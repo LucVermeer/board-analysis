@@ -657,7 +657,6 @@
       "grade": "Niveau",
       "anyGrade": "Tout niveau",
       "gradeClear": "Tous",
-      "gradeHint": "Touchez un niveau · un second pour une plage",
       "filters": "Filtres",
       "removeFilter": "Retirer le filtre {{name}}",
       "fab": {
@@ -666,6 +665,16 @@
         "done": "Terminé",
         "hint": "Ouvre la recherche, le grade et les filtres"
       }
+    },
+    "gradeRail": {
+      "setFilterAria": "Filtrer par cotation {{grade}}",
+      "selectedFilterAria": "Filtre de cotation {{grade}} sélectionné",
+      "rangeFilterAria": "{{grade}} est dans la plage de cotations sélectionnée",
+      "clearFilterAria": "Effacer le filtre de cotation",
+      "rangeHint": "Touchez une autre cotation pour créer une plage",
+      "setLogGradeAria": "Enregistrer la cotation {{grade}}",
+      "selectedLogGradeAria": "Cotation {{grade}} sélectionnée pour le carnet",
+      "consensusGradeAria": "{{grade}}, cotation consensus"
     },
     "climbRow": {
       "addToQueue": "Ajouter à la file",

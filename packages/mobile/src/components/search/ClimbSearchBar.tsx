@@ -28,6 +28,7 @@ import { GlassIconButton } from '../GlassIconButton';
 import { GradePill } from './GradePill';
 import { FilterButton } from './FilterButton';
 import { ActiveFilterChips } from './ActiveFilterChips';
+import { GradeRangeRail } from '../grade';
 
 type ClimbSearchBarProps = {
   layout: SearchLayout;
@@ -44,7 +45,10 @@ type ClimbSearchBarProps = {
   filters: ClimbFilters;
   boardFilters: ClimbBoardFilterState;
   activeFilterCount: number;
+  gradeRailVisible: boolean;
   onOpenGrade: () => void;
+  onCloseGrade: () => void;
+  onGradeChange: (grade: GradeBound) => void;
   onOpenFilters: () => void;
   onPatchFilters: (patch: Partial<ClimbFilters>) => void;
   onPatchBoardFilters: (patch: Partial<ClimbBoardFilterState>) => void;
@@ -68,7 +72,10 @@ export function ClimbSearchBar({
   filters,
   boardFilters,
   activeFilterCount,
+  gradeRailVisible,
   onOpenGrade,
+  onCloseGrade,
+  onGradeChange,
   onOpenFilters,
   onPatchFilters,
   onPatchBoardFilters,
@@ -92,6 +99,15 @@ export function ClimbSearchBar({
     onCreate();
   }, [onCreate]);
 
+  const handleGradePress = useCallback(() => {
+    hapticLight();
+    if (gradeRailVisible) {
+      onCloseGrade();
+    } else {
+      onOpenGrade();
+    }
+  }, [gradeRailVisible, onCloseGrade, onOpenGrade]);
+
   return (
     <View pointerEvents="box-none" style={[styles.container, { paddingTop: insets.top }]} onLayout={handleLayout}>
       <View pointerEvents="box-none" style={styles.row}>
@@ -114,10 +130,20 @@ export function ClimbSearchBar({
           onBlur={onSearchBlur}
         />
 
-        {showControls ? <GradePill bound={bound} grades={grades} onPress={onOpenGrade} maxWidth={132} /> : null}
+        {showControls ? <GradePill bound={bound} grades={grades} onPress={handleGradePress} maxWidth={132} /> : null}
 
         {showControls ? <FilterButton activeFilterCount={activeFilterCount} onPress={onOpenFilters} /> : null}
       </View>
+
+      {showControls && gradeRailVisible ? (
+        <GradeRangeRail
+          grades={grades}
+          bound={bound}
+          onChange={onGradeChange}
+          onRequestClose={onCloseGrade}
+          style={styles.gradeRail}
+        />
+      ) : null}
 
       {showControls && filtersActive ? (
         <ActiveFilterChips
@@ -150,5 +176,9 @@ const styles = StyleSheet.create({
   chipsRow: {
     paddingHorizontal: spacing[4],
     paddingBottom: spacing[2],
+  },
+  gradeRail: {
+    marginHorizontal: spacing[4],
+    marginBottom: spacing[2],
   },
 });

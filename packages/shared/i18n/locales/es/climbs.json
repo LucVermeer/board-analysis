@@ -657,7 +657,6 @@
       "grade": "Grado",
       "anyGrade": "Cualquier grado",
       "gradeClear": "Cualquiera",
-      "gradeHint": "Toca un grado · toca otro para un rango",
       "filters": "Filtros",
       "removeFilter": "Quitar filtro {{name}}",
       "fab": {
@@ -666,6 +665,16 @@
         "done": "Listo",
         "hint": "Abre los controles de búsqueda, grado y filtros"
       }
+    },
+    "gradeRail": {
+      "setFilterAria": "Filtrar por grado {{grade}}",
+      "selectedFilterAria": "Filtro de grado {{grade}} seleccionado",
+      "rangeFilterAria": "{{grade}} está en el rango de grados seleccionado",
+      "clearFilterAria": "Borrar filtro de grado",
+      "rangeHint": "Toca otro grado para crear un rango",
+      "setLogGradeAria": "Guardar grado {{grade}} en el registro",
+      "selectedLogGradeAria": "Grado {{grade}} seleccionado para el registro",
+      "consensusGradeAria": "{{grade}}, grado de consenso"
     },
     "climbRow": {
       "addToQueue": "Añadir a la cola",

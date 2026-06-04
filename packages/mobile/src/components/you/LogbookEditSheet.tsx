@@ -1,10 +1,9 @@
 import { type RefObject, useEffect, useMemo, useState } from 'react';
-import { View, ScrollView, Pressable, Alert, StyleSheet } from 'react-native';
+import { View, Pressable, Alert, StyleSheet } from 'react-native';
 import BottomSheet, { BottomSheetTextInput } from '@gorhom/bottom-sheet';
 import { useTranslation } from 'react-i18next';
 import { useUpdateTick, useDeleteTick } from '@boardsesh/board-react';
 import type { AscentFeedItem } from '@boardsesh/graphql/operations';
-import { getGradeTextColor } from '@boardsesh/play-view';
 import { Text } from '../Text';
 import { Icon } from '../Icon';
 import { Sheet } from '../Sheet';
@@ -12,8 +11,8 @@ import { Button } from '../Button';
 import { StarRating } from '../StarRating';
 import { SegmentedControl } from '../SegmentedControl';
 import { SectionHeader } from '../SectionHeader';
+import { GradeSingleSelectRail } from '../grade';
 import { useGrades } from '../../lib/graphql/hooks';
-import { gradeBadgeColor } from './profile-chart-colors';
 import { hapticSuccess, hapticError } from '../../lib/haptics';
 import { brandColors } from '../../theme/colors';
 import { spacing, borderRadius } from '../../theme/tokens';
@@ -139,24 +138,12 @@ export function LogbookEditSheet({ sheetRef, ascent, onClose }: LogbookEditSheet
       </View>
 
       <SectionHeader title={t('mobile.logbook.gradeLabel')} />
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.grades}>
-        {grades.map((grade) => {
-          const selected = grade.difficultyId === difficulty;
-          const background = selected ? gradeBadgeColor(grade.name) : systemColors.fill;
-          const textColor = selected ? getGradeTextColor(gradeBadgeColor(grade.name)) : systemColors.label;
-          return (
-            <Pressable
-              key={grade.difficultyId}
-              onPress={() => setDifficulty(grade.difficultyId)}
-              style={[styles.gradeChip, { backgroundColor: background }]}
-            >
-              <Text variant="footnote" color={textColor} style={styles.gradeChipText}>
-                {grade.name}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
+      <GradeSingleSelectRail
+        grades={grades}
+        selectedDifficultyId={difficulty}
+        onSelect={(difficultyId) => setDifficulty(difficultyId ?? null)}
+        allowClear={false}
+      />
 
       <SectionHeader title={t('mobile.logbook.qualityLabel')} />
       <View style={styles.field}>
@@ -211,15 +198,6 @@ const styles = StyleSheet.create({
   content: { paddingBottom: spacing[6] },
   title: { paddingHorizontal: spacing[4], paddingTop: spacing[2] },
   field: { paddingHorizontal: spacing[4] },
-  grades: { paddingHorizontal: spacing[4], gap: spacing[2] },
-  gradeChip: {
-    paddingHorizontal: spacing[3],
-    paddingVertical: spacing[2],
-    borderRadius: borderRadius.md,
-    minWidth: 44,
-    alignItems: 'center',
-  },
-  gradeChipText: { fontWeight: '600' },
   stepper: { flexDirection: 'row', alignItems: 'center', gap: spacing[5] },
   stepperValue: { minWidth: 40, textAlign: 'center' },
   input: {

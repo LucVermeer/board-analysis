@@ -1,0 +1,174 @@
+// @vitest-environment jsdom
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+import { render, fireEvent } from '@testing-library/react';
+import { createElement, type ReactNode } from 'react';
+import type { Grade } from '@boardsesh/shared-schema';
+import type { GradeBound } from '@boardsesh/climb-filters';
+
+const haptics = vi.hoisted(() => ({ selection: vi.fn() }));
+
+type LayoutEvent = { nativeEvent: { layout: { x: number; width: number; height: number; y: number } } };
+
+vi.mock('react-native', () => ({
+  View: ({ children, onLayout }: { children?: ReactNode; onLayout?: (event: LayoutEvent) => void }) =>
+    createElement(
+      'div',
+      {
+        onClick: onLayout
+          ? () => onLayout({ nativeEvent: { layout: { x: 0, width: 320, height: 44, y: 0 } } })
+          : undefined,
+      },
+      children,
+    ),
+  StyleSheet: { create: (styles: Record<string, unknown>) => styles, absoluteFill: {} },
+}));
+
+vi.mock('react-native-gesture-handler', () => ({
+  ScrollView: ({ children, onLayout }: { children?: ReactNode; onLayout?: (event: LayoutEvent) => void }) =>
+    createElement(
+      'div',
+      {
+        'data-scroll': 'true',
+        onClick: onLayout
+          ? () => onLayout({ nativeEvent: { layout: { x: 0, width: 320, height: 44, y: 0 } } })
+          : undefined,
+      },
+      children,
+    ),
+}));
+
+vi.mock('../GradeChip', () => ({
+  GradeChip: ({
+    label,
+    onPress,
+    accessibilityLabel,
+    accessibilityState,
+    onLayout,
+  }: {
+    label: string;
+    onPress: () => void;
+    accessibilityLabel: string;
+    accessibilityState?: { selected?: boolean };
+    onLayout?: (event: LayoutEvent) => void;
+  }) =>
+    createElement(
+      'button',
+      {
+        onClick: () => {
+          onLayout?.({ nativeEvent: { layout: { x: 0, width: 56, height: 44, y: 0 } } });
+          onPress();
+        },
+        'data-label': accessibilityLabel,
+        'data-selected': accessibilityState?.selected ? 'true' : 'false',
+      },
+      label,
+    ),
+}));
+
+vi.mock('../../GlassSurface', () => ({
+  GlassSurface: ({ children }: { children?: ReactNode }) => createElement('div', { 'data-glass': 'true' }, children),
+}));
+
+vi.mock('../../PressableSurface', () => ({
+  PressableSurface: ({
+    children,
+    onPress,
+    accessibilityLabel,
+  }: {
+    children?: ReactNode;
+    onPress?: () => void;
+    accessibilityLabel?: string;
+  }) => createElement('button', { onClick: onPress, 'data-label': accessibilityLabel ?? '' }, children),
+}));
+
+vi.mock('../../Text', () => ({
+  Text: ({ children }: { children?: ReactNode }) => createElement('span', { 'data-text': 'true' }, children),
+}));
+
+vi.mock('../../Icon', () => ({
+  Icon: ({ name }: { name: string }) => createElement('span', { 'data-icon': name }),
+}));
+
+vi.mock('../../../providers/theme-provider', () => ({
+  useTheme: () => ({
+    systemColors: {
+      fill: '#eee',
+      secondaryBackground: '#fff',
+      secondaryLabel: '#666',
+    },
+  }),
+}));
+
+vi.mock('../../../theme/colors', () => ({
+  brandColors: { primary: '#8C4A52' },
+  withAlpha: (color: string, alpha: number) => `${color}@${alpha}`,
+}));
+
+vi.mock('../../../theme/tokens', () => ({ spacing: { 1: 4, 2: 8, 3: 12, 4: 16 } }));
+
+vi.mock('../../../hooks/use-grade-format', () => ({
+  useGradeFormat: () => ({ formatGrade: (name: string | null | undefined) => name ?? null }),
+}));
+
+vi.mock('../../../lib/haptics', () => ({ hapticSelection: haptics.selection }));
+
+vi.mock('react-i18next', () => ({
+  useTranslation: () => ({
+    t: (key: string, options?: Record<string, unknown>) => {
+      if (key.includes('Aria') && options?.grade) return `${key}:${options.grade}`;
+      return key;
+    },
+  }),
+}));
+
+import { GradeRangeRail } from '../GradeRail';
+
+const grades: Grade[] = [
+  { difficultyId: 10, name: 'V4' },
+  { difficultyId: 12, name: 'V5' },
+  { difficultyId: 14, name: 'V6' },
+] as unknown as Grade[];
+
+function renderRail(bound: GradeBound, onChange = vi.fn()) {
+  const onRequestClose = vi.fn();
+  const view = render(
+    <GradeRangeRail grades={grades} bound={bound} onChange={onChange} onRequestClose={onRequestClose} />,
+  );
+  return { ...view, onChange, onRequestClose };
+}
+
+describe('GradeRangeRail', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    haptics.selection.mockClear();
+  });
+
+  afterEach(() => {
+    vi.runOnlyPendingTimers();
+    vi.useRealTimers();
+  });
+
+  it('switches an existing single grade instead of treating open as a range-start tap', () => {
+    const onChange = vi.fn();
+    const { getByText } = renderRail({ minGradeId: 12, maxGradeId: 12 }, onChange);
+    fireEvent.click(getByText('V6'));
+    expect(onChange).toHaveBeenCalledWith({ minGradeId: 14, maxGradeId: 14 });
+  });
+
+  it('builds a range from a fresh single grade tap followed by a second tap', () => {
+    const onChange = vi.fn();
+    const { getByText, rerender } = renderRail({ minGradeId: undefined, maxGradeId: undefined }, onChange);
+    fireEvent.click(getByText('V4'));
+    expect(onChange).toHaveBeenLastCalledWith({ minGradeId: 10, maxGradeId: 10 });
+    rerender(
+      <GradeRangeRail
+        grades={grades}
+        bound={{ minGradeId: 10, maxGradeId: 10 }}
+        onChange={onChange}
+        onRequestClose={vi.fn()}
+      />,
+    );
+    fireEvent.click(getByText('V6'));
+    expect(onChange).toHaveBeenLastCalledWith({ minGradeId: 10, maxGradeId: 14 });
+  });
+});

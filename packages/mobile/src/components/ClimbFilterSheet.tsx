@@ -54,6 +54,7 @@ import { brandColors } from '../theme/colors';
 import { iosSystemColors } from '../theme/ios-colors';
 import { spacing, borderRadius } from '../theme/tokens';
 import { formatGradePillLabel } from './search/grade-pill-label';
+import { GradeRangeRail } from './grade';
 import type { ClimbFilters } from '../lib/climb-filter-types';
 import { DEFAULT_FILTERS } from '../lib/climb-filter-types';
 
@@ -75,10 +76,6 @@ type ClimbFilterSheetProps = {
   currentBoardFilters: ClimbBoardFilterState;
   /** Current committed name term, so the live "Show N" count matches Apply. */
   searchName?: string;
-  /** Commit the in-progress sheet edits, then open the grade popover (the single
-   *  grade front door). Receives the current local edits so nothing is lost on
-   *  the jump from the sheet to the popover. */
-  onEditGrade: (filters: ClimbFilters, boardFilters: ClimbBoardFilterState) => void;
   onApply: (filters: ClimbFilters, boardFilters: ClimbBoardFilterState) => void;
 };
 
@@ -145,7 +142,6 @@ export function ClimbFilterSheet({
   currentFilters,
   currentBoardFilters,
   searchName,
-  onEditGrade,
   onApply,
 }: ClimbFilterSheetProps) {
   const { t } = useTranslation('climbs');
@@ -162,6 +158,7 @@ export function ClimbFilterSheet({
 
   const [localFilters, setLocalFilters] = useState<ClimbFilters>(() => normalizeRetiredStatus(currentFilters));
   const [localBoardFilters, setLocalBoardFilters] = useState<ClimbBoardFilterState>(currentBoardFilters);
+  const [gradeRailOpen, setGradeRailOpen] = useState(false);
   // Bumped on Reset so the Refine/Advanced sections collapse back to default.
   const [sectionResetKey, setSectionResetKey] = useState(0);
 
@@ -292,6 +289,9 @@ export function ClimbFilterSheet({
     (value: GradeAccuracyValue | 'off') => setFiltersPatch({ gradeAccuracy: value === 'off' ? undefined : value }),
     [setFiltersPatch],
   );
+  const handleGradeChange = useCallback((grade: { minGradeId: number | undefined; maxGradeId: number | undefined }) => {
+    setLocalFilters((previous) => ({ ...previous, minGrade: grade.minGradeId, maxGrade: grade.maxGradeId }));
+  }, []);
   // Climb-type toggle (main's #2496 control). A 3-way control means there's no
   // UI path to "neither", so the never-both-off invariant is structural (see
   // toClimbSearchInput). "Both" = show everything; boulders-only is the default.
@@ -328,6 +328,7 @@ export function ClimbFilterSheet({
     hapticSelection();
     setLocalFilters(DEFAULT_FILTERS);
     setLocalBoardFilters(DEFAULT_CLIMB_BOARD_FILTER_STATE);
+    setGradeRailOpen(false);
     setSectionResetKey((key) => key + 1);
   }, []);
 
@@ -438,10 +439,13 @@ export function ClimbFilterSheet({
       >
         {/* PRIMARY — the levers the analytics say carry the product. Always open. */}
         <View style={styles.primary}>
-          {/* Grade — one tappable row that opens the colorized popover (the
-              single grade front door, shared with the bottom-bar pill). */}
+          {/* Grade — inline and sheet-local, so dismissing the filter sheet does
+              not commit grade edits until Apply. */}
           <Pressable
-            onPress={() => onEditGrade(localFilters, localBoardFilters)}
+            onPress={() => {
+              hapticSelection();
+              setGradeRailOpen((open) => !open);
+            }}
             accessibilityRole="button"
             accessibilityLabel={t('mobile.filter.gradeRange')}
             style={({ pressed }) => [
@@ -460,9 +464,23 @@ export function ClimbFilterSheet({
                   t,
                 )}
               </Text>
-              <Icon name="chevron.right" size={14} color={iosSystemColors.systemGray4} />
+              <Icon
+                name={gradeRailOpen ? 'chevron.up' : 'chevron.down'}
+                size={14}
+                color={iosSystemColors.systemGray4}
+              />
             </View>
           </Pressable>
+
+          {gradeRailOpen ? (
+            <GradeRangeRail
+              grades={grades ?? []}
+              bound={{ minGradeId: localFilters.minGrade, maxGradeId: localFilters.maxGrade }}
+              onChange={handleGradeChange}
+              onRequestClose={() => setGradeRailOpen(false)}
+              style={styles.inlineGradeRail}
+            />
+          ) : null}
 
           {/* Quality toggles, grouped as one iOS inset card. */}
           <View style={styles.subsectionGap} />
@@ -754,6 +772,9 @@ const styles = StyleSheet.create({
   },
   tappableRowValue: {
     opacity: 0.55,
+  },
+  inlineGradeRail: {
+    marginTop: spacing[2],
   },
   footer: {
     paddingHorizontal: spacing[4],

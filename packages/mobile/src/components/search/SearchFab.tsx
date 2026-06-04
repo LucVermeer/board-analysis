@@ -8,8 +8,8 @@
 // grade/filter swap for a "done" ✓. Collapsed, the FAB carries a filter-count
 // badge. Controls are individual glass elements over the list (no glass-on-glass).
 
-import { type RefObject, useCallback, useEffect, useState } from 'react';
-import { Keyboard, Pressable, StyleSheet } from 'react-native';
+import { type RefObject, useCallback, useEffect, useMemo, useState } from 'react';
+import { Keyboard, Pressable, StyleSheet, View } from 'react-native';
 import Animated, {
   FadeIn,
   FadeOut,
@@ -21,18 +21,22 @@ import Animated, {
 import { useTranslation } from 'react-i18next';
 import { useFocusEffect } from 'expo-router';
 import type { Grade } from '@boardsesh/shared-schema';
-import { type GradeBound } from '@boardsesh/climb-filters';
+import { isAnyGrade, type GradeBound } from '@boardsesh/climb-filters';
+import { getGradeColor } from '@boardsesh/board-constants/grade-colors';
 import { useTheme } from '../../providers/theme-provider';
 import { spacing } from '../../theme/tokens';
 import { TOOLBAR_FAB_SIZE, TOOLBAR_SIDE_MARGIN } from '../../theme/layout';
 import { hapticLight, hapticSelection } from '../../lib/haptics';
 import { useReduceMotion } from '../../hooks/use-reduce-motion';
+import { useGradeFormat } from '../../hooks/use-grade-format';
 import { setSearchExpanded } from '../../lib/search-expanded-state';
+import { withAlpha } from '../../theme/colors';
 import { SearchHeader, type SearchHeaderHandle } from '../SearchHeader';
 import { GlassIconButton } from '../GlassIconButton';
-import { GlassCluster } from '../GlassCluster';
 import { GradePill } from './GradePill';
 import { FilterButton } from './FilterButton';
+import { GradeRangeRail } from '../grade';
+import { formatGradePillLabel } from './grade-pill-label';
 
 type SearchFabProps = {
   searchFieldRef: RefObject<SearchHeaderHandle | null>;
@@ -46,7 +50,10 @@ type SearchFabProps = {
   bound: GradeBound;
   grades: readonly Grade[];
   activeFilterCount: number;
+  gradeRailVisible: boolean;
   onOpenGrade: () => void;
+  onCloseGrade: () => void;
+  onGradeChange: (grade: GradeBound) => void;
   onOpenFilters: () => void;
   /** Resting bottom for the cluster (clears the tab bar + floating toolbar). */
   toolbarBottom: number;
@@ -63,12 +70,16 @@ export function SearchFab({
   bound,
   grades,
   activeFilterCount,
+  gradeRailVisible,
   onOpenGrade,
+  onCloseGrade,
+  onGradeChange,
   onOpenFilters,
   toolbarBottom,
 }: SearchFabProps) {
   const { t } = useTranslation('climbs');
-  const { systemColors } = useTheme();
+  const { systemColors, brandColors } = useTheme();
+  const { formatGrade } = useGradeFormat();
   const reduceMotion = useReduceMotion();
   const keyboard = useAnimatedKeyboard();
   const [expanded, setExpanded] = useState(false);
@@ -93,9 +104,10 @@ export function SearchFab({
   const handleCollapse = useCallback(() => {
     searchFieldRef.current?.blur();
     Keyboard.dismiss();
+    onCloseGrade();
     setExpanded(false);
     setSearchExpanded(false);
-  }, [searchFieldRef]);
+  }, [searchFieldRef, onCloseGrade]);
 
   // The tabs stay mounted across switches, so an unmount cleanup never fires on a
   // tab change. Collapse on blur instead — fully resetting local + global state —
@@ -115,9 +127,10 @@ export function SearchFab({
   }, [expanded, handleCollapse]);
 
   const handleFocus = useCallback(() => {
+    onCloseGrade();
     setFocused(true);
     onSearchFocus();
-  }, [onSearchFocus]);
+  }, [onCloseGrade, onSearchFocus]);
 
   const handleBlur = useCallback(() => {
     setFocused(false);
@@ -136,22 +149,53 @@ export function SearchFab({
     Keyboard.dismiss();
   }, [searchFieldRef, onSearchSubmit]);
 
+  const handleOpenGrade = useCallback(() => {
+    hapticLight();
+    searchFieldRef.current?.blur();
+    Keyboard.dismiss();
+    setFocused(false);
+    if (gradeRailVisible) {
+      onCloseGrade();
+    } else {
+      onOpenGrade();
+    }
+  }, [gradeRailVisible, onCloseGrade, onOpenGrade, searchFieldRef]);
+
+  const gradeActive = !isAnyGrade(bound);
+  const gradeLabel = useMemo(
+    () => formatGradePillLabel(bound, grades, formatGrade, t),
+    [bound, grades, formatGrade, t],
+  );
+  const gradeAccent = useMemo(() => {
+    const selectedDifficultyId = bound.minGradeId ?? bound.maxGradeId;
+    if (selectedDifficultyId == null) return brandColors.primary;
+    const selectedGrade = grades.find((grade) => grade.difficultyId === selectedDifficultyId);
+    return selectedGrade ? (getGradeColor(selectedGrade.name) ?? brandColors.primary) : brandColors.primary;
+  }, [bound.maxGradeId, bound.minGradeId, brandColors.primary, grades]);
+
   const enter = reduceMotion ? undefined : FadeIn.duration(200);
   const exit = reduceMotion ? undefined : FadeOut.duration(150);
+  const searchFabLabel =
+    expanded || !gradeActive ? t('mobile.search.fab.open') : `${t('mobile.search.fab.open')}, ${gradeLabel}`;
 
   return (
     <>
       {expanded ? (
         <Pressable
           style={styles.scrim}
-          onPress={handleCollapse}
+          onPress={gradeRailVisible ? onCloseGrade : handleCollapse}
           accessibilityElementsHidden
           importantForAccessibility="no-hide-descendants"
         />
       ) : null}
 
       <Animated.View pointerEvents="box-none" style={[styles.cluster, clusterStyle]}>
-        <GlassCluster pointerEvents="box-none" style={styles.fabRow} spacing={spacing[2]}>
+        {expanded && gradeRailVisible ? (
+          <Animated.View entering={enter} exiting={exit} style={styles.gradeRailSlot}>
+            <GradeRangeRail grades={grades} bound={bound} onChange={onGradeChange} onRequestClose={onCloseGrade} />
+          </Animated.View>
+        ) : null}
+        <View pointerEvents="box-none" style={styles.fabRow}>
           {/* The FAB is pinned LEFT and morphs 🔍→✕; everything speed-dials to its
               right. Collapsed, it carries the active-filter count as a badge. */}
           <GlassIconButton
@@ -159,9 +203,10 @@ export function SearchFab({
             secondaryIconName="close"
             active={expanded}
             iconColor={systemColors.label as string}
-            fallbackColor={systemColors.fill}
+            tintColor={!expanded && gradeActive ? withAlpha(gradeAccent, 0.2) : undefined}
+            fallbackColor={!expanded && gradeActive ? withAlpha(gradeAccent, 0.16) : systemColors.fill}
             onPress={handleFabPress}
-            accessibilityLabel={expanded ? t('mobile.search.fab.close') : t('mobile.search.fab.open')}
+            accessibilityLabel={expanded ? t('mobile.search.fab.close') : searchFabLabel}
             accessibilityHint={expanded ? undefined : t('mobile.search.fab.hint')}
             badgeCount={expanded ? undefined : activeFilterCount}
             size={TOOLBAR_FAB_SIZE}
@@ -181,7 +226,7 @@ export function SearchFab({
           ) : null}
           {expanded && !focused ? (
             <Animated.View entering={enter} exiting={exit}>
-              <GradePill bound={bound} grades={grades} onPress={onOpenGrade} maxWidth={140} />
+              <GradePill bound={bound} grades={grades} onPress={handleOpenGrade} maxWidth={140} />
             </Animated.View>
           ) : null}
           {expanded && !focused ? (
@@ -201,7 +246,7 @@ export function SearchFab({
               />
             </Animated.View>
           ) : null}
-        </GlassCluster>
+        </View>
       </Animated.View>
     </>
   );
@@ -231,5 +276,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'flex-start',
     gap: spacing[2],
+  },
+  gradeRailSlot: {
+    marginBottom: spacing[2],
   },
 });
