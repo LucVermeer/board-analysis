@@ -818,6 +818,10 @@ describe('CreateClimbForm — Aurora rendering', () => {
       resetHolds: mockResetAuroraHolds,
       generateFramesString: mockGenerateAuroraFramesString,
       loadHolds: mockLoadAuroraHolds,
+      undo: vi.fn(),
+      redo: vi.fn(),
+      canUndo: false,
+      canRedo: false,
     });
 
     renderAuroraComponent();
@@ -857,6 +861,10 @@ describe('CreateClimbForm — Aurora rendering', () => {
       resetHolds: mockResetAuroraHolds,
       generateFramesString: mockGenerateAuroraFramesString,
       loadHolds: mockLoadAuroraHolds,
+      undo: vi.fn(),
+      redo: vi.fn(),
+      canUndo: false,
+      canRedo: false,
     });
 
     renderAuroraComponent();

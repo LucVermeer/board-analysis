@@ -1,7 +1,7 @@
-import React, { useCallback, useMemo, useState, type ReactNode } from 'react';
-import { View, StyleSheet, Pressable, type LayoutChangeEvent } from 'react-native';
+import React, { useMemo, type ReactNode } from 'react';
+import { View, StyleSheet, Pressable } from 'react-native';
 import Animated from 'react-native-reanimated';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { GestureDetector } from 'react-native-gesture-handler';
 import type { BoardName, LitUpHoldsMap } from '@boardsesh/shared-schema';
 import { BoardImageNative } from '../BoardImageNative';
 import { Text } from '../Text';
@@ -24,6 +24,10 @@ type InteractiveCreateBoardProps = {
   onLongPressHold: (holdId: number) => void;
   mirrored?: boolean;
   showAllHolds?: boolean;
+  /** Exact on-screen board size, computed by the drawer up front so the board
+   *  renders immediately (no onLayout round-trip while the sheet animates in). */
+  renderWidth: number;
+  renderHeight: number;
   /** Optional overlay (e.g. heatmap) drawn between the background and the holds. */
   overlay?: ReactNode;
 };
@@ -34,6 +38,12 @@ type InteractiveCreateBoardProps = {
  * plain RN Views placed INSIDE the zoom-transformed Animated.View, so RNGH
  * hit-tests them in board-local space and taps land correctly at any zoom level
  * with zero manual coordinate math.
+ *
+ * Sized by the drawer (renderWidth/renderHeight) so it paints on the first frame.
+ * Gesture model mirrors the Play Drawer's board: pinch is always live, but the
+ * 1-finger zoom-pan only mounts while zoomed (a conditional overlay) so idle
+ * vertical drags fall through to the BottomSheetScrollView and scroll/close the
+ * drawer instead of being eaten here.
  */
 export const InteractiveCreateBoard = React.memo(function InteractiveCreateBoard({
   boardName,
@@ -48,14 +58,14 @@ export const InteractiveCreateBoard = React.memo(function InteractiveCreateBoard
   onLongPressHold,
   mirrored = false,
   showAllHolds = false,
+  renderWidth,
+  renderHeight,
   overlay,
 }: InteractiveCreateBoardProps) {
-  const [size, setSize] = useState({ width: 0, height: 0 });
-
   const { pinchGesture, zoomPanGesture, isZoomed, resetZoom, animatedZoomStyle } = useZoomPanGesture({
     enabled: true,
-    containerWidth: size.width,
-    containerHeight: size.height,
+    containerWidth: renderWidth,
+    containerHeight: renderHeight,
   });
 
   const holdById = useMemo(() => {
@@ -64,27 +74,10 @@ export const InteractiveCreateBoard = React.memo(function InteractiveCreateBoard
     return map;
   }, [holdTargets]);
 
-  // Pinch (2-finger) and pan (1-finger, no-ops until zoomed) run together. The
-  // per-hold Tap/LongPress detectors are nested children, so a stationary tap
-  // wins (paint) while a drag activates the pan. If a device shows the pan
-  // stealing quick taps while zoomed, add `.activeOffsetX([-8,8]).activeOffsetY([-8,8])`
-  // to zoomPanGesture in use-zoom-pan-gesture.
-  const rootGesture = useMemo(() => Gesture.Simultaneous(pinchGesture, zoomPanGesture), [pinchGesture, zoomPanGesture]);
-
-  const handleLayout = useCallback((event: LayoutChangeEvent) => {
-    const { width, height } = event.nativeEvent.layout;
-    setSize((prev) => (prev.width === width && prev.height === height ? prev : { width, height }));
-  }, []);
-
-  const containerStyle = useMemo(
-    () => [styles.clip, { aspectRatio: boardWidth / boardHeight }],
-    [boardWidth, boardHeight],
-  );
-
   return (
     <View style={styles.root}>
-      <GestureDetector gesture={rootGesture}>
-        <View style={containerStyle} onLayout={handleLayout}>
+      <GestureDetector gesture={pinchGesture}>
+        <View style={[styles.clip, { width: renderWidth, height: renderHeight }]}>
           <Animated.View style={[styles.board, animatedZoomStyle]}>
             <BoardImageNative
               frames=""
@@ -105,7 +98,7 @@ export const InteractiveCreateBoard = React.memo(function InteractiveCreateBoard
               holdTargets={holdTargets}
               boardWidth={boardWidth}
               boardHeight={boardHeight}
-              measuredWidth={size.width}
+              measuredWidth={renderWidth}
               mirrored={mirrored}
               showAllHolds={showAllHolds}
               onPaint={onPaint}
@@ -116,10 +109,20 @@ export const InteractiveCreateBoard = React.memo(function InteractiveCreateBoard
               holdById={holdById}
               boardWidth={boardWidth}
               boardHeight={boardHeight}
-              measuredWidth={size.width}
+              measuredWidth={renderWidth}
               mirrored={mirrored}
             />
           </Animated.View>
+
+          {/* Pan-while-zoomed overlay: only mounted when zoomed so it doesn't
+              claim 1-finger touches at rest (which would block the drawer's
+              scroll/close). 2-finger pinches fall through via maxPointers(1).
+              While zoomed, reset to paint precise holds. */}
+          {isZoomed ? (
+            <GestureDetector gesture={zoomPanGesture}>
+              <View style={StyleSheet.absoluteFill} />
+            </GestureDetector>
+          ) : null}
 
           {isZoomed ? (
             <Pressable style={styles.resetButton} onPress={resetZoom} hitSlop={8} accessibilityRole="button">
@@ -136,14 +139,15 @@ export const InteractiveCreateBoard = React.memo(function InteractiveCreateBoard
 
 const styles = StyleSheet.create({
   root: {
-    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   clip: {
-    width: '100%',
     overflow: 'hidden',
   },
   board: {
     width: '100%',
+    height: '100%',
   },
   resetButton: {
     position: 'absolute',

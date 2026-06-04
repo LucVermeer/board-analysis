@@ -695,11 +695,10 @@
         "finish": "Final: {{count}}/2"
       },
       "actions": {
-        "heatmap": "Mapa de calor",
-        "settings": "Ajustes",
         "clear": "Borrar presas",
         "setActive": "Fijar como vía activa",
-        "save": "Guardar vía"
+        "undo": "Deshacer",
+        "redo": "Rehacer"
       },
       "holdRole": {
         "title": "Asignar rol de presa",
@@ -710,13 +709,13 @@
         "draftDescription": "Los borradores quedan privados hasta que los publiques.",
         "showAllHoldsLabel": "Mostrar todas las presas",
         "showAllHoldsDescription": "Resalta todas las presas pulsables del panel.",
-        "connectBoard": "Conectar panel",
-        "bleConnected": "Panel conectado",
-        "bleUnavailable": "Elige un panel para iluminarlo por Bluetooth."
+        "noMatchLabel": "Sin igualar",
+        "noMatchDescription": "No se pueden igualar las manos en la misma presa"
       },
       "drafts": {
         "holds_one": "{{count}} presa",
-        "holds_other": "{{count}} presas"
+        "holds_other": "{{count}} presas",
+        "sectionTitle": "Borradores abiertos"
       },
       "unavailable": {
         "title": "Aún no se puede crear aquí",
@@ -724,6 +723,17 @@
       },
       "fab": {
         "ariaLabel": "Crear una vía"
+      },
+      "header": {
+        "newClimb": "Nueva vía"
+      },
+      "save": {
+        "idle": "Guardar",
+        "login": "Inicia sesión para guardar",
+        "saving": "Guardando…",
+        "done": "Guardado",
+        "draftToast": "Borrador guardado",
+        "publishedToast": "Vía publicada"
       }
     }
   }

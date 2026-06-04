@@ -44,8 +44,11 @@ export default function ClimbsLayout() {
       <Stack.Screen
         name="create"
         options={{
-          title: t('mobile.nav.createClimb'),
-          presentation: 'modal',
+          // The create UI is just the drawer floating over the climbs/search
+          // list — a transparent, headerless modal (no separate card around it).
+          headerShown: false,
+          presentation: 'transparentModal',
+          animation: 'fade',
         }}
       />
     </Stack>

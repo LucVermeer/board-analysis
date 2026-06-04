@@ -368,4 +368,203 @@ describe('useCreateClimb', () => {
       expect(frames).toBe('p100r1');
     });
   });
+
+  describe('undo / redo', () => {
+    it('starts with nothing to undo or redo', () => {
+      const { result } = renderHook(() => useCreateClimb('kilter'));
+
+      expect(result.current.canUndo).toBe(false);
+      expect(result.current.canRedo).toBe(false);
+    });
+
+    it('paint -> undo -> redo round-trips', () => {
+      const { result } = renderHook(() => useCreateClimb('kilter'));
+
+      act(() => {
+        result.current.setHoldState(100, 'STARTING');
+      });
+      expect(result.current.canUndo).toBe(true);
+      expect(result.current.canRedo).toBe(false);
+
+      act(() => {
+        result.current.undo();
+      });
+      expect(result.current.litUpHoldsMap[100]).toBeUndefined();
+      expect(result.current.totalHolds).toBe(0);
+      expect(result.current.canUndo).toBe(false);
+      expect(result.current.canRedo).toBe(true);
+
+      act(() => {
+        result.current.redo();
+      });
+      expect(result.current.litUpHoldsMap[100].state).toBe('STARTING');
+      expect(result.current.canUndo).toBe(true);
+      expect(result.current.canRedo).toBe(false);
+    });
+
+    it('undo past the baseline is a no-op', () => {
+      const { result } = renderHook(() => useCreateClimb('kilter'));
+
+      act(() => {
+        result.current.undo();
+      });
+      expect(result.current.litUpHoldsMap).toEqual({});
+      expect(result.current.canUndo).toBe(false);
+
+      act(() => {
+        result.current.redo();
+      });
+      expect(result.current.litUpHoldsMap).toEqual({});
+      expect(result.current.canRedo).toBe(false);
+    });
+
+    it('loadHolds resets history to a fresh baseline', () => {
+      const { result } = renderHook(() => useCreateClimb('kilter'));
+
+      act(() => {
+        result.current.setHoldState(100, 'STARTING');
+      });
+      expect(result.current.canUndo).toBe(true);
+
+      act(() => {
+        result.current.loadHolds({ 200: { state: 'HAND', color: '#00FFFF', displayColor: '#00FFFF' } });
+      });
+
+      // Can't undo back to the 100-painted state or the empty canvas before it.
+      expect(result.current.canUndo).toBe(false);
+      expect(result.current.canRedo).toBe(false);
+      expect(result.current.litUpHoldsMap[200].state).toBe('HAND');
+    });
+
+    it('clear (resetHolds) is undoable', () => {
+      const { result } = renderHook(() => useCreateClimb('kilter'));
+
+      act(() => {
+        result.current.setHoldState(100, 'STARTING');
+      });
+      act(() => {
+        result.current.setHoldState(200, 'HAND');
+      });
+
+      act(() => {
+        result.current.resetHolds();
+      });
+      expect(result.current.totalHolds).toBe(0);
+      expect(result.current.canUndo).toBe(true);
+
+      act(() => {
+        result.current.undo();
+      });
+      expect(result.current.totalHolds).toBe(2);
+      expect(result.current.litUpHoldsMap[100].state).toBe('STARTING');
+      expect(result.current.litUpHoldsMap[200].state).toBe('HAND');
+    });
+
+    it('a new edit after undo clears the redo branch', () => {
+      const { result } = renderHook(() => useCreateClimb('kilter'));
+
+      act(() => {
+        result.current.setHoldState(100, 'STARTING');
+      });
+      act(() => {
+        result.current.undo();
+      });
+      expect(result.current.canRedo).toBe(true);
+
+      act(() => {
+        result.current.setHoldState(200, 'HAND');
+      });
+      expect(result.current.canRedo).toBe(false);
+      expect(result.current.litUpHoldsMap[200].state).toBe('HAND');
+    });
+
+    it('redundant and blocked edits do not grow history', () => {
+      const { result } = renderHook(() => useCreateClimb('kilter'));
+
+      act(() => {
+        result.current.setHoldState(100, 'STARTING');
+      });
+      // Re-paint the same hold to the same state — should not add an undo step.
+      act(() => {
+        result.current.setHoldState(100, 'STARTING');
+      });
+      // Exactly one undo returns to the empty baseline.
+      act(() => {
+        result.current.undo();
+      });
+      expect(result.current.totalHolds).toBe(0);
+      expect(result.current.canUndo).toBe(false);
+    });
+
+    it('a blocked third STARTING records no history step', () => {
+      const { result } = renderHook(() => useCreateClimb('kilter'));
+
+      act(() => {
+        result.current.setHoldState(100, 'STARTING');
+      });
+      act(() => {
+        result.current.setHoldState(200, 'STARTING');
+      });
+      // Blocked by the max-2 cap.
+      act(() => {
+        result.current.setHoldState(300, 'STARTING');
+      });
+
+      // Two undos clear both real edits; a third does nothing.
+      act(() => {
+        result.current.undo();
+      });
+      act(() => {
+        result.current.undo();
+      });
+      expect(result.current.totalHolds).toBe(0);
+      expect(result.current.canUndo).toBe(false);
+    });
+
+    it('caps history at the depth limit, dropping the oldest steps', () => {
+      const { result } = renderHook(() => useCreateClimb('kilter'));
+
+      // 60 distinct FOOT holds (no max cap on FOOT) — more than HISTORY_LIMIT (50).
+      for (let holdId = 1; holdId <= 60; holdId += 1) {
+        act(() => {
+          result.current.setHoldState(holdId, 'FOOT');
+        });
+      }
+      expect(result.current.totalHolds).toBe(60);
+
+      // Undo as far as possible — capped at 50 steps.
+      let undoCount = 0;
+      while (result.current.canUndo) {
+        act(() => {
+          result.current.undo();
+        });
+        undoCount += 1;
+        if (undoCount > 100) break; // safety against an infinite loop on a bug
+      }
+      expect(undoCount).toBe(50);
+      // The 10 oldest holds remain (history fell off the front, not the canvas).
+      expect(result.current.totalHolds).toBe(10);
+    });
+
+    it('with an initial holds map, undo cannot cross below the seed', () => {
+      const initialHoldsMap = {
+        100: { state: 'STARTING' as const, color: '#00FF00', displayColor: '#00FF00' },
+      };
+      const { result } = renderHook(() => useCreateClimb('kilter', { initialHoldsMap }));
+
+      expect(result.current.canUndo).toBe(false);
+
+      act(() => {
+        result.current.setHoldState(200, 'HAND');
+      });
+      act(() => {
+        result.current.undo();
+      });
+
+      // Back to the seed, not an empty canvas.
+      expect(result.current.litUpHoldsMap[100].state).toBe('STARTING');
+      expect(result.current.litUpHoldsMap[200]).toBeUndefined();
+      expect(result.current.canUndo).toBe(false);
+    });
+  });
 });

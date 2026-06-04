@@ -1,20 +1,14 @@
 import { memo, useCallback } from 'react';
-import { View, Pressable, StyleSheet, type ViewStyle } from 'react-native';
+import { View, Pressable, StyleSheet } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { Icon } from '../Icon';
 import { Text } from '../Text';
 import { BleLightbulbButton } from '../ble/BleLightbulbButton';
+import { ActionButton, SIZES, type ButtonSize, drawerActionBarStyles } from '../drawer-action-bar/DrawerActionBar';
 import { brandColors } from '../../theme/colors';
 import { iosSystemColors } from '../../theme/ios-colors';
-import { spacing, shadows } from '../../theme/tokens';
+import { shadows } from '../../theme/tokens';
 import { hapticMedium } from '../../lib/haptics';
-
-type ButtonSize = 'lg' | 'sm';
-
-const SIZES: Record<ButtonSize, { dim: number; icon: number }> = {
-  lg: { dim: 56, icon: 28 },
-  sm: { dim: 40, icon: 22 },
-};
 
 type PlayDrawerActionBarProps = {
   canSwipePrevious: boolean;
@@ -100,9 +94,9 @@ export const PlayDrawerActionBar = memo(function PlayDrawerActionBar({
   }, [onShare]);
 
   return (
-    <View style={styles.container}>
-      <View style={styles.rowPrimary}>
-        <View style={styles.primarySlot}>
+    <View style={drawerActionBarStyles.container}>
+      <View style={drawerActionBarStyles.rowPrimary}>
+        <View style={drawerActionBarStyles.primarySlot}>
           {supportsMirroring ? (
             <ActionButton
               size="lg"
@@ -129,7 +123,7 @@ export const PlayDrawerActionBar = memo(function PlayDrawerActionBar({
             />
           )}
         </View>
-        <View style={styles.primarySlot}>
+        <View style={drawerActionBarStyles.primarySlot}>
           <ActionButton
             size="lg"
             iconName="skip.previous"
@@ -138,7 +132,7 @@ export const PlayDrawerActionBar = memo(function PlayDrawerActionBar({
             accessibilityLabel={t('playView.actionBar.previousAria')}
           />
         </View>
-        <View style={styles.primarySlot}>
+        <View style={drawerActionBarStyles.primarySlot}>
           <TickButton
             size="lg"
             ascentCount={ascentCount}
@@ -147,7 +141,7 @@ export const PlayDrawerActionBar = memo(function PlayDrawerActionBar({
             accessibilityLabel={t('playView.tickFab.logAscentAria')}
           />
         </View>
-        <View style={styles.primarySlot}>
+        <View style={drawerActionBarStyles.primarySlot}>
           <ActionButton
             size="lg"
             iconName="skip.next"
@@ -156,7 +150,7 @@ export const PlayDrawerActionBar = memo(function PlayDrawerActionBar({
             accessibilityLabel={t('playView.actionBar.nextAria')}
           />
         </View>
-        <View style={styles.primarySlot}>
+        <View style={drawerActionBarStyles.primarySlot}>
           <BleLightbulbButton
             isConnected={lightbulbActive}
             isScanning={lightbulbPending}
@@ -172,7 +166,7 @@ export const PlayDrawerActionBar = memo(function PlayDrawerActionBar({
         </View>
       </View>
 
-      <View style={styles.rowSecondary}>
+      <View style={drawerActionBarStyles.rowSecondary}>
         {onOpenAngleSelector && currentAngle != null && (
           <Pressable
             onPress={handleAngleSelector}
@@ -181,7 +175,7 @@ export const PlayDrawerActionBar = memo(function PlayDrawerActionBar({
             style={({ pressed }) => [
               styles.anglePill,
               { height: SIZES.sm.dim, borderRadius: SIZES.sm.dim / 2 },
-              pressed && styles.actionButtonPressed,
+              pressed && drawerActionBarStyles.actionButtonPressed,
             ]}
           >
             <Text variant="caption1" style={styles.angleText}>
@@ -207,7 +201,7 @@ export const PlayDrawerActionBar = memo(function PlayDrawerActionBar({
           accessibilityLabel={t('playView.actionBar.climbActionsAria')}
         />
 
-        <View style={styles.spacer} />
+        <View style={drawerActionBarStyles.spacer} />
 
         <ShareButton size="sm" onPress={handleShare} accessibilityLabel={tClimbs('mobile.climbRow.share')} />
         <ActionButton
@@ -220,55 +214,6 @@ export const PlayDrawerActionBar = memo(function PlayDrawerActionBar({
     </View>
   );
 });
-
-type ActionButtonProps = {
-  iconName: import('../icon-map').IconName;
-  size: ButtonSize;
-  onPress: () => void;
-  disabled?: boolean;
-  active?: boolean;
-  activeColor?: string;
-  iconColor?: string;
-  accessibilityLabel: string;
-};
-
-function ActionButton({
-  iconName,
-  size,
-  onPress,
-  disabled = false,
-  active = false,
-  activeColor,
-  iconColor,
-  accessibilityLabel,
-}: ActionButtonProps) {
-  const { dim, icon } = SIZES[size];
-  const buttonStyle: ViewStyle[] = [styles.actionButton, { width: dim, height: dim, borderRadius: dim / 2 }];
-  if (active && activeColor) {
-    buttonStyle.push({ backgroundColor: `${activeColor}20` });
-  }
-
-  const resolvedColor = disabled
-    ? iosSystemColors.systemGray4
-    : (iconColor ?? (active && activeColor ? activeColor : iosSystemColors.systemGray));
-
-  return (
-    <Pressable
-      onPress={onPress}
-      disabled={disabled}
-      accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel}
-      accessibilityState={{ disabled }}
-      style={({ pressed }) => [
-        ...buttonStyle,
-        disabled && styles.actionButtonDisabled,
-        pressed && !disabled && styles.actionButtonPressed,
-      ]}
-    >
-      <Icon name={iconName} size={icon} color={resolvedColor} />
-    </Pressable>
-  );
-}
 
 type ShareButtonProps = {
   size: ButtonSize;
@@ -287,9 +232,9 @@ function ShareButton({ size, onPress, accessibilityLabel }: ShareButtonProps) {
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
       style={({ pressed }) => [
-        styles.actionButton,
+        drawerActionBarStyles.actionButton,
         { width: dim, height: dim, borderRadius: dim / 2 },
-        pressed && styles.actionButtonPressed,
+        pressed && drawerActionBarStyles.actionButtonPressed,
       ]}
     >
       <Icon name="share" size={icon} color={iosSystemColors.systemGray} />
@@ -342,43 +287,6 @@ function TickButton({ size, ascentCount, onPress, onLongPress, accessibilityLabe
 }
 
 const styles = StyleSheet.create({
-  container: {
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: iosSystemColors.separator,
-  },
-  rowPrimary: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: spacing[4],
-    paddingTop: spacing[3],
-  },
-  primarySlot: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  rowSecondary: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing[2],
-    paddingHorizontal: spacing[4],
-    paddingTop: spacing[2],
-    paddingBottom: spacing[3],
-  },
-  spacer: {
-    flex: 1,
-  },
-  actionButton: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  actionButtonDisabled: {
-    opacity: 0.4,
-  },
-  actionButtonPressed: {
-    opacity: 0.6,
-    transform: [{ scale: 0.9 }],
-  },
   anglePill: {
     paddingHorizontal: 14,
     alignItems: 'center',

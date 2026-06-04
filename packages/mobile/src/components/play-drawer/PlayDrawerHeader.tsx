@@ -1,13 +1,11 @@
-import { memo, useCallback, useMemo, useState } from 'react';
-import { View, StyleSheet, type LayoutChangeEvent } from 'react-native';
+import { memo, useMemo } from 'react';
+import { StyleSheet } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { getGradeColor, DEFAULT_GRADE_COLOR } from '@boardsesh/board-constants/grade-colors';
 import { formatSends, formatQuality } from '../../lib/format-climb-stats';
 import { Text } from '../Text';
+import { DrawerHeader } from '../DrawerHeader';
 import { iosSystemColors } from '../../theme/ios-colors';
-import { spacing } from '../../theme/tokens';
-
-const MIN_GRADE_COLUMN_WIDTH: number = spacing[12];
 
 type PlayDrawerHeaderProps = {
   name: string;
@@ -30,16 +28,10 @@ export const PlayDrawerHeader = memo(function PlayDrawerHeader({
   setterUsername,
 }: PlayDrawerHeaderProps) {
   const { t } = useTranslation('climbs');
-  const [gradeColumnWidth, setGradeColumnWidth] = useState(MIN_GRADE_COLUMN_WIDTH);
   const gradeColor = useMemo(
     () => getGradeColor(rawDifficulty ?? difficulty) ?? DEFAULT_GRADE_COLOR,
     [rawDifficulty, difficulty],
   );
-
-  const handleGradeLayout = useCallback((event: LayoutChangeEvent) => {
-    const measuredWidth = Math.ceil(event.nativeEvent.layout.width);
-    setGradeColumnWidth((previousWidth) => (previousWidth === measuredWidth ? previousWidth : measuredWidth));
-  }, []);
 
   const subtitleParts: string[] = [];
   if (ascensionistCount > 0) subtitleParts.push(formatSends(ascensionistCount, t));
@@ -48,53 +40,28 @@ export const PlayDrawerHeader = memo(function PlayDrawerHeader({
   if (setterUsername) subtitleParts.push(setterUsername);
 
   return (
-    <View style={styles.container}>
-      <View style={styles.headerRow}>
-        <View style={[styles.leadingSpacer, { width: gradeColumnWidth }]} />
-        <View style={styles.centerColumn}>
+    <DrawerHeader
+      center={
+        <>
           <Text variant="body" style={styles.nameText} numberOfLines={1}>
             {name}
           </Text>
           <Text variant="caption1" style={styles.subtitleText} numberOfLines={1}>
             {subtitleParts.join(' · ')}
           </Text>
-        </View>
-        <Text
-          variant="headline"
-          style={[styles.gradeText, { color: gradeColor }]}
-          numberOfLines={1}
-          onLayout={handleGradeLayout}
-        >
+        </>
+      }
+      trailing={
+        <Text variant="headline" style={[styles.gradeText, { color: gradeColor }]} numberOfLines={1}>
           {difficulty}
         </Text>
-      </View>
-    </View>
+      }
+    />
   );
 });
 
 const styles = StyleSheet.create({
-  container: {
-    paddingHorizontal: spacing[4],
-    paddingVertical: spacing[3],
-    minHeight: 56,
-    justifyContent: 'center',
-  },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing[3],
-  },
-  leadingSpacer: {
-    flexShrink: 0,
-  },
-  centerColumn: {
-    flex: 1,
-    minWidth: 0,
-    alignItems: 'center',
-  },
   gradeText: {
-    flexShrink: 0,
-    minWidth: MIN_GRADE_COLUMN_WIDTH,
     fontVariant: ['tabular-nums'],
     fontWeight: '700',
     textAlign: 'right',
