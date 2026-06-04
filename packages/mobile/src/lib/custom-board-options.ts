@@ -9,7 +9,13 @@ import {
   type ProductSizeData,
   type SetData,
 } from '@boardsesh/board-constants/product-sizes';
-import { MOONBOARD_LAYOUTS, MOONBOARD_SETS, MOONBOARD_SIZE, type MoonBoardLayoutKey } from '@boardsesh/board-config';
+import {
+  getLayoutById,
+  MOONBOARD_LAYOUTS,
+  MOONBOARD_SETS,
+  MOONBOARD_SIZE,
+  type MoonBoardLayoutKey,
+} from '@boardsesh/board-config';
 
 const MOONBOARD_PRODUCT_SIZE: ProductSizeData = {
   id: MOONBOARD_SIZE.id,
@@ -22,14 +28,8 @@ const MOONBOARD_PRODUCT_SIZE: ProductSizeData = {
   productId: MOONBOARD_SIZE.id,
 };
 
-function getMoonBoardLayoutEntry(
-  layoutId: number,
-): [MoonBoardLayoutKey, (typeof MOONBOARD_LAYOUTS)[MoonBoardLayoutKey]] | null {
-  return (
-    (Object.entries(MOONBOARD_LAYOUTS).find(([, layout]) => layout.id === layoutId) as
-      | [MoonBoardLayoutKey, (typeof MOONBOARD_LAYOUTS)[MoonBoardLayoutKey]]
-      | undefined) ?? null
-  );
+function getMoonBoardLayoutKey(layoutId: number): MoonBoardLayoutKey | null {
+  return (getLayoutById(layoutId)?.[0] as MoonBoardLayoutKey | undefined) ?? null;
 }
 
 export function getBoardLayouts(boardName: BoardName): LayoutData[] {
@@ -46,7 +46,7 @@ export function getBoardLayouts(boardName: BoardName): LayoutData[] {
 
 export function getBoardSizesForLayoutId(boardName: BoardName, layoutId: number): ProductSizeData[] {
   if (boardName === 'moonboard') {
-    return getMoonBoardLayoutEntry(layoutId) ? [MOONBOARD_PRODUCT_SIZE] : [];
+    return getMoonBoardLayoutKey(layoutId) ? [MOONBOARD_PRODUCT_SIZE] : [];
   }
 
   return getSizesForLayoutId(boardName, layoutId);
@@ -54,9 +54,9 @@ export function getBoardSizesForLayoutId(boardName: BoardName, layoutId: number)
 
 export function getBoardSetsForLayoutAndSize(boardName: BoardName, layoutId: number, sizeId: number): SetData[] {
   if (boardName === 'moonboard') {
-    const layoutEntry = getMoonBoardLayoutEntry(layoutId);
-    if (!layoutEntry || sizeId !== MOONBOARD_SIZE.id) return [];
-    return MOONBOARD_SETS[layoutEntry[0]].map((set) => ({ id: set.id, name: set.name }));
+    const layoutKey = getMoonBoardLayoutKey(layoutId);
+    if (!layoutKey || sizeId !== MOONBOARD_SIZE.id) return [];
+    return MOONBOARD_SETS[layoutKey].map((set) => ({ id: set.id, name: set.name }));
   }
 
   return getSetsForLayoutAndSize(boardName, layoutId, sizeId);
@@ -64,7 +64,7 @@ export function getBoardSetsForLayoutAndSize(boardName: BoardName, layoutId: num
 
 export function getDefaultBoardSizeForLayout(boardName: BoardName, layoutId: number): number | null {
   if (boardName === 'moonboard') {
-    return getMoonBoardLayoutEntry(layoutId) ? MOONBOARD_SIZE.id : null;
+    return getMoonBoardLayoutKey(layoutId) ? MOONBOARD_SIZE.id : null;
   }
 
   return getDefaultSizeForLayout(boardName, layoutId);

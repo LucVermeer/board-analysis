@@ -129,4 +129,25 @@ describe('getBoardRenderData', () => {
     expect(result).toBeNull();
     expect(mockedGetMoonBoardDetails).not.toHaveBeenCalled();
   });
+
+  it('warns and returns null when MoonBoard details cannot be resolved', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    mockedGetMoonBoardDetails.mockImplementation(() => {
+      throw new Error('layout missing');
+    });
+
+    try {
+      expect(
+        getBoardRenderData({
+          boardName: 'moonboard',
+          layoutId: 999,
+          sizeId: 1,
+          setIds: [8],
+        }),
+      ).toBeNull();
+      expect(warnSpy).toHaveBeenCalledWith('[board-details] MoonBoard render data unavailable:', 'layout missing');
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
 });

@@ -21,6 +21,9 @@ function filterSupportedHoldsMap(boardName: BoardName, holdsMap: LitUpHoldsMap):
  * string.
  */
 export function useCreateClimb(boardName: BoardName, options?: UseCreateClimbOptions) {
+  // The editor mounts once per board route today, so this initial sanitizer only
+  // needs the mount-time board. If a future caller swaps boardName mid-mount,
+  // remount this hook or re-sanitize litUpHoldsMap on board change.
   const [litUpHoldsMap, setLitUpHoldsMap] = useState<LitUpHoldsMap>(() =>
     filterSupportedHoldsMap(boardName, options?.initialHoldsMap ?? {}),
   );

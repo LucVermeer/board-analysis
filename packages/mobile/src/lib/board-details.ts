@@ -96,7 +96,12 @@ function getMoonBoardRenderData(params: {
       imageUrls,
       holdsData,
     };
-  } catch {
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      '[board-details] MoonBoard render data unavailable:',
+      error instanceof Error ? error.message : String(error),
+    );
     return null;
   }
 }

@@ -118,11 +118,12 @@ export function useCreateClimbScreen({
   const [publishDuplicateError, setPublishDuplicateError] = useState<PublishDuplicateError | null>(null);
 
   useEffect(() => {
-    if (selectedBrush === 'OFF') return;
-    const supportedRoles = getPaintRoles(board.boardName);
-    if (supportedRoles.includes(selectedBrush)) return;
-    setSelectedBrush(supportedRoles[0] ?? 'HAND');
-  }, [board.boardName, selectedBrush]);
+    setSelectedBrush((currentBrush) => {
+      if (currentBrush === 'OFF') return currentBrush;
+      const supportedRoles = getPaintRoles(board.boardName);
+      return supportedRoles.includes(currentBrush) ? currentBrush : (supportedRoles[0] ?? 'HAND');
+    });
+  }, [board.boardName]);
 
   const draftKey = useMemo(() => createClimbDraftKey(board), [board]);
   // Skip the local-autosave restore when forking or editing (those seed from
