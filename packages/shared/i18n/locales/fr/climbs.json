@@ -663,7 +663,8 @@
       "fab": {
         "open": "Rechercher",
         "close": "Fermer la recherche",
-        "done": "Terminé"
+        "done": "Terminé",
+        "hint": "Ouvre la recherche, le grade et les filtres"
       }
     },
     "climbRow": {

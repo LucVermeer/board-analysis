@@ -21,6 +21,7 @@ import { View, StyleSheet } from 'react-native';
 import Animated, { FadeIn, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSegments } from 'expo-router';
+import { isClimbsTabRoute } from '../../lib/route-segments';
 import { timing } from '../../theme/animations';
 import {
   TOOLBAR_RESERVE,
@@ -45,14 +46,11 @@ export function PersistentQueueBar() {
   const insets = useSafeAreaInsets();
   const searchExpanded = useSearchExpanded();
   const reduceMotion = useReduceMotion();
-  // `useSegments` is typed as a route-specific tuple; widen to string[] so we can
-  // probe segment 1 (the tab name) regardless of which route is focused.
-  const segments = useSegments() as string[];
 
   const currentClimb = state.currentClimbQueueItem?.climb;
   // The tick (log-ascent) is a climb-browsing action — show it only on the Climbs
   // tab. The capsule itself stays global so the current climb is visible anywhere.
-  const onClimbsTab = segments[0] === '(tabs)' && segments[1] === 'climbs';
+  const onClimbsTab = isClimbsTabRoute(useSegments());
 
   // Yield the row to the Climbs-tab search when it expands: fade the capsule +
   // tick out (they stay mounted — they're global — just transparent and inert).

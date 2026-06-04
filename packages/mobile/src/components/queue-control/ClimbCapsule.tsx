@@ -1,8 +1,9 @@
 // The toolbar's center element: a frosted-glass pill showing the current climb's
-// grade + name. Tap opens the PlayDrawer; horizontal swipe steps the queue
+// name with the grade colorized on the right — the same treatment as the climb
+// list rows. Tap opens the PlayDrawer; horizontal swipe steps the queue
 // (prev/next) with the neighbouring climb peeking in — the same carousel feel as
-// the play drawer. Grade tints the glass; the vivid grade pill anchors the read.
-// Extracted from the old queue bar so the swipe/peek + drawer wiring is shared.
+// the play drawer. A faint grade wash tints the glass. Extracted from the old
+// queue bar so the swipe/peek + drawer wiring is shared.
 
 import { useCallback, useMemo, useState } from 'react';
 import { View, StyleSheet, type ColorValue, type LayoutChangeEvent } from 'react-native';
@@ -12,7 +13,6 @@ import { useTranslation } from 'react-i18next';
 import { computePeekOffset } from '@boardsesh/play-view';
 import { getGradeColor, DEFAULT_GRADE_COLOR } from '@boardsesh/board-constants/grade-colors';
 import type { ClimbQueueItem } from '@boardsesh/queue';
-import { iosSystemColors } from '../../theme/ios-colors';
 import { shadows } from '../../theme/tokens';
 import { withAlpha } from '../../theme/colors';
 import { TOOLBAR_CAPSULE_HEIGHT, TOOLBAR_CAPSULE_MAX_WIDTH } from '../../theme/layout';
@@ -42,22 +42,20 @@ type ClimbLabelProps = {
   display: ClimbDisplay;
   labelColor: ColorValue;
   formattedGrade: string | null;
-  chipBackground: string;
+  gradeColor: string;
 };
 
-function ClimbLabel({ display, labelColor, formattedGrade, chipBackground }: ClimbLabelProps) {
+function ClimbLabel({ display, labelColor, formattedGrade, gradeColor }: ClimbLabelProps) {
   return (
     <View style={styles.labelInner}>
-      {formattedGrade ? (
-        <View style={[styles.gradePill, { backgroundColor: chipBackground }]}>
-          <Text variant="caption1" color={iosSystemColors.white} style={styles.gradeText}>
-            {formattedGrade}
-          </Text>
-        </View>
-      ) : null}
       <Text variant="subheadline" color={labelColor} numberOfLines={1} ellipsizeMode="tail" style={styles.name}>
         {display.name ?? ''}
       </Text>
+      {formattedGrade ? (
+        <Text variant="headline" numberOfLines={1} style={[styles.gradeText, { color: gradeColor }]}>
+          {formattedGrade}
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -177,16 +175,16 @@ export function ClimbCapsule() {
   const previousFormatted = previousDisplay ? formatGrade(previousDisplay.difficulty) : null;
   const nextFormatted = nextDisplay ? formatGrade(nextDisplay.difficulty) : null;
 
-  const currentChipColor = getGradeColor(currentDisplay.difficulty) ?? DEFAULT_GRADE_COLOR;
-  const previousChipColor = previousDisplay
+  const currentGradeColor = getGradeColor(currentDisplay.difficulty) ?? DEFAULT_GRADE_COLOR;
+  const previousGradeColor = previousDisplay
     ? (getGradeColor(previousDisplay.difficulty) ?? DEFAULT_GRADE_COLOR)
     : DEFAULT_GRADE_COLOR;
-  const nextChipColor = nextDisplay ? (getGradeColor(nextDisplay.difficulty) ?? DEFAULT_GRADE_COLOR) : DEFAULT_GRADE_COLOR;
+  const nextGradeColor = nextDisplay ? (getGradeColor(nextDisplay.difficulty) ?? DEFAULT_GRADE_COLOR) : DEFAULT_GRADE_COLOR;
 
   // A faint grade-hued wash on the frosted glass — translucent so scrolling
   // content still frosts through (vs. the old opaque card). Falls back to a
-  // neutral elevated surface on the no-glass path; the vivid pill still anchors
-  // the grade either way.
+  // neutral elevated surface on the no-glass path; the colorized grade text
+  // still anchors the read either way.
   const gradeWash = withAlpha(getGradeColor(currentDisplay.difficulty) ?? DEFAULT_GRADE_COLOR, 0.16);
 
   return (
@@ -216,7 +214,7 @@ export function ClimbCapsule() {
               display={currentDisplay}
               labelColor={systemColors.label}
               formattedGrade={currentFormatted}
-              chipBackground={currentChipColor}
+              gradeColor={currentGradeColor}
             />
           </Animated.View>
           {nextDisplay ? (
@@ -225,7 +223,7 @@ export function ClimbCapsule() {
                 display={nextDisplay}
                 labelColor={systemColors.label}
                 formattedGrade={nextFormatted}
-                chipBackground={nextChipColor}
+                gradeColor={nextGradeColor}
               />
             </Animated.View>
           ) : null}
@@ -235,7 +233,7 @@ export function ClimbCapsule() {
                 display={previousDisplay}
                 labelColor={systemColors.label}
                 formattedGrade={previousFormatted}
-                chipBackground={previousChipColor}
+                gradeColor={previousGradeColor}
               />
             </Animated.View>
           ) : null}
@@ -278,19 +276,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
-  gradePill: {
-    // Reserve a 3-char slot ("V10") so the name doesn't shift between climbs.
-    minWidth: 40,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 6,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   gradeText: {
+    // Colorized like the list rows; right-aligned with a reserved min width
+    // (tabular digits) so the grade column stays put as you swipe between climbs.
     fontVariant: ['tabular-nums'],
-    fontWeight: '600',
-    textAlign: 'center',
+    fontWeight: '700',
+    minWidth: 40,
+    textAlign: 'right',
   },
   name: {
     flex: 1,
