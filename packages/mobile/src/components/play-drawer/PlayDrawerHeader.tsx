@@ -1,10 +1,12 @@
-import { memo, useMemo } from 'react';
-import { View, StyleSheet } from 'react-native';
+import { memo, useCallback, useMemo, useState } from 'react';
+import { View, StyleSheet, type LayoutChangeEvent } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { getGradeColor, DEFAULT_GRADE_COLOR } from '@boardsesh/board-constants/grade-colors';
 import { Text } from '../Text';
 import { iosSystemColors } from '../../theme/ios-colors';
 import { spacing } from '../../theme/tokens';
+
+const MIN_GRADE_COLUMN_WIDTH: number = spacing[12];
 
 type PlayDrawerHeaderProps = {
   name: string;
@@ -29,10 +31,16 @@ export const PlayDrawerHeader = memo(function PlayDrawerHeader({
   setterUsername,
 }: PlayDrawerHeaderProps) {
   const { t } = useTranslation('climbs');
+  const [gradeColumnWidth, setGradeColumnWidth] = useState(MIN_GRADE_COLUMN_WIDTH);
   const gradeColor = useMemo(
     () => getGradeColor(rawDifficulty ?? difficulty) ?? DEFAULT_GRADE_COLOR,
     [rawDifficulty, difficulty],
   );
+
+  const handleGradeLayout = useCallback((event: LayoutChangeEvent) => {
+    const measuredWidth = Math.ceil(event.nativeEvent.layout.width);
+    setGradeColumnWidth((previousWidth) => (previousWidth === measuredWidth ? previousWidth : measuredWidth));
+  }, []);
 
   const qualityNum = parseFloat(qualityAverage);
   const qualityDisplay = stars > 0 ? stars.toFixed(1) : qualityNum > 0 ? qualityNum.toFixed(1) : null;
@@ -45,7 +53,7 @@ export const PlayDrawerHeader = memo(function PlayDrawerHeader({
   return (
     <View style={styles.container}>
       <View style={styles.headerRow}>
-        <View style={styles.leadingSpacer} />
+        <View style={[styles.leadingSpacer, { width: gradeColumnWidth }]} />
         <View style={styles.centerColumn}>
           <Text variant="body" style={styles.nameText} numberOfLines={1}>
             {name}
@@ -54,7 +62,12 @@ export const PlayDrawerHeader = memo(function PlayDrawerHeader({
             {subtitleParts.join(' · ')}
           </Text>
         </View>
-        <Text variant="headline" style={[styles.gradeText, { color: gradeColor }]} numberOfLines={1}>
+        <Text
+          variant="headline"
+          style={[styles.gradeText, { color: gradeColor }]}
+          numberOfLines={1}
+          onLayout={handleGradeLayout}
+        >
           {difficulty}
         </Text>
       </View>
@@ -76,7 +89,6 @@ const styles = StyleSheet.create({
   },
   leadingSpacer: {
     flexShrink: 0,
-    minWidth: 48,
   },
   centerColumn: {
     flex: 1,
@@ -85,7 +97,7 @@ const styles = StyleSheet.create({
   },
   gradeText: {
     flexShrink: 0,
-    minWidth: 48,
+    minWidth: MIN_GRADE_COLUMN_WIDTH,
     fontVariant: ['tabular-nums'],
     fontWeight: '700',
     textAlign: 'right',
