@@ -75,11 +75,6 @@ vi.mock('../../../providers/drawer-host-provider', () => ({
 
 vi.mock('../../../hooks/use-reduce-motion', () => ({ useReduceMotion: () => false }));
 
-// withAlpha appends the alpha byte so the logged tint/fallback differ from the
-// neutral resting colours in a way the assertions can read.
-vi.mock('../../../theme/colors', () => ({
-  withAlpha: (color: string, alpha: number) => `${color}@${alpha}`,
-}));
 vi.mock('../../../theme/animations', () => ({ springs: { bouncy: {}, snappy: {} } }));
 vi.mock('../../../lib/haptics', () => ({ hapticSelection: vi.fn() }));
 vi.mock('../../../theme/layout', () => ({ glassSize: { hero: 64, standard: 56 } }));

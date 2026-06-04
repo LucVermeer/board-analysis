@@ -25,9 +25,16 @@ type GlassIconButtonProps = {
   tintColor?: string;
   /** Solid colour used on Android, Reduce Transparency, and the cold-start frame. */
   fallbackColor: ColorValue;
-  /** Frost strength for the iOS < 26 blur fallback (see `glassMaterial`). Default
-   *  is GlassSurface's `regular`; pass `glassMaterial.thick` for a FAB floating
-   *  over bright, saturated content. */
+  /**
+   * Frost strength for the iOS < 26 blur fallback (see `glassMaterial`). Default
+   * is GlassSurface's `regular`; pass `glassMaterial.thick` for a FAB floating
+   * over bright, saturated content.
+   *
+   * NOTE: this ONLY affects the iOS < 26 blur path. On iOS 26+ Liquid Glass the
+   * `GlassView` exposes just `glassEffectStyle` (`'regular'`/`'clear'`) and has no
+   * blur-amount input, so `blurAmount` is silently ignored there — a `thick` FAB
+   * simply renders as the standard `regular` glass.
+   */
   blurAmount?: number;
   /** Count badge (top-right). Rendered only when > 0. */
   badgeCount?: number;

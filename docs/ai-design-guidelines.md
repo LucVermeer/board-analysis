@@ -866,14 +866,26 @@ The Expo app (`packages/mobile/`) is a separate implementation from the web CSS 
 | Android                                     | Solid themed surface (`systemColors.secondaryBackground`) |
 | Reduce Transparency on (any platform)       | Solid themed surface                                  |
 
-Props: `glassEffectStyle` (`'regular'` for frosted chrome, `'clear'` for content-forward), `tintColor` (translucent hue composited onto the glass), `fallbackColor` (solid path).
+Props: `glassEffectStyle` (`'regular'` for frosted chrome, `'clear'` for content-forward), `tintColor` (translucent hue composited onto the glass), `fallbackColor` (solid path), `blurAmount` (frost strength — see material note below).
+
+### Glass material (thin / regular / thick)
+
+Native iOS 26 Liquid Glass (`GlassView`) only exposes two styles — `'regular'` and `'clear'` — so there is **no thin/thick control on iOS 26+**. The material "thickness" lives entirely on the **iOS < 26 blur fallback**, expressed as `blurAmount` via the `glassMaterial` tokens in `theme/tokens.ts`:
+
+| Token                   | `blurAmount` | Use                                                                 |
+| ----------------------- | ------------ | ------------------------------------------------------------------- |
+| `glassMaterial.thin`    | 13           | Text-bearing capsules (climb-name capsule, board-name capsule, grade pill) — lighter so content behind stays legible |
+| `glassMaterial.regular` | 20           | Default for actionable FABs (`GlassSurface`'s built-in default)     |
+| `glassMaterial.thick`   | 30           | A FAB over bright, saturated content (the create-playlist FAB over vivid hero cards) — frosts the colour instead of letting it bleed through |
+
+On iOS 26+ all three render as `regular` Liquid Glass (`blurAmount` is ignored); the split only manifests on the iOS < 26 frosted-blur path. `GlassIconButton` forwards an optional `blurAmount` for this.
 
 ### Where glass is allowed
 
-Glass is for **floating chrome only** — never for content canvases, full-screen surfaces, or text-bearing bars (Apple's HIG, and washed-out/illegible content otherwise):
+Glass is for **floating chrome only** — never for content canvases or text-heavy reading surfaces (Apple's HIG, and washed-out/illegible content otherwise). FABs and capsules carry **no solid colour fill**: colour rides the icon/text (and, for state, a translucent native `tintColor`), never an opaque background.
 
-- **Glass:** the bottom tab bar (`BlurTabBar` — a bottom-anchored, full-width Liquid Glass bar spanning through the home-indicator inset) and the `QuickTickBar` (over the board image).
-- **Opaque:** the persistent queue mini-player (a solid grade-tinted card — Liquid Glass is too see-through for a floating bar you have to read), the full-height `PlayDrawer`, and all bottom sheets (`Sheet`, `QueueSheet`, `AngleSelectorSheet`, etc.) use themed `secondaryBackground`.
+- **Glass:** the bottom tab bar (`BlurTabBar`), the persistent floating toolbar — the climb-name capsule (`ClimbCapsule`), log-ascent FAB (`LogAscentFab`), and search FAB (`SearchFab`) — the `QuickTickBar`, the create-playlist FAB, the top board-name chrome (`ClimbTopChrome`), the session overlay (`SessionScreenHost`), and the `PlayDrawer` background. Capsules use the `thin` material; FABs `regular` (the create FAB `thick`).
+- **Opaque:** the remaining bottom sheets (`Sheet`, `QueueSheet`, `AngleSelectorSheet`, etc.) use themed `secondaryBackground`.
 
 ### Dark mode & appearance
 
