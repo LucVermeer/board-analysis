@@ -28,10 +28,6 @@ type GradeChipProps = {
   style?: StyleProp<ViewStyle>;
 };
 
-function alphaGradeColor(color: string, alpha: number): string {
-  return withAlpha(color, alpha);
-}
-
 export function GradeChip({
   label,
   tone = 'neutral',
@@ -58,11 +54,11 @@ export function GradeChip({
     borderColor = accentColor;
     textColor = readableTextColor(accentColor);
   } else if (ranged) {
-    backgroundColor = alphaGradeColor(accentColor, 0.18);
-    borderColor = alphaGradeColor(accentColor, 0.75);
+    backgroundColor = withAlpha(accentColor, 0.18);
+    borderColor = withAlpha(accentColor, 0.75);
   } else if (consensus) {
-    backgroundColor = alphaGradeColor(accentColor, 0.11);
-    borderColor = alphaGradeColor(accentColor, 0.55);
+    backgroundColor = withAlpha(accentColor, 0.11);
+    borderColor = withAlpha(accentColor, 0.55);
   }
 
   return (

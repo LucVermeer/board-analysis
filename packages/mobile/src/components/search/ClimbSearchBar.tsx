@@ -191,6 +191,9 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
+    // Below the chrome (zIndex 1) so taps on the grade rail / row reach their
+    // controls; this layer only catches taps in the empty area to dismiss.
+    zIndex: 0,
   },
   chrome: {
     zIndex: 1,

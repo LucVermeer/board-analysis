@@ -42,7 +42,8 @@ vi.mock('react-native-gesture-handler', () => ({
       return gesture;
     },
   },
-  GestureDetector: ({ children }: { children?: ReactNode }) => createElement('div', { 'data-gesture': 'true' }, children),
+  GestureDetector: ({ children }: { children?: ReactNode }) =>
+    createElement('div', { 'data-gesture': 'true' }, children),
   ScrollView: ({ children, onLayout }: { children?: ReactNode; onLayout?: (event: LayoutEvent) => void }) =>
     createElement(
       'div',
@@ -147,7 +148,7 @@ vi.mock('react-i18next', () => ({
   }),
 }));
 
-import { GradeRangeRail } from '../GradeRail';
+import { GradeRangeRail, GradeSingleSelectRail } from '../GradeRail';
 
 const grades: Grade[] = [
   { difficultyId: 10, name: 'V4' },
@@ -201,7 +202,7 @@ describe('GradeRangeRail', () => {
     expect(onChange).toHaveBeenLastCalledWith({ minGradeId: 10, maxGradeId: 14 });
   });
 
-  it('keeps the rail open after grade taps until the user dismisses it', async () => {
+  it('keeps the rail open after a first (single) grade tap', async () => {
     const { getByText, onRequestClose } = renderRail({ minGradeId: undefined, maxGradeId: undefined });
     await act(async () => {
       await Promise.resolve();
@@ -213,6 +214,80 @@ describe('GradeRangeRail', () => {
     expect(onRequestClose).not.toHaveBeenCalled();
   });
 
+  it('closes after completing a range by tapping a second grade', async () => {
+    const onRequestClose = vi.fn();
+    const onChange = vi.fn();
+    const { getByText, rerender } = render(
+      <GradeRangeRail
+        grades={grades}
+        bound={{ minGradeId: undefined, maxGradeId: undefined }}
+        onChange={onChange}
+        onRequestClose={onRequestClose}
+      />,
+    );
+    await act(async () => {
+      await Promise.resolve();
+    });
+    // First tap: single grade selected, rail stays open
+    fireEvent.click(getByText('V4'));
+    act(() => vi.advanceTimersByTime(0));
+    expect(onRequestClose).not.toHaveBeenCalled();
+
+    // Rerender with the new bound — same onRequestClose ref
+    rerender(
+      <GradeRangeRail
+        grades={grades}
+        bound={{ minGradeId: 10, maxGradeId: 10 }}
+        onChange={onChange}
+        onRequestClose={onRequestClose}
+      />,
+    );
+
+    // Second tap within window: range formed → close
+    fireEvent.click(getByText('V6'));
+    act(() => vi.advanceTimersByTime(300));
+    expect(onRequestClose).toHaveBeenCalled();
+  });
+
+  it('stays open after clearing the active single grade (starting a fresh range)', async () => {
+    const onRequestClose = vi.fn();
+    const { getByText } = render(
+      <GradeRangeRail
+        grades={grades}
+        bound={{ minGradeId: 12, maxGradeId: 12 }}
+        onChange={vi.fn()}
+        onRequestClose={onRequestClose}
+      />,
+    );
+    await act(async () => {
+      await Promise.resolve();
+    });
+    // Tap V5 again (it's already selected) → deselects to "any". The rail must
+    // stay open so the user can build a new range from here, not close.
+    fireEvent.click(getByText('V5'));
+    act(() => vi.advanceTimersByTime(10000));
+    expect(onRequestClose).not.toHaveBeenCalled();
+  });
+
+  it('keeps the rail open when trimming an existing range (adjusting endpoints)', async () => {
+    const onRequestClose = vi.fn();
+    const { getByText } = render(
+      <GradeRangeRail
+        grades={grades}
+        bound={{ minGradeId: 10, maxGradeId: 14 }}
+        onChange={vi.fn()}
+        onRequestClose={onRequestClose}
+      />,
+    );
+    await act(async () => {
+      await Promise.resolve();
+    });
+    // Tap V4 (min endpoint of existing range) → trims to V5-V6 — still a range, rail stays open
+    fireEvent.click(getByText('V4'));
+    act(() => vi.advanceTimersByTime(10000));
+    expect(onRequestClose).not.toHaveBeenCalled();
+  });
+
   it('does not auto-dismiss a single selection while screen reader state is still resolving', () => {
     accessibilityInfo.screenReaderEnabled.mockResolvedValue(true);
     const { getByText, onRequestClose } = renderRail({ minGradeId: undefined, maxGradeId: undefined });
@@ -221,5 +296,62 @@ describe('GradeRangeRail', () => {
       vi.advanceTimersByTime(3000);
     });
     expect(onRequestClose).not.toHaveBeenCalled();
+  });
+});
+
+describe('GradeSingleSelectRail', () => {
+  beforeEach(() => {
+    haptics.selection.mockClear();
+  });
+
+  it('selects a grade by its difficulty id', () => {
+    const onSelect = vi.fn();
+    const { getByText } = render(
+      <GradeSingleSelectRail grades={grades} selectedDifficultyId={null} onSelect={onSelect} />,
+    );
+    fireEvent.click(getByText('V5'));
+    expect(onSelect).toHaveBeenCalledWith(12);
+  });
+
+  it('clears the active grade when re-tapped (allowClear defaults to true)', () => {
+    const onSelect = vi.fn();
+    const { getByText } = render(
+      <GradeSingleSelectRail grades={grades} selectedDifficultyId={12} onSelect={onSelect} />,
+    );
+    fireEvent.click(getByText('V5'));
+    expect(onSelect).toHaveBeenCalledWith(undefined);
+  });
+
+  it('keeps the active grade when re-tapped and allowClear is false (logbook edit)', () => {
+    const onSelect = vi.fn();
+    const { getByText } = render(
+      <GradeSingleSelectRail grades={grades} selectedDifficultyId={12} onSelect={onSelect} allowClear={false} />,
+    );
+    fireEvent.click(getByText('V5'));
+    // Re-selecting the same grade returns its id, never undefined — there is no
+    // "no grade" option when logging an ascent.
+    expect(onSelect).toHaveBeenCalledWith(12);
+    expect(onSelect).not.toHaveBeenCalledWith(undefined);
+  });
+
+  it('marks the consensus grade distinctly from the active selection', () => {
+    const { container } = render(
+      <GradeSingleSelectRail
+        grades={grades}
+        selectedDifficultyId={null}
+        consensusDifficultyId={14}
+        onSelect={vi.fn()}
+      />,
+    );
+    const consensusChip = container.querySelector('[data-label*="consensusGradeAria"]');
+    expect(consensusChip).not.toBeNull();
+  });
+
+  it('fires selection haptics on tap', () => {
+    const { getByText } = render(
+      <GradeSingleSelectRail grades={grades} selectedDifficultyId={null} onSelect={vi.fn()} />,
+    );
+    fireEvent.click(getByText('V4'));
+    expect(haptics.selection).toHaveBeenCalled();
   });
 });

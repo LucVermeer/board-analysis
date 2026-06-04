@@ -183,7 +183,7 @@ export function SearchFab({
       {expanded ? (
         <Pressable
           style={styles.scrim}
-          onPress={gradeRailVisible ? onCloseGrade : handleCollapse}
+          onPress={gradeRailVisible ? undefined : handleCollapse}
           accessibilityElementsHidden
           importantForAccessibility="no-hide-descendants"
         />

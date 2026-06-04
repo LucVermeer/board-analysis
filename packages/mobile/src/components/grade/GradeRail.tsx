@@ -62,7 +62,12 @@ type GradeRangeRailProps = {
   bound: GradeBound;
   sendDifficultyIds?: readonly number[];
   onChange: (next: GradeBound) => void;
-  onRequestClose: () => void;
+  /**
+   * Asked to dismiss itself (swipe, Done, completed range, or cleared
+   * selection). Only ever called when `dismissible` is true, so an inline,
+   * always-open rail (e.g. inside the filter sheet) can omit it.
+   */
+  onRequestClose?: () => void;
   dismissible?: boolean;
   showTitle?: boolean;
   style?: StyleProp<ViewStyle>;
@@ -85,6 +90,10 @@ export function GradeRangeRail({
   const chipLayoutsRef = useRef<Record<number, ChipLayout>>({});
   const dismissTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSingleAtRef = useRef<number | undefined>(undefined);
+  // The pending dismiss runs through a ref so a parent re-render that swaps the
+  // onRequestClose identity between scheduling and firing can't strand a stale
+  // closure on the timer.
+  const onRequestCloseRef = useRef(onRequestClose);
   const [railWidth, setRailWidth] = useState(0);
   const [screenReaderEnabled, setScreenReaderEnabled] = useState<boolean | null>(null);
   const didCenterRef = useRef(false);
@@ -102,10 +111,14 @@ export function GradeRangeRail({
     }
   }, []);
 
+  useEffect(() => {
+    onRequestCloseRef.current = onRequestClose;
+  }, [onRequestClose]);
+
   const handleRequestClose = useCallback(() => {
     clearDismissTimer();
-    onRequestClose();
-  }, [clearDismissTimer, onRequestClose]);
+    onRequestCloseRef.current?.();
+  }, [clearDismissTimer]);
 
   useEffect(() => clearDismissTimer, [clearDismissTimer]);
 
@@ -128,9 +141,9 @@ export function GradeRangeRail({
   const scheduleDismiss = useCallback(
     (delay: number) => {
       clearDismissTimer();
-      dismissTimerRef.current = setTimeout(onRequestClose, delay);
+      dismissTimerRef.current = setTimeout(() => onRequestCloseRef.current?.(), delay);
     },
-    [clearDismissTimer, onRequestClose],
+    [clearDismissTimer],
   );
 
   const handleGestureClose = useMemo(
@@ -165,8 +178,19 @@ export function GradeRangeRail({
       const result = computeGradeTap(bound, gradeIds, difficultyId, withinWindow);
       onChange(result.next);
       lastSingleAtRef.current = isSingleGrade(result.next) ? Date.now() : undefined;
+      // The rail auto-closes only when a tap *completes a range* — extending a
+      // single grade into a two-ended range. Every other tap keeps it open:
+      // picking the first grade, switching the single grade, adjusting an
+      // existing range, and crucially clearing a grade (tapping the already-
+      // selected one). That clear case is how a user starts a fresh range from a
+      // prior selection, so closing there would cut them off mid-build. To
+      // dismiss without finishing a range, swipe the handle down or tap Done.
+      const completedRange = isSingleGrade(bound) && isRangeGrade(result.next);
+      if (dismissible && completedRange) {
+        scheduleDismiss(CLEAR_DISMISS_MS);
+      }
     },
-    [bound, gradeIds, onChange, clearDismissTimer],
+    [bound, gradeIds, onChange, clearDismissTimer, dismissible, scheduleDismiss],
   );
 
   const handleClear = useCallback(() => {
@@ -236,9 +260,7 @@ export function GradeRangeRail({
           tone={anySelected ? 'selected' : 'neutral'}
           gradeColor={brandColors.primary}
           onPress={handleClear}
-          accessibilityLabel={
-            anySelected ? t('mobile.gradeRail.anyGradeAria') : t('mobile.gradeRail.clearFilterAria')
-          }
+          accessibilityLabel={anySelected ? t('mobile.gradeRail.anyGradeAria') : t('mobile.gradeRail.clearFilterAria')}
           accessibilityState={{ selected: anySelected }}
         />
         {grades.map((grade) => {
@@ -261,7 +283,7 @@ export function GradeRangeRail({
                     ? t('mobile.gradeRail.rangeFilterAria', { grade: label })
                     : t('mobile.gradeRail.setFilterAria', { grade: label })
               }
-              accessibilityHint={t('mobile.gradeRail.rangeHint')}
+              accessibilityHint={endpoint ? undefined : t('mobile.gradeRail.rangeHint')}
               accessibilityState={{ selected: endpoint }}
               onLayout={({ nativeEvent }) => {
                 chipLayoutsRef.current[grade.difficultyId] = nativeEvent.layout;
