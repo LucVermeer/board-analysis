@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { randomUUID } from 'expo-crypto';
 import { getGradeColor, DEFAULT_GRADE_COLOR } from '@boardsesh/board-constants/grade-colors';
 import type { BoardName } from '@boardsesh/shared-schema';
+import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { Text } from '../../../src/components/Text';
 import { Button } from '../../../src/components/Button';
 import { Icon } from '../../../src/components/Icon';
@@ -72,7 +73,7 @@ export default function ClimbDetail() {
   const viewedClimbUuid = climb?.uuid;
   useEffect(() => {
     if (!viewedClimbUuid) return;
-    track('Climb Info Viewed', {
+    track(SHARED_EVENTS.ClimbInfoViewed, {
       boardName: boardName ?? null,
       climbUuid: viewedClimbUuid,
     });

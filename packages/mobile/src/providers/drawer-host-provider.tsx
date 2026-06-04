@@ -16,6 +16,7 @@ import { randomUUID } from 'expo-crypto';
 import type { BoardName, Climb } from '@boardsesh/shared-schema';
 import { buildBoardPath } from '@boardsesh/board-config';
 import type { Climb as QueueClimb, ClimbQueueItem, PlaylistSuggestionSource } from '@boardsesh/queue';
+import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { PlayDrawer, type PlayDrawerHandle, type PlayDrawerOpenOptions } from '../components/play-drawer';
 import { LogAscentSheet } from '../components/LogAscentSheet';
 import { QueueSheet } from '../components/play-drawer/QueueSheet';
@@ -137,7 +138,7 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
   const openPlayDrawer = useCallback((climb: Climb, options?: OpenPlayDrawerOptions) => {
     const { boardConfig: override, ...openOptions } = options ?? {};
     const boardConfig = override ?? activeBoardConfigRef.current;
-    track('Play Drawer Opened', {
+    track(SHARED_EVENTS.PlayDrawerOpened, {
       climbUuid: climb.uuid,
       boardName: boardConfig?.boardName,
       layoutId: boardConfig?.layoutId,
@@ -187,7 +188,7 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      track('Angle Changed', {
+      track(SHARED_EVENTS.AngleChanged, {
         angle: newAngle,
         boardName: cfg?.boardName,
         layoutId: cfg?.layoutId,
@@ -242,7 +243,7 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
 
   const handleClimbActionsToggleFavorite = useCallback(() => {
     if (!climbActions) return;
-    track('Favorite Toggle', {
+    track(SHARED_EVENTS.FavoriteToggle, {
       action: 'toggled',
       climbUuid: climbActions.climb.uuid,
       boardName: climbActions.boardConfig.boardName,

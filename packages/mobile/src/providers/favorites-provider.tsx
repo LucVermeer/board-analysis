@@ -13,6 +13,7 @@
 
 import { createContext, useContext, useCallback, useLayoutEffect, useMemo, type ReactNode } from 'react';
 import { favoritesStore } from '@boardsesh/climb-actions';
+import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { track } from '../lib/analytics';
 
 type FavoritesContextValue = {
@@ -60,7 +61,7 @@ export function FavoritesProvider({
   const trackedToggleFavorite = useCallback(
     async (uuid: string): Promise<boolean> => {
       const isNowFavorited = await toggleFavorite(uuid);
-      track('Favorite Toggle', {
+      track(SHARED_EVENTS.FavoriteToggle, {
         action: isNowFavorited ? 'added' : 'removed',
         climbUuid: uuid,
         source: 'mobile',

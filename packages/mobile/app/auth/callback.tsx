@@ -3,6 +3,7 @@ import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { exchangeTransferToken } from '../../src/lib/auth';
 import { classifyNativeAuthFailureReason } from '../../src/lib/native-auth-analytics';
+import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { brandColors } from '../../src/theme/colors';
 import { track } from '../../src/lib/analytics';
 import { useAuth } from '../../src/providers/auth-provider';
@@ -18,7 +19,7 @@ export default function AuthCallback() {
     if (!transferToken) {
       // auth_method is unknown here — the OAuth provider isn't echoed back on the
       // transfer-token exchange (same reason Login Succeeded omits it).
-      track('Login Failed', { flow: 'native', failure_reason: 'no_transfer_token' });
+      track(SHARED_EVENTS.LoginFailed, { flow: 'native', failure_reason: 'no_transfer_token' });
       setError('No transfer token received');
       return;
     }
@@ -29,16 +30,16 @@ export default function AuthCallback() {
     exchangeTransferToken(transferToken)
       .then(async (result) => {
         if (result.success) {
-          track('Login Succeeded', { flow: 'native' });
+          track(SHARED_EVENTS.LoginSucceeded, { flow: 'native' });
           await refreshAuthState();
           router.replace('/(tabs)/boards');
         } else {
-          track('Login Failed', { flow: 'native', failure_reason: classifyNativeAuthFailureReason(result) });
+          track(SHARED_EVENTS.LoginFailed, { flow: 'native', failure_reason: classifyNativeAuthFailureReason(result) });
           setError(result.error);
         }
       })
       .catch((exchangeError: unknown) => {
-        track('Login Failed', { flow: 'native', failure_reason: 'exception' });
+        track(SHARED_EVENTS.LoginFailed, { flow: 'native', failure_reason: 'exception' });
         setError(exchangeError instanceof Error ? exchangeError.message : 'Unexpected error');
       });
   }, [transferToken, router, refreshAuthState]);

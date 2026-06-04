@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import type { Climb, BoardName } from '@boardsesh/shared-schema';
+import { SHARED_EVENTS } from '@boardsesh/analytics';
 import {
   toClimbSearchInput,
   mergeBoardFilters,
@@ -319,7 +320,7 @@ function ClimbListInner() {
     const trackKey = JSON.stringify({ name, filters, boardFilters, boardName, layoutId, sizeId, setIds, angle });
     if (lastSearchTrackKeyRef.current === trackKey) return;
     lastSearchTrackKeyRef.current = trackKey;
-    track('Climb Search Performed', {
+    track(SHARED_EVENTS.ClimbSearchPerformed, {
       hasQuery: name.length > 0,
       queryLengthBucket: queryLengthBucket(name),
       // The search payload carries `climbs` + `hasMore` only — no total count

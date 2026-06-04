@@ -15,6 +15,7 @@ import { randomUUID } from 'expo-crypto';
 import { computeNavigationStateWithSuggestions, boardSupportsMirroring } from '@boardsesh/play-view';
 import { climbToQueueItem } from '../../lib/climb-to-queue-item';
 import type { ActiveSubDrawer } from '@boardsesh/play-view';
+import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { SwipeBoardCarousel } from './SwipeBoardCarousel';
 import { PlaybackControls } from './PlaybackControls';
 import { useMobilePlayback } from './use-mobile-playback';
@@ -244,7 +245,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
     hapticSuccess();
     const nextIsFavorited = !isFavorited;
     setIsFavorited(nextIsFavorited);
-    track('Favorite Toggle', {
+    track(SHARED_EVENTS.FavoriteToggle, {
       action: nextIsFavorited ? 'added' : 'removed',
       climbUuid: displayedClimb.uuid,
       boardName,

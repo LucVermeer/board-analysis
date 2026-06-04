@@ -7,6 +7,7 @@
 
 import { createContext, useContext, useCallback, useMemo, type ReactNode } from 'react';
 import type { Playlist } from '@boardsesh/graphql/operations/playlists';
+import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { track } from '../lib/analytics';
 
 export type { Playlist } from '@boardsesh/graphql/operations/playlists';
@@ -77,7 +78,7 @@ export function PlaylistsProvider({
   const trackedCreatePlaylist = useCallback(
     async (name: string, description?: string, color?: string, icon?: string): Promise<Playlist> => {
       const created = await createPlaylist(name, description, color, icon);
-      track('Create Playlist', {
+      track(SHARED_EVENTS.CreatePlaylist, {
         playlistId: created.id,
         hasDescription: !!description,
         hasColor: !!color,
@@ -91,7 +92,7 @@ export function PlaylistsProvider({
   const trackedAddToPlaylist = useCallback(
     async (playlistId: string, climbUuid: string, angle: number): Promise<void> => {
       await addToPlaylist(playlistId, climbUuid, angle);
-      track('Add to Playlist', {
+      track(SHARED_EVENTS.AddToPlaylist, {
         playlistId,
         climbUuid,
       });
@@ -102,7 +103,7 @@ export function PlaylistsProvider({
   const trackedRemoveFromPlaylist = useCallback(
     async (playlistId: string, climbUuid: string): Promise<void> => {
       await removeFromPlaylist(playlistId, climbUuid);
-      track('Remove from Playlist', {
+      track(SHARED_EVENTS.RemoveFromPlaylist, {
         playlistId,
         climbUuid,
       });

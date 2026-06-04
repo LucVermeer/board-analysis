@@ -23,6 +23,7 @@ import { useTheme } from '../../providers/theme-provider';
 import { useGrades } from '../../lib/graphql/hooks';
 import { useOptionalBoardProvider, useSaveTick } from '@boardsesh/board-react';
 import { toBoardName } from '@boardsesh/board-config';
+import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { useToast } from '../../providers/toast-provider';
 import { track } from '../../lib/analytics';
 import { hapticSuccess, hapticError } from '../../lib/haptics';
@@ -134,7 +135,7 @@ export const QuickTickBar = React.memo(function QuickTickBar({
   const handleSaveWithStatus = useCallback(
     (status: TickStatus) => {
       if (saveTick.isPending) return;
-      track('Tick Button Clicked', { climbUuid, layoutId: layoutId ?? null });
+      track(SHARED_EVENTS.TickButtonClicked, { climbUuid, layoutId: layoutId ?? null });
       setLastError(null);
 
       const finalAttempts = clampAttempts(tickState.attemptCount, status);
@@ -158,7 +159,7 @@ export const QuickTickBar = React.memo(function QuickTickBar({
         },
         {
           onSuccess: () => {
-            track('Quick Tick Saved', {
+            track(SHARED_EVENTS.QuickTickSaved, {
               climbUuid,
               layoutId: layoutId ?? null,
               status,
@@ -167,7 +168,6 @@ export const QuickTickBar = React.memo(function QuickTickBar({
               hasDifficulty: tickState.difficulty != null,
               hasComment: comment.length > 0,
             });
-            track('Tick Logged', { climbUuid, layoutId: layoutId ?? null, status });
             hapticSuccess();
             // Reset on commit so reopening the sheet on the same climb
             // doesn't show stale state from the just-saved tick.
@@ -179,7 +179,7 @@ export const QuickTickBar = React.memo(function QuickTickBar({
           },
           onError: (error: unknown) => {
             hapticError();
-            track('Quick Tick Failed', { climbUuid, layoutId: layoutId ?? null });
+            track(SHARED_EVENTS.QuickTickFailed, { climbUuid, layoutId: layoutId ?? null });
             const message =
               error instanceof Error && error.message ? error.message : tClimbs('mobile.logAscent.errorMessage');
             setLastError(message);

@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { ClimbQueueItem } from '@boardsesh/queue';
+import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { useBoardBluetooth } from '../lib/ble/use-board-bluetooth';
 import { registerBluetoothConnection } from '../lib/ble/bluetooth-status-store';
 import { useQueue } from './queue-provider';
@@ -211,7 +212,7 @@ export function BluetoothProvider({ boardName, layoutId, sizeId, children }: Blu
   const wrappedDisconnect = useCallback(async () => {
     isUserDisconnectRef.current = true;
     setDisconnectedUnexpectedly(false);
-    track('Bluetooth Disconnected', { boardName, reason: 'user' });
+    track(SHARED_EVENTS.BluetoothDisconnected, { boardName, reason: 'user' });
     try {
       await disconnect();
     } finally {
@@ -230,7 +231,7 @@ export function BluetoothProvider({ boardName, layoutId, sizeId, children }: Blu
       // Unexpected disconnect — fire haptic error and expose to consumers
       hapticError();
       setDisconnectedUnexpectedly(true);
-      track('Bluetooth Disconnected', { boardName, reason: 'unexpected' });
+      track(SHARED_EVENTS.BluetoothDisconnected, { boardName, reason: 'unexpected' });
     }
     wasConnectedRef.current = isConnected;
   }, [isConnected]);

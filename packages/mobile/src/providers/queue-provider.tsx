@@ -36,6 +36,7 @@ import { useQueueMutations, type PublishPlaybackStateInput } from '@boardsesh/qu
 import type { SessionSummary, SubscriptionQueueEvent } from '@boardsesh/shared-schema';
 import { execute } from '@boardsesh/graphql-client';
 import { buildBoardPath, parseBoardPath } from '@boardsesh/board-config';
+import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { JOIN_SESSION } from '@boardsesh/graphql/operations/queue-session';
 import { getWsClient } from '../lib/graphql/ws-client';
 import { getHttpClient } from '../lib/graphql/client';
@@ -327,7 +328,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
           dispatch(result.action);
           switch (result.eventType) {
             case 'QueueItemAdded':
-              track('Climb Added to Queue', {
+              track(SHARED_EVENTS.ClimbAddedToQueue, {
                 boardName: activeBoardRef.current?.boardType,
                 layoutId: activeBoardRef.current?.layoutId,
                 addedFromTab: 'peer_broadcast',
@@ -336,7 +337,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
               });
               break;
             case 'QueueItemRemoved':
-              track('Climb Removed from Queue', {
+              track(SHARED_EVENTS.ClimbRemovedFromQueue, {
                 boardName: activeBoardRef.current?.boardType,
                 layoutId: activeBoardRef.current?.layoutId,
                 partyMode: true,
@@ -345,7 +346,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
               break;
             case 'QueueReordered':
               if (event.__typename === 'QueueReordered') {
-                track('Queue Reordered', {
+                track(SHARED_EVENTS.QueueReordered, {
                   boardName: activeBoardRef.current?.boardType,
                   layoutId: activeBoardRef.current?.layoutId,
                   oldIndex: event.oldIndex,
@@ -458,7 +459,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
           const newId = response.createSession.id;
           sessionIdRef.current = newId;
           setSessionId(newId);
-          track('Session Started', {
+          track(SHARED_EVENTS.SessionStarted, {
             boardName: activeBoard.boardType,
             hasGoal: !!config?.goal,
             isDiscoverable: config?.discoverable ?? false,
@@ -613,7 +614,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       // phone, or a transient WS error must NOT see "Action failed" when the
       // local queue is already correct. Dev-log only.
       dispatch({ type: 'DELTA_ADD_QUEUE_ITEM', payload: { item } });
-      track('Climb Added to Queue', {
+      track(SHARED_EVENTS.ClimbAddedToQueue, {
         climbUuid: item.climb.uuid,
         boardName: activeBoardRef.current?.boardType,
         layoutId: activeBoardRef.current?.layoutId,
@@ -636,7 +637,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       // item locally; the server mutation only syncs it to a party session (and
       // no-ops when there's none — it never lazily creates one just to remove).
       dispatch({ type: 'DELTA_REMOVE_QUEUE_ITEM', payload: { uuid } });
-      track('Climb Removed from Queue', {
+      track(SHARED_EVENTS.ClimbRemovedFromQueue, {
         climbUuid: removedItem?.climb.uuid ?? null,
         queueItemUuid: uuid,
         boardName: activeBoardRef.current?.boardType,
@@ -657,7 +658,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       const previousQueue = stateRef.current.queue;
       const previousCurrent = stateRef.current.currentClimbQueueItem;
       dispatch({ type: 'DELTA_REORDER_QUEUE_ITEM', payload: { uuid, oldIndex, newIndex } });
-      track('Queue Reordered', {
+      track(SHARED_EVENTS.QueueReordered, {
         boardName: activeBoardRef.current?.boardType,
         layoutId: activeBoardRef.current?.layoutId,
         oldIndex,
@@ -681,7 +682,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
   const clearQueue = useCallback(() => {
     const itemsToRemove = stateRef.current.queue;
     dispatch({ type: 'CLEAR_QUEUE' });
-    track('Queue Cleared', { layoutId: activeBoardRef.current?.layoutId, totalCount: itemsToRemove.length });
+    track(SHARED_EVENTS.QueueCleared, { layoutId: activeBoardRef.current?.layoutId, totalCount: itemsToRemove.length });
     setPlaylistSuggestionSourceState(null);
     // Surface at most one toast if any removal fails — a persistent join
     // failure would otherwise toast once per queued item.
@@ -721,7 +722,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       // climb-list/search open passes null to clear playlist context; re-opening
       // the current climb passes nothing, leaving the source intact.
       if (options) setPlaylistSuggestionSourceState(options.playlistSuggestionSource);
-      track('Set Active Climb', {
+      track(SHARED_EVENTS.SetActiveClimb, {
         climbUuid: item.climb.uuid,
         layoutId: activeBoardRef.current?.layoutId,
         source: 'mobile',
@@ -798,7 +799,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
         sessionId: currentSessionId,
       });
       await clearSession();
-      track('Session Ended', { sessionId: currentSessionId });
+      track(SHARED_EVENTS.SessionEnded, { sessionId: currentSessionId });
       showToast(t('mobile.toast.sessionEnded'), 'success');
       return response.endSession;
     } catch {

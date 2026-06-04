@@ -3,6 +3,7 @@ import { AppState } from 'react-native';
 import type { WebBrowserAuthSessionResult } from 'expo-web-browser';
 import { useSegments, Redirect } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
+import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { getAuthToken, isTokenExpiringSoon } from '../lib/auth-store';
 import {
   startSignIn,
@@ -104,7 +105,7 @@ export function AuthProvider({ children, onReady }: AuthProviderProps) {
   );
 
   const signOut = useCallback(async () => {
-    track('Logout', { method: 'manual' });
+    track(SHARED_EVENTS.Logout, { method: 'manual' });
     await authSignOut();
     resetAnalytics();
     await Promise.all([clearStoredSessionId(), clearStoredActiveBoard()]);

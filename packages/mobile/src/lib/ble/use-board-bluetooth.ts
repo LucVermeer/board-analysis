@@ -11,6 +11,7 @@ import {
 import { getMoonboardBluetoothPacket } from '@boardsesh/ble-protocol/moonboard';
 import { isDisconnectionError } from '@boardsesh/ble-protocol/connection-error';
 import type { AuroraBoardName } from '@boardsesh/shared-schema';
+import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { createBluetoothAdapter, isNativeIosBleAdapter } from './adapter-factory';
 import type { BluetoothAdapter, DevicePickerFn, DiscoveredDevice } from './types';
 import type { HoldPlacement } from '../../components/board-renderer/types';
@@ -205,7 +206,7 @@ export function useBoardBluetooth({
             adapterRef.current.write.bind(adapterRef.current),
             combinedSignal,
           );
-          if (sent) track('Climb Sent to Board Success', boardAnalyticsProperties);
+          if (sent) track(SHARED_EVENTS.ClimbSentToBoardSuccess, boardAnalyticsProperties);
           return sent;
         }
 
@@ -234,7 +235,7 @@ export function useBoardBluetooth({
             `[BLE] LED placement map is empty for ${boardName} layout=${layoutId} size=${sizeId}. Board configuration may be incorrect or LED data may need regeneration.`,
           );
           Alert.alert(t('ble.notAvailable'), t('ble.errorLedMissing'));
-          track('Climb Sent to Board Failure', {
+          track(SHARED_EVENTS.ClimbSentToBoardFailure, {
             ...boardAnalyticsProperties,
             failureReason: 'missing_led_placements',
           });
@@ -254,7 +255,10 @@ export function useBoardBluetooth({
         if (skippedCount > 0 && result.packet.length === 0) {
           console.warn(`[BLE] All ${result.totalPlacements} placements skipped — climb incompatible with board`);
           Alert.alert(t('ble.notAvailable'), t('ble.errorIncompatible'));
-          track('Climb Sent to Board Failure', { ...boardAnalyticsProperties, failureReason: 'incompatible_climb' });
+          track(SHARED_EVENTS.ClimbSentToBoardFailure, {
+            ...boardAnalyticsProperties,
+            failureReason: 'incompatible_climb',
+          });
           return false;
         }
 
@@ -263,14 +267,14 @@ export function useBoardBluetooth({
         }
 
         await adapterRef.current.write(result.packet, combinedSignal);
-        track('Climb Sent to Board Success', boardAnalyticsProperties);
+        track(SHARED_EVENTS.ClimbSentToBoardSuccess, boardAnalyticsProperties);
         return true;
       } catch (error) {
         if (error instanceof DOMException && error.name === 'AbortError') {
           return;
         }
         console.error('Error sending frames to board:', error);
-        track('Climb Sent to Board Failure', {
+        track(SHARED_EVENTS.ClimbSentToBoardFailure, {
           ...boardAnalyticsProperties,
           failureReason: classifyBleFailureReason(error),
         });
@@ -380,7 +384,7 @@ export function useBoardBluetooth({
         setIsConnected(true);
         onConnectionChange?.(true);
         onConnectSuccess?.(parsedSerial);
-        track('Bluetooth Connection Success', { boardName, layoutId, sizeId });
+        track(SHARED_EVENTS.BluetoothConnectionSuccess, { boardName, layoutId, sizeId });
         return true;
       } catch (error) {
         console.error('Error connecting to Bluetooth:', error);
@@ -405,7 +409,7 @@ export function useBoardBluetooth({
           Alert.alert(t('ble.notAvailable'), t('ble.errorConnectionFailed'));
         }
 
-        track('Bluetooth Connection Failed', {
+        track(SHARED_EVENTS.BluetoothConnectionFailed, {
           boardName,
           layoutId,
           sizeId,

@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
+import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { classifyNativeAuthFailureReason } from '../../src/lib/native-auth-analytics';
 import { useAuth } from '../../src/providers/auth-provider';
 import { useTheme } from '../../src/providers/theme-provider';
@@ -87,11 +88,14 @@ export default function LoginScreen() {
 
     setError(null);
     setSubmitting(true);
-    track('Login Attempted', { auth_method: 'credentials', flow: 'native' });
+    track(SHARED_EVENTS.LoginAttempted, { auth_method: 'credentials', flow: 'native' });
     try {
       const result = await signInWithCredentials(trimmedEmail, password);
       if (!result.success) {
-        track('Login Failed', { auth_method: 'credentials', failure_reason: classifyNativeAuthFailureReason(result) });
+        track(SHARED_EVENTS.LoginFailed, {
+          auth_method: 'credentials',
+          failure_reason: classifyNativeAuthFailureReason(result),
+        });
         if (result.error === 'network') {
           setError(t('nativeStart.networkError'));
         } else if (result.status === 401) {
@@ -100,11 +104,11 @@ export default function LoginScreen() {
           setError(result.error);
         }
       } else {
-        track('Login Succeeded', { auth_method: 'credentials', flow: 'native' });
+        track(SHARED_EVENTS.LoginSucceeded, { auth_method: 'credentials', flow: 'native' });
       }
       // On success, AuthProvider flips isAuthenticated and the redirect handles navigation.
     } catch (signInError) {
-      track('Login Failed', {
+      track(SHARED_EVENTS.LoginFailed, {
         auth_method: 'credentials',
         failure_reason: 'exception',
       });
@@ -115,14 +119,14 @@ export default function LoginScreen() {
   }
 
   async function handleOAuthSignIn(provider: 'apple' | 'google') {
-    track('Login Attempted', { auth_method: provider, flow: 'native' });
+    track(SHARED_EVENTS.LoginAttempted, { auth_method: provider, flow: 'native' });
     const result = await signIn(provider);
     // A successful redirect ('success') hands off to /auth/callback, which fires
     // Login Succeeded/Failed. The user dismissing the system sheet is only
     // observable here — track it so the funnel sees the Attempted→Succeeded
     // drop-off instead of a silent gap.
     if (result.type === 'cancel' || result.type === 'dismiss') {
-      track('Login Failed', { auth_method: provider, flow: 'native', failure_reason: result.type });
+      track(SHARED_EVENTS.LoginFailed, { auth_method: provider, flow: 'native', failure_reason: result.type });
     }
   }
 
