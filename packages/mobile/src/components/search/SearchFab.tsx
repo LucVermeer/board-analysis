@@ -9,7 +9,7 @@
 // badge. Controls are individual glass elements over the list (no glass-on-glass).
 
 import { type RefObject, useCallback, useEffect, useState } from 'react';
-import { Keyboard, Platform, Pressable, StyleSheet, View } from 'react-native';
+import { Keyboard, Pressable, StyleSheet, View } from 'react-native';
 import Animated, {
   FadeIn,
   FadeOut,
@@ -76,16 +76,17 @@ export function SearchFab({
   const [focused, setFocused] = useState(false);
 
   // The cluster's bottom slides with the toolbar (toolbarBottom) and rises above
-  // the keyboard when the field focuses (iOS: useAnimatedKeyboard; Android relies
-  // on the window resize). The fab sits at the cluster's bottom-left.
+  // the keyboard when the field focuses. `useAnimatedKeyboard` reports the IME
+  // height on BOTH platforms (0 when closed), which matters on Android: this app
+  // runs edge-to-edge, so the window doesn't resize and a bottom-anchored cluster
+  // wouldn't otherwise clear the keyboard. The fab sits at the cluster's bottom-left.
   const restingBottom = useSharedValue(toolbarBottom);
   useEffect(() => {
     restingBottom.value = reduceMotion ? toolbarBottom : withTiming(toolbarBottom, { duration: 200 });
   }, [toolbarBottom, reduceMotion, restingBottom]);
 
   const clusterStyle = useAnimatedStyle(() => {
-    const keyboardHeight = Platform.OS === 'ios' ? keyboard.height.value : 0;
-    return { bottom: Math.max(restingBottom.value, keyboardHeight + spacing[2]) };
+    return { bottom: Math.max(restingBottom.value, keyboard.height.value + spacing[2]) };
   });
 
   const handleCollapse = useCallback(() => {

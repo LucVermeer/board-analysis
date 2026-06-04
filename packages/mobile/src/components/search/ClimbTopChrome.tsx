@@ -95,7 +95,12 @@ export function ClimbTopChrome({ canCreate, onCreate, onOpenBoardDetail, onHeigh
               accessibilityLabel={boardLabel}
               style={styles.capsulePress}
             >
-              <View style={styles.capsuleGlass}>
+              <View
+                style={[
+                  styles.capsuleGlass,
+                  { borderWidth: StyleSheet.hairlineWidth, borderColor: systemColors.separator },
+                ]}
+              >
                 <GlassSurface
                   glassEffectStyle="clear"
                   fallbackColor={systemColors.elevatedSurface}

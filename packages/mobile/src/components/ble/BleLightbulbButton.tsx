@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Pressable, StyleSheet, type ColorValue } from 'react-native';
+import { Pressable, StyleSheet } from 'react-native';
 import Animated, {
   cancelAnimation,
   useAnimatedStyle,
@@ -27,16 +27,6 @@ type BleLightbulbButtonProps = {
    * drawer's primary action row.
    */
   containerSize?: number;
-  /**
-   * Tonal fill for the at-rest (disconnected) state so the button reads as a
-   * pressable target rather than a bare glyph. Set by the queue bar (passes
-   * `systemColors.fill`) to match the neighbouring Tick; the play drawer omits it
-   * to keep its own bare-icon look. The connected state keeps its own warm fill.
-   */
-  restingBackgroundColor?: ColorValue;
-  /** Icon colour in the disconnected (resting) state. Defaults to secondaryLabel;
-   *  the queue bar passes white for a crisp Spotify-style glyph. */
-  disconnectedColor?: string;
 };
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
@@ -50,8 +40,6 @@ export function BleLightbulbButton({
   haptic = 'light',
   size = 24,
   containerSize = 44,
-  restingBackgroundColor,
-  disconnectedColor,
 }: BleLightbulbButtonProps) {
   const { systemColors, brandColors } = useTheme();
   const pulseOpacity = useSharedValue(1);
@@ -81,7 +69,7 @@ export function BleLightbulbButton({
   const visualState = getBleLightbulbVisualState({
     isConnected,
     connectedColor: brandColors.warning,
-    disconnectedColor: disconnectedColor ?? (systemColors.secondaryLabel as string),
+    disconnectedColor: systemColors.secondaryLabel as string,
   });
 
   return (
@@ -96,12 +84,6 @@ export function BleLightbulbButton({
         styles.container,
         { width: containerSize, height: containerSize, borderRadius: containerSize / 2 },
         animatedStyle,
-        !isConnected &&
-          restingBackgroundColor != null && {
-            backgroundColor: restingBackgroundColor,
-            borderWidth: StyleSheet.hairlineWidth,
-            borderColor: systemColors.separator as string,
-          },
         isConnected && {
           backgroundColor: visualState.backgroundColor,
           shadowColor: visualState.shadowColor,

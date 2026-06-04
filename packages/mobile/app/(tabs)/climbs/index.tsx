@@ -32,7 +32,7 @@ import { randomUUID } from 'expo-crypto';
 import { type SearchHeaderHandle } from '../../../src/components/SearchHeader';
 import { RecentFilterPills } from '../../../src/components/RecentFilterPills';
 import { TAB_BAR_HEIGHT, TOOLBAR_RESERVE, TOOLBAR_GAP_ABOVE_TABBAR } from '../../../src/theme/layout';
-import { useSearchClimbs, useSearchClimbsCount, useGrades } from '../../../src/lib/graphql/hooks';
+import { useSearchClimbs, useGrades } from '../../../src/lib/graphql/hooks';
 import { SEARCH_CLIMBS, type SearchClimbsQueryResponse } from '../../../src/lib/graphql/operations';
 import { getHttpClient } from '../../../src/lib/graphql/client';
 import { usePlaylistActivation } from '../../../src/lib/playlists/use-playlist-activation';
@@ -280,23 +280,6 @@ function ClimbListInner() {
       ),
     [boardName, layoutId, sizeId, setIds, angle, name, pageNumber, filters, boardFilters],
   );
-
-  // Page-independent input for the result count so the count query key stays
-  // stable while the user scrolls (totalCount is the same across pages).
-  const countInput = useMemo(
-    () =>
-      mergeBoardFilters(
-        toClimbSearchInput(
-          filters,
-          { boardName, layoutId, sizeId, setIds, angle },
-          { page: 1, pageSize: PAGE_SIZE },
-          { name },
-        ),
-        boardFilters,
-      ),
-    [boardName, layoutId, sizeId, setIds, angle, name, filters, boardFilters],
-  );
-  const { data: totalCount } = useSearchClimbsCount(countInput, searchReady);
 
   const {
     data: searchResult,

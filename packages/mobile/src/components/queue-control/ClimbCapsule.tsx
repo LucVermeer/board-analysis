@@ -190,7 +190,7 @@ export function ClimbCapsule() {
   const gradeWash = withAlpha(getGradeColor(currentDisplay.difficulty) ?? DEFAULT_GRADE_COLOR, 0.16);
 
   return (
-    <View style={styles.capsule}>
+    <View style={[styles.capsule, { borderWidth: StyleSheet.hairlineWidth, borderColor: systemColors.separator }]}>
       <GlassSurface
         glassEffectStyle="regular"
         tintColor={gradeWash}

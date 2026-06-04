@@ -95,10 +95,11 @@ export function LogAscentFab({ climb, size = TOOLBAR_FAB_SIZE }: LogAscentFabPro
   }, [openLogAscent, boardConfig, sessionId, climb, angle, isMirror]);
 
   // Neutral glass at rest — matching the search + create FABs — and green only
-  // when logged (the lasting "you sent this" signal). The solid fallback keeps
-  // the green tint on Android / Reduce Transparency.
-  const tintColor = isLogged ? withAlpha(brandColors.success, 0.28) : undefined;
-  const fallbackColor = isLogged ? withAlpha(brandColors.success, 0.22) : systemColors.fill;
+  // when logged (the lasting "you sent this" signal). The solid fallback is a
+  // touch stronger so the green still reads on the Android / Reduce-Transparency
+  // no-glass path, where a low-alpha tint over a light surface barely registers.
+  const tintColor = isLogged ? withAlpha(brandColors.success, 0.3) : undefined;
+  const fallbackColor = isLogged ? withAlpha(brandColors.success, 0.4) : systemColors.fill;
 
   const baseLabel = t('mobile.queue.logAscent');
   const accessibilityLabel = isLogged ? `${baseLabel}, ${t('mobile.queue.alreadyLogged')}` : baseLabel;
