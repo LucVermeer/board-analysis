@@ -591,7 +591,8 @@ jobs:
   report-screenshots:
     name: Report screenshots on PR
     needs: screenshots
-    if: always() && github.event_name == 'pull_request'
+    # Disabled: Playwright sticky PR comments are too noisy for now.
+    if: false && always() && github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write
