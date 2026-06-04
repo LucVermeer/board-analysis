@@ -9,7 +9,7 @@
 // badge. Controls are individual glass elements over the list (no glass-on-glass).
 
 import { type RefObject, useCallback, useEffect, useMemo, useState } from 'react';
-import { Keyboard, Pressable, StyleSheet, View } from 'react-native';
+import { Keyboard, Pressable, StyleSheet } from 'react-native';
 import Animated, {
   FadeIn,
   FadeOut,
@@ -33,6 +33,7 @@ import { setSearchExpanded } from '../../lib/search-expanded-state';
 import { withAlpha } from '../../theme/colors';
 import { SearchHeader, type SearchHeaderHandle } from '../SearchHeader';
 import { GlassIconButton } from '../GlassIconButton';
+import { GlassCluster } from '../GlassCluster';
 import { GradePill } from './GradePill';
 import { FilterButton } from './FilterButton';
 import { GradeRangeRail } from '../grade';
@@ -195,7 +196,7 @@ export function SearchFab({
             <GradeRangeRail grades={grades} bound={bound} onChange={onGradeChange} onRequestClose={onCloseGrade} />
           </Animated.View>
         ) : null}
-        <View pointerEvents="box-none" style={styles.fabRow}>
+        <GlassCluster pointerEvents="box-none" style={styles.fabRow} spacing={spacing[2]}>
           {/* The FAB is pinned LEFT and morphs 🔍→✕; everything speed-dials to its
               right. Collapsed, it carries the active-filter count as a badge. */}
           <GlassIconButton
@@ -252,7 +253,7 @@ export function SearchFab({
               />
             </Animated.View>
           ) : null}
-        </View>
+        </GlassCluster>
       </Animated.View>
     </>
   );
