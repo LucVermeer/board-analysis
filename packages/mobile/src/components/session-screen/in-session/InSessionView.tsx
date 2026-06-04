@@ -1,6 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import Animated, {
+  runOnJS,
+  useAnimatedScrollHandler,
+  useSharedValue,
+  withSpring,
+  type SharedValue,
+} from 'react-native-reanimated';
 import { randomUUID } from 'expo-crypto';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -26,12 +34,22 @@ import { getBoardConfigForPlaylist } from '../../../lib/playlists/board-details-
 import { navigateToSessionClimb } from '../../../lib/session-tick-mapping';
 import { brandColors, withAlpha } from '../../../theme/colors';
 import { iosSystemColors } from '../../../theme/ios-colors';
+import { springs } from '../../../theme/animations';
 import { borderRadius, spacing } from '../../../theme/tokens';
 import { gradeBadgeColor, gradeSortValue } from '../../you/profile-chart-colors';
 import { hapticSelection } from '../../../lib/haptics';
 import { SessionAnalytics, type HardestSend } from './SessionAnalytics';
 import { SessionLeaderboard } from './SessionLeaderboard';
 import { SessionPresenceRow } from './SessionPresenceRow';
+
+const DISMISS_DISTANCE_FRACTION = 0.18;
+const DISMISS_VELOCITY = 800;
+
+type InSessionViewProps = {
+  /** Host overlay offset (0 = presented). The body pull-to-dismiss drives it. */
+  translateY: SharedValue<number>;
+  screenHeight: number;
+};
 
 type SessionHistoryStatus = 'attempt' | 'send' | 'flash';
 
@@ -171,7 +189,7 @@ function SessionHistoryRow({ tick, status, participant, onPress }: SessionHistor
   );
 }
 
-export function InSessionView() {
+export function InSessionView({ translateY, screenHeight }: InSessionViewProps) {
   const { t } = useTranslation('session');
   const { systemColors } = useTheme();
   const insets = useSafeAreaInsets();
@@ -316,6 +334,40 @@ export function InSessionView() {
     [canControlWall, openPlayDrawer, router, setCurrentClimb],
   );
 
+  // Swipe-down-to-dismiss from the body. Drag the sheet only when the inner
+  // scroll is at the top and the pull is downward; otherwise the scroll handles
+  // it. Drives the host's translateY, and on release either dismisses or springs
+  // back to fully presented.
+  const scrollOffset = useSharedValue(0);
+  const startedAtTop = useSharedValue(true);
+  const scrollHandler = useAnimatedScrollHandler((event) => {
+    scrollOffset.value = event.contentOffset.y;
+  });
+  const scrollGesture = useMemo(() => Gesture.Native(), []);
+  const dismissGesture = useMemo(
+    () =>
+      Gesture.Pan()
+        .activeOffsetY(12)
+        .onStart(() => {
+          startedAtTop.value = scrollOffset.value <= 0;
+        })
+        .onUpdate((event) => {
+          if (startedAtTop.value && event.translationY > 0) {
+            translateY.value = event.translationY;
+          }
+        })
+        .onEnd((event) => {
+          if (!startedAtTop.value) return;
+          if (translateY.value > screenHeight * DISMISS_DISTANCE_FRACTION || event.velocityY > DISMISS_VELOCITY) {
+            runOnJS(close)();
+          } else {
+            translateY.value = withSpring(0, springs.gentle);
+          }
+        })
+        .simultaneousWithExternalGesture(scrollGesture),
+    [translateY, screenHeight, close, scrollOffset, startedAtTop, scrollGesture],
+  );
+
   const [showEndSession, setShowEndSession] = useState(false);
   const [isEnding, setIsEnding] = useState(false);
 
@@ -333,78 +385,88 @@ export function InSessionView() {
   }, [endSession, close, router]);
 
   return (
-    <View style={styles.container}>
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={[styles.content, { paddingBottom: 100 + insets.bottom }]}
-        showsVerticalScrollIndicator={false}
-      >
-        <SessionPresenceRow
-          users={sessionUsers}
-          driverParticipantId={driverParticipantId}
-          selfParticipantId={participantId}
-        />
+    <GestureDetector gesture={dismissGesture}>
+      <View style={styles.container}>
+        <GestureDetector gesture={scrollGesture}>
+          <Animated.ScrollView
+            style={styles.scroll}
+            contentContainerStyle={[styles.content, { paddingBottom: 100 + insets.bottom }]}
+            showsVerticalScrollIndicator={false}
+            onScroll={scrollHandler}
+            scrollEventThrottle={16}
+            bounces={false}
+          >
+            <SessionPresenceRow
+              users={sessionUsers}
+              driverParticipantId={driverParticipantId}
+              selfParticipantId={participantId}
+            />
 
-        <SessionAnalytics
-          sends={sends}
-          flashes={flashes}
-          hardestGrade={hardestGrade}
-          hardestSends={hardestSends}
-          startedAt={startedAt}
-          gradeDistribution={gradeDistribution}
-        />
+            <SessionAnalytics
+              sends={sends}
+              flashes={flashes}
+              hardestGrade={hardestGrade}
+              hardestSends={hardestSends}
+              startedAt={startedAt}
+              gradeDistribution={gradeDistribution}
+            />
 
-        <View style={styles.historySection}>
-          <Text variant="footnote" color={systemColors.secondaryLabel} style={styles.sectionLabel}>
-            {t('mobile.session.inHistoryTitle')}
-          </Text>
-          {sessionHistoryTicks.length === 0 ? (
-            <View style={[styles.emptyCard, { backgroundColor: systemColors.secondaryBackground }]}>
-              <Text variant="body" color={systemColors.secondaryLabel}>
-                {t('mobile.session.inHistoryEmpty')}
+            <View style={styles.historySection}>
+              <Text variant="footnote" color={systemColors.secondaryLabel} style={styles.sectionLabel}>
+                {t('mobile.session.inHistoryTitle')}
               </Text>
+              {sessionHistoryTicks.length === 0 ? (
+                <View style={[styles.emptyCard, { backgroundColor: systemColors.secondaryBackground }]}>
+                  <Text variant="body" color={systemColors.secondaryLabel}>
+                    {t('mobile.session.inHistoryEmpty')}
+                  </Text>
+                </View>
+              ) : (
+                <View style={[styles.historyList, { backgroundColor: systemColors.secondaryBackground }]}>
+                  {sessionHistoryTicks.map((tick) => (
+                    <SessionHistoryRow
+                      key={tick.uuid}
+                      tick={tick}
+                      status={tick.status}
+                      participant={participantByUserId.get(tick.userId)}
+                      onPress={handlePressHistoryTick}
+                    />
+                  ))}
+                </View>
+              )}
             </View>
-          ) : (
-            <View style={[styles.historyList, { backgroundColor: systemColors.secondaryBackground }]}>
-              {sessionHistoryTicks.map((tick) => (
-                <SessionHistoryRow
-                  key={tick.uuid}
-                  tick={tick}
-                  status={tick.status}
-                  participant={participantByUserId.get(tick.userId)}
-                  onPress={handlePressHistoryTick}
-                />
-              ))}
-            </View>
-          )}
+
+            <SessionLeaderboard
+              participants={participants}
+              driverParticipantId={driverParticipantId}
+              selfUserId={selfUserId}
+            />
+          </Animated.ScrollView>
+        </GestureDetector>
+
+        <View
+          style={[
+            styles.footer,
+            { backgroundColor: systemColors.background, paddingBottom: insets.bottom + spacing[3] },
+          ]}
+        >
+          <Button
+            title={t('mobile.session.inEndSession')}
+            onPress={() => setShowEndSession(true)}
+            variant="outlined"
+            size="large"
+          />
         </View>
 
-        <SessionLeaderboard
-          participants={participants}
-          driverParticipantId={driverParticipantId}
-          selfUserId={selfUserId}
-        />
-      </ScrollView>
-
-      <View
-        style={[styles.footer, { backgroundColor: systemColors.background, paddingBottom: insets.bottom + spacing[3] }]}
-      >
-        <Button
-          title={t('mobile.session.inEndSession')}
-          onPress={() => setShowEndSession(true)}
-          variant="outlined"
-          size="large"
+        <EndSessionSheet
+          visible={showEndSession}
+          onDismiss={() => setShowEndSession(false)}
+          onConfirm={() => void handleConfirmEnd()}
+          isEnding={isEnding}
+          climbCount={sessionHistoryTicks.length}
         />
       </View>
-
-      <EndSessionSheet
-        visible={showEndSession}
-        onDismiss={() => setShowEndSession(false)}
-        onConfirm={() => void handleConfirmEnd()}
-        isEnding={isEnding}
-        climbCount={sessionHistoryTicks.length}
-      />
-    </View>
+    </GestureDetector>
   );
 }
 
