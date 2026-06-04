@@ -13,8 +13,7 @@ import { useTranslation } from 'react-i18next';
 import { computePeekOffset } from '@boardsesh/play-view';
 import { getGradeColor, DEFAULT_GRADE_COLOR } from '@boardsesh/board-constants/grade-colors';
 import type { ClimbQueueItem } from '@boardsesh/queue';
-import { shadows, glassMaterial } from '../../theme/tokens';
-import { withAlpha } from '../../theme/colors';
+import { shadows } from '../../theme/tokens';
 import { TOOLBAR_CAPSULE_HEIGHT, TOOLBAR_CAPSULE_MAX_WIDTH } from '../../theme/layout';
 import { useGradeFormat } from '../../hooks/use-grade-format';
 import { useReduceMotion } from '../../hooks/use-reduce-motion';
@@ -183,12 +182,6 @@ export function ClimbCapsule() {
     : DEFAULT_GRADE_COLOR;
   const nextGradeColor = nextDisplay ? (getGradeColor(nextDisplay.difficulty) ?? DEFAULT_GRADE_COLOR) : DEFAULT_GRADE_COLOR;
 
-  // A faint grade-hued wash on the frosted glass — translucent so scrolling
-  // content still frosts through (vs. the old opaque card). Falls back to a
-  // neutral elevated surface on the no-glass path; the colorized grade text
-  // still anchors the read either way.
-  const gradeWash = withAlpha(getGradeColor(currentDisplay.difficulty) ?? DEFAULT_GRADE_COLOR, 0.16);
-
   return (
     <View
       style={[
@@ -199,12 +192,12 @@ export function ClimbCapsule() {
         !nativeGlass && { borderWidth: StyleSheet.hairlineWidth, borderColor: systemColors.separator },
       ]}
     >
+      {/* Neutral frosted glass — no grade-hued wash. The colorized grade text
+          carries the grade; the capsule background stays a plain glass surface. */}
       <GlassSurface
         glassEffectStyle="regular"
-        tintColor={gradeWash}
         fallbackColor={systemColors.elevatedSurface}
         borderRadius={CAPSULE_RADIUS}
-        blurAmount={glassMaterial.thin}
         style={StyleSheet.absoluteFill}
         pointerEvents="none"
       />

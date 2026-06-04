@@ -13,7 +13,7 @@ vi.mock('react-native', () => ({
 vi.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ bottom: 0 }) }));
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock('../../../providers/theme-provider', () => ({
-  useTheme: () => ({ systemColors: { fill: '#eee' }, brandColors: { primary: '#8C4A52' } }),
+  useTheme: () => ({ systemColors: { fill: '#eee', label: '#111' } }),
 }));
 vi.mock('../../../lib/haptics', () => ({ hapticLight: haptics.light }));
 vi.mock('../../../theme/tokens', () => ({ spacing: { 3: 12, 4: 16 } }));
@@ -48,16 +48,16 @@ vi.mock('../../GlassIconButton', () => ({
 import { CreatePlaylistFab } from '../CreatePlaylistFab';
 
 describe('CreatePlaylistFab', () => {
-  it('renders a glass FAB — a hero-sized plus with a maroon glyph, no solid fill', () => {
+  it('renders a hero glass FAB — a plus with a high-contrast label glyph, no solid fill', () => {
     const { container } = render(createElement(CreatePlaylistFab, { onPress: vi.fn() }));
     const button = container.querySelector('[data-glass="true"]') as HTMLElement;
 
     expect(button).toBeTruthy();
     expect(button.getAttribute('data-icon')).toBe('plus');
-    // Colour rides the glyph (maroon), not a background fill.
-    expect(button.getAttribute('data-icon-color')).toBe('#8C4A52');
+    // High-contrast system label glyph (legible over bright hero cards), not maroon.
+    expect(button.getAttribute('data-icon-color')).toBe('#111');
     expect(button.getAttribute('data-size')).toBe('64');
-    // Neutral solid fallback (Android / Reduce Transparency), not the brand maroon.
+    // Neutral solid fallback (Android / Reduce Transparency), no colour fill.
     expect(button.getAttribute('data-fallback')).toBe('#eee');
   });
 

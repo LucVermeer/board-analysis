@@ -16,7 +16,6 @@ import { PressableSurface } from '../PressableSurface';
 import { useTheme } from '../../providers/theme-provider';
 import { useGradeFormat } from '../../hooks/use-grade-format';
 import { withAlpha } from '../../theme/colors';
-import { glassMaterial } from '../../theme/tokens';
 import { glassSize } from '../../theme/layout';
 import { formatGradePillLabel } from './grade-pill-label';
 
@@ -68,7 +67,6 @@ export function GradePill({ bound, grades, onPress, expanded = false, maxWidth }
         tintColor={tintColor}
         fallbackColor={fallbackColor}
         borderRadius={PILL_RADIUS}
-        blurAmount={glassMaterial.thin}
         style={StyleSheet.absoluteFill}
         pointerEvents="none"
       />

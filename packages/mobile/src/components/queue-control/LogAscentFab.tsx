@@ -14,7 +14,6 @@ import { useTheme } from '../../providers/theme-provider';
 import { useQueue } from '../../providers/queue-provider';
 import { useDrawerHost } from '../../providers/drawer-host-provider';
 import { useReduceMotion } from '../../hooks/use-reduce-motion';
-import { withAlpha } from '../../theme/colors';
 import { springs } from '../../theme/animations';
 import { hapticSelection } from '../../lib/haptics';
 import { countSentAscents } from '../../lib/ascent-status-utils';
@@ -94,12 +93,11 @@ export function LogAscentFab({ climb, size = glassSize.hero }: LogAscentFabProps
     });
   }, [openLogAscent, boardConfig, sessionId, climb, angle, isMirror]);
 
-  // Neutral glass at rest — matching the search + create FABs — and green only
-  // when logged (the lasting "you sent this" signal). The solid fallback is a
-  // touch stronger so the green still reads on the Android / Reduce-Transparency
-  // no-glass path, where a low-alpha tint over a light surface barely registers.
-  const tintColor = isLogged ? withAlpha(brandColors.success, 0.3) : undefined;
-  const fallbackColor = isLogged ? withAlpha(brandColors.success, 0.4) : systemColors.fill;
+  // Always neutral glass — no coloured background. The "you sent this" signal
+  // rides the glyph instead: a green tick when logged, the system label otherwise
+  // (colour on the icon, suitable for a glass element), keeping the FAB readable
+  // over whatever scrolls behind it.
+  const iconColor = isLogged ? brandColors.success : (systemColors.label as string);
 
   const baseLabel = t('mobile.queue.logAscent');
   const accessibilityLabel = isLogged ? `${baseLabel}, ${t('mobile.queue.alreadyLogged')}` : baseLabel;
@@ -108,13 +106,12 @@ export function LogAscentFab({ climb, size = glassSize.hero }: LogAscentFabProps
     <Animated.View style={popStyle}>
       <GlassIconButton
         iconName="tick"
-        iconColor={systemColors.label as string}
+        iconColor={iconColor}
         iconSize={26}
         onPress={handleTick}
         disabled={!boardConfig}
         accessibilityLabel={accessibilityLabel}
-        tintColor={tintColor}
-        fallbackColor={fallbackColor}
+        fallbackColor={systemColors.fill}
         size={size}
       />
     </Animated.View>

@@ -10,14 +10,16 @@ import { TOOLBAR_RESERVE, TAB_BAR_HEIGHT } from '../queue-control/persistent-que
 
 /**
  * Floating "create playlist" button on the Discover library — the single defining
- * action of that screen, so it takes the glass `hero` size. Neutral Liquid Glass
- * with a maroon plus glyph (colour on the icon, not a fill), matching the search /
- * log-ascent FABs. Anchored bottom-right, lifted above the persistent queue bar +
- * tab bar so it never sits under them. The parent gates rendering on auth.
+ * action of that screen, so it takes the glass `hero` size. The playlist hero
+ * cards behind it are bright, vivid colours, so the plus glyph uses the
+ * high-contrast system `label` (black on light, white on dark) to stay legible
+ * over any card — colour on the icon, not a fill, on the OS-standard `regular`
+ * glass. Anchored bottom-right, lifted above the persistent queue bar + tab bar
+ * so it never sits under them. The parent gates rendering on auth.
  */
 export function CreatePlaylistFab({ onPress }: { onPress: () => void }) {
   const { t } = useTranslation('playlists');
-  const { systemColors, brandColors } = useTheme();
+  const { systemColors } = useTheme();
   const insets = useSafeAreaInsets();
   const bottom = TOOLBAR_RESERVE + TAB_BAR_HEIGHT + insets.bottom + spacing[3];
 
@@ -25,7 +27,7 @@ export function CreatePlaylistFab({ onPress }: { onPress: () => void }) {
     <View style={[styles.fab, { bottom }]}>
       <GlassIconButton
         iconName="plus"
-        iconColor={brandColors.primary}
+        iconColor={systemColors.label as string}
         iconSize={28}
         size={glassSize.hero}
         onPress={() => {

@@ -868,12 +868,14 @@ The Expo app (`packages/mobile/`) is a separate implementation from the web CSS 
 
 Props: `glassEffectStyle` (`'regular'` for frosted chrome, `'clear'` for content-forward), `tintColor` (translucent hue composited onto the glass), `fallbackColor` (solid path).
 
+**Material: lean on what the OS provides.** Native iOS 26 Liquid Glass (`GlassView`) exposes only `'regular'` and `'clear'`, so we use exactly those — there are no custom "thin"/"thick" thicknesses. Every glass FAB and capsule uses `'regular'`; the iOS < 26 `BlurView` fallback uses `GlassSurface`'s single default `blurAmount`. Legibility over busy/bright content comes from a high-contrast glyph/text colour, not from tuning the material.
+
 ### Where glass is allowed
 
-Glass is for **floating chrome only** — never for content canvases, full-screen surfaces, or text-bearing bars (Apple's HIG, and washed-out/illegible content otherwise):
+Glass is for **floating chrome only** — never for content canvases or text-heavy reading surfaces (Apple's HIG, and washed-out/illegible content otherwise). FABs and capsules carry **no solid colour fill**: colour rides the icon/text (and, for state, a translucent native `tintColor`), never an opaque background.
 
-- **Glass:** the bottom tab bar (`BlurTabBar` — a bottom-anchored, full-width Liquid Glass bar spanning through the home-indicator inset) and the `QuickTickBar` (over the board image).
-- **Opaque:** the persistent queue mini-player (a solid grade-tinted card — Liquid Glass is too see-through for a floating bar you have to read), the full-height `PlayDrawer`, and all bottom sheets (`Sheet`, `QueueSheet`, `AngleSelectorSheet`, etc.) use themed `secondaryBackground`.
+- **Glass:** the bottom tab bar (`BlurTabBar`), the persistent floating toolbar — the climb-name capsule (`ClimbCapsule`), log-ascent FAB (`LogAscentFab`), and search FAB (`SearchFab`) — the `QuickTickBar`, the create-playlist FAB, the top board-name chrome (`ClimbTopChrome`), the session overlay (`SessionScreenHost`), and the `PlayDrawer` background. All use `'regular'` glass.
+- **Opaque:** the remaining bottom sheets (`Sheet`, `QueueSheet`, `AngleSelectorSheet`, etc.) use themed `secondaryBackground`.
 
 ### Dark mode & appearance
 

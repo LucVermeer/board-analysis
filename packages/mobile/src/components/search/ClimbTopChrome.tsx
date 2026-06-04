@@ -13,7 +13,7 @@ import { formatBoardDisplayName } from '@boardsesh/board-config';
 import { useTheme } from '../../providers/theme-provider';
 import { useActiveBoard } from '../../lib/graphql/use-active-board';
 import { useOptionalBluetoothContext } from '../../providers/bluetooth-provider';
-import { spacing, shadows, glassMaterial } from '../../theme/tokens';
+import { spacing, shadows } from '../../theme/tokens';
 import { withAlpha } from '../../theme/colors';
 import { glassSize } from '../../theme/layout';
 import { hapticLight } from '../../lib/haptics';
@@ -114,7 +114,6 @@ export function ClimbTopChrome({ canCreate, onCreate, onOpenBoardDetail, onHeigh
                   glassEffectStyle="regular"
                   fallbackColor={systemColors.elevatedSurface}
                   borderRadius={CAPSULE_RADIUS}
-                  blurAmount={glassMaterial.thin}
                   style={StyleSheet.absoluteFill}
                   pointerEvents="none"
                 />
