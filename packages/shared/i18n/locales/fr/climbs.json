@@ -670,6 +670,7 @@
       "setFilterAria": "Filtrer par cotation {{grade}}",
       "selectedFilterAria": "Filtre de cotation {{grade}} sélectionné",
       "rangeFilterAria": "{{grade}} est dans la plage de cotations sélectionnée",
+      "anyGradeAria": "Toutes les cotations sélectionnées",
       "clearFilterAria": "Effacer le filtre de cotation",
       "rangeHint": "Touchez une autre cotation pour créer une plage",
       "setLogGradeAria": "Enregistrer la cotation {{grade}}",

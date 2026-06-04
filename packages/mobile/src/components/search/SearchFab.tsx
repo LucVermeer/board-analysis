@@ -226,7 +226,13 @@ export function SearchFab({
           ) : null}
           {expanded && !focused ? (
             <Animated.View entering={enter} exiting={exit}>
-              <GradePill bound={bound} grades={grades} onPress={handleOpenGrade} maxWidth={140} />
+              <GradePill
+                bound={bound}
+                grades={grades}
+                onPress={handleOpenGrade}
+                expanded={gradeRailVisible}
+                maxWidth={140}
+              />
             </Animated.View>
           ) : null}
           {expanded && !focused ? (

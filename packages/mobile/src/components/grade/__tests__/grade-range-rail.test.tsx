@@ -1,15 +1,23 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { render, fireEvent } from '@testing-library/react';
+import { render, fireEvent, act } from '@testing-library/react';
 import { createElement, type ReactNode } from 'react';
 import type { Grade } from '@boardsesh/shared-schema';
 import type { GradeBound } from '@boardsesh/climb-filters';
 
 const haptics = vi.hoisted(() => ({ selection: vi.fn() }));
+const accessibilityInfo = vi.hoisted(() => ({
+  screenReaderEnabled: vi.fn(() => Promise.resolve(false)),
+  addEventListener: vi.fn(() => ({ remove: vi.fn() })),
+}));
 
 type LayoutEvent = { nativeEvent: { layout: { x: number; width: number; height: number; y: number } } };
 
 vi.mock('react-native', () => ({
+  AccessibilityInfo: {
+    isScreenReaderEnabled: accessibilityInfo.screenReaderEnabled,
+    addEventListener: accessibilityInfo.addEventListener,
+  },
   View: ({ children, onLayout }: { children?: ReactNode; onLayout?: (event: LayoutEvent) => void }) =>
     createElement(
       'div',
@@ -141,6 +149,9 @@ describe('GradeRangeRail', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     haptics.selection.mockClear();
+    accessibilityInfo.screenReaderEnabled.mockReset();
+    accessibilityInfo.screenReaderEnabled.mockResolvedValue(false);
+    accessibilityInfo.addEventListener.mockClear();
   });
 
   afterEach(() => {
@@ -170,5 +181,31 @@ describe('GradeRangeRail', () => {
     );
     fireEvent.click(getByText('V6'));
     expect(onChange).toHaveBeenLastCalledWith({ minGradeId: 10, maxGradeId: 14 });
+  });
+
+  it('keeps the rail open long enough to use the shared range window', async () => {
+    const { getByText, onRequestClose } = renderRail({ minGradeId: undefined, maxGradeId: undefined });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    fireEvent.click(getByText('V4'));
+    act(() => {
+      vi.advanceTimersByTime(2999);
+    });
+    expect(onRequestClose).not.toHaveBeenCalled();
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+    expect(onRequestClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not auto-dismiss a single selection while screen reader state is still resolving', () => {
+    accessibilityInfo.screenReaderEnabled.mockResolvedValue(true);
+    const { getByText, onRequestClose } = renderRail({ minGradeId: undefined, maxGradeId: undefined });
+    fireEvent.click(getByText('V4'));
+    act(() => {
+      vi.advanceTimersByTime(3000);
+    });
+    expect(onRequestClose).not.toHaveBeenCalled();
   });
 });

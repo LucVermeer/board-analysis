@@ -1,6 +1,6 @@
 // The grade selector for the climb-list search row / bottom card: a Liquid
 // Glass pill showing the active grade band, tinted with the grade's colour when
-// set. Tapping opens the grade popover. Extracted from ClimbSearchControls so the
+// set. Tapping opens the grade rail. Extracted from ClimbSearchControls so the
 // top row (sticky-strip) and the bottom card (bottom-bar) share one component.
 
 import { useMemo } from 'react';
@@ -26,11 +26,12 @@ type GradePillProps = {
   bound: GradeBound;
   grades: readonly Grade[];
   onPress: () => void;
+  expanded?: boolean;
   /** Cap the pill width so the search field keeps room (top row); omit in the card. */
   maxWidth?: number;
 };
 
-export function GradePill({ bound, grades, onPress, maxWidth }: GradePillProps) {
+export function GradePill({ bound, grades, onPress, expanded = false, maxWidth }: GradePillProps) {
   const { t } = useTranslation('climbs');
   const { systemColors, brandColors } = useTheme();
   const { formatGrade } = useGradeFormat();
@@ -59,6 +60,7 @@ export function GradePill({ bound, grades, onPress, maxWidth }: GradePillProps) 
       scaleTo={0.95}
       accessibilityRole="button"
       accessibilityLabel={`${t('mobile.search.grade')}, ${gradeLabel}`}
+      accessibilityState={{ expanded }}
       style={[styles.pill, maxWidth != null ? { maxWidth } : null]}
     >
       <GlassSurface

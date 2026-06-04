@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ElementRef, type ReactNode } from 'react';
-import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import { AccessibilityInfo, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { ScrollView } from 'react-native-gesture-handler';
 import { useTranslation } from 'react-i18next';
 import type { Grade } from '@boardsesh/shared-schema';
@@ -26,8 +26,9 @@ import { hapticSelection } from '../../lib/haptics';
 import { brandColors } from '../../theme/colors';
 import { spacing } from '../../theme/tokens';
 import { GradeChip } from './GradeChip';
+import { readableTextColor } from './grade-chip-colors';
 
-const AUTO_DISMISS_MS = 900;
+const AUTO_DISMISS_MS = RANGE_EXTEND_WINDOW_MS;
 const CLEAR_DISMISS_MS = 300;
 
 type ChipLayout = { x: number; width: number };
@@ -82,12 +83,13 @@ export function GradeRangeRail({
   const dismissTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSingleAtRef = useRef<number | undefined>(undefined);
   const [railWidth, setRailWidth] = useState(0);
+  const [screenReaderEnabled, setScreenReaderEnabled] = useState<boolean | null>(null);
   const didCenterRef = useRef(false);
 
   const grades = useMemo(() => sortedGrades(unsortedGrades), [unsortedGrades]);
   const gradeIds = useMemo(() => grades.map((grade) => grade.difficultyId), [grades]);
   const centerId = useMemo(() => gradeRailCenter(bound, grades, sendDifficultyIds), [bound, grades, sendDifficultyIds]);
-  const showDone = isRangeGrade(bound);
+  const showDone = isRangeGrade(bound) || (screenReaderEnabled === true && !isAnyGrade(bound));
 
   const clearDismissTimer = useCallback(() => {
     if (dismissTimerRef.current) {
@@ -97,6 +99,22 @@ export function GradeRangeRail({
   }, []);
 
   useEffect(() => clearDismissTimer, [clearDismissTimer]);
+
+  useEffect(() => {
+    let mounted = true;
+    AccessibilityInfo.isScreenReaderEnabled()
+      .then((enabled) => {
+        if (mounted) setScreenReaderEnabled(enabled);
+      })
+      .catch(() => {
+        if (mounted) setScreenReaderEnabled(false);
+      });
+    const subscription = AccessibilityInfo.addEventListener('screenReaderChanged', setScreenReaderEnabled);
+    return () => {
+      mounted = false;
+      subscription.remove();
+    };
+  }, []);
 
   const scheduleDismiss = useCallback(
     (delay: number) => {
@@ -124,11 +142,11 @@ export function GradeRangeRail({
       const result = computeGradeTap(bound, gradeIds, difficultyId, withinWindow);
       onChange(result.next);
       lastSingleAtRef.current = isSingleGrade(result.next) ? Date.now() : undefined;
-      if (!isRangeGrade(result.next)) {
+      if (screenReaderEnabled === false && !isRangeGrade(result.next)) {
         scheduleDismiss(AUTO_DISMISS_MS);
       }
     },
-    [bound, gradeIds, onChange, clearDismissTimer, scheduleDismiss],
+    [bound, gradeIds, onChange, clearDismissTimer, scheduleDismiss, screenReaderEnabled],
   );
 
   const handleClear = useCallback(() => {
@@ -161,7 +179,7 @@ export function GradeRangeRail({
             accessibilityLabel={t('mobile.filter.done')}
             style={styles.doneButton}
           >
-            <Text variant="subheadline" color={brandColors.primary} style={styles.doneText}>
+            <Text variant="subheadline" color={readableTextColor(brandColors.primary)} style={styles.doneText}>
               {t('mobile.filter.done')}
             </Text>
           </PressableSurface>
@@ -184,7 +202,9 @@ export function GradeRangeRail({
           tone={anySelected ? 'selected' : 'neutral'}
           gradeColor={brandColors.primary}
           onPress={handleClear}
-          accessibilityLabel={t('mobile.gradeRail.clearFilterAria')}
+          accessibilityLabel={
+            anySelected ? t('mobile.gradeRail.anyGradeAria') : t('mobile.gradeRail.clearFilterAria')
+          }
           accessibilityState={{ selected: anySelected }}
         />
         {grades.map((grade) => {
@@ -258,7 +278,8 @@ export function GradeSingleSelectRail({
 
   useEffect(() => {
     didCenterRef.current = false;
-  }, [focusId]);
+    maybeCenter();
+  }, [focusId, maybeCenter]);
 
   const handleSelect = useCallback(
     (difficultyId: number) => {
@@ -333,9 +354,11 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   doneButton: {
-    minHeight: 28,
+    minHeight: 44,
+    borderRadius: 22,
+    backgroundColor: brandColors.primary,
     justifyContent: 'center',
-    paddingHorizontal: spacing[1],
+    paddingHorizontal: spacing[3],
   },
   doneText: {
     fontWeight: '600',

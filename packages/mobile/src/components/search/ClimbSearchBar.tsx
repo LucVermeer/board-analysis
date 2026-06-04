@@ -130,7 +130,15 @@ export function ClimbSearchBar({
           onBlur={onSearchBlur}
         />
 
-        {showControls ? <GradePill bound={bound} grades={grades} onPress={handleGradePress} maxWidth={132} /> : null}
+        {showControls ? (
+          <GradePill
+            bound={bound}
+            grades={grades}
+            onPress={handleGradePress}
+            expanded={gradeRailVisible}
+            maxWidth={132}
+          />
+        ) : null}
 
         {showControls ? <FilterButton activeFilterCount={activeFilterCount} onPress={onOpenFilters} /> : null}
       </View>

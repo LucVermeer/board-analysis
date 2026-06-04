@@ -448,6 +448,7 @@ export function ClimbFilterSheet({
             }}
             accessibilityRole="button"
             accessibilityLabel={t('mobile.filter.gradeRange')}
+            accessibilityState={{ expanded: gradeRailOpen }}
             style={({ pressed }) => [
               styles.tappableRow,
               { backgroundColor: systemColors.tertiaryBackground as string },
