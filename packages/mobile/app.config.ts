@@ -153,16 +153,13 @@ export default ({ config }: ConfigContext): ExpoConfig & { newArchEnabled?: bool
       // default is already false; we set it explicitly so nobody flips it on
       // before that regression is fixed upstream.
       predictiveBackGestureEnabled: false,
-      // Adaptive launcher icon. The brand mark (assets/icon.png) is a
-      // full-bleed design on black, so we pin the adaptive background to black
-      // — without this, Expo's prebuild defaults the background to white and
-      // the dark icon sits inside a white squircle ring on most launchers.
-      // TODO(Phase 6): replace foregroundImage with a safe-zone-padded
-      // foreground (108dp canvas / 66dp safe zone) and add `monochromeImage`
-      // (single-colour silhouette) for Android 13+ themed icons, supplied by a
-      // designer (no AI-generated art).
+      // Adaptive launcher icon. The foreground is a transparent, safe-zone
+      // padded version of the brand mark; the black background keeps launchers
+      // from placing the dark mark inside a white squircle.
+      // TODO(Phase 6): add `monochromeImage` (single-colour silhouette) for
+      // Android 13+ themed icons, supplied by a designer (no AI-generated art).
       adaptiveIcon: {
-        foregroundImage: './assets/icon.png',
+        foregroundImage: './assets/adaptive-icon.png',
         backgroundColor: '#000000',
       },
       permissions: [
@@ -207,19 +204,17 @@ export default ({ config }: ConfigContext): ExpoConfig & { newArchEnabled?: bool
       'expo-maps',
       'expo-status-bar',
       // Android 12+ system splash + the launch screen on every platform. The
-      // brand mark sits on its own black background, so both schemes use black
-      // for a seamless icon-to-app handoff. app/_layout.tsx already drives
+      // transparent brand mark sits on a black background for a consistent
+      // icon-to-app handoff. app/_layout.tsx already drives
       // SplashScreen.preventAutoHideAsync()/hideAsync() once auth is ready.
-      // TODO(Phase 6): swap `image` for a dedicated splash asset if design wants
-      // one distinct from the launcher icon.
       [
         'expo-splash-screen',
         {
-          image: './assets/icon.png',
+          image: './assets/splash-icon.png',
           imageWidth: 200,
           resizeMode: 'contain',
           backgroundColor: '#000000',
-          dark: { image: './assets/icon.png', backgroundColor: '#000000' },
+          dark: { image: './assets/splash-icon.png', backgroundColor: '#000000' },
         },
       ],
       'expo-updates',

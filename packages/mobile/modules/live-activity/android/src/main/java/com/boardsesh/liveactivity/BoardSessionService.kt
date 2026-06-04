@@ -96,9 +96,7 @@ class BoardSessionService : Service() {
 
     private fun buildNotification(): Notification {
         val builder = NotificationCompat.Builder(this, CHANNEL_ID)
-            // TODO(Phase 6): replace with a dedicated white-silhouette Boardsesh
-            // notification icon (the app launcher icon renders as a white blob).
-            .setSmallIcon(android.R.drawable.ic_media_play)
+            .setSmallIcon(R.drawable.ic_boardsesh_notification)
             .setContentTitle(climbName ?: contentTitleFallback)
             .setContentText(subtitle ?: "")
             .setOngoing(true)
