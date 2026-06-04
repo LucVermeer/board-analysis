@@ -3,16 +3,21 @@ import { Icon } from '../Icon';
 import type { IconName } from '../icon-map';
 import { iosSystemColors } from '../../theme/ios-colors';
 import { spacing } from '../../theme/tokens';
+import { glassSize } from '../../theme/layout';
 
 // Shared building blocks for the Play Drawer and Create Drawer action bars: the
 // circular icon button, its size scale, and the two-row container/row styles.
 // Both bars import these so the layout grammar never drifts between them.
+//
+// These bars sit INSIDE a sheet, not floating over content, so they ride the
+// inline size tier (`inlinePrimary`/`inline`) — distinct from the floating
+// chrome's hero/standard tier, and both at or above the 44pt touch floor.
 
 export type ButtonSize = 'lg' | 'sm';
 
 export const SIZES: Record<ButtonSize, { dim: number; icon: number }> = {
-  lg: { dim: 56, icon: 28 },
-  sm: { dim: 40, icon: 22 },
+  lg: { dim: glassSize.inlinePrimary, icon: 28 },
+  sm: { dim: glassSize.inline, icon: 22 },
 };
 
 type ActionButtonProps = {

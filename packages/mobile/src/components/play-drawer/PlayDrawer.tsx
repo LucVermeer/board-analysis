@@ -8,6 +8,7 @@ import {
   BottomSheetHandle,
   BottomSheetScrollView,
   type BottomSheetBackdropProps,
+  type BottomSheetBackgroundProps,
   type BottomSheetHandleProps,
 } from '@gorhom/bottom-sheet';
 import type { BoardName, Climb } from '@boardsesh/shared-schema';
@@ -26,6 +27,7 @@ import { DeferredSections } from './DeferredSections';
 import { AngleSelectorSheet } from './AngleSelectorSheet';
 import { ClimbActionsSheet } from '../ClimbActionsSheet';
 import { BleControlSheet } from '../ble/BleControlSheet';
+import { GlassSurface } from '../GlassSurface';
 import { Icon } from '../Icon';
 import { useQueue } from '../../providers/queue-provider';
 import { useTheme } from '../../providers/theme-provider';
@@ -344,7 +346,21 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
     [],
   );
 
-  const backgroundStyle = { ...sheetStyles.background, backgroundColor: systemColors.secondaryBackground };
+  // Frosted-glass sheet background — the same Liquid-Glass language as the session
+  // overlay (SessionScreenHost), so the drawer reads as part of the same chrome as
+  // it rises. `style` from gorhom positions the fill; sheetStyles.background rounds
+  // the top, and overflow clips the blur fallback to those corners.
+  const renderBackground = useCallback(
+    ({ style, pointerEvents }: BottomSheetBackgroundProps) => (
+      <GlassSurface
+        glassEffectStyle="regular"
+        fallbackColor={systemColors.secondaryBackground}
+        style={[style, sheetStyles.background, styles.glassBackground]}
+        pointerEvents={pointerEvents}
+      />
+    ),
+    [systemColors.secondaryBackground],
+  );
 
   // Custom handle component wraps gorhom's default in a View whose onLayout
   // reports the actual handle height (depends on indicator style + paddings).
@@ -403,9 +419,9 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
         enableContentPanningGesture={!subDrawerOpen}
         enableHandlePanningGesture={!subDrawerOpen}
         backdropComponent={renderBackdrop}
+        backgroundComponent={renderBackground}
         handleComponent={HandleComponent}
         onDismiss={handleClose}
-        backgroundStyle={backgroundStyle}
       >
         <BottomSheetScrollView
           style={styles.content}
@@ -588,6 +604,9 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
 const styles = StyleSheet.create({
   content: {
     flex: 1,
+  },
+  glassBackground: {
+    overflow: 'hidden',
   },
   closeButton: {
     position: 'absolute',

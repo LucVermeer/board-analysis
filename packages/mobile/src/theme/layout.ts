@@ -13,14 +13,39 @@
 /** Bottom tab bar height (excludes the safe-area inset). */
 export const TAB_BAR_HEIGHT = 49;
 
-/** Diameter of the floating toolbar's circular FABs (search, log-ascent).
- *  Larger than the 44pt HIG minimum — a primary, thumb-friendly action sized
- *  like the iOS Photos / Material FAB so it reads as the obvious target. */
-export const TOOLBAR_FAB_SIZE = 56;
+/**
+ * One height ladder for every glass FAB / capsule / pill, so the floating chrome
+ * reads as a single, deliberately-sized system rather than a pile of ad-hoc
+ * diameters. Liquid Glass earns expressiveness from a single hero bump plus a
+ * 4pt capsule offset — not from many sizes — so the ladder is capped and every
+ * interactive tier stays at or above the 44pt touch floor.
+ *
+ *   hero          one defining action per floating surface (log-ascent, create)
+ *   standard      default floating FAB
+ *   capsule       standalone floating capsule — 4pt under its sibling FABs
+ *   inlinePrimary primary action inside a sheet (PlayDrawer)
+ *   inline        standard inline control + touch-target floor
+ *   mini          label-only pill (angle); carries 44pt hit-slop when tappable
+ *
+ * Guardrail: the hero bump and the capsule offset are for STANDALONE glass
+ * bodies. Anything merged inside a GlassContainer shares one height.
+ */
+export const glassSize = {
+  hero: 64,
+  standard: 56,
+  capsule: 52,
+  inlinePrimary: 48,
+  inline: 44,
+  mini: 32,
+} as const;
 
-/** Height of the centered climb capsule. Matches the FAB diameter so the three
- *  floating elements share one optical baseline. */
-export const TOOLBAR_CAPSULE_HEIGHT = 56;
+/** Diameter of the floating toolbar's standard circular FABs (search).
+ *  The log-ascent hero FAB is `glassSize.hero`; see `glassSize`. */
+export const TOOLBAR_FAB_SIZE = glassSize.standard;
+
+/** Height of the centered climb capsule — one step under the flanking FABs so it
+ *  reads as context, not an action (the playful tell). See `glassSize`. */
+export const TOOLBAR_CAPSULE_HEIGHT = glassSize.capsule;
 
 /** Max width of the centered climb capsule so it never collides with the side
  *  FABs and stays Photos-style centered on wide phones. */
@@ -37,5 +62,6 @@ export const TOOLBAR_GAP = 8;
 export const TOOLBAR_GAP_ABOVE_TABBAR = 10;
 
 /** Bottom padding screens reserve (above the tab bar + safe-area inset) so the
- *  last scrollable row clears the floating toolbar. */
-export const TOOLBAR_RESERVE = TOOLBAR_CAPSULE_HEIGHT + TOOLBAR_GAP_ABOVE_TABBAR;
+ *  last scrollable row clears the floating toolbar. Keyed off the tallest island
+ *  (the hero log-ascent FAB), not the shorter capsule, so nothing hides under it. */
+export const TOOLBAR_RESERVE = glassSize.hero + TOOLBAR_GAP_ABOVE_TABBAR;

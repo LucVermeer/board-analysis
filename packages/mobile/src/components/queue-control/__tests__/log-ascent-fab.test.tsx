@@ -79,7 +79,7 @@ vi.mock('../../../theme/colors', () => ({
 }));
 vi.mock('../../../theme/animations', () => ({ springs: { bouncy: {}, snappy: {} } }));
 vi.mock('../../../lib/haptics', () => ({ hapticSelection: vi.fn() }));
-vi.mock('../../../theme/layout', () => ({ TOOLBAR_FAB_SIZE: 56 }));
+vi.mock('../../../theme/layout', () => ({ glassSize: { hero: 64, standard: 56 } }));
 
 // NB: ../../lib/ascent-status-utils is intentionally NOT mocked — the real,
 // pure countSentAscents drives the logged/green state from the logbook fixture.

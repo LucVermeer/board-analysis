@@ -78,11 +78,15 @@ vi.mock('../../../providers/bluetooth-provider', () => ({
 vi.mock('../../../theme/tokens', () => ({
   spacing: { 2: 8, 4: 16 },
   shadows: { sm: {} },
+  glassMaterial: { regular: 20, thin: 13 },
 }));
 
 vi.mock('../../../theme/colors', () => ({
   withAlpha: (color: string, alpha: number) => `${color}@${alpha}`,
 }));
+
+// Drive the fallback (non-native-glass) branch so the capsule's hairline/shadow render.
+vi.mock('../../../hooks/use-native-glass', () => ({ useNativeGlass: () => false }));
 
 vi.mock('../../../lib/haptics', () => ({ hapticLight: haptics.light }));
 

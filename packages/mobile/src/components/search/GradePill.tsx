@@ -16,7 +16,11 @@ import { PressableSurface } from '../PressableSurface';
 import { useTheme } from '../../providers/theme-provider';
 import { useGradeFormat } from '../../hooks/use-grade-format';
 import { withAlpha } from '../../theme/colors';
+import { glassMaterial } from '../../theme/tokens';
+import { glassSize } from '../../theme/layout';
 import { formatGradePillLabel } from './grade-pill-label';
+
+const PILL_RADIUS = glassSize.standard / 2;
 
 type GradePillProps = {
   bound: GradeBound;
@@ -61,7 +65,8 @@ export function GradePill({ bound, grades, onPress, maxWidth }: GradePillProps) 
         glassEffectStyle="regular"
         tintColor={tintColor}
         fallbackColor={fallbackColor}
-        borderRadius={22}
+        borderRadius={PILL_RADIUS}
+        blurAmount={glassMaterial.thin}
         style={StyleSheet.absoluteFill}
         pointerEvents="none"
       />
@@ -77,8 +82,8 @@ export function GradePill({ bound, grades, onPress, maxWidth }: GradePillProps) 
 
 const styles = StyleSheet.create({
   pill: {
-    height: 44,
-    borderRadius: 22,
+    height: glassSize.standard,
+    borderRadius: PILL_RADIUS,
     overflow: 'hidden',
     justifyContent: 'center',
   },
@@ -87,7 +92,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
     paddingHorizontal: 14,
-    height: 44,
+    height: glassSize.standard,
   },
   gradeText: {
     fontWeight: '600',

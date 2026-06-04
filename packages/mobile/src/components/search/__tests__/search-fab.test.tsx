@@ -65,6 +65,9 @@ vi.mock('../../GlassIconButton', () => ({
 
 vi.mock('../GradePill', () => ({ GradePill: () => createElement('div', { 'data-gradepill': 'true' }) }));
 vi.mock('../FilterButton', () => ({ FilterButton: () => createElement('div', { 'data-filterbutton': 'true' }) }));
+vi.mock('../../GlassCluster', () => ({
+  GlassCluster: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
+}));
 
 import { SearchFab } from '../SearchFab';
 

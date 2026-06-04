@@ -13,11 +13,12 @@ import { useTranslation } from 'react-i18next';
 import { computePeekOffset } from '@boardsesh/play-view';
 import { getGradeColor, DEFAULT_GRADE_COLOR } from '@boardsesh/board-constants/grade-colors';
 import type { ClimbQueueItem } from '@boardsesh/queue';
-import { shadows } from '../../theme/tokens';
+import { shadows, glassMaterial } from '../../theme/tokens';
 import { withAlpha } from '../../theme/colors';
 import { TOOLBAR_CAPSULE_HEIGHT, TOOLBAR_CAPSULE_MAX_WIDTH } from '../../theme/layout';
 import { useGradeFormat } from '../../hooks/use-grade-format';
 import { useReduceMotion } from '../../hooks/use-reduce-motion';
+import { useNativeGlass } from '../../hooks/use-native-glass';
 import { Text } from '../Text';
 import { GlassSurface } from '../GlassSurface';
 import { useTheme } from '../../providers/theme-provider';
@@ -67,6 +68,7 @@ export function ClimbCapsule() {
   const { t } = useTranslation('session');
   const { formatGrade } = useGradeFormat();
   const reduceMotion = useReduceMotion();
+  const nativeGlass = useNativeGlass();
 
   const [width, setWidth] = useState(0);
 
@@ -188,12 +190,21 @@ export function ClimbCapsule() {
   const gradeWash = withAlpha(getGradeColor(currentDisplay.difficulty) ?? DEFAULT_GRADE_COLOR, 0.16);
 
   return (
-    <View style={[styles.capsule, { borderWidth: StyleSheet.hairlineWidth, borderColor: systemColors.separator }]}>
+    <View
+      style={[
+        styles.capsule,
+        // Native Liquid Glass draws its own edge + lift; the hairline border and
+        // shadow are only needed on the blur/solid fallback.
+        !nativeGlass && shadows.sm,
+        !nativeGlass && { borderWidth: StyleSheet.hairlineWidth, borderColor: systemColors.separator },
+      ]}
+    >
       <GlassSurface
         glassEffectStyle="regular"
         tintColor={gradeWash}
         fallbackColor={systemColors.elevatedSurface}
         borderRadius={CAPSULE_RADIUS}
+        blurAmount={glassMaterial.thin}
         style={StyleSheet.absoluteFill}
         pointerEvents="none"
       />
@@ -249,7 +260,6 @@ const styles = StyleSheet.create({
     maxWidth: TOOLBAR_CAPSULE_MAX_WIDTH,
     height: TOOLBAR_CAPSULE_HEIGHT,
     borderRadius: CAPSULE_RADIUS,
-    ...shadows.sm,
   },
   swipeArea: {
     flex: 1,
