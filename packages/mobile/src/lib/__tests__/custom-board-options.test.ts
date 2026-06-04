@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { getAllLayouts } from '@boardsesh/board-constants/product-sizes';
 import {
   getBoardLayouts,
   getBoardSetsForLayoutAndSize,
@@ -7,6 +8,10 @@ import {
 } from '../custom-board-options';
 
 describe('custom board options', () => {
+  it('delegates non-MoonBoard layouts to product-size constants', () => {
+    expect(getBoardLayouts('kilter')).toEqual(getAllLayouts('kilter'));
+  });
+
   it('returns MoonBoard layouts for the custom board selector', () => {
     const layouts = getBoardLayouts('moonboard');
     expect(layouts.map((layout) => layout.name)).toEqual([
