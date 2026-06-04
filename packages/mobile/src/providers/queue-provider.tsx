@@ -28,8 +28,10 @@ import type {
   SetCurrentClimbOptions,
 } from '@boardsesh/queue';
 import {
+  applySessionRuntimeEvent,
   createJoinSessionTracker,
   mapSubscriptionEnvelopeToAction,
+  type RuntimeSessionState,
   type SubscriptionWireEnvelope,
 } from '@boardsesh/queue-runtime';
 import { useQueueMutations, type PublishPlaybackStateInput } from '@boardsesh/queue-react';
@@ -57,6 +59,7 @@ import { useActiveBoard, useSetActiveBoard } from '../lib/graphql/use-active-boa
 import { getStoredSessionId, setStoredSessionId, clearStoredSessionId } from '../lib/session-store';
 import { findPreviousQueueItem, findNextQueueItemWithSuggestions } from '@boardsesh/play-view';
 import { toClimbQueueItem, type SubscriptionQueueItem } from '../lib/queue-conversion';
+import { toMobileSessionRuntimeEvent } from '../lib/session-runtime-event';
 import { climbToQueueItem, toClimbInput } from '../lib/climb-to-queue-item';
 import { track } from '../lib/analytics';
 import { useToast } from './toast-provider';
@@ -88,6 +91,8 @@ type QueueContextValue = {
   sessionUsers: SessionUser[];
   /** Participant id of the member currently driving the wall, if any. */
   driverParticipantId: string | null;
+  /** Most recently published physical board serial for this session, if any. */
+  lastConnectedBoardSerial: string | null;
   /** Our own participant id for the active session (marks "you" in rosters). */
   participantId: string | null;
   addToQueue: (item: ClimbQueueItem) => void;
@@ -151,6 +156,16 @@ const defaultSearchParams: QueueSearchParams = {};
 // (disambiguates from QueueItemRemoved.uuid). Both aliases are first-class on
 // `SubscriptionWireEnvelope` so we can use the wire type directly.
 type QueueUpdateEvent = SubscriptionWireEnvelope<SubscriptionQueueItem>;
+type MobileSessionRuntimeState = RuntimeSessionState<SessionUser>;
+
+const createEmptySessionRuntimeState = (): MobileSessionRuntimeState => ({
+  users: [],
+  isLeader: false,
+  clientId: '',
+  driverParticipantId: null,
+  lastConnectedBoardSerial: null,
+  boardPath: '',
+});
 
 export function QueueProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(queueReducer, defaultSearchParams, initialState);
@@ -160,8 +175,11 @@ export function QueueProvider({ children }: { children: ReactNode }) {
   // (SessionStatsUpdated); the roster is seeded from JOIN_SESSION and kept
   // current via UserJoined/UserLeft/UserPresenceChanged/DriverChanged.
   const [liveStats, setLiveStats] = useState<SessionLiveStatsEvent | null>(null);
-  const [sessionUsers, setSessionUsers] = useState<SessionUser[]>([]);
-  const [driverParticipantId, setDriverParticipantId] = useState<string | null>(null);
+  const [sessionRuntimeState, setSessionRuntimeState] =
+    useState<MobileSessionRuntimeState>(createEmptySessionRuntimeState);
+  const sessionUsers = sessionRuntimeState.users;
+  const driverParticipantId = sessionRuntimeState.driverParticipantId;
+  const lastConnectedBoardSerial = sessionRuntimeState.lastConnectedBoardSerial;
   const [participantId, setParticipantId] = useState<string | null>(null);
   // Our own participant id, captured from the JOIN_SESSION response. Used to
   // suppress the echo of our own SessionBoardPathChanged broadcasts (the server
@@ -223,7 +241,11 @@ export function QueueProvider({ children }: { children: ReactNode }) {
           const result = await execute<{
             joinSession?: {
               participantId?: string | null;
+              clientId?: string | null;
+              isLeader?: boolean | null;
               driverParticipantId?: string | null;
+              lastConnectedBoardSerial?: string | null;
+              boardPath?: string | null;
               users?: SessionUser[] | null;
             };
           }>(getWsClient(), {
@@ -240,8 +262,14 @@ export function QueueProvider({ children }: { children: ReactNode }) {
           // Seed the live presence roster + driver from the join response. The
           // UserJoined/UserLeft/DriverChanged events that follow are deltas;
           // this is the initial snapshot of who's already in the session.
-          if (joined?.users) setSessionUsers(joined.users);
-          setDriverParticipantId(joined?.driverParticipantId ?? null);
+          setSessionRuntimeState({
+            users: joined?.users ?? [],
+            isLeader: joined?.isLeader ?? false,
+            clientId: joined?.clientId ?? joined?.participantId ?? '',
+            driverParticipantId: joined?.driverParticipantId ?? null,
+            lastConnectedBoardSerial: joined?.lastConnectedBoardSerial ?? null,
+            boardPath: joined?.boardPath ?? boardPath,
+          });
           return result;
         },
       }),
@@ -291,6 +319,9 @@ export function QueueProvider({ children }: { children: ReactNode }) {
   showToastRef.current = showToast;
   const tRef = useRef(t);
   tRef.current = t;
+  const clearSessionRef = useRef<() => Promise<void>>(async () => {});
+  const locallyEndingSessionIdRef = useRef<string | null>(null);
+  const suppressedRemoteEndSessionIdRef = useRef<string | null>(null);
 
   // Transient queue-event listeners. PlaybackStateChanged (route playback
   // party-sync) doesn't mutate queue state, so the play-drawer orchestrator
@@ -311,8 +342,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       participantIdRef.current = null;
       setParticipantId(null);
       setLiveStats(null);
-      setSessionUsers([]);
-      setDriverParticipantId(null);
+      setSessionRuntimeState(createEmptySessionRuntimeState());
       joinTracker.reset();
       return;
     }
@@ -432,6 +462,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
         next: ({ data }) => {
           const event = data?.sessionUpdates;
           if (!event) return;
+          if (sessionIdRef.current !== sessionId) return;
 
           // Live analytics push: flashes + flash/send/attempt grade split +
           // per-participant breakdown. Drives the in-session analytics view and
@@ -453,24 +484,21 @@ export function QueueProvider({ children }: { children: ReactNode }) {
             return;
           }
 
-          // Presence roster maintenance (deltas on top of the JOIN_SESSION seed).
-          if ((event.__typename === 'UserJoined' || event.__typename === 'UserPresenceChanged') && event.user) {
-            const incoming = event.user;
-            setSessionUsers((prev) => {
-              const next = prev.filter((existing) => existing.id !== incoming.id);
-              next.push(incoming);
-              return next;
-            });
+          if (event.__typename === 'SessionEnded') {
+            if (locallyEndingSessionIdRef.current === sessionId) {
+              suppressedRemoteEndSessionIdRef.current = sessionId;
+              return;
+            }
+            void clearSessionRef.current();
+            showToastRef.current(tRef.current('mobile.toast.sessionEnded'), 'success');
             return;
           }
-          if (event.__typename === 'UserLeft' && event.userId) {
-            const leftId = event.userId;
-            setSessionUsers((prev) => prev.filter((existing) => existing.id !== leftId));
-            return;
-          }
-          if (event.__typename === 'DriverChanged') {
-            setDriverParticipantId(event.driverParticipantId ?? null);
-            return;
+
+          const runtimeEvent = toMobileSessionRuntimeEvent(event);
+          if (runtimeEvent) {
+            setSessionRuntimeState(
+              (prev) => applySessionRuntimeEvent(prev, runtimeEvent) ?? createEmptySessionRuntimeState(),
+            );
           }
 
           if (event.__typename !== 'SessionBoardPathChanged' || !event.boardPath) return;
@@ -483,6 +511,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
           const nextAngle = parsed.angle;
           void (async () => {
             const stored = await getStoredActiveBoard();
+            if (sessionIdRef.current !== sessionId) return;
             if (!stored || stored.angle === nextAngle) return;
             // Never override a fixed-angle board (mirrors handleAngleChange's
             // local guard) — a peer can't change an angle the board can't be
@@ -520,8 +549,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       // liveStats/roster would leak into the joined session until B's first
       // push. The new session re-seeds the roster from its JOIN_SESSION response.
       setLiveStats(null);
-      setSessionUsers([]);
-      setDriverParticipantId(null);
+      setSessionRuntimeState(createEmptySessionRuntimeState());
       setParticipantId(null);
       participantIdRef.current = null;
       joinTracker.reset();
@@ -883,6 +911,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const clearSession = useCallback(async () => {
+    sessionIdRef.current = null;
     setSessionId(null);
     dispatch({
       type: 'INITIAL_QUEUE_DATA',
@@ -891,20 +920,32 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     setPlaylistSuggestionSourceState(null);
     await clearStoredSessionId();
   }, []);
+  clearSessionRef.current = clearSession;
 
   const endSession = useCallback(async (): Promise<SessionSummary | null> => {
     const currentSessionId = sessionIdRef.current;
     if (!currentSessionId) return null;
 
     try {
+      locallyEndingSessionIdRef.current = currentSessionId;
       const response = await getHttpClient().request<EndSessionMutationResponse>(END_SESSION, {
         sessionId: currentSessionId,
       });
       await clearSession();
+      locallyEndingSessionIdRef.current = null;
+      suppressedRemoteEndSessionIdRef.current = null;
       track(SHARED_EVENTS.SessionEnded, { sessionId: currentSessionId });
       showToast(t('mobile.toast.sessionEnded'), 'success');
       return response.endSession;
     } catch {
+      if (suppressedRemoteEndSessionIdRef.current === currentSessionId) {
+        locallyEndingSessionIdRef.current = null;
+        suppressedRemoteEndSessionIdRef.current = null;
+        await clearSession();
+        showToast(t('mobile.toast.sessionEnded'), 'success');
+        return null;
+      }
+      locallyEndingSessionIdRef.current = null;
       showToast(t('mobile.queue.actionFailed'), 'error');
       return null;
     }
@@ -941,6 +982,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       liveStats,
       sessionUsers,
       driverParticipantId,
+      lastConnectedBoardSerial,
       participantId,
       addToQueue,
       removeFromQueue,
@@ -966,6 +1008,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       liveStats,
       sessionUsers,
       driverParticipantId,
+      lastConnectedBoardSerial,
       participantId,
       addToQueue,
       removeFromQueue,

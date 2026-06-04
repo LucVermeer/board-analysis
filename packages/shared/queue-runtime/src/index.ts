@@ -17,3 +17,11 @@ export { createJoinSessionTracker } from './ensure-joined';
 export type { JoinSessionTracker, JoinSessionTrackerOptions } from './ensure-joined';
 
 export { deriveIsDriver } from './driver-state';
+
+export { applySessionRuntimeEvent, upsertRuntimeSessionUser } from './session-events';
+export type {
+  ApplySessionRuntimeEventOptions,
+  RuntimeSessionEvent,
+  RuntimeSessionState,
+  RuntimeSessionUser,
+} from './session-events';

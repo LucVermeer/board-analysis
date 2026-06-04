@@ -873,6 +873,9 @@ export const SESSION_UPDATES_SUBSCRIPTION = `
         boardPath
         changedByParticipantId
       }
+      ... on SessionBoardSerialChanged {
+        lastConnectedBoardSerial
+      }
       ... on SessionStatsUpdated {
         sessionId
         totalSends
@@ -936,9 +939,17 @@ export type SessionUpdateEvent = {
   user?: SessionUser;
   // UserLeft
   userId?: string;
+  // LeaderChanged
+  leaderId?: string | null;
+  leaderConnectionId?: string | null;
   // DriverChanged
   driverParticipantId?: string | null;
   previousDriverParticipantId?: string | null;
+  // SessionBoardSerialChanged
+  lastConnectedBoardSerial?: string | null;
+  // SessionEnded
+  reason?: string | null;
+  newPath?: string | null;
   // SessionStatsUpdated (aggregate fields — see SessionLiveStatsEvent)
   sessionId?: string;
   totalSends?: number;
