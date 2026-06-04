@@ -20,7 +20,6 @@ import { useTranslation } from 'react-i18next';
 import { computePeekOffset, getGradeTintColor } from '@boardsesh/play-view';
 import { getGradeColor, DEFAULT_GRADE_COLOR } from '@boardsesh/board-constants/grade-colors';
 import type { ClimbQueueItem } from '@boardsesh/queue';
-import { iosSystemColors } from '../../theme/ios-colors';
 import { shadowColor } from '../../theme/tokens';
 import { useGradeFormat } from '../../hooks/use-grade-format';
 import { Text } from '../Text';
