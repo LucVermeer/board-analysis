@@ -1,8 +1,9 @@
 # Android sideload build (React Native rewrite)
 
-`.github/workflows/android-apk-rn.yml` builds a signed, sideloadable Android APK
-for the Expo React Native app in `packages/mobile/` and attaches it to a GitHub
-Release. This is the Android counterpart to `ios-testflight-rn.yml` (iOS).
+`.github/workflows/android-apk-rn.yml` builds a signed, sideloadable arm64
+Android APK for the Expo React Native app in `packages/mobile/` and attaches it
+to a GitHub Release. This is the Android counterpart to `ios-testflight-rn.yml`
+(iOS).
 
 ## Why a workflow and not EAS
 
@@ -16,29 +17,38 @@ needs a macOS runner, which is why that one prebuilds locally too.)
 
 - **Trigger:** push to `main` touching `packages/mobile/**` (+ the shared
   packages it imports), and manual `workflow_dispatch`.
-- **Output:** a GitHub Release tagged `rn-android-2.0.<run_number>` with
-  `app-release.apk` attached, plus a 30-day build artifact.
+- **Output:** a GitHub Release tagged `rn-android-<major>.<minor>.<run_number>`
+  with `boardsesh-rn-android-arm64-v8a.apk` attached, plus a 30-day build
+  artifact.
 - The job runs in the `Production` GitHub Environment so it can read the
-  Production-scoped `SENTRY_AUTH_TOKEN`.
+  Production-scoped `SENTRY_AUTH_TOKEN` and `DISCORD_DEPLOY_WEBHOOK`.
 
 Steps: `bun install` → write `.env` (prod URLs + Sentry DSN) → gate Sentry
 upload on `SENTRY_AUTH_TOKEN` (`SENTRY_DISABLE_AUTO_UPLOAD`) → `expo prebuild`
-→ set `versionCode` → decode keystore → `gradlew assembleRelease` → verify the
-APK signature (`apksigner verify --print-certs`) → publish the Release.
+→ set `versionCode` → derive the app version from `app.config.ts` → decode
+keystore → `gradlew assembleRelease` → verify the APK signature
+(`apksigner verify --print-certs`) → publish the Release → notify the deploy
+channel → build the Play AAB.
+
+The sideload APK is intentionally `arm64-v8a` only. That covers modern physical
+Android devices while keeping the GitHub Release build reliable on
+`ubuntu-latest`. The Play Store path still receives a signed AAB, so Play can
+serve the right APKs for its supported device set.
 
 ## Signing
 
 The release APK is signed with the **same keystore as the Capacitor app**, via
 the existing repo secrets — no new secrets:
 
-| Secret | Used for |
-| --- | --- |
-| `ANDROID_KEYSTORE_BASE64` | base64 of the `.keystore`, decoded at build time |
-| `ANDROID_KEYSTORE_PASSWORD` | store password |
-| `ANDROID_KEY_ALIAS` | key alias |
-| `ANDROID_KEY_PASSWORD` | key password |
-| `SENTRY_AUTH_TOKEN` (optional) | source-map upload; build stays green without it |
-| `GOOGLE_MAPS_API_KEY` (optional) | Android map tiles; map is blank without it |
+| Secret                              | Used for                                         |
+| ----------------------------------- | ------------------------------------------------ |
+| `ANDROID_KEYSTORE_BASE64`           | base64 of the `.keystore`, decoded at build time |
+| `ANDROID_KEYSTORE_PASSWORD`         | store password                                   |
+| `ANDROID_KEY_ALIAS`                 | key alias                                        |
+| `ANDROID_KEY_PASSWORD`              | key password                                     |
+| `SENTRY_AUTH_TOKEN` (optional)      | source-map upload; build stays green without it  |
+| `GOOGLE_MAPS_API_KEY` (optional)    | Android map tiles; map is blank without it       |
+| `DISCORD_DEPLOY_WEBHOOK` (optional) | best-effort release notification                 |
 
 Signing is injected by the `with-android-release-signing` config plugin
 (`packages/mobile/plugins/`), which rewrites the prebuild-generated
@@ -82,8 +92,16 @@ The same workflow also builds a signed **AAB** (`./gradlew bundleRelease`, same
 prebuild / `release` signingConfig / `versionCode` as the APK, so the two
 channels never diverge) and uploads it to the Google Play **internal testing**
 track via [`r0adkll/upload-google-play`](https://github.com/r0adkll/upload-google-play)
-(pinned to a commit SHA). The APK stays the sideload channel (GitHub Release);
-the AAB is the Play channel.
+(pinned to a commit SHA). The APK stays the arm64 sideload channel (GitHub
+Release); the AAB is the Play channel.
+
+The GitHub Release is created before the AAB/Play steps. A Play-specific failure
+should not block the already-signed sideload APK from being published.
+
+After the GitHub Release is created, the workflow posts the release URL to the
+deployments Discord webhook. The notification is best-effort: if the webhook is
+unset or Discord rejects the request, the APK release remains successful and the
+run logs a warning.
 
 `bundleRelease` runs with `SENTRY_DISABLE_AUTO_UPLOAD=true` because
 `assembleRelease` already uploaded the source maps for the same release/dist —
@@ -129,12 +147,13 @@ consequences:
 
 ### versionCode
 
-No separate version source: the AAB inherits the exact `versionCode` the "Set
-version code" step seds in (`offset + run_number`), shared with the APK. Play
-enforces strictly-increasing `versionCode` per track, which `run_number`
-monotonicity satisfies. `eas.json`'s `appVersionSource: remote` governs only
-`eas build`/`eas submit` — do **not** enable EAS auto-increment for Android, or
-it would fight the gradle version source.
+No separate version source: the app version is read from
+`packages/mobile/app.config.ts`, and the AAB inherits the exact `versionCode`
+the "Set version code" step seds in (`offset + run_number`), shared with the
+APK. Play enforces strictly-increasing `versionCode` per track, which
+`run_number` monotonicity satisfies. `eas.json`'s `appVersionSource: remote`
+governs only `eas build`/`eas submit` — do **not** enable EAS auto-increment for
+Android, or it would fight the gradle version source.
 
 For production later, promote from internal and use Play's staged rollout (set
 `track: production` + `status: inProgress` + `userFraction` on the upload step).
