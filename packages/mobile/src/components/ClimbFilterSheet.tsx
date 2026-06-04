@@ -1,5 +1,11 @@
 import { useCallback, useMemo, useRef, useState, useEffect, type PropsWithChildren } from 'react';
-import { View, Pressable, ScrollView, StyleSheet, Platform, type ViewStyle } from 'react-native';
+import { View, Pressable, StyleSheet, Platform, type ViewStyle } from 'react-native';
+// react-native-gesture-handler's ScrollView (not the bare RN one) for the
+// horizontal sort-by chip rail: nested inside the sheet's vertical
+// BottomSheetScrollView, a plain RN ScrollView won't scroll on Android because
+// the parent scroll/pan gestures capture the touch. The gesture-handler
+// scrollable coordinates nested scrolling correctly.
+import { ScrollView } from 'react-native-gesture-handler';
 import {
   BottomSheetBackdrop,
   BottomSheetModal,
