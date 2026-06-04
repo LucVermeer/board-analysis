@@ -36,6 +36,7 @@ import { useQueueMutations, type PublishPlaybackStateInput } from '@boardsesh/qu
 import type { SessionSummary, SubscriptionQueueEvent } from '@boardsesh/shared-schema';
 import { execute } from '@boardsesh/graphql-client';
 import { buildBoardPath, parseBoardPath } from '@boardsesh/board-config';
+import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { JOIN_SESSION } from '@boardsesh/graphql/operations/queue-session';
 import { getWsClient } from '../lib/graphql/ws-client';
 import { getHttpClient } from '../lib/graphql/client';
@@ -56,6 +57,7 @@ import { getStoredSessionId, setStoredSessionId, clearStoredSessionId } from '..
 import { findPreviousQueueItem, findNextQueueItemWithSuggestions } from '@boardsesh/play-view';
 import { toClimbQueueItem, type SubscriptionQueueItem } from '../lib/queue-conversion';
 import { climbToQueueItem, toClimbInput } from '../lib/climb-to-queue-item';
+import { track } from '../lib/analytics';
 import { useToast } from './toast-provider';
 import { useQueueSnackbar } from './queue-snackbar-provider';
 
@@ -159,6 +161,13 @@ export function QueueProvider({ children }: { children: ReactNode }) {
   const { showToast } = useToast();
   const { showQueueAddedSnackbar } = useQueueSnackbar();
   const { t } = useTranslation('session');
+
+  // The active board is read synchronously from the React Query cache
+  // (staleTime: Infinity, hydrated from AsyncStorage) so analytics call sites
+  // can tag events with the current board layout without re-creating the
+  // callbacks on every board switch — mirror it into a ref the handlers read.
+  const activeBoardRef = useRef(activeBoard);
+  activeBoardRef.current = activeBoard;
 
   // JOIN_SESSION cache, keyed by (sessionId, connection epoch). Built once
   // per mount so its inFlight state survives re-renders. Web has a separate
@@ -315,11 +324,39 @@ export function QueueProvider({ children }: { children: ReactNode }) {
             mapItem: toClimbQueueItem,
             context: { myClientId: coordinator.clientId },
           });
-          if (result.kind === 'dispatch') dispatch(result.action);
-          // TODO(analytics-parity): web's use-queue-event-subscription.ts
-          // tracks peer-broadcast QueueItemAdded/QueueItemRemoved via track().
-          // Mobile lacks an analytics module today; revisit once the mobile
-          // analytics surface exists.
+          if (result.kind !== 'dispatch') return;
+          dispatch(result.action);
+          switch (result.eventType) {
+            case 'QueueItemAdded':
+              track(SHARED_EVENTS.ClimbAddedToQueue, {
+                boardName: activeBoardRef.current?.boardType,
+                layoutId: activeBoardRef.current?.layoutId,
+                addedFromTab: 'peer_broadcast',
+                currentQueueLength: stateRef.current.queue.length + 1,
+                partyMode: true,
+              });
+              break;
+            case 'QueueItemRemoved':
+              track(SHARED_EVENTS.ClimbRemovedFromQueue, {
+                boardName: activeBoardRef.current?.boardType,
+                layoutId: activeBoardRef.current?.layoutId,
+                partyMode: true,
+                removedBy: 'peer',
+              });
+              break;
+            case 'QueueReordered':
+              if (event.__typename === 'QueueReordered') {
+                track(SHARED_EVENTS.QueueReordered, {
+                  boardName: activeBoardRef.current?.boardType,
+                  layoutId: activeBoardRef.current?.layoutId,
+                  oldIndex: event.oldIndex,
+                  newIndex: event.newIndex,
+                  partyMode: true,
+                  reorderedBy: 'peer',
+                });
+              }
+              break;
+          }
         },
         error: () => {
           // i18n-keep session:mobile.queue.syncError — called through `tRef.current`,
@@ -422,6 +459,11 @@ export function QueueProvider({ children }: { children: ReactNode }) {
           const newId = response.createSession.id;
           sessionIdRef.current = newId;
           setSessionId(newId);
+          track(SHARED_EVENTS.SessionStarted, {
+            boardName: activeBoard.boardType,
+            hasGoal: !!config?.goal,
+            isDiscoverable: config?.discoverable ?? false,
+          });
           await setStoredSessionId(newId);
           return newId;
         } catch {
@@ -572,6 +614,13 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       // phone, or a transient WS error must NOT see "Action failed" when the
       // local queue is already correct. Dev-log only.
       dispatch({ type: 'DELTA_ADD_QUEUE_ITEM', payload: { item } });
+      track(SHARED_EVENTS.ClimbAddedToQueue, {
+        climbUuid: item.climb.uuid,
+        boardName: activeBoardRef.current?.boardType,
+        layoutId: activeBoardRef.current?.layoutId,
+        addedFromTab: 'mobile',
+        currentQueueLength: stateRef.current.queue.length + 1,
+      });
       mutations.addQueueItem(item).catch((error) => {
         if (__DEV__) console.warn('[queue] addQueueItem sync failed', error);
       });
@@ -583,10 +632,18 @@ export function QueueProvider({ children }: { children: ReactNode }) {
 
   const removeFromQueue = useCallback(
     (uuid: string) => {
+      const removedItem = stateRef.current.queue.find((queueItem) => queueItem.uuid === uuid);
       // Same best-effort model as addToQueue: the reducer already removed the
       // item locally; the server mutation only syncs it to a party session (and
       // no-ops when there's none — it never lazily creates one just to remove).
       dispatch({ type: 'DELTA_REMOVE_QUEUE_ITEM', payload: { uuid } });
+      track(SHARED_EVENTS.ClimbRemovedFromQueue, {
+        climbUuid: removedItem?.climb.uuid ?? null,
+        queueItemUuid: uuid,
+        boardName: activeBoardRef.current?.boardType,
+        layoutId: activeBoardRef.current?.layoutId,
+        removedBy: 'self',
+      });
       mutations.removeQueueItem(uuid).catch((error) => {
         if (__DEV__) console.warn('[queue] removeQueueItem sync failed', error);
       });
@@ -601,6 +658,14 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       const previousQueue = stateRef.current.queue;
       const previousCurrent = stateRef.current.currentClimbQueueItem;
       dispatch({ type: 'DELTA_REORDER_QUEUE_ITEM', payload: { uuid, oldIndex, newIndex } });
+      track(SHARED_EVENTS.QueueReordered, {
+        boardName: activeBoardRef.current?.boardType,
+        layoutId: activeBoardRef.current?.layoutId,
+        oldIndex,
+        newIndex,
+        partyMode: sessionIdRef.current !== null,
+        reorderedBy: 'self',
+      });
       mutations.reorderQueueItem(uuid, oldIndex, newIndex).catch((error) => {
         if (__DEV__) console.warn('[queue] reorderQueueItem sync failed; rolling back', error);
         // Unlike add/remove (idempotent, converge on next sync), a failed reorder
@@ -617,6 +682,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
   const clearQueue = useCallback(() => {
     const itemsToRemove = stateRef.current.queue;
     dispatch({ type: 'CLEAR_QUEUE' });
+    track(SHARED_EVENTS.QueueCleared, { layoutId: activeBoardRef.current?.layoutId, totalCount: itemsToRemove.length });
     setPlaylistSuggestionSourceState(null);
     // Surface at most one toast if any removal fails — a persistent join
     // failure would otherwise toast once per queued item.
@@ -656,6 +722,11 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       // climb-list/search open passes null to clear playlist context; re-opening
       // the current climb passes nothing, leaving the source intact.
       if (options) setPlaylistSuggestionSourceState(options.playlistSuggestionSource);
+      track(SHARED_EVENTS.SetActiveClimb, {
+        climbUuid: item.climb.uuid,
+        layoutId: activeBoardRef.current?.layoutId,
+        source: 'mobile',
+      });
       // Append (fresh-uuid items add to the queue; the reducer's uuid dedup makes
       // re-selecting an existing queue item a no-op add). Re-tapping a playlist
       // climb thus starts a fresh pass — forward-swipe re-appends the rest of the
@@ -728,6 +799,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
         sessionId: currentSessionId,
       });
       await clearSession();
+      track(SHARED_EVENTS.SessionEnded, { sessionId: currentSessionId });
       showToast(t('mobile.toast.sessionEnded'), 'success');
       return response.endSession;
     } catch {

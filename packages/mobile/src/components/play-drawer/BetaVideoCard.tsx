@@ -5,10 +5,12 @@ import * as Haptics from 'expo-haptics';
 import { useTranslation } from 'react-i18next';
 import type { BetaLink } from '@boardsesh/shared-schema';
 import { isInstagramUrl, isTikTokUrl } from '@boardsesh/shared-schema';
+import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { Text } from '../Text';
 import { Icon } from '../Icon';
 import type { IconName } from '../icon-map';
 import { useToast } from '../../providers/toast-provider';
+import { track } from '../../lib/analytics';
 import { iosSystemColors } from '../../theme/ios-colors';
 import { spacing, borderRadius } from '../../theme/tokens';
 
@@ -27,6 +29,10 @@ export const BetaVideoCard = memo(function BetaVideoCard({ link }: Props) {
 
   const onPress = useCallback(async () => {
     void Haptics.selectionAsync();
+    track(SHARED_EVENTS.BetaVideoLinkClicked, {
+      climbUuid: link.climb_uuid,
+      platform: detectPlatform(link.link)?.name ?? null,
+    });
     try {
       const canOpen = await Linking.canOpenURL(link.link);
       if (!canOpen) {
@@ -37,7 +43,7 @@ export const BetaVideoCard = memo(function BetaVideoCard({ link }: Props) {
     } catch {
       showToast(t('mobile.betaVideos.openError'), 'error');
     }
-  }, [link.link, showToast, t]);
+  }, [link.climb_uuid, link.link, showToast, t]);
 
   const platform = detectPlatform(link.link);
   const username = link.foreign_username?.trim();

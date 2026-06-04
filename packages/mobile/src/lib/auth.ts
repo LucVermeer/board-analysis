@@ -5,15 +5,20 @@ import { BACKEND_URL, WEB_BASE_URL } from './env';
 
 export type AuthProvider = 'google' | 'apple';
 
-export async function startSignIn(provider: AuthProvider): Promise<void> {
+// Returns the WebBrowser result so the caller can distinguish a successful
+// redirect from a user-cancelled/dismissed OAuth sheet — the cancel path never
+// reaches the /auth/callback deep link, so it's only observable here.
+export async function startSignIn(provider: AuthProvider): Promise<WebBrowser.WebBrowserAuthSessionResult> {
   const callbackUrl = encodeURIComponent('/api/auth/native/callback?next=/');
   const url = `${WEB_BASE_URL}/auth/native-start?provider=${provider}&callbackUrl=${callbackUrl}`;
-  await WebBrowser.openAuthSessionAsync(url, 'com.boardsesh.app://auth/callback');
+  return WebBrowser.openAuthSessionAsync(url, 'com.boardsesh.app://auth/callback');
 }
+
+type NativeAuthFailure = { success: false; status: number | null; error: string };
 
 export async function exchangeTransferToken(
   transferToken: string,
-): Promise<{ success: true; expiresAt: string } | { success: false; error: string }> {
+): Promise<{ success: true; expiresAt: string } | NativeAuthFailure> {
   try {
     const response = await fetch(`${BACKEND_URL}/auth/native/exchange`, {
       method: 'POST',
@@ -24,18 +29,18 @@ export async function exchangeTransferToken(
 
     if (!response.ok) {
       const errorBody = await response.text();
-      return { success: false, error: errorBody || `HTTP ${response.status}` };
+      return { success: false, status: response.status, error: errorBody || `HTTP ${response.status}` };
     }
 
     const data = (await response.json()) as { jwt: string; refreshToken: string; expiresAt: string };
     await storeTokens(data.jwt, data.refreshToken, data.expiresAt);
     return { success: true, expiresAt: data.expiresAt };
   } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'Exchange failed' };
+    return { success: false, status: null, error: error instanceof Error ? error.message : 'Exchange failed' };
   }
 }
 
-export type CredentialsSignInResult = { success: true } | { success: false; status: number | null; error: string };
+export type CredentialsSignInResult = { success: true } | NativeAuthFailure;
 
 export async function signInWithCredentials(email: string, password: string): Promise<CredentialsSignInResult> {
   let response: Response;

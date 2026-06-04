@@ -12,8 +12,11 @@ import {
 } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
+import { SHARED_EVENTS } from '@boardsesh/analytics';
+import { classifyNativeAuthFailureReason } from '../../src/lib/native-auth-analytics';
 import { useAuth } from '../../src/providers/auth-provider';
 import { useTheme } from '../../src/providers/theme-provider';
+import { track } from '../../src/lib/analytics';
 import { hapticLight } from '../../src/lib/haptics';
 import { brandColors } from '../../src/theme/colors';
 import { iosSystemColors } from '../../src/theme/ios-colors';
@@ -85,9 +88,14 @@ export default function LoginScreen() {
 
     setError(null);
     setSubmitting(true);
+    track(SHARED_EVENTS.LoginAttempted, { auth_method: 'credentials', flow: 'native' });
     try {
       const result = await signInWithCredentials(trimmedEmail, password);
       if (!result.success) {
+        track(SHARED_EVENTS.LoginFailed, {
+          auth_method: 'credentials',
+          failure_reason: classifyNativeAuthFailureReason(result),
+        });
         if (result.error === 'network') {
           setError(t('nativeStart.networkError'));
         } else if (result.status === 401) {
@@ -95,10 +103,30 @@ export default function LoginScreen() {
         } else {
           setError(result.error);
         }
+      } else {
+        track(SHARED_EVENTS.LoginSucceeded, { auth_method: 'credentials', flow: 'native' });
       }
       // On success, AuthProvider flips isAuthenticated and the redirect handles navigation.
+    } catch (signInError) {
+      track(SHARED_EVENTS.LoginFailed, {
+        auth_method: 'credentials',
+        failure_reason: 'exception',
+      });
+      throw signInError;
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  async function handleOAuthSignIn(provider: 'apple' | 'google') {
+    track(SHARED_EVENTS.LoginAttempted, { auth_method: provider, flow: 'native' });
+    const result = await signIn(provider);
+    // A successful redirect ('success') hands off to /auth/callback, which fires
+    // Login Succeeded/Failed. The user dismissing the system sheet is only
+    // observable here — track it so the funnel sees the Attempted→Succeeded
+    // drop-off instead of a silent gap.
+    if (result.type === 'cancel' || result.type === 'dismiss') {
+      track(SHARED_EVENTS.LoginFailed, { auth_method: provider, flow: 'native', failure_reason: result.type });
     }
   }
 
@@ -184,9 +212,19 @@ export default function LoginScreen() {
 
         <View style={styles.buttons}>
           {Platform.OS === 'ios' && (
-            <SignInButton title={t('nativeStart.signInApple')} onPress={() => signIn('apple')} />
+            <SignInButton
+              title={t('nativeStart.signInApple')}
+              onPress={() => {
+                void handleOAuthSignIn('apple');
+              }}
+            />
           )}
-          <SignInButton title={t('nativeStart.signInGoogle')} onPress={() => signIn('google')} />
+          <SignInButton
+            title={t('nativeStart.signInGoogle')}
+            onPress={() => {
+              void handleOAuthSignIn('google');
+            }}
+          />
         </View>
       </ScrollView>
     </KeyboardAvoidingView>

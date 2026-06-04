@@ -1,7 +1,9 @@
 import { createContext, useContext, useEffect, useRef, useState, useCallback, type ReactNode } from 'react';
 import { AppState } from 'react-native';
+import type { WebBrowserAuthSessionResult } from 'expo-web-browser';
 import { useSegments, Redirect } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
+import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { getAuthToken, isTokenExpiringSoon } from '../lib/auth-store';
 import {
   startSignIn,
@@ -10,6 +12,7 @@ import {
   type AuthProvider as AuthProviderType,
   type CredentialsSignInResult,
 } from '../lib/auth';
+import { reset as resetAnalytics, track } from '../lib/analytics';
 import { resetHttpClient } from '../lib/graphql/client';
 import { disposeWsClient } from '../lib/graphql/ws-client';
 import { clearStoredSessionId } from '../lib/session-store';
@@ -19,7 +22,7 @@ import { ACTIVE_BOARD_QUERY_KEY } from '../lib/graphql/use-active-board';
 type AuthState = {
   isAuthenticated: boolean;
   isLoading: boolean;
-  signIn: (provider: AuthProviderType) => Promise<void>;
+  signIn: (provider: AuthProviderType) => Promise<WebBrowserAuthSessionResult>;
   signInWithCredentials: (email: string, password: string) => Promise<CredentialsSignInResult>;
   signOut: () => Promise<void>;
   refreshAuthState: () => Promise<void>;
@@ -43,10 +46,20 @@ export function AuthProvider({ children, onReady }: AuthProviderProps) {
   const [isLoading, setIsLoading] = useState(true);
   const segments = useSegments();
   const queryClient = useQueryClient();
+  const authStateRef = useRef({ isAuthenticated: false, isLoading: true });
+  authStateRef.current = { isAuthenticated, isLoading };
+
+  const resetAnalyticsForSignedOutTransition = useCallback(() => {
+    const authState = authStateRef.current;
+    if (authState.isLoading || authState.isAuthenticated) {
+      resetAnalytics();
+    }
+  }, []);
 
   const checkAuth = useCallback(async () => {
     const token = await getAuthToken();
     if (!token) {
+      resetAnalyticsForSignedOutTransition();
       setIsAuthenticated(false);
       setIsLoading(false);
       return;
@@ -55,12 +68,13 @@ export function AuthProvider({ children, onReady }: AuthProviderProps) {
     if (expiring) {
       const { ensureFreshToken } = await import('../lib/auth-interceptor');
       const refreshed = await ensureFreshToken();
+      if (!refreshed) resetAnalyticsForSignedOutTransition();
       setIsAuthenticated(refreshed);
     } else {
       setIsAuthenticated(true);
     }
     setIsLoading(false);
-  }, []);
+  }, [resetAnalyticsForSignedOutTransition]);
 
   useEffect(() => {
     checkAuth();
@@ -75,8 +89,8 @@ export function AuthProvider({ children, onReady }: AuthProviderProps) {
     return () => subscription.remove();
   }, [checkAuth]);
 
-  const signIn = useCallback(async (provider: AuthProviderType) => {
-    await startSignIn(provider);
+  const signIn = useCallback((provider: AuthProviderType) => {
+    return startSignIn(provider);
   }, []);
 
   const signInWithCredentials = useCallback(
@@ -91,7 +105,9 @@ export function AuthProvider({ children, onReady }: AuthProviderProps) {
   );
 
   const signOut = useCallback(async () => {
+    track(SHARED_EVENTS.Logout, { method: 'manual' });
     await authSignOut();
+    resetAnalytics();
     await Promise.all([clearStoredSessionId(), clearStoredActiveBoard()]);
     // Drop the in-memory active-board cache too. It's `staleTime: Infinity`, so
     // without this the next user to sign in on a shared device would inherit the

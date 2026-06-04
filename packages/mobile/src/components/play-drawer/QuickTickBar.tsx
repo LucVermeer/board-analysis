@@ -23,7 +23,9 @@ import { useTheme } from '../../providers/theme-provider';
 import { useGrades } from '../../lib/graphql/hooks';
 import { useOptionalBoardProvider, useSaveTick } from '@boardsesh/board-react';
 import { toBoardName } from '@boardsesh/board-config';
+import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { useToast } from '../../providers/toast-provider';
+import { track } from '../../lib/analytics';
 import { hapticSuccess, hapticError } from '../../lib/haptics';
 import { brandColors } from '../../theme/colors';
 import { iosSystemColors } from '../../theme/ios-colors';
@@ -133,6 +135,7 @@ export const QuickTickBar = React.memo(function QuickTickBar({
   const handleSaveWithStatus = useCallback(
     (status: TickStatus) => {
       if (saveTick.isPending) return;
+      track(SHARED_EVENTS.TickButtonClicked, { climbUuid, layoutId: layoutId ?? null });
       setLastError(null);
 
       const finalAttempts = clampAttempts(tickState.attemptCount, status);
@@ -156,6 +159,15 @@ export const QuickTickBar = React.memo(function QuickTickBar({
         },
         {
           onSuccess: () => {
+            track(SHARED_EVENTS.QuickTickSaved, {
+              climbUuid,
+              layoutId: layoutId ?? null,
+              status,
+              attemptCount: finalAttempts,
+              hasQuality: tickState.quality != null && tickState.quality > 0,
+              hasDifficulty: tickState.difficulty != null,
+              hasComment: comment.length > 0,
+            });
             hapticSuccess();
             // Reset on commit so reopening the sheet on the same climb
             // doesn't show stale state from the just-saved tick.
@@ -167,10 +179,9 @@ export const QuickTickBar = React.memo(function QuickTickBar({
           },
           onError: (error: unknown) => {
             hapticError();
+            track(SHARED_EVENTS.QuickTickFailed, { climbUuid, layoutId: layoutId ?? null });
             const message =
-              error instanceof Error && error.message
-                ? error.message
-                : tClimbs('mobile.logAscent.errorMessage');
+              error instanceof Error && error.message ? error.message : tClimbs('mobile.logAscent.errorMessage');
             setLastError(message);
           },
         },
@@ -295,11 +306,7 @@ export const QuickTickBar = React.memo(function QuickTickBar({
             saveTick.isPending && styles.buttonDisabled,
           ]}
         >
-          <Text
-            variant="footnote"
-            color={systemColors.label}
-            style={styles.attemptLabel}
-          >
+          <Text variant="footnote" color={systemColors.label} style={styles.attemptLabel}>
             {tClimbs('mobile.logAscent.attempt')}
           </Text>
         </Pressable>

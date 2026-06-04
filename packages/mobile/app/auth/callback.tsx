@@ -2,7 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { exchangeTransferToken } from '../../src/lib/auth';
+import { classifyNativeAuthFailureReason } from '../../src/lib/native-auth-analytics';
+import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { brandColors } from '../../src/theme/colors';
+import { track } from '../../src/lib/analytics';
 import { useAuth } from '../../src/providers/auth-provider';
 
 export default function AuthCallback() {
@@ -14,6 +17,9 @@ export default function AuthCallback() {
 
   useEffect(() => {
     if (!transferToken) {
+      // auth_method is unknown here — the OAuth provider isn't echoed back on the
+      // transfer-token exchange (same reason Login Succeeded omits it).
+      track(SHARED_EVENTS.LoginFailed, { flow: 'native', failure_reason: 'no_transfer_token' });
       setError('No transfer token received');
       return;
     }
@@ -24,13 +30,16 @@ export default function AuthCallback() {
     exchangeTransferToken(transferToken)
       .then(async (result) => {
         if (result.success) {
+          track(SHARED_EVENTS.LoginSucceeded, { flow: 'native' });
           await refreshAuthState();
           router.replace('/(tabs)/boards');
         } else {
+          track(SHARED_EVENTS.LoginFailed, { flow: 'native', failure_reason: classifyNativeAuthFailureReason(result) });
           setError(result.error);
         }
       })
       .catch((exchangeError: unknown) => {
+        track(SHARED_EVENTS.LoginFailed, { flow: 'native', failure_reason: 'exception' });
         setError(exchangeError instanceof Error ? exchangeError.message : 'Unexpected error');
       });
   }, [transferToken, router, refreshAuthState]);

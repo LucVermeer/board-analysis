@@ -45,6 +45,8 @@ import { brandColors } from '../src/theme/colors';
 import { iosDarkColors } from '../src/theme/ios-colors';
 import { spacing } from '../src/theme/tokens';
 import { wrapWithSentry, reportError } from '../src/lib/sentry';
+import { AnalyticsProvider } from '../src/components/analytics/AnalyticsProvider';
+import { AnalyticsScreenTracker } from '../src/components/analytics/AnalyticsScreenTracker';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -205,21 +207,26 @@ function RootLayout() {
 
   return (
     <GestureHandlerRootView style={layoutStyles.root}>
-      <I18nProvider>
-        <QueryProvider>
-          <ThemeProvider>
-            <FeatureFlagsProvider>
-              <AuthProvider onReady={onAuthReady}>
-                <PartyProfileProvider>
-                  <ConnectionSettingsProvider>
-                    <ToastProvider>
-                      <ClimbActionsDataWrapper>
-                        <QueueSnackbarProvider>
-                          <QueueProvider>
-                            <BoardAdapterWrapper>
-                              <PlaylistsAdapterWrapper>
-                                <BoardProviderWrapper>
-                                  {/* BottomSheetModalProvider sits inside the board
+      {/* PostHogProvider sits at the top so touch autocapture covers the whole
+          app. It owns the single PostHog client; manual events go through the
+          imperative wrapper in src/lib/analytics. No-ops (renders children
+          untouched) in dev / when no key is configured. */}
+      <AnalyticsProvider>
+        <I18nProvider>
+          <QueryProvider>
+            <ThemeProvider>
+              <FeatureFlagsProvider>
+                <AuthProvider onReady={onAuthReady}>
+                  <PartyProfileProvider>
+                    <ConnectionSettingsProvider>
+                      <ToastProvider>
+                        <ClimbActionsDataWrapper>
+                          <QueueSnackbarProvider>
+                            <QueueProvider>
+                              <BoardAdapterWrapper>
+                                <PlaylistsAdapterWrapper>
+                                  <BoardProviderWrapper>
+                                    {/* BottomSheetModalProvider sits inside the board
                                     providers (gorhom's BottomSheetModal portals
                                     PlayDrawer → QuickTickBar here, so the host
                                     must be able to see BoardAdapter/BoardProvider
@@ -230,39 +237,41 @@ function RootLayout() {
                                     exist before the picker mounts or gorhom
                                     throws "BottomSheetModalInternalContext
                                     cannot be null". */}
-                                  <BottomSheetModalProvider>
-                                    <BluetoothProviderWrapper>
-                                      <SessionScreenProvider>
-                                        <DrawerHostProvider>
-                                          <ThemedNavigation>
-                                            <Stack screenOptions={{ headerShown: false }} initialRouteName="(tabs)">
-                                              <Stack.Screen name="(tabs)" />
-                                              <Stack.Screen
-                                                name="auth"
-                                                options={{ headerShown: false, gestureEnabled: false }}
-                                              />
-                                            </Stack>
-                                          </ThemedNavigation>
-                                          <PersistentQueueBar />
-                                          <SessionScreenHost />
-                                        </DrawerHostProvider>
-                                      </SessionScreenProvider>
-                                    </BluetoothProviderWrapper>
-                                  </BottomSheetModalProvider>
-                                </BoardProviderWrapper>
-                              </PlaylistsAdapterWrapper>
-                            </BoardAdapterWrapper>
-                          </QueueProvider>
-                        </QueueSnackbarProvider>
-                      </ClimbActionsDataWrapper>
-                    </ToastProvider>
-                  </ConnectionSettingsProvider>
-                </PartyProfileProvider>
-              </AuthProvider>
-            </FeatureFlagsProvider>
-          </ThemeProvider>
-        </QueryProvider>
-      </I18nProvider>
+                                    <BottomSheetModalProvider>
+                                      <BluetoothProviderWrapper>
+                                        <SessionScreenProvider>
+                                          <DrawerHostProvider>
+                                            <ThemedNavigation>
+                                              <Stack screenOptions={{ headerShown: false }} initialRouteName="(tabs)">
+                                                <Stack.Screen name="(tabs)" />
+                                                <Stack.Screen
+                                                  name="auth"
+                                                  options={{ headerShown: false, gestureEnabled: false }}
+                                                />
+                                              </Stack>
+                                            </ThemedNavigation>
+                                            <PersistentQueueBar />
+                                            <AnalyticsScreenTracker />
+                                            <SessionScreenHost />
+                                          </DrawerHostProvider>
+                                        </SessionScreenProvider>
+                                      </BluetoothProviderWrapper>
+                                    </BottomSheetModalProvider>
+                                  </BoardProviderWrapper>
+                                </PlaylistsAdapterWrapper>
+                              </BoardAdapterWrapper>
+                            </QueueProvider>
+                          </QueueSnackbarProvider>
+                        </ClimbActionsDataWrapper>
+                      </ToastProvider>
+                    </ConnectionSettingsProvider>
+                  </PartyProfileProvider>
+                </AuthProvider>
+              </FeatureFlagsProvider>
+            </ThemeProvider>
+          </QueryProvider>
+        </I18nProvider>
+      </AnalyticsProvider>
     </GestureHandlerRootView>
   );
 }

@@ -5,8 +5,10 @@
 // optional data + mutation props and defaults to empty/no-op so it can sit
 // in the tree without consumers.
 
-import { createContext, useContext, useMemo, type ReactNode } from 'react';
+import { createContext, useContext, useCallback, useMemo, type ReactNode } from 'react';
 import type { Playlist } from '@boardsesh/graphql/operations/playlists';
+import { SHARED_EVENTS } from '@boardsesh/analytics';
+import { track } from '../lib/analytics';
 
 export type { Playlist } from '@boardsesh/graphql/operations/playlists';
 
@@ -73,13 +75,49 @@ export function PlaylistsProvider({
     [playlistMemberships],
   );
 
+  const trackedCreatePlaylist = useCallback(
+    async (name: string, description?: string, color?: string, icon?: string): Promise<Playlist> => {
+      const created = await createPlaylist(name, description, color, icon);
+      track(SHARED_EVENTS.CreatePlaylist, {
+        playlistId: created.id,
+        hasDescription: !!description,
+        hasColor: !!color,
+        hasIcon: !!icon,
+      });
+      return created;
+    },
+    [createPlaylist],
+  );
+
+  const trackedAddToPlaylist = useCallback(
+    async (playlistId: string, climbUuid: string, angle: number): Promise<void> => {
+      await addToPlaylist(playlistId, climbUuid, angle);
+      track(SHARED_EVENTS.AddToPlaylist, {
+        playlistId,
+        climbUuid,
+      });
+    },
+    [addToPlaylist],
+  );
+
+  const trackedRemoveFromPlaylist = useCallback(
+    async (playlistId: string, climbUuid: string): Promise<void> => {
+      await removeFromPlaylist(playlistId, climbUuid);
+      track(SHARED_EVENTS.RemoveFromPlaylist, {
+        playlistId,
+        climbUuid,
+      });
+    },
+    [removeFromPlaylist],
+  );
+
   const value = useMemo<PlaylistsContextValue>(
     () => ({
       playlists,
       getPlaylistsForClimb,
-      addToPlaylist,
-      removeFromPlaylist,
-      createPlaylist,
+      addToPlaylist: trackedAddToPlaylist,
+      removeFromPlaylist: trackedRemoveFromPlaylist,
+      createPlaylist: trackedCreatePlaylist,
       isLoading,
       isAuthenticated,
       refreshPlaylists,
@@ -87,9 +125,9 @@ export function PlaylistsProvider({
     [
       playlists,
       getPlaylistsForClimb,
-      addToPlaylist,
-      removeFromPlaylist,
-      createPlaylist,
+      trackedAddToPlaylist,
+      trackedRemoveFromPlaylist,
+      trackedCreatePlaylist,
       isLoading,
       isAuthenticated,
       refreshPlaylists,

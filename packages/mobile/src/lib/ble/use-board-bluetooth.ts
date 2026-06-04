@@ -11,10 +11,12 @@ import {
 import { getMoonboardBluetoothPacket } from '@boardsesh/ble-protocol/moonboard';
 import { isDisconnectionError } from '@boardsesh/ble-protocol/connection-error';
 import type { AuroraBoardName } from '@boardsesh/shared-schema';
+import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { createBluetoothAdapter, isNativeIosBleAdapter } from './adapter-factory';
 import { requestBleRuntimePermissions } from './use-ble-permissions';
 import type { BluetoothAdapter, DevicePickerFn, DiscoveredDevice } from './types';
 import type { HoldPlacement } from '../../components/board-renderer/types';
+import { track } from '../analytics';
 
 // Exported for testing — isolates the .packet extraction so regressions are caught.
 export async function dispatchMoonboardPacket(
@@ -99,6 +101,13 @@ function mergeAbortSignals(signalA: AbortSignal, signalB: AbortSignal): AbortSig
   return controller.signal;
 }
 
+function classifyBleFailureReason(error: unknown): string {
+  if (isDisconnectionError(error)) return 'disconnected';
+  if (error instanceof Error && error.message.includes('Mirrored hold ID')) return 'missing_mirror_mapping';
+  if (error instanceof DOMException) return `dom_${error.name || 'exception'}`;
+  return 'write_failed';
+}
+
 export function useBoardBluetooth({
   boardName,
   layoutId,
@@ -181,6 +190,7 @@ export function useBoardBluetooth({
   const sendFramesToBoard = useCallback(
     async (frames: string, mirrored: boolean = false, signal?: AbortSignal) => {
       if (!adapterRef.current || !boardName || layoutId === undefined || sizeId === undefined) return;
+      const boardAnalyticsProperties = { boardName, layoutId, sizeId, mirrored };
 
       // Create an AbortController for this write so connect() can cancel
       // an in-flight write when creating a new adapter.
@@ -192,8 +202,13 @@ export function useBoardBluetooth({
 
       try {
         if (boardName === 'moonboard') {
-          // TODO: analytics (Phase 6)
-          return dispatchMoonboardPacket(frames, adapterRef.current.write.bind(adapterRef.current), combinedSignal);
+          const sent = await dispatchMoonboardPacket(
+            frames,
+            adapterRef.current.write.bind(adapterRef.current),
+            combinedSignal,
+          );
+          if (sent) track(SHARED_EVENTS.ClimbSentToBoardSuccess, boardAnalyticsProperties);
+          return sent;
         }
 
         // Empty frames = "clear all LEDs" for Aurora boards
@@ -221,6 +236,10 @@ export function useBoardBluetooth({
             `[BLE] LED placement map is empty for ${boardName} layout=${layoutId} size=${sizeId}. Board configuration may be incorrect or LED data may need regeneration.`,
           );
           Alert.alert(t('ble.notAvailable'), t('ble.errorLedMissing'));
+          track(SHARED_EVENTS.ClimbSentToBoardFailure, {
+            ...boardAnalyticsProperties,
+            failureReason: 'missing_led_placements',
+          });
           return false;
         }
 
@@ -237,6 +256,10 @@ export function useBoardBluetooth({
         if (skippedCount > 0 && result.packet.length === 0) {
           console.warn(`[BLE] All ${result.totalPlacements} placements skipped — climb incompatible with board`);
           Alert.alert(t('ble.notAvailable'), t('ble.errorIncompatible'));
+          track(SHARED_EVENTS.ClimbSentToBoardFailure, {
+            ...boardAnalyticsProperties,
+            failureReason: 'incompatible_climb',
+          });
           return false;
         }
 
@@ -245,13 +268,17 @@ export function useBoardBluetooth({
         }
 
         await adapterRef.current.write(result.packet, combinedSignal);
-        // TODO: analytics (Phase 6)
+        track(SHARED_EVENTS.ClimbSentToBoardSuccess, boardAnalyticsProperties);
         return true;
       } catch (error) {
         if (error instanceof DOMException && error.name === 'AbortError') {
           return;
         }
         console.error('Error sending frames to board:', error);
+        track(SHARED_EVENTS.ClimbSentToBoardFailure, {
+          ...boardAnalyticsProperties,
+          failureReason: classifyBleFailureReason(error),
+        });
         // A write that fails because the link is gone (the board dropped or
         // another device grabbed it — these boards are last-connection-wins) is
         // often the only signal we get: the adapter's disconnect event may never
@@ -343,8 +370,6 @@ export function useBoardBluetooth({
           }
         }
 
-        // TODO: analytics (Phase 6)
-
         // Parse serial for Aurora boards
         let parsedSerial: string | null = null;
         if (boardName !== 'moonboard' && connection.deviceName) {
@@ -366,6 +391,7 @@ export function useBoardBluetooth({
         setIsConnected(true);
         onConnectionChange?.(true);
         onConnectSuccess?.(parsedSerial);
+        track(SHARED_EVENTS.BluetoothConnectionSuccess, { boardName, layoutId, sizeId });
         return true;
       } catch (error) {
         console.error('Error connecting to Bluetooth:', error);
@@ -390,7 +416,12 @@ export function useBoardBluetooth({
           Alert.alert(t('ble.notAvailable'), t('ble.errorConnectionFailed'));
         }
 
-        // TODO: analytics (Phase 6)
+        track(SHARED_EVENTS.BluetoothConnectionFailed, {
+          boardName,
+          layoutId,
+          sizeId,
+          failureReason: classifyBleFailureReason(error),
+        });
       } finally {
         setLoading(false);
       }
@@ -410,7 +441,6 @@ export function useBoardBluetooth({
     // drop should offer a silent same-board reconnect.
     setLastConnectedBoard(null);
     onConnectionChange?.(false);
-    // TODO: analytics (Phase 6)
     await adapter?.disconnect();
   }, [onConnectionChange]);
 

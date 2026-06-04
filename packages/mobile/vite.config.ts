@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
@@ -11,6 +12,14 @@ export default defineConfig({
     name: 'mobile',
     globals: true,
     environment: 'node',
+    alias: {
+      // The real `posthog-react-native` entry re-exports RN-native components
+      // (PostHogProvider/PostHogMaskView) whose untransformed source throws a
+      // `SyntaxError` under vitest's node env, breaking every suite that imports
+      // `src/lib/analytics`. Analytics is a no-op in tests (isAnalyticsEnabled is
+      // false), so a lightweight stub satisfies the static imports safely.
+      'posthog-react-native': fileURLToPath(new URL('./test/posthog-react-native-stub.ts', import.meta.url)),
+    },
     // .tsx test files can opt into a jsdom environment per file via the
     // `// @vitest-environment jsdom` pragma — needed to render React
     // providers in tests. Pure-logic tests stay node-env (faster).

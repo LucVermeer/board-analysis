@@ -8,6 +8,7 @@ import * as WebBrowser from 'expo-web-browser';
 import type { Climb } from '@boardsesh/shared-schema';
 import { buildClimbViewPath } from '@boardsesh/play-view';
 import { computeCanUpdate, type SavedClimbSnapshot } from '@boardsesh/create-climb-react';
+import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { Sheet } from './Sheet';
 import { ListRow } from './ListRow';
 import { Icon } from './Icon';
@@ -16,6 +17,7 @@ import { brandColors } from '../theme/colors';
 import { iosSystemColors } from '../theme/ios-colors';
 import { spacing } from '../theme/tokens';
 import { WEB_BASE_URL } from '../lib/env';
+import { track } from '../lib/analytics';
 
 type ClimbActionsSheetProps = {
   visible: boolean;
@@ -88,17 +90,19 @@ function ClimbActionsSheet({
   const handleOpenInApp = useCallback(async () => {
     if (!auroraAppUrl) return;
     try {
+      track(SHARED_EVENTS.OpenInAuroraApp, { climbUuid: climb?.uuid ?? null, boardName, layoutId });
       await WebBrowser.openBrowserAsync(auroraAppUrl);
     } finally {
       onClose();
     }
-  }, [auroraAppUrl, onClose]);
+  }, [auroraAppUrl, climb, boardName, onClose]);
 
   const handleCopyLink = useCallback(async () => {
     if (!climb) return;
     try {
       const url = `${WEB_BASE_URL}${buildClimbViewPath(boardName, layoutId, sizeId, setIds, angle, climb.uuid)}`;
       await Clipboard.setStringAsync(url);
+      track(SHARED_EVENTS.ClimbShared, { method: 'copy_link', climbUuid: climb.uuid, boardName, layoutId });
       showToast(t('mobile.climbActions.linkCopied'), 'info');
     } finally {
       onClose();

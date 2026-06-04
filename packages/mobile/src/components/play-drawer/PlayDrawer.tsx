@@ -15,6 +15,7 @@ import { randomUUID } from 'expo-crypto';
 import { computeNavigationStateWithSuggestions, boardSupportsMirroring } from '@boardsesh/play-view';
 import { climbToQueueItem } from '../../lib/climb-to-queue-item';
 import type { ActiveSubDrawer } from '@boardsesh/play-view';
+import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { SwipeBoardCarousel } from './SwipeBoardCarousel';
 import { PlaybackControls } from './PlaybackControls';
 import { useMobilePlayback } from './use-mobile-playback';
@@ -36,6 +37,7 @@ import { useShareClimb } from '../../hooks/use-share-climb';
 import { getBoardRenderData } from '../../lib/board-details';
 import { hapticSuccess } from '../../lib/haptics';
 import { usePlayDrawerWakeLock } from './use-play-drawer-wake-lock';
+import { track } from '../../lib/analytics';
 import { iosSystemColors } from '../../theme/ios-colors';
 import { spacing, sheetStyles } from '../../theme/tokens';
 
@@ -241,7 +243,15 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   const handleToggleFavorite = useCallback(() => {
     if (!displayedClimb) return;
     hapticSuccess();
-    setIsFavorited((prev) => !prev);
+    const nextIsFavorited = !isFavorited;
+    setIsFavorited(nextIsFavorited);
+    track(SHARED_EVENTS.FavoriteToggle, {
+      action: nextIsFavorited ? 'added' : 'removed',
+      climbUuid: displayedClimb.uuid,
+      boardName,
+      layoutId,
+      source: 'mobile_play_drawer',
+    });
     toggleFavoriteMutate({
       input: {
         boardName,
@@ -249,7 +259,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
         angle,
       },
     });
-  }, [displayedClimb, boardName, angle, toggleFavoriteMutate]);
+  }, [displayedClimb, isFavorited, boardName, layoutId, angle, toggleFavoriteMutate]);
 
   const handleLightbulb = useCallback(() => {
     if (!bluetooth) return;

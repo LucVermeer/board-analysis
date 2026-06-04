@@ -1,10 +1,11 @@
-import { useMemo, useCallback, useState } from 'react';
+import { useMemo, useCallback, useState, useEffect } from 'react';
 import { View, ScrollView, StyleSheet } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { randomUUID } from 'expo-crypto';
 import { getGradeColor, DEFAULT_GRADE_COLOR } from '@boardsesh/board-constants/grade-colors';
 import type { BoardName } from '@boardsesh/shared-schema';
+import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { Text } from '../../../src/components/Text';
 import { Button } from '../../../src/components/Button';
 import { Icon } from '../../../src/components/Icon';
@@ -15,6 +16,7 @@ import { useClimb, useToggleFavorite } from '../../../src/lib/graphql/hooks';
 import { useQueue } from '../../../src/providers/queue-provider';
 import { getBoardRenderData } from '../../../src/lib/board-details';
 import { hapticSuccess } from '../../../src/lib/haptics';
+import { track } from '../../../src/lib/analytics';
 import { brandColors } from '../../../src/theme/colors';
 import { spacing } from '../../../src/theme/tokens';
 
@@ -67,6 +69,15 @@ export default function ClimbDetail() {
     const color = getGradeColor(climb.difficulty) ?? DEFAULT_GRADE_COLOR;
     return { name: climb.difficulty, color };
   }, [climb]);
+
+  const viewedClimbUuid = climb?.uuid;
+  useEffect(() => {
+    if (!viewedClimbUuid) return;
+    track(SHARED_EVENTS.ClimbInfoViewed, {
+      boardName: boardName ?? null,
+      climbUuid: viewedClimbUuid,
+    });
+  }, [viewedClimbUuid, boardName]);
 
   const handleToggleFavorite = useCallback(() => {
     if (!climb || !boardName) return;

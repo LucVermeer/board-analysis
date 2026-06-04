@@ -16,12 +16,14 @@ import { randomUUID } from 'expo-crypto';
 import type { BoardName, Climb } from '@boardsesh/shared-schema';
 import { buildBoardPath } from '@boardsesh/board-config';
 import type { Climb as QueueClimb, ClimbQueueItem, PlaylistSuggestionSource } from '@boardsesh/queue';
+import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { PlayDrawer, type PlayDrawerHandle, type PlayDrawerOpenOptions } from '../components/play-drawer';
 import { LogAscentSheet } from '../components/LogAscentSheet';
 import { QueueSheet } from '../components/play-drawer/QueueSheet';
 import { QueueAddedSnackbar } from '../components/QueueAddedSnackbar';
 import type { QueueItemRowBoard } from '../components/QueueItemRow';
 import { useActiveBoard, useSetActiveBoard } from '../lib/graphql/use-active-board';
+import { track } from '../lib/analytics';
 import { ClimbActionsSheet } from '../components/ClimbActionsSheet';
 import { AddToPlaylistSheet } from '../components/AddToPlaylistSheet';
 import { useToggleFavorite, useProfile } from '../lib/graphql/hooks';
@@ -135,6 +137,13 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
 
   const openPlayDrawer = useCallback((climb: Climb, options?: OpenPlayDrawerOptions) => {
     const { boardConfig: override, ...openOptions } = options ?? {};
+    const boardConfig = override ?? activeBoardConfigRef.current;
+    track(SHARED_EVENTS.PlayDrawerOpened, {
+      climbUuid: climb.uuid,
+      boardName: boardConfig?.boardName,
+      layoutId: boardConfig?.layoutId,
+      source: openOptions.setAsCurrent === false ? 'current_queue_item' : 'mobile',
+    });
     if (override) {
       pendingOverrideOpenRef.current = { climb, options: openOptions };
       setBoardConfigOverride(override);
@@ -158,6 +167,8 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
   // Apply an angle change made from the play drawer's angle selector.
   const handleAngleChange = useCallback(
     (newAngle: number) => {
+      const cfg = activeBoardConfigRef.current;
+      if (cfg && newAngle === cfg.angle) return;
       if (boardConfigOverride) {
         // The drawer is showing a climb from a board other than the user's
         // stored active board. Update only the override (so the drawer reflects
@@ -177,14 +188,23 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
         }
       }
 
+      track(SHARED_EVENTS.AngleChanged, {
+        angle: newAngle,
+        boardName: cfg?.boardName,
+        layoutId: cfg?.layoutId,
+        sizeId: cfg?.sizeId,
+        setIds: cfg?.setIds,
+        source: 'mobile_play_drawer',
+        partyMode: sessionId !== null,
+      });
+
       // Broadcast to party members (no-op in solo). Build the path from the
       // board the drawer is actually showing, with the new angle.
-      const cfg = activeBoardConfigRef.current;
       if (cfg) {
         void setSessionBoardPath(buildBoardPath(cfg.boardName, cfg.layoutId, cfg.sizeId, cfg.setIds, newAngle));
       }
     },
-    [activeBoard, boardConfigOverride, setActiveBoard, setSessionBoardPath],
+    [activeBoard, boardConfigOverride, sessionId, setActiveBoard, setSessionBoardPath],
   );
 
   const openLogAscent = useCallback((input: LogAscentInput) => {
@@ -223,6 +243,13 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
 
   const handleClimbActionsToggleFavorite = useCallback(() => {
     if (!climbActions) return;
+    track(SHARED_EVENTS.FavoriteToggle, {
+      action: 'toggled',
+      climbUuid: climbActions.climb.uuid,
+      boardName: climbActions.boardConfig.boardName,
+      layoutId: climbActions.boardConfig.layoutId,
+      source: 'mobile_climb_actions',
+    });
     toggleFavoriteMutate({
       input: {
         boardName: climbActions.boardConfig.boardName,
