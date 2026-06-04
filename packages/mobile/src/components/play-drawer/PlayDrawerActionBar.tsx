@@ -7,7 +7,7 @@ import { BleLightbulbButton } from '../ble/BleLightbulbButton';
 import { ActionButton, SIZES, type ButtonSize, drawerActionBarStyles } from '../drawer-action-bar/DrawerActionBar';
 import { brandColors } from '../../theme/colors';
 import { iosSystemColors } from '../../theme/ios-colors';
-import { shadows } from '../../theme/tokens';
+import { glassSize } from '../../theme/layout';
 import { hapticMedium } from '../../lib/haptics';
 
 type PlayDrawerActionBarProps = {
@@ -172,11 +172,10 @@ export const PlayDrawerActionBar = memo(function PlayDrawerActionBar({
             onPress={handleAngleSelector}
             accessibilityRole="button"
             accessibilityLabel={t('mobile.angleSelector.title')}
-            style={({ pressed }) => [
-              styles.anglePill,
-              { height: SIZES.sm.dim, borderRadius: SIZES.sm.dim / 2 },
-              pressed && drawerActionBarStyles.actionButtonPressed,
-            ]}
+            // A label-only mini pill (32pt); hit-slop lifts the tap target back to
+            // the 44pt floor without growing the visual chip.
+            hitSlop={8}
+            style={({ pressed }) => [styles.anglePill, pressed && drawerActionBarStyles.actionButtonPressed]}
           >
             <Text variant="caption1" style={styles.angleText}>
               {currentAngle}°
@@ -269,12 +268,14 @@ function TickButton({ size, ascentCount, onPress, onLongPress, accessibilityLabe
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
       style={({ pressed }) => [
-        styles.tickButton,
+        drawerActionBarStyles.actionButton,
         { width: dim, height: dim, borderRadius: dim / 2 },
-        pressed && styles.tickButtonPressed,
+        pressed && drawerActionBarStyles.actionButtonPressed,
       ]}
     >
-      <Icon name="tick.outline" size={icon} color={iosSystemColors.white} />
+      {/* The primary log action: a green glyph on the glass sheet (colour on the
+          icon, not a fill) — its hue and the count badge mark it as the hero. */}
+      <Icon name="tick.outline" size={icon} color={brandColors.success} />
       {ascentCount > 0 && (
         <View style={styles.countBadge}>
           <Text variant="caption2" color={iosSystemColors.white} style={styles.countText}>
@@ -287,25 +288,19 @@ function TickButton({ size, ascentCount, onPress, onLongPress, accessibilityLabe
 }
 
 const styles = StyleSheet.create({
+  // A neutral, label-only outlined capsule (no colour fill) — the mini inline tier.
   anglePill: {
-    paddingHorizontal: 14,
+    height: glassSize.mini,
+    borderRadius: glassSize.mini / 2,
+    paddingHorizontal: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: `${iosSystemColors.systemGray}1F`,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: iosSystemColors.separator,
   },
   angleText: {
     fontWeight: '600',
     color: iosSystemColors.systemGray,
-  },
-  tickButton: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: brandColors.success,
-    ...shadows.md,
-  },
-  tickButtonPressed: {
-    opacity: 0.9,
-    transform: [{ scale: 0.92 }],
   },
   countBadge: {
     position: 'absolute',

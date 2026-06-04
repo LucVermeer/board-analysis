@@ -18,14 +18,14 @@ import { withAlpha } from '../../theme/colors';
 import { springs } from '../../theme/animations';
 import { hapticSelection } from '../../lib/haptics';
 import { countSentAscents } from '../../lib/ascent-status-utils';
-import { TOOLBAR_FAB_SIZE } from '../../theme/layout';
+import { glassSize } from '../../theme/layout';
 
 type LogAscentFabProps = {
   climb: Climb;
   size?: number;
 };
 
-export function LogAscentFab({ climb, size = TOOLBAR_FAB_SIZE }: LogAscentFabProps) {
+export function LogAscentFab({ climb, size = glassSize.hero }: LogAscentFabProps) {
   const { t } = useTranslation('session');
   const { systemColors, brandColors } = useTheme();
   const { boardConfig, openLogAscent } = useDrawerHost();

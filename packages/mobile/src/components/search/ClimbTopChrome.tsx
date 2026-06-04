@@ -13,14 +13,18 @@ import { formatBoardDisplayName } from '@boardsesh/board-config';
 import { useTheme } from '../../providers/theme-provider';
 import { useActiveBoard } from '../../lib/graphql/use-active-board';
 import { useOptionalBluetoothContext } from '../../providers/bluetooth-provider';
-import { spacing, shadows } from '../../theme/tokens';
+import { spacing, shadows, glassMaterial } from '../../theme/tokens';
 import { withAlpha } from '../../theme/colors';
+import { glassSize } from '../../theme/layout';
 import { hapticLight } from '../../lib/haptics';
+import { useNativeGlass } from '../../hooks/use-native-glass';
 import { GlassSurface } from '../GlassSurface';
 import { GlassIconButton } from '../GlassIconButton';
 import { PressableSurface } from '../PressableSurface';
 import { Text } from '../Text';
 import { Icon } from '../Icon';
+
+const CAPSULE_RADIUS = glassSize.capsule / 2;
 
 type ClimbTopChromeProps = {
   canCreate: boolean;
@@ -34,6 +38,7 @@ export function ClimbTopChrome({ canCreate, onCreate, onOpenBoardDetail, onHeigh
   const { t: tSettings } = useTranslation('settings');
   const { t: tCommon } = useTranslation('common');
   const { systemColors, brandColors } = useTheme();
+  const nativeGlass = useNativeGlass();
   const insets = useSafeAreaInsets();
   const { data: activeBoard } = useActiveBoard();
   const bluetooth = useOptionalBluetoothContext();
@@ -78,6 +83,7 @@ export function ClimbTopChrome({ canCreate, onCreate, onOpenBoardDetail, onHeigh
             <GlassIconButton
               iconName="plus"
               iconColor={systemColors.label as string}
+              size={glassSize.standard}
               onPress={onCreate}
               accessibilityLabel={t('mobile.create.fab.ariaLabel')}
               fallbackColor={systemColors.fill}
@@ -98,13 +104,17 @@ export function ClimbTopChrome({ canCreate, onCreate, onOpenBoardDetail, onHeigh
               <View
                 style={[
                   styles.capsuleGlass,
-                  { borderWidth: StyleSheet.hairlineWidth, borderColor: systemColors.separator },
+                  // Native Liquid Glass renders its own edge + lift; keep the
+                  // hairline border + shadow only on the blur/solid fallback.
+                  !nativeGlass && shadows.sm,
+                  !nativeGlass && { borderWidth: StyleSheet.hairlineWidth, borderColor: systemColors.separator },
                 ]}
               >
                 <GlassSurface
-                  glassEffectStyle="clear"
+                  glassEffectStyle="regular"
                   fallbackColor={systemColors.elevatedSurface}
-                  borderRadius={22}
+                  borderRadius={CAPSULE_RADIUS}
+                  blurAmount={glassMaterial.thin}
                   style={StyleSheet.absoluteFill}
                   pointerEvents="none"
                 />
@@ -123,6 +133,7 @@ export function ClimbTopChrome({ canCreate, onCreate, onOpenBoardDetail, onHeigh
             <GlassIconButton
               iconName={bluetoothConnected ? 'lightbulb.fill' : 'lightbulb'}
               iconColor={bluetoothConnected ? brandColors.warning : (systemColors.label as string)}
+              size={glassSize.standard}
               onPress={handleBluetoothPress}
               accessibilityLabel={
                 bluetoothConnected ? tCommon('lightControl.disconnect') : tSettings('ble.connectBoard')
@@ -150,10 +161,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: spacing[4],
     paddingVertical: spacing[2],
-    minHeight: 44,
+    minHeight: glassSize.standard,
   },
   sideSlot: {
-    width: 44,
+    width: glassSize.standard,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -162,7 +173,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   capsulePress: {
-    height: 44,
+    height: glassSize.capsule,
     maxWidth: 180,
     alignItems: 'center',
     justifyContent: 'center',
@@ -170,11 +181,10 @@ const styles = StyleSheet.create({
   capsuleGlass: {
     flexDirection: 'row',
     alignItems: 'center',
-    height: 44,
-    borderRadius: 22,
+    height: glassSize.capsule,
+    borderRadius: CAPSULE_RADIUS,
     paddingHorizontal: 14,
     gap: 6,
-    ...shadows.sm,
   },
   capsuleText: {
     fontWeight: '600',

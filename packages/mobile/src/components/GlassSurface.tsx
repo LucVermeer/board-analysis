@@ -40,6 +40,14 @@ type GlassSurfaceProps = {
   borderRadius?: number;
   /** Blur strength for the iOS < 26 fallback. */
   blurAmount?: number;
+  /**
+   * Let the native Liquid Glass react to touches with Apple's own press/highlight
+   * (iOS 26 only — ignored on the blur/solid fallback, where the consumer's
+   * PressableSurface supplies the feedback). Only takes effect when the GlassView
+   * is the touch target; a `pointerEvents="none"` glass behind content won't see
+   * the touch.
+   */
+  isInteractive?: boolean;
   pointerEvents?: ViewProps['pointerEvents'];
 };
 
@@ -63,6 +71,7 @@ export function GlassSurface({
   fallbackColor,
   borderRadius,
   blurAmount = 20,
+  isInteractive = false,
   pointerEvents,
 }: GlassSurfaceProps) {
   const { systemColors, colorScheme } = useTheme();
@@ -92,6 +101,7 @@ export function GlassSurface({
         <GlassView
           glassEffectStyle={glassEffectStyle}
           tintColor={tintColor}
+          isInteractive={isInteractive}
           colorScheme={isDark ? 'dark' : 'light'}
           style={[StyleSheet.absoluteFill, radius]}
         />

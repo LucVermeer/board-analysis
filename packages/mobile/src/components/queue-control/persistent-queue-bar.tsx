@@ -29,6 +29,7 @@ import {
   TOOLBAR_GAP,
   TOOLBAR_FAB_SIZE,
   TOOLBAR_GAP_ABOVE_TABBAR,
+  glassSize,
 } from '../../theme/layout';
 import { useQueue } from '../../providers/queue-provider';
 import { useReduceMotion } from '../../hooks/use-reduce-motion';
@@ -81,7 +82,7 @@ export function PersistentQueueBar() {
         <View style={styles.centerSlot} pointerEvents="box-none">
           <ClimbCapsule />
         </View>
-        <View style={styles.sideSlot} pointerEvents="box-none">
+        <View style={styles.heroSlot} pointerEvents="box-none">
           {onClimbsTab ? <LogAscentFab climb={currentClimb} /> : null}
         </View>
       </Animated.View>
@@ -102,8 +103,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: TOOLBAR_GAP,
   },
+  // Left gutter: reserves room for the Climbs-tab search FAB (standard size) so
+  // the capsule never centers under where it floats in.
   sideSlot: {
     width: TOOLBAR_FAB_SIZE,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  // Right slot holds the hero log-ascent FAB — a touch larger than the search
+  // gutter, which gives the row its deliberate, playful asymmetry.
+  heroSlot: {
+    width: glassSize.hero,
     alignItems: 'center',
     justifyContent: 'center',
   },

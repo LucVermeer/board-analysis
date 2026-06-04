@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { GlassIconButton } from '../GlassIconButton';
 import { useTheme } from '../../providers/theme-provider';
 import { withAlpha } from '../../theme/colors';
+import { glassSize } from '../../theme/layout';
 
 type FilterButtonProps = {
   activeFilterCount: number;
@@ -21,6 +22,7 @@ export function FilterButton({ activeFilterCount, onPress }: FilterButtonProps) 
     <GlassIconButton
       iconName="filter"
       iconColor={active ? brandColors.primary : (systemColors.secondaryLabel as string)}
+      size={glassSize.standard}
       onPress={onPress}
       accessibilityLabel={
         active ? `${t('mobile.search.filters')}, ${activeFilterCount}` : t('mobile.search.filters')

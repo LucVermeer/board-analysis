@@ -9,6 +9,7 @@ import type { IconName } from './icon-map';
 import { useTheme } from '../providers/theme-provider';
 import { iosSystemColors } from '../theme/ios-colors';
 import { timing } from '../theme/animations';
+import { glassSize } from '../theme/layout';
 import { useReduceMotion } from '../hooks/use-reduce-motion';
 
 type GlassIconButtonProps = {
@@ -27,7 +28,8 @@ type GlassIconButtonProps = {
   /** Count badge (top-right). Rendered only when > 0. */
   badgeCount?: number;
   disabled?: boolean;
-  /** Diameter of the circular target (default 44 — the HIG minimum). */
+  /** Diameter of the circular target (default `glassSize.standard` — the standard
+   *  floating FAB; pass `glassSize.hero` for a surface's defining action). */
   size?: number;
   /**
    * Optional second glyph the button morphs to (e.g. search ↔ close). When set,
@@ -58,7 +60,7 @@ export function GlassIconButton({
   fallbackColor,
   badgeCount,
   disabled = false,
-  size = 44,
+  size = glassSize.standard,
   secondaryIconName,
   active = false,
 }: GlassIconButtonProps) {
