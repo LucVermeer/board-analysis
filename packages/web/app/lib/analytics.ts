@@ -16,14 +16,6 @@ let posthogClient: PostHog | null = null;
 let posthogInitAttempted = false;
 const shouldDebugAnalytics = process.env.NEXT_PUBLIC_ANALYTICS_DEBUG === '1';
 
-function readOptionalEnv(envName: string): string | null {
-  const rawValue = process.env[envName];
-  if (!rawValue) return null;
-
-  const trimmedValue = rawValue.trim();
-  return trimmedValue.length > 0 ? trimmedValue : null;
-}
-
 function getPosthog(): PostHog | null {
   if (typeof window === 'undefined') return null;
   if (posthogClient) return posthogClient;
@@ -34,7 +26,7 @@ function getPosthog(): PostHog | null {
   // out of the prod PostHog project.
   if (!window.location.hostname.includes('boardsesh.com')) return null;
 
-  const apiKey = readOptionalEnv('NEXT_PUBLIC_POSTHOG_KEY');
+  const apiKey = process.env.NEXT_PUBLIC_POSTHOG_KEY;
   if (!apiKey) {
     // We're on a production boardsesh.com host but NEXT_PUBLIC_POSTHOG_KEY was
     // not inlined into the client bundle at build time, so the SDK can't start
@@ -53,7 +45,7 @@ function getPosthog(): PostHog | null {
   // first-party to ad-blockers. NEXT_PUBLIC_POSTHOG_HOST overrides for incident
   // recovery (point straight at us.i.posthog.com if the proxy is down).
   const backendUrl = getBackendHttpUrl();
-  const configuredHost = readOptionalEnv('NEXT_PUBLIC_POSTHOG_HOST');
+  const configuredHost = process.env.NEXT_PUBLIC_POSTHOG_HOST;
   const host = configuredHost ?? (backendUrl ? `${backendUrl}/api/posthog` : DEFAULT_POSTHOG_HOST);
   if (!configuredHost && !backendUrl) {
     const message =
