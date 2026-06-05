@@ -19,6 +19,9 @@ type PlayDrawerActionBarProps = {
   remainingQueueCount: number;
   lightbulbActive: boolean;
   lightbulbPending?: boolean;
+  lightbulbAccessibilityLabel?: string;
+  lightbulbLongPressAccessibilityHint?: string;
+  lightbulbLongPressEnabled?: boolean;
   ascentCount: number;
   currentAngle?: number;
   onPrevClick: () => void;
@@ -44,6 +47,9 @@ export const PlayDrawerActionBar = memo(function PlayDrawerActionBar({
   remainingQueueCount,
   lightbulbActive,
   lightbulbPending = false,
+  lightbulbAccessibilityLabel,
+  lightbulbLongPressAccessibilityHint,
+  lightbulbLongPressEnabled = lightbulbActive,
   ascentCount,
   currentAngle,
   onPrevClick,
@@ -155,10 +161,17 @@ export const PlayDrawerActionBar = memo(function PlayDrawerActionBar({
             isConnected={lightbulbActive}
             isScanning={lightbulbPending}
             onPress={onLightbulb}
-            onLongPress={lightbulbActive ? onLightbulbLongPress : undefined}
-            accessibilityLabel={lightbulbActive ? tSettings('ble.relightBoard') : tSettings('ble.connectBoard')}
+            onLongPress={lightbulbLongPressEnabled ? onLightbulbLongPress : undefined}
+            accessibilityLabel={
+              lightbulbAccessibilityLabel ??
+              (lightbulbActive ? tSettings('ble.relightBoard') : tSettings('ble.connectBoard'))
+            }
             scanningAccessibilityHint={tSettings('ble.scanning')}
-            longPressAccessibilityHint={lightbulbActive ? tSettings('ble.holdForControls') : undefined}
+            longPressAccessibilityHint={
+              lightbulbLongPressEnabled
+                ? (lightbulbLongPressAccessibilityHint ?? tSettings('ble.holdForControls'))
+                : undefined
+            }
             haptic="medium"
             size={SIZES.lg.icon}
             containerSize={SIZES.lg.dim}

@@ -28,6 +28,7 @@ type MockQueueState = {
 const tokenLookupRows = vi.fn<() => Array<{ sessionId: string; userId: string | null }>>(() => []);
 const trackLiveActivityWidgetNavigationMock = vi.fn();
 const trackLiveActivityWidgetNavigationAttributionGapMock = vi.fn();
+const getSessionDriverParticipantIdMock = vi.fn<() => Promise<string | null>>(async () => 'user-widget-test');
 const getQueueStateMock = vi.fn<() => Promise<MockQueueState>>(async () => ({
   queue: [
     { uuid: 'q1', climb: { uuid: 'c1' } },
@@ -57,6 +58,7 @@ vi.mock('../handlers/cors', () => ({
 
 vi.mock('../services/room-manager', () => ({
   roomManager: {
+    getSessionDriverParticipantId: getSessionDriverParticipantIdMock,
     getQueueState: getQueueStateMock,
   },
 }));
@@ -163,6 +165,7 @@ describe('handleWidgetNavigate', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     tokenLookupRows.mockReturnValue([]);
+    getSessionDriverParticipantIdMock.mockResolvedValue(USER_ID);
     getQueueStateMock.mockResolvedValue({
       queue: [
         { uuid: 'q1', climb: { uuid: 'c1' } },
@@ -252,7 +255,7 @@ describe('handleWidgetNavigate', () => {
     });
   });
 
-  it('tracks an aggregate attribution-gap event when the registered token has no userId', async () => {
+  it('rejects a registered widget token with no userId because driver ownership cannot be proven', async () => {
     tokenLookupRows.mockReturnValue([{ sessionId: SESSION_ID, userId: null }]);
     const req = makeRequest({
       method: 'POST',
@@ -262,17 +265,37 @@ describe('handleWidgetNavigate', () => {
     const res = makeResponse();
     await handleWidgetNavigate(req as unknown as IncomingMessage, res as unknown as ServerResponse);
 
-    expect(res.statusCode).toBe(200);
+    expect(res.statusCode).toBe(403);
+    expect(mockNavigate).not.toHaveBeenCalled();
     expect(trackLiveActivityWidgetNavigationMock).not.toHaveBeenCalled();
     expect(trackLiveActivityWidgetNavigationAttributionGapMock).toHaveBeenCalledWith({
       sessionId: SESSION_ID,
       action: 'next',
-      outcome: 'success',
-      statusCode: 200,
-      queueLength: 2,
-      serverCurrentIndex: 0,
-      targetIndex: 1,
+      outcome: 'not_driver',
+      statusCode: 403,
       reason: 'missing_user_id',
+    });
+  });
+
+  it('returns 403 when the registered widget is not owned by the current driver', async () => {
+    tokenLookupRows.mockReturnValue([{ sessionId: SESSION_ID, userId: USER_ID }]);
+    getSessionDriverParticipantIdMock.mockResolvedValue('driver-user-id');
+    const req = makeRequest({
+      method: 'POST',
+      authHeader: `Bearer ${REGISTERED_TOKEN}`,
+      body: { sessionId: SESSION_ID, action: 'previous', currentIndex: 0 },
+    });
+    const res = makeResponse();
+    await handleWidgetNavigate(req as unknown as IncomingMessage, res as unknown as ServerResponse);
+
+    expect(res.statusCode).toBe(403);
+    expect(mockNavigate).not.toHaveBeenCalled();
+    expect(trackLiveActivityWidgetNavigationMock).toHaveBeenCalledWith({
+      userId: USER_ID,
+      sessionId: SESSION_ID,
+      action: 'previous',
+      outcome: 'not_driver',
+      statusCode: 403,
     });
   });
 

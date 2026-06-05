@@ -12,6 +12,7 @@ import {
   type BottomSheetHandleProps,
 } from '@gorhom/bottom-sheet';
 import type { BoardName, Climb } from '@boardsesh/shared-schema';
+import type { ClimbQueueItem, PlaylistSuggestionSource } from '@boardsesh/queue';
 import { randomUUID } from 'expo-crypto';
 import { computeNavigationStateWithSuggestions, boardSupportsMirroring } from '@boardsesh/play-view';
 import { climbToQueueItem } from '../../lib/climb-to-queue-item';
@@ -39,6 +40,16 @@ import { useShareClimb } from '../../hooks/use-share-climb';
 import { getBoardRenderData } from '../../lib/board-details';
 import { hapticSuccess } from '../../lib/haptics';
 import { usePlayDrawerWakeLock } from './use-play-drawer-wake-lock';
+import {
+  buildPlayDrawerBoardLayout,
+  derivePlayDrawerLightbulbPressAction,
+  derivePlayDrawerLightbulbState,
+  derivePlayDrawerPreviousDriver,
+  isPlayDrawerPreviewOnly,
+  resolvePlayDrawerWallControlQueueItem,
+  shouldRestoreFailedTakeControlPreview,
+} from './lightbulb-control';
+import { useWallConfirmFallback } from './use-wall-confirm-fallback';
 import { track } from '../../lib/analytics';
 import { iosSystemColors } from '../../theme/ios-colors';
 import { spacing, sheetStyles } from '../../theme/tokens';
@@ -62,6 +73,15 @@ export type PlayDrawerOpenOptions = {
    * guards key off uuid and don't catch the duplicate.
    */
   setAsCurrent?: boolean;
+  /**
+   * Local-only playlist source for party non-driver previews. It drives drawer
+   * next/previous suggestions without mutating the shared queue until the
+   * lightbulb promotes the preview to wall control.
+   */
+  previewPlaylistSuggestionSource?: PlaylistSuggestionSource | null;
+  /** Queue item to display locally without making it current. Used by
+   * preview-only queue-sheet opens so navigation has the right queue anchor. */
+  previewQueueItem?: ClimbQueueItem | null;
 };
 
 export type PlayDrawerHandle = {
@@ -87,13 +107,18 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   const { systemColors } = useTheme();
   const insets = useSafeAreaInsets();
   const sheetRef = useRef<BottomSheetModal>(null);
-  const [climb, setClimb] = useState<Climb | null>(null);
+  const [drawerPreviewItem, setDrawerPreviewItem] = useState<ClimbQueueItem | null>(null);
+  const [drawerPreviewSuggestionSource, setDrawerPreviewSuggestionSource] = useState<PlaylistSuggestionSource | null>(
+    null,
+  );
   const [isMirrored, setIsMirrored] = useState(false);
   const [isFavorited, setIsFavorited] = useState(false);
   const [isTickBarActive, setIsTickBarActive] = useState(false);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [activeSubDrawer, setActiveSubDrawer] = useState<ActiveSubDrawer>('none');
   const [bleControlOpen, setBleControlOpen] = useState(false);
+  const [pendingClimbUuid, setPendingClimbUuid] = useState<string | null>(null);
+  const wallControlPressOperationRef = useRef(0);
   const resetZoomRef = useRef<(() => void) | null>(null);
 
   // Measured heights driving the peek snap-point. The peek opens the drawer
@@ -123,15 +148,34 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   // and leaves manual user expansion alone afterwards.
   const lastSnappedClimbUuidRef = useRef<string | null>(null);
 
-  const { state, setCurrentClimb, nextClimb, previousClimb, playlistSuggestionSource, sessionId, addToQueue } =
-    useQueue();
+  const {
+    state,
+    setCurrentClimb,
+    nextClimb,
+    previousClimb,
+    playlistSuggestionSource,
+    sessionId,
+    addToQueue,
+    takeControl,
+    releaseControl,
+    driverParticipantId,
+    participantId,
+    lastConnectedBoardSerial,
+  } = useQueue();
   const bluetooth = useOptionalBluetoothContext();
   const { mutate: toggleFavoriteMutate } = useToggleFavorite();
   const { formatGrade } = useGradeFormat();
 
   const { boardName, layoutId, sizeId, setIds, angle } = boardConfig;
+  const bluetoothConnected = bluetooth?.isConnected ?? false;
+  const bluetoothLoading = bluetooth?.loading ?? false;
 
   usePlayDrawerWakeLock(isSheetOpen);
+
+  const boardLayout = useMemo(
+    () => buildPlayDrawerBoardLayout({ boardName, layoutId, sizeId }),
+    [boardName, layoutId, sizeId],
+  );
 
   const boardRenderData = useMemo(() => {
     const parsedSetIds = setIds.split(',').map(Number);
@@ -143,12 +187,28 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
     });
   }, [boardName, layoutId, sizeId, setIds]);
 
-  const navigationState = useMemo(
-    () => computeNavigationStateWithSuggestions(state.queue, state.currentClimbQueueItem, playlistSuggestionSource),
-    [state.queue, state.currentClimbQueueItem, playlistSuggestionSource],
+  const displayedQueueItem = drawerPreviewItem ?? state.currentClimbQueueItem;
+  const displayedClimb = displayedQueueItem?.climb;
+  const displayedClimbUuidRef = useRef<string | null>(null);
+  displayedClimbUuidRef.current = displayedClimb?.uuid ?? null;
+  const lightbulbState = useMemo(
+    () =>
+      derivePlayDrawerLightbulbState({
+        sessionId,
+        driverParticipantId,
+        participantId,
+        isBluetoothConnected: bluetoothConnected,
+        isBluetoothLoading: bluetoothLoading,
+        pendingClimbUuid,
+      }),
+    [sessionId, driverParticipantId, participantId, bluetoothConnected, bluetoothLoading, pendingClimbUuid],
   );
-
-  const displayedClimb = climb ?? state.currentClimbQueueItem?.climb;
+  const isPartyPreviewOnly = isPlayDrawerPreviewOnly(lightbulbState);
+  const navigationSuggestionSource = drawerPreviewSuggestionSource ?? playlistSuggestionSource;
+  const navigationState = useMemo(
+    () => computeNavigationStateWithSuggestions(state.queue, displayedQueueItem, navigationSuggestionSource),
+    [state.queue, displayedQueueItem, navigationSuggestionSource],
+  );
 
   // Multi-frame route playback (animation + BLE + party-sync). Boulders
   // short-circuit inside the hook (isAnimatable === false), so nothing renders
@@ -171,7 +231,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   // re-grade effect patches with the new angle's grade. Without this, the header
   // would keep showing the stale grade baked into the locally-held climb.
   useEffect(() => {
-    setClimb(null);
+    setDrawerPreviewItem(null);
   }, [angle]);
 
   const { showToast } = useToast();
@@ -194,19 +254,70 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
     });
   }, [shareClimb, showToast, t]);
 
+  const bluetoothConnect = useCallback(
+    (frames?: string, mirrored?: boolean, targetSerial?: string) =>
+      bluetooth?.connect(frames, mirrored, targetSerial) ?? Promise.resolve(false),
+    [bluetooth],
+  );
+
+  const handleWallConfirmed = useCallback((info: { climbUuid: string }) => {
+    setPendingClimbUuid((currentClimbUuid) => (currentClimbUuid === info.climbUuid ? null : currentClimbUuid));
+  }, []);
+  const handleWallConfirmTimeout = useCallback((info: { climbUuid: string }) => {
+    setPendingClimbUuid((currentClimbUuid) => (currentClimbUuid === info.climbUuid ? null : currentClimbUuid));
+  }, []);
+  const { armWatcher: armWallConfirmWatcher, cancelWatcher: cancelWallConfirmWatcher } = useWallConfirmFallback(
+    {
+      sessionId,
+      isBluetoothConnected: bluetoothConnected,
+      isBluetoothSupported: bluetooth !== null,
+      lastConnectedBoardSerial,
+      isPersistentSessionActive: lightbulbState.isPersistentSessionActive,
+      bluetoothConnect,
+    },
+    { onConfirmed: handleWallConfirmed, onTimeout: handleWallConfirmTimeout },
+  );
+
+  const cancelPendingWallControlAttempt = useCallback(() => {
+    wallControlPressOperationRef.current += 1;
+    cancelWallConfirmWatcher();
+    setPendingClimbUuid(null);
+  }, [cancelWallConfirmWatcher]);
+
+  const pendingSessionIdRef = useRef(sessionId);
+  useEffect(() => {
+    const didSessionChange = pendingSessionIdRef.current !== sessionId;
+    pendingSessionIdRef.current = sessionId;
+    if (pendingClimbUuid !== null && (!lightbulbState.isPersistentSessionActive || didSessionChange)) {
+      cancelPendingWallControlAttempt();
+    }
+  }, [cancelPendingWallControlAttempt, lightbulbState.isPersistentSessionActive, pendingClimbUuid, sessionId]);
+
   useImperativeHandle(ref, () => ({
     open: (selectedClimb: Climb, options?: PlayDrawerOpenOptions) => {
-      setClimb(selectedClimb);
+      cancelPendingWallControlAttempt();
+      const previewPlaylistSuggestionSource = options?.previewPlaylistSuggestionSource ?? null;
+      const shouldShowCurrentQueueItem =
+        options?.setAsCurrent === false &&
+        options.previewQueueItem == null &&
+        previewPlaylistSuggestionSource === null &&
+        state.currentClimbQueueItem?.climb.uuid === selectedClimb.uuid;
+      const selectedItem = shouldShowCurrentQueueItem
+        ? null
+        : (options?.previewQueueItem ??
+          climbToQueueItem(selectedClimb, { suggested: previewPlaylistSuggestionSource !== null }));
+      setDrawerPreviewSuggestionSource(previewPlaylistSuggestionSource);
+      setDrawerPreviewItem(selectedItem);
       setIsMirrored(false);
       setIsFavorited(false);
       setIsTickBarActive(false);
       setIsSheetOpen(true);
       setActiveSubDrawer('none');
       lastSnappedClimbUuidRef.current = null;
-      if (options?.setAsCurrent ?? true) {
+      if (selectedItem && (options?.setAsCurrent ?? true) && !isPartyPreviewOnly) {
         // Fresh activation from the list/search clears any playlist suggestion
         // source (web passes the same null option on every non-playlist set).
-        setCurrentClimb(climbToQueueItem(selectedClimb), { playlistSuggestionSource: null });
+        setCurrentClimb(selectedItem, { playlistSuggestionSource: null });
       }
       sheetRef.current?.present();
     },
@@ -216,27 +327,43 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   }));
 
   const handleClose = useCallback(() => {
-    setClimb(null);
+    cancelPendingWallControlAttempt();
+    setDrawerPreviewItem(null);
+    setDrawerPreviewSuggestionSource(null);
     setIsMirrored(false);
     setIsTickBarActive(false);
     setIsSheetOpen(false);
     setActiveSubDrawer('none');
     lastSnappedClimbUuidRef.current = null;
-  }, []);
+  }, [cancelPendingWallControlAttempt]);
 
   const handlePrev = useCallback(() => {
-    setClimb(null);
-    previousClimb();
+    cancelPendingWallControlAttempt();
+    if (isPartyPreviewOnly) {
+      if (navigationState.prevItem) {
+        setDrawerPreviewItem(navigationState.prevItem);
+      }
+    } else {
+      setDrawerPreviewItem(null);
+      previousClimb();
+    }
     setIsMirrored(false);
     setIsFavorited(false);
-  }, [previousClimb]);
+  }, [cancelPendingWallControlAttempt, isPartyPreviewOnly, navigationState.prevItem, previousClimb]);
 
   const handleNext = useCallback(() => {
-    setClimb(null);
-    nextClimb();
+    cancelPendingWallControlAttempt();
+    if (isPartyPreviewOnly) {
+      if (navigationState.nextItem) {
+        setDrawerPreviewItem(navigationState.nextItem);
+      }
+    } else {
+      setDrawerPreviewItem(null);
+      nextClimb();
+    }
     setIsMirrored(false);
     setIsFavorited(false);
-  }, [nextClimb]);
+  }, [cancelPendingWallControlAttempt, isPartyPreviewOnly, navigationState.nextItem, nextClimb]);
 
   const handleMirror = useCallback(() => {
     setIsMirrored((prev) => !prev);
@@ -264,17 +391,132 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   }, [displayedClimb, isFavorited, boardName, layoutId, angle, toggleFavoriteMutate]);
 
   const handleLightbulb = useCallback(() => {
-    if (!bluetooth) return;
-    if (bluetooth.isConnected) {
+    const pressAction = derivePlayDrawerLightbulbPressAction({
+      hasBluetooth: bluetooth !== null,
+      hasDisplayedClimb: displayedClimb !== null,
+      isPersistentSessionActive: lightbulbState.isPersistentSessionActive,
+      isDriver: lightbulbState.isDriver,
+      isBluetoothConnected: bluetoothConnected,
+    });
+    if (pressAction === 'noop') return;
+
+    const previousDriver = derivePlayDrawerPreviousDriver({ driverParticipantId, participantId });
+
+    if (pressAction === 'release_party') {
+      wallControlPressOperationRef.current += 1;
+      cancelWallConfirmWatcher();
+      setPendingClimbUuid(null);
+      void releaseControl()
+        .then(() => {
+          track('Wall Control Released', {
+            reason: 'manual',
+            mode: 'party',
+            boardLayout,
+          });
+        })
+        .catch((error: unknown) => {
+          console.error('[playDrawer] failed to release wall control:', error);
+        });
+      return;
+    }
+
+    if (pressAction === 'connect_solo') {
+      if (!bluetooth) return;
+      track('Wall Control Taken', {
+        source: 'lightbulb_drawer',
+        previousDriver,
+        mode: 'solo',
+        boardLayout,
+        climbUuid: displayedClimb?.uuid ?? null,
+      });
+      const reconnectSerialForBoard = bluetooth.reconnectSerialForCurrentBoard;
+      if (reconnectSerialForBoard) {
+        void bluetooth.connect(undefined, undefined, reconnectSerialForBoard);
+      } else {
+        void bluetooth.connect();
+      }
+      return;
+    }
+
+    if (!displayedClimb) return;
+
+    if (pressAction === 'reassert_solo') {
+      if (!bluetooth) return;
       // Already connected — re-light the current climb. Re-tapping the lightbulb
       // re-pushes the wall (and trips disconnect detection if the link is dead).
       bluetooth.reassertWall();
-    } else {
-      // Disconnected — silently reconnect to the same board when we remember it;
-      // the adapter falls back to the picker if it doesn't reappear.
-      void bluetooth.connect(undefined, undefined, bluetooth.reconnectSerialForCurrentBoard ?? undefined);
+      setDrawerPreviewItem(null);
+      track('Wall Control Taken', {
+        source: 'lightbulb_drawer',
+        previousDriver,
+        mode: 'solo',
+        boardLayout,
+        climbUuid: displayedClimb.uuid,
+      });
+      return;
     }
-  }, [bluetooth]);
+
+    const queueItem = resolvePlayDrawerWallControlQueueItem({
+      displayedQueueItem,
+      displayedClimb,
+      createQueueItem: (queueItemClimb, options) =>
+        climbToQueueItem(queueItemClimb as unknown as Parameters<typeof climbToQueueItem>[0], options),
+    });
+    const operationId = wallControlPressOperationRef.current + 1;
+    wallControlPressOperationRef.current = operationId;
+    setDrawerPreviewItem(null);
+    setPendingClimbUuid(displayedClimb.uuid);
+    const takeControlOptions = drawerPreviewSuggestionSource
+      ? { playlistSuggestionSource: drawerPreviewSuggestionSource }
+      : undefined;
+    void takeControl(queueItem, takeControlOptions)
+      .then(() => {
+        track('Wall Control Taken', {
+          source: 'lightbulb_drawer',
+          previousDriver,
+          mode: 'party',
+          boardLayout,
+          climbUuid: displayedClimb.uuid,
+        });
+      })
+      .catch((error: unknown) => {
+        const shouldHandleFailure = wallControlPressOperationRef.current === operationId;
+        if (!shouldHandleFailure) return;
+        console.error('[playDrawer] failed to take wall control:', error);
+        cancelWallConfirmWatcher();
+        setPendingClimbUuid((currentClimbUuid) => (currentClimbUuid === displayedClimb.uuid ? null : currentClimbUuid));
+        if (
+          shouldRestoreFailedTakeControlPreview({
+            failedOperationId: operationId,
+            latestOperationId: wallControlPressOperationRef.current,
+            failedClimbUuid: displayedClimb.uuid,
+            displayedClimbUuid: displayedClimbUuidRef.current,
+          })
+        ) {
+          setDrawerPreviewItem((currentItem) => currentItem ?? queueItem);
+        }
+      });
+    armWallConfirmWatcher({
+      climbUuid: displayedClimb.uuid,
+      mode: 'party',
+      boardLayout,
+    });
+  }, [
+    bluetooth,
+    driverParticipantId,
+    participantId,
+    lightbulbState.isPersistentSessionActive,
+    lightbulbState.isDriver,
+    cancelWallConfirmWatcher,
+    releaseControl,
+    boardLayout,
+    bluetoothConnected,
+    displayedClimb,
+    displayedQueueItem,
+    takeControl,
+    drawerPreviewSuggestionSource,
+    armWallConfirmWatcher,
+  ]);
 
   const handleLightbulbLongPress = useCallback(() => {
     if (!bluetooth?.isConnected) return;
@@ -285,7 +527,6 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
 
   // Close the BLE controls sheet if the link drops while it's open — otherwise
   // it lingers showing Re-light / Disconnect actions that no-op on a dead link.
-  const bluetoothConnected = bluetooth?.isConnected ?? false;
   useEffect(() => {
     if (!bluetoothConnected) setBleControlOpen(false);
   }, [bluetoothConnected]);
@@ -328,15 +569,18 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
 
   const handleSimilarClimbPress = useCallback(
     (similarClimb: Climb) => {
-      setClimb(similarClimb);
+      cancelPendingWallControlAttempt();
+      const queueItem = climbToQueueItem(similarClimb);
+      setDrawerPreviewItem(queueItem);
+      setDrawerPreviewSuggestionSource(null);
       setIsMirrored(false);
       setIsFavorited(false);
       setIsTickBarActive(false);
-      const queueItem = climbToQueueItem(similarClimb);
+      if (isPartyPreviewOnly) return;
       addToQueue(queueItem);
       setCurrentClimb(queueItem, { playlistSuggestionSource: null });
     },
-    [addToQueue, setCurrentClimb],
+    [addToQueue, cancelPendingWallControlAttempt, isPartyPreviewOnly, setCurrentClimb],
   );
 
   const renderBackdrop = useCallback(
@@ -407,6 +651,15 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   const ascentCount = displayedClimb?.userAscents ?? 0;
   const supportsMirroring = boardSupportsMirroring(boardName, layoutId);
   const subDrawerOpen = activeSubDrawer !== 'none';
+  const lightbulbAccessibilityLabel = useMemo(() => {
+    if (!lightbulbState.isPersistentSessionActive) return undefined;
+    if (lightbulbState.isDriver) {
+      if (!displayedClimb) return t('playView.actionBar.lightbulb.driving');
+      return t('playView.actionBar.lightbulb.drivingNamed', { name: displayedClimb.name });
+    }
+    if (!displayedClimb) return t('playView.actionBar.lightbulb.take');
+    return t('playView.actionBar.lightbulb.takeNamed', { name: displayedClimb.name });
+  }, [displayedClimb, lightbulbState.isDriver, lightbulbState.isPersistentSessionActive, t]);
 
   return (
     <>
@@ -492,8 +745,10 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
                   supportsMirroring={supportsMirroring}
                   isFavorited={isFavorited}
                   remainingQueueCount={navigationState.remainingCount}
-                  lightbulbActive={bluetooth?.isConnected ?? false}
-                  lightbulbPending={bluetooth?.loading ?? false}
+                  lightbulbActive={lightbulbState.lightbulbActive}
+                  lightbulbPending={lightbulbState.lightbulbPending}
+                  lightbulbAccessibilityLabel={lightbulbAccessibilityLabel}
+                  lightbulbLongPressEnabled={bluetoothConnected}
                   ascentCount={ascentCount}
                   onPrevClick={handlePrev}
                   onNextClick={handleNext}

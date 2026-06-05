@@ -283,20 +283,38 @@ export async function handleWidgetNavigate(req: IncomingMessage, res: ServerResp
     return;
   }
 
-  // Rate limit (per session) — apply *after* auth so unauth requests can't poison the bucket
-  if (!checkRateLimit(sessionId)) {
-    trackWidgetNavigation(authResult.userId, {
-      sessionId,
-      action,
-      outcome: 'rate_limited',
-      statusCode: 429,
-    });
-    res.writeHead(429, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ success: false, error: 'Too many requests' }));
-    return;
-  }
-
   try {
+    // The Live Activity token proves session membership, but wall navigation is
+    // driver-only. Authenticated users join with participantId === userId, so
+    // compare the token's bound user to the current driver before mutating the
+    // shared queue. Legacy rows without userId cannot prove driver ownership.
+    const driverParticipantId = await roomManager.getSessionDriverParticipantId(sessionId);
+    if (!authResult.userId || driverParticipantId !== authResult.userId) {
+      trackWidgetNavigation(authResult.userId, {
+        sessionId,
+        action,
+        outcome: 'not_driver',
+        statusCode: 403,
+      });
+      res.writeHead(403, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: false, error: 'Widget navigation requires the current driver' }));
+      return;
+    }
+
+    // Rate limit (per session) — apply *after* auth + driver check so a
+    // non-driver cannot poison the driver's bucket.
+    if (!checkRateLimit(sessionId)) {
+      trackWidgetNavigation(authResult.userId, {
+        sessionId,
+        action,
+        outcome: 'rate_limited',
+        statusCode: 429,
+      });
+      res.writeHead(429, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: false, error: 'Too many requests' }));
+      return;
+    }
+
     // Determine target index based on action and current queue state
     const queueState = await roomManager.getQueueState(sessionId);
     const queueLength = queueState.queue.length;

@@ -51,6 +51,8 @@ export type LiveActivityStartSessionOptions = {
   authToken?: string;
   wsUrl?: string;
   graphqlUrl?: string;
+  widgetNavigationAllowed: boolean;
+  isPartySession: boolean;
   /**
    * Localized strings for the Android foreground-service notification. Ignored
    * on iOS (ActivityKit builds its UI in Swift). Supplied so the ongoing
@@ -87,6 +89,8 @@ export type LiveActivityUpdateOptions = {
   hasPrevious: boolean;
   climbUuid: string;
   queue: LiveActivityQueueItem[];
+  widgetNavigationAllowed: boolean;
+  isPartySession: boolean;
 };
 
 export type LiveActivityClimbUpdateOptions = Omit<LiveActivityUpdateOptions, 'queue'>;

@@ -538,6 +538,8 @@ public class LiveActivityModule: Module {
         let authToken = options.authToken
         let wsUrl = options.wsUrl
         let graphqlUrl = options.graphqlUrl
+        let widgetNavigationAllowed = options.widgetNavigationAllowed
+        let isPartySession = options.isPartySession
 
         // Store session details for push token registration.
         tokenQueue.sync {
@@ -566,6 +568,11 @@ public class LiveActivityModule: Module {
             defaults.set(layoutId, forKey: SharedConstants.layoutIdKey)
             defaults.set(sizeId, forKey: SharedConstants.sizeIdKey)
             defaults.set(setIds, forKey: SharedConstants.setIdsKey)
+            SharedWidgetWallControlState.save(
+                navigationAllowed: widgetNavigationAllowed,
+                isPartySession: isPartySession,
+                to: defaults
+            )
         }
         if let authToken = authToken {
             if authToken.isEmpty {
@@ -684,6 +691,8 @@ public class LiveActivityModule: Module {
             defaults.removeObject(forKey: SharedConstants.widgetNavigateUrlKey)
             defaults.removeObject(forKey: SharedConstants.authTokenKey)
             defaults.removeObject(forKey: SharedConstants.livePushTokenKey)
+            defaults.removeObject(forKey: SharedConstants.widgetNavigationAllowedKey)
+            defaults.removeObject(forKey: SharedConstants.partySessionKey)
         }
         SharedKeychain.remove(SharedKeychain.authTokenKey)
         SharedKeychain.remove(SharedKeychain.livePushTokenKey)
@@ -720,6 +729,11 @@ public class LiveActivityModule: Module {
                 ))
             }
             SharedQueueState.save(items: queueItems, currentIndex: options.currentIndex, to: defaults)
+            SharedWidgetWallControlState.save(
+                navigationAllowed: options.widgetNavigationAllowed,
+                isPartySession: options.isPartySession,
+                to: defaults
+            )
         }
 
         let state = ClimbSessionAttributes.ContentState(
@@ -751,6 +765,11 @@ public class LiveActivityModule: Module {
 
         if let defaults = SharedConstants.sharedDefaults {
             SharedQueueState.saveCurrentIndex(options.currentIndex, to: defaults)
+            SharedWidgetWallControlState.save(
+                navigationAllowed: options.widgetNavigationAllowed,
+                isPartySession: options.isPartySession,
+                to: defaults
+            )
         }
 
         let state = ClimbSessionAttributes.ContentState(
@@ -788,6 +807,8 @@ struct StartSessionOptions: Record {
     @Field var authToken: String?
     @Field var wsUrl: String?
     @Field var graphqlUrl: String?
+    @Field var widgetNavigationAllowed: Bool = true
+    @Field var isPartySession: Bool = false
 }
 
 struct UpdateActivityQueueItem: Record {
@@ -811,6 +832,8 @@ struct UpdateActivityOptions: Record {
     @Field var hasPrevious: Bool = false
     @Field var climbUuid: String = ""
     @Field var queue: [UpdateActivityQueueItem] = []
+    @Field var widgetNavigationAllowed: Bool = true
+    @Field var isPartySession: Bool = false
 }
 
 struct UpdateActivityClimbOptions: Record {
@@ -822,4 +845,6 @@ struct UpdateActivityClimbOptions: Record {
     @Field var hasNext: Bool = false
     @Field var hasPrevious: Bool = false
     @Field var climbUuid: String = ""
+    @Field var widgetNavigationAllowed: Bool = true
+    @Field var isPartySession: Bool = false
 }

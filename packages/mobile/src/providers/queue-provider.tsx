@@ -135,7 +135,7 @@ type QueueContextValue = {
    * the climb that should become the driver's wall climb. Best-effort no-op
    * when no session is active.
    */
-  takeControl: (item?: ClimbQueueItem | null) => Promise<void>;
+  takeControl: (item?: ClimbQueueItem | null, options?: TakeControlOptions) => Promise<void>;
   /** Release wall-control authority in the current party session. */
   releaseControl: () => Promise<void>;
   /**
@@ -160,6 +160,10 @@ type QueueContextValue = {
 };
 
 const QueueContext = createContext<QueueContextValue | null>(null);
+
+type TakeControlOptions = {
+  playlistSuggestionSource?: PlaylistSuggestionSource | null;
+};
 type QueueSessionControlContextValue = Pick<
   QueueContextValue,
   | 'sessionId'
@@ -215,6 +219,8 @@ export function QueueProvider({ children }: { children: ReactNode }) {
   const [liveStats, setLiveStats] = useState<SessionLiveStatsEvent | null>(null);
   const [sessionRuntimeState, setSessionRuntimeState] =
     useState<MobileSessionRuntimeState>(createEmptySessionRuntimeState);
+  const sessionRuntimeStateRef = useRef(sessionRuntimeState);
+  sessionRuntimeStateRef.current = sessionRuntimeState;
   const sessionUsers = sessionRuntimeState.users;
   const driverParticipantId = sessionRuntimeState.driverParticipantId;
   const lastConnectedBoardSerial = sessionRuntimeState.lastConnectedBoardSerial;
@@ -224,6 +230,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
   // stamps `changedByParticipantId` with the originator's participant id).
   const participantIdRef = useRef<string | null>(null);
   const unsubscribeRef = useRef<(() => void) | null>(null);
+  const wallControlOperationRef = useRef(0);
 
   // The active board is the angle source of truth. Read it here so the
   // self-healing re-grade effect can compare each queued climb's display angle
@@ -693,8 +700,126 @@ export function QueueProvider({ children }: { children: ReactNode }) {
   // shared mutation already swallows transport errors and is a true no-op in
   // solo (never lazily creates a session), so callers can fire it freely.
   const setSessionBoardPath = useCallback((boardPath: string) => mutations.setSessionBoardPath(boardPath), [mutations]);
-  const takeControl = useCallback((item?: ClimbQueueItem | null) => mutations.takeControl(item), [mutations]);
-  const releaseControl = useCallback(() => mutations.releaseControl(), [mutations]);
+  const restoreQueueSnapshot = useCallback(
+    (snapshot: {
+      queue: ClimbQueueItem[];
+      currentClimbQueueItem: ClimbQueueItem | null;
+      playlistSuggestionSource: PlaylistSuggestionSource | null;
+    }) => {
+      dispatch({
+        type: 'UPDATE_QUEUE',
+        payload: { queue: snapshot.queue, currentClimbQueueItem: snapshot.currentClimbQueueItem },
+      });
+      dispatch({ type: 'SET_PLAYLIST_SUGGESTION_SOURCE', payload: snapshot.playlistSuggestionSource });
+      setPlaylistSuggestionSourceState(snapshot.playlistSuggestionSource);
+    },
+    [],
+  );
+
+  const takeControl = useCallback(
+    async (item?: ClimbQueueItem | null, options?: TakeControlOptions) => {
+      if (!sessionIdRef.current) {
+        await mutations.takeControl(item);
+        return;
+      }
+
+      const queueSnapshot = {
+        queue: stateRef.current.queue,
+        currentClimbQueueItem: stateRef.current.currentClimbQueueItem,
+        playlistSuggestionSource: playlistSuggestionSourceRef.current,
+      };
+      const operationId = wallControlOperationRef.current + 1;
+      wallControlOperationRef.current = operationId;
+      const localParticipantId = participantIdRef.current;
+      const previousDriverParticipantId = sessionRuntimeStateRef.current.driverParticipantId;
+
+      if (localParticipantId) {
+        setSessionRuntimeState((current) => ({ ...current, driverParticipantId: localParticipantId }));
+      }
+      if (item) {
+        const hasPlaylistSuggestionSourceOption = Object.prototype.hasOwnProperty.call(
+          options ?? {},
+          'playlistSuggestionSource',
+        );
+        let nextPlaylistSuggestionSource: PlaylistSuggestionSource | null | undefined;
+        if (hasPlaylistSuggestionSourceOption) {
+          nextPlaylistSuggestionSource = options?.playlistSuggestionSource ?? null;
+        } else if (item.suggested !== true) {
+          nextPlaylistSuggestionSource = null;
+        }
+        if (nextPlaylistSuggestionSource !== undefined) {
+          setPlaylistSuggestionSourceState(nextPlaylistSuggestionSource);
+        }
+        dispatch({
+          type: 'DELTA_UPDATE_CURRENT_CLIMB',
+          payload: {
+            item,
+            shouldAddToQueue: true,
+            isServerEvent: false,
+            ...(nextPlaylistSuggestionSource === undefined
+              ? {}
+              : { playlistSuggestionSource: nextPlaylistSuggestionSource }),
+          },
+        });
+      }
+
+      try {
+        await mutations.takeControl(item);
+      } catch (error) {
+        const isLatestWallControlOperation = wallControlOperationRef.current === operationId;
+        if (isLatestWallControlOperation && item && stateRef.current.currentClimbQueueItem?.uuid === item.uuid) {
+          restoreQueueSnapshot(queueSnapshot);
+        }
+        if (isLatestWallControlOperation && localParticipantId) {
+          setSessionRuntimeState((current) =>
+            current.driverParticipantId === localParticipantId
+              ? { ...current, driverParticipantId: previousDriverParticipantId }
+              : current,
+          );
+        }
+        if (isLatestWallControlOperation) {
+          showToast(t('mobile.queue.actionFailed'), 'error');
+        }
+        throw error;
+      }
+    },
+    [mutations, restoreQueueSnapshot, showToast, t],
+  );
+
+  const releaseControl = useCallback(async () => {
+    if (!sessionIdRef.current) {
+      await mutations.releaseControl();
+      return;
+    }
+
+    const previousDriverParticipantId = sessionRuntimeStateRef.current.driverParticipantId;
+    const localParticipantId = participantIdRef.current;
+    const shouldOptimisticallyRelease =
+      previousDriverParticipantId !== null && previousDriverParticipantId === localParticipantId;
+    const operationId = shouldOptimisticallyRelease
+      ? wallControlOperationRef.current + 1
+      : wallControlOperationRef.current;
+    if (shouldOptimisticallyRelease) {
+      wallControlOperationRef.current = operationId;
+      setSessionRuntimeState((current) => ({ ...current, driverParticipantId: null }));
+    }
+    try {
+      await mutations.releaseControl();
+    } catch (error) {
+      const isLatestWallControlOperation = wallControlOperationRef.current === operationId;
+      if (shouldOptimisticallyRelease && isLatestWallControlOperation) {
+        setSessionRuntimeState((current) =>
+          current.driverParticipantId === null
+            ? { ...current, driverParticipantId: previousDriverParticipantId }
+            : current,
+        );
+      }
+      if (!shouldOptimisticallyRelease || isLatestWallControlOperation) {
+        showToast(t('mobile.queue.actionFailed'), 'error');
+      }
+      throw error;
+    }
+  }, [mutations, showToast, t]);
   const confirmClimbOnWall = useCallback((climbUuid: string) => mutations.confirmClimbOnWall(climbUuid), [mutations]);
   const setSessionBoardSerial = useCallback((serial: string) => mutations.setSessionBoardSerial(serial), [mutations]);
 
