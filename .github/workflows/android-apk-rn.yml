@@ -288,14 +288,21 @@ jobs:
           fi
 
       - name: Upload AAB to Play internal track
+        id: play_upload
         if: github.ref == 'refs/heads/main' && env.PLAY_UPLOAD_ENABLED == 'true'
+        continue-on-error: true
         uses: r0adkll/upload-google-play@e738b9dd8f2476ea806d921b64aacd24f34515a5 # v1.1.5
         with:
           serviceAccountJsonPlainText: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
           packageName: com.boardsesh.app
           releaseFiles: packages/mobile/android/app/build/outputs/bundle/release/*.aab
-          track: internal
+          tracks: internal
           status: completed
+
+      - name: Warn when Play upload fails
+        if: github.ref == 'refs/heads/main' && env.PLAY_UPLOAD_ENABLED == 'true' && steps.play_upload.outcome == 'failure'
+        run: |
+          echo "::warning::Play upload failed after the signed APK/AAB were built and the GitHub Release was published. If Play reports 'You must let us know whether your app uses any Foreground Service permissions', complete Play Console > App content > Foreground services for FOREGROUND_SERVICE_CONNECTED_DEVICE, then rerun the workflow or upload the AAB artifact manually."
 
       - name: Clean up keystore
         if: always()
