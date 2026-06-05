@@ -62,6 +62,22 @@ const toast = vi.hoisted(() => ({
   showToast: vi.fn(),
 }));
 
+const queueMutations = vi.hoisted(() => ({
+  addQueueItem: vi.fn(async () => {}),
+  removeQueueItem: vi.fn(async () => {}),
+  reorderQueueItem: vi.fn(async () => {}),
+  setCurrentClimb: vi.fn(async () => {}),
+  mirrorCurrentClimb: vi.fn(async () => {}),
+  publishPlaybackState: vi.fn(async () => {}),
+  setQueue: vi.fn(async () => {}),
+  replaceQueueItem: vi.fn(async () => {}),
+  takeControl: vi.fn(async () => {}),
+  releaseControl: vi.fn(async () => {}),
+  confirmClimbOnWall: vi.fn(async () => {}),
+  setSessionBoardSerial: vi.fn(async () => {}),
+  setSessionBoardPath: vi.fn(async () => {}),
+}));
+
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
@@ -80,17 +96,7 @@ vi.mock('@boardsesh/graphql-client', () => ({
 }));
 
 vi.mock('@boardsesh/queue-react', () => ({
-  useQueueMutations: () => ({
-    addQueueItem: vi.fn(async () => {}),
-    removeQueueItem: vi.fn(async () => {}),
-    reorderQueueItem: vi.fn(async () => {}),
-    setCurrentClimb: vi.fn(async () => {}),
-    mirrorCurrentClimb: vi.fn(async () => {}),
-    publishPlaybackState: vi.fn(async () => {}),
-    setQueue: vi.fn(async () => {}),
-    replaceQueueItem: vi.fn(async () => {}),
-    setSessionBoardPath: vi.fn(async () => {}),
-  }),
+  useQueueMutations: () => queueMutations,
 }));
 
 vi.mock('../../lib/graphql/ws-client', () => ({
@@ -137,6 +143,10 @@ type Snapshot = {
   lastConnectedBoardSerial: string | null;
   joinSession: (sessionId: string, opts: Parameters<ReturnType<typeof useQueue>['joinSession']>[1]) => Promise<void>;
   endSession: () => Promise<unknown>;
+  takeControl: ReturnType<typeof useQueue>['takeControl'];
+  releaseControl: ReturnType<typeof useQueue>['releaseControl'];
+  confirmClimbOnWall: ReturnType<typeof useQueue>['confirmClimbOnWall'];
+  setSessionBoardSerial: ReturnType<typeof useQueue>['setSessionBoardSerial'];
 };
 
 const user = (overrides: Partial<SessionUser> = {}): SessionUser => ({
@@ -159,6 +169,10 @@ function Probe({ onSnapshot }: { onSnapshot: (snapshot: Snapshot) => void }) {
       lastConnectedBoardSerial: queue.lastConnectedBoardSerial,
       joinSession: queue.joinSession,
       endSession: queue.endSession,
+      takeControl: queue.takeControl,
+      releaseControl: queue.releaseControl,
+      confirmClimbOnWall: queue.confirmClimbOnWall,
+      setSessionBoardSerial: queue.setSessionBoardSerial,
     });
   }, [
     queue.sessionId,
@@ -167,6 +181,10 @@ function Probe({ onSnapshot }: { onSnapshot: (snapshot: Snapshot) => void }) {
     queue.lastConnectedBoardSerial,
     queue.joinSession,
     queue.endSession,
+    queue.takeControl,
+    queue.releaseControl,
+    queue.confirmClimbOnWall,
+    queue.setSessionBoardSerial,
     onSnapshot,
   ]);
   return null;
@@ -207,6 +225,9 @@ describe('QueueProvider session update subscription', () => {
     activeBoard.getStoredActiveBoard.mockResolvedValue(activeBoard.stored);
     activeBoard.setActiveBoard.mockClear();
     toast.showToast.mockClear();
+    for (const mutation of Object.values(queueMutations)) {
+      mutation.mockClear();
+    }
     graph.execute.mockReset();
     http.request.mockReset();
     http.request.mockResolvedValue({
@@ -265,6 +286,28 @@ describe('QueueProvider session update subscription', () => {
       expect(latestSnapshot?.users.map((entry) => entry.id)).toEqual(['participant-self', 'participant-2']);
       expect(latestSnapshot?.driverParticipantId).toBe('participant-2');
     });
+  });
+
+  it('exposes shared party wall-control actions through the mobile queue context', async () => {
+    const snapshots: Snapshot[] = [];
+    renderProvider((snapshot) => snapshots.push(snapshot));
+
+    await waitFor(() => {
+      expect(snapshots.at(-1)?.sessionId).toBe('session-1');
+    });
+
+    const snapshot = snapshots.at(-1);
+    if (!snapshot) throw new Error('queue snapshot was not captured');
+
+    await snapshot.takeControl(null);
+    await snapshot.releaseControl();
+    await snapshot.confirmClimbOnWall('climb-1');
+    await snapshot.setSessionBoardSerial('SERIAL-1');
+
+    expect(queueMutations.takeControl).toHaveBeenCalledWith(null);
+    expect(queueMutations.releaseControl).toHaveBeenCalledOnce();
+    expect(queueMutations.confirmClimbOnWall).toHaveBeenCalledWith('climb-1');
+    expect(queueMutations.setSessionBoardSerial).toHaveBeenCalledWith('SERIAL-1');
   });
 
   it('clears persisted session state when SessionEnded arrives', async () => {

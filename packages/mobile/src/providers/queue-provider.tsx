@@ -131,6 +131,25 @@ type QueueContextValue = {
    */
   setSessionBoardPath: (boardPath: string) => Promise<void>;
   /**
+   * Claim wall-control authority in the current party session, optionally with
+   * the climb that should become the driver's wall climb. Best-effort no-op
+   * when no session is active.
+   */
+  takeControl: (item?: ClimbQueueItem | null) => Promise<void>;
+  /** Release wall-control authority in the current party session. */
+  releaseControl: () => Promise<void>;
+  /**
+   * Broadcast that this phone successfully wrote a climb to the physical wall.
+   * The local wall-confirm bus is handled by the Bluetooth provider; this
+   * mutation notifies party peers through the session subscription.
+   */
+  confirmClimbOnWall: (climbUuid: string) => Promise<void>;
+  /**
+   * Store the connected board serial on the active session so native peers can
+   * reconnect to the same physical wall without showing the picker.
+   */
+  setSessionBoardSerial: (serial: string) => Promise<void>;
+  /**
    * Subscribe to raw queue subscription events, including transient ones that
    * never reach the reducer (PlaybackStateChanged drives route playback
    * party-sync). Returns an unsubscribe function.
@@ -141,10 +160,29 @@ type QueueContextValue = {
 };
 
 const QueueContext = createContext<QueueContextValue | null>(null);
+type QueueSessionControlContextValue = Pick<
+  QueueContextValue,
+  | 'sessionId'
+  | 'driverParticipantId'
+  | 'participantId'
+  | 'lastConnectedBoardSerial'
+  | 'takeControl'
+  | 'releaseControl'
+  | 'confirmClimbOnWall'
+  | 'setSessionBoardSerial'
+>;
+
+const QueueSessionControlContext = createContext<QueueSessionControlContextValue | null>(null);
 
 export function useQueue(): QueueContextValue {
   const context = useContext(QueueContext);
   if (!context) throw new Error('useQueue must be used within QueueProvider');
+  return context;
+}
+
+export function useQueueSessionControls(): QueueSessionControlContextValue {
+  const context = useContext(QueueSessionControlContext);
+  if (!context) throw new Error('useQueueSessionControls must be used within QueueProvider');
   return context;
 }
 
@@ -650,6 +688,10 @@ export function QueueProvider({ children }: { children: ReactNode }) {
   // shared mutation already swallows transport errors and is a true no-op in
   // solo (never lazily creates a session), so callers can fire it freely.
   const setSessionBoardPath = useCallback((boardPath: string) => mutations.setSessionBoardPath(boardPath), [mutations]);
+  const takeControl = useCallback((item?: ClimbQueueItem | null) => mutations.takeControl(item), [mutations]);
+  const releaseControl = useCallback(() => mutations.releaseControl(), [mutations]);
+  const confirmClimbOnWall = useCallback((climbUuid: string) => mutations.confirmClimbOnWall(climbUuid), [mutations]);
+  const setSessionBoardSerial = useCallback((serial: string) => mutations.setSessionBoardSerial(serial), [mutations]);
 
   // Self-healing re-grade: a climb's difficulty/quality/sends are angle-specific
   // (stored per-angle server-side), but queue items carry the grade baked in for
@@ -999,6 +1041,10 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       startSession: createSessionWithConfig,
       joinSession,
       setSessionBoardPath,
+      takeControl,
+      releaseControl,
+      confirmClimbOnWall,
+      setSessionBoardSerial,
       subscribeToQueueEvents,
       publishPlaybackState,
     }),
@@ -1025,10 +1071,41 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       createSessionWithConfig,
       joinSession,
       setSessionBoardPath,
+      takeControl,
+      releaseControl,
+      confirmClimbOnWall,
+      setSessionBoardSerial,
       subscribeToQueueEvents,
       publishPlaybackState,
     ],
   );
 
-  return <QueueContext.Provider value={contextValue}>{children}</QueueContext.Provider>;
+  const sessionControlValue = useMemo<QueueSessionControlContextValue>(
+    () => ({
+      sessionId,
+      driverParticipantId,
+      participantId,
+      lastConnectedBoardSerial,
+      takeControl,
+      releaseControl,
+      confirmClimbOnWall,
+      setSessionBoardSerial,
+    }),
+    [
+      sessionId,
+      driverParticipantId,
+      participantId,
+      lastConnectedBoardSerial,
+      takeControl,
+      releaseControl,
+      confirmClimbOnWall,
+      setSessionBoardSerial,
+    ],
+  );
+
+  return (
+    <QueueSessionControlContext.Provider value={sessionControlValue}>
+      <QueueContext.Provider value={contextValue}>{children}</QueueContext.Provider>
+    </QueueSessionControlContext.Provider>
+  );
 }

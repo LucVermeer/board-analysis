@@ -1,9 +1,10 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { ClimbQueueItem } from '@boardsesh/queue';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
+import { emitWallConfirm } from '@boardsesh/play-view';
 import { useBoardBluetooth } from '../lib/ble/use-board-bluetooth';
 import { registerBluetoothConnection } from '../lib/ble/bluetooth-status-store';
-import { useQueue } from './queue-provider';
+import { useQueue, useQueueSessionControls } from './queue-provider';
 import { hapticSuccess, hapticError } from '../lib/haptics';
 import { DevicePickerSheet } from '../components/ble/DevicePickerSheet';
 import { track } from '../lib/analytics';
@@ -52,13 +53,19 @@ const BluetoothContext = createContext<BluetoothContextValue | null>(null);
  */
 function BluetoothAutoSender({
   sendFramesToBoard,
+  onWallConfirmed,
   reassertNonce,
 }: {
   sendFramesToBoard: (frames: string, mirrored?: boolean, signal?: AbortSignal) => Promise<boolean | undefined>;
+  onWallConfirmed: (climbUuid: string) => void;
   reassertNonce: number;
 }) {
   const { state } = useQueue();
   const { currentClimbQueueItem } = state;
+  const onWallConfirmedRef = useRef(onWallConfirmed);
+  useEffect(() => {
+    onWallConfirmedRef.current = onWallConfirmed;
+  }, [onWallConfirmed]);
 
   const isWritingRef = useRef(false);
   const pendingClimbRef = useRef<ClimbQueueItem | null>(null);
@@ -132,6 +139,7 @@ function BluetoothAutoSender({
           // the signature and re-pushes.
           const sendSignature = `${item.climb.uuid}::${item.climb.frames}::${item.climb.mirrored ? 1 : 0}`;
           if (sendSignature === lastSentSignatureRef.current) {
+            onWallConfirmedRef.current(item.climb.uuid);
             toSend = pendingClimbRef.current;
             pendingClimbRef.current = null;
             continue;
@@ -146,6 +154,7 @@ function BluetoothAutoSender({
 
             if (result === true) {
               lastSentSignatureRef.current = sendSignature;
+              onWallConfirmedRef.current(item.climb.uuid);
               hapticSuccess();
             }
           } catch (error) {
@@ -175,11 +184,49 @@ type BluetoothProviderProps = {
 };
 
 export function BluetoothProvider({ boardName, layoutId, sizeId, children }: BluetoothProviderProps) {
+  const { sessionId, confirmClimbOnWall, setSessionBoardSerial, lastConnectedBoardSerial } = useQueueSessionControls();
+  const sessionIdRef = useRef(sessionId);
+  useEffect(() => {
+    sessionIdRef.current = sessionId;
+  }, [sessionId]);
+  const lastConnectedBoardSerialRef = useRef(lastConnectedBoardSerial);
+  useEffect(() => {
+    lastConnectedBoardSerialRef.current = lastConnectedBoardSerial;
+  }, [lastConnectedBoardSerial]);
+
+  const handleWallConfirmed = useCallback(
+    (climbUuid: string) => {
+      emitWallConfirm(climbUuid);
+      if (sessionIdRef.current) {
+        void confirmClimbOnWall(climbUuid);
+      }
+    },
+    [confirmClimbOnWall],
+  );
+
+  const handleConnectSuccess = useCallback(
+    (serial: string | null) => {
+      if (!serial) return;
+      if (!sessionIdRef.current) return;
+      const previousSerial = lastConnectedBoardSerialRef.current;
+      if (previousSerial === serial) return;
+      lastConnectedBoardSerialRef.current = serial;
+      void setSessionBoardSerial(serial);
+      track('Session Board Serial Set', {
+        mode: 'party',
+        previousSerialKnown: previousSerial != null,
+        boardLayout: boardName ?? '',
+      });
+    },
+    [boardName, setSessionBoardSerial],
+  );
+
   const { isConnected, loading, connect, disconnect, sendFramesToBoard, pickerState, reconnectSerialForCurrentBoard } =
     useBoardBluetooth({
       boardName,
       layoutId,
       sizeId,
+      onConnectSuccess: handleConnectSuccess,
     });
 
   const clearBoard = useCallback(() => sendFramesToBoard(''), [sendFramesToBoard]);
@@ -272,7 +319,13 @@ export function BluetoothProvider({ boardName, layoutId, sizeId, children }: Blu
 
   return (
     <BluetoothContext.Provider value={value}>
-      {isConnected && <BluetoothAutoSender sendFramesToBoard={sendFramesToBoard} reassertNonce={reassertNonce} />}
+      {isConnected && (
+        <BluetoothAutoSender
+          sendFramesToBoard={sendFramesToBoard}
+          onWallConfirmed={handleWallConfirmed}
+          reassertNonce={reassertNonce}
+        />
+      )}
       {children}
       {pickerState && (
         <DevicePickerSheet
