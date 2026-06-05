@@ -714,7 +714,13 @@ public class LiveActivityModule: Module {
     private func updateActivity(options: UpdateActivityOptions) {
         guard #available(iOS 17.0, *) else { return }
 
+        var wallControlChanged = false
         if let defaults = SharedConstants.sharedDefaults {
+            let previousWallControl = SharedWidgetWallControlState.load(from: defaults)
+            wallControlChanged =
+                previousWallControl.navigationAllowed != options.widgetNavigationAllowed ||
+                previousWallControl.requiresServerAuthorization != options.isPartySession
+
             var queueItems: [SharedQueueItem] = []
             for item in options.queue {
                 queueItems.append(SharedQueueItem(
@@ -750,7 +756,7 @@ public class LiveActivityModule: Module {
         let activityManager = LiveActivityManager.shared
         Task {
             let elapsed = await activityManager.timeSinceLastUpdate()
-            if let elapsed, elapsed < SharedConstants.liveActivityDedupWindow {
+            if !wallControlChanged, let elapsed, elapsed < SharedConstants.liveActivityDedupWindow {
                 self.logger.debug("Skipping redundant ActivityKit push (\(Int(elapsed * 1000))ms since last native update)")
             } else {
                 await activityManager.updateActivity(state: state)
@@ -763,7 +769,13 @@ public class LiveActivityModule: Module {
     private func updateActivityClimb(options: UpdateActivityClimbOptions) {
         guard #available(iOS 17.0, *) else { return }
 
+        var wallControlChanged = false
         if let defaults = SharedConstants.sharedDefaults {
+            let previousWallControl = SharedWidgetWallControlState.load(from: defaults)
+            wallControlChanged =
+                previousWallControl.navigationAllowed != options.widgetNavigationAllowed ||
+                previousWallControl.requiresServerAuthorization != options.isPartySession
+
             SharedQueueState.saveCurrentIndex(options.currentIndex, to: defaults)
             SharedWidgetWallControlState.save(
                 navigationAllowed: options.widgetNavigationAllowed,
@@ -786,7 +798,7 @@ public class LiveActivityModule: Module {
         let activityManager = LiveActivityManager.shared
         Task {
             let elapsed = await activityManager.timeSinceLastUpdate()
-            if let elapsed, elapsed < SharedConstants.liveActivityDedupWindow {
+            if !wallControlChanged, let elapsed, elapsed < SharedConstants.liveActivityDedupWindow {
                 self.logger.debug("Skipping redundant climb ActivityKit push (\(Int(elapsed * 1000))ms since last native update)")
             } else {
                 await activityManager.updateActivity(state: state)
