@@ -95,7 +95,12 @@ track via [`r0adkll/upload-google-play`](https://github.com/r0adkll/upload-googl
 Release); the AAB is the Play channel.
 
 The GitHub Release is created before the AAB/Play steps. A Play-specific failure
-should not block the already-signed sideload APK from being published.
+should not block the already-signed sideload APK from being published. The
+workflow keeps the job green when the Play upload fails and emits a warning with
+the manual follow-up. If Play reports `You must let us know whether your app uses
+any Foreground Service permissions`, complete the Play Console foreground
+service declaration for `FOREGROUND_SERVICE_CONNECTED_DEVICE`, then rerun the
+workflow or upload the saved AAB artifact by hand.
 
 After the GitHub Release is created, the workflow posts the release URL to the
 deployments Discord webhook. The notification is best-effort: if the webhook is
