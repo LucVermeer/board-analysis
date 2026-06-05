@@ -210,6 +210,10 @@ Source locations:
 cd packages/mobile && bunx expo prebuild --platform ios --clean
 ```
 
+For normal local simulator/device builds from `packages/mobile`, use `vp run mobile:ios`
+instead of raw `expo run:ios`. It keeps `packages/mobile/ios/build` pointed at the
+shared Boardsesh Xcode cache so separate git worktrees do not each rebuild from cold.
+
 #### 2. Build to a device
 
 Native code changes (Swift, entitlements, new Xcode targets, etc.) cannot

@@ -357,6 +357,10 @@ export default defineConfig({
         command: 'bash scripts/mobile-simulator-check.sh',
         cache: false,
       },
+      'mobile:ios': {
+        command: 'tsx scripts/mobile-ios-run.ts',
+        cache: false,
+      },
       'mobile:screenshot': {
         command: 'bash scripts/mobile-screenshot.sh',
         cache: false,

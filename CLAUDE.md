@@ -62,6 +62,7 @@ Common commands:
 - `vp run check:i18n` — fails on hardcoded English strings under `packages/web/app/`
 - `vp run check:mobile-bundle` — headless Metro bundle check (Linux-safe)
 - `vp run check:mobile-simulator`, `vp run mobile:screenshot` — macOS only
+- `vp run mobile:ios` — local Expo iOS build with the shared Boardsesh Xcode cache
 - `vp run mobile:publish` — EAS Update for current branch
 - `vp run test:e2e` — Playwright; auto-starts the dev DB + web server
 
@@ -220,6 +221,10 @@ After mobile changes:
 3. `vp run check:mobile-bundle` — Metro bundle check (Linux-safe; highest-value).
 4. `vp run check:mobile-simulator` — macOS only; skips on Linux.
 5. `vp run mobile:screenshot` — macOS only.
+
+### Local iOS builds
+
+Use `vp run mobile:ios` for local `packages/mobile` iOS builds instead of raw `expo run:ios`. The wrapper points generated `packages/mobile/ios/build` at a shared cache under `~/Library/Caches/boardsesh/xcode/packages-mobile-ios/build`, so separate git worktrees reuse the same Xcode build products. Override with `BOARDSESH_IOS_BUILD_CACHE_DIR=/path/to/cache` only when deliberately isolating a cache. Do not pass `--no-build-cache`; it clears iOS derived data and defeats the shared-cache workflow.
 
 ### OTA preview distribution (EAS Update)
 
