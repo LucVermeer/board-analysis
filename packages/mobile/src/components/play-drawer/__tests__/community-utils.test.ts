@@ -33,6 +33,11 @@ describe('buildAngleGradeBars', () => {
     expect(bars[0].gradeName).toBe('6C');
   });
 
+  it('uses combined labels when requested', () => {
+    const bars = buildAngleGradeBars([makeEntry({ displayDifficulty: 21 })], 'both');
+    expect(bars[0].gradeName).toBe('V5+ / 6C+');
+  });
+
   it('keeps only the latest snapshot per angle', () => {
     const bars = buildAngleGradeBars(
       [

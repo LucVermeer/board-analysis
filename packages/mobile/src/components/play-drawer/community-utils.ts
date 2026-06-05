@@ -1,5 +1,5 @@
 import type { ClimbStatsHistoryEntry } from '@boardsesh/graphql/operations';
-import type { GradeDisplayFormat } from '@boardsesh/play-view';
+import { formatGrade, type GradeDisplayFormat } from '@boardsesh/play-view';
 import { BOULDER_GRADES, type BoulderGrade } from '@boardsesh/board-constants/boulder-grade-mapping';
 import { getGradeColor, DEFAULT_GRADE_COLOR } from '@boardsesh/board-constants/grade-colors';
 
@@ -36,9 +36,7 @@ export function buildAngleGradeBars(
     .map(([angle, { difficulty }]) => {
       const grade = GRADE_BY_ID.get(Math.round(difficulty));
       const gradeName = grade
-        ? gradeFormat === 'font'
-          ? grade.font_grade.toUpperCase()
-          : grade.v_grade
+        ? (formatGrade(grade.difficulty_name, gradeFormat) ?? grade.v_grade)
         : String(Math.round(difficulty));
       return {
         angle,
@@ -83,13 +81,12 @@ export function buildAngleStatsMap(
   for (const [angle, entry] of latestByAngle) {
     const difficulty = entry.displayDifficulty ?? entry.difficultyAverage;
     const grade = difficulty == null ? undefined : GRADE_BY_ID.get(Math.round(difficulty));
-    const gradeName = grade
-      ? gradeFormat === 'font'
-        ? grade.font_grade.toUpperCase()
-        : grade.v_grade
-      : difficulty == null
-        ? null
-        : String(Math.round(difficulty));
+    let gradeName: string | null = null;
+    if (grade) {
+      gradeName = formatGrade(grade.difficulty_name, gradeFormat) ?? grade.v_grade;
+    } else if (difficulty != null) {
+      gradeName = String(Math.round(difficulty));
+    }
     result.set(angle, {
       gradeName,
       color: getGradeColor(grade?.difficulty_name) ?? DEFAULT_GRADE_COLOR,

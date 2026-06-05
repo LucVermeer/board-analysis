@@ -11,6 +11,7 @@ import { gradeBadgeColor } from '../../you/profile-chart-colors';
 import { brandColors } from '../../../theme/colors';
 import { spacing, borderRadius } from '../../../theme/tokens';
 import { hapticSuccess } from '../../../lib/haptics';
+import { useGradeFormat } from '../../../hooks/use-grade-format';
 import { SessionGradeChart } from './SessionGradeChart';
 import { SessionTimer } from './SessionTimer';
 
@@ -20,6 +21,7 @@ export type HardestSend = {
   userId?: string;
   displayName?: string | null;
   avatarUrl?: string | null;
+  difficultyId?: number | null;
   grade: string;
   climbName?: string | null;
 };
@@ -52,6 +54,7 @@ export function SessionAnalytics({
 }: SessionAnalyticsProps) {
   const { t } = useTranslation('session');
   const { systemColors } = useTheme();
+  const { formatGrade, formatGradeByDifficultyId } = useGradeFormat();
 
   // Celebrate a fresh hardest grade once. Seeded with the initial grade so the
   // first render (which may already carry a hardest) doesn't buzz; only a later
@@ -108,7 +111,7 @@ export function SessionAnalytics({
               {send.userId ? <Avatar uri={send.avatarUrl} name={send.displayName} size={28} /> : null}
               {/* Grade as bold coloured text — no pill, per the chip cleanup. */}
               <Text variant="title3" color={gradeBadgeColor(send.grade)} style={styles.hardestGrade}>
-                {send.grade}
+                {formatGradeByDifficultyId(send.difficultyId) ?? formatGrade(send.grade) ?? send.grade}
               </Text>
               {send.climbName ? (
                 <Text variant="body" numberOfLines={1} style={styles.hardestName}>

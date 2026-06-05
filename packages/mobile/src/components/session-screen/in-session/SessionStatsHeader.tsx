@@ -6,6 +6,7 @@ import { Icon } from '../../Icon';
 import { useTheme } from '../../../providers/theme-provider';
 import { brandColors } from '../../../theme/colors';
 import { spacing, borderRadius } from '../../../theme/tokens';
+import { useGradeFormat } from '../../../hooks/use-grade-format';
 import { SessionTimer } from './SessionTimer';
 import { GradeDistributionChart } from './GradeDistributionChart';
 
@@ -21,6 +22,7 @@ type SessionStatsHeaderProps = {
 export function SessionStatsHeader({ summary }: SessionStatsHeaderProps) {
   const { t } = useTranslation('session');
   const { systemColors } = useTheme();
+  const { formatGrade } = useGradeFormat();
 
   const sends = summary?.totalSends ?? 0;
   const attempts = summary?.totalAttempts ?? 0;
@@ -62,7 +64,7 @@ export function SessionStatsHeader({ summary }: SessionStatsHeaderProps) {
           <View style={styles.hardestRow}>
             <View style={[styles.gradeBadge, { backgroundColor: brandColors.primary }]}>
               <Text variant="subheadline" color="#FFFFFF" style={styles.gradeBadgeText}>
-                {hardest.grade}
+                {formatGrade(hardest.grade) ?? hardest.grade}
               </Text>
             </View>
             <Text variant="body" numberOfLines={1} style={styles.hardestName}>

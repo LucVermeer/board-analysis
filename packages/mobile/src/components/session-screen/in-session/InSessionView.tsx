@@ -32,6 +32,7 @@ import { useSessionDetail, useSessionSummary } from '../../../lib/graphql/hooks'
 import { climbToQueueItem } from '../../../lib/climb-to-queue-item';
 import { getBoardConfigForPlaylist } from '../../../lib/playlists/board-details-for-playlist';
 import { navigateToSessionClimb } from '../../../lib/session-tick-mapping';
+import { useGradeFormat } from '../../../hooks/use-grade-format';
 import { brandColors, withAlpha } from '../../../theme/colors';
 import { iosSystemColors } from '../../../theme/ios-colors';
 import { springs } from '../../../theme/animations';
@@ -111,6 +112,7 @@ type SessionHistoryRowProps = {
 function SessionHistoryRow({ tick, status, participant, onPress }: SessionHistoryRowProps) {
   const { t } = useTranslation('session');
   const { systemColors } = useTheme();
+  const { formatGrade, formatGradeByDifficultyId } = useGradeFormat();
   const meta = statusMeta(status);
   let statusLabel: string;
   switch (status) {
@@ -132,7 +134,9 @@ function SessionHistoryRow({ tick, status, participant, onPress }: SessionHistor
     formatTickRelativeTime(tick.climbedAt),
   ].filter((part): part is string => !!part);
   const subtitle = subtitleParts.join(' · ');
-  const gradeLabel = tick.difficultyName ?? null;
+  const rawGradeLabel = tick.difficultyName ?? null;
+  const gradeLabel = formatGradeByDifficultyId(tick.difficulty) ?? formatGrade(rawGradeLabel) ?? rawGradeLabel;
+  const gradeColor = gradeLabel ? gradeBadgeColor(rawGradeLabel ?? gradeLabel) : undefined;
 
   const handlePress = () => {
     hapticSelection();
@@ -175,13 +179,9 @@ function SessionHistoryRow({ tick, status, participant, onPress }: SessionHistor
                 {subtitle}
               </Text>
             </View>
-            {gradeLabel ? (
-              <View style={[styles.historyGradePill, { backgroundColor: gradeBadgeColor(gradeLabel) }]}>
-                <Text
-                  variant="caption1"
-                  color={getGradeTextColor(gradeBadgeColor(gradeLabel))}
-                  style={styles.historyGradeText}
-                >
+            {gradeLabel && gradeColor ? (
+              <View style={[styles.historyGradePill, { backgroundColor: gradeColor }]}>
+                <Text variant="caption1" color={getGradeTextColor(gradeColor)} style={styles.historyGradeText}>
                   {gradeLabel}
                 </Text>
               </View>
@@ -257,15 +257,17 @@ export function InSessionView({ translateY, screenHeight }: InSessionViewProps) 
     if (!isMultiUser) {
       if (!hardestGrade) return [];
       let bestName: string | null = null;
+      let bestDifficultyId: number | null = null;
       let bestDifficulty = -Infinity;
       for (const tick of sendTicks) {
         const difficulty = tick.difficulty ?? -Infinity;
         if (difficulty > bestDifficulty) {
           bestDifficulty = difficulty;
+          bestDifficultyId = tick.difficulty ?? null;
           bestName = tick.climbName ?? null;
         }
       }
-      return [{ grade: hardestGrade, climbName: bestName }];
+      return [{ difficultyId: bestDifficultyId, grade: hardestGrade, climbName: bestName }];
     }
     const bestByUser = new Map<string, SessionDetailTick>();
     for (const tick of sendTicks) {
@@ -281,6 +283,7 @@ export function InSessionView({ translateY, screenHeight }: InSessionViewProps) 
           userId,
           displayName: participant?.displayName ?? null,
           avatarUrl: participant?.avatarUrl ?? null,
+          difficultyId: tick.difficulty ?? null,
           grade: tick.difficultyName ?? '',
           climbName: tick.climbName,
         };

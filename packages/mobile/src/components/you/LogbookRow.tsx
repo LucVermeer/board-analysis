@@ -13,6 +13,7 @@ import { brandColors } from '../../theme/colors';
 import { iosSystemColors } from '../../theme/ios-colors';
 import { spacing, borderRadius } from '../../theme/tokens';
 import { useTheme } from '../../providers/theme-provider';
+import { useGradeFormat } from '../../hooks/use-grade-format';
 
 type LogbookRowProps = {
   ascent: AscentFeedItem;
@@ -28,9 +29,15 @@ const STATUS_META: Record<AscentFeedItem['status'], { icon: IconName; color: str
 export const LogbookRow = memo(function LogbookRow({ ascent, onPress }: LogbookRowProps) {
   const { t } = useTranslation('you');
   const { systemColors } = useTheme();
+  const { formatGrade, formatGradeByDifficultyId } = useGradeFormat();
 
   const meta = STATUS_META[ascent.status];
-  const gradeLabel = ascent.difficultyName ?? ascent.consensusDifficultyName;
+  const rawGradeLabel = ascent.difficultyName ?? ascent.consensusDifficultyName;
+  const gradeLabel =
+    formatGradeByDifficultyId(ascent.difficulty ?? ascent.consensusDifficulty) ??
+    formatGrade(rawGradeLabel) ??
+    rawGradeLabel;
+  const gradeColor = gradeLabel ? gradeBadgeColor(rawGradeLabel ?? gradeLabel) : undefined;
   const layoutName = getLayoutDisplayName(ascent.boardType, ascent.layoutId);
   const subtitle = `${formatTickRelativeTime(ascent.climbedAt)} · ${ascent.angle}° · ${layoutName}`;
 
@@ -47,9 +54,9 @@ export const LogbookRow = memo(function LogbookRow({ ascent, onPress }: LogbookR
       }
       trailing={
         <View style={styles.trailing}>
-          {gradeLabel ? (
-            <View style={[styles.gradePill, { backgroundColor: gradeBadgeColor(gradeLabel) }]}>
-              <Text variant="caption1" color={getGradeTextColor(gradeBadgeColor(gradeLabel))} style={styles.gradeText}>
+          {gradeLabel && gradeColor ? (
+            <View style={[styles.gradePill, { backgroundColor: gradeColor }]}>
+              <Text variant="caption1" color={getGradeTextColor(gradeColor)} style={styles.gradeText}>
                 {gradeLabel}
               </Text>
             </View>

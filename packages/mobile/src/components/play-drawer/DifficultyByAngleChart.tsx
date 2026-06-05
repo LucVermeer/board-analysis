@@ -65,7 +65,7 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.sm,
   },
   gradeName: {
-    width: 44,
+    width: 84,
     textAlign: 'right',
   },
 });

@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import type { SessionGradeDistributionItem } from '@boardsesh/shared-schema';
 import { StackedBarChart } from '../../you/YouCharts';
 import { buildSessionGradeBars } from '../../you/profile-chart-colors';
+import { useGradeFormat } from '../../../hooks/use-grade-format';
 
 type SessionGradeChartProps = {
   distribution: SessionGradeDistributionItem[];
@@ -15,7 +16,8 @@ type SessionGradeChartProps = {
  * logged yet.
  */
 export function SessionGradeChart({ distribution }: SessionGradeChartProps) {
-  const bars = useMemo(() => buildSessionGradeBars(distribution), [distribution]);
+  const { formatGrade } = useGradeFormat();
+  const bars = useMemo(() => buildSessionGradeBars(distribution, formatGrade), [distribution, formatGrade]);
 
   if (!bars) return null;
 

@@ -2,6 +2,7 @@ import { StyleSheet, View } from 'react-native';
 import type { SessionGradeCount } from '@boardsesh/shared-schema';
 import { Text } from '../../Text';
 import { useTheme } from '../../../providers/theme-provider';
+import { useGradeFormat } from '../../../hooks/use-grade-format';
 import { spacing, borderRadius } from '../../../theme/tokens';
 
 type GradeDistributionChartProps = {
@@ -30,6 +31,7 @@ const gradeColor = (index: number): string => GRADE_COLORS[index % GRADE_COLORS.
 
 export function GradeDistributionChart({ distribution }: GradeDistributionChartProps) {
   const { systemColors } = useTheme();
+  const { formatGrade } = useGradeFormat();
   const maxCount = Math.max(...distribution.map((item) => item.count), 1);
 
   if (distribution.length === 0) return null;
@@ -39,7 +41,7 @@ export function GradeDistributionChart({ distribution }: GradeDistributionChartP
       {distribution.map((item, index) => (
         <View key={item.grade} style={styles.row}>
           <Text variant="footnote" color={systemColors.secondaryLabel} style={styles.label}>
-            {item.grade}
+            {formatGrade(item.grade) ?? item.grade}
           </Text>
           <View style={[styles.barTrack, { backgroundColor: systemColors.fill }]}>
             <View
@@ -71,7 +73,7 @@ const styles = StyleSheet.create({
     gap: spacing[2],
   },
   label: {
-    width: 40,
+    width: 76,
     textAlign: 'right',
   },
   barTrack: {

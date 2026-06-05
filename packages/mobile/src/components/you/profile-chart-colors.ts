@@ -8,6 +8,8 @@ import type { RawBar, RawBarSegment } from '@boardsesh/profile-stats';
 import type { SessionGradeDistributionItem } from '@boardsesh/shared-schema';
 import { brandColors, withAlpha } from '../../theme/colors';
 
+type FormatGrade = (difficulty: string | null | undefined) => string | null;
+
 /**
  * A stacked-bar segment that may carry its own colour, overriding the chart's
  * `colorBy` resolution. Used for session grade bars (vivid grade colour for
@@ -117,17 +119,21 @@ export function gradeSortValue(gradeLabel: string): number {
  * when the whole distribution is empty. Pass straight to `StackedBarChart` (the
  * segment carries an explicit colour, so `colorBy` is ignored for these bars).
  */
-export function buildSessionGradeBars(distribution: SessionGradeDistributionItem[]): ColoredBar[] | null {
+export function buildSessionGradeBars(
+  distribution: SessionGradeDistributionItem[],
+  formatGrade?: FormatGrade,
+): ColoredBar[] | null {
   const bars: ColoredBar[] = [];
   // Order the X-axis easy→hard regardless of the order the backend returns.
   const ordered = [...distribution].sort((a, b) => gradeSortValue(a.grade) - gradeSortValue(b.grade));
   for (const item of ordered) {
     const total = item.flash + item.send;
     if (total <= 0) continue;
+    const label = formatGrade?.(item.grade) ?? item.grade;
     bars.push({
       key: item.grade,
-      label: item.grade,
-      segments: [{ value: total, key: item.grade, label: item.grade, color: gradeBadgeColor(item.grade) }],
+      label,
+      segments: [{ value: total, key: item.grade, label, color: gradeBadgeColor(item.grade) }],
     });
   }
   return bars.length > 0 ? bars : null;

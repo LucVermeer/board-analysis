@@ -17,6 +17,7 @@ import { useQueue } from '../../../src/providers/queue-provider';
 import { getBoardRenderData } from '../../../src/lib/board-details';
 import { hapticSuccess } from '../../../src/lib/haptics';
 import { track } from '../../../src/lib/analytics';
+import { useGradeFormat } from '../../../src/hooks/use-grade-format';
 import { brandColors } from '../../../src/theme/colors';
 import { spacing } from '../../../src/theme/tokens';
 
@@ -51,6 +52,7 @@ export default function ClimbDetail() {
   const { data: climb, isLoading } = useClimb(climbVariables);
   const toggleFavorite = useToggleFavorite();
   const { sessionId, addToQueue } = useQueue();
+  const { formatGrade } = useGradeFormat();
   const [showLogAscent, setShowLogAscent] = useState(false);
 
   const boardDimensions = useMemo(() => {
@@ -67,8 +69,8 @@ export default function ClimbDetail() {
   const gradeInfo = useMemo(() => {
     if (!climb) return null;
     const color = getGradeColor(climb.difficulty) ?? DEFAULT_GRADE_COLOR;
-    return { name: climb.difficulty, color };
-  }, [climb]);
+    return { name: formatGrade(climb.difficulty) ?? climb.difficulty, color };
+  }, [climb, formatGrade]);
 
   const viewedClimbUuid = climb?.uuid;
   useEffect(() => {

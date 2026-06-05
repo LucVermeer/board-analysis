@@ -10,6 +10,7 @@ import { ListRow } from '../ListRow';
 import { Avatar } from '../Avatar';
 import { FeedSocialRow } from '../you/FeedSocialRow';
 import { gradeBadgeColor } from '../you/profile-chart-colors';
+import { useGradeFormat } from '../../hooks/use-grade-format';
 import { brandColors } from '../../theme/colors';
 import { iosSystemColors } from '../../theme/ios-colors';
 import { spacing, borderRadius } from '../../theme/tokens';
@@ -73,11 +74,15 @@ export const SessionTickRow = memo(function SessionTickRow({
   onOpenComments,
 }: SessionTickRowProps) {
   const { t } = useTranslation('session');
+  const { formatGrade, formatGradeByDifficultyId } = useGradeFormat();
 
   const meta = statusMeta(tick.status);
   const attemptText = formatAttemptText(tick, t);
   const subtitleParts = [attemptText, tick.comment ?? null].filter((part): part is string => !!part);
   const subtitle = subtitleParts.length > 0 ? subtitleParts.join(' · ') : undefined;
+  const gradeLabel =
+    formatGradeByDifficultyId(tick.difficulty) ?? formatGrade(tick.difficultyName) ?? tick.difficultyName;
+  const gradeColor = gradeLabel ? gradeBadgeColor(tick.difficultyName ?? gradeLabel) : undefined;
 
   return (
     <ListRow
@@ -95,14 +100,10 @@ export const SessionTickRow = memo(function SessionTickRow({
       }
       trailing={
         <View style={styles.trailing}>
-          {tick.difficultyName ? (
-            <View style={[styles.gradePill, { backgroundColor: gradeBadgeColor(tick.difficultyName) }]}>
-              <Text
-                variant="caption1"
-                color={getGradeTextColor(gradeBadgeColor(tick.difficultyName))}
-                style={styles.gradeText}
-              >
-                {tick.difficultyName}
+          {gradeLabel && gradeColor ? (
+            <View style={[styles.gradePill, { backgroundColor: gradeColor }]}>
+              <Text variant="caption1" color={getGradeTextColor(gradeColor)} style={styles.gradeText}>
+                {gradeLabel}
               </Text>
             </View>
           ) : null}
