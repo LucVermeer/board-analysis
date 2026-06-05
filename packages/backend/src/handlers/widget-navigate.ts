@@ -1,11 +1,9 @@
 import type { IncomingMessage, ServerResponse } from 'http';
-import { eq } from 'drizzle-orm';
-import { activityPushTokens } from '@boardsesh/db/schema/app';
-import { db } from '../db/client';
 import { applyCorsHeaders } from './cors';
 import { roomManager } from '../services/room-manager';
 import { pubsub } from '../pubsub/index';
 import { navigateToQueueItem } from '../services/queue-navigation';
+import { authenticateWidget, type WidgetAuthResult } from './widget-auth';
 import {
   trackLiveActivityWidgetNavigation,
   trackLiveActivityWidgetNavigationAttributionGap,
@@ -132,12 +130,6 @@ function ensurePrunerRunning(): void {
   if (typeof pruneIntervalHandle.unref === 'function') pruneIntervalHandle.unref();
 }
 
-type AuthResult =
-  | { kind: 'ok'; userId: string | null }
-  | { kind: 'missing' } // No bearer at all → 401
-  | { kind: 'unknown' } // Bearer present but no row matches the token → 401
-  | { kind: 'wrong-session'; boundSessionId: string; userId: string | null }; // Token exists but bound to a different session → 410
-
 type WidgetNavigationAnalyticsEvent = Parameters<typeof trackLiveActivityWidgetNavigation>[0];
 type WidgetNavigationAnalyticsPayload = Omit<WidgetNavigationAnalyticsEvent, 'userId'>;
 
@@ -151,34 +143,6 @@ function trackWidgetNavigation(userId: string | null, event: WidgetNavigationAna
     ...event,
     reason: 'missing_user_id',
   });
-}
-
-/**
- * Verify that the bearer token in the Authorization header is registered to
- * `sessionId` in `activity_push_tokens`. This is the auth contract the iOS
- * widget honors: the widget reads its APNs Live Activity push token (already
- * registered via `registerActivityPushToken`) and sends it as a Bearer header.
- *
- * Distinguishes "token unknown" (genuinely bogus → 401) from "token bound to
- * a different session" (need to re-register → 410). iOS uses the 410 hint to
- * fire a fresh `registerActivityPushToken` mutation.
- */
-async function authenticateWidget(authHeader: string | undefined, sessionId: string): Promise<AuthResult> {
-  if (!authHeader || !authHeader.startsWith('Bearer ')) return { kind: 'missing' };
-  const bearer = authHeader.slice(7).trim();
-  if (!bearer) return { kind: 'missing' };
-
-  const rows = await db
-    .select({ sessionId: activityPushTokens.sessionId, userId: activityPushTokens.userId })
-    .from(activityPushTokens)
-    .where(eq(activityPushTokens.token, bearer))
-    .limit(1);
-
-  if (rows.length === 0) return { kind: 'unknown' };
-  const boundSessionId = rows[0].sessionId;
-  const userId = rows[0].userId ?? null;
-  if (boundSessionId !== sessionId) return { kind: 'wrong-session', boundSessionId, userId };
-  return { kind: 'ok', userId };
 }
 
 /**
@@ -246,7 +210,7 @@ export async function handleWidgetNavigate(req: IncomingMessage, res: ServerResp
   const authHeader = req.headers['authorization'];
   const authHeaderValue = Array.isArray(authHeader) ? authHeader[0] : authHeader;
 
-  let authResult: AuthResult;
+  let authResult: WidgetAuthResult;
   try {
     authResult = await authenticateWidget(authHeaderValue, sessionId);
   } catch (error) {

@@ -131,7 +131,23 @@ private struct WallControlStatus: View {
                     : Color.white.opacity(0.06)
             )
             .clipShape(RoundedRectangle(cornerRadius: 8))
-            .accessibilityLabel(wallControl.navigationAllowed ? "Wall driver" : "Not wall driver")
+            .accessibilityLabel(wallControl.navigationAllowed ? "Wall driver" : "Take wall control")
+    }
+}
+
+@available(iOS 17.0, *)
+private struct WallControlButton: View {
+    let wallControl: WallControlViewState
+
+    var body: some View {
+        if wallControl.isPartySession && !wallControl.navigationAllowed {
+            Button(intent: TakeControlIntent()) {
+                WallControlStatus(wallControl: wallControl)
+            }
+            .buttonStyle(.plain)
+        } else {
+            WallControlStatus(wallControl: wallControl)
+        }
     }
 }
 
@@ -157,7 +173,7 @@ private struct NavigationControlsView: View {
             .buttonStyle(.plain)
             .disabled(!previousEnabled)
 
-            WallControlStatus(wallControl: wallControl)
+            WallControlButton(wallControl: wallControl)
 
             Button(intent: NextClimbIntent()) {
                 NavigationButtonLabel(

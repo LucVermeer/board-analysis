@@ -557,12 +557,22 @@ public class LiveActivityModule: Module {
             components.fragment = nil
             return components.url?.absoluteString
         }()
+        let widgetTakeControlUrl: String? = {
+            guard let graphqlUrl, var components = URLComponents(string: graphqlUrl) else { return nil }
+            components.path = "/api/widget/take-control"
+            components.query = nil
+            components.fragment = nil
+            return components.url?.absoluteString
+        }()
 
         if let defaults = SharedConstants.sharedDefaults {
             defaults.set(sessionId, forKey: SharedConstants.sessionIdKey)
             defaults.set(serverUrl, forKey: SharedConstants.serverUrlKey)
             if let widgetNavigateUrl {
                 defaults.set(widgetNavigateUrl, forKey: SharedConstants.widgetNavigateUrlKey)
+            }
+            if let widgetTakeControlUrl {
+                defaults.set(widgetTakeControlUrl, forKey: SharedConstants.widgetTakeControlUrlKey)
             }
             defaults.set(boardName, forKey: SharedConstants.boardNameKey)
             defaults.set(layoutId, forKey: SharedConstants.layoutIdKey)
@@ -689,6 +699,7 @@ public class LiveActivityModule: Module {
             defaults.removeObject(forKey: SharedConstants.sessionIdKey)
             defaults.removeObject(forKey: SharedConstants.pendingActionKey)
             defaults.removeObject(forKey: SharedConstants.widgetNavigateUrlKey)
+            defaults.removeObject(forKey: SharedConstants.widgetTakeControlUrlKey)
             defaults.removeObject(forKey: SharedConstants.authTokenKey)
             defaults.removeObject(forKey: SharedConstants.livePushTokenKey)
             defaults.removeObject(forKey: SharedConstants.widgetNavigationAllowedKey)

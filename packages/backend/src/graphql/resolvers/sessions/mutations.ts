@@ -32,7 +32,7 @@ import { eq, inArray } from 'drizzle-orm';
 import { generateSessionSummary } from './session-summary';
 import { adoptRecentTicksForSession, extractBoardType } from '../../../jobs/inferred-session-builder';
 import { endLiveActivity } from '../../../services/apns';
-import { setCurrentClimbAndPublish } from '../../../services/queue-navigation';
+import { takeSessionDriverControl } from '../../../services/session-driver-control';
 import { buildSessionPayload } from './helpers';
 
 /**
@@ -413,45 +413,12 @@ export const sessionMutations = {
     }
     const participantId = ctx.participantId;
 
-    // Broadcast the climb to the wall BEFORE swapping the driver. If
-    // setCurrentClimbAndPublish throws (e.g. Redis VersionConflict over
-    // MAX_RETRIES, or any other failure inside the queue-update path), the
-    // driver hasn't moved yet — subscribers don't end up in the wedged
-    // "B is driving, but the wall still shows A's previous climb" state
-    // that the old "driver first, then climb" ordering produced. The atomic
-    // swap below is the moment the driver actually flips for everyone.
-    if (climb) {
-      await setCurrentClimbAndPublish(
-        sessionId,
-        climb,
-        true, // takeControl always treats the climb as a queue-add candidate (matches the old setCurrentClimb+shouldAddToQueue:true path)
-        roomManager,
-        pubsub,
-        ctx.connectionId || null,
-        null,
-      );
-    }
-
-    // Atomic swap so the previous-vs-new comparison can't race a concurrent
-    // takeControl from another participant. The room manager returns the
-    // previous driver from a single Redis GETSET in multi-instance mode (and
-    // the in-memory shadow in single-instance), which we use to decide
-    // whether to publish DriverChanged.
-    const previousDriverParticipantId = await roomManager.setSessionDriverAndReturnPrevious(sessionId, participantId);
-
-    // Broadcast DriverChanged only on transitions. Self-claim while already
-    // driving is a no-op for the wire (avoids redundant subscriber work and
-    // keeps the time series clean for the Phase 5 instrumentation). The
-    // event carries the previous driver so subscribers can render
-    // "X took the wall from Y" toasts without local bookkeeping (Phase 5
-    // `previousDriver` analytics property).
-    if (previousDriverParticipantId !== participantId) {
-      pubsub.publishSessionEvent(sessionId, {
-        __typename: 'DriverChanged',
-        driverParticipantId: participantId,
-        previousDriverParticipantId,
-      });
-    }
+    await takeSessionDriverControl({
+      sessionId,
+      participantId,
+      climb,
+      originConnectionId: ctx.connectionId || null,
+    });
 
     // We already know the new driver from the atomic swap above; everything
     // else fans out via the helper.

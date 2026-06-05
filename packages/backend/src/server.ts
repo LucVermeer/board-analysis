@@ -15,6 +15,7 @@ import { handleOcrTestDataUpload } from './handlers/ocr-test-data';
 import { handlePosthogProxy } from './handlers/posthog';
 import { handleUserDataExport, handleUserDataExportDownload } from './handlers/user-data-export';
 import { handleWidgetNavigate } from './handlers/widget-navigate';
+import { handleWidgetTakeControl } from './handlers/widget-take-control';
 import {
   handleNativeAuthCredentials,
   handleNativeAuthExchange,
@@ -329,6 +330,10 @@ export async function startServer(): Promise<ServerResources> {
         await handleWidgetNavigate(req, res);
         return;
       }
+      if (pathname === '/api/widget/take-control' && (req.method === 'POST' || req.method === 'OPTIONS')) {
+        await handleWidgetTakeControl(req, res);
+        return;
+      }
 
       // APNs metrics (debugging aid, gated on APNS_STATS_SECRET)
       if (pathname === '/api/internal/apns-stats' && (req.method === 'GET' || req.method === 'OPTIONS')) {
@@ -415,6 +420,7 @@ export async function startServer(): Promise<ServerResources> {
     logger.info(`  PostHog proxy: ${httpScheme}://0.0.0.0:${PORT}/api/posthog/*`);
     logger.info(`  User data export: ${httpScheme}://0.0.0.0:${PORT}/api/user-data-export`);
     logger.info(`  Widget navigate: ${httpScheme}://0.0.0.0:${PORT}/api/widget/navigate`);
+    logger.info(`  Widget take-control: ${httpScheme}://0.0.0.0:${PORT}/api/widget/take-control`);
     logger.info(`  Native auth exchange: ${httpScheme}://0.0.0.0:${PORT}/auth/native/exchange`);
     logger.info(`  Native auth credentials: ${httpScheme}://0.0.0.0:${PORT}/auth/native/credentials`);
     logger.info(`  Native auth refresh: ${httpScheme}://0.0.0.0:${PORT}/auth/native/refresh`);

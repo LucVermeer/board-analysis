@@ -12,7 +12,9 @@ Two BLE layers exist in the codebase. The **React Native layer** (`packages/mobi
 
 - Single native `URLSessionWebSocketTask` owned by `SessionWebSocketManager`, shared between webview and Live Activity
 - Widget shows current climb name, grade, angle, queue position, and board thumbnail
-- Next/Previous buttons navigate the queue optimistically (App Group UserDefaults) and send `setCurrentClimb` mutation via native WS
+- Widget shows whether this device currently owns wall control. In party sessions, non-drivers see the lightbulb off and the Previous/Next controls disabled.
+- Next/Previous buttons navigate the queue optimistically (App Group UserDefaults) and send `setCurrentClimb` mutation via native WS, but only after local driver state allows navigation. The backend `/api/widget/navigate` endpoint still rejects non-driver requests.
+- Non-drivers can tap the widget lightbulb to POST `/api/widget/take-control` with the registered Live Activity bearer token. The endpoint requires the token row to have a bound `userId`, claims that participant as driver, and then the widget enables navigation after the successful response.
 - All queue delta events (FullSync, ItemAdded, ItemRemoved, CurrentClimbChanged, Reordered) are processed natively and persisted to App Group
 - Message buffering when webview is backgrounded, with flush or resync on foreground
 - Rust board renderer (`packages/board-renderer-wasm/`) compiles to WASM, used in both Node.js backend (server-rendered thumbnails) and web frontend (Web Worker). Already has `HoldData` types, frame string parsing (`p<hold_id>r<state_code>`), and Aurora hold state color mapping
@@ -35,6 +37,17 @@ The widget extension **cannot** hold a CoreBluetooth connection (extensions have
 The flow for lock-screen LED control:
 
 ```
+Widget (lightbulb take-control tap)
+  │ system invokes LiveActivityIntent
+  ▼
+Main app process (background-launched if needed)
+  │ LiveActivityIntent.perform() runs here, not in the widget
+  │ POSTs to /api/widget/take-control with the registered Live Activity token
+  │ on success, saves local wall-control state in App Group UserDefaults
+  │ updates ActivityKit so the lightbulb turns on and navigation enables
+  ▼
+Next/Previous taps are now allowed on this device
+
 Widget (Next/Previous tap)
   │ system invokes LiveActivityIntent
   ▼

@@ -590,6 +590,13 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
             components.fragment = nil
             return components.url?.absoluteString
         }()
+        let widgetTakeControlUrl: String? = {
+            guard let graphqlUrl, var components = URLComponents(string: graphqlUrl) else { return nil }
+            components.path = "/api/widget/take-control"
+            components.query = nil
+            components.fragment = nil
+            return components.url?.absoluteString
+        }()
 
         // Store board details in shared UserDefaults for App Intents
         // and thumbnail URL construction. Auth + push tokens go through
@@ -600,6 +607,9 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
             defaults.set(serverUrl, forKey: SharedConstants.serverUrlKey)
             if let widgetNavigateUrl {
                 defaults.set(widgetNavigateUrl, forKey: SharedConstants.widgetNavigateUrlKey)
+            }
+            if let widgetTakeControlUrl {
+                defaults.set(widgetTakeControlUrl, forKey: SharedConstants.widgetTakeControlUrlKey)
             }
             defaults.set(boardName, forKey: SharedConstants.boardNameKey)
             defaults.set(layoutId, forKey: SharedConstants.layoutIdKey)
@@ -756,6 +766,7 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
             defaults.removeObject(forKey: SharedConstants.sessionIdKey)
             defaults.removeObject(forKey: SharedConstants.pendingActionKey)
             defaults.removeObject(forKey: SharedConstants.widgetNavigateUrlKey)
+            defaults.removeObject(forKey: SharedConstants.widgetTakeControlUrlKey)
             defaults.removeObject(forKey: SharedConstants.widgetNavigationAllowedKey)
             defaults.removeObject(forKey: SharedConstants.partySessionKey)
             // Cover earlier builds that wrote tokens to UserDefaults so

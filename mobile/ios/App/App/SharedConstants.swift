@@ -18,6 +18,9 @@ enum SharedConstants {
     /// taps here. Distinct from `serverUrlKey` because the backend lives on a
     /// different host than the web app.
     static let widgetNavigateUrlKey = "bs_widget_navigate_url"
+    /// Fully-qualified backend `/api/widget/take-control` URL. The widget
+    /// POSTs non-driver lightbulb taps here before enabling local navigation.
+    static let widgetTakeControlUrlKey = "bs_widget_take_control_url"
     static let boardNameKey = "bs_board_name"
     static let layoutIdKey = "bs_layout_id"
     static let sizeIdKey = "bs_size_id"
