@@ -47,7 +47,7 @@ import { usePendingUpdateCleanup } from './hooks/use-pending-update-cleanup';
 import { useMutationGuard } from './hooks/use-mutation-guard';
 import { useOfflineQueueBuffer } from './hooks/use-offline-queue-buffer';
 import { useOfflineReconciliation } from './hooks/use-offline-reconciliation';
-import { emitWallConfirm } from '../board-bluetooth-control/wall-confirm-bus';
+import { emitWallConfirm } from '@boardsesh/play-view';
 import { useQueueAddValidator } from '../board-lock/use-queue-add-validator';
 import { track } from '@/app/lib/analytics';
 import {

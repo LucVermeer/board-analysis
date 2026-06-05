@@ -20,7 +20,7 @@ import { DevicePickerDialog } from './device-picker-dialog';
 import { BoardConfigMismatchDialog } from './board-config-mismatch-dialog';
 import { AutoConnectHandler } from './auto-connect-handler';
 import { parseSerialNumber } from './bluetooth-aurora';
-import { emitWallConfirm } from './wall-confirm-bus';
+import { emitWallConfirm } from '@boardsesh/play-view';
 import { usePersistentSessionActions, usePersistentSessionState } from '@/app/components/persistent-session';
 import { useSnackbar } from '../providers/snackbar-provider';
 import { useWsAuthToken } from '@/app/hooks/use-ws-auth-token';

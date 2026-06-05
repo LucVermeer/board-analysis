@@ -1,3 +1,12 @@
+/**
+ * Shared controller for the wall-confirm fallback flow used by web and mobile.
+ *
+ * When a user claims the wall, both platforms wait briefly for a
+ * WallConfirmedClimb event. If no confirm arrives, this controller decides
+ * whether to skip fallback, auto-connect to the last board, or open the board
+ * picker. Platform-specific BLE, native-shell, and event-bus dependencies are
+ * injected so the timer/listener logic stays in one place.
+ */
 export const WALL_CONFIRM_TIMEOUT_MS = 2000;
 
 export type WallConfirmMode = 'party' | 'solo';
