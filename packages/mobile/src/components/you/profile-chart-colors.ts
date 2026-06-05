@@ -7,6 +7,9 @@ import {
 import type { RawBar, RawBarSegment } from '@boardsesh/profile-stats';
 import type { SessionGradeDistributionItem } from '@boardsesh/shared-schema';
 import { brandColors, withAlpha } from '../../theme/colors';
+import { gradeSortValue } from './grade-sort-value';
+
+export { gradeSortValue } from './grade-sort-value';
 
 type FormatGrade = (difficulty: string | null | undefined) => string | null;
 
@@ -92,24 +95,6 @@ export function flashRedpointColor(seriesKey: 'flash' | 'redpoint'): string {
  */
 export function gradeBadgeColor(gradeLabel: string | null | undefined): string {
   return getGradeColor(gradeLabel) ?? DEFAULT_GRADE_COLOR;
-}
-
-/**
- * Sortable rank for a grade label so chart X-axes read easy→hard. Extracts the
- * V-number when present (combined Aurora labels always carry one), else maps a
- * font grade; unknown labels sort last.
- */
-export function gradeSortValue(gradeLabel: string): number {
-  const vMatch = gradeLabel.match(/V(\d+)/i);
-  if (vMatch) return Number(vMatch[1]);
-  const fontMatch = gradeLabel.match(/(\d)([abc])(\+?)/i);
-  if (fontMatch) {
-    const number = Number(fontMatch[1]);
-    const letter = fontMatch[2].toLowerCase().charCodeAt(0) - 96; // a=1, b=2, c=3
-    // Offset past the V range so a pure-font session still sorts ascending.
-    return 100 + number * 10 + letter * 2 + (fontMatch[3] ? 1 : 0);
-  }
-  return Number.MAX_SAFE_INTEGER;
 }
 
 /**

@@ -14,17 +14,7 @@ import { hapticSuccess } from '../../../lib/haptics';
 import { useGradeFormat } from '../../../hooks/use-grade-format';
 import { SessionGradeChart } from './SessionGradeChart';
 import { SessionTimer } from './SessionTimer';
-
-/** One climber's hardest send. `userId` set only for multi-climber parties (so
- *  the solo case renders without an avatar). */
-export type HardestSend = {
-  userId?: string;
-  displayName?: string | null;
-  avatarUrl?: string | null;
-  difficultyId?: number | null;
-  grade: string;
-  climbName?: string | null;
-};
+import type { HardestSend } from './hardest-sends';
 
 type SessionAnalyticsProps = {
   sends: number;

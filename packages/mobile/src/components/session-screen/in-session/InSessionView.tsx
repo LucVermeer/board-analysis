@@ -37,11 +37,12 @@ import { brandColors, withAlpha } from '../../../theme/colors';
 import { iosSystemColors } from '../../../theme/ios-colors';
 import { springs } from '../../../theme/animations';
 import { borderRadius, spacing } from '../../../theme/tokens';
-import { gradeBadgeColor, gradeSortValue } from '../../you/profile-chart-colors';
+import { gradeBadgeColor } from '../../you/profile-chart-colors';
 import { hapticSelection } from '../../../lib/haptics';
-import { SessionAnalytics, type HardestSend } from './SessionAnalytics';
+import { SessionAnalytics } from './SessionAnalytics';
 import { SessionLeaderboard } from './SessionLeaderboard';
 import { SessionPresenceRow } from './SessionPresenceRow';
+import { sortHardestSends, type HardestSend } from './hardest-sends';
 
 const DISMISS_DISTANCE_FRACTION = 0.18;
 const DISMISS_VELOCITY = 800;
@@ -276,7 +277,7 @@ export function InSessionView({ translateY, screenHeight }: InSessionViewProps) 
         bestByUser.set(tick.userId, tick);
       }
     }
-    return [...bestByUser.entries()]
+    const hardestSendsByUser = [...bestByUser.entries()]
       .map(([userId, tick]) => {
         const participant = participants.find((entry) => entry.userId === userId);
         return {
@@ -288,8 +289,8 @@ export function InSessionView({ translateY, screenHeight }: InSessionViewProps) 
           climbName: tick.climbName,
         };
       })
-      .filter((entry) => entry.grade)
-      .sort((first, second) => gradeSortValue(second.grade) - gradeSortValue(first.grade));
+      .filter((entry) => entry.grade);
+    return sortHardestSends(hardestSendsByUser);
   }, [detail?.ticks, participants, isMultiUser, hardestGrade]);
 
   const sessionHistoryTicks = useMemo(
