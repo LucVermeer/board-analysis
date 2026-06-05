@@ -57,7 +57,7 @@ import {
 import { getStoredActiveBoard } from '../lib/active-board-store';
 import { useActiveBoard, useSetActiveBoard } from '../lib/graphql/use-active-board';
 import { getStoredSessionId, setStoredSessionId, clearStoredSessionId } from '../lib/session-store';
-import { findPreviousQueueItem, findNextQueueItemWithSuggestions } from '@boardsesh/play-view';
+import { emitWallConfirm, findPreviousQueueItem, findNextQueueItemWithSuggestions } from '@boardsesh/play-view';
 import { toClimbQueueItem, type SubscriptionQueueItem } from '../lib/queue-conversion';
 import { toMobileSessionRuntimeEvent } from '../lib/session-runtime-event';
 import { climbToQueueItem, toClimbInput } from '../lib/climb-to-queue-item';
@@ -529,6 +529,11 @@ export function QueueProvider({ children }: { children: ReactNode }) {
             }
             void clearSessionRef.current();
             showToastRef.current(tRef.current('mobile.toast.sessionEnded'), 'success');
+            return;
+          }
+
+          if (event.__typename === 'WallConfirmedClimb') {
+            if (event.climbUuid) emitWallConfirm(event.climbUuid);
             return;
           }
 

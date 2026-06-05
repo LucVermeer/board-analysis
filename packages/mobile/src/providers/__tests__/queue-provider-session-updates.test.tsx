@@ -78,6 +78,10 @@ const queueMutations = vi.hoisted(() => ({
   setSessionBoardPath: vi.fn(async () => {}),
 }));
 
+const wallConfirm = vi.hoisted(() => ({
+  emitWallConfirm: vi.fn(),
+}));
+
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
@@ -97,6 +101,11 @@ vi.mock('@boardsesh/graphql-client', () => ({
 
 vi.mock('@boardsesh/queue-react', () => ({
   useQueueMutations: () => queueMutations,
+}));
+
+vi.mock('@boardsesh/play-view', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@boardsesh/play-view')>()),
+  emitWallConfirm: wallConfirm.emitWallConfirm,
 }));
 
 vi.mock('../../lib/graphql/ws-client', () => ({
@@ -228,6 +237,7 @@ describe('QueueProvider session update subscription', () => {
     for (const mutation of Object.values(queueMutations)) {
       mutation.mockClear();
     }
+    wallConfirm.emitWallConfirm.mockClear();
     graph.execute.mockReset();
     http.request.mockReset();
     http.request.mockResolvedValue({
@@ -308,6 +318,34 @@ describe('QueueProvider session update subscription', () => {
     expect(queueMutations.releaseControl).toHaveBeenCalledOnce();
     expect(queueMutations.confirmClimbOnWall).toHaveBeenCalledWith('climb-1');
     expect(queueMutations.setSessionBoardSerial).toHaveBeenCalledWith('SERIAL-1');
+  });
+
+  it('republishes WallConfirmedClimb events onto the shared wall-confirm bus', async () => {
+    const snapshots: Snapshot[] = [];
+    renderProvider((snapshot) => snapshots.push(snapshot));
+
+    await waitFor(() => {
+      expect(ws.getSessionUpdatesSink()).not.toBeNull();
+    });
+
+    const sessionUpdatesSink = ws.getSessionUpdatesSink();
+    if (!sessionUpdatesSink) throw new Error('session updates sink was not captured');
+
+    act(() => {
+      sessionUpdatesSink.next({
+        data: {
+          sessionUpdates: {
+            __typename: 'WallConfirmedClimb',
+            climbUuid: 'climb-1',
+            confirmedAt: '2026-06-05T00:00:00.000Z',
+            confirmedByParticipantId: 'participant-2',
+            queueItemUuid: 'queue-item-1',
+          },
+        },
+      });
+    });
+
+    expect(wallConfirm.emitWallConfirm).toHaveBeenCalledWith('climb-1');
   });
 
   it('clears persisted session state when SessionEnded arrives', async () => {
