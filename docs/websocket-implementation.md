@@ -301,7 +301,7 @@ This ensures `BoardSessionBridge` only calls `activateSession()` when the actual
 
 ## Backend URL Resolution
 
-The WebSocket backend URL is resolved at runtime by `packages/web/app/lib/backend-url.ts` rather than relying solely on the build-time `NEXT_PUBLIC_WS_URL` environment variable. This is necessary because branch deploy previews serve a single build from multiple domains, and a hard-coded URL only works for one of them.
+The WebSocket backend URL is resolved at runtime by `packages/web/app/lib/backend-url.ts` rather than relying solely on the build-time `NEXT_PUBLIC_WS_URL` environment variable. This is necessary because production and branch deploy previews can serve a build whose baked fallback is missing or points at local development.
 
 ### Preview Domain Pattern
 
@@ -322,8 +322,8 @@ The runtime resolver maps the frontend hostname to the backend:
 
 `getBackendWsUrl()` checks these sources in order and returns the first match:
 
-1. **Host-derived URL** -- if the page hostname matches `{N}.preview.boardsesh.com`, the backend URL is derived automatically. No build-time config needed.
-2. **`NEXT_PUBLIC_WS_URL` build-time fallback** -- the standard env var baked into the Next.js client bundle at build time. Used for production (`boardsesh.com`) and any hostname that doesn't match a known pattern.
+1. **Host-derived URL** -- if the page hostname is `boardsesh.com` / `www.boardsesh.com` or matches `{N}.preview.boardsesh.com`, the backend URL is derived automatically. No build-time config needed.
+2. **`NEXT_PUBLIC_WS_URL` build-time fallback** -- the standard env var baked into the Next.js client bundle at build time. Used for any hostname that doesn't match a known pattern.
 
 On the server side (SSR), only the build-time env var is used.
 
@@ -1654,7 +1654,7 @@ ActivityKit on every device that registered a token for this session
 
 ### Server-Side Analytics
 
-Live Activity actions that happen outside the web view are captured server-side through PostHog when `POSTHOG_PROJECT_KEY` is configured. `POSTHOG_HOST` defaults to `https://us.i.posthog.com`, and `POSTHOG_ENVIRONMENT` can override the event `environment` property. If `POSTHOG_ENVIRONMENT` is unset, the backend falls back to `SENTRY_ENVIRONMENT`, then `NODE_ENV`, then `development`. Server events are sent directly rather than through the browser `/api/posthog/*` proxy.
+Live Activity actions that happen outside the web view are captured server-side through PostHog when `POSTHOG_PROJECT_KEY` is configured. The backend can also fall back to `NEXT_PUBLIC_POSTHOG_KEY` for compatibility with the web build env, but `POSTHOG_PROJECT_KEY` is the preferred runtime variable. `POSTHOG_HOST` defaults to `https://us.i.posthog.com`, and `POSTHOG_ENVIRONMENT` can override the event `environment` property. If `POSTHOG_ENVIRONMENT` is unset, the backend falls back to `SENTRY_ENVIRONMENT`, then `NODE_ENV`, then `development`. Server events are sent directly rather than through the browser `/api/posthog/*` proxy.
 
 Event taxonomy:
 
