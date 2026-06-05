@@ -25,3 +25,14 @@ export type {
   RuntimeSessionState,
   RuntimeSessionUser,
 } from './session-events';
+
+export {
+  createReleaseControlOptimisticPlan,
+  createTakeControlOptimisticPlan,
+  deriveTakeControlPlaylistSuggestionSource,
+  shouldRollbackReleaseControlDriver,
+  shouldRollbackTakeControlDriver,
+  shouldRollbackTakeControlQueue,
+  shouldSurfaceReleaseControlFailure,
+} from './wall-control-optimistic';
+export type { ReleaseControlOptimisticPlan, TakeControlOptimisticPlan } from './wall-control-optimistic';

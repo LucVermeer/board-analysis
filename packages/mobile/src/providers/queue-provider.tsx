@@ -30,7 +30,13 @@ import type {
 import {
   applySessionRuntimeEvent,
   createJoinSessionTracker,
+  createReleaseControlOptimisticPlan,
+  createTakeControlOptimisticPlan,
   mapSubscriptionEnvelopeToAction,
+  shouldRollbackReleaseControlDriver,
+  shouldRollbackTakeControlDriver,
+  shouldRollbackTakeControlQueue,
+  shouldSurfaceReleaseControlFailure,
   type RuntimeSessionState,
   type SubscriptionWireEnvelope,
 } from '@boardsesh/queue-runtime';
@@ -728,27 +734,28 @@ export function QueueProvider({ children }: { children: ReactNode }) {
         currentClimbQueueItem: stateRef.current.currentClimbQueueItem,
         playlistSuggestionSource: playlistSuggestionSourceRef.current,
       };
-      const operationId = wallControlOperationRef.current + 1;
-      wallControlOperationRef.current = operationId;
       const localParticipantId = participantIdRef.current;
-      const previousDriverParticipantId = sessionRuntimeStateRef.current.driverParticipantId;
-
-      if (localParticipantId) {
-        setSessionRuntimeState((current) => ({ ...current, driverParticipantId: localParticipantId }));
-      }
-      if (item) {
-        const hasPlaylistSuggestionSourceOption = Object.prototype.hasOwnProperty.call(
+      const plan = createTakeControlOptimisticPlan({
+        isSessionActive: true,
+        currentOperationId: wallControlOperationRef.current,
+        localParticipantId,
+        previousDriverParticipantId: sessionRuntimeStateRef.current.driverParticipantId,
+        item,
+        hasExplicitPlaylistSuggestionSource: Object.prototype.hasOwnProperty.call(
           options ?? {},
           'playlistSuggestionSource',
-        );
-        let nextPlaylistSuggestionSource: PlaylistSuggestionSource | null | undefined;
-        if (hasPlaylistSuggestionSourceOption) {
-          nextPlaylistSuggestionSource = options?.playlistSuggestionSource ?? null;
-        } else if (item.suggested !== true) {
-          nextPlaylistSuggestionSource = null;
-        }
-        if (nextPlaylistSuggestionSource !== undefined) {
-          setPlaylistSuggestionSourceState(nextPlaylistSuggestionSource);
+        ),
+        explicitPlaylistSuggestionSource: options?.playlistSuggestionSource,
+      });
+      wallControlOperationRef.current = plan.operationId;
+
+      const optimisticDriverParticipantId = plan.optimisticDriverParticipantId;
+      if (optimisticDriverParticipantId != null) {
+        setSessionRuntimeState((current) => ({ ...current, driverParticipantId: optimisticDriverParticipantId }));
+      }
+      if (plan.shouldUpdateCurrentClimb && item) {
+        if (plan.playlistSuggestionSource !== undefined) {
+          setPlaylistSuggestionSourceState(plan.playlistSuggestionSource);
         }
         dispatch({
           type: 'DELTA_UPDATE_CURRENT_CLIMB',
@@ -756,9 +763,9 @@ export function QueueProvider({ children }: { children: ReactNode }) {
             item,
             shouldAddToQueue: true,
             isServerEvent: false,
-            ...(nextPlaylistSuggestionSource === undefined
+            ...(plan.playlistSuggestionSource === undefined
               ? {}
-              : { playlistSuggestionSource: nextPlaylistSuggestionSource }),
+              : { playlistSuggestionSource: plan.playlistSuggestionSource }),
           },
         });
       }
@@ -766,18 +773,31 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       try {
         await mutations.takeControl(item);
       } catch (error) {
-        const isLatestWallControlOperation = wallControlOperationRef.current === operationId;
-        if (isLatestWallControlOperation && item && stateRef.current.currentClimbQueueItem?.uuid === item.uuid) {
+        if (
+          shouldRollbackTakeControlQueue({
+            currentOperationId: wallControlOperationRef.current,
+            operationId: plan.operationId,
+            itemUuid: item?.uuid,
+            currentClimbQueueItemUuid: stateRef.current.currentClimbQueueItem?.uuid,
+          })
+        ) {
           restoreQueueSnapshot(queueSnapshot);
         }
-        if (isLatestWallControlOperation && localParticipantId) {
+        if (
+          shouldRollbackTakeControlDriver({
+            currentOperationId: wallControlOperationRef.current,
+            operationId: plan.operationId,
+            localParticipantId,
+            currentDriverParticipantId: sessionRuntimeStateRef.current.driverParticipantId,
+          })
+        ) {
           setSessionRuntimeState((current) =>
             current.driverParticipantId === localParticipantId
-              ? { ...current, driverParticipantId: previousDriverParticipantId }
+              ? { ...current, driverParticipantId: plan.previousDriverParticipantId }
               : current,
           );
         }
-        if (isLatestWallControlOperation) {
+        if (wallControlOperationRef.current === plan.operationId) {
           showToast(t('mobile.queue.actionFailed'), 'error');
         }
         throw error;
@@ -794,27 +814,39 @@ export function QueueProvider({ children }: { children: ReactNode }) {
 
     const previousDriverParticipantId = sessionRuntimeStateRef.current.driverParticipantId;
     const localParticipantId = participantIdRef.current;
-    const shouldOptimisticallyRelease =
-      previousDriverParticipantId !== null && previousDriverParticipantId === localParticipantId;
-    const operationId = shouldOptimisticallyRelease
-      ? wallControlOperationRef.current + 1
-      : wallControlOperationRef.current;
-    if (shouldOptimisticallyRelease) {
-      wallControlOperationRef.current = operationId;
+    const plan = createReleaseControlOptimisticPlan({
+      currentOperationId: wallControlOperationRef.current,
+      previousDriverParticipantId,
+      localParticipantId,
+    });
+    if (plan.shouldOptimisticallyRelease) {
+      wallControlOperationRef.current = plan.operationId;
       setSessionRuntimeState((current) => ({ ...current, driverParticipantId: null }));
     }
     try {
       await mutations.releaseControl();
     } catch (error) {
-      const isLatestWallControlOperation = wallControlOperationRef.current === operationId;
-      if (shouldOptimisticallyRelease && isLatestWallControlOperation) {
+      if (
+        shouldRollbackReleaseControlDriver({
+          currentOperationId: wallControlOperationRef.current,
+          operationId: plan.operationId,
+          shouldOptimisticallyRelease: plan.shouldOptimisticallyRelease,
+          currentDriverParticipantId: sessionRuntimeStateRef.current.driverParticipantId,
+        })
+      ) {
         setSessionRuntimeState((current) =>
           current.driverParticipantId === null
-            ? { ...current, driverParticipantId: previousDriverParticipantId }
+            ? { ...current, driverParticipantId: plan.previousDriverParticipantId }
             : current,
         );
       }
-      if (!shouldOptimisticallyRelease || isLatestWallControlOperation) {
+      if (
+        shouldSurfaceReleaseControlFailure({
+          currentOperationId: wallControlOperationRef.current,
+          operationId: plan.operationId,
+          shouldOptimisticallyRelease: plan.shouldOptimisticallyRelease,
+        })
+      ) {
         showToast(t('mobile.queue.actionFailed'), 'error');
       }
       throw error;
