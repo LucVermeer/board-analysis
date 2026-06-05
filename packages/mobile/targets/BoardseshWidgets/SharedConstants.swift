@@ -46,6 +46,13 @@ enum SharedConstants {
     /// `SharedKeychain` under `SharedKeychain.livePushTokenKey`. Kept here
     /// only for the same migration cleanup as `authTokenKey`.
     static let livePushTokenKey = "bs_live_push_token"
+    /// Whether the current app-side session state allows widget Previous/Next
+    /// to control the wall. For party sessions JS keeps this true only for the
+    /// current driver; for local sessions it stays true.
+    static let widgetNavigationAllowedKey = "bs_widget_navigation_allowed"
+    /// Distinguishes real party sessions from local-only Live Activities whose
+    /// generated sessionId is only an ActivityKit identifier.
+    static let partySessionKey = "bs_party_session"
 
     // MARK: Darwin Notification
 
@@ -187,6 +194,34 @@ enum SharedQueueState {
         ]
 
         return components?.url
+    }
+}
+
+// MARK: - Shared Widget Wall Control
+
+struct SharedWidgetWallControl {
+    let navigationAllowed: Bool
+    let requiresServerAuthorization: Bool
+}
+
+enum SharedWidgetWallControlState {
+    static func save(navigationAllowed: Bool, isPartySession: Bool, to defaults: UserDefaults) {
+        defaults.set(navigationAllowed, forKey: SharedConstants.widgetNavigationAllowedKey)
+        defaults.set(isPartySession, forKey: SharedConstants.partySessionKey)
+    }
+
+    static func load(from defaults: UserDefaults) -> SharedWidgetWallControl {
+        let storedPartySession = defaults.object(forKey: SharedConstants.partySessionKey) as? Bool
+        let storedSessionId = defaults.string(forKey: SharedConstants.sessionIdKey)
+        let inferredPartySession = storedSessionId.map { !$0.hasPrefix("local-") } ?? false
+        let isPartySession = storedPartySession ?? inferredPartySession
+        if !isPartySession {
+            return SharedWidgetWallControl(navigationAllowed: true, requiresServerAuthorization: false)
+        }
+        return SharedWidgetWallControl(
+            navigationAllowed: defaults.bool(forKey: SharedConstants.widgetNavigationAllowedKey),
+            requiresServerAuthorization: true
+        )
     }
 }
 
