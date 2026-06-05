@@ -7,6 +7,10 @@ import type { QueueState, QueueAction, QueueSearchParams, ClimbQueueItem } from 
 import { insertQueueItemIdempotent } from './event-utils';
 import { playlistSuggestionSourceMatches, pruneSuggestedQueueItemsAfterCurrent } from './playlist-suggestions';
 
+function hasCurrentClimbQueueItem(payload: { currentClimbQueueItem?: ClimbQueueItem | null }): boolean {
+  return Object.prototype.hasOwnProperty.call(payload, 'currentClimbQueueItem');
+}
+
 export const initialState = <TSearchParams extends QueueSearchParams>(
   initialSearchParams: TSearchParams,
 ): QueueState<TSearchParams> => ({
@@ -73,7 +77,9 @@ export function queueReducer<TSearchParams extends QueueSearchParams>(
       return {
         ...state,
         queue: filteredQueue,
-        currentClimbQueueItem: action.payload.currentClimbQueueItem ?? state.currentClimbQueueItem,
+        currentClimbQueueItem: hasCurrentClimbQueueItem(action.payload)
+          ? (action.payload.currentClimbQueueItem ?? null)
+          : state.currentClimbQueueItem,
         initialQueueDataReceivedFromPeers: true,
         playlistSuggestionSource: null,
         // Clear pending updates on full sync since we're getting complete server state
@@ -97,7 +103,9 @@ export function queueReducer<TSearchParams extends QueueSearchParams>(
       return {
         ...state,
         queue: filteredQueue,
-        currentClimbQueueItem: action.payload.currentClimbQueueItem ?? state.currentClimbQueueItem,
+        currentClimbQueueItem: hasCurrentClimbQueueItem(action.payload)
+          ? (action.payload.currentClimbQueueItem ?? null)
+          : state.currentClimbQueueItem,
         playlistSuggestionSource: null,
         // Request resync if we filtered out corrupted data
         needsResync: state.needsResync || hadCorruptedData,

@@ -1,5 +1,6 @@
 import { useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
+import { deriveIsDriver } from '@boardsesh/queue-runtime';
 import { useQueue } from '../../providers/queue-provider';
 import { useLiveActivity } from './use-live-activity';
 import { addWidgetQueueNavigateListener } from './live-activity-plugin';
@@ -21,8 +22,15 @@ type LiveActivityBridgeProps = {
 // selected) so a guest user without a board doesn't trigger Live Activity
 // authorization prompts at random.
 export function LiveActivityBridge({ boardName, layoutId, sizeId, setIds }: LiveActivityBridgeProps) {
-  const { state, sessionId, nextClimb, previousClimb } = useQueue();
+  const { state, sessionId, driverParticipantId, participantId, nextClimb, previousClimb } = useQueue();
   const { t } = useTranslation('session');
+  const canNavigateFromWidget =
+    sessionId === null ||
+    deriveIsDriver({
+      isPersistentSessionActive: true,
+      participantId,
+      driverParticipantId,
+    });
 
   // Localized strings for the Android foreground-service notification (channel +
   // Previous/Next actions). Built here because hooks need a component context;
@@ -44,6 +52,8 @@ export function LiveActivityBridge({ boardName, layoutId, sizeId, setIds }: Live
     board: { boardName, layoutId, sizeId, setIds },
     sessionId,
     isSessionActive: state.queue.length > 0 || state.currentClimbQueueItem !== null,
+    widgetNavigationAllowed: canNavigateFromWidget,
+    isPartySession: sessionId !== null,
     androidNotification,
   });
 
@@ -53,6 +63,7 @@ export function LiveActivityBridge({ boardName, layoutId, sizeId, setIds }: Live
   // when the app foregrounds, its currentClimbQueueItem matches the wall.
   useEffect(() => {
     const unsubscribe = addWidgetQueueNavigateListener((event) => {
+      if (!canNavigateFromWidget) return;
       if (event.action === 'next') {
         nextClimb();
       } else if (event.action === 'previous') {
@@ -60,7 +71,7 @@ export function LiveActivityBridge({ boardName, layoutId, sizeId, setIds }: Live
       }
     });
     return unsubscribe;
-  }, [nextClimb, previousClimb]);
+  }, [canNavigateFromWidget, nextClimb, previousClimb]);
 
   return null;
 }

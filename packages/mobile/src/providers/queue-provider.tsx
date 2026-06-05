@@ -28,8 +28,16 @@ import type {
   SetCurrentClimbOptions,
 } from '@boardsesh/queue';
 import {
+  applySessionRuntimeEvent,
   createJoinSessionTracker,
+  createReleaseControlOptimisticPlan,
+  createTakeControlOptimisticPlan,
   mapSubscriptionEnvelopeToAction,
+  shouldRollbackReleaseControlDriver,
+  shouldRollbackTakeControlDriver,
+  shouldRollbackTakeControlQueue,
+  shouldSurfaceReleaseControlFailure,
+  type RuntimeSessionState,
   type SubscriptionWireEnvelope,
 } from '@boardsesh/queue-runtime';
 import { useQueueMutations, type PublishPlaybackStateInput } from '@boardsesh/queue-react';
@@ -55,8 +63,9 @@ import {
 import { getStoredActiveBoard } from '../lib/active-board-store';
 import { useActiveBoard, useSetActiveBoard } from '../lib/graphql/use-active-board';
 import { getStoredSessionId, setStoredSessionId, clearStoredSessionId } from '../lib/session-store';
-import { findPreviousQueueItem, findNextQueueItemWithSuggestions } from '@boardsesh/play-view';
+import { emitWallConfirm, findPreviousQueueItem, findNextQueueItemWithSuggestions } from '@boardsesh/play-view';
 import { toClimbQueueItem, type SubscriptionQueueItem } from '../lib/queue-conversion';
+import { toMobileSessionRuntimeEvent } from '../lib/session-runtime-event';
 import { climbToQueueItem, toClimbInput } from '../lib/climb-to-queue-item';
 import { track } from '../lib/analytics';
 import { useToast } from './toast-provider';
@@ -88,6 +97,8 @@ type QueueContextValue = {
   sessionUsers: SessionUser[];
   /** Participant id of the member currently driving the wall, if any. */
   driverParticipantId: string | null;
+  /** Most recently published physical board serial for this session, if any. */
+  lastConnectedBoardSerial: string | null;
   /** Our own participant id for the active session (marks "you" in rosters). */
   participantId: string | null;
   addToQueue: (item: ClimbQueueItem) => void;
@@ -126,6 +137,25 @@ type QueueContextValue = {
    */
   setSessionBoardPath: (boardPath: string) => Promise<void>;
   /**
+   * Claim wall-control authority in the current party session, optionally with
+   * the climb that should become the driver's wall climb. Best-effort no-op
+   * when no session is active.
+   */
+  takeControl: (item?: ClimbQueueItem | null, options?: TakeControlOptions) => Promise<void>;
+  /** Release wall-control authority in the current party session. */
+  releaseControl: () => Promise<void>;
+  /**
+   * Broadcast that this phone successfully wrote a climb to the physical wall.
+   * The local wall-confirm bus is handled by the Bluetooth provider; this
+   * mutation notifies party peers through the session subscription.
+   */
+  confirmClimbOnWall: (climbUuid: string) => Promise<void>;
+  /**
+   * Store the connected board serial on the active session so native peers can
+   * reconnect to the same physical wall without showing the picker.
+   */
+  setSessionBoardSerial: (serial: string) => Promise<void>;
+  /**
    * Subscribe to raw queue subscription events, including transient ones that
    * never reach the reducer (PlaybackStateChanged drives route playback
    * party-sync). Returns an unsubscribe function.
@@ -137,9 +167,32 @@ type QueueContextValue = {
 
 const QueueContext = createContext<QueueContextValue | null>(null);
 
+type TakeControlOptions = {
+  playlistSuggestionSource?: PlaylistSuggestionSource | null;
+};
+type QueueSessionControlContextValue = Pick<
+  QueueContextValue,
+  | 'sessionId'
+  | 'driverParticipantId'
+  | 'participantId'
+  | 'lastConnectedBoardSerial'
+  | 'takeControl'
+  | 'releaseControl'
+  | 'confirmClimbOnWall'
+  | 'setSessionBoardSerial'
+>;
+
+const QueueSessionControlContext = createContext<QueueSessionControlContextValue | null>(null);
+
 export function useQueue(): QueueContextValue {
   const context = useContext(QueueContext);
   if (!context) throw new Error('useQueue must be used within QueueProvider');
+  return context;
+}
+
+export function useQueueSessionControls(): QueueSessionControlContextValue {
+  const context = useContext(QueueSessionControlContext);
+  if (!context) throw new Error('useQueueSessionControls must be used within QueueProvider');
   return context;
 }
 
@@ -151,6 +204,16 @@ const defaultSearchParams: QueueSearchParams = {};
 // (disambiguates from QueueItemRemoved.uuid). Both aliases are first-class on
 // `SubscriptionWireEnvelope` so we can use the wire type directly.
 type QueueUpdateEvent = SubscriptionWireEnvelope<SubscriptionQueueItem>;
+type MobileSessionRuntimeState = RuntimeSessionState<SessionUser>;
+
+const createEmptySessionRuntimeState = (): MobileSessionRuntimeState => ({
+  users: [],
+  isLeader: false,
+  clientId: '',
+  driverParticipantId: null,
+  lastConnectedBoardSerial: null,
+  boardPath: '',
+});
 
 export function QueueProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(queueReducer, defaultSearchParams, initialState);
@@ -160,14 +223,20 @@ export function QueueProvider({ children }: { children: ReactNode }) {
   // (SessionStatsUpdated); the roster is seeded from JOIN_SESSION and kept
   // current via UserJoined/UserLeft/UserPresenceChanged/DriverChanged.
   const [liveStats, setLiveStats] = useState<SessionLiveStatsEvent | null>(null);
-  const [sessionUsers, setSessionUsers] = useState<SessionUser[]>([]);
-  const [driverParticipantId, setDriverParticipantId] = useState<string | null>(null);
+  const [sessionRuntimeState, setSessionRuntimeState] =
+    useState<MobileSessionRuntimeState>(createEmptySessionRuntimeState);
+  const sessionRuntimeStateRef = useRef(sessionRuntimeState);
+  sessionRuntimeStateRef.current = sessionRuntimeState;
+  const sessionUsers = sessionRuntimeState.users;
+  const driverParticipantId = sessionRuntimeState.driverParticipantId;
+  const lastConnectedBoardSerial = sessionRuntimeState.lastConnectedBoardSerial;
   const [participantId, setParticipantId] = useState<string | null>(null);
   // Our own participant id, captured from the JOIN_SESSION response. Used to
   // suppress the echo of our own SessionBoardPathChanged broadcasts (the server
   // stamps `changedByParticipantId` with the originator's participant id).
   const participantIdRef = useRef<string | null>(null);
   const unsubscribeRef = useRef<(() => void) | null>(null);
+  const wallControlOperationRef = useRef(0);
 
   // The active board is the angle source of truth. Read it here so the
   // self-healing re-grade effect can compare each queued climb's display angle
@@ -223,7 +292,11 @@ export function QueueProvider({ children }: { children: ReactNode }) {
           const result = await execute<{
             joinSession?: {
               participantId?: string | null;
+              clientId?: string | null;
+              isLeader?: boolean | null;
               driverParticipantId?: string | null;
+              lastConnectedBoardSerial?: string | null;
+              boardPath?: string | null;
               users?: SessionUser[] | null;
             };
           }>(getWsClient(), {
@@ -240,8 +313,14 @@ export function QueueProvider({ children }: { children: ReactNode }) {
           // Seed the live presence roster + driver from the join response. The
           // UserJoined/UserLeft/DriverChanged events that follow are deltas;
           // this is the initial snapshot of who's already in the session.
-          if (joined?.users) setSessionUsers(joined.users);
-          setDriverParticipantId(joined?.driverParticipantId ?? null);
+          setSessionRuntimeState({
+            users: joined?.users ?? [],
+            isLeader: joined?.isLeader ?? false,
+            clientId: joined?.clientId ?? joined?.participantId ?? '',
+            driverParticipantId: joined?.driverParticipantId ?? null,
+            lastConnectedBoardSerial: joined?.lastConnectedBoardSerial ?? null,
+            boardPath: joined?.boardPath ?? boardPath,
+          });
           return result;
         },
       }),
@@ -291,6 +370,9 @@ export function QueueProvider({ children }: { children: ReactNode }) {
   showToastRef.current = showToast;
   const tRef = useRef(t);
   tRef.current = t;
+  const clearSessionRef = useRef<() => Promise<void>>(async () => {});
+  const locallyEndingSessionIdRef = useRef<string | null>(null);
+  const suppressedRemoteEndSessionIdRef = useRef<string | null>(null);
 
   // Transient queue-event listeners. PlaybackStateChanged (route playback
   // party-sync) doesn't mutate queue state, so the play-drawer orchestrator
@@ -311,8 +393,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       participantIdRef.current = null;
       setParticipantId(null);
       setLiveStats(null);
-      setSessionUsers([]);
-      setDriverParticipantId(null);
+      setSessionRuntimeState(createEmptySessionRuntimeState());
       joinTracker.reset();
       return;
     }
@@ -432,6 +513,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
         next: ({ data }) => {
           const event = data?.sessionUpdates;
           if (!event) return;
+          if (sessionIdRef.current !== sessionId) return;
 
           // Live analytics push: flashes + flash/send/attempt grade split +
           // per-participant breakdown. Drives the in-session analytics view and
@@ -453,24 +535,26 @@ export function QueueProvider({ children }: { children: ReactNode }) {
             return;
           }
 
-          // Presence roster maintenance (deltas on top of the JOIN_SESSION seed).
-          if ((event.__typename === 'UserJoined' || event.__typename === 'UserPresenceChanged') && event.user) {
-            const incoming = event.user;
-            setSessionUsers((prev) => {
-              const next = prev.filter((existing) => existing.id !== incoming.id);
-              next.push(incoming);
-              return next;
-            });
+          if (event.__typename === 'SessionEnded') {
+            if (locallyEndingSessionIdRef.current === sessionId) {
+              suppressedRemoteEndSessionIdRef.current = sessionId;
+              return;
+            }
+            void clearSessionRef.current();
+            showToastRef.current(tRef.current('mobile.toast.sessionEnded'), 'success');
             return;
           }
-          if (event.__typename === 'UserLeft' && event.userId) {
-            const leftId = event.userId;
-            setSessionUsers((prev) => prev.filter((existing) => existing.id !== leftId));
+
+          if (event.__typename === 'WallConfirmedClimb') {
+            if (event.climbUuid) emitWallConfirm(event.climbUuid);
             return;
           }
-          if (event.__typename === 'DriverChanged') {
-            setDriverParticipantId(event.driverParticipantId ?? null);
-            return;
+
+          const runtimeEvent = toMobileSessionRuntimeEvent(event);
+          if (runtimeEvent) {
+            setSessionRuntimeState(
+              (prev) => applySessionRuntimeEvent(prev, runtimeEvent) ?? createEmptySessionRuntimeState(),
+            );
           }
 
           if (event.__typename !== 'SessionBoardPathChanged' || !event.boardPath) return;
@@ -483,6 +567,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
           const nextAngle = parsed.angle;
           void (async () => {
             const stored = await getStoredActiveBoard();
+            if (sessionIdRef.current !== sessionId) return;
             if (!stored || stored.angle === nextAngle) return;
             // Never override a fixed-angle board (mirrors handleAngleChange's
             // local guard) — a peer can't change an angle the board can't be
@@ -520,8 +605,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       // liveStats/roster would leak into the joined session until B's first
       // push. The new session re-seeds the roster from its JOIN_SESSION response.
       setLiveStats(null);
-      setSessionUsers([]);
-      setDriverParticipantId(null);
+      setSessionRuntimeState(createEmptySessionRuntimeState());
       setParticipantId(null);
       participantIdRef.current = null;
       joinTracker.reset();
@@ -622,6 +706,154 @@ export function QueueProvider({ children }: { children: ReactNode }) {
   // shared mutation already swallows transport errors and is a true no-op in
   // solo (never lazily creates a session), so callers can fire it freely.
   const setSessionBoardPath = useCallback((boardPath: string) => mutations.setSessionBoardPath(boardPath), [mutations]);
+  const restoreQueueSnapshot = useCallback(
+    (snapshot: {
+      queue: ClimbQueueItem[];
+      currentClimbQueueItem: ClimbQueueItem | null;
+      playlistSuggestionSource: PlaylistSuggestionSource | null;
+    }) => {
+      dispatch({
+        type: 'UPDATE_QUEUE',
+        payload: { queue: snapshot.queue, currentClimbQueueItem: snapshot.currentClimbQueueItem },
+      });
+      dispatch({ type: 'SET_PLAYLIST_SUGGESTION_SOURCE', payload: snapshot.playlistSuggestionSource });
+      setPlaylistSuggestionSourceState(snapshot.playlistSuggestionSource);
+    },
+    [],
+  );
+
+  const takeControl = useCallback(
+    async (item?: ClimbQueueItem | null, options?: TakeControlOptions) => {
+      if (!sessionIdRef.current) {
+        await mutations.takeControl(item);
+        return;
+      }
+
+      const queueSnapshot = {
+        queue: stateRef.current.queue,
+        currentClimbQueueItem: stateRef.current.currentClimbQueueItem,
+        playlistSuggestionSource: playlistSuggestionSourceRef.current,
+      };
+      const localParticipantId = participantIdRef.current;
+      const plan = createTakeControlOptimisticPlan({
+        isSessionActive: true,
+        currentOperationId: wallControlOperationRef.current,
+        localParticipantId,
+        previousDriverParticipantId: sessionRuntimeStateRef.current.driverParticipantId,
+        item,
+        hasExplicitPlaylistSuggestionSource: Object.prototype.hasOwnProperty.call(
+          options ?? {},
+          'playlistSuggestionSource',
+        ),
+        explicitPlaylistSuggestionSource: options?.playlistSuggestionSource,
+      });
+      wallControlOperationRef.current = plan.operationId;
+
+      const optimisticDriverParticipantId = plan.optimisticDriverParticipantId;
+      if (optimisticDriverParticipantId != null) {
+        setSessionRuntimeState((current) => ({ ...current, driverParticipantId: optimisticDriverParticipantId }));
+      }
+      if (plan.shouldUpdateCurrentClimb && item) {
+        if (plan.playlistSuggestionSource !== undefined) {
+          setPlaylistSuggestionSourceState(plan.playlistSuggestionSource);
+        }
+        dispatch({
+          type: 'DELTA_UPDATE_CURRENT_CLIMB',
+          payload: {
+            item,
+            shouldAddToQueue: true,
+            isServerEvent: false,
+            ...(plan.playlistSuggestionSource === undefined
+              ? {}
+              : { playlistSuggestionSource: plan.playlistSuggestionSource }),
+          },
+        });
+      }
+
+      try {
+        await mutations.takeControl(item);
+      } catch (error) {
+        if (
+          shouldRollbackTakeControlQueue({
+            currentOperationId: wallControlOperationRef.current,
+            operationId: plan.operationId,
+            itemUuid: item?.uuid,
+            currentClimbQueueItemUuid: stateRef.current.currentClimbQueueItem?.uuid,
+          })
+        ) {
+          restoreQueueSnapshot(queueSnapshot);
+        }
+        if (
+          shouldRollbackTakeControlDriver({
+            currentOperationId: wallControlOperationRef.current,
+            operationId: plan.operationId,
+            localParticipantId,
+            currentDriverParticipantId: sessionRuntimeStateRef.current.driverParticipantId,
+          })
+        ) {
+          setSessionRuntimeState((current) =>
+            current.driverParticipantId === localParticipantId
+              ? { ...current, driverParticipantId: plan.previousDriverParticipantId }
+              : current,
+          );
+        }
+        if (wallControlOperationRef.current === plan.operationId) {
+          showToast(t('mobile.queue.actionFailed'), 'error');
+        }
+        throw error;
+      }
+    },
+    [mutations, restoreQueueSnapshot, showToast, t],
+  );
+
+  const releaseControl = useCallback(async () => {
+    if (!sessionIdRef.current) {
+      await mutations.releaseControl();
+      return;
+    }
+
+    const previousDriverParticipantId = sessionRuntimeStateRef.current.driverParticipantId;
+    const localParticipantId = participantIdRef.current;
+    const plan = createReleaseControlOptimisticPlan({
+      currentOperationId: wallControlOperationRef.current,
+      previousDriverParticipantId,
+      localParticipantId,
+    });
+    if (plan.shouldOptimisticallyRelease) {
+      wallControlOperationRef.current = plan.operationId;
+      setSessionRuntimeState((current) => ({ ...current, driverParticipantId: null }));
+    }
+    try {
+      await mutations.releaseControl();
+    } catch (error) {
+      if (
+        shouldRollbackReleaseControlDriver({
+          currentOperationId: wallControlOperationRef.current,
+          operationId: plan.operationId,
+          shouldOptimisticallyRelease: plan.shouldOptimisticallyRelease,
+          currentDriverParticipantId: sessionRuntimeStateRef.current.driverParticipantId,
+        })
+      ) {
+        setSessionRuntimeState((current) =>
+          current.driverParticipantId === null
+            ? { ...current, driverParticipantId: plan.previousDriverParticipantId }
+            : current,
+        );
+      }
+      if (
+        shouldSurfaceReleaseControlFailure({
+          currentOperationId: wallControlOperationRef.current,
+          operationId: plan.operationId,
+          shouldOptimisticallyRelease: plan.shouldOptimisticallyRelease,
+        })
+      ) {
+        showToast(t('mobile.queue.actionFailed'), 'error');
+      }
+      throw error;
+    }
+  }, [mutations, showToast, t]);
+  const confirmClimbOnWall = useCallback((climbUuid: string) => mutations.confirmClimbOnWall(climbUuid), [mutations]);
+  const setSessionBoardSerial = useCallback((serial: string) => mutations.setSessionBoardSerial(serial), [mutations]);
 
   // Self-healing re-grade: a climb's difficulty/quality/sends are angle-specific
   // (stored per-angle server-side), but queue items carry the grade baked in for
@@ -883,6 +1115,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const clearSession = useCallback(async () => {
+    sessionIdRef.current = null;
     setSessionId(null);
     dispatch({
       type: 'INITIAL_QUEUE_DATA',
@@ -891,20 +1124,32 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     setPlaylistSuggestionSourceState(null);
     await clearStoredSessionId();
   }, []);
+  clearSessionRef.current = clearSession;
 
   const endSession = useCallback(async (): Promise<SessionSummary | null> => {
     const currentSessionId = sessionIdRef.current;
     if (!currentSessionId) return null;
 
     try {
+      locallyEndingSessionIdRef.current = currentSessionId;
       const response = await getHttpClient().request<EndSessionMutationResponse>(END_SESSION, {
         sessionId: currentSessionId,
       });
       await clearSession();
+      locallyEndingSessionIdRef.current = null;
+      suppressedRemoteEndSessionIdRef.current = null;
       track(SHARED_EVENTS.SessionEnded, { sessionId: currentSessionId });
       showToast(t('mobile.toast.sessionEnded'), 'success');
       return response.endSession;
     } catch {
+      if (suppressedRemoteEndSessionIdRef.current === currentSessionId) {
+        locallyEndingSessionIdRef.current = null;
+        suppressedRemoteEndSessionIdRef.current = null;
+        await clearSession();
+        showToast(t('mobile.toast.sessionEnded'), 'success');
+        return null;
+      }
+      locallyEndingSessionIdRef.current = null;
       showToast(t('mobile.queue.actionFailed'), 'error');
       return null;
     }
@@ -941,6 +1186,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       liveStats,
       sessionUsers,
       driverParticipantId,
+      lastConnectedBoardSerial,
       participantId,
       addToQueue,
       removeFromQueue,
@@ -957,6 +1203,10 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       startSession: createSessionWithConfig,
       joinSession,
       setSessionBoardPath,
+      takeControl,
+      releaseControl,
+      confirmClimbOnWall,
+      setSessionBoardSerial,
       subscribeToQueueEvents,
       publishPlaybackState,
     }),
@@ -966,6 +1216,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       liveStats,
       sessionUsers,
       driverParticipantId,
+      lastConnectedBoardSerial,
       participantId,
       addToQueue,
       removeFromQueue,
@@ -982,10 +1233,41 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       createSessionWithConfig,
       joinSession,
       setSessionBoardPath,
+      takeControl,
+      releaseControl,
+      confirmClimbOnWall,
+      setSessionBoardSerial,
       subscribeToQueueEvents,
       publishPlaybackState,
     ],
   );
 
-  return <QueueContext.Provider value={contextValue}>{children}</QueueContext.Provider>;
+  const sessionControlValue = useMemo<QueueSessionControlContextValue>(
+    () => ({
+      sessionId,
+      driverParticipantId,
+      participantId,
+      lastConnectedBoardSerial,
+      takeControl,
+      releaseControl,
+      confirmClimbOnWall,
+      setSessionBoardSerial,
+    }),
+    [
+      sessionId,
+      driverParticipantId,
+      participantId,
+      lastConnectedBoardSerial,
+      takeControl,
+      releaseControl,
+      confirmClimbOnWall,
+      setSessionBoardSerial,
+    ],
+  );
+
+  return (
+    <QueueSessionControlContext.Provider value={sessionControlValue}>
+      <QueueContext.Provider value={contextValue}>{children}</QueueContext.Provider>
+    </QueueSessionControlContext.Provider>
+  );
 }

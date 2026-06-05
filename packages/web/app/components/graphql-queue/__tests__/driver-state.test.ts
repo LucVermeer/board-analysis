@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vite-plus/test';
-import { deriveIsDriver } from '../driver-state';
+import { deriveIsDriver } from '@boardsesh/queue-runtime';
 
 /**
  * Driver-state derivation for the queue-control-bar pivot

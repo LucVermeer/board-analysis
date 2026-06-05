@@ -36,7 +36,7 @@ import { useSnackbar } from '../providers/snackbar-provider';
 import { queueAddErrorMessage } from '../board-lock/queue-add-error-messages';
 import { QueueBridgeBoardInfoContext, type QueueBridgeBoardInfo } from './queue-bridge-board-info-context';
 import { dispatchOpenPlayDrawer } from './play-drawer-event';
-import { deriveIsDriver } from '../graphql-queue/driver-state';
+import { deriveIsDriver } from '@boardsesh/queue-runtime';
 import type { SetActiveClimbSource } from '../graphql-queue/set-active-climb-event';
 import { track } from '@/app/lib/analytics';
 import {

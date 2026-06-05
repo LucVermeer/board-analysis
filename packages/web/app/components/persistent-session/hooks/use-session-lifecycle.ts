@@ -13,6 +13,7 @@ import {
   SESSION_UPDATES,
   EVENTS_REPLAY,
 } from '@boardsesh/graphql/operations/queue-session';
+import { applySessionRuntimeEvent, type RuntimeSessionEvent } from '@boardsesh/queue-runtime';
 import type {
   SubscriptionQueueEvent,
   SessionEvent,
@@ -26,7 +27,7 @@ import { setPreference, removePreference } from '@/app/lib/user-preferences-db';
 import { createGraphQLHttpClient } from '@/app/lib/graphql/client';
 import { END_SESSION as END_SESSION_GQL, type EndSessionResponse } from '@boardsesh/graphql/operations/sessions';
 import { fetchAutoFinishedSummary } from './use-queue-storage';
-import { coerceSessionUser, upsertSessionUser } from '../event-utils';
+import { coerceSessionUser } from '../event-utils';
 import { TransientJoinError } from '../errors';
 import {
   type Session,
@@ -82,6 +83,45 @@ export function transformToSubscriptionEvent(event: QueueEvent | SubscriptionQue
   }
 }
 
+type WebRuntimeSessionUser = Parameters<typeof coerceSessionUser>[0];
+
+function toWebSessionRuntimeEvent(event: SessionEvent): RuntimeSessionEvent<WebRuntimeSessionUser> | null {
+  switch (event.__typename) {
+    case 'UserJoined':
+    case 'UserPresenceChanged':
+      return { __typename: event.__typename, user: event.user as unknown as WebRuntimeSessionUser };
+    case 'UserLeft':
+      return { __typename: 'UserLeft', userId: event.userId };
+    case 'LeaderChanged':
+      return {
+        __typename: 'LeaderChanged',
+        leaderId: event.leaderId,
+        leaderConnectionId: event.leaderConnectionId ?? null,
+      };
+    case 'DriverChanged':
+      return {
+        __typename: 'DriverChanged',
+        driverParticipantId: event.driverParticipantId ?? null,
+        previousDriverParticipantId: event.previousDriverParticipantId ?? null,
+      };
+    case 'SessionBoardSerialChanged':
+      return {
+        __typename: 'SessionBoardSerialChanged',
+        lastConnectedBoardSerial: event.lastConnectedBoardSerial ?? null,
+      };
+    case 'SessionBoardPathChanged':
+      return {
+        __typename: 'SessionBoardPathChanged',
+        boardPath: event.boardPath,
+        changedByParticipantId: event.changedByParticipantId ?? null,
+      };
+    case 'SessionEnded':
+      return { __typename: 'SessionEnded', reason: event.reason ?? null, newPath: event.newPath ?? null };
+    default:
+      return null;
+  }
+}
+
 /**
  * Apply a single `SessionEvent` (excluding `SessionStatsUpdated`, which is
  * dispatched through the React Query cache rather than the session reducer)
@@ -93,58 +133,8 @@ export function transformToSubscriptionEvent(event: QueueEvent | SubscriptionQue
  * IndexedDB removal and the next lifecycle tick, not the reducer.
  */
 export function applySessionEvent(prev: Session | null, event: SessionEvent): Session | null {
-  if (!prev) return prev;
-  switch (event.__typename) {
-    case 'UserJoined':
-      return { ...prev, users: upsertSessionUser(prev.users, coerceSessionUser(event.user)) };
-    case 'UserPresenceChanged':
-      return { ...prev, users: upsertSessionUser(prev.users, coerceSessionUser(event.user)) };
-    case 'UserLeft':
-      return { ...prev, users: prev.users.filter((u) => u.id !== event.userId) };
-    case 'LeaderChanged': {
-      // See the long-form comment in the subscription's `next` handler below for
-      // the anonymous-vs-authenticated fallback rationale.
-      const localEntry = prev.users.find((u) => u.id === prev.clientId);
-      const isAnonymous = localEntry !== undefined && !localEntry.userId;
-      const effectiveLeaderConnectionId = event.leaderConnectionId ?? (isAnonymous ? event.leaderId : null);
-      return {
-        ...prev,
-        isLeader: effectiveLeaderConnectionId === prev.clientId,
-        users: prev.users.map((u) => ({
-          ...u,
-          isLeader: u.id === event.leaderId,
-        })),
-      };
-    }
-    case 'DriverChanged':
-      // Driver is a separate concept from leader (the queue-control-bar pivot's
-      // lightbulb gesture). Keep `isLeader` untouched here — leader semantics
-      // are presentation/legacy and ride on `LeaderChanged`. Coerce
-      // undefined → null so the local Session's tighter `string | null` shape
-      // holds even when the wire payload omits the field.
-      return { ...prev, driverParticipantId: event.driverParticipantId ?? null };
-    case 'SessionBoardSerialChanged':
-      // Mobile clients consult this when running the lightbulb fallback so a
-      // second phone joining a multi-board gym auto-connects to the same
-      // physical board the first phone is paired to.
-      return { ...prev, lastConnectedBoardSerial: event.lastConnectedBoardSerial ?? null };
-    case 'SessionBoardPathChanged':
-      // Update the stored boardPath so every consumer that reads
-      // `Session.boardPath` (queue-bridge fallback, off-board surfaces, the
-      // session-lifecycle's restore path) sees the new value. The URL
-      // follow-up — `router.replace(newPath)` for remote-originated changes
-      // — lives in the React-side event subscriber, not this reducer; we
-      // intentionally keep `applySessionEvent` pure so the rule stays
-      // unit-testable.
-      return { ...prev, boardPath: event.boardPath };
-    case 'SessionEnded':
-      // The lifecycle effect clears IndexedDB and tears the session down on
-      // its own; the reducer just leaves the existing state in place so the
-      // UI doesn't snap to "no session" before the dialog can mount.
-      return prev;
-    default:
-      return prev;
-  }
+  const runtimeEvent = toWebSessionRuntimeEvent(event);
+  return runtimeEvent ? applySessionRuntimeEvent(prev, runtimeEvent, { coerceUser: coerceSessionUser }) : prev;
 }
 
 export function hasContiguousReplayCoverage(

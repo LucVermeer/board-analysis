@@ -32,6 +32,8 @@ type UseLiveActivityOptions = {
   board: BoardConfig | null;
   sessionId: string | null;
   isSessionActive: boolean;
+  widgetNavigationAllowed: boolean;
+  isPartySession: boolean;
   /** Localized strings for the Android foreground-service notification (ignored on iOS). */
   androidNotification?: AndroidNotificationStrings;
 };
@@ -67,6 +69,8 @@ export function useLiveActivity({
   board,
   sessionId,
   isSessionActive,
+  widgetNavigationAllowed,
+  isPartySession,
   androidNotification,
 }: UseLiveActivityOptions): void {
   const isActiveRef = useRef(false);
@@ -82,6 +86,10 @@ export function useLiveActivity({
   authTokenRef.current = authToken;
   const androidNotificationRef = useRef(androidNotification);
   androidNotificationRef.current = androidNotification;
+  const widgetNavigationAllowedRef = useRef(widgetNavigationAllowed);
+  widgetNavigationAllowedRef.current = widgetNavigationAllowed;
+  const isPartySessionRef = useRef(isPartySession);
+  isPartySessionRef.current = isPartySession;
   const queueRef = useRef(queue);
   queueRef.current = queue;
   const currentClimbRef = useRef(currentClimbQueueItem);
@@ -160,6 +168,8 @@ export function useLiveActivity({
         layoutId: stableBoard.layoutId,
         sizeId: stableBoard.sizeId,
         setIds: stableBoard.setIds,
+        widgetNavigationAllowed: widgetNavigationAllowedRef.current,
+        isPartySession: isPartySessionRef.current,
         androidNotification: androidNotificationRef.current,
       })
         .then(() => {
@@ -180,6 +190,8 @@ export function useLiveActivity({
             hasPrevious: idx > 0,
             climbUuid: displayItem.climb.uuid,
             queue: serializedQueueRef.current,
+            widgetNavigationAllowed: widgetNavigationAllowedRef.current,
+            isPartySession: isPartySessionRef.current,
           });
         })
         .catch((error) => {
@@ -232,8 +244,10 @@ export function useLiveActivity({
       hasPrevious: currentIndex > 0,
       climbUuid: displayItem.climb.uuid,
       queue: serializedQueue,
+      widgetNavigationAllowed,
+      isPartySession,
     });
-  }, [serializedQueue, stableBoard]);
+  }, [isPartySession, serializedQueue, stableBoard, widgetNavigationAllowed]);
 
   // Effect 2: Climb navigation — lightweight update with only scalar data.
   useEffect(() => {
@@ -255,6 +269,8 @@ export function useLiveActivity({
       hasNext: currentIndex < queue.length - 1,
       hasPrevious: currentIndex > 0,
       climbUuid: displayItem.climb.uuid,
+      widgetNavigationAllowed,
+      isPartySession,
     });
-  }, [currentClimbQueueItem, queue, stableBoard]);
+  }, [currentClimbQueueItem, isPartySession, queue, stableBoard, widgetNavigationAllowed]);
 }

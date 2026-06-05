@@ -67,6 +67,18 @@ Device-to-server (widget buttons):
   Backend publishes CurrentClimbChanged
        |
   APNs push sent to all session tokens (other devices)
+
+  User taps the lightbulb while not the party driver
+       |
+  iOS performs TakeControlIntent in the MAIN APP process
+       |
+  HTTP POST /api/widget/take-control
+       - authenticated with the registered Live Activity bearer token
+       - rejected unless the token row has a bound authenticated userId
+       - claims that participant as the wall driver
+       |
+  On success, the widget stores local wall-control state, shows the
+  lightbulb on, and enables Next/Previous.
 ```
 
 Latency on the BLE side from a suspended-app cold-launch is ~1.5–2.5 s: background-launch (~0.5–1 s) + CoreBluetooth state restoration (~0.5–1 s) + UART chunk flush (~0.2–0.5 s). Subsequent taps inside the same wake window are faster because the peripheral stays connected.
@@ -334,6 +346,17 @@ Lock your iPhone. The Live Activity widget should update within a few seconds sh
 
 ## Testing Widget Navigation
 
+### Test Non-Driver Take Control
+
+1. Start a party session with two signed-in participants and register Live Activities on both devices
+2. Make device A the wall driver
+3. Lock device B
+4. Verify device B shows the lightbulb off and the Next/Previous buttons disabled
+5. Tap the lightbulb on device B
+6. Backend logs should show the `/api/widget/take-control` request
+7. Device B should show the lightbulb on and enable Next/Previous after the request succeeds
+8. Device A should show disabled navigation after its app/native state receives the driver update
+
 ### Test with App in Foreground
 
 1. Lock your iPhone with the app still running
@@ -482,8 +505,9 @@ The .p8 key JWT has expired (tokens are valid for 1 hour). The `@parse/node-apn`
 ### Widget buttons don't send HTTP request
 
 - Check that `bs_widget_navigate_url` (constant: `SharedConstants.widgetNavigateUrlKey`) is stored in SharedDefaults. `LiveActivityPlugin.startSession()` derives it from `graphqlUrl` (e.g. `https://ws.boardsesh.com/api/widget/navigate`) and writes it — verify in the Xcode console during session start. The widget reads this exact URL via `WidgetNetworking.sendNavigation`; if the key is missing the call silently no-ops. Earlier builds derived the URL from `bs_server_url` (the web origin), which is wrong because `/api/widget/navigate` is a backend route, not a Next.js route — if you're seeing the old key in SharedDefaults, the user is on a stale build.
+- Check that `bs_widget_take_control_url` (constant: `SharedConstants.widgetTakeControlUrlKey`) is stored in SharedDefaults when debugging lightbulb take-control. It is derived from the same `graphqlUrl` as the navigation endpoint.
 - The widget extension must have the App Group entitlement to read SharedDefaults.
-- Check backend logs for incoming requests to `/api/widget/navigate`.
+- Check backend logs for incoming requests to `/api/widget/navigate` or `/api/widget/take-control`.
 
 ### Live Activity goes stale after 3 minutes
 

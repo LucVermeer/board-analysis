@@ -35,7 +35,21 @@ vi.mock('../../Text', () => ({
   Text: ({ children }: { children?: ReactNode }) => createElement('span', null, children),
 }));
 vi.mock('../../ble/BleLightbulbButton', () => ({
-  BleLightbulbButton: () => createElement('div', { 'data-ble': 'true' }),
+  BleLightbulbButton: ({
+    accessibilityLabel,
+    longPressAccessibilityHint,
+    onLongPress,
+  }: {
+    accessibilityLabel?: string;
+    longPressAccessibilityHint?: string;
+    onLongPress?: () => void;
+  }) =>
+    createElement('div', {
+      'data-ble': 'true',
+      'data-label': accessibilityLabel,
+      'data-long-press-hint': longPressAccessibilityHint,
+      'data-long-press-enabled': onLongPress ? 'true' : 'false',
+    }),
 }));
 vi.mock('../../drawer-action-bar/DrawerActionBar', () => ({
   SIZES: { lg: { dim: 48, icon: 28 }, sm: { dim: 44, icon: 22 } },
@@ -100,5 +114,49 @@ describe('PlayDrawerActionBar', () => {
     expect(anglePill).toBeTruthy();
     expect(anglePill.textContent).toContain('40°');
     expect(Number(anglePill.getAttribute('data-hitslop'))).toBeGreaterThanOrEqual(6);
+  });
+
+  it('passes party wall-control labels through to the lightbulb', () => {
+    const { container } = render(
+      createElement(PlayDrawerActionBar, {
+        ...baseProps,
+        lightbulbActive: true,
+        lightbulbAccessibilityLabel: 'Release wall control',
+        lightbulbLongPressAccessibilityHint: 'Hold for Bluetooth controls',
+      }),
+    );
+    const lightbulb = container.querySelector('[data-ble="true"]') as HTMLElement;
+
+    expect(lightbulb.getAttribute('data-label')).toBe('Release wall control');
+    expect(lightbulb.getAttribute('data-long-press-hint')).toBe('Hold for Bluetooth controls');
+  });
+
+  it('gates lightbulb long-press controls separately from the active state', () => {
+    const { container, rerender } = render(
+      createElement(PlayDrawerActionBar, {
+        ...baseProps,
+        lightbulbActive: true,
+        lightbulbLongPressEnabled: false,
+        lightbulbAccessibilityLabel: 'Release wall control',
+      }),
+    );
+    const inactiveLongPressBulb = container.querySelector('[data-ble="true"]') as HTMLElement;
+
+    expect(inactiveLongPressBulb.getAttribute('data-long-press-enabled')).toBe('false');
+    expect(inactiveLongPressBulb.getAttribute('data-long-press-hint')).toBeNull();
+
+    rerender(
+      createElement(PlayDrawerActionBar, {
+        ...baseProps,
+        lightbulbActive: false,
+        lightbulbLongPressEnabled: true,
+        lightbulbAccessibilityLabel: 'Take wall control',
+        onLightbulbLongPress: vi.fn(),
+      }),
+    );
+    const activeLongPressBulb = container.querySelector('[data-ble="true"]') as HTMLElement;
+
+    expect(activeLongPressBulb.getAttribute('data-long-press-enabled')).toBe('true');
+    expect(activeLongPressBulb.getAttribute('data-long-press-hint')).toBe('ble.holdForControls');
   });
 });

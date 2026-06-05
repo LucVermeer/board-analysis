@@ -73,6 +73,60 @@ describe('REMOVE_FROM_QUEUE', () => {
   });
 });
 
+describe('INITIAL_QUEUE_DATA', () => {
+  it('preserves current climb when not provided', () => {
+    const current = makeClimbQueueItem({ uuid: 'current' });
+    const next = makeClimbQueueItem({ uuid: 'next' });
+    const state = makeState({ currentClimbQueueItem: current });
+
+    const result = queueReducer(state, {
+      type: 'INITIAL_QUEUE_DATA',
+      payload: { queue: [next] },
+    });
+
+    expect(result.currentClimbQueueItem).toBe(current);
+  });
+
+  it('clears current climb when explicitly set to null', () => {
+    const current = makeClimbQueueItem({ uuid: 'current' });
+    const state = makeState({ currentClimbQueueItem: current });
+
+    const result = queueReducer(state, {
+      type: 'INITIAL_QUEUE_DATA',
+      payload: { queue: [], currentClimbQueueItem: null },
+    });
+
+    expect(result.currentClimbQueueItem).toBeNull();
+  });
+});
+
+describe('UPDATE_QUEUE', () => {
+  it('preserves current climb when not provided', () => {
+    const current = makeClimbQueueItem({ uuid: 'current' });
+    const next = makeClimbQueueItem({ uuid: 'next' });
+    const state = makeState({ currentClimbQueueItem: current });
+
+    const result = queueReducer(state, {
+      type: 'UPDATE_QUEUE',
+      payload: { queue: [next] },
+    });
+
+    expect(result.currentClimbQueueItem).toBe(current);
+  });
+
+  it('clears current climb when explicitly set to null', () => {
+    const current = makeClimbQueueItem({ uuid: 'current' });
+    const state = makeState({ currentClimbQueueItem: current });
+
+    const result = queueReducer(state, {
+      type: 'UPDATE_QUEUE',
+      payload: { queue: [], currentClimbQueueItem: null },
+    });
+
+    expect(result.currentClimbQueueItem).toBeNull();
+  });
+});
+
 describe('SET_CURRENT_CLIMB', () => {
   it('inserts item after current when current exists in queue', () => {
     const current = makeClimbQueueItem({ uuid: 'current' });

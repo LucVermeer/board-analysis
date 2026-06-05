@@ -865,6 +865,12 @@ export const SESSION_UPDATES_SUBSCRIPTION = `
         driverParticipantId
         previousDriverParticipantId
       }
+      ... on WallConfirmedClimb {
+        climbUuid
+        confirmedAt
+        confirmedByParticipantId
+        queueItemUuid
+      }
       ... on SessionEnded {
         reason
         newPath
@@ -872,6 +878,9 @@ export const SESSION_UPDATES_SUBSCRIPTION = `
       ... on SessionBoardPathChanged {
         boardPath
         changedByParticipantId
+      }
+      ... on SessionBoardSerialChanged {
+        lastConnectedBoardSerial
       }
       ... on SessionStatsUpdated {
         sessionId
@@ -936,9 +945,22 @@ export type SessionUpdateEvent = {
   user?: SessionUser;
   // UserLeft
   userId?: string;
+  // LeaderChanged
+  leaderId?: string | null;
+  leaderConnectionId?: string | null;
   // DriverChanged
   driverParticipantId?: string | null;
   previousDriverParticipantId?: string | null;
+  // WallConfirmedClimb
+  climbUuid?: string;
+  confirmedAt?: string;
+  confirmedByParticipantId?: string | null;
+  queueItemUuid?: string | null;
+  // SessionBoardSerialChanged
+  lastConnectedBoardSerial?: string | null;
+  // SessionEnded
+  reason?: string | null;
+  newPath?: string | null;
   // SessionStatsUpdated (aggregate fields — see SessionLiveStatsEvent)
   sessionId?: string;
   totalSends?: number;

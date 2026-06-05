@@ -16,6 +16,7 @@ import { randomUUID } from 'expo-crypto';
 import type { BoardName, Climb } from '@boardsesh/shared-schema';
 import { buildBoardPath } from '@boardsesh/board-config';
 import type { Climb as QueueClimb, ClimbQueueItem, PlaylistSuggestionSource } from '@boardsesh/queue';
+import { deriveIsDriver } from '@boardsesh/queue-runtime';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { PlayDrawer, type PlayDrawerHandle, type PlayDrawerOpenOptions } from '../components/play-drawer';
 import { LogAscentSheet } from '../components/LogAscentSheet';
@@ -103,7 +104,8 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
   // unmounting instead of vanishing instantly.
   const [queueSheetMounted, setQueueSheetMounted] = useState(false);
   const [queueSheetVisible, setQueueSheetVisible] = useState(false);
-  const { addToQueue, setSessionBoardPath, setCurrentClimb, sessionId } = useQueue();
+  const { addToQueue, setSessionBoardPath, setCurrentClimb, sessionId, driverParticipantId, participantId } =
+    useQueue();
   const setActiveBoard = useSetActiveBoard();
   const { visible: snackbarVisible, nonce: snackbarNonce, dismissSnackbar } = useQueueSnackbar();
   const { mutate: toggleFavoriteMutate } = useToggleFavorite();
@@ -306,11 +308,23 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
   // Tap a queue item → make it current and show it in the play drawer.
   const handleQueueClimbPress = useCallback(
     (item: ClimbQueueItem) => {
+      const isPartyPreviewOnly =
+        sessionId !== null &&
+        !deriveIsDriver({
+          isPersistentSessionActive: true,
+          participantId,
+          driverParticipantId,
+        });
+      if (isPartyPreviewOnly) {
+        openPlayDrawer(item.climb, { setAsCurrent: false, previewQueueItem: item });
+        requestCloseQueueSheet();
+        return;
+      }
       setCurrentClimb(item);
-      openPlayDrawer(item.climb, { setAsCurrent: false });
+      openPlayDrawer(item.climb, { setAsCurrent: false, previewQueueItem: item });
       requestCloseQueueSheet();
     },
-    [setCurrentClimb, openPlayDrawer, requestCloseQueueSheet],
+    [driverParticipantId, participantId, sessionId, setCurrentClimb, openPlayDrawer, requestCloseQueueSheet],
   );
 
   // Tap a suggestion → activate it with a suggestion source built from the
@@ -319,11 +333,28 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
   const handleQueueSuggestionPress = useCallback(
     (climb: QueueClimb, source: PlaylistSuggestionSource) => {
       const item = climbToQueueItem(climb, { suggested: true });
+      const schemaClimb = item.climb as Climb;
+      const isPartyPreviewOnly =
+        sessionId !== null &&
+        !deriveIsDriver({
+          isPersistentSessionActive: true,
+          participantId,
+          driverParticipantId,
+        });
+      if (isPartyPreviewOnly) {
+        openPlayDrawer(schemaClimb, {
+          setAsCurrent: false,
+          previewQueueItem: item,
+          previewPlaylistSuggestionSource: source,
+        });
+        requestCloseQueueSheet();
+        return;
+      }
       setCurrentClimb(item, { playlistSuggestionSource: source });
-      openPlayDrawer(climb, { setAsCurrent: false });
+      openPlayDrawer(schemaClimb, { setAsCurrent: false, previewQueueItem: item });
       requestCloseQueueSheet();
     },
-    [setCurrentClimb, openPlayDrawer, requestCloseQueueSheet],
+    [driverParticipantId, participantId, sessionId, setCurrentClimb, openPlayDrawer, requestCloseQueueSheet],
   );
 
   // Tick a history climb → open the log-ascent sheet (stacks above the queue
