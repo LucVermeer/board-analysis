@@ -1,6 +1,7 @@
 import { router } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
+import type { GradeDisplayFormat } from '@boardsesh/play-view';
 import type { ThemeOverride } from '@boardsesh/key-value-storage';
 import { useTheme } from '../../../src/providers/theme-provider';
 import { useAuth } from '../../../src/providers/auth-provider';
@@ -15,6 +16,7 @@ import { SectionHeader } from '../../../src/components/SectionHeader';
 import { SegmentedControl } from '../../../src/components/SegmentedControl';
 import { isPreviewBuild } from '../../../src/lib/eas-api';
 import { useSearchLayout, type SearchLayout } from '../../../src/lib/search-layout-preference';
+import { useGradeFormat } from '../../../src/hooks/use-grade-format';
 
 export default function MoreScreen() {
   const { systemColors, borderRadius, themeOverride, setThemeOverride } = useTheme();
@@ -23,6 +25,7 @@ export default function MoreScreen() {
   const { signOut } = useAuth();
   const { data: profile } = useProfile();
   const { layout: searchLayout, setLayout: setSearchLayout } = useSearchLayout();
+  const { gradeFormat, setGradeFormat } = useGradeFormat();
 
   const appearanceOptions: { key: ThemeOverride; label: string }[] = [
     { key: 'system', label: t('mobile.more.appearance.system') },
@@ -33,6 +36,12 @@ export default function MoreScreen() {
   const searchLayoutOptions: { key: SearchLayout; label: string }[] = [
     { key: 'bottom-bar', label: t('mobile.more.searchLayout.bottomBar') },
     { key: 'sticky-strip', label: t('mobile.more.searchLayout.stickyStrip') },
+  ];
+
+  const gradeFormatOptions: { key: GradeDisplayFormat; label: string }[] = [
+    { key: 'v-grade', label: t('mobile.more.gradeFormat.vGrade') },
+    { key: 'font', label: t('mobile.more.gradeFormat.font') },
+    { key: 'both', label: t('mobile.more.gradeFormat.both') },
   ];
 
   return (
@@ -59,6 +68,32 @@ export default function MoreScreen() {
             trackColor={systemColors.fill}
             accessibilityLabel={t('mobile.more.appearance.title')}
           />
+        </View>
+      </View>
+
+      <View style={styles.section}>
+        <SectionHeader title={t('mobile.more.gradeFormat.title')} />
+        <View
+          style={[
+            styles.card,
+            {
+              backgroundColor: systemColors.secondaryBackground,
+              borderRadius: borderRadius.lg,
+              marginHorizontal: spacing[4],
+              padding: spacing[3],
+            },
+          ]}
+        >
+          <SegmentedControl
+            options={gradeFormatOptions}
+            selectedKey={gradeFormat}
+            onSelect={setGradeFormat}
+            trackColor={systemColors.fill}
+            accessibilityLabel={t('mobile.more.gradeFormat.title')}
+          />
+          <Text variant="footnote" color={systemColors.secondaryLabel} style={styles.settingHint}>
+            {t('mobile.more.gradeFormat.description')}
+          </Text>
         </View>
       </View>
 

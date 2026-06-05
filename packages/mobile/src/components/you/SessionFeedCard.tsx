@@ -16,6 +16,7 @@ import { brandColors, withAlpha } from '../../theme/colors';
 import { iosSystemColors } from '../../theme/ios-colors';
 import { spacing, borderRadius } from '../../theme/tokens';
 import { useTheme } from '../../providers/theme-provider';
+import { useGradeFormat } from '../../hooks/use-grade-format';
 
 type SessionFeedCardProps = {
   session: SessionFeedItem;
@@ -40,13 +41,17 @@ export const SessionFeedCard = memo(function SessionFeedCard({
 }: SessionFeedCardProps) {
   const { t } = useTranslation('feed');
   const { systemColors } = useTheme();
+  const { formatGrade } = useGradeFormat();
 
   const names = session.participants
     .map((participant) => participant.displayName)
     .filter((name): name is string => !!name)
     .join(', ');
 
-  const gradeBars = useMemo(() => buildSessionGradeBars(session.gradeDistribution), [session.gradeDistribution]);
+  const gradeBars = useMemo(
+    () => buildSessionGradeBars(session.gradeDistribution, formatGrade),
+    [session.gradeDistribution, formatGrade],
+  );
 
   return (
     <View style={styles.wrapper}>
@@ -74,7 +79,11 @@ export const SessionFeedCard = memo(function SessionFeedCard({
             </View>
           </View>
           {session.hardestGrade ? (
-            <HardestBadge grade={session.hardestGrade} label={t('sessionFeedCard.hardest')} />
+            <HardestBadge
+              grade={session.hardestGrade}
+              displayGrade={formatGrade(session.hardestGrade) ?? session.hardestGrade}
+              label={t('sessionFeedCard.hardest')}
+            />
           ) : null}
         </View>
 
@@ -146,7 +155,7 @@ function Chip({ icon, label, tint }: { icon: IconName; label: string; tint: stri
   );
 }
 
-function HardestBadge({ grade, label }: { grade: string; label: string }) {
+function HardestBadge({ grade, displayGrade, label }: { grade: string; displayGrade: string; label: string }) {
   const { systemColors } = useTheme();
   const background = gradeBadgeColor(grade);
   const textColor = getGradeTextColor(background);
@@ -155,7 +164,7 @@ function HardestBadge({ grade, label }: { grade: string; label: string }) {
       <View style={[styles.hardestPill, { backgroundColor: background }]}>
         <Icon name="flame" size={12} color={textColor} />
         <Text variant="footnote" color={textColor} style={styles.hardestGrade}>
-          {grade}
+          {displayGrade}
         </Text>
       </View>
       <Text variant="caption2" color={systemColors.tertiaryLabel}>

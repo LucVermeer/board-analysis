@@ -12,6 +12,7 @@ import {
 } from '@boardsesh/playlist-generator';
 import { Text } from '../../Text';
 import { useTheme } from '../../../providers/theme-provider';
+import { useGradeFormat } from '../../../hooks/use-grade-format';
 import { spacing, borderRadius } from '../../../theme/tokens';
 import { brandColors } from '../../../theme/colors';
 import { iosSystemColors } from '../../../theme/ios-colors';
@@ -76,6 +77,7 @@ function getDefaultTargetGrade(boardName: BoardName | null): number {
 export function GeneratorPickerCard({ boardName, selection, onChange }: GeneratorPickerCardProps) {
   const { t } = useTranslation('session');
   const { systemColors } = useTheme();
+  const { formatGrade } = useGradeFormat();
 
   const handleSelectType = (value: ChipValue) => {
     if (value === 'off') {
@@ -135,6 +137,7 @@ export function GeneratorPickerCard({ boardName, selection, onChange }: Generato
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
             {gradeChoices.map((grade) => {
               const isActive = grade.difficulty_id === selection.options.targetGrade;
+              const gradeLabel = formatGrade(grade.difficulty_name) ?? grade.difficulty_name;
               return (
                 <Pressable
                   key={grade.difficulty_id}
@@ -148,10 +151,10 @@ export function GeneratorPickerCard({ boardName, selection, onChange }: Generato
                   ]}
                   accessibilityRole="button"
                   accessibilityState={{ selected: isActive }}
-                  accessibilityLabel={grade.difficulty_name}
+                  accessibilityLabel={gradeLabel}
                 >
                   <Text variant="footnote" color={isActive ? iosSystemColors.white : systemColors.label}>
-                    {grade.difficulty_name}
+                    {gradeLabel}
                   </Text>
                 </Pressable>
               );

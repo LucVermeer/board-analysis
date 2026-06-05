@@ -7,6 +7,11 @@ import {
 import type { RawBar, RawBarSegment } from '@boardsesh/profile-stats';
 import type { SessionGradeDistributionItem } from '@boardsesh/shared-schema';
 import { brandColors, withAlpha } from '../../theme/colors';
+import { gradeSortValue } from './grade-sort-value';
+
+export { gradeSortValue } from './grade-sort-value';
+
+type FormatGrade = (difficulty: string | null | undefined) => string | null;
 
 /**
  * A stacked-bar segment that may carry its own colour, overriding the chart's
@@ -93,41 +98,27 @@ export function gradeBadgeColor(gradeLabel: string | null | undefined): string {
 }
 
 /**
- * Sortable rank for a grade label so chart X-axes read easy→hard. Extracts the
- * V-number when present (combined Aurora labels always carry one), else maps a
- * font grade; unknown labels sort last.
- */
-export function gradeSortValue(gradeLabel: string): number {
-  const vMatch = gradeLabel.match(/V(\d+)/i);
-  if (vMatch) return Number(vMatch[1]);
-  const fontMatch = gradeLabel.match(/(\d)([abc])(\+?)/i);
-  if (fontMatch) {
-    const number = Number(fontMatch[1]);
-    const letter = fontMatch[2].toLowerCase().charCodeAt(0) - 96; // a=1, b=2, c=3
-    // Offset past the V range so a pure-font session still sorts ascending.
-    return 100 + number * 10 + letter * 2 + (fontMatch[3] ? 1 : 0);
-  }
-  return Number.MAX_SAFE_INTEGER;
-}
-
-/**
  * Build grade-distribution bars for a session view. Each grade bar is the total
  * ascents (flash + send) for that grade, drawn in the grade's own vivid colour —
  * a colourful grade pyramid. Grades with no ascents are dropped; returns null
  * when the whole distribution is empty. Pass straight to `StackedBarChart` (the
  * segment carries an explicit colour, so `colorBy` is ignored for these bars).
  */
-export function buildSessionGradeBars(distribution: SessionGradeDistributionItem[]): ColoredBar[] | null {
+export function buildSessionGradeBars(
+  distribution: SessionGradeDistributionItem[],
+  formatGrade?: FormatGrade,
+): ColoredBar[] | null {
   const bars: ColoredBar[] = [];
   // Order the X-axis easy→hard regardless of the order the backend returns.
   const ordered = [...distribution].sort((a, b) => gradeSortValue(a.grade) - gradeSortValue(b.grade));
   for (const item of ordered) {
     const total = item.flash + item.send;
     if (total <= 0) continue;
+    const label = formatGrade?.(item.grade) ?? item.grade;
     bars.push({
       key: item.grade,
-      label: item.grade,
-      segments: [{ value: total, key: item.grade, label: item.grade, color: gradeBadgeColor(item.grade) }],
+      label,
+      segments: [{ value: total, key: item.grade, label, color: gradeBadgeColor(item.grade) }],
     });
   }
   return bars.length > 0 ? bars : null;

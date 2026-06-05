@@ -22,6 +22,13 @@
         "description": "Where the grade and filters sit on the climbs screen.",
         "bottomBar": "Bottom bar",
         "stickyStrip": "Top strip"
+      },
+      "gradeFormat": {
+        "title": "Grade format",
+        "description": "Choose how climb grades read across the app.",
+        "vGrade": "V grade",
+        "font": "French",
+        "both": "Both"
       }
     },
     "nav": {

@@ -10,6 +10,7 @@ import { brandColors } from '../../theme/colors';
 import { iosSystemColors } from '../../theme/ios-colors';
 import { spacing, borderRadius } from '../../theme/tokens';
 import { useTheme } from '../../providers/theme-provider';
+import { useGradeFormat } from '../../hooks/use-grade-format';
 
 type SessionStatTilesProps = {
   sends: number;
@@ -58,12 +59,14 @@ function StatTile({ value, label, icon, tint }: { value: number; label: string; 
 }
 
 function GradeTile({ grade, label }: { grade: string; label: string }) {
+  const { formatGrade } = useGradeFormat();
   const background = gradeBadgeColor(grade);
   const textColor = getGradeTextColor(background);
+  const displayGrade = formatGrade(grade) ?? grade;
   return (
     <View style={[styles.tile, { backgroundColor: background }]}>
       <Text variant="title3" color={textColor}>
-        {grade}
+        {displayGrade}
       </Text>
       <Text variant="caption1" color={textColor} style={styles.gradeLabel} numberOfLines={1}>
         {label}

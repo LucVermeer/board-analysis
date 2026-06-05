@@ -10,6 +10,7 @@ import { SectionHeader } from '../../../src/components/SectionHeader';
 import { Separator } from '../../../src/components/Separator';
 import { useTheme } from '../../../src/providers/theme-provider';
 import { useSessionSummary } from '../../../src/lib/graphql/hooks';
+import { useGradeFormat } from '../../../src/hooks/use-grade-format';
 import { brandColors } from '../../../src/theme/colors';
 import { spacing, borderRadius as br } from '../../../src/theme/tokens';
 
@@ -52,6 +53,7 @@ export default function SessionSummaryScreen() {
   const { systemColors } = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { formatGrade } = useGradeFormat();
 
   if (isLoading || !summary) {
     return (
@@ -107,7 +109,7 @@ export default function SessionSummaryScreen() {
           <View style={styles.hardestRow}>
             <View style={[styles.gradeBadge, { backgroundColor: brandColors.primary }]}>
               <Text variant="subheadline" color="#FFFFFF" style={styles.gradeBadgeText}>
-                {summary.hardestClimb.grade}
+                {formatGrade(summary.hardestClimb.grade) ?? summary.hardestClimb.grade}
               </Text>
             </View>
             <Text variant="body" numberOfLines={1} style={styles.hardestClimbName}>
@@ -125,7 +127,7 @@ export default function SessionSummaryScreen() {
             {summary.gradeDistribution.map((gradeItem, index) => (
               <View key={gradeItem.grade} style={styles.gradeRow}>
                 <Text variant="footnote" color={systemColors.secondaryLabel} style={styles.gradeLabel}>
-                  {gradeItem.grade}
+                  {formatGrade(gradeItem.grade) ?? gradeItem.grade}
                 </Text>
                 <View style={styles.gradeBarContainer}>
                   <View
@@ -251,7 +253,7 @@ const styles = StyleSheet.create({
     gap: spacing[2],
   },
   gradeLabel: {
-    width: 40,
+    width: 76,
     textAlign: 'right',
   },
   gradeBarContainer: {

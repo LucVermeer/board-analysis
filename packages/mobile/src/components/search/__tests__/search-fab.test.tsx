@@ -36,6 +36,9 @@ vi.mock('../../../theme/layout', () => ({ TOOLBAR_FAB_SIZE: 56, TOOLBAR_SIDE_MAR
 vi.mock('../../../theme/colors', () => ({ withAlpha: (color: string, alpha: number) => `${color}@${alpha}` }));
 vi.mock('../../../lib/haptics', () => ({ hapticLight: haptics.light, hapticSelection: haptics.selection }));
 vi.mock('../../../hooks/use-reduce-motion', () => ({ useReduceMotion: () => false }));
+vi.mock('../../../hooks/use-grade-format', () => ({
+  useGradeFormat: () => ({ formatGrade: (difficulty: string | null | undefined) => difficulty ?? null }),
+}));
 vi.mock('../../../lib/search-expanded-state', () => ({ setSearchExpanded: signal.setSearchExpanded }));
 
 vi.mock('../../SearchHeader', () => ({
