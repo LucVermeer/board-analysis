@@ -220,7 +220,7 @@ describe('NativeAccessoryClimbRow', () => {
     expect(container.querySelector('[data-icon-size="24"]')).not.toBeNull();
     expect(container.querySelector('[data-height="56"]')).not.toBeNull();
     expect(container.querySelector('[data-height="40"]')).not.toBeNull();
-    expect(container.querySelector('[data-height="28"]')).not.toBeNull();
+    expect(container.querySelector('[data-height="36"]')).not.toBeNull();
     expect(container.querySelector('[data-padding-right="12"]')).not.toBeNull();
     const gradeText = Array.from(container.querySelectorAll('[data-text]')).find(
       (textNode) => textNode.textContent === 'V6',
