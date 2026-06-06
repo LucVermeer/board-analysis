@@ -69,7 +69,7 @@ export function PreSessionView() {
   }, [activeBoard, isAuthenticated, selection, startSession, addToQueue, showToast, t]);
 
   const canStart = activeBoard != null && !isStarting;
-  const footerBottomPadding = bottomChrome.floatingControlBottom + spacing[3];
+  const footerBottomPadding = bottomChrome.scrollBottomPadding + spacing[3];
 
   return (
     <View style={styles.container}>

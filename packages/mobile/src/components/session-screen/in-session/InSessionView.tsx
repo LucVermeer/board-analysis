@@ -390,7 +390,7 @@ export function InSessionView({ translateY, screenHeight }: InSessionViewProps) 
 
   const [showEndSession, setShowEndSession] = useState(false);
   const [isEnding, setIsEnding] = useState(false);
-  const footerBottomPadding = bottomChrome.floatingControlBottom + spacing[3];
+  const footerBottomPadding = bottomChrome.scrollBottomPadding + spacing[3];
 
   const handleConfirmEnd = useCallback(async () => {
     setIsEnding(true);
