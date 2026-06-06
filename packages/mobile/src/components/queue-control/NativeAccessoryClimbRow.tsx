@@ -83,8 +83,6 @@ function AccessoryClimbThumbnail({ climb, boardConfig }: { climb: Climb; boardCo
 
   const thumbnailBoardStyle = {
     ...getAccessoryThumbnailBoardSize(boardRenderData.boardWidth, boardRenderData.boardHeight),
-    borderRadius: ACCESSORY_THUMBNAIL_RADIUS,
-    overflow: 'hidden' as const,
   };
 
   return (
@@ -108,13 +106,7 @@ function ClimbLabel({ climb, labelColor, formattedGrade, showThumbnail, boardCon
   return (
     <View style={styles.labelInner}>
       {showThumbnail ? <AccessoryClimbThumbnail climb={climb} boardConfig={boardConfig} /> : null}
-      <Text
-        variant="subheadline"
-        color={labelColor}
-        numberOfLines={1}
-        ellipsizeMode="tail"
-        style={styles.name}
-      >
+      <Text variant="subheadline" color={labelColor} numberOfLines={1} ellipsizeMode="tail" style={styles.name}>
         {climb.name}
       </Text>
       {formattedGrade ? (
@@ -331,6 +323,8 @@ const styles = StyleSheet.create({
   thumbnailSlot: {
     width: ACCESSORY_THUMBNAIL_SIZE,
     height: ACCESSORY_THUMBNAIL_SIZE,
+    borderRadius: ACCESSORY_THUMBNAIL_RADIUS,
+    overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,

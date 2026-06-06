@@ -58,6 +58,7 @@ vi.mock('react-native', () => ({
     const borderWidth = readStyleValue('borderWidth');
     const borderColor = readStyleValue('borderColor');
     const borderRadius = readStyleValue('borderRadius');
+    const overflow = readStyleValue('overflow');
     return createElement(
       'div',
       {
@@ -68,6 +69,7 @@ vi.mock('react-native', () => ({
         'data-border-width': borderWidth == null ? '' : String(borderWidth),
         'data-border-color': borderColor == null ? '' : String(borderColor),
         'data-border-radius': borderRadius == null ? '' : String(borderRadius),
+        'data-overflow': overflow == null ? '' : String(overflow),
         'data-role': accessibilityRole ?? '',
         'data-label': accessibilityLabel ?? '',
       },
@@ -279,11 +281,12 @@ describe('NativeAccessoryClimbRow', () => {
     expect(thumbnailSlot?.getAttribute('data-background-color')).toBe('');
     expect(thumbnailSlot?.getAttribute('data-border-width')).toBe('');
     expect(thumbnailSlot?.getAttribute('data-border-color')).toBe('');
-    expect(thumbnailSlot?.getAttribute('data-border-radius')).toBe('');
+    expect(thumbnailSlot?.getAttribute('data-border-radius')).toBe('7');
+    expect(thumbnailSlot?.getAttribute('data-overflow')).toBe('hidden');
     expectNumericAttribute(thumbnail, 'data-board-width', 22.5);
     expectNumericAttribute(thumbnail, 'data-board-height', 40);
-    expect(thumbnail.getAttribute('data-board-border-radius')).toBe('7');
-    expect(thumbnail.getAttribute('data-board-overflow')).toBe('hidden');
+    expect(thumbnail.getAttribute('data-board-border-radius')).toBe('');
+    expect(thumbnail.getAttribute('data-board-overflow')).toBe('');
 
     const gradeText = Array.from(container.querySelectorAll('[data-text]')).find(
       (textNode) => textNode.textContent === 'V6',
