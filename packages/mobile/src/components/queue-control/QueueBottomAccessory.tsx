@@ -3,8 +3,7 @@ import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import { NativeTabs } from 'expo-router/unstable-native-tabs';
 import { useQueue } from '../../providers/queue-provider';
 import { glassSize } from '../../theme/layout';
-import { ClimbCapsule } from './ClimbCapsule';
-import { LogAscentToolbarButton } from './LogAscentToolbarButton';
+import { NativeAccessoryClimbRow } from './NativeAccessoryClimbRow';
 
 const ACCESSORY_MAX_WIDTH = 344;
 const ACCESSORY_SCREEN_GUTTER = 32;
@@ -26,20 +25,11 @@ export function QueueBottomAccessory() {
 
   if (!currentClimb) return null;
 
-  const actionSize = glassSize.inline;
-  const capsuleHeight = placement === 'inline' ? glassSize.inline : glassSize.capsule;
-
   return (
     <View
       style={[styles.row, placement === 'inline' ? styles.inlineRow : styles.regularRow, { width: accessoryWidth }]}
     >
-      <ClimbCapsule
-        bare
-        fillWidth
-        height={capsuleHeight}
-        endAction={<LogAscentToolbarButton climb={currentClimb} size={actionSize} />}
-        endActionSize={actionSize}
-      />
+      <NativeAccessoryClimbRow placement={placement} width={accessoryWidth} />
     </View>
   );
 }

@@ -10,6 +10,7 @@ import { useLogAscentAction } from './use-log-ascent-action';
 type LogAscentToolbarButtonProps = {
   climb: Climb;
   size?: number;
+  iconSize?: number;
 };
 
 /**
@@ -17,7 +18,11 @@ type LogAscentToolbarButtonProps = {
  * toolbar provides the visible container, so this uses the plain checkmark SF
  * Symbol instead of the circular tick glyph used by standalone FABs.
  */
-export function LogAscentToolbarButton({ climb, size = glassSize.standard }: LogAscentToolbarButtonProps) {
+export function LogAscentToolbarButton({
+  climb,
+  size = glassSize.standard,
+  iconSize = 26,
+}: LogAscentToolbarButtonProps) {
   const { accessibilityLabel, disabled, handleLogAscentPress, iconColor, popStyle } = useLogAscentAction(climb);
 
   return (
@@ -32,7 +37,7 @@ export function LogAscentToolbarButton({ climb, size = glassSize.standard }: Log
         accessibilityState={{ disabled }}
         style={[styles.action, { width: size, height: size }, disabled ? styles.disabled : null]}
       >
-        <Icon name="check.small" size={26} color={iconColor} />
+        <Icon name="check.small" size={iconSize} color={iconColor} />
       </PressableSurface>
     </Animated.View>
   );

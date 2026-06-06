@@ -34,31 +34,13 @@ vi.mock('../../../providers/queue-provider', () => ({
 vi.mock('../../../theme/layout', () => ({
   glassSize: { standard: 56, inline: 44, capsule: 52 },
 }));
-vi.mock('../../../theme/tokens', () => ({ spacing: { 1: 4 } }));
-vi.mock('../ClimbCapsule', () => ({
-  ClimbCapsule: ({
-    bare,
-    fillWidth,
-    height,
-    endAction,
-  }: {
-    bare?: boolean;
-    fillWidth?: boolean;
-    height?: number;
-    endAction?: ReactNode;
-  }) =>
-    createElement(
-      'div',
-      {
-        'data-capsule-bare': bare ? 'true' : 'false',
-        'data-capsule-fill': fillWidth ? 'true' : 'false',
-        'data-capsule-height': String(height),
-      },
-      endAction,
-    ),
-}));
-vi.mock('../LogAscentToolbarButton', () => ({
-  LogAscentToolbarButton: ({ size }: { size?: number }) => createElement('button', { 'data-tick-size': String(size) }),
+vi.mock('../NativeAccessoryClimbRow', () => ({
+  NativeAccessoryClimbRow: ({ placement, width }: { placement: 'regular' | 'inline'; width: number }) =>
+    createElement('div', {
+      'data-native-row': 'true',
+      'data-placement': placement,
+      'data-row-width': String(width),
+    }),
 }));
 
 import { QueueBottomAccessory } from '../QueueBottomAccessory';
@@ -69,40 +51,40 @@ describe('QueueBottomAccessory', () => {
     cfg.currentClimbQueueItem = { climb: { uuid: 'c1', angle: 40 } } as unknown as ClimbQueueItem;
   });
 
-  it('renders bare current climb and tick in regular placement', () => {
+  it('renders the native accessory row in regular placement', () => {
     const { container } = render(<QueueBottomAccessory />);
-    expect(container.querySelector('[data-capsule-bare="true"]')).not.toBeNull();
-    expect(container.querySelector('[data-capsule-fill="true"]')).not.toBeNull();
-    expect(container.querySelector('[data-capsule-height="52"]')).not.toBeNull();
-    expect(container.querySelector('[data-tick-size="44"]')).not.toBeNull();
+    expect(container.querySelector('[data-native-row="true"]')).not.toBeNull();
+    expect(container.querySelector('[data-placement="regular"]')).not.toBeNull();
     expect(container.querySelector('[data-icon="search"]')).toBeNull();
   });
 
-  it('keeps the tick visible in inline placement', () => {
+  it('renders the native accessory row in inline placement', () => {
     cfg.placement = 'inline';
     const { container } = render(<QueueBottomAccessory />);
-    expect(container.querySelector('[data-capsule-bare="true"]')).not.toBeNull();
-    expect(container.querySelector('[data-capsule-height="44"]')).not.toBeNull();
-    expect(container.querySelector('[data-tick-size="44"]')).not.toBeNull();
+    expect(container.querySelector('[data-native-row="true"]')).not.toBeNull();
+    expect(container.querySelector('[data-placement="inline"]')).not.toBeNull();
   });
 
   it('keeps inline placement the same width as regular placement', () => {
     const regular = render(<QueueBottomAccessory />);
     const regularWidth = regular.container.querySelector('[data-width]')?.getAttribute('data-width');
+    const regularRowWidth = regular.container.querySelector('[data-native-row]')?.getAttribute('data-row-width');
     regular.unmount();
 
     cfg.placement = 'inline';
     const inline = render(<QueueBottomAccessory />);
     const inlineWidth = inline.container.querySelector('[data-width]')?.getAttribute('data-width');
+    const inlineRowWidth = inline.container.querySelector('[data-native-row]')?.getAttribute('data-row-width');
 
     expect(inlineWidth).toBe(regularWidth);
     expect(inlineWidth).toBe('344');
+    expect(inlineRowWidth).toBe(regularRowWidth);
+    expect(inlineRowWidth).toBe('344');
   });
 
   it('renders nothing without a current climb', () => {
     cfg.currentClimbQueueItem = null;
     const { container } = render(<QueueBottomAccessory />);
-    expect(container.querySelector('[data-capsule-bare]')).toBeNull();
-    expect(container.querySelector('[data-tick-size]')).toBeNull();
+    expect(container.querySelector('[data-native-row]')).toBeNull();
   });
 });

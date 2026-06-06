@@ -49,6 +49,8 @@ export type BoardRendererProps = {
   holdsData: HoldPlacement[];
   /** Whether to mirror the board horizontally */
   mirrored?: boolean;
+  /** Fill the caller's frame and rely on SVG `meet` scaling instead of deriving height from board aspect ratio. */
+  fillContainer?: boolean;
   /** External style applied to the outermost View wrapper */
   style?: import('react-native').ViewStyle;
 };
