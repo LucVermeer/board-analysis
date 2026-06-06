@@ -170,7 +170,7 @@ vi.mock('../../../theme/tokens', () => ({
 }));
 
 vi.mock('../../../theme/layout', () => ({
-  glassSize: { standard: 56, inline: 44 },
+  glassSize: { standard: 48, inline: 44 },
 }));
 
 vi.mock('../../../lib/board-details', () => ({
@@ -285,20 +285,20 @@ describe('NativeAccessoryClimbRow', () => {
     expect(container.querySelector('[data-fill-container="true"]')).not.toBeNull();
     expect(container.querySelector('[data-tick-size="44"]')).not.toBeNull();
     expect(container.querySelector('[data-icon-size="24"]')).not.toBeNull();
-    expect(container.querySelector('[data-height="56"]')).not.toBeNull();
+    expect(container.querySelector('[data-height="48"]')).not.toBeNull();
     expect(container.querySelector('[data-padding-right="12"]')).not.toBeNull();
 
     const thumbnail = getCurrentThumbnail(container);
-    const thumbnailSlot = thumbnail.closest('[data-width="36"][data-height="36"]');
+    const thumbnailSlot = thumbnail.closest('[data-width="40"][data-height="40"]');
     expect(thumbnailSlot).not.toBeNull();
     expect(thumbnailSlot?.getAttribute('data-background-color')).toBe('');
     expect(thumbnailSlot?.getAttribute('data-border-width')).toBe('');
     expect(thumbnailSlot?.getAttribute('data-border-color')).toBe('');
     expect(thumbnailSlot?.getAttribute('data-border-radius')).toBe('');
     expect(thumbnailSlot?.getAttribute('data-overflow')).toBe('');
-    expectNumericAttribute(thumbnail, 'data-board-width', 16.875);
-    expectNumericAttribute(thumbnail, 'data-board-height', 30);
-    expect(thumbnail.getAttribute('data-board-border-radius')).toBe('9');
+    expectNumericAttribute(thumbnail, 'data-board-width', 22.5);
+    expectNumericAttribute(thumbnail, 'data-board-height', 40);
+    expect(thumbnail.getAttribute('data-board-border-radius')).toBe('10');
     expect(thumbnail.getAttribute('data-board-overflow')).toBe('hidden');
 
     const climbNameText = Array.from(container.querySelectorAll('[data-text]')).find(
@@ -321,8 +321,8 @@ describe('NativeAccessoryClimbRow', () => {
     const { container } = render(<NativeAccessoryClimbRow placement="regular" width={344} />);
     const thumbnail = getCurrentThumbnail(container);
 
-    expectNumericAttribute(thumbnail, 'data-board-width', 12.970376);
-    expectNumericAttribute(thumbnail, 'data-board-height', 30);
+    expectNumericAttribute(thumbnail, 'data-board-width', 17.293835);
+    expectNumericAttribute(thumbnail, 'data-board-height', 40);
   });
 
   it('keeps near-square Kilter Homewall thumbnails off the accessory edges', () => {
@@ -331,10 +331,10 @@ describe('NativeAccessoryClimbRow', () => {
     const { container } = render(<NativeAccessoryClimbRow placement="regular" width={344} />);
     const thumbnail = getCurrentThumbnail(container);
 
-    expect(container.querySelector('[data-height="56"]')).not.toBeNull();
-    expect(thumbnail.closest('[data-width="36"][data-height="36"]')).not.toBeNull();
-    expectNumericAttribute(thumbnail, 'data-board-width', 28.003457);
-    expectNumericAttribute(thumbnail, 'data-board-height', 30);
+    expect(container.querySelector('[data-height="48"]')).not.toBeNull();
+    expect(thumbnail.closest('[data-width="40"][data-height="40"]')).not.toBeNull();
+    expectNumericAttribute(thumbnail, 'data-board-width', 37.337943);
+    expectNumericAttribute(thumbnail, 'data-board-height', 40);
   });
 
   it('uses the full silhouette for wide board thumbnails', () => {
@@ -343,8 +343,8 @@ describe('NativeAccessoryClimbRow', () => {
     const { container } = render(<NativeAccessoryClimbRow placement="regular" width={344} />);
     const thumbnail = getCurrentThumbnail(container);
 
-    expectNumericAttribute(thumbnail, 'data-board-width', 30);
-    expectNumericAttribute(thumbnail, 'data-board-height', 16.575);
+    expectNumericAttribute(thumbnail, 'data-board-width', 40);
+    expectNumericAttribute(thumbnail, 'data-board-height', 22.1);
   });
 
   it('keeps the thumbnail out of inline placement', () => {
