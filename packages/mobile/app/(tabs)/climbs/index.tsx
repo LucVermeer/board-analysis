@@ -10,7 +10,6 @@ import {
   toClimbSearchInput,
   mergeBoardFilters,
   countActiveFilters,
-  countActiveFiltersBeyondGrade,
   hasActiveBoardFilters,
   DEFAULT_CLIMB_FILTER_STATE,
   DEFAULT_CLIMB_BOARD_FILTER_STATE,
@@ -422,7 +421,10 @@ function ClimbListInner() {
       sizeId,
       setIds,
       angle,
-      activeFilterCount: countActiveFiltersBeyondGrade(filters, boardFilters),
+      // Grade-inclusive, matching the filter button's badge — a set grade is an
+      // active filter, so the analytics count and the UI never disagree (and a
+      // grade-only search reports 1, not 0).
+      activeFilterCount: countActiveFilters(filters, boardFilters),
     });
   }, [firstSearchPage, name, filters, boardFilters, boardName, layoutId, sizeId, setIds, angle]);
 
