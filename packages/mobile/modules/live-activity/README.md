@@ -44,6 +44,7 @@ the files listed below have **byte-identical copies** in both folders:
 - `ClimbSessionAttributes.swift`
 - `SharedConstants.swift`
 - `SharedKeychain.swift`
+- `TakeControlIntent.swift`
 - `WidgetNetworking.swift`
 
 When you change one, change the other. The
