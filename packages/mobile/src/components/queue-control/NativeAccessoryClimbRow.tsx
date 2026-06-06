@@ -30,8 +30,10 @@ type NativeAccessoryClimbRowProps = {
 const ACCESSORY_OPTICAL_Y_OFFSET = -1;
 const ACCESSORY_LEADING_INSET = spacing[1];
 const ACCESSORY_TRAILING_INSET = spacing[3];
-const ACCESSORY_THUMBNAIL_SIZE = 40;
+const ACCESSORY_THUMBNAIL_SLOT_SIZE = 36;
+const ACCESSORY_THUMBNAIL_ART_MAX_SIZE = 36;
 const ACCESSORY_THUMBNAIL_RADIUS = 7;
+const ACCESSORY_THUMBNAIL_Y_OFFSET = -4;
 
 type ClimbLabelProps = {
   climb: Climb;
@@ -45,21 +47,21 @@ function getAccessoryThumbnailBoardSize(boardWidth: number, boardHeight: number)
   const boardAspectRatio = boardWidth / boardHeight;
   if (!Number.isFinite(boardAspectRatio) || boardAspectRatio <= 0) {
     return {
-      width: ACCESSORY_THUMBNAIL_SIZE,
-      height: ACCESSORY_THUMBNAIL_SIZE,
+      width: ACCESSORY_THUMBNAIL_ART_MAX_SIZE,
+      height: ACCESSORY_THUMBNAIL_ART_MAX_SIZE,
     };
   }
 
   if (boardAspectRatio >= 1) {
     return {
-      width: ACCESSORY_THUMBNAIL_SIZE,
-      height: ACCESSORY_THUMBNAIL_SIZE / boardAspectRatio,
+      width: ACCESSORY_THUMBNAIL_ART_MAX_SIZE,
+      height: ACCESSORY_THUMBNAIL_ART_MAX_SIZE / boardAspectRatio,
     };
   }
 
   return {
-    width: ACCESSORY_THUMBNAIL_SIZE * boardAspectRatio,
-    height: ACCESSORY_THUMBNAIL_SIZE,
+    width: ACCESSORY_THUMBNAIL_ART_MAX_SIZE * boardAspectRatio,
+    height: ACCESSORY_THUMBNAIL_ART_MAX_SIZE,
   };
 }
 
@@ -321,13 +323,14 @@ const styles = StyleSheet.create({
     paddingRight: spacing[1],
   },
   thumbnailSlot: {
-    width: ACCESSORY_THUMBNAIL_SIZE,
-    height: ACCESSORY_THUMBNAIL_SIZE,
+    width: ACCESSORY_THUMBNAIL_SLOT_SIZE,
+    height: ACCESSORY_THUMBNAIL_SLOT_SIZE,
     borderRadius: ACCESSORY_THUMBNAIL_RADIUS,
     overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
+    transform: [{ translateY: ACCESSORY_THUMBNAIL_Y_OFFSET }],
   },
   name: {
     flex: 1,
