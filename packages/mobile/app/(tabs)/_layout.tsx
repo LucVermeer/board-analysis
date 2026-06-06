@@ -41,7 +41,7 @@ export default function TabLayout() {
         <NativeTabs.Trigger.Label>{t('mobile.nav.climbs')}</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
 
-      <NativeTabs.Trigger name="record" disableAutomaticContentInsets>
+      <NativeTabs.Trigger name="record">
         <NativeTabs.Trigger.Icon sf="record.circle" md="radio_button_checked" />
         <NativeTabs.Trigger.Label>{tSession('mobile.session.recordTab')}</NativeTabs.Trigger.Label>
         {showRecordBadge ? (
