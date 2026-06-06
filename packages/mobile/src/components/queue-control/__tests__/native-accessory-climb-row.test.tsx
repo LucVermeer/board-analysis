@@ -105,6 +105,7 @@ vi.mock('@boardsesh/play-view', () => ({ computePeekOffset: () => 0 }));
 type TextMockProps = {
   children?: ReactNode;
   color?: string;
+  variant?: string;
   style?: CSSProperties | Array<CSSProperties | undefined | false | null>;
 };
 
@@ -131,6 +132,7 @@ vi.mock('../../Text', () => ({
         'data-text': 'true',
         'data-color': readColor(props),
         'data-font-weight': readTextStyleValue(props, 'fontWeight'),
+        'data-variant': props.variant ?? '',
       },
       props.children,
     ),
@@ -302,12 +304,14 @@ describe('NativeAccessoryClimbRow', () => {
     const climbNameText = Array.from(container.querySelectorAll('[data-text]')).find(
       (textNode) => textNode.textContent === "Alvin's Nuts",
     );
+    expect(climbNameText?.getAttribute('data-variant')).toBe('subheadline');
     expect(climbNameText?.getAttribute('data-font-weight')).toBe('500');
 
     const gradeText = Array.from(container.querySelectorAll('[data-text]')).find(
       (textNode) => textNode.textContent === 'V6',
     );
     expect(gradeText?.getAttribute('data-color')).toBe('#111111');
+    expect(gradeText?.getAttribute('data-variant')).toBe('subheadline');
     expect(gradeText?.getAttribute('data-font-weight')).toBe('600');
   });
 

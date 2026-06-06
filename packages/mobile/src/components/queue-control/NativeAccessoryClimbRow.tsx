@@ -115,7 +115,7 @@ function ClimbLabel({ climb, labelColor, formattedGrade, showThumbnail, boardCon
         {climb.name}
       </Text>
       {formattedGrade ? (
-        <Text variant="headline" color={labelColor} numberOfLines={1} style={styles.gradeText}>
+        <Text variant="subheadline" color={labelColor} numberOfLines={1} style={styles.gradeText}>
           {formattedGrade}
         </Text>
       ) : null}
