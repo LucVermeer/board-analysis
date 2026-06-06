@@ -124,6 +124,7 @@ export function SessionsTab({ userId }: { userId: string | undefined }) {
         renderItem={renderItem}
         getItemType={(row) => row.type}
         keyExtractor={(row) => (row.type === 'header' ? `header-${row.bucket}` : row.item.sessionId)}
+        contentInsetAdjustmentBehavior="automatic"
         onEndReached={handleEndReached}
         onEndReachedThreshold={0.5}
         contentContainerStyle={{ paddingBottom }}

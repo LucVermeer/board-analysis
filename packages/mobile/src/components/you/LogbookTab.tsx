@@ -55,6 +55,7 @@ export function LogbookTab({ userId }: { userId: string | undefined }) {
         data={items}
         renderItem={renderItem}
         keyExtractor={(item) => item.uuid}
+        contentInsetAdjustmentBehavior="automatic"
         onEndReached={handleEndReached}
         onEndReachedThreshold={0.5}
         contentContainerStyle={{ paddingBottom }}

@@ -54,6 +54,7 @@ export function ProgressTab({ data }: { data: YouData }) {
   return (
     <ScrollView
       style={styles.flex}
+      contentInsetAdjustmentBehavior="automatic"
       contentContainerStyle={{ paddingBottom }}
       refreshControl={
         <RefreshControl refreshing={data.refreshing} onRefresh={data.refetch} tintColor={brandColors.primary} />
