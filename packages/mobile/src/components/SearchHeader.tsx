@@ -96,6 +96,12 @@ export const SearchHeader = forwardRef<SearchHeaderHandle, SearchHeaderProps>(fu
         autoCapitalize="none"
         autoCorrect={false}
         accessibilityLabel={placeholder}
+        // Pin both dimensions so the first layout pass is deterministic: `flex: 1`
+        // fills the row slot's width and `minHeight` stops Paper's Surface from
+        // collapsing to 0 before its async content measure (which left the search
+        // bar blank until a tab switch forced a re-layout). minHeight (not height)
+        // so it can still grow to Paper's natural height — no clipping.
+        style={[styles.materialSearchbar, { minHeight: height }]}
       />
     );
   }
@@ -140,6 +146,11 @@ export const SearchHeader = forwardRef<SearchHeaderHandle, SearchHeaderProps>(fu
 });
 
 const styles = StyleSheet.create({
+  // Material (Paper Searchbar): fill the row slot's width; minHeight is applied
+  // inline from the `height` prop so the first layout pass can't collapse to 0.
+  materialSearchbar: {
+    flex: 1,
+  },
   capsule: {
     flex: 1,
     height: 44,
