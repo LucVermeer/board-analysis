@@ -466,11 +466,11 @@ void describe('createClimbFilters: onlyBenchmarks', () => {
     assert.equal(f.climbStatsConditions.length, 0);
   });
 
-  void it('emits a benchmark_difficulty IS NOT NULL stats condition when onlyBenchmarks is on', () => {
+  void it('emits a positive benchmark_difficulty stats condition when onlyBenchmarks is on', () => {
     const f = createClimbFilters(params, { onlyBenchmarks: true });
     assert.equal(f.climbStatsConditions.length, 1);
     const rendered = sqlToString(f.climbStatsConditions[0]);
     assert.match(rendered, /benchmark_difficulty/);
-    assert.match(rendered, /IS NOT NULL/i);
+    assert.match(rendered, /> 0/);
   });
 });
