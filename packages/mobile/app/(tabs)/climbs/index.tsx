@@ -143,7 +143,9 @@ function ClimbListInner() {
 
   const listPaddingBottom = bottomChrome.scrollBottomPadding;
   const filterFabNativeAccessoryDrop = bottomChrome.nativeAccessoryVisible ? glassSize.standard * 2 : 0;
-  const filterFabMinimumBottom = bottomChrome.nativeAccessoryVisible ? insets.bottom + spacing[2] : bottomChrome.tabBarBottom + spacing[2];
+  const filterFabMinimumBottom = bottomChrome.nativeAccessoryVisible
+    ? insets.bottom + spacing[2]
+    : bottomChrome.tabBarBottom + spacing[2];
   const filterFabBottom = Math.max(
     filterFabMinimumBottom,
     bottomChrome.floatingControlBottom + spacing[2] - filterFabNativeAccessoryDrop,

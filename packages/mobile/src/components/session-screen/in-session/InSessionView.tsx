@@ -451,11 +451,7 @@ export function InSessionView({ translateY, screenHeight }: InSessionViewProps) 
         )}
       </View>
 
-      <SessionLeaderboard
-        participants={participants}
-        driverUserId={driverUserId}
-        selfUserId={selfUserId}
-      />
+      <SessionLeaderboard participants={participants} driverUserId={driverUserId} selfUserId={selfUserId} />
     </Animated.ScrollView>
   );
 

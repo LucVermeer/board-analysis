@@ -1,12 +1,15 @@
 import { useEffect, useRef } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
+import { useSegments } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text } from './Text';
 import { Icon } from './Icon';
 import type { IconName } from './icon-map';
 import { brandColors, withAlpha } from '../theme/colors';
 import { borderRadius, spacing } from '../theme/tokens';
-import { useBottomChromeMetrics } from '../hooks/use-bottom-chrome-metrics';
+import { TAB_BAR_HEIGHT, TOOLBAR_RESERVE } from '../theme/layout';
+import { isTabsRoute } from '../lib/route-segments';
 import { useTheme } from '../providers/theme-provider';
 
 export type ToastVariant = 'success' | 'error' | 'info' | 'warning';
@@ -31,13 +34,18 @@ const VARIANT_CONFIG: Record<ToastVariant, { icon: IconName; color: string }> = 
 };
 
 export function Toast({ toast, onDismiss }: ToastProps) {
+  const insets = useSafeAreaInsets();
+  const segments = useSegments();
   const { systemColors, colorScheme } = useTheme();
-  const bottomChrome = useBottomChromeMetrics();
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const config = VARIANT_CONFIG[toast.variant];
 
-  // Lift the toast clear of whichever bottom chrome is actually mounted.
-  const bottomOffset = bottomChrome.floatingControlBottom + (bottomChrome.insideTabs ? spacing[2] : spacing[3]);
+  // ToastProvider sits above QueueProvider, so this must stay independent from
+  // queue context. On tab screens, reserve the worst-case queue toolbar height
+  // so a toast never covers the current-climb controls.
+  const bottomOffset = isTabsRoute(segments)
+    ? insets.bottom + TAB_BAR_HEIGHT + TOOLBAR_RESERVE + spacing[2]
+    : insets.bottom + spacing[3];
 
   useEffect(() => {
     timerRef.current = setTimeout(() => onDismiss(toast.id), toast.duration);
