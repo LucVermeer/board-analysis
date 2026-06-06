@@ -27,7 +27,8 @@ type NativeAccessoryClimbRowProps = {
   width: number;
 };
 
-const ACCESSORY_OPTICAL_Y_OFFSET = -1;
+const ACCESSORY_TEXT_OPTICAL_Y_OFFSET = -2;
+const ACCESSORY_TICK_OPTICAL_Y_OFFSET = -3;
 const ACCESSORY_LEADING_INSET = spacing[1];
 const ACCESSORY_TRAILING_INSET = spacing[3];
 const ACCESSORY_THUMBNAIL_SLOT_SIZE = 36;
@@ -336,17 +337,19 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
     fontWeight: '500',
+    transform: [{ translateY: ACCESSORY_TEXT_OPTICAL_Y_OFFSET }],
   },
   gradeText: {
     fontVariant: ['tabular-nums'],
     fontWeight: '600',
     minWidth: spacing[10],
     textAlign: 'right',
+    transform: [{ translateY: ACCESSORY_TEXT_OPTICAL_Y_OFFSET }],
   },
   tickSlot: {
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
-    transform: [{ translateY: ACCESSORY_OPTICAL_Y_OFFSET }],
+    transform: [{ translateY: ACCESSORY_TICK_OPTICAL_Y_OFFSET }],
   },
 });
