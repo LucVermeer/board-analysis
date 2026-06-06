@@ -335,6 +335,9 @@
       "inStatsDuration": "Durée",
       "inStatsHardest": "Plus dure enchaînée",
       "inStatsGrades": "Répartition par cotation",
+      "inHistoryTitle": "Historique de la session",
+      "inHistoryEmpty": "Enregistre des blocs pour construire l'historique de ta session.",
+      "historyRowAria": "{{name}}, {{status}}",
       "inEndSession": "Terminer la session",
       "notification": {
         "channelName": "Session d'escalade active",

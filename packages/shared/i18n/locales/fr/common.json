@@ -22,6 +22,13 @@
         "description": "Où se trouvent le niveau et les filtres sur l'écran des blocs.",
         "bottomBar": "Barre inférieure",
         "stickyStrip": "Barre supérieure"
+      },
+      "gradeFormat": {
+        "title": "Format de cotation",
+        "description": "Choisis comment les cotations s'affichent dans l'app.",
+        "vGrade": "Cotation V",
+        "font": "Français",
+        "both": "Les deux"
       }
     },
     "nav": {

@@ -220,6 +220,13 @@
         "description": "Dónde se sitúan el grado y los filtros en la pantalla de bloques.",
         "bottomBar": "Barra inferior",
         "stickyStrip": "Barra superior"
+      },
+      "gradeFormat": {
+        "title": "Formato de grado",
+        "description": "Elige cómo se muestran los grados en la app.",
+        "vGrade": "Grado V",
+        "font": "Francés",
+        "both": "Ambos"
       }
     },
     "nav": {
