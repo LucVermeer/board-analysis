@@ -1,8 +1,9 @@
 import { StyleSheet, type ViewStyle } from 'react-native';
+import { Button as PaperButton } from 'react-native-paper';
 import { Text } from './Text';
 import { Icon } from './Icon';
 import { PressableSurface } from './PressableSurface';
-import type { IconName } from './icon-map';
+import { iconMap, type IconName } from './icon-map';
 import { hapticLight } from '../lib/haptics';
 import { brandColors } from '../theme/colors';
 import { iosSystemColors } from '../theme/ios-colors';
@@ -30,7 +31,19 @@ const sizeConfig = {
   large: { paddingHorizontal: 20, paddingVertical: 14, fontSize: 17, iconSize: 22 },
 } as const;
 
-export function Button({
+/**
+ * Button routes to an authentic Material 3 button on the Material variant, and to
+ * the existing Liquid-Glass/HIG button on the Liquid Glass variant. The public
+ * prop API is identical for both, so call sites never change.
+ */
+export function Button(props: ButtonProps) {
+  const { variant: uiVariant } = useTheme();
+  return uiVariant === 'material' ? <ButtonMaterial {...props} /> : <ButtonGlass {...props} />;
+}
+
+const PAPER_MODE = { filled: 'contained', outlined: 'outlined', text: 'text' } as const;
+
+function ButtonMaterial({
   title,
   onPress,
   variant = 'filled',
@@ -43,8 +56,49 @@ export function Button({
   style,
 }: ButtonProps) {
   const config = sizeConfig[size];
-  // Soft 10dp corner on Liquid Glass, M3 20dp on Material (and Android, which
-  // defaults to the Material variant).
+  const handlePress = () => {
+    if (disabled || loading) return;
+    if (haptic) hapticLight();
+    onPress();
+  };
+
+  return (
+    <PaperButton
+      mode={PAPER_MODE[variant]}
+      onPress={handlePress}
+      disabled={disabled || loading}
+      loading={loading}
+      // Paper resolves the MDI glyph through our icon settings (see
+      // material-theme-provider); map our semantic name to its MDI name.
+      icon={icon ? iconMap[icon].android : undefined}
+      buttonColor={variant === 'filled' ? tintColor : undefined}
+      textColor={variant === 'filled' ? undefined : tintColor}
+      accessibilityLabel={title}
+      // Approximate the small/medium/large ladder on Paper's single-height button.
+      labelStyle={{ fontSize: config.fontSize }}
+      contentStyle={{ paddingVertical: config.paddingVertical }}
+      style={style}
+    >
+      {title}
+    </PaperButton>
+  );
+}
+
+// Liquid Glass / HIG button — the original implementation, unchanged.
+function ButtonGlass({
+  title,
+  onPress,
+  variant = 'filled',
+  size = 'medium',
+  icon,
+  disabled = false,
+  loading = false,
+  haptic = true,
+  tintColor = brandColors.primary,
+  style,
+}: ButtonProps) {
+  const config = sizeConfig[size];
+  // Soft 10dp corner on Liquid Glass.
   const { radii } = useTheme();
 
   const handlePress = () => {

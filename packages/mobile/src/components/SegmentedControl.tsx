@@ -1,4 +1,5 @@
 import { View, StyleSheet, type ViewStyle, type ColorValue } from 'react-native';
+import { SegmentedButtons } from 'react-native-paper';
 import { Text } from './Text';
 import { PressableSurface } from './PressableSurface';
 import { hapticSelection } from '../lib/haptics';
@@ -90,7 +91,45 @@ function Segment({
   );
 }
 
-export function SegmentedControl<K extends string = string>({
+/**
+ * SegmentedControl routes to a Material 3 `SegmentedButtons` on the Material
+ * variant, and to the existing Liquid-Glass/HIG segmented control on the Liquid
+ * Glass variant. The public prop API is identical for both, so call sites never
+ * change.
+ */
+export function SegmentedControl<K extends string = string>(props: SegmentedControlProps<K>) {
+  const { variant: uiVariant } = useTheme();
+  return uiVariant === 'material' ? <SegmentedControlMaterial {...props} /> : <SegmentedControlGlass {...props} />;
+}
+
+function SegmentedControlMaterial<K extends string = string>({
+  options,
+  selectedKey,
+  onSelect,
+  disabledKeys,
+  accessibilityLabel,
+}: SegmentedControlProps<K>) {
+  const buttons = options.map((option) => ({
+    value: option.key,
+    label: option.label,
+    disabled: disabledKeys?.has(option.key) ?? false,
+  }));
+
+  const handleValueChange = (nextKey: K) => {
+    if (disabledKeys?.has(nextKey)) return;
+    hapticSelection();
+    onSelect(nextKey);
+  };
+
+  return (
+    <View accessibilityRole="radiogroup" accessibilityLabel={accessibilityLabel}>
+      <SegmentedButtons value={selectedKey} onValueChange={handleValueChange} buttons={buttons} />
+    </View>
+  );
+}
+
+// Liquid Glass / HIG segmented control — the original implementation, unchanged.
+function SegmentedControlGlass<K extends string = string>({
   options,
   selectedKey,
   onSelect,

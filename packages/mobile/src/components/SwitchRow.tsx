@@ -1,9 +1,11 @@
 import { Pressable, Switch as RNSwitch, View, StyleSheet } from 'react-native';
+import { Switch as PaperSwitch } from 'react-native-paper';
 import { Text } from './Text';
 import { hapticSelection } from '../lib/haptics';
 import { brandColors } from '../theme/colors';
 import { iosSystemColors } from '../theme/ios-colors';
 import { spacing } from '../theme/tokens';
+import { useTheme } from '../providers/theme-provider';
 
 type SwitchRowProps = {
   label: string;
@@ -14,6 +16,8 @@ type SwitchRowProps = {
 };
 
 export function SwitchRow({ label, description, value, onValueChange, disabled = false }: SwitchRowProps) {
+  const { variant: uiVariant } = useTheme();
+
   const handleToggle = (next: boolean) => {
     if (disabled) return;
     hapticSelection();
@@ -39,13 +43,18 @@ export function SwitchRow({ label, description, value, onValueChange, disabled =
           </Text>
         ) : null}
       </View>
-      <RNSwitch
-        value={value}
-        onValueChange={handleToggle}
-        disabled={disabled}
-        trackColor={{ false: undefined, true: brandColors.primary }}
-        ios_backgroundColor={iosSystemColors.systemGray4 as string}
-      />
+      {uiVariant === 'material' ? (
+        // Paper's Switch picks up the M3 colours from the global PaperProvider theme.
+        <PaperSwitch value={value} onValueChange={handleToggle} disabled={disabled} />
+      ) : (
+        <RNSwitch
+          value={value}
+          onValueChange={handleToggle}
+          disabled={disabled}
+          trackColor={{ false: undefined, true: brandColors.primary }}
+          ios_backgroundColor={iosSystemColors.systemGray4 as string}
+        />
+      )}
     </Pressable>
   );
 }

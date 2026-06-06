@@ -1,5 +1,6 @@
 import { forwardRef, useImperativeHandle, useRef, useState, useCallback } from 'react';
 import { View, TextInput, Pressable, StyleSheet } from 'react-native';
+import { Searchbar } from 'react-native-paper';
 import { Icon } from './Icon';
 import { GlassSurface } from './GlassSurface';
 import { useTheme } from '../providers/theme-provider';
@@ -44,7 +45,7 @@ export const SearchHeader = forwardRef<SearchHeaderHandle, SearchHeaderProps>(fu
   ref,
 ) {
   const inputRef = useRef<TextInput>(null);
-  const { systemColors } = useTheme();
+  const { systemColors, variant: uiVariant } = useTheme();
   const [text, setText] = useState(initialValue);
   const radius = height / 2;
 
@@ -76,6 +77,28 @@ export const SearchHeader = forwardRef<SearchHeaderHandle, SearchHeaderProps>(fu
     onSubmit?.(text);
     inputRef.current?.blur();
   }, [onSubmit, text]);
+
+  // Material variant: an authentic MD3 search bar. The imperative handle still
+  // works because Paper's Searchbar forwards its ref to the inner TextInput
+  // (blur/focus) and getText/setText stay backed by our own `text` state.
+  if (uiVariant === 'material') {
+    return (
+      <Searchbar
+        ref={inputRef}
+        value={text}
+        onChangeText={handleChange}
+        onClearIconPress={handleClear}
+        placeholder={placeholder}
+        onFocus={onFocus}
+        onBlur={onBlur}
+        onSubmitEditing={handleSubmit}
+        returnKeyType="search"
+        autoCapitalize="none"
+        autoCorrect={false}
+        accessibilityLabel={placeholder}
+      />
+    );
+  }
 
   return (
     <View style={[styles.capsule, { height, borderRadius: radius }]}>

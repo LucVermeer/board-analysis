@@ -19,6 +19,11 @@ export default defineConfig({
       // `src/lib/analytics`. Analytics is a no-op in tests (isAnalyticsEnabled is
       // false), so a lightweight stub satisfies the static imports safely.
       'posthog-react-native': fileURLToPath(new URL('./test/posthog-react-native-stub.ts', import.meta.url)),
+      // react-native-paper's real entry throws a SyntaxError under vitest's node
+      // env (untransformed RN-native source + react-native-vector-icons). Stub it
+      // so any suite can import a Paper-backed primitive; component tests that
+      // assert Paper props register their own vi.mock which takes precedence.
+      'react-native-paper': fileURLToPath(new URL('./test/react-native-paper-stub.tsx', import.meta.url)),
     },
     // .tsx test files can opt into a jsdom environment per file via the
     // `// @vitest-environment jsdom` pragma — needed to render React
