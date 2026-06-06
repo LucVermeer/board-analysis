@@ -49,6 +49,31 @@ Card with "Display" title and subtitle.
 
 ---
 
+### Mobile: More tab — UI Style
+
+**Screen:** `packages/mobile/app/(tabs)/profile/more.tsx`
+
+The mobile More tab contains appearance and UI-style controls that have no direct web equivalent.
+
+**Appearance** (system / light / dark):
+
+- `SegmentedControl` with three options persisted as `ThemeOverride` in key-value storage.
+
+**UI Style**:
+
+- `SegmentedControl` with three options: Auto, Liquid Glass, Material.
+- Persisted as `UiVariantPreference` via `useTheme().setUiVariant`.
+- **Auto**: resolves to Liquid Glass on iOS 26+ hardware, Material everywhere else.
+- **Liquid Glass**: native iOS 26 `NativeTabs` tab bar + `GlassView` surfaces.
+- **Material**: JS `MaterialTabBar` + opaque M3 surfaces.
+- The Liquid Glass option is shown **disabled** (not hidden) on devices that cannot render it (`useGlassCapability()` returns false — Android or iOS < 26). An explanatory footnote switches between `mobile.more.uiStyle.description` and `mobile.more.uiStyle.glassUnavailable` based on capability.
+
+**Grade Format** (V-Grade / Font / Both):
+
+- `SegmentedControl` persisted via `useGradeFormat()`.
+
+---
+
 ### 11.3 Password Management
 
 **Component:** `SetPasswordSection`

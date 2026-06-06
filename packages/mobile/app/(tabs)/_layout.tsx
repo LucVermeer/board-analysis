@@ -1,3 +1,4 @@
+import type { ComponentProps } from 'react';
 import type { ColorValue } from 'react-native';
 import { NativeTabs } from 'expo-router/unstable-native-tabs';
 import { Tabs } from 'expo-router';
@@ -16,14 +17,15 @@ import { brandColors } from '../../src/theme/colors';
 export const unstable_settings = { initialRouteName: 'climbs' };
 
 type TabIconProps = { focused: boolean; color: ColorValue; size: number };
+type MaterialIconName = ComponentProps<typeof MaterialCommunityIcons>['name'];
 
 // Material (MaterialCommunityIcons) glyphs for the JS tab bar, mirroring the
 // SF Symbols / md hints used by the native tab bar. Rendered on all platforms in
 // the Material variant so it reads as Material even on iOS.
 const materialTabIcon =
-  (active: string, inactive: string) =>
+  (active: MaterialIconName, inactive: MaterialIconName) =>
   ({ focused, color, size }: TabIconProps) => (
-    <MaterialCommunityIcons name={(focused ? active : inactive) as never} color={color} size={size} />
+    <MaterialCommunityIcons name={focused ? active : inactive} color={color} size={size} />
   );
 
 /**
