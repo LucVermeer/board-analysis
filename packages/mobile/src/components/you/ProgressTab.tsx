@@ -1,6 +1,5 @@
 import { useMemo } from 'react';
 import { View, ScrollView, RefreshControl, StyleSheet } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import type { useYouProfileData } from '../../lib/graphql/hooks';
 import { Text } from '../Text';
@@ -11,7 +10,7 @@ import { ActivityIndicator } from '../ActivityIndicator';
 import { StatsSummaryCard } from './StatsSummaryCard';
 import { StackedBarChart, GroupedBarChart, TotalAreaChart, type ChartLegendItem } from './YouCharts';
 import { layoutChartColor, flashRedpointColor } from './profile-chart-colors';
-import { TOOLBAR_RESERVE, TAB_BAR_HEIGHT } from '../../theme/layout';
+import { useBottomChromeMetrics } from '../../hooks/use-bottom-chrome-metrics';
 import { brandColors } from '../../theme/colors';
 import { spacing } from '../../theme/tokens';
 import { useTheme } from '../../providers/theme-provider';
@@ -22,8 +21,8 @@ export function ProgressTab({ data }: { data: YouData }) {
   const { t } = useTranslation('profile');
   const { t: tYou } = useTranslation('you');
   const { systemColors } = useTheme();
-  const insets = useSafeAreaInsets();
-  const paddingBottom = TOOLBAR_RESERVE + TAB_BAR_HEIGHT + insets.bottom + spacing[6];
+  const bottomChrome = useBottomChromeMetrics();
+  const paddingBottom = bottomChrome.scrollBottomPadding + spacing[6];
 
   const totalAscents = data.statisticsSummary.totalAscents;
   const noAscentData = t('empty.noAscentData');
@@ -55,6 +54,7 @@ export function ProgressTab({ data }: { data: YouData }) {
   return (
     <ScrollView
       style={styles.flex}
+      contentInsetAdjustmentBehavior="automatic"
       contentContainerStyle={{ paddingBottom }}
       refreshControl={
         <RefreshControl refreshing={data.refreshing} onRefresh={data.refetch} tintColor={brandColors.primary} />

@@ -8,7 +8,8 @@ import { brandColors } from '../../theme/colors';
 import { spacing } from '../../theme/tokens';
 
 type SessionScreenHeaderProps = {
-  onClose: () => void;
+  /** Minimize handler (chevron-down). Absent in tab mode — switching tabs minimizes. */
+  onClose?: () => void;
   sessionActive: boolean;
   /** When set, a share button floats at the trailing edge to invite climbers. */
   onShare?: () => void;
@@ -18,15 +19,19 @@ type SessionScreenHeaderProps = {
    * joins (a clear contextual label, the HIG-preferred alternative to a coachmark).
    */
   inviteHint?: boolean;
-  /** Swipe-down-to-dismiss gesture (the header doubles as the drag handle). */
-  dragGesture: PanGesture;
+  /**
+   * Swipe-down-to-dismiss gesture (the header doubles as the drag handle).
+   * Absent in tab mode, where the header isn't draggable.
+   */
+  dragGesture?: PanGesture;
 };
 
 /**
- * Compact header strip for the session overlay. Left: chevron-down to minimize
- * (session stays alive — the tab icon then blinks). Center: contextual title.
- * Right: a share button to invite climbers while a session is live. The whole
- * strip is also a drag handle — swipe it down to dismiss the overlay.
+ * Compact header strip for the session screen. Left: chevron-down to minimize
+ * in overlay mode (omitted in tab mode, where switching tabs is the minimize).
+ * Center: contextual title. Right: a share button to invite climbers while a
+ * session is live. In overlay mode the whole strip is also a drag handle —
+ * swipe it down to dismiss; tab mode renders the same row without the gesture.
  */
 export function SessionScreenHeader({
   onClose,
@@ -40,9 +45,9 @@ export function SessionScreenHeader({
 
   const title = sessionActive ? t('mobile.session.headerActive') : t('mobile.session.headerStart');
 
-  return (
-    <GestureDetector gesture={dragGesture}>
-      <View style={styles.row}>
+  const row = (
+    <View style={styles.row}>
+      {onClose ? (
         <Pressable
           onPress={onClose}
           hitSlop={12}
@@ -52,30 +57,39 @@ export function SessionScreenHeader({
         >
           <Icon name="chevron.down" size={26} color={systemColors.label} />
         </Pressable>
-        <Text variant="title3" color={systemColors.label} style={styles.title} numberOfLines={1}>
-          {title}
-        </Text>
-        {onShare ? (
-          <Pressable
-            onPress={onShare}
-            hitSlop={12}
-            accessibilityRole="button"
-            accessibilityLabel={t('mobile.session.invite')}
-            style={styles.shareButton}
-          >
-            {inviteHint ? (
-              <Text variant="subheadline" color={brandColors.primary} style={styles.shareLabel}>
-                {t('mobile.session.inviteAction')}
-              </Text>
-            ) : null}
-            <Icon name="share" size={22} color={brandColors.primary} />
-          </Pressable>
-        ) : (
-          <View style={styles.iconButton} />
-        )}
-      </View>
-    </GestureDetector>
+      ) : (
+        <View style={styles.iconButton} />
+      )}
+      <Text variant="title3" color={systemColors.label} style={styles.title} numberOfLines={1}>
+        {title}
+      </Text>
+      {onShare ? (
+        <Pressable
+          onPress={onShare}
+          hitSlop={12}
+          accessibilityRole="button"
+          accessibilityLabel={t('mobile.session.invite')}
+          style={styles.shareButton}
+        >
+          {inviteHint ? (
+            <Text variant="subheadline" color={brandColors.primary} style={styles.shareLabel}>
+              {t('mobile.session.inviteAction')}
+            </Text>
+          ) : null}
+          <Icon name="share" size={22} color={brandColors.primary} />
+        </Pressable>
+      ) : (
+        <View style={styles.iconButton} />
+      )}
+    </View>
   );
+
+  // Tab mode: no drag handle, render the row directly.
+  if (!dragGesture) {
+    return row;
+  }
+
+  return <GestureDetector gesture={dragGesture}>{row}</GestureDetector>;
 }
 
 const styles = StyleSheet.create({

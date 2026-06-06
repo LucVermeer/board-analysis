@@ -8,8 +8,12 @@ import { createElement } from 'react';
 type GlassMockProps = {
   iconName?: string;
   iconColor?: string;
+  iconSize?: number;
+  size?: number;
   onPress?: () => void;
+  onLongPress?: () => void;
   accessibilityLabel?: string;
+  accessibilityHint?: string;
   tintColor?: string;
   fallbackColor?: string;
   badgeCount?: number;
@@ -18,17 +22,25 @@ vi.mock('../../GlassIconButton', () => ({
   GlassIconButton: ({
     iconName,
     iconColor,
+    iconSize,
+    size,
     onPress,
+    onLongPress,
     accessibilityLabel,
+    accessibilityHint,
     tintColor,
     fallbackColor,
     badgeCount,
   }: GlassMockProps) =>
     createElement('button', {
       onClick: onPress,
+      onDoubleClick: onLongPress,
       'data-icon': iconName,
       'data-icon-color': iconColor ?? '',
+      'data-icon-size': iconSize == null ? '' : String(iconSize),
+      'data-size': size == null ? '' : String(size),
       'data-label': accessibilityLabel ?? '',
+      'data-hint': accessibilityHint ?? '',
       'data-tint': tintColor ?? '',
       'data-fallback': fallbackColor ?? '',
       'data-badge': badgeCount == null ? '' : String(badgeCount),
@@ -45,6 +57,10 @@ vi.mock('../../../providers/theme-provider', () => ({
 // Deterministic colour helper so the active tint/fallback are assertable.
 vi.mock('../../../theme/colors', () => ({
   withAlpha: (color: string, alpha: number) => `${color}@${alpha}`,
+}));
+
+vi.mock('../../../theme/layout', () => ({
+  glassSize: { inlinePrimary: 48 },
 }));
 
 vi.mock('react-i18next', () => ({
@@ -64,9 +80,25 @@ describe('FilterButton', () => {
     expect(onPress).toHaveBeenCalledTimes(1);
   });
 
+  it('fires the optional long-press handler without firing onPress', () => {
+    const onPress = vi.fn();
+    const onLongPress = vi.fn();
+    const { getByRole } = render(<FilterButton activeFilterCount={0} onPress={onPress} onLongPress={onLongPress} />);
+    fireEvent.doubleClick(getByRole('button'));
+    expect(onLongPress).toHaveBeenCalledTimes(1);
+    expect(onPress).not.toHaveBeenCalled();
+  });
+
   it('forwards the active filter count as the badge', () => {
     const { container } = render(<FilterButton activeFilterCount={3} onPress={() => {}} />);
     expect(button(container).getAttribute('data-badge')).toBe('3');
+  });
+
+  it('uses the smaller floating action size', () => {
+    const { container } = render(<FilterButton activeFilterCount={0} onPress={() => {}} />);
+    const filterButton = button(container);
+    expect(filterButton.getAttribute('data-size')).toBe('48');
+    expect(filterButton.getAttribute('data-icon-size')).toBe('20');
   });
 
   it('forwards a zero count so the underlying button can hide the badge itself', () => {
@@ -98,8 +130,13 @@ describe('FilterButton', () => {
     expect(button(container).getAttribute('data-label')).toBe('mobile.search.filters');
   });
 
-  it('appends the count to the a11y label when filters are active', () => {
+  it('uses the active-count a11y label when filters are active', () => {
     const { container } = render(<FilterButton activeFilterCount={5} onPress={() => {}} />);
-    expect(button(container).getAttribute('data-label')).toBe('mobile.search.filters, 5');
+    expect(button(container).getAttribute('data-label')).toBe('mobile.search.filterCountAria');
+  });
+
+  it('adds the long-press hint when quick grade search is available', () => {
+    const { container } = render(<FilterButton activeFilterCount={0} onPress={() => {}} onLongPress={() => {}} />);
+    expect(button(container).getAttribute('data-hint')).toBe('mobile.search.filterHint');
   });
 });

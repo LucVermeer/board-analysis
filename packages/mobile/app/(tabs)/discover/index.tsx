@@ -29,15 +29,14 @@ import { useToast } from '../../../src/providers/toast-provider';
 import { useAuthToken } from '../../../src/lib/graphql/use-auth-token';
 import { useMyBoards, useProfile } from '../../../src/lib/graphql/hooks';
 import { useActiveBoard } from '../../../src/lib/graphql/use-active-board';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { TOOLBAR_RESERVE, TAB_BAR_HEIGHT } from '../../../src/components/queue-control/persistent-queue-bar';
+import { useBottomChromeMetrics } from '../../../src/hooks/use-bottom-chrome-metrics';
 import { brandColors } from '../../../src/theme/colors';
 import { iosSystemColors } from '../../../src/theme/ios-colors';
 import { spacing } from '../../../src/theme/tokens';
 
 export default function DiscoverLibrary() {
   const { t } = useTranslation('playlists');
-  const insets = useSafeAreaInsets();
+  const bottomChrome = useBottomChromeMetrics();
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   const { data: token = null, isLoading: tokenLoading } = useAuthToken();
   const { data: profile } = useProfile();
@@ -225,7 +224,7 @@ export default function DiscoverLibrary() {
       <ScrollView
         style={styles.flex}
         contentInsetAdjustmentBehavior="automatic"
-        contentContainerStyle={{ paddingBottom: TOOLBAR_RESERVE + TAB_BAR_HEIGHT + insets.bottom + spacing[6] }}
+        contentContainerStyle={{ paddingBottom: bottomChrome.scrollBottomPadding + spacing[6] }}
         keyboardShouldPersistTaps="handled"
       >
         <BoardFilterStrip boards={boards} selectedBoardUuid={boardFilter?.uuid ?? null} onSelect={setBoardFilter} />

@@ -2,7 +2,6 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 import { View, RefreshControl, StyleSheet } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { useRouter } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import type BottomSheet from '@gorhom/bottom-sheet';
 import type { SessionFeedItem } from '@boardsesh/shared-schema';
@@ -16,11 +15,10 @@ import { FeedSectionLabel } from './FeedSectionLabel';
 import { CommentSheet } from './CommentSheet';
 import { bucketSessionsByRecency, type FeedRecencyBucket } from '../../lib/feed-time-buckets';
 import { useSessionGroupedFeed, useBulkVoteSummaries } from '../../lib/graphql/hooks';
-import { TOOLBAR_RESERVE, TAB_BAR_HEIGHT } from '../../theme/layout';
+import { useBottomChromeMetrics } from '../../hooks/use-bottom-chrome-metrics';
 import { brandColors } from '../../theme/colors';
 import { spacing } from '../../theme/tokens';
 import { useTheme } from '../../providers/theme-provider';
-import { useSessionScreen } from '../../providers/session-screen-provider';
 
 type FeedRow = { type: 'header'; bucket: FeedRecencyBucket } | { type: 'session'; item: SessionFeedItem };
 
@@ -37,9 +35,8 @@ export function SessionsTab({ userId }: { userId: string | undefined }) {
   const { t } = useTranslation('you');
   const { systemColors } = useTheme();
   const router = useRouter();
-  const { open: openSessionScreen } = useSessionScreen();
-  const insets = useSafeAreaInsets();
-  const paddingBottom = TOOLBAR_RESERVE + TAB_BAR_HEIGHT + insets.bottom + spacing[4];
+  const bottomChrome = useBottomChromeMetrics();
+  const paddingBottom = bottomChrome.scrollBottomPadding + spacing[4];
 
   const commentSheetRef = useRef<BottomSheet | null>(null);
   const [commentSessionId, setCommentSessionId] = useState<string | null>(null);
@@ -127,6 +124,7 @@ export function SessionsTab({ userId }: { userId: string | undefined }) {
         renderItem={renderItem}
         getItemType={(row) => row.type}
         keyExtractor={(row) => (row.type === 'header' ? `header-${row.bucket}` : row.item.sessionId)}
+        contentInsetAdjustmentBehavior="automatic"
         onEndReached={handleEndReached}
         onEndReachedThreshold={0.5}
         contentContainerStyle={{ paddingBottom }}
@@ -155,10 +153,9 @@ export function SessionsTab({ userId }: { userId: string | undefined }) {
               {t('mobile.sessions.emptyBody')}
             </Text>
             <View style={styles.emptyCta}>
-              {/* The Record tab opens the session overlay (mounted at the root),
-                  so open it directly rather than navigating to the blank /record
-                  screen — a programmatic push wouldn't trigger BlurTabBar. */}
-              <Button title={t('mobile.sessions.emptyCta')} onPress={openSessionScreen} />
+              {/* The Record tab hosts the session screen inline, so the CTA just
+                  navigates there. */}
+              <Button title={t('mobile.sessions.emptyCta')} onPress={() => router.navigate('/(tabs)/record')} />
             </View>
           </View>
         }

@@ -1,7 +1,6 @@
 import { useCallback, useRef, useState } from 'react';
 import { View, RefreshControl, StyleSheet } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import type BottomSheet from '@gorhom/bottom-sheet';
 import type { AscentFeedItem } from '@boardsesh/graphql/operations';
@@ -11,7 +10,7 @@ import { ActivityIndicator } from '../ActivityIndicator';
 import { LogbookRow } from './LogbookRow';
 import { LogbookEditSheet } from './LogbookEditSheet';
 import { useUserAscentsFeed } from '../../lib/graphql/hooks';
-import { TOOLBAR_RESERVE, TAB_BAR_HEIGHT } from '../../theme/layout';
+import { useBottomChromeMetrics } from '../../hooks/use-bottom-chrome-metrics';
 import { brandColors } from '../../theme/colors';
 import { spacing } from '../../theme/tokens';
 import { useTheme } from '../../providers/theme-provider';
@@ -19,8 +18,8 @@ import { useTheme } from '../../providers/theme-provider';
 export function LogbookTab({ userId }: { userId: string | undefined }) {
   const { t } = useTranslation('you');
   const { systemColors } = useTheme();
-  const insets = useSafeAreaInsets();
-  const paddingBottom = TOOLBAR_RESERVE + TAB_BAR_HEIGHT + insets.bottom + spacing[4];
+  const bottomChrome = useBottomChromeMetrics();
+  const paddingBottom = bottomChrome.scrollBottomPadding + spacing[4];
 
   const editSheetRef = useRef<BottomSheet | null>(null);
   const [editAscent, setEditAscent] = useState<AscentFeedItem | null>(null);
@@ -56,6 +55,7 @@ export function LogbookTab({ userId }: { userId: string | undefined }) {
         data={items}
         renderItem={renderItem}
         keyExtractor={(item) => item.uuid}
+        contentInsetAdjustmentBehavior="automatic"
         onEndReached={handleEndReached}
         onEndReachedThreshold={0.5}
         contentContainerStyle={{ paddingBottom }}

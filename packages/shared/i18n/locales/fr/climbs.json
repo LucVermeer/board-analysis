@@ -654,17 +654,11 @@
       "settersCount_other": "{{count}} ouvreurs",
       "climbsCount_one": "{{count}} voie",
       "climbsCount_other": "{{count}} voies",
-      "grade": "Niveau",
-      "anyGrade": "Tout niveau",
       "gradeClear": "Tous",
       "filters": "Filtres",
-      "removeFilter": "Retirer le filtre {{name}}",
-      "fab": {
-        "open": "Rechercher",
-        "close": "Fermer la recherche",
-        "done": "Terminé",
-        "hint": "Ouvre la recherche, le grade et les filtres"
-      }
+      "filterCountAria": "Filtres, {{count}} actifs",
+      "filterHint": "Touchez pour filtrer. Maintenez pour choisir la cotation.",
+      "removeFilter": "Retirer le filtre {{name}}"
     },
     "gradeRail": {
       "setFilterAria": "Filtrer par cotation {{grade}}",

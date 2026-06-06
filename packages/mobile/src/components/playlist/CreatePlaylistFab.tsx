@@ -1,12 +1,11 @@
 import { StyleSheet, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { GlassIconButton } from '../GlassIconButton';
 import { useTheme } from '../../providers/theme-provider';
 import { hapticLight } from '../../lib/haptics';
 import { spacing } from '../../theme/tokens';
 import { glassSize } from '../../theme/layout';
-import { TOOLBAR_RESERVE, TAB_BAR_HEIGHT } from '../queue-control/persistent-queue-bar';
+import { useBottomChromeMetrics } from '../../hooks/use-bottom-chrome-metrics';
 
 /**
  * Floating "create playlist" button on the Discover library — the single defining
@@ -20,8 +19,8 @@ import { TOOLBAR_RESERVE, TAB_BAR_HEIGHT } from '../queue-control/persistent-que
 export function CreatePlaylistFab({ onPress }: { onPress: () => void }) {
   const { t } = useTranslation('playlists');
   const { systemColors } = useTheme();
-  const insets = useSafeAreaInsets();
-  const bottom = TOOLBAR_RESERVE + TAB_BAR_HEIGHT + insets.bottom + spacing[3];
+  const bottomChrome = useBottomChromeMetrics();
+  const bottom = bottomChrome.floatingControlBottom + spacing[3];
 
   return (
     <View style={[styles.fab, { bottom }]}>

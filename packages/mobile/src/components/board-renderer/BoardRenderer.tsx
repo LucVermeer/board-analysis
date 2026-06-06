@@ -38,6 +38,7 @@ const BoardRenderer = React.memo(function BoardRenderer({
   imageUrls,
   holdsData,
   mirrored = false,
+  fillContainer = false,
   style,
 }: BoardRendererProps) {
   // Pass mirrored flag so individual hold positions are swapped
@@ -48,12 +49,20 @@ const BoardRenderer = React.memo(function BoardRenderer({
   // react-native-svg will scale the content to fit the View, preserving aspect ratio.
   const viewBox = `0 0 ${boardWidth} ${boardHeight}`;
 
-  // Container style: fills available width, height determined by aspect ratio
-  const containerStyle: ViewStyle = {
-    width: '100%',
-    aspectRatio: boardWidth / boardHeight,
-    ...style,
-  };
+  // Default thumbnails derive height from board aspect ratio. Small framed
+  // surfaces can opt into filling their caller-owned box; the SVG still uses
+  // `meet`, so tall boards fit instead of overflowing and being clipped.
+  const containerStyle: ViewStyle = fillContainer
+    ? {
+        width: '100%',
+        height: '100%',
+        ...style,
+      }
+    : {
+        width: '100%',
+        aspectRatio: boardWidth / boardHeight,
+        ...style,
+      };
 
   return (
     <View style={containerStyle}>

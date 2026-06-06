@@ -11,15 +11,14 @@ export type YouTab<K extends string> = { key: K; label: string };
 type YouTabBarProps<K extends string> = {
   tabs: YouTab<K>[];
   activeIndex: number;
-  /** Pager scroll position (page + offset), drives the sliding underline. */
+  /** Tab position that drives the sliding underline. */
   scrollPosition: SharedValue<number>;
   onTabPress: (index: number) => void;
 };
 
 /**
- * Instagram-style swipeable top tab bar. The underline indicator tracks the
- * pager's continuous scroll position (a reanimated shared value) so it glides
- * with the swipe; label colors flip on the committed page change.
+ * Profile top tab bar. The underline indicator tracks a reanimated shared value
+ * so it can glide between selected sections while labels update from state.
  */
 export function YouTabBar<K extends string>({ tabs, activeIndex, scrollPosition, onTabPress }: YouTabBarProps<K>) {
   const { systemColors } = useTheme();

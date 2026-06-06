@@ -8,16 +8,32 @@ const config = getDefaultConfig(projectRoot);
 
 config.watchFolders = [monorepoRoot];
 
+function escapedPathPattern(filePath) {
+  return path
+    .resolve(filePath)
+    .split(path.sep)
+    .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+    .join('[/\\\\]');
+}
+
+function ignoredRootPattern(filePath) {
+  return new RegExp(`^${escapedPathPattern(filePath)}(?:[/\\\\].*)?$`);
+}
+
 // Exclude non-source directories from Metro's crawl/watch:
-//  - <root>/.claude/worktrees/* — 30+ nested git worktrees, each with its own
-//    full node_modules (~5M files combined), which otherwise makes the haste-map
-//    crawl hang for minutes and exhausts the inotify watch limit (ENOSPC).
+//  - <root>/.agents/* and <root>/.claude/* — agent config and hooks. Anchor
+//    these to the repo root because this checkout itself may live under
+//    .claude/worktrees.
 //  - <root>/.local-work/* — local tooling scratch (e.g. an Android SDK install
 //    whose ephemeral unzip temp dirs vanish mid-watch and crash the file watcher
 //    with ENOENT, exit code 7).
-// Nothing the app imports lives in either, so pruning them is safe and lets the
-// dev server boot in seconds.
-const ignoredRoots = [/[/\\]\.claude[/\\].*/, /[/\\]\.local-work[/\\].*/];
+//  - <root>/.boardsesh/* — local dev artifacts such as Xcode DerivedData and
+//    Metro logs.
+// Nothing the app imports lives in these directories, so pruning them is safe
+// and lets the dev server boot in seconds.
+const ignoredRoots = ['.agents', '.claude', '.local-work', '.boardsesh'].map((name) =>
+  ignoredRootPattern(path.join(monorepoRoot, name)),
+);
 config.resolver.blockList = config.resolver.blockList
   ? [].concat(config.resolver.blockList, ignoredRoots)
   : ignoredRoots;

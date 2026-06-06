@@ -45,7 +45,7 @@ function getPosthog(): PostHog | null {
   // first-party to ad-blockers. NEXT_PUBLIC_POSTHOG_HOST overrides for incident
   // recovery (point straight at us.i.posthog.com if the proxy is down).
   const backendUrl = getBackendHttpUrl();
-  const configuredHost = process.env.NEXT_PUBLIC_POSTHOG_HOST;
+  const configuredHost = process.env.NEXT_PUBLIC_POSTHOG_HOST?.trim() || null;
   const host = configuredHost ?? (backendUrl ? `${backendUrl}/api/posthog` : DEFAULT_POSTHOG_HOST);
   if (!configuredHost && !backendUrl) {
     const message =

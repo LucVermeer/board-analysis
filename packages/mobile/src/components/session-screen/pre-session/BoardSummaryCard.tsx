@@ -6,7 +6,6 @@ import { Text } from '../../Text';
 import { Icon } from '../../Icon';
 import { useTheme } from '../../../providers/theme-provider';
 import { spacing, borderRadius } from '../../../theme/tokens';
-import { useSessionScreen } from '../../../providers/session-screen-provider';
 
 type BoardSummaryCardProps = {
   board: UserBoard | null;
@@ -15,19 +14,17 @@ type BoardSummaryCardProps = {
 const cap = (value: string) => (value ? value.charAt(0).toUpperCase() + value.slice(1) : value);
 
 /**
- * Compact summary of the user's active board. Tapping the card closes the
- * session overlay and jumps to the Boards tab where the existing picker lives
- * — we don't duplicate that UI inline; the cascading sheet there is the one
- * source of truth for board configuration.
+ * Compact summary of the user's active board. Tapping the card jumps to the
+ * Boards tab where the existing picker lives — we don't duplicate that UI
+ * inline; the cascading sheet there is the one source of truth for board
+ * configuration.
  */
 export function BoardSummaryCard({ board }: BoardSummaryCardProps) {
   const { t } = useTranslation('session');
   const { systemColors } = useTheme();
   const router = useRouter();
-  const { close } = useSessionScreen();
 
   const goToBoards = () => {
-    close();
     router.navigate('/(tabs)/boards');
   };
 

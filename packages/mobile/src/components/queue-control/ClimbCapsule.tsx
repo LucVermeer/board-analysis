@@ -5,7 +5,7 @@
 // the play drawer. A faint grade wash tints the glass. Extracted from the old
 // queue bar so the swipe/peek + drawer wiring is shared.
 
-import { useCallback, useMemo, useState } from 'react';
+import { type ReactNode, useCallback, useMemo, useState } from 'react';
 import { View, StyleSheet, type ColorValue, type LayoutChangeEvent } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { runOnJS, useAnimatedStyle, useDerivedValue } from 'react-native-reanimated';
@@ -25,8 +25,6 @@ import { useQueue } from '../../providers/queue-provider';
 import { useDrawerHost } from '../../providers/drawer-host-provider';
 import { hapticLight, hapticSelection } from '../../lib/haptics';
 import { useCarouselGesture } from '../play-drawer/use-carousel-gesture';
-
-const CAPSULE_RADIUS = TOOLBAR_CAPSULE_HEIGHT / 2;
 
 type ClimbDisplay = {
   difficulty: string | null | undefined;
@@ -60,7 +58,32 @@ function ClimbLabel({ display, labelColor, formattedGrade, gradeColor }: ClimbLa
   );
 }
 
-export function ClimbCapsule() {
+type ClimbCapsuleProps = {
+  /**
+   * Render without the capsule's own glass pill / border / shadow. Used inside
+   * the iOS 26 tab-bar bottom accessory, which is itself a Liquid Glass platter —
+   * a second glass surface there would read as glass-on-glass. Keeps the label
+   * + swipe/tap gestures; just drops the background chrome.
+   */
+  bare?: boolean;
+  /**
+   * Let the capsule fill its parent. Used by the native bottom accessory where
+   * UIKit's platter is wider than the standalone floating capsule cap.
+   */
+  fillWidth?: boolean;
+  /** Optional right-side action rendered inside the capsule chrome. */
+  endAction?: ReactNode;
+  endActionSize?: number;
+  height?: number;
+};
+
+export function ClimbCapsule({
+  bare = false,
+  fillWidth = false,
+  endAction,
+  endActionSize = 0,
+  height = TOOLBAR_CAPSULE_HEIGHT,
+}: ClimbCapsuleProps) {
   const { state, nextClimb, previousClimb } = useQueue();
   const { openPlayDrawer } = useDrawerHost();
   const { systemColors } = useTheme();
@@ -180,30 +203,41 @@ export function ClimbCapsule() {
   const previousGradeColor = previousDisplay
     ? (getGradeColor(previousDisplay.difficulty) ?? DEFAULT_GRADE_COLOR)
     : DEFAULT_GRADE_COLOR;
-  const nextGradeColor = nextDisplay ? (getGradeColor(nextDisplay.difficulty) ?? DEFAULT_GRADE_COLOR) : DEFAULT_GRADE_COLOR;
+  const nextGradeColor = nextDisplay
+    ? (getGradeColor(nextDisplay.difficulty) ?? DEFAULT_GRADE_COLOR)
+    : DEFAULT_GRADE_COLOR;
+  const endActionReservedWidth = endAction ? endActionSize + 8 : 0;
+  const labelSlotRight = 16 + endActionReservedWidth;
+  const capsuleRadius = height / 2;
 
   return (
     <View
       style={[
         styles.capsule,
+        { height, borderRadius: capsuleRadius },
+        fillWidth ? styles.fillWidthCapsule : null,
         // Native Liquid Glass draws its own edge + lift; the hairline border and
-        // shadow are only needed on the blur/solid fallback.
-        !nativeGlass && shadows.sm,
-        !nativeGlass && { borderWidth: StyleSheet.hairlineWidth, borderColor: systemColors.separator },
+        // shadow are only needed on the blur/solid fallback. `bare` (inside the
+        // native accessory's own glass platter) drops all background chrome.
+        !bare && !nativeGlass && shadows.sm,
+        !bare && !nativeGlass && { borderWidth: StyleSheet.hairlineWidth, borderColor: systemColors.separator },
       ]}
     >
       {/* Neutral frosted glass — no grade-hued wash. The colorized grade text
-          carries the grade; the capsule background stays a plain glass surface. */}
-      <GlassSurface
-        glassEffectStyle="regular"
-        fallbackColor={systemColors.elevatedSurface}
-        borderRadius={CAPSULE_RADIUS}
-        style={StyleSheet.absoluteFill}
-        pointerEvents="none"
-      />
+          carries the grade; the capsule background stays a plain glass surface.
+          Omitted in `bare` mode (the accessory platter is the glass). */}
+      {bare ? null : (
+        <GlassSurface
+          glassEffectStyle="regular"
+          fallbackColor={systemColors.elevatedSurface}
+          borderRadius={capsuleRadius}
+          style={StyleSheet.absoluteFill}
+          pointerEvents="none"
+        />
+      )}
       <GestureDetector gesture={composedGesture}>
         <View
-          style={styles.swipeArea}
+          style={[styles.swipeArea, { height, borderRadius: capsuleRadius }]}
           onLayout={onLayout}
           accessibilityRole="button"
           accessibilityLabel={currentDisplay.name}
@@ -213,7 +247,7 @@ export function ClimbCapsule() {
             else if (event.nativeEvent.actionName === 'previous') handlePrevious();
           }}
         >
-          <Animated.View style={[styles.labelSlot, currentLabelStyle]}>
+          <Animated.View style={[styles.labelSlot, { right: labelSlotRight }, currentLabelStyle]}>
             <ClimbLabel
               display={currentDisplay}
               labelColor={systemColors.label}
@@ -243,6 +277,7 @@ export function ClimbCapsule() {
           ) : null}
         </View>
       </GestureDetector>
+      {endAction ? <View style={[styles.endActionSlot, { width: endActionSize, height }]}>{endAction}</View> : null}
     </View>
   );
 }
@@ -251,13 +286,13 @@ const styles = StyleSheet.create({
   capsule: {
     flex: 1,
     maxWidth: TOOLBAR_CAPSULE_MAX_WIDTH,
-    height: TOOLBAR_CAPSULE_HEIGHT,
-    borderRadius: CAPSULE_RADIUS,
+  },
+  fillWidthCapsule: {
+    width: '100%',
+    maxWidth: '100%',
   },
   swipeArea: {
     flex: 1,
-    height: TOOLBAR_CAPSULE_HEIGHT,
-    borderRadius: CAPSULE_RADIUS,
     overflow: 'hidden',
     justifyContent: 'center',
     paddingHorizontal: 16,
@@ -266,6 +301,13 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 16,
     right: 16,
+    justifyContent: 'center',
+  },
+  endActionSlot: {
+    position: 'absolute',
+    top: 0,
+    right: 8,
+    alignItems: 'center',
     justifyContent: 'center',
   },
   peekSlot: {

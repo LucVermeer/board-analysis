@@ -1,8 +1,8 @@
 import { useEffect, useRef } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSegments } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text } from './Text';
 import { Icon } from './Icon';
 import type { IconName } from './icon-map';
@@ -35,14 +35,15 @@ const VARIANT_CONFIG: Record<ToastVariant, { icon: IconName; color: string }> = 
 
 export function Toast({ toast, onDismiss }: ToastProps) {
   const insets = useSafeAreaInsets();
+  const segments = useSegments();
   const { systemColors, colorScheme } = useTheme();
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const config = VARIANT_CONFIG[toast.variant];
 
-  // Tab screens carry the tab bar + floating climb toolbar; lift the toast clear
-  // of both (a tick confirmation lands just above the tick). Elsewhere (auth,
-  // session/modal screens) there's no bottom chrome — just clear the safe area.
-  const bottomOffset = isTabsRoute(useSegments())
+  // ToastProvider sits above QueueProvider, so this must stay independent from
+  // queue context. On tab screens, reserve the worst-case queue toolbar height
+  // so a toast never covers the current-climb controls.
+  const bottomOffset = isTabsRoute(segments)
     ? insets.bottom + TAB_BAR_HEIGHT + TOOLBAR_RESERVE + spacing[2]
     : insets.bottom + spacing[3];
 

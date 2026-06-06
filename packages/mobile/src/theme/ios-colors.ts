@@ -49,7 +49,7 @@ export const iosSystemColors = {
 
 /**
  * Dark-mode specific iOS system colors for contexts that need
- * manual dark/light switching (e.g. BlurTabBar).
+ * manual dark/light switching.
  */
 export const iosDarkColors = {
   /** iOS systemBackground (dark) — base screen background */
@@ -66,7 +66,7 @@ export const iosDarkColors = {
 
 /**
  * Light-mode specific iOS system colors for contexts that need
- * manual dark/light switching (e.g. BlurTabBar).
+ * manual dark/light switching.
  */
 export const iosLightColors = {
   /** iOS secondarySystemBackground (light) */

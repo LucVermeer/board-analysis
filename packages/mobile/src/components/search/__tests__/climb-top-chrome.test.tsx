@@ -1,12 +1,14 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, fireEvent } from '@testing-library/react';
-import { createElement, type ReactNode } from 'react';
+import { createElement, forwardRef, useImperativeHandle, type ReactNode, type RefObject } from 'react';
 import type { UserBoard } from '@boardsesh/shared-schema';
+import type { SearchHeaderHandle } from '../../SearchHeader';
 
-// Only the board fields ClimbTopChrome reads. A full UserBoard is overkill, so
-// the active-board mock returns this narrowed shape (cast at the mock boundary).
-type BoardLabelFields = Pick<UserBoard, 'name' | 'angle' | 'boardType' | 'sizeName' | 'layoutName'>;
+type BoardLabelFields = Pick<
+  UserBoard,
+  'name' | 'angle' | 'boardType' | 'sizeName' | 'layoutName' | 'layoutId' | 'isAngleAdjustable'
+>;
 
 type BluetoothCtx = {
   isConnected: boolean;
@@ -17,22 +19,23 @@ type BluetoothCtx = {
 const ctrl = vi.hoisted(() => ({
   board: null as BoardLabelFields | null,
   bluetooth: null as BluetoothCtx,
+  setActiveBoard: vi.fn(),
 }));
-const haptics = vi.hoisted(() => ({ light: vi.fn() }));
+const haptics = vi.hoisted(() => ({ light: vi.fn(), selection: vi.fn() }));
 
-// View → div that forwards onLayout via a data hook we can trigger, and an
-// onPress for the few Views that take one (none here, but kept generic).
 type ViewMockProps = {
   children?: ReactNode;
   onLayout?: (event: { nativeEvent: { layout: { height: number } } }) => void;
 };
 vi.mock('react-native', () => ({
+  Keyboard: { dismiss: vi.fn() },
+  Pressable: ({ children, onPress }: { children?: ReactNode; onPress?: () => void }) =>
+    createElement('button', { onClick: onPress, 'data-scrim': 'true' }, children),
   View: ({ children, onLayout }: ViewMockProps) =>
     createElement(
       'div',
       {
         'data-has-layout': onLayout ? 'true' : 'false',
-        // Surface onLayout so a test can simulate a measured height.
         onClick: onLayout ? () => onLayout({ nativeEvent: { layout: { height: 88 } } }) : undefined,
       },
       children,
@@ -40,6 +43,13 @@ vi.mock('react-native', () => ({
   StyleSheet: { create: (styles: Record<string, unknown>) => styles, absoluteFill: {}, hairlineWidth: 1 },
 }));
 
+vi.mock('react-native-reanimated', () => ({
+  default: { View: ({ children }: { children?: ReactNode }) => createElement('div', null, children) },
+  FadeIn: { duration: () => ({}) },
+  FadeOut: { duration: () => ({}) },
+}));
+
+vi.mock('expo-router', () => ({ useFocusEffect: () => {} }));
 vi.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 47, bottom: 0, left: 0, right: 0 }),
 }));
@@ -48,10 +58,12 @@ vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 
-// Make the board display name distinguishable from a custom board name so the
-// named-vs-typed label branch is observable.
 vi.mock('@boardsesh/board-config', () => ({
   formatBoardDisplayName: (boardType: string) => `Display:${boardType}`,
+}));
+
+vi.mock('@boardsesh/board-constants/grade-colors', () => ({
+  getGradeColor: () => '#123456',
 }));
 
 vi.mock('../../../providers/theme-provider', () => ({
@@ -63,12 +75,13 @@ vi.mock('../../../providers/theme-provider', () => ({
       separator: '#ccc',
       elevatedSurface: '#fff',
     },
-    brandColors: { warning: '#FF9500' },
+    brandColors: { primary: '#8C4A52', warning: '#FF9500' },
   }),
 }));
 
 vi.mock('../../../lib/graphql/use-active-board', () => ({
   useActiveBoard: () => ({ data: ctrl.board }),
+  useSetActiveBoard: () => ctrl.setActiveBoard,
 }));
 
 vi.mock('../../../providers/bluetooth-provider', () => ({
@@ -76,52 +89,55 @@ vi.mock('../../../providers/bluetooth-provider', () => ({
 }));
 
 vi.mock('../../../theme/tokens', () => ({
-  spacing: { 2: 8, 4: 16 },
+  spacing: { 1: 4, 2: 8, 4: 16 },
   shadows: { sm: {} },
+}));
+
+vi.mock('../../../theme/layout', () => ({
+  glassSize: { standard: 56, capsule: 52 },
 }));
 
 vi.mock('../../../theme/colors', () => ({
   withAlpha: (color: string, alpha: number) => `${color}@${alpha}`,
 }));
 
-// Drive the fallback (non-native-glass) branch so the capsule's hairline/shadow render.
+vi.mock('../../../theme/ios-colors', () => ({ iosSystemColors: { white: '#fff' } }));
 vi.mock('../../../hooks/use-native-glass', () => ({ useNativeGlass: () => false }));
-
-vi.mock('../../../lib/haptics', () => ({ hapticLight: haptics.light }));
-
-// GlassIconButton → button exposing icon/colors/label so create FAB and the
-// lightbulb FAB are individually addressable, with onPress forwarded.
-type GlassIconMockProps = {
-  iconName?: string;
-  iconColor?: string;
-  tintColor?: string;
-  onPress?: () => void;
-  accessibilityLabel?: string;
-};
-vi.mock('../../GlassIconButton', () => ({
-  GlassIconButton: ({ iconName, iconColor, tintColor, onPress, accessibilityLabel }: GlassIconMockProps) =>
-    createElement('button', {
-      onClick: onPress,
-      'data-fab': iconName,
-      'data-icon-color': iconColor ?? '',
-      'data-tint': tintColor ?? '',
-      'data-label': accessibilityLabel ?? '',
-    }),
+vi.mock('../../../hooks/use-reduce-motion', () => ({ useReduceMotion: () => true }));
+vi.mock('../../../hooks/use-grade-format', () => ({
+  useGradeFormat: () => ({ formatGrade: (grade: string) => grade }),
 }));
+vi.mock('../../../lib/haptics', () => ({ hapticLight: haptics.light, hapticSelection: haptics.selection }));
 
-// PressableSurface → button exposing its accessibility label (the board label).
 type PressMockProps = {
   children?: ReactNode;
   onPress?: () => void;
+  onLongPress?: () => void;
   accessibilityLabel?: string;
+  accessibilityHint?: string;
 };
 vi.mock('../../PressableSurface', () => ({
-  PressableSurface: ({ children, onPress, accessibilityLabel }: PressMockProps) =>
-    createElement('button', { onClick: onPress, 'data-capsule': accessibilityLabel ?? '' }, children),
+  PressableSurface: ({ children, onPress, onLongPress, accessibilityLabel, accessibilityHint }: PressMockProps) =>
+    createElement(
+      'button',
+      {
+        onClick: onPress,
+        onDoubleClick: onLongPress,
+        'data-pressable': accessibilityLabel ?? '',
+        'data-hint': accessibilityHint ?? '',
+        'data-capsule': accessibilityLabel?.includes('•') ? accessibilityLabel : '',
+      },
+      children,
+    ),
 }));
 
 vi.mock('../../GlassSurface', () => ({
   GlassSurface: () => createElement('div', { 'data-glass': 'true' }),
+}));
+
+vi.mock('../../GlassCluster', () => ({
+  GlassCluster: ({ children }: { children?: ReactNode }) =>
+    createElement('div', { 'data-glass-cluster': 'true' }, children),
 }));
 
 vi.mock('../../Icon', () => ({
@@ -132,6 +148,64 @@ vi.mock('../../Text', () => ({
   Text: ({ children }: { children?: ReactNode }) => createElement('span', { 'data-text': 'true' }, children),
 }));
 
+type SearchHeaderMockProps = {
+  placeholder?: string;
+  initialValue?: string;
+  onChangeText?: (text: string) => void;
+  onFocus?: () => void;
+  onBlur?: () => void;
+};
+vi.mock('../../SearchHeader', () => ({
+  SearchHeader: forwardRef<SearchHeaderHandle, SearchHeaderMockProps>(function SearchHeaderMock(props, ref) {
+    useImperativeHandle(ref, () => ({
+      blur: () => props.onBlur?.(),
+      focus: () => props.onFocus?.(),
+      getText: () => props.initialValue ?? '',
+      setText: (text: string) => props.onChangeText?.(text),
+    }));
+    return createElement('input', {
+      'data-search-field': 'true',
+      'data-placeholder': props.placeholder ?? '',
+      onFocus: props.onFocus,
+      onBlur: props.onBlur,
+    });
+  }),
+}));
+
+vi.mock('../../grade', () => ({ GradeRangeRail: () => createElement('div', { 'data-grade-rail': 'true' }) }));
+
+type AngleSelectorMockProps = {
+  visible: boolean;
+  onClose: () => void;
+  boardName: string;
+  layoutId: number;
+  currentAngle: number;
+  onAngleChange: (angle: number) => void;
+};
+vi.mock('../../play-drawer/AngleSelectorSheet', () => ({
+  AngleSelectorSheet: ({
+    visible,
+    onClose,
+    boardName,
+    layoutId,
+    currentAngle,
+    onAngleChange,
+  }: AngleSelectorMockProps) =>
+    visible
+      ? createElement(
+          'button',
+          {
+            onClick: () => {
+              onAngleChange(45);
+              onClose();
+            },
+            'data-angle-selector': `${boardName}:${layoutId}:${currentAngle}`,
+          },
+          'Angle selector',
+        )
+      : null,
+}));
+
 import { ClimbTopChrome } from '../ClimbTopChrome';
 
 function makeProps(over: Partial<Parameters<typeof ClimbTopChrome>[0]> = {}) {
@@ -140,15 +214,26 @@ function makeProps(over: Partial<Parameters<typeof ClimbTopChrome>[0]> = {}) {
     onCreate: vi.fn(),
     onOpenBoardDetail: vi.fn(),
     onHeightChange: vi.fn(),
+    searchFieldRef: { current: null } as RefObject<SearchHeaderHandle | null>,
+    searchInitialValue: '',
+    searchPlaceholder: 'Search climbs',
+    onSearchChange: vi.fn(),
+    onSearchFocus: vi.fn(),
+    onSearchBlur: vi.fn(),
+    onCloseGrade: vi.fn(),
     ...over,
   };
 }
 
-const createFab = (root: HTMLElement) => root.querySelector('[data-fab="plus"]') as HTMLButtonElement | null;
+const createAction = (root: HTMLElement) =>
+  root.querySelector('[data-pressable="mobile.create.fab.ariaLabel"]') as HTMLButtonElement | null;
+const angleAction = (root: HTMLElement) =>
+  root.querySelector('[data-pressable="mobile.angleSelector.title"]') as HTMLButtonElement | null;
 const lightbulb = (root: HTMLElement) =>
-  (root.querySelector('[data-fab="lightbulb"]') ??
-    root.querySelector('[data-fab="lightbulb.fill"]')) as HTMLButtonElement | null;
-const capsule = (root: HTMLElement) => root.querySelector('[data-capsule]') as HTMLButtonElement | null;
+  (root.querySelector('[data-pressable="ble.connectBoard"]') ??
+    root.querySelector('[data-pressable="lightControl.disconnect"]')) as HTMLButtonElement | null;
+const capsule = (root: HTMLElement) =>
+  root.querySelector('[data-capsule]:not([data-capsule=""])') as HTMLButtonElement | null;
 
 const typedBoard: BoardLabelFields = {
   name: '',
@@ -156,6 +241,8 @@ const typedBoard: BoardLabelFields = {
   boardType: 'kilter',
   sizeName: '12x12',
   layoutName: 'Kilter Layout',
+  layoutId: 1,
+  isAngleAdjustable: true,
 };
 const namedBoard: BoardLabelFields = {
   name: 'Garage Wall',
@@ -163,13 +250,17 @@ const namedBoard: BoardLabelFields = {
   boardType: 'tension',
   sizeName: '8x10',
   layoutName: 'Tension Layout',
+  layoutId: 2,
+  isAngleAdjustable: true,
 };
 
 describe('ClimbTopChrome', () => {
   beforeEach(() => {
     ctrl.board = null;
     ctrl.bluetooth = null;
+    ctrl.setActiveBoard.mockClear();
     haptics.light.mockClear();
+    haptics.selection.mockClear();
   });
 
   it('renders no board capsule when there is no active board', () => {
@@ -177,17 +268,15 @@ describe('ClimbTopChrome', () => {
     expect(capsule(container)).toBeNull();
   });
 
-  it('builds a typed-board label from display name • size • angle', () => {
+  it('builds a typed-board label from display name, size, and angle', () => {
     ctrl.board = typedBoard;
     const { container } = render(<ClimbTopChrome {...makeProps()} />);
-    // boardType has no custom name → composite: Display:kilter • 12x12 • 40°
     expect(capsule(container)?.getAttribute('data-capsule')).toBe('Display:kilter • 12x12 • 40°');
   });
 
   it('leads with the custom board name when the board is named', () => {
     ctrl.board = namedBoard;
     const { container } = render(<ClimbTopChrome {...makeProps()} />);
-    // Named board → "Garage Wall • 25°" (display name + size are dropped).
     expect(capsule(container)?.getAttribute('data-capsule')).toBe('Garage Wall • 25°');
   });
 
@@ -200,19 +289,42 @@ describe('ClimbTopChrome', () => {
   it('hides the create FAB unless canCreate is true', () => {
     ctrl.board = typedBoard;
     const { container, rerender } = render(<ClimbTopChrome {...makeProps({ canCreate: false })} />);
-    expect(createFab(container)).toBeNull();
+    expect(createAction(container)).toBeNull();
     rerender(<ClimbTopChrome {...makeProps({ canCreate: true })} />);
-    expect(createFab(container)).not.toBeNull();
+    expect(createAction(container)).not.toBeNull();
   });
 
   it('fires onCreate when the create FAB is pressed', () => {
     const onCreate = vi.fn();
     const { container } = render(<ClimbTopChrome {...makeProps({ canCreate: true, onCreate })} />);
-    fireEvent.click(createFab(container)!);
+    fireEvent.click(createAction(container)!);
     expect(onCreate).toHaveBeenCalledTimes(1);
   });
 
-  it('fires onOpenBoardDetail (with haptic) when the board capsule is pressed', () => {
+  it('renders the angle selector as the second left toolbar button', () => {
+    ctrl.board = typedBoard;
+    const { container } = render(<ClimbTopChrome {...makeProps({ canCreate: true })} />);
+    expect(angleAction(container)).not.toBeNull();
+    expect(angleAction(container)?.textContent).toBe('40°');
+  });
+
+  it('hides the angle selector for fixed-angle boards', () => {
+    ctrl.board = { ...typedBoard, isAngleAdjustable: false };
+    const { container } = render(<ClimbTopChrome {...makeProps({ canCreate: true })} />);
+    expect(angleAction(container)).toBeNull();
+  });
+
+  it('opens the angle sheet and persists the selected angle', () => {
+    ctrl.board = typedBoard;
+    const { container } = render(<ClimbTopChrome {...makeProps()} />);
+    fireEvent.click(angleAction(container)!);
+    expect(haptics.light).toHaveBeenCalledTimes(1);
+    expect(container.querySelector('[data-angle-selector]')?.getAttribute('data-angle-selector')).toBe('kilter:1:40');
+    fireEvent.click(container.querySelector('[data-angle-selector]') as HTMLButtonElement);
+    expect(ctrl.setActiveBoard).toHaveBeenCalledWith({ ...typedBoard, angle: 45 });
+  });
+
+  it('fires onOpenBoardDetail with haptic when the board capsule is pressed', () => {
     ctrl.board = typedBoard;
     const onOpenBoardDetail = vi.fn();
     const { container } = render(<ClimbTopChrome {...makeProps({ onOpenBoardDetail })} />);
@@ -221,32 +333,32 @@ describe('ClimbTopChrome', () => {
     expect(haptics.light).toHaveBeenCalledTimes(1);
   });
 
-  it('renders no lightbulb when there is no bluetooth context', () => {
-    ctrl.bluetooth = null;
+  it('renders the custom search field without top-row filter chrome', () => {
     const { container } = render(<ClimbTopChrome {...makeProps()} />);
     expect(lightbulb(container)).toBeNull();
+    expect(container.querySelector('[data-search-field]')).not.toBeNull();
+    expect(container.querySelector('[data-pressable^="mobile.search.filters"]')).toBeNull();
   });
 
-  it('shows a disconnected lightbulb (outline icon, neutral color) when not connected', () => {
+  it('native search mode leaves text search in the stack header and does not render filter chrome', () => {
+    const { container } = render(<ClimbTopChrome {...makeProps({ searchMode: 'native' })} />);
+    expect(container.querySelector('[data-search-field]')).toBeNull();
+    expect(container.querySelector('[data-gradepill]')).toBeNull();
+    expect(container.querySelector('[data-pressable^="mobile.search.filters"]')).toBeNull();
+  });
+
+  it('shows a disconnected lightbulb when not connected', () => {
     ctrl.bluetooth = { isConnected: false, connect: vi.fn().mockResolvedValue(true), disconnect: vi.fn() };
     const { container } = render(<ClimbTopChrome {...makeProps()} />);
-    const bulb = lightbulb(container);
-    expect(bulb?.getAttribute('data-fab')).toBe('lightbulb');
-    // Not connected → neutral label color, no warm tint, connect a11y label.
-    expect(bulb?.getAttribute('data-icon-color')).toBe('#000');
-    expect(bulb?.getAttribute('data-tint')).toBe('');
-    expect(bulb?.getAttribute('data-label')).toBe('ble.connectBoard');
+    expect(lightbulb(container)).not.toBeNull();
+    expect(container.querySelector('[data-icon="lightbulb"]')).not.toBeNull();
   });
 
-  it('shows a connected lightbulb (filled icon, warm tint) when connected', () => {
+  it('shows a connected lightbulb when connected', () => {
     ctrl.bluetooth = { isConnected: true, connect: vi.fn(), disconnect: vi.fn().mockResolvedValue(undefined) };
     const { container } = render(<ClimbTopChrome {...makeProps()} />);
-    const bulb = lightbulb(container);
-    expect(bulb?.getAttribute('data-fab')).toBe('lightbulb.fill');
-    expect(bulb?.getAttribute('data-icon-color')).toBe('#FF9500');
-    // withAlpha(warning, 0.2) → warm tint applied only when connected.
-    expect(bulb?.getAttribute('data-tint')).toBe('#FF9500@0.2');
-    expect(bulb?.getAttribute('data-label')).toBe('lightControl.disconnect');
+    expect(lightbulb(container)).not.toBeNull();
+    expect(container.querySelector('[data-icon="lightbulb.fill"]')).not.toBeNull();
   });
 
   it('connects on lightbulb press when disconnected', () => {
@@ -273,7 +385,6 @@ describe('ClimbTopChrome', () => {
   it('reports its measured height through onHeightChange via onLayout', () => {
     const onHeightChange = vi.fn();
     const { container } = render(<ClimbTopChrome {...makeProps({ onHeightChange })} />);
-    // The outer container View is the only one wired with onLayout.
     const layoutView = container.querySelector('[data-has-layout="true"]') as HTMLElement;
     expect(layoutView).not.toBeNull();
     fireEvent.click(layoutView);

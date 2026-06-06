@@ -10,7 +10,6 @@ vi.mock('react-native', () => ({
   StyleSheet: { create: (styles: Record<string, unknown>) => styles },
 }));
 
-vi.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ bottom: 0 }) }));
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock('../../../providers/theme-provider', () => ({
   useTheme: () => ({ systemColors: { fill: '#eee', label: '#111' } }),
@@ -18,9 +17,9 @@ vi.mock('../../../providers/theme-provider', () => ({
 vi.mock('../../../lib/haptics', () => ({ hapticLight: haptics.light }));
 vi.mock('../../../theme/tokens', () => ({ spacing: { 3: 12, 4: 16 } }));
 vi.mock('../../../theme/layout', () => ({ glassSize: { hero: 64 } }));
-// Only TOOLBAR_RESERVE/TAB_BAR_HEIGHT are needed; mock to avoid pulling the
-// whole queue bar (and its providers) into this unit.
-vi.mock('../../queue-control/persistent-queue-bar', () => ({ TOOLBAR_RESERVE: 74, TAB_BAR_HEIGHT: 49 }));
+vi.mock('../../../hooks/use-bottom-chrome-metrics', () => ({
+  useBottomChromeMetrics: () => ({ floatingControlBottom: 123 }),
+}));
 
 // GlassIconButton → a button exposing the glass props we assert on. Its mere
 // presence proves the FAB is glass rather than the old solid-maroon Pressable.

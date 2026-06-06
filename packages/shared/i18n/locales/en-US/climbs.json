@@ -654,17 +654,11 @@
       "settersCount_other": "{{count}} setters",
       "climbsCount_one": "{{count}} climb",
       "climbsCount_other": "{{count}} climbs",
-      "grade": "Grade",
-      "anyGrade": "Any grade",
       "gradeClear": "Any",
       "filters": "Filters",
-      "removeFilter": "Remove {{name}} filter",
-      "fab": {
-        "open": "Search",
-        "close": "Close search",
-        "done": "Done",
-        "hint": "Opens search, grade, and filter controls"
-      }
+      "filterCountAria": "Filters, {{count}} active",
+      "filterHint": "Tap for filters. Hold for grade.",
+      "removeFilter": "Remove {{name}} filter"
     },
     "gradeRail": {
       "setFilterAria": "Set grade filter to {{grade}}",

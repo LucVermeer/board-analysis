@@ -10,18 +10,21 @@ import { InSessionView } from './in-session/InSessionView';
 import { InviteSheet } from './InviteSheet';
 
 type SessionScreenProps = {
-  onClose: () => void;
-  /** Swipe-down-to-dismiss gesture, attached to the header by the host. */
-  headerGesture: PanGesture;
-  /** Host overlay offset (0 = presented) — the in-session body's pull-to-dismiss drives it. */
-  translateY: SharedValue<number>;
-  screenHeight: number;
+  /** Minimize handler. Absent in tab mode (switching tabs is the minimize). */
+  onClose?: () => void;
+  /** Swipe-down-to-dismiss gesture, attached to the header by the host. Absent in tab mode. */
+  headerGesture?: PanGesture;
+  /** Host overlay offset (0 = presented) — the in-session body's pull-to-dismiss drives it. Absent in tab mode. */
+  translateY?: SharedValue<number>;
+  /** Screen height for the dismiss-distance threshold. Absent in tab mode. */
+  screenHeight?: number;
 };
 
 /**
- * Top-level body of the session overlay. Picks between the pre-session
+ * Top-level body of the session screen. Picks between the pre-session
  * configuration form and the in-session live view based on whether the
- * QueueContext currently holds an active sessionId.
+ * QueueContext currently holds an active sessionId. Renders inline in the
+ * Record tab; the overlay-only props (drag/pull-to-dismiss) are omitted there.
  */
 export function SessionScreen({ onClose, headerGesture, translateY, screenHeight }: SessionScreenProps) {
   const { sessionId, sessionUsers } = useQueue();

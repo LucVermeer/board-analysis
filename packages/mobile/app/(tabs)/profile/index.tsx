@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { View, Pressable, StyleSheet } from 'react-native';
-import PagerView, { type PagerViewOnPageScrollEvent, type PagerViewOnPageSelectedEvent } from 'react-native-pager-view';
-import { useSharedValue } from 'react-native-reanimated';
+import { useSharedValue, withTiming } from 'react-native-reanimated';
 import { router, useNavigation } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import type BottomSheet from '@gorhom/bottom-sheet';
@@ -27,7 +26,6 @@ export default function YouScreen() {
   const userId = profile?.id;
   const youData = useYouProfileData(userId);
 
-  const pagerRef = useRef<PagerView>(null);
   const filterSheetRef = useRef<BottomSheet | null>(null);
   const scrollPosition = useSharedValue(0);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -41,20 +39,13 @@ export default function YouScreen() {
     [t],
   );
 
-  const handleTabPress = useCallback((index: number) => {
-    pagerRef.current?.setPage(index);
-  }, []);
-
-  const handlePageScroll = useCallback(
-    (event: PagerViewOnPageScrollEvent) => {
-      scrollPosition.value = event.nativeEvent.position + event.nativeEvent.offset;
+  const handleTabPress = useCallback(
+    (index: number) => {
+      setActiveIndex(index);
+      scrollPosition.value = withTiming(index, { duration: 180 });
     },
     [scrollPosition],
   );
-
-  const handlePageSelected = useCallback((event: PagerViewOnPageSelectedEvent) => {
-    setActiveIndex(event.nativeEvent.position);
-  }, []);
 
   const openFilters = useCallback(() => {
     filterSheetRef.current?.snapToIndex(0);
@@ -102,24 +93,11 @@ export default function YouScreen() {
     <View style={[styles.container, { backgroundColor: systemColors.background }]}>
       <YouTabBar tabs={tabs} activeIndex={activeIndex} scrollPosition={scrollPosition} onTabPress={handleTabPress} />
 
-      <PagerView
-        ref={pagerRef}
-        style={styles.pager}
-        initialPage={0}
-        offscreenPageLimit={1}
-        onPageScroll={handlePageScroll}
-        onPageSelected={handlePageSelected}
-      >
-        <View key="progress" style={styles.page}>
-          <ProgressTab data={youData} />
-        </View>
-        <View key="sessions" style={styles.page}>
-          <SessionsTab userId={userId} />
-        </View>
-        <View key="logbook" style={styles.page}>
-          <LogbookTab userId={userId} />
-        </View>
-      </PagerView>
+      <View style={styles.page}>
+        {activeIndex === 0 ? <ProgressTab data={youData} /> : null}
+        {activeIndex === 1 ? <SessionsTab userId={userId} /> : null}
+        {activeIndex === 2 ? <LogbookTab userId={userId} /> : null}
+      </View>
 
       <YouFilterSheet
         sheetRef={filterSheetRef}
@@ -134,6 +112,5 @@ export default function YouScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  pager: { flex: 1 },
   page: { flex: 1 },
 });

@@ -1,16 +1,12 @@
 import { useEffect } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import Animated, { FadeInDown, FadeOutDown } from 'react-native-reanimated';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { Text } from './Text';
 import { brandColors } from '../theme/colors';
 import { borderRadius, spacing, shadowColor } from '../theme/tokens';
 import { useTheme } from '../providers/theme-provider';
-import { useQueue } from '../providers/queue-provider';
-import { TAB_BAR_HEIGHT } from './BlurTabBar';
-import { TOOLBAR_RESERVE } from '../theme/layout';
-import { queueSnackbarBottomOffset } from './queue-snackbar-position';
+import { useBottomChromeMetrics } from '../hooks/use-bottom-chrome-metrics';
 
 const DEFAULT_DURATION = 4000;
 
@@ -37,10 +33,9 @@ export function QueueAddedSnackbar({
   onOpen,
   duration = DEFAULT_DURATION,
 }: QueueAddedSnackbarProps) {
-  const insets = useSafeAreaInsets();
   const { systemColors } = useTheme();
   const { t } = useTranslation('session');
-  const { state } = useQueue();
+  const bottomChrome = useBottomChromeMetrics();
 
   useEffect(() => {
     if (!visible) return undefined;
@@ -48,16 +43,9 @@ export function QueueAddedSnackbar({
     return () => clearTimeout(timer);
   }, [visible, nonce, duration, onDismiss]);
 
-  // Sit above the toolbar capsule when it's showing (a current climb is set);
-  // otherwise just above the tab bar.
-  const barVisible = !!state.currentClimbQueueItem;
-  const bottom = queueSnackbarBottomOffset({
-    insetsBottom: insets.bottom,
-    tabBarHeight: TAB_BAR_HEIGHT,
-    barContentHeight: TOOLBAR_RESERVE,
-    gap: spacing[2],
-    barVisible,
-  });
+  // Sit above the queue controls when they are showing; otherwise just above
+  // the tab bar/safe area.
+  const bottom = bottomChrome.floatingControlBottom + spacing[2];
 
   return (
     <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
