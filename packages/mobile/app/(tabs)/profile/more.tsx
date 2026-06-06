@@ -15,7 +15,6 @@ import { ListRow } from '../../../src/components/ListRow';
 import { SectionHeader } from '../../../src/components/SectionHeader';
 import { SegmentedControl } from '../../../src/components/SegmentedControl';
 import { isPreviewBuild } from '../../../src/lib/eas-api';
-import { useSearchLayout, type SearchLayout } from '../../../src/lib/search-layout-preference';
 import { useGradeFormat } from '../../../src/hooks/use-grade-format';
 
 export default function MoreScreen() {
@@ -24,18 +23,12 @@ export default function MoreScreen() {
   const { t: tProfile } = useTranslation('profile');
   const { signOut } = useAuth();
   const { data: profile } = useProfile();
-  const { layout: searchLayout, setLayout: setSearchLayout } = useSearchLayout();
   const { gradeFormat, setGradeFormat } = useGradeFormat();
 
   const appearanceOptions: { key: ThemeOverride; label: string }[] = [
     { key: 'system', label: t('mobile.more.appearance.system') },
     { key: 'light', label: t('mobile.more.appearance.light') },
     { key: 'dark', label: t('mobile.more.appearance.dark') },
-  ];
-
-  const searchLayoutOptions: { key: SearchLayout; label: string }[] = [
-    { key: 'bottom-bar', label: t('mobile.more.searchLayout.bottomBar') },
-    { key: 'sticky-strip', label: t('mobile.more.searchLayout.stickyStrip') },
   ];
 
   const gradeFormatOptions: { key: GradeDisplayFormat; label: string }[] = [
@@ -97,31 +90,6 @@ export default function MoreScreen() {
         </View>
       </View>
 
-      <View style={styles.section}>
-        <SectionHeader title={t('mobile.more.searchLayout.title')} />
-        <View
-          style={[
-            styles.card,
-            {
-              backgroundColor: systemColors.secondaryBackground,
-              borderRadius: borderRadius.lg,
-              marginHorizontal: spacing[4],
-              padding: spacing[3],
-            },
-          ]}
-        >
-          <SegmentedControl
-            options={searchLayoutOptions}
-            selectedKey={searchLayout}
-            onSelect={setSearchLayout}
-            trackColor={systemColors.fill}
-            accessibilityLabel={t('mobile.more.searchLayout.title')}
-          />
-          <Text variant="footnote" color={systemColors.secondaryLabel} style={styles.settingHint}>
-            {t('mobile.more.searchLayout.description')}
-          </Text>
-        </View>
-      </View>
       {__DEV__ ? (
         <View style={styles.section}>
           <SectionHeader title={t('mobile.more.development')} />

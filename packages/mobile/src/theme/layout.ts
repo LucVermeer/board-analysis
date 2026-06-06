@@ -31,9 +31,9 @@ export const TAB_BAR_HEIGHT = 49;
  * bodies. Anything merged inside a GlassContainer shares one height.
  */
 export const glassSize = {
-  hero: 64,
-  standard: 56,
-  capsule: 52,
+  hero: 56,
+  standard: 48,
+  capsule: 44,
   inlinePrimary: 48,
   inline: 44,
   mini: 32,
@@ -62,7 +62,5 @@ export const TOOLBAR_GAP_ABOVE_TABBAR = 10;
 
 /** Bottom padding screens reserve (above the tab bar + safe-area inset) so the
  *  last scrollable row clears the floating toolbar. Keyed off the tallest island
- *  across layouts — the sticky-strip layout still floats the hero log-ascent tick
- *  (`glassSize.hero`), taller than the bottom-bar action toolbar — so nothing hides
- *  under it on either layout. */
+ *  — the hero log-ascent tick (`glassSize.hero`) — so nothing hides under it. */
 export const TOOLBAR_RESERVE = glassSize.hero + TOOLBAR_GAP_ABOVE_TABBAR;

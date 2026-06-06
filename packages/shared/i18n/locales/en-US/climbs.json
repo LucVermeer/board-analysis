@@ -657,8 +657,7 @@
       "gradeClear": "Any",
       "filters": "Filters",
       "filterCountAria": "Filters, {{count}} active",
-      "filterHint": "Tap for filters. Hold for grade.",
-      "removeFilter": "Remove {{name}} filter"
+      "filterHint": "Tap for filters. Hold for grade."
     },
     "gradeRail": {
       "setFilterAria": "Set grade filter to {{grade}}",

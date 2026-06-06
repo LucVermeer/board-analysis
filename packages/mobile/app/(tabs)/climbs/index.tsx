@@ -21,7 +21,6 @@ import { ActivityIndicator } from '../../../src/components/ActivityIndicator';
 import { Text } from '../../../src/components/Text';
 import { Icon } from '../../../src/components/Icon';
 import { ClimbFilterSheet, hasActiveFilters, type ClimbFilters } from '../../../src/components/ClimbFilterSheet';
-import { ClimbSearchBar } from '../../../src/components/search/ClimbSearchBar';
 import { ClimbFilterFab } from '../../../src/components/search/ClimbFilterFab';
 import { ClimbTopChrome } from '../../../src/components/search/ClimbTopChrome';
 import { BoardDetailSheet } from '../../../src/components/board-discovery/BoardDetailSheet';
@@ -53,7 +52,6 @@ import {
 import { getLastSearch, saveLastSearch, boardConfigKey } from '../../../src/lib/last-search-store';
 import { getFilterSummary } from '../../../src/lib/filter-summary';
 import { normalizeSearchName } from '../../../src/lib/search-name';
-import { useSearchLayout } from '../../../src/lib/search-layout-preference';
 import { track } from '../../../src/lib/analytics';
 import { brandColors } from '../../../src/theme/colors';
 import { iosSystemColors } from '../../../src/theme/ios-colors';
@@ -106,23 +104,11 @@ export default function ClimbList() {
 function ClimbListInner() {
   const router = useRouter();
   const { t } = useTranslation('climbs');
-  const { t: tCommon } = useTranslation('common');
   const { openClimbActions, openAddToPlaylist } = useDrawerHost();
   const { systemColors } = useTheme();
   const { addToQueue, state: queueState } = useQueue();
-  const {
-    filters,
-    boardFilters,
-    name,
-    setFilters,
-    setBoardFilters,
-    patchFilters,
-    patchBoardFilters,
-    setGrade,
-    setName,
-    replaceSearch,
-  } = useClimbSearch();
-  const { layout, loaded: layoutLoaded } = useSearchLayout();
+  const { filters, boardFilters, name, setFilters, setBoardFilters, setGrade, setName, replaceSearch } =
+    useClimbSearch();
   // The active climb (driving the board / persistent queue bar). We highlight
   // its row so the search → tap → change-active loop is always visible.
   const activeClimbUuid = queueState.currentClimbQueueItem?.climb?.uuid;
@@ -135,11 +121,8 @@ function ClimbListInner() {
 
   // iOS 26 uses the native tab-bar bottom accessory for current climb + tick
   // and the NativeTabs search role + Stack search bar for text search. Fallback
-  // devices keep the custom search chrome.
-  const accessoryActive = isBottomAccessoryAvailable();
-  const useNativeSearch = accessoryActive;
-  const useBottomBar = accessoryActive || (layoutLoaded && layout === 'bottom-bar');
-  const useStickyStrip = !accessoryActive && layout === 'sticky-strip';
+  // devices keep the custom search field inside the top chrome.
+  const useNativeSearch = isBottomAccessoryAvailable();
 
   const listPaddingBottom = bottomChrome.scrollBottomPadding;
   const filterFabNativeAccessoryDrop = bottomChrome.nativeAccessoryVisible ? glassSize.standard * 2 : 0;
@@ -160,7 +143,7 @@ function ClimbListInner() {
   // Measured height of the floating glass search row (incl. the top safe-area
   // inset). The list pads its top by this so the first row rests below the bar
   // and the rest scroll under it; re-measures when the chips row appears.
-  const [searchBarHeight, setSearchBarHeight] = useState(() => (useNativeSearch ? 56 : insets.top + 60));
+  const [searchBarHeight, setSearchBarHeight] = useState(() => insets.top + 60);
   // Board-detail sheet, opened from the bottom-bar experiment's top board capsule.
   const [showBoardDetail, setShowBoardDetail] = useState(false);
   const setActiveBoard = useSetActiveBoard();
@@ -205,18 +188,6 @@ function ClimbListInner() {
       debounceTimerRef.current = setTimeout(() => {
         setName(nextName);
       }, SEARCH_DEBOUNCE_MS);
-    },
-    [setName],
-  );
-
-  // Commit the typed text immediately, bypassing the debounce — used by the
-  // bottom-bar "done typing" fab so the search runs the moment it's tapped.
-  const handleSearchSubmit = useCallback(
-    (text: string) => {
-      const nextName = normalizeSearchName(text);
-      setSearchTextLength(nextName.length);
-      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
-      setName(nextName);
     },
     [setName],
   );
@@ -569,10 +540,9 @@ function ClimbListInner() {
   }, [router, boardName, layoutId, sizeId, setIds, angle]);
 
   // Recent-filter pills live in the list header on search focus — only meaningful
-  // in the sticky-strip layout (in bottom-bar the search field sits behind a
-  // scrim/keyboard, so the list header isn't reachable while typing).
-  const showRecentPills =
-    (useStickyStrip || useNativeSearch) && isSearchFocused && searchTextLength === 0 && recentFilters.length > 0;
+  // with native search (the custom in-chrome field sits behind a scrim/keyboard,
+  // so the list header isn't reachable while typing).
+  const showRecentPills = useNativeSearch && isSearchFocused && searchTextLength === 0 && recentFilters.length > 0;
   // Show the spinner (not a premature "no climbs" empty state) while a board is
   // resolving or its per-board restore hasn't landed yet.
   const isBoardResolving = isBoardLoading || (hasBoardConfig && !searchReady);
@@ -591,9 +561,18 @@ function ClimbListInner() {
     () =>
       useNativeSearch
         ? {
+            // iOS 26 presents this screen's search controller in the bottom tab
+            // bar (the NativeTabs role="search" liquid-glass pattern) — there is
+            // no header search bar. The header only has to stay mounted to host
+            // the controller, so we make it fully invisible: transparent, no
+            // blur (the parent layout's systemMaterial was the grey bar), no
+            // shadow, no title. The floating glass chrome then owns the top.
             headerShown: true,
-            headerTransparent: false,
-            title: tCommon('mobile.nav.climbs'),
+            headerTransparent: true,
+            headerBlurEffect: 'none' as const,
+            headerShadowVisible: false,
+            headerStyle: { backgroundColor: 'transparent' },
+            title: '',
             headerSearchBarOptions: {
               ref: nativeSearchRef,
               placement: 'automatic' as const,
@@ -608,15 +587,7 @@ function ClimbListInner() {
             },
           }
         : { headerShown: false },
-    [
-      useNativeSearch,
-      tCommon,
-      t,
-      handleNativeSearchChange,
-      handleSearchFocus,
-      handleSearchBlur,
-      handleNativeSearchCancel,
-    ],
+    [useNativeSearch, t, handleNativeSearchChange, handleSearchFocus, handleSearchBlur, handleNativeSearchCancel],
   );
 
   const renderClimbItem = useCallback(
@@ -688,7 +659,10 @@ function ClimbListInner() {
         keyExtractor={keyExtractor}
         onEndReached={handleEndReached}
         onEndReachedThreshold={0.5}
-        contentInsetAdjustmentBehavior={useNativeSearch ? 'automatic' : 'never'}
+        // The header is transparent on every path now, so the chrome owns the top
+        // inset and the list pads manually by the measured chrome height. Leaving
+        // this 'automatic' would double-inset under the (invisible) native header.
+        contentInsetAdjustmentBehavior="never"
         contentContainerStyle={{ paddingTop: searchBarHeight, paddingBottom: listPaddingBottom }}
         scrollIndicatorInsets={{ top: searchBarHeight }}
         keyboardShouldPersistTaps="handled"
@@ -727,46 +701,21 @@ function ClimbListInner() {
         }
       />
 
-      {useStickyStrip ? (
-        <ClimbSearchBar
-          layout={layout}
-          searchFieldRef={searchHeaderRef}
-          searchInitialValue={name}
-          searchPlaceholder={t('search.placeholders.climbs')}
-          onSearchChange={handleSearchChange}
-          onSearchSubmit={handleSearchSubmit}
-          onSearchFocus={handleSearchFocus}
-          onSearchBlur={handleSearchBlur}
-          filters={filters}
-          boardFilters={boardFilters}
-          activeFilterCount={activeFilterCount}
-          onPatchFilters={patchFilters}
-          onPatchBoardFilters={patchBoardFilters}
-          canCreate={isAuthenticated && hasBoardConfig}
-          onCreate={handleCreateClimb}
-          onHeightChange={setSearchBarHeight}
-        />
-      ) : null}
-
-      {useBottomBar ? (
-        <>
-          <ClimbTopChrome
-            searchMode={useNativeSearch ? 'native' : 'custom'}
-            canCreate={isAuthenticated && hasBoardConfig}
-            onCreate={handleCreateClimb}
-            onOpenBoardDetail={() => setShowBoardDetail(true)}
-            onHeightChange={setSearchBarHeight}
-            includeTopInset={!useNativeSearch}
-            searchFieldRef={searchHeaderRef}
-            searchInitialValue={name}
-            searchPlaceholder={t('search.placeholders.climbs')}
-            onSearchChange={handleSearchChange}
-            onSearchFocus={handleSearchFocus}
-            onSearchBlur={handleSearchBlur}
-            onCloseGrade={handleDismissGrade}
-          />
-        </>
-      ) : null}
+      <ClimbTopChrome
+        searchMode={useNativeSearch ? 'native' : 'custom'}
+        canCreate={isAuthenticated && hasBoardConfig}
+        onCreate={handleCreateClimb}
+        onOpenBoardDetail={() => setShowBoardDetail(true)}
+        onHeightChange={setSearchBarHeight}
+        includeTopInset
+        searchFieldRef={searchHeaderRef}
+        searchInitialValue={name}
+        searchPlaceholder={t('search.placeholders.climbs')}
+        onSearchChange={handleSearchChange}
+        onSearchFocus={handleSearchFocus}
+        onSearchBlur={handleSearchBlur}
+        onCloseGrade={handleDismissGrade}
+      />
 
       <ClimbFilterFab
         activeFilterCount={activeFilterCount}

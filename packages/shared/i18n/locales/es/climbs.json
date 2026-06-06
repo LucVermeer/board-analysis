@@ -657,8 +657,7 @@
       "gradeClear": "Cualquiera",
       "filters": "Filtros",
       "filterCountAria": "Filtros, {{count}} activos",
-      "filterHint": "Toca para filtrar. Mantén pulsado para elegir grado.",
-      "removeFilter": "Quitar filtro {{name}}"
+      "filterHint": "Toca para filtrar. Mantén pulsado para elegir grado."
     },
     "gradeRail": {
       "setFilterAria": "Filtrar por grado {{grade}}",
