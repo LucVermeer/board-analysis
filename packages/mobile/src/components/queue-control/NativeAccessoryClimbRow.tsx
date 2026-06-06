@@ -113,17 +113,12 @@ function ClimbLabel({ climb, labelColor, formattedGrade, showThumbnail, boardCon
         color={labelColor}
         numberOfLines={1}
         ellipsizeMode="tail"
-        style={[styles.name, styles.textOpticalOffset]}
+        style={styles.name}
       >
         {climb.name}
       </Text>
       {formattedGrade ? (
-        <Text
-          variant="headline"
-          color={labelColor}
-          numberOfLines={1}
-          style={[styles.gradeText, styles.textOpticalOffset]}
-        >
+        <Text variant="headline" color={labelColor} numberOfLines={1} style={styles.gradeText}>
           {formattedGrade}
         </Text>
       ) : null}
@@ -350,9 +345,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     minWidth: spacing[10],
     textAlign: 'right',
-  },
-  textOpticalOffset: {
-    transform: [{ translateY: ACCESSORY_OPTICAL_Y_OFFSET }],
   },
   tickSlot: {
     alignItems: 'center',
