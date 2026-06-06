@@ -31,8 +31,8 @@ const ACCESSORY_OPTICAL_Y_OFFSET = -1;
 const ACCESSORY_LEADING_INSET = spacing[1];
 const ACCESSORY_TRAILING_INSET = spacing[3];
 const ACCESSORY_THUMBNAIL_SLOT_SIZE = 36;
-const ACCESSORY_THUMBNAIL_ART_MAX_SIZE = 36;
-const ACCESSORY_THUMBNAIL_RADIUS = 7;
+const ACCESSORY_THUMBNAIL_ART_MAX_SIZE = 30;
+const ACCESSORY_THUMBNAIL_ART_RADIUS = 9;
 const ACCESSORY_THUMBNAIL_OPTICAL_Y_OFFSET = -4;
 
 type ClimbLabelProps = {
@@ -85,6 +85,8 @@ function AccessoryClimbThumbnail({ climb, boardConfig }: { climb: Climb; boardCo
 
   const thumbnailBoardStyle = {
     ...getAccessoryThumbnailBoardSize(boardRenderData.boardWidth, boardRenderData.boardHeight),
+    borderRadius: ACCESSORY_THUMBNAIL_ART_RADIUS,
+    overflow: 'hidden' as const,
   };
 
   return (
@@ -325,8 +327,6 @@ const styles = StyleSheet.create({
   thumbnailSlot: {
     width: ACCESSORY_THUMBNAIL_SLOT_SIZE,
     height: ACCESSORY_THUMBNAIL_SLOT_SIZE,
-    borderRadius: ACCESSORY_THUMBNAIL_RADIUS,
-    overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
@@ -335,11 +335,11 @@ const styles = StyleSheet.create({
   name: {
     flex: 1,
     minWidth: 0,
-    fontWeight: '600',
+    fontWeight: '500',
   },
   gradeText: {
     fontVariant: ['tabular-nums'],
-    fontWeight: '700',
+    fontWeight: '600',
     minWidth: spacing[10],
     textAlign: 'right',
   },

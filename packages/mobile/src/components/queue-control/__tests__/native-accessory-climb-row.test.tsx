@@ -108,21 +108,32 @@ type TextMockProps = {
   style?: CSSProperties | Array<CSSProperties | undefined | false | null>;
 };
 
-function readColor(props: TextMockProps): string {
-  if (props.color != null) return props.color;
+function readTextStyleValue(props: TextMockProps, styleKey: keyof CSSProperties): string {
   const styles = Array.isArray(props.style) ? props.style : [props.style];
   for (let styleIndex = styles.length - 1; styleIndex >= 0; styleIndex -= 1) {
     const styleEntry = styles[styleIndex];
-    if (styleEntry && typeof styleEntry === 'object' && 'color' in styleEntry && styleEntry.color != null) {
-      return String((styleEntry as { color: unknown }).color);
+    if (styleEntry && typeof styleEntry === 'object' && styleKey in styleEntry && styleEntry[styleKey] != null) {
+      return String(styleEntry[styleKey]);
     }
   }
   return '';
 }
 
+function readColor(props: TextMockProps): string {
+  return props.color ?? readTextStyleValue(props, 'color');
+}
+
 vi.mock('../../Text', () => ({
   Text: (props: TextMockProps) =>
-    createElement('span', { 'data-text': 'true', 'data-color': readColor(props) }, props.children),
+    createElement(
+      'span',
+      {
+        'data-text': 'true',
+        'data-color': readColor(props),
+        'data-font-weight': readTextStyleValue(props, 'fontWeight'),
+      },
+      props.children,
+    ),
 }));
 
 vi.mock('../../../providers/theme-provider', () => ({
@@ -281,17 +292,23 @@ describe('NativeAccessoryClimbRow', () => {
     expect(thumbnailSlot?.getAttribute('data-background-color')).toBe('');
     expect(thumbnailSlot?.getAttribute('data-border-width')).toBe('');
     expect(thumbnailSlot?.getAttribute('data-border-color')).toBe('');
-    expect(thumbnailSlot?.getAttribute('data-border-radius')).toBe('7');
-    expect(thumbnailSlot?.getAttribute('data-overflow')).toBe('hidden');
-    expectNumericAttribute(thumbnail, 'data-board-width', 20.25);
-    expectNumericAttribute(thumbnail, 'data-board-height', 36);
-    expect(thumbnail.getAttribute('data-board-border-radius')).toBe('');
-    expect(thumbnail.getAttribute('data-board-overflow')).toBe('');
+    expect(thumbnailSlot?.getAttribute('data-border-radius')).toBe('');
+    expect(thumbnailSlot?.getAttribute('data-overflow')).toBe('');
+    expectNumericAttribute(thumbnail, 'data-board-width', 16.875);
+    expectNumericAttribute(thumbnail, 'data-board-height', 30);
+    expect(thumbnail.getAttribute('data-board-border-radius')).toBe('9');
+    expect(thumbnail.getAttribute('data-board-overflow')).toBe('hidden');
+
+    const climbNameText = Array.from(container.querySelectorAll('[data-text]')).find(
+      (textNode) => textNode.textContent === "Alvin's Nuts",
+    );
+    expect(climbNameText?.getAttribute('data-font-weight')).toBe('500');
 
     const gradeText = Array.from(container.querySelectorAll('[data-text]')).find(
       (textNode) => textNode.textContent === 'V6',
     );
     expect(gradeText?.getAttribute('data-color')).toBe('#111111');
+    expect(gradeText?.getAttribute('data-font-weight')).toBe('600');
   });
 
   it('uses the full silhouette for very tall board thumbnails', () => {
@@ -300,8 +317,8 @@ describe('NativeAccessoryClimbRow', () => {
     const { container } = render(<NativeAccessoryClimbRow placement="regular" width={344} />);
     const thumbnail = getCurrentThumbnail(container);
 
-    expectNumericAttribute(thumbnail, 'data-board-width', 15.564452);
-    expectNumericAttribute(thumbnail, 'data-board-height', 36);
+    expectNumericAttribute(thumbnail, 'data-board-width', 12.970376);
+    expectNumericAttribute(thumbnail, 'data-board-height', 30);
   });
 
   it('keeps near-square Kilter Homewall thumbnails off the accessory edges', () => {
@@ -312,8 +329,8 @@ describe('NativeAccessoryClimbRow', () => {
 
     expect(container.querySelector('[data-height="56"]')).not.toBeNull();
     expect(thumbnail.closest('[data-width="36"][data-height="36"]')).not.toBeNull();
-    expectNumericAttribute(thumbnail, 'data-board-width', 33.604149);
-    expectNumericAttribute(thumbnail, 'data-board-height', 36);
+    expectNumericAttribute(thumbnail, 'data-board-width', 28.003457);
+    expectNumericAttribute(thumbnail, 'data-board-height', 30);
   });
 
   it('uses the full silhouette for wide board thumbnails', () => {
@@ -322,8 +339,8 @@ describe('NativeAccessoryClimbRow', () => {
     const { container } = render(<NativeAccessoryClimbRow placement="regular" width={344} />);
     const thumbnail = getCurrentThumbnail(container);
 
-    expectNumericAttribute(thumbnail, 'data-board-width', 36);
-    expectNumericAttribute(thumbnail, 'data-board-height', 19.89);
+    expectNumericAttribute(thumbnail, 'data-board-width', 30);
+    expectNumericAttribute(thumbnail, 'data-board-height', 16.575);
   });
 
   it('keeps the thumbnail out of inline placement', () => {
