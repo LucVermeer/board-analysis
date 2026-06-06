@@ -15,7 +15,6 @@ import { useDrawerHost, type BoardConfig } from '../../providers/drawer-host-pro
 import { hapticLight, hapticSelection } from '../../lib/haptics';
 import { spacing } from '../../theme/tokens';
 import { glassSize } from '../../theme/layout';
-import { iosSystemColors } from '../../theme/ios-colors';
 import { Text } from '../Text';
 import { BoardRenderer } from '../board-renderer/BoardRenderer';
 import { useCarouselGesture } from '../play-drawer/use-carousel-gesture';
@@ -32,7 +31,6 @@ const ACCESSORY_OPTICAL_Y_OFFSET = -1;
 const ACCESSORY_LEADING_INSET = spacing[1];
 const ACCESSORY_TRAILING_INSET = spacing[3];
 const ACCESSORY_THUMBNAIL_SIZE = 40;
-const ACCESSORY_THUMBNAIL_ART_SIZE = 36;
 const ACCESSORY_THUMBNAIL_RADIUS = 7;
 
 type ClimbLabelProps = {
@@ -42,6 +40,28 @@ type ClimbLabelProps = {
   showThumbnail: boolean;
   boardConfig: BoardConfig | null;
 };
+
+function getAccessoryThumbnailBoardSize(boardWidth: number, boardHeight: number) {
+  const boardAspectRatio = boardWidth / boardHeight;
+  if (!Number.isFinite(boardAspectRatio) || boardAspectRatio <= 0) {
+    return {
+      width: ACCESSORY_THUMBNAIL_SIZE,
+      height: ACCESSORY_THUMBNAIL_SIZE,
+    };
+  }
+
+  if (boardAspectRatio >= 1) {
+    return {
+      width: ACCESSORY_THUMBNAIL_SIZE,
+      height: ACCESSORY_THUMBNAIL_SIZE / boardAspectRatio,
+    };
+  }
+
+  return {
+    width: ACCESSORY_THUMBNAIL_SIZE * boardAspectRatio,
+    height: ACCESSORY_THUMBNAIL_SIZE,
+  };
+}
 
 function AccessoryClimbThumbnail({ climb, boardConfig }: { climb: Climb; boardConfig: BoardConfig | null }) {
   const boardRenderData = useMemo(() => {
@@ -61,21 +81,25 @@ function AccessoryClimbThumbnail({ climb, boardConfig }: { climb: Climb; boardCo
 
   if (!boardRenderData) return null;
 
+  const thumbnailBoardStyle = {
+    ...getAccessoryThumbnailBoardSize(boardRenderData.boardWidth, boardRenderData.boardHeight),
+    borderRadius: ACCESSORY_THUMBNAIL_RADIUS,
+    overflow: 'hidden' as const,
+  };
+
   return (
-    <View style={styles.thumbnailFrame}>
-      <View style={styles.thumbnailArt}>
-        <BoardRenderer
-          frames={climb.frames}
-          boardName={boardConfig?.boardName as BoardName}
-          boardWidth={boardRenderData.boardWidth}
-          boardHeight={boardRenderData.boardHeight}
-          imageUrls={boardRenderData.imageUrls}
-          holdsData={boardRenderData.holdsData}
-          mirrored={climb.mirrored === true}
-          fillContainer
-          style={styles.thumbnailBoard}
-        />
-      </View>
+    <View style={styles.thumbnailSlot}>
+      <BoardRenderer
+        frames={climb.frames}
+        boardName={boardConfig?.boardName as BoardName}
+        boardWidth={boardRenderData.boardWidth}
+        boardHeight={boardRenderData.boardHeight}
+        imageUrls={boardRenderData.imageUrls}
+        holdsData={boardRenderData.holdsData}
+        mirrored={climb.mirrored === true}
+        fillContainer
+        style={thumbnailBoardStyle}
+      />
     </View>
   );
 }
@@ -298,30 +322,12 @@ const styles = StyleSheet.create({
     paddingLeft: spacing[2],
     paddingRight: spacing[1],
   },
-  thumbnailFrame: {
+  thumbnailSlot: {
     width: ACCESSORY_THUMBNAIL_SIZE,
     height: ACCESSORY_THUMBNAIL_SIZE,
-    borderRadius: ACCESSORY_THUMBNAIL_RADIUS,
-    overflow: 'hidden',
-    backgroundColor: `${iosSystemColors.systemGray}1A`,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: `${iosSystemColors.systemGray}4D`,
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
-  },
-  thumbnailArt: {
-    width: ACCESSORY_THUMBNAIL_ART_SIZE,
-    height: ACCESSORY_THUMBNAIL_ART_SIZE,
-    overflow: 'hidden',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  thumbnailBoard: {
-    width: '100%',
-    height: '100%',
-    borderRadius: ACCESSORY_THUMBNAIL_RADIUS,
-    overflow: 'hidden',
   },
   name: {
     flex: 1,

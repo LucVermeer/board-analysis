@@ -19,6 +19,11 @@ const drawer = vi.hoisted(() => ({
   openPlayDrawer: vi.fn(),
 }));
 
+const boardRender = vi.hoisted(() => ({
+  boardWidth: 1080,
+  boardHeight: 1920,
+}));
+
 vi.mock('react-native', () => ({
   Platform: { OS: 'ios' },
   PlatformColor: (name: string) => name,
@@ -33,24 +38,36 @@ vi.mock('react-native', () => ({
     accessibilityRole?: string;
     accessibilityLabel?: string;
   }) => {
-    const styles = Array.isArray(style) ? style : [style];
-    const height = styles.reduce<unknown>((foundHeight, styleEntry) => {
-      if (foundHeight != null) return foundHeight;
-      return styleEntry != null && typeof styleEntry === 'object' && 'height' in styleEntry
-        ? (styleEntry as { height?: unknown }).height
-        : null;
-    }, null);
-    const paddingRight = styles.reduce<unknown>((foundPaddingRight, styleEntry) => {
-      if (foundPaddingRight != null) return foundPaddingRight;
-      return styleEntry != null && typeof styleEntry === 'object' && 'paddingRight' in styleEntry
-        ? (styleEntry as { paddingRight?: unknown }).paddingRight
-        : null;
-    }, null);
+    const readStyleValue = (styleKey: string): unknown => {
+      const styles = Array.isArray(style) ? style : [style];
+      for (const styleEntry of styles) {
+        if (
+          styleEntry != null &&
+          typeof styleEntry === 'object' &&
+          Object.prototype.hasOwnProperty.call(styleEntry, styleKey)
+        ) {
+          return (styleEntry as Record<string, unknown>)[styleKey];
+        }
+      }
+      return null;
+    };
+    const width = readStyleValue('width');
+    const height = readStyleValue('height');
+    const paddingRight = readStyleValue('paddingRight');
+    const backgroundColor = readStyleValue('backgroundColor');
+    const borderWidth = readStyleValue('borderWidth');
+    const borderColor = readStyleValue('borderColor');
+    const borderRadius = readStyleValue('borderRadius');
     return createElement(
       'div',
       {
+        'data-width': width == null ? '' : String(width),
         'data-height': height == null ? '' : String(height),
         'data-padding-right': paddingRight == null ? '' : String(paddingRight),
+        'data-background-color': backgroundColor == null ? '' : String(backgroundColor),
+        'data-border-width': borderWidth == null ? '' : String(borderWidth),
+        'data-border-color': borderColor == null ? '' : String(borderColor),
+        'data-border-radius': borderRadius == null ? '' : String(borderRadius),
         'data-role': accessibilityRole ?? '',
         'data-label': accessibilityLabel ?? '',
       },
@@ -143,19 +160,42 @@ vi.mock('../../../theme/layout', () => ({
 
 vi.mock('../../../lib/board-details', () => ({
   getBoardRenderData: () => ({
-    boardWidth: 1080,
-    boardHeight: 1920,
+    boardWidth: boardRender.boardWidth,
+    boardHeight: boardRender.boardHeight,
     imageUrls: ['https://example.test/board.webp'],
     holdsData: [],
   }),
 }));
 
 vi.mock('../../board-renderer/BoardRenderer', () => ({
-  BoardRenderer: ({ frames, fillContainer }: { frames: string; fillContainer?: boolean }) =>
-    createElement('div', {
+  BoardRenderer: ({ frames, fillContainer, style }: { frames: string; fillContainer?: boolean; style?: unknown }) => {
+    const readStyleValue = (styleKey: string): unknown => {
+      const styles = Array.isArray(style) ? style : [style];
+      for (const styleEntry of styles) {
+        if (
+          styleEntry != null &&
+          typeof styleEntry === 'object' &&
+          Object.prototype.hasOwnProperty.call(styleEntry, styleKey)
+        ) {
+          return (styleEntry as Record<string, unknown>)[styleKey];
+        }
+      }
+      return null;
+    };
+    const width = readStyleValue('width');
+    const height = readStyleValue('height');
+    const borderRadius = readStyleValue('borderRadius');
+    const overflow = readStyleValue('overflow');
+
+    return createElement('div', {
       'data-thumbnail': frames,
       'data-fill-container': fillContainer ? 'true' : 'false',
-    }),
+      'data-board-width': width == null ? '' : String(width),
+      'data-board-height': height == null ? '' : String(height),
+      'data-board-border-radius': borderRadius == null ? '' : String(borderRadius),
+      'data-board-overflow': overflow == null ? '' : String(overflow),
+    });
+  },
 }));
 
 vi.mock('../../play-drawer/use-carousel-gesture', () => ({
@@ -198,12 +238,24 @@ function makeBoardConfig(): BoardConfig {
   return { boardName: 'kilter', layoutId: 1, sizeId: 10, setIds: '1,20', angle: 40 };
 }
 
+function getCurrentThumbnail(container: HTMLElement): HTMLElement {
+  const thumbnail = container.querySelector('[data-thumbnail="p1r12"]');
+  expect(thumbnail).not.toBeNull();
+  return thumbnail as HTMLElement;
+}
+
+function expectNumericAttribute(element: HTMLElement, attributeName: string, expectedValue: number) {
+  expect(Number(element.getAttribute(attributeName))).toBeCloseTo(expectedValue, 3);
+}
+
 describe('NativeAccessoryClimbRow', () => {
   beforeEach(() => {
     const currentItem = makeItem(makeClimb());
     queue.state.currentClimbQueueItem = currentItem;
     queue.state.queue = [currentItem];
     drawer.boardConfig = makeBoardConfig();
+    boardRender.boardWidth = 1080;
+    boardRender.boardHeight = 1920;
     queue.nextClimb.mockClear();
     queue.previousClimb.mockClear();
     drawer.openPlayDrawer.mockClear();
@@ -219,13 +271,44 @@ describe('NativeAccessoryClimbRow', () => {
     expect(container.querySelector('[data-tick-size="44"]')).not.toBeNull();
     expect(container.querySelector('[data-icon-size="24"]')).not.toBeNull();
     expect(container.querySelector('[data-height="56"]')).not.toBeNull();
-    expect(container.querySelector('[data-height="40"]')).not.toBeNull();
-    expect(container.querySelector('[data-height="36"]')).not.toBeNull();
     expect(container.querySelector('[data-padding-right="12"]')).not.toBeNull();
+
+    const thumbnail = getCurrentThumbnail(container);
+    const thumbnailSlot = thumbnail.closest('[data-width="40"][data-height="40"]');
+    expect(thumbnailSlot).not.toBeNull();
+    expect(thumbnailSlot?.getAttribute('data-background-color')).toBe('');
+    expect(thumbnailSlot?.getAttribute('data-border-width')).toBe('');
+    expect(thumbnailSlot?.getAttribute('data-border-color')).toBe('');
+    expect(thumbnailSlot?.getAttribute('data-border-radius')).toBe('');
+    expectNumericAttribute(thumbnail, 'data-board-width', 22.5);
+    expectNumericAttribute(thumbnail, 'data-board-height', 40);
+    expect(thumbnail.getAttribute('data-board-border-radius')).toBe('7');
+    expect(thumbnail.getAttribute('data-board-overflow')).toBe('hidden');
+
     const gradeText = Array.from(container.querySelectorAll('[data-text]')).find(
       (textNode) => textNode.textContent === 'V6',
     );
     expect(gradeText?.getAttribute('data-color')).toBe('#111111');
+  });
+
+  it('uses the full silhouette for very tall board thumbnails', () => {
+    boardRender.boardWidth = 1080;
+    boardRender.boardHeight = 2498;
+    const { container } = render(<NativeAccessoryClimbRow placement="regular" width={344} />);
+    const thumbnail = getCurrentThumbnail(container);
+
+    expectNumericAttribute(thumbnail, 'data-board-width', 17.293835);
+    expectNumericAttribute(thumbnail, 'data-board-height', 40);
+  });
+
+  it('uses the full silhouette for wide board thumbnails', () => {
+    boardRender.boardWidth = 1200;
+    boardRender.boardHeight = 663;
+    const { container } = render(<NativeAccessoryClimbRow placement="regular" width={344} />);
+    const thumbnail = getCurrentThumbnail(container);
+
+    expectNumericAttribute(thumbnail, 'data-board-width', 40);
+    expectNumericAttribute(thumbnail, 'data-board-height', 22.1);
   });
 
   it('keeps the thumbnail out of inline placement', () => {
