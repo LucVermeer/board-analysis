@@ -261,8 +261,7 @@ struct ClimbSessionLiveActivity: Widget {
             } compactTrailing: {
                 // Compact Dynamic Island - Trailing
                 Text(context.state.climbDifficulty)
-                    .font(.headline)
-                    .fontWeight(.bold)
+                    .font(.caption.bold())
                     .foregroundColor(.white)
                     .offset(y: -1)
             } minimal: {
