@@ -263,6 +263,7 @@ struct ClimbSessionLiveActivity: Widget {
                 Text(context.state.climbDifficulty)
                     .font(.caption.bold())
                     .foregroundColor(.white)
+                    .offset(y: -1)
             } minimal: {
                 Image(systemName: "mountain.2.fill")
                     .font(.system(size: 12))

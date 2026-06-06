@@ -213,10 +213,10 @@ export const createClimbFilters = (params: BoardRouteParams, searchParams: Climb
     );
   }
 
-  // Benchmark-only: climbs the board curators flagged as benchmarks carry a
-  // non-null benchmark_difficulty. (onlyClassics is a legacy no-op — see #2499.)
+  // Benchmark/classic-only: imported board feeds mark these climbs with a
+  // positive benchmark_difficulty. Zero and NULL both mean "not flagged".
   if (searchParams.onlyBenchmarks) {
-    climbStatsConditions.push(sql`${boardClimbStats.benchmarkDifficulty} IS NOT NULL`);
+    climbStatsConditions.push(sql`${boardClimbStats.benchmarkDifficulty} > 0`);
   }
 
   // Name search condition
