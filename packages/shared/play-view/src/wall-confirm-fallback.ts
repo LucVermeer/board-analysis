@@ -1,11 +1,13 @@
 /**
  * Shared controller for the wall-confirm fallback flow used by web and mobile.
  *
- * When a user claims the wall, both platforms wait briefly for a
- * WallConfirmedClimb event. If no confirm arrives, this controller decides
- * whether to skip fallback, auto-connect to the last board, or open the board
- * picker. Platform-specific BLE, native-shell, and event-bus dependencies are
- * injected so the timer/listener logic stays in one place.
+ * This logic was extracted from the original web hook and made
+ * platform-neutral for React Native by injecting BLE, native-shell, timer, and
+ * event-bus dependencies. When a user claims the wall, both platforms wait
+ * briefly for a WallConfirmedClimb event. If no confirm arrives, this
+ * controller decides whether to skip fallback, auto-connect to the last board,
+ * or open the board picker so web and mobile do not each carry their own
+ * timer/listener/fallback implementation.
  */
 export const WALL_CONFIRM_TIMEOUT_MS = 2000;
 
