@@ -5,8 +5,9 @@
  * Just the global climb capsule now, floating above the tab bar (iOS-Photos
  * style, no opaque card):
  *   [ grade · climb name ]            [ ✓ tick ]
- *     ↑ tap = PlayDrawer                ↑ Climbs tab only, when the native
- *       swipe = prev/next                 bottom accessory is unavailable
+ *     ↑ tap = PlayDrawer                ↑ log ascent — shown on every tab so the
+ *       swipe = prev/next                 fallback matches the always-on iOS 26
+ *                                         bottom accessory (current climb + tick)
  *
  * The native iOS 26 bottom accessory owns this same current climb + tick pair.
  * On that path this JS fallback returns null so the tab bar minimization behavior
@@ -15,8 +16,6 @@
 
 import { View, StyleSheet } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
-import { useSegments } from 'expo-router';
-import { isClimbsTabRoute } from '../../lib/route-segments';
 import { timing } from '../../theme/animations';
 import {
   TOOLBAR_RESERVE,
@@ -43,7 +42,6 @@ export function PersistentQueueBar() {
   const bottomChrome = useBottomChromeMetrics();
 
   const currentClimb = state.currentClimbQueueItem?.climb;
-  const onClimbsTab = isClimbsTabRoute(useSegments());
 
   if (!bottomChrome.jsQueueToolbarVisible) return null;
   if (!currentClimb) return null;
@@ -60,7 +58,7 @@ export function PersistentQueueBar() {
           <ClimbCapsule />
         </View>
         <View style={styles.heroSlot} pointerEvents="box-none">
-          {onClimbsTab ? <LogAscentFab climb={currentClimb} /> : null}
+          <LogAscentFab climb={currentClimb} />
         </View>
       </Animated.View>
     </Animated.View>
@@ -86,14 +84,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  // Left gutter: balances the capsule so it reads centered between the screen
-  // edge and the standalone tick.
+  // Left gutter spacer: balances the capsule so it reads centered between the
+  // screen edge and the standalone tick (which now shows on every tab).
   sideSlot: {
     width: TOOLBAR_FAB_SIZE,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  // Standalone log-ascent tick (hero size) on the Climbs tab.
+  // Standalone log-ascent tick (hero size), shown on every tab.
   heroSlot: {
     width: glassSize.hero,
     alignItems: 'center',

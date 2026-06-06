@@ -65,16 +65,18 @@ describe('PersistentQueueBar', () => {
     expect(container.querySelector('[data-capsule]')).toBeNull();
   });
 
-  it('on the Climbs tab: shows the capsule and standalone tick fallback', () => {
+  it('shows the capsule and standalone tick when a climb is current', () => {
     const { container } = render(<PersistentQueueBar />);
     expect(container.querySelector('[data-capsule]')).not.toBeNull();
     expect(container.querySelector('[data-tick]')).not.toBeNull();
   });
 
-  it('off the Climbs tab: capsule only, no tick (regardless of layout)', () => {
+  it('shows the tick on every tab — parity with the always-on native accessory', () => {
+    // Even off the Climbs tab the fallback keeps the tick so an ascent can be
+    // logged from anywhere, matching the iOS 26 bottom accessory.
     cfg.onClimbsTab = false;
     const { container } = render(<PersistentQueueBar />);
     expect(container.querySelector('[data-capsule]')).not.toBeNull();
-    expect(container.querySelector('[data-tick]')).toBeNull();
+    expect(container.querySelector('[data-tick]')).not.toBeNull();
   });
 });
