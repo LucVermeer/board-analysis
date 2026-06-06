@@ -9,7 +9,14 @@ export type SearchHeaderHandle = {
   blur: () => void;
   focus: () => void;
   getText: () => string;
-  setText: (text: string) => void;
+  /**
+   * Set the field text imperatively. Pass `{ silent: true }` for programmatic
+   * seeding (board restore / per-board sync / recent-pill apply) to update only
+   * the displayed value WITHOUT re-entering `onChangeText` — which would re-arm
+   * the caller's input debounce and redundantly re-commit the term (and could
+   * outlive a fast board switch).
+   */
+  setText: (text: string, options?: { silent?: boolean }) => void;
 };
 
 type SearchHeaderProps = {
@@ -45,9 +52,9 @@ export const SearchHeader = forwardRef<SearchHeaderHandle, SearchHeaderProps>(fu
     blur: () => inputRef.current?.blur(),
     focus: () => inputRef.current?.focus(),
     getText: () => text,
-    setText: (newText: string) => {
+    setText: (newText: string, options?: { silent?: boolean }) => {
       setText(newText);
-      onChangeText(newText);
+      if (!options?.silent) onChangeText(newText);
     },
   }));
 

@@ -349,6 +349,10 @@ export default defineConfig({
         command: 'tsx scripts/mobile-native-deps-check.ts',
         cache: false,
       },
+      'check:mobile-patches': {
+        command: 'tsx scripts/mobile-patches-check.ts',
+        cache: false,
+      },
       'check:mobile-bundle': {
         command: 'bash scripts/mobile-bundle-check.sh',
         cache: false,

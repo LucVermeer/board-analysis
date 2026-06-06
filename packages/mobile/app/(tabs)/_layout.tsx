@@ -26,6 +26,10 @@ export default function TabLayout() {
   const showRecordBadge = isBluetoothConnected || sessionId !== null;
 
   return (
+    // `minimizeBehavior="onScrollDown"` relies on UIKit finding the climbs
+    // FlashList's nested scroll view, which it can't by default — that fallback
+    // lives in patches/react-native-screens@4.25.2.patch. `vp run check:mobile-patches`
+    // (CI) fails the build if that patch ever stops applying after a dep bump.
     <NativeTabs minimizeBehavior="onScrollDown">
       <NativeTabs.BottomAccessory>
         <QueueBottomAccessory />

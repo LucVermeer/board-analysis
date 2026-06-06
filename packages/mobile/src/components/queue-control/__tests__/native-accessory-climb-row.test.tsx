@@ -24,6 +24,18 @@ const boardRender = vi.hoisted(() => ({
   boardHeight: 1920,
 }));
 
+// Injectable navigation result so tests can drive the suggestion-aware
+// canNext/nextItem the component reads from computeNavigationStateWithSuggestions.
+const nav = vi.hoisted(() => ({
+  result: {
+    canNext: false,
+    canPrevious: false,
+    nextItem: null as ClimbQueueItem | null,
+    prevItem: null as ClimbQueueItem | null,
+    remainingCount: 0,
+  },
+}));
+
 vi.mock('react-native', () => ({
   Platform: { OS: 'ios' },
   PlatformColor: (name: string) => name,
@@ -32,11 +44,13 @@ vi.mock('react-native', () => ({
     style,
     accessibilityRole,
     accessibilityLabel,
+    accessibilityActions,
   }: {
     children?: ReactNode;
     style?: unknown;
     accessibilityRole?: string;
     accessibilityLabel?: string;
+    accessibilityActions?: ReadonlyArray<{ name: string; label?: string }>;
   }) => {
     const readStyleValue = (styleKey: string): unknown => {
       const styles = Array.isArray(style) ? style : [style];
@@ -72,6 +86,9 @@ vi.mock('react-native', () => ({
         'data-overflow': overflow == null ? '' : String(overflow),
         'data-role': accessibilityRole ?? '',
         'data-label': accessibilityLabel ?? '',
+        'data-actions': Array.isArray(accessibilityActions)
+          ? accessibilityActions.map((action) => action.name).join(',')
+          : '',
       },
       children,
     );
@@ -100,7 +117,10 @@ vi.mock('react-native-gesture-handler', () => {
 
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 
-vi.mock('@boardsesh/play-view', () => ({ computePeekOffset: () => 0 }));
+vi.mock('@boardsesh/play-view', () => ({
+  computePeekOffset: () => 0,
+  computeNavigationStateWithSuggestions: () => nav.result,
+}));
 
 type TextMockProps = {
   children?: ReactNode;
@@ -265,6 +285,7 @@ function expectNumericAttribute(element: HTMLElement, attributeName: string, exp
 
 describe('NativeAccessoryClimbRow', () => {
   beforeEach(() => {
+    nav.result = { canNext: false, canPrevious: false, nextItem: null, prevItem: null, remainingCount: 0 };
     const currentItem = makeItem(makeClimb());
     queue.state.currentClimbQueueItem = currentItem;
     queue.state.queue = [currentItem];
@@ -371,5 +392,36 @@ describe('NativeAccessoryClimbRow', () => {
 
     expect(tick).not.toBeNull();
     expect(tick?.closest('[data-gesture="true"]')).toBeNull();
+  });
+
+  it('surfaces the suggestion-aware next item as a peek and a "next" accessibility action', () => {
+    const currentItem = makeItem(makeClimb({ uuid: 'current', name: 'Current Climb' }));
+    queue.state.currentClimbQueueItem = currentItem;
+    queue.state.queue = [currentItem];
+    // Navigation reports a next item even though only one climb is queued — i.e.
+    // a playlist suggestion peek past the tail. The carousel must reflect it
+    // rather than dead-ending, and expose a VoiceOver "next" action.
+    nav.result = {
+      canNext: true,
+      canPrevious: false,
+      nextItem: makeItem(makeClimb({ uuid: 'peek', name: 'Playlist Next', difficulty: 'V9' })),
+      prevItem: null,
+      remainingCount: 0,
+    };
+
+    const { container } = render(<NativeAccessoryClimbRow placement="regular" width={344} />);
+
+    expect(container.textContent).toContain('Current Climb');
+    expect(container.textContent).toContain('Playlist Next');
+    const swipeTarget = container.querySelector('[data-role="button"]');
+    expect(swipeTarget?.getAttribute('data-actions')).toContain('next');
+  });
+
+  it('exposes no "next" action and no peek at the navigation tail', () => {
+    // Default nav.result (set in beforeEach) reports no next/previous item.
+    const { container } = render(<NativeAccessoryClimbRow placement="regular" width={344} />);
+
+    const swipeTarget = container.querySelector('[data-role="button"]');
+    expect(swipeTarget?.getAttribute('data-actions')).toBe('');
   });
 });

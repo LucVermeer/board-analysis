@@ -175,7 +175,12 @@ function ClimbListInner() {
     setSearchTextLength(text.length);
     const customSearch = searchHeaderRef.current;
     const nativeSearch = nativeSearchRef.current;
-    customSearch?.setText(text);
+    // Seed the displayed text only — never re-enter onChangeText, which would
+    // re-arm the input debounce and redundantly re-commit the term. Callers
+    // commit `name` through the search provider (replaceSearch / setName); this
+    // just mirrors it into the field. (The native bar's setText likewise does
+    // not fire its change handler.)
+    customSearch?.setText(text, { silent: true });
     nativeSearch?.setText(text);
     return customSearch != null || nativeSearch != null;
   }, []);
