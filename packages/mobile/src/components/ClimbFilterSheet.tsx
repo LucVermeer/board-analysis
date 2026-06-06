@@ -181,7 +181,7 @@ export function ClimbFilterSheet({
   const previewInput = useMemo(() => {
     if (!boardConfig) return null;
     return mergeBoardFilters(
-      toClimbSearchInput(debouncedEdits.filters, boardConfig, { page: 1, pageSize: 1 }, { name: searchName }),
+      toClimbSearchInput(debouncedEdits.filters, boardConfig, { page: 0, pageSize: 1 }, { name: searchName }),
       debouncedEdits.boardFilters,
     );
   }, [boardConfig, debouncedEdits, searchName]);

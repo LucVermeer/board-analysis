@@ -15,6 +15,7 @@ export type SearchHeaderHandle = {
 type SearchHeaderProps = {
   placeholder: string;
   onChangeText: (text: string) => void;
+  onSubmit?: (text: string) => void;
   onFocus: () => void;
   onBlur: () => void;
   /** Seeds the field on mount — reflects a restored per-board search. */
@@ -32,7 +33,7 @@ type SearchHeaderProps = {
  * screen can blur it and seed restored text without a remount.
  */
 export const SearchHeader = forwardRef<SearchHeaderHandle, SearchHeaderProps>(function SearchHeader(
-  { placeholder, onChangeText, onFocus, onBlur, initialValue = '', height = 44 },
+  { placeholder, onChangeText, onSubmit, onFocus, onBlur, initialValue = '', height = 44 },
   ref,
 ) {
   const inputRef = useRef<TextInput>(null);
@@ -86,6 +87,7 @@ export const SearchHeader = forwardRef<SearchHeaderHandle, SearchHeaderProps>(fu
           autoCapitalize="none"
           autoCorrect={false}
           returnKeyType="search"
+          onSubmitEditing={() => onSubmit?.(text)}
           clearButtonMode="never"
           style={[styles.input, { color: systemColors.label as string }]}
           accessibilityLabel={placeholder}

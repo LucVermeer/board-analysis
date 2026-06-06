@@ -37,6 +37,7 @@ type ClimbSearchBarProps = {
   searchInitialValue: string;
   searchPlaceholder: string;
   onSearchChange: (text: string) => void;
+  onSearchSubmit: (text: string) => void;
   onSearchFocus: () => void;
   onSearchBlur: () => void;
   // Grade + filter (rendered inline only in the sticky-strip layout)
@@ -65,6 +66,7 @@ export function ClimbSearchBar({
   searchInitialValue,
   searchPlaceholder,
   onSearchChange,
+  onSearchSubmit,
   onSearchFocus,
   onSearchBlur,
   bound,
@@ -135,6 +137,7 @@ export function ClimbSearchBar({
             initialValue={searchInitialValue}
             placeholder={searchPlaceholder}
             onChangeText={onSearchChange}
+            onSubmit={onSearchSubmit}
             onFocus={onSearchFocus}
             onBlur={onSearchBlur}
           />

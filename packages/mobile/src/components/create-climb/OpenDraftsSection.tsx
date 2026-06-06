@@ -49,7 +49,7 @@ export function OpenDraftsSection({ board, onLoadDraft }: OpenDraftsSectionProps
       sizeId: board.sizeId,
       setIds: board.setIds,
       angle: board.angle,
-      page: 1,
+      page: 0,
       pageSize: 50,
       onlyDrafts: true,
       sortBy: 'creation',

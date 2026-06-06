@@ -219,6 +219,7 @@ export function SearchFab({
                 initialValue={searchInitialValue}
                 placeholder={searchPlaceholder}
                 onChangeText={onSearchChange}
+                onSubmit={onSearchSubmit}
                 onFocus={handleFocus}
                 onBlur={handleBlur}
                 height={TOOLBAR_FAB_SIZE}

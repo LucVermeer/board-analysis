@@ -44,7 +44,7 @@ export async function selectClimbsForPlan(
         maxGrade: grade,
         gradeAccuracy: 'moderate',
         pageSize: POOL_SIZE_PER_GRADE,
-        page: 1,
+        page: 0,
         // Quality-sorted so the generator favours the better climbs at each
         // grade rather than whatever happens to be most-recently published.
         sortBy: 'quality',
@@ -58,9 +58,7 @@ export async function selectClimbsForPlan(
         ...(options?.isAuthenticated && options.filters?.climbBias === 'unfamiliar'
           ? { hideAttempted: true, hideCompleted: true }
           : {}),
-        ...(options?.isAuthenticated && options.filters?.climbBias === 'attempted'
-          ? { showOnlyAttempted: true }
-          : {}),
+        ...(options?.isAuthenticated && options.filters?.climbBias === 'attempted' ? { showOnlyAttempted: true } : {}),
       };
       const response = await getHttpClient().request<SearchClimbsQueryResponse>(SEARCH_CLIMBS, { input });
       const climbs = response.searchClimbs.climbs.slice();

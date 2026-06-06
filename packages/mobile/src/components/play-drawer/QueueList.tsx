@@ -102,7 +102,7 @@ export function QueueList({
   );
 
   const searchInput = useMemo(
-    () => toClimbSearchInput(DEFAULT_CLIMB_FILTER_STATE, board, { page: 1, pageSize: SUGGESTION_PAGE_SIZE }),
+    () => toClimbSearchInput(DEFAULT_CLIMB_FILTER_STATE, board, { page: 0, pageSize: SUGGESTION_PAGE_SIZE }),
     [board],
   );
   const { data: searchResult } = useSearchClimbs(searchInput, true, {
