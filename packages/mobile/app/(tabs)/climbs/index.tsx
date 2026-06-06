@@ -119,9 +119,10 @@ function ClimbListInner() {
   const insets = useSafeAreaInsets();
   const bottomChrome = useBottomChromeMetrics();
 
-  // iOS 26 uses the native tab-bar bottom accessory for current climb + tick
-  // and the NativeTabs search role + Stack search bar for text search. Fallback
-  // devices keep the custom search field inside the top chrome.
+  // iOS 26 uses the native tab-bar bottom accessory for current climb + tick, and
+  // presents this screen's headerSearchBarOptions controller in the bottom tab
+  // bar's search role — there is no header search bar. Fallback devices keep the
+  // custom search field inside the top chrome.
   const useNativeSearch = isBottomAccessoryAvailable();
 
   const listPaddingBottom = bottomChrome.scrollBottomPadding;
@@ -140,11 +141,11 @@ function ClimbListInner() {
   const [showFilters, setShowFilters] = useState(false);
   const [showGrade, setShowGrade] = useState(false);
   const [recentFilters, setRecentFilters] = useState<RecentFilter[]>([]);
-  // Measured height of the floating glass search row (incl. the top safe-area
-  // inset). The list pads its top by this so the first row rests below the bar
-  // and the rest scroll under it; re-measures when the chips row appears.
+  // Measured height of the floating glass chrome (incl. the top safe-area inset).
+  // The list pads its top by this so the first row rests below the chrome and the
+  // rest scroll under it.
   const [searchBarHeight, setSearchBarHeight] = useState(() => insets.top + 60);
-  // Board-detail sheet, opened from the bottom-bar experiment's top board capsule.
+  // Board-detail sheet, opened from the top board capsule.
   const [showBoardDetail, setShowBoardDetail] = useState(false);
   const setActiveBoard = useSetActiveBoard();
 
@@ -707,7 +708,6 @@ function ClimbListInner() {
         onCreate={handleCreateClimb}
         onOpenBoardDetail={() => setShowBoardDetail(true)}
         onHeightChange={setSearchBarHeight}
-        includeTopInset
         searchFieldRef={searchHeaderRef}
         searchInitialValue={name}
         searchPlaceholder={t('search.placeholders.climbs')}
