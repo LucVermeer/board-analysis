@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   useAnimatedScrollHandler,
@@ -31,6 +30,7 @@ import { climbToQueueItem } from '../../../lib/climb-to-queue-item';
 import { getBoardConfigForPlaylist } from '../../../lib/playlists/board-details-for-playlist';
 import { navigateToSessionClimb } from '../../../lib/session-tick-mapping';
 import { useGradeFormat } from '../../../hooks/use-grade-format';
+import { useBottomChromeMetrics } from '../../../hooks/use-bottom-chrome-metrics';
 import { brandColors, withAlpha } from '../../../theme/colors';
 import { iosSystemColors } from '../../../theme/ios-colors';
 import { springs } from '../../../theme/animations';
@@ -200,7 +200,7 @@ function SessionHistoryRow({ tick, status, participant, onPress }: SessionHistor
 export function InSessionView({ translateY, screenHeight }: InSessionViewProps) {
   const { t } = useTranslation('session');
   const { systemColors } = useTheme();
-  const insets = useSafeAreaInsets();
+  const bottomChrome = useBottomChromeMetrics();
   const router = useRouter();
   const queryClient = useQueryClient();
   const { openPlayDrawer } = useDrawerHost();
@@ -390,6 +390,7 @@ export function InSessionView({ translateY, screenHeight }: InSessionViewProps) 
 
   const [showEndSession, setShowEndSession] = useState(false);
   const [isEnding, setIsEnding] = useState(false);
+  const footerBottomPadding = bottomChrome.floatingControlBottom + spacing[3];
 
   const handleConfirmEnd = useCallback(async () => {
     setIsEnding(true);
@@ -404,7 +405,7 @@ export function InSessionView({ translateY, screenHeight }: InSessionViewProps) 
   const scrollView = (
     <Animated.ScrollView
       style={styles.scroll}
-      contentContainerStyle={[styles.content, { paddingBottom: 100 + insets.bottom }]}
+      contentContainerStyle={[styles.content, { paddingBottom: 100 + footerBottomPadding }]}
       showsVerticalScrollIndicator={false}
       onScroll={scrollHandler}
       scrollEventThrottle={16}
@@ -462,12 +463,7 @@ export function InSessionView({ translateY, screenHeight }: InSessionViewProps) 
     <View style={styles.container}>
       {scrollView}
 
-      <View
-        style={[
-          styles.footer,
-          { backgroundColor: systemColors.background, paddingBottom: insets.bottom + spacing[3] },
-        ]}
-      >
+      <View style={[styles.footer, { backgroundColor: systemColors.background, paddingBottom: footerBottomPadding }]}>
         <Button
           title={t('mobile.session.inEndSession')}
           onPress={() => setShowEndSession(true)}

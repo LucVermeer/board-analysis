@@ -27,6 +27,7 @@ export function QueueBottomAccessory() {
   if (!currentClimb) return null;
 
   const actionSize = glassSize.inline;
+  const capsuleHeight = placement === 'inline' ? glassSize.inline : glassSize.capsule;
 
   return (
     <View
@@ -35,6 +36,7 @@ export function QueueBottomAccessory() {
       <ClimbCapsule
         bare
         fillWidth
+        height={capsuleHeight}
         endAction={<LogAscentToolbarButton climb={currentClimb} size={actionSize} />}
         endActionSize={actionSize}
       />

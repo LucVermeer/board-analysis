@@ -1,7 +1,6 @@
 import { useCallback } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import type { BoardName } from '@boardsesh/shared-schema';
 import type { Climb } from '@boardsesh/queue';
@@ -11,8 +10,8 @@ import { ActivityIndicator } from '../ActivityIndicator';
 import { ClimbListRow } from '../ClimbListRow';
 import { PlaylistPreviewSquare } from './PlaylistPreviewSquare';
 import { toQueueClimb, toSchemaClimb } from '../../lib/climb-types';
-import { TOOLBAR_RESERVE, TAB_BAR_HEIGHT } from '../queue-control/persistent-queue-bar';
 import { useDrawerHost } from '../../providers/drawer-host-provider';
+import { useBottomChromeMetrics } from '../../hooks/use-bottom-chrome-metrics';
 import { iosSystemColors } from '../../theme/ios-colors';
 import { spacing } from '../../theme/tokens';
 
@@ -68,10 +67,8 @@ export function PlaylistDetailView({
 }: PlaylistDetailViewProps) {
   const { t } = useTranslation('playlists');
   const { boardConfig } = useDrawerHost();
-  const insets = useSafeAreaInsets();
-  // Reserve room for the floating queue bar + tab bar so the last row isn't
-  // hidden behind them (matches the boards list).
-  const listPaddingBottom = TOOLBAR_RESERVE + TAB_BAR_HEIGHT + insets.bottom;
+  const bottomChrome = useBottomChromeMetrics();
+  const listPaddingBottom = bottomChrome.scrollBottomPadding;
 
   const handleEndReached = useCallback(() => {
     if (hasNextPage && !isFetchingNextPage) fetchNextPage();

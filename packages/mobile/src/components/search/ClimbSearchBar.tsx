@@ -2,9 +2,7 @@
 // below the status bar, with the list scrolling under them. Replaces the old
 // nav-header search pill + the (header-occluded, unreachable) StickyFilterStrip.
 //
-// Layout: [＋ create] [🔍 glass search capsule] [filter]
-//   - sticky-strip value: filter opens the full sheet; long-press opens the
-//     quick grade rail below the row.
+// Layout: [＋ create] [🔍 glass search capsule]
 //   - bottom-bar value: this row isn't rendered; that layout uses ClimbTopChrome
 //     for board, create, lightbulb, and search/grade/filter.
 //
@@ -13,11 +11,10 @@
 // can pad the list to rest below it (handles the chips row appearing/vanishing).
 
 import { type Ref, useCallback } from 'react';
-import { Pressable, type LayoutChangeEvent, StyleSheet, View } from 'react-native';
+import { type LayoutChangeEvent, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
-import type { Grade } from '@boardsesh/shared-schema';
-import type { GradeBound, ClimbBoardFilterState } from '@boardsesh/climb-filters';
+import type { ClimbBoardFilterState } from '@boardsesh/climb-filters';
 import { useTheme } from '../../providers/theme-provider';
 import { spacing } from '../../theme/tokens';
 import { hapticLight } from '../../lib/haptics';
@@ -25,9 +22,7 @@ import type { ClimbFilters } from '../../lib/climb-filter-types';
 import type { SearchLayout } from '../../lib/search-layout-preference';
 import { SearchHeader, type SearchHeaderHandle } from '../SearchHeader';
 import { GlassIconButton } from '../GlassIconButton';
-import { FilterButton } from './FilterButton';
 import { ActiveFilterChips } from './ActiveFilterChips';
-import { GradeRangeRail } from '../grade';
 
 type ClimbSearchBarProps = {
   layout: SearchLayout;
@@ -39,17 +34,9 @@ type ClimbSearchBarProps = {
   onSearchSubmit: (text: string) => void;
   onSearchFocus: () => void;
   onSearchBlur: () => void;
-  // Grade + filter (rendered inline only in the sticky-strip layout)
-  bound: GradeBound;
-  grades: readonly Grade[];
   filters: ClimbFilters;
   boardFilters: ClimbBoardFilterState;
   activeFilterCount: number;
-  gradeRailVisible: boolean;
-  onOpenGrade: () => void;
-  onCloseGrade: () => void;
-  onGradeChange: (grade: GradeBound) => void;
-  onOpenFilters: () => void;
   onPatchFilters: (patch: Partial<ClimbFilters>) => void;
   onPatchBoardFilters: (patch: Partial<ClimbBoardFilterState>) => void;
   // Create
@@ -68,16 +55,9 @@ export function ClimbSearchBar({
   onSearchSubmit,
   onSearchFocus,
   onSearchBlur,
-  bound,
-  grades,
   filters,
   boardFilters,
   activeFilterCount,
-  gradeRailVisible,
-  onOpenGrade,
-  onCloseGrade,
-  onGradeChange,
-  onOpenFilters,
   onPatchFilters,
   onPatchBoardFilters,
   canCreate,
@@ -102,14 +82,6 @@ export function ClimbSearchBar({
 
   return (
     <View pointerEvents="box-none" style={styles.container}>
-      {showControls && gradeRailVisible ? (
-        <Pressable
-          style={styles.dismissLayer}
-          onPress={onCloseGrade}
-          accessibilityElementsHidden
-          importantForAccessibility="no-hide-descendants"
-        />
-      ) : null}
       <View pointerEvents="box-none" style={[styles.chrome, { paddingTop: insets.top }]} onLayout={handleLayout}>
         <View pointerEvents="box-none" style={styles.row}>
           {canCreate ? (
@@ -122,30 +94,18 @@ export function ClimbSearchBar({
             />
           ) : null}
 
-          <SearchHeader
-            ref={searchFieldRef}
-            initialValue={searchInitialValue}
-            placeholder={searchPlaceholder}
-            onChangeText={onSearchChange}
-            onSubmit={onSearchSubmit}
-            onFocus={onSearchFocus}
-            onBlur={onSearchBlur}
-          />
-
-          {showControls ? (
-            <FilterButton activeFilterCount={activeFilterCount} onPress={onOpenFilters} onLongPress={onOpenGrade} />
-          ) : null}
+          <View pointerEvents="box-none" style={styles.searchSlot}>
+            <SearchHeader
+              ref={searchFieldRef}
+              initialValue={searchInitialValue}
+              placeholder={searchPlaceholder}
+              onChangeText={onSearchChange}
+              onSubmit={onSearchSubmit}
+              onFocus={onSearchFocus}
+              onBlur={onSearchBlur}
+            />
+          </View>
         </View>
-
-        {showControls && gradeRailVisible ? (
-          <GradeRangeRail
-            grades={grades}
-            bound={bound}
-            onChange={onGradeChange}
-            onRequestClose={onCloseGrade}
-            style={styles.gradeRail}
-          />
-        ) : null}
 
         {showControls && filtersActive ? (
           <ActiveFilterChips
@@ -170,32 +130,23 @@ const styles = StyleSheet.create({
     bottom: 0,
     zIndex: 10,
   },
-  dismissLayer: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    // Below the chrome (zIndex 1) so taps on the grade rail / row reach their
-    // controls; this layer only catches taps in the empty area to dismiss.
-    zIndex: 0,
-  },
   chrome: {
     zIndex: 1,
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: spacing[2],
     paddingHorizontal: spacing[4],
     paddingVertical: spacing[2],
   },
+  searchSlot: {
+    flex: 1,
+    minWidth: 0,
+  },
   chipsRow: {
     paddingHorizontal: spacing[4],
     paddingBottom: spacing[2],
-  },
-  gradeRail: {
-    marginHorizontal: spacing[4],
-    marginBottom: spacing[2],
   },
 });

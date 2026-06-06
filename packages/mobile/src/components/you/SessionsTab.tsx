@@ -2,7 +2,6 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 import { View, RefreshControl, StyleSheet } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { useRouter } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import type BottomSheet from '@gorhom/bottom-sheet';
 import type { SessionFeedItem } from '@boardsesh/shared-schema';
@@ -16,7 +15,7 @@ import { FeedSectionLabel } from './FeedSectionLabel';
 import { CommentSheet } from './CommentSheet';
 import { bucketSessionsByRecency, type FeedRecencyBucket } from '../../lib/feed-time-buckets';
 import { useSessionGroupedFeed, useBulkVoteSummaries } from '../../lib/graphql/hooks';
-import { TOOLBAR_RESERVE, TAB_BAR_HEIGHT } from '../../theme/layout';
+import { useBottomChromeMetrics } from '../../hooks/use-bottom-chrome-metrics';
 import { brandColors } from '../../theme/colors';
 import { spacing } from '../../theme/tokens';
 import { useTheme } from '../../providers/theme-provider';
@@ -36,8 +35,8 @@ export function SessionsTab({ userId }: { userId: string | undefined }) {
   const { t } = useTranslation('you');
   const { systemColors } = useTheme();
   const router = useRouter();
-  const insets = useSafeAreaInsets();
-  const paddingBottom = TOOLBAR_RESERVE + TAB_BAR_HEIGHT + insets.bottom + spacing[4];
+  const bottomChrome = useBottomChromeMetrics();
+  const paddingBottom = bottomChrome.scrollBottomPadding + spacing[4];
 
   const commentSheetRef = useRef<BottomSheet | null>(null);
   const [commentSessionId, setCommentSessionId] = useState<string | null>(null);

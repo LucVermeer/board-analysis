@@ -25,6 +25,7 @@ vi.mock('../GlassSurface', () => ({
 type PressMockProps = {
   children?: ReactNode;
   onPress?: () => void;
+  onPressOut?: () => void;
   onLongPress?: () => void;
   disabled?: boolean;
   accessibilityLabel?: string;
@@ -34,6 +35,7 @@ vi.mock('../PressableSurface', () => ({
   PressableSurface: ({
     children,
     onPress,
+    onPressOut,
     onLongPress,
     disabled,
     accessibilityLabel,
@@ -43,6 +45,7 @@ vi.mock('../PressableSurface', () => ({
       'button',
       {
         onClick: onPress,
+        onMouseUp: onPressOut,
         onDoubleClick: onLongPress,
         disabled,
         'data-label': accessibilityLabel,
@@ -124,5 +127,25 @@ describe('GlassIconButton', () => {
     fireEvent.click(button);
     expect(onLongPress).toHaveBeenCalledTimes(1);
     expect(onPress).not.toHaveBeenCalled();
+  });
+
+  it('clears long-press suppression after the release cycle', () => {
+    vi.useFakeTimers();
+    const onPress = vi.fn();
+    const onLongPress = vi.fn();
+    const { getByRole } = render(
+      <GlassIconButton {...base} iconName="filter" onPress={onPress} onLongPress={onLongPress} />,
+    );
+    const button = getByRole('button');
+
+    fireEvent.doubleClick(button);
+    fireEvent.mouseUp(button);
+    fireEvent.click(button);
+    expect(onPress).not.toHaveBeenCalled();
+
+    vi.runAllTimers();
+    fireEvent.click(button);
+    expect(onPress).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
   });
 });

@@ -240,18 +240,19 @@ function RootLayout() {
                                         <DrawerHostProvider>
                                           <DeepLinkProvider>
                                             <ThemedNavigation>
-                                                <Stack screenOptions={{ headerShown: false }} initialRouteName="(tabs)">
-                                                  <Stack.Screen name="(tabs)" />
-                                                  <Stack.Screen
-                                                    name="auth"
-                                                    options={{ headerShown: false, gestureEnabled: false }}
-                                                  />
-                                                  <Stack.Screen name="session/[sessionId]" />
-                                                  <Stack.Screen
-                                                    name="join/[sessionId]"
-                                                    options={{ presentation: 'modal', headerShown: false }}
-                                                  />
-                                                </Stack>
+                                              <Stack screenOptions={{ headerShown: false }} initialRouteName="index">
+                                                <Stack.Screen name="index" />
+                                                <Stack.Screen name="(tabs)" />
+                                                <Stack.Screen
+                                                  name="auth"
+                                                  options={{ headerShown: false, gestureEnabled: false }}
+                                                />
+                                                <Stack.Screen name="session/[sessionId]" />
+                                                <Stack.Screen
+                                                  name="join/[sessionId]"
+                                                  options={{ presentation: 'modal', headerShown: false }}
+                                                />
+                                              </Stack>
                                             </ThemedNavigation>
                                             <PersistentQueueBar />
                                             <AnalyticsScreenTracker />

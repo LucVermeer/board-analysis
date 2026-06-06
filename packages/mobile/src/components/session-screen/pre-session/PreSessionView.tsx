@@ -1,6 +1,5 @@
 import { useCallback, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { getGradesForBoard, toBoardName } from '@boardsesh/board-config';
 import { generateWorkoutPlan } from '@boardsesh/playlist-generator';
@@ -12,6 +11,7 @@ import { useActiveBoard } from '../../../lib/graphql/use-active-board';
 import { useAuth } from '../../../providers/auth-provider';
 import { useQueue } from '../../../providers/queue-provider';
 import { useToast } from '../../../providers/toast-provider';
+import { useBottomChromeMetrics } from '../../../hooks/use-bottom-chrome-metrics';
 import { BoardSummaryCard } from './BoardSummaryCard';
 import { GeneratorPickerCard, type GeneratorSelection } from './GeneratorPickerCard';
 import { selectClimbsForPlan } from './select-climbs-for-plan';
@@ -25,7 +25,7 @@ import { selectClimbsForPlan } from './select-climbs-for-plan';
 export function PreSessionView() {
   const { t } = useTranslation('session');
   const { systemColors } = useTheme();
-  const insets = useSafeAreaInsets();
+  const bottomChrome = useBottomChromeMetrics();
   const { data: activeBoard } = useActiveBoard();
   const { isAuthenticated } = useAuth();
   const { startSession, addToQueue } = useQueue();
@@ -69,12 +69,13 @@ export function PreSessionView() {
   }, [activeBoard, isAuthenticated, selection, startSession, addToQueue, showToast, t]);
 
   const canStart = activeBoard != null && !isStarting;
+  const footerBottomPadding = bottomChrome.floatingControlBottom + spacing[3];
 
   return (
     <View style={styles.container}>
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={[styles.content, { paddingBottom: 100 + insets.bottom }]}
+        contentContainerStyle={[styles.content, { paddingBottom: 100 + footerBottomPadding }]}
         showsVerticalScrollIndicator={false}
       >
         <Text variant="footnote" color={systemColors.secondaryLabel} style={styles.eyebrow}>
@@ -90,9 +91,7 @@ export function PreSessionView() {
         />
       </ScrollView>
 
-      <View
-        style={[styles.footer, { backgroundColor: systemColors.background, paddingBottom: insets.bottom + spacing[3] }]}
-      >
+      <View style={[styles.footer, { backgroundColor: systemColors.background, paddingBottom: footerBottomPadding }]}>
         <Button
           title={isStarting ? t('mobile.session.preStarting') : t('mobile.session.preStart')}
           onPress={() => void handleStart()}

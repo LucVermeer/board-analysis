@@ -70,7 +70,7 @@ export function GlassIconButton({
   const reduceMotion = useReduceMotion();
   const showBadge = badgeCount != null && badgeCount > 0;
   const suppressPressRef = useRef(false);
-  const suppressionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const releaseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // 0 → primary glyph, 1 → secondary glyph. Only used when `secondaryIconName` is set.
   const morph = useSharedValue(active ? 1 : 0);
@@ -81,7 +81,7 @@ export function GlassIconButton({
 
   useEffect(
     () => () => {
-      if (suppressionTimerRef.current) clearTimeout(suppressionTimerRef.current);
+      if (releaseTimerRef.current) clearTimeout(releaseTimerRef.current);
     },
     [],
   );
@@ -91,6 +91,10 @@ export function GlassIconButton({
   const handlePress = useCallback(() => {
     if (suppressPressRef.current) {
       suppressPressRef.current = false;
+      if (releaseTimerRef.current) {
+        clearTimeout(releaseTimerRef.current);
+        releaseTimerRef.current = null;
+      }
       return;
     }
     onPress();
@@ -98,17 +102,26 @@ export function GlassIconButton({
   const handleLongPress = useCallback(() => {
     if (!onLongPress) return;
     suppressPressRef.current = true;
-    if (suppressionTimerRef.current) clearTimeout(suppressionTimerRef.current);
-    suppressionTimerRef.current = setTimeout(() => {
-      suppressPressRef.current = false;
-    }, 350);
+    if (releaseTimerRef.current) {
+      clearTimeout(releaseTimerRef.current);
+      releaseTimerRef.current = null;
+    }
     onLongPress();
   }, [onLongPress]);
+  const handlePressOut = useCallback(() => {
+    if (!suppressPressRef.current) return;
+    if (releaseTimerRef.current) clearTimeout(releaseTimerRef.current);
+    releaseTimerRef.current = setTimeout(() => {
+      suppressPressRef.current = false;
+      releaseTimerRef.current = null;
+    }, 0);
+  }, []);
 
   return (
     <View style={[styles.wrapper, { width: size, height: size }]}>
       <PressableSurface
         onPress={handlePress}
+        onPressOut={handlePressOut}
         onLongPress={onLongPress ? handleLongPress : undefined}
         disabled={disabled}
         feedback="scale"

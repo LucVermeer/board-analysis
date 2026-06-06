@@ -26,8 +26,6 @@ import { useDrawerHost } from '../../providers/drawer-host-provider';
 import { hapticLight, hapticSelection } from '../../lib/haptics';
 import { useCarouselGesture } from '../play-drawer/use-carousel-gesture';
 
-const CAPSULE_RADIUS = TOOLBAR_CAPSULE_HEIGHT / 2;
-
 type ClimbDisplay = {
   difficulty: string | null | undefined;
   name: string | undefined;
@@ -76,9 +74,16 @@ type ClimbCapsuleProps = {
   /** Optional right-side action rendered inside the capsule chrome. */
   endAction?: ReactNode;
   endActionSize?: number;
+  height?: number;
 };
 
-export function ClimbCapsule({ bare = false, fillWidth = false, endAction, endActionSize = 0 }: ClimbCapsuleProps) {
+export function ClimbCapsule({
+  bare = false,
+  fillWidth = false,
+  endAction,
+  endActionSize = 0,
+  height = TOOLBAR_CAPSULE_HEIGHT,
+}: ClimbCapsuleProps) {
   const { state, nextClimb, previousClimb } = useQueue();
   const { openPlayDrawer } = useDrawerHost();
   const { systemColors } = useTheme();
@@ -203,11 +208,13 @@ export function ClimbCapsule({ bare = false, fillWidth = false, endAction, endAc
     : DEFAULT_GRADE_COLOR;
   const endActionReservedWidth = endAction ? endActionSize + 8 : 0;
   const labelSlotRight = 16 + endActionReservedWidth;
+  const capsuleRadius = height / 2;
 
   return (
     <View
       style={[
         styles.capsule,
+        { height, borderRadius: capsuleRadius },
         fillWidth ? styles.fillWidthCapsule : null,
         // Native Liquid Glass draws its own edge + lift; the hairline border and
         // shadow are only needed on the blur/solid fallback. `bare` (inside the
@@ -223,14 +230,14 @@ export function ClimbCapsule({ bare = false, fillWidth = false, endAction, endAc
         <GlassSurface
           glassEffectStyle="regular"
           fallbackColor={systemColors.elevatedSurface}
-          borderRadius={CAPSULE_RADIUS}
+          borderRadius={capsuleRadius}
           style={StyleSheet.absoluteFill}
           pointerEvents="none"
         />
       )}
       <GestureDetector gesture={composedGesture}>
         <View
-          style={styles.swipeArea}
+          style={[styles.swipeArea, { height, borderRadius: capsuleRadius }]}
           onLayout={onLayout}
           accessibilityRole="button"
           accessibilityLabel={currentDisplay.name}
@@ -270,11 +277,7 @@ export function ClimbCapsule({ bare = false, fillWidth = false, endAction, endAc
           ) : null}
         </View>
       </GestureDetector>
-      {endAction ? (
-        <View style={[styles.endActionSlot, { width: endActionSize, height: TOOLBAR_CAPSULE_HEIGHT }]}>
-          {endAction}
-        </View>
-      ) : null}
+      {endAction ? <View style={[styles.endActionSlot, { width: endActionSize, height }]}>{endAction}</View> : null}
     </View>
   );
 }
@@ -283,8 +286,6 @@ const styles = StyleSheet.create({
   capsule: {
     flex: 1,
     maxWidth: TOOLBAR_CAPSULE_MAX_WIDTH,
-    height: TOOLBAR_CAPSULE_HEIGHT,
-    borderRadius: CAPSULE_RADIUS,
   },
   fillWidthCapsule: {
     width: '100%',
@@ -292,8 +293,6 @@ const styles = StyleSheet.create({
   },
   swipeArea: {
     flex: 1,
-    height: TOOLBAR_CAPSULE_HEIGHT,
-    borderRadius: CAPSULE_RADIUS,
     overflow: 'hidden',
     justifyContent: 'center',
     paddingHorizontal: 16,

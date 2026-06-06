@@ -4,9 +4,10 @@
  * The persistent climb toolbar — a glass capsule (current climb), joined on the
  * Climbs tab by a standalone log-ascent tick when the native bottom accessory is
  * unavailable — floats above the tab bar while a climb is active. Screens
- * reserve `TOOLBAR_RESERVE + TAB_BAR_HEIGHT + insets.bottom` of bottom padding
- * so their last row clears it. Owned here (rather than inside queue-control) so
- * any screen can pad correctly without importing those components' internals.
+ * reserve it via `useBottomChromeMetrics()` so native-accessory screens do not
+ * keep padding for a JS toolbar that is not mounted. Owned here (rather than
+ * inside queue-control) so any screen can pad correctly without importing those
+ * components' internals.
  */
 
 /** Bottom tab bar height (excludes the safe-area inset). */

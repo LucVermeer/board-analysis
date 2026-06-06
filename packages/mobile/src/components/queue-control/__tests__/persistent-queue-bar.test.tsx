@@ -27,7 +27,10 @@ vi.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ bottom: 0, top: 0, left: 0, right: 0 }),
 }));
 vi.mock('expo-router', () => ({ useSegments: () => [] }));
-vi.mock('../../../lib/route-segments', () => ({ isClimbsTabRoute: () => cfg.onClimbsTab }));
+vi.mock('../../../lib/route-segments', () => ({
+  isClimbsTabRoute: () => cfg.onClimbsTab,
+  isTabsRoute: () => false,
+}));
 vi.mock('../../../providers/queue-provider', () => ({
   useQueue: () => ({ state: { currentClimbQueueItem: cfg.currentClimbQueueItem } }),
 }));

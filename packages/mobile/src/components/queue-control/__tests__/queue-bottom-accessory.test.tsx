@@ -32,14 +32,28 @@ vi.mock('../../../providers/queue-provider', () => ({
   useQueue: () => ({ state: { currentClimbQueueItem: cfg.currentClimbQueueItem } }),
 }));
 vi.mock('../../../theme/layout', () => ({
-  glassSize: { standard: 56, inline: 44 },
+  glassSize: { standard: 56, inline: 44, capsule: 52 },
 }));
 vi.mock('../../../theme/tokens', () => ({ spacing: { 1: 4 } }));
 vi.mock('../ClimbCapsule', () => ({
-  ClimbCapsule: ({ bare, fillWidth, endAction }: { bare?: boolean; fillWidth?: boolean; endAction?: ReactNode }) =>
+  ClimbCapsule: ({
+    bare,
+    fillWidth,
+    height,
+    endAction,
+  }: {
+    bare?: boolean;
+    fillWidth?: boolean;
+    height?: number;
+    endAction?: ReactNode;
+  }) =>
     createElement(
       'div',
-      { 'data-capsule-bare': bare ? 'true' : 'false', 'data-capsule-fill': fillWidth ? 'true' : 'false' },
+      {
+        'data-capsule-bare': bare ? 'true' : 'false',
+        'data-capsule-fill': fillWidth ? 'true' : 'false',
+        'data-capsule-height': String(height),
+      },
       endAction,
     ),
 }));
@@ -59,6 +73,7 @@ describe('QueueBottomAccessory', () => {
     const { container } = render(<QueueBottomAccessory />);
     expect(container.querySelector('[data-capsule-bare="true"]')).not.toBeNull();
     expect(container.querySelector('[data-capsule-fill="true"]')).not.toBeNull();
+    expect(container.querySelector('[data-capsule-height="52"]')).not.toBeNull();
     expect(container.querySelector('[data-tick-size="44"]')).not.toBeNull();
     expect(container.querySelector('[data-icon="search"]')).toBeNull();
   });
@@ -67,6 +82,7 @@ describe('QueueBottomAccessory', () => {
     cfg.placement = 'inline';
     const { container } = render(<QueueBottomAccessory />);
     expect(container.querySelector('[data-capsule-bare="true"]')).not.toBeNull();
+    expect(container.querySelector('[data-capsule-height="44"]')).not.toBeNull();
     expect(container.querySelector('[data-tick-size="44"]')).not.toBeNull();
   });
 

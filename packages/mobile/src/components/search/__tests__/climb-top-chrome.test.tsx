@@ -3,7 +3,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, fireEvent } from '@testing-library/react';
 import { createElement, forwardRef, useImperativeHandle, type ReactNode, type RefObject } from 'react';
 import type { UserBoard } from '@boardsesh/shared-schema';
-import type { GradeBound } from '@boardsesh/climb-filters';
 import type { SearchHeaderHandle } from '../../SearchHeader';
 
 type BoardLabelFields = Pick<
@@ -221,14 +220,7 @@ function makeProps(over: Partial<Parameters<typeof ClimbTopChrome>[0]> = {}) {
     onSearchChange: vi.fn(),
     onSearchFocus: vi.fn(),
     onSearchBlur: vi.fn(),
-    bound: {} as GradeBound,
-    grades: [],
-    activeFilterCount: 0,
-    gradeRailVisible: false,
-    onOpenGrade: vi.fn(),
     onCloseGrade: vi.fn(),
-    onGradeChange: vi.fn(),
-    onOpenFilters: vi.fn(),
     ...over,
   };
 }
@@ -240,8 +232,6 @@ const angleAction = (root: HTMLElement) =>
 const lightbulb = (root: HTMLElement) =>
   (root.querySelector('[data-pressable="ble.connectBoard"]') ??
     root.querySelector('[data-pressable="lightControl.disconnect"]')) as HTMLButtonElement | null;
-const toolbarFilter = (root: HTMLElement) =>
-  root.querySelector('[data-pressable^="mobile.search.filters"]') as HTMLButtonElement | null;
 const capsule = (root: HTMLElement) =>
   root.querySelector('[data-capsule]:not([data-capsule=""])') as HTMLButtonElement | null;
 
@@ -343,25 +333,18 @@ describe('ClimbTopChrome', () => {
     expect(haptics.light).toHaveBeenCalledTimes(1);
   });
 
-  it('renders the custom search field and toolbar filter even when there is no bluetooth context', () => {
-    const { container } = render(<ClimbTopChrome {...makeProps({ activeFilterCount: 2 })} />);
+  it('renders the custom search field without top-row filter chrome', () => {
+    const { container } = render(<ClimbTopChrome {...makeProps()} />);
     expect(lightbulb(container)).toBeNull();
     expect(container.querySelector('[data-search-field]')).not.toBeNull();
-    expect(toolbarFilter(container)).not.toBeNull();
-    expect(toolbarFilter(container)?.textContent).toBe('2');
+    expect(container.querySelector('[data-pressable^="mobile.search.filters"]')).toBeNull();
   });
 
-  it('native search mode keeps the toolbar filter while text search stays in the stack header', () => {
-    const { container } = render(<ClimbTopChrome {...makeProps({ searchMode: 'native', activeFilterCount: 2 })} />);
+  it('native search mode leaves text search in the stack header and does not render filter chrome', () => {
+    const { container } = render(<ClimbTopChrome {...makeProps({ searchMode: 'native' })} />);
     expect(container.querySelector('[data-search-field]')).toBeNull();
     expect(container.querySelector('[data-gradepill]')).toBeNull();
-    expect(toolbarFilter(container)).not.toBeNull();
-    expect(toolbarFilter(container)?.textContent).toBe('2');
-  });
-
-  it('native search mode shows the grade rail from the compact controls', () => {
-    const { container } = render(<ClimbTopChrome {...makeProps({ searchMode: 'native', gradeRailVisible: true })} />);
-    expect(container.querySelector('[data-grade-rail]')).not.toBeNull();
+    expect(container.querySelector('[data-pressable^="mobile.search.filters"]')).toBeNull();
   });
 
   it('shows a disconnected lightbulb when not connected', () => {
@@ -397,29 +380,6 @@ describe('ClimbTopChrome', () => {
     fireEvent.click(lightbulb(container)!);
     expect(disconnect).toHaveBeenCalledTimes(1);
     expect(connect).not.toHaveBeenCalled();
-  });
-
-  it('opens the filter sheet from the toolbar filter button', () => {
-    const onOpenFilters = vi.fn();
-    const { container } = render(<ClimbTopChrome {...makeProps({ onOpenFilters })} />);
-    expect(container.querySelector('[data-search-field]')).not.toBeNull();
-    fireEvent.click(toolbarFilter(container)!);
-    expect(onOpenFilters).toHaveBeenCalledTimes(1);
-    expect(haptics.light).toHaveBeenCalledTimes(1);
-  });
-
-  it('opens the grade rail from a toolbar filter long press', () => {
-    const onOpenGrade = vi.fn();
-    const { container } = render(<ClimbTopChrome {...makeProps({ onOpenGrade })} />);
-    fireEvent.doubleClick(toolbarFilter(container)!);
-    expect(onOpenGrade).toHaveBeenCalledTimes(1);
-    expect(haptics.light).toHaveBeenCalledTimes(1);
-  });
-
-  it('renders the grade rail above the custom search row when requested', () => {
-    const { container } = render(<ClimbTopChrome {...makeProps({ gradeRailVisible: true })} />);
-    expect(container.querySelector('[data-grade-rail]')).not.toBeNull();
-    expect(container.querySelector('[data-scrim]')).not.toBeNull();
   });
 
   it('reports its measured height through onHeightChange via onLayout', () => {

@@ -1,15 +1,13 @@
 // Top chrome for the climbs list. On native-search devices, Expo's stack search
 // bar owns text input and this chrome carries board/angle/create/light controls.
-// On fallback devices, it also keeps a custom climb-name search row; in both
-// modes the filter action owns the full filter sheet and long-press grade rail.
+// On fallback devices, it also keeps a custom climb-name search row. The bottom
+// right filter FAB owns the full filter sheet and long-press grade rail.
 
-import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Keyboard, Pressable, type LayoutChangeEvent, StyleSheet, View } from 'react-native';
+import { type RefObject, useCallback, useMemo, useState } from 'react';
+import { Keyboard, type LayoutChangeEvent, StyleSheet, View } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
-import type { Grade } from '@boardsesh/shared-schema';
-import type { GradeBound } from '@boardsesh/climb-filters';
 import { formatBoardDisplayName } from '@boardsesh/board-config';
 import { useTheme } from '../../providers/theme-provider';
 import { useActiveBoard, useSetActiveBoard } from '../../lib/graphql/use-active-board';
@@ -23,9 +21,7 @@ import { PressableSurface } from '../PressableSurface';
 import { SearchHeader, type SearchHeaderHandle } from '../SearchHeader';
 import { Text } from '../Text';
 import { Icon } from '../Icon';
-import { GradeRangeRail } from '../grade';
 import { AngleSelectorSheet } from '../play-drawer/AngleSelectorSheet';
-import { iosSystemColors } from '../../theme/ios-colors';
 
 const CAPSULE_RADIUS = glassSize.capsule / 2;
 const TOP_ACTION_SIZE = glassSize.standard;
@@ -45,14 +41,7 @@ type ClimbTopChromeProps = {
   onSearchChange: (text: string) => void;
   onSearchFocus: () => void;
   onSearchBlur: () => void;
-  bound: GradeBound;
-  grades: readonly Grade[];
-  activeFilterCount: number;
-  gradeRailVisible: boolean;
-  onOpenGrade: () => void;
   onCloseGrade: () => void;
-  onGradeChange: (grade: GradeBound) => void;
-  onOpenFilters: () => void;
 };
 
 export function ClimbTopChrome({
@@ -68,14 +57,7 @@ export function ClimbTopChrome({
   onSearchChange,
   onSearchFocus,
   onSearchBlur,
-  bound,
-  grades,
-  activeFilterCount,
-  gradeRailVisible,
-  onOpenGrade,
   onCloseGrade,
-  onGradeChange,
-  onOpenFilters,
 }: ClimbTopChromeProps) {
   const { t } = useTranslation('climbs');
   const { t: tSettings } = useTranslation('settings');
@@ -89,16 +71,7 @@ export function ClimbTopChrome({
   const bluetooth = useOptionalBluetoothContext();
   const bluetoothConnected = bluetooth?.isConnected ?? false;
   const [angleSelectorVisible, setAngleSelectorVisible] = useState(false);
-  const suppressFilterPressRef = useRef(false);
-  const suppressionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const usesCustomSearch = searchMode === 'custom';
-
-  useEffect(
-    () => () => {
-      if (suppressionTimerRef.current) clearTimeout(suppressionTimerRef.current);
-    },
-    [],
-  );
 
   const boardLabel = useMemo(() => {
     if (!activeBoard) return null;
@@ -162,52 +135,11 @@ export function ClimbTopChrome({
     onSearchBlur();
   }, [onSearchBlur]);
 
-  const handleOpenGrade = useCallback(() => {
-    hapticLight();
-    searchFieldRef.current?.blur();
-    Keyboard.dismiss();
-    onOpenGrade();
-  }, [onOpenGrade, searchFieldRef]);
-
-  const handleOpenFilters = useCallback(() => {
-    hapticLight();
-    searchFieldRef.current?.blur();
-    Keyboard.dismiss();
-    onCloseGrade();
-    onOpenFilters();
-  }, [onCloseGrade, onOpenFilters, searchFieldRef]);
-
-  const handleFilterPress = useCallback(() => {
-    if (suppressFilterPressRef.current) {
-      suppressFilterPressRef.current = false;
-      return;
-    }
-    handleOpenFilters();
-  }, [handleOpenFilters]);
-
-  const handleFilterLongPress = useCallback(() => {
-    suppressFilterPressRef.current = true;
-    if (suppressionTimerRef.current) clearTimeout(suppressionTimerRef.current);
-    suppressionTimerRef.current = setTimeout(() => {
-      suppressFilterPressRef.current = false;
-    }, 350);
-    handleOpenGrade();
-  }, [handleOpenGrade]);
-
   const canOpenAngleSelector = activeBoard?.isAngleAdjustable !== false && activeBoard?.angle != null;
-  const filtersActive = activeFilterCount > 0;
+  const leftActionCount = (canCreate ? 1 : 0) + (canOpenAngleSelector ? 1 : 0);
 
   return (
     <>
-      {gradeRailVisible ? (
-        <Pressable
-          style={styles.scrim}
-          onPress={onCloseGrade}
-          accessibilityElementsHidden
-          importantForAccessibility="no-hide-descendants"
-        />
-      ) : null}
-
       <View
         pointerEvents="box-none"
         style={[styles.container, { paddingTop: includeTopInset ? insets.top : 0 }]}
@@ -219,6 +151,7 @@ export function ClimbTopChrome({
               <View
                 style={[
                   styles.actionToolbar,
+                  { width: TOP_ACTION_SIZE * leftActionCount },
                   !nativeGlass && shadows.sm,
                   !nativeGlass && { borderWidth: StyleSheet.hairlineWidth, borderColor: systemColors.separator },
                 ]}
@@ -241,9 +174,7 @@ export function ClimbTopChrome({
                   >
                     <Icon name="plus" size={24} color={systemColors.label as string} />
                   </PressableSurface>
-                ) : (
-                  <View pointerEvents="none" style={styles.toolbarAction} />
-                )}
+                ) : null}
                 {canOpenAngleSelector ? (
                   <PressableSurface
                     onPress={handleOpenAngleSelector}
@@ -257,9 +188,7 @@ export function ClimbTopChrome({
                       {activeBoard.angle}°
                     </Text>
                   </PressableSurface>
-                ) : (
-                  <View pointerEvents="none" style={styles.toolbarAction} />
-                )}
+                ) : null}
               </View>
             ) : null}
           </View>
@@ -298,21 +227,22 @@ export function ClimbTopChrome({
           </View>
 
           <View pointerEvents="box-none" style={styles.rightSlot}>
-            <View
-              style={[
-                styles.actionToolbar,
-                !nativeGlass && shadows.sm,
-                !nativeGlass && { borderWidth: StyleSheet.hairlineWidth, borderColor: systemColors.separator },
-              ]}
-            >
-              <GlassSurface
-                glassEffectStyle="regular"
-                fallbackColor={systemColors.elevatedSurface}
-                borderRadius={TOP_TOOLBAR_RADIUS}
-                style={StyleSheet.absoluteFill}
-                pointerEvents="none"
-              />
-              {bluetooth ? (
+            {bluetooth ? (
+              <View
+                style={[
+                  styles.actionToolbar,
+                  { width: TOP_ACTION_SIZE },
+                  !nativeGlass && shadows.sm,
+                  !nativeGlass && { borderWidth: StyleSheet.hairlineWidth, borderColor: systemColors.separator },
+                ]}
+              >
+                <GlassSurface
+                  glassEffectStyle="regular"
+                  fallbackColor={systemColors.elevatedSurface}
+                  borderRadius={TOP_TOOLBAR_RADIUS}
+                  style={StyleSheet.absoluteFill}
+                  pointerEvents="none"
+                />
                 <PressableSurface
                   onPress={handleBluetoothPress}
                   feedback="opacity"
@@ -329,45 +259,13 @@ export function ClimbTopChrome({
                     color={bluetoothConnected ? brandColors.warning : (systemColors.label as string)}
                   />
                 </PressableSurface>
-              ) : (
-                <View pointerEvents="none" style={styles.toolbarAction} />
-              )}
-              <PressableSurface
-                onPress={handleFilterPress}
-                onLongPress={handleFilterLongPress}
-                feedback="opacity"
-                hitSlop={4}
-                accessibilityRole="button"
-                accessibilityLabel={
-                  filtersActive ? `${t('mobile.search.filters')}, ${activeFilterCount}` : t('mobile.search.filters')
-                }
-                accessibilityHint={t('mobile.search.filterHint')}
-                style={styles.toolbarAction}
-              >
-                <Icon
-                  name="filter"
-                  size={23}
-                  color={filtersActive ? brandColors.primary : (systemColors.label as string)}
-                />
-                {filtersActive ? (
-                  <View style={[styles.filterBadge, { backgroundColor: brandColors.primary }]} pointerEvents="none">
-                    <Text variant="caption2" color={iosSystemColors.white} style={styles.filterBadgeText}>
-                      {activeFilterCount}
-                    </Text>
-                  </View>
-                ) : null}
-              </PressableSurface>
-            </View>
+              </View>
+            ) : null}
           </View>
         </View>
 
         {usesCustomSearch ? (
           <View pointerEvents="box-none" style={styles.searchStack}>
-            {gradeRailVisible ? (
-              <View style={styles.gradeRailSlot}>
-                <GradeRangeRail grades={grades} bound={bound} onChange={onGradeChange} onRequestClose={onCloseGrade} />
-              </View>
-            ) : null}
             <View pointerEvents="box-none" style={styles.searchRow}>
               <View pointerEvents="box-none" style={styles.searchSlot}>
                 <SearchHeader
@@ -380,12 +278,6 @@ export function ClimbTopChrome({
                   height={TOP_ACTION_SIZE}
                 />
               </View>
-            </View>
-          </View>
-        ) : gradeRailVisible ? (
-          <View pointerEvents="box-none" style={styles.nativeSearchStack}>
-            <View style={styles.nativeGradeRailSlot}>
-              <GradeRangeRail grades={grades} bound={bound} onChange={onGradeChange} onRequestClose={onCloseGrade} />
             </View>
           </View>
         ) : null}
@@ -405,14 +297,6 @@ export function ClimbTopChrome({
 }
 
 const styles = StyleSheet.create({
-  scrim: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    zIndex: 18,
-  },
   container: {
     position: 'absolute',
     top: 0,
@@ -462,29 +346,12 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   },
   actionToolbar: {
-    width: TOP_TOOLBAR_WIDTH,
     height: TOP_ACTION_SIZE,
     borderRadius: TOP_TOOLBAR_RADIUS,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'flex-end',
     overflow: 'hidden',
-  },
-  filterBadge: {
-    position: 'absolute',
-    top: 8,
-    right: 7,
-    minWidth: 16,
-    height: 16,
-    borderRadius: 8,
-    paddingHorizontal: 4,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  filterBadgeText: {
-    fontWeight: '700',
-    fontSize: 10,
-    lineHeight: 14,
   },
   toolbarAction: {
     width: TOP_ACTION_SIZE,
@@ -503,22 +370,12 @@ const styles = StyleSheet.create({
   searchRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: spacing[2],
   },
   searchSlot: {
     flex: 1,
     flexDirection: 'row',
     minWidth: 0,
-  },
-  gradeRailSlot: {
-    marginBottom: spacing[1],
-  },
-  nativeSearchStack: {
-    gap: spacing[2],
-    paddingHorizontal: spacing[4],
-    paddingBottom: spacing[2],
-  },
-  nativeGradeRailSlot: {
-    marginTop: spacing[1],
   },
 });

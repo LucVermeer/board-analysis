@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Pressable, StyleSheet } from 'react-native';
 import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FlashList } from '@shopify/flash-list';
 import { useTranslation } from 'react-i18next';
 import type BottomSheet from '@gorhom/bottom-sheet';
@@ -21,7 +20,7 @@ import { SessionTickRow } from '../../src/components/session/SessionTickRow';
 import { SessionEditSheet } from '../../src/components/session/SessionEditSheet';
 import { useSessionDetail, useProfile } from '../../src/lib/graphql/hooks';
 import { navigateToSessionClimb } from '../../src/lib/session-tick-mapping';
-import { TOOLBAR_RESERVE } from '../../src/theme/layout';
+import { useBottomChromeMetrics } from '../../src/hooks/use-bottom-chrome-metrics';
 import { spacing } from '../../src/theme/tokens';
 import { useTheme } from '../../src/providers/theme-provider';
 
@@ -31,8 +30,8 @@ export default function SessionDetailScreen() {
   const { systemColors } = useTheme();
   const navigation = useNavigation();
   const router = useRouter();
-  const insets = useSafeAreaInsets();
-  const paddingBottom = TOOLBAR_RESERVE + insets.bottom + spacing[6];
+  const bottomChrome = useBottomChromeMetrics();
+  const paddingBottom = bottomChrome.scrollBottomPadding + spacing[6];
 
   const { data: session, isPending } = useSessionDetail(sessionId);
   const { data: profile } = useProfile();

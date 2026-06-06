@@ -15,7 +15,6 @@
 
 import { View, StyleSheet } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSegments } from 'expo-router';
 import { isClimbsTabRoute } from '../../lib/route-segments';
 import { timing } from '../../theme/animations';
@@ -30,7 +29,7 @@ import {
 } from '../../theme/layout';
 import { useQueue } from '../../providers/queue-provider';
 import { useReduceMotion } from '../../hooks/use-reduce-motion';
-import { isBottomAccessoryAvailable } from '../../hooks/use-bottom-accessory';
+import { useBottomChromeMetrics } from '../../hooks/use-bottom-chrome-metrics';
 import { ClimbCapsule } from './ClimbCapsule';
 import { LogAscentFab } from './LogAscentFab';
 
@@ -40,20 +39,20 @@ export { TOOLBAR_RESERVE, TAB_BAR_HEIGHT };
 
 export function PersistentQueueBar() {
   const { state } = useQueue();
-  const insets = useSafeAreaInsets();
   const reduceMotion = useReduceMotion();
+  const bottomChrome = useBottomChromeMetrics();
 
   const currentClimb = state.currentClimbQueueItem?.climb;
   const onClimbsTab = isClimbsTabRoute(useSegments());
 
-  if (isBottomAccessoryAvailable()) return null;
+  if (!bottomChrome.jsQueueToolbarVisible) return null;
   if (!currentClimb) return null;
 
   return (
     <Animated.View
       entering={reduceMotion ? undefined : FadeIn.duration(timing.normal)}
       pointerEvents="box-none"
-      style={[styles.toolbar, { bottom: insets.bottom + TAB_BAR_HEIGHT + TOOLBAR_GAP_ABOVE_TABBAR }]}
+      style={[styles.toolbar, { bottom: bottomChrome.tabBarBottom + TOOLBAR_GAP_ABOVE_TABBAR }]}
     >
       <Animated.View style={styles.row} pointerEvents="box-none" importantForAccessibility="auto">
         <View style={styles.sideSlot} pointerEvents="none" />

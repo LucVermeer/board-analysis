@@ -654,18 +654,11 @@
       "settersCount_other": "{{count}} equipadores",
       "climbsCount_one": "{{count}} vía",
       "climbsCount_other": "{{count}} vías",
-      "grade": "Grado",
-      "anyGrade": "Cualquier grado",
       "gradeClear": "Cualquiera",
       "filters": "Filtros",
+      "filterCountAria": "Filtros, {{count}} activos",
       "filterHint": "Toca para filtrar. Mantén pulsado para elegir grado.",
-      "removeFilter": "Quitar filtro {{name}}",
-      "fab": {
-        "open": "Buscar",
-        "close": "Cerrar búsqueda",
-        "done": "Listo",
-        "hint": "Abre los controles de búsqueda, grado y filtros"
-      }
+      "removeFilter": "Quitar filtro {{name}}"
     },
     "gradeRail": {
       "setFilterAria": "Filtrar por grado {{grade}}",

@@ -1,15 +1,12 @@
 import { useEffect, useRef } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useSegments } from 'expo-router';
 import { Text } from './Text';
 import { Icon } from './Icon';
 import type { IconName } from './icon-map';
 import { brandColors, withAlpha } from '../theme/colors';
 import { borderRadius, spacing } from '../theme/tokens';
-import { TAB_BAR_HEIGHT, TOOLBAR_RESERVE } from '../theme/layout';
-import { isTabsRoute } from '../lib/route-segments';
+import { useBottomChromeMetrics } from '../hooks/use-bottom-chrome-metrics';
 import { useTheme } from '../providers/theme-provider';
 
 export type ToastVariant = 'success' | 'error' | 'info' | 'warning';
@@ -34,17 +31,13 @@ const VARIANT_CONFIG: Record<ToastVariant, { icon: IconName; color: string }> = 
 };
 
 export function Toast({ toast, onDismiss }: ToastProps) {
-  const insets = useSafeAreaInsets();
   const { systemColors, colorScheme } = useTheme();
+  const bottomChrome = useBottomChromeMetrics();
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const config = VARIANT_CONFIG[toast.variant];
 
-  // Tab screens carry the tab bar + floating climb toolbar; lift the toast clear
-  // of both (a tick confirmation lands just above the tick). Elsewhere (auth,
-  // session/modal screens) there's no bottom chrome — just clear the safe area.
-  const bottomOffset = isTabsRoute(useSegments())
-    ? insets.bottom + TAB_BAR_HEIGHT + TOOLBAR_RESERVE + spacing[2]
-    : insets.bottom + spacing[3];
+  // Lift the toast clear of whichever bottom chrome is actually mounted.
+  const bottomOffset = bottomChrome.floatingControlBottom + (bottomChrome.insideTabs ? spacing[2] : spacing[3]);
 
   useEffect(() => {
     timerRef.current = setTimeout(() => onDismiss(toast.id), toast.duration);

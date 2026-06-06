@@ -1,8 +1,5 @@
-import { useEffect, useRef } from 'react';
-import { router } from 'expo-router';
 import { NativeTabs } from 'expo-router/unstable-native-tabs';
 import { useTranslation } from 'react-i18next';
-import { useActiveBoard } from '../../src/lib/graphql/use-active-board';
 import { useBluetoothConnectedStatus } from '../../src/lib/ble/bluetooth-status-store';
 import { useQueue } from '../../src/providers/queue-provider';
 import { QueueBottomAccessory } from '../../src/components/queue-control/QueueBottomAccessory';
@@ -21,29 +18,12 @@ export default function TabLayout() {
   const { t: tPlaylists } = useTranslation('playlists');
   const { t: tSession } = useTranslation('session');
 
-  const { data: activeBoard, isLoading } = useActiveBoard();
   // Record-tab status cue: a badge when a board is connected over Bluetooth or a
   // session is live (the custom tab bar's green dot + blink have no native
   // equivalent under NativeTabs).
   const isBluetoothConnected = useBluetoothConnectedStatus();
   const { sessionId } = useQueue();
-  const recordBadge = isBluetoothConnected || sessionId !== null ? ' ' : undefined;
-
-  // NativeTabs has no `initialRouteName`; the first trigger (boards) is the
-  // default. Existing users (a board is set) should open on Climbs — redirect
-  // once on first mount. The `isLoading` guard below means `activeBoard` is
-  // already resolved here, so this is a single same-frame replace, not a flash
-  // of the wrong tab on every navigation.
-  const didRedirect = useRef(false);
-  useEffect(() => {
-    if (isLoading || didRedirect.current) return;
-    didRedirect.current = true;
-    if (activeBoard) router.replace('/(tabs)/climbs');
-  }, [isLoading, activeBoard]);
-
-  // initialRouteName is consumed only on first mount; committing <NativeTabs>
-  // before the AsyncStorage read settles would lock in the wrong default.
-  if (isLoading) return null;
+  const showRecordBadge = isBluetoothConnected || sessionId !== null;
 
   return (
     <NativeTabs minimizeBehavior="onScrollDown">
@@ -64,7 +44,9 @@ export default function TabLayout() {
       <NativeTabs.Trigger name="record">
         <NativeTabs.Trigger.Icon sf="record.circle" md="radio_button_checked" />
         <NativeTabs.Trigger.Label>{tSession('mobile.session.recordTab')}</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Badge selectedBackgroundColor={brandColors.success}>{recordBadge}</NativeTabs.Trigger.Badge>
+        {showRecordBadge ? (
+          <NativeTabs.Trigger.Badge selectedBackgroundColor={brandColors.success}> </NativeTabs.Trigger.Badge>
+        ) : null}
       </NativeTabs.Trigger>
 
       <NativeTabs.Trigger name="discover">

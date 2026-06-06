@@ -29,6 +29,7 @@ export function LogAscentToolbarButton({ climb, size = glassSize.standard }: Log
         hitSlop={4}
         accessibilityRole="button"
         accessibilityLabel={accessibilityLabel}
+        accessibilityState={{ disabled }}
         style={[styles.action, { width: size, height: size }, disabled ? styles.disabled : null]}
       >
         <Icon name="check.small" size={26} color={iconColor} />

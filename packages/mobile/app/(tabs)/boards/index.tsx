@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, ScrollView, StyleSheet } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import type BottomSheet from '@gorhom/bottom-sheet';
@@ -21,24 +20,19 @@ import { CustomBoardSheet, type BoardSeed } from '../../../src/components/board-
 import { BluetoothQuickstartSheet } from '../../../src/components/board-discovery/BluetoothQuickstartSheet';
 import { userBoardToItem, popularConfigToItem } from '../../../src/components/board-discovery/board-items';
 import type { DiscoveryBoardItem } from '../../../src/components/board-discovery/BoardDiscoveryCard';
-import {
-  TOOLBAR_RESERVE,
-  TAB_BAR_HEIGHT,
-} from '../../../src/components/queue-control/persistent-queue-bar';
+import { useBottomChromeMetrics } from '../../../src/hooks/use-bottom-chrome-metrics';
 import { iosSystemColors } from '../../../src/theme/ios-colors';
 import { spacing } from '../../../src/theme/tokens';
 
 export default function BoardSelection() {
   const { isAuthenticated, refreshAuthState } = useAuth();
-  const insets = useSafeAreaInsets();
+  const bottomChrome = useBottomChromeMetrics();
   const router = useRouter();
   const { t } = useTranslation('boards');
   const { showToast } = useToast();
 
-  // Clear the absolutely-positioned PersistentQueueBar (which sits above the tab
-  // bar) so the last carousel isn't tucked underneath it — same inset the queue
-  // tab uses.
-  const scrollBottomPadding = TOOLBAR_RESERVE + TAB_BAR_HEIGHT + insets.bottom;
+  // Clear the bottom tab bar and whichever queue controls are actually visible.
+  const scrollBottomPadding = bottomChrome.scrollBottomPadding;
 
   const setActiveBoard = useSetActiveBoard();
   const { data: activeBoard } = useActiveBoard();
@@ -91,11 +85,17 @@ export default function BoardSelection() {
   );
 
   const myBoardItems = useMemo(
-    () => myBoards.map((board) => userBoardToItem(board, activeBoard?.uuid)).filter((item): item is DiscoveryBoardItem => item !== null),
+    () =>
+      myBoards
+        .map((board) => userBoardToItem(board, activeBoard?.uuid))
+        .filter((item): item is DiscoveryBoardItem => item !== null),
     [myBoards, activeBoard?.uuid],
   );
   const nearbyItems = useMemo(
-    () => (nearby?.boards ?? []).map((board) => userBoardToItem(board, activeBoard?.uuid)).filter((item): item is DiscoveryBoardItem => item !== null),
+    () =>
+      (nearby?.boards ?? [])
+        .map((board) => userBoardToItem(board, activeBoard?.uuid))
+        .filter((item): item is DiscoveryBoardItem => item !== null),
     [nearby?.boards, activeBoard?.uuid],
   );
   const popularItems = useMemo(
@@ -108,7 +108,8 @@ export default function BoardSelection() {
   // custom sheet (CREATE_BOARD) — see onSelectPopular.
   const onSelectMyBoard = useCallback(
     (item: DiscoveryBoardItem) => {
-      const board = myBoards.find((b) => b.uuid === item.key) ?? (nearby?.boards ?? []).find((b) => b.uuid === item.key);
+      const board =
+        myBoards.find((b) => b.uuid === item.key) ?? (nearby?.boards ?? []).find((b) => b.uuid === item.key);
       if (board) {
         void activateBoard(board);
       } else {
@@ -238,11 +239,7 @@ export default function BoardSelection() {
             state={nearbyState}
             onPress={onModeFindNearby}
           />
-          <BoardModeCard
-            icon="bluetooth"
-            label={t('mobile.discovery.bluetooth')}
-            onPress={onModeBluetooth}
-          />
+          <BoardModeCard icon="bluetooth" label={t('mobile.discovery.bluetooth')} onPress={onModeBluetooth} />
           <BoardModeCard icon="plus" label={t('mobile.discovery.custom')} onPress={onModeCustom} />
           <BoardModeCard
             icon="search"

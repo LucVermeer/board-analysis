@@ -8,6 +8,8 @@ import { useTheme } from '../../providers/theme-provider';
 import { withAlpha } from '../../theme/colors';
 import { glassSize } from '../../theme/layout';
 
+export const FILTER_FAB_SIZE = glassSize.inlinePrimary;
+
 type FilterButtonProps = {
   activeFilterCount: number;
   onPress: () => void;
@@ -23,9 +25,12 @@ export function FilterButton({ activeFilterCount, onPress, onLongPress }: Filter
     <GlassIconButton
       iconName="filter"
       iconColor={active ? brandColors.primary : (systemColors.secondaryLabel as string)}
-      size={glassSize.standard}
+      iconSize={20}
+      size={FILTER_FAB_SIZE}
       onPress={onPress}
-      accessibilityLabel={active ? `${t('mobile.search.filters')}, ${activeFilterCount}` : t('mobile.search.filters')}
+      accessibilityLabel={
+        active ? t('mobile.search.filterCountAria', { count: activeFilterCount }) : t('mobile.search.filters')
+      }
       accessibilityHint={onLongPress ? t('mobile.search.filterHint') : undefined}
       onLongPress={onLongPress}
       tintColor={active ? withAlpha(brandColors.primary, 0.18) : undefined}
