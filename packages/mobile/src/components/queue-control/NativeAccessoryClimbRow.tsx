@@ -108,11 +108,22 @@ function ClimbLabel({ climb, labelColor, formattedGrade, showThumbnail, boardCon
   return (
     <View style={styles.labelInner}>
       {showThumbnail ? <AccessoryClimbThumbnail climb={climb} boardConfig={boardConfig} /> : null}
-      <Text variant="subheadline" color={labelColor} numberOfLines={1} ellipsizeMode="tail" style={styles.name}>
+      <Text
+        variant="subheadline"
+        color={labelColor}
+        numberOfLines={1}
+        ellipsizeMode="tail"
+        style={[styles.name, styles.textOpticalOffset]}
+      >
         {climb.name}
       </Text>
       {formattedGrade ? (
-        <Text variant="headline" color={labelColor} numberOfLines={1} style={styles.gradeText}>
+        <Text
+          variant="headline"
+          color={labelColor}
+          numberOfLines={1}
+          style={[styles.gradeText, styles.textOpticalOffset]}
+        >
           {formattedGrade}
         </Text>
       ) : null}
@@ -208,7 +219,7 @@ export function NativeAccessoryClimbRow({ placement, width }: NativeAccessoryCli
   }, []);
 
   const currentLabelStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: translateX.value }, { translateY: ACCESSORY_OPTICAL_Y_OFFSET }],
+    transform: [{ translateX: translateX.value }],
   }));
   const nextPeekX = useDerivedValue(() =>
     computePeekOffset({ direction: 'next', swipeOffset: translateX.value, viewportWidth: clipWidth }),
@@ -217,10 +228,10 @@ export function NativeAccessoryClimbRow({ placement, width }: NativeAccessoryCli
     computePeekOffset({ direction: 'prev', swipeOffset: translateX.value, viewportWidth: clipWidth }),
   );
   const nextPeekStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: nextPeekX.value }, { translateY: ACCESSORY_OPTICAL_Y_OFFSET }],
+    transform: [{ translateX: nextPeekX.value }],
   }));
   const previousPeekStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: previousPeekX.value }, { translateY: ACCESSORY_OPTICAL_Y_OFFSET }],
+    transform: [{ translateX: previousPeekX.value }],
   }));
 
   if (!currentClimb) return null;
@@ -339,6 +350,9 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     minWidth: spacing[10],
     textAlign: 'right',
+  },
+  textOpticalOffset: {
+    transform: [{ translateY: ACCESSORY_OPTICAL_Y_OFFSET }],
   },
   tickSlot: {
     alignItems: 'center',
