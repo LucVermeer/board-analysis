@@ -20,8 +20,8 @@ type SearchHeaderProps = {
   onBlur: () => void;
   /** Seeds the field on mount — reflects a restored per-board search. */
   initialValue?: string;
-  /** Capsule height (defaults to 44). The bottom toolbar passes 56 so the
-   *  expanded field matches its FABs. The radius tracks height/2 for a pill. */
+  /** Capsule height (defaults to 44). The top chrome passes its FAB height so the
+   *  expanded field matches them. The radius tracks height/2 for a pill. */
   height?: number;
 };
 

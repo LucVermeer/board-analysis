@@ -86,14 +86,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  // Sticky-strip / non-Climbs left gutter: balances the capsule so it reads
-  // centered between the edge and the standalone tick.
+  // Left gutter: balances the capsule so it reads centered between the screen
+  // edge and the standalone tick.
   sideSlot: {
     width: TOOLBAR_FAB_SIZE,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  // Sticky-strip standalone log-ascent tick (hero size) on the Climbs tab.
+  // Standalone log-ascent tick (hero size) on the Climbs tab.
   heroSlot: {
     width: glassSize.hero,
     alignItems: 'center',

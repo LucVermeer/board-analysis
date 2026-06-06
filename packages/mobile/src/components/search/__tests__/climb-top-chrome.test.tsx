@@ -94,7 +94,7 @@ vi.mock('../../../theme/tokens', () => ({
 }));
 
 vi.mock('../../../theme/layout', () => ({
-  glassSize: { standard: 56, capsule: 52 },
+  glassSize: { standard: 48, capsule: 44 },
 }));
 
 vi.mock('../../../theme/colors', () => ({

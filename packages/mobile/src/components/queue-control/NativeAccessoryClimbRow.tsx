@@ -27,14 +27,11 @@ type NativeAccessoryClimbRowProps = {
   width: number;
 };
 
-const ACCESSORY_TEXT_OPTICAL_Y_OFFSET = -2;
-const ACCESSORY_TICK_OPTICAL_Y_OFFSET = -3;
 const ACCESSORY_LEADING_INSET = spacing[1];
 const ACCESSORY_TRAILING_INSET = spacing[3];
-const ACCESSORY_THUMBNAIL_SLOT_SIZE = 36;
-const ACCESSORY_THUMBNAIL_ART_MAX_SIZE = 30;
-const ACCESSORY_THUMBNAIL_ART_RADIUS = 9;
-const ACCESSORY_THUMBNAIL_OPTICAL_Y_OFFSET = -4;
+const ACCESSORY_THUMBNAIL_SLOT_SIZE = 40;
+const ACCESSORY_THUMBNAIL_ART_MAX_SIZE = 40;
+const ACCESSORY_THUMBNAIL_ART_RADIUS = 10;
 
 type ClimbLabelProps = {
   climb: Climb;
@@ -331,25 +328,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
-    transform: [{ translateY: ACCESSORY_THUMBNAIL_OPTICAL_Y_OFFSET }],
   },
   name: {
     flex: 1,
     minWidth: 0,
     fontWeight: '500',
-    transform: [{ translateY: ACCESSORY_TEXT_OPTICAL_Y_OFFSET }],
   },
   gradeText: {
     fontVariant: ['tabular-nums'],
     fontWeight: '600',
     minWidth: spacing[10],
     textAlign: 'right',
-    transform: [{ translateY: ACCESSORY_TEXT_OPTICAL_Y_OFFSET }],
   },
   tickSlot: {
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
-    transform: [{ translateY: ACCESSORY_TICK_OPTICAL_Y_OFFSET }],
   },
 });

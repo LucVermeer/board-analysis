@@ -657,8 +657,7 @@
       "gradeClear": "Tous",
       "filters": "Filtres",
       "filterCountAria": "Filtres, {{count}} actifs",
-      "filterHint": "Touchez pour filtrer. Maintenez pour choisir la cotation.",
-      "removeFilter": "Retirer le filtre {{name}}"
+      "filterHint": "Touchez pour filtrer. Maintenez pour choisir la cotation."
     },
     "gradeRail": {
       "setFilterAria": "Filtrer par cotation {{grade}}",

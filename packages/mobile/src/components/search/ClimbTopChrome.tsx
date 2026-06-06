@@ -34,7 +34,6 @@ type ClimbTopChromeProps = {
   onCreate: () => void;
   onOpenBoardDetail: () => void;
   onHeightChange: (height: number) => void;
-  includeTopInset?: boolean;
   searchFieldRef: RefObject<SearchHeaderHandle | null>;
   searchInitialValue: string;
   searchPlaceholder: string;
@@ -50,7 +49,6 @@ export function ClimbTopChrome({
   onCreate,
   onOpenBoardDetail,
   onHeightChange,
-  includeTopInset = true,
   searchFieldRef,
   searchInitialValue,
   searchPlaceholder,
@@ -140,11 +138,7 @@ export function ClimbTopChrome({
 
   return (
     <>
-      <View
-        pointerEvents="box-none"
-        style={[styles.container, { paddingTop: includeTopInset ? insets.top : 0 }]}
-        onLayout={handleLayout}
-      >
+      <View pointerEvents="box-none" style={[styles.container, { paddingTop: insets.top }]} onLayout={handleLayout}>
         <View pointerEvents="box-none" style={styles.row}>
           <View pointerEvents="box-none" style={styles.leftSlot}>
             {canCreate || canOpenAngleSelector ? (
