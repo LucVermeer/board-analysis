@@ -16,6 +16,7 @@ import {
   type ClimbBoardFilterState,
 } from '@boardsesh/climb-filters';
 import { ClimbListRow } from '../../../src/components/ClimbListRow';
+import { ClimbListRowSkeleton } from '../../../src/components/ClimbListRowSkeleton';
 import { ActivityIndicator } from '../../../src/components/ActivityIndicator';
 import { Text } from '../../../src/components/Text';
 import { Icon } from '../../../src/components/Icon';
@@ -33,14 +34,14 @@ import { randomUUID } from 'expo-crypto';
 import { type SearchHeaderHandle } from '../../../src/components/SearchHeader';
 import { RecentFilterPills } from '../../../src/components/RecentFilterPills';
 import { TAB_BAR_HEIGHT, TOOLBAR_RESERVE, TOOLBAR_GAP_ABOVE_TABBAR } from '../../../src/theme/layout';
-import { useSearchClimbs, useGrades } from '../../../src/lib/graphql/hooks';
+import { useGrades } from '../../../src/lib/graphql/hooks';
+import { useInfiniteSearchClimbs } from '../../../src/lib/graphql/hooks/use-infinite-search-climbs';
 import { SEARCH_CLIMBS, type SearchClimbsQueryResponse } from '../../../src/lib/graphql/operations';
 import { getHttpClient } from '../../../src/lib/graphql/client';
 import { usePlaylistActivation } from '../../../src/lib/playlists/use-playlist-activation';
 import { toQueueClimb, toQueueClimbs } from '../../../src/lib/climb-types';
 import { useActiveBoard, useSetActiveBoard } from '../../../src/lib/graphql/use-active-board';
 import { useAuth } from '../../../src/providers/auth-provider';
-import { accumulateClimbs } from '../../../src/lib/climb-pagination';
 import { getBoardRenderData } from '../../../src/lib/board-details';
 import {
   getRecentFilters,
@@ -50,6 +51,7 @@ import {
 } from '../../../src/lib/recent-filter-store';
 import { getLastSearch, saveLastSearch, boardConfigKey } from '../../../src/lib/last-search-store';
 import { getFilterSummary } from '../../../src/lib/filter-summary';
+import { normalizeSearchName } from '../../../src/lib/search-name';
 import { useSearchLayout } from '../../../src/lib/search-layout-preference';
 import { track } from '../../../src/lib/analytics';
 import { brandColors } from '../../../src/theme/colors';
@@ -57,6 +59,8 @@ import { iosSystemColors } from '../../../src/theme/ios-colors';
 
 const PAGE_SIZE = 30;
 const SEARCH_DEBOUNCE_MS = 300;
+const INITIAL_SKELETON_ROW_COUNT = 10;
+const FOOTER_SKELETON_ROW_COUNT = 6;
 // Debounce persisting the per-board last search so rapid grade nudges don't
 // thrash secure-store.
 const SAVE_DEBOUNCE_MS = 600;
@@ -143,10 +147,11 @@ function ClimbListInner() {
 
   const handleSearchChange = useCallback(
     (text: string) => {
-      setSearchTextLength(text.length);
+      const nextName = normalizeSearchName(text);
+      setSearchTextLength(nextName.length);
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
       debounceTimerRef.current = setTimeout(() => {
-        setName(text);
+        setName(nextName);
       }, SEARCH_DEBOUNCE_MS);
     },
     [setName],
@@ -156,9 +161,10 @@ function ClimbListInner() {
   // bottom-bar "done typing" fab so the search runs the moment it's tapped.
   const handleSearchSubmit = useCallback(
     (text: string) => {
-      setSearchTextLength(text.length);
+      const nextName = normalizeSearchName(text);
+      setSearchTextLength(nextName.length);
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
-      setName(text);
+      setName(nextName);
     },
     [setName],
   );
@@ -274,55 +280,58 @@ function ClimbListInner() {
     }
   }, [activeBoard]);
 
-  // Pagination + accumulation for infinite scroll.
-  const [pageNumber, setPageNumber] = useState(1);
-  const [accumulatedClimbs, setAccumulatedClimbs] = useState<Climb[]>([]);
-
-  // Clear accumulated climbs and reset page when search, filters, or angle
-  // change. Including `angle` is essential: the search refetches per-angle
-  // grades (the angle is in the query key), and without resetting accumulation
-  // a mid-scroll angle change would merge the new angle's page into the old
-  // angle's pages, mixing grades.
-  useEffect(() => {
-    setAccumulatedClimbs([]);
-    setPageNumber(1);
-  }, [name, filters, boardFilters, angle]);
-
   const searchInput = useMemo(
     () =>
       mergeBoardFilters(
         toClimbSearchInput(
           filters,
           { boardName, layoutId, sizeId, setIds, angle },
-          { page: pageNumber, pageSize: PAGE_SIZE },
+          { page: 0, pageSize: PAGE_SIZE },
           { name },
         ),
         boardFilters,
       ),
-    [boardName, layoutId, sizeId, setIds, angle, name, pageNumber, filters, boardFilters],
+    [boardName, layoutId, sizeId, setIds, angle, name, filters, boardFilters],
   );
 
   const {
-    data: searchResult,
+    data: searchPages,
     isLoading: isClimbsLoading,
+    isFetchingNextPage,
     isRefetching,
+    fetchNextPage,
+    hasNextPage,
     refetch,
-  } = useSearchClimbs(searchInput, searchReady);
-  const hasMore = searchResult?.hasMore ?? false;
+  } = useInfiniteSearchClimbs(searchInput, searchReady);
   const isLoadingMoreRef = useRef(false);
 
+  const visibleClimbs = useMemo(() => {
+    const seenUuids = new Set<string>();
+    const climbs: Climb[] = [];
+    for (const page of searchPages?.pages ?? []) {
+      for (const climb of page.climbs) {
+        if (seenUuids.has(climb.uuid)) continue;
+        seenUuids.add(climb.uuid);
+        climbs.push(climb);
+      }
+    }
+    return climbs;
+  }, [searchPages?.pages]);
+
+  const firstSearchPage = searchPages?.pages[0];
+
   useEffect(() => {
-    if (!searchResult?.climbs) return;
-    isLoadingMoreRef.current = false;
-    setAccumulatedClimbs((previous) => accumulateClimbs(previous, searchResult.climbs, pageNumber));
-  }, [searchResult?.climbs, pageNumber]);
+    if (!isFetchingNextPage) {
+      isLoadingMoreRef.current = false;
+    }
+  }, [isFetchingNextPage]);
 
   // Fire "Climb Search Performed" once per resolved search/filter result set.
   // Keyed on the search text + filter signature so it fires when a new result
   // set lands — not on every keystroke (debounced upstream) or paginated page.
   const lastSearchTrackKeyRef = useRef<string | null>(null);
   useEffect(() => {
-    if (pageNumber !== 1 || !searchResult) return;
+    if (!firstSearchPage) return;
     // Skip the default state (no search text, no active filters): the initial
     // tab-mount load is not a user search/apply, and web suppresses it the same
     // way (only fires when at least one filter/term is active).
@@ -335,8 +344,8 @@ function ClimbListInner() {
       queryLengthBucket: queryLengthBucket(name),
       // The search payload carries `climbs` + `hasMore` only — no total count
       // (that lives in the separate count query). Report the size of the
-      // resolved page-1 result set, which is what's available at this point.
-      resultCount: searchResult.climbs.length,
+      // resolved page-0 result set, which is what's available at this point.
+      resultCount: firstSearchPage.climbs.length,
       boardName,
       layoutId,
       sizeId,
@@ -344,41 +353,37 @@ function ClimbListInner() {
       angle,
       activeFilterCount: countActiveFiltersBeyondGrade(filters, boardFilters),
     });
-  }, [searchResult, pageNumber, name, filters, boardFilters, boardName, layoutId, sizeId, setIds, angle]);
+  }, [firstSearchPage, name, filters, boardFilters, boardName, layoutId, sizeId, setIds, angle]);
 
   // Feed the visible climb UUIDs into the shared logbook so the ascent badge
   // can render flash/send/attempt without baking per-user counts into the
   // (CDN-cacheable) search query. `getLogbook` is a noop when the user is
   // anonymous or the active board hasn't resolved yet.
   useEffect(() => {
-    if (accumulatedClimbs.length === 0) return;
-    void getLogbook(accumulatedClimbs.map((climb) => climb.uuid));
-  }, [accumulatedClimbs, getLogbook]);
+    if (visibleClimbs.length === 0) return;
+    void getLogbook(visibleClimbs.map((climb) => climb.uuid));
+  }, [visibleClimbs, getLogbook]);
 
   const handleRefresh = useCallback(() => {
-    setAccumulatedClimbs([]);
-    setPageNumber(1);
-    refetch();
+    isLoadingMoreRef.current = false;
+    void refetch();
   }, [refetch]);
 
   const handleEndReached = useCallback(() => {
-    if (hasMore && !isClimbsLoading && !isRefetching && !isLoadingMoreRef.current) {
+    if (hasNextPage && !isClimbsLoading && !isFetchingNextPage && !isRefetching && !isLoadingMoreRef.current) {
       isLoadingMoreRef.current = true;
-      setPageNumber((previous) => previous + 1);
+      void fetchNextPage().finally(() => {
+        isLoadingMoreRef.current = false;
+      });
     }
-  }, [hasMore, isClimbsLoading, isRefetching]);
+  }, [fetchNextPage, hasNextPage, isClimbsLoading, isFetchingNextPage, isRefetching]);
 
   // Page the same search query the list uses so the play-drawer swipe can walk
-  // climbs beyond what's loaded. Activation pages are 0-based; search is 1-based.
+  // climbs beyond what's loaded. Activation pages and search pages are both 0-based.
   const fetchSearchPage = useCallback(
     async ({ page, pageSize }: { page: number; pageSize: number }) => {
       const input = mergeBoardFilters(
-        toClimbSearchInput(
-          filters,
-          { boardName, layoutId, sizeId, setIds, angle },
-          { page: page + 1, pageSize },
-          { name },
-        ),
+        toClimbSearchInput(filters, { boardName, layoutId, sizeId, setIds, angle }, { page, pageSize }, { name }),
         boardFilters,
       );
       const response = await getHttpClient().request<SearchClimbsQueryResponse>(SEARCH_CLIMBS, { input });
@@ -390,7 +395,7 @@ function ClimbListInner() {
     [filters, boardName, layoutId, sizeId, setIds, angle, name, boardFilters],
   );
 
-  const allQueueClimbs = useMemo(() => toQueueClimbs(accumulatedClimbs), [accumulatedClimbs]);
+  const allQueueClimbs = useMemo(() => toQueueClimbs(visibleClimbs), [visibleClimbs]);
 
   const activateClimbListClimb = usePlaylistActivation({
     sourceId: 'climblist',
@@ -473,8 +478,8 @@ function ClimbListInner() {
     layout === 'sticky-strip' && isSearchFocused && searchTextLength === 0 && recentFilters.length > 0;
   // Show the spinner (not a premature "no climbs" empty state) while a board is
   // resolving or its per-board restore hasn't landed yet.
-  const isInitialLoading =
-    isBoardLoading || (hasBoardConfig && !searchReady) || (isClimbsLoading && accumulatedClimbs.length === 0);
+  const isBoardResolving = isBoardLoading || (hasBoardConfig && !searchReady);
+  const showInitialSkeletons = isClimbsLoading && visibleClimbs.length === 0;
 
   const gradeBound = useMemo<GradeBound>(
     () => ({ minGradeId: filters.minGrade, maxGradeId: filters.maxGrade }),
@@ -529,7 +534,7 @@ function ClimbListInner() {
     );
   }
 
-  if (isInitialLoading) {
+  if (isBoardResolving) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" />
@@ -537,12 +542,12 @@ function ClimbListInner() {
     );
   }
 
-  const isEmpty = accumulatedClimbs.length === 0 && !isClimbsLoading;
+  const isEmpty = visibleClimbs.length === 0 && !isClimbsLoading;
 
   return (
     <View style={[styles.container, { backgroundColor: systemColors.background }]}>
       <FlashList
-        data={accumulatedClimbs}
+        data={visibleClimbs}
         renderItem={renderClimbItem}
         keyExtractor={keyExtractor}
         onEndReached={handleEndReached}
@@ -566,15 +571,11 @@ function ClimbListInner() {
             />
           ) : null
         }
-        ListFooterComponent={
-          isClimbsLoading && accumulatedClimbs.length > 0 ? (
-            <View style={styles.footer}>
-              <ActivityIndicator size="small" />
-            </View>
-          ) : null
-        }
+        ListFooterComponent={isFetchingNextPage ? <ClimbListSkeletonRows count={FOOTER_SKELETON_ROW_COUNT} /> : null}
         ListEmptyComponent={
-          isEmpty ? (
+          showInitialSkeletons ? (
+            <ClimbListSkeletonRows count={INITIAL_SKELETON_ROW_COUNT} />
+          ) : isEmpty ? (
             <View style={styles.emptyContainer}>
               <Icon name="search" size={48} color={iosSystemColors.systemGray4} />
               <Text variant="headline" style={styles.emptyTitle}>
@@ -597,6 +598,7 @@ function ClimbListInner() {
           searchInitialValue={name}
           searchPlaceholder={t('search.placeholders.climbs')}
           onSearchChange={handleSearchChange}
+          onSearchSubmit={handleSearchSubmit}
           onSearchFocus={handleSearchFocus}
           onSearchBlur={handleSearchBlur}
           bound={gradeBound}
@@ -674,6 +676,16 @@ function keyExtractor(item: Climb) {
   return item.uuid;
 }
 
+function ClimbListSkeletonRows({ count }: { count: number }) {
+  return (
+    <View>
+      {Array.from({ length: count }, (_item, index) => (
+        <ClimbListRowSkeleton key={`climb-skeleton-${index}`} />
+      ))}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -698,9 +710,5 @@ const styles = StyleSheet.create({
   emptySubtitle: {
     opacity: 0.4,
     textAlign: 'center',
-  },
-  footer: {
-    paddingVertical: 20,
-    alignItems: 'center',
   },
 });

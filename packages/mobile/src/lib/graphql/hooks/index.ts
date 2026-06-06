@@ -396,6 +396,7 @@ export function useAttachBetaLink() {
 
 // Re-export feature-specific hooks that live alongside this barrel so the
 // import surface from this directory stays a single path.
+export { useInfiniteSearchClimbs } from './use-infinite-search-climbs';
 export { useMobileClimbActionsData } from './use-mobile-climb-actions-data';
 export {
   useAllBoardsTicks,
