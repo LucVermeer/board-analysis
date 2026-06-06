@@ -47,7 +47,7 @@ export function QueueSheet({
 }: QueueSheetProps) {
   const { t } = useTranslation('session');
   const insets = useSafeAreaInsets();
-  const { systemColors } = useTheme();
+  const { systemColors, sheet } = useTheme();
   const sheetRef = useRef<BottomSheetModal>(null);
 
   const { state, removeFromQueue, clearQueue, reorderQueue, playlistSuggestionSource } = useQueue();
@@ -138,12 +138,22 @@ export function QueueSheet({
 
   const renderBackdrop = useCallback(
     (props: BottomSheetBackdropProps) => (
-      <BottomSheetBackdrop {...props} disappearsOnIndex={-1} appearsOnIndex={0} opacity={0.4} pressBehavior="close" />
+      <BottomSheetBackdrop
+        {...props}
+        disappearsOnIndex={-1}
+        appearsOnIndex={0}
+        opacity={sheet.scrimOpacity}
+        pressBehavior="close"
+      />
     ),
-    [],
+    [sheet.scrimOpacity],
   );
 
-  const backgroundStyle = { ...sheetStyles.background, backgroundColor: systemColors.secondaryBackground };
+  const backgroundStyle = {
+    ...sheetStyles.background,
+    ...sheet.corners,
+    backgroundColor: systemColors.secondaryBackground,
+  };
 
   const viewOnlyMode = queue.length === 0;
 
@@ -163,7 +173,7 @@ export function QueueSheet({
       backdropComponent={renderBackdrop}
       containerComponent={modalContainerComponent}
       onDismiss={handleDismissed}
-      handleIndicatorStyle={sheetStyles.indicator}
+      handleIndicatorStyle={sheet.handleStyle}
       backgroundStyle={backgroundStyle}
       style={styles.sheet}
     >

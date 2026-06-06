@@ -69,9 +69,54 @@ export const androidFallbackColors = {
   },
 } as const;
 
+/**
+ * Material 3 tonal surfaces for the Material UI variant, keyed by color scheme.
+ * Same shape as `androidFallbackColors` so the ThemeProvider can return them
+ * directly as the resolved system colors on ANY platform when the user is on the
+ * Material variant (including iOS 26 hardware where they chose Material).
+ *
+ * Neutrals are warmed toward the maroon brand tint (#8C4A52) so Material reads as
+ * the same product as Liquid Glass rather than a generic M3 theme. The Material
+ * feel comes from elevation shadows, ripple, the nav active-indicator pill, and
+ * bounded radii — not from a different palette. Labels keep the iOS-derived
+ * neutral values so text contrast matches the glass variant exactly.
+ */
+export const materialSurfaces = {
+  light: {
+    // M3 base surface — warm-tinted so cards/elevation read against it.
+    background: '#F4ECEC',
+    // Cards and sheets sit a step up from the base (surface container low).
+    secondaryBackground: '#FFFFFF',
+    tertiaryBackground: '#FFFFFF',
+    groupedBackground: '#F4ECEC',
+    // Raised tile (selected segmented pill, elevated bar) — surface + elevation.
+    elevatedSurface: '#FFFFFF',
+    label: '#000000',
+    secondaryLabel: 'rgba(60, 60, 67, 0.6)',
+    tertiaryLabel: 'rgba(60, 60, 67, 0.3)',
+    // M3 outline-variant.
+    separator: 'rgba(60, 60, 67, 0.18)',
+    // Faint maroon track for segmented controls / fills.
+    fill: 'rgba(140, 74, 82, 0.1)',
+  },
+  dark: {
+    background: '#141011',
+    secondaryBackground: '#1F1A1B',
+    tertiaryBackground: '#2A2425',
+    groupedBackground: '#141011',
+    elevatedSurface: '#2A2425',
+    label: '#FFFFFF',
+    secondaryLabel: 'rgba(235, 235, 245, 0.6)',
+    tertiaryLabel: 'rgba(235, 235, 245, 0.3)',
+    separator: 'rgba(235, 235, 245, 0.18)',
+    fill: 'rgba(235, 220, 222, 0.12)',
+  },
+} as const;
+
 export type SystemColorKey = keyof typeof androidFallbackColors.light;
 export type BrandColors = typeof brandColors;
 export type AndroidFallbackColors = typeof androidFallbackColors;
+export type MaterialSurfaces = typeof materialSurfaces;
 
 /**
  * Apply an alpha (0–1) to a colour. Handles `#RGB` and `#RRGGBB` hex by

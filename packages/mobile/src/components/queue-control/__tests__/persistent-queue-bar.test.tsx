@@ -43,13 +43,24 @@ vi.mock('../../../theme/layout', () => ({
   TOOLBAR_GAP: 8,
   TOOLBAR_FAB_SIZE: 56,
   TOOLBAR_GAP_ABOVE_TABBAR: 10,
-  glassSize: { hero: 64 },
+  glassSize: { hero: 64, inline: 44 },
 }));
-// Legacy bar renders only where the native bottom accessory doesn't (Android /
-// iOS < 26) — force that path so the capsule/tick assertions hold.
-vi.mock('../../../hooks/use-bottom-accessory', () => ({ isBottomAccessoryAvailable: () => false }));
+vi.mock('../../../theme/tokens', () => ({ spacing: { 1: 4 } }));
+// Default to the Liquid Glass layout (centered capsule + standalone hero tick).
+vi.mock('../../../providers/theme-provider', () => ({ useTheme: () => ({ variant: 'liquidGlass' }) }));
+// The floating bar renders only where the native bottom accessory doesn't
+// (Material variant / iOS < 26 / Android) — force that path so the capsule/tick
+// assertions hold. `useNativeAccessoryActive` is what use-bottom-chrome-metrics
+// reads now (variant-aware); the capability function stays for other callers.
+vi.mock('../../../hooks/use-bottom-accessory', () => ({
+  isBottomAccessoryAvailable: () => false,
+  useNativeAccessoryActive: () => false,
+}));
 vi.mock('../ClimbCapsule', () => ({ ClimbCapsule: () => createElement('div', { 'data-capsule': 'true' }) }));
 vi.mock('../LogAscentFab', () => ({ LogAscentFab: () => createElement('div', { 'data-tick': 'true' }) }));
+vi.mock('../LogAscentToolbarButton', () => ({
+  LogAscentToolbarButton: () => createElement('div', { 'data-tick-inline': 'true' }),
+}));
 
 import { PersistentQueueBar } from '../persistent-queue-bar';
 

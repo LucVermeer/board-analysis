@@ -1,18 +1,11 @@
 import { type ReactNode } from 'react';
-import {
-  Platform,
-  StyleSheet,
-  View,
-  type ColorValue,
-  type StyleProp,
-  type ViewProps,
-  type ViewStyle,
-} from 'react-native';
+import { StyleSheet, View, type ColorValue, type StyleProp, type ViewProps, type ViewStyle } from 'react-native';
 import { BlurView } from '@react-native-community/blur';
-import { GlassView, isGlassEffectAPIAvailable, isLiquidGlassAvailable, type GlassStyle } from 'expo-glass-effect';
+import { GlassView, type GlassStyle } from 'expo-glass-effect';
 import { useTheme } from '../providers/theme-provider';
 import { iosDarkColors, iosLightColors } from '../theme/ios-colors';
-import { useReduceTransparency } from '../hooks/use-reduce-transparency';
+import { shadows } from '../theme/tokens';
+import { useEffectiveSurfaceMode } from '../hooks/use-effective-surface-mode';
 
 type GlassSurfaceProps = {
   children?: ReactNode;
@@ -25,9 +18,11 @@ type GlassSurfaceProps = {
    */
   tintColor?: string;
   /**
-   * Solid background used on Android and when Reduce Transparency is enabled.
-   * Defaults to the theme's secondary background. Pass an opaque tint here when
-   * a surface wants its tint to survive on the no-glass path.
+   * Fill layered over the surface on the no-glass paths (Material / Android /
+   * Reduce Transparency). It composites on top of an opaque secondary-background
+   * base, so a translucent token (e.g. `systemColors.fill`) reads as a tint —
+   * not a see-through hole — and an opaque value fully covers the base. Omit it
+   * to get the plain secondary-background surface.
    */
   fallbackColor?: ColorValue;
   /**
@@ -52,13 +47,14 @@ type GlassSurfaceProps = {
 };
 
 /**
- * One background primitive for every translucent surface. Picks the best
- * available material for the device and degrades cleanly:
+ * One background primitive for every translucent / tonal surface. Picks the
+ * right material for the device, variant and a11y settings via
+ * `useEffectiveSurfaceMode()`, and renders cleanly for each:
  *
- *   iOS 26+            → expo-glass-effect GlassView (true Liquid Glass)
- *   iOS < 26           → @react-native-community/blur frosted blur
- *   Android            → solid themed surface
- *   Reduce Transparency → solid themed surface (any platform)
+ *   glass    → expo-glass-effect GlassView (iOS 26 Liquid Glass — preferred)
+ *   blur     → @react-native-community/blur frosted blur (iOS < 26 fallback)
+ *   material → opaque Material 3 tonal surface + elevation shadow
+ *   solid    → flat themed surface (Reduce Transparency, or Android on glass)
  *
  * It fills its parent like gorhom's `backgroundComponent`; consumers stack
  * content on top either as children or as siblings.
@@ -75,27 +71,56 @@ export function GlassSurface({
   pointerEvents,
 }: GlassSurfaceProps) {
   const { systemColors, colorScheme } = useTheme();
-  const reduceTransparency = useReduceTransparency();
+  const mode = useEffectiveSurfaceMode();
   const isDark = colorScheme === 'dark';
 
-  const solidColor = fallbackColor ?? systemColors.secondaryBackground;
+  // The no-glass paths always start from an opaque base so the surface never
+  // shows the screen through it (a `fallbackColor` may be a translucent token
+  // like `fill`, meant as a tint over a surface, not a standalone background —
+  // and a see-through surface would also defeat Reduce Transparency).
+  const baseColor = systemColors.secondaryBackground;
   const radius = borderRadius != null ? { borderRadius } : null;
   // The blur/solid paths have no native shape, so clip them to the radius here.
   const clippedRadius = borderRadius != null ? { borderRadius, overflow: 'hidden' as const } : null;
 
-  // Honour Reduce Transparency strictly — no glass, no blur.
-  if (reduceTransparency) {
+  // Solid: Reduce Transparency (a11y) on any platform, or Android forced onto
+  // the Liquid Glass variant. Opaque base + the fallback/tint layered on top.
+  if (mode === 'solid') {
     return (
-      <View style={[style, clippedRadius, { backgroundColor: solidColor }]} pointerEvents={pointerEvents}>
+      <View style={[style, clippedRadius, { backgroundColor: baseColor }]} pointerEvents={pointerEvents}>
+        {fallbackColor ? (
+          <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: fallbackColor }]} />
+        ) : null}
+        {tintColor ? (
+          <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: tintColor }]} />
+        ) : null}
         {children}
       </View>
     );
   }
 
-  // iOS 26+: real Liquid Glass. The radius goes on the GlassView itself so the
-  // native glass renders a rounded shape with its own clean edge (no parent clip
-  // or RN border, which would seam at the cardinal points of a circle).
-  if (Platform.OS === 'ios' && isLiquidGlassAvailable() && isGlassEffectAPIAvailable()) {
+  // Material: opaque M3 tonal surface. Background + radius + shadow live on the
+  // same view (no `overflow: 'hidden'`, which would clip the iOS shadow) so the
+  // surface casts a real elevation shadow with rounded corners. The fallback and
+  // tint composite over the opaque base, matching the blur path.
+  if (mode === 'material') {
+    return (
+      <View style={[style, radius, shadows.sm, { backgroundColor: baseColor }]} pointerEvents={pointerEvents}>
+        {fallbackColor ? (
+          <View pointerEvents="none" style={[StyleSheet.absoluteFill, radius, { backgroundColor: fallbackColor }]} />
+        ) : null}
+        {tintColor ? (
+          <View pointerEvents="none" style={[StyleSheet.absoluteFill, radius, { backgroundColor: tintColor }]} />
+        ) : null}
+        {children}
+      </View>
+    );
+  }
+
+  // Glass: real iOS 26 Liquid Glass. The radius goes on the GlassView itself so
+  // the native glass renders a rounded shape with its own clean edge (no parent
+  // clip or RN border, which would seam at the cardinal points of a circle).
+  if (mode === 'glass') {
     return (
       <View style={style} pointerEvents={pointerEvents}>
         <GlassView
@@ -110,29 +135,20 @@ export function GlassSurface({
     );
   }
 
-  // iOS < 26: frosted blur approximation (matches the existing tab-bar look).
-  if (Platform.OS === 'ios') {
-    return (
-      <View style={[style, clippedRadius]} pointerEvents={pointerEvents}>
-        <BlurView
-          blurType={isDark ? 'dark' : 'light'}
-          blurAmount={blurAmount}
-          reducedTransparencyFallbackColor={
-            isDark ? iosDarkColors.secondaryBackground : iosLightColors.secondaryBackground
-          }
-          style={StyleSheet.absoluteFill}
-        />
-        {tintColor ? (
-          <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: tintColor }]} />
-        ) : null}
-        {children}
-      </View>
-    );
-  }
-
-  // Android: solid themed surface (or an opaque tint via fallbackColor).
+  // Blur: iOS < 26 frosted approximation (matches the pre-Liquid-Glass tab bar).
   return (
-    <View style={[style, clippedRadius, { backgroundColor: solidColor }]} pointerEvents={pointerEvents}>
+    <View style={[style, clippedRadius]} pointerEvents={pointerEvents}>
+      <BlurView
+        blurType={isDark ? 'dark' : 'light'}
+        blurAmount={blurAmount}
+        reducedTransparencyFallbackColor={
+          isDark ? iosDarkColors.secondaryBackground : iosLightColors.secondaryBackground
+        }
+        style={StyleSheet.absoluteFill}
+      />
+      {tintColor ? (
+        <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: tintColor }]} />
+      ) : null}
       {children}
     </View>
   );

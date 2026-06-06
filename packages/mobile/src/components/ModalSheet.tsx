@@ -17,7 +17,7 @@ import {
 import { FullWindowOverlay } from 'react-native-screens';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { hapticMedium } from '../lib/haptics';
-import { sheetAndroid, sheetStyles, spacing } from '../theme/tokens';
+import { sheetStyles, spacing } from '../theme/tokens';
 import { useTheme } from '../providers/theme-provider';
 
 // iOS renders the modal in a native window overlay so it sits above the queue
@@ -54,7 +54,7 @@ export const ModalSheet = forwardRef<BottomSheetModal, ModalSheetProps>(function
   },
   ref,
 ) {
-  const { systemColors } = useTheme();
+  const { systemColors, sheet } = useTheme();
   const insets = useSafeAreaInsets();
   const snapPoints = useMemo(() => customSnapPoints ?? ['50%', '90%'], [customSnapPoints]);
 
@@ -64,11 +64,11 @@ export const ModalSheet = forwardRef<BottomSheetModal, ModalSheetProps>(function
         {...props}
         disappearsOnIndex={-1}
         appearsOnIndex={0}
-        opacity={sheetAndroid.scrimOpacity}
+        opacity={sheet.scrimOpacity}
         pressBehavior="close"
       />
     ),
-    [],
+    [sheet.scrimOpacity],
   );
 
   const handleChange = useCallback(
@@ -81,7 +81,7 @@ export const ModalSheet = forwardRef<BottomSheetModal, ModalSheetProps>(function
 
   const backgroundStyle = {
     ...sheetStyles.background,
-    ...sheetAndroid.corners,
+    ...sheet.corners,
     backgroundColor: systemColors.secondaryBackground,
   };
 
@@ -109,7 +109,7 @@ export const ModalSheet = forwardRef<BottomSheetModal, ModalSheetProps>(function
       enablePanDownToClose={enablePanDownToClose}
       backdropComponent={renderBackdrop}
       backgroundStyle={backgroundStyle}
-      handleIndicatorStyle={sheetAndroid.handleStyle}
+      handleIndicatorStyle={sheet.handleStyle}
       containerComponent={modalContainerComponent}
       onChange={handleChange}
       onDismiss={onDismiss}

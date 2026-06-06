@@ -1,4 +1,4 @@
-import { Platform, StyleSheet, type ViewStyle } from 'react-native';
+import { StyleSheet, type ViewStyle } from 'react-native';
 import { Text } from './Text';
 import { Icon } from './Icon';
 import { PressableSurface } from './PressableSurface';
@@ -6,7 +6,7 @@ import type { IconName } from './icon-map';
 import { hapticLight } from '../lib/haptics';
 import { brandColors } from '../theme/colors';
 import { iosSystemColors } from '../theme/ios-colors';
-import { material } from '../theme/tokens';
+import { useTheme } from '../providers/theme-provider';
 
 type ButtonVariant = 'filled' | 'outlined' | 'text';
 type ButtonSize = 'small' | 'medium' | 'large';
@@ -30,9 +30,6 @@ const sizeConfig = {
   large: { paddingHorizontal: 20, paddingVertical: 14, fontSize: 17, iconSize: 22 },
 } as const;
 
-// M3 corner radius on Android, the existing iOS radius elsewhere.
-const BUTTON_RADIUS = Platform.select({ android: material.button.radius, default: 10 });
-
 export function Button({
   title,
   onPress,
@@ -46,6 +43,9 @@ export function Button({
   style,
 }: ButtonProps) {
   const config = sizeConfig[size];
+  // Soft 10dp corner on Liquid Glass, M3 20dp on Material (and Android, which
+  // defaults to the Material variant).
+  const { radii } = useTheme();
 
   const handlePress = () => {
     if (disabled || loading) return;
@@ -60,7 +60,7 @@ export function Button({
     gap: 6,
     paddingHorizontal: config.paddingHorizontal,
     paddingVertical: config.paddingVertical,
-    borderRadius: BUTTON_RADIUS,
+    borderRadius: radii.button,
     opacity: disabled ? 0.5 : 1,
     ...(variant === 'filled' && { backgroundColor: tintColor }),
     ...(variant === 'outlined' && { borderWidth: 1, borderColor: tintColor }),

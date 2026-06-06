@@ -6,7 +6,6 @@
  * Animation tokens have moved to ./animations.ts
  */
 
-import { Platform } from 'react-native';
 import { iosSystemColors } from './ios-colors';
 import { withAlpha } from './colors';
 
@@ -144,20 +143,42 @@ export function androidRipple(color: string, borderless = false): { color: strin
 }
 
 /**
- * Bottom-sheet chrome resolved per platform: Android gets the Material 3 metrics
- * (28dp corners, slimmer handle, lighter scrim), iOS keeps the softer existing
- * look. Shared by Sheet and ModalSheet so the two never drift.
+ * Corner radii that genuinely differ between the two variants, resolved via
+ * `theme.radii`. Pills/capsules stay fully rounded and cards stay `lg` in BOTH
+ * variants (the variants differ in surface/elevation, not those silhouettes), so
+ * they're not here — only the button corner varies (soft 10dp on Liquid Glass,
+ * M3 20dp on Material). Sheet corners live in `sheetChromeByVariant` below.
  */
-export const sheetAndroid = {
-  scrimOpacity: Platform.OS === 'android' ? material.sheet.scrimOpacity : 0.4,
-  handleStyle:
-    Platform.OS === 'android'
-      ? { ...sheetStyles.indicator, width: material.sheet.handleWidth, height: material.sheet.handleHeight }
-      : sheetStyles.indicator,
-  corners:
-    Platform.OS === 'android'
-      ? { borderTopLeftRadius: material.sheet.cornerRadius, borderTopRightRadius: material.sheet.cornerRadius }
-      : null,
+export const radiiByVariant = {
+  liquidGlass: {
+    button: 10,
+  },
+  material: {
+    button: material.button.radius,
+  },
+} as const;
+
+/**
+ * Bottom-sheet chrome resolved per UI variant (supersedes the old
+ * `Platform.OS`-keyed `sheetAndroid` so an iOS-26 user on Material gets M3 sheet
+ * metrics too). Liquid Glass keeps the softer existing look; Material uses the
+ * M3 metrics (28dp corners, slimmer handle, lighter scrim). Consumed by Sheet,
+ * ModalSheet and PlayDrawer via `theme.sheet` so the three never drift.
+ */
+export const sheetChromeByVariant = {
+  liquidGlass: {
+    scrimOpacity: 0.4,
+    handleStyle: sheetStyles.indicator,
+    corners: null as { borderTopLeftRadius: number; borderTopRightRadius: number } | null,
+  },
+  material: {
+    scrimOpacity: material.sheet.scrimOpacity,
+    handleStyle: { ...sheetStyles.indicator, width: material.sheet.handleWidth, height: material.sheet.handleHeight },
+    corners: {
+      borderTopLeftRadius: material.sheet.cornerRadius,
+      borderTopRightRadius: material.sheet.cornerRadius,
+    } as { borderTopLeftRadius: number; borderTopRightRadius: number } | null,
+  },
 } as const;
 
 export type Spacing = typeof spacing;
@@ -165,3 +186,5 @@ export type BorderRadius = typeof borderRadius;
 export type Shadows = typeof shadows;
 export type Opacity = typeof opacity;
 export type Material = typeof material;
+export type Radii = (typeof radiiByVariant)[keyof typeof radiiByVariant];
+export type SheetChrome = (typeof sheetChromeByVariant)[keyof typeof sheetChromeByVariant];

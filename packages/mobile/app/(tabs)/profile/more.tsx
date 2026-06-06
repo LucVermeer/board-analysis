@@ -2,7 +2,7 @@ import { router } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import type { GradeDisplayFormat } from '@boardsesh/play-view';
-import type { ThemeOverride } from '@boardsesh/key-value-storage';
+import type { ThemeOverride, UiVariantPreference } from '@boardsesh/key-value-storage';
 import { useTheme } from '../../../src/providers/theme-provider';
 import { useAuth } from '../../../src/providers/auth-provider';
 import { useProfile } from '../../../src/lib/graphql/hooks';
@@ -16,20 +16,31 @@ import { SectionHeader } from '../../../src/components/SectionHeader';
 import { SegmentedControl } from '../../../src/components/SegmentedControl';
 import { isPreviewBuild } from '../../../src/lib/eas-api';
 import { useGradeFormat } from '../../../src/hooks/use-grade-format';
+import { useGlassCapability } from '../../../src/hooks/use-glass-capability';
 
 export default function MoreScreen() {
-  const { systemColors, borderRadius, themeOverride, setThemeOverride } = useTheme();
+  const { systemColors, borderRadius, themeOverride, setThemeOverride, uiVariantPreference, setUiVariant } = useTheme();
   const { t } = useTranslation('common');
   const { t: tProfile } = useTranslation('profile');
   const { signOut } = useAuth();
   const { data: profile } = useProfile();
   const { gradeFormat, setGradeFormat } = useGradeFormat();
+  const glassCapable = useGlassCapability();
 
   const appearanceOptions: { key: ThemeOverride; label: string }[] = [
     { key: 'system', label: t('mobile.more.appearance.system') },
     { key: 'light', label: t('mobile.more.appearance.light') },
     { key: 'dark', label: t('mobile.more.appearance.dark') },
   ];
+
+  const uiStyleOptions: { key: UiVariantPreference; label: string }[] = [
+    { key: 'auto', label: t('mobile.more.uiStyle.auto') },
+    { key: 'liquidGlass', label: t('mobile.more.uiStyle.liquidGlass') },
+    { key: 'material', label: t('mobile.more.uiStyle.material') },
+  ];
+  // Liquid Glass can't render on Android / iOS < 26, so show it disabled there
+  // rather than hide it — more honest than a no-op control.
+  const disabledUiStyles = glassCapable ? undefined : new Set<UiVariantPreference>(['liquidGlass']);
 
   const gradeFormatOptions: { key: GradeDisplayFormat; label: string }[] = [
     { key: 'v-grade', label: t('mobile.more.gradeFormat.vGrade') },
@@ -61,6 +72,33 @@ export default function MoreScreen() {
             trackColor={systemColors.fill}
             accessibilityLabel={t('mobile.more.appearance.title')}
           />
+        </View>
+      </View>
+
+      <View style={styles.section}>
+        <SectionHeader title={t('mobile.more.uiStyle.title')} />
+        <View
+          style={[
+            styles.card,
+            {
+              backgroundColor: systemColors.secondaryBackground,
+              borderRadius: borderRadius.lg,
+              marginHorizontal: spacing[4],
+              padding: spacing[3],
+            },
+          ]}
+        >
+          <SegmentedControl
+            options={uiStyleOptions}
+            selectedKey={uiVariantPreference}
+            onSelect={(key) => void setUiVariant(key)}
+            disabledKeys={disabledUiStyles}
+            trackColor={systemColors.fill}
+            accessibilityLabel={t('mobile.more.uiStyle.title')}
+          />
+          <Text variant="footnote" color={systemColors.secondaryLabel} style={styles.settingHint}>
+            {glassCapable ? t('mobile.more.uiStyle.description') : t('mobile.more.uiStyle.glassUnavailable')}
+          </Text>
         </View>
       </View>
 

@@ -1,29 +1,84 @@
+import type { ColorValue } from 'react-native';
 import { NativeTabs } from 'expo-router/unstable-native-tabs';
+import { Tabs } from 'expo-router';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { useTranslation } from 'react-i18next';
 import { useBluetoothConnectedStatus } from '../../src/lib/ble/bluetooth-status-store';
 import { useQueue } from '../../src/providers/queue-provider';
 import { QueueBottomAccessory } from '../../src/components/queue-control/QueueBottomAccessory';
+import { MaterialTabBar } from '../../src/components/navigation/MaterialTabBar';
+import { useTheme } from '../../src/providers/theme-provider';
 import { brandColors } from '../../src/theme/colors';
 
+type TabIconProps = { focused: boolean; color: ColorValue; size: number };
+
+// Material (MaterialCommunityIcons) glyphs for the JS tab bar, mirroring the
+// SF Symbols / md hints used by the native tab bar. Rendered on all platforms in
+// the Material variant so it reads as Material even on iOS.
+const materialTabIcon =
+  (active: string, inactive: string) =>
+  ({ focused, color, size }: TabIconProps) => (
+    <MaterialCommunityIcons name={(focused ? active : inactive) as never} color={color} size={size} />
+  );
+
 /**
- * Native bottom tabs (`expo-router/unstable-native-tabs`). On iOS 26 this renders
- * the system Liquid Glass tab bar and folds into a leading home button on scroll
- * (`minimizeBehavior="onScrollDown"`). The bottom accessory now owns only the
- * current climb + tick, so its single native platter is the intended background.
- * The Climbs tab opts into the native search role, which lets iOS place search
- * in the separated bottom-right tab affordance.
+ * Bottom tabs. The Liquid Glass variant uses the system Liquid Glass tab bar
+ * (`expo-router/unstable-native-tabs`) with a native `BottomAccessory` platter
+ * for the current climb + tick. The Material variant uses a JS `Tabs` navigator
+ * with the Material 3 `MaterialTabBar`; its climb/tick chrome rides the floating
+ * `PersistentQueueBar` (the native accessory is Liquid-Glass-only).
  */
 export default function TabLayout() {
   const { t } = useTranslation('common');
   const { t: tPlaylists } = useTranslation('playlists');
   const { t: tSession } = useTranslation('session');
+  const { variant } = useTheme();
 
   // Record-tab status cue: a badge when a board is connected over Bluetooth or a
-  // session is live (the custom tab bar's green dot + blink have no native
-  // equivalent under NativeTabs).
+  // session is live.
   const isBluetoothConnected = useBluetoothConnectedStatus();
   const { sessionId } = useQueue();
   const showRecordBadge = isBluetoothConnected || sessionId !== null;
+
+  if (variant === 'material') {
+    return (
+      <Tabs tabBar={(props) => <MaterialTabBar {...props} />} screenOptions={{ headerShown: false }}>
+        <Tabs.Screen
+          name="boards"
+          options={{
+            title: t('mobile.nav.boards'),
+            tabBarIcon: materialTabIcon('view-dashboard', 'view-dashboard-outline'),
+          }}
+        />
+        <Tabs.Screen
+          name="climbs"
+          options={{ title: t('mobile.nav.climbs'), tabBarIcon: materialTabIcon('magnify', 'magnify') }}
+        />
+        <Tabs.Screen
+          name="record"
+          options={{
+            title: tSession('mobile.session.recordTab'),
+            tabBarIcon: materialTabIcon('record-circle', 'record-circle-outline'),
+            tabBarBadge: showRecordBadge ? '' : undefined,
+          }}
+        />
+        <Tabs.Screen
+          name="discover"
+          options={{
+            title: tPlaylists('bottomTabBar.discover'),
+            tabBarIcon: materialTabIcon('bookmark-multiple', 'bookmark-multiple-outline'),
+          }}
+        />
+        <Tabs.Screen
+          name="profile"
+          options={{
+            title: t('mobile.nav.profile'),
+            tabBarIcon: materialTabIcon('account-circle', 'account-circle-outline'),
+          }}
+        />
+      </Tabs>
+    );
+  }
 
   return (
     // `minimizeBehavior="onScrollDown"` relies on UIKit finding the climbs

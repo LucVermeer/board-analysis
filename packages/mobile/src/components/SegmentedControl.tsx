@@ -19,6 +19,8 @@ type SegmentedControlProps<K extends string> = {
   textVariant?: 'subheadline' | 'footnote';
   /** Background color for the segmented control track. */
   trackColor: ColorValue;
+  /** Keys that render dimmed and non-selectable (e.g. Liquid Glass on a device that can't show it). */
+  disabledKeys?: ReadonlySet<K>;
   /** Accessibility label naming the group (e.g. "Appearance"), so VoiceOver announces what the segments control. */
   accessibilityLabel?: string;
 };
@@ -26,15 +28,17 @@ type SegmentedControlProps<K extends string> = {
 function Segment({
   label,
   selected,
+  disabled,
   onPress,
   textVariant,
 }: {
   label: string;
   selected: boolean;
+  disabled: boolean;
   onPress: () => void;
   textVariant: 'subheadline' | 'footnote';
 }) {
-  const { systemColors, colorScheme } = useTheme();
+  const { systemColors, colorScheme, opacity } = useTheme();
   const isDark = colorScheme === 'dark';
 
   // Selected pill is a raised tile over the track — elevatedSurface reads as a
@@ -45,6 +49,7 @@ function Segment({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 7,
+    ...(disabled && { opacity: opacity.disabled }),
     ...(selected && {
       backgroundColor: systemColors.elevatedSurface,
       shadowColor: '#000',
@@ -62,13 +67,15 @@ function Segment({
   return (
     <PressableSurface
       onPress={() => {
+        if (disabled) return;
         hapticSelection();
         onPress();
       }}
+      disabled={disabled}
       feedback="scale"
       scaleTo={0.95}
       accessibilityRole="radio"
-      accessibilityState={{ selected }}
+      accessibilityState={{ selected, disabled }}
       accessibilityLabel={label}
       style={segmentStyle}
     >
@@ -89,6 +96,7 @@ export function SegmentedControl<K extends string = string>({
   onSelect,
   textVariant = 'subheadline',
   trackColor,
+  disabledKeys,
   accessibilityLabel,
 }: SegmentedControlProps<K>) {
   const containerStyle = {
@@ -105,6 +113,7 @@ export function SegmentedControl<K extends string = string>({
           key={option.key}
           label={option.label}
           selected={selectedKey === option.key}
+          disabled={disabledKeys?.has(option.key) ?? false}
           onPress={() => onSelect(option.key)}
           textVariant={textVariant}
         />

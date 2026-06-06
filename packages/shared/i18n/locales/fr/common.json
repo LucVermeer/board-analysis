@@ -17,6 +17,14 @@
         "light": "Clair",
         "dark": "Sombre"
       },
+      "uiStyle": {
+        "title": "Style d'interface",
+        "auto": "Automatique",
+        "liquidGlass": "Liquid Glass",
+        "material": "Material",
+        "description": "Automatique choisit Liquid Glass quand ton appareil peut l'afficher, Material partout ailleurs.",
+        "glassUnavailable": "Liquid Glass nécessite iOS 26. Ton appareil utilise Material."
+      },
       "gradeFormat": {
         "title": "Format de cotation",
         "description": "Choisis comment les cotations s'affichent dans l'app.",

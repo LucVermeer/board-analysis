@@ -4,7 +4,13 @@ import { render } from '@testing-library/react';
 import { createElement, type ReactNode } from 'react';
 
 // Controls the rendering branch under test.
-const ctrl = vi.hoisted(() => ({ os: 'ios' as string, glass: true, glassApi: true, rt: false }));
+const ctrl = vi.hoisted(() => ({
+  os: 'ios' as string,
+  glass: true,
+  glassApi: true,
+  rt: false,
+  variant: 'liquidGlass' as 'liquidGlass' | 'material',
+}));
 
 // Minimal RN surface. View renders a <div> exposing its background colour and
 // pointerEvents so the solid path and tint overlays are inspectable.
@@ -42,13 +48,21 @@ vi.mock('../../hooks/use-reduce-transparency', () => ({
 }));
 
 vi.mock('../../providers/theme-provider', () => ({
-  useTheme: () => ({ systemColors: { secondaryBackground: '#1C1C1E' }, colorScheme: 'dark' }),
+  useTheme: () => ({
+    systemColors: { secondaryBackground: '#1C1C1E', elevatedSurface: '#2C2C2E' },
+    colorScheme: 'dark',
+    variant: ctrl.variant,
+  }),
 }));
 
 vi.mock('../../theme/ios-colors', () => ({
   iosDarkColors: { secondaryBackground: '#1C1C1E' },
   iosLightColors: { secondaryBackground: '#F2F2F7' },
 }));
+
+// Real tokens.ts pulls in PlatformColor via ios-colors; the material branch only
+// needs shadows.sm, so stub it.
+vi.mock('../../theme/tokens', () => ({ shadows: { sm: {} } }));
 
 import { GlassSurface } from '../GlassSurface';
 
@@ -57,6 +71,7 @@ beforeEach(() => {
   ctrl.glass = true;
   ctrl.glassApi = true;
   ctrl.rt = false;
+  ctrl.variant = 'liquidGlass';
 });
 
 describe('GlassSurface fallback hierarchy', () => {
@@ -90,6 +105,40 @@ describe('GlassSurface fallback hierarchy', () => {
 
   it('Reduce Transparency takes priority over Liquid Glass — solid surface', () => {
     ctrl.rt = true; // even though iOS 26 + glass are available
+    const { queryByTestId } = render(<GlassSurface />);
+    expect(queryByTestId('glass-view')).toBeNull();
+    expect(queryByTestId('blur-view')).toBeNull();
+  });
+
+  it('renders an opaque Material surface on the Material variant — even on iOS 26 hardware', () => {
+    ctrl.variant = 'material'; // glass is available, but the user chose Material
+    const { queryByTestId, container } = render(<GlassSurface />);
+    expect(queryByTestId('glass-view')).toBeNull();
+    expect(queryByTestId('blur-view')).toBeNull();
+    expect(container.querySelector('[data-bg="#1C1C1E"]')).not.toBeNull();
+  });
+
+  it('composites a translucent fallbackColor over an opaque base (no see-through) on Material', () => {
+    // The climbs search bar passes the faint `fill` token as its fallback; it
+    // must not punch a hole through the surface on the no-glass paths.
+    ctrl.variant = 'material';
+    const { container } = render(<GlassSurface fallbackColor="rgba(1, 2, 3, 0.1)" />);
+    // Opaque secondary-background base is present...
+    expect(container.querySelector('[data-bg="#1C1C1E"]')).not.toBeNull();
+    // ...with the translucent fill layered on top as a tint.
+    expect(container.querySelector('[data-bg="rgba(1, 2, 3, 0.1)"]')).not.toBeNull();
+  });
+
+  it('composites a translucent fallbackColor over an opaque base on the solid path too', () => {
+    ctrl.rt = true; // solid path
+    const { container } = render(<GlassSurface fallbackColor="rgba(1, 2, 3, 0.1)" />);
+    expect(container.querySelector('[data-bg="#1C1C1E"]')).not.toBeNull();
+    expect(container.querySelector('[data-bg="rgba(1, 2, 3, 0.1)"]')).not.toBeNull();
+  });
+
+  it('Reduce Transparency still wins over the Material variant — solid surface', () => {
+    ctrl.variant = 'material';
+    ctrl.rt = true;
     const { queryByTestId } = render(<GlassSurface />);
     expect(queryByTestId('glass-view')).toBeNull();
     expect(queryByTestId('blur-view')).toBeNull();

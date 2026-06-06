@@ -9,7 +9,7 @@ import BottomSheet, {
 import { FullWindowOverlay } from 'react-native-screens';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { hapticMedium } from '../lib/haptics';
-import { sheetAndroid, sheetStyles, spacing } from '../theme/tokens';
+import { sheetStyles, spacing } from '../theme/tokens';
 import { useTheme } from '../providers/theme-provider';
 
 // On iOS a plain BottomSheet renders inside the screen's view tree, so it sits
@@ -67,15 +67,15 @@ export const Sheet = forwardRef<BottomSheet, SheetProps>(function Sheet(
   },
   ref,
 ) {
-  const { systemColors } = useTheme();
+  const { systemColors, sheet: sheetChrome } = useTheme();
   const insets = useSafeAreaInsets();
   const snapPoints = useMemo(() => customSnapPoints ?? ['50%', '90%'], [customSnapPoints]);
 
   const renderBackdrop = useCallback(
     (props: BottomSheetBackdropProps) => (
-      <BottomSheetBackdrop {...props} disappearsOnIndex={-1} appearsOnIndex={0} opacity={sheetAndroid.scrimOpacity} />
+      <BottomSheetBackdrop {...props} disappearsOnIndex={-1} appearsOnIndex={0} opacity={sheetChrome.scrimOpacity} />
     ),
-    [],
+    [sheetChrome.scrimOpacity],
   );
 
   const handleChange = useCallback(
@@ -88,7 +88,7 @@ export const Sheet = forwardRef<BottomSheet, SheetProps>(function Sheet(
 
   const backgroundStyle = {
     ...sheetStyles.background,
-    ...sheetAndroid.corners,
+    ...sheetChrome.corners,
     backgroundColor: systemColors.secondaryBackground,
   };
 
@@ -121,7 +121,7 @@ export const Sheet = forwardRef<BottomSheet, SheetProps>(function Sheet(
       backgroundStyle={backgroundStyle}
       onChange={handleChange}
       onClose={onClose}
-      handleIndicatorStyle={sheetAndroid.handleStyle}
+      handleIndicatorStyle={sheetChrome.handleStyle}
       style={styles.sheet}
     >
       {footer ? (

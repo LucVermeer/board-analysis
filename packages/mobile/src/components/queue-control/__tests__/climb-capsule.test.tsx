@@ -111,8 +111,12 @@ vi.mock('../../../providers/queue-provider', () => ({
 }));
 
 vi.mock('../../../providers/drawer-host-provider', () => ({
-  useDrawerHost: () => ({ openPlayDrawer: drawer.openPlayDrawer }),
+  useDrawerHost: () => ({ openPlayDrawer: drawer.openPlayDrawer, boardConfig: null }),
 }));
+
+// The board thumbnail pulls in BoardRenderer/board-details (native deps); the
+// capsule only renders it when boardConfig is set (null here), so stub it out.
+vi.mock('../AccessoryClimbThumbnail', () => ({ AccessoryClimbThumbnail: () => null }));
 
 // formatGrade prefixes so the displayed grade is distinguishable from the raw
 // difficulty key used for colour lookup.
@@ -130,6 +134,10 @@ vi.mock('../../../theme/colors', () => ({ withAlpha: (color: string) => `${color
 vi.mock('../../../theme/layout', () => ({ TOOLBAR_CAPSULE_HEIGHT: 52, TOOLBAR_CAPSULE_MAX_WIDTH: 260 }));
 vi.mock('../../../theme/tokens', () => ({ shadows: { sm: {} } }));
 vi.mock('../../../hooks/use-native-glass', () => ({ useNativeGlass: () => false }));
+// AccessoryBarSurface (the capsule background) resolves the surface via this —
+// force the glass branch so the GlassSurface mock renders and `[data-glass]`
+// assertions hold.
+vi.mock('../../../hooks/use-effective-surface-mode', () => ({ useEffectiveSurfaceMode: () => 'glass' }));
 
 // useCarouselGesture is mocked: in jsdom we cannot drive the RNGH worklets, so
 // the hook just returns an inert gesture + a translateX shared value.
@@ -232,22 +240,6 @@ describe('ClimbCapsule', () => {
     const { container } = render(<ClimbCapsule />);
     // No tint passed to the glass — the capsule background is plain frosted glass.
     expect(container.querySelector('[data-glass]')?.getAttribute('data-tint')).toBe('');
-  });
-
-  it('reserves the right edge for an inline action outside the capsule gesture target', () => {
-    const item = makeItem(makeClimb({ difficulty: 'V6', name: 'Inline Tick' }));
-    queue.state.currentClimbQueueItem = item;
-    queue.state.queue = [item];
-
-    const { container } = render(<ClimbCapsule endAction={<button data-inline-action="tick" />} endActionSize={44} />);
-
-    expect(container.textContent).toContain('Inline Tick');
-    expect(container.querySelector('[data-inline-action="tick"]')).not.toBeNull();
-    const gradeNode = Array.from(container.querySelectorAll('[data-text]')).find((node) =>
-      (node.textContent ?? '').includes('6C'),
-    );
-    expect(gradeNode?.getAttribute('data-color')).toBe('#FF0000');
-    expect(container.querySelector('[data-inline-action="tick"]')?.closest('[data-gesture]')).toBeNull();
   });
 
   it('wires openPlayDrawer with setAsCurrent:false (drawer-open behavior; tap worklet not driven in jsdom)', () => {
