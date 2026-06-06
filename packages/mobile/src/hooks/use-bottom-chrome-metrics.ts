@@ -3,7 +3,7 @@ import { useSegments } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQueue } from '../providers/queue-provider';
 import { isTabsRoute } from '../lib/route-segments';
-import { isBottomAccessoryAvailable } from './use-bottom-accessory';
+import { useNativeAccessoryActive } from './use-bottom-accessory';
 import { computeBottomChromeMetrics } from './bottom-chrome-metrics';
 
 /**
@@ -18,7 +18,8 @@ export function useBottomChromeMetrics() {
 
   const hasCurrentClimb = state.currentClimbQueueItem?.climb != null;
   const insideTabs = isTabsRoute(segments);
-  const nativeAccessoryMounted = insideTabs && isBottomAccessoryAvailable();
+  const nativeAccessoryActive = useNativeAccessoryActive();
+  const nativeAccessoryMounted = insideTabs && nativeAccessoryActive;
 
   return useMemo(
     () =>

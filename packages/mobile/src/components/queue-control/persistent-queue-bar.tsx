@@ -2,33 +2,24 @@
  * PersistentQueueBar — the floating climb toolbar that mounts at the app root
  * and is visible on every screen while a current climb is set.
  *
- * Just the global climb capsule now, floating above the tab bar (iOS-Photos
- * style, no opaque card):
+ * It is a thin adapter: it decides *whether* the climb bar should show (a current
+ * climb exists and the native iOS 26 bottom accessory isn't already owning it),
+ * then hands the climb capsule + log-ascent tick to the content-agnostic
+ * {@link ActiveContextBar} for layout:
+ *
  *   [ grade · climb name ]            [ ✓ tick ]
  *     ↑ tap = PlayDrawer                ↑ log ascent — shown on every tab so the
  *       swipe = prev/next                 fallback matches the always-on iOS 26
  *                                         bottom accessory (current climb + tick)
  *
- * The native iOS 26 bottom accessory owns this same current climb + tick pair.
- * On that path this JS fallback returns null so the tab bar minimization behavior
- * comes from UIKit.
+ * On the Liquid Glass variant on iOS 26 the native bottom accessory owns this
+ * same pair, so `jsQueueToolbarVisible` is false here and this returns null.
  */
 
-import { View, StyleSheet } from 'react-native';
-import Animated, { FadeIn } from 'react-native-reanimated';
-import { timing } from '../../theme/animations';
-import {
-  TOOLBAR_RESERVE,
-  TOOLBAR_SIDE_MARGIN,
-  TOOLBAR_GAP,
-  TOOLBAR_FAB_SIZE,
-  TOOLBAR_GAP_ABOVE_TABBAR,
-  TAB_BAR_HEIGHT,
-  glassSize,
-} from '../../theme/layout';
+import { TOOLBAR_RESERVE, TAB_BAR_HEIGHT } from '../../theme/layout';
 import { useQueue } from '../../providers/queue-provider';
-import { useReduceMotion } from '../../hooks/use-reduce-motion';
 import { useBottomChromeMetrics } from '../../hooks/use-bottom-chrome-metrics';
+import { ActiveContextBar } from './ActiveContextBar';
 import { ClimbCapsule } from './ClimbCapsule';
 import { LogAscentFab } from './LogAscentFab';
 
@@ -38,7 +29,6 @@ export { TOOLBAR_RESERVE, TAB_BAR_HEIGHT };
 
 export function PersistentQueueBar() {
   const { state } = useQueue();
-  const reduceMotion = useReduceMotion();
   const bottomChrome = useBottomChromeMetrics();
 
   const currentClimb = state.currentClimbQueueItem?.climb;
@@ -46,55 +36,5 @@ export function PersistentQueueBar() {
   if (!bottomChrome.jsQueueToolbarVisible) return null;
   if (!currentClimb) return null;
 
-  return (
-    <Animated.View
-      entering={reduceMotion ? undefined : FadeIn.duration(timing.normal)}
-      pointerEvents="box-none"
-      style={[styles.toolbar, { bottom: bottomChrome.tabBarBottom + TOOLBAR_GAP_ABOVE_TABBAR }]}
-    >
-      <Animated.View style={styles.row} pointerEvents="box-none" importantForAccessibility="auto">
-        <View style={styles.sideSlot} pointerEvents="none" />
-        <View style={styles.centerSlot} pointerEvents="box-none">
-          <ClimbCapsule />
-        </View>
-        <View style={styles.heroSlot} pointerEvents="box-none">
-          <LogAscentFab climb={currentClimb} />
-        </View>
-      </Animated.View>
-    </Animated.View>
-  );
+  return <ActiveContextBar primary={<ClimbCapsule />} trailing={<LogAscentFab climb={currentClimb} />} />;
 }
-
-const styles = StyleSheet.create({
-  toolbar: {
-    position: 'absolute',
-    left: TOOLBAR_SIDE_MARGIN,
-    right: TOOLBAR_SIDE_MARGIN,
-    // `bottom` is set inline from the safe-area inset + tab-bar height so the
-    // islands float just above the tab bar.
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: TOOLBAR_GAP,
-  },
-  centerSlot: {
-    flex: 1,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  // Left gutter spacer: balances the capsule so it reads centered between the
-  // screen edge and the standalone tick (which now shows on every tab).
-  sideSlot: {
-    width: TOOLBAR_FAB_SIZE,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  // Standalone log-ascent tick (hero size), shown on every tab.
-  heroSlot: {
-    width: glassSize.hero,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});

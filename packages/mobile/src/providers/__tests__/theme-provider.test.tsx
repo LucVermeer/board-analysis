@@ -32,8 +32,15 @@ vi.mock('react-native', () => ({
   Appearance: { setColorScheme: vi.fn() },
 }));
 
+// useGlassCapability imports these; under jsdom (Platform.OS='android') the
+// capability is false regardless, but the import must resolve.
+vi.mock('expo-glass-effect', () => ({
+  isLiquidGlassAvailable: () => false,
+  isGlassEffectAPIAvailable: () => false,
+}));
+
 import { ThemeProvider, useTheme } from '../theme-provider';
-import { THEME_OVERRIDE_KEY } from '@boardsesh/key-value-storage';
+import { THEME_OVERRIDE_KEY, UI_VARIANT_KEY } from '@boardsesh/key-value-storage';
 
 const wrapper = ({ children }: { children: ReactNode }) => <ThemeProvider>{children}</ThemeProvider>;
 
@@ -130,6 +137,49 @@ describe('ThemeProvider', () => {
       });
 
       expect(result.current.themeOverride).toBe('dark');
+    });
+  });
+
+  describe('uiVariant', () => {
+    it("defaults to the Material variant on a non-glass device ('auto' → material)", async () => {
+      const { result } = renderHook(() => useTheme(), { wrapper });
+      await waitFor(() => expect(getMock).toHaveBeenCalledWith(UI_VARIANT_KEY));
+      expect(result.current.uiVariantPreference).toBe('auto');
+      expect(result.current.variant).toBe('material');
+      // Material maps M3 tonal surfaces + the 20dp button radius.
+      expect(result.current.radii.button).toBe(20);
+      expect(result.current.systemColors.background).toBe('#F4ECEC');
+    });
+
+    it('setUiVariant persists to SecureStore and flips the resolved variant + tokens', async () => {
+      const { result } = renderHook(() => useTheme(), { wrapper });
+      await waitFor(() => expect(getMock).toHaveBeenCalledWith(UI_VARIANT_KEY));
+
+      await act(async () => {
+        await result.current.setUiVariant('liquidGlass');
+      });
+
+      expect(result.current.uiVariantPreference).toBe('liquidGlass');
+      expect(result.current.variant).toBe('liquidGlass');
+      // Liquid Glass keeps the soft 10dp button radius and the (Android) system
+      // surface — not the Material tonal map.
+      expect(result.current.radii.button).toBe(10);
+      expect(result.current.systemColors.background).toBe('#FFFFFF');
+      expect(setMock).toHaveBeenCalledWith(UI_VARIANT_KEY, 'liquidGlass');
+    });
+
+    it('hydrates a stored variant preference on mount', async () => {
+      getMock.mockImplementation((key: string) => Promise.resolve(key === UI_VARIANT_KEY ? 'liquidGlass' : null));
+      const { result } = renderHook(() => useTheme(), { wrapper });
+      await waitFor(() => expect(result.current.uiVariantPreference).toBe('liquidGlass'));
+      expect(result.current.variant).toBe('liquidGlass');
+    });
+
+    it('ignores a stored value that is not a UiVariantPreference', async () => {
+      getMock.mockImplementation((key: string) => Promise.resolve(key === UI_VARIANT_KEY ? 'frosted' : null));
+      const { result } = renderHook(() => useTheme(), { wrapper });
+      await waitFor(() => expect(getMock).toHaveBeenCalledWith(UI_VARIANT_KEY));
+      expect(result.current.uiVariantPreference).toBe('auto');
     });
   });
 

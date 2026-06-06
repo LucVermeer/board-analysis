@@ -1,31 +1,23 @@
-// The toolbar's center element: a frosted-glass pill showing the current climb's
-// name with the grade colorized on the right — the same treatment as the climb
-// list rows. Tap opens the PlayDrawer; horizontal swipe steps the queue
-// (prev/next) with the neighbouring climb peeking in — the same carousel feel as
-// the play drawer. A faint grade wash tints the glass. Extracted from the old
-// queue bar so the swipe/peek + drawer wiring is shared.
+// The toolbar's center element: a floating pill showing the current climb's name
+// with the grade colorized on the right — the same treatment as the climb list
+// rows. Tap opens the PlayDrawer; horizontal swipe steps the queue (prev/next)
+// with the neighbouring climb peeking in. The pill's background adapts to the UI
+// variant (Liquid Glass / Material / fallback) via AccessoryBarSurface; the
+// swipe/peek/tap behaviour is shared with the native accessory via useQueueCarousel.
 
-import { type ReactNode, useCallback, useMemo, useState } from 'react';
-import { View, StyleSheet, type ColorValue, type LayoutChangeEvent } from 'react-native';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import Animated, { runOnJS, useAnimatedStyle, useDerivedValue } from 'react-native-reanimated';
-import { useTranslation } from 'react-i18next';
-import { computePeekOffset, computeNavigationStateWithSuggestions } from '@boardsesh/play-view';
+import { useMemo } from 'react';
+import { View, StyleSheet, type ColorValue } from 'react-native';
+import { GestureDetector } from 'react-native-gesture-handler';
+import Animated from 'react-native-reanimated';
 import { getGradeColor, DEFAULT_GRADE_COLOR } from '@boardsesh/board-constants/grade-colors';
 import type { ClimbQueueItem } from '@boardsesh/queue';
-import { shadows } from '../../theme/tokens';
 import { TOOLBAR_CAPSULE_HEIGHT, TOOLBAR_CAPSULE_MAX_WIDTH } from '../../theme/layout';
 import { CHROME_LABEL_MAX_FONT_SCALE } from '../../theme/typography';
 import { useGradeFormat } from '../../hooks/use-grade-format';
-import { useReduceMotion } from '../../hooks/use-reduce-motion';
-import { useNativeGlass } from '../../hooks/use-native-glass';
 import { Text } from '../Text';
-import { GlassSurface } from '../GlassSurface';
 import { useTheme } from '../../providers/theme-provider';
-import { useQueue } from '../../providers/queue-provider';
-import { useDrawerHost } from '../../providers/drawer-host-provider';
-import { hapticLight, hapticSelection } from '../../lib/haptics';
-import { useCarouselGesture } from '../play-drawer/use-carousel-gesture';
+import { AccessoryBarSurface } from './AccessoryBarSurface';
+import { useQueueCarousel } from './use-queue-carousel';
 
 type ClimbDisplay = {
   difficulty: string | null | undefined;
@@ -72,182 +64,49 @@ function ClimbLabel({ display, labelColor, formattedGrade, gradeColor }: ClimbLa
 }
 
 type ClimbCapsuleProps = {
-  /**
-   * Render without the capsule's own glass pill / border / shadow. Used inside
-   * the iOS 26 tab-bar bottom accessory, which is itself a Liquid Glass platter —
-   * a second glass surface there would read as glass-on-glass. Keeps the label
-   * + swipe/tap gestures; just drops the background chrome.
-   */
-  bare?: boolean;
-  /**
-   * Let the capsule fill its parent. Used by the native bottom accessory where
-   * UIKit's platter is wider than the standalone floating capsule cap.
-   */
-  fillWidth?: boolean;
-  /** Optional right-side action rendered inside the capsule chrome. */
-  endAction?: ReactNode;
-  endActionSize?: number;
   height?: number;
 };
 
-export function ClimbCapsule({
-  bare = false,
-  fillWidth = false,
-  endAction,
-  endActionSize = 0,
-  height = TOOLBAR_CAPSULE_HEIGHT,
-}: ClimbCapsuleProps) {
-  const { state, nextClimb, previousClimb, playlistSuggestionSource } = useQueue();
-  const { openPlayDrawer } = useDrawerHost();
+export function ClimbCapsule({ height = TOOLBAR_CAPSULE_HEIGHT }: ClimbCapsuleProps) {
   const { systemColors } = useTheme();
-  const { t } = useTranslation('session');
   const { formatGrade } = useGradeFormat();
-  const reduceMotion = useReduceMotion();
-  const nativeGlass = useNativeGlass();
+  const {
+    onLayout,
+    composedGesture,
+    currentLabelStyle,
+    nextPeekStyle,
+    prevPeekStyle,
+    currentItem,
+    previousItem,
+    nextItem,
+    handleNext,
+    handlePrevious,
+    swipeAccessibilityActions,
+  } = useQueueCarousel();
 
-  const [width, setWidth] = useState(0);
-
-  const { currentClimbQueueItem, queue } = state;
-
-  // Suggestion-aware so the capsule carousel matches the play drawer: at the
-  // queue tail of an active playlist, `nextItem` falls through to the next
-  // playlist climb (a transient "peek") instead of stopping. canPrevious/prevItem
-  // stay queue-only — there is no backward suggestion fall-through.
-  const { canPrevious, canNext, nextItem, prevItem } = useMemo(
-    () => computeNavigationStateWithSuggestions(queue, currentClimbQueueItem, playlistSuggestionSource),
-    [queue, currentClimbQueueItem, playlistSuggestionSource],
-  );
-  const previousItem = prevItem;
-
-  const handleNext = useCallback(() => {
-    hapticSelection();
-    nextClimb();
-  }, [nextClimb]);
-
-  const handlePrevious = useCallback(() => {
-    hapticSelection();
-    previousClimb();
-  }, [previousClimb]);
-
-  const { gesture: panGesture, translateX } = useCarouselGesture({
-    onSwipeNext: handleNext,
-    onSwipePrevious: handlePrevious,
-    canSwipeNext: canNext,
-    canSwipePrevious: canPrevious,
-    boardWidth: width,
-    enabled: width > 0,
-    reduceMotion,
-  });
-
-  const handleOpenPlay = useCallback(() => {
-    if (!currentClimbQueueItem?.climb) return;
-    hapticLight();
-    // Opening the drawer for the already-current climb; opting out of
-    // setAsCurrent avoids duplicating it at the end of the queue.
-    openPlayDrawer(currentClimbQueueItem.climb, { setAsCurrent: false });
-  }, [openPlayDrawer, currentClimbQueueItem]);
-
-  const tapGesture = useMemo(
-    () =>
-      Gesture.Tap()
-        .maxDuration(250)
-        .onEnd(() => {
-          'worklet';
-          runOnJS(handleOpenPlay)();
-        }),
-    [handleOpenPlay],
-  );
-
-  // Swipe up to open the drawer — a quick alternative to tapping (like dragging a
-  // now-playing chip up to full screen). Activates only on upward movement and
-  // bails on horizontal travel, so the prev/next carousel keeps the sideways
-  // swipes. Opens on a decisive drag or a fast upward flick.
-  const swipeUpGesture = useMemo(
-    () =>
-      Gesture.Pan()
-        .activeOffsetY(-12)
-        .failOffsetX([-20, 20])
-        .onEnd((event) => {
-          'worklet';
-          if (event.translationY < -40 || event.velocityY < -600) {
-            runOnJS(handleOpenPlay)();
-          }
-        }),
-    [handleOpenPlay],
-  );
-
-  const composedGesture = useMemo(
-    () => Gesture.Race(panGesture, swipeUpGesture, tapGesture),
-    [panGesture, swipeUpGesture, tapGesture],
-  );
-
-  const onLayout = useCallback((event: LayoutChangeEvent) => {
-    setWidth(event.nativeEvent.layout.width);
-  }, []);
-
-  const currentLabelStyle = useAnimatedStyle(() => ({ transform: [{ translateX: translateX.value }] }));
-  const nextPeekX = useDerivedValue(() =>
-    computePeekOffset({ direction: 'next', swipeOffset: translateX.value, viewportWidth: width }),
-  );
-  const prevPeekX = useDerivedValue(() =>
-    computePeekOffset({ direction: 'prev', swipeOffset: translateX.value, viewportWidth: width }),
-  );
-  const nextPeekStyle = useAnimatedStyle(() => ({ transform: [{ translateX: nextPeekX.value }] }));
-  const prevPeekStyle = useAnimatedStyle(() => ({ transform: [{ translateX: prevPeekX.value }] }));
-
-  const currentDisplay = climbDisplay(currentClimbQueueItem);
+  const currentDisplay = climbDisplay(currentItem);
   const previousDisplay = climbDisplay(previousItem);
   const nextDisplay = climbDisplay(nextItem);
 
+  const grades = useMemo(() => {
+    const color = (display: ClimbDisplay | null) =>
+      display ? (getGradeColor(display.difficulty) ?? DEFAULT_GRADE_COLOR) : DEFAULT_GRADE_COLOR;
+    return {
+      current: currentDisplay ? formatGrade(currentDisplay.difficulty) : null,
+      previous: previousDisplay ? formatGrade(previousDisplay.difficulty) : null,
+      next: nextDisplay ? formatGrade(nextDisplay.difficulty) : null,
+      currentColor: color(currentDisplay),
+      previousColor: color(previousDisplay),
+      nextColor: color(nextDisplay),
+    };
+  }, [currentDisplay, previousDisplay, nextDisplay, formatGrade]);
+
   if (!currentDisplay) return null;
 
-  // Swipe is invisible to VoiceOver — expose prev/next as custom actions on the
-  // capsule (rotor / two-finger swipe), gated on the same edge guards.
-  const swipeAccessibilityActions = [
-    ...(canPrevious ? [{ name: 'previous', label: t('mobile.queue.previousClimb') }] : []),
-    ...(canNext ? [{ name: 'next', label: t('mobile.queue.nextClimb') }] : []),
-  ];
-
-  const currentFormatted = formatGrade(currentDisplay.difficulty);
-  const previousFormatted = previousDisplay ? formatGrade(previousDisplay.difficulty) : null;
-  const nextFormatted = nextDisplay ? formatGrade(nextDisplay.difficulty) : null;
-
-  const currentGradeColor = getGradeColor(currentDisplay.difficulty) ?? DEFAULT_GRADE_COLOR;
-  const previousGradeColor = previousDisplay
-    ? (getGradeColor(previousDisplay.difficulty) ?? DEFAULT_GRADE_COLOR)
-    : DEFAULT_GRADE_COLOR;
-  const nextGradeColor = nextDisplay
-    ? (getGradeColor(nextDisplay.difficulty) ?? DEFAULT_GRADE_COLOR)
-    : DEFAULT_GRADE_COLOR;
-  const endActionReservedWidth = endAction ? endActionSize + 8 : 0;
-  const labelSlotRight = 16 + endActionReservedWidth;
   const capsuleRadius = height / 2;
 
   return (
-    <View
-      style={[
-        styles.capsule,
-        { height, borderRadius: capsuleRadius },
-        fillWidth ? styles.fillWidthCapsule : null,
-        // Native Liquid Glass draws its own edge + lift; the hairline border and
-        // shadow are only needed on the blur/solid fallback. `bare` (inside the
-        // native accessory's own glass platter) drops all background chrome.
-        !bare && !nativeGlass && shadows.sm,
-        !bare && !nativeGlass && { borderWidth: StyleSheet.hairlineWidth, borderColor: systemColors.separator },
-      ]}
-    >
-      {/* Neutral frosted glass — no grade-hued wash. The colorized grade text
-          carries the grade; the capsule background stays a plain glass surface.
-          Omitted in `bare` mode (the accessory platter is the glass). */}
-      {bare ? null : (
-        <GlassSurface
-          glassEffectStyle="regular"
-          fallbackColor={systemColors.elevatedSurface}
-          borderRadius={capsuleRadius}
-          style={StyleSheet.absoluteFill}
-          pointerEvents="none"
-        />
-      )}
+    <AccessoryBarSurface height={height} borderRadius={capsuleRadius} style={styles.capsule}>
       <GestureDetector gesture={composedGesture}>
         <View
           style={[styles.swipeArea, { height, borderRadius: capsuleRadius }]}
@@ -260,12 +119,12 @@ export function ClimbCapsule({
             else if (event.nativeEvent.actionName === 'previous') handlePrevious();
           }}
         >
-          <Animated.View style={[styles.labelSlot, { right: labelSlotRight }, currentLabelStyle]}>
+          <Animated.View style={[styles.labelSlot, currentLabelStyle]}>
             <ClimbLabel
               display={currentDisplay}
               labelColor={systemColors.label}
-              formattedGrade={currentFormatted}
-              gradeColor={currentGradeColor}
+              formattedGrade={grades.current}
+              gradeColor={grades.currentColor}
             />
           </Animated.View>
           {nextDisplay ? (
@@ -273,8 +132,8 @@ export function ClimbCapsule({
               <ClimbLabel
                 display={nextDisplay}
                 labelColor={systemColors.label}
-                formattedGrade={nextFormatted}
-                gradeColor={nextGradeColor}
+                formattedGrade={grades.next}
+                gradeColor={grades.nextColor}
               />
             </Animated.View>
           ) : null}
@@ -283,15 +142,14 @@ export function ClimbCapsule({
               <ClimbLabel
                 display={previousDisplay}
                 labelColor={systemColors.label}
-                formattedGrade={previousFormatted}
-                gradeColor={previousGradeColor}
+                formattedGrade={grades.previous}
+                gradeColor={grades.previousColor}
               />
             </Animated.View>
           ) : null}
         </View>
       </GestureDetector>
-      {endAction ? <View style={[styles.endActionSlot, { width: endActionSize, height }]}>{endAction}</View> : null}
-    </View>
+    </AccessoryBarSurface>
   );
 }
 
@@ -299,10 +157,6 @@ const styles = StyleSheet.create({
   capsule: {
     flex: 1,
     maxWidth: TOOLBAR_CAPSULE_MAX_WIDTH,
-  },
-  fillWidthCapsule: {
-    width: '100%',
-    maxWidth: '100%',
   },
   swipeArea: {
     flex: 1,
@@ -314,13 +168,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 16,
     right: 16,
-    justifyContent: 'center',
-  },
-  endActionSlot: {
-    position: 'absolute',
-    top: 0,
-    right: 8,
-    alignItems: 'center',
     justifyContent: 'center',
   },
   peekSlot: {

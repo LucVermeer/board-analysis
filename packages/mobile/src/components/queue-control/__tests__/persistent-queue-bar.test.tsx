@@ -45,9 +45,14 @@ vi.mock('../../../theme/layout', () => ({
   TOOLBAR_GAP_ABOVE_TABBAR: 10,
   glassSize: { hero: 64 },
 }));
-// Legacy bar renders only where the native bottom accessory doesn't (Android /
-// iOS < 26) — force that path so the capsule/tick assertions hold.
-vi.mock('../../../hooks/use-bottom-accessory', () => ({ isBottomAccessoryAvailable: () => false }));
+// The floating bar renders only where the native bottom accessory doesn't
+// (Material variant / iOS < 26 / Android) — force that path so the capsule/tick
+// assertions hold. `useNativeAccessoryActive` is what use-bottom-chrome-metrics
+// reads now (variant-aware); the capability function stays for other callers.
+vi.mock('../../../hooks/use-bottom-accessory', () => ({
+  isBottomAccessoryAvailable: () => false,
+  useNativeAccessoryActive: () => false,
+}));
 vi.mock('../ClimbCapsule', () => ({ ClimbCapsule: () => createElement('div', { 'data-capsule': 'true' }) }));
 vi.mock('../LogAscentFab', () => ({ LogAscentFab: () => createElement('div', { 'data-tick': 'true' }) }));
 

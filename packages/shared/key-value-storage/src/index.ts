@@ -8,3 +8,4 @@
 
 export type { KeyValueStorage } from './storage';
 export { THEME_OVERRIDE_KEY, isThemeOverride, type ThemeOverride } from './theme';
+export { UI_VARIANT_KEY, isUiVariantPreference, type UiVariantPreference } from './ui-variant';

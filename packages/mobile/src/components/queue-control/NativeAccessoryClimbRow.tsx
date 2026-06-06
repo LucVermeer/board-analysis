@@ -1,24 +1,19 @@
-import { useCallback, useMemo, useState } from 'react';
-import { StyleSheet, View, type ColorValue, type LayoutChangeEvent } from 'react-native';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import Animated, { runOnJS, useAnimatedStyle, useDerivedValue } from 'react-native-reanimated';
-import { useTranslation } from 'react-i18next';
+import { useMemo } from 'react';
+import { StyleSheet, View, type ColorValue } from 'react-native';
+import { GestureDetector } from 'react-native-gesture-handler';
+import Animated from 'react-native-reanimated';
 import type { BoardName } from '@boardsesh/shared-schema';
 import type { Climb, ClimbQueueItem } from '@boardsesh/queue';
-import { computePeekOffset, computeNavigationStateWithSuggestions } from '@boardsesh/play-view';
 import { getBoardRenderData } from '../../lib/board-details';
 import { useGradeFormat } from '../../hooks/use-grade-format';
-import { useReduceMotion } from '../../hooks/use-reduce-motion';
 import { useTheme } from '../../providers/theme-provider';
-import { useQueue } from '../../providers/queue-provider';
 import { useDrawerHost, type BoardConfig } from '../../providers/drawer-host-provider';
-import { hapticLight, hapticSelection } from '../../lib/haptics';
 import { spacing } from '../../theme/tokens';
 import { glassSize } from '../../theme/layout';
 import { CHROME_LABEL_MAX_FONT_SCALE } from '../../theme/typography';
 import { Text } from '../Text';
 import { BoardRenderer } from '../board-renderer/BoardRenderer';
-import { useCarouselGesture } from '../play-drawer/use-carousel-gesture';
+import { useQueueCarousel } from './use-queue-carousel';
 import { LogAscentToolbarButton } from './LogAscentToolbarButton';
 
 type AccessoryPlacement = 'regular' | 'inline';
@@ -138,110 +133,35 @@ function climbFromItem(item: ClimbQueueItem | null | undefined): Climb | null {
   return item?.climb ?? null;
 }
 
+/**
+ * Content for the iOS 26 tab-bar bottom accessory (Liquid Glass variant only).
+ * UIKit supplies the glass platter, so this stays bare: current climb + tick,
+ * with the same swipe/peek carousel as the floating capsule (shared via
+ * useQueueCarousel). Its plain grade + board thumbnail are tuned for the platter,
+ * so they intentionally differ from the floating capsule's colorized grade.
+ */
 export function NativeAccessoryClimbRow({ placement, width }: NativeAccessoryClimbRowProps) {
-  const {
-    state,
-    nextClimb: navigateNextClimb,
-    previousClimb: navigatePreviousClimb,
-    playlistSuggestionSource,
-  } = useQueue();
-  const { boardConfig, openPlayDrawer } = useDrawerHost();
+  const { boardConfig } = useDrawerHost();
   const { systemColors } = useTheme();
-  const { t } = useTranslation('session');
   const { formatGrade } = useGradeFormat();
-  const reduceMotion = useReduceMotion();
-  const [clipWidth, setClipWidth] = useState(0);
+  const {
+    onLayout,
+    composedGesture,
+    currentLabelStyle,
+    nextPeekStyle,
+    prevPeekStyle,
+    currentItem,
+    previousItem,
+    nextItem,
+    handleNext,
+    handlePrevious,
+    swipeAccessibilityActions,
+  } = useQueueCarousel();
 
-  const { currentClimbQueueItem, queue } = state;
-  const currentClimb = climbFromItem(currentClimbQueueItem);
-
-  // Suggestion-aware so the carousel matches the play drawer: at the queue tail
-  // of an active playlist, `nextItem` falls through to the next playlist climb
-  // (a transient "peek") instead of dead-ending. canPrevious/prevItem stay
-  // queue-only — there is no backward suggestion fall-through.
-  const { canPrevious, canNext, nextItem, prevItem } = useMemo(
-    () => computeNavigationStateWithSuggestions(queue, currentClimbQueueItem, playlistSuggestionSource),
-    [queue, currentClimbQueueItem, playlistSuggestionSource],
-  );
-  const previousClimb = climbFromItem(prevItem);
+  const currentClimb = climbFromItem(currentItem);
+  const previousClimb = climbFromItem(previousItem);
   const nextQueueClimb = climbFromItem(nextItem);
   const showThumbnail = placement === 'regular' && boardConfig !== null;
-
-  const handleNext = useCallback(() => {
-    hapticSelection();
-    navigateNextClimb();
-  }, [navigateNextClimb]);
-
-  const handlePrevious = useCallback(() => {
-    hapticSelection();
-    navigatePreviousClimb();
-  }, [navigatePreviousClimb]);
-
-  const handleOpenPlay = useCallback(() => {
-    if (!currentClimb) return;
-    hapticLight();
-    openPlayDrawer(currentClimb, { setAsCurrent: false });
-  }, [openPlayDrawer, currentClimb]);
-
-  const { gesture: panGesture, translateX } = useCarouselGesture({
-    onSwipeNext: handleNext,
-    onSwipePrevious: handlePrevious,
-    canSwipeNext: canNext,
-    canSwipePrevious: canPrevious,
-    boardWidth: clipWidth,
-    enabled: clipWidth > 0,
-    reduceMotion,
-  });
-
-  const tapGesture = useMemo(
-    () =>
-      Gesture.Tap()
-        .maxDuration(250)
-        .onEnd(() => {
-          'worklet';
-          runOnJS(handleOpenPlay)();
-        }),
-    [handleOpenPlay],
-  );
-
-  const swipeUpGesture = useMemo(
-    () =>
-      Gesture.Pan()
-        .activeOffsetY(-12)
-        .failOffsetX([-20, 20])
-        .onEnd((event) => {
-          'worklet';
-          if (event.translationY < -40 || event.velocityY < -600) {
-            runOnJS(handleOpenPlay)();
-          }
-        }),
-    [handleOpenPlay],
-  );
-
-  const composedGesture = useMemo(
-    () => Gesture.Race(panGesture, swipeUpGesture, tapGesture),
-    [panGesture, swipeUpGesture, tapGesture],
-  );
-
-  const onClipLayout = useCallback((event: LayoutChangeEvent) => {
-    setClipWidth(event.nativeEvent.layout.width);
-  }, []);
-
-  const currentLabelStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: translateX.value }],
-  }));
-  const nextPeekX = useDerivedValue(() =>
-    computePeekOffset({ direction: 'next', swipeOffset: translateX.value, viewportWidth: clipWidth }),
-  );
-  const previousPeekX = useDerivedValue(() =>
-    computePeekOffset({ direction: 'prev', swipeOffset: translateX.value, viewportWidth: clipWidth }),
-  );
-  const nextPeekStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: nextPeekX.value }],
-  }));
-  const previousPeekStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: previousPeekX.value }],
-  }));
 
   if (!currentClimb) return null;
 
@@ -249,17 +169,13 @@ export function NativeAccessoryClimbRow({ placement, width }: NativeAccessoryCli
   const currentFormattedGrade = formatGrade(currentClimb.difficulty);
   const previousFormattedGrade = previousClimb ? formatGrade(previousClimb.difficulty) : null;
   const nextFormattedGrade = nextQueueClimb ? formatGrade(nextQueueClimb.difficulty) : null;
-  const swipeAccessibilityActions = [
-    ...(canPrevious ? [{ name: 'previous', label: t('mobile.queue.previousClimb') }] : []),
-    ...(canNext ? [{ name: 'next', label: t('mobile.queue.nextClimb') }] : []),
-  ];
 
   return (
     <View style={[styles.row, { width, height: rowHeight }]}>
       <GestureDetector gesture={composedGesture}>
         <View
           style={styles.swipeClip}
-          onLayout={onClipLayout}
+          onLayout={onLayout}
           accessibilityRole="button"
           accessibilityLabel={currentClimb.name}
           accessibilityActions={swipeAccessibilityActions}
@@ -289,7 +205,7 @@ export function NativeAccessoryClimbRow({ placement, width }: NativeAccessoryCli
             </Animated.View>
           ) : null}
           {previousClimb ? (
-            <Animated.View style={[styles.peekSlot, previousPeekStyle]} pointerEvents="none">
+            <Animated.View style={[styles.peekSlot, prevPeekStyle]} pointerEvents="none">
               <ClimbLabel
                 climb={previousClimb}
                 labelColor={systemColors.label}

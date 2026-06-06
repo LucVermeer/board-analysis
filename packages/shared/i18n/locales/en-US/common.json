@@ -17,6 +17,14 @@
         "light": "Light",
         "dark": "Dark"
       },
+      "uiStyle": {
+        "title": "UI style",
+        "auto": "Auto",
+        "liquidGlass": "Liquid Glass",
+        "material": "Material",
+        "description": "Auto picks Liquid Glass where your device can render it, Material everywhere else.",
+        "glassUnavailable": "Liquid Glass needs iOS 26. Your device runs Material."
+      },
       "gradeFormat": {
         "title": "Grade format",
         "description": "Choose how climb grades read across the app.",

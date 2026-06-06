@@ -215,6 +215,14 @@
         "light": "Claro",
         "dark": "Oscuro"
       },
+      "uiStyle": {
+        "title": "Estilo de interfaz",
+        "auto": "Automático",
+        "liquidGlass": "Liquid Glass",
+        "material": "Material",
+        "description": "Automático usa Liquid Glass donde tu dispositivo puede mostrarlo y Material en el resto.",
+        "glassUnavailable": "Liquid Glass requiere iOS 26. Tu dispositivo usa Material."
+      },
       "gradeFormat": {
         "title": "Formato de grado",
         "description": "Elige cómo se muestran los grados en la app.",

@@ -1,10 +1,28 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Appearance, Platform, useColorScheme, type ColorValue } from 'react-native';
-import { THEME_OVERRIDE_KEY, isThemeOverride, type ThemeOverride } from '@boardsesh/key-value-storage';
-import { iosSystemColors, brandColors, androidFallbackColors } from '../theme/colors';
+import {
+  THEME_OVERRIDE_KEY,
+  isThemeOverride,
+  type ThemeOverride,
+  UI_VARIANT_KEY,
+  isUiVariantPreference,
+  type UiVariantPreference,
+} from '@boardsesh/key-value-storage';
+import { iosSystemColors, brandColors, androidFallbackColors, materialSurfaces } from '../theme/colors';
 import { textStyles, type TextVariant } from '../theme/typography';
-import { spacing, borderRadius, shadows, opacity } from '../theme/tokens';
+import {
+  spacing,
+  borderRadius,
+  shadows,
+  opacity,
+  radiiByVariant,
+  sheetChromeByVariant,
+  type Radii,
+  type SheetChrome,
+} from '../theme/tokens';
 import { springs, timing } from '../theme/animations';
+import { resolveUiVariant, type UiVariant } from '../theme/resolve-ui-variant';
+import { useGlassCapability } from '../hooks/use-glass-capability';
 import { secureStorePreferences } from '../lib/preferences/secure-store-adapter';
 
 type ColorScheme = 'light' | 'dark';
@@ -39,6 +57,15 @@ type Theme = {
   timing: typeof timing;
   themeOverride: ThemeOverride;
   setThemeOverride: (next: ThemeOverride) => Promise<void>;
+  /** Resolved visual variant the app renders in ('auto' already resolved). */
+  variant: UiVariant;
+  /** The user's raw stored preference, including 'auto'. Drives the settings UI. */
+  uiVariantPreference: UiVariantPreference;
+  setUiVariant: (next: UiVariantPreference) => Promise<void>;
+  /** Semantic corner radii for the current variant (control/card/sheet). */
+  radii: Radii;
+  /** Bottom-sheet chrome (scrim/handle/corners) for the current variant. */
+  sheet: SheetChrome;
 };
 
 const ThemeContext = createContext<Theme | null>(null);
@@ -52,7 +79,14 @@ const ThemeContext = createContext<Theme | null>(null);
  * On Android, PlatformColor is not used — we pick from the
  * androidFallbackColors light/dark map.
  */
-function resolveSystemColors(colorScheme: ColorScheme): ResolvedSystemColors {
+function resolveSystemColors(colorScheme: ColorScheme, variant: UiVariant): ResolvedSystemColors {
+  // Material variant: M3 tonal surfaces on every platform — including iOS 26
+  // hardware when the user explicitly chose Material. Drawn opaque (no glass),
+  // so we don't use PlatformColor here.
+  if (variant === 'material') {
+    return { ...materialSurfaces[colorScheme] };
+  }
+
   if (Platform.OS === 'ios' && iosSystemColors) {
     // PlatformColor values adapt automatically on iOS — return as-is.
     return iosSystemColors as ResolvedSystemColors;
@@ -86,10 +120,15 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
   // resolved scheme switches to the saved override (if any) without a visible
   // flash when the OS already matches the override.
   const [themeOverride, setThemeOverrideState] = useState<ThemeOverride>('system');
+  // `'auto'` until SecureStore hydrates — same value as a brand-new user, so the
+  // first paint resolves to the platform default (Liquid Glass on iOS 26,
+  // Material elsewhere) via the synchronous capability check, no flash.
+  const [uiVariantPreference, setUiVariantPreferenceState] = useState<UiVariantPreference>('auto');
   // Guards the hydration effect against stomping a user choice that lands
   // before the SecureStore read resolves (a tap on a settings toggle can
   // beat the keychain read on a cold launch).
   const hasUserChosenRef = useRef(false);
+  const hasUserChosenVariantRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -103,6 +142,15 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
         // Storage read can fail if SecureStore is unavailable (rare). Stay on
         // the 'system' default rather than crashing — the user's override is
         // lost for this session but the app remains usable.
+      });
+    secureStorePreferences
+      .get<UiVariantPreference>(UI_VARIANT_KEY)
+      .then((value) => {
+        if (cancelled || hasUserChosenVariantRef.current) return;
+        if (isUiVariantPreference(value)) setUiVariantPreferenceState(value);
+      })
+      .catch(() => {
+        // Same rationale as the theme override read — stay on 'auto'.
       });
     return () => {
       cancelled = true;
@@ -139,8 +187,28 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
     }
   }, []);
 
+  const setUiVariant = useCallback(async (next: UiVariantPreference) => {
+    hasUserChosenVariantRef.current = true;
+    setUiVariantPreferenceState(next);
+    try {
+      await secureStorePreferences.set(UI_VARIANT_KEY, next);
+    } catch (error) {
+      // See setThemeOverride — keep the in-memory pick on write failure.
+      // eslint-disable-next-line no-console
+      console.warn('[theme-provider] Failed to persist UI variant', error);
+    }
+  }, []);
+
+  // Synchronous native check — lets the first paint resolve 'auto' to the right
+  // variant without waiting on the async SecureStore read.
+  const glassCapable = useGlassCapability();
+  const variant = useMemo<UiVariant>(
+    () => resolveUiVariant(uiVariantPreference, glassCapable),
+    [uiVariantPreference, glassCapable],
+  );
+
   const theme = useMemo<Theme>(() => {
-    const resolvedSystemColors = resolveSystemColors(colorScheme);
+    const resolvedSystemColors = resolveSystemColors(colorScheme, variant);
 
     return {
       colorScheme,
@@ -155,8 +223,13 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
       timing,
       themeOverride,
       setThemeOverride,
+      variant,
+      uiVariantPreference,
+      setUiVariant,
+      radii: radiiByVariant[variant],
+      sheet: sheetChromeByVariant[variant],
     };
-  }, [colorScheme, themeOverride, setThemeOverride]);
+  }, [colorScheme, variant, themeOverride, setThemeOverride, uiVariantPreference, setUiVariant]);
 
   // React 19 context provider syntax (Expo SDK 53+ / React 19)
   return <ThemeContext value={theme}>{children}</ThemeContext>;
@@ -182,4 +255,4 @@ export function useOptionalTheme(): Theme | null {
   return useContext(ThemeContext);
 }
 
-export type { Theme, ColorScheme, ResolvedSystemColors, TextVariant };
+export type { Theme, ColorScheme, ResolvedSystemColors, TextVariant, UiVariant };

@@ -32,7 +32,7 @@ import { useBoardProvider } from '@boardsesh/board-react';
 import { randomUUID } from 'expo-crypto';
 import { type SearchHeaderHandle } from '../../../src/components/SearchHeader';
 import { RecentFilterPills } from '../../../src/components/RecentFilterPills';
-import { isBottomAccessoryAvailable } from '../../../src/hooks/use-bottom-accessory';
+import { useNativeAccessoryActive } from '../../../src/hooks/use-bottom-accessory';
 import { useBottomChromeMetrics } from '../../../src/hooks/use-bottom-chrome-metrics';
 import { useGrades } from '../../../src/lib/graphql/hooks';
 import { useInfiniteSearchClimbs } from '../../../src/lib/graphql/hooks/use-infinite-search-climbs';
@@ -119,7 +119,7 @@ function ClimbListInner() {
   // presents this screen's headerSearchBarOptions controller in the bottom tab
   // bar's search role — there is no header search bar. Fallback devices keep the
   // custom search field inside the top chrome.
-  const useNativeSearch = isBottomAccessoryAvailable();
+  const useNativeSearch = useNativeAccessoryActive();
 
   const listPaddingBottom = bottomChrome.scrollBottomPadding;
   const filterFabNativeAccessoryDrop = bottomChrome.nativeAccessoryVisible ? glassSize.standard * 2 : 0;
