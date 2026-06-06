@@ -21,8 +21,9 @@ function ignoredRootPattern(filePath) {
 }
 
 // Exclude non-source directories from Metro's crawl/watch:
-//  - <root>/.claude/* — Codex/Claude agent config and hooks. Anchor this to the
-//    repo root because this checkout itself may live under .claude/worktrees.
+//  - <root>/.agents/* and <root>/.claude/* — agent config and hooks. Anchor
+//    these to the repo root because this checkout itself may live under
+//    .claude/worktrees.
 //  - <root>/.local-work/* — local tooling scratch (e.g. an Android SDK install
 //    whose ephemeral unzip temp dirs vanish mid-watch and crash the file watcher
 //    with ENOENT, exit code 7).
@@ -30,7 +31,7 @@ function ignoredRootPattern(filePath) {
 //    Metro logs.
 // Nothing the app imports lives in these directories, so pruning them is safe
 // and lets the dev server boot in seconds.
-const ignoredRoots = ['.claude', '.local-work', '.boardsesh'].map((name) =>
+const ignoredRoots = ['.agents', '.claude', '.local-work', '.boardsesh'].map((name) =>
   ignoredRootPattern(path.join(monorepoRoot, name)),
 );
 config.resolver.blockList = config.resolver.blockList
