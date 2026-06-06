@@ -981,6 +981,8 @@ export type CurrentClimbChanged = {
   clientId?: Maybe<Scalars['ID']['output']>;
   /** Correlation ID for request tracking */
   correlationId?: Maybe<Scalars['ID']['output']>;
+  /** Raw Aurora frames for an unknown BLE climb when no database match exists */
+  frames?: Maybe<Scalars['String']['output']>;
   /** New current climb (null to clear) */
   item?: Maybe<ClimbQueueItem>;
   /** Sequence number of this event */
@@ -1738,6 +1740,8 @@ export type LedUpdate = {
   climbName?: Maybe<Scalars['String']['output']>;
   climbUuid?: Maybe<Scalars['String']['output']>;
   commands: Array<LedCommand>;
+  /** Compact Aurora frames string for rendering a climb thumbnail. */
+  frames?: Maybe<Scalars['String']['output']>;
   gradeColor?: Maybe<Scalars['String']['output']>;
   navigation?: Maybe<QueueNavigationContext>;
   /** Queue item UUID (for reconciling optimistic UI) */
@@ -6265,6 +6269,7 @@ export type CurrentClimbChangedResolvers<
 > = ResolversObject<{
   clientId?: Resolver<Maybe<ResolversTypes['ID']>, ParentType, ContextType>;
   correlationId?: Resolver<Maybe<ResolversTypes['ID']>, ParentType, ContextType>;
+  frames?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   item?: Resolver<Maybe<ResolversTypes['ClimbQueueItem']>, ParentType, ContextType>;
   sequence?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   stateHash?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
@@ -6633,6 +6638,7 @@ export type LedUpdateResolvers<
   climbName?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   climbUuid?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   commands?: Resolver<Array<ResolversTypes['LedCommand']>, ParentType, ContextType>;
+  frames?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   gradeColor?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   navigation?: Resolver<Maybe<ResolversTypes['QueueNavigationContext']>, ParentType, ContextType>;
   queueItemUuid?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
