@@ -9,6 +9,7 @@ import { SHARED_EVENTS } from '@boardsesh/analytics';
 import {
   toClimbSearchInput,
   mergeBoardFilters,
+  countActiveFilters,
   countActiveFiltersBeyondGrade,
   hasActiveBoardFilters,
   DEFAULT_CLIMB_FILTER_STATE,
@@ -79,10 +80,6 @@ type NativeSearchChange = string | { nativeEvent?: { text?: string } };
 
 function readNativeSearchText(change: NativeSearchChange): string {
   return typeof change === 'string' ? change : (change.nativeEvent?.text ?? '');
-}
-
-function gradeFilterActive(filters: ClimbFilters): boolean {
-  return filters.minGrade != null || filters.maxGrade != null;
 }
 
 function queryLengthBucket(query: string): 'none' | 'short' | 'medium' | 'long' {
@@ -558,10 +555,7 @@ function ClimbListInner() {
     () => ({ minGradeId: filters.minGrade, maxGradeId: filters.maxGrade }),
     [filters.minGrade, filters.maxGrade],
   );
-  const activeFilterCount = useMemo(
-    () => countActiveFiltersBeyondGrade(filters, boardFilters) + (gradeFilterActive(filters) ? 1 : 0),
-    [filters, boardFilters],
-  );
+  const activeFilterCount = useMemo(() => countActiveFilters(filters, boardFilters), [filters, boardFilters]);
 
   const stackOptions = useMemo(
     () =>
