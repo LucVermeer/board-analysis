@@ -3,7 +3,6 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
-  runOnJS,
   useAnimatedScrollHandler,
   useSharedValue,
   withSpring,
@@ -27,7 +26,6 @@ import { type IconName } from '../../icon-map';
 import { useTheme } from '../../../providers/theme-provider';
 import { useQueue } from '../../../providers/queue-provider';
 import { useDrawerHost } from '../../../providers/drawer-host-provider';
-import { useSessionScreen } from '../../../providers/session-screen-provider';
 import { useSessionDetail, useSessionSummary } from '../../../lib/graphql/hooks';
 import { climbToQueueItem } from '../../../lib/climb-to-queue-item';
 import { getBoardConfigForPlaylist } from '../../../lib/playlists/board-details-for-playlist';
@@ -44,13 +42,11 @@ import { SessionLeaderboard } from './SessionLeaderboard';
 import { SessionPresenceRow } from './SessionPresenceRow';
 import { sortHardestSends, type HardestSend } from './hardest-sends';
 
-const DISMISS_DISTANCE_FRACTION = 0.18;
-const DISMISS_VELOCITY = 800;
-
 type InSessionViewProps = {
-  /** Host overlay offset (0 = presented). The body pull-to-dismiss drives it. */
-  translateY: SharedValue<number>;
-  screenHeight: number;
+  /** Host overlay offset (0 = presented). The body pull-to-dismiss drives it. Absent in tab mode. */
+  translateY?: SharedValue<number>;
+  /** Screen height for the dismiss-distance threshold. Absent in tab mode. */
+  screenHeight?: number;
 };
 
 type SessionHistoryStatus = 'attempt' | 'send' | 'flash';
@@ -207,7 +203,6 @@ export function InSessionView({ translateY, screenHeight }: InSessionViewProps) 
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { close } = useSessionScreen();
   const { openPlayDrawer } = useDrawerHost();
   const { sessionId, liveStats, sessionUsers, driverParticipantId, participantId, setCurrentClimb, endSession } =
     useQueue();
@@ -364,39 +359,34 @@ export function InSessionView({ translateY, screenHeight }: InSessionViewProps) 
     [canControlWall, openPlayDrawer, router, setCurrentClimb],
   );
 
-  // Swipe-down-to-dismiss from the body. Drag the sheet only when the inner
-  // scroll is at the top and the pull is downward; otherwise the scroll handles
-  // it. Drives the host's translateY, and on release either dismisses or springs
-  // back to fully presented.
+  // Swipe-down-to-dismiss from the body (overlay mode only). Drag the sheet only
+  // when the inner scroll is at the top and the pull is downward; otherwise the
+  // scroll handles it. Drives the host's translateY and springs back on release.
+  // In tab mode (translateY/screenHeight absent) there's nothing to dismiss to,
+  // so the gesture is omitted and the normal content scroll stands alone.
+  const overlayMode = translateY !== undefined && screenHeight !== undefined;
   const scrollOffset = useSharedValue(0);
   const startedAtTop = useSharedValue(true);
   const scrollHandler = useAnimatedScrollHandler((event) => {
     scrollOffset.value = event.contentOffset.y;
   });
-  const scrollGesture = useMemo(() => Gesture.Native(), []);
-  const dismissGesture = useMemo(
-    () =>
-      Gesture.Pan()
-        .activeOffsetY(12)
-        .onStart(() => {
-          startedAtTop.value = scrollOffset.value <= 0;
-        })
-        .onUpdate((event) => {
-          if (startedAtTop.value && event.translationY > 0) {
-            translateY.value = event.translationY;
-          }
-        })
-        .onEnd((event) => {
-          if (!startedAtTop.value) return;
-          if (translateY.value > screenHeight * DISMISS_DISTANCE_FRACTION || event.velocityY > DISMISS_VELOCITY) {
-            runOnJS(close)();
-          } else {
-            translateY.value = withSpring(0, springs.gentle);
-          }
-        })
-        .simultaneousWithExternalGesture(scrollGesture),
-    [translateY, screenHeight, close, scrollOffset, startedAtTop, scrollGesture],
-  );
+  const dismissGesture = useMemo(() => {
+    if (translateY === undefined || screenHeight === undefined) return null;
+    return Gesture.Pan()
+      .activeOffsetY(12)
+      .onStart(() => {
+        startedAtTop.value = scrollOffset.value <= 0;
+      })
+      .onUpdate((event) => {
+        if (startedAtTop.value && event.translationY > 0) {
+          translateY.value = event.translationY;
+        }
+      })
+      .onEnd(() => {
+        if (!startedAtTop.value) return;
+        translateY.value = withSpring(0, springs.gentle);
+      });
+  }, [translateY, screenHeight, scrollOffset, startedAtTop]);
 
   const [showEndSession, setShowEndSession] = useState(false);
   const [isEnding, setIsEnding] = useState(false);
@@ -407,93 +397,102 @@ export function InSessionView({ translateY, screenHeight }: InSessionViewProps) 
     setIsEnding(false);
     setShowEndSession(false);
     if (summary) {
-      // Close the overlay before pushing the summary so the modal-presented
-      // summary route lands on a stable underlying tab.
-      close();
       router.push({ pathname: '/(tabs)/record/summary', params: { sessionId: summary.sessionId } });
     }
-  }, [endSession, close, router]);
+  }, [endSession, router]);
 
-  return (
-    <GestureDetector gesture={dismissGesture}>
-      <View style={styles.container}>
-        <GestureDetector gesture={scrollGesture}>
-          <Animated.ScrollView
-            style={styles.scroll}
-            contentContainerStyle={[styles.content, { paddingBottom: 100 + insets.bottom }]}
-            showsVerticalScrollIndicator={false}
-            onScroll={scrollHandler}
-            scrollEventThrottle={16}
-            bounces={false}
-          >
-            <SessionPresenceRow
-              users={sessionUsers}
-              driverParticipantId={driverParticipantId}
-              selfParticipantId={participantId}
-            />
+  const scrollView = (
+    <Animated.ScrollView
+      style={styles.scroll}
+      contentContainerStyle={[styles.content, { paddingBottom: 100 + insets.bottom }]}
+      showsVerticalScrollIndicator={false}
+      onScroll={scrollHandler}
+      scrollEventThrottle={16}
+      bounces={false}
+    >
+      <SessionPresenceRow
+        users={sessionUsers}
+        driverParticipantId={driverParticipantId}
+        selfParticipantId={participantId}
+      />
 
-            <SessionAnalytics
-              sends={sends}
-              flashes={flashes}
-              hardestGrade={hardestGrade}
-              hardestSends={hardestSends}
-              startedAt={startedAt}
-              gradeDistribution={gradeDistribution}
-            />
+      <SessionAnalytics
+        sends={sends}
+        flashes={flashes}
+        hardestGrade={hardestGrade}
+        hardestSends={hardestSends}
+        startedAt={startedAt}
+        gradeDistribution={gradeDistribution}
+      />
 
-            <View style={styles.historySection}>
-              <Text variant="footnote" color={systemColors.secondaryLabel} style={styles.sectionLabel}>
-                {t('mobile.session.inHistoryTitle')}
-              </Text>
-              {sessionHistoryTicks.length === 0 ? (
-                <View style={[styles.emptyCard, { backgroundColor: systemColors.secondaryBackground }]}>
-                  <Text variant="body" color={systemColors.secondaryLabel}>
-                    {t('mobile.session.inHistoryEmpty')}
-                  </Text>
-                </View>
-              ) : (
-                <View style={[styles.historyList, { backgroundColor: systemColors.secondaryBackground }]}>
-                  {sessionHistoryTicks.map((tick) => (
-                    <SessionHistoryRow
-                      key={tick.uuid}
-                      tick={tick}
-                      status={tick.status}
-                      participant={participantByUserId.get(tick.userId)}
-                      onPress={handlePressHistoryTick}
-                    />
-                  ))}
-                </View>
-              )}
-            </View>
+      <View style={styles.historySection}>
+        <Text variant="footnote" color={systemColors.secondaryLabel} style={styles.sectionLabel}>
+          {t('mobile.session.inHistoryTitle')}
+        </Text>
+        {sessionHistoryTicks.length === 0 ? (
+          <View style={[styles.emptyCard, { backgroundColor: systemColors.secondaryBackground }]}>
+            <Text variant="body" color={systemColors.secondaryLabel}>
+              {t('mobile.session.inHistoryEmpty')}
+            </Text>
+          </View>
+        ) : (
+          <View style={[styles.historyList, { backgroundColor: systemColors.secondaryBackground }]}>
+            {sessionHistoryTicks.map((tick) => (
+              <SessionHistoryRow
+                key={tick.uuid}
+                tick={tick}
+                status={tick.status}
+                participant={participantByUserId.get(tick.userId)}
+                onPress={handlePressHistoryTick}
+              />
+            ))}
+          </View>
+        )}
+      </View>
 
-            <SessionLeaderboard participants={participants} driverUserId={driverUserId} selfUserId={selfUserId} />
-          </Animated.ScrollView>
-        </GestureDetector>
+      <SessionLeaderboard
+        participants={participants}
+        driverUserId={driverUserId}
+        selfUserId={selfUserId}
+      />
+    </Animated.ScrollView>
+  );
 
-        <View
-          style={[
-            styles.footer,
-            { backgroundColor: systemColors.background, paddingBottom: insets.bottom + spacing[3] },
-          ]}
-        >
-          <Button
-            title={t('mobile.session.inEndSession')}
-            onPress={() => setShowEndSession(true)}
-            variant="outlined"
-            size="large"
-          />
-        </View>
+  const body = (
+    <View style={styles.container}>
+      {scrollView}
 
-        <EndSessionSheet
-          visible={showEndSession}
-          onDismiss={() => setShowEndSession(false)}
-          onConfirm={() => void handleConfirmEnd()}
-          isEnding={isEnding}
-          climbCount={sessionHistoryTicks.length}
+      <View
+        style={[
+          styles.footer,
+          { backgroundColor: systemColors.background, paddingBottom: insets.bottom + spacing[3] },
+        ]}
+      >
+        <Button
+          title={t('mobile.session.inEndSession')}
+          onPress={() => setShowEndSession(true)}
+          variant="outlined"
+          size="large"
         />
       </View>
-    </GestureDetector>
+
+      <EndSessionSheet
+        visible={showEndSession}
+        onDismiss={() => setShowEndSession(false)}
+        onConfirm={() => void handleConfirmEnd()}
+        isEnding={isEnding}
+        climbCount={sessionHistoryTicks.length}
+      />
+    </View>
   );
+
+  // Overlay mode wraps the body in the pull-to-dismiss detector; tab mode
+  // renders the body as-is so the inner scroll runs unobstructed.
+  if (overlayMode && dismissGesture) {
+    return <GestureDetector gesture={dismissGesture}>{body}</GestureDetector>;
+  }
+
+  return body;
 }
 
 const styles = StyleSheet.create({

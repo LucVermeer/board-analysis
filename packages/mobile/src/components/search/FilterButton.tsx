@@ -11,9 +11,10 @@ import { glassSize } from '../../theme/layout';
 type FilterButtonProps = {
   activeFilterCount: number;
   onPress: () => void;
+  onLongPress?: () => void;
 };
 
-export function FilterButton({ activeFilterCount, onPress }: FilterButtonProps) {
+export function FilterButton({ activeFilterCount, onPress, onLongPress }: FilterButtonProps) {
   const { t } = useTranslation('climbs');
   const { systemColors, brandColors } = useTheme();
   const active = activeFilterCount > 0;
@@ -24,9 +25,9 @@ export function FilterButton({ activeFilterCount, onPress }: FilterButtonProps) 
       iconColor={active ? brandColors.primary : (systemColors.secondaryLabel as string)}
       size={glassSize.standard}
       onPress={onPress}
-      accessibilityLabel={
-        active ? `${t('mobile.search.filters')}, ${activeFilterCount}` : t('mobile.search.filters')
-      }
+      accessibilityLabel={active ? `${t('mobile.search.filters')}, ${activeFilterCount}` : t('mobile.search.filters')}
+      accessibilityHint={onLongPress ? t('mobile.search.filterHint') : undefined}
+      onLongPress={onLongPress}
       tintColor={active ? withAlpha(brandColors.primary, 0.18) : undefined}
       fallbackColor={active ? withAlpha(brandColors.primary, 0.16) : systemColors.fill}
       badgeCount={activeFilterCount}

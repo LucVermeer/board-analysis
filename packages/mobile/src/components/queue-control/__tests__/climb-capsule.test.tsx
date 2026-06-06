@@ -39,7 +39,8 @@ vi.mock('react-native-gesture-handler', () => {
   const chainable: Record<string, () => unknown> = {};
   const builder = new Proxy(chainable, { get: () => () => builder });
   return {
-    GestureDetector: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
+    GestureDetector: ({ children }: { children?: ReactNode }) =>
+      createElement('div', { 'data-gesture': 'true' }, children),
     Gesture: { Tap: () => builder, Pan: () => builder, Race: () => builder },
   };
 });
@@ -101,7 +102,9 @@ vi.mock('../../../providers/drawer-host-provider', () => ({
 // formatGrade prefixes so the displayed grade is distinguishable from the raw
 // difficulty key used for colour lookup.
 vi.mock('../../../hooks/use-grade-format', () => ({
-  useGradeFormat: () => ({ formatGrade: (difficulty: string | null | undefined) => (difficulty ? `${difficulty} 6C` : null) }),
+  useGradeFormat: () => ({
+    formatGrade: (difficulty: string | null | undefined) => (difficulty ? `${difficulty} 6C` : null),
+  }),
 }));
 
 vi.mock('../../../hooks/use-reduce-motion', () => ({ useReduceMotion: () => false }));
@@ -213,6 +216,22 @@ describe('ClimbCapsule', () => {
     const { container } = render(<ClimbCapsule />);
     // No tint passed to the glass — the capsule background is plain frosted glass.
     expect(container.querySelector('[data-glass]')?.getAttribute('data-tint')).toBe('');
+  });
+
+  it('reserves the right edge for an inline action outside the capsule gesture target', () => {
+    const item = makeItem(makeClimb({ difficulty: 'V6', name: 'Inline Tick' }));
+    queue.state.currentClimbQueueItem = item;
+    queue.state.queue = [item];
+
+    const { container } = render(<ClimbCapsule endAction={<button data-inline-action="tick" />} endActionSize={44} />);
+
+    expect(container.textContent).toContain('Inline Tick');
+    expect(container.querySelector('[data-inline-action="tick"]')).not.toBeNull();
+    const gradeNode = Array.from(container.querySelectorAll('[data-text]')).find((node) =>
+      (node.textContent ?? '').includes('6C'),
+    );
+    expect(gradeNode?.getAttribute('data-color')).toBe('#FF0000');
+    expect(container.querySelector('[data-inline-action="tick"]')?.closest('[data-gesture]')).toBeNull();
   });
 
   it('wires openPlayDrawer with setAsCurrent:false (drawer-open behavior; tap worklet not driven in jsdom)', () => {

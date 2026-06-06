@@ -658,6 +658,7 @@
       "anyGrade": "Tout niveau",
       "gradeClear": "Tous",
       "filters": "Filtres",
+      "filterHint": "Touchez pour filtrer. Maintenez pour choisir la cotation.",
       "removeFilter": "Retirer le filtre {{name}}",
       "fab": {
         "open": "Rechercher",

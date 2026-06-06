@@ -20,7 +20,6 @@ import { TOOLBAR_RESERVE, TAB_BAR_HEIGHT } from '../../theme/layout';
 import { brandColors } from '../../theme/colors';
 import { spacing } from '../../theme/tokens';
 import { useTheme } from '../../providers/theme-provider';
-import { useSessionScreen } from '../../providers/session-screen-provider';
 
 type FeedRow = { type: 'header'; bucket: FeedRecencyBucket } | { type: 'session'; item: SessionFeedItem };
 
@@ -37,7 +36,6 @@ export function SessionsTab({ userId }: { userId: string | undefined }) {
   const { t } = useTranslation('you');
   const { systemColors } = useTheme();
   const router = useRouter();
-  const { open: openSessionScreen } = useSessionScreen();
   const insets = useSafeAreaInsets();
   const paddingBottom = TOOLBAR_RESERVE + TAB_BAR_HEIGHT + insets.bottom + spacing[4];
 
@@ -155,10 +153,9 @@ export function SessionsTab({ userId }: { userId: string | undefined }) {
               {t('mobile.sessions.emptyBody')}
             </Text>
             <View style={styles.emptyCta}>
-              {/* The Record tab opens the session overlay (mounted at the root),
-                  so open it directly rather than navigating to the blank /record
-                  screen — a programmatic push wouldn't trigger BlurTabBar. */}
-              <Button title={t('mobile.sessions.emptyCta')} onPress={openSessionScreen} />
+              {/* The Record tab hosts the session screen inline, so the CTA just
+                  navigates there. */}
+              <Button title={t('mobile.sessions.emptyCta')} onPress={() => router.navigate('/(tabs)/record')} />
             </View>
           </View>
         }

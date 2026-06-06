@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { type ColorValue, StyleSheet, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { GlassSurface } from './GlassSurface';
@@ -17,6 +17,7 @@ type GlassIconButtonProps = {
   iconColor: ColorValue;
   iconSize?: number;
   onPress: () => void;
+  onLongPress?: () => void;
   accessibilityLabel: string;
   /** Hint describing what activation does — useful when the button morphs in
    *  place (e.g. search ↔ close) rather than navigating. */
@@ -54,6 +55,7 @@ export function GlassIconButton({
   iconColor,
   iconSize = 22,
   onPress,
+  onLongPress,
   accessibilityLabel,
   accessibilityHint,
   tintColor,
@@ -67,6 +69,8 @@ export function GlassIconButton({
   const { brandColors } = useTheme();
   const reduceMotion = useReduceMotion();
   const showBadge = badgeCount != null && badgeCount > 0;
+  const suppressPressRef = useRef(false);
+  const suppressionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // 0 → primary glyph, 1 → secondary glyph. Only used when `secondaryIconName` is set.
   const morph = useSharedValue(active ? 1 : 0);
@@ -75,13 +79,37 @@ export function GlassIconButton({
     morph.value = reduceMotion ? target : withTiming(target, { duration: timing.fast });
   }, [active, reduceMotion, morph]);
 
+  useEffect(
+    () => () => {
+      if (suppressionTimerRef.current) clearTimeout(suppressionTimerRef.current);
+    },
+    [],
+  );
+
   const primaryIconStyle = useAnimatedStyle(() => ({ opacity: 1 - morph.value }));
   const secondaryIconStyle = useAnimatedStyle(() => ({ opacity: morph.value }));
+  const handlePress = useCallback(() => {
+    if (suppressPressRef.current) {
+      suppressPressRef.current = false;
+      return;
+    }
+    onPress();
+  }, [onPress]);
+  const handleLongPress = useCallback(() => {
+    if (!onLongPress) return;
+    suppressPressRef.current = true;
+    if (suppressionTimerRef.current) clearTimeout(suppressionTimerRef.current);
+    suppressionTimerRef.current = setTimeout(() => {
+      suppressPressRef.current = false;
+    }, 350);
+    onLongPress();
+  }, [onLongPress]);
 
   return (
     <View style={[styles.wrapper, { width: size, height: size }]}>
       <PressableSurface
-        onPress={onPress}
+        onPress={handlePress}
+        onLongPress={onLongPress ? handleLongPress : undefined}
         disabled={disabled}
         feedback="scale"
         scaleTo={0.92}

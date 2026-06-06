@@ -1,13 +1,12 @@
 /**
  * Shared layout metrics for chrome that floats over scrollable content.
  *
- * The persistent climb toolbar — a glass capsule (current climb) + a log-ascent
- * FAB, joined on the Climbs tab by a search FAB — floats above the tab bar on
- * every screen while a climb is active. Screens reserve
- * `TOOLBAR_RESERVE + TAB_BAR_HEIGHT + insets.bottom` of bottom padding so their
- * last row clears it. Owned here (rather than inside the queue-control / tab-bar
- * components) so any screen can pad correctly without importing those
- * components' internals.
+ * The persistent climb toolbar — a glass capsule (current climb), joined on the
+ * Climbs tab by a standalone log-ascent tick when the native bottom accessory is
+ * unavailable — floats above the tab bar while a climb is active. Screens
+ * reserve `TOOLBAR_RESERVE + TAB_BAR_HEIGHT + insets.bottom` of bottom padding
+ * so their last row clears it. Owned here (rather than inside queue-control) so
+ * any screen can pad correctly without importing those components' internals.
  */
 
 /** Bottom tab bar height (excludes the safe-area inset). */
@@ -39,8 +38,7 @@ export const glassSize = {
   mini: 32,
 } as const;
 
-/** Diameter of the floating toolbar's standard circular FABs (search).
- *  The log-ascent hero FAB is `glassSize.hero`; see `glassSize`. */
+/** Height of each floating toolbar action target. */
 export const TOOLBAR_FAB_SIZE = glassSize.standard;
 
 /** Height of the centered climb capsule — one step under the flanking FABs so it
@@ -54,7 +52,7 @@ export const TOOLBAR_CAPSULE_MAX_WIDTH = 260;
 /** Screen-edge gutter for the toolbar's side FABs. Matches ClimbTopChrome. */
 export const TOOLBAR_SIDE_MARGIN = 16;
 
-/** Gap between the toolbar's three floating elements. */
+/** Gap between the toolbar's floating elements. */
 export const TOOLBAR_GAP = 8;
 
 /** Lift between the floating toolbar and the tab bar below it, so the islands
@@ -63,5 +61,7 @@ export const TOOLBAR_GAP_ABOVE_TABBAR = 10;
 
 /** Bottom padding screens reserve (above the tab bar + safe-area inset) so the
  *  last scrollable row clears the floating toolbar. Keyed off the tallest island
- *  (the hero log-ascent FAB), not the shorter capsule, so nothing hides under it. */
+ *  across layouts — the sticky-strip layout still floats the hero log-ascent tick
+ *  (`glassSize.hero`), taller than the bottom-bar action toolbar — so nothing hides
+ *  under it on either layout. */
 export const TOOLBAR_RESERVE = glassSize.hero + TOOLBAR_GAP_ABOVE_TABBAR;

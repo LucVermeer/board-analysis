@@ -1,0 +1,92 @@
+// @vitest-environment jsdom
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render } from '@testing-library/react';
+import { createElement, type ReactNode } from 'react';
+import type { ClimbQueueItem } from '@boardsesh/queue';
+
+const cfg = vi.hoisted(() => ({
+  placement: 'regular' as 'regular' | 'inline',
+  currentClimbQueueItem: { climb: { uuid: 'c1', angle: 40 } } as unknown as ClimbQueueItem | null,
+}));
+
+vi.mock('expo-router/unstable-native-tabs', () => ({
+  NativeTabs: { BottomAccessory: { usePlacement: () => cfg.placement } },
+}));
+
+vi.mock('react-native', () => ({
+  View: ({ children, style }: { children?: ReactNode; style?: unknown }) => {
+    const styles = Array.isArray(style) ? style : [style];
+    const width = styles.reduce<unknown>((foundWidth, styleEntry) => {
+      if (foundWidth != null) return foundWidth;
+      return styleEntry != null && typeof styleEntry === 'object' && 'width' in styleEntry
+        ? (styleEntry as { width?: unknown }).width
+        : null;
+    }, null);
+    return createElement('div', { 'data-width': width == null ? '' : String(width) }, children);
+  },
+  StyleSheet: { create: (styles: Record<string, unknown>) => styles },
+  useWindowDimensions: () => ({ width: 402, height: 874, scale: 3, fontScale: 1 }),
+}));
+
+vi.mock('../../../providers/queue-provider', () => ({
+  useQueue: () => ({ state: { currentClimbQueueItem: cfg.currentClimbQueueItem } }),
+}));
+vi.mock('../../../theme/layout', () => ({
+  glassSize: { standard: 56, inline: 44 },
+}));
+vi.mock('../../../theme/tokens', () => ({ spacing: { 1: 4 } }));
+vi.mock('../ClimbCapsule', () => ({
+  ClimbCapsule: ({ bare, fillWidth, endAction }: { bare?: boolean; fillWidth?: boolean; endAction?: ReactNode }) =>
+    createElement(
+      'div',
+      { 'data-capsule-bare': bare ? 'true' : 'false', 'data-capsule-fill': fillWidth ? 'true' : 'false' },
+      endAction,
+    ),
+}));
+vi.mock('../LogAscentToolbarButton', () => ({
+  LogAscentToolbarButton: ({ size }: { size?: number }) => createElement('button', { 'data-tick-size': String(size) }),
+}));
+
+import { QueueBottomAccessory } from '../QueueBottomAccessory';
+
+describe('QueueBottomAccessory', () => {
+  beforeEach(() => {
+    cfg.placement = 'regular';
+    cfg.currentClimbQueueItem = { climb: { uuid: 'c1', angle: 40 } } as unknown as ClimbQueueItem;
+  });
+
+  it('renders bare current climb and tick in regular placement', () => {
+    const { container } = render(<QueueBottomAccessory />);
+    expect(container.querySelector('[data-capsule-bare="true"]')).not.toBeNull();
+    expect(container.querySelector('[data-capsule-fill="true"]')).not.toBeNull();
+    expect(container.querySelector('[data-tick-size="44"]')).not.toBeNull();
+    expect(container.querySelector('[data-icon="search"]')).toBeNull();
+  });
+
+  it('keeps the tick visible in inline placement', () => {
+    cfg.placement = 'inline';
+    const { container } = render(<QueueBottomAccessory />);
+    expect(container.querySelector('[data-capsule-bare="true"]')).not.toBeNull();
+    expect(container.querySelector('[data-tick-size="44"]')).not.toBeNull();
+  });
+
+  it('keeps inline placement the same width as regular placement', () => {
+    const regular = render(<QueueBottomAccessory />);
+    const regularWidth = regular.container.querySelector('[data-width]')?.getAttribute('data-width');
+    regular.unmount();
+
+    cfg.placement = 'inline';
+    const inline = render(<QueueBottomAccessory />);
+    const inlineWidth = inline.container.querySelector('[data-width]')?.getAttribute('data-width');
+
+    expect(inlineWidth).toBe(regularWidth);
+    expect(inlineWidth).toBe('344');
+  });
+
+  it('renders nothing without a current climb', () => {
+    cfg.currentClimbQueueItem = null;
+    const { container } = render(<QueueBottomAccessory />);
+    expect(container.querySelector('[data-capsule-bare]')).toBeNull();
+    expect(container.querySelector('[data-tick-size]')).toBeNull();
+  });
+});

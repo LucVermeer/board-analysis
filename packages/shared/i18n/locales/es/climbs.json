@@ -658,6 +658,7 @@
       "anyGrade": "Cualquier grado",
       "gradeClear": "Cualquiera",
       "filters": "Filtros",
+      "filterHint": "Toca para filtrar. Mantén pulsado para elegir grado.",
       "removeFilter": "Quitar filtro {{name}}",
       "fab": {
         "open": "Buscar",

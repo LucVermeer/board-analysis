@@ -9,7 +9,9 @@ type GlassMockProps = {
   iconName?: string;
   iconColor?: string;
   onPress?: () => void;
+  onLongPress?: () => void;
   accessibilityLabel?: string;
+  accessibilityHint?: string;
   tintColor?: string;
   fallbackColor?: string;
   badgeCount?: number;
@@ -19,16 +21,20 @@ vi.mock('../../GlassIconButton', () => ({
     iconName,
     iconColor,
     onPress,
+    onLongPress,
     accessibilityLabel,
+    accessibilityHint,
     tintColor,
     fallbackColor,
     badgeCount,
   }: GlassMockProps) =>
     createElement('button', {
       onClick: onPress,
+      onDoubleClick: onLongPress,
       'data-icon': iconName,
       'data-icon-color': iconColor ?? '',
       'data-label': accessibilityLabel ?? '',
+      'data-hint': accessibilityHint ?? '',
       'data-tint': tintColor ?? '',
       'data-fallback': fallbackColor ?? '',
       'data-badge': badgeCount == null ? '' : String(badgeCount),
@@ -62,6 +68,15 @@ describe('FilterButton', () => {
     expect(button(container)).not.toBeNull();
     fireEvent.click(getByRole('button'));
     expect(onPress).toHaveBeenCalledTimes(1);
+  });
+
+  it('fires the optional long-press handler without firing onPress', () => {
+    const onPress = vi.fn();
+    const onLongPress = vi.fn();
+    const { getByRole } = render(<FilterButton activeFilterCount={0} onPress={onPress} onLongPress={onLongPress} />);
+    fireEvent.doubleClick(getByRole('button'));
+    expect(onLongPress).toHaveBeenCalledTimes(1);
+    expect(onPress).not.toHaveBeenCalled();
   });
 
   it('forwards the active filter count as the badge', () => {
@@ -101,5 +116,10 @@ describe('FilterButton', () => {
   it('appends the count to the a11y label when filters are active', () => {
     const { container } = render(<FilterButton activeFilterCount={5} onPress={() => {}} />);
     expect(button(container).getAttribute('data-label')).toBe('mobile.search.filters, 5');
+  });
+
+  it('adds the long-press hint when quick grade search is available', () => {
+    const { container } = render(<FilterButton activeFilterCount={0} onPress={() => {}} onLongPress={() => {}} />);
+    expect(button(container).getAttribute('data-hint')).toBe('mobile.search.filterHint');
   });
 });

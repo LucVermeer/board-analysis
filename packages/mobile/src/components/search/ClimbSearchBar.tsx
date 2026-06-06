@@ -2,11 +2,11 @@
 // below the status bar, with the list scrolling under them. Replaces the old
 // nav-header search pill + the (header-occluded, unreachable) StickyFilterStrip.
 //
-// Layout: [🔍 glass search capsule] [grade] [filter] [＋ create]
-//   - sticky-strip value: grade + filter live inline here; a second chips row
-//     appears under the row only when filters are active.
+// Layout: [＋ create] [🔍 glass search capsule] [filter]
+//   - sticky-strip value: filter opens the full sheet; long-press opens the
+//     quick grade rail below the row.
 //   - bottom-bar value: this row isn't rendered; that layout uses ClimbTopChrome
-//     (board + create) up top and the thumb-zone SearchFab for search/grade/filter.
+//     for board, create, lightbulb, and search/grade/filter.
 //
 // The container is `box-none` so taps in the gaps fall through to the list; each
 // control captures its own touches. It reports its measured height so the screen
@@ -25,7 +25,6 @@ import type { ClimbFilters } from '../../lib/climb-filter-types';
 import type { SearchLayout } from '../../lib/search-layout-preference';
 import { SearchHeader, type SearchHeaderHandle } from '../SearchHeader';
 import { GlassIconButton } from '../GlassIconButton';
-import { GradePill } from './GradePill';
 import { FilterButton } from './FilterButton';
 import { ActiveFilterChips } from './ActiveFilterChips';
 import { GradeRangeRail } from '../grade';
@@ -101,15 +100,6 @@ export function ClimbSearchBar({
     onCreate();
   }, [onCreate]);
 
-  const handleGradePress = useCallback(() => {
-    hapticLight();
-    if (gradeRailVisible) {
-      onCloseGrade();
-    } else {
-      onOpenGrade();
-    }
-  }, [gradeRailVisible, onCloseGrade, onOpenGrade]);
-
   return (
     <View pointerEvents="box-none" style={styles.container}>
       {showControls && gradeRailVisible ? (
@@ -143,16 +133,8 @@ export function ClimbSearchBar({
           />
 
           {showControls ? (
-            <GradePill
-              bound={bound}
-              grades={grades}
-              onPress={handleGradePress}
-              expanded={gradeRailVisible}
-              maxWidth={132}
-            />
+            <FilterButton activeFilterCount={activeFilterCount} onPress={onOpenFilters} onLongPress={onOpenGrade} />
           ) : null}
-
-          {showControls ? <FilterButton activeFilterCount={activeFilterCount} onPress={onOpenFilters} /> : null}
         </View>
 
         {showControls && gradeRailVisible ? (

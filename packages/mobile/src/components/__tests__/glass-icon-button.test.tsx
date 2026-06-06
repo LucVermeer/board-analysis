@@ -25,15 +25,29 @@ vi.mock('../GlassSurface', () => ({
 type PressMockProps = {
   children?: ReactNode;
   onPress?: () => void;
+  onLongPress?: () => void;
   disabled?: boolean;
   accessibilityLabel?: string;
   accessibilityHint?: string;
 };
 vi.mock('../PressableSurface', () => ({
-  PressableSurface: ({ children, onPress, disabled, accessibilityLabel, accessibilityHint }: PressMockProps) =>
+  PressableSurface: ({
+    children,
+    onPress,
+    onLongPress,
+    disabled,
+    accessibilityLabel,
+    accessibilityHint,
+  }: PressMockProps) =>
     createElement(
       'button',
-      { onClick: onPress, disabled, 'data-label': accessibilityLabel, 'data-hint': accessibilityHint ?? '' },
+      {
+        onClick: onPress,
+        onDoubleClick: onLongPress,
+        disabled,
+        'data-label': accessibilityLabel,
+        'data-hint': accessibilityHint ?? '',
+      },
       children,
     ),
 }));
@@ -97,5 +111,18 @@ describe('GlassIconButton', () => {
   it('passes disabled through to the pressable', () => {
     const { getByRole } = render(<GlassIconButton {...base} iconName="search" disabled />);
     expect((getByRole('button') as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('suppresses onPress immediately after onLongPress', () => {
+    const onPress = vi.fn();
+    const onLongPress = vi.fn();
+    const { getByRole } = render(
+      <GlassIconButton {...base} iconName="filter" onPress={onPress} onLongPress={onLongPress} />,
+    );
+    const button = getByRole('button');
+    fireEvent.doubleClick(button);
+    fireEvent.click(button);
+    expect(onLongPress).toHaveBeenCalledTimes(1);
+    expect(onPress).not.toHaveBeenCalled();
   });
 });

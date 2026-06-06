@@ -23,9 +23,7 @@ import { ToastProvider } from '../src/providers/toast-provider';
 import { QueueProvider } from '../src/providers/queue-provider';
 import { QueueSnackbarProvider } from '../src/providers/queue-snackbar-provider';
 import { DrawerHostProvider } from '../src/providers/drawer-host-provider';
-import { SessionScreenProvider } from '../src/providers/session-screen-provider';
 import { DeepLinkProvider } from '../src/providers/deep-link-provider';
-import { SessionScreenHost } from '../src/components/session-screen/SessionScreenHost';
 import { FeatureFlagsProvider } from '../src/providers/feature-flags-provider';
 import { PartyProfileProvider } from '../src/providers/party-profile-provider';
 import { ConnectionSettingsProvider } from '../src/providers/connection-settings-provider';
@@ -190,8 +188,7 @@ function ThemedNavigation({ children }: { children: ReactNode }) {
       {/* Drive the system status-bar icon contrast from the *resolved* scheme
           (honours the in-app appearance override), not "auto" — under Android's
           mandatory edge-to-edge the bar is transparent over app content, so a
-          forced dark theme on a light OS must still get light icons. Matches the
-          pattern already used in SessionScreenHost.
+          forced dark theme on a light OS must still get light icons.
           Note: the Android 3-button navigation-bar icon contrast is NOT driven
           here — under edge-to-edge that needs react-native-edge-to-edge's
           <SystemBars> (a new native dep), deferred to a device-tested follow-up. */}
@@ -240,10 +237,9 @@ function RootLayout() {
                                     cannot be null". */}
                                     <BottomSheetModalProvider>
                                       <BluetoothProviderWrapper>
-                                        <SessionScreenProvider>
-                                          <DrawerHostProvider>
-                                            <DeepLinkProvider>
-                                              <ThemedNavigation>
+                                        <DrawerHostProvider>
+                                          <DeepLinkProvider>
+                                            <ThemedNavigation>
                                                 <Stack screenOptions={{ headerShown: false }} initialRouteName="(tabs)">
                                                   <Stack.Screen name="(tabs)" />
                                                   <Stack.Screen
@@ -256,13 +252,11 @@ function RootLayout() {
                                                     options={{ presentation: 'modal', headerShown: false }}
                                                   />
                                                 </Stack>
-                                              </ThemedNavigation>
-                                              <PersistentQueueBar />
-                                              <AnalyticsScreenTracker />
-                                              <SessionScreenHost />
-                                            </DeepLinkProvider>
-                                          </DrawerHostProvider>
-                                        </SessionScreenProvider>
+                                            </ThemedNavigation>
+                                            <PersistentQueueBar />
+                                            <AnalyticsScreenTracker />
+                                          </DeepLinkProvider>
+                                        </DrawerHostProvider>
                                       </BluetoothProviderWrapper>
                                     </BottomSheetModalProvider>
                                   </BoardProviderWrapper>

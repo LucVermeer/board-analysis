@@ -65,6 +65,11 @@ export const SearchHeader = forwardRef<SearchHeaderHandle, SearchHeaderProps>(fu
     inputRef.current?.focus();
   }, [onChangeText]);
 
+  const handleSubmit = useCallback(() => {
+    onSubmit?.(text);
+    inputRef.current?.blur();
+  }, [onSubmit, text]);
+
   return (
     <View style={[styles.capsule, { height, borderRadius: radius }]}>
       <GlassSurface
@@ -87,7 +92,7 @@ export const SearchHeader = forwardRef<SearchHeaderHandle, SearchHeaderProps>(fu
           autoCapitalize="none"
           autoCorrect={false}
           returnKeyType="search"
-          onSubmitEditing={() => onSubmit?.(text)}
+          onSubmitEditing={handleSubmit}
           clearButtonMode="never"
           style={[styles.input, { color: systemColors.label as string }]}
           accessibilityLabel={placeholder}

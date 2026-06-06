@@ -658,6 +658,7 @@
       "anyGrade": "Any grade",
       "gradeClear": "Any",
       "filters": "Filters",
+      "filterHint": "Tap for filters. Hold for grade.",
       "removeFilter": "Remove {{name}} filter",
       "fab": {
         "open": "Search",

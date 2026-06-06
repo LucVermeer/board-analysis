@@ -13,7 +13,6 @@ import { Icon } from '../../src/components/Icon';
 import { useTheme } from '../../src/providers/theme-provider';
 import { useAuth } from '../../src/providers/auth-provider';
 import { useQueue } from '../../src/providers/queue-provider';
-import { useSessionScreen } from '../../src/providers/session-screen-provider';
 import { useToast } from '../../src/providers/toast-provider';
 import { useSessionPreview, useMyBoards, useCreateBoard } from '../../src/lib/graphql/hooks';
 import { resolveBoardForSession } from '../../src/lib/board-path-to-user-board';
@@ -38,7 +37,6 @@ export default function JoinSessionScreen() {
   const { showToast } = useToast();
 
   const { sessionId: activeSessionId, joinSession, clearSession } = useQueue();
-  const sessionScreen = useSessionScreen();
 
   const preview = useSessionPreview(sessionId);
   const myBoards = useMyBoards(undefined, { enabled: isAuthenticated });
@@ -71,14 +69,14 @@ export default function JoinSessionScreen() {
         createBoard: (input) => createBoard.mutateAsync(input),
       });
       await joinSession(session.id, { boardPath: session.boardPath, userBoard });
-      sessionScreen.open();
-      router.back();
+      // Land on the Record tab so the user drops straight into the joined session.
+      router.replace('/(tabs)/record');
     } catch (error) {
       if (__DEV__) console.warn('[join] failed to join session', error);
       showToast(t('mobileJoin.joinError'), 'error');
       setIsJoining(false);
     }
-  }, [session, myBoards, createBoard, joinSession, sessionScreen, router, showToast, t]);
+  }, [session, myBoards, createBoard, joinSession, router, showToast, t]);
 
   const handleJoinPress = useCallback(() => {
     if (!session) return;

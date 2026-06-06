@@ -591,8 +591,8 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   );
 
   // Frosted-glass sheet background — the same Liquid-Glass language as the session
-  // overlay (SessionScreenHost), so the drawer reads as part of the same chrome as
-  // it rises. `style` from gorhom positions the fill; sheetStyles.background rounds
+  // screen, so the drawer reads as part of the same chrome as it rises. `style`
+  // from gorhom positions the fill; sheetStyles.background rounds
   // the top, and overflow clips the blur fallback to those corners.
   const renderBackground = useCallback(
     ({ style, pointerEvents }: BottomSheetBackgroundProps) => (

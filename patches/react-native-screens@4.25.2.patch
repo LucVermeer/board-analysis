@@ -1,0 +1,96 @@
+diff --git a/ios/helpers/scroll-view/RNSScrollViewFinder.h b/ios/helpers/scroll-view/RNSScrollViewFinder.h
+index 04d40b38bad73bedd79c6aa8b85125dc79093db7..ea25d1b0b36fcc6afeed44b5d603b8cbd15be6c0 100644
+--- a/ios/helpers/scroll-view/RNSScrollViewFinder.h
++++ b/ios/helpers/scroll-view/RNSScrollViewFinder.h
+@@ -25,4 +25,14 @@
+  */
+ + (nullable UIScrollView *)findContentScrollViewWithDelegatingToProvider:(nullable UIView *)view;
+ 
++/**
++ * Depth-first search for the first UIScrollView anywhere in the subtree (visiting every child, not just the first).
++ * Unlike `findScrollViewInFirstDescendantChainFrom`, this finds scroll views that virtualized lists (FlashList,
++ * LegendList) nest below a non-scroll container, which UIKit's first-child heuristic misses. Used as the fallback
++ * for `-[UIViewController contentScrollViewForEdge:]` so the iOS 26 tab-bar minimize can track those lists.
++ *
++ * When `view == nil`, it should also return `nil`.
++ */
+++ (nullable UIScrollView *)findScrollViewDeepFirstFrom:(nullable UIView *)view;
++
+ @end
+diff --git a/ios/helpers/scroll-view/RNSScrollViewFinder.mm b/ios/helpers/scroll-view/RNSScrollViewFinder.mm
+index 2434c612951a40bd1ecfcc476acebb9a9a6b500e..1045352774b126b0766c74fe5f800b62acc53033 100644
+--- a/ios/helpers/scroll-view/RNSScrollViewFinder.mm
++++ b/ios/helpers/scroll-view/RNSScrollViewFinder.mm
+@@ -1,4 +1,5 @@
+ #import "RNSScrollViewFinder.h"
++#import <objc/runtime.h>
+ 
+ @implementation RNSScrollViewFinder
+ 
+@@ -41,4 +42,66 @@
+   return nil;
+ }
+ 
+++ (nullable UIScrollView *)findScrollViewDeepFirstFrom:(nullable UIView *)view
++{
++  if (view == nil) {
++    return nil;
++  }
++  if ([view isKindOfClass:UIScrollView.class]) {
++    return static_cast<UIScrollView *>(view);
++  }
++  // Visit children in order, fully descending each branch first. The climbs list
++  // (FlashList) is the first child of its screen, so this reaches its nested
++  // scroll view before any shallower chrome scroll view (e.g. a grade rail).
++  for (UIView *subview in view.subviews) {
++    UIScrollView *found = [RNSScrollViewFinder findScrollViewDeepFirstFrom:subview];
++    if (found != nil) {
++      return found;
++    }
++  }
++  return nil;
++}
++
++@end
++
++#pragma mark - contentScrollView fallback for iOS 26 tab-bar minimize
++
++// iOS 26's UITabBarController.minimizeBehavior tracks the scroll view that the
++// selected tab's view controller vends via -contentScrollViewForEdge:. UIKit
++// resolves that for plain RN ScrollView/FlatList, but misses FlashList's nested
++// UIScrollView, so the climbs tab never minimizes. Swizzle the getter to fall
++// back to a deep search when UIKit returns nil — leaving every case UIKit
++// already handles untouched. Installed once at load (the category is compiled
++// into the RNScreens static lib, so +load runs at app launch).
++@interface UIViewController (RNSContentScrollViewFallback)
++@end
++
++@implementation UIViewController (RNSContentScrollViewFallback)
++
+++ (void)load
++{
++  if (@available(iOS 26.0, *)) {
++    static dispatch_once_t onceToken;
++    dispatch_once(&onceToken, ^{
++      SEL originalSelector = @selector(contentScrollViewForEdge:);
++      SEL swizzledSelector = @selector(rnscreens_contentScrollViewForEdge:);
++      Method originalMethod = class_getInstanceMethod(UIViewController.class, originalSelector);
++      Method swizzledMethod = class_getInstanceMethod(UIViewController.class, swizzledSelector);
++      if (originalMethod != NULL && swizzledMethod != NULL) {
++        method_exchangeImplementations(originalMethod, swizzledMethod);
++      }
++    });
++  }
++}
++
++- (nullable UIScrollView *)rnscreens_contentScrollViewForEdge:(NSDirectionalRectEdge)edge API_AVAILABLE(ios(17.0))
++{
++  // After the exchange this calls UIKit's original implementation.
++  UIScrollView *resolved = [self rnscreens_contentScrollViewForEdge:edge];
++  if (resolved != nil) {
++    return resolved;
++  }
++  return [RNSScrollViewFinder findScrollViewDeepFirstFrom:self.viewIfLoaded];
++}
++
+ @end

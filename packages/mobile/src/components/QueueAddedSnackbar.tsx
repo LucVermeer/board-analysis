@@ -8,8 +8,7 @@ import { brandColors } from '../theme/colors';
 import { borderRadius, spacing, shadowColor } from '../theme/tokens';
 import { useTheme } from '../providers/theme-provider';
 import { useQueue } from '../providers/queue-provider';
-import { TAB_BAR_HEIGHT } from './BlurTabBar';
-import { TOOLBAR_RESERVE } from '../theme/layout';
+import { TAB_BAR_HEIGHT, TOOLBAR_RESERVE } from '../theme/layout';
 import { queueSnackbarBottomOffset } from './queue-snackbar-position';
 
 const DEFAULT_DURATION = 4000;
