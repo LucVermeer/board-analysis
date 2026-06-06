@@ -2,6 +2,8 @@ import { type ReactNode } from 'react';
 import {
   Pressable,
   Platform,
+  type AccessibilityActionEvent,
+  type AccessibilityActionInfo,
   type AccessibilityRole,
   type AccessibilityState,
   type GestureResponderEvent,
@@ -46,6 +48,9 @@ type PressableSurfaceProps = {
   accessibilityLabel?: string;
   accessibilityHint?: string;
   accessibilityState?: AccessibilityState;
+  /** Custom assistive-tech actions (e.g. a long-press equivalent VoiceOver / Switch Control can reach). */
+  accessibilityActions?: ReadonlyArray<AccessibilityActionInfo>;
+  onAccessibilityAction?: (event: AccessibilityActionEvent) => void;
   style?: StyleProp<ViewStyle>;
 };
 
@@ -75,6 +80,8 @@ export function PressableSurface({
   accessibilityLabel,
   accessibilityHint,
   accessibilityState,
+  accessibilityActions,
+  onAccessibilityAction,
   style,
 }: PressableSurfaceProps) {
   // `pressed` is 0 at rest, 1 while held. Resolved into a scale or opacity in
@@ -124,6 +131,8 @@ export function PressableSurface({
         accessibilityLabel={accessibilityLabel}
         accessibilityHint={accessibilityHint}
         accessibilityState={accessibilityState}
+        accessibilityActions={accessibilityActions}
+        onAccessibilityAction={onAccessibilityAction}
         style={style}
       >
         {children}
@@ -144,6 +153,8 @@ export function PressableSurface({
       accessibilityLabel={accessibilityLabel}
       accessibilityHint={accessibilityHint}
       accessibilityState={accessibilityState}
+      accessibilityActions={accessibilityActions}
+      onAccessibilityAction={onAccessibilityAction}
       style={[animatedStyle, style]}
     >
       {children}

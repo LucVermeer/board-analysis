@@ -1,9 +1,9 @@
 /**
  * Shared layout metrics for chrome that floats over scrollable content.
  *
- * The persistent climb toolbar — a glass capsule (current climb), joined on the
- * Climbs tab by a standalone log-ascent tick when the native bottom accessory is
- * unavailable — floats above the tab bar while a climb is active. Screens
+ * The persistent climb toolbar — a glass capsule (current climb) joined by a
+ * standalone log-ascent tick when the native bottom accessory is unavailable —
+ * floats above the tab bar while a climb is active. Screens
  * reserve it via `useBottomChromeMetrics()` so native-accessory screens do not
  * keep padding for a JS toolbar that is not mounted. Owned here (rather than
  * inside queue-control) so any screen can pad correctly without importing those

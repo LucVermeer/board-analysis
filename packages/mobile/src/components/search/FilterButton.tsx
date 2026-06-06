@@ -33,6 +33,17 @@ export function FilterButton({ activeFilterCount, onPress, onLongPress }: Filter
       }
       accessibilityHint={onLongPress ? t('mobile.search.filterHint') : undefined}
       onLongPress={onLongPress}
+      // The long-press opens the grade rail, but a raw long-press is invisible
+      // to VoiceOver / Switch Control. Expose it as a named action so assistive
+      // tech can reach grade selection too (the Filters sheet stays the fallback).
+      accessibilityActions={onLongPress ? [{ name: 'grade', label: t('mobile.search.gradeAction') }] : undefined}
+      onAccessibilityAction={
+        onLongPress
+          ? (event) => {
+              if (event.nativeEvent.actionName === 'grade') onLongPress();
+            }
+          : undefined
+      }
       tintColor={active ? withAlpha(brandColors.primary, 0.18) : undefined}
       fallbackColor={active ? withAlpha(brandColors.primary, 0.16) : systemColors.fill}
       badgeCount={activeFilterCount}

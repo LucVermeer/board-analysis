@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useRef } from 'react';
-import { type ColorValue, StyleSheet, View } from 'react-native';
+import {
+  type AccessibilityActionEvent,
+  type AccessibilityActionInfo,
+  type ColorValue,
+  StyleSheet,
+  View,
+} from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { GlassSurface } from './GlassSurface';
 import { PressableSurface } from './PressableSurface';
@@ -22,6 +28,10 @@ type GlassIconButtonProps = {
   /** Hint describing what activation does — useful when the button morphs in
    *  place (e.g. search ↔ close) rather than navigating. */
   accessibilityHint?: string;
+  /** Custom assistive-tech actions (e.g. a grade shortcut VoiceOver / Switch
+   *  Control can reach, mirroring an otherwise-invisible long-press). */
+  accessibilityActions?: ReadonlyArray<AccessibilityActionInfo>;
+  onAccessibilityAction?: (event: AccessibilityActionEvent) => void;
   /** Translucent tint composited on the glass (iOS). Omit for a neutral surface. */
   tintColor?: string;
   /** Solid colour used on Android, Reduce Transparency, and the cold-start frame. */
@@ -58,6 +68,8 @@ export function GlassIconButton({
   onLongPress,
   accessibilityLabel,
   accessibilityHint,
+  accessibilityActions,
+  onAccessibilityAction,
   tintColor,
   fallbackColor,
   badgeCount,
@@ -131,6 +143,8 @@ export function GlassIconButton({
         accessibilityRole="button"
         accessibilityLabel={accessibilityLabel}
         accessibilityHint={accessibilityHint}
+        accessibilityActions={accessibilityActions}
+        onAccessibilityAction={onAccessibilityAction}
         style={[styles.button, { width: size, height: size, borderRadius: size / 2 }]}
       >
         <GlassSurface

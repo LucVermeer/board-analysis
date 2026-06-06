@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ElementRef, type ReactNode } from 'react';
-import { AccessibilityInfo, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Gesture, GestureDetector, ScrollView } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
@@ -26,7 +26,6 @@ import { hapticSelection } from '../../lib/haptics';
 import { brandColors } from '../../theme/colors';
 import { spacing } from '../../theme/tokens';
 import { GradeChip } from './GradeChip';
-import { readableTextColor } from './grade-chip-colors';
 
 const CLEAR_DISMISS_MS = 300;
 
@@ -63,7 +62,7 @@ type GradeRangeRailProps = {
   sendDifficultyIds?: readonly number[];
   onChange: (next: GradeBound) => void;
   /**
-   * Asked to dismiss itself (swipe, Done, completed range, or cleared
+   * Asked to dismiss itself (swipe the handle down, completed range, or cleared
    * selection). Only ever called when `dismissible` is true, so an inline,
    * always-open rail (e.g. inside the filter sheet) can omit it.
    */
@@ -95,14 +94,11 @@ export function GradeRangeRail({
   // closure on the timer.
   const onRequestCloseRef = useRef(onRequestClose);
   const [railWidth, setRailWidth] = useState(0);
-  const [screenReaderEnabled, setScreenReaderEnabled] = useState<boolean | null>(null);
   const didCenterRef = useRef(false);
 
   const grades = useMemo(() => sortedGrades(unsortedGrades), [unsortedGrades]);
   const gradeIds = useMemo(() => grades.map((grade) => grade.difficultyId), [grades]);
   const centerId = useMemo(() => gradeRailCenter(bound, grades, sendDifficultyIds), [bound, grades, sendDifficultyIds]);
-  const showDone = dismissible && (isRangeGrade(bound) || (screenReaderEnabled === true && !isAnyGrade(bound)));
-  const showTopRow = showTitle || showDone;
 
   const clearDismissTimer = useCallback(() => {
     if (dismissTimerRef.current) {
@@ -121,22 +117,6 @@ export function GradeRangeRail({
   }, [clearDismissTimer]);
 
   useEffect(() => clearDismissTimer, [clearDismissTimer]);
-
-  useEffect(() => {
-    let mounted = true;
-    AccessibilityInfo.isScreenReaderEnabled()
-      .then((enabled) => {
-        if (mounted) setScreenReaderEnabled(enabled);
-      })
-      .catch(() => {
-        if (mounted) setScreenReaderEnabled(false);
-      });
-    const subscription = AccessibilityInfo.addEventListener('screenReaderChanged', setScreenReaderEnabled);
-    return () => {
-      mounted = false;
-      subscription.remove();
-    };
-  }, []);
 
   const scheduleDismiss = useCallback(
     (delay: number) => {
@@ -184,7 +164,7 @@ export function GradeRangeRail({
       // existing range, and crucially clearing a grade (tapping the already-
       // selected one). That clear case is how a user starts a fresh range from a
       // prior selection, so closing there would cut them off mid-build. To
-      // dismiss without finishing a range, swipe the handle down or tap Done.
+      // dismiss without finishing a range, swipe the handle down.
       const completedRange = isSingleGrade(bound) && isRangeGrade(result.next);
       if (dismissible && completedRange) {
         scheduleDismiss(CLEAR_DISMISS_MS);
@@ -219,28 +199,11 @@ export function GradeRangeRail({
           </PressableSurface>
         </GestureDetector>
       ) : null}
-      {showTopRow ? (
-        <View style={[styles.topRow, !showTitle && styles.topRowEnd]}>
-          {showTitle ? (
-            <Text variant="footnote" color={systemColors.secondaryLabel} style={styles.title}>
-              {t('mobile.filter.gradeRange')}
-            </Text>
-          ) : null}
-          {showDone ? (
-            <PressableSurface
-              onPress={() => {
-                handleRequestClose();
-              }}
-              feedback="opacity"
-              accessibilityRole="button"
-              accessibilityLabel={t('mobile.filter.done')}
-              style={styles.doneButton}
-            >
-              <Text variant="subheadline" color={readableTextColor(brandColors.primary)} style={styles.doneText}>
-                {t('mobile.filter.done')}
-              </Text>
-            </PressableSurface>
-          ) : null}
+      {showTitle ? (
+        <View style={styles.topRow}>
+          <Text variant="footnote" color={systemColors.secondaryLabel} style={styles.title}>
+            {t('mobile.filter.gradeRange')}
+          </Text>
         </View>
       ) : null}
       <ScrollView
@@ -412,20 +375,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  topRowEnd: {
-    justifyContent: 'flex-end',
-  },
   title: {
-    fontWeight: '600',
-  },
-  doneButton: {
-    minHeight: 44,
-    borderRadius: 22,
-    backgroundColor: brandColors.primary,
-    justifyContent: 'center',
-    paddingHorizontal: spacing[3],
-  },
-  doneText: {
     fontWeight: '600',
   },
   railContent: {

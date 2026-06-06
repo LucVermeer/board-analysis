@@ -9,7 +9,7 @@ import { SHARED_EVENTS } from '@boardsesh/analytics';
 import {
   toClimbSearchInput,
   mergeBoardFilters,
-  countActiveFiltersBeyondGrade,
+  countActiveFilters,
   hasActiveBoardFilters,
   DEFAULT_CLIMB_FILTER_STATE,
   DEFAULT_CLIMB_BOARD_FILTER_STATE,
@@ -79,10 +79,6 @@ type NativeSearchChange = string | { nativeEvent?: { text?: string } };
 
 function readNativeSearchText(change: NativeSearchChange): string {
   return typeof change === 'string' ? change : (change.nativeEvent?.text ?? '');
-}
-
-function gradeFilterActive(filters: ClimbFilters): boolean {
-  return filters.minGrade != null || filters.maxGrade != null;
 }
 
 function queryLengthBucket(query: string): 'none' | 'short' | 'medium' | 'long' {
@@ -175,7 +171,12 @@ function ClimbListInner() {
     setSearchTextLength(text.length);
     const customSearch = searchHeaderRef.current;
     const nativeSearch = nativeSearchRef.current;
-    customSearch?.setText(text);
+    // Seed the displayed text only — never re-enter onChangeText, which would
+    // re-arm the input debounce and redundantly re-commit the term. Callers
+    // commit `name` through the search provider (replaceSearch / setName); this
+    // just mirrors it into the field. (The native bar's setText likewise does
+    // not fire its change handler.)
+    customSearch?.setText(text, { silent: true });
     nativeSearch?.setText(text);
     return customSearch != null || nativeSearch != null;
   }, []);
@@ -420,7 +421,10 @@ function ClimbListInner() {
       sizeId,
       setIds,
       angle,
-      activeFilterCount: countActiveFiltersBeyondGrade(filters, boardFilters),
+      // Grade-inclusive, matching the filter button's badge — a set grade is an
+      // active filter, so the analytics count and the UI never disagree (and a
+      // grade-only search reports 1, not 0).
+      activeFilterCount: countActiveFilters(filters, boardFilters),
     });
   }, [firstSearchPage, name, filters, boardFilters, boardName, layoutId, sizeId, setIds, angle]);
 
@@ -553,10 +557,7 @@ function ClimbListInner() {
     () => ({ minGradeId: filters.minGrade, maxGradeId: filters.maxGrade }),
     [filters.minGrade, filters.maxGrade],
   );
-  const activeFilterCount = useMemo(
-    () => countActiveFiltersBeyondGrade(filters, boardFilters) + (gradeFilterActive(filters) ? 1 : 0),
-    [filters, boardFilters],
-  );
+  const activeFilterCount = useMemo(() => countActiveFilters(filters, boardFilters), [filters, boardFilters]);
 
   const stackOptions = useMemo(
     () =>

@@ -486,6 +486,13 @@ jobs:
       # push-to-main. Runs before the heavier Metro bundle so it fails fast.
       - name: Check native build-phase deps resolve
         run: vp run check:mobile-native-deps
+      # A Bun patch is keyed by an exact version, so an Expo/RN bump can silently
+      # drop it: install only warns, and typecheck + the Metro bundle stay green
+      # while a native-only behavior (e.g. the iOS 26 tab-bar minimize tracking
+      # the climbs FlashList) regresses all the way into TestFlight. Assert the
+      # patched source is actually present on this cheap Linux runner.
+      - name: Check native patches are applied
+        run: vp run check:mobile-patches
       - name: Download built packages
         uses: actions/download-artifact@v4
         with:

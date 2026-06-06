@@ -10,11 +10,12 @@ import { View, StyleSheet, type ColorValue, type LayoutChangeEvent } from 'react
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { runOnJS, useAnimatedStyle, useDerivedValue } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
-import { computePeekOffset } from '@boardsesh/play-view';
+import { computePeekOffset, computeNavigationStateWithSuggestions } from '@boardsesh/play-view';
 import { getGradeColor, DEFAULT_GRADE_COLOR } from '@boardsesh/board-constants/grade-colors';
 import type { ClimbQueueItem } from '@boardsesh/queue';
 import { shadows } from '../../theme/tokens';
 import { TOOLBAR_CAPSULE_HEIGHT, TOOLBAR_CAPSULE_MAX_WIDTH } from '../../theme/layout';
+import { CHROME_LABEL_MAX_FONT_SCALE } from '../../theme/typography';
 import { useGradeFormat } from '../../hooks/use-grade-format';
 import { useReduceMotion } from '../../hooks/use-reduce-motion';
 import { useNativeGlass } from '../../hooks/use-native-glass';
@@ -46,11 +47,23 @@ type ClimbLabelProps = {
 function ClimbLabel({ display, labelColor, formattedGrade, gradeColor }: ClimbLabelProps) {
   return (
     <View style={styles.labelInner}>
-      <Text variant="subheadline" color={labelColor} numberOfLines={1} ellipsizeMode="tail" style={styles.name}>
+      <Text
+        variant="subheadline"
+        color={labelColor}
+        numberOfLines={1}
+        ellipsizeMode="tail"
+        maxFontSizeMultiplier={CHROME_LABEL_MAX_FONT_SCALE}
+        style={styles.name}
+      >
         {display.name ?? ''}
       </Text>
       {formattedGrade ? (
-        <Text variant="headline" numberOfLines={1} style={[styles.gradeText, { color: gradeColor }]}>
+        <Text
+          variant="headline"
+          numberOfLines={1}
+          maxFontSizeMultiplier={CHROME_LABEL_MAX_FONT_SCALE}
+          style={[styles.gradeText, { color: gradeColor }]}
+        >
           {formattedGrade}
         </Text>
       ) : null}
@@ -84,7 +97,7 @@ export function ClimbCapsule({
   endActionSize = 0,
   height = TOOLBAR_CAPSULE_HEIGHT,
 }: ClimbCapsuleProps) {
-  const { state, nextClimb, previousClimb } = useQueue();
+  const { state, nextClimb, previousClimb, playlistSuggestionSource } = useQueue();
   const { openPlayDrawer } = useDrawerHost();
   const { systemColors } = useTheme();
   const { t } = useTranslation('session');
@@ -96,15 +109,15 @@ export function ClimbCapsule({
 
   const { currentClimbQueueItem, queue } = state;
 
-  const currentIndex = useMemo(() => {
-    if (!currentClimbQueueItem) return -1;
-    return queue.findIndex(({ uuid }) => uuid === currentClimbQueueItem.uuid);
-  }, [queue, currentClimbQueueItem]);
-
-  const canPrevious = currentIndex > 0;
-  const canNext = currentIndex >= 0 && currentIndex < queue.length - 1;
-  const previousItem = canPrevious ? queue[currentIndex - 1] : null;
-  const nextItem = canNext ? queue[currentIndex + 1] : null;
+  // Suggestion-aware so the capsule carousel matches the play drawer: at the
+  // queue tail of an active playlist, `nextItem` falls through to the next
+  // playlist climb (a transient "peek") instead of stopping. canPrevious/prevItem
+  // stay queue-only — there is no backward suggestion fall-through.
+  const { canPrevious, canNext, nextItem, prevItem } = useMemo(
+    () => computeNavigationStateWithSuggestions(queue, currentClimbQueueItem, playlistSuggestionSource),
+    [queue, currentClimbQueueItem, playlistSuggestionSource],
+  );
+  const previousItem = prevItem;
 
   const handleNext = useCallback(() => {
     hapticSelection();

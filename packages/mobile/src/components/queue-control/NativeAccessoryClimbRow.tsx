@@ -5,7 +5,7 @@ import Animated, { runOnJS, useAnimatedStyle, useDerivedValue } from 'react-nati
 import { useTranslation } from 'react-i18next';
 import type { BoardName } from '@boardsesh/shared-schema';
 import type { Climb, ClimbQueueItem } from '@boardsesh/queue';
-import { computePeekOffset } from '@boardsesh/play-view';
+import { computePeekOffset, computeNavigationStateWithSuggestions } from '@boardsesh/play-view';
 import { getBoardRenderData } from '../../lib/board-details';
 import { useGradeFormat } from '../../hooks/use-grade-format';
 import { useReduceMotion } from '../../hooks/use-reduce-motion';
@@ -15,6 +15,7 @@ import { useDrawerHost, type BoardConfig } from '../../providers/drawer-host-pro
 import { hapticLight, hapticSelection } from '../../lib/haptics';
 import { spacing } from '../../theme/tokens';
 import { glassSize } from '../../theme/layout';
+import { CHROME_LABEL_MAX_FONT_SCALE } from '../../theme/typography';
 import { Text } from '../Text';
 import { BoardRenderer } from '../board-renderer/BoardRenderer';
 import { useCarouselGesture } from '../play-drawer/use-carousel-gesture';
@@ -108,11 +109,24 @@ function ClimbLabel({ climb, labelColor, formattedGrade, showThumbnail, boardCon
   return (
     <View style={styles.labelInner}>
       {showThumbnail ? <AccessoryClimbThumbnail climb={climb} boardConfig={boardConfig} /> : null}
-      <Text variant="subheadline" color={labelColor} numberOfLines={1} ellipsizeMode="tail" style={styles.name}>
+      <Text
+        variant="subheadline"
+        color={labelColor}
+        numberOfLines={1}
+        ellipsizeMode="tail"
+        maxFontSizeMultiplier={CHROME_LABEL_MAX_FONT_SCALE}
+        style={styles.name}
+      >
         {climb.name}
       </Text>
       {formattedGrade ? (
-        <Text variant="subheadline" color={labelColor} numberOfLines={1} style={styles.gradeText}>
+        <Text
+          variant="subheadline"
+          color={labelColor}
+          numberOfLines={1}
+          maxFontSizeMultiplier={CHROME_LABEL_MAX_FONT_SCALE}
+          style={styles.gradeText}
+        >
           {formattedGrade}
         </Text>
       ) : null}
@@ -125,7 +139,12 @@ function climbFromItem(item: ClimbQueueItem | null | undefined): Climb | null {
 }
 
 export function NativeAccessoryClimbRow({ placement, width }: NativeAccessoryClimbRowProps) {
-  const { state, nextClimb: navigateNextClimb, previousClimb: navigatePreviousClimb } = useQueue();
+  const {
+    state,
+    nextClimb: navigateNextClimb,
+    previousClimb: navigatePreviousClimb,
+    playlistSuggestionSource,
+  } = useQueue();
   const { boardConfig, openPlayDrawer } = useDrawerHost();
   const { systemColors } = useTheme();
   const { t } = useTranslation('session');
@@ -136,15 +155,16 @@ export function NativeAccessoryClimbRow({ placement, width }: NativeAccessoryCli
   const { currentClimbQueueItem, queue } = state;
   const currentClimb = climbFromItem(currentClimbQueueItem);
 
-  const currentIndex = useMemo(() => {
-    if (!currentClimbQueueItem) return -1;
-    return queue.findIndex(({ uuid }) => uuid === currentClimbQueueItem.uuid);
-  }, [queue, currentClimbQueueItem]);
-
-  const canPrevious = currentIndex > 0;
-  const canNext = currentIndex >= 0 && currentIndex < queue.length - 1;
-  const previousClimb = climbFromItem(canPrevious ? queue[currentIndex - 1] : null);
-  const nextQueueClimb = climbFromItem(canNext ? queue[currentIndex + 1] : null);
+  // Suggestion-aware so the carousel matches the play drawer: at the queue tail
+  // of an active playlist, `nextItem` falls through to the next playlist climb
+  // (a transient "peek") instead of dead-ending. canPrevious/prevItem stay
+  // queue-only — there is no backward suggestion fall-through.
+  const { canPrevious, canNext, nextItem, prevItem } = useMemo(
+    () => computeNavigationStateWithSuggestions(queue, currentClimbQueueItem, playlistSuggestionSource),
+    [queue, currentClimbQueueItem, playlistSuggestionSource],
+  );
+  const previousClimb = climbFromItem(prevItem);
+  const nextQueueClimb = climbFromItem(nextItem);
   const showThumbnail = placement === 'regular' && boardConfig !== null;
 
   const handleNext = useCallback(() => {

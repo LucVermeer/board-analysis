@@ -70,3 +70,13 @@ export const textStyles = {
 } as const satisfies Record<string, TypeStyle>;
 
 export type TextVariant = keyof typeof textStyles;
+
+/**
+ * Max Dynamic Type multiplier for labels inside fixed-height glass chrome — the
+ * queue capsule and the iOS 26 bottom-accessory / now-playing-style rows, whose
+ * height is pinned to the `glassSize` ladder. The global `Text` default (1.5×)
+ * clips the single-line climb name + grade against those rigid heights, so cap
+ * them at 1.2× — still meaningfully larger for low-vision users, but it fits the
+ * platter. Surfaces that can grow with their content keep the 1.5× default.
+ */
+export const CHROME_LABEL_MAX_FONT_SCALE = 1.2;

@@ -14,6 +14,8 @@ type GlassMockProps = {
   onLongPress?: () => void;
   accessibilityLabel?: string;
   accessibilityHint?: string;
+  accessibilityActions?: ReadonlyArray<{ name: string; label?: string }>;
+  onAccessibilityAction?: (event: { nativeEvent: { actionName: string } }) => void;
   tintColor?: string;
   fallbackColor?: string;
   badgeCount?: number;
@@ -28,6 +30,8 @@ vi.mock('../../GlassIconButton', () => ({
     onLongPress,
     accessibilityLabel,
     accessibilityHint,
+    accessibilityActions,
+    onAccessibilityAction,
     tintColor,
     fallbackColor,
     badgeCount,
@@ -35,12 +39,17 @@ vi.mock('../../GlassIconButton', () => ({
     createElement('button', {
       onClick: onPress,
       onDoubleClick: onLongPress,
+      // Simulate VoiceOver / Switch Control invoking the named "grade" action.
+      onContextMenu: () => onAccessibilityAction?.({ nativeEvent: { actionName: 'grade' } }),
       'data-icon': iconName,
       'data-icon-color': iconColor ?? '',
       'data-icon-size': iconSize == null ? '' : String(iconSize),
       'data-size': size == null ? '' : String(size),
       'data-label': accessibilityLabel ?? '',
       'data-hint': accessibilityHint ?? '',
+      'data-actions': Array.isArray(accessibilityActions)
+        ? accessibilityActions.map((action) => action.name).join(',')
+        : '',
       'data-tint': tintColor ?? '',
       'data-fallback': fallbackColor ?? '',
       'data-badge': badgeCount == null ? '' : String(badgeCount),
@@ -138,5 +147,21 @@ describe('FilterButton', () => {
   it('adds the long-press hint when quick grade search is available', () => {
     const { container } = render(<FilterButton activeFilterCount={0} onPress={() => {}} onLongPress={() => {}} />);
     expect(button(container).getAttribute('data-hint')).toBe('mobile.search.filterHint');
+  });
+
+  it('exposes a grade accessibility action that assistive tech can trigger', () => {
+    // A raw long-press is invisible to VoiceOver / Switch Control, so grade must
+    // also be reachable as a named action that runs the same handler.
+    const onLongPress = vi.fn();
+    const { getByRole } = render(<FilterButton activeFilterCount={0} onPress={() => {}} onLongPress={onLongPress} />);
+    const filterButton = getByRole('button');
+    expect(filterButton.getAttribute('data-actions')).toContain('grade');
+    fireEvent.contextMenu(filterButton);
+    expect(onLongPress).toHaveBeenCalledTimes(1);
+  });
+
+  it('exposes no custom actions when grade quick-access is unavailable', () => {
+    const { container } = render(<FilterButton activeFilterCount={0} onPress={() => {}} />);
+    expect(button(container).getAttribute('data-actions')).toBe('');
   });
 });

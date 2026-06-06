@@ -657,7 +657,8 @@
       "gradeClear": "Any",
       "filters": "Filters",
       "filterCountAria": "Filters, {{count}} active",
-      "filterHint": "Tap for filters. Hold for grade."
+      "filterHint": "Opens all climb filters",
+      "gradeAction": "Set grade range"
     },
     "gradeRail": {
       "setFilterAria": "Set grade filter to {{grade}}",

@@ -15,6 +15,18 @@ const queue = vi.hoisted(() => ({
 }));
 const drawer = vi.hoisted(() => ({ openPlayDrawer: vi.fn() }));
 
+// Injectable navigation result so tests drive the suggestion-aware canNext/nextItem
+// the capsule reads from computeNavigationStateWithSuggestions.
+const nav = vi.hoisted(() => ({
+  result: {
+    canNext: false,
+    canPrevious: false,
+    nextItem: null as ClimbQueueItem | null,
+    prevItem: null as ClimbQueueItem | null,
+    remainingCount: 0,
+  },
+}));
+
 // --- RN surface: View → div ---------------------------------------------------
 vi.mock('react-native', () => ({
   View: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
@@ -47,7 +59,10 @@ vi.mock('react-native-gesture-handler', () => {
 
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 
-vi.mock('@boardsesh/play-view', () => ({ computePeekOffset: () => 0 }));
+vi.mock('@boardsesh/play-view', () => ({
+  computePeekOffset: () => 0,
+  computeNavigationStateWithSuggestions: () => nav.result,
+}));
 
 // getGradeColor returns a distinct hue for V6 so we can assert the grade text
 // carries the grade colour (not a generic white-on-pill style).
@@ -148,6 +163,7 @@ function makeItem(climb: Climb): ClimbQueueItem {
 
 describe('ClimbCapsule', () => {
   beforeEach(() => {
+    nav.result = { canNext: false, canPrevious: false, nextItem: null, prevItem: null, remainingCount: 0 };
     queue.state.currentClimbQueueItem = null;
     queue.state.queue = [];
     drawer.openPlayDrawer.mockClear();
@@ -246,5 +262,25 @@ describe('ClimbCapsule', () => {
     render(<ClimbCapsule />);
     // No tap fired → no call yet. (Documents the jsdom gesture limitation.)
     expect(drawer.openPlayDrawer).not.toHaveBeenCalled();
+  });
+
+  it('peeks the suggestion-aware next climb past the queue tail', () => {
+    const item = makeItem(makeClimb({ uuid: 'current', name: 'Current Route' }));
+    queue.state.currentClimbQueueItem = item;
+    queue.state.queue = [item];
+    // Only one climb queued, yet navigation reports a next item — a playlist
+    // suggestion peek. The capsule must render it instead of stopping at the tail.
+    nav.result = {
+      canNext: true,
+      canPrevious: false,
+      nextItem: makeItem(makeClimb({ uuid: 'peek', name: 'Suggested Next', difficulty: 'V7' })),
+      prevItem: null,
+      remainingCount: 0,
+    };
+
+    const { container } = render(<ClimbCapsule />);
+
+    expect(container.textContent).toContain('Current Route');
+    expect(container.textContent).toContain('Suggested Next');
   });
 });
