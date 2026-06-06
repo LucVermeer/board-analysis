@@ -118,6 +118,24 @@ describe('GlassSurface fallback hierarchy', () => {
     expect(container.querySelector('[data-bg="#1C1C1E"]')).not.toBeNull();
   });
 
+  it('composites a translucent fallbackColor over an opaque base (no see-through) on Material', () => {
+    // The climbs search bar passes the faint `fill` token as its fallback; it
+    // must not punch a hole through the surface on the no-glass paths.
+    ctrl.variant = 'material';
+    const { container } = render(<GlassSurface fallbackColor="rgba(1, 2, 3, 0.1)" />);
+    // Opaque secondary-background base is present...
+    expect(container.querySelector('[data-bg="#1C1C1E"]')).not.toBeNull();
+    // ...with the translucent fill layered on top as a tint.
+    expect(container.querySelector('[data-bg="rgba(1, 2, 3, 0.1)"]')).not.toBeNull();
+  });
+
+  it('composites a translucent fallbackColor over an opaque base on the solid path too', () => {
+    ctrl.rt = true; // solid path
+    const { container } = render(<GlassSurface fallbackColor="rgba(1, 2, 3, 0.1)" />);
+    expect(container.querySelector('[data-bg="#1C1C1E"]')).not.toBeNull();
+    expect(container.querySelector('[data-bg="rgba(1, 2, 3, 0.1)"]')).not.toBeNull();
+  });
+
   it('Reduce Transparency still wins over the Material variant — solid surface', () => {
     ctrl.variant = 'material';
     ctrl.rt = true;

@@ -18,9 +18,11 @@ type GlassSurfaceProps = {
    */
   tintColor?: string;
   /**
-   * Solid background used on Android and when Reduce Transparency is enabled.
-   * Defaults to the theme's secondary background. Pass an opaque tint here when
-   * a surface wants its tint to survive on the no-glass path.
+   * Fill layered over the surface on the no-glass paths (Material / Android /
+   * Reduce Transparency). It composites on top of an opaque secondary-background
+   * base, so a translucent token (e.g. `systemColors.fill`) reads as a tint —
+   * not a see-through hole — and an opaque value fully covers the base. Omit it
+   * to get the plain secondary-background surface.
    */
   fallbackColor?: ColorValue;
   /**
@@ -72,16 +74,26 @@ export function GlassSurface({
   const mode = useEffectiveSurfaceMode();
   const isDark = colorScheme === 'dark';
 
-  const solidColor = fallbackColor ?? systemColors.secondaryBackground;
+  // The no-glass paths always start from an opaque base so the surface never
+  // shows the screen through it (a `fallbackColor` may be a translucent token
+  // like `fill`, meant as a tint over a surface, not a standalone background —
+  // and a see-through surface would also defeat Reduce Transparency).
+  const baseColor = systemColors.secondaryBackground;
   const radius = borderRadius != null ? { borderRadius } : null;
   // The blur/solid paths have no native shape, so clip them to the radius here.
   const clippedRadius = borderRadius != null ? { borderRadius, overflow: 'hidden' as const } : null;
 
   // Solid: Reduce Transparency (a11y) on any platform, or Android forced onto
-  // the Liquid Glass variant. Flat fill, no elevation.
+  // the Liquid Glass variant. Opaque base + the fallback/tint layered on top.
   if (mode === 'solid') {
     return (
-      <View style={[style, clippedRadius, { backgroundColor: solidColor }]} pointerEvents={pointerEvents}>
+      <View style={[style, clippedRadius, { backgroundColor: baseColor }]} pointerEvents={pointerEvents}>
+        {fallbackColor ? (
+          <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: fallbackColor }]} />
+        ) : null}
+        {tintColor ? (
+          <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: tintColor }]} />
+        ) : null}
         {children}
       </View>
     );
@@ -89,11 +101,14 @@ export function GlassSurface({
 
   // Material: opaque M3 tonal surface. Background + radius + shadow live on the
   // same view (no `overflow: 'hidden'`, which would clip the iOS shadow) so the
-  // surface casts a real elevation shadow with rounded corners. A tint is
-  // composited as a translucent overlay, matching the blur path.
+  // surface casts a real elevation shadow with rounded corners. The fallback and
+  // tint composite over the opaque base, matching the blur path.
   if (mode === 'material') {
     return (
-      <View style={[style, radius, shadows.sm, { backgroundColor: solidColor }]} pointerEvents={pointerEvents}>
+      <View style={[style, radius, shadows.sm, { backgroundColor: baseColor }]} pointerEvents={pointerEvents}>
+        {fallbackColor ? (
+          <View pointerEvents="none" style={[StyleSheet.absoluteFill, radius, { backgroundColor: fallbackColor }]} />
+        ) : null}
         {tintColor ? (
           <View pointerEvents="none" style={[StyleSheet.absoluteFill, radius, { backgroundColor: tintColor }]} />
         ) : null}
