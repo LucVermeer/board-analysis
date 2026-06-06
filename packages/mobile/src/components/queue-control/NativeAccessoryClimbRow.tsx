@@ -33,7 +33,7 @@ const ACCESSORY_TRAILING_INSET = spacing[3];
 const ACCESSORY_THUMBNAIL_SLOT_SIZE = 36;
 const ACCESSORY_THUMBNAIL_ART_MAX_SIZE = 36;
 const ACCESSORY_THUMBNAIL_RADIUS = 7;
-const ACCESSORY_THUMBNAIL_Y_OFFSET = -4;
+const ACCESSORY_THUMBNAIL_OPTICAL_Y_OFFSET = -4;
 
 type ClimbLabelProps = {
   climb: Climb;
@@ -330,7 +330,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
-    transform: [{ translateY: ACCESSORY_THUMBNAIL_Y_OFFSET }],
+    transform: [{ translateY: ACCESSORY_THUMBNAIL_OPTICAL_Y_OFFSET }],
   },
   name: {
     flex: 1,
