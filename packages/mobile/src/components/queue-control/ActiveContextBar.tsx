@@ -35,6 +35,11 @@ type ActiveContextBarProps = {
   trailing?: ReactNode;
   /** Width of the trailing slot (defaults to the hero size). */
   trailingWidth?: number;
+  /** Render the primary edge-to-edge (no leading/trailing slots) — the Material
+   *  full-width bar, where the trailing action lives inside the primary. */
+  fillPrimary?: boolean;
+  /** Lift above the tab bar (defaults to TOOLBAR_GAP_ABOVE_TABBAR). */
+  gapAboveTabBar?: number;
 };
 
 export function ActiveContextBar({
@@ -42,6 +47,8 @@ export function ActiveContextBar({
   primary,
   trailing,
   trailingWidth = glassSize.hero,
+  fillPrimary = false,
+  gapAboveTabBar = TOOLBAR_GAP_ABOVE_TABBAR,
 }: ActiveContextBarProps) {
   const reduceMotion = useReduceMotion();
   const bottomChrome = useBottomChromeMetrics();
@@ -50,19 +57,25 @@ export function ActiveContextBar({
     <Animated.View
       entering={reduceMotion ? undefined : FadeIn.duration(timing.normal)}
       pointerEvents="box-none"
-      style={[styles.toolbar, { bottom: bottomChrome.tabBarBottom + TOOLBAR_GAP_ABOVE_TABBAR }]}
+      style={[styles.toolbar, { bottom: bottomChrome.tabBarBottom + gapAboveTabBar }]}
     >
-      <Animated.View style={styles.row} pointerEvents="box-none" importantForAccessibility="auto">
-        <View style={styles.sideSlot} pointerEvents={leading ? 'box-none' : 'none'}>
-          {leading}
-        </View>
-        <View style={styles.centerSlot} pointerEvents="box-none">
+      {fillPrimary ? (
+        <View style={styles.fillRow} pointerEvents="box-none" importantForAccessibility="auto">
           {primary}
         </View>
-        <View style={[styles.heroSlot, { width: trailingWidth }]} pointerEvents="box-none">
-          {trailing}
-        </View>
-      </Animated.View>
+      ) : (
+        <Animated.View style={styles.row} pointerEvents="box-none" importantForAccessibility="auto">
+          <View style={styles.sideSlot} pointerEvents={leading ? 'box-none' : 'none'}>
+            {leading}
+          </View>
+          <View style={styles.centerSlot} pointerEvents="box-none">
+            {primary}
+          </View>
+          <View style={[styles.heroSlot, { width: trailingWidth }]} pointerEvents="box-none">
+            {trailing}
+          </View>
+        </Animated.View>
+      )}
     </Animated.View>
   );
 }
@@ -79,6 +92,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: TOOLBAR_GAP,
+  },
+  // Full-width primary (Material bar): the single occupant spans the toolbar.
+  fillRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   centerSlot: {
     flex: 1,

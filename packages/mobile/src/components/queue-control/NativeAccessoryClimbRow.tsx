@@ -1,10 +1,7 @@
-import { useMemo } from 'react';
 import { StyleSheet, View, type ColorValue } from 'react-native';
 import { GestureDetector } from 'react-native-gesture-handler';
 import Animated from 'react-native-reanimated';
-import type { BoardName } from '@boardsesh/shared-schema';
 import type { Climb, ClimbQueueItem } from '@boardsesh/queue';
-import { getBoardRenderData } from '../../lib/board-details';
 import { useGradeFormat } from '../../hooks/use-grade-format';
 import { useTheme } from '../../providers/theme-provider';
 import { useDrawerHost, type BoardConfig } from '../../providers/drawer-host-provider';
@@ -12,7 +9,7 @@ import { spacing } from '../../theme/tokens';
 import { glassSize } from '../../theme/layout';
 import { CHROME_LABEL_MAX_FONT_SCALE } from '../../theme/typography';
 import { Text } from '../Text';
-import { BoardRenderer } from '../board-renderer/BoardRenderer';
+import { AccessoryClimbThumbnail } from './AccessoryClimbThumbnail';
 import { useQueueCarousel } from './use-queue-carousel';
 import { LogAscentToolbarButton } from './LogAscentToolbarButton';
 
@@ -25,9 +22,6 @@ type NativeAccessoryClimbRowProps = {
 
 const ACCESSORY_LEADING_INSET = spacing[1];
 const ACCESSORY_TRAILING_INSET = spacing[3];
-const ACCESSORY_THUMBNAIL_SLOT_SIZE = 40;
-const ACCESSORY_THUMBNAIL_ART_MAX_SIZE = 40;
-const ACCESSORY_THUMBNAIL_ART_RADIUS = 10;
 
 type ClimbLabelProps = {
   climb: Climb;
@@ -36,69 +30,6 @@ type ClimbLabelProps = {
   showThumbnail: boolean;
   boardConfig: BoardConfig | null;
 };
-
-function getAccessoryThumbnailBoardSize(boardWidth: number, boardHeight: number) {
-  const boardAspectRatio = boardWidth / boardHeight;
-  if (!Number.isFinite(boardAspectRatio) || boardAspectRatio <= 0) {
-    return {
-      width: ACCESSORY_THUMBNAIL_ART_MAX_SIZE,
-      height: ACCESSORY_THUMBNAIL_ART_MAX_SIZE,
-    };
-  }
-
-  if (boardAspectRatio >= 1) {
-    return {
-      width: ACCESSORY_THUMBNAIL_ART_MAX_SIZE,
-      height: ACCESSORY_THUMBNAIL_ART_MAX_SIZE / boardAspectRatio,
-    };
-  }
-
-  return {
-    width: ACCESSORY_THUMBNAIL_ART_MAX_SIZE * boardAspectRatio,
-    height: ACCESSORY_THUMBNAIL_ART_MAX_SIZE,
-  };
-}
-
-function AccessoryClimbThumbnail({ climb, boardConfig }: { climb: Climb; boardConfig: BoardConfig | null }) {
-  const boardRenderData = useMemo(() => {
-    if (!boardConfig) return null;
-    const setIdValues = boardConfig.setIds
-      .split(',')
-      .map((setIdText) => Number(setIdText))
-      .filter((setIdValue) => Number.isFinite(setIdValue));
-    if (setIdValues.length === 0) return null;
-    return getBoardRenderData({
-      boardName: boardConfig.boardName as BoardName,
-      layoutId: boardConfig.layoutId,
-      sizeId: boardConfig.sizeId,
-      setIds: setIdValues,
-    });
-  }, [boardConfig]);
-
-  if (!boardRenderData) return null;
-
-  const thumbnailBoardStyle = {
-    ...getAccessoryThumbnailBoardSize(boardRenderData.boardWidth, boardRenderData.boardHeight),
-    borderRadius: ACCESSORY_THUMBNAIL_ART_RADIUS,
-    overflow: 'hidden' as const,
-  };
-
-  return (
-    <View style={styles.thumbnailSlot}>
-      <BoardRenderer
-        frames={climb.frames}
-        boardName={boardConfig?.boardName as BoardName}
-        boardWidth={boardRenderData.boardWidth}
-        boardHeight={boardRenderData.boardHeight}
-        imageUrls={boardRenderData.imageUrls}
-        holdsData={boardRenderData.holdsData}
-        mirrored={climb.mirrored === true}
-        fillContainer
-        style={thumbnailBoardStyle}
-      />
-    </View>
-  );
-}
 
 function ClimbLabel({ climb, labelColor, formattedGrade, showThumbnail, boardConfig }: ClimbLabelProps) {
   return (
@@ -257,13 +188,6 @@ const styles = StyleSheet.create({
     gap: spacing[2],
     paddingLeft: spacing[2],
     paddingRight: spacing[1],
-  },
-  thumbnailSlot: {
-    width: ACCESSORY_THUMBNAIL_SLOT_SIZE,
-    height: ACCESSORY_THUMBNAIL_SLOT_SIZE,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
   },
   name: {
     flex: 1,

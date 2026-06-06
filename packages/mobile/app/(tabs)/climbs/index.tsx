@@ -101,7 +101,7 @@ function ClimbListInner() {
   const router = useRouter();
   const { t } = useTranslation('climbs');
   const { openClimbActions, openAddToPlaylist } = useDrawerHost();
-  const { systemColors } = useTheme();
+  const { systemColors, variant } = useTheme();
   const { addToQueue, state: queueState } = useQueue();
   const { filters, boardFilters, name, setFilters, setBoardFilters, setGrade, setName, replaceSearch } =
     useClimbSearch();
@@ -130,6 +130,11 @@ function ClimbListInner() {
     filterFabMinimumBottom,
     bottomChrome.floatingControlBottom + spacing[2] - filterFabNativeAccessoryDrop,
   );
+
+  // On the Material variant the filter lives in the top-right toolbar (next to
+  // the light/bluetooth button) inside ClimbTopChrome, so the bottom filter FAB
+  // is not rendered here.
+  const filterInTopChrome = variant === 'material';
 
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
@@ -716,19 +721,24 @@ function ClimbListInner() {
         onSearchFocus={handleSearchFocus}
         onSearchBlur={handleSearchBlur}
         onCloseGrade={handleDismissGrade}
+        showFilterAction={filterInTopChrome}
+        activeFilterCount={activeFilterCount}
+        onOpenFilters={handleOpenFilters}
       />
 
-      <ClimbFilterFab
-        activeFilterCount={activeFilterCount}
-        bottom={filterFabBottom}
-        bound={gradeBound}
-        grades={grades}
-        gradeRailVisible={showGrade}
-        onOpenFilters={handleOpenFilters}
-        onOpenGrade={handleOpenGrade}
-        onCloseGrade={handleDismissGrade}
-        onGradeChange={handleGradeChange}
-      />
+      {filterInTopChrome ? null : (
+        <ClimbFilterFab
+          activeFilterCount={activeFilterCount}
+          bottom={filterFabBottom}
+          bound={gradeBound}
+          grades={grades}
+          gradeRailVisible={showGrade}
+          onOpenFilters={handleOpenFilters}
+          onOpenGrade={handleOpenGrade}
+          onCloseGrade={handleDismissGrade}
+          onGradeChange={handleGradeChange}
+        />
+      )}
 
       {showFilters ? (
         <ClimbFilterSheet

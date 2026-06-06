@@ -4,24 +4,27 @@
  *
  * It is a thin adapter: it decides *whether* the climb bar should show (a current
  * climb exists and the native iOS 26 bottom accessory isn't already owning it),
- * then hands the climb capsule + log-ascent tick to the content-agnostic
- * {@link ActiveContextBar} for layout:
+ * then lays it out per variant via {@link ActiveContextBar}:
  *
- *   [ grade · climb name ]            [ ✓ tick ]
- *     ↑ tap = PlayDrawer                ↑ log ascent — shown on every tab so the
- *       swipe = prev/next                 fallback matches the always-on iOS 26
- *                                         bottom accessory (current climb + tick)
+ *   Liquid Glass / fallback   [ grade · name ]        [ ✓ tick ]
+ *     centered capsule + standalone hero tick (tap = PlayDrawer, swipe = prev/next)
+ *
+ *   Material                  [ ▢ grade · name              ✓ ]
+ *     one full-width capsule with the tick inside, sitting close to the tab bar
  *
  * On the Liquid Glass variant on iOS 26 the native bottom accessory owns this
- * same pair, so `jsQueueToolbarVisible` is false here and this returns null.
+ * pair, so `jsQueueToolbarVisible` is false here and this returns null.
  */
 
-import { TOOLBAR_RESERVE, TAB_BAR_HEIGHT } from '../../theme/layout';
+import { TOOLBAR_RESERVE, TAB_BAR_HEIGHT, glassSize } from '../../theme/layout';
+import { spacing } from '../../theme/tokens';
 import { useQueue } from '../../providers/queue-provider';
+import { useTheme } from '../../providers/theme-provider';
 import { useBottomChromeMetrics } from '../../hooks/use-bottom-chrome-metrics';
 import { ActiveContextBar } from './ActiveContextBar';
 import { ClimbCapsule } from './ClimbCapsule';
 import { LogAscentFab } from './LogAscentFab';
+import { LogAscentToolbarButton } from './LogAscentToolbarButton';
 
 // Re-export so layout consumers that already import toolbar metrics from this
 // module don't need to know which file owns them. Source of truth: theme/layout.
@@ -29,12 +32,29 @@ export { TOOLBAR_RESERVE, TAB_BAR_HEIGHT };
 
 export function PersistentQueueBar() {
   const { state } = useQueue();
+  const { variant } = useTheme();
   const bottomChrome = useBottomChromeMetrics();
 
   const currentClimb = state.currentClimbQueueItem?.climb;
 
   if (!bottomChrome.jsQueueToolbarVisible) return null;
   if (!currentClimb) return null;
+
+  if (variant === 'material') {
+    return (
+      <ActiveContextBar
+        fillPrimary
+        gapAboveTabBar={spacing[1]}
+        primary={
+          <ClimbCapsule
+            fillWidth
+            endAction={<LogAscentToolbarButton climb={currentClimb} size={glassSize.inline} />}
+            endActionSize={glassSize.inline}
+          />
+        }
+      />
+    );
+  }
 
   return <ActiveContextBar primary={<ClimbCapsule />} trailing={<LogAscentFab climb={currentClimb} />} />;
 }

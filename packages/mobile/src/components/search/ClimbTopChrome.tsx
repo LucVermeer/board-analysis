@@ -21,6 +21,7 @@ import { PressableSurface } from '../PressableSurface';
 import { SearchHeader, type SearchHeaderHandle } from '../SearchHeader';
 import { Text } from '../Text';
 import { Icon } from '../Icon';
+import { Badge } from '../Badge';
 import { AngleSelectorSheet } from '../play-drawer/AngleSelectorSheet';
 
 const CAPSULE_RADIUS = glassSize.capsule / 2;
@@ -41,6 +42,11 @@ type ClimbTopChromeProps = {
   onSearchFocus: () => void;
   onSearchBlur: () => void;
   onCloseGrade: () => void;
+  /** Render the filter affordance in the top-right toolbar (Material variant), next
+   *  to the light/bluetooth button, instead of as the bottom-right FAB. */
+  showFilterAction?: boolean;
+  activeFilterCount?: number;
+  onOpenFilters?: () => void;
 };
 
 export function ClimbTopChrome({
@@ -56,6 +62,9 @@ export function ClimbTopChrome({
   onSearchFocus,
   onSearchBlur,
   onCloseGrade,
+  showFilterAction = false,
+  activeFilterCount = 0,
+  onOpenFilters,
 }: ClimbTopChromeProps) {
   const { t } = useTranslation('climbs');
   const { t: tSettings } = useTranslation('settings');
@@ -135,6 +144,11 @@ export function ClimbTopChrome({
 
   const canOpenAngleSelector = activeBoard?.isAngleAdjustable !== false && activeBoard?.angle != null;
   const leftActionCount = (canCreate ? 1 : 0) + (canOpenAngleSelector ? 1 : 0);
+
+  // Right toolbar: filter (Material variant) + light/bluetooth, sharing one surface.
+  const filterActive = activeFilterCount > 0;
+  const showFilter = showFilterAction && onOpenFilters != null;
+  const rightActionCount = (showFilter ? 1 : 0) + (bluetooth ? 1 : 0);
 
   return (
     <>
@@ -221,11 +235,11 @@ export function ClimbTopChrome({
           </View>
 
           <View pointerEvents="box-none" style={styles.rightSlot}>
-            {bluetooth ? (
+            {rightActionCount > 0 ? (
               <View
                 style={[
                   styles.actionToolbar,
-                  { width: TOP_ACTION_SIZE },
+                  { width: TOP_ACTION_SIZE * rightActionCount },
                   !nativeGlass && shadows.sm,
                   !nativeGlass && { borderWidth: StyleSheet.hairlineWidth, borderColor: systemColors.separator },
                 ]}
@@ -237,22 +251,49 @@ export function ClimbTopChrome({
                   style={StyleSheet.absoluteFill}
                   pointerEvents="none"
                 />
-                <PressableSurface
-                  onPress={handleBluetoothPress}
-                  feedback="opacity"
-                  hitSlop={4}
-                  accessibilityRole="button"
-                  accessibilityLabel={
-                    bluetoothConnected ? tCommon('lightControl.disconnect') : tSettings('ble.connectBoard')
-                  }
-                  style={styles.toolbarAction}
-                >
-                  <Icon
-                    name={bluetoothConnected ? 'lightbulb.fill' : 'lightbulb'}
-                    size={23}
-                    color={bluetoothConnected ? brandColors.warning : (systemColors.label as string)}
-                  />
-                </PressableSurface>
+                {showFilter ? (
+                  <PressableSurface
+                    onPress={onOpenFilters}
+                    feedback="opacity"
+                    hitSlop={4}
+                    accessibilityRole="button"
+                    accessibilityLabel={
+                      filterActive
+                        ? t('mobile.search.filterCountAria', { count: activeFilterCount })
+                        : t('mobile.search.filters')
+                    }
+                    style={styles.toolbarAction}
+                  >
+                    <Icon
+                      name="filter"
+                      size={22}
+                      color={filterActive ? brandColors.primary : (systemColors.label as string)}
+                    />
+                    {filterActive ? (
+                      <View pointerEvents="none" style={styles.actionBadge}>
+                        <Badge count={activeFilterCount} color={brandColors.primary} />
+                      </View>
+                    ) : null}
+                  </PressableSurface>
+                ) : null}
+                {bluetooth ? (
+                  <PressableSurface
+                    onPress={handleBluetoothPress}
+                    feedback="opacity"
+                    hitSlop={4}
+                    accessibilityRole="button"
+                    accessibilityLabel={
+                      bluetoothConnected ? tCommon('lightControl.disconnect') : tSettings('ble.connectBoard')
+                    }
+                    style={styles.toolbarAction}
+                  >
+                    <Icon
+                      name={bluetoothConnected ? 'lightbulb.fill' : 'lightbulb'}
+                      size={23}
+                      color={bluetoothConnected ? brandColors.warning : (systemColors.label as string)}
+                    />
+                  </PressableSurface>
+                ) : null}
               </View>
             ) : null}
           </View>
@@ -352,6 +393,11 @@ const styles = StyleSheet.create({
     height: TOP_ACTION_SIZE,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  actionBadge: {
+    position: 'absolute',
+    top: 5,
+    right: 5,
   },
   angleActionText: {
     fontWeight: '700',

@@ -5,40 +5,35 @@
 // variant (Liquid Glass / Material / fallback) via AccessoryBarSurface; the
 // swipe/peek/tap behaviour is shared with the native accessory via useQueueCarousel.
 
-import { useMemo } from 'react';
+import { useMemo, type ReactNode } from 'react';
 import { View, StyleSheet, type ColorValue } from 'react-native';
 import { GestureDetector } from 'react-native-gesture-handler';
 import Animated from 'react-native-reanimated';
 import { getGradeColor, DEFAULT_GRADE_COLOR } from '@boardsesh/board-constants/grade-colors';
-import type { ClimbQueueItem } from '@boardsesh/queue';
+import type { Climb } from '@boardsesh/queue';
 import { TOOLBAR_CAPSULE_HEIGHT, TOOLBAR_CAPSULE_MAX_WIDTH } from '../../theme/layout';
 import { CHROME_LABEL_MAX_FONT_SCALE } from '../../theme/typography';
 import { useGradeFormat } from '../../hooks/use-grade-format';
 import { Text } from '../Text';
 import { useTheme } from '../../providers/theme-provider';
+import { useDrawerHost, type BoardConfig } from '../../providers/drawer-host-provider';
 import { AccessoryBarSurface } from './AccessoryBarSurface';
+import { AccessoryClimbThumbnail } from './AccessoryClimbThumbnail';
 import { useQueueCarousel } from './use-queue-carousel';
 
-type ClimbDisplay = {
-  difficulty: string | null | undefined;
-  name: string | undefined;
-};
-
-function climbDisplay(item: ClimbQueueItem | null | undefined): ClimbDisplay | null {
-  if (!item?.climb) return null;
-  return { difficulty: item.climb.difficulty, name: item.climb.name };
-}
-
 type ClimbLabelProps = {
-  display: ClimbDisplay;
+  climb: Climb;
   labelColor: ColorValue;
   formattedGrade: string | null;
   gradeColor: string;
+  showThumbnail: boolean;
+  boardConfig: BoardConfig | null;
 };
 
-function ClimbLabel({ display, labelColor, formattedGrade, gradeColor }: ClimbLabelProps) {
+function ClimbLabel({ climb, labelColor, formattedGrade, gradeColor, showThumbnail, boardConfig }: ClimbLabelProps) {
   return (
     <View style={styles.labelInner}>
+      {showThumbnail ? <AccessoryClimbThumbnail climb={climb} boardConfig={boardConfig} /> : null}
       <Text
         variant="subheadline"
         color={labelColor}
@@ -47,7 +42,7 @@ function ClimbLabel({ display, labelColor, formattedGrade, gradeColor }: ClimbLa
         maxFontSizeMultiplier={CHROME_LABEL_MAX_FONT_SCALE}
         style={styles.name}
       >
-        {display.name ?? ''}
+        {climb.name}
       </Text>
       {formattedGrade ? (
         <Text
@@ -65,10 +60,21 @@ function ClimbLabel({ display, labelColor, formattedGrade, gradeColor }: ClimbLa
 
 type ClimbCapsuleProps = {
   height?: number;
+  /** Span the full available width instead of the centered 260px cap (Material bar). */
+  fillWidth?: boolean;
+  /** Action floated inside the capsule on the right, outside the swipe target (e.g. the tick). */
+  endAction?: ReactNode;
+  endActionSize?: number;
 };
 
-export function ClimbCapsule({ height = TOOLBAR_CAPSULE_HEIGHT }: ClimbCapsuleProps) {
+export function ClimbCapsule({
+  height = TOOLBAR_CAPSULE_HEIGHT,
+  fillWidth = false,
+  endAction,
+  endActionSize = 0,
+}: ClimbCapsuleProps) {
   const { systemColors } = useTheme();
+  const { boardConfig } = useDrawerHost();
   const { formatGrade } = useGradeFormat();
   const {
     onLayout,
@@ -84,71 +90,87 @@ export function ClimbCapsule({ height = TOOLBAR_CAPSULE_HEIGHT }: ClimbCapsulePr
     swipeAccessibilityActions,
   } = useQueueCarousel();
 
-  const currentDisplay = climbDisplay(currentItem);
-  const previousDisplay = climbDisplay(previousItem);
-  const nextDisplay = climbDisplay(nextItem);
+  const currentClimb = currentItem?.climb ?? null;
+  const previousClimb = previousItem?.climb ?? null;
+  const nextClimb = nextItem?.climb ?? null;
+  // Board art needs the active board config; matches the iOS 26 native accessory.
+  const showThumbnail = boardConfig != null;
 
   const grades = useMemo(() => {
-    const color = (display: ClimbDisplay | null) =>
-      display ? (getGradeColor(display.difficulty) ?? DEFAULT_GRADE_COLOR) : DEFAULT_GRADE_COLOR;
+    const color = (climb: Climb | null) =>
+      climb ? (getGradeColor(climb.difficulty) ?? DEFAULT_GRADE_COLOR) : DEFAULT_GRADE_COLOR;
     return {
-      current: currentDisplay ? formatGrade(currentDisplay.difficulty) : null,
-      previous: previousDisplay ? formatGrade(previousDisplay.difficulty) : null,
-      next: nextDisplay ? formatGrade(nextDisplay.difficulty) : null,
-      currentColor: color(currentDisplay),
-      previousColor: color(previousDisplay),
-      nextColor: color(nextDisplay),
+      current: currentClimb ? formatGrade(currentClimb.difficulty) : null,
+      previous: previousClimb ? formatGrade(previousClimb.difficulty) : null,
+      next: nextClimb ? formatGrade(nextClimb.difficulty) : null,
+      currentColor: color(currentClimb),
+      previousColor: color(previousClimb),
+      nextColor: color(nextClimb),
     };
-  }, [currentDisplay, previousDisplay, nextDisplay, formatGrade]);
+  }, [currentClimb, previousClimb, nextClimb, formatGrade]);
 
-  if (!currentDisplay) return null;
+  if (!currentClimb) return null;
 
   const capsuleRadius = height / 2;
+  // Reserve room on the right so the name/grade never slide under the inline tick.
+  const endActionReservedWidth = endAction ? endActionSize + 8 : 0;
+  const labelRight = 16 + endActionReservedWidth;
 
   return (
-    <AccessoryBarSurface height={height} borderRadius={capsuleRadius} style={styles.capsule}>
+    <AccessoryBarSurface
+      height={height}
+      borderRadius={capsuleRadius}
+      style={[styles.capsule, fillWidth ? null : styles.capsuleCap]}
+    >
       <GestureDetector gesture={composedGesture}>
         <View
           style={[styles.swipeArea, { height, borderRadius: capsuleRadius }]}
           onLayout={onLayout}
           accessibilityRole="button"
-          accessibilityLabel={currentDisplay.name}
+          accessibilityLabel={currentClimb.name}
           accessibilityActions={swipeAccessibilityActions}
           onAccessibilityAction={(event) => {
             if (event.nativeEvent.actionName === 'next') handleNext();
             else if (event.nativeEvent.actionName === 'previous') handlePrevious();
           }}
         >
-          <Animated.View style={[styles.labelSlot, currentLabelStyle]}>
+          <Animated.View style={[styles.labelSlot, { right: labelRight }, currentLabelStyle]}>
             <ClimbLabel
-              display={currentDisplay}
+              climb={currentClimb}
               labelColor={systemColors.label}
               formattedGrade={grades.current}
               gradeColor={grades.currentColor}
+              showThumbnail={showThumbnail}
+              boardConfig={boardConfig}
             />
           </Animated.View>
-          {nextDisplay ? (
-            <Animated.View style={[styles.peekSlot, nextPeekStyle]} pointerEvents="none">
+          {nextClimb ? (
+            <Animated.View style={[styles.peekSlot, { right: labelRight }, nextPeekStyle]} pointerEvents="none">
               <ClimbLabel
-                display={nextDisplay}
+                climb={nextClimb}
                 labelColor={systemColors.label}
                 formattedGrade={grades.next}
                 gradeColor={grades.nextColor}
+                showThumbnail={showThumbnail}
+                boardConfig={boardConfig}
               />
             </Animated.View>
           ) : null}
-          {previousDisplay ? (
-            <Animated.View style={[styles.peekSlot, prevPeekStyle]} pointerEvents="none">
+          {previousClimb ? (
+            <Animated.View style={[styles.peekSlot, { right: labelRight }, prevPeekStyle]} pointerEvents="none">
               <ClimbLabel
-                display={previousDisplay}
+                climb={previousClimb}
                 labelColor={systemColors.label}
                 formattedGrade={grades.previous}
                 gradeColor={grades.previousColor}
+                showThumbnail={showThumbnail}
+                boardConfig={boardConfig}
               />
             </Animated.View>
           ) : null}
         </View>
       </GestureDetector>
+      {endAction ? <View style={[styles.endActionSlot, { width: endActionSize, height }]}>{endAction}</View> : null}
     </AccessoryBarSurface>
   );
 }
@@ -156,6 +178,9 @@ export function ClimbCapsule({ height = TOOLBAR_CAPSULE_HEIGHT }: ClimbCapsulePr
 const styles = StyleSheet.create({
   capsule: {
     flex: 1,
+  },
+  // Centered-pill cap; omitted on the full-width Material bar.
+  capsuleCap: {
     maxWidth: TOOLBAR_CAPSULE_MAX_WIDTH,
   },
   swipeArea: {
@@ -174,6 +199,13 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 16,
     right: 16,
+    justifyContent: 'center',
+  },
+  endActionSlot: {
+    position: 'absolute',
+    top: 0,
+    right: 8,
+    alignItems: 'center',
     justifyContent: 'center',
   },
   labelInner: {
