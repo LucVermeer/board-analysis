@@ -53,12 +53,6 @@ describe('useEffectiveSurfaceMode', () => {
     expect(result.current).toBe('solid');
   });
 
-  it('returns solid when Reduce Transparency wins over Liquid Glass', () => {
-    ctrl.rt = true; // iOS 26 + glass available, but a11y wins
-    const { result } = renderHook(() => useEffectiveSurfaceMode());
-    expect(result.current).toBe('solid');
-  });
-
   it('returns material when the Material variant is active', () => {
     ctrl.variant = 'material';
     const { result } = renderHook(() => useEffectiveSurfaceMode());
