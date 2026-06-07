@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View, type ViewStyle } from 'react-native';
 import Animated, { FadeInDown, FadeOutDown } from 'react-native-reanimated';
+import { Snackbar } from 'react-native-paper';
 import { useTranslation } from 'react-i18next';
 import { Text } from './Text';
 import { brandColors } from '../theme/colors';
@@ -23,10 +24,51 @@ type QueueAddedSnackbarProps = {
  * Bottom-anchored "Climb added to queue · Open" snackbar that floats just above
  * the persistent queue bar. Rendered inside DrawerHostProvider so it can read
  * the queue state (to drop lower when the bar is hidden) and bind "Open" to the
- * host's `openQueueSheet`. Unlike the top toast, its overlay is `box-none` so
- * the "Open" button is tappable.
+ * host's `openQueueSheet`. Routes to a Material 3 Paper Snackbar on the Material
+ * variant and to the existing Liquid-Glass pill on the Liquid Glass variant; the
+ * public prop API is identical for both.
  */
-export function QueueAddedSnackbar({
+export function QueueAddedSnackbar(props: QueueAddedSnackbarProps) {
+  const { variant: uiVariant } = useTheme();
+  return uiVariant === 'material' ? <QueueAddedSnackbarMaterial {...props} /> : <QueueAddedSnackbarGlass {...props} />;
+}
+
+function QueueAddedSnackbarMaterial({
+  visible,
+  nonce,
+  onDismiss,
+  onOpen,
+  duration = DEFAULT_DURATION,
+}: QueueAddedSnackbarProps) {
+  const { t } = useTranslation('session');
+  const bottomChrome = useBottomChromeMetrics();
+
+  // Sit above the queue controls when they are showing; otherwise just above the
+  // tab bar/safe area. The nonce forces a remount so the entrance + Paper's own
+  // auto-dismiss timer replay on each show.
+  const bottom = bottomChrome.floatingControlBottom + spacing[2];
+  const wrapperStyle: ViewStyle = { bottom };
+
+  return (
+    <Snackbar
+      key={nonce}
+      visible={visible}
+      onDismiss={onDismiss}
+      duration={duration}
+      wrapperStyle={wrapperStyle}
+      action={{
+        label: t('mobile.queueSnackbar.open'),
+        onPress: onOpen,
+        accessibilityLabel: t('mobile.queueSnackbar.openAria'),
+      }}
+    >
+      {t('mobile.queueSnackbar.added')}
+    </Snackbar>
+  );
+}
+
+// Liquid Glass / HIG snackbar — the original implementation, unchanged.
+function QueueAddedSnackbarGlass({
   visible,
   nonce,
   onDismiss,

@@ -16,6 +16,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import { QueryProvider } from '../src/providers/query-provider';
 import { ThemeProvider, useTheme } from '../src/providers/theme-provider';
+import { MaterialThemeProvider } from '../src/providers/material-theme-provider';
 import { AuthProvider } from '../src/providers/auth-provider';
 import { I18nProvider } from '../src/providers/i18n-provider';
 import { BluetoothProvider } from '../src/providers/bluetooth-provider';
@@ -213,18 +214,19 @@ function RootLayout() {
         <I18nProvider>
           <QueryProvider>
             <ThemeProvider>
-              <FeatureFlagsProvider>
-                <AuthProvider onReady={onAuthReady}>
-                  <PartyProfileProvider>
-                    <ConnectionSettingsProvider>
-                      <ToastProvider>
-                        <ClimbActionsDataWrapper>
-                          <QueueSnackbarProvider>
-                            <QueueProvider>
-                              <BoardAdapterWrapper>
-                                <PlaylistsAdapterWrapper>
-                                  <BoardProviderWrapper>
-                                    {/* BottomSheetModalProvider sits inside the board
+              <MaterialThemeProvider>
+                <FeatureFlagsProvider>
+                  <AuthProvider onReady={onAuthReady}>
+                    <PartyProfileProvider>
+                      <ConnectionSettingsProvider>
+                        <ToastProvider>
+                          <ClimbActionsDataWrapper>
+                            <QueueSnackbarProvider>
+                              <QueueProvider>
+                                <BoardAdapterWrapper>
+                                  <PlaylistsAdapterWrapper>
+                                    <BoardProviderWrapper>
+                                      {/* BottomSheetModalProvider sits inside the board
                                     providers (gorhom's BottomSheetModal portals
                                     PlayDrawer → QuickTickBar here, so the host
                                     must be able to see BoardAdapter/BoardProvider
@@ -235,42 +237,43 @@ function RootLayout() {
                                     exist before the picker mounts or gorhom
                                     throws "BottomSheetModalInternalContext
                                     cannot be null". */}
-                                    <BottomSheetModalProvider>
-                                      <BluetoothProviderWrapper>
-                                        <DrawerHostProvider>
-                                          <DeepLinkProvider>
-                                            <ThemedNavigation>
-                                              <Stack screenOptions={{ headerShown: false }} initialRouteName="index">
-                                                <Stack.Screen name="index" />
-                                                <Stack.Screen name="(tabs)" />
-                                                <Stack.Screen
-                                                  name="auth"
-                                                  options={{ headerShown: false, gestureEnabled: false }}
-                                                />
-                                                <Stack.Screen name="session/[sessionId]" />
-                                                <Stack.Screen
-                                                  name="join/[sessionId]"
-                                                  options={{ presentation: 'modal', headerShown: false }}
-                                                />
-                                              </Stack>
-                                            </ThemedNavigation>
-                                            <PersistentQueueBar />
-                                            <AnalyticsScreenTracker />
-                                          </DeepLinkProvider>
-                                        </DrawerHostProvider>
-                                      </BluetoothProviderWrapper>
-                                    </BottomSheetModalProvider>
-                                  </BoardProviderWrapper>
-                                </PlaylistsAdapterWrapper>
-                              </BoardAdapterWrapper>
-                            </QueueProvider>
-                          </QueueSnackbarProvider>
-                        </ClimbActionsDataWrapper>
-                      </ToastProvider>
-                    </ConnectionSettingsProvider>
-                  </PartyProfileProvider>
-                </AuthProvider>
-              </FeatureFlagsProvider>
+                                      <BottomSheetModalProvider>
+                                        <BluetoothProviderWrapper>
+                                          <DrawerHostProvider>
+                                            <DeepLinkProvider>
+                                              <ThemedNavigation>
+                                                <Stack screenOptions={{ headerShown: false }} initialRouteName="index">
+                                                  <Stack.Screen name="index" />
+                                                  <Stack.Screen name="(tabs)" />
+                                                  <Stack.Screen
+                                                    name="auth"
+                                                    options={{ headerShown: false, gestureEnabled: false }}
+                                                  />
+                                                  <Stack.Screen name="session/[sessionId]" />
+                                                  <Stack.Screen
+                                                    name="join/[sessionId]"
+                                                    options={{ presentation: 'modal', headerShown: false }}
+                                                  />
+                                                </Stack>
+                                              </ThemedNavigation>
+                                              <PersistentQueueBar />
+                                              <AnalyticsScreenTracker />
+                                            </DeepLinkProvider>
+                                          </DrawerHostProvider>
+                                        </BluetoothProviderWrapper>
+                                      </BottomSheetModalProvider>
+                                    </BoardProviderWrapper>
+                                  </PlaylistsAdapterWrapper>
+                                </BoardAdapterWrapper>
+                              </QueueProvider>
+                            </QueueSnackbarProvider>
+                          </ClimbActionsDataWrapper>
+                        </ToastProvider>
+                      </ConnectionSettingsProvider>
+                    </PartyProfileProvider>
+                  </AuthProvider>
+                </FeatureFlagsProvider>
+              </MaterialThemeProvider>
             </ThemeProvider>
           </QueryProvider>
         </I18nProvider>

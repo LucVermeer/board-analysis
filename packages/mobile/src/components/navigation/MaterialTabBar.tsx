@@ -17,9 +17,11 @@ import { TAB_BAR_HEIGHT } from '../../theme/layout';
  */
 export function MaterialTabBar({ state, descriptors, navigation, insets }: BottomTabBarProps) {
   const { systemColors } = useTheme();
-  const activeColor = brandColors.primary;
+  // Softened active state (closer to M3, which tints the indicator gently rather
+  // than using full primary): a lighter maroon pill + a muted maroon icon/label.
+  const activeColor = withAlpha(brandColors.primary, 0.8);
   const inactiveColor = systemColors.secondaryLabel;
-  const indicatorColor = withAlpha(brandColors.primary, 0.16);
+  const indicatorColor = withAlpha(brandColors.primary, 0.1);
 
   return (
     <View

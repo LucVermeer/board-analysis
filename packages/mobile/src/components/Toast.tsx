@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, View, type ViewStyle } from 'react-native';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
+import { Snackbar } from 'react-native-paper';
 import { useSegments } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text } from './Text';
@@ -33,19 +34,56 @@ const VARIANT_CONFIG: Record<ToastVariant, { icon: IconName; color: string }> = 
   warning: { icon: 'warning', color: brandColors.warning },
 };
 
+/**
+ * Toast routes to a Material 3 Paper Snackbar on the Material variant, and to the
+ * existing Liquid-Glass/HIG pill on the Liquid Glass variant. The public prop API
+ * is identical for both, so ToastProvider never changes.
+ */
 export function Toast({ toast, onDismiss }: ToastProps) {
+  const { variant: uiVariant } = useTheme();
+  return uiVariant === 'material' ? (
+    <ToastMaterial toast={toast} onDismiss={onDismiss} />
+  ) : (
+    <ToastGlass toast={toast} onDismiss={onDismiss} />
+  );
+}
+
+/**
+ * Reserve the worst-case queue toolbar height on tab screens so a toast never
+ * covers the current-climb controls; off tab screens it sits just above the safe
+ * area. Shared by both variants — ToastProvider sits above QueueProvider, so this
+ * must stay independent from queue context.
+ */
+function useToastBottomOffset() {
   const insets = useSafeAreaInsets();
   const segments = useSegments();
-  const { systemColors, colorScheme } = useTheme();
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const config = VARIANT_CONFIG[toast.variant];
-
-  // ToastProvider sits above QueueProvider, so this must stay independent from
-  // queue context. On tab screens, reserve the worst-case queue toolbar height
-  // so a toast never covers the current-climb controls.
-  const bottomOffset = isTabsRoute(segments)
+  return isTabsRoute(segments)
     ? insets.bottom + TAB_BAR_HEIGHT + TOOLBAR_RESERVE + spacing[2]
     : insets.bottom + spacing[3];
+}
+
+function ToastMaterial({ toast, onDismiss }: ToastProps) {
+  const bottomOffset = useToastBottomOffset();
+
+  // Paper drives its own auto-dismiss timer off `duration` + `onDismiss`, so we
+  // don't run a manual setTimeout on the Material path (it would double-fire).
+  // The glass toast has no tappable affordance, so we omit Paper's trailing
+  // icon-dismiss button to keep the same auto-dismiss-only interaction.
+  const wrapperStyle: ViewStyle = { bottom: bottomOffset };
+
+  return (
+    <Snackbar visible onDismiss={() => onDismiss(toast.id)} duration={toast.duration} wrapperStyle={wrapperStyle}>
+      {toast.message}
+    </Snackbar>
+  );
+}
+
+// Liquid Glass / HIG toast — the original implementation, unchanged.
+function ToastGlass({ toast, onDismiss }: ToastProps) {
+  const { systemColors, colorScheme } = useTheme();
+  const bottomOffset = useToastBottomOffset();
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const config = VARIANT_CONFIG[toast.variant];
 
   useEffect(() => {
     timerRef.current = setTimeout(() => onDismiss(toast.id), toast.duration);

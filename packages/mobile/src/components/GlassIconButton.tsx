@@ -7,11 +7,12 @@ import {
   View,
 } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import { IconButton as PaperIconButton, Badge as PaperBadge } from 'react-native-paper';
 import { GlassSurface } from './GlassSurface';
 import { PressableSurface } from './PressableSurface';
 import { Icon } from './Icon';
 import { Text } from './Text';
-import type { IconName } from './icon-map';
+import { iconMap, type IconName } from './icon-map';
 import { useTheme } from '../providers/theme-provider';
 import { iosSystemColors } from '../theme/ios-colors';
 import { timing } from '../theme/animations';
@@ -52,6 +53,67 @@ type GlassIconButtonProps = {
 };
 
 /**
+ * Circular icon button shared by the climb-list search row (filter, create) and
+ * the bottom-bar search FAB. Routes to a Material 3 `IconButton` on the Material
+ * variant and to the original Liquid Glass circle on the Liquid Glass variant.
+ * The public prop API is identical for both, so call sites never change.
+ */
+export function GlassIconButton(props: GlassIconButtonProps) {
+  const { variant: uiVariant } = useTheme();
+  return uiVariant === 'material' ? <GlassIconButtonMaterial {...props} /> : <GlassIconButtonGlass {...props} />;
+}
+
+/**
+ * Material 3 icon button. Paper resolves the MDI glyph through our icon settings
+ * (see material-theme-provider), so we hand it the `.android` MDI name. Paper's
+ * `IconButton` renders a single glyph — the Liquid Glass cross-fade morph
+ * (`secondaryIconName` / `active`) has no Material equivalent and is dropped
+ * here; the static `iconName` is shown instead. The count badge is overlaid via
+ * Paper's `Badge` in an outer wrapper so the round target can't crop it.
+ */
+function GlassIconButtonMaterial({
+  iconName,
+  iconColor,
+  iconSize = 22,
+  onPress,
+  onLongPress,
+  accessibilityLabel,
+  accessibilityHint,
+  accessibilityActions,
+  onAccessibilityAction,
+  badgeCount,
+  disabled = false,
+  size = glassSize.standard,
+}: GlassIconButtonProps) {
+  const showBadge = badgeCount != null && badgeCount > 0;
+
+  return (
+    <View style={[styles.wrapper, { width: size, height: size }]}>
+      <PaperIconButton
+        icon={iconMap[iconName].android}
+        iconColor={iconColor as string}
+        size={iconSize}
+        // Match the circular target diameter; Paper's default margin would
+        // otherwise inflate the footprint past the requested `size`.
+        style={[styles.materialButton, { width: size, height: size }]}
+        onPress={onPress}
+        onLongPress={onLongPress}
+        disabled={disabled}
+        accessibilityLabel={accessibilityLabel}
+        accessibilityHint={accessibilityHint}
+        accessibilityActions={accessibilityActions}
+        onAccessibilityAction={onAccessibilityAction}
+      />
+      {showBadge ? (
+        <PaperBadge style={styles.materialBadge} visible>
+          {badgeCount}
+        </PaperBadge>
+      ) : null}
+    </View>
+  );
+}
+
+/**
  * Circular Liquid Glass button — the floating-control affordance shared by the
  * climb-list search row (filter, create) and the bottom-bar search FAB. The glass
  * fills a clipped circle so the iOS < 26 blur fallback doesn't spill past the
@@ -60,7 +122,7 @@ type GlassIconButtonProps = {
  * (spring / ripple), so Android, Reduce Transparency, and cold-start all degrade
  * correctly. With `secondaryIconName`, the glyph cross-fades on `active`.
  */
-export function GlassIconButton({
+function GlassIconButtonGlass({
   iconName,
   iconColor,
   iconSize = 22,
@@ -188,6 +250,14 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  materialButton: {
+    margin: 0,
+  },
+  materialBadge: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
   },
   center: {
     alignItems: 'center',

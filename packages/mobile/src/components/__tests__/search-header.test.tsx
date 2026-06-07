@@ -1,7 +1,10 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render } from '@testing-library/react';
-import { createElement, forwardRef, type ChangeEvent, type KeyboardEvent, type ReactNode } from 'react';
+import { act, createElement, createRef, forwardRef, type ChangeEvent, type KeyboardEvent, type ReactNode } from 'react';
+
+// Controls the resolved UI variant SearchHeader branches on.
+const ctrl = vi.hoisted(() => ({ variant: 'liquidGlass' as 'material' | 'liquidGlass' }));
 
 vi.mock('react-native', () => ({
   View: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
@@ -49,17 +52,36 @@ vi.mock('../Icon', () => ({
 }));
 
 vi.mock('../../providers/theme-provider', () => ({
-  useTheme: () => ({ systemColors: { label: '#000', fill: '#eee' } }),
+  useTheme: () => ({ systemColors: { label: '#000', fill: '#eee' }, variant: ctrl.variant }),
 }));
 
 vi.mock('../../theme/ios-colors', () => ({
   iosSystemColors: { systemGray: '#888', white: '#fff' },
 }));
 
-import { SearchHeader } from '../SearchHeader';
+// Paper Searchbar forwards its ref to the inner TextInput; model that so the
+// imperative blur/focus path can be exercised on the Material variant.
+vi.mock('react-native-paper', () => ({
+  Searchbar: forwardRef<
+    HTMLInputElement,
+    { value?: string; placeholder?: string; onChangeText?: (text: string) => void }
+  >(function SearchbarMock({ value, placeholder, onChangeText }, ref) {
+    return createElement('input', {
+      ref,
+      'data-paper': 'searchbar',
+      value,
+      placeholder,
+      onChange: (event: ChangeEvent<HTMLInputElement>) => onChangeText?.(event.currentTarget.value),
+      readOnly: true,
+    });
+  }),
+}));
+
+import { SearchHeader, type SearchHeaderHandle } from '../SearchHeader';
 
 describe('SearchHeader', () => {
   it('submits the current text when the keyboard search action fires', () => {
+    ctrl.variant = 'liquidGlass';
     const onSubmit = vi.fn();
     const { getByPlaceholderText } = render(
       <SearchHeader
@@ -76,5 +98,50 @@ describe('SearchHeader', () => {
     fireEvent.keyDown(input, { key: 'Enter' });
 
     expect(onSubmit).toHaveBeenCalledWith('Moonage');
+  });
+
+  it('renders the Material Searchbar and keeps the imperative handle working', () => {
+    ctrl.variant = 'material';
+    const ref = createRef<SearchHeaderHandle>();
+    const { container } = render(
+      <SearchHeader
+        ref={ref}
+        placeholder="Search climbs"
+        onChangeText={() => {}}
+        onFocus={() => {}}
+        onBlur={() => {}}
+      />,
+    );
+
+    // Material path renders the Paper Searchbar (stub), not the glass capsule.
+    expect(container.querySelector('[data-paper="searchbar"]')).not.toBeNull();
+    expect(container.querySelector('[data-glass]')).toBeNull();
+
+    // getText/set({silent}) are backed by local state, so they work regardless of
+    // Paper owning the inner TextInput.
+    act(() => ref.current?.setText('Crimps', { silent: true }));
+    expect(ref.current?.getText()).toBe('Crimps');
+  });
+
+  it('forwards blur/focus through the imperative handle on the Material path', () => {
+    ctrl.variant = 'material';
+    const ref = createRef<SearchHeaderHandle>();
+    const { container } = render(
+      <SearchHeader
+        ref={ref}
+        placeholder="Search climbs"
+        onChangeText={() => {}}
+        onFocus={() => {}}
+        onBlur={() => {}}
+      />,
+    );
+    const input = container.querySelector('[data-paper="searchbar"]');
+    expect(input).not.toBeNull();
+
+    // The handle proxies to Paper's forwarded TextInput ref — not a silent no-op.
+    act(() => ref.current?.focus());
+    expect(document.activeElement).toBe(input);
+    act(() => ref.current?.blur());
+    expect(document.activeElement).not.toBe(input);
   });
 });
