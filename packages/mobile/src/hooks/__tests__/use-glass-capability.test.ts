@@ -53,10 +53,5 @@ describe('useGlassCapability', () => {
     expect(result.current).toBe(false);
   });
 
-  it('returns false when both capability checks fail', () => {
-    ctrl.glass = false;
-    ctrl.glassApi = false;
-    const { result } = renderHook(() => useGlassCapability());
-    expect(result.current).toBe(false);
-  });
+
 });

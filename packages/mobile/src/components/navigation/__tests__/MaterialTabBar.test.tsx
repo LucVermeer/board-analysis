@@ -22,10 +22,12 @@ vi.mock('react-native', () => ({
   View: ({
     children,
     style,
+    testID,
     ...props
   }: {
     children?: ReactNode;
     style?: unknown;
+    testID?: string;
     [key: string]: unknown;
   }) =>
     createElement(
@@ -33,6 +35,7 @@ vi.mock('react-native', () => ({
       {
         'data-view': 'true',
         'data-style': JSON.stringify(style),
+        ...(testID ? { 'data-testid': testID } : {}),
         ...Object.fromEntries(
           Object.entries(props).filter(([k]) => k.startsWith('data-') || k === 'accessibilityRole'),
         ),
@@ -169,41 +172,14 @@ describe('MaterialTabBar', () => {
   describe('badge rendering', () => {
     it('renders a badge dot when tabBarBadge is set', () => {
       const props = makeProps({ tabBarBadge: '' });
-      const { container } = render(<MaterialTabBar {...(props as Parameters<typeof MaterialTabBar>[0])} />);
-      // The badge View has backgroundColor from brandColors.success (#6B9080)
-      const styles = [...container.querySelectorAll('[data-style]')]
-        .map((el) => {
-          try {
-            return JSON.parse(el.getAttribute('data-style') ?? '{}');
-          } catch {
-            return {};
-          }
-        })
-        .flat();
-      const badgeStyle = styles.find(
-        (style: Record<string, unknown>) =>
-          typeof style === 'object' && 'backgroundColor' in style && style.backgroundColor === '#6B9080',
-      );
-      expect(badgeStyle).toBeDefined();
+      const { queryByTestId } = render(<MaterialTabBar {...(props as Parameters<typeof MaterialTabBar>[0])} />);
+      expect(queryByTestId('badge')).not.toBeNull();
     });
 
     it('does not render a badge when tabBarBadge is undefined', () => {
       const props = makeProps({ tabBarBadge: undefined });
-      const { container } = render(<MaterialTabBar {...(props as Parameters<typeof MaterialTabBar>[0])} />);
-      const styles = [...container.querySelectorAll('[data-style]')]
-        .map((el) => {
-          try {
-            return JSON.parse(el.getAttribute('data-style') ?? '{}');
-          } catch {
-            return {};
-          }
-        })
-        .flat();
-      const badgeStyle = styles.find(
-        (style: Record<string, unknown>) =>
-          typeof style === 'object' && 'backgroundColor' in style && style.backgroundColor === '#6B9080',
-      );
-      expect(badgeStyle).toBeUndefined();
+      const { queryByTestId } = render(<MaterialTabBar {...(props as Parameters<typeof MaterialTabBar>[0])} />);
+      expect(queryByTestId('badge')).toBeNull();
     });
   });
 
