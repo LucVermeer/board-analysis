@@ -80,7 +80,7 @@ describe('useEffectiveSurfaceMode', () => {
 
   it('returns solid on Android (no glass, no blur)', () => {
     ctrl.os = 'android';
-    ctrl.glass = false;
+    // glass/glassApi are irrelevant here — the hook short-circuits on Platform.OS before calling them
     const { result } = renderHook(() => useEffectiveSurfaceMode());
     expect(result.current).toBe('solid');
   });

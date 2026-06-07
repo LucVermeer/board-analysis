@@ -73,6 +73,7 @@ vi.mock('../../PressableSurface', () => ({
       'button',
       {
         onClick: onPress,
+        // jsdom has no long-press event; map to contextmenu so fireEvent.contextMenu() triggers it
         onContextMenu: onLongPress,
         role: accessibilityRole,
         'aria-selected': accessibilityState?.selected,
