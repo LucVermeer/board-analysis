@@ -148,7 +148,7 @@ export default function DiscoverLibrary() {
   const handleCreatePress = useCallback(() => {
     if (!createBoard) {
       showToast(t('bottomTabBar.selectBoardForPlaylist'), 'info');
-      router.push('/(tabs)/boards');
+      router.push('/boards');
       return;
     }
     setCreateVisible(true);

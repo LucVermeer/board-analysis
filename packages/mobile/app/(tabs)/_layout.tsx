@@ -10,6 +10,11 @@ import { MaterialTabBar } from '../../src/components/navigation/MaterialTabBar';
 import { useTheme } from '../../src/providers/theme-provider';
 import { brandColors } from '../../src/theme/colors';
 
+// Cold-start on the climbs list (our search surface), not the boards tab — board
+// switching is rare, so the filtered climb list is the home base. Drives the
+// default-selected tab in both the native-tabs and Material `Tabs` variants.
+export const unstable_settings = { initialRouteName: 'climbs' };
+
 type TabIconProps = { focused: boolean; color: ColorValue; size: number };
 
 // Material (MaterialCommunityIcons) glyphs for the JS tab bar, mirroring the
@@ -43,13 +48,6 @@ export default function TabLayout() {
   if (variant === 'material') {
     return (
       <Tabs tabBar={(props) => <MaterialTabBar {...props} />} screenOptions={{ headerShown: false }}>
-        <Tabs.Screen
-          name="boards"
-          options={{
-            title: t('mobile.nav.boards'),
-            tabBarIcon: materialTabIcon('view-dashboard', 'view-dashboard-outline'),
-          }}
-        />
         <Tabs.Screen
           name="climbs"
           options={{ title: t('mobile.nav.climbs'), tabBarIcon: materialTabIcon('magnify', 'magnify') }}
@@ -89,11 +87,6 @@ export default function TabLayout() {
       <NativeTabs.BottomAccessory>
         <QueueBottomAccessory />
       </NativeTabs.BottomAccessory>
-
-      <NativeTabs.Trigger name="boards">
-        <NativeTabs.Trigger.Icon sf="square.grid.2x2" md="dashboard" />
-        <NativeTabs.Trigger.Label>{t('mobile.nav.boards')}</NativeTabs.Trigger.Label>
-      </NativeTabs.Trigger>
 
       <NativeTabs.Trigger name="climbs" role="search">
         <NativeTabs.Trigger.Icon sf="magnifyingglass" md="search" />

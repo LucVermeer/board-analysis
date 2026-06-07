@@ -5,9 +5,18 @@ import type { BoardName } from '@boardsesh/shared-schema';
 import { getGradeColor, DEFAULT_GRADE_COLOR } from '@boardsesh/board-constants/grade-colors';
 import { Text } from './Text';
 import { ClimbListThumbnail, THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT } from './ClimbListThumbnail';
-import { AscentStatusBadge } from './AscentStatusBadge';
 import { formatSends, formatQuality } from '../lib/format-climb-stats';
 import { useGradeFormat } from '../hooks/use-grade-format';
+import { useAscentStatus } from '../hooks/use-ascent-status';
+import { iosSystemColors } from '../theme/ios-colors';
+import type { AscentStatusValue } from '../lib/ascent-status-utils';
+
+// Scan-line status dot colours — green sent, yellow flash, orange attempted.
+const ASCENT_DOT_COLOR: Record<AscentStatusValue, string> = {
+  send: iosSystemColors.systemGreen,
+  flash: iosSystemColors.systemYellow,
+  attempt: iosSystemColors.systemOrange,
+};
 
 /**
  * Minimal structural climb shape this visual needs. Kept permissive so BOTH the
@@ -57,6 +66,7 @@ const ClimbListItemContent = React.memo(function ClimbListItemContent({
 
   const gradeColor = getGradeColor(climb.difficulty) ?? DEFAULT_GRADE_COLOR;
   const formattedGrade = formatGrade(climb.difficulty);
+  const ascentStatus = useAscentStatus(climb.uuid, angle);
 
   // Subtitle parts: sends · quality★ · setter (each dropped when absent).
   const subtitleText = useMemo(() => {
@@ -89,7 +99,6 @@ const ClimbListItemContent = React.memo(function ClimbListItemContent({
           setIds={setIds}
           mirrored={climb.mirrored ?? false}
         />
-        <AscentStatusBadge climbUuid={climb.uuid} angle={angle} />
       </View>
 
       {/* Center: name + subtitle */}
@@ -102,9 +111,10 @@ const ClimbListItemContent = React.memo(function ClimbListItemContent({
         </Text>
       </View>
 
-      {/* Right: colorized grade */}
+      {/* Right: ascent-status dot + colorized grade — the two scan keys together */}
       <View style={styles.rightSection}>
-        <Text variant="headline" numberOfLines={1} style={[styles.gradeText, { color: gradeColor }]}>
+        {ascentStatus ? <View style={[styles.statusDot, { backgroundColor: ASCENT_DOT_COLOR[ascentStatus] }]} /> : null}
+        <Text variant="title3" numberOfLines={1} style={[styles.gradeText, { color: gradeColor }]}>
           {formattedGrade ?? climb.difficulty}
         </Text>
       </View>
@@ -135,12 +145,19 @@ const styles = StyleSheet.create({
   },
   rightSection: {
     flexShrink: 0,
-    alignItems: 'flex-end',
-    justifyContent: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 6,
+  },
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
   gradeText: {
     fontWeight: '700',
-    minWidth: 34,
+    minWidth: 40,
     textAlign: 'right',
   },
 });

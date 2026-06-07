@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { GlassIconButton } from '../GlassIconButton';
 import { useTheme } from '../../providers/theme-provider';
 import { withAlpha } from '../../theme/colors';
+import { iosSystemColors } from '../../theme/ios-colors';
 import { glassSize } from '../../theme/layout';
 
 export const FILTER_FAB_SIZE = glassSize.inlinePrimary;
@@ -18,13 +19,21 @@ type FilterButtonProps = {
 
 export function FilterButton({ activeFilterCount, onPress, onLongPress }: FilterButtonProps) {
   const { t } = useTranslation('climbs');
-  const { systemColors, brandColors } = useTheme();
+  const { systemColors, brandColors, variant } = useTheme();
   const active = activeFilterCount > 0;
+  // Liquid Glass paints the active button on a maroon glass tint, so a maroon
+  // glyph is low-contrast — use white there. Material has no tint behind the
+  // glyph, so it keeps maroon (white would vanish on the bare surface).
+  const iconColor = active
+    ? variant === 'material'
+      ? (brandColors.primary as string)
+      : iosSystemColors.white
+    : (systemColors.secondaryLabel as string);
 
   return (
     <GlassIconButton
       iconName="filter"
-      iconColor={active ? brandColors.primary : (systemColors.secondaryLabel as string)}
+      iconColor={iconColor}
       iconSize={20}
       size={FILTER_FAB_SIZE}
       onPress={onPress}

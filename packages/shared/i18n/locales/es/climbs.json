@@ -537,7 +537,8 @@
     "emptyState": {
       "noBoard": {
         "title": "Tabla no seleccionada",
-        "subtitle": "Agrega una tabla primero para explorar bloques"
+        "subtitle": "Agrega una tabla primero para explorar bloques",
+        "cta": "Elige tu tabla"
       },
       "noClimbs": {
         "title": "No se encontraron bloques",
@@ -658,7 +659,8 @@
       "filters": "Filtros",
       "filterCountAria": "Filtros, {{count}} activos",
       "filterHint": "Abre todos los filtros de bloques",
-      "gradeAction": "Ajustar el rango de grado"
+      "gradeAction": "Ajustar el rango de grado",
+      "clearAll": "Borrar todo"
     },
     "gradeRail": {
       "setFilterAria": "Filtrar por grado {{grade}}",

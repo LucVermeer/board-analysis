@@ -25,7 +25,7 @@ export function BoardSummaryCard({ board }: BoardSummaryCardProps) {
   const router = useRouter();
 
   const goToBoards = () => {
-    router.navigate('/(tabs)/boards');
+    router.push('/boards');
   };
 
   if (!board) {

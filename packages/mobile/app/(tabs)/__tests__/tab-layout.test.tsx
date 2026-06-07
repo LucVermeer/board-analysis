@@ -52,12 +52,16 @@ vi.mock('expo-router/unstable-native-tabs', () => {
   return { NativeTabs };
 });
 
-import TabLayout from '../_layout';
+import TabLayout, { unstable_settings } from '../_layout';
 
 describe('TabLayout', () => {
   beforeEach(() => {
     cfg.bluetoothConnected = false;
     cfg.sessionId = null;
+  });
+
+  it('lands on the climbs tab by default', () => {
+    expect(unstable_settings.initialRouteName).toBe('climbs');
   });
 
   it('does not render the Record badge when no status is active', () => {

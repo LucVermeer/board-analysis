@@ -50,6 +50,10 @@ vi.mock('react-native-reanimated', () => ({
 }));
 
 vi.mock('expo-router', () => ({ useFocusEffect: () => {} }));
+vi.mock('expo-linear-gradient', () => ({
+  LinearGradient: ({ children }: { children?: ReactNode }) =>
+    createElement('div', { 'data-gradient': 'true' }, children),
+}));
 vi.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 47, bottom: 0, left: 0, right: 0 }),
 }));

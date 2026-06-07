@@ -32,7 +32,7 @@ export default function AuthCallback() {
         if (result.success) {
           track(SHARED_EVENTS.LoginSucceeded, { flow: 'native' });
           await refreshAuthState();
-          router.replace('/(tabs)/boards');
+          router.replace('/(tabs)/climbs');
         } else {
           track(SHARED_EVENTS.LoginFailed, { flow: 'native', failure_reason: classifyNativeAuthFailureReason(result) });
           setError(result.error);

@@ -5,6 +5,7 @@
 
 import { type RefObject, useCallback, useMemo, useState } from 'react';
 import { Keyboard, type LayoutChangeEvent, StyleSheet, View } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
@@ -21,13 +22,15 @@ import { PressableSurface } from '../PressableSurface';
 import { SearchHeader, type SearchHeaderHandle } from '../SearchHeader';
 import { Text } from '../Text';
 import { Icon } from '../Icon';
-import { Badge } from '../Badge';
 import { AngleSelectorSheet } from '../play-drawer/AngleSelectorSheet';
+import { FilterButton } from './FilterButton';
 
 const CAPSULE_RADIUS = glassSize.capsule / 2;
 const TOP_ACTION_SIZE = glassSize.standard;
 const TOP_TOOLBAR_WIDTH = TOP_ACTION_SIZE * 2;
 const TOP_TOOLBAR_RADIUS = TOP_ACTION_SIZE / 2;
+const SUMMARY_CAPSULE_HEIGHT = glassSize.mini;
+const SUMMARY_CAPSULE_RADIUS = SUMMARY_CAPSULE_HEIGHT / 2;
 
 type ClimbTopChromeProps = {
   searchMode?: 'custom' | 'native';
@@ -42,11 +45,14 @@ type ClimbTopChromeProps = {
   onSearchFocus: () => void;
   onSearchBlur: () => void;
   onCloseGrade: () => void;
-  /** Render the filter affordance in the top-right toolbar (Material variant), next
-   *  to the light/bluetooth button, instead of as the bottom-right FAB. */
-  showFilterAction?: boolean;
+  /** Active-filter count for the Material variant's filter button (rendered to
+   *  the left of the search field — the affordance the native search bar can't
+   *  host). Liquid Glass keeps the bottom filter FAB instead. */
   activeFilterCount?: number;
   onOpenFilters?: () => void;
+  /** Active-filter summary shown as a single capsule below the board name.
+   *  Tapping it clears all filters (no per-chip remove). Absent = no filters. */
+  filterSummary?: { text: string; onClear: () => void };
 };
 
 export function ClimbTopChrome({
@@ -62,15 +68,15 @@ export function ClimbTopChrome({
   onSearchFocus,
   onSearchBlur,
   onCloseGrade,
-  showFilterAction = false,
   activeFilterCount = 0,
   onOpenFilters,
+  filterSummary,
 }: ClimbTopChromeProps) {
   const { t } = useTranslation('climbs');
   const { t: tSettings } = useTranslation('settings');
   const { t: tCommon } = useTranslation('common');
   const { t: tSession } = useTranslation('session');
-  const { systemColors, brandColors } = useTheme();
+  const { systemColors, brandColors, variant } = useTheme();
   const nativeGlass = useNativeGlass();
   const insets = useSafeAreaInsets();
   const { data: activeBoard } = useActiveBoard();
@@ -145,14 +151,22 @@ export function ClimbTopChrome({
   const canOpenAngleSelector = activeBoard?.isAngleAdjustable !== false && activeBoard?.angle != null;
   const leftActionCount = (canCreate ? 1 : 0) + (canOpenAngleSelector ? 1 : 0);
 
-  // Right toolbar: filter (Material variant) + light/bluetooth, sharing one surface.
-  const filterActive = activeFilterCount > 0;
-  const showFilter = showFilterAction && onOpenFilters != null;
-  const rightActionCount = (showFilter ? 1 : 0) + (bluetooth ? 1 : 0);
+  // Right toolbar: light/bluetooth only. The filter affordance now lives to the
+  // left of the search field (Material) or as the bottom FAB (Liquid Glass).
+  const rightActionCount = bluetooth ? 1 : 0;
 
   return (
     <>
       <View pointerEvents="box-none" style={[styles.container, { paddingTop: insets.top }]} onLayout={handleLayout}>
+        {/* Scrim: opaque screen background behind the controls, fading to clear at
+            the bottom edge — hides the climb list scrolling up behind the floating
+            islands (the gaps between them otherwise bleed list content = clutter). */}
+        <LinearGradient
+          pointerEvents="none"
+          colors={[systemColors.background, systemColors.background, 'transparent'] as const}
+          locations={[0, 0.7, 1]}
+          style={StyleSheet.absoluteFill}
+        />
         <View pointerEvents="box-none" style={styles.row}>
           <View pointerEvents="box-none" style={styles.leftSlot}>
             {canCreate || canOpenAngleSelector ? (
@@ -226,7 +240,13 @@ export function ClimbTopChrome({
                     pointerEvents="none"
                   />
                   <Icon name="boards" size={14} color={systemColors.secondaryLabel as string} />
-                  <Text variant="footnote" numberOfLines={1} ellipsizeMode="tail" style={styles.capsuleText}>
+                  <Text
+                    variant="caption1"
+                    numberOfLines={1}
+                    ellipsizeMode="tail"
+                    color={systemColors.secondaryLabel as string}
+                    style={styles.capsuleText}
+                  >
                     {boardLabel}
                   </Text>
                 </View>
@@ -251,31 +271,6 @@ export function ClimbTopChrome({
                   style={StyleSheet.absoluteFill}
                   pointerEvents="none"
                 />
-                {showFilter ? (
-                  <PressableSurface
-                    onPress={onOpenFilters}
-                    feedback="opacity"
-                    hitSlop={4}
-                    accessibilityRole="button"
-                    accessibilityLabel={
-                      filterActive
-                        ? t('mobile.search.filterCountAria', { count: activeFilterCount })
-                        : t('mobile.search.filters')
-                    }
-                    style={styles.toolbarAction}
-                  >
-                    <Icon
-                      name="filter"
-                      size={22}
-                      color={filterActive ? brandColors.primary : (systemColors.label as string)}
-                    />
-                    {filterActive ? (
-                      <View pointerEvents="none" style={styles.actionBadge}>
-                        <Badge count={activeFilterCount} color={brandColors.primary} />
-                      </View>
-                    ) : null}
-                  </PressableSurface>
-                ) : null}
                 {bluetooth ? (
                   <PressableSurface
                     onPress={handleBluetoothPress}
@@ -299,9 +294,54 @@ export function ClimbTopChrome({
           </View>
         </View>
 
+        {filterSummary ? (
+          <View pointerEvents="box-none" style={styles.summaryRow}>
+            <PressableSurface
+              onPress={() => {
+                hapticLight();
+                filterSummary.onClear();
+              }}
+              feedback="scale"
+              scaleTo={0.96}
+              accessibilityRole="button"
+              accessibilityLabel={filterSummary.text}
+              accessibilityHint={t('mobile.search.clearAll')}
+              style={styles.summaryPress}
+            >
+              <View
+                style={[
+                  styles.summaryCapsule,
+                  !nativeGlass && shadows.sm,
+                  !nativeGlass && { borderWidth: StyleSheet.hairlineWidth, borderColor: systemColors.separator },
+                ]}
+              >
+                <GlassSurface
+                  glassEffectStyle="regular"
+                  fallbackColor={systemColors.elevatedSurface}
+                  borderRadius={SUMMARY_CAPSULE_RADIUS}
+                  style={StyleSheet.absoluteFill}
+                  pointerEvents="none"
+                />
+                <Text
+                  variant="caption1"
+                  numberOfLines={1}
+                  ellipsizeMode="tail"
+                  color={systemColors.label as string}
+                  style={styles.summaryText}
+                >
+                  {filterSummary.text}
+                </Text>
+              </View>
+            </PressableSurface>
+          </View>
+        ) : null}
+
         {usesCustomSearch ? (
           <View pointerEvents="box-none" style={styles.searchStack}>
             <View pointerEvents="box-none" style={styles.searchRow}>
+              {variant === 'material' && onOpenFilters ? (
+                <FilterButton activeFilterCount={activeFilterCount} onPress={onOpenFilters} />
+              ) : null}
               <View pointerEvents="box-none" style={styles.searchSlot}>
                 <SearchHeader
                   ref={searchFieldRef}
@@ -377,7 +417,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   capsuleText: {
-    fontWeight: '600',
+    fontWeight: '500',
     flexShrink: 1,
   },
   actionToolbar: {
@@ -393,11 +433,6 @@ const styles = StyleSheet.create({
     height: TOP_ACTION_SIZE,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  actionBadge: {
-    position: 'absolute',
-    top: 5,
-    right: 5,
   },
   angleActionText: {
     fontWeight: '700',
@@ -417,5 +452,28 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     minWidth: 0,
+  },
+  summaryRow: {
+    paddingHorizontal: spacing[4],
+    paddingTop: spacing[1],
+    alignItems: 'center',
+  },
+  summaryPress: {
+    height: SUMMARY_CAPSULE_HEIGHT,
+    maxWidth: 280,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  summaryCapsule: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: SUMMARY_CAPSULE_HEIGHT,
+    borderRadius: SUMMARY_CAPSULE_RADIUS,
+    paddingHorizontal: 12,
+    gap: 5,
+  },
+  summaryText: {
+    fontWeight: '600',
+    flexShrink: 1,
   },
 });

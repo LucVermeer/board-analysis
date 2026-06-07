@@ -4,20 +4,20 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import type { UserBoard } from '@boardsesh/shared-schema';
-import { useSetActiveBoard } from '../../../src/lib/graphql/use-active-board';
-import { useSearchBoardsMap } from '../../../src/lib/graphql/use-search-boards-map';
-import { useDeviceLocation } from '../../../src/lib/use-device-location';
-import { useToast } from '../../../src/providers/toast-provider';
-import { useTheme } from '../../../src/providers/theme-provider';
-import { hapticSelection } from '../../../src/lib/haptics';
-import { Text } from '../../../src/components/Text';
-import { Icon } from '../../../src/components/Icon';
-import { BoardCarousel } from '../../../src/components/board-discovery/BoardCarousel';
-import { BoardDetailSheet } from '../../../src/components/board-discovery/BoardDetailSheet';
-import { userBoardToItem } from '../../../src/components/board-discovery/board-items';
-import type { DiscoveryBoardItem } from '../../../src/components/board-discovery/BoardDiscoveryCard';
-import { brandColors } from '../../../src/theme/colors';
-import { spacing, borderRadius } from '../../../src/theme/tokens';
+import { useSetActiveBoard } from '../../src/lib/graphql/use-active-board';
+import { useSearchBoardsMap } from '../../src/lib/graphql/use-search-boards-map';
+import { useDeviceLocation } from '../../src/lib/use-device-location';
+import { useToast } from '../../src/providers/toast-provider';
+import { useTheme } from '../../src/providers/theme-provider';
+import { hapticSelection } from '../../src/lib/haptics';
+import { Text } from '../../src/components/Text';
+import { Icon } from '../../src/components/Icon';
+import { BoardCarousel } from '../../src/components/board-discovery/BoardCarousel';
+import { BoardDetailSheet } from '../../src/components/board-discovery/BoardDetailSheet';
+import { userBoardToItem } from '../../src/components/board-discovery/board-items';
+import type { DiscoveryBoardItem } from '../../src/components/board-discovery/BoardDiscoveryCard';
+import { brandColors } from '../../src/theme/colors';
+import { spacing, borderRadius } from '../../src/theme/tokens';
 
 // Lazy/guarded expo-maps load: it's a native module, so a JS-only OTA push to a
 // build that predates it would otherwise throw at import. We resolve the
@@ -125,9 +125,10 @@ export default function BoardSearchScreen() {
         // sheet stays open so the error toast has visible context.
         setSelectedUuid(null);
         // router.back() is the same foreground unmount the X button uses —
-        // proven safe for expo-maps — then switch to the climbs tab.
+        // proven safe for expo-maps — closing the search screen first; then
+        // dismiss the boards modal back onto the climbs list.
         router.back();
-        router.navigate('/(tabs)/climbs');
+        router.dismissTo('/(tabs)/climbs');
       } catch {
         showToast(t('mobile.boardSwitchError'), 'error');
       }

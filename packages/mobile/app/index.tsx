@@ -1,14 +1,11 @@
 import { Redirect } from 'expo-router';
-import { useActiveBoard } from '../src/lib/graphql/use-active-board';
 
 /**
- * App launcher route. Pick the default tab only when the user opens the app root;
- * explicit tab routes (join -> Record, deep links, etc.) must keep their target.
+ * App launcher route. Always lands on the Climbs tab — our search surface and
+ * home base. When no board is active yet, the Climbs screen shows a "choose your
+ * board" CTA (board switching is rare, so it lives in a modal, not a tab).
+ * Explicit tab routes (join -> Record, deep links) keep their own target.
  */
 export default function MobileHome() {
-  const { data: activeBoard, isLoading } = useActiveBoard();
-
-  if (isLoading) return null;
-
-  return <Redirect href={activeBoard ? '/(tabs)/climbs' : '/(tabs)/boards'} />;
+  return <Redirect href="/(tabs)/climbs" />;
 }

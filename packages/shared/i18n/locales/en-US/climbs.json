@@ -537,7 +537,8 @@
     "emptyState": {
       "noBoard": {
         "title": "No board selected",
-        "subtitle": "Add a board first to browse climbs"
+        "subtitle": "Add a board first to browse climbs",
+        "cta": "Choose your board"
       },
       "noClimbs": {
         "title": "No climbs found",
@@ -658,7 +659,8 @@
       "filters": "Filters",
       "filterCountAria": "Filters, {{count}} active",
       "filterHint": "Opens all climb filters",
-      "gradeAction": "Set grade range"
+      "gradeAction": "Set grade range",
+      "clearAll": "Clear all"
     },
     "gradeRail": {
       "setFilterAria": "Set grade filter to {{grade}}",

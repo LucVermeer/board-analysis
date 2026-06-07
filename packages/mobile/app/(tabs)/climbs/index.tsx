@@ -11,6 +11,7 @@ import {
   mergeBoardFilters,
   countActiveFilters,
   hasActiveBoardFilters,
+  formatFilterSummary,
   DEFAULT_CLIMB_FILTER_STATE,
   DEFAULT_CLIMB_BOARD_FILTER_STATE,
   type ClimbBoardFilterState,
@@ -20,10 +21,10 @@ import { ClimbListRowSkeleton } from '../../../src/components/ClimbListRowSkelet
 import { ActivityIndicator } from '../../../src/components/ActivityIndicator';
 import { Text } from '../../../src/components/Text';
 import { Icon } from '../../../src/components/Icon';
+import { Button } from '../../../src/components/Button';
 import { ClimbFilterSheet, hasActiveFilters, type ClimbFilters } from '../../../src/components/ClimbFilterSheet';
 import { ClimbFilterFab } from '../../../src/components/search/ClimbFilterFab';
 import { ClimbTopChrome } from '../../../src/components/search/ClimbTopChrome';
-import { BoardDetailSheet } from '../../../src/components/board-discovery/BoardDetailSheet';
 import { useDrawerHost } from '../../../src/providers/drawer-host-provider';
 import { useTheme } from '../../../src/providers/theme-provider';
 import { useQueue } from '../../../src/providers/queue-provider';
@@ -35,12 +36,13 @@ import { RecentFilterPills } from '../../../src/components/RecentFilterPills';
 import { useNativeAccessoryActive } from '../../../src/hooks/use-bottom-accessory';
 import { useBottomChromeMetrics } from '../../../src/hooks/use-bottom-chrome-metrics';
 import { useGrades } from '../../../src/lib/graphql/hooks';
+import { useGradeFormat } from '../../../src/hooks/use-grade-format';
 import { useInfiniteSearchClimbs } from '../../../src/lib/graphql/hooks/use-infinite-search-climbs';
 import { SEARCH_CLIMBS, type SearchClimbsQueryResponse } from '../../../src/lib/graphql/operations';
 import { getHttpClient } from '../../../src/lib/graphql/client';
 import { usePlaylistActivation } from '../../../src/lib/playlists/use-playlist-activation';
 import { toQueueClimb, toQueueClimbs } from '../../../src/lib/climb-types';
-import { useActiveBoard, useSetActiveBoard } from '../../../src/lib/graphql/use-active-board';
+import { useActiveBoard } from '../../../src/lib/graphql/use-active-board';
 import { useAuth } from '../../../src/providers/auth-provider';
 import { getBoardRenderData } from '../../../src/lib/board-details';
 import {
@@ -51,6 +53,7 @@ import {
 } from '../../../src/lib/recent-filter-store';
 import { getLastSearch, saveLastSearch, boardConfigKey } from '../../../src/lib/last-search-store';
 import { getFilterSummary } from '../../../src/lib/filter-summary';
+import { getActiveFilterTokens } from '../../../src/lib/filter-tokens';
 import { normalizeSearchName } from '../../../src/lib/search-name';
 import { track } from '../../../src/lib/analytics';
 import { brandColors } from '../../../src/theme/colors';
@@ -103,8 +106,18 @@ function ClimbListInner() {
   const { openClimbActions, openAddToPlaylist } = useDrawerHost();
   const { systemColors, variant } = useTheme();
   const { addToQueue, state: queueState } = useQueue();
-  const { filters, boardFilters, name, setFilters, setBoardFilters, setGrade, setName, replaceSearch } =
-    useClimbSearch();
+  const {
+    filters,
+    boardFilters,
+    name,
+    setFilters,
+    setBoardFilters,
+    setGrade,
+    setName,
+    replaceSearch,
+    patchFilters,
+    patchBoardFilters,
+  } = useClimbSearch();
   // The active climb (driving the board / persistent queue bar). We highlight
   // its row so the search → tap → change-active loop is always visible.
   const activeClimbUuid = queueState.currentClimbQueueItem?.climb?.uuid;
@@ -146,9 +159,6 @@ function ClimbListInner() {
   // The list pads its top by this so the first row rests below the chrome and the
   // rest scroll under it.
   const [searchBarHeight, setSearchBarHeight] = useState(() => insets.top + 60);
-  // Board-detail sheet, opened from the top board capsule.
-  const [showBoardDetail, setShowBoardDetail] = useState(false);
-  const setActiveBoard = useSetActiveBoard();
 
   const blurSearchInputs = useCallback(() => {
     Keyboard.dismiss();
@@ -253,6 +263,7 @@ function ClimbListInner() {
   const gradesRef = useRef(gradesData);
   gradesRef.current = gradesData;
   const grades = useMemo(() => gradesData ?? [], [gradesData]);
+  const { formatGradeByDifficultyId } = useGradeFormat();
 
   const boardConfig = useMemo(
     () => (hasBoardConfig ? { boardName, layoutId, sizeId, setIds, angle } : null),
@@ -535,6 +546,12 @@ function ClimbListInner() {
       .catch(() => {});
   }, []);
 
+  // "Clear all" on the scope row: reset every filter (grade + refinements + board
+  // filters) to defaults, keeping the typed name query.
+  const handleClearAllFilters = useCallback(() => {
+    replaceSearch(DEFAULT_CLIMB_FILTER_STATE, name, DEFAULT_CLIMB_BOARD_FILTER_STATE);
+  }, [replaceSearch, name]);
+
   const handleGradeChange = useCallback(
     (next: GradeBound) => {
       setGrade(next);
@@ -563,6 +580,32 @@ function ClimbListInner() {
     [filters.minGrade, filters.maxGrade],
   );
   const activeFilterCount = useMemo(() => countActiveFilters(filters, boardFilters), [filters, boardFilters]);
+  // Removable active-filter tokens for the scope row beneath the search field.
+  // Each token's `clear` patches just its field back to the default.
+  const filterTokens = useMemo(
+    () =>
+      getActiveFilterTokens({
+        filters,
+        boardFilters,
+        grades,
+        t,
+        formatGradeByDifficultyId,
+        patchFilters,
+        patchBoardFilters,
+        setGrade,
+      }),
+    [filters, boardFilters, grades, t, formatGradeByDifficultyId, patchFilters, patchBoardFilters, setGrade],
+  );
+  // Condensed one-line summary of the active filters for the capsule below the
+  // board name (2 parts max, then "+N more"). Tapping the capsule clears them.
+  const filterSummary = useMemo(() => {
+    if (filterTokens.length === 0) return null;
+    return formatFilterSummary(
+      filterTokens.map((token) => token.label),
+      { more: (count) => t('mobile.search.more', { count }) },
+      2,
+    );
+  }, [filterTokens, t]);
 
   const stackOptions = useMemo(
     () =>
@@ -639,6 +682,16 @@ function ClimbListInner() {
           <Text variant="subheadline" style={styles.emptySubtitle}>
             {t('mobile.emptyState.noBoard.subtitle')}
           </Text>
+          {/* Board selection is a modal now. When BLE serial auto-detect lands it
+              calls useSetActiveBoard(); useActiveBoard() then flips this screen to
+              the climb list with no extra wiring here. */}
+          <Button
+            title={t('mobile.emptyState.noBoard.cta')}
+            onPress={() => router.push('/boards')}
+            variant="filled"
+            size="large"
+            style={styles.emptyCta}
+          />
         </View>
       </>
     );
@@ -712,7 +765,7 @@ function ClimbListInner() {
         searchMode={useNativeSearch ? 'native' : 'custom'}
         canCreate={isAuthenticated && hasBoardConfig}
         onCreate={handleCreateClimb}
-        onOpenBoardDetail={() => setShowBoardDetail(true)}
+        onOpenBoardDetail={() => router.push('/boards')}
         onHeightChange={setSearchBarHeight}
         searchFieldRef={searchHeaderRef}
         searchInitialValue={name}
@@ -721,9 +774,9 @@ function ClimbListInner() {
         onSearchFocus={handleSearchFocus}
         onSearchBlur={handleSearchBlur}
         onCloseGrade={handleDismissGrade}
-        showFilterAction={filterInTopChrome}
         activeFilterCount={activeFilterCount}
         onOpenFilters={handleOpenFilters}
+        filterSummary={filterSummary ? { text: filterSummary, onClear: handleClearAllFilters } : undefined}
       />
 
       {filterInTopChrome ? null : (
@@ -750,16 +803,6 @@ function ClimbListInner() {
           onApply={handleApplyFilters}
         />
       ) : null}
-
-      <BoardDetailSheet
-        board={activeBoard ?? null}
-        visible={showBoardDetail}
-        onClose={() => setShowBoardDetail(false)}
-        onSetActive={(board) => {
-          void setActiveBoard(board);
-          setShowBoardDetail(false);
-        }}
-      />
     </View>
   );
 }
@@ -802,5 +845,8 @@ const styles = StyleSheet.create({
   emptySubtitle: {
     opacity: 0.4,
     textAlign: 'center',
+  },
+  emptyCta: {
+    marginTop: spacing[4],
   },
 });

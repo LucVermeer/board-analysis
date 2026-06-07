@@ -4,25 +4,25 @@ import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import type BottomSheet from '@gorhom/bottom-sheet';
 import type { UserBoard } from '@boardsesh/shared-schema';
-import { useMyBoards, usePopularBoardConfigs, useNearbyBoards } from '../../../src/lib/graphql/hooks';
-import { useActiveBoard, useSetActiveBoard } from '../../../src/lib/graphql/use-active-board';
-import { useDeviceLocation } from '../../../src/lib/use-device-location';
-import { useAuth } from '../../../src/providers/auth-provider';
-import { useToast } from '../../../src/providers/toast-provider';
-import { hapticSelection } from '../../../src/lib/haptics';
-import { Text } from '../../../src/components/Text';
-import { Icon } from '../../../src/components/Icon';
-import { Button } from '../../../src/components/Button';
-import { ActivityIndicator } from '../../../src/components/ActivityIndicator';
-import { BoardCarousel } from '../../../src/components/board-discovery/BoardCarousel';
-import { BoardModeCard, type ModeCardState } from '../../../src/components/board-discovery/BoardModeCard';
-import { CustomBoardSheet, type BoardSeed } from '../../../src/components/board-discovery/CustomBoardSheet';
-import { BluetoothQuickstartSheet } from '../../../src/components/board-discovery/BluetoothQuickstartSheet';
-import { userBoardToItem, popularConfigToItem } from '../../../src/components/board-discovery/board-items';
-import type { DiscoveryBoardItem } from '../../../src/components/board-discovery/BoardDiscoveryCard';
-import { useBottomChromeMetrics } from '../../../src/hooks/use-bottom-chrome-metrics';
-import { iosSystemColors } from '../../../src/theme/ios-colors';
-import { spacing } from '../../../src/theme/tokens';
+import { useMyBoards, usePopularBoardConfigs, useNearbyBoards } from '../../src/lib/graphql/hooks';
+import { useActiveBoard, useSetActiveBoard } from '../../src/lib/graphql/use-active-board';
+import { useDeviceLocation } from '../../src/lib/use-device-location';
+import { useAuth } from '../../src/providers/auth-provider';
+import { useToast } from '../../src/providers/toast-provider';
+import { hapticSelection } from '../../src/lib/haptics';
+import { Text } from '../../src/components/Text';
+import { Icon } from '../../src/components/Icon';
+import { Button } from '../../src/components/Button';
+import { ActivityIndicator } from '../../src/components/ActivityIndicator';
+import { BoardCarousel } from '../../src/components/board-discovery/BoardCarousel';
+import { BoardModeCard, type ModeCardState } from '../../src/components/board-discovery/BoardModeCard';
+import { CustomBoardSheet, type BoardSeed } from '../../src/components/board-discovery/CustomBoardSheet';
+import { BluetoothQuickstartSheet } from '../../src/components/board-discovery/BluetoothQuickstartSheet';
+import { userBoardToItem, popularConfigToItem } from '../../src/components/board-discovery/board-items';
+import type { DiscoveryBoardItem } from '../../src/components/board-discovery/BoardDiscoveryCard';
+import { useBottomChromeMetrics } from '../../src/hooks/use-bottom-chrome-metrics';
+import { iosSystemColors } from '../../src/theme/ios-colors';
+import { spacing } from '../../src/theme/tokens';
 
 export default function BoardSelection() {
   const { isAuthenticated, refreshAuthState } = useAuth();
@@ -76,7 +76,9 @@ export default function BoardSelection() {
         // only once the write succeeds (a failed write must not strand the user
         // on a board that won't survive the next cold start).
         await setActiveBoard(board);
-        router.navigate('/(tabs)/climbs');
+        // Dismiss the boards modal back onto the Climbs list (replaces with it if
+        // climbs isn't already underneath, e.g. opened from a deep link).
+        router.dismissTo('/(tabs)/climbs');
       } catch {
         showToast(t('mobile.boardSwitchError'), 'error');
       }
@@ -244,7 +246,7 @@ export default function BoardSelection() {
           <BoardModeCard
             icon="search"
             label={t('mobile.discovery.search')}
-            onPress={() => router.push('/(tabs)/boards/search')}
+            onPress={() => router.push('/boards/search')}
           />
         </View>
 
