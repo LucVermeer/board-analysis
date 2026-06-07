@@ -14,6 +14,8 @@ import {
 } from '../../../lib/beta-link-thumbnails';
 import { redisClientManager } from '../../../redis/client';
 import { logger } from '../../../utils/logger';
+import type { ConnectionContext } from '@boardsesh/shared-schema';
+import { applyRateLimit, requireAuthenticated } from '../shared/helpers';
 
 type BetaLinkResult = {
   climbUuid: string;
@@ -30,6 +32,13 @@ type RecentBetaLinkResult = {
   climbName: string | null;
   boardType: string;
   layoutId: number | null;
+};
+
+type BetaLinkPreviewResult = {
+  link: string;
+  thumbnail: string | null;
+  username: string | null;
+  caption: string | null;
 };
 
 const RECENT_BETA_LINKS_MAX_LIMIT = 50;
@@ -420,6 +429,51 @@ export const betaLinkQueries = {
     const enriched = await Promise.all(rows.map((row) => limit(() => enrichRowSafe(row))));
 
     return enriched.filter((r): r is BetaLinkResult => r !== null);
+  },
+
+  // Live, unsaved preview of a shared Instagram/TikTok URL for the mobile share
+  // flow. Returns the thumbnail/caption so the client can show the post and
+  // auto-match the climb from the caption before attaching. Best-effort: a
+  // private/unavailable post (or a non-IG/TikTok URL) yields null fields rather
+  // than an error, so the user can still attach manually. Auth + the same 30/min
+  // limit as beta-link writes guard the outbound IG/TikTok fetch. Thumbnail is
+  // the platform CDN URL (not S3-cached) — it's a throwaway preview, not yet a
+  // persisted beta link. Caption is Instagram-only for now.
+  betaLinkPreview: async (
+    _: unknown,
+    { link }: { link: string },
+    ctx: ConnectionContext,
+  ): Promise<BetaLinkPreviewResult> => {
+    requireAuthenticated(ctx);
+    await applyRateLimit(ctx, 30, 'beta-link-preview');
+
+    const preview: BetaLinkPreviewResult = {
+      link,
+      thumbnail: null,
+      username: null,
+      caption: null,
+    };
+
+    if (isInstagramUrl(link)) {
+      const meta = await fetchInstagramMeta(link);
+      if (meta.status === 'ok') {
+        preview.thumbnail = meta.thumbnail;
+        preview.username = meta.username;
+        preview.caption = meta.caption;
+      }
+      return preview;
+    }
+
+    if (isTikTokUrl(link)) {
+      const meta = await fetchTikTokMeta(link);
+      if (meta.status === 'ok') {
+        preview.thumbnail = meta.thumbnail;
+        preview.username = meta.username;
+      }
+      return preview;
+    }
+
+    return preview;
   },
 
   // Powers the home-screen "Fresh beta" slider. We deliberately read only

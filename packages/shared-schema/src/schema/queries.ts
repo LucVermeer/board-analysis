@@ -580,5 +580,13 @@ export const queriesTypeDefs = /* GraphQL */ `
     Returns only rows whose thumbnails are cached in our S3.
     """
     userBetaLinks(userId: String!, limit: Int = 50): [RecentBetaLink!]!
+
+    """
+    Live preview metadata for a shared Instagram/TikTok URL, before it's
+    attached. Powers the mobile share flow: shows the post thumbnail/caption and
+    lets the client auto-match the climb from the caption. Best-effort — returns
+    null fields rather than throwing when the post is unavailable.
+    """
+    betaLinkPreview(link: String!): BetaLinkPreview!
   }
 `;

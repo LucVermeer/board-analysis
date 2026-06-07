@@ -321,6 +321,21 @@ export type BetaLink = {
   thumbnail?: Maybe<Scalars['String']['output']>;
 };
 
+/**
+ * Live, unsaved metadata for a shared Instagram/TikTok URL — used by the mobile
+ * share flow to preview the post and auto-match the climb from the caption
+ * before anything is attached. Best-effort: any field can be null if the post is
+ * private/unavailable or the platform doesn't expose it (caption is currently
+ * Instagram-only). Never throws — the user can still attach manually.
+ */
+export type BetaLinkPreview = {
+  __typename?: 'BetaLinkPreview';
+  caption?: Maybe<Scalars['String']['output']>;
+  link: Scalars['String']['output'];
+  thumbnail?: Maybe<Scalars['String']['output']>;
+  username?: Maybe<Scalars['String']['output']>;
+};
+
 /** Board leaderboard result. */
 export type BoardLeaderboard = {
   __typename?: 'BoardLeaderboard';
@@ -2960,6 +2975,13 @@ export type Query = {
    */
   auroraCredentials: Array<AuroraCredentialStatus>;
   /**
+   * Live preview metadata for a shared Instagram/TikTok URL, before it's
+   * attached. Powers the mobile share flow: shows the post thumbnail/caption and
+   * lets the client auto-match the climb from the caption. Best-effort — returns
+   * null fields rather than throwing when the post is unavailable.
+   */
+  betaLinkPreview: BetaLinkPreview;
+  /**
    * Get external (Instagram, TikTok) beta links for a climb.
    * Live-checks each post and omits any that have been deleted or made private.
    * Caches thumbnails to our S3 bucket on first read.
@@ -3298,6 +3320,11 @@ export type QueryAnglesArgs = {
 /** Root query type for all read operations. */
 export type QueryAuroraCredentialArgs = {
   boardType: Scalars['String']['input'];
+};
+
+/** Root query type for all read operations. */
+export type QueryBetaLinkPreviewArgs = {
+  link: Scalars['String']['input'];
 };
 
 /** Root query type for all read operations. */
@@ -5268,6 +5295,21 @@ export type GetUserBetaLinksQuery = {
       createdAt?: string | null;
     };
   }>;
+};
+
+export type BetaLinkPreviewQueryVariables = Exact<{
+  link: Scalars['String']['input'];
+}>;
+
+export type BetaLinkPreviewQuery = {
+  __typename?: 'Query';
+  betaLinkPreview: {
+    __typename?: 'BetaLinkPreview';
+    link: string;
+    thumbnail?: string | null;
+    username?: string | null;
+    caption?: string | null;
+  };
 };
 
 export type ClimbStatsHistoryQueryVariables = Exact<{
@@ -7631,6 +7673,48 @@ export const GetUserBetaLinksDocument = {
     },
   ],
 } as unknown as DocumentNode<GetUserBetaLinksQuery, GetUserBetaLinksQueryVariables>;
+export const BetaLinkPreviewDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'query',
+      name: { kind: 'Name', value: 'BetaLinkPreview' },
+      variableDefinitions: [
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'link' } },
+          type: { kind: 'NonNullType', type: { kind: 'NamedType', name: { kind: 'Name', value: 'String' } } },
+        },
+      ],
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'betaLinkPreview' },
+            arguments: [
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'link' },
+                value: { kind: 'Variable', name: { kind: 'Name', value: 'link' } },
+              },
+            ],
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'link' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'thumbnail' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'username' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'caption' } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<BetaLinkPreviewQuery, BetaLinkPreviewQueryVariables>;
 export const ClimbStatsHistoryDocument = {
   kind: 'Document',
   definitions: [
