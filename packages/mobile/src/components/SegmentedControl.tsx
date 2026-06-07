@@ -115,8 +115,9 @@ function SegmentedControlMaterial<K extends string = string>({
     disabled: disabledKeys?.has(option.key) ?? false,
   }));
 
+  // Paper never fires onValueChange for a button rendered disabled, so disabled
+  // keys can't reach here — no re-check needed.
   const handleValueChange = (nextKey: K) => {
-    if (disabledKeys?.has(nextKey)) return;
     hapticSelection();
     onSelect(nextKey);
   };

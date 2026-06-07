@@ -45,7 +45,9 @@ function QueueAddedSnackbarMaterial({
 
   // Sit above the queue controls when they are showing; otherwise just above the
   // tab bar/safe area. The nonce forces a remount so the entrance + Paper's own
-  // auto-dismiss timer replay on each show.
+  // auto-dismiss timer replay on each show. Paper's wrapper is
+  // pointerEvents="box-none", so taps outside the pill reach content behind it —
+  // matching the glass path's absoluteFill/box-none wrapper.
   const bottom = bottomChrome.floatingControlBottom + spacing[2];
   const wrapperStyle: ViewStyle = { bottom };
 

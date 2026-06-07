@@ -7,7 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text } from './Text';
 import { Icon } from './Icon';
 import type { IconName } from './icon-map';
-import { brandColors, withAlpha } from '../theme/colors';
+import { brandColors, blendOpaque, withAlpha } from '../theme/colors';
 import { borderRadius, spacing } from '../theme/tokens';
 import { TAB_BAR_HEIGHT, TOOLBAR_RESERVE } from '../theme/layout';
 import { isTabsRoute } from '../lib/route-segments';
@@ -63,17 +63,42 @@ function useToastBottomOffset() {
 }
 
 function ToastMaterial({ toast, onDismiss }: ToastProps) {
+  const { systemColors, colorScheme } = useTheme();
   const bottomOffset = useToastBottomOffset();
+  const config = VARIANT_CONFIG[toast.variant];
 
   // Paper drives its own auto-dismiss timer off `duration` + `onDismiss`, so we
   // don't run a manual setTimeout on the Material path (it would double-fire).
   // The glass toast has no tappable affordance, so we omit Paper's trailing
-  // icon-dismiss button to keep the same auto-dismiss-only interaction.
+  // icon-dismiss button to keep the same auto-dismiss-only interaction. Paper's
+  // wrapper is pointerEvents="box-none", so taps outside the pill reach content
+  // behind it — matching the glass path's absoluteFill/box-none wrapper.
   const wrapperStyle: ViewStyle = { bottom: bottomOffset };
 
+  // Carry the same variant cue as the glass pill: an opaque brand-hued wash over
+  // the surface (legible while floating over content) plus a leading icon and
+  // brand-coloured label. Passing our own content node lets us own the icon and
+  // text colour rather than inheriting Paper's inverse-surface text colour.
+  const backgroundColor = blendOpaque(
+    config.color,
+    systemColors.secondaryBackground as string,
+    colorScheme === 'dark' ? 0.24 : 0.15,
+  );
+
   return (
-    <Snackbar visible onDismiss={() => onDismiss(toast.id)} duration={toast.duration} wrapperStyle={wrapperStyle}>
-      {toast.message}
+    <Snackbar
+      visible
+      onDismiss={() => onDismiss(toast.id)}
+      duration={toast.duration}
+      wrapperStyle={wrapperStyle}
+      style={{ backgroundColor }}
+    >
+      <View style={styles.materialContent} accessibilityRole="alert" accessibilityLiveRegion="assertive">
+        <Icon name={config.icon} size={18} color={config.color} />
+        <Text variant="subheadline" color={config.color} style={styles.message} numberOfLines={2}>
+          {toast.message}
+        </Text>
+      </View>
     </Snackbar>
   );
 }
@@ -135,5 +160,10 @@ const styles = StyleSheet.create({
   },
   message: {
     flexShrink: 1,
+  },
+  materialContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[2],
   },
 });

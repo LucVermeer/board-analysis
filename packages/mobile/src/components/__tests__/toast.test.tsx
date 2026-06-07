@@ -6,9 +6,10 @@ import { createElement, type ReactNode } from 'react';
 // Controls the resolved UI variant the Toast branches on.
 const ctrl = vi.hoisted(() => ({ variant: 'material' as 'material' | 'liquidGlass' }));
 
-type ViewMockProps = { children?: ReactNode };
+type ViewMockProps = { children?: ReactNode; accessibilityRole?: string };
 vi.mock('react-native', () => ({
-  View: ({ children }: ViewMockProps) => createElement('div', { 'data-view': 'true' }, children),
+  View: ({ children, accessibilityRole }: ViewMockProps) =>
+    createElement('div', { 'data-view': 'true', 'data-role': accessibilityRole ?? '' }, children),
   StyleSheet: { create: (styles: Record<string, unknown>) => styles, absoluteFill: {} },
 }));
 
@@ -28,15 +29,17 @@ type SnackbarMockProps = {
   duration?: number;
   onDismiss?: () => void;
   children?: ReactNode;
+  style?: { backgroundColor?: string };
 };
 vi.mock('react-native-paper', () => ({
-  Snackbar: ({ visible, duration, onDismiss, children }: SnackbarMockProps) =>
+  Snackbar: ({ visible, duration, onDismiss, children, style }: SnackbarMockProps) =>
     createElement(
       'div',
       {
         'data-paper-snackbar': 'true',
         'data-visible': visible ? 'true' : 'false',
         'data-duration': String(duration ?? ''),
+        'data-bg': style?.backgroundColor ?? '',
         onClick: onDismiss,
       },
       children,
@@ -55,6 +58,7 @@ vi.mock('../Icon', () => ({ Icon: ({ name }: { name: string }) => createElement(
 vi.mock('../../theme/colors', () => ({
   brandColors: { success: '#34C759', error: '#FF3B30', primary: '#8C4A52', warning: '#FF9500' },
   withAlpha: (color: string) => color,
+  blendOpaque: (_foreground: string, background: string) => background,
 }));
 vi.mock('../../theme/tokens', () => ({ borderRadius: { full: 999 }, spacing: { 2: 8, 3: 12, 4: 16 } }));
 vi.mock('../../theme/layout', () => ({ TAB_BAR_HEIGHT: 49, TOOLBAR_RESERVE: 56 }));
@@ -80,6 +84,10 @@ describe('Toast', () => {
     expect(snackbar?.getAttribute('data-visible')).toBe('true');
     expect(snackbar?.getAttribute('data-duration')).toBe('3000'); // duration mapped through
     expect(snackbar?.textContent).toContain('Saved tick'); // message mapped through
+    // Variant cue carries through: leading icon, brand-tinted surface, alert role.
+    expect(container.querySelector('[data-icon="success"]')).not.toBeNull();
+    expect(snackbar?.getAttribute('data-bg')).toBe('#EEE'); // blendOpaque → base surface (mocked)
+    expect(container.querySelector('[data-view][data-role="alert"]')).not.toBeNull();
     // The glass animated pill must not render on Material.
     expect(container.querySelector('[data-animated]')).toBeNull();
   });
