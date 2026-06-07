@@ -59,6 +59,24 @@ vi.mock('../../theme/ios-colors', () => ({
   iosSystemColors: { systemGray: '#888', white: '#fff' },
 }));
 
+// Paper Searchbar forwards its ref to the inner TextInput; model that so the
+// imperative blur/focus path can be exercised on the Material variant.
+vi.mock('react-native-paper', () => ({
+  Searchbar: forwardRef<
+    HTMLInputElement,
+    { value?: string; placeholder?: string; onChangeText?: (text: string) => void }
+  >(function SearchbarMock({ value, placeholder, onChangeText }, ref) {
+    return createElement('input', {
+      ref,
+      'data-paper': 'searchbar',
+      value,
+      placeholder,
+      onChange: (event: ChangeEvent<HTMLInputElement>) => onChangeText?.(event.currentTarget.value),
+      readOnly: true,
+    });
+  }),
+}));
+
 import { SearchHeader, type SearchHeaderHandle } from '../SearchHeader';
 
 describe('SearchHeader', () => {
@@ -103,5 +121,27 @@ describe('SearchHeader', () => {
     // Paper owning the inner TextInput.
     act(() => ref.current?.setText('Crimps', { silent: true }));
     expect(ref.current?.getText()).toBe('Crimps');
+  });
+
+  it('forwards blur/focus through the imperative handle on the Material path', () => {
+    ctrl.variant = 'material';
+    const ref = createRef<SearchHeaderHandle>();
+    const { container } = render(
+      <SearchHeader
+        ref={ref}
+        placeholder="Search climbs"
+        onChangeText={() => {}}
+        onFocus={() => {}}
+        onBlur={() => {}}
+      />,
+    );
+    const input = container.querySelector('[data-paper="searchbar"]');
+    expect(input).not.toBeNull();
+
+    // The handle proxies to Paper's forwarded TextInput ref — not a silent no-op.
+    act(() => ref.current?.focus());
+    expect(document.activeElement).toBe(input);
+    act(() => ref.current?.blur());
+    expect(document.activeElement).not.toBe(input);
   });
 });

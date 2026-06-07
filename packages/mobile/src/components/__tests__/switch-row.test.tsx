@@ -62,18 +62,30 @@ describe('SwitchRow', () => {
     expect(container.querySelector('[data-paper-switch]')).toBeNull();
   });
 
-  it('fires haptics and onValueChange when the Paper Switch toggles', () => {
+  it('toggles exactly once from the row press on Material (no double-fire)', () => {
     ctrl.variant = 'material';
     hapticSelectionMock.mockClear();
     const onValueChange = vi.fn();
     const { container } = render(<SwitchRow label="Sound" value={false} onValueChange={onValueChange} />);
-    const toggle = container.querySelector('[data-paper-switch]');
-    expect(toggle).not.toBeNull();
-    fireEvent.click(toggle as Element);
-    // (In jsdom the click also bubbles to the row Pressable, so handleToggle may
-    //  fire more than once — in RN the Switch captures the touch. We only assert
-    //  the wiring fires, not the exact count.)
-    expect(hapticSelectionMock).toHaveBeenCalled();
+    // The row Pressable is the sole toggle target; the Paper Switch is a
+    // non-interactive indicator, so a single press fires the toggle once.
+    const row = container.querySelector('[data-pressable]');
+    expect(row).not.toBeNull();
+    fireEvent.click(row as Element);
+    expect(hapticSelectionMock).toHaveBeenCalledTimes(1);
+    expect(onValueChange).toHaveBeenCalledTimes(1);
     expect(onValueChange).toHaveBeenCalledWith(true);
+  });
+
+  it('does not toggle from the Paper Switch itself (it is non-interactive)', () => {
+    ctrl.variant = 'material';
+    hapticSelectionMock.mockClear();
+    const onValueChange = vi.fn();
+    const { container } = render(<SwitchRow label="Sound" value={false} onValueChange={onValueChange} />);
+    const toggle = container.querySelector('[data-paper-switch]') as Element;
+    // SwitchRow no longer wires onValueChange to the Paper Switch, so firing its
+    // change directly is a no-op (the row owns the toggle).
+    fireEvent.change(toggle, { target: { checked: true } });
+    expect(onValueChange).not.toHaveBeenCalled();
   });
 });

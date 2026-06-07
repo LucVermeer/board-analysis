@@ -883,6 +883,28 @@ Glass is for **floating chrome only** — never for content canvases or text-hea
 - A **Light / Dark / System** toggle lives in More → Appearance. `ColorSchemePreferenceProvider` persists the choice and calls `Appearance.setColorScheme(...)`, which overrides the app's native trait collection so `PlatformColor`, the status bar, and the glass all follow in lockstep. `app.config.ts` stays `userInterfaceStyle: 'automatic'` so the override can take effect at runtime.
 - `elevatedSurface` (`tertiarySystemBackground` on iOS) is the token for a raised tile over a secondary/fill surface — e.g. the selected segmented-control pill.
 
+### Material variant (react-native-paper)
+
+The mobile app ships **two visual variants**, switchable in More → **UI style** (Auto / Liquid Glass / Material). Liquid Glass (above) is the preferred, primary UI; **Material** is the default on non-iOS-26 devices and renders authentic Material 3 via `react-native-paper`. The resolved variant is exposed as `useTheme().variant` (`'liquidGlass' | 'material'`) — resolved in `ThemeProvider` from the persisted `uiVariantPreference` (`src/theme/resolve-ui-variant.ts`).
+
+**Our theme stays the source of truth.** `src/theme/paper-theme.ts` `buildPaperTheme(colorScheme, dynamic?)` maps our tokens (`materialSurfaces`, `brandColors`) onto MD3 colour roles and feeds `PaperProvider` (mounted by `src/providers/material-theme-provider.tsx`, under `ThemeProvider`). Paper's MD3 type scale + shapes stay as defaults (system font). The optional `dynamic` palette is the seam for the planned Material You fast-follow (`@pchmn/expo-material3-theme`).
+
+**Per-primitive dispatch convention** — when adding/migrating a primitive, branch on the variant and keep the Liquid Glass body untouched in the `else`:
+
+```tsx
+export function Button(props: ButtonProps) {
+  const { variant: uiVariant } = useTheme();
+  return uiVariant === 'material' ? <ButtonMaterial {...props} /> : <ButtonGlass {...props} />;
+}
+```
+
+The public prop API must stay identical across both branches so call sites never change. `Button.tsx` is the exemplar.
+
+- **Icons:** Paper resolves icons through the app's `@expo/vector-icons` MaterialCommunityIcons (wired via `PaperProvider settings.icon`), so pass the **MDI** name — bridge our semantic `IconName` with `iconMap[name].android` (`src/components/icon-map.ts`).
+- **Paper-backed today:** Button, SegmentedControl→`SegmentedButtons`, SwitchRow→`Switch`, Badge, GlassIconButton→`IconButton`, Card, Toast/QueueAddedSnackbar→`Snackbar`, SearchHeader→`Searchbar`.
+- **Token-skinned but palette-consistent** (they read the same `materialSurfaces` that feeds the Paper theme): `ListRow`, `GradeChip`, `MaterialTabBar`, gorhom sheets, `AccessoryBarSurface`.
+- **Tests:** `react-native-paper` is aliased to a jsdom-safe stub (`test/react-native-paper-stub.tsx`) in `packages/mobile/vite.config.ts` — the same pattern as the posthog stub — so any suite can import a Paper-backed primitive. Component tests that assert Paper props register their own `vi.mock('react-native-paper', …)`, which takes precedence.
+
 ---
 
 ## Anti-Patterns

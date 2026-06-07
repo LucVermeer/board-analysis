@@ -28,18 +28,18 @@ function CardMaterial({ children, onPress, haptic = true, style }: CardProps) {
     onPress?.();
   };
 
-  // M3 elevated card. Paper draws its own padding-less surface, so keep the 16dp
-  // content padding the Liquid Glass card uses. Only attach onPress when given,
-  // mirroring the glass branch (no pressable affordance for a static card).
+  // M3 elevated card. Paper's Card has no `contentStyle`; padding belongs on
+  // `Card.Content`, which keeps the 16dp the Liquid Glass card uses. Only attach
+  // onPress when given, mirroring the glass branch (no pressable affordance for a
+  // static card).
   return (
     <PaperCard
       mode="elevated"
       onPress={onPress ? handlePress : undefined}
       accessibilityRole={onPress ? 'button' : undefined}
-      contentStyle={styles.materialContent}
       style={style}
     >
-      {children}
+      <PaperCard.Content style={styles.materialContent}>{children}</PaperCard.Content>
     </PaperCard>
   );
 }

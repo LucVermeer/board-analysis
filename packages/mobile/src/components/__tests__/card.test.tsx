@@ -13,11 +13,15 @@ vi.mock('react-native', () => ({
   Platform: { select: (spec: Record<string, unknown>) => spec.ios },
 }));
 
-// Paper Card → <section> exposing the props the material test asserts on.
-vi.mock('react-native-paper', () => ({
-  Card: ({ children, mode, onPress }: { children?: ReactNode; mode?: string; onPress?: () => void }) =>
-    createElement('section', { 'data-paper-card': 'true', 'data-mode': mode, onClick: onPress }, children),
-}));
+// Paper Card → <section> exposing the props the material test asserts on; Card
+// has a static `.Content` (the component wraps children in <Card.Content>).
+vi.mock('react-native-paper', () => {
+  const Card = ({ children, mode, onPress }: { children?: ReactNode; mode?: string; onPress?: () => void }) =>
+    createElement('section', { 'data-paper-card': 'true', 'data-mode': mode, onClick: onPress }, children);
+  Card.Content = ({ children }: { children?: ReactNode }) =>
+    createElement('div', { 'data-paper-card-content': 'true' }, children);
+  return { Card };
+});
 
 // Glass-path pressable → a plain <button>.
 vi.mock('../PressableSurface', () => ({
