@@ -1,14 +1,15 @@
+import type { OpaqueColorValue } from 'react-native';
 import type { IconName } from '../icon-map';
 
 type BleLightbulbVisualStateInput = {
   isConnected: boolean;
   connectedColor: string;
-  disconnectedColor: string;
+  disconnectedColor: string | OpaqueColorValue;
 };
 
 type BleLightbulbVisualState = {
   iconName: IconName;
-  iconColor: string;
+  iconColor: string | OpaqueColorValue;
   backgroundColor?: string;
   shadowColor?: string;
 };

@@ -116,9 +116,9 @@ export function PlaylistFormSheet({ mode, visible, submitting, playlist, onSubmi
     () => [
       styles.input,
       {
-        backgroundColor: systemColors.fill as string,
-        color: systemColors.label as string,
-        borderColor: systemColors.separator as string,
+        backgroundColor: systemColors.fill,
+        color: systemColors.label,
+        borderColor: systemColors.separator,
       },
     ],
     [systemColors],
@@ -145,7 +145,7 @@ export function PlaylistFormSheet({ mode, visible, submitting, playlist, onSubmi
           value={name}
           onChangeText={setName}
           placeholder={t('create.fields.namePlaceholder')}
-          placeholderTextColor={systemColors.tertiaryLabel as string}
+          placeholderTextColor={systemColors.tertiaryLabel}
           maxLength={NAME_MAX}
           style={inputStyle}
           returnKeyType="done"
@@ -158,7 +158,7 @@ export function PlaylistFormSheet({ mode, visible, submitting, playlist, onSubmi
           value={description}
           onChangeText={setDescription}
           placeholder={t('create.fields.descriptionPlaceholder')}
-          placeholderTextColor={systemColors.tertiaryLabel as string}
+          placeholderTextColor={systemColors.tertiaryLabel}
           maxLength={DESCRIPTION_MAX}
           multiline
           style={[inputStyle, styles.multiline]}
@@ -200,7 +200,7 @@ export function PlaylistFormSheet({ mode, visible, submitting, playlist, onSubmi
                 accessibilityState={{ selected }}
                 style={[
                   styles.emojiChip,
-                  { backgroundColor: systemColors.fill as string },
+                  { backgroundColor: systemColors.fill },
                   selected && styles.emojiChipSelected,
                 ]}
               >
@@ -214,7 +214,7 @@ export function PlaylistFormSheet({ mode, visible, submitting, playlist, onSubmi
             <Pressable
               onPress={() => setIcon(undefined)}
               accessibilityRole="button"
-              style={[styles.removeChip, { borderColor: systemColors.separator as string }]}
+              style={[styles.removeChip, { borderColor: systemColors.separator }]}
             >
               <Text variant="footnote" color={iosSystemColors.systemRed}>
                 {t('edit.fields.removeIcon')}

@@ -126,7 +126,7 @@ export function ClimbTopChrome({
             <GlassActionToolbar actionCount={leftActionCount}>
               {canCreate ? (
                 <GlassToolbarAction onPress={onCreate} accessibilityLabel={t('mobile.create.fab.ariaLabel')}>
-                  <Icon name="plus" size={24} color={systemColors.label as string} />
+                  <Icon name="plus" size={24} color={systemColors.label} />
                 </GlassToolbarAction>
               ) : null}
               <AngleToolbarAction />
@@ -181,7 +181,7 @@ export function ClimbTopChrome({
                 variant="caption1"
                 numberOfLines={1}
                 ellipsizeMode="tail"
-                color={systemColors.label as string}
+                color={systemColors.label}
                 style={styles.summaryText}
               >
                 {filterSummary.text}

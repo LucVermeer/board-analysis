@@ -150,18 +150,18 @@ export default function SettersPicker() {
   );
 
   return (
-    <View style={[styles.container, { backgroundColor: systemColors.background as string }]}>
-      <View style={[styles.searchBarWrapper, { backgroundColor: systemColors.secondaryBackground as string }]}>
+    <View style={[styles.container, { backgroundColor: systemColors.background }]}>
+      <View style={[styles.searchBarWrapper, { backgroundColor: systemColors.secondaryBackground }]}>
         <Icon name="search" size={16} color={iosSystemColors.systemGray} />
         <TextInput
           value={searchInput}
           onChangeText={handleSearchChange}
           placeholder={t('mobile.filter.searchSetters')}
-          placeholderTextColor={iosSystemColors.systemGray as string}
+          placeholderTextColor={iosSystemColors.systemGray}
           autoCorrect={false}
           autoCapitalize="none"
           returnKeyType="search"
-          style={[styles.searchInput, { color: systemColors.label as string }]}
+          style={[styles.searchInput, { color: systemColors.label }]}
         />
       </View>
 

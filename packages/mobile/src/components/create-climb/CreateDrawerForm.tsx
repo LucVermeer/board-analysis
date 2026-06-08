@@ -41,8 +41,8 @@ export function CreateDrawerForm({
 
   const inputStyle = useMemo<TextStyle>(
     () => ({
-      backgroundColor: systemColors.fill as string,
-      color: systemColors.label as string,
+      backgroundColor: systemColors.fill,
+      color: systemColors.label,
       borderRadius: borderRadius.md,
       paddingHorizontal: spacing[3],
       paddingVertical: spacing[3],
@@ -60,7 +60,7 @@ export function CreateDrawerForm({
         value={description}
         onChangeText={onChangeDescription}
         placeholder={t('createClimbForm.descriptionPlaceholder')}
-        placeholderTextColor={systemColors.tertiaryLabel as string}
+        placeholderTextColor={systemColors.tertiaryLabel}
         maxLength={DESCRIPTION_MAX}
         multiline
         style={[inputStyle, styles.multiline]}

@@ -68,7 +68,7 @@ export function DevicePickerSheet({ devices, onSelect, onDismiss, isScanning }: 
   const { systemColors } = theme;
 
   const backgroundStyle: ViewStyle = {
-    backgroundColor: systemColors.secondaryBackground as string,
+    backgroundColor: systemColors.secondaryBackground,
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
   };

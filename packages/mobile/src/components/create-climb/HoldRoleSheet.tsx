@@ -102,7 +102,7 @@ export function HoldRoleSheet({
             accessibilityLabel={t('mobile.create.holdRole.clear')}
             style={[styles.cell, { backgroundColor: systemColors.fill }]}
           >
-            <Icon name="eraser" size={20} color={systemColors.label as string} />
+            <Icon name="eraser" size={20} color={systemColors.label} />
             <Text variant="subheadline" style={styles.cellLabel}>
               {t('mobile.create.holdRole.clear')}
             </Text>

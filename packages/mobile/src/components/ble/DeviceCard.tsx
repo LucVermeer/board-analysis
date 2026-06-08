@@ -77,7 +77,7 @@ export function DeviceCard({ device, onSelect, boardType }: DeviceCardProps) {
       style={({ pressed }) => [
         styles.container,
         {
-          backgroundColor: (pressed ? systemColors.fill : systemColors.secondaryBackground) as string,
+          backgroundColor: (pressed ? systemColors.fill : systemColors.secondaryBackground),
         },
       ]}
     >
@@ -92,7 +92,7 @@ export function DeviceCard({ device, onSelect, boardType }: DeviceCardProps) {
 
         <View style={styles.metaRow}>
           {boardType && (
-            <View style={[styles.badge, { backgroundColor: systemColors.fill as string }]}>
+            <View style={[styles.badge, { backgroundColor: systemColors.fill }]}>
               <Text variant="caption2" color={systemColors.secondaryLabel as ColorValue}>
                 {boardType}
               </Text>

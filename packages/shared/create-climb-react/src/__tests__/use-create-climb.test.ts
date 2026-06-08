@@ -566,5 +566,44 @@ describe('useCreateClimb', () => {
       expect(result.current.litUpHoldsMap[200]).toBeUndefined();
       expect(result.current.canUndo).toBe(false);
     });
+
+    it('redo does not let past exceed the history depth limit', () => {
+      const { result } = renderHook(() => useCreateClimb('kilter'));
+
+      // 60 distinct FOOT holds — more than HISTORY_LIMIT (50), triggers the cap.
+      for (let holdId = 1; holdId <= 60; holdId += 1) {
+        act(() => {
+          result.current.setHoldState(holdId, 'FOOT');
+        });
+      }
+
+      // Undo 5 steps so future has 5 redoable items.
+      for (let i = 0; i < 5; i += 1) {
+        act(() => {
+          result.current.undo();
+        });
+      }
+
+      // Redo all 5 — each redo pushes present to past; capPast must keep
+      // the depth at HISTORY_LIMIT.  Without the fix, redoing into an already-
+      // capped past would silently exceed the limit once a future LOAD or similar
+      // action ever pre-populates past to HISTORY_LIMIT before a redo.
+      for (let i = 0; i < 5; i += 1) {
+        act(() => {
+          result.current.redo();
+        });
+      }
+
+      // Drain undo stack — must still be exactly 50 steps, not 55.
+      let undoCount = 0;
+      while (result.current.canUndo) {
+        act(() => {
+          result.current.undo();
+        });
+        undoCount += 1;
+        if (undoCount > 100) break; // safety
+      }
+      expect(undoCount).toBe(50);
+    });
   });
 });

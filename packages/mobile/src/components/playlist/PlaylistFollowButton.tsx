@@ -78,9 +78,9 @@ export function PlaylistFollowButton({ isFollowing, onToggle, loading, collapsed
         {loading ? (
           <ActivityIndicator size="small" />
         ) : (
-          <Icon name={iconName} size={18} color={systemColors.label as string} />
+          <Icon name={iconName} size={18} color={systemColors.label} />
         )}
-        <Text variant="subheadline" color={systemColors.label as string} style={styles.label}>
+        <Text variant="subheadline" color={systemColors.label} style={styles.label}>
           {label}
         </Text>
       </View>

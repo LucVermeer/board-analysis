@@ -37,7 +37,7 @@ export function LightbulbToolbarAction() {
       <Icon
         name={connected ? 'lightbulb.fill' : 'lightbulb'}
         size={23}
-        color={connected ? brandColors.warning : (systemColors.label as string)}
+        color={connected ? brandColors.warning : systemColors.label}
       />
     </GlassToolbarAction>
   );

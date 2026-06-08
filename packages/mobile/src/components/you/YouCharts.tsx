@@ -5,6 +5,7 @@ import type { RawGroupedBar, RawVPointsTimeline } from '@boardsesh/profile-stats
 import { Text } from '../Text';
 import { ActivityIndicator } from '../ActivityIndicator';
 import { useTheme } from '../../providers/theme-provider';
+import { androidFallbackColors } from '../../theme/colors';
 import { gradeChartColor, layoutChartColor, flashRedpointColor, type ColoredBar } from './profile-chart-colors';
 
 const MAX_X_LABELS = 12;
@@ -111,7 +112,7 @@ export function StackedBarChart({
   legend,
   maxXLabels,
 }: StackedBarsProps) {
-  const { systemColors } = useTheme();
+  const { systemColors, colorScheme } = useTheme();
   const isEmpty = !bars || bars.length === 0;
 
   // Color resolution is width-independent, so memoize it off the data.
@@ -151,8 +152,9 @@ export function StackedBarChart({
       <ChartFrame height={height} loading={loading} isEmpty={isEmpty} emptyLabel={emptyLabel}>
         {(width) => {
           const { barWidth, spacing } = fitBars(width, stackData.length);
-          // gifted-charts color props are typed `string`, not RN `ColorValue`,
-          // so the systemColors values below are cast rather than passed directly.
+          // gifted-charts color props are typed `string`, not RN `ColorValue`.
+          // Use androidFallbackColors[colorScheme] for plain hex/rgba strings
+          // instead of systemColors (PlatformColor on iOS) to stay compatible.
           return (
             <BarChart
               stackData={stackData}
@@ -165,8 +167,8 @@ export function StackedBarChart({
               hideYAxisText
               yAxisThickness={0}
               xAxisThickness={StyleSheet.hairlineWidth}
-              xAxisColor={systemColors.separator as string}
-              xAxisLabelTextStyle={{ color: systemColors.secondaryLabel as string, fontSize: AXIS_LABEL_SIZE }}
+              xAxisColor={androidFallbackColors[colorScheme].separator}
+              xAxisLabelTextStyle={{ color: androidFallbackColors[colorScheme].secondaryLabel, fontSize: AXIS_LABEL_SIZE }}
               isAnimated={false}
               disableScroll
             />
@@ -216,8 +218,9 @@ export function GroupedBarChart({ bars, height = 150, loading, emptyLabel, legen
               labelWidth: barWidth * 2 + innerGap,
             })),
           );
-          // gifted-charts color props are typed `string`, not RN `ColorValue`,
-          // so the systemColors values below are cast rather than passed directly.
+          // gifted-charts color props are typed `string`, not RN `ColorValue`.
+          // Use androidFallbackColors[colorScheme] for plain hex/rgba strings
+          // instead of systemColors (PlatformColor on iOS) to stay compatible.
           return (
             <BarChart
               data={data}
@@ -230,8 +233,8 @@ export function GroupedBarChart({ bars, height = 150, loading, emptyLabel, legen
               hideYAxisText
               yAxisThickness={0}
               xAxisThickness={StyleSheet.hairlineWidth}
-              xAxisColor={systemColors.separator as string}
-              xAxisLabelTextStyle={{ color: systemColors.tertiaryLabel as string, fontSize: AXIS_LABEL_SIZE }}
+              xAxisColor={androidFallbackColors[colorScheme].separator}
+              xAxisLabelTextStyle={{ color: androidFallbackColors[colorScheme].tertiaryLabel, fontSize: AXIS_LABEL_SIZE }}
               isAnimated={false}
               disableScroll
             />
@@ -258,7 +261,7 @@ type AreaProps = {
  * is conveyed by the grade-distribution chart instead).
  */
 export function TotalAreaChart({ timeline, color, height = 170, loading, emptyLabel }: AreaProps) {
-  const { systemColors } = useTheme();
+  const { systemColors, colorScheme } = useTheme();
   const isEmpty = !timeline || timeline.series.length === 0;
 
   // Data + axis labels are width-independent — memoize off the timeline.
@@ -308,11 +311,11 @@ export function TotalAreaChart({ timeline, color, height = 170, loading, emptyLa
             yAxisLabelTexts={model.yAxisLabelTexts}
             yAxisThickness={0}
             xAxisThickness={StyleSheet.hairlineWidth}
-            xAxisColor={systemColors.separator as string}
-            rulesColor={systemColors.separator as string}
+            xAxisColor={androidFallbackColors[colorScheme].separator}
+            rulesColor={androidFallbackColors[colorScheme].separator}
             rulesType="solid"
-            yAxisTextStyle={{ color: systemColors.tertiaryLabel as string, fontSize: AXIS_LABEL_SIZE }}
-            xAxisLabelTextStyle={{ color: systemColors.tertiaryLabel as string, fontSize: AXIS_LABEL_SIZE }}
+            yAxisTextStyle={{ color: androidFallbackColors[colorScheme].tertiaryLabel, fontSize: AXIS_LABEL_SIZE }}
+            xAxisLabelTextStyle={{ color: androidFallbackColors[colorScheme].tertiaryLabel, fontSize: AXIS_LABEL_SIZE }}
             isAnimated={false}
             disableScroll
           />

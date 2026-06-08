@@ -116,7 +116,7 @@ export function ConnectionBanner({ visible, onReconnect, onDismiss }: Connection
         </Pressable>
 
         <Pressable onPress={handleDismiss} accessibilityRole="button" hitSlop={8}>
-          <Icon name="close" size={16} color={systemColors.tertiaryLabel as string} />
+          <Icon name="close" size={16} color={systemColors.tertiaryLabel} />
         </Pressable>
       </View>
     </Animated.View>

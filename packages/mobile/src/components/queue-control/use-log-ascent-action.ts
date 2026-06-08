@@ -84,7 +84,7 @@ export function useLogAscentAction(climb: Climb) {
   // rides the glyph instead: a green tick when logged, the system label otherwise
   // (colour on the icon, suitable for a glass element), keeping the action
   // readable over whatever scrolls behind it.
-  const iconColor = isLogged ? brandColors.success : (systemColors.label as string);
+  const iconColor = isLogged ? brandColors.success : systemColors.label;
 
   const baseLabel = t('mobile.queue.logAscent');
   const accessibilityLabel = isLogged ? `${baseLabel}, ${t('mobile.queue.alreadyLogged')}` : baseLabel;
