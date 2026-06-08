@@ -150,7 +150,9 @@ describe('AllPlaylistsScreen', () => {
     const { getByText, getByLabelText } = render(<AllPlaylistsScreen />);
 
     expect(getByText('library.allPlaylists.loadMoreError')).toBeTruthy();
-    fireEvent.click(getByLabelText('library.errors.tryAgain'));
+    // The retry button's a11y label carries the error context, not just "Try Again".
+    const retryButton = getByLabelText('library.allPlaylists.loadMoreError library.errors.tryAgain');
+    fireEvent.click(retryButton);
     expect(hook.retryLoadMore).toHaveBeenCalledTimes(1);
   });
 });

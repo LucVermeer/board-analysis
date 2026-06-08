@@ -182,9 +182,9 @@ export default function AllPlaylistsScreen() {
                 style={styles.footer}
                 onPress={retryLoadMore}
                 accessibilityRole="button"
-                accessibilityLabel={t('library.errors.tryAgain')}
+                accessibilityLabel={`${t('library.allPlaylists.loadMoreError')} ${t('library.errors.tryAgain')}`}
               >
-                <Text variant="footnote" style={styles.stateSubtitle}>
+                <Text variant="footnote" color={systemColors.secondaryLabel} style={styles.footerError}>
                   {t('library.allPlaylists.loadMoreError')}
                 </Text>
                 <Text variant="subheadline" color={brandColors.primary} style={styles.footerRetry}>
@@ -254,6 +254,9 @@ const styles = StyleSheet.create({
   footer: {
     paddingVertical: spacing[4],
     alignItems: 'center',
+  },
+  footerError: {
+    textAlign: 'center',
   },
   footerRetry: {
     marginTop: spacing[1],
