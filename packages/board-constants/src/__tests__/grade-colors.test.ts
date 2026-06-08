@@ -108,3 +108,41 @@ describe('DEFAULT_GRADE_COLOR', () => {
     expect(DEFAULT_GRADE_COLOR).toBe('#808080');
   });
 });
+
+// WCAG relative luminance of a #RRGGBB hex (0 = black, 1 = white).
+function relativeLuminance(hex: string): number {
+  const channel = (int: number) => {
+    const c = int / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  };
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+}
+
+// The arc is designed to descend in luminance (easy/bright -> hard/dark) so a
+// pill reads as "harder = darker". The ONE intentional exception is V10 -> V11,
+// where V11 is the fixed brighter logo purple. These guards stop a future palette
+// tweak from silently flattening or re-ordering the ramp.
+describe('grade arc luminance shape', () => {
+  it('descends monotonically across the warm ramp V0–V10', () => {
+    for (let i = 0; i < 10; i++) {
+      const lighter = relativeLuminance(V_GRADE_COLORS[`V${i}`]);
+      const darker = relativeLuminance(V_GRADE_COLORS[`V${i + 1}`]);
+      expect(lighter, `V${i} should be lighter than V${i + 1}`).toBeGreaterThan(darker);
+    }
+  });
+
+  it('descends monotonically across the logo purples V11–V17', () => {
+    for (let i = 11; i < 17; i++) {
+      const lighter = relativeLuminance(V_GRADE_COLORS[`V${i}`]);
+      const darker = relativeLuminance(V_GRADE_COLORS[`V${i + 1}`]);
+      expect(lighter, `V${i} should be lighter than V${i + 1}`).toBeGreaterThan(darker);
+    }
+  });
+
+  it('keeps the single documented V10→V11 inversion (logo purple brighter than its grape neighbour)', () => {
+    expect(relativeLuminance(V_GRADE_COLORS.V11)).toBeGreaterThan(relativeLuminance(V_GRADE_COLORS.V10));
+  });
+});

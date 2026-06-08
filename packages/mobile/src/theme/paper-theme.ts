@@ -41,9 +41,12 @@ export function buildPaperTheme(colorScheme: ColorScheme, dynamic?: MD3Theme['co
       onSecondary: brand.onPrimary,
       secondaryContainer: withAlpha(brand.primaryFill, isDark ? 0.28 : 0.16),
       onSecondaryContainer: onSurface,
-      // Amber accent is the M3 tertiary role — fill-only, so it carries dark text.
+      // Amber accent is the M3 tertiary role — fill-only, so it carries dark text
+      // in BOTH schemes (white fails on amber). Pin to the light-scheme label
+      // token (the dark ink) rather than the per-scheme `onSurface`, which would
+      // be near-white in dark and illegible on the accent.
       tertiary: brand.accent,
-      onTertiary: '#16111F',
+      onTertiary: materialSurfaces.light.label as string,
       background: surfaces.background as string,
       onBackground: onSurface,
       surface: surfaces.secondaryBackground as string,

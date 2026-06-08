@@ -20,6 +20,8 @@ Boardsesh follows a **modern, mobile-first aesthetic** inspired by apps like Spo
 
 All tokens live in `packages/web/app/theme/theme-config.ts` and are exposed as CSS custom properties in `packages/web/app/components/index.css`.
 
+> **Web vs. mobile.** The tables in this section are the **web** palette (maroon/sage). The React Native app (`packages/mobile`) uses a separate, logo-cohesive **"Velvet Send"** violet palette — see [Mobile palette — "Velvet Send"](#mobile-palette--velvet-send-packagesmobile). The two are intentionally independent; only the climbing **grade colours** are shared (`@boardsesh/board-constants`).
+
 ### Colors
 
 | Token                  | Value     | CSS Variable            | Usage                                           |
@@ -161,6 +163,37 @@ Base unit: **4px**. All spacing uses this scale.
 | `zIndex.tooltip`  | `1060` |
 
 ---
+
+## Mobile palette — "Velvet Send" (`packages/mobile`)
+
+The React Native app is recolored onto a **violet brand** anchored on the logo (built from the V11–V16 grade purples). Tokens live in `packages/mobile/src/theme/colors.ts` as `brandColors` (light) + `brandColorsDark` (dark overrides). They are resolved per colour scheme by the ThemeProvider and exposed as **`useTheme().brandColors`** — components must read brand colours from the theme wherever the scheme matters, **not** from the static import. Material-variant components additionally read these via `buildPaperTheme` (`paper-theme.ts`).
+
+### Brand & semantic
+
+| Role          | Light     | Dark      | Usage                                                            |
+| ------------- | --------- | --------- | --------------------------------------------------------------- |
+| `primary`/`tint` | `#6D28D9` | `#A78BFA` | Foreground brand: text, icons, links, borders, accent bars      |
+| `primaryFill` | `#6D28D9` | `#7C3AED` | Filled surface/button background (pair with `onPrimary`)         |
+| `onPrimary`   | `#FFFFFF` | `#FFFFFF` | Text/icon on `primaryFill`                                       |
+| `accent`      | `#FF8A3D` | `#FF8A3D` | Amber spark for highlights — **fill-only, always dark text**     |
+| `success`     | `#047857` | `#34D399` | Sends, positive confirmation                                    |
+| `warning`     | `#B45309` | `#FBBF24` | Flashes, caution                                                |
+| `error`       | `#C81E1E` | `#F87171` | Destructive, removals                                           |
+
+Contrast (WCAG): white-on-`#6D28D9` 7.10:1 · `#A78BFA` tint ≥6.12:1 across the dark ladder · white-on-`#7C3AED` 5.70:1 · black-on-`#FF8A3D` 8.95:1 (white-on-amber fails, so accent is fill-only).
+
+> **Scheme-aware rule.** Use `useTheme().brandColors.primary` for any brand **foreground** so dark mode lifts to `#A78BFA`. The static `brandColors` import is only safe for **fills** that carry white/`onPrimary` text (e.g. filled buttons, swipe-action panels), where the value is legible in both schemes. A number of legacy static foreground sites are not yet ported — tracked as a follow-up.
+
+### Neutrals
+
+- **Liquid Glass variant** (iOS): neutrals come from `PlatformColor` (system materials, auto-adapting). **Android fallback** is a violet-tinted set in `androidFallbackColors` (light bg `#F4F1FB` / dark bg `#0F0B16`, label `#16111F` / `#F5F2FB`, opaque secondary labels for AA).
+- **Material 3 variant** (any platform): `materialSurfaces` — violet-tinted tonal surfaces (light bg `#F3EFFA`, surface `#FFFFFF`, fill `rgba(109,40,217,0.14)`; dark bg `#15101E`, surface `#221A33`, elevated `#2A2142`).
+
+### Grade colours (shared with web + backend)
+
+The yellow→red→purple grade arc in `@boardsesh/board-constants/grade-colors.ts` was refreshed (V0 `#FFD400` → V10 `#7E1C8E`); the V11–V16 logo purples are unchanged. Luminance descends monotonically except the documented V10→V11 step (the logo purple is brighter than its grape neighbour) — guarded by a test in `board-constants/src/__tests__/grade-colors.test.ts`. Grade-pill text is auto-picked for contrast (`readableTextColor`), so refreshed hexes stay AA without per-pill colours.
+
+> Climbing **hold** colours (`hold-states.ts`) are board data, fully decoupled from the theme — the recolor never affects rendered holds.
 
 ## Color Usage Rules
 

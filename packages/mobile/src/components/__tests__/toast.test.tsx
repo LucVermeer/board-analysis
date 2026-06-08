@@ -100,7 +100,7 @@ describe('Toast', () => {
     const cases = [
       { variant: 'error' as const, icon: 'error', color: '#FF3B30' },
       { variant: 'warning' as const, icon: 'warning', color: '#FF9500' },
-      { variant: 'info' as const, icon: 'info', color: '#8C4A52' },
+      { variant: 'info' as const, icon: 'info', color: '#6D28D9' },
     ];
     for (const { variant, icon, color } of cases) {
       const { container } = render(
