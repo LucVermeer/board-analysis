@@ -11,7 +11,6 @@ import { Text } from '../Text';
 import { iosSystemColors } from '../../theme/ios-colors';
 import { spacing } from '../../theme/tokens';
 import { useTheme } from '../../providers/theme-provider';
-import { brandColors } from '../../theme/colors';
 import { hapticSelection } from '../../lib/haptics';
 import { useSearchClimbs } from '../../lib/graphql/hooks';
 import { toClimbSearchInput, DEFAULT_CLIMB_FILTER_STATE } from '@boardsesh/climb-filters';
@@ -75,7 +74,7 @@ export function QueueList({
   onDraggingChange,
 }: QueueListProps) {
   const { t } = useTranslation('session');
-  const { systemColors } = useTheme();
+  const { systemColors, brandColors } = useTheme();
   const flatListRef = useRef<BottomSheetFlatListMethods | null>(null);
 
   const { flatRows, currentItemFlatIndex } = useMemo(
@@ -326,6 +325,7 @@ export function QueueList({
       handleSuggestionPress,
       systemColors.separator,
       systemColors.secondaryBackground,
+      brandColors.primary,
       t,
     ],
   );

@@ -14,7 +14,7 @@ import { Text } from '../../Text';
 import { useTheme } from '../../../providers/theme-provider';
 import { useGradeFormat } from '../../../hooks/use-grade-format';
 import { spacing, borderRadius } from '../../../theme/tokens';
-import { brandColors } from '../../../theme/colors';
+import { brandColors as staticBrandColors } from '../../../theme/colors';
 import { iosSystemColors } from '../../../theme/ios-colors';
 
 export type GeneratorSelection = { type: 'off' } | { type: 'on'; options: GeneratorOptions };
@@ -76,7 +76,7 @@ function getDefaultTargetGrade(boardName: BoardName | null): number {
  */
 export function GeneratorPickerCard({ boardName, selection, onChange }: GeneratorPickerCardProps) {
   const { t } = useTranslation('session');
-  const { systemColors } = useTheme();
+  const { systemColors, brandColors } = useTheme();
   const { formatGrade } = useGradeFormat();
 
   const handleSelectType = (value: ChipValue) => {
@@ -114,8 +114,10 @@ export function GeneratorPickerCard({ boardName, selection, onChange }: Generato
               style={[
                 styles.chip,
                 {
+                  // Border is a FOREGROUND → scheme-aware brand; the active fill
+                  // (white text on it) stays the static light brand.
                   borderColor: isActive ? brandColors.primary : systemColors.separator,
-                  backgroundColor: isActive ? brandColors.primary : 'transparent',
+                  backgroundColor: isActive ? staticBrandColors.primary : 'transparent',
                 },
               ]}
               accessibilityRole="button"
@@ -145,8 +147,9 @@ export function GeneratorPickerCard({ boardName, selection, onChange }: Generato
                   style={[
                     styles.gradeChip,
                     {
+                      // Border is a FOREGROUND → scheme-aware; active fill stays static.
                       borderColor: isActive ? brandColors.primary : systemColors.separator,
-                      backgroundColor: isActive ? brandColors.primary : 'transparent',
+                      backgroundColor: isActive ? staticBrandColors.primary : 'transparent',
                     },
                   ]}
                   accessibilityRole="button"

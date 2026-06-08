@@ -5,6 +5,7 @@ import { Icon } from '../Icon';
 import { Text } from '../Text';
 import { BleLightbulbButton } from '../ble/BleLightbulbButton';
 import { ActionButton, SIZES, type ButtonSize, drawerActionBarStyles } from '../drawer-action-bar/DrawerActionBar';
+import { useTheme } from '../../providers/theme-provider';
 import { brandColors } from '../../theme/colors';
 import { iosSystemColors } from '../../theme/ios-colors';
 import { glassSize } from '../../theme/layout';
@@ -68,6 +69,7 @@ export const PlayDrawerActionBar = memo(function PlayDrawerActionBar({
   const { t } = useTranslation('session');
   const { t: tClimbs } = useTranslation('climbs');
   const { t: tSettings } = useTranslation('settings');
+  const theme = useTheme();
 
   const handlePrev = useCallback(() => {
     hapticMedium();
@@ -109,7 +111,7 @@ export const PlayDrawerActionBar = memo(function PlayDrawerActionBar({
               iconName="mirror"
               onPress={handleMirror}
               active={isMirrored}
-              activeColor={brandColors.primary}
+              activeColor={theme.brandColors.primary}
               accessibilityLabel={
                 isMirrored ? t('playView.actionBar.unmirrorAria') : t('playView.actionBar.mirrorAria')
               }
@@ -264,6 +266,7 @@ type TickButtonProps = {
 
 function TickButton({ size, ascentCount, onPress, onLongPress, accessibilityLabel }: TickButtonProps) {
   const { dim, icon } = SIZES[size];
+  const theme = useTheme();
   const handlePress = useCallback(() => {
     hapticMedium();
     onPress();
@@ -288,7 +291,7 @@ function TickButton({ size, ascentCount, onPress, onLongPress, accessibilityLabe
     >
       {/* The primary log action: a green glyph on the glass sheet (colour on the
           icon, not a fill) — its hue and the count badge mark it as the hero. */}
-      <Icon name="tick.outline" size={icon} color={brandColors.success} />
+      <Icon name="tick.outline" size={icon} color={theme.brandColors.success} />
       {ascentCount > 0 && (
         <View style={styles.countBadge}>
           <Text variant="caption2" color={iosSystemColors.white} style={styles.countText}>

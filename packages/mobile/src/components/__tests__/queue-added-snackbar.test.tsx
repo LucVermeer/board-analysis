@@ -76,7 +76,11 @@ vi.mock('../../theme/tokens', () => ({
   shadowColor: '#000',
 }));
 vi.mock('../../providers/theme-provider', () => ({
-  useTheme: () => ({ variant: ctrl.variant, systemColors: { secondaryBackground: '#EEE', label: '#000' } }),
+  useTheme: () => ({
+    variant: ctrl.variant,
+    brandColors: { primary: '#6D28D9' },
+    systemColors: { secondaryBackground: '#EEE', label: '#000' },
+  }),
 }));
 vi.mock('../../hooks/use-bottom-chrome-metrics', () => ({
   useBottomChromeMetrics: () => ({ floatingControlBottom: 100 }),

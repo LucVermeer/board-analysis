@@ -16,7 +16,6 @@ import { CommentSheet } from './CommentSheet';
 import { bucketSessionsByRecency, type FeedRecencyBucket } from '../../lib/feed-time-buckets';
 import { useSessionGroupedFeed, useBulkVoteSummaries } from '../../lib/graphql/hooks';
 import { useBottomChromeMetrics } from '../../hooks/use-bottom-chrome-metrics';
-import { brandColors } from '../../theme/colors';
 import { spacing } from '../../theme/tokens';
 import { useTheme } from '../../providers/theme-provider';
 
@@ -33,7 +32,7 @@ function sectionLabel(bucket: FeedRecencyBucket, t: TFunc): string {
 
 export function SessionsTab({ userId }: { userId: string | undefined }) {
   const { t } = useTranslation('you');
-  const { systemColors } = useTheme();
+  const { systemColors, brandColors } = useTheme();
   const router = useRouter();
   const bottomChrome = useBottomChromeMetrics();
   const paddingBottom = bottomChrome.scrollBottomPadding + spacing[4];

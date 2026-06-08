@@ -103,6 +103,7 @@ vi.mock('../icon-map', () => ({
   },
 }));
 
+vi.mock('../../theme/colors', () => ({ brandColors: { primary: '#6D28D9' } }));
 vi.mock('../../theme/ios-colors', () => ({ iosSystemColors: { white: '#FFFFFF' } }));
 vi.mock('../../theme/animations', () => ({ timing: { fast: 150 } }));
 vi.mock('../../hooks/use-reduce-motion', () => ({ useReduceMotion: () => false }));

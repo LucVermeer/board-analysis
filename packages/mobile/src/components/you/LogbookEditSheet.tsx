@@ -14,7 +14,6 @@ import { SectionHeader } from '../SectionHeader';
 import { GradeSingleSelectRail } from '../grade';
 import { useGrades } from '../../lib/graphql/hooks';
 import { hapticSuccess, hapticError } from '../../lib/haptics';
-import { brandColors } from '../../theme/colors';
 import { spacing, borderRadius } from '../../theme/tokens';
 import { useTheme } from '../../providers/theme-provider';
 import { useToast } from '../../providers/toast-provider';
@@ -30,7 +29,7 @@ type LogbookEditSheetProps = {
 /** Edit (status / grade / stars / tries / comment) or delete a logged ascent. */
 export function LogbookEditSheet({ sheetRef, ascent, onClose }: LogbookEditSheetProps) {
   const { t } = useTranslation('you');
-  const { systemColors } = useTheme();
+  const { systemColors, brandColors } = useTheme();
   const { showToast } = useToast();
   const updateTick = useUpdateTick();
   const deleteTick = useDeleteTick();

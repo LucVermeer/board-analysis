@@ -9,7 +9,6 @@ import { Icon } from '../Icon';
 import { type IconName } from '../icon-map';
 import { ListRow } from '../ListRow';
 import { gradeBadgeColor } from './profile-chart-colors';
-import { brandColors } from '../../theme/colors';
 import { iosSystemColors } from '../../theme/ios-colors';
 import { spacing, borderRadius } from '../../theme/tokens';
 import { useTheme } from '../../providers/theme-provider';
@@ -20,18 +19,25 @@ type LogbookRowProps = {
   onPress: (ascent: AscentFeedItem) => void;
 };
 
-const STATUS_META: Record<AscentFeedItem['status'], { icon: IconName; color: string }> = {
-  flash: { icon: 'flash', color: brandColors.warning },
-  send: { icon: 'tick', color: brandColors.success },
-  attempt: { icon: 'circle', color: iosSystemColors.systemGray },
+// Icon names are scheme-agnostic; the badge fill colour is resolved from the
+// theme in render (brand tones lift in dark) so the static map keeps icons only.
+const STATUS_ICON: Record<AscentFeedItem['status'], IconName> = {
+  flash: 'flash',
+  send: 'tick',
+  attempt: 'circle',
 };
 
 export const LogbookRow = memo(function LogbookRow({ ascent, onPress }: LogbookRowProps) {
   const { t } = useTranslation('you');
-  const { systemColors } = useTheme();
+  const { systemColors, brandColors } = useTheme();
   const { formatGrade, formatGradeByDifficultyId } = useGradeFormat();
 
-  const meta = STATUS_META[ascent.status];
+  const statusColor: Record<AscentFeedItem['status'], string> = {
+    flash: brandColors.warning,
+    send: brandColors.success,
+    attempt: iosSystemColors.systemGray,
+  };
+  const meta = { icon: STATUS_ICON[ascent.status], color: statusColor[ascent.status] };
   const rawGradeLabel = ascent.difficultyName ?? ascent.consensusDifficultyName;
   const gradeLabel =
     formatGradeByDifficultyId(ascent.difficulty ?? ascent.consensusDifficulty) ??

@@ -7,7 +7,7 @@ import { type IconName } from '../icon-map';
 import { Avatar } from '../Avatar';
 import { ListRow } from '../ListRow';
 import { SectionHeader } from '../SectionHeader';
-import { brandColors, withAlpha } from '../../theme/colors';
+import { withAlpha } from '../../theme/colors';
 import { iosSystemColors } from '../../theme/ios-colors';
 import { spacing, borderRadius } from '../../theme/tokens';
 import { useTheme } from '../../providers/theme-provider';
@@ -16,6 +16,7 @@ import { useTheme } from '../../providers/theme-provider';
 export function SessionParticipantBreakdown({ participants }: { participants: SessionFeedParticipant[] }) {
   const { t } = useTranslation('session');
   const { t: tYou } = useTranslation('you');
+  const { brandColors } = useTheme();
 
   if (participants.length <= 1) return null;
 

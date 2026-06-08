@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { ModalSheet } from '../ModalSheet';
 import { ListRow } from '../ListRow';
 import { Icon } from '../Icon';
+import { useTheme } from '../../providers/theme-provider';
 import { iosSystemColors } from '../../theme/ios-colors';
 import { spacing } from '../../theme/tokens';
 
@@ -21,6 +22,7 @@ type PlaylistActionsMenuProps = {
  */
 export function PlaylistActionsMenu({ visible, onEdit, onDelete, onClose }: PlaylistActionsMenuProps) {
   const { t } = useTranslation('playlists');
+  const { systemColors } = useTheme();
   const sheetRef = useRef<BottomSheetModal>(null);
   // Track presented state so we never call dismiss() on a not-presented modal
   // (which leaves gorhom in a state where the next present() is a no-op — the
@@ -49,7 +51,7 @@ export function PlaylistActionsMenu({ visible, onEdit, onDelete, onClose }: Play
       <View style={styles.content}>
         <ListRow
           title={t('detail.menu.edit')}
-          leading={<Icon name="edit" size={22} color={iosSystemColors.systemBlue} />}
+          leading={<Icon name="edit" size={22} color={systemColors.accent} />}
           onPress={onEdit}
           showSeparator
         />

@@ -158,7 +158,8 @@ function SpeedSlider({
   onChange: (speed: number) => void;
   onLiveChange: (speed: number) => void;
 }) {
-  const { systemColors } = useTheme();
+  const theme = useTheme();
+  const { systemColors } = theme;
   const [trackWidth, setTrackWidth] = useState(0);
   const usable = Math.max(0, trackWidth - THUMB_SIZE);
   const position = useSharedValue(0);
@@ -261,7 +262,7 @@ function SpeedSlider({
     <GestureDetector gesture={composed}>
       <View style={styles.sliderTrackWrapper} onLayout={handleLayout}>
         <View style={[styles.sliderTrack, { backgroundColor: systemColors.fill }]} />
-        <Animated.View style={[styles.sliderFill, fillStyle]} />
+        <Animated.View style={[styles.sliderFill, { backgroundColor: theme.brandColors.primary }, fillStyle]} />
         <Animated.View style={[styles.sliderThumb, thumbStyle]} />
       </View>
     </GestureDetector>
@@ -288,7 +289,8 @@ export function PlaybackControls({
   onSeek,
   onSpeedChange,
 }: PlaybackControlsProps) {
-  const { systemColors } = useTheme();
+  const theme = useTheme();
+  const { systemColors } = theme;
   const { t } = useTranslation('session');
   const atFirstFrame = frameIndex <= 0;
   const atLastFrame = frameIndex >= frameCount - 1;
@@ -362,7 +364,10 @@ export function PlaybackControls({
 
   return (
     <View style={[styles.container, { backgroundColor: systemColors.tertiaryBackground }]}>
-      <Animated.View style={[styles.progressBar, progressStyle]} pointerEvents="none" />
+      <Animated.View
+        style={[styles.progressBar, { backgroundColor: theme.brandColors.primary }, progressStyle]}
+        pointerEvents="none"
+      />
 
       <View style={styles.transportRow}>
         <View style={styles.sideLeft}>
@@ -445,7 +450,6 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     height: 3,
-    backgroundColor: brandColors.primary,
   },
   transportRow: {
     flexDirection: 'row',
@@ -509,7 +513,6 @@ const styles = StyleSheet.create({
     left: 0,
     height: TRACK_HEIGHT,
     borderRadius: TRACK_HEIGHT / 2,
-    backgroundColor: brandColors.primary,
   },
   sliderThumb: {
     position: 'absolute',

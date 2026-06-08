@@ -7,7 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text } from './Text';
 import { Icon } from './Icon';
 import type { IconName } from './icon-map';
-import { brandColors, blendOpaque, withAlpha } from '../theme/colors';
+import { blendOpaque, withAlpha } from '../theme/colors';
 import { borderRadius, spacing } from '../theme/tokens';
 import { TAB_BAR_HEIGHT, TOOLBAR_RESERVE } from '../theme/layout';
 import { isTabsRoute } from '../lib/route-segments';
@@ -27,12 +27,16 @@ type ToastProps = {
   onDismiss: (id: string) => void;
 };
 
-const VARIANT_CONFIG: Record<ToastVariant, { icon: IconName; color: string }> = {
-  success: { icon: 'success', color: brandColors.success },
-  error: { icon: 'error', color: brandColors.error },
-  info: { icon: 'info', color: brandColors.primary },
-  warning: { icon: 'warning', color: brandColors.warning },
-};
+// The icon glyph is static, but the colour must be scheme-aware: the `colorKey`
+// names a `brandColors` field resolved from `useTheme()` at render so dark mode
+// lifts to the brighter brand tones.
+const VARIANT_CONFIG: Record<ToastVariant, { icon: IconName; colorKey: 'success' | 'error' | 'primary' | 'warning' }> =
+  {
+    success: { icon: 'success', colorKey: 'success' },
+    error: { icon: 'error', colorKey: 'error' },
+    info: { icon: 'info', colorKey: 'primary' },
+    warning: { icon: 'warning', colorKey: 'warning' },
+  };
 
 /**
  * Toast routes to a Material 3 Paper Snackbar on the Material variant, and to the
@@ -63,9 +67,10 @@ function useToastBottomOffset() {
 }
 
 function ToastMaterial({ toast, onDismiss }: ToastProps) {
-  const { systemColors, colorScheme } = useTheme();
+  const { systemColors, colorScheme, brandColors } = useTheme();
   const bottomOffset = useToastBottomOffset();
   const config = VARIANT_CONFIG[toast.variant];
+  const variantColor = brandColors[config.colorKey];
 
   // Paper drives its own auto-dismiss timer off `duration` + `onDismiss`, so we
   // don't run a manual setTimeout on the Material path (it would double-fire).
@@ -84,7 +89,7 @@ function ToastMaterial({ toast, onDismiss }: ToastProps) {
   // opaque ref; blendOpaque also returns its background unchanged for non-hex
   // input, so the cast is safe.
   const backgroundColor = blendOpaque(
-    config.color,
+    variantColor,
     systemColors.secondaryBackground as string,
     colorScheme === 'dark' ? 0.24 : 0.15,
   );
@@ -102,8 +107,8 @@ function ToastMaterial({ toast, onDismiss }: ToastProps) {
           puts them on its container; here the content View is the equivalent
           announced node, so TalkBack reads the message assertively either way. */}
       <View style={styles.materialContent} accessibilityRole="alert" accessibilityLiveRegion="assertive">
-        <Icon name={config.icon} size={18} color={config.color} />
-        <Text variant="subheadline" color={config.color} style={styles.message} numberOfLines={2}>
+        <Icon name={config.icon} size={18} color={variantColor} />
+        <Text variant="subheadline" color={variantColor} style={styles.message} numberOfLines={2}>
           {toast.message}
         </Text>
       </View>
@@ -113,10 +118,11 @@ function ToastMaterial({ toast, onDismiss }: ToastProps) {
 
 // Liquid Glass / HIG toast — the original implementation, unchanged.
 function ToastGlass({ toast, onDismiss }: ToastProps) {
-  const { systemColors, colorScheme } = useTheme();
+  const { systemColors, colorScheme, brandColors } = useTheme();
   const bottomOffset = useToastBottomOffset();
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const config = VARIANT_CONFIG[toast.variant];
+  const variantColor = brandColors[config.colorKey];
 
   useEffect(() => {
     timerRef.current = setTimeout(() => onDismiss(toast.id), toast.duration);
@@ -128,7 +134,7 @@ function ToastGlass({ toast, onDismiss }: ToastProps) {
   // Opaque themed pill keeps the toast legible over any content; the brand-hued
   // wash on top carries the variant cue. Bump the wash alpha in dark mode where
   // a 15% tint barely registers.
-  const tintColor = withAlpha(config.color, colorScheme === 'dark' ? 0.24 : 0.15);
+  const tintColor = withAlpha(variantColor, colorScheme === 'dark' ? 0.24 : 0.15);
 
   return (
     <Animated.View
@@ -145,8 +151,8 @@ function ToastGlass({ toast, onDismiss }: ToastProps) {
       accessibilityLiveRegion="assertive"
     >
       <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: tintColor }]} />
-      <Icon name={config.icon} size={18} color={config.color} />
-      <Text variant="subheadline" color={config.color} style={styles.message} numberOfLines={2}>
+      <Icon name={config.icon} size={18} color={variantColor} />
+      <Text variant="subheadline" color={variantColor} style={styles.message} numberOfLines={2}>
         {toast.message}
       </Text>
     </Animated.View>

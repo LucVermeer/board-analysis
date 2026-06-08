@@ -14,7 +14,6 @@ import { useTheme } from '../../providers/theme-provider';
 import { hapticLight } from '../../lib/haptics';
 import { spacing, borderRadius } from '../../theme/tokens';
 import { timing } from '../../theme/animations';
-import { brandColors } from '../../theme/colors';
 
 const AUTO_DISMISS_MS = 10_000;
 
@@ -50,7 +49,7 @@ function useSlideAnimation(
 
 export function ConnectionBanner({ visible, onReconnect, onDismiss }: ConnectionBannerProps) {
   const { t } = useTranslation('settings');
-  const { systemColors } = useTheme();
+  const { systemColors, brandColors } = useTheme();
   const autoDismissTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Keep the component mounted until the exit animation completes
@@ -102,7 +101,15 @@ export function ConnectionBanner({ visible, onReconnect, onDismiss }: Connection
 
   return (
     <Animated.View style={[styles.wrapper, animatedStyle]}>
-      <View style={styles.container}>
+      <View
+        style={[
+          styles.container,
+          {
+            backgroundColor: `${brandColors.warning}1F`,
+            borderColor: `${brandColors.warning}40`,
+          },
+        ]}
+      >
         <Icon name="bluetooth.off" size={18} color={brandColors.warning} />
 
         <Text variant="subheadline" color={systemColors.label} style={styles.messageText} numberOfLines={1}>
@@ -136,9 +143,7 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: `${brandColors.warning}1F`,
     borderWidth: 1,
-    borderColor: `${brandColors.warning}40`,
     borderRadius: borderRadius.lg,
     paddingHorizontal: spacing[3],
     paddingVertical: spacing[2],

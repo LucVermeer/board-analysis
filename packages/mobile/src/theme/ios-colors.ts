@@ -4,12 +4,14 @@ import { brandColors } from './colors';
 /**
  * The interactive-accent blue. iOS keeps Apple's #007AFF; Android resolves it to
  * the brand tint so the active tab, links, and "edit / copy / open" affordances
- * read as Boardsesh violet rather than an out-of-place iOS blue. This is the one
- * value in `iosSystemColors` that genuinely leaks an iOS aesthetic onto Android
- * (it's used as a *tint*, not a fixed status colour); resolving it here fixes
- * every static (StyleSheet / default-prop) consumer at once without a wide
- * per-file refactor. Every other value below is intentionally identical across
- * platforms — iOS system reds/greens/grays read fine on Android too.
+ * read as Boardsesh violet rather than an out-of-place iOS blue.
+ *
+ * For FOREGROUND use prefer the scheme-aware `useTheme().systemColors.accent`
+ * (lifts to #A78BFA in Android dark so it clears AA on near-black). This static
+ * value stays as the FILL fallback for the few StyleSheet backgrounds that carry
+ * white text (e.g. the logbook angle chip), where lifting would break white-on-fill
+ * contrast. Every other value below is intentionally identical across platforms —
+ * iOS system reds/greens/grays read fine on Android too.
  */
 const ACCENT_TINT = Platform.OS === 'android' ? brandColors.tint : '#007AFF';
 

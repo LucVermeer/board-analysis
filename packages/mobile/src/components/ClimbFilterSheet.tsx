@@ -420,7 +420,7 @@ export function ClimbFilterSheet({
       <View style={styles.header}>
         <Text variant="title3">{t('mobile.filter.title')}</Text>
         <Pressable onPress={handleReset} hitSlop={8} accessibilityRole="button" disabled={!anyActive}>
-          <Text variant="subheadline" color={anyActive ? brandColors.primary : systemColors.secondaryLabel}>
+          <Text variant="subheadline" color={anyActive ? theme.brandColors.primary : systemColors.secondaryLabel}>
             {t('mobile.filter.reset')}
           </Text>
         </Pressable>
@@ -641,10 +641,7 @@ export function ClimbFilterSheet({
       </BottomSheetScrollView>
 
       <View
-        style={[
-          styles.footer,
-          { paddingBottom: insets.bottom + spacing[3], borderTopColor: systemColors.separator },
-        ]}
+        style={[styles.footer, { paddingBottom: insets.bottom + spacing[3], borderTopColor: systemColors.separator }]}
       >
         <Button title={applyLabel} onPress={handleApply} variant="filled" size="large" style={styles.applyButton} />
       </View>

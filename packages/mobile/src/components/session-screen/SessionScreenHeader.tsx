@@ -4,7 +4,6 @@ import { useTranslation } from 'react-i18next';
 import { Text } from '../Text';
 import { Icon } from '../Icon';
 import { useTheme } from '../../providers/theme-provider';
-import { brandColors } from '../../theme/colors';
 import { spacing } from '../../theme/tokens';
 
 type SessionScreenHeaderProps = {
@@ -41,7 +40,7 @@ export function SessionScreenHeader({
   dragGesture,
 }: SessionScreenHeaderProps) {
   const { t } = useTranslation('session');
-  const { systemColors } = useTheme();
+  const { systemColors, brandColors } = useTheme();
 
   const title = sessionActive ? t('mobile.session.headerActive') : t('mobile.session.headerStart');
 

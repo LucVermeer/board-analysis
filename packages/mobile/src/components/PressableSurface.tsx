@@ -125,6 +125,10 @@ export function PressableSurface({
         onLongPress={onLongPress}
         onLayout={onLayout}
         disabled={disabled}
+        // Static brand tint by design: this is a core primitive and the default
+        // ripple is an Android-only, rarely-hit fallback (most callers pass an
+        // explicit rippleColor). Kept off the theme to avoid coupling every
+        // pressable to ThemeProvider for a colour the eye barely registers.
         android_ripple={androidRipple(rippleColor ?? brandColors.tint, rippleBorderless)}
         hitSlop={hitSlop}
         accessibilityRole={accessibilityRole}

@@ -6,7 +6,6 @@ import { Text } from '../../Text';
 import { Icon } from '../../Icon';
 import { AvatarGroup } from '../../you/AvatarGroup';
 import { useTheme } from '../../../providers/theme-provider';
-import { brandColors } from '../../../theme/colors';
 import { spacing, opacity } from '../../../theme/tokens';
 
 type SessionPresenceRowProps = {
@@ -23,7 +22,7 @@ type SessionPresenceRowProps = {
  */
 export function SessionPresenceRow({ users, driverParticipantId, selfParticipantId }: SessionPresenceRowProps) {
   const { t } = useTranslation('session');
-  const { systemColors } = useTheme();
+  const { systemColors, brandColors } = useTheme();
 
   // Connected climbers first so the visible (non-overflow) avatars favour the
   // people actually present. The AvatarGroup participant shape carries no

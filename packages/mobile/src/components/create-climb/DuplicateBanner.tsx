@@ -3,7 +3,6 @@ import { useTranslation } from 'react-i18next';
 import { Text } from '../Text';
 import { Icon } from '../Icon';
 import { useTheme } from '../../providers/theme-provider';
-import { brandColors } from '../../theme/colors';
 import { spacing, borderRadius } from '../../theme/tokens';
 
 type DuplicateBannerProps = {
@@ -19,7 +18,7 @@ type DuplicateBannerProps = {
  */
 export function DuplicateBanner({ name, onView, onDismiss }: DuplicateBannerProps) {
   const { t } = useTranslation('climbs');
-  const { systemColors } = useTheme();
+  const { systemColors, brandColors } = useTheme();
   return (
     <View style={[styles.banner, { backgroundColor: systemColors.fill }]}>
       <View style={styles.bannerText}>

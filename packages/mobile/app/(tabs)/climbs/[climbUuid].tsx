@@ -18,7 +18,7 @@ import { getBoardRenderData } from '../../../src/lib/board-details';
 import { hapticSuccess } from '../../../src/lib/haptics';
 import { track } from '../../../src/lib/analytics';
 import { useGradeFormat } from '../../../src/hooks/use-grade-format';
-import { brandColors } from '../../../src/theme/colors';
+import { useTheme } from '../../../src/providers/theme-provider';
 import { spacing } from '../../../src/theme/tokens';
 
 type ClimbDetailParams = {
@@ -34,6 +34,7 @@ export default function ClimbDetail() {
   const params = useLocalSearchParams<ClimbDetailParams>();
   const { climbUuid, boardName, layoutId, sizeId, setIds, angle } = params;
   const { t } = useTranslation('climbs');
+  const { brandColors } = useTheme();
 
   const hasRequiredParams = boardName && layoutId && sizeId && setIds && angle;
 
@@ -178,7 +179,7 @@ export default function ClimbDetail() {
           {climb.userAscents != null && climb.userAscents > 0 && (
             <View style={styles.progressRow}>
               <Icon name="tick" size={16} color={brandColors.success} />
-              <Text variant="footnote" style={styles.progressText}>
+              <Text variant="footnote" style={[styles.progressText, { color: brandColors.success }]}>
                 {climb.userAttempts != null && climb.userAttempts > 0
                   ? t('mobile.detail.sentWithAttempts', {
                       count: climb.userAscents,
@@ -329,9 +330,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(107, 144, 128, 0.1)',
     borderRadius: 8,
   },
-  progressText: {
-    color: brandColors.success,
-  },
+  progressText: {},
   description: {
     marginTop: spacing[4],
     opacity: 0.8,

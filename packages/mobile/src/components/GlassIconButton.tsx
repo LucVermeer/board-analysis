@@ -14,6 +14,7 @@ import { Icon } from './Icon';
 import { Text } from './Text';
 import { iconMap, type IconName } from './icon-map';
 import { useTheme } from '../providers/theme-provider';
+import { brandColors } from '../theme/colors';
 import { iosSystemColors } from '../theme/ios-colors';
 import { timing } from '../theme/animations';
 import { glassSize } from '../theme/layout';
@@ -145,7 +146,6 @@ function GlassIconButtonGlass({
   secondaryIconName,
   active = false,
 }: GlassIconButtonProps) {
-  const { brandColors } = useTheme();
   const reduceMotion = useReduceMotion();
   const showBadge = badgeCount != null && badgeCount > 0;
   const suppressPressRef = useRef(false);

@@ -11,7 +11,6 @@ import { ActivityIndicator } from '../ActivityIndicator';
 import { useComments, useAddComment } from '../../lib/graphql/hooks';
 import { formatTickRelativeTime } from '@boardsesh/profile-stats';
 import { hapticLight } from '../../lib/haptics';
-import { brandColors } from '../../theme/colors';
 import { spacing, borderRadius } from '../../theme/tokens';
 import { useTheme } from '../../providers/theme-provider';
 
@@ -27,7 +26,7 @@ type CommentSheetProps = {
 /** Comment thread for a social entity (session or tick), with an inline composer. */
 export function CommentSheet({ sheetRef, entityId, entityType = 'session', onClose }: CommentSheetProps) {
   const { t } = useTranslation('you');
-  const { systemColors } = useTheme();
+  const { systemColors, brandColors } = useTheme();
   const [draft, setDraft] = useState('');
 
   const commentsQuery = useComments(entityType, entityId ?? undefined, !!entityId);

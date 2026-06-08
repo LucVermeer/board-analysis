@@ -5,7 +5,6 @@ import type { SessionFeedItem } from '@boardsesh/shared-schema';
 import { parseTickTime } from '@boardsesh/profile-stats';
 import { Text } from '../Text';
 import { Card } from '../Card';
-import { brandColors } from '../../theme/colors';
 import { spacing, borderRadius } from '../../theme/tokens';
 import { useTheme } from '../../providers/theme-provider';
 
@@ -52,7 +51,7 @@ function computeRollup(sessions: SessionFeedItem[], now: number): WeeklyRollup {
 
 export function SessionsFeedHeader({ sessions, now }: { sessions: SessionFeedItem[]; now: number }) {
   const { t } = useTranslation('you');
-  const { systemColors } = useTheme();
+  const { systemColors, brandColors } = useTheme();
 
   const rollup = useMemo(() => computeRollup(sessions, now), [sessions, now]);
 

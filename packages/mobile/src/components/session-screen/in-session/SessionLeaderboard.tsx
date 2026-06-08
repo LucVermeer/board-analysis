@@ -8,7 +8,7 @@ import { type IconName } from '../../icon-map';
 import { Avatar } from '../../Avatar';
 import { SectionHeader } from '../../SectionHeader';
 import { useTheme } from '../../../providers/theme-provider';
-import { brandColors, withAlpha } from '../../../theme/colors';
+import { withAlpha } from '../../../theme/colors';
 import { iosSystemColors } from '../../../theme/ios-colors';
 import { spacing, borderRadius } from '../../../theme/tokens';
 
@@ -26,7 +26,7 @@ type SessionLeaderboardProps = {
  */
 export function SessionLeaderboard({ participants, driverUserId, selfUserId }: SessionLeaderboardProps) {
   const { t } = useTranslation('session');
-  const { systemColors } = useTheme();
+  const { systemColors, brandColors } = useTheme();
 
   const ranked = useMemo(
     () => [...participants].sort((a, b) => b.sends - a.sends || b.flashes - a.flashes),

@@ -69,6 +69,7 @@ vi.mock('../../providers/theme-provider', () => ({
   useTheme: () => ({
     variant: ctrl.variant,
     colorScheme: 'light',
+    brandColors: { success: '#34C759', error: '#FF3B30', primary: '#6D28D9', warning: '#FF9500' },
     systemColors: { secondaryBackground: '#EEE', label: '#000' },
   }),
 }));

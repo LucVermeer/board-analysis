@@ -13,7 +13,7 @@ import { Sheet } from './Sheet';
 import { ListRow } from './ListRow';
 import { Icon } from './Icon';
 import { useToast } from '../providers/toast-provider';
-import { brandColors } from '../theme/colors';
+import { useTheme } from '../providers/theme-provider';
 import { iosSystemColors } from '../theme/ios-colors';
 import { spacing } from '../theme/tokens';
 import { WEB_BASE_URL } from '../lib/env';
@@ -59,6 +59,7 @@ function ClimbActionsSheet({
 }: ClimbActionsSheetProps) {
   const { t } = useTranslation('climbs');
   const { showToast } = useToast();
+  const theme = useTheme();
   const router = useRouter();
   const sheetRef = useRef<BottomSheet>(null);
 
@@ -182,7 +183,7 @@ function ClimbActionsSheet({
         {onAddToQueue && (
           <ListRow
             title={t('mobile.climbRow.addToQueue')}
-            leading={<Icon name="add" size={22} color={brandColors.success} />}
+            leading={<Icon name="add" size={22} color={theme.brandColors.success} />}
             onPress={handleAddToQueue}
             showSeparator
           />
@@ -198,7 +199,7 @@ function ClimbActionsSheet({
         {onTick && (
           <ListRow
             title={t('mobile.climbActions.tick')}
-            leading={<Icon name="tick" size={22} color={brandColors.success} />}
+            leading={<Icon name="tick" size={22} color={theme.brandColors.success} />}
             onPress={handleTick}
             showSeparator
           />
@@ -206,20 +207,20 @@ function ClimbActionsSheet({
         {canEdit && (
           <ListRow
             title={t('mobile.climbActions.edit')}
-            leading={<Icon name="edit" size={22} color={iosSystemColors.systemBlue} />}
+            leading={<Icon name="edit" size={22} color={theme.systemColors.accent} />}
             onPress={handleEdit}
             showSeparator
           />
         )}
         <ListRow
           title={t('mobile.climbActions.fork')}
-          leading={<Icon name="branch" size={22} color={iosSystemColors.systemBlue} />}
+          leading={<Icon name="branch" size={22} color={theme.systemColors.accent} />}
           onPress={handleFork}
           showSeparator
         />
         <ListRow
           title={t('mobile.climbActions.copyLink')}
-          leading={<Icon name="copy" size={22} color={iosSystemColors.systemBlue} />}
+          leading={<Icon name="copy" size={22} color={theme.systemColors.accent} />}
           onPress={handleCopyLink}
           showSeparator
         />
@@ -232,7 +233,7 @@ function ClimbActionsSheet({
         {auroraAppUrl && (
           <ListRow
             title={t('mobile.climbActions.openInApp')}
-            leading={<Icon name="open.external" size={22} color={iosSystemColors.systemBlue} />}
+            leading={<Icon name="open.external" size={22} color={theme.systemColors.accent} />}
             onPress={handleOpenInApp}
             showSeparator={false}
           />

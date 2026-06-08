@@ -31,7 +31,7 @@ import { getBoardConfigForPlaylist } from '../../../lib/playlists/board-details-
 import { navigateToSessionClimb } from '../../../lib/session-tick-mapping';
 import { useGradeFormat } from '../../../hooks/use-grade-format';
 import { useBottomChromeMetrics } from '../../../hooks/use-bottom-chrome-metrics';
-import { brandColors, withAlpha } from '../../../theme/colors';
+import { withAlpha } from '../../../theme/colors';
 import { iosSystemColors } from '../../../theme/ios-colors';
 import { springs } from '../../../theme/animations';
 import { borderRadius, spacing } from '../../../theme/tokens';
@@ -61,14 +61,31 @@ function isSessionHistoryTick(tick: SessionDetailTick): tick is SessionDetailTic
   return isSessionHistoryStatus(tick.status);
 }
 
-function statusMeta(status: SessionHistoryStatus): { icon: IconName; tint: string } {
+// Icon name per status — colour-free so the map can stay at module scope. The
+// matching tint is resolved in render from the scheme-aware theme brand colours
+// (see `statusTint`), since `flash`/`send` are brand foregrounds that must lift
+// in dark mode.
+function statusIcon(status: SessionHistoryStatus): IconName {
   switch (status) {
     case 'flash':
-      return { icon: 'flash', tint: brandColors.warning };
+      return 'flash';
     case 'send':
-      return { icon: 'tick', tint: brandColors.success };
+      return 'tick';
     case 'attempt':
-      return { icon: 'circle', tint: iosSystemColors.systemGray };
+      return 'circle';
+  }
+}
+
+// Resolve the status tint from the current theme. `flash`/`send` are brand
+// foregrounds (lifted in dark); `attempt` stays the neutral system gray.
+function statusTint(status: SessionHistoryStatus, brand: { warning: string; success: string }): string {
+  switch (status) {
+    case 'flash':
+      return brand.warning;
+    case 'send':
+      return brand.success;
+    case 'attempt':
+      return iosSystemColors.systemGray;
   }
 }
 
@@ -108,9 +125,10 @@ type SessionHistoryRowProps = {
 
 function SessionHistoryRow({ tick, status, participant, onPress }: SessionHistoryRowProps) {
   const { t } = useTranslation('session');
-  const { systemColors } = useTheme();
+  const { systemColors, brandColors } = useTheme();
   const { formatGrade, formatGradeByDifficultyId } = useGradeFormat();
-  const meta = statusMeta(status);
+  const statusIconName = statusIcon(status);
+  const statusColor = statusTint(status, brandColors);
   let statusLabel: string;
   switch (status) {
     case 'flash':
@@ -152,8 +170,8 @@ function SessionHistoryRow({ tick, status, participant, onPress }: SessionHistor
         style={[styles.historyRow, { backgroundColor: systemColors.secondaryBackground }]}
       >
         <View style={styles.historyStatusSlot}>
-          <View style={[styles.historyStatusIcon, { backgroundColor: withAlpha(meta.tint, 0.15) }]}>
-            <Icon name={meta.icon} size={14} color={meta.tint} />
+          <View style={[styles.historyStatusIcon, { backgroundColor: withAlpha(statusColor, 0.15) }]}>
+            <Icon name={statusIconName} size={14} color={statusColor} />
           </View>
         </View>
 
@@ -186,8 +204,8 @@ function SessionHistoryRow({ tick, status, participant, onPress }: SessionHistor
           </>
         )}
 
-        <View style={[styles.historyStatusPill, { backgroundColor: withAlpha(meta.tint, 0.15) }]}>
-          <Text variant="caption1" color={meta.tint} style={styles.historyStatusLabel}>
+        <View style={[styles.historyStatusPill, { backgroundColor: withAlpha(statusColor, 0.15) }]}>
+          <Text variant="caption1" color={statusColor} style={styles.historyStatusLabel}>
             {statusLabel}
           </Text>
         </View>

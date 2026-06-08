@@ -11,13 +11,15 @@ import { Avatar } from '../Avatar';
 import { FeedSocialRow } from '../you/FeedSocialRow';
 import { gradeBadgeColor } from '../you/profile-chart-colors';
 import { useGradeFormat } from '../../hooks/use-grade-format';
-import { brandColors } from '../../theme/colors';
 import { iosSystemColors } from '../../theme/ios-colors';
 import { spacing, borderRadius } from '../../theme/tokens';
+import { useTheme, type Theme } from '../../providers/theme-provider';
 
 type TickStatusMeta = { icon: IconName; color: string };
 
-function statusMeta(status: string): TickStatusMeta {
+// Icon names are scheme-agnostic; the badge fill colour is resolved from the
+// theme (brand tones lift in dark) so this reads the per-scheme brand set.
+function statusMeta(status: string, brandColors: Theme['brandColors']): TickStatusMeta {
   if (status === 'flash') return { icon: 'flash', color: brandColors.warning };
   if (status === 'send') return { icon: 'tick', color: brandColors.success };
   return { icon: 'circle', color: iosSystemColors.systemGray };
@@ -74,9 +76,10 @@ export const SessionTickRow = memo(function SessionTickRow({
   onOpenComments,
 }: SessionTickRowProps) {
   const { t } = useTranslation('session');
+  const { brandColors } = useTheme();
   const { formatGrade, formatGradeByDifficultyId } = useGradeFormat();
 
-  const meta = statusMeta(tick.status);
+  const meta = statusMeta(tick.status, brandColors);
   const attemptText = formatAttemptText(tick, t);
   const subtitleParts = [attemptText, tick.comment ?? null].filter((part): part is string => !!part);
   const subtitle = subtitleParts.length > 0 ? subtitleParts.join(' · ') : undefined;
