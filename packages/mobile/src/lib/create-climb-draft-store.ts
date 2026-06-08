@@ -20,17 +20,21 @@ export type CreateClimbDraft = {
 const KEY_PREFIX = 'boardsesh_create_climb_draft:';
 
 /**
- * Stable per-board key. Matches the brief's
- * `${boardName}:${layoutId}:${sizeId}:${angle}` so two configs that differ in
- * any of those restore independent working drafts.
+ * Stable per-board key of the form
+ * `${boardName}:${layoutId}:${sizeId}:${setIds}:${angle}` so two configs that
+ * differ in any of those restore independent working drafts. `setIds` matters
+ * because Kilter/Tension share a layout/size/angle across "original" vs
+ * "commercial" (bolt-on) hold sets — leaving it out lets a draft from one set
+ * restore hold IDs that don't exist in the current set.
  */
 export function createClimbDraftKey(config: {
   boardName: string;
   layoutId: number;
   sizeId: number;
+  setIds: string;
   angle: number;
 }): string {
-  return `${config.boardName}:${config.layoutId}:${config.sizeId}:${config.angle}`;
+  return `${config.boardName}:${config.layoutId}:${config.sizeId}:${config.setIds}:${config.angle}`;
 }
 
 function storageKey(boardKey: string): string {

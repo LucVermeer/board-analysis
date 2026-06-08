@@ -236,7 +236,11 @@ export function useCreateClimbScreen({
     // Edit mode operates on an existing climb — never persist it into the
     // per-board new-draft autosave slot, or it resurfaces as a phantom draft.
     if (isEditing) return;
-    const hasContent = Object.keys(litUpHoldsMap).length > 0 || name.trim() !== '' || description.trim() !== '';
+    // Once the WIP has been saved, stop autosaving. `handleSave` clears the
+    // draft and sets `savedClimb`; without this guard the debounced timer would
+    // re-write the just-cleared draft and resurface it as a phantom on reopen.
+    if (savedClimb) return;
+    const hasContent = holdsJson !== '{}' || name.trim() !== '' || description.trim() !== '';
     const handle = setTimeout(() => {
       if (!hasContent) {
         void clearDraft(draftKey);
@@ -245,7 +249,7 @@ export function useCreateClimbScreen({
       void saveDraft(draftKey, { holdsJson, name, description: withNoMatch(description, noMatch), isDraft });
     }, AUTOSAVE_DEBOUNCE_MS);
     return () => clearTimeout(handle);
-  }, [holdsJson, name, description, noMatch, isDraft, draftKey, litUpHoldsMap]);
+  }, [holdsJson, name, description, noMatch, isDraft, draftKey, savedClimb]);
 
   // ---- BLE preview (debounced) while connected. ----
   const sendFramesRef = useRef(bluetooth?.sendFramesToBoard);
@@ -276,6 +280,11 @@ export function useCreateClimbScreen({
 
   const handleClear = useCallback(() => {
     resetHolds();
+    // Treat Clear as a brand-new climb: wipe name/description/draft flag too, or
+    // a Save straight after Clear reuses the old name and skips the name prompt.
+    setName('');
+    setDescription('');
+    setIsDraft(true);
     setSavedClimb(null);
     setPublishDuplicateError(null);
     // Fresh climb identity for the next WIP so its queue item is independent.
