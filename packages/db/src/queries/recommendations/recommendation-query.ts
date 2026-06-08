@@ -108,10 +108,10 @@ function buildParts(params: RecommendationQueryParams): QueryParts {
       break;
     }
     case 'RECOMMENDED_FRESH': {
-      conditions.push(sql`bc.published_at IS NOT NULL AND bc.published_at <> ''`);
-      conditions.push(
-        sql`NULLIF(bc.published_at, '')::timestamptz > now() - make_interval(days => ${freshWindowDays})`,
-      );
+      // published_at is free-text; only cast rows that look like an ISO date so a
+      // single malformed value can't error the whole query / nightly refresh.
+      conditions.push(sql`bc.published_at ~ '^\\d{4}-\\d{2}-\\d{2}'`);
+      conditions.push(sql`bc.published_at::timestamptz > now() - make_interval(days => ${freshWindowDays})`);
       // Setter popularity is the primary lever (new climbs have few ascents),
       // then recency, then community rating.
       orderBy = sql`COALESCE(ss.setter_score, 0) DESC, NULLIF(bc.published_at, '')::timestamptz DESC, ${quality} DESC`;

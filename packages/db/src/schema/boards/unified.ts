@@ -370,9 +370,9 @@ export const boardClimbs = pgTable(
       .where(sql`${table.userId} IS NOT NULL AND ${table.isDraft} = false`),
     // Index for climb name lookups (used by JSON import to resolve names to UUIDs)
     nameIdx: index('board_climbs_name_idx').on(table.boardType, table.name),
-    // GIN index so the recommendation size filter (compatible_size_ids @> ARRAY[sizeId])
-    // and overlap checks don't sequential-scan ~573k climbs.
-    compatibleSizeIdsIdx: index('board_climbs_compatible_size_ids_gin').using('gin', table.compatibleSizeIds),
+    // Note: a GIN index on compatible_size_ids already exists from migration 0073
+    // (board_climbs_compatible_size_ids_idx); the recommendation size filter uses
+    // `compatible_size_ids @> ARRAY[sizeId]` so it can use that existing index.
     // Note: No FK to board_layouts - climbs may reference layouts that don't exist during sync
   }),
 );

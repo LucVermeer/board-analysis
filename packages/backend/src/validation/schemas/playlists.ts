@@ -129,6 +129,7 @@ export const GetSmartPlaylistInputSchema = z.object({
   type: SmartPlaylistTypeSchema,
   userId: z.string().min(1),
   boardName: BoardNameSchema.optional(),
+  boardUuid: z.string().min(1).optional(),
   sizeId: z.number().int().positive().optional(),
   angle: z.number().int().min(0).max(70).optional(),
   page: z.number().int().min(0).optional(),

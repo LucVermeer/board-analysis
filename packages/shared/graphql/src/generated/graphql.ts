@@ -1407,6 +1407,8 @@ export type GetSmartPlaylistInput = {
   angle?: InputMaybe<Scalars['Int']['input']>;
   /** Filter to a board type (optional) */
   boardName?: InputMaybe<Scalars['String']['input']>;
+  /** Recommendation: the specific owned board (uuid) to recommend for */
+  boardUuid?: InputMaybe<Scalars['String']['input']>;
   /** Page number */
   page?: InputMaybe<Scalars['Int']['input']>;
   /** Page size */

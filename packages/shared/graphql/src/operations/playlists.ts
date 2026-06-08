@@ -649,6 +649,8 @@ export type GetSmartPlaylistInput = {
   type: SmartPlaylistType;
   userId: string;
   boardName?: string;
+  /** Recommendation: the specific owned board (uuid) to recommend for. */
+  boardUuid?: string;
   /** Recommendation board-size override (size the user is browsing). */
   sizeId?: number;
   /** Recommendation board-angle override. */

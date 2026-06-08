@@ -98,14 +98,13 @@ async function recomputeSetterStats(db: Db): Promise<void> {
  */
 async function refreshSendStats(db: Db): Promise<void> {
   const apiKey = process.env.POSTHOG_PERSONAL_API_KEY;
-  const projectId = process.env.POSTHOG_PROJECT_ID;
+  // The project id is not a secret (it appears in PostHog URLs); default it so a
+  // missing repo variable can't silently leave the boost stale. The API KEY is
+  // the real gate — without it we intentionally skip.
+  const projectId = process.env.POSTHOG_PROJECT_ID ?? '412845';
   const host = process.env.POSTHOG_HOST ?? 'https://us.posthog.com';
   if (!apiKey) {
     console.log('[recs] POSTHOG_PERSONAL_API_KEY not set — skipping send-stats refresh (sendBoost stays neutral).');
-    return;
-  }
-  if (!projectId) {
-    console.log('[recs] POSTHOG_PROJECT_ID not set — skipping send-stats refresh.');
     return;
   }
 
@@ -135,7 +134,6 @@ async function refreshSendStats(db: Db): Promise<void> {
   const payload = (await response.json()) as { results?: unknown[][] };
   const results = payload.results ?? [];
   console.log(`[recs] PostHog returned ${results.length} climbs with sends.`);
-  if (results.length === 0) return;
 
   // [climb_uuid, sends_30d, senders_30d, sends_90d, last_sent_at]
   const byUuid = new Map<string, { s30: number; u30: number; s90: number; last: string | null }>();
@@ -150,49 +148,53 @@ async function refreshSendStats(db: Db): Promise<void> {
     });
   }
 
-  // Resolve board_type per climb from our catalog (batched).
+  // Resolve board_type per climb from our catalog (batched). A UUID that maps to
+  // more than one board_type is ambiguous (cross-board collision) — skip it
+  // rather than assign the boost to a nondeterministic board.
   const uuids = [...byUuid.keys()];
-  const boardByUuid = new Map<string, string>();
+  const boardTypesByUuid = new Map<string, Set<string>>();
   for (let i = 0; i < uuids.length; i += 1000) {
     const batch = uuids.slice(i, i + 1000);
     const rows = rowsOf<{ uuid: string; board_type: string }>(
       await db.execute(sql`SELECT uuid, board_type FROM board_climbs WHERE uuid = ANY(${batch})`),
     );
-    for (const row of rows) boardByUuid.set(row.uuid, row.board_type);
+    for (const row of rows) {
+      const set = boardTypesByUuid.get(row.uuid) ?? new Set<string>();
+      set.add(row.board_type);
+      boardTypesByUuid.set(row.uuid, set);
+    }
   }
 
+  let ambiguous = 0;
   const values = [...byUuid.entries()]
-    .map(([uuid, counts]) => ({ uuid, boardType: boardByUuid.get(uuid), counts }))
-    .filter((entry): entry is { uuid: string; boardType: string; counts: (typeof entry)['counts'] } =>
-      Boolean(entry.boardType),
-    )
-    .map(({ uuid, boardType, counts }) => ({
-      boardType,
-      climbUuid: uuid,
-      sendCount30d: counts.s30,
-      senderCount30d: counts.u30,
-      sendCount90d: counts.s90,
-      lastSentAt: counts.last,
-    }));
+    .map(([uuid, counts]) => {
+      const types = boardTypesByUuid.get(uuid);
+      if (!types || types.size !== 1) {
+        if (types && types.size > 1) ambiguous += 1;
+        return null;
+      }
+      return {
+        boardType: [...types][0],
+        climbUuid: uuid,
+        sendCount30d: counts.s30,
+        senderCount30d: counts.u30,
+        sendCount90d: counts.s90,
+        lastSentAt: counts.last,
+      };
+    })
+    .filter((value): value is NonNullable<typeof value> => value !== null);
 
-  // Chunked bulk upsert (one round-trip per ~500 climbs, not one per climb).
-  for (let i = 0; i < values.length; i += 500) {
-    const chunk = values.slice(i, i + 500);
-    await db
-      .insert(boardClimbSendStats)
-      .values(chunk)
-      .onConflictDoUpdate({
-        target: [boardClimbSendStats.boardType, boardClimbSendStats.climbUuid],
-        set: {
-          sendCount30d: sql`excluded.send_count_30d`,
-          senderCount30d: sql`excluded.sender_count_30d`,
-          sendCount90d: sql`excluded.send_count_90d`,
-          lastSentAt: sql`excluded.last_sent_at`,
-          updatedAt: sql`now()`,
-        },
-      });
-  }
-  console.log(`[recs] upserted ${values.length} send-stat rows.`);
+  // Full rebuild in one transaction: delete-all then insert. This expires rows
+  // that dropped out of the 90-day window (a stale boost must not linger) and
+  // gives readers an atomic swap. A successful-but-empty PostHog result clears
+  // the table; a failed query returned earlier without touching it.
+  await db.transaction(async (tx) => {
+    await tx.delete(boardClimbSendStats);
+    for (let i = 0; i < values.length; i += 500) {
+      await tx.insert(boardClimbSendStats).values(values.slice(i, i + 500));
+    }
+  });
+  console.log(`[recs] rebuilt ${values.length} send-stat rows (${ambiguous} ambiguous UUIDs skipped).`);
 }
 
 function cohortTarget(cohort: Cohort): BoardTarget {
@@ -221,7 +223,7 @@ async function upsertCohortPlaylist(
   db: Db,
   cohort: Cohort,
   variant: (typeof PUBLIC_VARIANTS)[number],
-): Promise<{ name: string; count: number }> {
+): Promise<{ name: string; count: number; skipped: boolean }> {
   const target = cohortTarget(cohort);
   const tiers = getSizeFullnessTiers(cohort.boardType, cohort.sizeId);
   const refs = rowsOf<{ climb_uuid: string }>(
@@ -242,8 +244,16 @@ async function upsertCohortPlaylist(
     ),
   );
 
-  const key = `${cohort.boardType}:${cohort.layoutId}:${cohort.sizeId}:${cohort.angle}:${variant.slug}`;
   const name = cohortPlaylistName(variant.label, cohort);
+
+  // Never publish (or empty) a public playlist with zero climbs — a bad
+  // threshold, missing stats, or a Fresh date issue must keep the previous
+  // playlist intact rather than wipe it. Skip and let the job log it.
+  if (refs.length === 0) {
+    return { name, count: 0, skipped: true };
+  }
+
+  const key = `${cohort.boardType}:${cohort.layoutId}:${cohort.sizeId}:${cohort.angle}:${variant.slug}`;
 
   // Upsert the playlist and atomically swap its climbs — a crash mid-swap must
   // never leave a published playlist empty.
@@ -275,27 +285,25 @@ async function upsertCohortPlaylist(
       .onConflictDoNothing();
 
     await tx.delete(playlistClimbs).where(eq(playlistClimbs.playlistId, playlistId));
-    if (refs.length > 0) {
-      await tx.insert(playlistClimbs).values(
-        refs.map((ref, index) => ({
-          playlistId,
-          climbUuid: ref.climb_uuid,
-          angle: cohort.angle,
-          position: index,
-        })),
-      );
-    }
+    await tx.insert(playlistClimbs).values(
+      refs.map((ref, index) => ({
+        playlistId,
+        climbUuid: ref.climb_uuid,
+        angle: cohort.angle,
+        position: index,
+      })),
+    );
   });
 
-  return { name, count: refs.length };
+  return { name, count: refs.length, skipped: false };
 }
 
 async function generateCohortPlaylists(db: Db): Promise<void> {
   console.log('[recs] generating cohort playlists…');
   for (const cohort of COHORTS) {
     for (const variant of PUBLIC_VARIANTS) {
-      const { name, count } = await upsertCohortPlaylist(db, cohort, variant);
-      console.log(`[recs]   ${name} → ${count} climbs`);
+      const { name, count, skipped } = await upsertCohortPlaylist(db, cohort, variant);
+      console.log(`[recs]   ${name} → ${skipped ? 'SKIPPED (0 climbs, kept previous)' : `${count} climbs`}`);
     }
   }
 }

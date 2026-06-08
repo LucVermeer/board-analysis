@@ -38,5 +38,7 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           POSTHOG_PERSONAL_API_KEY: ${{ secrets.POSTHOG_PERSONAL_API_KEY }}
-          POSTHOG_PROJECT_ID: ${{ secrets.POSTHOG_PROJECT_ID }}
+          # POSTHOG_PROJECT_ID defaults to the (non-secret) project id in the
+          # script; override here only if it ever changes. The send-stats step
+          # runs whenever POSTHOG_PERSONAL_API_KEY is present.
         run: node --import tsx scripts/refresh-recommendations.ts

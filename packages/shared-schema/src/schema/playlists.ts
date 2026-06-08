@@ -457,6 +457,8 @@ export const playlistsTypeDefs = /* GraphQL */ `
     userId: ID!
     "Filter to a board type (optional)"
     boardName: String
+    "Recommendation: the specific owned board (uuid) to recommend for"
+    boardUuid: String
     "Recommendation board-size override (the size the user is browsing)"
     sizeId: Int
     "Recommendation board-angle override"

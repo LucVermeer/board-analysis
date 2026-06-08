@@ -32,6 +32,26 @@ export async function hydrateClimbsByRefs(refs: ClimbRef[], options?: HydrateCli
   const tables = UNIFIED_TABLES;
   const uuids = refs.map((ref) => ref.climbUuid);
 
+  // When the caller supplies per-ref angle overrides (recommendations rank at
+  // the board's angle; playlists store a per-climb angle), join board_climb_stats
+  // at THAT angle so difficulty/quality/ascents/benchmark all match — not just
+  // the returned `angle` field. Falls back to the most-ascended angle.
+  const overrideEntries = [...(options?.angleOverrides ?? new Map<string, number | null>())].filter(
+    (entry): entry is [string, number] => typeof entry[1] === 'number',
+  );
+  const overrideAngleExpr = overrideEntries.length
+    ? sql`(SELECT ov.angle FROM (VALUES ${sql.join(
+        overrideEntries.map(([key, angle]) => {
+          const separator = key.indexOf(':');
+          const boardType = key.slice(0, separator);
+          const climbUuid = key.slice(separator + 1);
+          return sql`(${boardType}::text, ${climbUuid}::text, ${angle}::int)`;
+        }),
+        sql`, `,
+      )}) AS ov(board_type, climb_uuid, angle)
+        WHERE ov.board_type = ${tables.climbs.boardType} AND ov.climb_uuid = ${tables.climbs.uuid})`
+    : sql`NULL::int`;
+
   const rows = await db
     .select({
       climbUuid: tables.climbs.uuid,
@@ -62,13 +82,13 @@ export async function hydrateClimbsByRefs(refs: ClimbRef[], options?: HydrateCli
         // target wouldn't silently break the resolution to it.
         eq(
           tables.climbStats.angle,
-          sql`(
+          sql`COALESCE(${overrideAngleExpr}, (
             SELECT s.angle FROM board_climb_stats s
             WHERE s.board_type = ${tables.climbs.boardType}
               AND s.climb_uuid = ${tables.climbs.uuid}
             ORDER BY s.ascensionist_count DESC NULLS LAST
             LIMIT 1
-          )`,
+          ))`,
         ),
       ),
     )

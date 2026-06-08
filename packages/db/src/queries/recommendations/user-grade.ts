@@ -7,13 +7,17 @@ import { effectiveSendVNumber } from '@boardsesh/board-constants/grade-conversio
  * {@link computeUserMaxVGrade} (which applies the MoonBoard de-sandbag).
  */
 export function buildUserSendGradesByBoardSql(userId: string): SQL {
+  // Many sends are logged without a personal difficulty; fall back to the
+  // community consensus grade at the tick's angle so those sends still count.
   return sql`
-    SELECT board_type, MAX(difficulty)::int AS max_difficulty
-    FROM boardsesh_ticks
-    WHERE user_id = ${userId}
-      AND status IN ('flash', 'send')
-      AND difficulty IS NOT NULL
-    GROUP BY board_type
+    SELECT t.board_type, MAX(COALESCE(t.difficulty, ROUND(s.display_difficulty)::int))::int AS max_difficulty
+    FROM boardsesh_ticks t
+    LEFT JOIN board_climb_stats s
+      ON s.board_type = t.board_type AND s.climb_uuid = t.climb_uuid AND s.angle = t.angle
+    WHERE t.user_id = ${userId}
+      AND t.status IN ('flash', 'send')
+      AND (t.difficulty IS NOT NULL OR s.display_difficulty IS NOT NULL)
+    GROUP BY t.board_type
   `;
 }
 

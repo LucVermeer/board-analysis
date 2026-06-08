@@ -1,1 +1,0 @@
-CREATE INDEX "board_climbs_compatible_size_ids_gin" ON "board_climbs" USING gin ("compatible_size_ids");

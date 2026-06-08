@@ -42,7 +42,9 @@ async function resolveRegisteredTarget(userId: string): Promise<BoardTarget | nu
       angle: dbSchema.userBoards.angle,
     })
     .from(dbSchema.userBoards)
-    .where(and(eq(dbSchema.userBoards.ownerId, userId), isNull(dbSchema.userBoards.deletedAt)));
+    .where(and(eq(dbSchema.userBoards.ownerId, userId), isNull(dbSchema.userBoards.deletedAt)))
+    // Stable order so ties in size rank resolve deterministically (lowest id).
+    .orderBy(dbSchema.userBoards.id);
 
   const recommendable = boards.filter((board) => RECOMMENDABLE_BOARDS.has(board.boardType));
   if (recommendable.length === 0) return null;
@@ -72,11 +74,13 @@ async function resolveRegisteredTarget(userId: string): Promise<BoardTarget | nu
  * layout's canonical default size/sets. Approximate — registered boards win.
  */
 async function resolveInferredTarget(userId: string): Promise<BoardTarget | null> {
+  // Deterministic tie-breakers (board_type / angle / layout_id ASC) so identical
+  // activity always resolves to the same inferred board across requests.
   const boardRows = rowsOf<{ board_type: string }>(
     await db.execute(sql`
       SELECT board_type FROM boardsesh_ticks
       WHERE user_id = ${userId} AND status IN ('flash', 'send') AND board_type IN ('kilter', 'tension')
-      GROUP BY board_type ORDER BY COUNT(*) DESC LIMIT 1
+      GROUP BY board_type ORDER BY COUNT(*) DESC, board_type ASC LIMIT 1
     `),
   );
   const boardType = boardRows[0]?.board_type;
@@ -87,13 +91,13 @@ async function resolveInferredTarget(userId: string): Promise<BoardTarget | null
     db.execute(sql`
       SELECT angle FROM boardsesh_ticks
       WHERE user_id = ${userId} AND status IN ('flash', 'send') AND board_type = ${boardType}
-      GROUP BY angle ORDER BY COUNT(*) DESC LIMIT 1
+      GROUP BY angle ORDER BY COUNT(*) DESC, angle ASC LIMIT 1
     `),
     db.execute(sql`
       SELECT bc.layout_id FROM boardsesh_ticks t
       JOIN board_climbs bc ON bc.board_type = t.board_type AND bc.uuid = t.climb_uuid
       WHERE t.user_id = ${userId} AND t.board_type = ${boardType}
-      GROUP BY bc.layout_id ORDER BY COUNT(*) DESC LIMIT 1
+      GROUP BY bc.layout_id ORDER BY COUNT(*) DESC, bc.layout_id ASC LIMIT 1
     `),
   ]);
   const angle = Number(rowsOf<{ angle: number }>(angleRows)[0]?.angle ?? 40);
@@ -107,7 +111,40 @@ async function resolveInferredTarget(userId: string): Promise<BoardTarget | null
   return { boardType, layoutId, sizeId, angle, setIds: setIds.length > 0 ? setIds : null };
 }
 
+/** A specific board the user owns (uuid), validated against ownership. Null if
+ * it isn't theirs, is deleted, or isn't a recommendable board type. */
+async function resolveOwnedBoardByUuid(userId: string, boardUuid: string): Promise<BoardTarget | null> {
+  const [board] = await db
+    .select({
+      boardType: dbSchema.userBoards.boardType,
+      layoutId: dbSchema.userBoards.layoutId,
+      sizeId: dbSchema.userBoards.sizeId,
+      setIds: dbSchema.userBoards.setIds,
+      angle: dbSchema.userBoards.angle,
+    })
+    .from(dbSchema.userBoards)
+    .where(
+      and(
+        eq(dbSchema.userBoards.uuid, boardUuid),
+        eq(dbSchema.userBoards.ownerId, userId),
+        isNull(dbSchema.userBoards.deletedAt),
+      ),
+    )
+    .limit(1);
+
+  if (!board || !RECOMMENDABLE_BOARDS.has(board.boardType)) return null;
+  return {
+    boardType: board.boardType,
+    layoutId: Number(board.layoutId),
+    sizeId: Number(board.sizeId),
+    angle: Number(board.angle),
+    setIds: parseSetIds(board.setIds),
+  };
+}
+
 export type BoardTargetOverride = {
+  /** The specific owned board the user selected (wins over biggest/inferred). */
+  boardUuid?: string | null;
   /** Override the resolved board's size (e.g. browsing a specific size). */
   sizeId?: number | null;
   /** Override the resolved board's angle. */
@@ -115,17 +152,21 @@ export type BoardTargetOverride = {
 };
 
 /**
- * Resolve which board to recommend for: registered biggest board, else inferred
- * from activity. Size/angle overrides (from a board the user is browsing) are
- * applied on top of the resolved base. Returns null when nothing can be
- * determined — the per-user recommendation cards are then hidden, and discovery
- * falls back to the public cohort playlists.
+ * Resolve which board to recommend for, in priority order: the selected owned
+ * board (boardUuid) → biggest registered board → inferred from activity. An
+ * unowned/unknown boardUuid falls through rather than failing. Size/angle
+ * overrides apply on top. Returns null when nothing can be determined — the
+ * per-user recommendation cards are then hidden and discovery falls back to the
+ * public cohort playlists.
  */
 export async function resolveRecommendationBoardTarget(
   userId: string,
   override?: BoardTargetOverride,
 ): Promise<BoardTarget | null> {
-  const base = (await resolveRegisteredTarget(userId)) ?? (await resolveInferredTarget(userId));
+  const base =
+    (override?.boardUuid ? await resolveOwnedBoardByUuid(userId, override.boardUuid) : null) ??
+    (await resolveRegisteredTarget(userId)) ??
+    (await resolveInferredTarget(userId));
   if (!base) return null;
 
   return {
