@@ -14,6 +14,7 @@ import { Icon } from '../../../../src/components/Icon';
 import { ClimbListRowSkeleton } from '../../../../src/components/ClimbListRowSkeleton';
 import {
   PlaylistDetailView,
+  SKELETON_PLACEHOLDERS,
   PlaylistBackFab,
   type PlaylistDetailEmptyState,
 } from '../../../../src/components/playlist';
@@ -142,9 +143,6 @@ export default function SmartPlaylistDetail() {
     />
   );
 }
-
-// Stable hoisted keys for the first-page skeleton rows.
-const SKELETON_PLACEHOLDERS = Array.from({ length: 8 }, (_, index) => `skeleton-${index}`);
 
 const styles = StyleSheet.create({
   stateContainer: {

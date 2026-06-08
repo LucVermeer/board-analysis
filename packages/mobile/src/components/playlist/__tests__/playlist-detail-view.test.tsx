@@ -4,7 +4,7 @@ import { render, fireEvent } from '@testing-library/react';
 import { createElement, type ReactNode } from 'react';
 import type { Climb } from '@boardsesh/queue';
 
-const ctrl = vi.hoisted(() => ({ back: vi.fn(), variant: 'glass' as 'glass' | 'material' }));
+const ctrl = vi.hoisted(() => ({ back: vi.fn(), variant: 'liquidGlass' as 'liquidGlass' | 'material' }));
 
 // ── React Native ──────────────────────────────────────────────────────────────
 vi.mock('react-native', () => ({
@@ -225,7 +225,7 @@ function makeProps(overrides: Partial<PlaylistDetailViewProps> = {}): PlaylistDe
 describe('PlaylistDetailView', () => {
   beforeEach(() => {
     ctrl.back.mockClear();
-    ctrl.variant = 'glass';
+    ctrl.variant = 'liquidGlass';
   });
 
   // ── Navigation ──────────────────────────────────────────────────────────────
@@ -428,6 +428,19 @@ describe('PlaylistDetailView', () => {
     it('shows skeleton rows while loading', () => {
       const { container } = render(<PlaylistDetailView {...makeProps({ isLoading: true, climbs: [] })} />);
       expect(container.querySelectorAll('[data-skeleton-row]').length).toBeGreaterThan(0);
+    });
+
+    it('surfaces the actions node in the app bar (compact form)', () => {
+      // The owner's Follow / Pin / More controls must reach the Material app bar —
+      // dropping them leaves a playlist owner with no edit/pin/delete on Material.
+      const actions = vi.fn((collapsed: boolean) =>
+        createElement('span', { 'data-action-collapsed': String(collapsed) }, 'action'),
+      );
+      const { container } = render(<PlaylistDetailView {...makeProps({ climbs: [CLIMB], actions })} />);
+      // App bar is always present on Material, so actions are asked for the compact
+      // (collapsed) icon form rather than the scroll-driven pill.
+      expect(actions).toHaveBeenCalledWith(true);
+      expect(container.querySelector('[data-action-collapsed="true"]')).not.toBeNull();
     });
   });
 });
