@@ -39,7 +39,8 @@
       "climbs": "Climbs",
       "climb": "Climb",
       "profile": "Profile",
-      "setters": "Setters"
+      "setters": "Setters",
+      "holdFilter": "Hold types"
     }
   },
   "lightControl": {

@@ -27,6 +27,7 @@ import {
   mergeBoardFilters,
   formatMinAscentsFilterCount,
   DEFAULT_CLIMB_BOARD_FILTER_STATE,
+  countFilteredHolds,
   type SortOption,
   type SortOrder,
   type StatusFilter,
@@ -49,6 +50,7 @@ import { useGrades, useSearchClimbsCount } from '../lib/graphql/hooks';
 import { useAuth } from '../providers/auth-provider';
 import { hapticSelection } from '../lib/haptics';
 import { subscribeToSetterSelection } from '../lib/filter-handoff';
+import { subscribeToHoldsFilterSelection } from '../lib/hold-filter-handoff';
 import { springs } from '../theme/animations';
 // Aliased: the active-filter label reads scheme-aware brand from `useTheme()`.
 // `staticBrandColors` is the static set, used only for the selected chip — a FILL
@@ -170,6 +172,15 @@ export function ClimbFilterSheet({
   useEffect(() => {
     return subscribeToSetterSelection((setters) => {
       setLocalFilters((previous) => ({ ...previous, setter: setters.length > 0 ? setters : undefined }));
+    });
+  }, []);
+
+  useEffect(() => {
+    return subscribeToHoldsFilterSelection((holdsFilter) => {
+      setLocalBoardFilters((previous) => ({
+        ...previous,
+        holdsFilter: Object.keys(holdsFilter).length > 0 ? holdsFilter : undefined,
+      }));
     });
   }, []);
 
@@ -354,6 +365,24 @@ export function ClimbFilterSheet({
     });
   }, [router, boardConfig, localFilters.setter]);
 
+  const openHoldFilter = useCallback(() => {
+    if (!boardConfig) return;
+    router.push({
+      pathname: '/(tabs)/climbs/holds',
+      params: {
+        boardName: boardConfig.boardName,
+        layoutId: String(boardConfig.layoutId),
+        sizeId: String(boardConfig.sizeId),
+        setIds: boardConfig.setIds,
+        angle: String(boardConfig.angle),
+        layoutName: boardConfig.boardName,
+        holdsFilter: JSON.stringify(localBoardFilters.holdsFilter ?? {}),
+      },
+    });
+  }, [router, boardConfig, localBoardFilters.holdsFilter]);
+
+  const holdFilterCount = countFilteredHolds(localBoardFilters.holdsFilter);
+
   const refineSummary = useMemo(() => {
     const parts: string[] = [];
     // Boulders-only is the default, so only surface a chip when it differs.
@@ -365,10 +394,11 @@ export function ClimbFilterSheet({
     if (localFilters.setter && localFilters.setter.length > 0) {
       parts.push(t('mobile.search.settersCount', { count: localFilters.setter.length }));
     }
+    if (holdFilterCount > 0) parts.push(t('mobile.holdFilter.summaryCount', { count: holdFilterCount }));
     if (localFilters.onlyTallClimbs) parts.push(t('mobile.filter.tallClimbs'));
     if (localFilters.onlyWideClimbs) parts.push(t('mobile.filter.wideClimbs'));
     return parts.join(' · ') || null;
-  }, [localFilters, accuracyLabels, t]);
+  }, [localFilters, accuracyLabels, holdFilterCount, t]);
 
   const advancedSummary = useMemo(() => {
     const parts: string[] = [];
@@ -536,6 +566,30 @@ export function ClimbFilterSheet({
                 <Text variant="footnote" style={styles.tappableRowValue}>
                   {localFilters.setter && localFilters.setter.length > 0
                     ? t('mobile.search.settersCount', { count: localFilters.setter.length })
+                    : t('mobile.filter.none')}
+                </Text>
+                <Icon name="chevron.right" size={14} color={iosSystemColors.systemGray4} />
+              </View>
+            </Pressable>
+
+            <View style={styles.subsectionGap} />
+            <Pressable
+              onPress={openHoldFilter}
+              disabled={!boardConfig}
+              accessibilityRole="button"
+              accessibilityLabel={t('mobile.holdFilter.title')}
+              style={({ pressed }) => [
+                styles.tappableRow,
+                { backgroundColor: systemColors.tertiaryBackground },
+                pressed && styles.tappableRowPressed,
+                !boardConfig && styles.tappableRowDisabled,
+              ]}
+            >
+              <Text variant="body">{t('mobile.holdFilter.title')}</Text>
+              <View style={styles.tappableRowTrailing}>
+                <Text variant="footnote" style={styles.tappableRowValue}>
+                  {holdFilterCount > 0
+                    ? t('mobile.holdFilter.summaryCount', { count: holdFilterCount })
                     : t('mobile.filter.none')}
                 </Text>
                 <Icon name="chevron.right" size={14} color={iosSystemColors.systemGray4} />
@@ -724,6 +778,9 @@ const styles = StyleSheet.create({
   },
   tappableRowPressed: {
     opacity: 0.6,
+  },
+  tappableRowDisabled: {
+    opacity: 0.4,
   },
   tappableRowTrailing: {
     flexDirection: 'row',

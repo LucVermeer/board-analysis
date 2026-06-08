@@ -1,0 +1,68 @@
+import { describe, it, expect } from 'vitest';
+import type { HoldFilterEntry, HoldsFilter } from '@boardsesh/shared-schema';
+import {
+  ANY_HOLD_COLOR,
+  buildHoldFilterOptions,
+  countFilteredHolds,
+  toggleHoldFilterType,
+} from '../hold-filter-options';
+
+describe('buildHoldFilterOptions', () => {
+  it('lists the named Kilter roles followed by the ANY wildcard', () => {
+    const options = buildHoldFilterOptions('kilter');
+    const types = options.map((option) => option.type);
+    expect(types).toEqual(['STARTING', 'HAND', 'FINISH', 'FOOT', 'ANY']);
+    // ANY has no LED colour, so it falls back to the plain-white swatch.
+    expect(options.at(-1)).toEqual({ type: 'ANY', color: ANY_HOLD_COLOR });
+  });
+
+  it('drops FOOT for MoonBoard but keeps ANY', () => {
+    const types = buildHoldFilterOptions('moonboard').map((option) => option.type);
+    expect(types).toEqual(['STARTING', 'HAND', 'FINISH', 'ANY']);
+  });
+
+  it('pulls swatch colours from the board hold-state map', () => {
+    const starting = buildHoldFilterOptions('kilter').find((option) => option.type === 'STARTING');
+    expect(starting?.color).toMatch(/^#/);
+    expect(starting?.color).not.toBe(ANY_HOLD_COLOR);
+  });
+});
+
+describe('toggleHoldFilterType', () => {
+  it('sets an unset type to the apply mode', () => {
+    expect(toggleHoldFilterType({}, 'STARTING', 'include')).toEqual({ STARTING: 'include' });
+    expect(toggleHoldFilterType({}, 'HAND', 'exclude')).toEqual({ HAND: 'exclude' });
+  });
+
+  it('unsets a type already at the apply mode', () => {
+    const entry: HoldFilterEntry = { FOOT: 'include' };
+    expect(toggleHoldFilterType(entry, 'FOOT', 'include')).toEqual({});
+  });
+
+  it('flips a type from the other mode to the apply mode', () => {
+    const entry: HoldFilterEntry = { FINISH: 'include' };
+    expect(toggleHoldFilterType(entry, 'FINISH', 'exclude')).toEqual({ FINISH: 'exclude' });
+  });
+
+  it('does not mutate the input entry', () => {
+    const entry: HoldFilterEntry = { ANY: 'include' };
+    toggleHoldFilterType(entry, 'STARTING', 'include');
+    expect(entry).toEqual({ ANY: 'include' });
+  });
+});
+
+describe('countFilteredHolds', () => {
+  it('counts only holds with at least one active type', () => {
+    const filter: HoldsFilter = {
+      '10': { STARTING: 'include' },
+      '20': { HAND: 'exclude', FOOT: 'include' },
+      '30': {},
+    };
+    expect(countFilteredHolds(filter)).toBe(2);
+  });
+
+  it('returns 0 for an empty or undefined filter', () => {
+    expect(countFilteredHolds({})).toBe(0);
+    expect(countFilteredHolds(undefined)).toBe(0);
+  });
+});

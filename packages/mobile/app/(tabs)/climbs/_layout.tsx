@@ -51,6 +51,17 @@ export default function ClimbsLayout() {
           animation: 'fade',
         }}
       />
+      <Stack.Screen
+        name="holds"
+        options={{
+          // Full-screen interactive board for the hold-type filter. Owns its own
+          // header (Done / Clear all), and the board gestures need the full card,
+          // so the native header is hidden and it's a pushed route (not a modal,
+          // which would compete with the board's pan/pinch).
+          title: t('mobile.nav.holdFilter'),
+          headerShown: false,
+        }}
+      />
     </Stack>
   );
 }
