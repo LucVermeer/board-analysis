@@ -1406,15 +1406,21 @@ export type GetPlaylistsForClimbsInput = {
 
 /** Input for fetching a smart playlist. */
 export type GetSmartPlaylistInput = {
+  /** Recommendation board-angle override */
+  angle?: InputMaybe<Scalars['Int']['input']>;
   /** Filter to a board type (optional) */
   boardName?: InputMaybe<Scalars['String']['input']>;
+  /** Recommendation: the specific owned board (uuid) to recommend for */
+  boardUuid?: InputMaybe<Scalars['String']['input']>;
   /** Page number */
   page?: InputMaybe<Scalars['Int']['input']>;
   /** Page size */
   pageSize?: InputMaybe<Scalars['Int']['input']>;
+  /** Recommendation board-size override (the size the user is browsing) */
+  sizeId?: InputMaybe<Scalars['Int']['input']>;
   /** Smart playlist type */
   type: SmartPlaylistType;
-  /** User whose logbook to compute from */
+  /** User whose logbook (or board) to compute from */
   userId: Scalars['ID']['input'];
 };
 
@@ -4614,13 +4620,31 @@ export type SmartPlaylistResult = {
 };
 
 /**
- * A computed playlist generated from a user's logbook or favourites.
+ * A computed playlist generated from a user's logbook or favourites, or a
+ * recommendation computed from the catalog for the user's board.
+ *
+ * Logbook-derived:
  * - FIVE_STARS: climbs the user has rated 5/5
  * - MOST_REPEATED: climbs the user has logged the most attempts on
  * - PROJECTS: climbs with the most attempts that have never been sent
  * - LIKED_CLIMBS: climbs the user has favourited
+ *
+ * Recommendations (ranked within climbs that fit the user's biggest board,
+ * excluding ones they've already sent):
+ * - RECOMMENDED_CROWD_FAVORITES: proven classics for the board (ascents × rating)
+ * - RECOMMENDED_HIDDEN_GEMS: highly rated but low-ascent climbs
+ * - RECOMMENDED_AT_LEVEL: climbs near the user's grade band
+ * - RECOMMENDED_FRESH: recently set climbs, weighted toward popular setters
  */
-export type SmartPlaylistType = 'FIVE_STARS' | 'LIKED_CLIMBS' | 'MOST_REPEATED' | 'PROJECTS';
+export type SmartPlaylistType =
+  | 'FIVE_STARS'
+  | 'LIKED_CLIMBS'
+  | 'MOST_REPEATED'
+  | 'PROJECTS'
+  | 'RECOMMENDED_AT_LEVEL'
+  | 'RECOMMENDED_CROWD_FAVORITES'
+  | 'RECOMMENDED_FRESH'
+  | 'RECOMMENDED_HIDDEN_GEMS';
 
 export type SocialEntityType =
   | 'board'

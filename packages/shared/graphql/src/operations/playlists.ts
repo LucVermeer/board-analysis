@@ -620,7 +620,15 @@ export type UnfollowPlaylistMutationResponse = {
 // Smart (computed) Playlist Types and Operations
 // ============================================
 
-export type SmartPlaylistType = 'FIVE_STARS' | 'MOST_REPEATED' | 'PROJECTS' | 'LIKED_CLIMBS';
+export type SmartPlaylistType =
+  | 'FIVE_STARS'
+  | 'MOST_REPEATED'
+  | 'PROJECTS'
+  | 'LIKED_CLIMBS'
+  | 'RECOMMENDED_CROWD_FAVORITES'
+  | 'RECOMMENDED_HIDDEN_GEMS'
+  | 'RECOMMENDED_AT_LEVEL'
+  | 'RECOMMENDED_FRESH';
 
 export type SmartPlaylistMeta = {
   type: SmartPlaylistType;
@@ -641,6 +649,12 @@ export type GetSmartPlaylistInput = {
   type: SmartPlaylistType;
   userId: string;
   boardName?: string;
+  /** Recommendation: the specific owned board (uuid) to recommend for. */
+  boardUuid?: string;
+  /** Recommendation board-size override (size the user is browsing). */
+  sizeId?: number;
+  /** Recommendation board-angle override. */
+  angle?: number;
   page?: number;
   pageSize?: number;
 };
