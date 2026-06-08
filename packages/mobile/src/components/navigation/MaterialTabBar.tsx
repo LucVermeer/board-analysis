@@ -68,6 +68,7 @@ export function MaterialTabBar({ state, descriptors, navigation, insets }: Botto
               {options.tabBarIcon?.({ focused, color, size: 24 })}
               {options.tabBarBadge != null ? (
                 <View
+                  testID="badge"
                   style={[
                     styles.badge,
                     { backgroundColor: brandColors.success, borderColor: systemColors.elevatedSurface },

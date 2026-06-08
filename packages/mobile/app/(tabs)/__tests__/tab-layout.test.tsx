@@ -28,6 +28,23 @@ vi.mock('../../../src/theme/colors', () => ({
   brandColors: { success: '#6B9080' },
 }));
 
+vi.mock('../../../src/providers/theme-provider', () => ({
+  useTheme: () => ({ variant: 'liquidGlass' }),
+}));
+
+// Stub the Material-variant path so it doesn't pull in native modules.
+vi.mock('expo-router', () => ({
+  Tabs: ({ children }: { children?: ReactNode }) => createElement('nav', { 'data-tabs-material': 'true' }, children),
+}));
+
+vi.mock('../../../src/components/navigation/MaterialTabBar', () => ({
+  MaterialTabBar: () => createElement('nav', { 'data-material-tab-bar': 'true' }),
+}));
+
+vi.mock('@expo/vector-icons/MaterialCommunityIcons', () => ({
+  default: () => createElement('span', { 'data-icon': 'mci' }),
+}));
+
 vi.mock('expo-router/unstable-native-tabs', () => {
   const Trigger = Object.assign(
     ({ name, children }: { name: string; children?: ReactNode }) =>
