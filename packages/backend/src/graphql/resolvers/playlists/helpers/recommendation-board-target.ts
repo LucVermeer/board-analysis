@@ -6,18 +6,12 @@ import {
   getSetsForLayoutAndSize,
 } from '@boardsesh/board-constants/product-sizes';
 import type { BoardName } from '@boardsesh/shared-schema';
-import type { BoardTarget } from '@boardsesh/db/queries';
+import { rowsOf, type BoardTarget } from '@boardsesh/db/queries';
 import { db } from '../../../../db/client';
 
 /** Recommendations target Kilter & Tension boards (MoonBoard is single-size;
  * other boards are negligible). MoonBoard *sends* still inform the grade band. */
 const RECOMMENDABLE_BOARDS = new Set(['kilter', 'tension']);
-
-/** db.execute returns an iterable or `{ rows }` depending on the driver. */
-function rowsOf<T>(result: unknown): T[] {
-  if (Array.isArray(result)) return result as T[];
-  return ((result as { rows?: T[] }).rows ?? []) as T[];
-}
 
 function parseSetIds(csv: string | null | undefined): number[] | null {
   if (!csv) return null;
@@ -88,24 +82,22 @@ async function resolveInferredTarget(userId: string): Promise<BoardTarget | null
   const boardType = boardRows[0]?.board_type;
   if (!boardType) return null;
 
-  const angleRows = rowsOf<{ angle: number }>(
-    await db.execute(sql`
+  // Angle and dominant layout are independent given the board type — run together.
+  const [angleRows, layoutRows] = await Promise.all([
+    db.execute(sql`
       SELECT angle FROM boardsesh_ticks
       WHERE user_id = ${userId} AND status IN ('flash', 'send') AND board_type = ${boardType}
       GROUP BY angle ORDER BY COUNT(*) DESC LIMIT 1
     `),
-  );
-  const angle = Number(angleRows[0]?.angle ?? 40);
-
-  const layoutRows = rowsOf<{ layout_id: number }>(
-    await db.execute(sql`
+    db.execute(sql`
       SELECT bc.layout_id FROM boardsesh_ticks t
       JOIN board_climbs bc ON bc.board_type = t.board_type AND bc.uuid = t.climb_uuid
       WHERE t.user_id = ${userId} AND t.board_type = ${boardType}
       GROUP BY bc.layout_id ORDER BY COUNT(*) DESC LIMIT 1
     `),
-  );
-  const layoutId = Number(layoutRows[0]?.layout_id);
+  ]);
+  const angle = Number(rowsOf<{ angle: number }>(angleRows)[0]?.angle ?? 40);
+  const layoutId = Number(rowsOf<{ layout_id: number }>(layoutRows)[0]?.layout_id);
   if (!Number.isInteger(layoutId)) return null;
 
   const sizeId = getDefaultSizeForLayout(boardType as BoardName, layoutId);

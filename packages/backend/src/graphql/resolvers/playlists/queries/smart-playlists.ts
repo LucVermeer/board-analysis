@@ -272,6 +272,14 @@ export const smartPlaylist = async (
   // Catalog-derived recommendations: resolve the user's board, then rank the
   // catalog. Hydrate at the board's angle (not the most-ascended angle).
   if (isRecommendationType(input.type)) {
+    // Unlike the shareable logbook smart playlists, recommendations expose the
+    // user's board config and (via AT_LEVEL) their grade, so they're private to
+    // the owner. A non-owner / anonymous caller gets a uniform empty result —
+    // this both prevents leaking (or inferring) another user's data and keeps
+    // SSR of a shared/guessed URL from 500ing.
+    if (!ctx.userId || ctx.userId !== input.userId) {
+      return { meta, climbs: [], totalCount: 0, hasMore: false };
+    }
     const target = await resolveRecommendationBoardTarget(input.userId, {
       sizeId: input.sizeId,
       angle: input.angle,

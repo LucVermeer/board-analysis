@@ -5,6 +5,7 @@ import {
   buildRecommendationCountSql,
   buildUserSendGradesByBoardSql,
   computeUserMaxVGrade,
+  rowsOf,
   type BoardTarget,
   type RecommendationType,
   type RecommendationQueryParams,
@@ -18,11 +19,6 @@ import type { ClimbRef } from './hydrate-climbs';
 const FRESH_WINDOW_DAYS = 365;
 const GRADES_BELOW = 3;
 const GRADES_ABOVE = 1;
-
-function rowsOf<T>(result: unknown): T[] {
-  if (Array.isArray(result)) return result as T[];
-  return ((result as { rows?: T[] }).rows ?? []) as T[];
-}
 
 /** The user's [max-3, max+1] V-band as target-board difficulty ids, or null. */
 async function resolveGradeBand(userId: string): Promise<{ minDifficultyId: number; maxDifficultyId: number } | null> {

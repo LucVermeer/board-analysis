@@ -46,7 +46,8 @@ function buildParts(params: RecommendationQueryParams): QueryParts {
     sql`bc.layout_id = ${layoutId}`,
     sql`bc.is_listed = true`,
     sql`bc.is_draft = false`,
-    sql`${sizeId} = ANY(bc.compatible_size_ids)`,
+    // `@>` (rather than `= ANY`) so the GIN index on compatible_size_ids applies.
+    sql`bc.compatible_size_ids @> ${intArray([sizeId])}`,
   ];
 
   // Only recommend climbs the owner can actually build with their sets.
@@ -92,8 +93,12 @@ function buildParts(params: RecommendationQueryParams): QueryParts {
       break;
     }
     case 'RECOMMENDED_AT_LEVEL': {
-      // gradeBand is guaranteed by the caller for this type.
-      const band = gradeBand ?? { minDifficultyId: 0, maxDifficultyId: 0 };
+      // Callers must resolve the grade band before requesting this type (a null
+      // band means "no graded sends" and the card should be hidden upstream).
+      if (!gradeBand) {
+        throw new Error('RECOMMENDED_AT_LEVEL requires a gradeBand');
+      }
+      const band = gradeBand;
       conditions.push(sql`COALESCE(s.quality_average, 0) >= 4.0`);
       conditions.push(sql`COALESCE(s.ascensionist_count, 0) >= 10`);
       conditions.push(

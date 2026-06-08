@@ -18,12 +18,14 @@ import { eq, sql } from 'drizzle-orm';
 import { createScriptDb } from './db-connection.js';
 import { users } from '../src/schema/auth/users.js';
 import { playlists, playlistClimbs, playlistOwnership } from '../src/schema/app/playlists.js';
+import { boardClimbSendStats } from '../src/schema/app/recommendation-stats.js';
 import {
   buildRecomputeSetterStatsSql,
   buildRecommendationRefsSql,
   type BoardTarget,
   type RecommendationType,
 } from '../src/queries/recommendations/index.js';
+import { rowsOf } from '../src/queries/util/rows.js';
 import { getSizeFullnessTiers } from '@boardsesh/board-constants/size-comparison';
 import { getProductSize, getSetsForLayoutAndSize, getLayout } from '@boardsesh/board-constants/product-sizes';
 import type { BoardName } from '@boardsesh/shared-schema';
@@ -77,11 +79,6 @@ const BOARD_LABEL: Record<string, string> = { kilter: 'Kilter', tension: 'Tensio
 
 type Db = ReturnType<typeof createScriptDb>['db'];
 
-function rowsOf<T>(result: unknown): T[] {
-  if (Array.isArray(result)) return result as T[];
-  return ((result as { rows?: T[] }).rows ?? []) as T[];
-}
-
 async function ensureSystemUser(db: Db): Promise<void> {
   await db
     .insert(users)
@@ -101,10 +98,14 @@ async function recomputeSetterStats(db: Db): Promise<void> {
  */
 async function refreshSendStats(db: Db): Promise<void> {
   const apiKey = process.env.POSTHOG_PERSONAL_API_KEY;
-  const projectId = process.env.POSTHOG_PROJECT_ID ?? '412845';
+  const projectId = process.env.POSTHOG_PROJECT_ID;
   const host = process.env.POSTHOG_HOST ?? 'https://us.posthog.com';
   if (!apiKey) {
     console.log('[recs] POSTHOG_PERSONAL_API_KEY not set — skipping send-stats refresh (sendBoost stays neutral).');
+    return;
+  }
+  if (!projectId) {
+    console.log('[recs] POSTHOG_PROJECT_ID not set — skipping send-stats refresh.');
     return;
   }
 
@@ -160,24 +161,38 @@ async function refreshSendStats(db: Db): Promise<void> {
     for (const row of rows) boardByUuid.set(row.uuid, row.board_type);
   }
 
-  let upserts = 0;
-  for (const [uuid, counts] of byUuid) {
-    const boardType = boardByUuid.get(uuid);
-    if (!boardType) continue;
-    await db.execute(sql`
-      INSERT INTO board_climb_send_stats
-        (board_type, climb_uuid, send_count_30d, sender_count_30d, send_count_90d, last_sent_at, updated_at)
-      VALUES (${boardType}, ${uuid}, ${counts.s30}, ${counts.u30}, ${counts.s90}, ${counts.last}, now())
-      ON CONFLICT (board_type, climb_uuid) DO UPDATE SET
-        send_count_30d = EXCLUDED.send_count_30d,
-        sender_count_30d = EXCLUDED.sender_count_30d,
-        send_count_90d = EXCLUDED.send_count_90d,
-        last_sent_at = EXCLUDED.last_sent_at,
-        updated_at = now()
-    `);
-    upserts += 1;
+  const values = [...byUuid.entries()]
+    .map(([uuid, counts]) => ({ uuid, boardType: boardByUuid.get(uuid), counts }))
+    .filter((entry): entry is { uuid: string; boardType: string; counts: (typeof entry)['counts'] } =>
+      Boolean(entry.boardType),
+    )
+    .map(({ uuid, boardType, counts }) => ({
+      boardType,
+      climbUuid: uuid,
+      sendCount30d: counts.s30,
+      senderCount30d: counts.u30,
+      sendCount90d: counts.s90,
+      lastSentAt: counts.last,
+    }));
+
+  // Chunked bulk upsert (one round-trip per ~500 climbs, not one per climb).
+  for (let i = 0; i < values.length; i += 500) {
+    const chunk = values.slice(i, i + 500);
+    await db
+      .insert(boardClimbSendStats)
+      .values(chunk)
+      .onConflictDoUpdate({
+        target: [boardClimbSendStats.boardType, boardClimbSendStats.climbUuid],
+        set: {
+          sendCount30d: sql`excluded.send_count_30d`,
+          senderCount30d: sql`excluded.sender_count_30d`,
+          sendCount90d: sql`excluded.send_count_90d`,
+          lastSentAt: sql`excluded.last_sent_at`,
+          updatedAt: sql`now()`,
+        },
+      });
   }
-  console.log(`[recs] upserted ${upserts} send-stat rows.`);
+  console.log(`[recs] upserted ${values.length} send-stat rows.`);
 }
 
 function cohortTarget(cohort: Cohort): BoardTarget {
@@ -230,44 +245,47 @@ async function upsertCohortPlaylist(
   const key = `${cohort.boardType}:${cohort.layoutId}:${cohort.sizeId}:${cohort.angle}:${variant.slug}`;
   const name = cohortPlaylistName(variant.label, cohort);
 
-  const inserted = await db
-    .insert(playlists)
-    .values({
-      uuid: randomUUID(),
-      boardType: cohort.boardType,
-      layoutId: cohort.layoutId,
-      name,
-      description: null,
-      isPublic: true,
-      color: variant.color,
-      icon: variant.icon,
-      generatedRecommendation: key,
-    })
-    .onConflictDoUpdate({
-      target: playlists.generatedRecommendation,
-      set: { name, color: variant.color, icon: variant.icon, isPublic: true, updatedAt: new Date() },
-    })
-    .returning({ id: playlists.id });
+  // Upsert the playlist and atomically swap its climbs — a crash mid-swap must
+  // never leave a published playlist empty.
+  await db.transaction(async (tx) => {
+    const inserted = await tx
+      .insert(playlists)
+      .values({
+        uuid: randomUUID(),
+        boardType: cohort.boardType,
+        layoutId: cohort.layoutId,
+        name,
+        description: null,
+        isPublic: true,
+        color: variant.color,
+        icon: variant.icon,
+        generatedRecommendation: key,
+      })
+      .onConflictDoUpdate({
+        target: playlists.generatedRecommendation,
+        set: { name, color: variant.color, icon: variant.icon, isPublic: true, updatedAt: new Date() },
+      })
+      .returning({ id: playlists.id });
 
-  const playlistId = inserted[0].id;
+    const playlistId = inserted[0].id;
 
-  await db
-    .insert(playlistOwnership)
-    .values({ playlistId, userId: SYSTEM_USER_ID, role: 'owner' })
-    .onConflictDoNothing();
+    await tx
+      .insert(playlistOwnership)
+      .values({ playlistId, userId: SYSTEM_USER_ID, role: 'owner' })
+      .onConflictDoNothing();
 
-  // Replace the climb set.
-  await db.delete(playlistClimbs).where(eq(playlistClimbs.playlistId, playlistId));
-  if (refs.length > 0) {
-    await db.insert(playlistClimbs).values(
-      refs.map((ref, index) => ({
-        playlistId,
-        climbUuid: ref.climb_uuid,
-        angle: cohort.angle,
-        position: index,
-      })),
-    );
-  }
+    await tx.delete(playlistClimbs).where(eq(playlistClimbs.playlistId, playlistId));
+    if (refs.length > 0) {
+      await tx.insert(playlistClimbs).values(
+        refs.map((ref, index) => ({
+          playlistId,
+          climbUuid: ref.climb_uuid,
+          angle: cohort.angle,
+          position: index,
+        })),
+      );
+    }
+  });
 
   return { name, count: refs.length };
 }
