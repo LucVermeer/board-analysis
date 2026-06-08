@@ -1,4 +1,11 @@
-import { TAB_BAR_HEIGHT, TOOLBAR_GAP_ABOVE_TABBAR, TOOLBAR_RESERVE, glassSize } from '../theme/layout';
+import type { UiVariant } from '../theme/resolve-ui-variant';
+import {
+  MATERIAL_ACTIVE_CONTEXT_BAR_HEIGHT,
+  TAB_BAR_HEIGHT,
+  TOOLBAR_GAP_ABOVE_TABBAR,
+  TOOLBAR_RESERVE,
+  glassSize,
+} from '../theme/layout';
 
 /**
  * Inputs the React hook gathers (safe-area insets, route, queue, capability)
@@ -11,6 +18,8 @@ import { TAB_BAR_HEIGHT, TOOLBAR_GAP_ABOVE_TABBAR, TOOLBAR_RESERVE, glassSize } 
  * folded into the hook.)
  */
 export type BottomChromeInputs = {
+  /** Resolved UI variant; controls the JS toolbar shape/reserve. */
+  uiVariant: UiVariant;
   /** Bottom safe-area inset. */
   insetsBottom: number;
   /** Whether the current route is inside the (tabs) group (tab bar present). */
@@ -42,10 +51,13 @@ export type BottomChromeMetrics = {
  * `jsQueueToolbarVisible` are mutually exclusive (the JS toolbar only mounts
  * when the native accessory does not). The native accessory is UIKit-owned and
  * adds its own content inset, so `scrollBottomPadding` reserves only for the JS
- * toolbar; `floatingControlBottom` takes the max of the two reserves so floating
- * controls clear whichever chrome is present.
+ * toolbar. Liquid Glass/fallback reserves the taller floating island stack;
+ * Material reserves the docked active-context bar height. `floatingControlBottom`
+ * takes the max of the JS/native reserves so floating controls clear whichever
+ * chrome is present.
  */
 export function computeBottomChromeMetrics({
+  uiVariant,
   insetsBottom,
   insideTabs,
   hasCurrentClimb,
@@ -54,7 +66,8 @@ export function computeBottomChromeMetrics({
   const nativeAccessoryVisible = nativeAccessoryMounted && hasCurrentClimb;
   const jsQueueToolbarVisible = hasCurrentClimb && !nativeAccessoryMounted;
   const tabBarHeight = insideTabs ? TAB_BAR_HEIGHT : 0;
-  const jsQueueReserve = jsQueueToolbarVisible ? TOOLBAR_RESERVE : 0;
+  const jsQueueToolbarReserve = uiVariant === 'material' ? MATERIAL_ACTIVE_CONTEXT_BAR_HEIGHT : TOOLBAR_RESERVE;
+  const jsQueueReserve = jsQueueToolbarVisible ? jsQueueToolbarReserve : 0;
   const nativeAccessoryReserve = nativeAccessoryVisible ? glassSize.standard + TOOLBAR_GAP_ABOVE_TABBAR : 0;
 
   return {

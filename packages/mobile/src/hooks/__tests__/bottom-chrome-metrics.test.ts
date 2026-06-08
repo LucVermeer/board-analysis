@@ -1,6 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { computeBottomChromeMetrics } from '../bottom-chrome-metrics';
-import { TAB_BAR_HEIGHT, TOOLBAR_GAP_ABOVE_TABBAR, TOOLBAR_RESERVE, glassSize } from '../../theme/layout';
+import {
+  MATERIAL_ACTIVE_CONTEXT_BAR_HEIGHT,
+  TAB_BAR_HEIGHT,
+  TOOLBAR_GAP_ABOVE_TABBAR,
+  TOOLBAR_RESERVE,
+  glassSize,
+} from '../../theme/layout';
 
 // Assert the arbitration in terms of the layout constants (not magic numbers) so
 // this stays correct when the glass-size ladder is retuned.
@@ -9,6 +15,7 @@ const NATIVE_ACCESSORY_RESERVE = glassSize.standard + TOOLBAR_GAP_ABOVE_TABBAR;
 describe('computeBottomChromeMetrics', () => {
   it('reserves nothing extra outside the tabs group', () => {
     const metrics = computeBottomChromeMetrics({
+      uiVariant: 'liquidGlass',
       insetsBottom: 34,
       insideTabs: false,
       hasCurrentClimb: false,
@@ -24,6 +31,7 @@ describe('computeBottomChromeMetrics', () => {
 
   it('reserves the JS toolbar when a climb is set and the native accessory is unavailable', () => {
     const metrics = computeBottomChromeMetrics({
+      uiVariant: 'liquidGlass',
       insetsBottom: 0,
       insideTabs: true,
       hasCurrentClimb: true,
@@ -35,8 +43,23 @@ describe('computeBottomChromeMetrics', () => {
     expect(metrics.floatingControlBottom).toBe(TAB_BAR_HEIGHT + TOOLBAR_RESERVE);
   });
 
+  it('reserves the docked Material bar when the JS toolbar is visible', () => {
+    const metrics = computeBottomChromeMetrics({
+      uiVariant: 'material',
+      insetsBottom: 0,
+      insideTabs: true,
+      hasCurrentClimb: true,
+      nativeAccessoryMounted: false,
+    });
+    expect(metrics.jsQueueToolbarVisible).toBe(true);
+    expect(metrics.jsQueueReserve).toBe(MATERIAL_ACTIVE_CONTEXT_BAR_HEIGHT);
+    expect(metrics.scrollBottomPadding).toBe(TAB_BAR_HEIGHT + MATERIAL_ACTIVE_CONTEXT_BAR_HEIGHT);
+    expect(metrics.floatingControlBottom).toBe(TAB_BAR_HEIGHT + MATERIAL_ACTIVE_CONTEXT_BAR_HEIGHT);
+  });
+
   it('does not pad scroll content for the UIKit-owned native accessory', () => {
     const metrics = computeBottomChromeMetrics({
+      uiVariant: 'liquidGlass',
       insetsBottom: 0,
       insideTabs: true,
       hasCurrentClimb: true,
@@ -54,6 +77,7 @@ describe('computeBottomChromeMetrics', () => {
 
   it('keeps the tab bar but no toolbar reserve when no climb is set, even if the accessory is mounted', () => {
     const metrics = computeBottomChromeMetrics({
+      uiVariant: 'liquidGlass',
       insetsBottom: 34,
       insideTabs: true,
       hasCurrentClimb: false,
@@ -69,6 +93,7 @@ describe('computeBottomChromeMetrics', () => {
     for (const hasCurrentClimb of [true, false]) {
       for (const nativeAccessoryMounted of [true, false]) {
         const metrics = computeBottomChromeMetrics({
+          uiVariant: 'liquidGlass',
           insetsBottom: 0,
           insideTabs: true,
           hasCurrentClimb,

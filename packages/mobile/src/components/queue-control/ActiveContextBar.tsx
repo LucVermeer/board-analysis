@@ -1,6 +1,6 @@
 /**
- * ActiveContextBar — the content-agnostic floating bar that sits above the tab
- * bar. It owns ONLY the layout (absolute lift above the tab bar, the
+ * ActiveContextBar — the content-agnostic bar that sits above the tab
+ * bar. It owns ONLY the layout (absolute lift/docking above the tab bar, the
  * leading / primary / trailing slot rhythm, fade-in) — not what fills it. Today
  * the primary slot holds the climb capsule; a later workout rep-timer drops into
  * the same slot with no changes here.
@@ -40,6 +40,8 @@ type ActiveContextBarProps = {
   fillPrimary?: boolean;
   /** Lift above the tab bar (defaults to TOOLBAR_GAP_ABOVE_TABBAR). */
   gapAboveTabBar?: number;
+  /** Horizontal inset from the screen edge; Material uses 0 for a docked bar. */
+  horizontalInset?: number;
 };
 
 export function ActiveContextBar({
@@ -49,6 +51,7 @@ export function ActiveContextBar({
   trailingWidth = glassSize.hero,
   fillPrimary = false,
   gapAboveTabBar = TOOLBAR_GAP_ABOVE_TABBAR,
+  horizontalInset = TOOLBAR_SIDE_MARGIN,
 }: ActiveContextBarProps) {
   const reduceMotion = useReduceMotion();
   const bottomChrome = useBottomChromeMetrics();
@@ -57,7 +60,14 @@ export function ActiveContextBar({
     <Animated.View
       entering={reduceMotion ? undefined : FadeIn.duration(timing.normal)}
       pointerEvents="box-none"
-      style={[styles.toolbar, { bottom: bottomChrome.tabBarBottom + gapAboveTabBar }]}
+      style={[
+        styles.toolbar,
+        {
+          bottom: bottomChrome.tabBarBottom + gapAboveTabBar,
+          left: horizontalInset,
+          right: horizontalInset,
+        },
+      ]}
     >
       {fillPrimary ? (
         <View style={styles.fillRow} pointerEvents="box-none" importantForAccessibility="auto">
@@ -83,10 +93,8 @@ export function ActiveContextBar({
 const styles = StyleSheet.create({
   toolbar: {
     position: 'absolute',
-    left: TOOLBAR_SIDE_MARGIN,
-    right: TOOLBAR_SIDE_MARGIN,
     // `bottom` is set inline from the safe-area inset + tab-bar height so the
-    // islands float just above the tab bar.
+    // bar can either float above or dock to the tab bar.
   },
   row: {
     flexDirection: 'row',

@@ -8,6 +8,7 @@ import type { ClimbQueueItem } from '@boardsesh/queue';
 const cfg = vi.hoisted(() => ({
   onClimbsTab: true,
   currentClimbQueueItem: { climb: { uuid: 'c1', angle: 40 } } as unknown as ClimbQueueItem | null,
+  variant: 'liquidGlass' as 'liquidGlass' | 'material',
 }));
 
 vi.mock('react-native', () => ({
@@ -16,7 +17,10 @@ vi.mock('react-native', () => ({
 }));
 
 vi.mock('react-native-reanimated', () => ({
-  default: { View: ({ children }: { children?: ReactNode }) => createElement('div', null, children) },
+  default: {
+    View: ({ children, style }: { children?: ReactNode; style?: unknown }) =>
+      createElement('div', { 'data-animated': 'true', 'data-style': JSON.stringify(style) }, children),
+  },
   FadeIn: { duration: () => ({}) },
   useAnimatedStyle: () => ({}),
   useSharedValue: (value: number) => ({ value }),
@@ -37,6 +41,7 @@ vi.mock('../../../providers/queue-provider', () => ({
 vi.mock('../../../hooks/use-reduce-motion', () => ({ useReduceMotion: () => true }));
 vi.mock('../../../theme/animations', () => ({ timing: { fast: 150, normal: 250 } }));
 vi.mock('../../../theme/layout', () => ({
+  MATERIAL_ACTIVE_CONTEXT_BAR_HEIGHT: 48,
   TAB_BAR_HEIGHT: 49,
   TOOLBAR_RESERVE: 74,
   TOOLBAR_SIDE_MARGIN: 16,
@@ -47,7 +52,7 @@ vi.mock('../../../theme/layout', () => ({
 }));
 vi.mock('../../../theme/tokens', () => ({ spacing: { 1: 4 } }));
 // Default to the Liquid Glass layout (centered capsule + standalone hero tick).
-vi.mock('../../../providers/theme-provider', () => ({ useTheme: () => ({ variant: 'liquidGlass' }) }));
+vi.mock('../../../providers/theme-provider', () => ({ useTheme: () => ({ variant: cfg.variant }) }));
 // The floating bar renders only where the native bottom accessory doesn't
 // (Material variant / iOS < 26 / Android) — force that path so the capsule/tick
 // assertions hold. `useNativeAccessoryActive` is what use-bottom-chrome-metrics
@@ -56,7 +61,29 @@ vi.mock('../../../hooks/use-bottom-accessory', () => ({
   isBottomAccessoryAvailable: () => false,
   useNativeAccessoryActive: () => false,
 }));
-vi.mock('../ClimbCapsule', () => ({ ClimbCapsule: () => createElement('div', { 'data-capsule': 'true' }) }));
+vi.mock('../ClimbCapsule', () => ({
+  ClimbCapsule: ({
+    fillWidth,
+    height,
+    surfaceTreatment,
+    endAction,
+  }: {
+    fillWidth?: boolean;
+    height?: number;
+    surfaceTreatment?: string;
+    endAction?: ReactNode;
+  }) =>
+    createElement(
+      'div',
+      {
+        'data-capsule': 'true',
+        'data-fill-width': fillWidth ? 'true' : 'false',
+        'data-height': height == null ? '' : String(height),
+        'data-surface-treatment': surfaceTreatment ?? '',
+      },
+      endAction,
+    ),
+}));
 vi.mock('../LogAscentFab', () => ({ LogAscentFab: () => createElement('div', { 'data-tick': 'true' }) }));
 vi.mock('../LogAscentToolbarButton', () => ({
   LogAscentToolbarButton: () => createElement('div', { 'data-tick-inline': 'true' }),
@@ -68,6 +95,7 @@ describe('PersistentQueueBar', () => {
   beforeEach(() => {
     cfg.onClimbsTab = true;
     cfg.currentClimbQueueItem = { climb: { uuid: 'c1', angle: 40 } } as unknown as ClimbQueueItem;
+    cfg.variant = 'liquidGlass';
   });
 
   it('renders nothing when no climb is current', () => {
@@ -89,5 +117,19 @@ describe('PersistentQueueBar', () => {
     const { container } = render(<PersistentQueueBar />);
     expect(container.querySelector('[data-capsule]')).not.toBeNull();
     expect(container.querySelector('[data-tick]')).not.toBeNull();
+  });
+
+  it('uses a docked full-width inline-action bar on Material', () => {
+    cfg.variant = 'material';
+    const { container } = render(<PersistentQueueBar />);
+    const capsule = container.querySelector('[data-capsule]');
+    expect(capsule).not.toBeNull();
+    expect(capsule?.getAttribute('data-fill-width')).toBe('true');
+    expect(capsule?.getAttribute('data-height')).toBe('48');
+    expect(capsule?.getAttribute('data-surface-treatment')).toBe('docked');
+    expect(container.querySelector('[data-animated]')?.getAttribute('data-style')).toContain('"left":0');
+    expect(container.querySelector('[data-animated]')?.getAttribute('data-style')).toContain('"right":0');
+    expect(container.querySelector('[data-tick-inline]')).not.toBeNull();
+    expect(container.querySelector('[data-tick]')).toBeNull();
   });
 });
