@@ -83,26 +83,29 @@ export const SearchHeader = forwardRef<SearchHeaderHandle, SearchHeaderProps>(fu
   // (blur/focus) and getText/setText stay backed by our own `text` state.
   if (uiVariant === 'material') {
     return (
-      <Searchbar
-        ref={inputRef}
-        value={text}
-        onChangeText={handleChange}
-        onClearIconPress={handleClear}
-        placeholder={placeholder}
-        onFocus={onFocus}
-        onBlur={onBlur}
-        onSubmitEditing={handleSubmit}
-        returnKeyType="search"
-        autoCapitalize="none"
-        autoCorrect={false}
-        accessibilityLabel={placeholder}
-        // Pin both dimensions so the first layout pass is deterministic: `flex: 1`
-        // fills the row slot's width and `minHeight` stops Paper's Surface from
-        // collapsing to 0 before its async content measure (which left the search
-        // bar blank until a tab switch forced a re-layout). minHeight (not height)
-        // so it can still grow to Paper's natural height — no clipping.
-        style={[styles.materialSearchbar, { minHeight: height }]}
-      />
+      <View style={[styles.materialFrame, { height, borderRadius: radius }]}>
+        <Searchbar
+          ref={inputRef}
+          value={text}
+          onChangeText={handleChange}
+          onClearIconPress={handleClear}
+          placeholder={placeholder}
+          onFocus={onFocus}
+          onBlur={onBlur}
+          onSubmitEditing={handleSubmit}
+          returnKeyType="search"
+          autoCapitalize="none"
+          autoCorrect={false}
+          accessibilityLabel={placeholder}
+          elevation={0}
+          inputStyle={styles.materialInput}
+          // Pin the full footprint on first mount. Paper's Searchbar contains a
+          // Surface + TextInput stack; on Android it can draw only the tonal
+          // surface for one frame if its parent hands it an unconstrained flex
+          // slot. The wrapper owns the slot, and the Searchbar fills it.
+          style={[styles.materialSearchbar, { height, borderRadius: radius }]}
+        />
+      </View>
     );
   }
 
@@ -148,8 +151,21 @@ export const SearchHeader = forwardRef<SearchHeaderHandle, SearchHeaderProps>(fu
 const styles = StyleSheet.create({
   // Material (Paper Searchbar): fill the row slot's width; minHeight is applied
   // inline from the `height` prop so the first layout pass can't collapse to 0.
+  materialFrame: {
+    flex: 1,
+    minWidth: 0,
+    overflow: 'hidden',
+    justifyContent: 'center',
+  },
   materialSearchbar: {
     flex: 1,
+    width: '100%',
+    margin: 0,
+  },
+  materialInput: {
+    minHeight: 0,
+    paddingVertical: 0,
+    textAlignVertical: 'center',
   },
   capsule: {
     flex: 1,

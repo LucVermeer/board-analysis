@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ElementRef, type ReactNode } from 'react';
-import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Platform, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Gesture, GestureDetector, ScrollView } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
@@ -39,7 +39,7 @@ type RailFrameProps = {
 function RailFrame({ children, style }: RailFrameProps) {
   const { systemColors } = useTheme();
   return (
-    <View style={[styles.frame, style]}>
+    <View collapsable={false} style={[styles.frame, style]}>
       <GlassSurface
         glassEffectStyle="regular"
         fallbackColor={systemColors.secondaryBackground}
@@ -209,8 +209,10 @@ export function GradeRangeRail({
       <ScrollView
         ref={scrollRef}
         horizontal
+        nestedScrollEnabled={Platform.OS === 'android'}
         showsHorizontalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
+        style={styles.railScroll}
         contentContainerStyle={styles.railContent}
         onScrollBeginDrag={clearDismissTimer}
         onLayout={(event) => {
@@ -355,6 +357,7 @@ const styles = StyleSheet.create({
   frame: {
     overflow: 'hidden',
     borderRadius: 24,
+    minHeight: 62,
     paddingTop: 2,
     paddingBottom: spacing[2],
   },
@@ -382,8 +385,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing[2],
+    minHeight: 52,
     paddingHorizontal: spacing[3],
     paddingVertical: spacing[1],
+  },
+  railScroll: {
+    flexGrow: 0,
+    minHeight: 52,
   },
   singleSelectContent: {
     flexDirection: 'row',
