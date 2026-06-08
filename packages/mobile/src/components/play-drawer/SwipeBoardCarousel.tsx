@@ -1,5 +1,13 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { View, Pressable, Text, StyleSheet, useWindowDimensions, type LayoutChangeEvent } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  View,
+  Pressable,
+  Text,
+  StyleSheet,
+  useWindowDimensions,
+  type LayoutChangeEvent,
+  type ViewStyle,
+} from 'react-native';
 import Animated, {
   useAnimatedStyle,
   useDerivedValue,
@@ -72,15 +80,34 @@ export const SwipeBoardCarousel = React.memo(function SwipeBoardCarousel({
 }: SwipeBoardCarouselProps) {
   const { t } = useTranslation('session');
   const { width: screenWidth } = useWindowDimensions();
-  // Starts at 0; populated by onLayout. clampTranslation returns zero for the
-  // first frame before layout fires — fine since the user can't pinch in
-  // pre-layout. The pinch hook re-reads this value, no remount needed.
-  const [containerHeight, setContainerHeight] = useState(0);
+  // Measured box the board is laid out into. The board is sized to *fit* this
+  // box (contain) so the play drawer's full-screen first view can keep the
+  // action bar and a Beta-videos teaser on screen instead of the tall board
+  // pushing them below the fold. Starts at 0; populated by onLayout. The zoom
+  // hook mirrors these into shared values, so updating after first layout
+  // doesn't rebuild the gestures.
+  const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
+
+  const { boardWidth, boardHeight } = boardRenderData;
+  const aspectRatio = boardWidth / boardHeight;
+  // Contain the board within the measured box, preserving aspect ratio and
+  // centering. Letterboxes (vertically on tall boards, horizontally on wide
+  // ones) so the whole climb stays visible while the box drives the height.
+  const boardBox = useMemo(() => {
+    const { width, height } = containerSize;
+    if (width <= 0 || height <= 0) return null;
+    const widthAtFullHeight = height * aspectRatio;
+    return widthAtFullHeight <= width ? { width: widthAtFullHeight, height } : { width, height: width / aspectRatio };
+  }, [containerSize, aspectRatio]);
+  const boardStyle = useMemo<ViewStyle | undefined>(
+    () => (boardBox ? { width: boardBox.width, height: boardBox.height } : undefined),
+    [boardBox],
+  );
 
   const { pinchGesture, zoomPanGesture, isZoomed, isZoomedSV, resetZoom, animatedZoomStyle } = useZoomPanGesture({
     enabled,
-    containerWidth: screenWidth,
-    containerHeight,
+    containerWidth: boardBox?.width ?? screenWidth,
+    containerHeight: boardBox?.height ?? containerSize.height,
   });
 
   const onResetZoomReadyRef = useRef(onResetZoomReady);
@@ -146,7 +173,6 @@ export const SwipeBoardCarousel = React.memo(function SwipeBoardCarousel({
     return { opacity: 1, transform: [{ translateX: offset }] };
   });
 
-  const { boardWidth, boardHeight } = boardRenderData;
   const peekFrames = jsDirection === 'next' ? nextFrames : prevFrames;
 
   // Outer composition: pinch + swipe always. zoomPan is rendered separately
@@ -159,7 +185,10 @@ export const SwipeBoardCarousel = React.memo(function SwipeBoardCarousel({
   );
 
   const handleLayout = useCallback((event: LayoutChangeEvent) => {
-    setContainerHeight(event.nativeEvent.layout.height);
+    const { width, height } = event.nativeEvent.layout;
+    setContainerSize((prev) =>
+      Math.abs(prev.width - width) > 1 || Math.abs(prev.height - height) > 1 ? { width, height } : prev,
+    );
   }, []);
 
   return (
@@ -176,6 +205,7 @@ export const SwipeBoardCarousel = React.memo(function SwipeBoardCarousel({
               boardWidth={boardWidth}
               boardHeight={boardHeight}
               mirrored={mirrored}
+              style={boardStyle}
             />
           </Animated.View>
         </Animated.View>
@@ -191,6 +221,7 @@ export const SwipeBoardCarousel = React.memo(function SwipeBoardCarousel({
               boardWidth={boardWidth}
               boardHeight={boardHeight}
               mirrored={mirrored}
+              style={boardStyle}
             />
           )}
         </Animated.View>
@@ -227,9 +258,12 @@ const styles = StyleSheet.create({
     flex: 1,
     width: '100%',
     overflow: 'hidden',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   boardWrapper: {
     width: '100%',
+    alignItems: 'center',
   },
   peekWrapper: {
     position: 'absolute',
@@ -237,6 +271,8 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   zoomPanOverlay: {
     position: 'absolute',
