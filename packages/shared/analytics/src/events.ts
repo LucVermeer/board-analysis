@@ -49,7 +49,6 @@ export const SHARED_EVENTS = {
   // signal: a write failed with a disconnect error while we believed we were
   // connected (another device grabbed the last-connection-wins board).
   BluetoothScanStarted: 'Bluetooth Scan Started',
-  BluetoothReconnectAttempt: 'Bluetooth Reconnect Attempt',
   BluetoothConnectionStolen: 'Bluetooth Connection Stolen',
   ClimbSentToBoardSuccess: 'Climb Sent to Board Success',
   ClimbSentToBoardFailure: 'Climb Sent to Board Failure',

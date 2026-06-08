@@ -293,10 +293,14 @@ export function BluetoothProvider({ boardName, layoutId, sizeId, children }: Blu
     if (wasConnectedRef.current && !isConnected && !isUserDisconnectRef.current) {
       hapticError();
       setDisconnectedUnexpectedly(true);
-      const inSession = sessionIdRef.current != null;
-      track(SHARED_EVENTS.BluetoothDisconnected, { boardName, reason: 'unexpected', inSession });
-      track(SHARED_EVENTS.BluetoothReconnectAttempt, { boardName, reason: 'unexpected_drop', inSession });
-      // Open the picker (no target serial → fresh scan + selection sheet).
+      track(SHARED_EVENTS.BluetoothDisconnected, {
+        boardName,
+        reason: 'unexpected',
+        inSession: sessionIdRef.current != null,
+      });
+      // Open the picker (no target serial → fresh scan + selection sheet). The
+      // scan itself emits BluetoothScanStarted, so the drop→scan timeline is
+      // already captured without a separate "reconnect attempt" event.
       void wrappedConnectRef.current();
     }
     wasConnectedRef.current = isConnected;

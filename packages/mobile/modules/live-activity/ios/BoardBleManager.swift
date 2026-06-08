@@ -162,6 +162,15 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
     /// ReconnectBoardIntent. Tries a direct retrieve-by-identifier first (no
     /// scan, works while backgrounded); falls back to a time-boxed scan that
     /// connects when the stored UUID advertises.
+    ///
+    /// Known limitation: this reconnects the native layer only. The wall re-lights
+    /// (displaySharedCurrentItemOnBleQueue) and widget next/prev keep driving it,
+    /// but the JS `isConnected` is NOT updated — there's no native→JS "connected"
+    /// event yet — so after a background widget reconnect the in-app lightbulb
+    /// shows disconnected and in-app climb navigation won't push to the wall until
+    /// the user taps it once (which connects JS to the already-connected board, a
+    /// fast no-op on the native side). Follow-up: bridge a `connected` event +
+    /// adopt the connection in NativeIosBleAdapter on app foreground.
     func reconnectToLastKnownBoard(completion: @escaping (Result<Void, Error>) -> Void) {
         runOnBleQueue { [weak self] in
             self?.reconnectToLastKnownBoardOnBleQueue(completion: completion)
@@ -371,7 +380,10 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
         reconnectScanTimeoutWorkItem = timeout
         bleQueue.asyncAfter(deadline: .now() + connectTimeout, execute: timeout)
 
-        startScanOnBleQueue(serviceUuids: []) { [weak self] result in
+        // Filter on both the Aurora advertised service and the UART service so a
+        // MoonBoard (which advertises UART) is matchable too, mirroring the JS
+        // adapter's scan filter.
+        startScanOnBleQueue(serviceUuids: [auroraServiceUuid.uuidString, uartServiceUuid.uuidString]) { [weak self] result in
             if case .failure(let error) = result {
                 self?.failReconnectScan(error)
             }
