@@ -12,7 +12,7 @@ import {
 import { Text } from '../../../../src/components/Text';
 import { Icon } from '../../../../src/components/Icon';
 import { ActivityIndicator } from '../../../../src/components/ActivityIndicator';
-import { PlaylistDetailView } from '../../../../src/components/playlist';
+import { PlaylistDetailView, PlaylistBackFab } from '../../../../src/components/playlist';
 import { getHttpClient } from '../../../../src/lib/graphql/client';
 import { usePlaylistActivation } from '../../../../src/lib/playlists/use-playlist-activation';
 import { toQueueClimbs } from '../../../../src/lib/climb-types';
@@ -85,6 +85,7 @@ export default function SmartPlaylistDetail() {
   if (!preset && !query.isLoading) {
     return (
       <View style={styles.stateContainer}>
+        <PlaylistBackFab />
         <Icon name="error" size={48} color={iosSystemColors.systemGray4} />
         <Text variant="headline" style={styles.stateTitle}>
           {t('library.smart.notFound.title')}
@@ -99,6 +100,7 @@ export default function SmartPlaylistDetail() {
   if (query.isLoading && allClimbs.length === 0) {
     return (
       <View style={styles.stateContainer}>
+        <PlaylistBackFab />
         <ActivityIndicator size="large" />
       </View>
     );

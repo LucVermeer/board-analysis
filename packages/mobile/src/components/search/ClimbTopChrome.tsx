@@ -278,6 +278,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     height: SUMMARY_CAPSULE_HEIGHT,
     borderRadius: SUMMARY_CAPSULE_RADIUS,
+    // Clip the absolutely-filled GlassSurface to the rounded corners (Android
+    // border-radius alone doesn't clip children), matching the action toolbars.
+    overflow: 'hidden',
     paddingHorizontal: 12,
     gap: 5,
   },

@@ -127,10 +127,13 @@ export default function BoardSearchScreen() {
         // Only close the sheet once the board is saved — if it throws, the
         // sheet stays open so the error toast has visible context.
         setSelectedUuid(null);
-        // router.back() is the same foreground unmount the X button uses —
-        // proven safe for expo-maps — closing the search screen first; then
-        // dismiss the boards modal back onto the tab it was opened from.
-        router.back();
+        // A single dismissTo collapses the whole boards modal — including this
+        // search screen and its expo-maps view — back to the originating tab. The
+        // map unmounts while the modal is still foreground (mid-dismiss), which is
+        // the same foreground unmount the X button relies on. Using only dismissTo
+        // (matching boards/index.tsx) avoids the back()+dismissTo double-dispatch
+        // race, where dismissTo could fire against a stack frame back() hadn't
+        // committed yet.
         router.dismissTo(boardReturnTo);
       } catch {
         showToast(t('mobile.boardSwitchError'), 'error');

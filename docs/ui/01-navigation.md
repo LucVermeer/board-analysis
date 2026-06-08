@@ -52,6 +52,9 @@ There are **5 tabs** (the web has a 6th "Create" tab but it is between Discover 
 - Safe area handled by `react-native-safe-area-context`
 - Tab icons from `@expo/vector-icons` MaterialIcons set
 - Active session context from shared queue provider
+- **Mobile tab set differs from the web table above:** Climbs, Record, Discover, Profile. Climbs is the default route (`unstable_settings.initialRouteName = 'climbs'`); there is no separate "Boards" tab.
+- **Board selection is a full-screen modal** (`app/boards/`), not the web's `BoardSelectorDrawer`. The board pill in the Climbs / Discover top chrome opens it (`/boards`).
+- **No board context shows a CTA, not a selector.** On a cold start with no active board the Climbs list renders a "select a board" prompt rather than auto-opening a drawer; tapping it routes to the `/boards` modal.
 
 ### Header Patterns
 

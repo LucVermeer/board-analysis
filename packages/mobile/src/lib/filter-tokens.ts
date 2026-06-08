@@ -114,7 +114,7 @@ export function getActiveFilterTokens({
     });
   }
 
-  if (filters.setter != null && filters.setter.length > 0 && labels.setters) {
+  if (filters.setter != null && filters.setter.length > 0) {
     tokens.push({
       key: 'setter',
       label: labels.setters(filters.setter.length),
@@ -122,7 +122,7 @@ export function getActiveFilterTokens({
     });
   }
 
-  if (filters.gradeAccuracy != null && labels.gradeAccuracy) {
+  if (filters.gradeAccuracy != null) {
     tokens.push({
       key: 'gradeAccuracy',
       label: labels.gradeAccuracy(filters.gradeAccuracy),
@@ -130,15 +130,15 @@ export function getActiveFilterTokens({
     });
   }
 
-  if (filters.onlyTallClimbs && labels.tallOnly) {
+  if (filters.onlyTallClimbs) {
     tokens.push({ key: 'tall', label: labels.tallOnly(), clear: () => patchFilters({ onlyTallClimbs: undefined }) });
   }
 
-  if (filters.onlyWideClimbs && labels.wideOnly) {
+  if (filters.onlyWideClimbs) {
     tokens.push({ key: 'wide', label: labels.wideOnly(), clear: () => patchFilters({ onlyWideClimbs: undefined }) });
   }
 
-  if (filters.onlyWithBetaVideos && labels.betaOnly) {
+  if (filters.onlyWithBetaVideos) {
     tokens.push({
       key: 'beta',
       label: labels.betaOnly(),
@@ -148,7 +148,7 @@ export function getActiveFilterTokens({
 
   // Only drafts/projects produce a token — 'any' is the default and 'established'
   // is the retired duplicate of the popularity lever (matches the summary).
-  if ((filters.status === 'drafts' || filters.status === 'projects') && labels.status) {
+  if (filters.status === 'drafts' || filters.status === 'projects') {
     tokens.push({
       key: 'status',
       label: labels.status(filters.status),
@@ -156,7 +156,7 @@ export function getActiveFilterTokens({
     });
   }
 
-  if (filters.hideAttempted && labels.hideAttempted) {
+  if (filters.hideAttempted) {
     tokens.push({
       key: 'hideAttempted',
       label: labels.hideAttempted(),
@@ -164,7 +164,7 @@ export function getActiveFilterTokens({
     });
   }
 
-  if (filters.hideCompleted && labels.hideCompleted) {
+  if (filters.hideCompleted) {
     tokens.push({
       key: 'hideCompleted',
       label: labels.hideCompleted(),
@@ -172,7 +172,7 @@ export function getActiveFilterTokens({
     });
   }
 
-  if (filters.showOnlyAttempted && labels.showOnlyAttempted) {
+  if (filters.showOnlyAttempted) {
     tokens.push({
       key: 'showOnlyAttempted',
       label: labels.showOnlyAttempted(),
@@ -180,7 +180,7 @@ export function getActiveFilterTokens({
     });
   }
 
-  if (filters.showOnlyCompleted && labels.showOnlyCompleted) {
+  if (filters.showOnlyCompleted) {
     tokens.push({
       key: 'showOnlyCompleted',
       label: labels.showOnlyCompleted(),

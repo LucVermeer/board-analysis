@@ -21,6 +21,7 @@ import {
   PlaylistFormSheet,
   PlaylistActionsMenu,
   PlaylistFollowButton,
+  PlaylistBackFab,
   type PlaylistFormValues,
 } from '../../../src/components/playlist';
 import { GlassIconButton } from '../../../src/components/GlassIconButton';
@@ -344,6 +345,7 @@ export default function PlaylistDetail() {
   if (!metaLoading && playlist === null) {
     return (
       <View style={styles.stateContainer}>
+        <PlaylistBackFab />
         <Icon name="error" size={48} color={iosSystemColors.systemGray4} />
         <Text variant="headline" style={styles.stateTitle}>
           {t('detail.errors.notFoundTitle')}
@@ -358,6 +360,7 @@ export default function PlaylistDetail() {
   if (metaLoading && allClimbs.length === 0) {
     return (
       <View style={styles.stateContainer}>
+        <PlaylistBackFab />
         <ActivityIndicator size="large" />
       </View>
     );

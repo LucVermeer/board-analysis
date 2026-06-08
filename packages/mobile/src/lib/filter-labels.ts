@@ -5,7 +5,12 @@
 import type { TFunction } from 'i18next';
 import { gradeAccuracyBucket, type FilterSummaryLabels, type SortOption } from '@boardsesh/climb-filters';
 
-export function buildFilterLabels(t: TFunction<'climbs'>): FilterSummaryLabels {
+// `FilterSummaryLabels` marks several fields optional for shared callers that
+// emit a partial summary, but this builder always populates every one — so the
+// return type is `Required` here. That lets the token builder index the labels
+// without `&& labels.x` guards that would silently drop a token if a field were
+// ever forgotten (a real bug) rather than absent by design.
+export function buildFilterLabels(t: TFunction<'climbs'>): Required<FilterSummaryLabels> {
   return {
     gradeRange: (min, max) => t('mobile.search.gradeRange', { min, max }),
     gradeMin: (grade) => t('mobile.search.gradeMin', { grade }),

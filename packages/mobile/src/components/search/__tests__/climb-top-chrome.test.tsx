@@ -238,6 +238,8 @@ const lightbulb = (root: HTMLElement) =>
     root.querySelector('[data-pressable="lightControl.disconnect"]')) as HTMLButtonElement | null;
 const capsule = (root: HTMLElement) =>
   root.querySelector('[data-capsule]:not([data-capsule=""])') as HTMLButtonElement | null;
+const summaryClear = (root: HTMLElement) =>
+  root.querySelector('[data-hint="mobile.search.clearAll"]') as HTMLButtonElement | null;
 
 const typedBoard: BoardLabelFields = {
   name: '',
@@ -393,5 +395,27 @@ describe('ClimbTopChrome', () => {
     expect(layoutView).not.toBeNull();
     fireEvent.click(layoutView);
     expect(onHeightChange).toHaveBeenCalledWith(88);
+  });
+
+  it('renders the active-filter summary capsule when filterSummary is provided', () => {
+    ctrl.board = typedBoard;
+    const { container } = render(
+      <ClimbTopChrome {...makeProps({ filterSummary: { text: 'V6 • High Quality', onClear: vi.fn() } })} />,
+    );
+    expect(summaryClear(container)?.getAttribute('data-pressable')).toBe('V6 • High Quality');
+  });
+
+  it('omits the summary capsule when filterSummary is undefined', () => {
+    ctrl.board = typedBoard;
+    const { container } = render(<ClimbTopChrome {...makeProps()} />);
+    expect(summaryClear(container)).toBeNull();
+  });
+
+  it('clears all filters when the summary capsule is pressed', () => {
+    ctrl.board = typedBoard;
+    const onClear = vi.fn();
+    const { container } = render(<ClimbTopChrome {...makeProps({ filterSummary: { text: 'V6 +1 more', onClear } })} />);
+    fireEvent.click(summaryClear(container)!);
+    expect(onClear).toHaveBeenCalledTimes(1);
   });
 });
