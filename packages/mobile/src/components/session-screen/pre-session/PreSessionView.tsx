@@ -99,6 +99,7 @@ export function PreSessionView() {
 
         <GeneratorPickerCard
           boardName={activeBoard ? toBoardName(activeBoard.boardType) : null}
+          angle={activeBoard?.angle ?? null}
           selection={selection}
           onChange={setSelection}
         />

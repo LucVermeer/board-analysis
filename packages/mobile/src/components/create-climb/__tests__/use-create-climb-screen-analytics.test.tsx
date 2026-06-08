@@ -115,6 +115,11 @@ const BOARD = {
   angle: 40,
 };
 
+// Kilter layout id 1 resolves to this human-readable name via the shared
+// `getLayoutName` helper. Web sends the same name string for `boardLayout`
+// (`boardDetails.layout_name`), so the events match across platforms.
+const EXPECTED_BOARD_LAYOUT = 'Kilter Board Original';
+
 function renderScreen(editClimbUuid?: string) {
   return renderHook(() => useCreateClimbScreen({ board: BOARD, editClimbUuid }));
 }
@@ -152,9 +157,10 @@ describe('useCreateClimbScreen analytics', () => {
     await nameAndSave(result);
 
     expect(board.saveClimb).toHaveBeenCalledTimes(1);
-    // Same schema as web's `Climb Created` (create-climb-form.tsx): { boardLayout, isDraft, holdCount }.
+    // Same schema AND values as web's `Climb Created` (create-climb-form.tsx):
+    // { boardLayout: <resolved layout name>, isDraft, holdCount }.
     expect(analytics.track).toHaveBeenCalledWith('Climb Created', {
-      boardLayout: 1,
+      boardLayout: EXPECTED_BOARD_LAYOUT,
       isDraft: true,
       holdCount: 3,
     });
@@ -187,9 +193,9 @@ describe('useCreateClimbScreen analytics', () => {
 
     expect(board.updateClimb).toHaveBeenCalledTimes(1);
     expect(board.saveClimb).not.toHaveBeenCalled();
-    // Same schema as web's `Climb Updated`: { boardLayout, isDraft, holdCount }.
+    // Same schema AND values as web's `Climb Updated`: { boardLayout: <name>, isDraft, holdCount }.
     expect(analytics.track).toHaveBeenCalledWith('Climb Updated', {
-      boardLayout: 1,
+      boardLayout: EXPECTED_BOARD_LAYOUT,
       isDraft: false,
       holdCount: 3,
     });
@@ -203,9 +209,9 @@ describe('useCreateClimbScreen analytics', () => {
     await nameAndSave(result);
 
     await waitFor(() =>
-      // Web emits `{ boardLayout }`; mobile adds a non-grouping `error_reason`.
+      // Web emits `{ boardLayout: <name> }`; mobile adds a non-grouping `error_reason`.
       expect(analytics.track).toHaveBeenCalledWith('Climb Create Failed', {
-        boardLayout: 1,
+        boardLayout: EXPECTED_BOARD_LAYOUT,
         error_reason: 'duplicate',
       }),
     );
@@ -221,7 +227,7 @@ describe('useCreateClimbScreen analytics', () => {
 
     await waitFor(() =>
       expect(analytics.track).toHaveBeenCalledWith('Climb Create Failed', {
-        boardLayout: 1,
+        boardLayout: EXPECTED_BOARD_LAYOUT,
         error_reason: 'exception',
       }),
     );

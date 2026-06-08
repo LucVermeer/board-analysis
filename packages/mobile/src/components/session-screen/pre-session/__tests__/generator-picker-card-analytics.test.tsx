@@ -58,10 +58,11 @@ beforeEach(() => {
 });
 
 describe('GeneratorPickerCard analytics', () => {
-  it('fires "Workout Generator Opened" when switching off → a workout type', () => {
+  it('fires "Workout Generator Opened" with web-aligned targetType + angle when switching off → a workout type', () => {
     render(
       createElement(GeneratorPickerCard, {
         boardName: 'kilter',
+        angle: 40,
         selection: { type: 'off' } satisfies GeneratorSelection,
         onChange: vi.fn(),
       }),
@@ -70,9 +71,12 @@ describe('GeneratorPickerCard analytics', () => {
     // Chip index 1 is 'volume' (index 0 is 'off').
     chips.onPress[1]?.();
 
+    // Exact payload web sends (playlist-generator-drawer.tsx): { targetType, boardName, angle }.
+    // No `workoutType` key — PostHog groups by exact prop name, so it must match web.
     expect(analytics.track).toHaveBeenCalledWith('Workout Generator Opened', {
+      targetType: 'session',
       boardName: 'kilter',
-      workoutType: 'volume',
+      angle: 40,
     });
   });
 
@@ -80,6 +84,7 @@ describe('GeneratorPickerCard analytics', () => {
     render(
       createElement(GeneratorPickerCard, {
         boardName: 'kilter',
+        angle: 40,
         selection: { type: 'off' } satisfies GeneratorSelection,
         onChange: vi.fn(),
       }),

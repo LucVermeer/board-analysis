@@ -23,6 +23,8 @@ export type GeneratorSelection = { type: 'off' } | { type: 'on'; options: Genera
 
 type GeneratorPickerCardProps = {
   boardName: BoardName | null;
+  /** Board angle, forwarded to the `Workout Generator Opened` event to match web. */
+  angle: number | null;
   selection: GeneratorSelection;
   onChange: (selection: GeneratorSelection) => void;
 };
@@ -76,7 +78,7 @@ function getDefaultTargetGrade(boardName: BoardName | null): number {
  * algorithm and the chosen target grade. Defaults come from the shared package
  * so web and mobile agree on the starting state for each workout type.
  */
-export function GeneratorPickerCard({ boardName, selection, onChange }: GeneratorPickerCardProps) {
+export function GeneratorPickerCard({ boardName, angle, selection, onChange }: GeneratorPickerCardProps) {
   const { t } = useTranslation('session');
   const { systemColors, brandColors } = useTheme();
   const { formatGrade } = useGradeFormat();
@@ -87,9 +89,12 @@ export function GeneratorPickerCard({ boardName, selection, onChange }: Generato
       return;
     }
     // Enabling the generator (off → a workout type) reveals the configurator —
-    // the mobile analogue of web's `Workout Generator Opened`.
+    // the mobile analogue of web's `Workout Generator Opened`. Match web's exact
+    // payload (playlist-generator-drawer.tsx): `{ targetType, boardName, angle }`.
+    // The pre-session flow always feeds the session queue, so targetType is
+    // 'session'; PostHog groups by exact prop name, so the keys must line up.
     if (selection.type === 'off') {
-      track(SHARED_EVENTS.WorkoutGeneratorOpened, { boardName, workoutType: value });
+      track(SHARED_EVENTS.WorkoutGeneratorOpened, { targetType: 'session', boardName, angle });
     }
     const currentTarget = selection.type === 'on' ? selection.options.targetGrade : getDefaultTargetGrade(boardName);
     onChange({ type: 'on', options: buildDefaultOptions(value, currentTarget) });

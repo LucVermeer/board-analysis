@@ -14,6 +14,7 @@ import {
 } from '@boardsesh/create-climb-react';
 import { useBoardProvider, isDuplicateClimbError } from '@boardsesh/board-react';
 import { GraphQLOperationError } from '@boardsesh/graphql-client';
+import { getLayoutName } from '@boardsesh/board-constants/product-sizes';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { track } from '../../lib/analytics';
 import { useAuth } from '../../providers/auth-provider';
@@ -380,6 +381,11 @@ export function useCreateClimbScreen({
     const fullDescription = withNoMatch(description, noMatch);
     // Mirror web's `holdCount` property (create-climb-form.tsx).
     const holdCount = Object.keys(litUpHoldsMap).length;
+    // Web sends the human-readable layout name (`boardDetails.layout_name || ''`)
+    // for `boardLayout`; mobile only carries the numeric layout id, so resolve it
+    // to the same name via the shared board-constants table. PostHog groups by
+    // exact value, so the string must match web for these create-climb events.
+    const boardLayout = getLayoutName(board.boardName, board.layoutId);
     try {
       if (canUpdate && savedClimb) {
         const result = await updateClimb({
@@ -399,11 +405,10 @@ export function useCreateClimbScreen({
           isDraft: result.isDraft,
         });
         // Match web's schema exactly (create-climb-form.tsx) so PostHog funnels
-        // that group by these props line up across platforms. Web emits the
-        // human-readable `layout_name`; mobile only carries the numeric layout id
-        // here, so `boardLayout` is the layout identity mobile already has.
+        // that group by these props line up across platforms. `boardLayout` is the
+        // resolved layout NAME (same value web sends), not the numeric id.
         track(SHARED_EVENTS.ClimbUpdated, {
-          boardLayout: board.layoutId,
+          boardLayout,
           isDraft: result.isDraft,
           holdCount,
         });
@@ -426,7 +431,7 @@ export function useCreateClimbScreen({
         });
         // Match web's schema exactly (create-climb-form.tsx). See ClimbUpdated above.
         track(SHARED_EVENTS.ClimbCreated, {
-          boardLayout: board.layoutId,
+          boardLayout,
           isDraft,
           holdCount,
         });
@@ -446,10 +451,10 @@ export function useCreateClimbScreen({
       justSavedTimerRef.current = setTimeout(() => setJustSaved(false), JUST_SAVED_MS);
     } catch (err) {
       // Web emits only `{ boardLayout }` for this event (create-climb-form.tsx);
-      // match that, plus a mobile-only `error_reason` that doesn't affect any
-      // grouping web relies on.
+      // match that (resolved layout NAME), plus a mobile-only `error_reason` that
+      // doesn't affect any grouping web relies on.
       track(SHARED_EVENTS.ClimbCreateFailed, {
-        boardLayout: board.layoutId,
+        boardLayout,
         error_reason: isDuplicateClimbError(err) ? 'duplicate' : 'exception',
       });
       if (isDuplicateClimbError(err)) {
