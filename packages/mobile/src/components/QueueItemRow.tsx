@@ -1,5 +1,5 @@
-import { memo, useState, useMemo, useCallback, useEffect } from 'react';
-import { Pressable, View, StyleSheet } from 'react-native';
+import { memo, useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import { Pressable, View, StyleSheet, type LayoutChangeEvent } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring, withTiming, runOnJS } from 'react-native-reanimated';
 import {
   Gesture,
@@ -122,6 +122,14 @@ function QueueItemRowComponent({
   const isSwipeOpen = useSharedValue(false);
   const [isOpen, setIsOpen] = useState(false);
 
+  // The queue reducer rebuilds the array (and each item object) on every update,
+  // so `item` arrives with a fresh reference even when this row's data hasn't
+  // changed. Read the live item through a ref and key the press callbacks on the
+  // stable `item.uuid` — otherwise every queue update hands `AnimatedPressable` a
+  // new `onPress`/`onTickHistory` and forces a re-render despite the memo.
+  const itemRef = useRef(item);
+  itemRef.current = item;
+
   // Disable swipe-to-delete for edit mode and history items.
   const swipeEnabled = !isEditMode && !isHistoryItem;
 
@@ -132,7 +140,7 @@ function QueueItemRowComponent({
       isSwipeOpen.value = false;
       runOnJS(setIsOpen)(false);
     }
-  }, [swipeEnabled]);
+  }, [swipeEnabled, translateX, isSwipeOpen]);
 
   const handleRemove = useCallback(() => {
     hapticMedium();
@@ -227,10 +235,10 @@ function QueueItemRowComponent({
     overflow: 'hidden' as const,
   }));
 
-  const handlePress = () => {
+  const handlePress = useCallback(() => {
     if (isEditMode) {
       hapticSelection();
-      onToggleSelect?.(item.uuid);
+      onToggleSelect?.(itemRef.current.uuid);
       return;
     }
     if (isOpen) {
@@ -241,26 +249,29 @@ function QueueItemRowComponent({
       return;
     }
     hapticSelection();
-    onPress(item);
-  };
+    onPress(itemRef.current);
+  }, [isEditMode, isOpen, onToggleSelect, onPress, translateX, isSwipeOpen]);
 
-  const handleDeletePress = () => {
+  const handleDeletePress = useCallback(() => {
     // Animate the row out
     translateX.value = withTiming(-400, { duration: 200 });
     rowOpacity.value = withTiming(0, { duration: 200 });
     rowHeight.value = withTiming(0, { duration: 200 }, () => {
       runOnJS(handleRemove)();
     });
-  };
+  }, [translateX, rowOpacity, rowHeight, handleRemove]);
 
   const handleTickPress = useCallback(() => {
     hapticSelection();
-    onTickHistory?.(item);
-  }, [onTickHistory, item]);
+    onTickHistory?.(itemRef.current);
+  }, [onTickHistory]);
 
+  // Take the layout event directly so the same stable function can be passed to
+  // `onLayout` — an inline `(event) => ...` wrapper would be a fresh arrow each
+  // render, defeating the row's memoization on the wrapping `Animated.View`.
   const handleRowLayout = useCallback(
-    (height: number) => {
-      if (isDraggable) drag?.onRowHeight(height);
+    (event: LayoutChangeEvent) => {
+      if (isDraggable) drag?.onRowHeight(event.nativeEvent.layout.height);
     },
     [isDraggable, drag],
   );
@@ -330,10 +341,7 @@ function QueueItemRowComponent({
   );
 
   return (
-    <Animated.View
-      style={[containerAnimatedStyle, dragAnimatedStyle]}
-      onLayout={(event) => handleRowLayout(event.nativeEvent.layout.height)}
-    >
+    <Animated.View style={[containerAnimatedStyle, dragAnimatedStyle]} onLayout={handleRowLayout}>
       <View style={styles.swipeContainer}>
         {/* Delete action behind the row */}
         {swipeEnabled && (
