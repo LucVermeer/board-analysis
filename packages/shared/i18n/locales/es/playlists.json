@@ -26,6 +26,7 @@
       "title": "Mis listas",
       "seeAll": "Ver todas",
       "searchPlaceholder": "Filtrar por título",
+      "clearSearch": "Borrar búsqueda",
       "noResults": "Ninguna lista coincide con \"{{query}}\""
     },
     "pin": {

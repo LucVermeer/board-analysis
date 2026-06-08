@@ -8,6 +8,7 @@
   "mobile": {
     "more": {
       "title": "Plus",
+      "library": "Bibliothèque",
       "development": "Développement",
       "metroServersTitle": "Serveurs Metro",
       "metroServersSubtitle": "Basculer entre les bundlers Tailnet",

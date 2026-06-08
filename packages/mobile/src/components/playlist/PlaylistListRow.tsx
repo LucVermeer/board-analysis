@@ -14,7 +14,8 @@ const THUMB_SIZE = 44;
 
 export type PlaylistListRowProps = {
   name: string;
-  climbCount: number;
+  /** Nullable on some board configs — coerced to 0 so the count never renders "NaN". */
+  climbCount?: number | null;
   color?: string;
   icon?: string;
   /** Index into the preview's fallback colour palette. */
@@ -42,7 +43,7 @@ export function PlaylistListRow({
   const { t } = useTranslation('playlists');
   const { systemColors } = useTheme();
 
-  const countLabel = t('detail.climbCount', { count: climbCount });
+  const countLabel = t('detail.climbCount', { count: climbCount ?? 0 });
 
   const handlePress = useCallback(() => {
     hapticLight();

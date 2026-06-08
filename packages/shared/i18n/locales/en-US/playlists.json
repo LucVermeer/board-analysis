@@ -26,6 +26,7 @@
       "title": "My Playlists",
       "seeAll": "See all",
       "searchPlaceholder": "Filter by title",
+      "clearSearch": "Clear search",
       "noResults": "No playlists match \"{{query}}\""
     },
     "pin": {

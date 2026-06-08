@@ -62,6 +62,7 @@ export default function MoreScreen() {
 
       {profile?.id ? (
         <View style={styles.section}>
+          <SectionHeader title={t('mobile.more.library')} />
           <View
             style={[
               styles.card,
