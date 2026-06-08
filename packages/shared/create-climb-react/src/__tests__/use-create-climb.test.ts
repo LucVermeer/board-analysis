@@ -1,6 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import { useCreateClimb } from '../use-create-climb';
+import { useCreateClimb, holdsReducer, HISTORY_LIMIT } from '../use-create-climb';
+import type { HoldsHistory } from '../use-create-climb';
+import type { LitUpHoldsMap } from '@boardsesh/shared-schema';
 
 vi.mock('@boardsesh/board-constants/hold-states', () => ({
   HOLD_STATE_MAP: {
@@ -567,43 +569,29 @@ describe('useCreateClimb', () => {
       expect(result.current.canUndo).toBe(false);
     });
 
-    it('redo does not let past exceed the history depth limit', () => {
-      const { result } = renderHook(() => useCreateClimb('kilter'));
+    it('redo caps past at HISTORY_LIMIT even when past is already full', () => {
+      // Normal hook usage cannot place past.length === HISTORY_LIMIT while future
+      // is non-empty (APPLY always clears future; UNDO always shrinks past before
+      // REDO can run). However, a future action that seeds past (e.g. a
+      // LOAD-with-history) could create exactly this state. This test calls the
+      // reducer directly with that edge-case state to verify capPast is applied.
+      // Without the capPast call in REDO the assertion fails: past grows to
+      // HISTORY_LIMIT + 1.
+      const foot = (id: number): LitUpHoldsMap => ({
+        [id]: { state: 'FOOT', color: '#FFA500', displayColor: '#FFA500' },
+      });
 
-      // 60 distinct FOOT holds — more than HISTORY_LIMIT (50), triggers the cap.
-      for (let holdId = 1; holdId <= 60; holdId += 1) {
-        act(() => {
-          result.current.setHoldState(holdId, 'FOOT');
-        });
-      }
+      const edgeState: HoldsHistory = {
+        past: Array.from({ length: HISTORY_LIMIT }, (_, i) => foot(i + 1)),
+        present: foot(HISTORY_LIMIT + 1),
+        future: [foot(HISTORY_LIMIT + 2)],
+      };
 
-      // Undo 5 steps so future has 5 redoable items.
-      for (let i = 0; i < 5; i += 1) {
-        act(() => {
-          result.current.undo();
-        });
-      }
+      const next = holdsReducer(edgeState, { type: 'REDO' });
 
-      // Redo all 5 — each redo pushes present to past; capPast must keep
-      // the depth at HISTORY_LIMIT.  Without the fix, redoing into an already-
-      // capped past would silently exceed the limit once a future LOAD or similar
-      // action ever pre-populates past to HISTORY_LIMIT before a redo.
-      for (let i = 0; i < 5; i += 1) {
-        act(() => {
-          result.current.redo();
-        });
-      }
-
-      // Drain undo stack — must still be exactly 50 steps, not 55.
-      let undoCount = 0;
-      while (result.current.canUndo) {
-        act(() => {
-          result.current.undo();
-        });
-        undoCount += 1;
-        if (undoCount > 100) break; // safety
-      }
-      expect(undoCount).toBe(50);
+      expect(next.past.length).toBeLessThanOrEqual(HISTORY_LIMIT);
+      expect(next.present).toEqual(foot(HISTORY_LIMIT + 2));
+      expect(next.future).toHaveLength(0);
     });
   });
 });

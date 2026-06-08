@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { View, Pressable, StyleSheet, type ColorValue } from 'react-native';
+import { View, Pressable, StyleSheet } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import type { DiscoveredDevice } from '../../lib/ble/types';
 import { Text } from '../Text';
@@ -86,20 +86,20 @@ export function DeviceCard({ device, onSelect, boardType }: DeviceCardProps) {
       </View>
 
       <View style={styles.centerSection}>
-        <Text variant="body" color={systemColors.label as ColorValue} numberOfLines={1}>
+        <Text variant="body" color={systemColors.label} numberOfLines={1}>
           {displayName}
         </Text>
 
         <View style={styles.metaRow}>
           {boardType && (
             <View style={[styles.badge, { backgroundColor: systemColors.fill }]}>
-              <Text variant="caption2" color={systemColors.secondaryLabel as ColorValue}>
+              <Text variant="caption2" color={systemColors.secondaryLabel}>
                 {boardType}
               </Text>
             </View>
           )}
           {serialNumber && (
-            <Text variant="caption1" color={systemColors.tertiaryLabel as ColorValue} numberOfLines={1}>
+            <Text variant="caption1" color={systemColors.tertiaryLabel} numberOfLines={1}>
               #{serialNumber}
             </Text>
           )}
