@@ -10,7 +10,7 @@ import { useBoardAdapter } from './adapter';
 import { useLogbook as useLogbookQuery } from './use-logbook';
 import { useSaveTick as useSaveTickMutation } from './use-save-tick';
 import { useSaveClimb as useSaveClimbMutation, useUpdateClimb as useUpdateClimbMutation } from './use-save-climb';
-import type { LogbookEntry } from './logbook-keys';
+import { logbookClimbAngleKey, type LogbookEntry } from './logbook-keys';
 import type { SaveTickOptions } from './tick-helpers';
 import type { SaveClimbOptions, SaveClimbResponse, UpdateClimbResponse } from './climb-helpers';
 
@@ -26,6 +26,13 @@ export type BoardContextType = {
   error: string | null;
   isInitialized: boolean;
   logbook: LogbookEntry[];
+  /**
+   * The logbook grouped by `${climb_uuid}:${angle}` (see `logbookClimbAngleKey`).
+   * Built once per logbook change so per-row consumers (the climb-list
+   * ascent-status glyph) read their ticks in O(1) instead of scanning the whole
+   * logbook on every render — turning O(rows × logbook) per merge into O(rows).
+   */
+  logbookByClimbAngle: Map<string, LogbookEntry[]>;
   getLogbook: (climbUuids: string[]) => Promise<void>;
   saveTick: (options: SaveTickOptions) => Promise<void>;
   saveClimb: (options: SaveClimbOptions) => Promise<SaveClimbResponse>;
@@ -56,6 +63,24 @@ export function BoardProvider({ boardName, children }: { boardName: BoardName | 
   const getLogbook = useCallback(async (uuids: string[]): Promise<void> => {
     setClimbUuids(uuids);
   }, []);
+
+  // Group the logbook by climb+angle once whenever it changes. Each scrolled
+  // page of climbs merges fresh ticks into a new `logbook` array, so without
+  // this index every visible row re-runs a full `logbook.filter(...)` on every
+  // merge (O(rows × logbook)); the index makes each row an O(1) lookup.
+  const logbookByClimbAngle = useMemo<Map<string, LogbookEntry[]>>(() => {
+    const index = new Map<string, LogbookEntry[]>();
+    for (const entry of logbook) {
+      const key = logbookClimbAngleKey(entry.climb_uuid, entry.angle);
+      const bucket = index.get(key);
+      if (bucket) {
+        bucket.push(entry);
+      } else {
+        index.set(key, [entry]);
+      }
+    }
+    return index;
+  }, [logbook]);
 
   // Stable callback identity for saveTick/saveClimb/updateClimb. React Query
   // mutation objects produce a fresh `mutateAsync` reference on every render,
@@ -98,12 +123,24 @@ export function BoardProvider({ boardName, children }: { boardName: BoardName | 
       error: null,
       isInitialized,
       logbook,
+      logbookByClimbAngle,
       getLogbook,
       saveTick,
       saveClimb,
       updateClimb,
     }),
-    [boardName, isAuthenticated, isAuthLoading, isInitialized, logbook, getLogbook, saveTick, saveClimb, updateClimb],
+    [
+      boardName,
+      isAuthenticated,
+      isAuthLoading,
+      isInitialized,
+      logbook,
+      logbookByClimbAngle,
+      getLogbook,
+      saveTick,
+      saveClimb,
+      updateClimb,
+    ],
   );
 
   return <BoardContext.Provider value={value}>{children}</BoardContext.Provider>;
