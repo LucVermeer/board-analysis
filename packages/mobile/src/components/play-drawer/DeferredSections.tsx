@@ -19,7 +19,8 @@ type DeferredSectionsProps = {
   angle: number;
   enabled: boolean;
   onSimilarClimbPress: (climb: Climb) => void;
-  /** Reports the measured height of the Beta Videos section header (drives peek snap-point). */
+  /** Reports the measured height of the Beta Videos section header (drives the play
+   *  drawer's first-screen reserve so the header teases at the bottom of the fold). */
   onBetaHeaderLayout?: (height: number) => void;
 };
 
@@ -62,11 +63,11 @@ export const DeferredSections = memo(function DeferredSections({
   }
 
   // Beta Videos section renders eagerly so its header height is laid out
-  // immediately — this is what drives the play drawer's peek snap-point.
-  // Without eager render the snap-point would only become known after
-  // InteractionManager fires, causing the drawer to visibly jump from full
-  // to peek on first open. BetaVideosSection's data fetch is React Query and
-  // cheap to schedule; only the JS-heavy sub-sections wait below.
+  // immediately — this is what drives the play drawer's first-screen reserve
+  // (the header teases at the bottom of the fold). Without eager render the
+  // reserve would only settle after InteractionManager fires, causing the board
+  // to visibly resize on first open. BetaVideosSection's data fetch is React
+  // Query and cheap to schedule; only the JS-heavy sub-sections wait below.
   return (
     <View style={styles.container}>
       <CollapsibleSection title={t('mobile.betaVideos.title')} keepExpanded onHeaderLayout={onBetaHeaderLayout}>
