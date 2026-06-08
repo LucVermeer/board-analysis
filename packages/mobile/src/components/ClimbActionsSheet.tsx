@@ -169,7 +169,9 @@ function ClimbActionsSheet({
       publishedAt: climb.published_at ?? null,
       isDraft: climb.is_draft ?? false,
     };
-    return (climb.is_draft ?? false) || computeCanUpdate(snapshot, boardName);
+    // `computeCanUpdate` already returns true for drafts, so no separate
+    // is_draft guard is needed — keep the draft rule in one place.
+    return computeCanUpdate(snapshot, boardName);
   }, [climb, currentUserId, boardName]);
 
   const snapPoints = useMemo(() => ['40%'], []);
