@@ -79,6 +79,10 @@ function ToastMaterial({ toast, onDismiss }: ToastProps) {
   // the surface (legible while floating over content) plus a leading icon and
   // brand-coloured label. Passing our own content node lets us own the icon and
   // text colour rather than inheriting Paper's inverse-surface text colour.
+  // `secondaryBackground as string`: on the Material path themed colours resolve
+  // from materialSurfaces (hex strings on every platform), never a PlatformColor
+  // opaque ref; blendOpaque also returns its background unchanged for non-hex
+  // input, so the cast is safe.
   const backgroundColor = blendOpaque(
     config.color,
     systemColors.secondaryBackground as string,
@@ -93,6 +97,10 @@ function ToastMaterial({ toast, onDismiss }: ToastProps) {
       wrapperStyle={wrapperStyle}
       style={{ backgroundColor }}
     >
+      {/* role + assertive live region sit on our content node, not the Snackbar
+          root (Paper owns that and sets its own polite region). The glass path
+          puts them on its container; here the content View is the equivalent
+          announced node, so TalkBack reads the message assertively either way. */}
       <View style={styles.materialContent} accessibilityRole="alert" accessibilityLiveRegion="assertive">
         <Icon name={config.icon} size={18} color={config.color} />
         <Text variant="subheadline" color={config.color} style={styles.message} numberOfLines={2}>

@@ -119,6 +119,18 @@ export type AndroidFallbackColors = typeof androidFallbackColors;
 export type MaterialSurfaces = typeof materialSurfaces;
 
 /**
+ * Normalise a `#RGB`/`#RRGGBB` hex string to a 6-digit hex (no `#`), or return
+ * `null` for any other format (already-`rgba()`, named colour, PlatformColor).
+ * Shared by `withAlpha` and `parseHex` so the expansion/validation rule can't
+ * drift between them.
+ */
+function expandHex(color: string): string | null {
+  const hex = color.replace('#', '');
+  const full = hex.length === 3 ? hex.replace(/(.)/g, '$1$1') : hex;
+  return full.length === 6 && !/[^0-9a-fA-F]/.test(full) ? full : null;
+}
+
+/**
  * Apply an alpha (0–1) to a colour. Handles `#RGB` and `#RRGGBB` hex by
  * emitting an `rgba()` string; any other format (already-`rgba()`, named
  * colour, PlatformColor) is returned unchanged so this never produces an
@@ -126,9 +138,8 @@ export type MaterialSurfaces = typeof materialSurfaces;
  * only works for 6-digit hex.
  */
 export function withAlpha(color: string, alpha: number): string {
-  const hex = color.replace('#', '');
-  const full = hex.length === 3 ? hex.replace(/(.)/g, '$1$1') : hex;
-  if (full.length !== 6 || /[^0-9a-fA-F]/.test(full)) {
+  const full = expandHex(color);
+  if (!full) {
     if (__DEV__) {
       // eslint-disable-next-line no-console
       console.warn(`[withAlpha] expected a hex colour, got "${color}" — returning it unchanged (alpha not applied)`);
@@ -142,9 +153,8 @@ export function withAlpha(color: string, alpha: number): string {
 }
 
 function parseHex(color: string): [number, number, number] | null {
-  const hex = color.replace('#', '');
-  const full = hex.length === 3 ? hex.replace(/(.)/g, '$1$1') : hex;
-  if (full.length !== 6 || /[^0-9a-fA-F]/.test(full)) return null;
+  const full = expandHex(color);
+  if (!full) return null;
   return [parseInt(full.slice(0, 2), 16), parseInt(full.slice(2, 4), 16), parseInt(full.slice(4, 6), 16)];
 }
 
@@ -165,7 +175,7 @@ export function blendOpaque(foreground: string, background: string, alpha: numbe
   const fg = parseHex(foreground);
   const bg = parseHex(background);
   if (!fg || !bg) {
-    if (__DEV__ && (!fg || !bg)) {
+    if (__DEV__) {
       // eslint-disable-next-line no-console
       console.warn(
         `[blendOpaque] expected hex colours, got foreground "${foreground}" / background "${background}" — returning background unchanged`,
