@@ -109,6 +109,7 @@ vi.mock('../../../../src/components/ActivityIndicator', () => ({
 }));
 vi.mock('../../../../src/components/playlist', () => ({
   PlaylistListRow: ({ name }: { name: string }) => createElement('div', { 'data-playlist-row': name }),
+  PlaylistListRowSeparator: () => createElement('div', { 'data-playlist-separator': 'true' }),
 }));
 
 import AllPlaylistsScreen from '../all';
