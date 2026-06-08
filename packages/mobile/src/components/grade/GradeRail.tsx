@@ -20,6 +20,7 @@ import { Text } from '../Text';
 import { GlassSurface } from '../GlassSurface';
 import { PressableSurface } from '../PressableSurface';
 import { useTheme } from '../../providers/theme-provider';
+import { useEffectiveSurfaceMode } from '../../hooks/use-effective-surface-mode';
 import { useGradeFormat } from '../../hooks/use-grade-format';
 import { gradeRailCenter } from '../../lib/grade-seed';
 import { hapticSelection } from '../../lib/haptics';
@@ -37,15 +38,28 @@ type RailFrameProps = {
 
 function RailFrame({ children, style }: RailFrameProps) {
   const { systemColors } = useTheme();
+  const surfaceMode = useEffectiveSurfaceMode();
+  // On the material/solid paths the background must NOT carry elevation: GlassSurface
+  // gives its material surface `shadows.sm` (elevation 2), and on Android elevation
+  // drives z-order, so an absoluteFill background view would paint ON TOP of the
+  // elevation-less grade chips and hide them. A flat coloured fill renders the chips.
+  const flatFill = surfaceMode === 'material' || surfaceMode === 'solid';
   return (
     <View collapsable={false} style={[styles.frame, style]}>
-      <GlassSurface
-        glassEffectStyle="regular"
-        fallbackColor={systemColors.secondaryBackground}
-        borderRadius={24}
-        style={StyleSheet.absoluteFill}
-        pointerEvents="none"
-      />
+      {flatFill ? (
+        <View
+          pointerEvents="none"
+          style={[StyleSheet.absoluteFill, { backgroundColor: systemColors.secondaryBackground, borderRadius: 24 }]}
+        />
+      ) : (
+        <GlassSurface
+          glassEffectStyle="regular"
+          fallbackColor={systemColors.secondaryBackground}
+          borderRadius={24}
+          style={StyleSheet.absoluteFill}
+          pointerEvents="none"
+        />
+      )}
       {children}
     </View>
   );

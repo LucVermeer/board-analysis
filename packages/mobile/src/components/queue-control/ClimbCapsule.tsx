@@ -19,6 +19,7 @@ import { useTheme } from '../../providers/theme-provider';
 import { useDrawerHost, type BoardConfig } from '../../providers/drawer-host-provider';
 import { AccessoryBarSurface, type AccessoryBarSurfaceTreatment } from './AccessoryBarSurface';
 import { AccessoryClimbThumbnail } from './AccessoryClimbThumbnail';
+import { deriveQueueBarBackground, QUEUE_BAR_TEXT_COLOR } from './queue-bar-colors';
 import { useQueueCarousel } from './use-queue-carousel';
 
 type ClimbLabelProps = {
@@ -76,7 +77,7 @@ export function ClimbCapsule({
   endActionSize = 0,
   surfaceTreatment = 'floating',
 }: ClimbCapsuleProps) {
-  const { systemColors } = useTheme();
+  const { systemColors, variant } = useTheme();
   const { boardConfig } = useDrawerHost();
   const { formatGrade } = useGradeFormat();
   const {
@@ -119,11 +120,19 @@ export function ClimbCapsule({
   const endActionReservedWidth = endAction ? endActionSize + 8 : 0;
   const labelRight = 16 + endActionReservedWidth;
 
+  // The Material docked bar fills with the current climb's (legibility-clamped) grade
+  // colour and carries white name + grade text — distinct from the neutral tab bar.
+  const coloredBar = variant === 'material' && surfaceTreatment === 'docked';
+  const barBackground = coloredBar ? deriveQueueBarBackground(grades.currentColor) : undefined;
+  const labelColor = coloredBar ? QUEUE_BAR_TEXT_COLOR : systemColors.label;
+  const gradeTextColor = (climbGradeColor: string) => (coloredBar ? QUEUE_BAR_TEXT_COLOR : climbGradeColor);
+
   return (
     <AccessoryBarSurface
       height={height}
       borderRadius={capsuleRadius}
       treatment={surfaceTreatment}
+      fillColor={barBackground}
       style={[styles.capsule, fillWidth ? null : styles.capsuleCap]}
     >
       <GestureDetector gesture={composedGesture}>
@@ -141,9 +150,9 @@ export function ClimbCapsule({
           <Animated.View style={[styles.labelSlot, { right: labelRight }, currentLabelStyle]}>
             <ClimbLabel
               climb={currentClimb}
-              labelColor={systemColors.label}
+              labelColor={labelColor}
               formattedGrade={grades.current}
-              gradeColor={grades.currentColor}
+              gradeColor={gradeTextColor(grades.currentColor)}
               showThumbnail={showThumbnail}
               boardConfig={boardConfig}
             />
@@ -152,9 +161,9 @@ export function ClimbCapsule({
             <Animated.View style={[styles.peekSlot, { right: labelRight }, nextPeekStyle]} pointerEvents="none">
               <ClimbLabel
                 climb={nextClimb}
-                labelColor={systemColors.label}
+                labelColor={labelColor}
                 formattedGrade={grades.next}
-                gradeColor={grades.nextColor}
+                gradeColor={gradeTextColor(grades.nextColor)}
                 showThumbnail={showThumbnail}
                 boardConfig={boardConfig}
               />
@@ -164,9 +173,9 @@ export function ClimbCapsule({
             <Animated.View style={[styles.peekSlot, { right: labelRight }, prevPeekStyle]} pointerEvents="none">
               <ClimbLabel
                 climb={previousClimb}
-                labelColor={systemColors.label}
+                labelColor={labelColor}
                 formattedGrade={grades.previous}
-                gradeColor={grades.previousColor}
+                gradeColor={gradeTextColor(grades.previousColor)}
                 showThumbnail={showThumbnail}
                 boardConfig={boardConfig}
               />

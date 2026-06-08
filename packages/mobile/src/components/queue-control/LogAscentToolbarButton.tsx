@@ -11,6 +11,8 @@ type LogAscentToolbarButtonProps = {
   climb: Climb;
   size?: number;
   iconSize?: number;
+  /** Override the checkmark colour (e.g. white on the grade-coloured Material bar). */
+  color?: string;
 };
 
 /**
@@ -22,6 +24,7 @@ export function LogAscentToolbarButton({
   climb,
   size = glassSize.standard,
   iconSize = 26,
+  color,
 }: LogAscentToolbarButtonProps) {
   const { accessibilityLabel, disabled, handleLogAscentPress, iconColor, popStyle } = useLogAscentAction(climb);
 
@@ -37,7 +40,7 @@ export function LogAscentToolbarButton({
         accessibilityState={{ disabled }}
         style={[styles.action, { width: size, height: size }, disabled ? styles.disabled : null]}
       >
-        <Icon name="check.small" size={iconSize} color={iconColor} />
+        <Icon name="check.small" size={iconSize} color={color ?? iconColor} />
       </PressableSurface>
     </Animated.View>
   );

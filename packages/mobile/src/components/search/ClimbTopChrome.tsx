@@ -191,33 +191,38 @@ export function ClimbTopChrome({
                   height={MATERIAL_SEARCH_HEIGHT}
                 />
               </View>
+              <View pointerEvents="box-none" style={styles.materialGradeSlot}>
+                <Chip
+                  compact
+                  mode={hasGradeFilter ? 'flat' : 'outlined'}
+                  selected={hasGradeFilter}
+                  showSelectedCheck={false}
+                  selectedColor={systemColors.label as string}
+                  onPress={() => {
+                    if (gradeRailVisible) {
+                      onCloseGrade();
+                      return;
+                    }
+                    onOpenGrade?.();
+                  }}
+                  onClose={hasGradeFilter ? gradeChip?.onClear : undefined}
+                  closeIcon={iconMap.close.android}
+                  accessibilityLabel={t('mobile.search.gradeAction')}
+                  style={[
+                    styles.materialChip,
+                    styles.materialGradeChip,
+                    hasGradeFilter ? { backgroundColor: systemColors.fill } : undefined,
+                  ]}
+                  textStyle={styles.materialChipText}
+                >
+                  {visibleGradeLabel}
+                </Chip>
+              </View>
               {onOpenFilters ? <FilterButton activeFilterCount={nonGradeFilterCount} onPress={onOpenFilters} /> : null}
             </View>
 
-            <View pointerEvents="box-none" style={styles.materialQuickRow}>
-              <Chip
-                compact
-                mode={hasGradeFilter ? 'flat' : 'outlined'}
-                selected={hasGradeFilter}
-                showSelectedCheck={false}
-                selectedColor={systemColors.label as string}
-                icon={iconMap.angle.android}
-                onPress={() => {
-                  if (gradeRailVisible) {
-                    onCloseGrade();
-                    return;
-                  }
-                  onOpenGrade?.();
-                }}
-                onClose={hasGradeFilter ? gradeChip?.onClear : undefined}
-                closeIcon={iconMap.close.android}
-                accessibilityLabel={t('mobile.search.gradeAction')}
-                style={[styles.materialChip, hasGradeFilter ? { backgroundColor: systemColors.fill } : undefined]}
-                textStyle={styles.materialChipText}
-              >
-                {visibleGradeLabel}
-              </Chip>
-              {visibleFilterSummary ? (
+            {visibleFilterSummary ? (
+              <View pointerEvents="box-none" style={styles.materialQuickRow}>
                 <Chip
                   compact
                   mode="flat"
@@ -231,8 +236,8 @@ export function ClimbTopChrome({
                 >
                   {visibleFilterSummary.text}
                 </Chip>
-              ) : null}
-            </View>
+              </View>
+            ) : null}
 
             {gradeRailVisible && gradeBound && onGradeChange ? (
               <GradeRangeRail
@@ -411,6 +416,12 @@ const styles = StyleSheet.create({
     gap: spacing[2],
   },
   materialSearchSlot: {
+    // ~75% of the flexible width (the filter button sits outside the flex split).
+    flex: 3,
+    minWidth: 0,
+  },
+  materialGradeSlot: {
+    // ~25% beside the search field; the grade chip stretches to fill it.
     flex: 1,
     minWidth: 0,
   },
@@ -423,6 +434,9 @@ const styles = StyleSheet.create({
   },
   materialChip: {
     minHeight: 32,
+  },
+  materialGradeChip: {
+    alignSelf: 'stretch',
   },
   materialChipText: {
     fontWeight: '600',
