@@ -10,6 +10,8 @@ import {
   type GeneratorOptions,
   type WorkoutType,
 } from '@boardsesh/playlist-generator';
+import { SHARED_EVENTS } from '@boardsesh/analytics';
+import { track } from '../../../lib/analytics';
 import { Text } from '../../Text';
 import { useTheme } from '../../../providers/theme-provider';
 import { useGradeFormat } from '../../../hooks/use-grade-format';
@@ -83,6 +85,11 @@ export function GeneratorPickerCard({ boardName, selection, onChange }: Generato
     if (value === 'off') {
       onChange({ type: 'off' });
       return;
+    }
+    // Enabling the generator (off → a workout type) reveals the configurator —
+    // the mobile analogue of web's `Workout Generator Opened`.
+    if (selection.type === 'off') {
+      track(SHARED_EVENTS.WorkoutGeneratorOpened, { boardName, workoutType: value });
     }
     const currentTarget = selection.type === 'on' ? selection.options.targetGrade : getDefaultTargetGrade(boardName);
     onChange({ type: 'on', options: buildDefaultOptions(value, currentTarget) });

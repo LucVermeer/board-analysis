@@ -35,6 +35,19 @@ export const SHARED_EVENTS = {
   CreatePlaylist: 'Create Playlist',
   AddToPlaylist: 'Add to Playlist',
   RemoveFromPlaylist: 'Remove from Playlist',
+  // Create climb
+  ClimbCreated: 'Climb Created',
+  ClimbUpdated: 'Climb Updated',
+  ClimbCreateFailed: 'Climb Create Failed',
+  // Workout / session-queue generator
+  WorkoutGeneratorOpened: 'Workout Generator Opened',
+  WorkoutGenerated: 'Workout Generated',
+  SessionQueueGenerated: 'Session Queue Generated',
+  // Deep-link session join
+  SessionJoined: 'Session Joined',
+  // Logbook
+  LogbookRowClicked: 'Logbook Row Clicked',
+  LogbookThumbnailClicked: 'Logbook Thumbnail Clicked',
   // Ticks / logbook
   TickButtonClicked: 'Tick Button Clicked',
   QuickTickSaved: 'Quick Tick Saved',
@@ -51,6 +64,7 @@ export const SHARED_EVENTS = {
   // Beta videos
   BetaVideoLinkClicked: 'Beta Video Link Clicked',
   BetaVideoClimbClicked: 'Beta Video Climb Clicked',
+  BetaVideoAdded: 'Beta Video Added',
 } as const;
 
 export type SharedEventKey = keyof typeof SHARED_EVENTS;

@@ -14,6 +14,8 @@ import {
 } from '@boardsesh/create-climb-react';
 import { useBoardProvider, isDuplicateClimbError } from '@boardsesh/board-react';
 import { GraphQLOperationError } from '@boardsesh/graphql-client';
+import { SHARED_EVENTS } from '@boardsesh/analytics';
+import { track } from '../../lib/analytics';
 import { useAuth } from '../../providers/auth-provider';
 import { useProfile, useClimb } from '../../lib/graphql/hooks';
 import { useQueue } from '../../providers/queue-provider';
@@ -376,6 +378,8 @@ export function useCreateClimbScreen({
     const frames = generateFramesString();
     // Encode the no-match marker into the description only at save time.
     const fullDescription = withNoMatch(description, noMatch);
+    // Mirror web's `holdCount` property (create-climb-form.tsx).
+    const holdCount = Object.keys(litUpHoldsMap).length;
     try {
       if (canUpdate && savedClimb) {
         const result = await updateClimb({
@@ -394,6 +398,13 @@ export function useCreateClimbScreen({
           publishedAt: result.publishedAt ?? savedClimb.publishedAt,
           isDraft: result.isDraft,
         });
+        track(SHARED_EVENTS.ClimbUpdated, {
+          boardName: board.boardName,
+          layoutId: board.layoutId,
+          climbUuid: result.uuid,
+          isDraft: result.isDraft,
+          holdCount,
+        });
         syncSavedToQueue(result.uuid, frames);
       } else {
         const result = await saveClimb({
@@ -411,6 +422,13 @@ export function useCreateClimbScreen({
           publishedAt: result.publishedAt ?? null,
           isDraft,
         });
+        track(SHARED_EVENTS.ClimbCreated, {
+          boardName: board.boardName,
+          layoutId: board.layoutId,
+          climbUuid: result.uuid,
+          isDraft,
+          holdCount,
+        });
         syncSavedToQueue(result.uuid, frames);
       }
       await clearDraft(draftKey);
@@ -426,6 +444,11 @@ export function useCreateClimbScreen({
       if (justSavedTimerRef.current) clearTimeout(justSavedTimerRef.current);
       justSavedTimerRef.current = setTimeout(() => setJustSaved(false), JUST_SAVED_MS);
     } catch (err) {
+      track(SHARED_EVENTS.ClimbCreateFailed, {
+        boardName: board.boardName,
+        layoutId: board.layoutId,
+        error_reason: isDuplicateClimbError(err) ? 'duplicate' : 'exception',
+      });
       if (isDuplicateClimbError(err)) {
         setPublishDuplicateError(readDuplicateExtensions(err));
       } else {
@@ -442,6 +465,7 @@ export function useCreateClimbScreen({
     name,
     canUpdate,
     savedClimb,
+    litUpHoldsMap,
     generateFramesString,
     updateClimb,
     saveClimb,
