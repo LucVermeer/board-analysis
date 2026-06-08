@@ -2,7 +2,6 @@ import { Pressable, Switch as RNSwitch, View, StyleSheet } from 'react-native';
 import { Switch as PaperSwitch } from 'react-native-paper';
 import { Text } from './Text';
 import { hapticSelection } from '../lib/haptics';
-import { brandColors } from '../theme/colors';
 import { iosSystemColors } from '../theme/ios-colors';
 import { spacing } from '../theme/tokens';
 import { useTheme } from '../providers/theme-provider';
@@ -16,7 +15,7 @@ type SwitchRowProps = {
 };
 
 export function SwitchRow({ label, description, value, onValueChange, disabled = false }: SwitchRowProps) {
-  const { variant: uiVariant } = useTheme();
+  const { variant: uiVariant, brandColors } = useTheme();
 
   const handleToggle = (next: boolean) => {
     if (disabled) return;
@@ -58,7 +57,11 @@ export function SwitchRow({ label, description, value, onValueChange, disabled =
           value={value}
           onValueChange={handleToggle}
           disabled={disabled}
-          trackColor={{ false: undefined, true: brandColors.primary }}
+          // Filled track behind a white thumb — use the scheme-aware brand FILL so
+          // dark mode gets the brighter #7C3AED (white thumb 5.70:1). The lighter
+          // track also reduces the contrast of iOS's native track-edge highlight,
+          // which is what reads as a "white rim" on a dark, saturated switch.
+          trackColor={{ false: undefined, true: brandColors.primaryFill }}
           ios_backgroundColor={iosSystemColors.systemGray4 as string}
         />
       )}
