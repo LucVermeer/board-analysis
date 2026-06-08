@@ -45,6 +45,22 @@
         "title": "Bloques favoritos",
         "description": "Todos los bloques que has marcado con corazón."
       },
+      "crowdFavorites": {
+        "title": "Favoritos de todos",
+        "description": "Los clásicos más encadenados para tu panel que aún no has hecho."
+      },
+      "hiddenGems": {
+        "title": "Joyas ocultas",
+        "description": "Bloques muy valorados para tu panel que aún no han explotado."
+      },
+      "atYourLevel": {
+        "title": "A tu nivel",
+        "description": "Bloques cerca de tu grado, ajustados a tu panel."
+      },
+      "fresh": {
+        "title": "Novedades",
+        "description": "Bloques nuevos para tu panel, de aperturistas que vale la pena seguir."
+      },
       "notFound": {
         "title": "Playlist inteligente no encontrada",
         "description": "Esta playlist inteligente no existe."

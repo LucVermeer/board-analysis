@@ -45,6 +45,22 @@
         "title": "Liked Climbs",
         "description": "All climbs you've hearted."
       },
+      "crowdFavorites": {
+        "title": "Crowd Favorites",
+        "description": "The most-sent classics for your board you haven't done yet."
+      },
+      "hiddenGems": {
+        "title": "Hidden Gems",
+        "description": "Highly rated climbs for your board that haven't blown up yet."
+      },
+      "atYourLevel": {
+        "title": "At Your Level",
+        "description": "Climbs around your grade, dialed in to your board."
+      },
+      "fresh": {
+        "title": "Fresh",
+        "description": "New climbs for your board from setters worth following."
+      },
       "notFound": {
         "title": "Smart playlist not found",
         "description": "This smart playlist doesn't exist."

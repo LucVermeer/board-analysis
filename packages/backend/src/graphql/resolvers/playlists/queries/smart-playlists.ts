@@ -1,17 +1,28 @@
 import { eq, and, desc, sql, inArray, max, type SQL } from 'drizzle-orm';
 import { type ConnectionContext, type Climb } from '@boardsesh/shared-schema';
+import { isRecommendationType, RECOMMENDATION_TYPES, type RecommendationType } from '@boardsesh/db/queries';
 import { db } from '../../../../db/client';
 import * as dbSchema from '@boardsesh/db/schema';
 import { applyRateLimit, requireAuthenticated, validateInput } from '../../shared/helpers';
 import { GetSmartPlaylistInputSchema } from '../../../../validation/schemas';
 import { hydrateClimbsByRefs, type ClimbRef } from '../helpers/hydrate-climbs';
+import { resolveRecommendationBoardTarget } from '../helpers/recommendation-board-target';
+import { selectRecommendationClimbRefs, countRecommendationClimbRefs } from '../helpers/recommendation-refs';
 
-type SmartPlaylistType = 'FIVE_STARS' | 'MOST_REPEATED' | 'PROJECTS' | 'LIKED_CLIMBS';
+// Logbook-derived smart playlists (computed from the user's own ticks).
+type LogbookPlaylistType = 'FIVE_STARS' | 'MOST_REPEATED' | 'PROJECTS' | 'LIKED_CLIMBS';
+// Catalog-derived recommendations (computed for the user's board) share the
+// same query envelope but a different candidate source.
+type SmartPlaylistType = LogbookPlaylistType | RecommendationType;
 
 type SmartPlaylistInput = {
   type: SmartPlaylistType;
   userId: string;
   boardName?: string;
+  /** Browsing-context overrides for recommendation types (a board the user is
+   * viewing); ignored by logbook playlists. */
+  sizeId?: number;
+  angle?: number;
   page?: number;
   pageSize?: number;
 };
@@ -62,7 +73,7 @@ function notSentExists(userId: string): SQL {
  * pushed into the database — we never materialize the full list in memory.
  */
 async function selectSmartClimbRefs(
-  type: SmartPlaylistType,
+  type: LogbookPlaylistType,
   userId: string,
   boardName: string | undefined,
   page: number,
@@ -148,7 +159,7 @@ async function selectSmartClimbRefs(
  * the same conditions as selectSmartClimbRefs so that paging is consistent.
  */
 async function countSmartClimbRefs(
-  type: SmartPlaylistType,
+  type: LogbookPlaylistType,
   userId: string,
   boardName: string | undefined,
 ): Promise<number> {
@@ -250,24 +261,51 @@ export const smartPlaylist = async (
     throw new Error('User not found');
   }
 
+  const meta = {
+    type: input.type,
+    userId: user.id,
+    userName: user.displayName || user.name || 'Climber',
+    userAvatar: user.avatarUrl || user.image || null,
+    climbCount: 0,
+  };
+
+  // Catalog-derived recommendations: resolve the user's board, then rank the
+  // catalog. Hydrate at the board's angle (not the most-ascended angle).
+  if (isRecommendationType(input.type)) {
+    const target = await resolveRecommendationBoardTarget(input.userId, {
+      sizeId: input.sizeId,
+      angle: input.angle,
+    });
+    if (!target) {
+      return { meta, climbs: [], totalCount: 0, hasMore: false };
+    }
+    const [pageRefs, totalCount] = await Promise.all([
+      selectRecommendationClimbRefs(input.type, target, input.userId, page, pageSize),
+      countRecommendationClimbRefs(input.type, target, input.userId),
+    ]);
+    const angleOverrides = new Map<string, number>(
+      pageRefs.map((ref) => [`${ref.boardType}:${ref.climbUuid}`, target.angle]),
+    );
+    const climbs = await hydrateClimbsByRefs(pageRefs, { angleOverrides });
+    return {
+      meta: { ...meta, climbCount: totalCount },
+      climbs,
+      totalCount,
+      hasMore: (page + 1) * pageSize < totalCount,
+    };
+  }
+
   const [pageRefs, totalCount] = await Promise.all([
     selectSmartClimbRefs(input.type, input.userId, input.boardName, page, pageSize),
     countSmartClimbRefs(input.type, input.userId, input.boardName),
   ]);
-  const hasMore = (page + 1) * pageSize < totalCount;
   const climbs = await hydrateClimbsByRefs(pageRefs);
 
   return {
-    meta: {
-      type: input.type,
-      userId: user.id,
-      userName: user.displayName || user.name || 'Climber',
-      userAvatar: user.avatarUrl || user.image || null,
-      climbCount: totalCount,
-    },
+    meta: { ...meta, climbCount: totalCount },
     climbs,
     totalCount,
-    hasMore,
+    hasMore: (page + 1) * pageSize < totalCount,
   };
 };
 
@@ -351,10 +389,25 @@ export const mySmartPlaylistCounts = async (
     byType.set(row.type, Number(row.count ?? 0));
   }
 
-  return [
+  const counts: Array<{ type: SmartPlaylistType; count: number }> = [
     { type: 'FIVE_STARS', count: byType.get('FIVE_STARS') ?? 0 },
     { type: 'MOST_REPEATED', count: byType.get('MOST_REPEATED') ?? 0 },
     { type: 'PROJECTS', count: byType.get('PROJECTS') ?? 0 },
     { type: 'LIKED_CLIMBS', count: byType.get('LIKED_CLIMBS') ?? 0 },
   ];
+
+  // Recommendation cards: scoped to the user's resolved board. Counted in
+  // parallel; all zero (cards hidden) when no board can be determined.
+  const target = await resolveRecommendationBoardTarget(userId);
+  if (target) {
+    const recCounts = await Promise.all(
+      RECOMMENDATION_TYPES.map(async (type) => ({
+        type,
+        count: await countRecommendationClimbRefs(type, target, userId),
+      })),
+    );
+    counts.push(...recCounts);
+  }
+
+  return counts;
 };

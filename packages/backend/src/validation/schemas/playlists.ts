@@ -114,12 +114,23 @@ export const SearchPlaylistsInputSchema = z.object({
   offset: z.number().int().min(0).optional().default(0),
 });
 
-export const SmartPlaylistTypeSchema = z.enum(['FIVE_STARS', 'MOST_REPEATED', 'PROJECTS', 'LIKED_CLIMBS']);
+export const SmartPlaylistTypeSchema = z.enum([
+  'FIVE_STARS',
+  'MOST_REPEATED',
+  'PROJECTS',
+  'LIKED_CLIMBS',
+  'RECOMMENDED_CROWD_FAVORITES',
+  'RECOMMENDED_HIDDEN_GEMS',
+  'RECOMMENDED_AT_LEVEL',
+  'RECOMMENDED_FRESH',
+]);
 
 export const GetSmartPlaylistInputSchema = z.object({
   type: SmartPlaylistTypeSchema,
   userId: z.string().min(1),
   boardName: BoardNameSchema.optional(),
+  sizeId: z.number().int().positive().optional(),
+  angle: z.number().int().min(0).max(70).optional(),
   page: z.number().int().min(0).optional(),
   pageSize: z.number().int().min(1).max(100).optional(),
 });
