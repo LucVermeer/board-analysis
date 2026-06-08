@@ -11,11 +11,12 @@ import type { QueueItemRowBoard } from '../QueueItemRow';
 // identical-props re-render must NOT bump this counter.
 const renderCounter = vi.hoisted(() => ({ count: 0 }));
 
-// Capture the latest `onPress` handed to the row's main pressable and trailing
-// tick button, so a test can assert they keep their identity across re-renders.
+// Capture the latest `onPress` handed to the row's main pressable, trailing
+// tick button, and delete button so a test can assert identity across re-renders.
 const captured = vi.hoisted(() => ({
   rowPress: null as null | (() => void),
   tickPress: null as null | (() => void),
+  deletePress: null as null | (() => void),
 }));
 
 vi.mock('react-native', () => {
@@ -27,10 +28,11 @@ vi.mock('react-native', () => {
     Platform: { OS: 'ios' },
     PlatformColor: (name: string) => name,
     View: passthrough('div'),
-    // History rows render exactly one Pressable (the tick button), so capturing
-    // its onPress here gives us `handleTickPress`.
-    Pressable: ({ children, onPress }: { children?: ReactNode; onPress?: () => void }) => {
-      if (onPress) captured.tickPress = onPress;
+    // Capture by testID so any future Pressable addition doesn't silently
+    // overwrite the wrong slot.
+    Pressable: ({ children, onPress, testID }: { children?: ReactNode; onPress?: () => void; testID?: string }) => {
+      if (testID === 'tick-button' && onPress) captured.tickPress = onPress;
+      if (testID === 'delete-button' && onPress) captured.deletePress = onPress;
       return createElement('button', null, children);
     },
     StyleSheet: {
@@ -146,6 +148,7 @@ describe('QueueItemRow React.memo', () => {
     renderCounter.count = 0;
     captured.rowPress = null;
     captured.tickPress = null;
+    captured.deletePress = null;
     vi.clearAllMocks();
   });
 
@@ -235,5 +238,29 @@ describe('QueueItemRow React.memo', () => {
 
     expect(captured.rowPress).toBe(rowPress);
     expect(captured.tickPress).toBe(tickPress);
+  });
+
+  it('keeps handleDeletePress stable when item identity changes but its data is equal', () => {
+    const rowProps = {
+      position: 1,
+      board,
+      isCurrentClimb: false,
+      onPress,
+      onRemove,
+      onToggleSelect,
+    };
+
+    const first = makeItem('a', 'Crimp Master');
+    const { rerender } = render(<QueueItemRow item={first} {...rowProps} />);
+
+    const deletePress = captured.deletePress;
+    expect(deletePress).toBeTypeOf('function');
+
+    // A fresh item object with the same uuid — same case as the tick-press test.
+    const second = makeItem('a', 'Crimp Master');
+    expect(second).not.toBe(first);
+    rerender(<QueueItemRow item={second} {...rowProps} />);
+
+    expect(captured.deletePress).toBe(deletePress);
   });
 });

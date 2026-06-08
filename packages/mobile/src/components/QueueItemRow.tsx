@@ -1,4 +1,4 @@
-import { memo, useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import { memo, useMemo, useCallback, useEffect, useRef } from 'react';
 import { Pressable, View, StyleSheet, type LayoutChangeEvent } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring, withTiming, runOnJS } from 'react-native-reanimated';
 import {
@@ -120,7 +120,6 @@ function QueueItemRowComponent({
   const rowOpacity = useSharedValue(1);
   const rowHeight = useSharedValue<number | undefined>(undefined);
   const isSwipeOpen = useSharedValue(false);
-  const [isOpen, setIsOpen] = useState(false);
 
   // The queue reducer rebuilds the array (and each item object) on every update,
   // so `item` arrives with a fresh reference even when this row's data hasn't
@@ -138,7 +137,6 @@ function QueueItemRowComponent({
     if (!swipeEnabled) {
       translateX.value = withSpring(0, { damping: 20, stiffness: 200 });
       isSwipeOpen.value = false;
-      runOnJS(setIsOpen)(false);
     }
   }, [swipeEnabled, translateX, isSwipeOpen]);
 
@@ -163,18 +161,14 @@ function QueueItemRowComponent({
         })
         .onEnd(() => {
           if (translateX.value < SWIPE_DELETE_THRESHOLD) {
-            // Snap open to show delete button
             translateX.value = withSpring(-DELETE_BUTTON_WIDTH, {
               damping: 20,
               stiffness: 200,
             });
             isSwipeOpen.value = true;
-            runOnJS(setIsOpen)(true);
           } else {
-            // Snap back
             translateX.value = withSpring(0, { damping: 20, stiffness: 200 });
             isSwipeOpen.value = false;
-            runOnJS(setIsOpen)(false);
           }
         }),
     [swipeEnabled, translateX, isSwipeOpen],
@@ -241,16 +235,16 @@ function QueueItemRowComponent({
       onToggleSelect?.(itemRef.current.uuid);
       return;
     }
-    if (isOpen) {
-      // Close the swipe first
+    if (isSwipeOpen.value) {
+      // Close the swipe first; read the shared value so this callback's
+      // identity doesn't churn on every swipe open/close.
       translateX.value = withSpring(0, { damping: 20, stiffness: 200 });
       isSwipeOpen.value = false;
-      setIsOpen(false);
       return;
     }
     hapticSelection();
     onPress(itemRef.current);
-  }, [isEditMode, isOpen, onToggleSelect, onPress, translateX, isSwipeOpen]);
+  }, [isEditMode, onToggleSelect, onPress, translateX, isSwipeOpen]);
 
   const handleDeletePress = useCallback(() => {
     // Animate the row out
@@ -318,6 +312,7 @@ function QueueItemRowComponent({
       {/* Trailing action: tick (history) or drag handle (upcoming) */}
       {showTick ? (
         <Pressable
+          testID="tick-button"
           onPress={handleTickPress}
           hitSlop={8}
           accessibilityRole="button"
@@ -347,6 +342,7 @@ function QueueItemRowComponent({
         {swipeEnabled && (
           <Animated.View style={[styles.deleteAction, deleteButtonStyle]}>
             <Pressable
+              testID="delete-button"
               onPress={handleDeletePress}
               accessibilityRole="button"
               accessibilityLabel={t('mobile.queue.removeClimb')}
