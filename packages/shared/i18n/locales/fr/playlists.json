@@ -26,6 +26,8 @@
       "title": "Mes listes",
       "seeAll": "Tout voir",
       "searchPlaceholder": "Filtrer par titre",
+      "clearSearch": "Effacer la recherche",
+      "loadMoreError": "Impossible de charger toutes vos listes.",
       "noResults": "Aucune liste ne correspond à « {{query}} »"
     },
     "pin": {

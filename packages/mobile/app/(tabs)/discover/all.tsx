@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -13,6 +13,7 @@ import { useTheme } from '../../../src/providers/theme-provider';
 import { useAuthToken } from '../../../src/lib/graphql/use-auth-token';
 import { useActiveBoard } from '../../../src/lib/graphql/use-active-board';
 import { useBottomChromeMetrics } from '../../../src/hooks/use-bottom-chrome-metrics';
+import { useDrainAllPages } from '../../../src/hooks/use-drain-all-pages';
 import { sortAndFilterPlaylists } from '../../../src/lib/sort-filter-playlists';
 import { iosSystemColors } from '../../../src/theme/ios-colors';
 import { spacing } from '../../../src/theme/tokens';
@@ -37,18 +38,17 @@ export default function AllPlaylistsScreen() {
 
   // Scope to the active board (matching the Discover hub's board filter), so this
   // screen is the full version of the "Jump Back In" shelf it expands.
-  const { playlists, isLoading, isLoadingMore, hasMore, loadMore } = useUserPlaylists({
-    token: effectiveToken,
-    boardType: activeBoard?.boardType,
-    layoutId: activeBoard?.layoutId,
-    pageSize: 50,
-  });
+  const { playlists, isLoading, isLoadingMore, hasMore, hasError, hasLoadMoreError, loadMore, retryLoadMore, refetch } =
+    useUserPlaylists({
+      token: effectiveToken,
+      boardType: activeBoard?.boardType,
+      layoutId: activeBoard?.layoutId,
+      pageSize: 50,
+    });
 
   // Drain every page so the alphabetical sort + title filter see the whole
   // library, not just the first page.
-  useEffect(() => {
-    if (hasMore && !isLoadingMore && !isLoading) loadMore();
-  }, [hasMore, isLoadingMore, isLoading, loadMore]);
+  useDrainAllPages({ hasMore, isLoading, isLoadingMore, loadMore });
 
   const [query, setQuery] = useState('');
 
@@ -90,8 +90,35 @@ export default function AllPlaylistsScreen() {
     );
   }
 
+  // The first page failed and nothing is on screen — offer a retry rather than
+  // falling through to the "no playlists yet" empty state. A retry flips
+  // isLoading back on, so the spinner branch below takes over while it's inflight.
+  if (hasError && !isLoading && playlists.length === 0) {
+    return (
+      <View style={[styles.flex, styles.centered, { backgroundColor: systemColors.background }]}>
+        <Icon name="error" size={48} color={iosSystemColors.systemGray4} />
+        <Text variant="headline" style={styles.stateTitle}>
+          {t('library.errors.loadTitle')}
+        </Text>
+        <Text variant="subheadline" style={styles.stateSubtitle}>
+          {t('library.errors.loadDescription')}
+        </Text>
+        <Pressable
+          onPress={refetch}
+          accessibilityRole="button"
+          accessibilityLabel={t('library.errors.tryAgain')}
+          hitSlop={8}
+        >
+          <Text variant="subheadline" color={brandColors.primary} style={styles.stateCta}>
+            {t('library.errors.tryAgain')}
+          </Text>
+        </Pressable>
+      </View>
+    );
+  }
+
   const showInitialSpinner = isLoading && playlists.length === 0;
-  const showDrainingFooter = !showInitialSpinner && (isLoadingMore || hasMore);
+  const showDrainingFooter = isLoadingMore;
 
   return (
     <View style={[styles.flex, { backgroundColor: systemColors.background }]}>
@@ -107,7 +134,6 @@ export default function AllPlaylistsScreen() {
             autoCapitalize="none"
             autoCorrect={false}
             returnKeyType="search"
-            clearButtonMode="while-editing"
             accessibilityLabel={t('library.allPlaylists.searchPlaceholder')}
           />
           {query.length > 0 ? (
@@ -115,7 +141,7 @@ export default function AllPlaylistsScreen() {
               onPress={() => setQuery('')}
               hitSlop={8}
               accessibilityRole="button"
-              accessibilityLabel={t('library.allPlaylists.searchPlaceholder')}
+              accessibilityLabel={t('library.allPlaylists.clearSearch')}
             >
               <Icon name="close" size={16} color={systemColors.secondaryLabel} />
             </Pressable>
@@ -151,7 +177,21 @@ export default function AllPlaylistsScreen() {
             </View>
           }
           ListFooterComponent={
-            showDrainingFooter ? (
+            hasLoadMoreError ? (
+              <Pressable
+                style={styles.footer}
+                onPress={retryLoadMore}
+                accessibilityRole="button"
+                accessibilityLabel={`${t('library.allPlaylists.loadMoreError')} ${t('library.errors.tryAgain')}`}
+              >
+                <Text variant="footnote" color={systemColors.secondaryLabel} style={styles.footerError}>
+                  {t('library.allPlaylists.loadMoreError')}
+                </Text>
+                <Text variant="subheadline" color={brandColors.primary} style={styles.footerRetry}>
+                  {t('library.errors.tryAgain')}
+                </Text>
+              </Pressable>
+            ) : showDrainingFooter ? (
               <View style={styles.footer}>
                 <ActivityIndicator size="small" />
               </View>
@@ -162,6 +202,10 @@ export default function AllPlaylistsScreen() {
     </View>
   );
 }
+
+// Drops the empty / no-results block below the search bar toward the optical
+// centre (spacing[16] + spacing[4] = 80).
+const STATE_BLOCK_TOP_INSET = spacing[16] + spacing[4];
 
 const styles = StyleSheet.create({
   flex: {
@@ -190,12 +234,12 @@ const styles = StyleSheet.create({
     paddingVertical: 0,
   },
   emptyBlock: {
-    paddingTop: spacing[10] * 2,
-    paddingHorizontal: 32,
-    gap: 8,
+    paddingTop: STATE_BLOCK_TOP_INSET,
+    paddingHorizontal: spacing[8],
+    gap: spacing[2],
   },
   stateTitle: {
-    marginTop: 12,
+    marginTop: spacing[3],
     opacity: 0.6,
     textAlign: 'center',
   },
@@ -204,11 +248,18 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   stateCta: {
-    marginTop: 12,
+    marginTop: spacing[3],
     fontWeight: '600',
   },
   footer: {
     paddingVertical: spacing[4],
     alignItems: 'center',
+  },
+  footerError: {
+    textAlign: 'center',
+  },
+  footerRetry: {
+    marginTop: spacing[1],
+    fontWeight: '600',
   },
 });

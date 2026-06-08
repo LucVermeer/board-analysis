@@ -26,6 +26,8 @@
       "title": "Mis listas",
       "seeAll": "Ver todas",
       "searchPlaceholder": "Filtrar por título",
+      "clearSearch": "Borrar búsqueda",
+      "loadMoreError": "No se pudieron cargar todas tus listas.",
       "noResults": "Ninguna lista coincide con \"{{query}}\""
     },
     "pin": {
