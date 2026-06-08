@@ -202,8 +202,13 @@ vi.mock('../../../lib/board-details', () => ({
   }),
 }));
 
-vi.mock('../../board-renderer/BoardRenderer', () => ({
-  BoardRenderer: ({ frames, fillContainer, style }: { frames: string; fillContainer?: boolean; style?: unknown }) => {
+// The accessory thumbnail renders through BoardImageNative (the rasterized
+// native-PNG path) rather than the SVG BoardRenderer. The mock surfaces the
+// fitted box dimensions (width/height from `style`), the rounding/clipping it
+// applies, and the mirror flag so the aspect-fit + mirroring assertions hold
+// without a native renderer.
+vi.mock('../../BoardImageNative', () => ({
+  BoardImageNative: ({ frames, mirrored, style }: { frames: string; mirrored?: boolean; style?: unknown }) => {
     const readStyleValue = (styleKey: string): unknown => {
       const styles = Array.isArray(style) ? style : [style];
       for (const styleEntry of styles) {
@@ -224,7 +229,7 @@ vi.mock('../../board-renderer/BoardRenderer', () => ({
 
     return createElement('div', {
       'data-thumbnail': frames,
-      'data-fill-container': fillContainer ? 'true' : 'false',
+      'data-mirrored': mirrored ? 'true' : 'false',
       'data-board-width': width == null ? '' : String(width),
       'data-board-height': height == null ? '' : String(height),
       'data-board-border-radius': borderRadius == null ? '' : String(borderRadius),
@@ -303,7 +308,7 @@ describe('NativeAccessoryClimbRow', () => {
     expect(container.textContent).toContain("Alvin's Nuts");
     expect(container.textContent).toContain('V6');
     expect(container.querySelector('[data-thumbnail="p1r12"]')).not.toBeNull();
-    expect(container.querySelector('[data-fill-container="true"]')).not.toBeNull();
+    expect(container.querySelector('[data-thumbnail="p1r12"]')?.getAttribute('data-mirrored')).toBe('false');
     expect(container.querySelector('[data-tick-size="44"]')).not.toBeNull();
     expect(container.querySelector('[data-icon-size="24"]')).not.toBeNull();
     expect(container.querySelector('[data-height="48"]')).not.toBeNull();
