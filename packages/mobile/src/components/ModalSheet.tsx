@@ -16,6 +16,7 @@ import {
 } from '@gorhom/bottom-sheet';
 import { FullWindowOverlay } from 'react-native-screens';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { GlassSheetBackground } from './GlassSheetBackground';
 import { hapticMedium } from '../lib/haptics';
 import { sheetStyles, spacing } from '../theme/tokens';
 import { useTheme } from '../providers/theme-provider';
@@ -38,6 +39,14 @@ type ModalSheetProps = {
   scrollable?: boolean;
   contentContainerStyle?: StyleProp<ViewStyle>;
   footer?: ReactNode;
+  // How this modal behaves when presented over another open modal. `push`
+  // (default) stacks above it (so the Play Drawer stays beneath); `replace`
+  // dismisses the one below.
+  stackBehavior?: 'push' | 'replace' | 'switch';
+  // Frosted Liquid-Glass background (the same material the Play Drawer uses).
+  // Default. Opt out (`glass={false}`) for the flat opaque secondary-background
+  // surface.
+  glass?: boolean;
 };
 
 export const ModalSheet = forwardRef<BottomSheetModal, ModalSheetProps>(function ModalSheet(
@@ -51,6 +60,8 @@ export const ModalSheet = forwardRef<BottomSheetModal, ModalSheetProps>(function
     scrollable = false,
     contentContainerStyle,
     footer,
+    stackBehavior = 'push',
+    glass = true,
   },
   ref,
 ) {
@@ -107,8 +118,10 @@ export const ModalSheet = forwardRef<BottomSheetModal, ModalSheetProps>(function
       snapPoints={enableDynamicSizing ? undefined : snapPoints}
       enableDynamicSizing={enableDynamicSizing}
       enablePanDownToClose={enablePanDownToClose}
+      stackBehavior={stackBehavior}
       backdropComponent={renderBackdrop}
-      backgroundStyle={backgroundStyle}
+      backgroundComponent={glass ? GlassSheetBackground : undefined}
+      backgroundStyle={glass ? undefined : backgroundStyle}
       handleIndicatorStyle={sheet.handleStyle}
       containerComponent={modalContainerComponent}
       onChange={handleChange}

@@ -8,7 +8,6 @@ import {
   BottomSheetHandle,
   BottomSheetScrollView,
   type BottomSheetBackdropProps,
-  type BottomSheetBackgroundProps,
   type BottomSheetHandleProps,
 } from '@gorhom/bottom-sheet';
 import type { BoardName, Climb } from '@boardsesh/shared-schema';
@@ -28,10 +27,9 @@ import { DeferredSections } from './DeferredSections';
 import { AngleSelectorSheet } from './AngleSelectorSheet';
 import { ClimbActionsSheet } from '../ClimbActionsSheet';
 import { BleControlSheet } from '../ble/BleControlSheet';
-import { GlassSurface } from '../GlassSurface';
+import { GlassSheetBackground } from '../GlassSheetBackground';
 import { Icon } from '../Icon';
 import { useQueue } from '../../providers/queue-provider';
-import { useTheme } from '../../providers/theme-provider';
 import { useOptionalBluetoothContext } from '../../providers/bluetooth-provider';
 import { useToast } from '../../providers/toast-provider';
 import { useToggleFavorite } from '../../lib/graphql/hooks';
@@ -104,7 +102,6 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   ref,
 ) {
   const { t } = useTranslation('session');
-  const { systemColors } = useTheme();
   const insets = useSafeAreaInsets();
   const sheetRef = useRef<BottomSheetModal>(null);
   const [drawerPreviewItem, setDrawerPreviewItem] = useState<ClimbQueueItem | null>(null);
@@ -535,10 +532,6 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
     setActiveSubDrawer('actions');
   }, []);
 
-  const handleOpenQueue = useCallback(() => {
-    onOpenQueue();
-  }, [onOpenQueue]);
-
   const handleOpenAngleSelector = useCallback(() => {
     setActiveSubDrawer('angleSelector');
   }, []);
@@ -588,22 +581,6 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
       <BottomSheetBackdrop {...props} disappearsOnIndex={-1} appearsOnIndex={0} opacity={0.5} />
     ),
     [],
-  );
-
-  // Frosted-glass sheet background — the same Liquid-Glass language as the session
-  // screen, so the drawer reads as part of the same chrome as it rises. `style`
-  // from gorhom positions the fill; sheetStyles.background rounds
-  // the top, and overflow clips the blur fallback to those corners.
-  const renderBackground = useCallback(
-    ({ style, pointerEvents }: BottomSheetBackgroundProps) => (
-      <GlassSurface
-        glassEffectStyle="regular"
-        fallbackColor={systemColors.secondaryBackground}
-        style={[style, sheetStyles.background, styles.glassBackground]}
-        pointerEvents={pointerEvents}
-      />
-    ),
-    [systemColors.secondaryBackground],
   );
 
   // Custom handle component wraps gorhom's default in a View whose onLayout
@@ -672,7 +649,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
         enableContentPanningGesture={!subDrawerOpen}
         enableHandlePanningGesture={!subDrawerOpen}
         backdropComponent={renderBackdrop}
-        backgroundComponent={renderBackground}
+        backgroundComponent={GlassSheetBackground}
         handleComponent={HandleComponent}
         onDismiss={handleClose}
       >
@@ -759,7 +736,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
                   onLightbulb={handleLightbulb}
                   onLightbulbLongPress={handleLightbulbLongPress}
                   onOpenActions={handleOpenActions}
-                  onOpenQueue={handleOpenQueue}
+                  onOpenQueue={onOpenQueue}
                   onShare={handleShare}
                   onTickPress={handleTickFabPress}
                   onTickLongPress={handleTickFabLongPress}
@@ -785,28 +762,30 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
         </BottomSheetScrollView>
       </BottomSheetModal>
 
-      {/* Sub-drawer: Climb actions */}
-      {activeSubDrawer === 'actions' && (
-        <ClimbActionsSheet
-          visible={true}
-          climb={displayedClimb ?? null}
-          boardName={boardName}
-          layoutId={layoutId}
-          sizeId={sizeId}
-          setIds={setIds}
-          angle={angle}
-          onAddToQueue={() => {
-            if (displayedClimb) {
-              addToQueue({
-                uuid: randomUUID(),
-                climb: displayedClimb,
-              });
-            }
-          }}
-          onToggleFavorite={handleToggleFavorite}
-          onClose={handleCloseSubDrawer}
-        />
-      )}
+      {/* Sub-drawer: Climb actions. Always mounted and toggled via `visible`
+          (it presents as a BottomSheetModal with stackBehavior=push, the only
+          way to render above the play drawer's own modal — same as the angle
+          selector and tick sheet). A conditionally-mounted modal here would drop
+          its present() over the already-open play drawer and never appear. */}
+      <ClimbActionsSheet
+        visible={activeSubDrawer === 'actions'}
+        climb={displayedClimb ?? null}
+        boardName={boardName as BoardName}
+        layoutId={layoutId}
+        sizeId={sizeId}
+        setIds={setIds}
+        angle={angle}
+        onAddToQueue={() => {
+          if (displayedClimb) {
+            addToQueue({
+              uuid: randomUUID(),
+              climb: displayedClimb,
+            });
+          }
+        }}
+        onToggleFavorite={handleToggleFavorite}
+        onClose={handleCloseSubDrawer}
+      />
 
       {/* Sub-drawer: Angle selector. Always mounted and toggled via `visible`
           (it presents as a BottomSheetModal with stackBehavior=push, the only
@@ -861,9 +840,6 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
 const styles = StyleSheet.create({
   content: {
     flex: 1,
-  },
-  glassBackground: {
-    overflow: 'hidden',
   },
   closeButton: {
     position: 'absolute',

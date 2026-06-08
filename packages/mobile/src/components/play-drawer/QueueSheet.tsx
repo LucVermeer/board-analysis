@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next';
 import type { Climb, ClimbQueueItem, PlaylistSuggestionSource } from '@boardsesh/queue';
 import { QueueSheetHeader } from './QueueSheetHeader';
 import { QueueList } from './QueueList';
+import { GlassSheetBackground } from '../GlassSheetBackground';
 import { Text } from '../Text';
 import type { QueueItemRowBoard } from '../QueueItemRow';
 import { useQueue } from '../../providers/queue-provider';
@@ -14,7 +15,7 @@ import { useTheme } from '../../providers/theme-provider';
 import { hapticMedium, hapticWarning } from '../../lib/haptics';
 import { brandColors } from '../../theme/colors';
 import { iosSystemColors } from '../../theme/ios-colors';
-import { spacing, sheetStyles } from '../../theme/tokens';
+import { spacing } from '../../theme/tokens';
 
 // iOS renders the modal in a native window overlay so it sits above the
 // persistent queue bar (mirrors ModalSheet / LogAscentSheet); Android's modal
@@ -149,12 +150,6 @@ export function QueueSheet({
     [sheet.scrimOpacity],
   );
 
-  const backgroundStyle = {
-    ...sheetStyles.background,
-    ...sheet.corners,
-    backgroundColor: systemColors.secondaryBackground,
-  };
-
   const viewOnlyMode = queue.length === 0;
 
   return (
@@ -174,7 +169,7 @@ export function QueueSheet({
       containerComponent={modalContainerComponent}
       onDismiss={handleDismissed}
       handleIndicatorStyle={sheet.handleStyle}
-      backgroundStyle={backgroundStyle}
+      backgroundComponent={GlassSheetBackground}
       style={styles.sheet}
     >
       <QueueSheetHeader

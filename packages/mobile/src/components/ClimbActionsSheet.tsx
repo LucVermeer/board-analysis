@@ -1,15 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { View, StyleSheet } from 'react-native';
-import BottomSheet from '@gorhom/bottom-sheet';
+import { BottomSheetModal } from '@gorhom/bottom-sheet';
 import { useTranslation } from 'react-i18next';
 import { useRouter } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
 import * as WebBrowser from 'expo-web-browser';
-import type { Climb } from '@boardsesh/shared-schema';
+import type { BoardName, Climb } from '@boardsesh/shared-schema';
 import { buildClimbViewPath } from '@boardsesh/play-view';
 import { computeCanUpdate, type SavedClimbSnapshot } from '@boardsesh/create-climb-react';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
-import { Sheet } from './Sheet';
+import { ModalSheet } from './ModalSheet';
+import { ClimbPreviewCard } from './ClimbPreviewCard';
 import { ListRow } from './ListRow';
 import { Icon } from './Icon';
 import { useToast } from '../providers/toast-provider';
@@ -22,7 +23,7 @@ import { track } from '../lib/analytics';
 type ClimbActionsSheetProps = {
   visible: boolean;
   climb: Climb | null;
-  boardName: string;
+  boardName: BoardName;
   layoutId: number;
   sizeId: number;
   setIds: string;
@@ -61,13 +62,20 @@ function ClimbActionsSheet({
   const { showToast } = useToast();
   const theme = useTheme();
   const router = useRouter();
-  const sheetRef = useRef<BottomSheet>(null);
+  const sheetRef = useRef<BottomSheetModal>(null);
+  // Track presented state so we never dismiss() a not-presented modal (which
+  // leaves gorhom unable to present() again — the "nothing happens" bug).
+  // Presenting on a real `visible` transition is also what lets this sheet stack
+  // reliably above the Play Drawer's own modal. Mirrors LogAscentSheet.
+  const isPresentedRef = useRef(false);
 
   useEffect(() => {
-    if (visible && climb) {
-      sheetRef.current?.snapToIndex(0);
-    } else {
-      sheetRef.current?.close();
+    if (visible && climb && !isPresentedRef.current) {
+      sheetRef.current?.present();
+      isPresentedRef.current = true;
+    } else if ((!visible || !climb) && isPresentedRef.current) {
+      sheetRef.current?.dismiss();
+      isPresentedRef.current = false;
     }
   }, [visible, climb]);
 
@@ -120,7 +128,8 @@ function ClimbActionsSheet({
     }
   }, [climb, boardName, layoutId, sizeId, setIds, angle, onClose]);
 
-  const handleClose = useCallback(() => {
+  const handleDismiss = useCallback(() => {
+    isPresentedRef.current = false;
     onClose();
   }, [onClose]);
 
@@ -175,10 +184,22 @@ function ClimbActionsSheet({
     return computeCanUpdate(snapshot, boardName);
   }, [climb, currentUserId, boardName]);
 
-  const snapPoints = useMemo(() => ['40%'], []);
+  // Sized for the climb preview row plus the action list (a couple more rows show
+  // for owners / Aurora-app climbs); the modal pans down to close.
+  const snapPoints = useMemo(() => ['55%'], []);
 
   return (
-    <Sheet ref={sheetRef} snapPoints={snapPoints} onClose={handleClose} enablePanDownToClose>
+    <ModalSheet ref={sheetRef} snapPoints={snapPoints} onDismiss={handleDismiss} enablePanDownToClose>
+      {climb && (
+        <ClimbPreviewCard
+          climb={climb}
+          boardName={boardName}
+          layoutId={layoutId}
+          sizeId={sizeId}
+          setIds={setIds}
+          angle={angle}
+        />
+      )}
       <View style={styles.content}>
         {onAddToQueue && (
           <ListRow
@@ -239,7 +260,7 @@ function ClimbActionsSheet({
           />
         )}
       </View>
-    </Sheet>
+    </ModalSheet>
   );
 }
 

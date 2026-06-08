@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, type PropsWithChildren } from 'react';
-import { View, ActivityIndicator, Platform, StyleSheet, type ViewStyle } from 'react-native';
+import { View, ActivityIndicator, Platform, StyleSheet } from 'react-native';
 import {
   BottomSheetModal,
   BottomSheetBackdrop,
@@ -15,6 +15,7 @@ import type { DiscoveredDevice } from '../../lib/ble/types';
 import { Text } from '../Text';
 import { Button } from '../Button';
 import { DeviceCard } from './DeviceCard';
+import { GlassSheetBackground } from '../GlassSheetBackground';
 import { useTheme } from '../../providers/theme-provider';
 import { spacing } from '../../theme/tokens';
 import { iosSystemColors } from '../../theme/ios-colors';
@@ -67,12 +68,6 @@ export function DevicePickerSheet({ devices, onSelect, onDismiss, isScanning }: 
 
   const { systemColors } = theme;
 
-  const backgroundStyle: ViewStyle = {
-    backgroundColor: systemColors.secondaryBackground,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-  };
-
   const showScanningState = isScanning && devices.length === 0;
   const showEmptyState = !isScanning && devices.length === 0;
 
@@ -88,7 +83,7 @@ export function DevicePickerSheet({ devices, onSelect, onDismiss, isScanning }: 
       backdropComponent={renderBackdrop}
       onDismiss={onDismiss}
       handleIndicatorStyle={styles.indicator}
-      backgroundStyle={backgroundStyle}
+      backgroundComponent={GlassSheetBackground}
     >
       <BottomSheetView style={styles.header}>
         <Text variant="title3" color={systemColors.label}>

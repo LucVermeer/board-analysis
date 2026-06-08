@@ -3,7 +3,7 @@ import { act, render, waitFor } from '@testing-library/react';
 import { createElement, useEffect, type ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ClimbQueueItem, PlaylistSuggestionSource } from '@boardsesh/queue';
-import type { UserBoard } from '@boardsesh/shared-schema';
+import type { Climb, UserBoard } from '@boardsesh/shared-schema';
 
 const queue = vi.hoisted(() => ({
   sessionId: 'session-1' as string | null,
@@ -21,9 +21,16 @@ const playDrawer = vi.hoisted(() => ({
 
 const queueSheet = vi.hoisted(() => ({
   props: null as null | {
+    visible: boolean;
+    onClose: () => void;
+    onDismissed: () => void;
     onClimbPress: (item: ClimbQueueItem) => void;
     onSuggestionPress: (climb: ClimbQueueItem['climb'], source: PlaylistSuggestionSource) => void;
   },
+}));
+
+const climbActions = vi.hoisted(() => ({
+  props: null as null | Record<string, unknown>,
 }));
 
 const activeBoard = vi.hoisted(() => ({
@@ -83,6 +90,9 @@ vi.mock('../../components/play-drawer', async () => {
 
 vi.mock('../../components/play-drawer/QueueSheet', () => ({
   QueueSheet: (props: {
+    visible: boolean;
+    onClose: () => void;
+    onDismissed: () => void;
     onClimbPress: (item: ClimbQueueItem) => void;
     onSuggestionPress: (climb: ClimbQueueItem['climb'], source: PlaylistSuggestionSource) => void;
   }) => {
@@ -95,7 +105,10 @@ vi.mock('../../components/LogAscentSheet', () => ({
   LogAscentSheet: () => createElement('div', { 'data-log-ascent': 'true' }),
 }));
 vi.mock('../../components/ClimbActionsSheet', () => ({
-  ClimbActionsSheet: () => createElement('div', { 'data-climb-actions': 'true' }),
+  ClimbActionsSheet: (props: Record<string, unknown>) => {
+    climbActions.props = props;
+    return createElement('div', { 'data-climb-actions': 'true' });
+  },
 }));
 vi.mock('../../components/AddToPlaylistSheet', () => ({
   AddToPlaylistSheet: () => createElement('div', { 'data-add-to-playlist': 'true' }),
@@ -190,6 +203,7 @@ describe('DrawerHostProvider queue sheet wall-control gating', () => {
     playDrawer.open.mockClear();
     playDrawer.close.mockClear();
     queueSheet.props = null;
+    climbActions.props = null;
   });
 
   it('opens a preview without broadcasting when a party non-driver taps a queued climb', async () => {
@@ -304,5 +318,116 @@ describe('DrawerHostProvider queue sheet wall-control gating', () => {
       setAsCurrent: false,
       previewQueueItem: suggestedItem,
     });
+  });
+});
+
+describe('DrawerHostProvider queue sheet open / re-open', () => {
+  beforeEach(() => {
+    queue.sessionId = 'session-1';
+    queue.driverParticipantId = 'participant-other';
+    queue.participantId = 'participant-self';
+    queueSheet.props = null;
+    climbActions.props = null;
+  });
+
+  it('presents the queue sheet on open (mount first, then visible on the next commit)', async () => {
+    const hosts: Array<ReturnType<typeof useDrawerHost>> = [];
+    renderHost((host) => hosts.push(host));
+    await waitFor(() => expect(hosts.at(-1)).toBeDefined());
+
+    act(() => {
+      hosts.at(-1)?.openQueueSheet();
+    });
+
+    await waitFor(() => expect(queueSheet.props?.visible).toBe(true));
+  });
+
+  it('re-presents the queue sheet when re-opened mid dismiss-animation, before it unmounts', async () => {
+    const hosts: Array<ReturnType<typeof useDrawerHost>> = [];
+    renderHost((host) => hosts.push(host));
+    await waitFor(() => expect(hosts.at(-1)).toBeDefined());
+
+    act(() => {
+      hosts.at(-1)?.openQueueSheet();
+    });
+    await waitFor(() => expect(queueSheet.props?.visible).toBe(true));
+
+    // Animated close request: visible flips false but the sheet stays mounted
+    // until its dismiss animation reports back via onDismissed (not fired here).
+    act(() => {
+      queueSheet.props?.onClose();
+    });
+    await waitFor(() => expect(queueSheet.props?.visible).toBe(false));
+
+    // Re-open while still mounted. The fresh-mount path alone (set mounted only)
+    // would no-op here — mounted is already true — and the mount effect would
+    // never re-fire, leaving the sheet hidden. This guards the direct re-present.
+    act(() => {
+      hosts.at(-1)?.openQueueSheet();
+    });
+    await waitFor(() => expect(queueSheet.props?.visible).toBe(true));
+  });
+
+  it('unmounts after the dismiss animation completes, then re-opens cleanly', async () => {
+    const hosts: Array<ReturnType<typeof useDrawerHost>> = [];
+    const { container } = renderHost((host) => hosts.push(host));
+    await waitFor(() => expect(hosts.at(-1)).toBeDefined());
+
+    act(() => {
+      hosts.at(-1)?.openQueueSheet();
+    });
+    await waitFor(() => expect(queueSheet.props?.visible).toBe(true));
+
+    act(() => {
+      queueSheet.props?.onClose(); // request animated close
+    });
+    act(() => {
+      queueSheet.props?.onDismissed(); // animation finished → host unmounts the sheet
+    });
+    await waitFor(() => expect(container.querySelector('[data-queue-sheet]')).toBeNull());
+
+    act(() => {
+      hosts.at(-1)?.openQueueSheet();
+    });
+    await waitFor(() => expect(queueSheet.props?.visible).toBe(true));
+  });
+});
+
+describe('DrawerHostProvider climb actions', () => {
+  beforeEach(() => {
+    queue.sessionId = 'session-1';
+    queueSheet.props = null;
+    climbActions.props = null;
+  });
+
+  it('opens the climb actions sheet for a climb against the active board, then closes it', async () => {
+    const hosts: Array<ReturnType<typeof useDrawerHost>> = [];
+    const { container } = renderHost((host) => hosts.push(host));
+    await waitFor(() => expect(hosts.at(-1)).toBeDefined());
+
+    expect(container.querySelector('[data-climb-actions]')).toBeNull();
+
+    const climb = makeQueueItem('queue-x', 'climb-x').climb as unknown as Climb;
+    act(() => {
+      hosts.at(-1)?.openClimbActions(climb);
+    });
+
+    await waitFor(() => expect(container.querySelector('[data-climb-actions]')).not.toBeNull());
+    // Snapshots the active board config (kilter / 1 / 10 / 1,2 / 40) at open time
+    // and forwards it to the sheet so the preview thumbnail + actions resolve.
+    expect(climbActions.props).toMatchObject({
+      visible: true,
+      climb,
+      boardName: 'kilter',
+      layoutId: 1,
+      sizeId: 10,
+      setIds: '1,2',
+      angle: 40,
+    });
+
+    act(() => {
+      hosts.at(-1)?.closeClimbActions();
+    });
+    await waitFor(() => expect(container.querySelector('[data-climb-actions]')).toBeNull());
   });
 });

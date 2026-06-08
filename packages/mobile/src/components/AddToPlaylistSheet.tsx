@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { ActivityIndicator, View, StyleSheet } from 'react-native';
-import BottomSheet from '@gorhom/bottom-sheet';
+import { BottomSheetModal } from '@gorhom/bottom-sheet';
 import { useTranslation } from 'react-i18next';
-import type { Climb } from '@boardsesh/shared-schema';
-import { Sheet } from './Sheet';
+import type { BoardName, Climb } from '@boardsesh/shared-schema';
+import { ModalSheet } from './ModalSheet';
+import { ClimbPreviewCard } from './ClimbPreviewCard';
 import { ListRow } from './ListRow';
 import { Icon } from './Icon';
 import { Text } from './Text';
@@ -16,6 +17,10 @@ import { spacing } from '../theme/tokens';
 type AddToPlaylistSheetProps = {
   visible: boolean;
   climb: Climb | null;
+  boardName: BoardName;
+  layoutId: number;
+  sizeId: number;
+  setIds: string;
   angle: number;
   onClose: () => void;
 };
@@ -27,18 +32,32 @@ function validHexColor(color: string | undefined): string | null {
   return color && HEX_COLOR.test(color) ? color : null;
 }
 
-function AddToPlaylistSheet({ visible, climb, angle, onClose }: AddToPlaylistSheetProps) {
+function AddToPlaylistSheet({
+  visible,
+  climb,
+  boardName,
+  layoutId,
+  sizeId,
+  setIds,
+  angle,
+  onClose,
+}: AddToPlaylistSheetProps) {
   const { t } = useTranslation('climbs');
   const { brandColors, systemColors } = useTheme();
   const { showToast } = useToast();
   const { playlists, addToPlaylist, isLoading, isAuthenticated } = usePlaylistsContext();
-  const sheetRef = useRef<BottomSheet>(null);
+  const sheetRef = useRef<BottomSheetModal>(null);
+  // Track presented state so we never dismiss() a not-presented modal (gorhom
+  // then no-ops the next present()). Mirrors LogAscentSheet.
+  const isPresentedRef = useRef(false);
 
   useEffect(() => {
-    if (visible && climb) {
-      sheetRef.current?.snapToIndex(0);
-    } else {
-      sheetRef.current?.close();
+    if (visible && climb && !isPresentedRef.current) {
+      sheetRef.current?.present();
+      isPresentedRef.current = true;
+    } else if ((!visible || !climb) && isPresentedRef.current) {
+      sheetRef.current?.dismiss();
+      isPresentedRef.current = false;
     }
   }, [visible, climb]);
 
@@ -67,14 +86,25 @@ function AddToPlaylistSheet({ visible, climb, angle, onClose }: AddToPlaylistShe
     [climb, angle, addToPlaylist, showToast, t, onClose],
   );
 
-  const handleClose = useCallback(() => {
+  const handleDismiss = useCallback(() => {
+    isPresentedRef.current = false;
     onClose();
   }, [onClose]);
 
   const snapPoints = useMemo(() => ['50%', '90%'], []);
 
   return (
-    <Sheet ref={sheetRef} snapPoints={snapPoints} onClose={handleClose} enablePanDownToClose scrollable>
+    <ModalSheet ref={sheetRef} snapPoints={snapPoints} onDismiss={handleDismiss} enablePanDownToClose scrollable>
+      {climb && (
+        <ClimbPreviewCard
+          climb={climb}
+          boardName={boardName}
+          layoutId={layoutId}
+          sizeId={sizeId}
+          setIds={setIds}
+          angle={angle}
+        />
+      )}
       <View style={styles.header}>
         <Icon name="playlist" size={20} color={systemColors.accent} />
         <Text variant="headline" style={styles.headerTitle}>
@@ -115,7 +145,7 @@ function AddToPlaylistSheet({ visible, climb, angle, onClose }: AddToPlaylistShe
           );
         })
       )}
-    </Sheet>
+    </ModalSheet>
   );
 }
 
