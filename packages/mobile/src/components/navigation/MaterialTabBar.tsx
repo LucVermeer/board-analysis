@@ -3,7 +3,7 @@ import type { BottomTabBarProps } from 'expo-router/tabs';
 import { Text } from '../Text';
 import { PressableSurface } from '../PressableSurface';
 import { useTheme } from '../../providers/theme-provider';
-import { brandColors, withAlpha } from '../../theme/colors';
+import { withAlpha } from '../../theme/colors';
 import { material } from '../../theme/tokens';
 import { TAB_BAR_HEIGHT } from '../../theme/layout';
 
@@ -16,9 +16,11 @@ import { TAB_BAR_HEIGHT } from '../../theme/layout';
  * screen's React Navigation options, so this stays a generic custom tab bar.
  */
 export function MaterialTabBar({ state, descriptors, navigation, insets }: BottomTabBarProps) {
-  const { systemColors } = useTheme();
+  const { systemColors, brandColors } = useTheme();
   // Softened active state (closer to M3, which tints the indicator gently rather
-  // than using full primary): a lighter maroon pill + a muted maroon icon/label.
+  // than using full primary): a lighter violet pill + a muted violet icon/label.
+  // Brand colours resolve per scheme (lifted #A78BFA in dark), so the active tab
+  // stays legible on the dark Material bar instead of dimming to the dark fill.
   const activeColor = withAlpha(brandColors.primary, 0.8);
   const inactiveColor = systemColors.secondaryLabel;
   const indicatorColor = withAlpha(brandColors.primary, 0.1);

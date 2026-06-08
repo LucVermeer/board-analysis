@@ -4,7 +4,7 @@ import { brandColors } from './colors';
 /**
  * The interactive-accent blue. iOS keeps Apple's #007AFF; Android resolves it to
  * the brand tint so the active tab, links, and "edit / copy / open" affordances
- * read as Boardsesh maroon rather than an out-of-place iOS blue. This is the one
+ * read as Boardsesh violet rather than an out-of-place iOS blue. This is the one
  * value in `iosSystemColors` that genuinely leaks an iOS aesthetic onto Android
  * (it's used as a *tint*, not a fixed status colour); resolving it here fixes
  * every static (StyleSheet / default-prop) consumer at once without a wide
@@ -29,7 +29,7 @@ export const iosSystemColors = {
   systemGreen: '#34C759',
   /** iOS systemYellow — caution, moderate indicators */
   systemYellow: '#FFCC00',
-  /** Interactive accent — iOS systemBlue (#007AFF); brand maroon on Android. */
+  /** Interactive accent — iOS systemBlue (#007AFF); brand violet on Android. */
   systemBlue: ACCENT_TINT,
   /** iOS systemOrange — moderate warnings, attempted indicators */
   systemOrange: '#FF9500',

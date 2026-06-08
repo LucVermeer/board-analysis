@@ -1,5 +1,5 @@
 // The filters affordance shared by the top search row and the bottom card: a
-// Liquid Glass circle that tints maroon and shows a count badge when filters are
+// Liquid Glass circle that tints violet and shows a count badge when filters are
 // active. Tapping opens the full filter sheet.
 
 import { useTranslation } from 'react-i18next';
@@ -21,9 +21,9 @@ export function FilterButton({ activeFilterCount, onPress, onLongPress }: Filter
   const { t } = useTranslation('climbs');
   const { systemColors, brandColors, variant } = useTheme();
   const active = activeFilterCount > 0;
-  // Liquid Glass paints the active button on a maroon glass tint, so a maroon
+  // Liquid Glass paints the active button on a violet glass tint, so a violet
   // glyph is low-contrast — use white there. Material has no tint behind the
-  // glyph, so it keeps maroon (white would vanish on the bare surface).
+  // glyph, so it keeps the violet (white would vanish on the bare surface).
   const iconColor = active
     ? variant === 'material'
       ? (brandColors.primary as string)

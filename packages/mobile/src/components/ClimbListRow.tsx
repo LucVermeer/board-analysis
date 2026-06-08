@@ -19,6 +19,7 @@ import { useTheme } from '../providers/theme-provider';
 import { iosSystemColors } from '../theme/ios-colors';
 import { brandColors } from '../theme/colors';
 import { spacing } from '../theme/tokens';
+import { selectedRowColors } from './climb-list-row-colors';
 
 // Swipe tuning. Each side reveals a panel up to ACTION_REVEAL wide; dragging
 // past COMMIT_THRESHOLD and RELEASING commits the action (Spotify-style swipe-
@@ -130,7 +131,10 @@ const ClimbListRow = React.memo(function ClimbListRow({
   selected,
   unsupported,
 }: ClimbListRowProps) {
-  const { systemColors } = useTheme();
+  const { systemColors, brandColors: brand } = useTheme();
+  // Active-row highlight colours, derived from the scheme-aware brand so the wash
+  // + accent stay visible in dark (lifted #A78BFA) as well as light.
+  const highlight = useMemo(() => selectedRowColors(brand.primary), [brand.primary]);
 
   const swipeableRef = useRef<SwipeableMethods>(null);
 
@@ -272,9 +276,13 @@ const ClimbListRow = React.memo(function ClimbListRow({
             accessibilityLabel={climb.name}
             accessibilityState={{ selected: !!selected }}
           >
-            {/* Active-climb highlight: rose wash + left accent bar */}
-            {selected ? <View style={styles.selectedFill} pointerEvents="none" /> : null}
-            {selected ? <View style={styles.selectedAccent} pointerEvents="none" /> : null}
+            {/* Active-climb highlight: violet wash + left accent bar */}
+            {selected ? (
+              <View style={[styles.selectedFill, { backgroundColor: highlight.fill }]} pointerEvents="none" />
+            ) : null}
+            {selected ? (
+              <View style={[styles.selectedAccent, { backgroundColor: highlight.accent }]} pointerEvents="none" />
+            ) : null}
 
             <ClimbListItemContent
               climb={climb}
@@ -311,9 +319,10 @@ const styles = StyleSheet.create({
     paddingVertical: spacing[2],
     gap: spacing[3],
   },
-  // Active-climb wash. Brand violet (#6D28D9) — kept distinct from the grade
-  // colour on the right of the row. Behind the content (crisp text). Bumped
-  // from 0.14 → 0.18 so it reads on near-black OLED, where the accent bar
+  // Active-climb wash + left accent bar. The COLOUR is applied inline from the
+  // scheme-aware brand (see `highlight` / selectedRowColors) so dark mode uses the
+  // lifted #A78BFA tint instead of the near-invisible dark fill — only layout
+  // lives here. The 0.18 wash alpha reads on near-black OLED, where the accent bar
   // scrolls off during a swipe and the wash is the only state cue left.
   selectedFill: {
     position: 'absolute',
@@ -321,7 +330,6 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(109, 40, 217, 0.18)',
   },
   selectedAccent: {
     position: 'absolute',
@@ -329,7 +337,6 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 0,
     width: 5,
-    backgroundColor: brandColors.primary,
   },
   separator: {
     height: StyleSheet.hairlineWidth,
@@ -342,6 +349,9 @@ const styles = StyleSheet.create({
   // Pin each icon to the OUTER edge of its panel (queue = right/screen edge,
   // playlist = left/screen edge) so it appears as soon as the panel starts
   // revealing, instead of needing half the panel out to see a centred icon.
+  // These are full-bleed panels with WHITE icons, so they use the static brand
+  // FILL (white-legible in both schemes); the lifted dark-mode tints would fail
+  // white-on-fill contrast, so they intentionally don't vary by colour scheme.
   queueAction: {
     backgroundColor: brandColors.success,
     alignItems: 'flex-start',

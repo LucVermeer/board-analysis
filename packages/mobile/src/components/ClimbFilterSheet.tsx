@@ -399,7 +399,7 @@ export function ClimbFilterSheet({
   const applyLabel =
     previewCount != null ? t('mobile.filter.showCount', { count: previewCount }) : t('mobile.filter.apply');
   // Reset stays a quiet secondary accent until there's actually something to
-  // reset — so the header isn't a second always-on maroon next to Apply.
+  // reset — so the header isn't a second always-on violet next to Apply.
   const anyActive = hasActiveClimbFilters(localFilters) || hasActiveBoardFilters(localBoardFilters);
 
   return (
