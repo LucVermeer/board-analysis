@@ -16,6 +16,7 @@ import { SegmentedControl } from '../../../src/components/SegmentedControl';
 import { isPreviewBuild } from '../../../src/lib/eas-api';
 import { useGradeFormat } from '../../../src/hooks/use-grade-format';
 import { useGlassCapability } from '../../../src/hooks/use-glass-capability';
+import { clearOnboardingSeen } from '../../../src/lib/onboarding/onboarding-storage';
 
 export default function MoreScreen() {
   const {
@@ -55,6 +56,13 @@ export default function MoreScreen() {
     { key: 'font', label: t('mobile.more.gradeFormat.font') },
     { key: 'both', label: t('mobile.more.gradeFormat.both') },
   ];
+
+  const handleReplayWalkthrough = () => {
+    // Clear the "seen" flag (best effort) then re-open the tour immediately —
+    // the push doesn't wait on the write, so the walkthrough opens instantly.
+    void clearOnboardingSeen();
+    router.push('/onboarding');
+  };
 
   return (
     <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.container}>
@@ -157,6 +165,28 @@ export default function MoreScreen() {
           <Text variant="footnote" color={systemColors.secondaryLabel} style={styles.settingHint}>
             {t('mobile.more.gradeFormat.description')}
           </Text>
+        </View>
+      </View>
+
+      <View style={styles.section}>
+        <View
+          style={[
+            styles.card,
+            {
+              backgroundColor: systemColors.secondaryBackground,
+              borderRadius: borderRadius.lg,
+              marginHorizontal: spacing[4],
+            },
+          ]}
+        >
+          <ListRow
+            title={t('mobile.onboarding.replayTitle')}
+            subtitle={t('mobile.onboarding.replaySubtitle')}
+            leading={<Icon name="play.circle" size={22} color={systemColors.secondaryLabel} />}
+            showChevron
+            showSeparator={false}
+            onPress={handleReplayWalkthrough}
+          />
         </View>
       </View>
 

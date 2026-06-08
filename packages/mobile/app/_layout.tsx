@@ -49,6 +49,7 @@ import { wrapWithSentry, reportError } from '../src/lib/sentry';
 import { loadRequiredFonts } from '../src/lib/required-fonts';
 import { AnalyticsProvider } from '../src/components/analytics/AnalyticsProvider';
 import { AnalyticsScreenTracker } from '../src/components/analytics/AnalyticsScreenTracker';
+import { OnboardingGate } from '../src/components/onboarding/OnboardingGate';
 
 void SplashScreen.preventAutoHideAsync();
 
@@ -296,9 +297,23 @@ function RootLayout() {
                                                       name="boards"
                                                       options={{ presentation: 'modal', headerShown: false }}
                                                     />
+                                                    {/* First-run welcome walkthrough. Full-screen cover
+                                                      over the Climbs tab; gesture disabled so the user
+                                                      leaves only via Skip / finish / the final CTA, never
+                                                      an accidental swipe-dismiss. */}
+                                                    <Stack.Screen
+                                                      name="onboarding"
+                                                      options={{
+                                                        presentation: 'fullScreenModal',
+                                                        headerShown: false,
+                                                        gestureEnabled: false,
+                                                        animation: 'fade',
+                                                      }}
+                                                    />
                                                   </Stack>
                                                 </ThemedNavigation>
                                                 <PersistentQueueBar />
+                                                <OnboardingGate ready={authReady && fontsReady} />
                                                 <AnalyticsScreenTracker />
                                               </ShareTargetProvider>
                                             </DeepLinkProvider>

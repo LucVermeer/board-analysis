@@ -51,6 +51,14 @@ export const SHARED_EVENTS = {
   // Beta videos
   BetaVideoLinkClicked: 'Beta Video Link Clicked',
   BetaVideoClimbClicked: 'Beta Video Climb Clicked',
+  // Onboarding tour (first-run walkthrough). Web fires the same names from its
+  // step-based guided tour; the mobile welcome carousel reuses them so both
+  // platforms land in one PostHog funnel.
+  OnboardingTourStarted: 'Onboarding Tour Started',
+  OnboardingTourStepViewed: 'Onboarding Tour Step Viewed',
+  OnboardingTourStepAdvanced: 'Onboarding Tour Step Advanced',
+  OnboardingTourCompleted: 'Onboarding Tour Completed',
+  OnboardingTourSkipped: 'Onboarding Tour Skipped',
 } as const;
 
 export type SharedEventKey = keyof typeof SHARED_EVENTS;
