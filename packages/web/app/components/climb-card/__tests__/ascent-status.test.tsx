@@ -7,7 +7,12 @@ import { createBoardAdapterWrapper, createTestQueryClient } from '@/app/test-uti
 import type { ExecuteHttp } from '@boardsesh/board-react';
 import { useWsAuthToken } from '@/app/hooks/use-ws-auth-token';
 import { useSession } from 'next-auth/react';
-import { useLogbook, accumulatedLogbookQueryKey, type LogbookEntry } from '@boardsesh/board-react';
+import {
+  useLogbook,
+  accumulatedLogbookQueryKey,
+  logbookClimbAngleKey,
+  type LogbookEntry,
+} from '@boardsesh/board-react';
 import { AscentStatus } from '../ascent-status';
 import { BoardContext, type BoardContextType } from '../../board-provider/board-provider-context';
 
@@ -38,6 +43,13 @@ function createBoardContextValue({
   boardName?: BoardContextType['boardName'];
   logbook?: LogbookEntry[];
 } = {}): BoardContextType {
+  const logbookByClimbAngle = new Map<string, LogbookEntry[]>();
+  for (const tick of logbook) {
+    const key = logbookClimbAngleKey(tick.climb_uuid, tick.angle);
+    const bucket = logbookByClimbAngle.get(key);
+    if (bucket) bucket.push(tick);
+    else logbookByClimbAngle.set(key, [tick]);
+  }
   return {
     boardName,
     isAuthenticated: true,
@@ -45,6 +57,7 @@ function createBoardContextValue({
     error: null,
     isInitialized: true,
     logbook,
+    logbookByClimbAngle,
     getLogbook: async () => {},
     saveTick: async () => {},
     saveClimb: async () => {

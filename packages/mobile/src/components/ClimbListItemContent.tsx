@@ -55,6 +55,44 @@ type ClimbListItemContentProps = {
 };
 
 /**
+ * Isolated, memoized ascent-status glyph. It is the ONLY part of the climb row
+ * that subscribes to the logbook (via `useAscentStatus` → `BoardProvider`), so a
+ * tick write / logbook merge re-renders just this 16px icon — not the whole row
+ * (thumbnail, name, grade). Props are primitives, so `React.memo` skips it on
+ * unrelated parent re-renders. Restores the memo boundary the climbs-search
+ * redesign removed when it inlined `useAscentStatus` into `ClimbListItemContent`.
+ */
+const AscentStatusGlyph = React.memo(function AscentStatusGlyph({
+  climbUuid,
+  angle,
+}: {
+  climbUuid: string;
+  angle: number;
+}) {
+  const { t } = useTranslation('climbs');
+  const theme = useTheme();
+  const ascentStatus = useAscentStatus(climbUuid, angle);
+
+  // Spoken by VoiceOver/TalkBack — the only non-visual signal now colour is gone.
+  // Literal keys (not a dynamic `t(...)`) so the i18n orphan checker sees them.
+  const ascentStatusLabel = useMemo(() => {
+    if (!ascentStatus) return undefined;
+    return {
+      flash: t('mobile.climbRow.ascentStatus.flash'),
+      send: t('mobile.climbRow.ascentStatus.send'),
+      attempt: t('mobile.climbRow.ascentStatus.attempt'),
+    }[ascentStatus];
+  }, [ascentStatus, t]);
+
+  if (!ascentStatus) return null;
+  return (
+    <View accessibilityRole="image" accessibilityLabel={ascentStatusLabel}>
+      <Icon name={ASCENT_STATUS_ICON[ascentStatus]} size={16} color={theme.systemColors.secondaryLabel} />
+    </View>
+  );
+});
+
+/**
  * The shared visual of a climb list item: portrait thumbnail (with ascent
  * badge) + name/subtitle + colorized grade. Returns the three blocks as a
  * fragment so the host row owns the flex container (padding, gap, background,
@@ -72,22 +110,9 @@ const ClimbListItemContent = React.memo(function ClimbListItemContent({
 }: ClimbListItemContentProps) {
   const { t } = useTranslation('climbs');
   const { formatGrade } = useGradeFormat();
-  const theme = useTheme();
 
   const gradeColor = getGradeColor(climb.difficulty) ?? DEFAULT_GRADE_COLOR;
   const formattedGrade = formatGrade(climb.difficulty);
-  const ascentStatus = useAscentStatus(climb.uuid, angle);
-
-  // Spoken by VoiceOver/TalkBack — the only non-visual signal now colour is gone.
-  // Literal keys (not a dynamic `t(...)`) so the i18n orphan checker sees them.
-  const ascentStatusLabel = useMemo(() => {
-    if (!ascentStatus) return undefined;
-    return {
-      flash: t('mobile.climbRow.ascentStatus.flash'),
-      send: t('mobile.climbRow.ascentStatus.send'),
-      attempt: t('mobile.climbRow.ascentStatus.attempt'),
-    }[ascentStatus];
-  }, [ascentStatus, t]);
 
   // Subtitle parts: sends · quality★ · setter (each dropped when absent).
   const subtitleText = useMemo(() => {
@@ -137,11 +162,7 @@ const ClimbListItemContent = React.memo(function ClimbListItemContent({
 
       {/* Right: ascent-status glyph + colorized grade — the two scan keys together */}
       <View style={styles.rightSection}>
-        {ascentStatus ? (
-          <View accessibilityRole="image" accessibilityLabel={ascentStatusLabel}>
-            <Icon name={ASCENT_STATUS_ICON[ascentStatus]} size={16} color={theme.systemColors.secondaryLabel} />
-          </View>
-        ) : null}
+        <AscentStatusGlyph climbUuid={climb.uuid} angle={angle} />
         <Text variant="title3" numberOfLines={1} style={[styles.gradeText, { color: gradeColor }]}>
           {formattedGrade ?? climb.difficulty}
         </Text>

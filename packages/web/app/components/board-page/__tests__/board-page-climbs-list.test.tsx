@@ -108,6 +108,7 @@ describe('BoardPageClimbsList logbook seed', () => {
       error: null,
       isInitialized: true,
       logbook: [],
+      logbookByClimbAngle: new Map(),
       getLogbook: mockGetLogbook,
       saveTick: vi.fn(),
       saveClimb: vi.fn(),
