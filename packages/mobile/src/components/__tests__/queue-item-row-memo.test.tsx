@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render } from '@testing-library/react';
-import { createElement, type ReactNode } from 'react';
+import { createElement, useRef, type ReactNode } from 'react';
 import type { ClimbQueueItem } from '@boardsesh/queue';
 import type { QueueItemRowBoard } from '../QueueItemRow';
 
@@ -10,6 +10,13 @@ import type { QueueItemRowBoard } from '../QueueItemRow';
 // faithful proxy for "QueueItemRow's body ran". If React.memo is working, an
 // identical-props re-render must NOT bump this counter.
 const renderCounter = vi.hoisted(() => ({ count: 0 }));
+
+// Capture the latest `onPress` handed to the row's main pressable and trailing
+// tick button, so a test can assert they keep their identity across re-renders.
+const captured = vi.hoisted(() => ({
+  rowPress: null as null | (() => void),
+  tickPress: null as null | (() => void),
+}));
 
 vi.mock('react-native', () => {
   const passthrough =
@@ -20,7 +27,12 @@ vi.mock('react-native', () => {
     Platform: { OS: 'ios' },
     PlatformColor: (name: string) => name,
     View: passthrough('div'),
-    Pressable: passthrough('button'),
+    // History rows render exactly one Pressable (the tick button), so capturing
+    // its onPress here gives us `handleTickPress`.
+    Pressable: ({ children, onPress }: { children?: ReactNode; onPress?: () => void }) => {
+      if (onPress) captured.tickPress = onPress;
+      return createElement('button', null, children);
+    },
     StyleSheet: {
       create: (styles: Record<string, unknown>) => styles,
       hairlineWidth: 1,
@@ -30,11 +42,23 @@ vi.mock('react-native', () => {
 
 vi.mock('react-native-reanimated', () => {
   const passthrough = ({ children }: { children?: ReactNode }) => createElement('div', null, children);
+  // The row's `AnimatedPressable` is the only animated component, so capturing
+  // its onPress gives us `handlePress`.
+  const animatedPressable = ({ children, onPress }: { children?: ReactNode; onPress?: () => void }) => {
+    if (onPress) captured.rowPress = onPress;
+    return createElement('div', null, children);
+  };
   return {
-    default: { View: passthrough, createAnimatedComponent: () => passthrough },
-    createAnimatedComponent: () => passthrough,
+    default: { View: passthrough, createAnimatedComponent: () => animatedPressable },
+    createAnimatedComponent: () => animatedPressable,
     useAnimatedStyle: (fn: () => unknown) => fn(),
-    useSharedValue: (initial: unknown) => ({ value: initial }),
+    // Real reanimated returns a stable ref across renders; mirror that so the
+    // callback-stability test reflects production behaviour (a fresh object each
+    // render would churn every callback that reads a shared value).
+    useSharedValue: (initial: unknown) => {
+      const ref = useRef({ value: initial });
+      return ref.current;
+    },
     withSpring: (value: unknown) => value,
     withTiming: (value: unknown) => value,
     runOnJS:
@@ -120,6 +144,8 @@ const onToggleSelect = vi.fn();
 describe('QueueItemRow React.memo', () => {
   beforeEach(() => {
     renderCounter.count = 0;
+    captured.rowPress = null;
+    captured.tickPress = null;
     vi.clearAllMocks();
   });
 
@@ -176,5 +202,38 @@ describe('QueueItemRow React.memo', () => {
       />,
     );
     expect(renderCounter.count).toBe(2);
+  });
+
+  it('keeps press callbacks stable when item identity changes but its data is equal', () => {
+    const onTickHistory = vi.fn();
+    const rowProps = {
+      position: 1,
+      board,
+      isCurrentClimb: false,
+      isHistoryItem: true,
+      onPress,
+      onRemove,
+      onToggleSelect,
+      onTickHistory,
+    };
+
+    const first = makeItem('a', 'Crimp Master');
+    const { rerender } = render(<QueueItemRow item={first} {...rowProps} />);
+
+    const rowPress = captured.rowPress;
+    const tickPress = captured.tickPress;
+    expect(rowPress).toBeTypeOf('function');
+    expect(tickPress).toBeTypeOf('function');
+
+    // A fresh item object with the same uuid + data — exactly what the queue
+    // reducer produces when it rebuilds the array on an unrelated update. The
+    // callbacks must keep their identity (they read the live item via a ref and
+    // dep only on `item.uuid`), or the row's pressables churn and defeat memo.
+    const second = makeItem('a', 'Crimp Master');
+    expect(second).not.toBe(first);
+    rerender(<QueueItemRow item={second} {...rowProps} />);
+
+    expect(captured.rowPress).toBe(rowPress);
+    expect(captured.tickPress).toBe(tickPress);
   });
 });

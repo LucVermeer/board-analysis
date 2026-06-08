@@ -1,4 +1,4 @@
-import { memo, useState, useMemo, useCallback, useEffect } from 'react';
+import { memo, useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { Pressable, View, StyleSheet, type LayoutChangeEvent } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring, withTiming, runOnJS } from 'react-native-reanimated';
 import {
@@ -122,6 +122,14 @@ function QueueItemRowComponent({
   const isSwipeOpen = useSharedValue(false);
   const [isOpen, setIsOpen] = useState(false);
 
+  // The queue reducer rebuilds the array (and each item object) on every update,
+  // so `item` arrives with a fresh reference even when this row's data hasn't
+  // changed. Read the live item through a ref and key the press callbacks on the
+  // stable `item.uuid` — otherwise every queue update hands `AnimatedPressable` a
+  // new `onPress`/`onTickHistory` and forces a re-render despite the memo.
+  const itemRef = useRef(item);
+  itemRef.current = item;
+
   // Disable swipe-to-delete for edit mode and history items.
   const swipeEnabled = !isEditMode && !isHistoryItem;
 
@@ -132,7 +140,7 @@ function QueueItemRowComponent({
       isSwipeOpen.value = false;
       runOnJS(setIsOpen)(false);
     }
-  }, [swipeEnabled]);
+  }, [swipeEnabled, translateX, isSwipeOpen]);
 
   const handleRemove = useCallback(() => {
     hapticMedium();
@@ -230,7 +238,7 @@ function QueueItemRowComponent({
   const handlePress = useCallback(() => {
     if (isEditMode) {
       hapticSelection();
-      onToggleSelect?.(item.uuid);
+      onToggleSelect?.(itemRef.current.uuid);
       return;
     }
     if (isOpen) {
@@ -241,8 +249,8 @@ function QueueItemRowComponent({
       return;
     }
     hapticSelection();
-    onPress(item);
-  }, [isEditMode, isOpen, onToggleSelect, onPress, item, translateX, isSwipeOpen]);
+    onPress(itemRef.current);
+  }, [isEditMode, isOpen, onToggleSelect, onPress, translateX, isSwipeOpen]);
 
   const handleDeletePress = useCallback(() => {
     // Animate the row out
@@ -255,8 +263,8 @@ function QueueItemRowComponent({
 
   const handleTickPress = useCallback(() => {
     hapticSelection();
-    onTickHistory?.(item);
-  }, [onTickHistory, item]);
+    onTickHistory?.(itemRef.current);
+  }, [onTickHistory]);
 
   // Take the layout event directly so the same stable function can be passed to
   // `onLayout` — an inline `(event) => ...` wrapper would be a fresh arrow each
