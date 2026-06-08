@@ -22,6 +22,14 @@ vi.mock('expo-secure-store', () => {
   };
 });
 
+// The provider injects expo-crypto's randomUUID into ensureProfile (Hermes has
+// no global crypto.randomUUID). Mock the native module so the suite stays in the
+// node/jsdom env, and so a created profile's id is deterministic — see the mount
+// test below, which asserts the id comes from this injected generator.
+vi.mock('expo-crypto', () => ({
+  randomUUID: () => 'test-uuid',
+}));
+
 // AuthProvider transitively imports expo-router; stub the consumed surface
 // so we can test PartyProfileProvider in isolation.
 vi.mock('../auth-provider', () => ({
@@ -73,7 +81,11 @@ describe('PartyProfileProvider', () => {
 
     await waitFor(() => expect(result.current.isLoading).toBe(false));
     expect(result.current.profile).not.toBeNull();
-    expect(typeof result.current.profile?.id).toBe('string');
+    // The id must come from the injected expo-crypto generator, not the shared
+    // default. If the `randomUUID` arg is dropped, the provider falls back to
+    // jsdom's real crypto.randomUUID (a genuine UUID, not 'test-uuid') and this
+    // fails — guarding against the Hermes "crypto.randomUUID unavailable" bug.
+    expect(result.current.profile?.id).toBe('test-uuid');
     expect(result.current.hasProfile).toBe(true);
   });
 
