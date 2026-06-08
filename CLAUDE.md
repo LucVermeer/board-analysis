@@ -204,7 +204,7 @@ React Native + Expo SDK 53, React Native 0.79, Expo Router 5.
 
 ### Mobile vs. web
 
-- **No `vp check` lint** — mobile is excluded. Use `vp run typecheck:mobile`.
+- **Lint via `vp check`** — runs for mobile just like other packages. Use `vp run typecheck:mobile` for type-only checks.
 - **Own i18n provider** at `packages/mobile/src/providers/i18n-provider.tsx`. No web i18n rules apply.
 - **No web dev-server workflow** — use `vp run dev:mobile` (Metro) instead. The QA-notes-into-`/api/internal/dev-metadata` flow is web-only; on mobile the `DevMetadataPanel` (More tab) reads `.boardsesh/qa-notes.md` via env injection.
 - **Styling**: `StyleSheet.create` + theme provider. No MUI, no `style`-prop avoidance rule.

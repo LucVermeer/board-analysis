@@ -28,6 +28,7 @@ type MapModule = typeof import('expo-maps');
 let expoMaps: MapModule | null = null;
 try {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
+  // oxlint-disable-next-line import/no-commonjs
   expoMaps = require('expo-maps') as MapModule;
 } catch {
   expoMaps = null;
