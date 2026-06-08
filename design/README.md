@@ -7,12 +7,11 @@ TL=V11 #9C27B0 · TR=V12 #7B1FA2 · BL=V13 #6A1B9A · BR=V15 #4A148C.
 Regenerate the canonical web, iOS, legacy Android, and social PNGs from
 `svg/icon-master.svg` with `bun scripts/rasterise-brand-assets.ts`.
 
-Exception: `mobile-rn-logo/` contains the user-created raster logo used by the
-React Native/Expo rewrite in `packages/mobile/assets/`. That artwork was
-provided as a PNG rather than an editable SVG, so it has its own documented
-ImageMagick workflow and provenance in `mobile-rn-logo/README.md`. The
-`scripts/rasterise-brand-assets.ts` pipeline does not regenerate those Expo
-assets.
+Exception: `mobile-rn-logo/` contains the committed raster logo used by the
+React Native/Expo rewrite in `packages/mobile/assets/`. That artwork is a PNG
+rather than an editable SVG, so it has its own documented ImageMagick workflow
+in `mobile-rn-logo/README.md`. The `scripts/rasterise-brand-assets.ts` pipeline
+does not regenerate those Expo assets.
 
 ## Contents
 
