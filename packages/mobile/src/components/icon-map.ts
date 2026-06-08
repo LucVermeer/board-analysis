@@ -82,6 +82,7 @@ export const iconMap = {
   // Social
   person: { ios: 'person', android: 'account-outline' },
   'person.fill': { ios: 'person.fill', android: 'account' },
+  'person.badge.plus': { ios: 'person.badge.plus', android: 'account-plus-outline' },
   people: { ios: 'person.2', android: 'account-multiple-outline' },
   'people.fill': { ios: 'person.2.fill', android: 'account-multiple' },
   notification: { ios: 'bell', android: 'bell-outline' },

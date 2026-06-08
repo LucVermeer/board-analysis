@@ -15,7 +15,11 @@ describe('normalizeScreenPath', () => {
   });
 
   it('builds a simple tab path', () => {
-    expect(normalizeScreenPath(['(tabs)', 'boards'])).toBe('/boards');
+    expect(normalizeScreenPath(['(tabs)', 'climbs'])).toBe('/climbs');
+  });
+
+  it('builds a top-level modal path (boards is no longer a tab)', () => {
+    expect(normalizeScreenPath(['boards'])).toBe('/boards');
   });
 
   it('keeps nested dynamic segments', () => {

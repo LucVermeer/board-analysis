@@ -100,7 +100,7 @@ export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
   }, [error]);
 
   const handleGoHome = () => {
-    router.replace('/(tabs)/boards');
+    router.replace('/(tabs)/climbs');
   };
 
   return (
@@ -112,11 +112,11 @@ export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
         Something went wrong
       </Text>
       <Text variant="body" style={errorStyles.message}>
-        The app hit an unexpected error. You can try again or head back to your boards.
+        The app hit an unexpected error. You can try again or head back home.
       </Text>
       <View style={errorStyles.buttonRow}>
         <Button title="Try again" onPress={retry} variant="filled" size="large" />
-        <Button title="Go to boards" onPress={handleGoHome} variant="outlined" size="large" />
+        <Button title="Go home" onPress={handleGoHome} variant="outlined" size="large" />
       </View>
     </View>
   );
@@ -252,6 +252,13 @@ function RootLayout() {
                                                   <Stack.Screen name="session/[sessionId]" />
                                                   <Stack.Screen
                                                     name="join/[sessionId]"
+                                                    options={{ presentation: 'modal', headerShown: false }}
+                                                  />
+                                                  {/* Board selection is a modal off the Climbs capsule /
+                                                      no-board CTA — board switching is rare, so it doesn't
+                                                      earn a tab. Its own _layout owns the headers. */}
+                                                  <Stack.Screen
+                                                    name="boards"
                                                     options={{ presentation: 'modal', headerShown: false }}
                                                   />
                                                 </Stack>

@@ -1,33 +1,36 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, ScrollView, StyleSheet } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import type BottomSheet from '@gorhom/bottom-sheet';
 import type { UserBoard } from '@boardsesh/shared-schema';
-import { useMyBoards, usePopularBoardConfigs, useNearbyBoards } from '../../../src/lib/graphql/hooks';
-import { useActiveBoard, useSetActiveBoard } from '../../../src/lib/graphql/use-active-board';
-import { useDeviceLocation } from '../../../src/lib/use-device-location';
-import { useAuth } from '../../../src/providers/auth-provider';
-import { useToast } from '../../../src/providers/toast-provider';
-import { hapticSelection } from '../../../src/lib/haptics';
-import { Text } from '../../../src/components/Text';
-import { Icon } from '../../../src/components/Icon';
-import { Button } from '../../../src/components/Button';
-import { ActivityIndicator } from '../../../src/components/ActivityIndicator';
-import { BoardCarousel } from '../../../src/components/board-discovery/BoardCarousel';
-import { BoardModeCard, type ModeCardState } from '../../../src/components/board-discovery/BoardModeCard';
-import { CustomBoardSheet, type BoardSeed } from '../../../src/components/board-discovery/CustomBoardSheet';
-import { BluetoothQuickstartSheet } from '../../../src/components/board-discovery/BluetoothQuickstartSheet';
-import { userBoardToItem, popularConfigToItem } from '../../../src/components/board-discovery/board-items';
-import type { DiscoveryBoardItem } from '../../../src/components/board-discovery/BoardDiscoveryCard';
-import { useBottomChromeMetrics } from '../../../src/hooks/use-bottom-chrome-metrics';
-import { iosSystemColors } from '../../../src/theme/ios-colors';
-import { spacing } from '../../../src/theme/tokens';
+import { useMyBoards, usePopularBoardConfigs, useNearbyBoards } from '../../src/lib/graphql/hooks';
+import { useActiveBoard, useSetActiveBoard } from '../../src/lib/graphql/use-active-board';
+import { useDeviceLocation } from '../../src/lib/use-device-location';
+import { useAuth } from '../../src/providers/auth-provider';
+import { useToast } from '../../src/providers/toast-provider';
+import { hapticSelection } from '../../src/lib/haptics';
+import { Text } from '../../src/components/Text';
+import { Icon } from '../../src/components/Icon';
+import { Button } from '../../src/components/Button';
+import { ActivityIndicator } from '../../src/components/ActivityIndicator';
+import { BoardCarousel } from '../../src/components/board-discovery/BoardCarousel';
+import { BoardModeCard, type ModeCardState } from '../../src/components/board-discovery/BoardModeCard';
+import { CustomBoardSheet, type BoardSeed } from '../../src/components/board-discovery/CustomBoardSheet';
+import { BluetoothQuickstartSheet } from '../../src/components/board-discovery/BluetoothQuickstartSheet';
+import { userBoardToItem, popularConfigToItem } from '../../src/components/board-discovery/board-items';
+import type { DiscoveryBoardItem } from '../../src/components/board-discovery/BoardDiscoveryCard';
+import { useBottomChromeMetrics } from '../../src/hooks/use-bottom-chrome-metrics';
+import { resolveBoardReturnTo } from '../../src/lib/boards/board-return-to';
+import { iosSystemColors } from '../../src/theme/ios-colors';
+import { spacing } from '../../src/theme/tokens';
 
 export default function BoardSelection() {
   const { isAuthenticated, refreshAuthState } = useAuth();
   const bottomChrome = useBottomChromeMetrics();
   const router = useRouter();
+  const { returnTo } = useLocalSearchParams<{ returnTo?: string }>();
+  const boardReturnTo = resolveBoardReturnTo(returnTo);
   const { t } = useTranslation('boards');
   const { showToast } = useToast();
 
@@ -76,12 +79,15 @@ export default function BoardSelection() {
         // only once the write succeeds (a failed write must not strand the user
         // on a board that won't survive the next cold start).
         await setActiveBoard(board);
-        router.navigate('/(tabs)/climbs');
+        // Dismiss the boards modal back onto the tab it was opened from — Climbs
+        // by default, Discover when the pill there opened it (replaces with that
+        // tab if it isn't already underneath, e.g. opened from a deep link).
+        router.dismissTo(boardReturnTo);
       } catch {
         showToast(t('mobile.boardSwitchError'), 'error');
       }
     },
-    [setActiveBoard, router, showToast, t],
+    [setActiveBoard, router, boardReturnTo, showToast, t],
   );
 
   const myBoardItems = useMemo(
@@ -244,7 +250,7 @@ export default function BoardSelection() {
           <BoardModeCard
             icon="search"
             label={t('mobile.discovery.search')}
-            onPress={() => router.push('/(tabs)/boards/search')}
+            onPress={() => router.push({ pathname: '/boards/search', params: { returnTo: boardReturnTo } })}
           />
         </View>
 

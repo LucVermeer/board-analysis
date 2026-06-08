@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, fireEvent } from '@testing-library/react';
 import { createElement } from 'react';
+
+const cfg = vi.hoisted(() => ({ variant: 'liquidGlass' as 'liquidGlass' | 'material' }));
 
 // GlassIconButton → a <button> surfacing the props FilterButton forwards: the
 // badge count, the icon tint, the glass tint, and the accessibility label.
@@ -60,7 +62,12 @@ vi.mock('../../../providers/theme-provider', () => ({
   useTheme: () => ({
     systemColors: { fill: '#EEE', secondaryLabel: '#999' },
     brandColors: { primary: '#8C4A52' },
+    variant: cfg.variant,
   }),
+}));
+
+vi.mock('../../../theme/ios-colors', () => ({
+  iosSystemColors: { white: '#FFFFFF' },
 }));
 
 // Deterministic colour helper so the active tint/fallback are assertable.
@@ -81,6 +88,10 @@ import { FilterButton } from '../FilterButton';
 const button = (root: HTMLElement) => root.querySelector('[data-icon="filter"]') as HTMLButtonElement;
 
 describe('FilterButton', () => {
+  beforeEach(() => {
+    cfg.variant = 'liquidGlass';
+  });
+
   it('renders the filter glyph and fires onPress', () => {
     const onPress = vi.fn();
     const { container, getByRole } = render(<FilterButton activeFilterCount={0} onPress={onPress} />);
@@ -125,13 +136,20 @@ describe('FilterButton', () => {
     expect(filterButton.getAttribute('data-fallback')).toBe('#EEE');
   });
 
-  it('tints maroon when at least one filter is active', () => {
+  it('uses a white glyph on the maroon glass tint when active (Liquid Glass)', () => {
+    cfg.variant = 'liquidGlass';
     const { container } = render(<FilterButton activeFilterCount={2} onPress={() => {}} />);
     const filterButton = button(container);
-    // Active: icon switches to the brand primary, glass tints/falls back to alpha-mixed maroon.
-    expect(filterButton.getAttribute('data-icon-color')).toBe('#8C4A52');
+    // Active on glass: white glyph reads on the maroon tint; glass tints/falls back to alpha-mixed maroon.
+    expect(filterButton.getAttribute('data-icon-color')).toBe('#FFFFFF');
     expect(filterButton.getAttribute('data-tint')).toBe('#8C4A52@0.18');
     expect(filterButton.getAttribute('data-fallback')).toBe('#8C4A52@0.16');
+  });
+
+  it('keeps the maroon glyph on Material when active (no tint behind it)', () => {
+    cfg.variant = 'material';
+    const { container } = render(<FilterButton activeFilterCount={2} onPress={() => {}} />);
+    expect(button(container).getAttribute('data-icon-color')).toBe('#8C4A52');
   });
 
   it('omits the count from the a11y label when no filters are active', () => {

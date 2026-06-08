@@ -217,6 +217,9 @@
     "all": "Todos",
     "allBoards": "Todas las tablas de escalada"
   },
+  "boardPill": {
+    "switchHint": "Abre el selector de tableros"
+  },
   "boardSwitchConfirm": {
     "session": {
       "title": "¿Salir de tu sesión?",

@@ -537,7 +537,8 @@
     "emptyState": {
       "noBoard": {
         "title": "Aucun board sélectionné",
-        "subtitle": "Ajoutez un board pour parcourir les blocs"
+        "subtitle": "Ajoutez un board pour parcourir les blocs",
+        "cta": "Choisir un board"
       },
       "noClimbs": {
         "title": "Aucun bloc trouvé",
@@ -658,7 +659,8 @@
       "filters": "Filtres",
       "filterCountAria": "Filtres, {{count}} actifs",
       "filterHint": "Ouvre tous les filtres de blocs",
-      "gradeAction": "Définir la plage de cotation"
+      "gradeAction": "Définir la plage de cotation",
+      "clearAll": "Tout effacer"
     },
     "gradeRail": {
       "setFilterAria": "Filtrer par cotation {{grade}}",

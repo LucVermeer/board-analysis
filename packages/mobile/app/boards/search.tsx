@@ -1,23 +1,24 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, TextInput, StyleSheet, Platform, Pressable } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import type { UserBoard } from '@boardsesh/shared-schema';
-import { useSetActiveBoard } from '../../../src/lib/graphql/use-active-board';
-import { useSearchBoardsMap } from '../../../src/lib/graphql/use-search-boards-map';
-import { useDeviceLocation } from '../../../src/lib/use-device-location';
-import { useToast } from '../../../src/providers/toast-provider';
-import { useTheme } from '../../../src/providers/theme-provider';
-import { hapticSelection } from '../../../src/lib/haptics';
-import { Text } from '../../../src/components/Text';
-import { Icon } from '../../../src/components/Icon';
-import { BoardCarousel } from '../../../src/components/board-discovery/BoardCarousel';
-import { BoardDetailSheet } from '../../../src/components/board-discovery/BoardDetailSheet';
-import { userBoardToItem } from '../../../src/components/board-discovery/board-items';
-import type { DiscoveryBoardItem } from '../../../src/components/board-discovery/BoardDiscoveryCard';
-import { brandColors } from '../../../src/theme/colors';
-import { spacing, borderRadius } from '../../../src/theme/tokens';
+import { useSetActiveBoard } from '../../src/lib/graphql/use-active-board';
+import { useSearchBoardsMap } from '../../src/lib/graphql/use-search-boards-map';
+import { useDeviceLocation } from '../../src/lib/use-device-location';
+import { useToast } from '../../src/providers/toast-provider';
+import { useTheme } from '../../src/providers/theme-provider';
+import { hapticSelection } from '../../src/lib/haptics';
+import { Text } from '../../src/components/Text';
+import { Icon } from '../../src/components/Icon';
+import { BoardCarousel } from '../../src/components/board-discovery/BoardCarousel';
+import { BoardDetailSheet } from '../../src/components/board-discovery/BoardDetailSheet';
+import { userBoardToItem } from '../../src/components/board-discovery/board-items';
+import type { DiscoveryBoardItem } from '../../src/components/board-discovery/BoardDiscoveryCard';
+import { resolveBoardReturnTo } from '../../src/lib/boards/board-return-to';
+import { brandColors } from '../../src/theme/colors';
+import { spacing, borderRadius } from '../../src/theme/tokens';
 
 // Lazy/guarded expo-maps load: it's a native module, so a JS-only OTA push to a
 // build that predates it would otherwise throw at import. We resolve the
@@ -50,6 +51,8 @@ export default function BoardSearchScreen() {
   const { systemColors } = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { returnTo } = useLocalSearchParams<{ returnTo?: string }>();
+  const boardReturnTo = resolveBoardReturnTo(returnTo);
   const { t } = useTranslation('boards');
   const { showToast } = useToast();
   const setActiveBoard = useSetActiveBoard();
@@ -124,15 +127,19 @@ export default function BoardSearchScreen() {
         // Only close the sheet once the board is saved — if it throws, the
         // sheet stays open so the error toast has visible context.
         setSelectedUuid(null);
-        // router.back() is the same foreground unmount the X button uses —
-        // proven safe for expo-maps — then switch to the climbs tab.
-        router.back();
-        router.navigate('/(tabs)/climbs');
+        // A single dismissTo collapses the whole boards modal — including this
+        // search screen and its expo-maps view — back to the originating tab. The
+        // map unmounts while the modal is still foreground (mid-dismiss), which is
+        // the same foreground unmount the X button relies on. Using only dismissTo
+        // (matching boards/index.tsx) avoids the back()+dismissTo double-dispatch
+        // race, where dismissTo could fire against a stack frame back() hadn't
+        // committed yet.
+        router.dismissTo(boardReturnTo);
       } catch {
         showToast(t('mobile.boardSwitchError'), 'error');
       }
     },
-    [setActiveBoard, router, showToast, t],
+    [setActiveBoard, router, boardReturnTo, showToast, t],
   );
 
   // Memoised so the native MapView doesn't re-bind the handler every render.
