@@ -3,7 +3,6 @@ import {
   View,
   StyleSheet,
   RefreshControl,
-  Image,
   Keyboard,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
@@ -52,7 +51,7 @@ import { usePlaylistActivation } from '../../../src/lib/playlists/use-playlist-a
 import { toQueueClimb, toQueueClimbs } from '../../../src/lib/climb-types';
 import { useActiveBoard } from '../../../src/lib/graphql/use-active-board';
 import { useAuth } from '../../../src/providers/auth-provider';
-import { getBoardRenderData } from '../../../src/lib/board-details';
+import { ensureBackgroundsCached } from '../../../src/lib/background-image-cache';
 import {
   getRecentFilters,
   addRecentFilter,
@@ -378,21 +377,18 @@ function ClimbListInner() {
     return () => clearTimeout(handle);
   }, [filters, name, boardFilters, boardConfig, boardKey]);
 
-  // Pre-warm board images so they're cached before the user taps into a climb.
+  // Pre-warm bundled board backgrounds so the first tap into a climb paints
+  // instantly. Backgrounds are bundled file:// assets — never fetch board art
+  // over HTTP (the production CDN/WAF 403s the app's request).
   useEffect(() => {
     if (!activeBoard) return;
     const parsedSetIds = activeBoard.setIds.split(',').map(Number);
-    const renderData = getBoardRenderData({
+    void ensureBackgroundsCached({
       boardName: activeBoard.boardType as BoardName,
       layoutId: activeBoard.layoutId,
       sizeId: activeBoard.sizeId,
       setIds: parsedSetIds,
     });
-    if (renderData?.imageUrls) {
-      for (const url of renderData.imageUrls) {
-        void Image.prefetch(url);
-      }
-    }
   }, [activeBoard]);
 
   const searchInput = useMemo(
