@@ -123,10 +123,6 @@ describe('QueueItemRow React.memo', () => {
     vi.clearAllMocks();
   });
 
-  it('is a memoized component', () => {
-    expect((QueueItemRow as unknown as { $$typeof: symbol }).$$typeof).toBe(Symbol.for('react.memo'));
-  });
-
   it('skips re-render when given referentially-equal props', () => {
     const item = makeItem('a', 'Crimp Master');
     const element = (

@@ -22,7 +22,15 @@ export type QueueDragShared = {
 };
 
 type UseQueueDragOptions = {
-  /** Optimistically reorder + broadcast (queue-array indices). */
+  /**
+   * Optimistically reorder + broadcast (queue-array indices).
+   *
+   * MUST be referentially stable across the caller's renders (wrap in
+   * `useCallback`). `controls` is memoized below, but `commit` →
+   * `makeHandleGesture` → `controls` all depend on this identity, so a fresh
+   * `reorderQueue` each render silently churns `controls` and re-renders every
+   * memoized row — exactly the cost this hook exists to avoid.
+   */
   reorderQueue: (uuid: string, oldIndex: number, newIndex: number) => void;
   /** flatRows index of the first/last contiguous `future-item` row (-1 when none). */
   firstFutureRowIndex: number;

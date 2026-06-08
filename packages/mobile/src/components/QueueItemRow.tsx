@@ -1,5 +1,5 @@
 import { memo, useState, useMemo, useCallback, useEffect } from 'react';
-import { Pressable, View, StyleSheet } from 'react-native';
+import { Pressable, View, StyleSheet, type LayoutChangeEvent } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring, withTiming, runOnJS } from 'react-native-reanimated';
 import {
   Gesture,
@@ -227,7 +227,7 @@ function QueueItemRowComponent({
     overflow: 'hidden' as const,
   }));
 
-  const handlePress = () => {
+  const handlePress = useCallback(() => {
     if (isEditMode) {
       hapticSelection();
       onToggleSelect?.(item.uuid);
@@ -242,25 +242,28 @@ function QueueItemRowComponent({
     }
     hapticSelection();
     onPress(item);
-  };
+  }, [isEditMode, isOpen, onToggleSelect, onPress, item, translateX, isSwipeOpen]);
 
-  const handleDeletePress = () => {
+  const handleDeletePress = useCallback(() => {
     // Animate the row out
     translateX.value = withTiming(-400, { duration: 200 });
     rowOpacity.value = withTiming(0, { duration: 200 });
     rowHeight.value = withTiming(0, { duration: 200 }, () => {
       runOnJS(handleRemove)();
     });
-  };
+  }, [translateX, rowOpacity, rowHeight, handleRemove]);
 
   const handleTickPress = useCallback(() => {
     hapticSelection();
     onTickHistory?.(item);
   }, [onTickHistory, item]);
 
+  // Take the layout event directly so the same stable function can be passed to
+  // `onLayout` — an inline `(event) => ...` wrapper would be a fresh arrow each
+  // render, defeating the row's memoization on the wrapping `Animated.View`.
   const handleRowLayout = useCallback(
-    (height: number) => {
-      if (isDraggable) drag?.onRowHeight(height);
+    (event: LayoutChangeEvent) => {
+      if (isDraggable) drag?.onRowHeight(event.nativeEvent.layout.height);
     },
     [isDraggable, drag],
   );
@@ -332,7 +335,7 @@ function QueueItemRowComponent({
   return (
     <Animated.View
       style={[containerAnimatedStyle, dragAnimatedStyle]}
-      onLayout={(event) => handleRowLayout(event.nativeEvent.layout.height)}
+      onLayout={handleRowLayout}
     >
       <View style={styles.swipeContainer}>
         {/* Delete action behind the row */}
