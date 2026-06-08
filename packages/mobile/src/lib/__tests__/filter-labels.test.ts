@@ -8,9 +8,9 @@ import { buildFilterLabels, buildSortLabel } from '../filter-labels';
 const mockT = ((key: string, opts?: Record<string, unknown>) => {
   if (key === 'mobile.search.gradeRange') return `${opts?.min}–${opts?.max}`;
   if (key === 'mobile.search.gradeMin') return `${opts?.grade}+`;
-  if (key === 'mobile.search.gradeMax') return `up to ${opts?.grade}`;
-  if (key === 'mobile.search.ascents') return `${opts?.count}+ ascents`;
-  if (key === 'mobile.search.rating') return `${opts?.count}+ stars`;
+  if (key === 'mobile.search.gradeMax') return `≤${opts?.grade}`;
+  if (key === 'mobile.search.ascents') return `${opts?.count}+ 🧗`;
+  if (key === 'mobile.search.rating') return `${opts?.count}+ ⭐`;
   if (key === 'mobile.search.more') return `+${opts?.count} more`;
   if (key === 'mobile.search.settersCount') return `${opts?.count} setters`;
   return key;
@@ -28,15 +28,15 @@ describe('buildFilterLabels', () => {
   });
 
   it('gradeMax passes the grade arg', () => {
-    expect(labels.gradeMax('V6')).toBe('up to V6');
+    expect(labels.gradeMax('V6')).toBe('≤V6');
   });
 
   it('ascents passes count', () => {
-    expect(labels.ascents(10)).toBe('10+ ascents');
+    expect(labels.ascents(10)).toBe('10+ 🧗');
   });
 
   it('rating passes count', () => {
-    expect(labels.rating(3)).toBe('3+ stars');
+    expect(labels.rating(3)).toBe('3+ ⭐');
   });
 
   it('more passes count', () => {
@@ -65,16 +65,16 @@ describe('buildFilterLabels', () => {
     expect(labels.gradeAccuracy('0.05')).toBe('mobile.filter.accuracy.tight');
   });
 
-  it('tallOnly uses mobile.filter.tall', () => {
-    expect(labels.tallOnly()).toBe('mobile.filter.tall');
+  it('tallOnly uses the no-"only" summary form mobile.filter.tallClimbs', () => {
+    expect(labels.tallOnly()).toBe('mobile.filter.tallClimbs');
   });
 
-  it('wideOnly uses mobile.filter.wide', () => {
-    expect(labels.wideOnly()).toBe('mobile.filter.wide');
+  it('wideOnly uses the no-"only" summary form mobile.filter.wideClimbs', () => {
+    expect(labels.wideOnly()).toBe('mobile.filter.wideClimbs');
   });
 
-  it('betaOnly uses mobile.filter.betaVideos', () => {
-    expect(labels.betaOnly()).toBe('mobile.filter.betaVideos');
+  it('betaOnly uses the no-"only" summary form mobile.filter.betaVideosShort', () => {
+    expect(labels.betaOnly()).toBe('mobile.filter.betaVideosShort');
   });
 
   it('status appends the kind suffix', () => {
@@ -102,9 +102,22 @@ describe('buildFilterLabels', () => {
   it('returns all required keys (no missing fields)', () => {
     // Ensures Required<FilterSummaryLabels> is fully populated.
     const keys: Array<keyof ReturnType<typeof buildFilterLabels>> = [
-      'gradeRange', 'gradeMin', 'gradeMax', 'ascents', 'rating', 'more',
-      'setters', 'gradeAccuracy', 'tallOnly', 'wideOnly', 'betaOnly',
-      'status', 'hideAttempted', 'hideCompleted', 'showOnlyAttempted', 'showOnlyCompleted',
+      'gradeRange',
+      'gradeMin',
+      'gradeMax',
+      'ascents',
+      'rating',
+      'more',
+      'setters',
+      'gradeAccuracy',
+      'tallOnly',
+      'wideOnly',
+      'betaOnly',
+      'status',
+      'hideAttempted',
+      'hideCompleted',
+      'showOnlyAttempted',
+      'showOnlyCompleted',
     ];
     for (const key of keys) {
       expect(typeof labels[key]).toBe('function');

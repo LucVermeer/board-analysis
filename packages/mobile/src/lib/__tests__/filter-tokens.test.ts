@@ -17,16 +17,16 @@ const mockFormatGradeById = (id: number | null | undefined) => (id == null ? nul
 const mockT = ((key: string, options?: Record<string, unknown>) => {
   if (key === 'mobile.search.gradeRange') return `${options?.min}–${options?.max}`;
   if (key === 'mobile.search.gradeMin') return `${options?.grade}+`;
-  if (key === 'mobile.search.gradeMax') return `Up to ${options?.grade}`;
-  if (key === 'mobile.search.ascents') return `${options?.count}+ ascents`;
-  if (key === 'mobile.search.rating') return `${options?.count}+ stars`;
+  if (key === 'mobile.search.gradeMax') return `≤${options?.grade}`;
+  if (key === 'mobile.search.ascents') return `${options?.count}+ 🧗`;
+  if (key === 'mobile.search.rating') return `${options?.count}+ ⭐`;
   if (key === 'mobile.search.settersCount') return `${options?.count} setters`;
   if (key === 'search.summary.routesOnly') return 'Routes only';
   if (key === 'search.summary.bouldersAndRoutes') return 'Boulders & routes';
   if (key === 'mobile.filter.sort.quality') return 'Quality';
   if (key === 'mobile.filter.benchmark') return 'Benchmarks only';
   if (key === 'mobile.filter.status.drafts') return 'Drafts';
-  if (key === 'mobile.filter.tall') return 'Tall climbs only';
+  if (key === 'mobile.filter.tallClimbs') return 'Tall climbs';
   return key;
 }) as unknown as Parameters<typeof getActiveFilterTokens>[0]['t'];
 

@@ -25,9 +25,9 @@ const mockT = ((key: string, options?: Record<string, unknown>) => {
 
   if (key === 'mobile.search.gradeRange') return `${options?.min}–${options?.max}`;
   if (key === 'mobile.search.gradeMin') return `${options?.grade}+`;
-  if (key === 'mobile.search.gradeMax') return `Up to ${options?.grade}`;
-  if (key === 'mobile.search.ascents') return `${options?.count}+ ascents`;
-  if (key === 'mobile.search.rating') return `${options?.count}+ stars`;
+  if (key === 'mobile.search.gradeMax') return `≤${options?.grade}`;
+  if (key === 'mobile.search.ascents') return `${options?.count}+ 🧗`;
+  if (key === 'mobile.search.rating') return `${options?.count}+ ⭐`;
   if (key === 'mobile.search.more') return `+${options?.count} more`;
 
   return key;
@@ -52,9 +52,9 @@ describe('getFilterSummary', () => {
     expect(getFilterSummary(filters, '', mockGrades, mockT)).toBe('V4+');
   });
 
-  it('shows max grade with up-to prefix', () => {
+  it('shows max grade with the ≤ prefix', () => {
     const filters: ClimbFilters = { ...DEFAULT_FILTERS, maxGrade: 15 };
-    expect(getFilterSummary(filters, '', mockGrades, mockT)).toBe('Up to V6');
+    expect(getFilterSummary(filters, '', mockGrades, mockT)).toBe('≤V6');
   });
 
   it('shows non-default sort label', () => {
@@ -64,7 +64,7 @@ describe('getFilterSummary', () => {
 
   it('joins two parts with middle dot', () => {
     const filters: ClimbFilters = { ...DEFAULT_FILTERS, minGrade: 10, minAscents: 25 };
-    expect(getFilterSummary(filters, '', mockGrades, mockT)).toBe('V4+ · 25+ ascents');
+    expect(getFilterSummary(filters, '', mockGrades, mockT)).toBe('V4+ · 25+ 🧗');
   });
 
   it('truncates at 2 parts and shows remainder count', () => {
@@ -86,7 +86,7 @@ describe('getFilterSummary', () => {
 
   it('skips grade parts when grades data is undefined', () => {
     const filters: ClimbFilters = { ...DEFAULT_FILTERS, minGrade: 10, minAscents: 5 };
-    expect(getFilterSummary(filters, '', undefined, mockT)).toBe('5+ ascents');
+    expect(getFilterSummary(filters, '', undefined, mockT)).toBe('5+ 🧗');
   });
 
   it('includes search text as first part before filter parts', () => {
@@ -96,6 +96,6 @@ describe('getFilterSummary', () => {
 
   it('shows the beta videos filter part when enabled', () => {
     const filters: ClimbFilters = { ...DEFAULT_FILTERS, onlyWithBetaVideos: true };
-    expect(getFilterSummary(filters, '', mockGrades, mockT)).toBe('mobile.filter.betaVideos');
+    expect(getFilterSummary(filters, '', mockGrades, mockT)).toBe('mobile.filter.betaVideosShort');
   });
 });

@@ -364,8 +364,8 @@ export function ClimbFilterSheet({
     if (localFilters.setter && localFilters.setter.length > 0) {
       parts.push(t('mobile.search.settersCount', { count: localFilters.setter.length }));
     }
-    if (localFilters.onlyTallClimbs) parts.push(t('mobile.filter.tall'));
-    if (localFilters.onlyWideClimbs) parts.push(t('mobile.filter.wide'));
+    if (localFilters.onlyTallClimbs) parts.push(t('mobile.filter.tallClimbs'));
+    if (localFilters.onlyWideClimbs) parts.push(t('mobile.filter.wideClimbs'));
     return parts.join(' · ') || null;
   }, [localFilters, accuracyLabels, t]);
 
@@ -375,7 +375,7 @@ export function ClimbFilterSheet({
     if (localFilters.hideAttempted) parts.push(t('mobile.filter.progress.hideAttempted'));
     if (localFilters.showOnlyAttempted) parts.push(t('mobile.filter.progress.onlyAttempted'));
     if (localFilters.showOnlyCompleted) parts.push(t('mobile.filter.progress.onlyCompleted'));
-    if (localFilters.onlyWithBetaVideos) parts.push(t('mobile.filter.betaVideos'));
+    if (localFilters.onlyWithBetaVideos) parts.push(t('mobile.filter.betaVideosShort'));
     if (localFilters.sortBy !== DEFAULT_FILTERS.sortBy || localFilters.sortOrder !== DEFAULT_FILTERS.sortOrder) {
       parts.push(sortLabels[localFilters.sortBy]);
     }

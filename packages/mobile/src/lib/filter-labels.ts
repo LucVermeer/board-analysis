@@ -22,9 +22,11 @@ export function buildFilterLabels(t: TFunction<'climbs'>): Required<FilterSummar
     setters: (count) => t('mobile.search.settersCount', { count }),
     // i18n-keep mobile.filter.accuracy.off mobile.filter.accuracy.loose mobile.filter.accuracy.moderate mobile.filter.accuracy.tight
     gradeAccuracy: (value) => t(`mobile.filter.accuracy.${gradeAccuracyBucket(value)}`),
-    tallOnly: () => t('mobile.filter.tall'),
-    wideOnly: () => t('mobile.filter.wide'),
-    betaOnly: () => t('mobile.filter.betaVideos'),
+    // Summary form drops the "only" wording the toggle rows use ("Tall climbs
+    // only" → "Tall climbs"), keeping the filter summary / tokens compact.
+    tallOnly: () => t('mobile.filter.tallClimbs'),
+    wideOnly: () => t('mobile.filter.wideClimbs'),
+    betaOnly: () => t('mobile.filter.betaVideosShort'),
     // i18n-keep mobile.filter.status.drafts mobile.filter.status.established mobile.filter.status.projects
     status: (kind) => t(`mobile.filter.status.${kind}`),
     hideAttempted: () => t('mobile.filter.progress.hideAttempted'),
