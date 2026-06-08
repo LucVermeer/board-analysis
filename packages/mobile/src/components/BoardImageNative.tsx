@@ -22,6 +22,14 @@ type BoardImageNativeProps = {
    * separate PNGs (see useNativeClimbRender).
    */
   filledStyle?: boolean;
+  /**
+   * Target overlay/background width in px for small surfaces (e.g. the
+   * 40×40 accessory thumbnail). Forwarded to useNativeClimbRender so the
+   * Rust renderer + bundled background resolve at a small size instead of
+   * the board's native ~1080px — avoiding a main-thread downscale. Omit
+   * for the full-size play view (renders at native board width).
+   */
+  renderWidth?: number;
   style?: ViewStyle;
 };
 
@@ -46,6 +54,7 @@ const BoardImageNative = React.memo(function BoardImageNative({
   boardHeight,
   mirrored,
   filledStyle = false,
+  renderWidth,
   style,
 }: BoardImageNativeProps) {
   const { overlayUri, backgroundPaths, missingBackgroundCount } = useNativeClimbRender({
@@ -55,6 +64,7 @@ const BoardImageNative = React.memo(function BoardImageNative({
     sizeId,
     setIds,
     filledStyle,
+    renderWidth,
   });
 
   const containerStyle: ViewStyle = {

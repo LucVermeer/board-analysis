@@ -14,17 +14,33 @@ export {
 export type { BetaLink, BetaLinksGqlRow };
 
 /**
+ * Width (px) requested for beta thumbnails — the 140px card at 2× DPR.
+ * Must be one of the backend's `ALLOWED_IMAGE_SIZES` buckets
+ * (packages/backend/src/lib/image-resize.ts), otherwise the backend serves
+ * the full-size original. Requesting a pre-sized thumbnail keeps the bytes
+ * (and expo-image's decode) small; `allowDownscaling={false}` on the card
+ * <Image> handles the rest.
+ */
+const BETA_THUMBNAIL_REQUEST_SIZE = 280;
+
+/**
  * Beta thumbnails are served by the backend's `/static/beta-link-thumbnails/...`
  * handler. The GraphQL resolver returns the path as a backend-relative URL;
  * mobile always talks to the backend over `BACKEND_URL`, so prepend it when
- * the value is a path (not already an absolute URL).
+ * the value is a path (not already an absolute URL), and request a sized
+ * variant via `?size=`.
+ *
+ * Already-absolute URLs (third-party CDNs) are passed through untouched —
+ * we can't resize those.
  *
  * Exported for tests; production callers should use `mapBetaLink` /
  * `mapBetaLinks` which thread it into the shared mapper.
  */
 export function absolutizeThumbnail(thumbnail: string | null): string | null {
   if (!thumbnail || !thumbnail.startsWith('/')) return thumbnail;
-  return `${BACKEND_URL.replace(/\/+$/, '')}${thumbnail}`;
+  const absolute = `${BACKEND_URL.replace(/\/+$/, '')}${thumbnail}`;
+  const separator = absolute.includes('?') ? '&' : '?';
+  return `${absolute}${separator}size=${BETA_THUMBNAIL_REQUEST_SIZE}`;
 }
 
 export function mapBetaLink(row: BetaLinksGqlRow): BetaLink {

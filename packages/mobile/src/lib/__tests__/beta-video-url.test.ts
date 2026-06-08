@@ -26,9 +26,9 @@ function makeRow(overrides: Partial<BetaLinksGqlRow> = {}): BetaLinksGqlRow {
 }
 
 describe('absolutizeThumbnail (mobile)', () => {
-  it('prepends BACKEND_URL to a backend-relative thumbnail path', () => {
+  it('prepends BACKEND_URL and requests a sized variant for a backend-relative thumbnail path', () => {
     expect(absolutizeThumbnail('/static/beta-link-thumbnails/abc.jpg')).toBe(
-      'https://ws.boardsesh.test/static/beta-link-thumbnails/abc.jpg',
+      'https://ws.boardsesh.test/static/beta-link-thumbnails/abc.jpg?size=280',
     );
   });
 
@@ -62,7 +62,7 @@ describe('mapBetaLink (mobile)', () => {
       link: IG_REEL,
       foreign_username: 'alice',
       angle: 40,
-      thumbnail: 'https://ws.boardsesh.test/static/abc.jpg',
+      thumbnail: 'https://ws.boardsesh.test/static/abc.jpg?size=280',
       is_listed: true,
       created_at: '2026-01-01T00:00:00Z',
     });
@@ -101,6 +101,6 @@ describe('absolutizeThumbnail trailing-slash normalisation', () => {
       WEB_BASE_URL: 'https://www.boardsesh.test',
     }));
     const reloaded = await import('../beta-video-url');
-    expect(reloaded.absolutizeThumbnail('/static/abc.jpg')).toBe('https://ws.boardsesh.test/static/abc.jpg');
+    expect(reloaded.absolutizeThumbnail('/static/abc.jpg')).toBe('https://ws.boardsesh.test/static/abc.jpg?size=280');
   });
 });

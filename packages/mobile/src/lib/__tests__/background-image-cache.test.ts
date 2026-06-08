@@ -24,6 +24,9 @@ vi.mock('expo-asset', () => ({
 vi.mock('../board-backgrounds-manifest', () => ({
   BOARD_BACKGROUND_ASSETS: {
     'kilter/product_sizes_layouts_sets/36-1.webp': 100,
+    // Kilter has a bundled thumb; Tension intentionally does not, so the
+    // thumb-variant fallback-to-full path is exercised below.
+    'kilter/product_sizes_layouts_sets/thumbs/36-1.webp': 300,
     'tension/product_sizes_layouts_sets/12.webp': 200,
   },
 }));
@@ -212,5 +215,52 @@ describe('tryGetBackgroundPathsSync', () => {
       setIds: [24],
     });
     expect(result).toBeNull();
+  });
+});
+
+describe('thumb variant', () => {
+  beforeEach(() => {
+    vi.mocked(getBoardRenderData).mockReset();
+  });
+
+  it('resolves the bundled thumbs/ asset when variant is "thumb"', () => {
+    vi.mocked(getBoardRenderData).mockReturnValue({
+      boardWidth: 100,
+      boardHeight: 100,
+      holdsData: [],
+      imageUrls: ['https://www.boardsesh.com/images/kilter/product_sizes_layouts_sets/36-1.png'],
+    } as ReturnType<typeof getBoardRenderData>);
+
+    const result = tryGetBackgroundPathsSync({
+      boardName: 'kilter',
+      layoutId: 1,
+      sizeId: 10,
+      setIds: [24],
+      variant: 'thumb',
+    });
+
+    // Maps to `.../thumbs/36-1.webp` (module 300), not the full-res 100.
+    expect(result).toEqual({ paths: ['/bundled/300.webp'], missingCount: 0 });
+  });
+
+  it('falls back to the bundled full-res asset when no thumb is bundled (never the backend)', () => {
+    vi.mocked(getBoardRenderData).mockReturnValue({
+      boardWidth: 100,
+      boardHeight: 100,
+      holdsData: [],
+      // Tension has no thumbs/ entry in the mock manifest.
+      imageUrls: ['https://www.boardsesh.com/images/tension/product_sizes_layouts_sets/12.png'],
+    } as ReturnType<typeof getBoardRenderData>);
+
+    const result = tryGetBackgroundPathsSync({
+      boardName: 'tension',
+      layoutId: 1,
+      sizeId: 10,
+      setIds: [24],
+      variant: 'thumb',
+    });
+
+    // Graceful fallback to the full-res key (module 200), no missing gap.
+    expect(result).toEqual({ paths: ['/bundled/200.webp'], missingCount: 0 });
   });
 });

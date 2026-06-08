@@ -3,7 +3,11 @@ import { Directory, Paths } from 'expo-file-system';
 import type { BoardName } from '@boardsesh/shared-schema';
 import { HOLD_STATE_MAP } from '@boardsesh/board-constants/hold-states';
 import { getBoardRenderData } from '../lib/board-details';
-import { ensureBackgroundsCached, tryGetBackgroundPathsSync } from '../lib/background-image-cache';
+import {
+  ensureBackgroundsCached,
+  tryGetBackgroundPathsSync,
+  type BackgroundVariant,
+} from '../lib/background-image-cache';
 
 /**
  * Bump when the Rust renderer output format changes. v2 marks the
@@ -46,6 +50,16 @@ type NativeClimbRenderParams = {
    * cache as separate PNGs.
    */
   filledStyle?: boolean;
+  /**
+   * Target overlay width in pixels for small surfaces (list thumbnail,
+   * accessory thumbnail). The Rust renderer rasterizes the holds-only PNG
+   * at this width instead of the board's native ~1080px, so the consuming
+   * <Image> never has to downscale a large source on the main thread (the
+   * cause of the iOS app hang). Omit for the full-size play view, which
+   * renders at native board width. Clamped to the board width (never
+   * upscales). Also selects the bundled `thumb` background variant.
+   */
+  renderWidth?: number;
 };
 
 type NativeClimbRenderResult = {
@@ -249,6 +263,7 @@ export function buildCacheKey(
   setIds: string,
   frames: string,
   filledStyle = false,
+  renderWidth?: number,
 ): string {
   const framesHash = fnv1aHex(frames);
   const canonicalSetIds = canonicalizeSetIds(setIds);
@@ -258,7 +273,13 @@ export function buildCacheKey(
   // thumbnail), 's' = stroke-only (full play view). Without this token the
   // two styles would collide on one PNG and whichever rendered first wins.
   const style = filledStyle ? 'f' : 's';
-  return `v${RENDERER_VERSION}_${style}_${boardName}_${layoutId}_${sizeId}_${canonicalSetIds}_${framesHash}`;
+  // Width token keeps the small (list, e.g. 400px) and full (play view,
+  // native board width) overlays in separate PNGs — otherwise whichever
+  // rendered first would be reused at the wrong resolution. 'full' = native
+  // board width. The token tracks the requested width, not the clamped
+  // output, so it stays stable for a given (board, renderWidth) pair.
+  const width = renderWidth != null ? `${renderWidth}` : 'full';
+  return `v${RENDERER_VERSION}_${style}_w${width}_${boardName}_${layoutId}_${sizeId}_${canonicalSetIds}_${framesHash}`;
 }
 
 /**
@@ -270,12 +291,29 @@ export function buildCacheKey(
  * hook instance but swaps in new props) can't surface stale paths from
  * the previous climb's board.
  */
-export function buildBoardKey(boardName: string, layoutId: number, sizeId: number, setIds: string): string {
-  return `${boardName}-${layoutId}-${sizeId}-${setIds}`;
+export function buildBoardKey(
+  boardName: string,
+  layoutId: number,
+  sizeId: number,
+  setIds: string,
+  variant: BackgroundVariant = 'full',
+): string {
+  // Variant is part of the identity so a FlashList row recycled between a
+  // thumb context (list) and a full context can't surface the wrong-size
+  // background paths from the previous climb.
+  return `${boardName}-${layoutId}-${sizeId}-${setIds}-${variant}`;
 }
 
-function getBoardConfig(boardName: BoardName, layoutId: number, sizeId: number, setIds: string, filledStyle: boolean) {
-  const configKey = `${boardName}-${layoutId}-${sizeId}-${setIds}-${filledStyle ? 'f' : 's'}`;
+function getBoardConfig(
+  boardName: BoardName,
+  layoutId: number,
+  sizeId: number,
+  setIds: string,
+  filledStyle: boolean,
+  renderWidth?: number,
+) {
+  const widthKey = renderWidth != null ? `${renderWidth}` : 'full';
+  const configKey = `${boardName}-${layoutId}-${sizeId}-${setIds}-${filledStyle ? 'f' : 's'}-w${widthKey}`;
   const cached = boardConfigCache.get(configKey);
   if (cached) return cached;
 
@@ -294,14 +332,16 @@ function getBoardConfig(boardName: BoardName, layoutId: number, sizeId: number, 
     };
   }
 
-  // Always render at the board's native width with the "full"-style hold
-  // rendering (thinner stroke, no fill). The list view scales the result
-  // down via contentFit="contain"; at 64×64 the thin stroke is still
-  // ~2.7px wide so holds remain visible.
+  // Small surfaces (list/accessory) pass a renderWidth so the Rust
+  // renderer rasterizes a small PNG (e.g. 400px) instead of the board's
+  // native ~1080px — the consuming <Image> then has nothing large to
+  // downscale on the main thread. Clamp to the board width so we never
+  // upscale. The play view omits renderWidth and renders at native width.
+  const outputWidth = renderWidth != null ? Math.min(renderWidth, renderData.boardWidth) : renderData.boardWidth;
   const configBase = {
     board_width: renderData.boardWidth,
     board_height: renderData.boardHeight,
-    output_width: renderData.boardWidth,
+    output_width: outputWidth,
     thumbnail: filledStyle,
     holds: renderData.holdsData.map((hold) => ({
       id: hold.id,
@@ -383,14 +423,19 @@ function getNativeModule() {
  * and the component shows backgrounds alone.
  */
 export function useNativeClimbRender(params: NativeClimbRenderParams): NativeClimbRenderResult {
-  const { frames, boardName, layoutId, sizeId, setIds, filledStyle = false } = params;
+  const { frames, boardName, layoutId, sizeId, setIds, filledStyle = false, renderWidth } = params;
+
+  // Small surfaces that pass a renderWidth want the bundled thumb-sized
+  // background too, so neither the overlay nor the photo is a large source
+  // the main thread has to downscale.
+  const variant: BackgroundVariant = renderWidth != null ? 'thumb' : 'full';
 
   // Run the disk-cache scan once per JS context. Safe to call on every
   // render — the function self-guards via `warmupRun`.
   warmupRenderedOverlaysOnce();
 
-  const currentCacheKey = buildCacheKey(boardName, layoutId, sizeId, setIds, frames, filledStyle);
-  const currentBoardKey = buildBoardKey(boardName, layoutId, sizeId, setIds);
+  const currentCacheKey = buildCacheKey(boardName, layoutId, sizeId, setIds, frames, filledStyle, renderWidth);
+  const currentBoardKey = buildBoardKey(boardName, layoutId, sizeId, setIds, variant);
 
   // Seed both pieces of state synchronously so the first paint already
   // shows whatever's available. Backgrounds in production are usually
@@ -419,6 +464,7 @@ export function useNativeClimbRender(params: NativeClimbRenderParams): NativeCli
       layoutId,
       sizeId,
       setIds: setIds.split(',').map(Number).filter(Boolean),
+      variant,
     });
     if (!sync) return null;
     return { key: currentBoardKey, paths: sync.paths, missingCount: sync.missingCount };
@@ -451,6 +497,7 @@ export function useNativeClimbRender(params: NativeClimbRenderParams): NativeCli
         layoutId,
         sizeId,
         setIds: setIdsArray,
+        variant,
       });
       if (sync) {
         setStoredBackgrounds({
@@ -468,6 +515,7 @@ export function useNativeClimbRender(params: NativeClimbRenderParams): NativeCli
         layoutId,
         sizeId,
         setIds: setIdsArray,
+        variant,
       });
       if (cancelled || !mountedRef.current) return;
       // Null = getBoardRenderData failed; leave existing state alone.
@@ -476,7 +524,7 @@ export function useNativeClimbRender(params: NativeClimbRenderParams): NativeCli
       // clobbering the current climb's state. mountedRef alone isn't
       // enough — the hook instance is still mounted, just on different
       // props now.
-      const latestBoardKey = buildBoardKey(boardName, layoutId, sizeId, setIds);
+      const latestBoardKey = buildBoardKey(boardName, layoutId, sizeId, setIds, variant);
       if (latestBoardKey !== currentBoardKey) return;
       setStoredBackgrounds((prev) => {
         // Skip the state update when nothing actually changed, to avoid
@@ -524,7 +572,7 @@ export function useNativeClimbRender(params: NativeClimbRenderParams): NativeCli
     const nativeModule = getNativeModule();
     if (!nativeModule) return;
 
-    const boardConfig = getBoardConfig(boardName, layoutId, sizeId, setIds, filledStyle);
+    const boardConfig = getBoardConfig(boardName, layoutId, sizeId, setIds, filledStyle, renderWidth);
     if (!boardConfig) return;
 
     const renderPromise = getOrStartInflightRender(currentCacheKey, () => {
@@ -554,7 +602,7 @@ export function useNativeClimbRender(params: NativeClimbRenderParams): NativeCli
     // nativeRender is intentionally excluded from deps: this effect *sets* it,
     // and the only meaningful re-trigger is a cacheKey change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentCacheKey, frames, boardName, layoutId, sizeId, setIds, filledStyle]);
+  }, [currentCacheKey, frames, boardName, layoutId, sizeId, setIds, filledStyle, renderWidth]);
 
   // Only surface the native URI if it matches the *current* cache key —
   // a stale render (from before a prop change) would otherwise show.

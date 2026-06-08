@@ -67,6 +67,9 @@ export const BetaVideoCard = memo(function BetaVideoCard({ link }: Props) {
           recyclingKey={link.thumbnail}
           onError={() => setImageFailed(true)}
           accessibilityIgnoresInvertColors
+          // Remote IG/TikTok thumbnail (now requested pre-sized via ?size=);
+          // skip expo-image's main-thread downscale resample regardless.
+          allowDownscaling={false}
         />
       ) : (
         <View style={[styles.thumbnail, styles.thumbnailFallback]}>
