@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useRef, useState, useCallback, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState, useCallback, type ReactNode } from 'react';
 import { AppState } from 'react-native';
 import type { WebBrowserAuthSessionResult } from 'expo-web-browser';
 import { useSegments, Redirect } from 'expo-router';
@@ -133,6 +133,22 @@ export function AuthProvider({ children, onReady }: AuthProviderProps) {
     }
   }, [isLoading]);
 
+  // Stable context value: every callback below is a stable useCallback, so the
+  // value reference only changes when isAuthenticated / isLoading actually flip
+  // — not on each AuthProvider render. Declared before the early returns so the
+  // hook order stays unconditional.
+  const value = useMemo<AuthState>(
+    () => ({
+      isAuthenticated,
+      isLoading,
+      signIn,
+      signInWithCredentials,
+      signOut,
+      refreshAuthState: checkAuth,
+    }),
+    [isAuthenticated, isLoading, signIn, signInWithCredentials, signOut, checkAuth],
+  );
+
   if (isLoading) {
     return null;
   }
@@ -146,18 +162,5 @@ export function AuthProvider({ children, onReady }: AuthProviderProps) {
     return <Redirect href="/(tabs)/climbs" />;
   }
 
-  return (
-    <AuthContext.Provider
-      value={{
-        isAuthenticated,
-        isLoading,
-        signIn,
-        signInWithCredentials,
-        signOut,
-        refreshAuthState: checkAuth,
-      }}
-    >
-      {children}
-    </AuthContext.Provider>
-  );
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

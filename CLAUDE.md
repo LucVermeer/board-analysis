@@ -222,6 +222,19 @@ After mobile changes:
 4. `vp run check:mobile-simulator` — macOS only; skips on Linux.
 5. `vp run mobile:screenshot` — macOS only.
 
+### Mobile performance checklist (PR review)
+
+For any list, provider, gesture, or board-art change, confirm:
+
+- **List virtualized?** `FlashList` / `BottomSheetFlatList`, never `.map()` in a `ScrollView`. Any `loadMore` is one page per end-reach, not a drain-until-`hasMore`.
+- **Row memoized & `renderItem` deps clean?** Row is `React.memo`'d; `renderItem` is a `useCallback` whose deps have **no array `.length`** and **no inline closures**; `keyExtractor` hoisted.
+- **Provider value memoized & state/actions split?** Context `value` is `useMemo`'d; a volatile array (logbook, reducer state, roster) is not bundled with the stable callbacks consumers depend on. Enforced for `packages/mobile/**` + `packages/shared/**` by `react/jsx-no-constructed-context-values` (error).
+- **Per-row hook O(1)?** Reads a pre-built index (`Map`), never `array.filter`/scan per row.
+- **Worklet `runOnJS` gated?** No `runOnJS(setState)` per frame — gate on a value change; mirror read JS values into shared values instead of listing them in the gesture `useMemo` deps.
+- **New effect bounded?** No unbounded `loadMore` loops or per-frame state churn.
+
+Full rationale + repo examples: `docs/react-native-performance.md`.
+
 ### Local iOS builds
 
 Use `vp run mobile:ios` for local `packages/mobile` iOS builds instead of raw `expo run:ios`. The wrapper points generated `packages/mobile/ios/build` at a shared cache under `~/Library/Caches/boardsesh/xcode/packages-mobile-ios/build`, so separate git worktrees reuse the same Xcode build products. Override with `BOARDSESH_IOS_BUILD_CACHE_DIR=/path/to/cache` only when deliberately isolating a cache. Do not pass `--no-build-cache`; it clears iOS derived data and defeats the shared-cache workflow.

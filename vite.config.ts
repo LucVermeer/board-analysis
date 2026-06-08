@@ -26,7 +26,28 @@ export default defineConfig({
       typeAware: true,
       typeCheck: true,
     },
+    rules: {
+      // Catch unmemoized React context values (the inline `value={{ ... }}`
+      // anti-pattern that re-renders every consumer). Warn repo-wide so the
+      // pre-existing web/test violations don't fail CI; promoted to `error` for
+      // the mobile + shared-react surfaces below. See docs/react-native-performance.md.
+      //
+      // NOTE: vite-plus's bundled linter (@oxlint/plugins) does not currently
+      // *execute* these two off-by-default `react/*` rules — they show in
+      // `vp lint --rules` but never fire — so this is editor/raw-oxlint
+      // enforcement + a forward-looking guard, not CI enforcement today. The
+      // two mobile providers were fixed by hand to satisfy it.
+      'react/jsx-no-constructed-context-values': 'warn',
+      // Index keys defeat list reconciliation when rows reorder. Low-noise warn.
+      'react/no-array-index-key': 'warn',
+    },
     overrides: [
+      {
+        files: ['packages/mobile/**/*.{ts,tsx}', 'packages/shared/**/*.{ts,tsx}'],
+        rules: {
+          'react/jsx-no-constructed-context-values': 'error',
+        },
+      },
       {
         files: ['packages/backend/src/**/*.ts'],
         rules: {
