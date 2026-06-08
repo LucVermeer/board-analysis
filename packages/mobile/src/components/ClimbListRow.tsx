@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, StyleSheet } from 'react-native';
 import Animated, {
   useAnimatedStyle,
@@ -28,13 +28,26 @@ const ACTION_REVEAL = 150;
 const COMMIT_THRESHOLD = 96;
 const SWIPE_FRICTION = 1;
 
+// Per-row swipe perf: the panels below split into a cheap always-mounted shell
+// (just the coloured panel + its resting-state icon, zero shared values /
+// animated styles / reactions) and a heavy animated inner that carries the
+// drag-driven icon interpolation + haptic-detent reaction. FlashList recycles
+// rows, so when a row is just sitting in the list the shell is all that mounts.
+// The inner mounts lazily the instant a horizontal drag begins (`active`), so
+// the animated cost is paid only while the user is actually swiping — not on
+// every recycle during a scroll. The shell renders each panel's translation=0
+// appearance, so the lazy inner can mount a frame or two late without ever
+// showing a blank or wrong-looking panel: the panel is occluded by the opaque
+// row at rest and only the first frames of a drag are covered by the shell,
+// which already looks identical to the inner at translation≈0.
+
 /**
- * Leading "Queue" swipe action — Spotify-style commit-on-release (left-to-right
- * swipe). The panel shows a queue icon that flips to a "✓" once you cross the
- * commit threshold (with a haptic detent), so you feel and see that releasing
- * will queue the climb. The add fires from the row's onSwipeableWillOpen.
+ * Drag-driven inner of the "Queue" action. The queue icon flips to a "✓" once
+ * you cross the commit threshold (with a haptic detent), so you feel and see
+ * that releasing will queue the climb. Only mounted while the row is being
+ * dragged; the add itself still fires from the row's onSwipeableWillOpen.
  */
-function QueueSwipeAction({ translation }: { translation: SharedValue<number> }) {
+function QueueSwipeActionInner({ translation }: { translation: SharedValue<number> }) {
   // Haptic detent the instant the drag crosses the commit threshold.
   useAnimatedReaction(
     () => Math.abs(translation.value) >= COMMIT_THRESHOLD,
@@ -60,26 +73,46 @@ function QueueSwipeAction({ translation }: { translation: SharedValue<number> })
     return { opacity: armedProgress, transform: [{ scale: 0.6 + armedProgress * 0.4 }] };
   });
   return (
-    <View style={[styles.swipeAction, styles.queueAction]}>
-      <View style={styles.swipeIcon}>
-        <Animated.View style={[styles.swipeIconLayer, plusStyle]}>
-          <Icon name="queue" size={26} color={iosSystemColors.white} />
-        </Animated.View>
-        <Animated.View style={[styles.swipeIconLayer, checkStyle]}>
-          <Icon name="tick" size={26} color={iosSystemColors.white} />
-        </Animated.View>
-      </View>
+    <View style={styles.swipeIcon}>
+      <Animated.View style={[styles.swipeIconLayer, plusStyle]}>
+        <Icon name="queue" size={26} color={iosSystemColors.white} />
+      </Animated.View>
+      <Animated.View style={[styles.swipeIconLayer, checkStyle]}>
+        <Icon name="tick" size={26} color={iosSystemColors.white} />
+      </Animated.View>
     </View>
   );
 }
 
 /**
- * Trailing "Playlist" swipe action (right-to-left swipe) — commit-on-release
- * opens the playlist picker. Rose panel with a playlist icon that grows in with
- * the drag plus a haptic detent at the threshold; the picker opens from
- * onSwipeableWillOpen.
+ * Leading "Queue" swipe action — Spotify-style commit-on-release (left-to-right
+ * swipe). Cheap shell while resting; mounts the animated inner once a drag
+ * starts (`active`). The resting shell shows the queue icon at full opacity (the
+ * translation=0 state, where the "✓" is fully transparent), so the panel looks
+ * right from the first frame of a drag.
  */
-function PlaylistSwipeAction({ translation }: { translation: SharedValue<number> }) {
+function QueueSwipeAction({ translation, active }: { translation: SharedValue<number>; active: boolean }) {
+  return (
+    <View style={[styles.swipeAction, styles.queueAction]}>
+      {active ? (
+        <QueueSwipeActionInner translation={translation} />
+      ) : (
+        <View style={styles.swipeIcon}>
+          <View style={styles.swipeIconLayer}>
+            <Icon name="queue" size={26} color={iosSystemColors.white} />
+          </View>
+        </View>
+      )}
+    </View>
+  );
+}
+
+/**
+ * Drag-driven inner of the "Playlist" action — playlist icon grows in with the
+ * drag plus a haptic detent at the threshold. Only mounted while the row is
+ * being dragged; the picker still opens from the row's onSwipeableWillOpen.
+ */
+function PlaylistSwipeActionInner({ translation }: { translation: SharedValue<number> }) {
   useAnimatedReaction(
     () => Math.abs(translation.value) >= COMMIT_THRESHOLD,
     (armed, wasArmed) => {
@@ -93,10 +126,23 @@ function PlaylistSwipeAction({ translation }: { translation: SharedValue<number>
     ],
   }));
   return (
+    <Animated.View style={iconStyle}>
+      <Icon name="playlist" size={24} color={iosSystemColors.white} />
+    </Animated.View>
+  );
+}
+
+/**
+ * Trailing "Playlist" swipe action (right-to-left swipe) — commit-on-release
+ * opens the playlist picker. Cheap shell while resting; mounts the animated
+ * inner once a drag starts (`active`). At translation=0 the playlist icon is
+ * fully transparent, so the resting shell deliberately renders no icon — the
+ * panel matches the inner's first frame.
+ */
+function PlaylistSwipeAction({ translation, active }: { translation: SharedValue<number>; active: boolean }) {
+  return (
     <View style={[styles.swipeAction, styles.playlistAction]}>
-      <Animated.View style={iconStyle}>
-        <Icon name="playlist" size={24} color={iosSystemColors.white} />
-      </Animated.View>
+      {active ? <PlaylistSwipeActionInner translation={translation} /> : null}
     </View>
   );
 }
@@ -137,15 +183,23 @@ const ClimbListRow = React.memo(function ClimbListRow({
 
   const swipeableRef = useRef<SwipeableMethods>(null);
 
+  // Lazy swipe panels: the heavy animated action content (icon interpolation +
+  // haptic-detent reaction) only mounts once a drag actually starts on THIS
+  // row. While the row is just sitting in the list — the common case during a
+  // scroll — only the cheap panel shells mount.
+  const [dragArmed, setDragArmed] = useState(false);
+
   // FlashList recycles rows (same instance, new climb). Snap any open swipe
   // shut so a recycled row never shows the previous climb's open panel.
   // reset() (vs close()) skips the animation — an animated slide-shut on a
   // recycle would read as a glitch. The reset lands on the next UI frame, so a
   // row recycled mid-swipe can flash its panel for ~1 frame; the opaque
   // contentRow background occludes the panel once translation returns to 0, so
-  // that background must stay opaque.
+  // that background must stay opaque. Disarm the lazy panels too, so a recycled
+  // row returns to the cheap steady state until it's dragged again.
   useEffect(() => {
     swipeableRef.current?.reset();
+    setDragArmed(false);
   }, [climb.uuid]);
 
   // Stable refs so gesture/worklet callbacks never close over stale props.
@@ -198,6 +252,15 @@ const ClimbListRow = React.memo(function ClimbListRow({
     swipeableRef.current?.close();
   }, []);
 
+  // Fired once when a horizontal drag begins (from a resting/closed row). This
+  // is the trigger that mounts the heavy animated action panels — the direction
+  // doesn't matter (we arm both sides; the non-dragged side stays occluded by
+  // the opaque row), so the panel reveal is fully animated by the time any
+  // meaningful translation is on screen.
+  const handleSwipeStartDrag = useCallback(() => {
+    setDragArmed(true);
+  }, []);
+
   const handleSwipeWillOpen = useCallback(
     (direction: 'left' | 'right') => {
       // ReanimatedSwipeable reports the SWIPE direction, not the actions side:
@@ -242,15 +305,15 @@ const ClimbListRow = React.memo(function ClimbListRow({
   // (right-to-left swipe) = Playlist.
   const renderLeftActions = useCallback(
     (_progress: SharedValue<number>, translation: SharedValue<number>) => (
-      <QueueSwipeAction translation={translation} />
+      <QueueSwipeAction translation={translation} active={dragArmed} />
     ),
-    [],
+    [dragArmed],
   );
   const renderRightActions = useCallback(
     (_progress: SharedValue<number>, translation: SharedValue<number>) => (
-      <PlaylistSwipeAction translation={translation} />
+      <PlaylistSwipeAction translation={translation} active={dragArmed} />
     ),
-    [],
+    [dragArmed],
   );
 
   return (
@@ -264,6 +327,7 @@ const ClimbListRow = React.memo(function ClimbListRow({
         overshootRight={false}
         renderLeftActions={renderLeftActions}
         renderRightActions={renderRightActions}
+        onSwipeableOpenStartDrag={handleSwipeStartDrag}
         onSwipeableWillOpen={handleSwipeWillOpen}
         onSwipeableOpen={handleSwipeableOpened}
       >
