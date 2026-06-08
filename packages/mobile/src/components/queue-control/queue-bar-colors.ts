@@ -15,7 +15,16 @@ export const QUEUE_BAR_TEXT_COLOR = '#FFFFFF';
 /** AA target for white text on the bar background. */
 const WHITE_AA_RATIO = 4.5;
 
-/** Worst-case dark tab-bar surface (Material dark `elevatedSurface`). */
+/**
+ * Worst-case tab-bar surface to separate from: Material *dark* `elevatedSurface`.
+ * The lift step (Step 2) is therefore dark-mode-centric — that's deliberate. In
+ * light mode the tab bar is white (`materialSurfaces.light.elevatedSurface`), and
+ * any background that already clears the white-text clamp (≥4.5:1 vs `#FFFFFF`)
+ * sits far above the 1.3:1 separation from a white tab bar, so the lift is a
+ * harmless no-op there. Anchoring on the dark surface covers both schemes with one
+ * pass; the unit test asserts separation from the white tab bar too, so a future
+ * palette change can't silently regress the light path.
+ */
 const DARK_TAB_BAR = '#2A2142';
 /** Minimum separation between the bar and the dark tab bar. */
 const TAB_SEPARATION_RATIO = 1.3;

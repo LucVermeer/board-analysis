@@ -66,6 +66,11 @@ export function computeBottomChromeMetrics({
   const nativeAccessoryVisible = nativeAccessoryMounted && hasCurrentClimb;
   const jsQueueToolbarVisible = hasCurrentClimb && !nativeAccessoryMounted;
   const tabBarHeight = insideTabs ? TAB_BAR_HEIGHT : 0;
+  // The Material bar reserves its full height even though it's tucked ~2px into the
+  // tab bar (MATERIAL_TABBAR_OVERLAP in persistent-queue-bar), so its visible height
+  // above the tab bar is ~2px less. The resulting 2px of extra scroll padding is
+  // intentional slack — imperceptible, and not worth threading the overlap through
+  // this pure arbitration. Don't "fix" it by subtracting the overlap here.
   const jsQueueToolbarReserve = uiVariant === 'material' ? MATERIAL_ACTIVE_CONTEXT_BAR_HEIGHT : TOOLBAR_RESERVE;
   const jsQueueReserve = jsQueueToolbarVisible ? jsQueueToolbarReserve : 0;
   const nativeAccessoryReserve = nativeAccessoryVisible ? glassSize.standard + TOOLBAR_GAP_ABOVE_TABBAR : 0;

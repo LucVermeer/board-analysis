@@ -27,6 +27,20 @@ describe('deriveQueueBarBackground', () => {
     expect(contrastRatio(v17Background, '#2A2142') ?? 0).toBeGreaterThanOrEqual(1.3);
   });
 
+  it('also stays distinct from the white (light-mode) tab bar across the range', () => {
+    // The lift step anchors on the dark tab surface, but the white-text clamp means
+    // every derived background also separates comfortably from a white tab bar —
+    // guards the light path against a future palette change.
+    const whiteTabBar = '#FFFFFF'; // materialSurfaces.light.elevatedSurface
+    for (const gradeColor of allGradeColors) {
+      const background = deriveQueueBarBackground(gradeColor);
+      expect(
+        contrastRatio(background, whiteTabBar) ?? 0,
+        `bar from ${gradeColor} (${background}) vs white tab bar`,
+      ).toBeGreaterThanOrEqual(1.3);
+    }
+  });
+
   it('darkens bright grades (white fails on the raw colour, passes on the bar)', () => {
     const rawYellow = V_GRADE_COLORS.V0;
     expect(contrastRatio('#FFFFFF', rawYellow) ?? 0).toBeLessThan(4.5);

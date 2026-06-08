@@ -14,6 +14,9 @@ const queue = vi.hoisted(() => ({
   previousClimb: vi.fn(),
 }));
 const drawer = vi.hoisted(() => ({ openPlayDrawer: vi.fn() }));
+// Theme variant is reconfigurable so a test can exercise the Material docked
+// "coloured bar" branch (white name + grade text) vs the default colorized one.
+const theme = vi.hoisted(() => ({ variant: undefined as 'material' | undefined }));
 
 // Injectable navigation result so tests drive the suggestion-aware canNext/nextItem
 // the capsule reads from computeNavigationStateWithSuggestions.
@@ -102,6 +105,7 @@ vi.mock('../../GlassSurface', () => ({
 
 vi.mock('../../../providers/theme-provider', () => ({
   useTheme: () => ({
+    variant: theme.variant,
     systemColors: { label: '#111111', separator: '#cccccc', elevatedSurface: '#f0f0f0' },
   }),
 }));
@@ -174,6 +178,7 @@ describe('ClimbCapsule', () => {
     nav.result = { canNext: false, canPrevious: false, nextItem: null, prevItem: null, remainingCount: 0 };
     queue.state.currentClimbQueueItem = null;
     queue.state.queue = [];
+    theme.variant = undefined;
     drawer.openPlayDrawer.mockClear();
     queue.nextClimb.mockClear();
     queue.previousClimb.mockClear();
@@ -254,6 +259,54 @@ describe('ClimbCapsule', () => {
     render(<ClimbCapsule />);
     // No tap fired → no call yet. (Documents the jsdom gesture limitation.)
     expect(drawer.openPlayDrawer).not.toHaveBeenCalled();
+  });
+
+  it('paints the grade and name white on the Material docked coloured bar', () => {
+    // On the docked Material bar the background carries the grade hue, so BOTH the
+    // grade and the name flip to white — the inverse of the colorized-grade default.
+    theme.variant = 'material';
+    const item = makeItem(makeClimb({ difficulty: 'V6', name: 'The Crimp Ladder' }));
+    queue.state.currentClimbQueueItem = item;
+    queue.state.queue = [item];
+
+    const { container } = render(<ClimbCapsule surfaceTreatment="docked" />);
+
+    const texts = Array.from(container.querySelectorAll('[data-text]'));
+    const gradeNode = texts.find((node) => (node.textContent ?? '').includes('6C'));
+    const nameNode = texts.find((node) => (node.textContent ?? '').includes('Crimp'));
+    expect(gradeNode?.getAttribute('data-color')).toBe('#FFFFFF');
+    expect(nameNode?.getAttribute('data-color')).toBe('#FFFFFF');
+  });
+
+  it('keeps white text on the coloured bar even for an unknown (gray-fallback) grade', () => {
+    // The grade-colour lookup misses, so the bar derives from the gray default —
+    // but the text stays white because the colour rides the background, not the text.
+    theme.variant = 'material';
+    const item = makeItem(makeClimb({ difficulty: 'V99', name: 'Mystery' }));
+    queue.state.currentClimbQueueItem = item;
+    queue.state.queue = [item];
+
+    const { container } = render(<ClimbCapsule surfaceTreatment="docked" />);
+    const gradeNode = Array.from(container.querySelectorAll('[data-text]')).find((node) =>
+      (node.textContent ?? '').includes('6C'),
+    );
+    expect(gradeNode?.getAttribute('data-color')).toBe('#FFFFFF');
+  });
+
+  it('still colorizes the grade (not white) on the non-docked floating capsule', () => {
+    // Material variant but a FLOATING capsule (not docked) keeps the default
+    // treatment: grade hued, name neutral. Only the docked bar inverts to white.
+    theme.variant = 'material';
+    const item = makeItem(makeClimb({ difficulty: 'V6', name: 'The Crimp Ladder' }));
+    queue.state.currentClimbQueueItem = item;
+    queue.state.queue = [item];
+
+    const { container } = render(<ClimbCapsule />);
+    const texts = Array.from(container.querySelectorAll('[data-text]'));
+    const gradeNode = texts.find((node) => (node.textContent ?? '').includes('6C'));
+    const nameNode = texts.find((node) => (node.textContent ?? '').includes('Crimp'));
+    expect(gradeNode?.getAttribute('data-color')).toBe('#FF0000');
+    expect(nameNode?.getAttribute('data-color')).toBe('#111111');
   });
 
   it('peeks the suggestion-aware next climb past the queue tail', () => {
