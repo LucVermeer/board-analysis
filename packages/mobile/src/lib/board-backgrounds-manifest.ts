@@ -10,6 +10,7 @@
 // This keeps the canonical asset set in one place (the web package).
 
 /* eslint-disable @typescript-eslint/no-require-imports */
+// oxlint-disable import/no-commonjs
 export const BOARD_BACKGROUND_ASSETS: Record<string, number> = {
   'decoy/product_sizes_layouts_sets/1.webp': require('../../../web/public/images/decoy/product_sizes_layouts_sets/1.webp'),
   'decoy/product_sizes_layouts_sets/10.webp': require('../../../web/public/images/decoy/product_sizes_layouts_sets/10.webp'),

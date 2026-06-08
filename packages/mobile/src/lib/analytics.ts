@@ -49,7 +49,7 @@ export function getAnalyticsClient(): PostHog | null {
 }
 
 const analytics = createAnalytics(getClient, {
-  onDebug: __DEV__ ? (name, properties) => console.log('[analytics]', name, properties ?? {}) : undefined,
+  onDebug: __DEV__ ? (name, properties) => console.info('[analytics]', name, properties ?? {}) : undefined,
 });
 
 export const { track, identify, setPersonProperties, alias, reset } = analytics;
@@ -59,6 +59,6 @@ export const { track, identify, setPersonProperties, alias, reset } = analytics;
 // calls this from a route-change effect. `screen()` emits the native $screen
 // event PostHog's mobile insights key off.
 export function trackScreen(path: string): void {
-  if (__DEV__) console.log('[analytics] $screen', path);
+  if (__DEV__) console.info('[analytics] $screen', path);
   void getClient()?.screen(path);
 }

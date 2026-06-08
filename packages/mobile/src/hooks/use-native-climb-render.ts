@@ -350,6 +350,7 @@ function getNativeModule() {
   if (moduleLoadAttempted) return renderModule;
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
+    // oxlint-disable-next-line import/no-commonjs
     const loaded = require('../../modules/board-renderer/src/index') as typeof renderModule;
     // The wrapper exposes `boardRendererNative` which is null when the
     // native binary isn't loaded. Treat that as "no native renderer

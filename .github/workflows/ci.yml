@@ -149,12 +149,12 @@ jobs:
           BASE_REF: ${{ github.base_ref }}
         run: |
           # Match the staged-hook scope in root vite.config.ts: TS/JS files,
-          # excluding generated/, mobile (excluded from vp lint by config), and
-          # embedded firmware sources. xargs -r ensures no-op on empty input.
+          # excluding generated/, board-controller, and embedded firmware sources.
+          # xargs -r ensures no-op on empty input.
           git diff --name-only --diff-filter=ACMR \
             "origin/$BASE_REF...HEAD" \
             -- '*.ts' '*.tsx' '*.js' '*.mjs' '*.cjs' \
-            | grep -vE '(/node_modules/|/generated/|^packages/mobile/|^packages/board-controller/|^embedded/)' \
+            | grep -vE '(/node_modules/|/generated/|^packages/board-controller/|^embedded/)' \
             > changed-lintable.txt || true
           if [ -s changed-lintable.txt ]; then
             xargs -r vp check < changed-lintable.txt
