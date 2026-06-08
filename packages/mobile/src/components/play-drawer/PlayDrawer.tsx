@@ -23,6 +23,7 @@ import { PlayDrawerHeader } from './PlayDrawerHeader';
 import { PlayDrawerActionBar } from './PlayDrawerActionBar';
 import { LogAscentSheet } from '../LogAscentSheet';
 import { DeferredSections } from './DeferredSections';
+import { computeFirstScreenHeight } from './play-drawer-layout';
 import { AngleSelectorSheet } from './AngleSelectorSheet';
 import { ClimbActionsSheet } from '../ClimbActionsSheet';
 import { BleControlSheet } from '../ble/BleControlSheet';
@@ -583,11 +584,13 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   // The first screen is sized so the action bar stays visible and the Beta
   // Videos header teases at the bottom across board sizes — the carousel fits
   // the leftover space (SwipeBoardCarousel contains the board). Reserve the
-  // home-indicator inset, the DeferredSections top padding, the beta header,
-  // and a small margin so that header peeks just above the fold.
+  // DeferredSections top padding, the beta header, and a small margin so that
+  // header peeks just above the fold. The home-indicator inset belongs to the
+  // scroll view's paddingBottom only — counting it here too would shrink the
+  // board by that inset twice.
   const firstScreenReserve =
-    insets.bottom + spacing[3] + (betaHeaderHeight > 0 ? betaHeaderHeight : DEFAULT_BETA_HEADER_HEIGHT) + spacing[2];
-  const firstScreenHeight = Math.max(windowHeight - firstScreenReserve, windowHeight * 0.5);
+    spacing[3] + (betaHeaderHeight > 0 ? betaHeaderHeight : DEFAULT_BETA_HEADER_HEIGHT) + spacing[2];
+  const firstScreenHeight = computeFirstScreenHeight(windowHeight, firstScreenReserve);
 
   const ascentCount = displayedClimb?.userAscents ?? 0;
   const supportsMirroring = boardSupportsMirroring(boardName, layoutId);

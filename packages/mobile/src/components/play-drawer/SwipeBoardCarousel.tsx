@@ -24,6 +24,7 @@ import { BoardImageNative } from '../BoardImageNative';
 import { Icon } from '../Icon';
 import { useCarouselGesture } from './use-carousel-gesture';
 import { useZoomPanGesture } from './use-zoom-pan-gesture';
+import { computeContainedBoardSize } from './play-drawer-layout';
 import { timing } from '../../theme/animations';
 import { overlays } from '../../theme/tokens';
 
@@ -91,18 +92,20 @@ export const SwipeBoardCarousel = React.memo(function SwipeBoardCarousel({
   const { boardWidth, boardHeight } = boardRenderData;
   const aspectRatio = boardWidth / boardHeight;
   // Contain the board within the measured box, preserving aspect ratio and
-  // centering. Letterboxes (vertically on tall boards, horizontally on wide
+  // centering. Letterboxes (horizontally on tall boards, vertically on wide
   // ones) so the whole climb stays visible while the box drives the height.
-  const boardBox = useMemo(() => {
-    const { width, height } = containerSize;
-    if (width <= 0 || height <= 0) return null;
-    const widthAtFullHeight = height * aspectRatio;
-    return widthAtFullHeight <= width ? { width: widthAtFullHeight, height } : { width, height: width / aspectRatio };
-  }, [containerSize, aspectRatio]);
+  const boardBox = useMemo(
+    () => computeContainedBoardSize(containerSize.width, containerSize.height, aspectRatio),
+    [containerSize, aspectRatio],
+  );
   const boardStyle = useMemo<ViewStyle | undefined>(
     () => (boardBox ? { width: boardBox.width, height: boardBox.height } : undefined),
     [boardBox],
   );
+  // The carousel works in board-width units: a letterboxed (narrower) board
+  // must slide off by its own width and the peek board must enter edge-adjacent.
+  // Using screenWidth instead leaves a gap equal to the letterbox margins.
+  const boardWidthForSwipe = boardBox?.width ?? screenWidth;
 
   const { pinchGesture, zoomPanGesture, isZoomed, isZoomedSV, resetZoom, animatedZoomStyle } = useZoomPanGesture({
     enabled,
@@ -132,7 +135,7 @@ export const SwipeBoardCarousel = React.memo(function SwipeBoardCarousel({
     onSwipePrevious,
     canSwipeNext,
     canSwipePrevious,
-    boardWidth: screenWidth,
+    boardWidth: boardWidthForSwipe,
     enabled,
     isZoomedSV,
   });
@@ -163,12 +166,12 @@ export const SwipeBoardCarousel = React.memo(function SwipeBoardCarousel({
 
   const peekStyle = useAnimatedStyle(() => {
     if (translateX.value === 0) {
-      return { opacity: 0, transform: [{ translateX: screenWidth }] };
+      return { opacity: 0, transform: [{ translateX: boardWidthForSwipe }] };
     }
     const offset = computePeekOffset({
       direction: peekDirection.value,
       swipeOffset: translateX.value,
-      viewportWidth: screenWidth,
+      viewportWidth: boardWidthForSwipe,
     });
     return { opacity: 1, transform: [{ translateX: offset }] };
   });
@@ -194,7 +197,7 @@ export const SwipeBoardCarousel = React.memo(function SwipeBoardCarousel({
   return (
     <GestureDetector gesture={composedGesture}>
       <View style={styles.container} onLayout={handleLayout}>
-        <Animated.View style={[styles.boardWrapper, currentStyle]}>
+        <Animated.View style={[styles.boardWrapper, boardBox ? { width: boardBox.width } : null, currentStyle]}>
           <Animated.View style={animatedZoomStyle}>
             <BoardImageNative
               frames={currentFrameOverride ?? currentFrames}
