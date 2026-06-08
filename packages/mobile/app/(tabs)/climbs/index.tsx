@@ -35,7 +35,7 @@ import { ClimbFilterFab } from '../../../src/components/search/ClimbFilterFab';
 import { ClimbTopChrome } from '../../../src/components/search/ClimbTopChrome';
 import { useDrawerHost } from '../../../src/providers/drawer-host-provider';
 import { useTheme } from '../../../src/providers/theme-provider';
-import { useQueue } from '../../../src/providers/queue-provider';
+import { useActiveClimbUuid, useQueueActions } from '../../../src/providers/queue-provider';
 import { ClimbSearchProvider, useClimbSearch, type GradeBound } from '../../../src/providers/climb-search-provider';
 import { useBoardProvider } from '@boardsesh/board-react';
 import { randomUUID } from 'expo-crypto';
@@ -118,7 +118,7 @@ function ClimbListInner() {
   const { t } = useTranslation('climbs');
   const { openClimbActions, openAddToPlaylist } = useDrawerHost();
   const { systemColors, variant, brandColors } = useTheme();
-  const { addToQueue, state: queueState } = useQueue();
+  const { addToQueue } = useQueueActions();
   const {
     filters,
     boardFilters,
@@ -132,8 +132,10 @@ function ClimbListInner() {
     patchBoardFilters,
   } = useClimbSearch();
   // The active climb (driving the board / persistent queue bar). We highlight
-  // its row so the search → tap → change-active loop is always visible.
-  const activeClimbUuid = queueState.currentClimbQueueItem?.climb?.uuid;
+  // its row so the search → tap → change-active loop is always visible. The
+  // selector changes identity only when the active uuid changes, so unrelated
+  // queue mutations / party pushes no longer re-render this screen.
+  const activeClimbUuid = useActiveClimbUuid();
   const { getLogbook } = useBoardProvider();
   const searchHeaderRef = useRef<SearchHeaderHandle>(null);
   const nativeSearchRef = useRef<NativeSearchBarRef>(null);
