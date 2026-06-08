@@ -32,6 +32,11 @@
         "vGrade": "V grade",
         "font": "French",
         "both": "Both"
+      },
+      "language": {
+        "title": "Language",
+        "system": "System",
+        "description": "System follows your device language."
       }
     },
     "onboarding": {

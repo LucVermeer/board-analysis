@@ -230,6 +230,11 @@
         "vGrade": "Grado V",
         "font": "Francés",
         "both": "Ambos"
+      },
+      "language": {
+        "title": "Idioma",
+        "system": "Sistema",
+        "description": "Sistema usa el idioma de tu dispositivo."
       }
     },
     "onboarding": {

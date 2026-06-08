@@ -208,7 +208,17 @@ vi.mock('../../../lib/board-details', () => ({
 // applies, and the mirror flag so the aspect-fit + mirroring assertions hold
 // without a native renderer.
 vi.mock('../../BoardImageNative', () => ({
-  BoardImageNative: ({ frames, mirrored, style }: { frames: string; mirrored?: boolean; style?: unknown }) => {
+  BoardImageNative: ({
+    frames,
+    mirrored,
+    filledStyle,
+    style,
+  }: {
+    frames: string;
+    mirrored?: boolean;
+    filledStyle?: boolean;
+    style?: unknown;
+  }) => {
     const readStyleValue = (styleKey: string): unknown => {
       const styles = Array.isArray(style) ? style : [style];
       for (const styleEntry of styles) {
@@ -230,6 +240,7 @@ vi.mock('../../BoardImageNative', () => ({
     return createElement('div', {
       'data-thumbnail': frames,
       'data-mirrored': mirrored ? 'true' : 'false',
+      'data-filled': filledStyle ? 'true' : 'false',
       'data-board-width': width == null ? '' : String(width),
       'data-board-height': height == null ? '' : String(height),
       'data-board-border-radius': borderRadius == null ? '' : String(borderRadius),
@@ -309,6 +320,9 @@ describe('NativeAccessoryClimbRow', () => {
     expect(container.textContent).toContain('V6');
     expect(container.querySelector('[data-thumbnail="p1r12"]')).not.toBeNull();
     expect(container.querySelector('[data-thumbnail="p1r12"]')?.getAttribute('data-mirrored')).toBe('false');
+    // Filled hold style so the lit holds read as solid dots at the 40×40 slot,
+    // matching the list thumbnail (and sharing its render cache key).
+    expect(container.querySelector('[data-thumbnail="p1r12"]')?.getAttribute('data-filled')).toBe('true');
     expect(container.querySelector('[data-tick-size="44"]')).not.toBeNull();
     expect(container.querySelector('[data-icon-size="24"]')).not.toBeNull();
     expect(container.querySelector('[data-height="48"]')).not.toBeNull();
@@ -339,6 +353,19 @@ describe('NativeAccessoryClimbRow', () => {
     expect(gradeText?.getAttribute('data-color')).toBe('#111111');
     expect(gradeText?.getAttribute('data-variant')).toBe('subheadline');
     expect(gradeText?.getAttribute('data-font-weight')).toBe('600');
+  });
+
+  it('flips the thumbnail for a mirrored climb', () => {
+    const mirroredItem = makeItem(makeClimb({ mirrored: true }));
+    queue.state.currentClimbQueueItem = mirroredItem;
+    queue.state.queue = [mirroredItem];
+
+    const { container } = render(<NativeAccessoryClimbRow placement="regular" width={344} />);
+
+    const thumbnail = getCurrentThumbnail(container);
+    expect(thumbnail.getAttribute('data-mirrored')).toBe('true');
+    // The filled style is independent of mirroring — still on.
+    expect(thumbnail.getAttribute('data-filled')).toBe('true');
   });
 
   it('uses the full silhouette for very tall board thumbnails', () => {
