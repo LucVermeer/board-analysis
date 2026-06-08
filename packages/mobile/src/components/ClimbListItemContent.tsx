@@ -10,6 +10,7 @@ import { useGradeFormat } from '../hooks/use-grade-format';
 import { useAscentStatus } from '../hooks/use-ascent-status';
 import { useTheme } from '../providers/theme-provider';
 import { Icon } from './Icon';
+import { ClimbAttributeIcons } from './ClimbAttributeIcons';
 import type { IconName } from './icon-map';
 import type { AscentStatusValue } from '../lib/ascent-status-utils';
 
@@ -107,12 +108,6 @@ const ClimbListItemContent = React.memo(function ClimbListItemContent({
     return parts.length > 0 ? parts.join(' · ') : t('mobile.climbRow.projectFallback');
   }, [climb.is_draft, climb.ascensionist_count, climb.quality_average, climb.setter_username, t]);
 
-  // Intrinsic-attribute glyphs that sit after the name (web parity:
-  // packages/web/.../climb-card/climb-icons.tsx). benchmark_difficulty > 0 marks
-  // a benchmark/classic climb in the current data feeds.
-  const benchmarkValue = climb.benchmark_difficulty != null ? Number(climb.benchmark_difficulty) : null;
-  const isBenchmark = benchmarkValue !== null && benchmarkValue > 0 && !Number.isNaN(benchmarkValue);
-
   return (
     <>
       {/* Left: portrait thumbnail with ascent badge */}
@@ -133,16 +128,7 @@ const ClimbListItemContent = React.memo(function ClimbListItemContent({
           <Text variant="body" numberOfLines={1} style={styles.climbName}>
             {climb.name}
           </Text>
-          {isBenchmark ? (
-            <View accessibilityRole="image" accessibilityLabel={t('mobile.climbRow.benchmark')} style={styles.attrIcon}>
-              <Icon name="benchmark" size={14} color={theme.systemColors.secondaryLabel} />
-            </View>
-          ) : null}
-          {climb.is_no_match ? (
-            <View accessibilityRole="image" accessibilityLabel={t('mobile.climbRow.noMatch')} style={styles.attrIcon}>
-              <Icon name="no.match" size={14} color={theme.systemColors.secondaryLabel} />
-            </View>
-          ) : null}
+          <ClimbAttributeIcons isNoMatch={climb.is_no_match} benchmarkDifficulty={climb.benchmark_difficulty} />
         </View>
         <Text variant="footnote" numberOfLines={1} style={styles.subtitle}>
           {subtitleText}
@@ -188,10 +174,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     // Shrink so the name (not the trailing attribute glyphs) absorbs truncation.
     flexShrink: 1,
-  },
-  attrIcon: {
-    marginLeft: 4,
-    flexShrink: 0,
   },
   subtitle: {
     opacity: 0.6,

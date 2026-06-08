@@ -699,6 +699,8 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
                   qualityAverage={displayedClimb.quality_average}
                   ascensionistCount={displayedClimb.ascensionist_count}
                   setterUsername={displayedClimb.setter_username}
+                  isNoMatch={displayedClimb.is_no_match}
+                  benchmarkDifficulty={displayedClimb.benchmark_difficulty}
                 />
 
                 <View style={styles.boardSection}>
