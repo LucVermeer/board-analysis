@@ -21,6 +21,12 @@ export const Switch = stub('switch');
 export const Badge = stub('badge');
 export const Snackbar = stub('snackbar');
 export const Searchbar = stub('searchbar');
+export const Chip = stub('chip');
+export const Appbar = {
+  Header: stub('appbar-header'),
+  Content: stub('appbar-content'),
+  Action: stub('appbar-action'),
+};
 export const SegmentedButtons = stub('segmented-buttons');
 export const ActivityIndicator = stub('activity-indicator');
 export const TouchableRipple = stub('touchable-ripple');

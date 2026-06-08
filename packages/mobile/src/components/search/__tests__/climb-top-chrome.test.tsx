@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, fireEvent } from '@testing-library/react';
-import { createElement, forwardRef, useImperativeHandle, type ReactNode, type RefObject } from 'react';
+import { createElement, forwardRef, useImperativeHandle, type MouseEvent, type ReactNode, type RefObject } from 'react';
 import type { UserBoard } from '@boardsesh/shared-schema';
 import type { SearchHeaderHandle } from '../../SearchHeader';
 
@@ -63,6 +63,66 @@ vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 
+vi.mock('react-native-paper', () => ({
+  Appbar: {
+    Header: ({ children }: { children?: ReactNode }) =>
+      createElement('div', { 'data-appbar-header': 'true' }, children),
+    Content: ({ title, subtitle, onPress }: { title?: ReactNode; subtitle?: ReactNode; onPress?: () => void }) =>
+      createElement(
+        'button',
+        { onClick: onPress, 'data-appbar-content': 'true' },
+        createElement('span', { 'data-appbar-title': 'true' }, title),
+        subtitle ? createElement('span', { 'data-appbar-subtitle': 'true' }, subtitle) : null,
+      ),
+    Action: ({
+      icon,
+      onPress,
+      accessibilityLabel,
+    }: {
+      icon?: ReactNode | ((props: { color: string; size: number }) => ReactNode);
+      onPress?: () => void;
+      accessibilityLabel?: string;
+    }) =>
+      createElement(
+        'button',
+        { onClick: onPress, 'data-appbar-action': accessibilityLabel ?? '' },
+        typeof icon === 'function' ? icon({ color: '#000', size: 24 }) : icon,
+      ),
+  },
+  Chip: ({
+    children,
+    onPress,
+    onClose,
+    accessibilityLabel,
+  }: {
+    children?: ReactNode;
+    onPress?: () => void;
+    onClose?: () => void;
+    accessibilityLabel?: string;
+  }) =>
+    createElement(
+      'button',
+      { onClick: onPress, 'data-chip': accessibilityLabel ?? '' },
+      children,
+      onClose
+        ? createElement(
+            'span',
+            {
+              'data-chip-close': accessibilityLabel ?? '',
+              onClick: (event: MouseEvent<HTMLSpanElement>) => {
+                event.stopPropagation();
+                onClose();
+              },
+            },
+            'close',
+          )
+        : null,
+    ),
+  IconButton: ({ onPress, accessibilityLabel }: { onPress?: () => void; accessibilityLabel?: string }) =>
+    createElement('button', { onClick: onPress, 'data-paper-icon-button': accessibilityLabel ?? '' }),
+  Badge: ({ children }: { children?: ReactNode }) => createElement('span', { 'data-paper-badge': 'true' }, children),
+}));
+
 vi.mock('@boardsesh/board-config', () => ({
   formatBoardDisplayName: (boardType: string) => `Display:${boardType}`,
 }));
@@ -73,15 +133,17 @@ vi.mock('@boardsesh/board-constants/grade-colors', () => ({
 
 vi.mock('../../../providers/theme-provider', () => ({
   useTheme: () => ({
+    variant: ctrl.variant,
     systemColors: {
       label: '#000',
       fill: '#eee',
       secondaryLabel: '#888',
       separator: '#ccc',
       elevatedSurface: '#fff',
+      secondaryBackground: '#fff',
+      tertiaryBackground: '#f5f5f5',
     },
     brandColors: { primary: '#6D28D9', warning: '#FF9500' },
-    variant: ctrl.variant,
   }),
 }));
 
@@ -122,6 +184,35 @@ type PressMockProps = {
   accessibilityLabel?: string;
   accessibilityHint?: string;
 };
+
+type GlassIconButtonMockProps = {
+  iconName?: string;
+  onPress?: () => void;
+  onLongPress?: () => void;
+  accessibilityLabel?: string;
+  accessibilityHint?: string;
+  badgeCount?: number;
+};
+
+vi.mock('../../GlassIconButton', () => ({
+  GlassIconButton: ({
+    iconName,
+    onPress,
+    onLongPress,
+    accessibilityLabel,
+    accessibilityHint,
+    badgeCount,
+  }: GlassIconButtonMockProps) =>
+    createElement('button', {
+      onClick: onPress,
+      onDoubleClick: onLongPress,
+      'data-glass-icon': iconName ?? '',
+      'data-label': accessibilityLabel ?? '',
+      'data-hint': accessibilityHint ?? '',
+      'data-badge': badgeCount == null ? '' : String(badgeCount),
+    }),
+}));
+
 vi.mock('../../PressableSurface', () => ({
   PressableSurface: ({ children, onPress, onLongPress, accessibilityLabel, accessibilityHint }: PressMockProps) =>
     createElement(
@@ -353,7 +444,7 @@ describe('ClimbTopChrome', () => {
     ctrl.variant = 'material';
     const { container } = render(<ClimbTopChrome {...makeProps({ onOpenFilters: vi.fn() })} />);
     expect(container.querySelector('[data-search-field]')).not.toBeNull();
-    expect(container.querySelector('[data-paper="icon-button"]')).not.toBeNull();
+    expect(container.querySelector('[data-glass-icon="filter"][data-label="mobile.search.filters"]')).not.toBeNull();
   });
 
   it('native search mode leaves text search in the stack header and does not render filter chrome', () => {
@@ -427,5 +518,161 @@ describe('ClimbTopChrome', () => {
     const { container } = render(<ClimbTopChrome {...makeProps({ filterSummary: { text: 'V6 +1 more', onClear } })} />);
     fireEvent.click(summaryClear(container)!);
     expect(onClear).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders the Material branch as an opaque app bar with search and grade controls', () => {
+    ctrl.variant = 'material';
+    ctrl.board = typedBoard;
+    const onOpenBoardDetail = vi.fn();
+    const { container } = render(
+      <ClimbTopChrome
+        {...makeProps({
+          onOpenBoardDetail,
+          onOpenFilters: vi.fn(),
+          activeFilterCount: 0,
+          gradeChip: { label: 'Grade range', active: false },
+          gradeBound: { minGradeId: undefined, maxGradeId: undefined },
+          onOpenGrade: vi.fn(),
+          onGradeChange: vi.fn(),
+        })}
+      />,
+    );
+
+    expect(container.querySelector('[data-gradient]')).toBeNull();
+    expect(container.querySelector('[data-appbar-title="true"]')?.textContent).toBe('mobile.nav.climbs');
+    expect(container.querySelector('[data-appbar-subtitle="true"]')?.textContent).toBe('Display:kilter • 12x12 • 40°');
+    expect(container.querySelector('[data-search-field]')).not.toBeNull();
+    expect(container.querySelector('[data-chip="mobile.search.gradeAction"]')?.textContent).toContain('Grade range');
+
+    fireEvent.click(container.querySelector('[data-appbar-content="true"]') as HTMLButtonElement);
+    expect(onOpenBoardDetail).toHaveBeenCalledTimes(1);
+    expect(haptics.light).toHaveBeenCalledTimes(1);
+  });
+
+  it('excludes the dedicated grade chip from the Material filter badge count', () => {
+    ctrl.variant = 'material';
+    ctrl.board = typedBoard;
+    const { container, rerender } = render(
+      <ClimbTopChrome
+        {...makeProps({
+          onOpenFilters: vi.fn(),
+          activeFilterCount: 2,
+          gradeChip: { label: 'V6+', active: true, onClear: vi.fn() },
+          gradeBound: { minGradeId: 20, maxGradeId: undefined },
+          onOpenGrade: vi.fn(),
+          onGradeChange: vi.fn(),
+        })}
+      />,
+    );
+
+    expect(container.querySelector('[data-glass-icon="filter"]')?.getAttribute('data-badge')).toBe('1');
+
+    rerender(
+      <ClimbTopChrome
+        {...makeProps({
+          onOpenFilters: vi.fn(),
+          activeFilterCount: 1,
+          gradeChip: { label: 'V6+', active: true, onClear: vi.fn() },
+          gradeBound: { minGradeId: 20, maxGradeId: undefined },
+          onOpenGrade: vi.fn(),
+          onGradeChange: vi.fn(),
+        })}
+      />,
+    );
+    expect(container.querySelector('[data-glass-icon="filter"]')?.getAttribute('data-badge')).toBe('0');
+  });
+
+  it('omits the Material summary chip when only grade is active', () => {
+    ctrl.variant = 'material';
+    ctrl.board = typedBoard;
+    const onClearSummary = vi.fn();
+    const { container } = render(
+      <ClimbTopChrome
+        {...makeProps({
+          onOpenFilters: vi.fn(),
+          activeFilterCount: 1,
+          filterSummary: { text: 'V6+', onClear: onClearSummary },
+          gradeChip: { label: 'V6+', active: true, onClear: vi.fn() },
+          gradeBound: { minGradeId: 20, maxGradeId: undefined },
+          onOpenGrade: vi.fn(),
+          onGradeChange: vi.fn(),
+        })}
+      />,
+    );
+
+    expect(container.querySelector('[data-chip="V6+"]')).toBeNull();
+  });
+
+  it('clears only the Material summary chip callback for non-grade filters', () => {
+    ctrl.variant = 'material';
+    ctrl.board = typedBoard;
+    const onClearGrade = vi.fn();
+    const onClearSummary = vi.fn();
+    const { container } = render(
+      <ClimbTopChrome
+        {...makeProps({
+          onOpenFilters: vi.fn(),
+          activeFilterCount: 2,
+          filterSummary: { text: 'Benchmarks', onClear: onClearSummary },
+          gradeChip: { label: 'V6+', active: true, onClear: onClearGrade },
+          gradeBound: { minGradeId: 20, maxGradeId: undefined },
+          onOpenGrade: vi.fn(),
+          onGradeChange: vi.fn(),
+        })}
+      />,
+    );
+
+    fireEvent.click(container.querySelector('[data-chip="Benchmarks"]') as HTMLButtonElement);
+    expect(onClearSummary).toHaveBeenCalledTimes(1);
+    expect(onClearGrade).not.toHaveBeenCalled();
+
+    fireEvent.click(container.querySelector('[data-chip-close="Benchmarks"]') as HTMLSpanElement);
+    expect(onClearSummary).toHaveBeenCalledTimes(2);
+    expect(onClearGrade).not.toHaveBeenCalled();
+  });
+
+  it('opens the inline grade rail from the Material grade chip and clears the active grade', () => {
+    ctrl.variant = 'material';
+    ctrl.board = typedBoard;
+    const onOpenGrade = vi.fn();
+    const onCloseGrade = vi.fn();
+    const onClearGrade = vi.fn();
+    const { container, rerender } = render(
+      <ClimbTopChrome
+        {...makeProps({
+          onOpenGrade,
+          onCloseGrade,
+          onOpenFilters: vi.fn(),
+          activeFilterCount: 1,
+          gradeChip: { label: 'V6+', active: true, onClear: onClearGrade },
+          gradeBound: { minGradeId: 20, maxGradeId: undefined },
+          onGradeChange: vi.fn(),
+        })}
+      />,
+    );
+
+    fireEvent.click(container.querySelector('[data-chip="mobile.search.gradeAction"]') as HTMLButtonElement);
+    expect(onOpenGrade).toHaveBeenCalledTimes(1);
+    fireEvent.click(container.querySelector('[data-chip-close="mobile.search.gradeAction"]') as HTMLSpanElement);
+    expect(onClearGrade).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <ClimbTopChrome
+        {...makeProps({
+          onOpenGrade,
+          onCloseGrade,
+          onOpenFilters: vi.fn(),
+          activeFilterCount: 1,
+          gradeRailVisible: true,
+          gradeChip: { label: 'V6+', active: true, onClear: onClearGrade },
+          gradeBound: { minGradeId: 20, maxGradeId: undefined },
+          onGradeChange: vi.fn(),
+        })}
+      />,
+    );
+    expect(container.querySelector('[data-grade-rail="true"]')).not.toBeNull();
+    fireEvent.click(container.querySelector('[data-chip="mobile.search.gradeAction"]') as HTMLButtonElement);
+    expect(onCloseGrade).toHaveBeenCalledTimes(1);
+    expect(onOpenGrade).toHaveBeenCalledTimes(1);
   });
 });

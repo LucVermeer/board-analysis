@@ -89,6 +89,7 @@ export const SearchHeader = forwardRef<SearchHeaderHandle, SearchHeaderProps>(fu
           value={text}
           onChangeText={handleChange}
           onClearIconPress={handleClear}
+          mode="bar"
           placeholder={placeholder}
           onFocus={onFocus}
           onBlur={onBlur}
@@ -98,12 +99,17 @@ export const SearchHeader = forwardRef<SearchHeaderHandle, SearchHeaderProps>(fu
           autoCorrect={false}
           accessibilityLabel={placeholder}
           elevation={0}
+          iconColor={systemColors.secondaryLabel as string}
+          rippleColor={systemColors.fill}
           inputStyle={styles.materialInput}
           // Pin the full footprint on first mount. Paper's Searchbar contains a
           // Surface + TextInput stack; on Android it can draw only the tonal
           // surface for one frame if its parent hands it an unconstrained flex
           // slot. The wrapper owns the slot, and the Searchbar fills it.
-          style={[styles.materialSearchbar, { height, borderRadius: radius }]}
+          style={[
+            styles.materialSearchbar,
+            { height, borderRadius: radius, backgroundColor: systemColors.tertiaryBackground as string },
+          ]}
         />
       </View>
     );
@@ -166,6 +172,7 @@ const styles = StyleSheet.create({
     minHeight: 0,
     paddingVertical: 0,
     textAlignVertical: 'center',
+    fontSize: 16,
   },
   capsule: {
     flex: 1,

@@ -1,8 +1,8 @@
 import { useCallback, useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { formatBoardDisplayName } from '@boardsesh/board-config';
 import { useTheme } from '../../providers/theme-provider';
 import { useActiveBoard } from '../../lib/graphql/use-active-board';
+import { formatActiveBoardLabel } from '../../lib/boards/active-board-label';
 import { useNativeGlass } from '../../hooks/use-native-glass';
 import { hapticLight } from '../../lib/haptics';
 import { shadows } from '../../theme/tokens';
@@ -33,13 +33,7 @@ export function BoardPill({ onPress, accessibilityHint }: BoardPillProps) {
   const { data: activeBoard } = useActiveBoard();
 
   const boardLabel = useMemo(() => {
-    if (!activeBoard) return null;
-    const angle = activeBoard.angle != null ? `${activeBoard.angle}°` : null;
-    const isNamed = activeBoard.name != null && activeBoard.name.trim().length > 0;
-    const parts = isNamed
-      ? [activeBoard.name, angle]
-      : [formatBoardDisplayName(activeBoard.boardType), activeBoard.sizeName ?? activeBoard.layoutName ?? null, angle];
-    return parts.filter(Boolean).join(' • ');
+    return formatActiveBoardLabel(activeBoard);
   }, [activeBoard]);
 
   const handlePress = useCallback(() => {
