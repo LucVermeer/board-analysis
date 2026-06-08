@@ -282,8 +282,17 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
 
   const openQueueSheet = useCallback(() => {
     setQueueSheetMounted(true);
-    setQueueSheetVisible(true);
   }, []);
+  // Present only AFTER the sheet has mounted (and registered with the modal
+  // provider). Flipping `mounted` and `visible` in one commit drops the
+  // `present()` when another modal — the Play Drawer — is already open: that's
+  // the bug where the play drawer's queue button did nothing while the
+  // snackbar's Open (fired with no modal open) worked. The two-commit path
+  // mirrors the always-mounted angle selector — present fires on a real
+  // `visible` transition over the already-stable Play Drawer.
+  useEffect(() => {
+    if (queueSheetMounted) setQueueSheetVisible(true);
+  }, [queueSheetMounted]);
   // Request an animated close (flip `visible`; the sheet's dismiss animation then
   // fires onDismissed → unmount).
   const requestCloseQueueSheet = useCallback(() => setQueueSheetVisible(false), []);
@@ -454,6 +463,10 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
         <AddToPlaylistSheet
           visible
           climb={playlistClimb.climb}
+          boardName={playlistClimb.boardConfig.boardName}
+          layoutId={playlistClimb.boardConfig.layoutId}
+          sizeId={playlistClimb.boardConfig.sizeId}
+          setIds={playlistClimb.boardConfig.setIds}
           angle={playlistClimb.boardConfig.angle}
           onClose={closeAddToPlaylist}
         />

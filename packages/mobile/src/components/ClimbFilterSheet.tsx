@@ -36,6 +36,7 @@ import {
   GRADE_ACCURACY_VALUES,
 } from '@boardsesh/climb-filters';
 import { Text } from './Text';
+import { GlassSheetBackground } from './GlassSheetBackground';
 import { Button } from './Button';
 import { SegmentedControl } from './SegmentedControl';
 import { StarRating } from './StarRating';
@@ -393,11 +394,6 @@ export function ClimbFilterSheet({
     t,
   ]);
 
-  const backgroundStyle: ViewStyle = {
-    backgroundColor: systemColors.secondaryBackground,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-  };
   const trackColor = systemColors.fill;
   const accuracyValue: GradeAccuracyValue | 'off' = localFilters.gradeAccuracy ?? 'off';
   const applyLabel =
@@ -419,7 +415,7 @@ export function ClimbFilterSheet({
       backdropComponent={renderBackdrop}
       onDismiss={onDismiss}
       handleIndicatorStyle={styles.indicator}
-      backgroundStyle={backgroundStyle}
+      backgroundComponent={GlassSheetBackground}
     >
       <View style={styles.header}>
         <Text variant="title3">{t('mobile.filter.title')}</Text>

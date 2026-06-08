@@ -12,13 +12,12 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import ReanimatedSwipeable, { type SwipeableMethods } from 'react-native-gesture-handler/ReanimatedSwipeable';
 import type { Climb, BoardName } from '@boardsesh/shared-schema';
 import { Icon } from './Icon';
-import { THUMBNAIL_WIDTH } from './ClimbListThumbnail';
 import { ClimbListItemContent } from './ClimbListItemContent';
+import { climbListRowStyles } from './climb-list-row-styles';
 import { hapticLight, hapticMedium, hapticSuccess } from '../lib/haptics';
 import { useTheme } from '../providers/theme-provider';
 import { iosSystemColors } from '../theme/ios-colors';
 import { brandColors } from '../theme/colors';
-import { spacing } from '../theme/tokens';
 import { selectedRowColors } from './climb-list-row-colors';
 
 // Swipe tuning. Each side reveals a panel up to ACTION_REVEAL wide; dragging
@@ -270,7 +269,7 @@ const ClimbListRow = React.memo(function ClimbListRow({
       >
         <GestureDetector gesture={tapGesture}>
           <View
-            style={[styles.contentRow, { backgroundColor: systemColors.background }]}
+            style={[climbListRowStyles.contentRow, { backgroundColor: systemColors.background }]}
             accessible
             accessibilityRole="button"
             accessibilityLabel={climb.name}
@@ -297,7 +296,7 @@ const ClimbListRow = React.memo(function ClimbListRow({
       </ReanimatedSwipeable>
 
       {/* Separator — inset to start at the text column (after the thumbnail) */}
-      <View style={[styles.separator, { backgroundColor: systemColors.separator }]} />
+      <View style={[climbListRowStyles.separator, { backgroundColor: systemColors.separator }]} />
     </View>
   );
 });
@@ -311,13 +310,6 @@ const styles = StyleSheet.create({
   },
   unsupported: {
     opacity: 0.5,
-  },
-  contentRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: spacing[2],
-    paddingVertical: spacing[2],
-    gap: spacing[3],
   },
   // Active-climb wash + left accent bar. The COLOUR is applied inline from the
   // scheme-aware brand (see `highlight` / selectedRowColors) so dark mode uses the
@@ -337,10 +329,6 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 0,
     width: 5,
-  },
-  separator: {
-    height: StyleSheet.hairlineWidth,
-    marginLeft: THUMBNAIL_WIDTH + spacing[2] + spacing[3],
   },
   swipeAction: {
     width: ACTION_REVEAL,

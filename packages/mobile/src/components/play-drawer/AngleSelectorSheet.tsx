@@ -12,6 +12,7 @@ import { useTranslation } from 'react-i18next';
 import type { BoardName } from '@boardsesh/shared-schema';
 import { ANGLES } from '@boardsesh/board-config';
 import { Text } from '../Text';
+import { GlassSheetBackground } from '../GlassSheetBackground';
 import { useClimbStatsHistory } from '../../lib/graphql/hooks';
 import { useGradeFormat } from '../../hooks/use-grade-format';
 import { buildAngleStatsMap, type AngleStats } from './community-utils';
@@ -108,8 +109,6 @@ export const AngleSelectorSheet = memo(function AngleSelectorSheet({
     [],
   );
 
-  const backgroundStyle = { ...sheetStyles.background, backgroundColor: systemColors.secondaryBackground };
-
   return (
     <BottomSheetModal
       ref={sheetRef}
@@ -122,7 +121,7 @@ export const AngleSelectorSheet = memo(function AngleSelectorSheet({
       onDismiss={handleDismiss}
       backdropComponent={renderBackdrop}
       handleIndicatorStyle={sheetStyles.indicator}
-      backgroundStyle={backgroundStyle}
+      backgroundComponent={GlassSheetBackground}
     >
       <BottomSheetView style={[styles.container, { paddingBottom: insets.bottom + spacing[4] }]}>
         <Text variant="headline" style={styles.title}>

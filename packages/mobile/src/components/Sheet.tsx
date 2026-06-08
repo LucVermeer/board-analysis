@@ -8,6 +8,7 @@ import BottomSheet, {
 } from '@gorhom/bottom-sheet';
 import { FullWindowOverlay } from 'react-native-screens';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { GlassSheetBackground } from './GlassSheetBackground';
 import { hapticMedium } from '../lib/haptics';
 import { sheetStyles, spacing } from '../theme/tokens';
 import { useTheme } from '../providers/theme-provider';
@@ -47,6 +48,10 @@ type SheetProps = {
   // on iOS. Needed for sheets opened from a tab screen whose footer/buttons
   // would otherwise sit behind those bars.
   fullWindowOverlay?: boolean;
+  // Frosted Liquid-Glass background (the same material the Play Drawer uses).
+  // Default. Opt out (`glass={false}`) for the flat opaque secondary-background
+  // surface — an escape hatch, not normally needed.
+  glass?: boolean;
 };
 
 export const Sheet = forwardRef<BottomSheet, SheetProps>(function Sheet(
@@ -64,6 +69,7 @@ export const Sheet = forwardRef<BottomSheet, SheetProps>(function Sheet(
     keyboardBlurBehavior,
     android_keyboardInputMode,
     fullWindowOverlay = false,
+    glass = true,
   },
   ref,
 ) {
@@ -118,7 +124,8 @@ export const Sheet = forwardRef<BottomSheet, SheetProps>(function Sheet(
       keyboardBlurBehavior={keyboardBlurBehavior}
       android_keyboardInputMode={android_keyboardInputMode}
       backdropComponent={renderBackdrop}
-      backgroundStyle={backgroundStyle}
+      backgroundComponent={glass ? GlassSheetBackground : undefined}
+      backgroundStyle={glass ? undefined : backgroundStyle}
       onChange={handleChange}
       onClose={onClose}
       handleIndicatorStyle={sheetChrome.handleStyle}
