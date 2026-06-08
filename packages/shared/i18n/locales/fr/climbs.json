@@ -663,6 +663,8 @@
       "filterCountAria": "Filtres, {{count}} actifs",
       "filterHint": "Ouvre tous les filtres de blocs",
       "gradeAction": "Définir la plage de cotation",
+      "gradeOpenHint": "Ouvre le sélecteur de cotation",
+      "gradeCloseHint": "Ferme le sélecteur de cotation",
       "allClimbs": "Toutes les voies"
     },
     "gradeRail": {

@@ -13,13 +13,6 @@ type AccessoryBarSurfaceProps = {
   borderRadius?: number;
   /** Material can dock the surface to the tab bar instead of rendering a floating pill. */
   treatment?: AccessoryBarSurfaceTreatment;
-  /**
-   * Opaque background for the Material docked bar (e.g. the current climb's derived
-   * grade colour). When set, the docked surface fills with this colour, swaps the
-   * separator hairline for a light top border, and lifts on elevation so it reads as
-   * distinct from the tab bar. Omit to keep the neutral elevated-surface treatment.
-   */
-  fillColor?: string;
   style?: StyleProp<ViewStyle>;
   children: ReactNode;
 };
@@ -41,7 +34,6 @@ export function AccessoryBarSurface({
   height,
   borderRadius,
   treatment = 'floating',
-  fillColor,
   style,
   children,
 }: AccessoryBarSurfaceProps) {
@@ -68,23 +60,18 @@ export function AccessoryBarSurface({
   // Material is already opaque, so keep it on the Material surface path even
   // when Reduce Transparency resolves translucent surfaces to solid.
   if (mode === 'material' || variant === 'material') {
-    let materialSurfaceStyle: ViewStyle;
-    if (treatment === 'docked') {
-      materialSurfaceStyle = fillColor
+    // Docked: neutral M3 surface that reads one elevation step above the tab bar
+    // (hairline separator + elevation shadow). Floating: the same surface as a
+    // lifted pill. The grade colour lives in the bar's leading accent, not here.
+    const materialSurfaceStyle: ViewStyle =
+      treatment === 'docked'
         ? {
-            backgroundColor: fillColor,
-            borderTopWidth: 1,
-            borderTopColor: 'rgba(255, 255, 255, 0.15)',
-            ...shadows.sm,
-          }
-        : {
             backgroundColor: systemColors.elevatedSurface,
             borderTopWidth: StyleSheet.hairlineWidth,
             borderTopColor: systemColors.separator,
-          };
-    } else {
-      materialSurfaceStyle = { backgroundColor: systemColors.elevatedSurface, ...shadows.sm };
-    }
+            ...shadows.sm,
+          }
+        : { backgroundColor: systemColors.elevatedSurface, ...shadows.sm };
     return <View style={[shape, materialSurfaceStyle, style]}>{children}</View>;
   }
 

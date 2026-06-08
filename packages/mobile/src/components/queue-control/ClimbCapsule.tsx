@@ -19,7 +19,6 @@ import { useTheme } from '../../providers/theme-provider';
 import { useDrawerHost, type BoardConfig } from '../../providers/drawer-host-provider';
 import { AccessoryBarSurface, type AccessoryBarSurfaceTreatment } from './AccessoryBarSurface';
 import { AccessoryClimbThumbnail } from './AccessoryClimbThumbnail';
-import { deriveQueueBarBackground, QUEUE_BAR_TEXT_COLOR } from './queue-bar-colors';
 import { useQueueCarousel } from './use-queue-carousel';
 
 type ClimbLabelProps = {
@@ -77,7 +76,7 @@ export function ClimbCapsule({
   endActionSize = 0,
   surfaceTreatment = 'floating',
 }: ClimbCapsuleProps) {
-  const { systemColors, variant } = useTheme();
+  const { systemColors } = useTheme();
   const { boardConfig } = useDrawerHost();
   const { formatGrade } = useGradeFormat();
   const {
@@ -120,21 +119,26 @@ export function ClimbCapsule({
   const endActionReservedWidth = endAction ? endActionSize + 8 : 0;
   const labelRight = 16 + endActionReservedWidth;
 
-  // The Material docked bar fills with the current climb's (legibility-clamped) grade
-  // colour and carries white name + grade text — distinct from the neutral tab bar.
-  const coloredBar = variant === 'material' && surfaceTreatment === 'docked';
-  const barBackground = coloredBar ? deriveQueueBarBackground(grades.currentColor) : undefined;
-  const labelColor = coloredBar ? QUEUE_BAR_TEXT_COLOR : systemColors.label;
-  const gradeTextColor = (climbGradeColor: string) => (coloredBar ? QUEUE_BAR_TEXT_COLOR : climbGradeColor);
+  // The docked Material bar stays on a neutral M3 surface (a step above the tab bar
+  // via elevation) and marks the grade with a vivid leading colour stripe — distinct
+  // from the tab bar without painting a full grade-coloured band. The grade number
+  // keeps its per-grade colour, matching the list rows.
+  const showGradeAccent = surfaceTreatment === 'docked';
 
   return (
     <AccessoryBarSurface
       height={height}
       borderRadius={capsuleRadius}
       treatment={surfaceTreatment}
-      fillColor={barBackground}
       style={[styles.capsule, fillWidth ? null : styles.capsuleCap]}
     >
+      {showGradeAccent ? (
+        <View
+          testID="grade-accent"
+          pointerEvents="none"
+          style={[styles.gradeAccent, { backgroundColor: grades.currentColor }]}
+        />
+      ) : null}
       <GestureDetector gesture={composedGesture}>
         <View
           style={[styles.swipeArea, { height, borderRadius: capsuleRadius }]}
@@ -150,9 +154,9 @@ export function ClimbCapsule({
           <Animated.View style={[styles.labelSlot, { right: labelRight }, currentLabelStyle]}>
             <ClimbLabel
               climb={currentClimb}
-              labelColor={labelColor}
+              labelColor={systemColors.label}
               formattedGrade={grades.current}
-              gradeColor={gradeTextColor(grades.currentColor)}
+              gradeColor={grades.currentColor}
               showThumbnail={showThumbnail}
               boardConfig={boardConfig}
             />
@@ -161,9 +165,9 @@ export function ClimbCapsule({
             <Animated.View style={[styles.peekSlot, { right: labelRight }, nextPeekStyle]} pointerEvents="none">
               <ClimbLabel
                 climb={nextClimb}
-                labelColor={labelColor}
+                labelColor={systemColors.label}
                 formattedGrade={grades.next}
-                gradeColor={gradeTextColor(grades.nextColor)}
+                gradeColor={grades.nextColor}
                 showThumbnail={showThumbnail}
                 boardConfig={boardConfig}
               />
@@ -173,9 +177,9 @@ export function ClimbCapsule({
             <Animated.View style={[styles.peekSlot, { right: labelRight }, prevPeekStyle]} pointerEvents="none">
               <ClimbLabel
                 climb={previousClimb}
-                labelColor={labelColor}
+                labelColor={systemColors.label}
                 formattedGrade={grades.previous}
-                gradeColor={gradeTextColor(grades.previousColor)}
+                gradeColor={grades.previousColor}
                 showThumbnail={showThumbnail}
                 boardConfig={boardConfig}
               />
@@ -191,6 +195,16 @@ export function ClimbCapsule({
 const styles = StyleSheet.create({
   capsule: {
     flex: 1,
+  },
+  // Leading grade marker on the docked Material bar: a vivid full-height stripe in
+  // the raw grade colour, sitting in the label's left padding so it never overlaps
+  // text. Distinguishes the bar from the tab bar and reads grade at a glance.
+  gradeAccent: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 4,
   },
   // Centered-pill cap; omitted on the full-width Material bar.
   capsuleCap: {

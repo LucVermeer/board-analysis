@@ -532,7 +532,7 @@ describe('ClimbTopChrome', () => {
     expect(container.querySelector('[data-appbar-title="true"]')?.textContent).toBe('mobile.nav.climbs');
     expect(container.querySelector('[data-appbar-subtitle="true"]')?.textContent).toBe('Display:kilter • 12x12 • 40°');
     expect(container.querySelector('[data-search-field]')).not.toBeNull();
-    expect(container.querySelector('[data-chip="mobile.search.gradeAction"]')?.textContent).toContain('Grade range');
+    expect(container.querySelector('[data-pressable="mobile.search.gradeAction"]')?.textContent).toContain('Grade range');
 
     fireEvent.click(container.querySelector('[data-appbar-content="true"]') as HTMLButtonElement);
     expect(onOpenBoardDetail).toHaveBeenCalledTimes(1);
@@ -641,9 +641,9 @@ describe('ClimbTopChrome', () => {
       />,
     );
 
-    fireEvent.click(container.querySelector('[data-chip="mobile.search.gradeAction"]') as HTMLButtonElement);
+    fireEvent.click(container.querySelector('[data-pressable="mobile.search.gradeAction"]') as HTMLButtonElement);
     expect(onOpenGrade).toHaveBeenCalledTimes(1);
-    fireEvent.click(container.querySelector('[data-chip-close="mobile.search.gradeAction"]') as HTMLSpanElement);
+    fireEvent.click(container.querySelector('[data-pressable="mobile.gradeRail.clearFilterAria"]') as HTMLButtonElement);
     expect(onClearGrade).toHaveBeenCalledTimes(1);
 
     rerender(
@@ -661,7 +661,7 @@ describe('ClimbTopChrome', () => {
       />,
     );
     expect(container.querySelector('[data-grade-rail="true"]')).not.toBeNull();
-    fireEvent.click(container.querySelector('[data-chip="mobile.search.gradeAction"]') as HTMLButtonElement);
+    fireEvent.click(container.querySelector('[data-pressable="mobile.search.gradeAction"]') as HTMLButtonElement);
     expect(onCloseGrade).toHaveBeenCalledTimes(1);
     expect(onOpenGrade).toHaveBeenCalledTimes(1);
   });

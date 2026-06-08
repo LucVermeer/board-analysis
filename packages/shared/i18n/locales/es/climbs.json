@@ -663,6 +663,8 @@
       "filterCountAria": "Filtros, {{count}} activos",
       "filterHint": "Abre todos los filtros de bloques",
       "gradeAction": "Ajustar el rango de grado",
+      "gradeOpenHint": "Abre el selector de grado",
+      "gradeCloseHint": "Cierra el selector de grado",
       "allClimbs": "Todas las vías"
     },
     "gradeRail": {

@@ -663,6 +663,8 @@
       "filterCountAria": "Filters, {{count}} active",
       "filterHint": "Opens all climb filters",
       "gradeAction": "Set grade range",
+      "gradeOpenHint": "Opens the grade picker",
+      "gradeCloseHint": "Closes the grade picker",
       "allClimbs": "All climbs"
     },
     "gradeRail": {

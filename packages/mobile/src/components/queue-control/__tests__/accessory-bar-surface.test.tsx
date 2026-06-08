@@ -58,7 +58,8 @@ describe('AccessoryBarSurface', () => {
     expect(style).toContain('"backgroundColor":"#FFFFFF"');
     expect(style).toContain('"borderTopWidth":1');
     expect(style).toContain('"borderTopColor":"#CCCCCC"');
-    expect(style).not.toContain('"elevation":2');
+    // The docked bar lifts one elevation step above the tab bar (M3 separation).
+    expect(style).toContain('"elevation":2');
     expect(container.querySelector('[data-glass]')).toBeNull();
   });
 

@@ -11,8 +11,6 @@ type LogAscentToolbarButtonProps = {
   climb: Climb;
   size?: number;
   iconSize?: number;
-  /** Override the checkmark colour (e.g. white on the grade-coloured Material bar). */
-  color?: string;
 };
 
 /**
@@ -20,12 +18,7 @@ type LogAscentToolbarButtonProps = {
  * toolbar provides the visible container, so this uses the plain checkmark SF
  * Symbol instead of the circular tick glyph used by standalone FABs.
  */
-export function LogAscentToolbarButton({
-  climb,
-  size = glassSize.standard,
-  iconSize = 26,
-  color,
-}: LogAscentToolbarButtonProps) {
+export function LogAscentToolbarButton({ climb, size = glassSize.standard, iconSize = 26 }: LogAscentToolbarButtonProps) {
   const { accessibilityLabel, disabled, handleLogAscentPress, iconColor, popStyle } = useLogAscentAction(climb);
 
   return (
@@ -40,7 +33,7 @@ export function LogAscentToolbarButton({
         accessibilityState={{ disabled }}
         style={[styles.action, { width: size, height: size }, disabled ? styles.disabled : null]}
       >
-        <Icon name="check.small" size={iconSize} color={color ?? iconColor} />
+        <Icon name="check.small" size={iconSize} color={iconColor} />
       </PressableSurface>
     </Animated.View>
   );

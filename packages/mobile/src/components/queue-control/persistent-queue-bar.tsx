@@ -24,7 +24,6 @@ import { ActiveContextBar } from './ActiveContextBar';
 import { ClimbCapsule } from './ClimbCapsule';
 import { LogAscentFab } from './LogAscentFab';
 import { LogAscentToolbarButton } from './LogAscentToolbarButton';
-import { QUEUE_BAR_TEXT_COLOR } from './queue-bar-colors';
 
 // The docked Material bar tucks a couple of px under the tab bar's top edge so the
 // elevated tab bar covers the seam — without this overlap a 1–2px gap shows through.
@@ -55,9 +54,7 @@ export function PersistentQueueBar() {
             fillWidth
             height={MATERIAL_ACTIVE_CONTEXT_BAR_HEIGHT}
             surfaceTreatment="docked"
-            endAction={
-              <LogAscentToolbarButton climb={currentClimb} size={glassSize.inline} color={QUEUE_BAR_TEXT_COLOR} />
-            }
+            endAction={<LogAscentToolbarButton climb={currentClimb} size={glassSize.inline} />}
             endActionSize={glassSize.inline}
           />
         }
