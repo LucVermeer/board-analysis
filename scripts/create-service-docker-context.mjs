@@ -202,6 +202,20 @@ function createServiceDockerContext({ serviceName, repoRoot = defaultRepoRoot, o
     copyFileCreatingParent(join(absoluteRepoRoot, rootFile), join(absoluteOutputDir, 'source', rootFile));
   }
 
+  // Bun resolves `patchedDependencies` paths relative to the package.json that
+  // declares them, so the install layer needs the patch files next to the copied
+  // root manifest. Without them `bun install --frozen-lockfile` aborts with
+  // "Couldn't find patch file" and the image build fails.
+  const rootPackageJson = readJson(join(absoluteRepoRoot, 'package.json'));
+  for (const patchRelativePath of Object.values(rootPackageJson.patchedDependencies ?? {}).map(String)) {
+    const absolutePatchPath = join(absoluteRepoRoot, patchRelativePath);
+    if (!existsSync(absolutePatchPath)) {
+      throw new Error(`package.json patchedDependencies references ${patchRelativePath}, but that file is missing`);
+    }
+    copyFileCreatingParent(absolutePatchPath, join(absoluteOutputDir, 'manifests', patchRelativePath));
+    copyFileCreatingParent(absolutePatchPath, join(absoluteOutputDir, 'source', patchRelativePath));
+  }
+
   for (const packageJsonPath of getWorkspacePackageJsonPaths(absoluteRepoRoot)) {
     copyFileCreatingParent(
       join(absoluteRepoRoot, packageJsonPath),

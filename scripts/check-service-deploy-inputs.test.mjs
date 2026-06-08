@@ -125,6 +125,59 @@ void test('rejects hand-maintained workspace manifest COPY lines in Dockerfiles'
   });
 });
 
+void test('rejects patchedDependencies without a patches COPY in the install layer', () => {
+  withFixtureRepo((repoRoot) => {
+    writeFixtureFile(
+      repoRoot,
+      'package.json',
+      `${JSON.stringify(
+        {
+          workspaces: ['packages/*', 'packages/shared/*'],
+          patchedDependencies: { 'left-pad@1.0.0': 'patches/left-pad@1.0.0.patch' },
+        },
+        null,
+        2,
+      )}\n`,
+    );
+    writeFixtureFile(repoRoot, 'patches/left-pad@1.0.0.patch', 'diff\n');
+
+    const failures = createServiceDeployInputFailures({ repoRoot });
+    assert.match(failures.join('\n'), /missing COPY manifests\/patches \.\/patches/);
+  });
+});
+
+void test('passes when patchedDependencies are wired into the install layer', () => {
+  withFixtureRepo((repoRoot) => {
+    writeFixtureFile(
+      repoRoot,
+      'package.json',
+      `${JSON.stringify(
+        {
+          workspaces: ['packages/*', 'packages/shared/*'],
+          patchedDependencies: { 'left-pad@1.0.0': 'patches/left-pad@1.0.0.patch' },
+        },
+        null,
+        2,
+      )}\n`,
+    );
+    writeFixtureFile(repoRoot, 'patches/left-pad@1.0.0.patch', 'diff\n');
+
+    const dockerfile = [
+      'FROM node:22-alpine',
+      'COPY manifests/package.json manifests/bun.lock ./',
+      'COPY manifests/packages ./packages',
+      'COPY manifests/patches ./patches',
+      'RUN bun install --frozen-lockfile',
+      'COPY source/packages ./packages',
+      '',
+    ].join('\n');
+    writeFixtureFile(repoRoot, 'Dockerfile.backend', dockerfile);
+    writeFixtureFile(repoRoot, 'Dockerfile.web', dockerfile);
+
+    assert.deepEqual(createServiceDeployInputFailures({ repoRoot }), []);
+  });
+});
+
 void test('rejects source package COPY instructions before bun install', () => {
   withFixtureRepo((repoRoot) => {
     writeFixtureFile(
