@@ -40,3 +40,20 @@ export function getFilterSummary(
 
   return formatFilterSummary(parts, labels) ?? t('mobile.filter.title');
 }
+
+/**
+ * Variant-aware active-filter summary for the Climbs screen. Material renders it
+ * as a quick chip (up to 2 parts, then "+N more"); the glass variant uses it as
+ * the screen title, fitting whole parts within a character budget (the title
+ * wraps to two lines) before "+N more". Returns null when there are no parts.
+ */
+export function buildClimbFilterSummary(params: {
+  labels: string[];
+  isMaterial: boolean;
+  maxChars: number;
+  more: (count: number) => string;
+}): string | null {
+  const { labels, isMaterial, maxChars, more } = params;
+  if (labels.length === 0) return null;
+  return isMaterial ? formatFilterSummary(labels, { more }, 2) : formatFilterSummary(labels, { more }, null, maxChars);
+}

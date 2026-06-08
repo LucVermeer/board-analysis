@@ -20,7 +20,6 @@ import {
   mergeBoardFilters,
   countActiveFilters,
   hasActiveBoardFilters,
-  formatFilterSummary,
   DEFAULT_CLIMB_FILTER_STATE,
   DEFAULT_CLIMB_BOARD_FILTER_STATE,
   type ClimbBoardFilterState,
@@ -61,7 +60,7 @@ import {
   type RecentFilter,
 } from '../../../src/lib/recent-filter-store';
 import { getLastSearch, saveLastSearch, boardConfigKey } from '../../../src/lib/last-search-store';
-import { getFilterSummary } from '../../../src/lib/filter-summary';
+import { getFilterSummary, buildClimbFilterSummary } from '../../../src/lib/filter-summary';
 import { getActiveFilterTokens } from '../../../src/lib/filter-tokens';
 import { normalizeSearchName } from '../../../src/lib/search-name';
 import { track } from '../../../src/lib/analytics';
@@ -70,9 +69,11 @@ import { spacing } from '../../../src/theme/tokens';
 import { glassSize } from '../../../src/theme/layout';
 
 const PAGE_SIZE = 30;
-// Character budget for the glass filter-summary title: include whole filter parts
-// up to roughly two wrapped lines of the large title before collapsing the rest
-// into "+N more".
+// Soft character budget for the glass filter-summary title: include whole filter
+// parts up to roughly two wrapped lines before collapsing the rest into "+N more".
+// It only decides *when* to summarise — the title's `numberOfLines={2}` +
+// ellipsize is the hard visual cap, so larger accessibility text sizes degrade to
+// truncation rather than overflowing the layout.
 const SUMMARY_MAX_CHARS = 28;
 const SEARCH_DEBOUNCE_MS = 300;
 const INITIAL_SKELETON_ROW_COUNT = 10;
@@ -636,18 +637,18 @@ function ClimbListInner() {
     [filterTokens],
   );
   const summaryFilterTokens = variant === 'material' ? nonGradeFilterTokens : filterTokens;
-  // Condensed summary of the active filters. Material shows it as a quick chip
-  // (non-grade tokens, 2 parts max then "+N more"); the glass variant uses it as
-  // the screen title, fitting whole parts within a character budget (the title
-  // wraps to two lines) before "+N more".
-  const filterSummary = useMemo(() => {
-    if (summaryFilterTokens.length === 0) return null;
-    const labels = summaryFilterTokens.map((token) => token.label);
-    const more = { more: (count: number) => t('mobile.search.more', { count }) };
-    return variant === 'material'
-      ? formatFilterSummary(labels, more, 2)
-      : formatFilterSummary(labels, more, null, SUMMARY_MAX_CHARS);
-  }, [summaryFilterTokens, variant, t]);
+  // Condensed summary of the active filters (variant-aware: Material chip vs glass
+  // title). See buildClimbFilterSummary.
+  const filterSummary = useMemo(
+    () =>
+      buildClimbFilterSummary({
+        labels: summaryFilterTokens.map((token) => token.label),
+        isMaterial: variant === 'material',
+        maxChars: SUMMARY_MAX_CHARS,
+        more: (count) => t('mobile.search.more', { count }),
+      }),
+    [summaryFilterTokens, variant, t],
+  );
   // The glass screen title: the active-filter summary, or "All climbs" when none.
   // Shown both as the large in-body title and the collapsed header capsule.
   const searchTitle = filterSummary ?? t('mobile.search.allClimbs');

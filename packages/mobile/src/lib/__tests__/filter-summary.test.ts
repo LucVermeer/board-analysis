@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { Grade } from '@boardsesh/shared-schema';
-import { getFilterSummary } from '../filter-summary';
+import { getFilterSummary, buildClimbFilterSummary } from '../filter-summary';
 import { DEFAULT_FILTERS, type ClimbFilters } from '../climb-filter-types';
 
 const mockGrades: Grade[] = [
@@ -97,5 +97,37 @@ describe('getFilterSummary', () => {
   it('shows the beta videos filter part when enabled', () => {
     const filters: ClimbFilters = { ...DEFAULT_FILTERS, onlyWithBetaVideos: true };
     expect(getFilterSummary(filters, '', mockGrades, mockT)).toBe('mobile.filter.betaVideosShort');
+  });
+});
+
+describe('buildClimbFilterSummary', () => {
+  const more = (count: number) => `+${count} more`;
+
+  it('returns null when there are no filter parts', () => {
+    expect(buildClimbFilterSummary({ labels: [], isMaterial: false, maxChars: 28, more })).toBeNull();
+    expect(buildClimbFilterSummary({ labels: [], isMaterial: true, maxChars: 28, more })).toBeNull();
+  });
+
+  it('Material caps at 2 parts then "+N more"', () => {
+    const labels = ['V4+', 'Quality', '3+ ⭐', '5+ 🧗'];
+    expect(buildClimbFilterSummary({ labels, isMaterial: true, maxChars: 999, more })).toBe('V4+ · Quality · +2 more');
+  });
+
+  it('glass fits whole parts within the character budget then "+N more"', () => {
+    const labels = ['V4+', 'Quality', '25+ ascents', '3+ stars'];
+    // "V4+ · Quality" is 13 chars; "25+ ascents" would push it to 27 > 20.
+    expect(buildClimbFilterSummary({ labels, isMaterial: false, maxChars: 20, more })).toBe('V4+ · Quality · +2 more');
+  });
+
+  it('glass keeps every part when the summary fits the budget', () => {
+    const labels = ['V4+', 'Quality'];
+    expect(buildClimbFilterSummary({ labels, isMaterial: false, maxChars: 28, more })).toBe('V4+ · Quality');
+  });
+
+  it('glass budget can show more parts than the Material 2-part cap', () => {
+    const labels = ['V4+', 'Quality', '3+ ⭐'];
+    // Material truncates to 2; glass fits all three within 28 chars.
+    expect(buildClimbFilterSummary({ labels, isMaterial: true, maxChars: 28, more })).toBe('V4+ · Quality · +1 more');
+    expect(buildClimbFilterSummary({ labels, isMaterial: false, maxChars: 28, more })).toBe('V4+ · Quality · 3+ ⭐');
   });
 });
