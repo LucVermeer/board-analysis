@@ -6,6 +6,9 @@ const pushMock = vi.hoisted(() => vi.fn());
 const segmentsCtrl = vi.hoisted(() => ({ segments: ['(tabs)', 'climbs'] as string[] }));
 const hasSeenMock = vi.hoisted(() => vi.fn());
 const getInitialURLMock = vi.hoisted(() => vi.fn());
+// Controllable signed-in profile: the gate keys its first-run decision on the
+// profile id, so tests drive sign-out/sign-in by swapping this id.
+const profileCtrl = vi.hoisted(() => ({ id: undefined as string | undefined }));
 
 vi.mock('expo-router', () => ({
   router: { push: pushMock },
@@ -16,6 +19,9 @@ vi.mock('expo-linking', () => ({
 }));
 vi.mock('../../../lib/onboarding/onboarding-storage', () => ({
   hasSeenOnboarding: hasSeenMock,
+}));
+vi.mock('../../../lib/graphql/hooks', () => ({
+  useProfile: () => ({ data: profileCtrl.id ? { id: profileCtrl.id } : undefined }),
 }));
 
 import { OnboardingGate } from '../OnboardingGate';
@@ -28,6 +34,7 @@ describe('OnboardingGate', () => {
     // Default: a plain launch (no cold-start deep link).
     getInitialURLMock.mockResolvedValue(null);
     segmentsCtrl.segments = ['(tabs)', 'climbs'];
+    profileCtrl.id = undefined;
   });
 
   it('does nothing until the app is ready', async () => {
@@ -104,5 +111,34 @@ describe('OnboardingGate', () => {
     getInitialURLMock.mockRejectedValue(new Error('linking unavailable'));
     render(<OnboardingGate ready />);
     await waitFor(() => expect(pushMock).toHaveBeenCalledWith('/onboarding'));
+  });
+
+  it('re-evaluates first-run when a different user signs in during the session', async () => {
+    // User A has already seen the tour — no push.
+    hasSeenMock.mockResolvedValue(true);
+    profileCtrl.id = 'user-a';
+    const { rerender } = render(<OnboardingGate ready />);
+    await waitFor(() => expect(hasSeenMock).toHaveBeenCalledTimes(1));
+    expect(pushMock).not.toHaveBeenCalled();
+
+    // User B signs in (different id) and hasn't seen it — the gate must
+    // re-check and push, rather than staying "decided" from user A.
+    hasSeenMock.mockResolvedValue(false);
+    profileCtrl.id = 'user-b';
+    rerender(<OnboardingGate ready />);
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith('/onboarding'));
+    expect(hasSeenMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not re-decide when the same user id stays stable across rerenders', async () => {
+    hasSeenMock.mockResolvedValue(true);
+    profileCtrl.id = 'user-a';
+    const { rerender } = render(<OnboardingGate ready />);
+    await waitFor(() => expect(hasSeenMock).toHaveBeenCalledTimes(1));
+    rerender(<OnboardingGate ready />);
+    await Promise.resolve();
+    // Same id → the gate stays decided; no extra flag read, no push.
+    expect(hasSeenMock).toHaveBeenCalledTimes(1);
+    expect(pushMock).not.toHaveBeenCalled();
   });
 });

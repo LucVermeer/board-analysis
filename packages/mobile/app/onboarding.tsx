@@ -4,6 +4,7 @@ import { useTheme as usePaperTheme } from 'react-native-paper';
 import { OnboardingCarousel } from '../src/components/onboarding/OnboardingCarousel';
 import { useTheme } from '../src/providers/theme-provider';
 import { markOnboardingSeen } from '../src/lib/onboarding/onboarding-storage';
+import { reportError } from '../src/lib/sentry';
 
 /**
  * First-run welcome walkthrough. Presented as a full-screen cover over the
@@ -30,15 +31,27 @@ export default function OnboardingScreen() {
   const bodyColor = isMaterial ? paperTheme.colors.onSurfaceVariant : (systemColors.secondaryLabel as string);
   const backgroundColor = isMaterial ? paperTheme.colors.background : (systemColors.background as string);
 
-  const dismissToClimbs = useCallback(() => {
-    void markOnboardingSeen();
-    router.replace('/(tabs)/climbs');
+  // Persist the "seen" flag without blocking the exit. If the SecureStore write
+  // rejects (keychain locked / unavailable), navigation still happens — but we
+  // log + report it, because a silent failure would reshow the tour on every
+  // cold start. console.warn for dev visibility, reportError for production.
+  const persistSeen = useCallback(() => {
+    markOnboardingSeen().catch((error: unknown) => {
+      // eslint-disable-next-line no-console
+      console.warn('[onboarding] Failed to persist "seen" flag', error);
+      reportError(error);
+    });
   }, []);
 
+  const dismissToClimbs = useCallback(() => {
+    persistSeen();
+    router.replace('/(tabs)/climbs');
+  }, [persistSeen]);
+
   const goToBoards = useCallback(() => {
-    void markOnboardingSeen();
+    persistSeen();
     router.replace('/boards');
-  }, []);
+  }, [persistSeen]);
 
   return (
     <OnboardingCarousel

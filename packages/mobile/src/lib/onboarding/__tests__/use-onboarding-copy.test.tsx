@@ -57,8 +57,9 @@ describe('useOnboardingCopy', () => {
   it('recomputes when the translator identity changes (deps on [t])', () => {
     const { result, rerender } = renderHook(() => useOnboardingCopy());
     const first = result.current;
-    // Swap `t` (e.g. a language change) — the memo dep changes, so the map must
-    // be rebuilt rather than served stale.
+    // Swap the translator for a new function reference (a fresh `t` is how a
+    // real language switch surfaces to the hook). The memo dep changes, so the
+    // map must be rebuilt rather than served stale.
     translatorRef.t = (key: string) => key;
     rerender();
     expect(result.current).not.toBe(first);

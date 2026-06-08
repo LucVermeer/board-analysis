@@ -44,6 +44,14 @@ describe('onboarding storage', () => {
     expect(setMock).toHaveBeenCalledWith(ONBOARDING_SEEN_KEY, true);
   });
 
+  it('propagates a write failure so callers can log/report it', async () => {
+    // The onboarding screen catches this rejection (console.warn + reportError)
+    // instead of silently swallowing it — a lost write reshows the tour on every
+    // cold start, so it must not fail quietly.
+    setMock.mockRejectedValue(new Error('keychain locked'));
+    await expect(markOnboardingSeen()).rejects.toThrow('keychain locked');
+  });
+
   it('clears the seen flag for replay', async () => {
     removeMock.mockResolvedValue(undefined);
     await clearOnboardingSeen();
@@ -68,6 +76,15 @@ describe('onboarding storage', () => {
       // The clear must settle first; otherwise a fast finish/skip could write the
       // flag and a late clear would wipe it, re-showing the tour on next launch.
       expect(order).toEqual(['clear', 'navigate']);
+    });
+
+    it('rejects (without navigating) when the clear fails, so the row can show an error', async () => {
+      removeMock.mockRejectedValue(new Error('keychain locked'));
+      const navigate = vi.fn();
+      await expect(replayOnboarding(navigate)).rejects.toThrow('keychain locked');
+      // Don't open a tour that the failed clear would re-show forever — the
+      // caller surfaces an error toast instead.
+      expect(navigate).not.toHaveBeenCalled();
     });
 
     it('does not navigate until the clear promise resolves', async () => {

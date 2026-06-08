@@ -43,8 +43,10 @@
       "skip": "Passer",
       "next": "Suivant",
       "getStarted": "Connecter un board",
+      "replaySection": "Tutoriel",
       "replayTitle": "Revoir le tutoriel",
       "replaySubtitle": "Affiche à nouveau la visite de bienvenue",
+      "replayError": "Impossible de rouvrir le tutoriel. Réessaie.",
       "pageIndicator": "Page {{current}} sur {{total}}",
       "cards": {
         "welcome": {

@@ -19,7 +19,9 @@ import { SegmentedControl } from '../../../src/components/SegmentedControl';
 import { isPreviewBuild } from '../../../src/lib/eas-api';
 import { useGradeFormat } from '../../../src/hooks/use-grade-format';
 import { useGlassCapability } from '../../../src/hooks/use-glass-capability';
+import { useToast } from '../../../src/providers/toast-provider';
 import { replayOnboarding } from '../../../src/lib/onboarding/onboarding-storage';
+import { reportError } from '../../../src/lib/sentry';
 
 export default function MoreScreen() {
   const { systemColors, brandColors, themeOverride, setThemeOverride, uiVariantPreference, setUiVariant } = useTheme();
@@ -31,6 +33,7 @@ export default function MoreScreen() {
   const { gradeFormat, setGradeFormat } = useGradeFormat();
   const glassCapable = useGlassCapability();
   const { localePreference, setLocalePreference } = useLocalePreference();
+  const { showToast } = useToast();
 
   // 'System' follows the device language; the rest are the supported locales,
   // labelled in their own script (English / Español / Français) from
@@ -67,7 +70,16 @@ export default function MoreScreen() {
     // finished/skipped before the clear settles, markOnboardingSeen() could land
     // first and a late clear would wipe the flag — leaving the tour "unseen" and
     // re-showing on the next cold start.
-    void replayOnboarding(() => router.push('/onboarding'));
+    //
+    // If the SecureStore clear rejects (keychain locked / unavailable),
+    // replayOnboarding never navigates, so surface an error toast instead of the
+    // row silently doing nothing. Log + report so we notice a recurring failure.
+    replayOnboarding(() => router.push('/onboarding')).catch((error: unknown) => {
+      // eslint-disable-next-line no-console
+      console.warn('[onboarding] Failed to replay walkthrough', error);
+      reportError(error);
+      showToast(t('mobile.onboarding.replayError'), 'error');
+    });
   };
 
   return (
@@ -158,6 +170,7 @@ export default function MoreScreen() {
       </View>
 
       <View style={styles.section}>
+        <SectionHeader title={t('mobile.onboarding.replaySection')} />
         <View style={[styles.card, { backgroundColor: systemColors.secondaryBackground }]}>
           <ListRow
             title={t('mobile.onboarding.replayTitle')}

@@ -43,8 +43,10 @@
       "skip": "Skip",
       "next": "Next",
       "getStarted": "Connect a board",
+      "replaySection": "Walkthrough",
       "replayTitle": "Replay walkthrough",
       "replaySubtitle": "See the welcome tour again",
+      "replayError": "Couldn't reopen the walkthrough. Try again.",
       "pageIndicator": "Page {{current}} of {{total}}",
       "cards": {
         "welcome": {

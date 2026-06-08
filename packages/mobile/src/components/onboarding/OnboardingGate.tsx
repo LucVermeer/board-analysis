@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { router, useSegments } from 'expo-router';
 import * as Linking from 'expo-linking';
 import { hasSeenOnboarding } from '../../lib/onboarding/onboarding-storage';
+import { useProfile } from '../../lib/graphql/hooks';
 
 type OnboardingGateProps = {
   /** True once auth + fonts are resolved and the splash has hidden. */
@@ -22,6 +23,10 @@ const DEEP_LINK_SEGMENTS = new Set(['join', 'share-beta', 'session', 'auth', 'on
  * nothing. Mounting it below AuthProvider means it only runs for an
  * authenticated session — an unauthenticated cold start is redirected to login
  * by the auth gate, and the walkthrough shows after they sign in.
+ *
+ * The decision is keyed on the signed-in profile id, not the app process: on a
+ * shared device a user can sign out and a different user sign in without a
+ * relaunch, and the new account gets its own first-run check.
  */
 export function OnboardingGate({ ready }: OnboardingGateProps) {
   const segments = useSegments();
@@ -30,6 +35,19 @@ export function OnboardingGate({ ready }: OnboardingGateProps) {
   const topSegmentRef = useRef<string | undefined>(segments[0]);
   topSegmentRef.current = segments[0];
   const decidedRef = useRef(false);
+
+  // The gate decides once per signed-in account, not once per app process. On a
+  // shared device a user can sign out and a DIFFERENT user can sign in without a
+  // relaunch; keying the decision on the profile id lets the new account get its
+  // own first-run check. `undefined` while the profile loads — we only reset the
+  // decision on a transition between two concrete ids.
+  const { data: profile } = useProfile();
+  const userId = profile?.id;
+  const decidedForUserRef = useRef<string | undefined>(userId);
+  if (userId !== undefined && userId !== decidedForUserRef.current) {
+    decidedForUserRef.current = userId;
+    decidedRef.current = false;
+  }
 
   useEffect(() => {
     if (!ready || decidedRef.current) return;
@@ -67,7 +85,9 @@ export function OnboardingGate({ ready }: OnboardingGateProps) {
     return () => {
       cancelled = true;
     };
-  }, [ready]);
+    // `userId` is here so the effect re-runs after a sign-out/sign-in resets
+    // `decidedRef` above — the new account gets its own first-run evaluation.
+  }, [ready, userId]);
 
   return null;
 }

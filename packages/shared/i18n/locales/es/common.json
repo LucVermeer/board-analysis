@@ -241,8 +241,10 @@
       "skip": "Omitir",
       "next": "Siguiente",
       "getStarted": "Conecta una tabla",
+      "replaySection": "Tutorial",
       "replayTitle": "Repetir el tutorial",
       "replaySubtitle": "Vuelve a ver el recorrido de bienvenida",
+      "replayError": "No se pudo abrir el tutorial. Inténtalo de nuevo.",
       "pageIndicator": "Página {{current}} de {{total}}",
       "cards": {
         "welcome": {
