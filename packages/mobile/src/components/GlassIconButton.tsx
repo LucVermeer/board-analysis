@@ -91,6 +91,11 @@ function GlassIconButtonMaterial({
     <View style={[styles.wrapper, { width: size, height: size }]}>
       <PaperIconButton
         icon={iconMap[iconName].android}
+        // Paper types iconColor as `string`. In the Material branch our themed
+        // colours resolve from materialSurfaces (hex/rgba strings on every
+        // platform), so no PlatformColor opaque ref reaches here; even if one
+        // did, Paper forwards it to MaterialCommunityIcons' `color`, which
+        // accepts ColorValue at runtime. The cast just satisfies Paper's type.
         iconColor={iconColor as string}
         size={iconSize}
         // Match the circular target diameter; Paper's default margin would

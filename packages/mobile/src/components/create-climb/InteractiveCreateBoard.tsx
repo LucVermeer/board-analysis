@@ -1,4 +1,5 @@
 import React, { useMemo, type ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 import { View, StyleSheet, Pressable } from 'react-native';
 import Animated from 'react-native-reanimated';
 import { GestureDetector } from 'react-native-gesture-handler';
@@ -62,6 +63,7 @@ export const InteractiveCreateBoard = React.memo(function InteractiveCreateBoard
   renderHeight,
   overlay,
 }: InteractiveCreateBoardProps) {
+  const { t } = useTranslation('common');
   const { pinchGesture, zoomPanGesture, isZoomed, resetZoom, animatedZoomStyle } = useZoomPanGesture({
     enabled: true,
     containerWidth: renderWidth,
@@ -127,7 +129,7 @@ export const InteractiveCreateBoard = React.memo(function InteractiveCreateBoard
           {isZoomed ? (
             <Pressable style={styles.resetButton} onPress={resetZoom} hitSlop={8} accessibilityRole="button">
               <Text variant="footnote" style={styles.resetLabel}>
-                Reset zoom
+                {t('board.resetZoom')}
               </Text>
             </Pressable>
           ) : null}

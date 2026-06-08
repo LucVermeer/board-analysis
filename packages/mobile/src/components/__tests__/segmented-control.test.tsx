@@ -32,7 +32,8 @@ vi.mock('react-native-paper', () => ({
           key: button.value,
           'data-segment-value': button.value,
           'data-disabled': button.disabled ? 'true' : 'false',
-          onClick: () => onValueChange(button.value),
+          // Real Paper never fires onValueChange for a disabled button.
+          onClick: button.disabled ? undefined : () => onValueChange(button.value),
         }),
       ),
     ),
