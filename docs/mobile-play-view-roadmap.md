@@ -22,28 +22,29 @@ The authoritative design spec for the play view lives at [`docs/ui/06-play-view.
 
 ## Feature Parity Table
 
-| Feature                                           | Web  | Mobile  | Shared Code                            | Phase |
-| ------------------------------------------------- | ---- | ------- | -------------------------------------- | ----- |
-| Play drawer (bottom sheet shell)                  | Done | Done    | Snap points, state machine             | 1     |
-| Climb header (grade + name + stats)               | Done | Done    | Grade formatting, stat utils           | 1     |
-| Board renderer                                    | Done | Done    | Hold data transforms                   | 1     |
-| Action bar (8 buttons)                            | Done | Done    | Button definitions, action types       | 1     |
-| Tick FAB                                          | Done | Done    | Tick state logic                       | 1     |
-| Queue navigation (prev/next)                      | Done | Done    | Navigation helpers                     | 1     |
-| Board carousel (swipe)                            | Done | Done    | Prefetch logic                         | 2     |
-| Inline tick bar                                   | Done | Done    | QuickTickBar logic                     | 2     |
-| Wake lock                                         | Done | Done    | --                                     | 2     |
-| Queue drawer (nested)                             | Done | Done    | Queue list model (buildQueueListModel) | 3     |
-| Below-fold sections (logbook, similar, community) | Done | Stub    | Section data types                     | 3     |
-| Climb actions sheet                               | Done | Done    | Action definitions                     | 3     |
-| Angle selector                                    | Done | Done    | Angle range utils                      | 3     |
-| Zoom/pan                                          | Done | Planned | Transform math                         | 4     |
-| Double-tap favorite                               | Done | Planned | Favorite toggle logic                  | 4     |
-| Party mode (mini session bar, driver, drift)      | Done | Planned | Session state types                    | 5     |
-| BLE lightbulb integration                         | Done | Planned | Protocol (via @boardsesh/ble-protocol) | 5     |
-| Coachmarks                                        | Done | Planned | Coachmark definitions                  | 6     |
-| Beta videos section                               | Done | Planned | Video data types                       | 6     |
-| Analytics section                                 | Done | Planned | Stat aggregation                       | 6     |
+| Feature                                             | Web  | Mobile  | Shared Code                                   | Phase |
+| --------------------------------------------------- | ---- | ------- | --------------------------------------------- | ----- |
+| Play drawer (bottom sheet shell)                    | Done | Done    | Snap points, state machine                    | 1     |
+| Climb header (grade + name + stats)                 | Done | Done    | Grade formatting, stat utils                  | 1     |
+| Board renderer                                      | Done | Done    | Hold data transforms                          | 1     |
+| Action bar (8 buttons)                              | Done | Done    | Button definitions, action types              | 1     |
+| Tick FAB                                            | Done | Done    | Tick state logic                              | 1     |
+| Queue navigation (prev/next)                        | Done | Done    | Navigation helpers                            | 1     |
+| Board carousel (swipe)                              | Done | Done    | Prefetch logic                                | 2     |
+| Inline tick bar                                     | Done | Done    | QuickTickBar logic                            | 2     |
+| Wake lock                                           | Done | Done    | --                                            | 2     |
+| Queue drawer (nested)                               | Done | Done    | Queue list model (buildQueueListModel)        | 3     |
+| Below-fold sections (logbook, similar, community)   | Done | Stub    | Section data types                            | 3     |
+| Climb actions sheet                                 | Done | Done    | Action definitions                            | 3     |
+| Angle selector                                      | Done | Done    | Angle range utils                             | 3     |
+| Zoom/pan                                            | Done | Planned | Transform math                                | 4     |
+| Double-tap favorite                                 | Done | Planned | Favorite toggle logic                         | 4     |
+| Route/circuit playback (animate, speed, party-sync) | Done | Done    | @boardsesh/playback-react (usePlaybackEngine) | 5     |
+| Party mode (mini session bar, driver, drift)        | Done | Partial | Session state types                           | 5     |
+| BLE lightbulb integration                           | Done | Partial | Protocol (via @boardsesh/ble-protocol)        | 5     |
+| Coachmarks                                          | Done | Planned | Coachmark definitions                         | 6     |
+| Beta videos section                                 | Done | Planned | Video data types                              | 6     |
+| Analytics section                                   | Done | Planned | Stat aggregation                              | 6     |
 
 ## Phase Descriptions
 
@@ -90,6 +91,14 @@ Adds zoom, pan, and gesture shortcuts.
 ### Phase 5: Party Mode
 
 Adds real-time collaborative climbing sessions.
+
+**Shipped (#2496):**
+
+- **Route/circuit playback** -- variable-speed, frame-stepped animation of multi-frame climbs (`framesCount > 1`) in the play drawer, via the shared `@boardsesh/playback-react` engine (`usePlaybackEngine` + `useClimbFrames`). Boulders are unaffected (`isAnimatable` is false).
+- **Playback party-sync** -- `PlaybackStateChanged` is forwarded through the queue provider's `subscribeToQueueEvents` seam (bypassing the reducer) and broadcast via `publishPlaybackState`, so party members see the same frame/speed/play state in real time.
+- **BLE frame mirroring** -- during route playback, the current frame is written to a connected board over BLE through a latest-wins, GATT-safe drain (mobile's `sendFramesToBoard` has no internal mutex).
+
+**Still planned:**
 
 - **Mini session bar** -- persistent bar above the play drawer showing connected users, driver name, and session status
 - **Driver state and lightbulb behavior** -- driver controls which climb is displayed and sends lightbulb commands; non-drivers see the driver's selection in real time

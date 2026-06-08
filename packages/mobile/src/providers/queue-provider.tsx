@@ -438,6 +438,8 @@ export function QueueProvider({ children }: { children: ReactNode }) {
           // model PlaybackStateChanged, but the subscription selects it and the
           // server emits it — SubscriptionQueueEvent is the canonical client
           // union that includes it.
+          // TODO(#2507): add PlaybackStateChanged to SubscriptionWireEnvelope so
+          // this `as unknown as` cast can be removed (don't strip it before then).
           const queueEvent = event as unknown as SubscriptionQueueEvent;
           if (queueEventListenersRef.current.size > 0) {
             for (const listener of queueEventListenersRef.current) {
