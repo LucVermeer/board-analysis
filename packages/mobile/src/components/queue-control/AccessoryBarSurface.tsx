@@ -60,12 +60,16 @@ export function AccessoryBarSurface({
   // Material is already opaque, so keep it on the Material surface path even
   // when Reduce Transparency resolves translucent surfaces to solid.
   if (mode === 'material' || variant === 'material') {
+    // Docked: neutral M3 surface that reads one elevation step above the tab bar
+    // (hairline separator + elevation shadow). Floating: the same surface as a
+    // lifted pill. The grade colour lives in the bar's leading accent, not here.
     const materialSurfaceStyle: ViewStyle =
       treatment === 'docked'
         ? {
             backgroundColor: systemColors.elevatedSurface,
             borderTopWidth: StyleSheet.hairlineWidth,
             borderTopColor: systemColors.separator,
+            ...shadows.sm,
           }
         : { backgroundColor: systemColors.elevatedSurface, ...shadows.sm };
     return <View style={[shape, materialSurfaceStyle, style]}>{children}</View>;

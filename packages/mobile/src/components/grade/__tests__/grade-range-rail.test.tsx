@@ -106,6 +106,12 @@ vi.mock('../../GlassSurface', () => ({
   GlassSurface: ({ children }: { children?: ReactNode }) => createElement('div', { 'data-glass': 'true' }, children),
 }));
 
+// The rail (Android) renders a flat material background; stub the surface-mode
+// hook so the test doesn't pull in the RN AccessibilityInfo/glass-capability chain.
+vi.mock('../../../hooks/use-effective-surface-mode', () => ({
+  useEffectiveSurfaceMode: () => 'material',
+}));
+
 vi.mock('../../PressableSurface', () => ({
   PressableSurface: ({
     children,

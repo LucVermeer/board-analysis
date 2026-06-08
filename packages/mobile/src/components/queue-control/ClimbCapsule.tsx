@@ -119,6 +119,12 @@ export function ClimbCapsule({
   const endActionReservedWidth = endAction ? endActionSize + 8 : 0;
   const labelRight = 16 + endActionReservedWidth;
 
+  // The docked Material bar stays on a neutral M3 surface (a step above the tab bar
+  // via elevation) and marks the grade with a vivid leading colour stripe — distinct
+  // from the tab bar without painting a full grade-coloured band. The grade number
+  // keeps its per-grade colour, matching the list rows.
+  const showGradeAccent = surfaceTreatment === 'docked';
+
   return (
     <AccessoryBarSurface
       height={height}
@@ -126,6 +132,13 @@ export function ClimbCapsule({
       treatment={surfaceTreatment}
       style={[styles.capsule, fillWidth ? null : styles.capsuleCap]}
     >
+      {showGradeAccent ? (
+        <View
+          testID="grade-accent"
+          pointerEvents="none"
+          style={[styles.gradeAccent, { backgroundColor: grades.currentColor }]}
+        />
+      ) : null}
       <GestureDetector gesture={composedGesture}>
         <View
           style={[styles.swipeArea, { height, borderRadius: capsuleRadius }]}
@@ -182,6 +195,16 @@ export function ClimbCapsule({
 const styles = StyleSheet.create({
   capsule: {
     flex: 1,
+  },
+  // Leading grade marker on the docked Material bar: a vivid full-height stripe in
+  // the raw grade colour, sitting in the label's left padding so it never overlaps
+  // text. Distinguishes the bar from the tab bar and reads grade at a glance.
+  gradeAccent: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 4,
   },
   // Centered-pill cap; omitted on the full-width Material bar.
   capsuleCap: {

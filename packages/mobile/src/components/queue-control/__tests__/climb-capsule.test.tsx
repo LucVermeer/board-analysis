@@ -28,8 +28,19 @@ const nav = vi.hoisted(() => ({
 }));
 
 // --- RN surface: View → div ---------------------------------------------------
+// Forward testID and the resolved backgroundColor so a test can assert the leading
+// grade-accent stripe paints the current climb's grade colour.
+function backgroundOf(style: unknown): string {
+  const entries = (Array.isArray(style) ? style.flat(Infinity) : [style]) as Array<Record<string, unknown> | undefined>;
+  for (let i = entries.length - 1; i >= 0; i -= 1) {
+    const entry = entries[i];
+    if (entry && typeof entry === 'object' && typeof entry.backgroundColor === 'string') return entry.backgroundColor;
+  }
+  return '';
+}
 vi.mock('react-native', () => ({
-  View: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
+  View: ({ children, testID, style }: { children?: ReactNode; testID?: string; style?: unknown }) =>
+    createElement('div', { 'data-testid': testID, 'data-bg': backgroundOf(style) }, children),
   StyleSheet: {
     create: (styles: Record<string, unknown>) => styles,
     absoluteFill: {},
@@ -254,6 +265,46 @@ describe('ClimbCapsule', () => {
     render(<ClimbCapsule />);
     // No tap fired → no call yet. (Documents the jsdom gesture limitation.)
     expect(drawer.openPlayDrawer).not.toHaveBeenCalled();
+  });
+
+  it('marks the docked bar with a leading grade-colour accent stripe, keeping text neutral', () => {
+    // The docked Material bar stays on a neutral surface: the grade rides a vivid
+    // leading accent stripe + the colorized grade number, NOT a full coloured fill,
+    // so the name stays the neutral label and the grade keeps its hue.
+    const item = makeItem(makeClimb({ difficulty: 'V6', name: 'The Crimp Ladder' }));
+    queue.state.currentClimbQueueItem = item;
+    queue.state.queue = [item];
+
+    const { container } = render(<ClimbCapsule surfaceTreatment="docked" />);
+
+    const accent = container.querySelector('[data-testid="grade-accent"]');
+    expect(accent).not.toBeNull();
+    expect(accent?.getAttribute('data-bg')).toBe('#FF0000');
+
+    const texts = Array.from(container.querySelectorAll('[data-text]'));
+    const gradeNode = texts.find((node) => (node.textContent ?? '').includes('6C'));
+    const nameNode = texts.find((node) => (node.textContent ?? '').includes('Crimp'));
+    expect(gradeNode?.getAttribute('data-color')).toBe('#FF0000');
+    expect(nameNode?.getAttribute('data-color')).toBe('#111111');
+  });
+
+  it('uses the gray fallback for the accent stripe of an unknown grade', () => {
+    const item = makeItem(makeClimb({ difficulty: 'V99', name: 'Mystery' }));
+    queue.state.currentClimbQueueItem = item;
+    queue.state.queue = [item];
+
+    const { container } = render(<ClimbCapsule surfaceTreatment="docked" />);
+    expect(container.querySelector('[data-testid="grade-accent"]')?.getAttribute('data-bg')).toBe('#808080');
+  });
+
+  it('omits the accent stripe on the non-docked floating capsule', () => {
+    // The stripe is a docked-bar treatment; the floating capsule keeps its plain pill.
+    const item = makeItem(makeClimb({ difficulty: 'V6', name: 'The Crimp Ladder' }));
+    queue.state.currentClimbQueueItem = item;
+    queue.state.queue = [item];
+
+    const { container } = render(<ClimbCapsule />);
+    expect(container.querySelector('[data-testid="grade-accent"]')).toBeNull();
   });
 
   it('peeks the suggestion-aware next climb past the queue tail', () => {
