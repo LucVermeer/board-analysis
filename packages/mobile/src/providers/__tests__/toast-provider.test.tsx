@@ -40,7 +40,7 @@ vi.mock('../../lib/haptics', () => ({
 vi.mock('../../providers/theme-provider', () => ({
   useTheme: () => ({
     colorScheme: 'light',
-    brandColors: { success: '#34C759', error: '#FF3B30', primary: '#6D28D9', warning: '#FF9500' },
+    brandColors: { success: '#047857', error: '#C81E1E', primary: '#6D28D9', warning: '#B45309' },
     systemColors: { secondaryBackground: '#fff' },
   }),
 }));

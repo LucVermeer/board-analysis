@@ -11,18 +11,23 @@ import { Avatar } from '../Avatar';
 import { FeedSocialRow } from '../you/FeedSocialRow';
 import { gradeBadgeColor } from '../you/profile-chart-colors';
 import { useGradeFormat } from '../../hooks/use-grade-format';
+import { brandColors } from '../../theme/colors';
 import { iosSystemColors } from '../../theme/ios-colors';
 import { spacing, borderRadius } from '../../theme/tokens';
-import { useTheme, type Theme } from '../../providers/theme-provider';
 
 type TickStatusMeta = { icon: IconName; color: string };
 
-// Icon names are scheme-agnostic; the badge fill colour is resolved from the
-// theme (brand tones lift in dark) so this reads the per-scheme brand set.
-function statusMeta(status: string, brandColors: Theme['brandColors']): TickStatusMeta {
-  if (status === 'flash') return { icon: 'flash', color: brandColors.warning };
-  if (status === 'send') return { icon: 'tick', color: brandColors.success };
-  return { icon: 'circle', color: iosSystemColors.systemGray };
+// The status badge is a FILL with a white icon on top, so the brand tones stay
+// STATIC (the lifted dark tints would fail white-on-fill contrast). Module-level
+// constants → zero allocation per row in this virtualised list.
+const STATUS_META: Record<string, TickStatusMeta> = {
+  flash: { icon: 'flash', color: brandColors.warning },
+  send: { icon: 'tick', color: brandColors.success },
+};
+const ATTEMPT_META: TickStatusMeta = { icon: 'circle', color: iosSystemColors.systemGray };
+
+function statusMeta(status: string): TickStatusMeta {
+  return STATUS_META[status] ?? ATTEMPT_META;
 }
 
 type TFunc = (key: string, options?: Record<string, unknown>) => string;
@@ -76,10 +81,9 @@ export const SessionTickRow = memo(function SessionTickRow({
   onOpenComments,
 }: SessionTickRowProps) {
   const { t } = useTranslation('session');
-  const { brandColors } = useTheme();
   const { formatGrade, formatGradeByDifficultyId } = useGradeFormat();
 
-  const meta = statusMeta(tick.status, brandColors);
+  const meta = statusMeta(tick.status);
   const attemptText = formatAttemptText(tick, t);
   const subtitleParts = [attemptText, tick.comment ?? null].filter((part): part is string => !!part);
   const subtitle = subtitleParts.length > 0 ? subtitleParts.join(' · ') : undefined;

@@ -89,8 +89,11 @@ vi.mock('../Text', () => ({
   Text: ({ children }: { children?: ReactNode }) => createElement('span', { 'data-text': 'true' }, children),
 }));
 
+// GlassIconButton reads only `variant` from the theme; its count badge is a
+// white-text FILL drawn from the static `brandColors` import (mocked below), so
+// the theme mock deliberately omits brandColors rather than carry a dead field.
 vi.mock('../../providers/theme-provider', () => ({
-  useTheme: () => ({ variant: ctrl.variant, brandColors: { primary: '#6D28D9' } }),
+  useTheme: () => ({ variant: ctrl.variant }),
 }));
 
 // The material branch maps the semantic name to its MDI glyph via iconMap.
@@ -103,6 +106,7 @@ vi.mock('../icon-map', () => ({
   },
 }));
 
+// Live mock: the badge fill reads `brandColors.primary` from this static import.
 vi.mock('../../theme/colors', () => ({ brandColors: { primary: '#6D28D9' } }));
 vi.mock('../../theme/ios-colors', () => ({ iosSystemColors: { white: '#FFFFFF' } }));
 vi.mock('../../theme/animations', () => ({ timing: { fast: 150 } }));

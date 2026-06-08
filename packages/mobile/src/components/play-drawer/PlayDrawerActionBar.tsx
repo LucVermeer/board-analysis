@@ -6,7 +6,10 @@ import { Text } from '../Text';
 import { BleLightbulbButton } from '../ble/BleLightbulbButton';
 import { ActionButton, SIZES, type ButtonSize, drawerActionBarStyles } from '../drawer-action-bar/DrawerActionBar';
 import { useTheme } from '../../providers/theme-provider';
-import { brandColors } from '../../theme/colors';
+// Aliased: foregrounds in this file read scheme-aware brand from `useTheme()`.
+// `staticBrandColors` is the static set, used only for the count badge — a FILL
+// with white text that must stay legible in both schemes.
+import { brandColors as staticBrandColors } from '../../theme/colors';
 import { iosSystemColors } from '../../theme/ios-colors';
 import { glassSize } from '../../theme/layout';
 import { hapticMedium } from '../../lib/haptics';
@@ -325,7 +328,8 @@ const styles = StyleSheet.create({
     minWidth: 16,
     height: 16,
     borderRadius: 8,
-    backgroundColor: brandColors.primary,
+    // FILL with white count text → static brand (see import note).
+    backgroundColor: staticBrandColors.primary,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 3,

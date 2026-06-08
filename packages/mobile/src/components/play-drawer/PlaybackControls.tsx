@@ -17,7 +17,11 @@ import { Icon } from '../Icon';
 import type { IconName } from '../icon-map';
 import { useTheme } from '../../providers/theme-provider';
 import { hapticLight, hapticSelection, hapticSuccess } from '../../lib/haptics';
-import { brandColors } from '../../theme/colors';
+// Aliased: this file reads scheme-aware brand from `useTheme()` for foregrounds
+// (slider/progress fills). `staticBrandColors` is intentionally the static set,
+// used only for the active speed pill — a FILL with white text that must stay
+// legible in both schemes (the lifted dark tint would fail white-on-fill).
+import { brandColors as staticBrandColors } from '../../theme/colors';
 import { iosSystemColors } from '../../theme/ios-colors';
 import { spacing, borderRadius } from '../../theme/tokens';
 import { springs, timing } from '../../theme/animations';
@@ -132,7 +136,11 @@ function SpeedPill({
       accessibilityRole="button"
       accessibilityState={{ expanded: active }}
       accessibilityLabel={accessibilityLabel}
-      style={[styles.speedPill, { backgroundColor: active ? brandColors.primary : systemColors.fill }, animatedStyle]}
+      style={[
+        styles.speedPill,
+        { backgroundColor: active ? staticBrandColors.primary : systemColors.fill },
+        animatedStyle,
+      ]}
     >
       <Text variant="footnote" color={active ? iosSystemColors.white : systemColors.label} style={styles.speedPillText}>
         {label}
