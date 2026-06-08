@@ -1,5 +1,5 @@
 /**
- * PersistentQueueBar — the floating climb toolbar that mounts at the app root
+ * PersistentQueueBar — the persistent climb toolbar that mounts at the app root
  * and is visible on every screen while a current climb is set.
  *
  * It is a thin adapter: it decides *whether* the climb bar should show (a current
@@ -10,14 +10,13 @@
  *     centered capsule + standalone hero tick (tap = PlayDrawer, swipe = prev/next)
  *
  *   Material                  [ ▢ grade · name              ✓ ]
- *     one full-width capsule with the tick inside, sitting close to the tab bar
+ *     one full-width opaque active-context bar docked above the tab bar
  *
  * On the Liquid Glass variant on iOS 26 the native bottom accessory owns this
  * pair, so `jsQueueToolbarVisible` is false here and this returns null.
  */
 
-import { TOOLBAR_RESERVE, TAB_BAR_HEIGHT, glassSize } from '../../theme/layout';
-import { spacing } from '../../theme/tokens';
+import { MATERIAL_ACTIVE_CONTEXT_BAR_HEIGHT, TOOLBAR_RESERVE, TAB_BAR_HEIGHT, glassSize } from '../../theme/layout';
 import { useQueue } from '../../providers/queue-provider';
 import { useTheme } from '../../providers/theme-provider';
 import { useBottomChromeMetrics } from '../../hooks/use-bottom-chrome-metrics';
@@ -44,10 +43,13 @@ export function PersistentQueueBar() {
     return (
       <ActiveContextBar
         fillPrimary
-        gapAboveTabBar={spacing[1]}
+        gapAboveTabBar={0}
+        horizontalInset={0}
         primary={
           <ClimbCapsule
             fillWidth
+            height={MATERIAL_ACTIVE_CONTEXT_BAR_HEIGHT}
+            surfaceTreatment="docked"
             endAction={<LogAscentToolbarButton climb={currentClimb} size={glassSize.inline} />}
             endActionSize={glassSize.inline}
           />

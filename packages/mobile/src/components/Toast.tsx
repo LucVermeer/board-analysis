@@ -9,7 +9,8 @@ import { Icon } from './Icon';
 import type { IconName } from './icon-map';
 import { blendOpaque, withAlpha } from '../theme/colors';
 import { borderRadius, spacing } from '../theme/tokens';
-import { TAB_BAR_HEIGHT, TOOLBAR_RESERVE } from '../theme/layout';
+import { MATERIAL_ACTIVE_CONTEXT_BAR_HEIGHT, TAB_BAR_HEIGHT, TOOLBAR_RESERVE } from '../theme/layout';
+import type { UiVariant } from '../theme/resolve-ui-variant';
 import { isTabsRoute } from '../lib/route-segments';
 import { useTheme } from '../providers/theme-provider';
 
@@ -58,17 +59,18 @@ export function Toast({ toast, onDismiss }: ToastProps) {
  * area. Shared by both variants — ToastProvider sits above QueueProvider, so this
  * must stay independent from queue context.
  */
-function useToastBottomOffset() {
+function useToastBottomOffset(uiVariant: UiVariant) {
   const insets = useSafeAreaInsets();
   const segments = useSegments();
+  const toolbarReserve = uiVariant === 'material' ? MATERIAL_ACTIVE_CONTEXT_BAR_HEIGHT : TOOLBAR_RESERVE;
   return isTabsRoute(segments)
-    ? insets.bottom + TAB_BAR_HEIGHT + TOOLBAR_RESERVE + spacing[2]
+    ? insets.bottom + TAB_BAR_HEIGHT + toolbarReserve + spacing[2]
     : insets.bottom + spacing[3];
 }
 
 function ToastMaterial({ toast, onDismiss }: ToastProps) {
-  const { systemColors, colorScheme, brandColors } = useTheme();
-  const bottomOffset = useToastBottomOffset();
+  const { systemColors, colorScheme, brandColors, variant: uiVariant } = useTheme();
+  const bottomOffset = useToastBottomOffset(uiVariant);
   const config = VARIANT_CONFIG[toast.variant];
   const variantColor = brandColors[config.colorKey];
 
@@ -118,8 +120,8 @@ function ToastMaterial({ toast, onDismiss }: ToastProps) {
 
 // Liquid Glass / HIG toast — the original implementation, unchanged.
 function ToastGlass({ toast, onDismiss }: ToastProps) {
-  const { systemColors, colorScheme, brandColors } = useTheme();
-  const bottomOffset = useToastBottomOffset();
+  const { systemColors, colorScheme, brandColors, variant: uiVariant } = useTheme();
+  const bottomOffset = useToastBottomOffset(uiVariant);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const config = VARIANT_CONFIG[toast.variant];
   const variantColor = brandColors[config.colorKey];

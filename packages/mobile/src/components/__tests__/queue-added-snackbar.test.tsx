@@ -37,16 +37,18 @@ type SnackbarMockProps = {
   duration?: number;
   onDismiss?: () => void;
   action?: SnackbarAction;
+  wrapperStyle?: unknown;
   children?: ReactNode;
 };
 vi.mock('react-native-paper', () => ({
-  Snackbar: ({ visible, duration, onDismiss, action, children }: SnackbarMockProps) =>
+  Snackbar: ({ visible, duration, onDismiss, action, wrapperStyle, children }: SnackbarMockProps) =>
     createElement(
       'div',
       {
         'data-paper-snackbar': 'true',
         'data-visible': visible ? 'true' : 'false',
         'data-duration': String(duration ?? ''),
+        'data-wrapper-style': JSON.stringify(wrapperStyle),
         onClick: onDismiss,
       },
       children,
@@ -103,6 +105,14 @@ describe('QueueAddedSnackbar', () => {
     expect(action?.textContent).toBe('mobile.queueSnackbar.open');
     expect(action?.getAttribute('data-action-label')).toBe('mobile.queueSnackbar.openAria');
     expect(container.querySelector('[data-animated]')).toBeNull();
+  });
+
+  it('positions the Material snackbar above the shared floating-control offset', () => {
+    ctrl.variant = 'material';
+    const { container } = render(<QueueAddedSnackbar {...base} />);
+    expect(container.querySelector('[data-paper-snackbar]')?.getAttribute('data-wrapper-style')).toContain(
+      '"bottom":108',
+    );
   });
 
   it('maps duration prop and routes the action to onOpen on Material', () => {

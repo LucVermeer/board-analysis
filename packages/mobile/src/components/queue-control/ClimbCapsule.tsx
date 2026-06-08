@@ -17,7 +17,7 @@ import { useGradeFormat } from '../../hooks/use-grade-format';
 import { Text } from '../Text';
 import { useTheme } from '../../providers/theme-provider';
 import { useDrawerHost, type BoardConfig } from '../../providers/drawer-host-provider';
-import { AccessoryBarSurface } from './AccessoryBarSurface';
+import { AccessoryBarSurface, type AccessoryBarSurfaceTreatment } from './AccessoryBarSurface';
 import { AccessoryClimbThumbnail } from './AccessoryClimbThumbnail';
 import { useQueueCarousel } from './use-queue-carousel';
 
@@ -65,6 +65,8 @@ type ClimbCapsuleProps = {
   /** Action floated inside the capsule on the right, outside the swipe target (e.g. the tick). */
   endAction?: ReactNode;
   endActionSize?: number;
+  /** Surface silhouette; Material docks this row while other variants float it. */
+  surfaceTreatment?: AccessoryBarSurfaceTreatment;
 };
 
 export function ClimbCapsule({
@@ -72,6 +74,7 @@ export function ClimbCapsule({
   fillWidth = false,
   endAction,
   endActionSize = 0,
+  surfaceTreatment = 'floating',
 }: ClimbCapsuleProps) {
   const { systemColors } = useTheme();
   const { boardConfig } = useDrawerHost();
@@ -111,7 +114,7 @@ export function ClimbCapsule({
 
   if (!currentClimb) return null;
 
-  const capsuleRadius = height / 2;
+  const capsuleRadius = surfaceTreatment === 'docked' ? 0 : height / 2;
   // Reserve room on the right so the name/grade never slide under the inline tick.
   const endActionReservedWidth = endAction ? endActionSize + 8 : 0;
   const labelRight = 16 + endActionReservedWidth;
@@ -120,6 +123,7 @@ export function ClimbCapsule({
     <AccessoryBarSurface
       height={height}
       borderRadius={capsuleRadius}
+      treatment={surfaceTreatment}
       style={[styles.capsule, fillWidth ? null : styles.capsuleCap]}
     >
       <GestureDetector gesture={composedGesture}>

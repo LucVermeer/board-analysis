@@ -1,13 +1,15 @@
 /**
  * Shared layout metrics for chrome that floats over scrollable content.
  *
- * The persistent climb toolbar — a glass capsule (current climb) joined by a
- * standalone log-ascent tick when the native bottom accessory is unavailable —
- * floats above the tab bar while a climb is active. Screens
- * reserve it via `useBottomChromeMetrics()` so native-accessory screens do not
- * keep padding for a JS toolbar that is not mounted. Owned here (rather than
- * inside queue-control) so any screen can pad correctly without importing those
- * components' internals.
+ * The persistent climb toolbar is rendered by variant:
+ *
+ *   Liquid Glass / fallback — floating glass capsule + standalone log tick
+ *   Material                — docked opaque active-context bar above the tab bar
+ *
+ * Screens reserve it via `useBottomChromeMetrics()` so native-accessory screens
+ * do not keep padding for a JS toolbar that is not mounted. Owned here (rather
+ * than inside queue-control) so any screen can pad correctly without importing
+ * those components' internals.
  */
 
 /** Bottom tab bar height (excludes the safe-area inset). */
@@ -64,3 +66,6 @@ export const TOOLBAR_GAP_ABOVE_TABBAR = 10;
  *  last scrollable row clears the floating toolbar. Keyed off the tallest island
  *  — the hero log-ascent tick (`glassSize.hero`) — so nothing hides under it. */
 export const TOOLBAR_RESERVE = glassSize.hero + TOOLBAR_GAP_ABOVE_TABBAR;
+
+/** Height of the Material active-context bar docked directly above the tab bar. */
+export const MATERIAL_ACTIVE_CONTEXT_BAR_HEIGHT = glassSize.standard;

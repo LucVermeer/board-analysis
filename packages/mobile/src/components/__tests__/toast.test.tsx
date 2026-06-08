@@ -16,8 +16,20 @@ vi.mock('react-native', () => ({
 // Reanimated Animated.View → div exposing accessibility props (glass path).
 vi.mock('react-native-reanimated', () => ({
   default: {
-    View: ({ children, accessibilityRole }: { children?: ReactNode; accessibilityRole?: string }) =>
-      createElement('div', { 'data-animated': 'true', 'data-role': accessibilityRole ?? '' }, children),
+    View: ({
+      children,
+      accessibilityRole,
+      style,
+    }: {
+      children?: ReactNode;
+      accessibilityRole?: string;
+      style?: unknown;
+    }) =>
+      createElement(
+        'div',
+        { 'data-animated': 'true', 'data-role': accessibilityRole ?? '', 'data-style': JSON.stringify(style) },
+        children,
+      ),
   },
   FadeIn: { duration: () => ({}) },
   FadeOut: { duration: () => ({}) },
@@ -29,16 +41,18 @@ type SnackbarMockProps = {
   duration?: number;
   onDismiss?: () => void;
   children?: ReactNode;
+  wrapperStyle?: unknown;
   style?: { backgroundColor?: string };
 };
 vi.mock('react-native-paper', () => ({
-  Snackbar: ({ visible, duration, onDismiss, children, style }: SnackbarMockProps) =>
+  Snackbar: ({ visible, duration, onDismiss, children, wrapperStyle, style }: SnackbarMockProps) =>
     createElement(
       'div',
       {
         'data-paper-snackbar': 'true',
         'data-visible': visible ? 'true' : 'false',
         'data-duration': String(duration ?? ''),
+        'data-wrapper-style': JSON.stringify(wrapperStyle),
         'data-bg': style?.backgroundColor ?? '',
         onClick: onDismiss,
       },
@@ -65,7 +79,11 @@ vi.mock('../../theme/colors', () => ({
   blendOpaque: (foreground: string, background: string) => `${foreground}|${background}`,
 }));
 vi.mock('../../theme/tokens', () => ({ borderRadius: { full: 999 }, spacing: { 2: 8, 3: 12, 4: 16 } }));
-vi.mock('../../theme/layout', () => ({ TAB_BAR_HEIGHT: 49, TOOLBAR_RESERVE: 56 }));
+vi.mock('../../theme/layout', () => ({
+  MATERIAL_ACTIVE_CONTEXT_BAR_HEIGHT: 48,
+  TAB_BAR_HEIGHT: 49,
+  TOOLBAR_RESERVE: 56,
+}));
 vi.mock('../../lib/route-segments', () => ({ isTabsRoute: () => true }));
 vi.mock('../../providers/theme-provider', () => ({
   useTheme: () => ({
@@ -96,6 +114,14 @@ describe('Toast', () => {
     expect(container.querySelector('[data-view][data-role="alert"]')).not.toBeNull();
     // The glass animated pill must not render on Material.
     expect(container.querySelector('[data-animated]')).toBeNull();
+  });
+
+  it('positions Material toasts above the docked climb bar and tab bar', () => {
+    ctrl.variant = 'material';
+    const { container } = render(<Toast toast={toast} onDismiss={() => {}} />);
+    expect(container.querySelector('[data-paper-snackbar]')?.getAttribute('data-wrapper-style')).toContain(
+      '"bottom":139',
+    );
   });
 
   it('selects the matching icon + tint per variant on the Material variant', () => {
@@ -131,6 +157,12 @@ describe('Toast', () => {
     expect(container.querySelector('[data-icon="success"]')).not.toBeNull();
     expect(container.textContent).toContain('Saved tick');
     expect(container.querySelector('[data-paper-snackbar]')).toBeNull();
+  });
+
+  it('positions Liquid Glass toasts above the floating toolbar reserve', () => {
+    ctrl.variant = 'liquidGlass';
+    const { container } = render(<Toast toast={toast} onDismiss={() => {}} />);
+    expect(container.querySelector('[data-animated]')?.getAttribute('data-style')).toContain('"bottom":147');
   });
 
   it('auto-dismisses via timer on the Liquid Glass variant', () => {
