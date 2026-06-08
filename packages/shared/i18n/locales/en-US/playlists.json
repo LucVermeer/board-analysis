@@ -27,6 +27,7 @@
       "seeAll": "See all",
       "searchPlaceholder": "Filter by title",
       "clearSearch": "Clear search",
+      "loadMoreError": "Couldn't load all your playlists.",
       "noResults": "No playlists match \"{{query}}\""
     },
     "pin": {

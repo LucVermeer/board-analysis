@@ -38,12 +38,13 @@ export default function AllPlaylistsScreen() {
 
   // Scope to the active board (matching the Discover hub's board filter), so this
   // screen is the full version of the "Jump Back In" shelf it expands.
-  const { playlists, isLoading, isLoadingMore, hasMore, hasError, loadMore, refetch } = useUserPlaylists({
-    token: effectiveToken,
-    boardType: activeBoard?.boardType,
-    layoutId: activeBoard?.layoutId,
-    pageSize: 50,
-  });
+  const { playlists, isLoading, isLoadingMore, hasMore, hasError, hasLoadMoreError, loadMore, retryLoadMore, refetch } =
+    useUserPlaylists({
+      token: effectiveToken,
+      boardType: activeBoard?.boardType,
+      layoutId: activeBoard?.layoutId,
+      pageSize: 50,
+    });
 
   // Drain every page so the alphabetical sort + title filter see the whole
   // library, not just the first page.
@@ -102,7 +103,12 @@ export default function AllPlaylistsScreen() {
         <Text variant="subheadline" style={styles.stateSubtitle}>
           {t('library.errors.loadDescription')}
         </Text>
-        <Pressable onPress={refetch} accessibilityRole="button" hitSlop={8}>
+        <Pressable
+          onPress={refetch}
+          accessibilityRole="button"
+          accessibilityLabel={t('library.errors.tryAgain')}
+          hitSlop={8}
+        >
           <Text variant="subheadline" color={brandColors.primary} style={styles.stateCta}>
             {t('library.errors.tryAgain')}
           </Text>
@@ -171,7 +177,21 @@ export default function AllPlaylistsScreen() {
             </View>
           }
           ListFooterComponent={
-            showDrainingFooter ? (
+            hasLoadMoreError ? (
+              <Pressable
+                style={styles.footer}
+                onPress={retryLoadMore}
+                accessibilityRole="button"
+                accessibilityLabel={t('library.errors.tryAgain')}
+              >
+                <Text variant="footnote" style={styles.stateSubtitle}>
+                  {t('library.allPlaylists.loadMoreError')}
+                </Text>
+                <Text variant="subheadline" color={brandColors.primary} style={styles.footerRetry}>
+                  {t('library.errors.tryAgain')}
+                </Text>
+              </Pressable>
+            ) : showDrainingFooter ? (
               <View style={styles.footer}>
                 <ActivityIndicator size="small" />
               </View>
@@ -182,6 +202,10 @@ export default function AllPlaylistsScreen() {
     </View>
   );
 }
+
+// Drops the empty / no-results block below the search bar toward the optical
+// centre (spacing[16] + spacing[4] = 80).
+const STATE_BLOCK_TOP_INSET = spacing[16] + spacing[4];
 
 const styles = StyleSheet.create({
   flex: {
@@ -210,7 +234,7 @@ const styles = StyleSheet.create({
     paddingVertical: 0,
   },
   emptyBlock: {
-    paddingTop: spacing[10] * 2,
+    paddingTop: STATE_BLOCK_TOP_INSET,
     paddingHorizontal: spacing[8],
     gap: spacing[2],
   },
@@ -230,5 +254,9 @@ const styles = StyleSheet.create({
   footer: {
     paddingVertical: spacing[4],
     alignItems: 'center',
+  },
+  footerRetry: {
+    marginTop: spacing[1],
+    fontWeight: '600',
   },
 });
