@@ -678,7 +678,12 @@
       "addToQueue": "Ajouter à la file",
       "toggleFavorite": "Basculer favori",
       "share": "Partager le bloc",
-      "projectFallback": "Projet"
+      "projectFallback": "Projet",
+      "ascentStatus": {
+        "flash": "Flashé",
+        "send": "Enchaîné",
+        "attempt": "Essayé"
+      }
     },
     "climbActions": {
       "copyLink": "Copier le lien",

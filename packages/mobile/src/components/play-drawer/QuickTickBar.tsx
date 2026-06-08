@@ -73,7 +73,7 @@ export const QuickTickBar = React.memo(function QuickTickBar({
   // Mobile's `Climb.userAscents`/`userAttempts` GraphQL fields aren't
   // populated server-side, so we read the user's accumulated logbook
   // (denormalised via `BoardProvider` → `useLogbook`) directly. Same
-  // source `AscentStatusBadge` uses for its flash/send/attempt pill.
+  // logbook source the climb-row status glyph reads.
   //
   // Two failure modes the save-button label must guard against:
   // 1. `BoardProvider` not mounted → no logbook context at all → `Send`.

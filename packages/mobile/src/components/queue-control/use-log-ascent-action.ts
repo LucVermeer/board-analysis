@@ -23,7 +23,8 @@ export function useLogAscentAction(climb: Climb) {
   const isMirror = climb.mirrored === true;
 
   // Count of send/flash ticks for this climb at this angle — the same logbook
-  // selector AscentStatusBadge uses, so the toolbar and the list badge agree.
+  // selector the climb-row status glyph uses, so the toolbar and the list
+  // marker agree.
   const sentCount = useMemo(
     () => (board ? countSentAscents(board.logbook, climb.uuid, angle) : 0),
     [board, climb.uuid, angle],
