@@ -1,16 +1,14 @@
-// Top chrome for the climbs list. On native-search devices, Expo's stack search
-// bar owns text input and this chrome carries board/angle/create/light controls.
-// On fallback devices, it also keeps a custom climb-name search row. The bottom
-// right filter FAB owns the full filter sheet and long-press grade rail.
-//
-// The board pill, the glass action islands and the angle / lightbulb controls are
-// shared with the Discover chrome — they live in `../chrome` so both tabs read as
-// one system. This file keeps the climbs-only pieces: the search row, the
-// Material filter button, and the active-filter summary capsule.
+// Top chrome for the climbs list. The board pill, glass action islands and the
+// angle / lightbulb controls are shared with the Discover chrome via
+// CollapsingTopChrome (`../chrome`) so both tabs read as one system: on the
+// liquid-glass variant this file delegates to CollapsingTopChrome (centred board
+// pill that collapses into a filter title on scroll) and adds the climbs-only
+// search row. The Material variant keeps a dedicated Appbar.Header with the board
+// as its subtitle plus grade / filter quick chips.
 
 import { type RefObject, useCallback, useState } from 'react';
 import { Keyboard, type LayoutChangeEvent, StyleSheet, View } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import { type SharedValue } from 'react-native-reanimated';
 import { useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
@@ -20,36 +18,33 @@ import type { GradeBound } from '@boardsesh/climb-filters';
 import { useTheme } from '../../providers/theme-provider';
 import { useActiveBoard, useSetActiveBoard } from '../../lib/graphql/use-active-board';
 import { useOptionalBluetoothContext } from '../../providers/bluetooth-provider';
-import { spacing, shadows } from '../../theme/tokens';
-import { glassSize } from '../../theme/layout';
+import { spacing } from '../../theme/tokens';
 import { hapticLight } from '../../lib/haptics';
 import { formatActiveBoardLabel } from '../../lib/boards/active-board-label';
-import { useNativeGlass } from '../../hooks/use-native-glass';
-import { GlassSurface } from '../GlassSurface';
-import { PressableSurface } from '../PressableSurface';
 import { SearchHeader, type SearchHeaderHandle } from '../SearchHeader';
 import { Text } from '../Text';
-import { Icon } from '../Icon';
 import { iconMap } from '../icon-map';
-import { BoardPill } from '../chrome/BoardPill';
-import { GlassActionToolbar, GlassToolbarAction, TOP_ACTION_SIZE } from '../chrome/GlassActionToolbar';
-import { AngleToolbarAction } from '../chrome/AngleToolbarAction';
-import { LightbulbToolbarAction } from '../chrome/LightbulbToolbarAction';
+import { CollapsingTopChrome, TOP_ACTION_SIZE } from '../chrome';
 import { GradeRangeRail } from '../grade';
 import { AngleSelectorSheet } from '../play-drawer/AngleSelectorSheet';
 import { FilterButton } from './FilterButton';
 
-const TOP_TOOLBAR_WIDTH = TOP_ACTION_SIZE * 2;
-const SUMMARY_CAPSULE_HEIGHT = glassSize.mini;
-const SUMMARY_CAPSULE_RADIUS = SUMMARY_CAPSULE_HEIGHT / 2;
 const MATERIAL_SEARCH_HEIGHT = 56;
 
 type ClimbTopChromeProps = {
   searchMode?: 'custom' | 'native';
+  /** Title for the collapsed glass header capsule — the active filter summary, or
+   *  "All climbs" when no filter is active. The caller renders the matching large
+   *  in-body title at the top of the list. (Unused by the Material variant.) */
+  title: string;
   canCreate: boolean;
   onCreate: () => void;
   onOpenBoardDetail: () => void;
   onHeightChange: (height: number) => void;
+  /** List scroll offset, driving the glass title collapse. */
+  scrollY: SharedValue<number>;
+  /** Tapping the collapsed glass title scrolls the list back to the top. */
+  onPressTitle: () => void;
   searchFieldRef: RefObject<SearchHeaderHandle | null>;
   searchInitialValue: string;
   searchPlaceholder: string;
@@ -62,8 +57,8 @@ type ClimbTopChromeProps = {
    *  host). Liquid Glass keeps the bottom filter FAB instead. */
   activeFilterCount?: number;
   onOpenFilters?: () => void;
-  /** Active-filter summary shown as a single capsule below the board name.
-   *  Tapping it clears all filters (no per-chip remove). Absent = no filters. */
+  /** Active-filter summary shown as a chip in the Material quick row. Tapping it
+   *  clears the (non-grade) filters. Absent = no filters. */
   filterSummary?: { text: string; onClear: () => void };
   gradeBound?: GradeBound;
   grades?: readonly Grade[];
@@ -75,10 +70,13 @@ type ClimbTopChromeProps = {
 
 export function ClimbTopChrome({
   searchMode = 'custom',
+  title,
   canCreate,
   onCreate,
   onOpenBoardDetail,
   onHeightChange,
+  scrollY,
+  onPressTitle,
   searchFieldRef,
   searchInitialValue,
   searchPlaceholder,
@@ -99,10 +97,8 @@ export function ClimbTopChrome({
   const { t } = useTranslation('climbs');
   const { t: tCommon } = useTranslation('common');
   const { systemColors, variant } = useTheme();
-  const nativeGlass = useNativeGlass();
   const insets = useSafeAreaInsets();
   const { data: activeBoard } = useActiveBoard();
-  const bluetooth = useOptionalBluetoothContext();
   const usesCustomSearch = searchMode === 'custom';
 
   const handleLayout = useCallback(
@@ -126,9 +122,6 @@ export function ClimbTopChrome({
   const handleBlur = useCallback(() => {
     onSearchBlur();
   }, [onSearchBlur]);
-
-  const canOpenAngleSelector = activeBoard?.isAngleAdjustable !== false && activeBoard?.angle != null;
-  const leftActionCount = (canCreate ? 1 : 0) + (canOpenAngleSelector ? 1 : 0);
 
   if (variant === 'material') {
     const boardLabel = formatActiveBoardLabel(activeBoard);
@@ -257,88 +250,20 @@ export function ClimbTopChrome({
     );
   }
 
+  // Liquid-glass variant: the shared collapsing chrome (centred board pill that
+  // collapses into the filter title, board glyph docking into the toolbar) with
+  // the climbs-only search row as its below-row content.
   return (
-    <View pointerEvents="box-none" style={[styles.container, { paddingTop: insets.top }]} onLayout={handleLayout}>
-      {/* Scrim: opaque screen background behind the controls, fading to clear at
-          the bottom edge — hides the climb list scrolling up behind the floating
-          islands (the gaps between them otherwise bleed list content = clutter). */}
-      <LinearGradient
-        pointerEvents="none"
-        colors={[systemColors.background, systemColors.background, 'transparent'] as const}
-        locations={[0, 0.7, 1]}
-        style={StyleSheet.absoluteFill}
-      />
-      <View pointerEvents="box-none" style={styles.row}>
-        <View pointerEvents="box-none" style={styles.leftSlot}>
-          {leftActionCount > 0 ? (
-            <GlassActionToolbar actionCount={leftActionCount}>
-              {canCreate ? (
-                <GlassToolbarAction onPress={onCreate} accessibilityLabel={t('mobile.create.fab.ariaLabel')}>
-                  <Icon name="plus" size={24} color={systemColors.label} />
-                </GlassToolbarAction>
-              ) : null}
-              <AngleToolbarAction />
-            </GlassActionToolbar>
-          ) : null}
-        </View>
-
-        <View pointerEvents="box-none" style={styles.centerSlot}>
-          <BoardPill onPress={onOpenBoardDetail} />
-        </View>
-
-        <View pointerEvents="box-none" style={styles.rightSlot}>
-          {/* Right toolbar: light/bluetooth only. The filter affordance lives to
-              the left of the search field (Material) or as the bottom FAB. */}
-          {bluetooth ? (
-            <GlassActionToolbar actionCount={1}>
-              <LightbulbToolbarAction />
-            </GlassActionToolbar>
-          ) : null}
-        </View>
-      </View>
-
-      {filterSummary ? (
-        <View pointerEvents="box-none" style={styles.summaryRow}>
-          <PressableSurface
-            onPress={() => {
-              hapticLight();
-              filterSummary.onClear();
-            }}
-            feedback="scale"
-            scaleTo={0.96}
-            accessibilityRole="button"
-            accessibilityLabel={filterSummary.text}
-            accessibilityHint={t('mobile.search.clearAll')}
-            style={styles.summaryPress}
-          >
-            <View
-              style={[
-                styles.summaryCapsule,
-                !nativeGlass && shadows.sm,
-                !nativeGlass && { borderWidth: StyleSheet.hairlineWidth, borderColor: systemColors.separator },
-              ]}
-            >
-              <GlassSurface
-                glassEffectStyle="regular"
-                fallbackColor={systemColors.elevatedSurface}
-                borderRadius={SUMMARY_CAPSULE_RADIUS}
-                style={StyleSheet.absoluteFill}
-                pointerEvents="none"
-              />
-              <Text
-                variant="caption1"
-                numberOfLines={1}
-                ellipsizeMode="tail"
-                color={systemColors.label}
-                style={styles.summaryText}
-              >
-                {filterSummary.text}
-              </Text>
-            </View>
-          </PressableSurface>
-        </View>
-      ) : null}
-
+    <CollapsingTopChrome
+      title={title}
+      canCreate={canCreate}
+      onCreate={onCreate}
+      createAccessibilityLabel={t('mobile.create.fab.ariaLabel')}
+      onOpenBoardSwitcher={onOpenBoardDetail}
+      onHeightChange={onHeightChange}
+      scrollY={scrollY}
+      onPressTitle={onPressTitle}
+    >
       {usesCustomSearch ? (
         <View pointerEvents="box-none" style={styles.searchStack}>
           <View pointerEvents="box-none" style={styles.searchRow}>
@@ -356,7 +281,7 @@ export function ClimbTopChrome({
           </View>
         </View>
       ) : null}
-    </View>
+    </CollapsingTopChrome>
   );
 }
 
@@ -441,36 +366,6 @@ function MaterialLightbulbAction() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    zIndex: 20,
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: spacing[4],
-    paddingVertical: spacing[2],
-    minHeight: TOP_ACTION_SIZE,
-  },
-  leftSlot: {
-    width: TOP_TOOLBAR_WIDTH,
-    alignItems: 'flex-start',
-    justifyContent: 'center',
-  },
-  centerSlot: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    minWidth: 0,
-  },
-  rightSlot: {
-    width: TOP_TOOLBAR_WIDTH,
-    alignItems: 'flex-end',
-    justifyContent: 'center',
-  },
   searchStack: {
     paddingHorizontal: spacing[4],
     paddingVertical: spacing[2],
@@ -486,32 +381,6 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     minWidth: 0,
-  },
-  summaryRow: {
-    paddingHorizontal: spacing[4],
-    paddingTop: spacing[1],
-    alignItems: 'center',
-  },
-  summaryPress: {
-    height: SUMMARY_CAPSULE_HEIGHT,
-    maxWidth: 280,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  summaryCapsule: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    height: SUMMARY_CAPSULE_HEIGHT,
-    borderRadius: SUMMARY_CAPSULE_RADIUS,
-    // Clip the absolutely-filled GlassSurface to the rounded corners (Android
-    // border-radius alone doesn't clip children), matching the action toolbars.
-    overflow: 'hidden',
-    paddingHorizontal: 12,
-    gap: 5,
-  },
-  summaryText: {
-    fontWeight: '600',
-    flexShrink: 1,
   },
   materialContainer: {
     position: 'absolute',

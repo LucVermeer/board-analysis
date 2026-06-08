@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { Grade } from '@boardsesh/shared-schema';
-import { getFilterSummary } from '../filter-summary';
+import { getFilterSummary, buildClimbFilterSummary } from '../filter-summary';
 import { DEFAULT_FILTERS, type ClimbFilters } from '../climb-filter-types';
 
 const mockGrades: Grade[] = [
@@ -25,9 +25,9 @@ const mockT = ((key: string, options?: Record<string, unknown>) => {
 
   if (key === 'mobile.search.gradeRange') return `${options?.min}–${options?.max}`;
   if (key === 'mobile.search.gradeMin') return `${options?.grade}+`;
-  if (key === 'mobile.search.gradeMax') return `Up to ${options?.grade}`;
-  if (key === 'mobile.search.ascents') return `${options?.count}+ ascents`;
-  if (key === 'mobile.search.rating') return `${options?.count}+ stars`;
+  if (key === 'mobile.search.gradeMax') return `≤${options?.grade}`;
+  if (key === 'mobile.search.ascents') return `${options?.count}+ 🧗`;
+  if (key === 'mobile.search.rating') return `${options?.count}+ ⭐`;
   if (key === 'mobile.search.more') return `+${options?.count} more`;
 
   return key;
@@ -52,9 +52,9 @@ describe('getFilterSummary', () => {
     expect(getFilterSummary(filters, '', mockGrades, mockT)).toBe('V4+');
   });
 
-  it('shows max grade with up-to prefix', () => {
+  it('shows max grade with the ≤ prefix', () => {
     const filters: ClimbFilters = { ...DEFAULT_FILTERS, maxGrade: 15 };
-    expect(getFilterSummary(filters, '', mockGrades, mockT)).toBe('Up to V6');
+    expect(getFilterSummary(filters, '', mockGrades, mockT)).toBe('≤V6');
   });
 
   it('shows non-default sort label', () => {
@@ -64,7 +64,7 @@ describe('getFilterSummary', () => {
 
   it('joins two parts with middle dot', () => {
     const filters: ClimbFilters = { ...DEFAULT_FILTERS, minGrade: 10, minAscents: 25 };
-    expect(getFilterSummary(filters, '', mockGrades, mockT)).toBe('V4+ · 25+ ascents');
+    expect(getFilterSummary(filters, '', mockGrades, mockT)).toBe('V4+ · 25+ 🧗');
   });
 
   it('truncates at 2 parts and shows remainder count', () => {
@@ -86,7 +86,7 @@ describe('getFilterSummary', () => {
 
   it('skips grade parts when grades data is undefined', () => {
     const filters: ClimbFilters = { ...DEFAULT_FILTERS, minGrade: 10, minAscents: 5 };
-    expect(getFilterSummary(filters, '', undefined, mockT)).toBe('5+ ascents');
+    expect(getFilterSummary(filters, '', undefined, mockT)).toBe('5+ 🧗');
   });
 
   it('includes search text as first part before filter parts', () => {
@@ -96,6 +96,38 @@ describe('getFilterSummary', () => {
 
   it('shows the beta videos filter part when enabled', () => {
     const filters: ClimbFilters = { ...DEFAULT_FILTERS, onlyWithBetaVideos: true };
-    expect(getFilterSummary(filters, '', mockGrades, mockT)).toBe('mobile.filter.betaVideos');
+    expect(getFilterSummary(filters, '', mockGrades, mockT)).toBe('mobile.filter.betaVideosShort');
+  });
+});
+
+describe('buildClimbFilterSummary', () => {
+  const more = (count: number) => `+${count} more`;
+
+  it('returns null when there are no filter parts', () => {
+    expect(buildClimbFilterSummary({ labels: [], isMaterial: false, maxChars: 28, more })).toBeNull();
+    expect(buildClimbFilterSummary({ labels: [], isMaterial: true, maxChars: 28, more })).toBeNull();
+  });
+
+  it('Material caps at 2 parts then "+N more"', () => {
+    const labels = ['V4+', 'Quality', '3+ ⭐', '5+ 🧗'];
+    expect(buildClimbFilterSummary({ labels, isMaterial: true, maxChars: 999, more })).toBe('V4+ · Quality · +2 more');
+  });
+
+  it('glass fits whole parts within the character budget then "+N more"', () => {
+    const labels = ['V4+', 'Quality', '25+ ascents', '3+ stars'];
+    // "V4+ · Quality" is 13 chars; "25+ ascents" would push it to 27 > 20.
+    expect(buildClimbFilterSummary({ labels, isMaterial: false, maxChars: 20, more })).toBe('V4+ · Quality · +2 more');
+  });
+
+  it('glass keeps every part when the summary fits the budget', () => {
+    const labels = ['V4+', 'Quality'];
+    expect(buildClimbFilterSummary({ labels, isMaterial: false, maxChars: 28, more })).toBe('V4+ · Quality');
+  });
+
+  it('glass budget can show more parts than the Material 2-part cap', () => {
+    const labels = ['V4+', 'Quality', '3+ ⭐'];
+    // Material truncates to 2; glass fits all three within 28 chars.
+    expect(buildClimbFilterSummary({ labels, isMaterial: true, maxChars: 28, more })).toBe('V4+ · Quality · +1 more');
+    expect(buildClimbFilterSummary({ labels, isMaterial: false, maxChars: 28, more })).toBe('V4+ · Quality · 3+ ⭐');
   });
 });

@@ -1,6 +1,15 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
-import { View, StyleSheet, RefreshControl, Image, Keyboard } from 'react-native';
-import { FlashList } from '@shopify/flash-list';
+import {
+  View,
+  StyleSheet,
+  RefreshControl,
+  Image,
+  Keyboard,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
+} from 'react-native';
+import { FlashList, type FlashListRef } from '@shopify/flash-list';
+import { useSharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -11,7 +20,6 @@ import {
   mergeBoardFilters,
   countActiveFilters,
   hasActiveBoardFilters,
-  formatFilterSummary,
   DEFAULT_CLIMB_FILTER_STATE,
   DEFAULT_CLIMB_BOARD_FILTER_STATE,
   type ClimbBoardFilterState,
@@ -52,7 +60,7 @@ import {
   type RecentFilter,
 } from '../../../src/lib/recent-filter-store';
 import { getLastSearch, saveLastSearch, boardConfigKey } from '../../../src/lib/last-search-store';
-import { getFilterSummary } from '../../../src/lib/filter-summary';
+import { getFilterSummary, buildClimbFilterSummary } from '../../../src/lib/filter-summary';
 import { getActiveFilterTokens } from '../../../src/lib/filter-tokens';
 import { normalizeSearchName } from '../../../src/lib/search-name';
 import { track } from '../../../src/lib/analytics';
@@ -61,6 +69,12 @@ import { spacing } from '../../../src/theme/tokens';
 import { glassSize } from '../../../src/theme/layout';
 
 const PAGE_SIZE = 30;
+// Soft character budget for the glass filter-summary title: include whole filter
+// parts up to roughly two wrapped lines before collapsing the rest into "+N more".
+// It only decides *when* to summarise — the title's `numberOfLines={2}` +
+// ellipsize is the hard visual cap, so larger accessibility text sizes degrade to
+// truncation rather than overflowing the layout.
+const SUMMARY_MAX_CHARS = 28;
 const SEARCH_DEBOUNCE_MS = 300;
 const INITIAL_SKELETON_ROW_COUNT = 10;
 const FOOTER_SKELETON_ROW_COUNT = 6;
@@ -126,6 +140,20 @@ function ClimbListInner() {
   const visibleSearchTextRef = useRef('');
   const insets = useSafeAreaInsets();
   const bottomChrome = useBottomChromeMetrics();
+
+  // Scroll offset drives the glass large in-body filter title collapsing into the
+  // top chrome; tapping the collapsed title capsule scrolls the list back to top.
+  const listRef = useRef<FlashListRef<Climb>>(null);
+  const scrollY = useSharedValue(0);
+  const handleScroll = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      scrollY.value = event.nativeEvent.contentOffset.y;
+    },
+    [scrollY],
+  );
+  const handleScrollToTop = useCallback(() => {
+    listRef.current?.scrollToTop({ animated: true });
+  }, []);
 
   // iOS 26 uses the native tab-bar bottom accessory for current climb + tick, and
   // presents this screen's headerSearchBarOptions controller in the bottom tab
@@ -545,11 +573,9 @@ function ClimbListInner() {
       .catch(() => {});
   }, []);
 
-  // "Clear all" on the scope row: reset every filter (grade + refinements + board
-  // filters) to defaults, keeping the typed name query.
-  const handleClearAllFilters = useCallback(() => {
-    replaceSearch(DEFAULT_CLIMB_FILTER_STATE, name, DEFAULT_CLIMB_BOARD_FILTER_STATE);
-  }, [replaceSearch, name]);
+  // Material filter-summary chip clears the non-grade refinements (the dedicated
+  // grade chip owns the grade), keeping the typed name query. The glass variant
+  // has no chrome clear-all — it clears via the filter sheet's Reset.
   const handleClearNonGradeFilters = useCallback(() => {
     replaceSearch(
       {
@@ -611,16 +637,21 @@ function ClimbListInner() {
     [filterTokens],
   );
   const summaryFilterTokens = variant === 'material' ? nonGradeFilterTokens : filterTokens;
-  // Condensed one-line summary of the active filters for the capsule below the
-  // board name (2 parts max, then "+N more"). Tapping the capsule clears them.
-  const filterSummary = useMemo(() => {
-    if (summaryFilterTokens.length === 0) return null;
-    return formatFilterSummary(
-      summaryFilterTokens.map((token) => token.label),
-      { more: (count) => t('mobile.search.more', { count }) },
-      2,
-    );
-  }, [summaryFilterTokens, t]);
+  // Condensed summary of the active filters (variant-aware: Material chip vs glass
+  // title). See buildClimbFilterSummary.
+  const filterSummary = useMemo(
+    () =>
+      buildClimbFilterSummary({
+        labels: summaryFilterTokens.map((token) => token.label),
+        isMaterial: variant === 'material',
+        maxChars: SUMMARY_MAX_CHARS,
+        more: (count) => t('mobile.search.more', { count }),
+      }),
+    [summaryFilterTokens, variant, t],
+  );
+  // The glass screen title: the active-filter summary, or "All climbs" when none.
+  // Shown both as the large in-body title and the collapsed header capsule.
+  const searchTitle = filterSummary ?? t('mobile.search.allClimbs');
   const gradeFilterToken = useMemo(
     () => filterTokens.find((filterToken) => filterToken.key === 'grade'),
     [filterTokens],
@@ -734,17 +765,19 @@ function ClimbListInner() {
   }
 
   const isEmpty = visibleClimbs.length === 0 && !isClimbsLoading;
-  const filterSummaryClear = variant === 'material' ? handleClearNonGradeFilters : handleClearAllFilters;
 
   return (
     <View style={[styles.container, { backgroundColor: systemColors.background }]}>
       <Stack.Screen options={stackOptions} />
       <FlashList
+        ref={listRef}
         data={visibleClimbs}
         renderItem={renderClimbItem}
         keyExtractor={keyExtractor}
         onEndReached={handleEndReached}
         onEndReachedThreshold={0.5}
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
         // The header is transparent on every path now, so the chrome owns the top
         // inset and the list pads manually by the measured chrome height. Leaving
         // this 'automatic' would double-inset under the (invisible) native header.
@@ -757,15 +790,26 @@ function ClimbListInner() {
           <RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor={brandColors.primary} />
         }
         ListHeaderComponent={
-          showRecentPills ? (
-            <RecentFilterPills
-              recentFilters={recentFilters}
-              currentFilters={filters}
-              currentSearchText={name}
-              onApply={handleApplyRecentFilter}
-              onClear={handleClearRecentFilters}
-            />
-          ) : null
+          <>
+            {/* Glass variant: the screen's identity in-body under the floating
+                chrome — the active filter ("V4–V6 · Quality") or "All climbs" —
+                collapsing into the centered header capsule as it scrolls up. The
+                Material variant shows the title in its Appbar instead. */}
+            {variant === 'material' ? null : (
+              <Text variant="largeTitle" numberOfLines={2} ellipsizeMode="tail" style={styles.screenTitle}>
+                {searchTitle}
+              </Text>
+            )}
+            {showRecentPills ? (
+              <RecentFilterPills
+                recentFilters={recentFilters}
+                currentFilters={filters}
+                currentSearchText={name}
+                onApply={handleApplyRecentFilter}
+                onClear={handleClearRecentFilters}
+              />
+            ) : null}
+          </>
         }
         ListFooterComponent={isFetchingNextPage ? <ClimbListSkeletonRows count={FOOTER_SKELETON_ROW_COUNT} /> : null}
         ListEmptyComponent={
@@ -789,10 +833,13 @@ function ClimbListInner() {
 
       <ClimbTopChrome
         searchMode={useNativeSearch ? 'native' : 'custom'}
+        title={searchTitle}
         canCreate={isAuthenticated && hasBoardConfig}
         onCreate={handleCreateClimb}
         onOpenBoardDetail={() => router.push('/boards')}
         onHeightChange={setSearchBarHeight}
+        scrollY={scrollY}
+        onPressTitle={handleScrollToTop}
         searchFieldRef={searchHeaderRef}
         searchInitialValue={name}
         searchPlaceholder={t('search.placeholders.climbs')}
@@ -802,7 +849,11 @@ function ClimbListInner() {
         onCloseGrade={handleDismissGrade}
         activeFilterCount={activeFilterCount}
         onOpenFilters={handleOpenFilters}
-        filterSummary={filterSummary ? { text: filterSummary, onClear: filterSummaryClear } : undefined}
+        filterSummary={
+          variant === 'material' && filterSummary
+            ? { text: filterSummary, onClear: handleClearNonGradeFilters }
+            : undefined
+        }
         gradeBound={gradeBound}
         grades={grades}
         gradeRailVisible={showGrade}
@@ -856,6 +907,11 @@ function ClimbListSkeletonRows({ count }: { count: number }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  screenTitle: {
+    paddingHorizontal: spacing[4],
+    paddingTop: 0,
+    paddingBottom: spacing[2],
   },
   loadingContainer: {
     flex: 1,
