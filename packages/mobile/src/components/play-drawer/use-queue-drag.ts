@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Gesture, type GestureType } from 'react-native-gesture-handler';
 import { useSharedValue, runOnJS, type SharedValue } from 'react-native-reanimated';
 import { hapticSelection } from '../../lib/haptics';
@@ -31,15 +31,27 @@ type UseQueueDragOptions = {
   firstFutureQueueIndex: number;
 };
 
+/**
+ * Row-facing drag controls. Passed down to every future `QueueItemRow`, so its
+ * identity must stay stable across renders — it deliberately excludes the
+ * `isDragging` flag (which flips on drag start/end). Each member is memoized in
+ * `useQueueDrag`, so a memoized row only re-renders when its own props change,
+ * never on drag start/end.
+ */
 export type QueueDragControls = {
-  /** True while a row is lifted — drives the FlatList scroll + sheet-pan lock. */
-  isDragging: boolean;
   /** Shared values read by each row's animated style (lift + sibling shift). */
   shared: QueueDragShared;
   /** Report a future row's measured height (call once from onLayout). */
   onRowHeight: (height: number) => void;
   /** Build the long-press drag Pan for a future row's handle. */
   makeHandleGesture: (rowIndex: number, uuid: string, queueIndex: number) => GestureType;
+};
+
+export type UseQueueDragResult = {
+  /** True while a row is lifted — drives the FlatList scroll + sheet-pan lock. */
+  isDragging: boolean;
+  /** Stable row-facing controls (no `isDragging`); safe to pass into memoized rows. */
+  controls: QueueDragControls;
 };
 
 /**
@@ -58,7 +70,7 @@ export function useQueueDrag({
   firstFutureRowIndex,
   lastFutureRowIndex,
   firstFutureQueueIndex,
-}: UseQueueDragOptions): QueueDragControls {
+}: UseQueueDragOptions): UseQueueDragResult {
   const activeUuid = useSharedValue<string | null>(null);
   const dragTranslateY = useSharedValue(0);
   const activeRowIndex = useSharedValue(-1);
@@ -138,10 +150,27 @@ export function useQueueDrag({
     [activeUuid, activeRowIndex, targetRowIndex, dragTranslateY, rowHeight, firstRowIndexSV, lastRowIndexSV, commit],
   );
 
-  return {
-    isDragging,
-    shared: { activeUuid, dragTranslateY, activeRowIndex, targetRowIndex, rowHeight },
-    onRowHeight,
-    makeHandleGesture,
-  };
+  // The shared-values bag holds stable `SharedValue` refs (reanimated never
+  // swaps them), so memoize it once. A fresh wrapper each render would give
+  // every row a new `drag.shared`, churning `renderRow`'s deps and re-rendering
+  // the whole list on unrelated parent updates.
+  const shared = useMemo<QueueDragShared>(
+    () => ({ activeUuid, dragTranslateY, activeRowIndex, targetRowIndex, rowHeight }),
+    [activeUuid, dragTranslateY, activeRowIndex, targetRowIndex, rowHeight],
+  );
+
+  // Row-facing controls: a permanently stable object (its three members are all
+  // memoized above and never change identity). Passing this — rather than an
+  // object that also carries `isDragging` — into memoized rows means a drag
+  // start/end never re-renders the rows; only the dragged row reacts, via the
+  // shared values on the UI thread.
+  const controls = useMemo<QueueDragControls>(
+    () => ({ shared, onRowHeight, makeHandleGesture }),
+    [shared, onRowHeight, makeHandleGesture],
+  );
+
+  // Keep the result identity stable across unrelated renders; it changes only
+  // when `isDragging` flips, which the host (QueueList) needs for scroll/sheet
+  // locking — but that flip never reaches the rows (they read `controls`).
+  return useMemo<UseQueueDragResult>(() => ({ isDragging, controls }), [isDragging, controls]);
 }

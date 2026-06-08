@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import { memo, useState, useMemo, useCallback, useEffect } from 'react';
 import { Pressable, View, StyleSheet } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring, withTiming, runOnJS } from 'react-native-reanimated';
 import {
@@ -97,7 +97,7 @@ function PositionIndicator({
   );
 }
 
-export function QueueItemRow({
+function QueueItemRowComponent({
   item,
   position,
   board,
@@ -357,6 +357,14 @@ export function QueueItemRow({
     </Animated.View>
   );
 }
+
+// Memoized: the queue list re-renders on every drag start/end, every selection
+// toggle, and unrelated parent updates. Every prop is referentially stable —
+// `board`, the `on*` callbacks, and `drag` (the stable row-facing controls from
+// `useQueueDrag`) — so a shallow compare lets each row skip re-rendering unless
+// its own data changes. The actively-dragged row still reacts via the drag
+// shared values on the UI thread, which sit outside React's render cycle.
+export const QueueItemRow = memo(QueueItemRowComponent);
 
 const styles = StyleSheet.create({
   swipeContainer: {

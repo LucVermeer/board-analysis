@@ -147,7 +147,7 @@ export function QueueList({
     return { firstFutureRowIndex: first, lastFutureRowIndex: last, firstFutureQueueIndex: firstQueue };
   }, [rows]);
 
-  const drag = useQueueDrag({
+  const { isDragging, controls: dragControls } = useQueueDrag({
     reorderQueue,
     firstFutureRowIndex,
     lastFutureRowIndex,
@@ -155,8 +155,8 @@ export function QueueList({
   });
 
   useEffect(() => {
-    onDraggingChange?.(drag.isDragging);
-  }, [drag.isDragging, onDraggingChange]);
+    onDraggingChange?.(isDragging);
+  }, [isDragging, onDraggingChange]);
 
   useEffect(() => {
     if (autoScrollOnMount && currentItemFlatIndex >= 0 && rows.length > 0) {
@@ -278,7 +278,7 @@ export function QueueList({
               onPress={onClimbPress}
               onRemove={onRemove}
               onToggleSelect={onToggleSelect}
-              drag={drag}
+              drag={dragControls}
               rowIndex={index}
               queueIndex={row.queueIndex}
               isDraggable={!isEditMode}
@@ -314,7 +314,7 @@ export function QueueList({
     },
     [
       board,
-      drag,
+      dragControls,
       isEditMode,
       selectedItems,
       onClimbPress,
@@ -348,7 +348,7 @@ export function QueueList({
       renderItem={renderRow}
       contentContainerStyle={styles.listContent}
       showsVerticalScrollIndicator={false}
-      scrollEnabled={!drag.isDragging}
+      scrollEnabled={!isDragging}
       onScrollToIndexFailed={() => {
         // Silently handle if scroll target isn't rendered yet
       }}
