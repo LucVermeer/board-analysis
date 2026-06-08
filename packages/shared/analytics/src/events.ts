@@ -41,13 +41,11 @@ export const SHARED_EVENTS = {
   ClimbCreateFailed: 'Climb Create Failed',
   // Workout / session-queue generator
   WorkoutGeneratorOpened: 'Workout Generator Opened',
-  WorkoutGenerated: 'Workout Generated',
   SessionQueueGenerated: 'Session Queue Generated',
   // Deep-link session join
   SessionJoined: 'Session Joined',
   // Logbook
   LogbookRowClicked: 'Logbook Row Clicked',
-  LogbookThumbnailClicked: 'Logbook Thumbnail Clicked',
   // Ticks / logbook
   TickButtonClicked: 'Tick Button Clicked',
   QuickTickSaved: 'Quick Tick Saved',
