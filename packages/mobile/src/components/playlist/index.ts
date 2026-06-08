@@ -4,6 +4,7 @@ export { PlaylistScrollSection, type PlaylistScrollSectionProps } from './Playli
 export { PlaylistListRow, PlaylistListRowSeparator, type PlaylistListRowProps } from './PlaylistListRow';
 export {
   PlaylistDetailView,
+  SKELETON_PLACEHOLDERS,
   type PlaylistDetailViewProps,
   type PlaylistDetailHero,
   type PlaylistDetailEmptyState,
