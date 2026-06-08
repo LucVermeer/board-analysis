@@ -235,6 +235,11 @@
         "title": "Idioma",
         "system": "Sistema",
         "description": "Sistema usa el idioma de tu dispositivo."
+      },
+      "diagnostics": {
+        "title": "Diagnóstico",
+        "recording": "Ayúdanos a arreglar el Bluetooth",
+        "recordingDescription": "Cuando la tabla se desconecte una y otra vez, activa esto. Grabaremos tu pantalla y la conexión Bluetooth para ver qué falla. Lo que escribes queda oculto, y está apagado hasta que lo enciendas."
       }
     },
     "nav": {

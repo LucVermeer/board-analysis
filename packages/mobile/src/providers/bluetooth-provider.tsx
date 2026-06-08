@@ -259,29 +259,13 @@ export function BluetoothProvider({ boardName, layoutId, sizeId, children }: Blu
   const wrappedDisconnect = useCallback(async () => {
     isUserDisconnectRef.current = true;
     setDisconnectedUnexpectedly(false);
-    track(SHARED_EVENTS.BluetoothDisconnected, { boardName, reason: 'user' });
+    track(SHARED_EVENTS.BluetoothDisconnected, { boardName, reason: 'user', inSession: sessionIdRef.current != null });
     try {
       await disconnect();
     } finally {
       isUserDisconnectRef.current = false;
     }
   }, [disconnect, boardName]);
-
-  // Deliberately NO foreground auto-reconnect. These boards are
-  // last-connection-wins, so silently re-grabbing the board whenever the app
-  // foregrounds would steal it back from another device that legitimately took
-  // it — a ping-pong that flickers the wall. Reconnecting stays user-initiated
-  // (tap the lightbulb), matching the web app.
-
-  useEffect(() => {
-    if (wasConnectedRef.current && !isConnected && !isUserDisconnectRef.current) {
-      // Unexpected disconnect — fire haptic error and expose to consumers
-      hapticError();
-      setDisconnectedUnexpectedly(true);
-      track(SHARED_EVENTS.BluetoothDisconnected, { boardName, reason: 'unexpected' });
-    }
-    wasConnectedRef.current = isConnected;
-  }, [isConnected]);
 
   // Clear unexpected-disconnect flag when reconnecting
   const wrappedConnect = useCallback(
@@ -291,6 +275,32 @@ export function BluetoothProvider({ boardName, layoutId, sizeId, children }: Blu
     },
     [connect],
   );
+
+  // Latest wrappedConnect, read by the unexpected-disconnect effect below without
+  // listing it as a dependency — the effect must fire exactly on the connected→
+  // disconnected transition, not whenever the callback identity changes.
+  const wrappedConnectRef = useRef(wrappedConnect);
+  useEffect(() => {
+    wrappedConnectRef.current = wrappedConnect;
+  }, [wrappedConnect]);
+
+  // Deliberately NO auto-reconnect: these boards are last-connection-wins, so
+  // silently re-grabbing the link would steal the wall back from whoever took it
+  // (a flickering ping-pong). Instead, on an unexpected drop we open the device
+  // picker so the climber re-picks their board in one tap — recovery stays
+  // explicit. The native BoardBleManager no longer auto-reconnects either.
+  useEffect(() => {
+    if (wasConnectedRef.current && !isConnected && !isUserDisconnectRef.current) {
+      hapticError();
+      setDisconnectedUnexpectedly(true);
+      const inSession = sessionIdRef.current != null;
+      track(SHARED_EVENTS.BluetoothDisconnected, { boardName, reason: 'unexpected', inSession });
+      track(SHARED_EVENTS.BluetoothReconnectAttempt, { boardName, reason: 'unexpected_drop', inSession });
+      // Open the picker (no target serial → fresh scan + selection sheet).
+      void wrappedConnectRef.current();
+    }
+    wasConnectedRef.current = isConnected;
+  }, [isConnected, boardName]);
 
   const value = useMemo<BluetoothContextValue>(
     () => ({
