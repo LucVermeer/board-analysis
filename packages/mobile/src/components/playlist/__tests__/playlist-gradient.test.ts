@@ -11,12 +11,12 @@ function channelSum(hex: string): number {
 
 describe('shiftLightness', () => {
   it('returns a valid 6-digit hex', () => {
-    expect(shiftLightness('#8C4A52', 14)).toMatch(HEX);
-    expect(shiftLightness('#8C4A52', -20)).toMatch(HEX);
+    expect(shiftLightness('#6D28D9', 14)).toMatch(HEX);
+    expect(shiftLightness('#6D28D9', -20)).toMatch(HEX);
   });
 
   it('lifts toward white for a positive delta and deepens for a negative one', () => {
-    const base = '#8C4A52';
+    const base = '#6D28D9';
     expect(channelSum(shiftLightness(base, 14))).toBeGreaterThan(channelSum(base));
     expect(channelSum(shiftLightness(base, -20))).toBeLessThan(channelSum(base));
   });
@@ -38,13 +38,13 @@ describe('shiftLightness', () => {
 
 describe('buildHeroGradient', () => {
   it('builds a 3-stop gradient with the true colour in the middle', () => {
-    const gradient = buildHeroGradient('#8C4A52');
+    const gradient = buildHeroGradient('#6D28D9');
     expect(gradient.colors).toHaveLength(3);
-    expect(gradient.colors[1]).toBe('#8C4A52');
+    expect(gradient.colors[1]).toBe('#6D28D9');
     expect(gradient.locations).toEqual([0, 0.55, 1]);
   });
 
-  it('falls back to the brand maroon for missing or invalid colours', () => {
+  it('falls back to the brand violet for missing or invalid colours', () => {
     expect(buildHeroGradient(undefined).colors[1]).toBe(PLAYLIST_COLORS[0]);
     expect(buildHeroGradient('not-a-colour').colors[1]).toBe(PLAYLIST_COLORS[0]);
   });

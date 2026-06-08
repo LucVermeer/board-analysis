@@ -84,7 +84,7 @@ export type HeroGradient = {
 /**
  * A 3-stop diagonal gradient from one playlist colour: a lifted top-left, the
  * true colour through the middle, and a deepened bottom-right (where the title
- * sits, so white text keeps contrast). Falls back to the brand maroon when the
+ * sits, so white text keeps contrast). Falls back to the brand violet when the
  * colour is missing/invalid, so the hero always has a deterministic banner.
  */
 export function buildHeroGradient(baseHex: string | undefined): HeroGradient {

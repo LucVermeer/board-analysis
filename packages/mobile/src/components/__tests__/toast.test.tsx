@@ -56,7 +56,7 @@ vi.mock('../Text', () => ({
 }));
 vi.mock('../Icon', () => ({ Icon: ({ name }: { name: string }) => createElement('i', { 'data-icon': name }) }));
 vi.mock('../../theme/colors', () => ({
-  brandColors: { success: '#34C759', error: '#FF3B30', primary: '#8C4A52', warning: '#FF9500' },
+  brandColors: { success: '#34C759', error: '#FF3B30', primary: '#6D28D9', warning: '#FF9500' },
   withAlpha: (color: string) => color,
   // Encode both args so tests can assert the variant colour (foreground) and the
   // surface (background) both reach blendOpaque — i.e. the colour-selection logic.
@@ -100,7 +100,7 @@ describe('Toast', () => {
     const cases = [
       { variant: 'error' as const, icon: 'error', color: '#FF3B30' },
       { variant: 'warning' as const, icon: 'warning', color: '#FF9500' },
-      { variant: 'info' as const, icon: 'info', color: '#8C4A52' },
+      { variant: 'info' as const, icon: 'info', color: '#6D28D9' },
     ];
     for (const { variant, icon, color } of cases) {
       const { container } = render(

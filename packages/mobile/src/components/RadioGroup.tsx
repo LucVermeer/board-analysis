@@ -3,7 +3,6 @@ import { Text } from './Text';
 import { Icon } from './Icon';
 import { hapticSelection } from '../lib/haptics';
 import { useTheme } from '../providers/theme-provider';
-import { brandColors } from '../theme/colors';
 import { iosSystemColors } from '../theme/ios-colors';
 import { spacing } from '../theme/tokens';
 
@@ -21,7 +20,7 @@ type RadioGroupProps<T extends string> = {
 };
 
 export function RadioGroup<T extends string>({ options, value, onChange }: RadioGroupProps<T>) {
-  const { systemColors } = useTheme();
+  const { systemColors, brandColors } = useTheme();
   return (
     <View style={[styles.container, { backgroundColor: systemColors.secondaryBackground as string }]}>
       {options.map((option, index) => {

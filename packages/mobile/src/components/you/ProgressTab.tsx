@@ -20,7 +20,7 @@ type YouData = ReturnType<typeof useYouProfileData>;
 export function ProgressTab({ data }: { data: YouData }) {
   const { t } = useTranslation('profile');
   const { t: tYou } = useTranslation('you');
-  const { systemColors } = useTheme();
+  const { systemColors, colorScheme } = useTheme();
   const bottomChrome = useBottomChromeMetrics();
   const paddingBottom = bottomChrome.scrollBottomPadding + spacing[6];
 
@@ -38,9 +38,9 @@ export function ProgressTab({ data }: { data: YouData }) {
     () =>
       data.aggregatedFlashRedpointBars?.[0]?.values.map((value) => ({
         label: value.label,
-        color: flashRedpointColor(value.key),
+        color: flashRedpointColor(value.key, colorScheme),
       })),
-    [data.aggregatedFlashRedpointBars],
+    [data.aggregatedFlashRedpointBars, colorScheme],
   );
 
   if (data.loading) {

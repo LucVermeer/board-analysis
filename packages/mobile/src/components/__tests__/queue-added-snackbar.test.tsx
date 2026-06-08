@@ -69,7 +69,7 @@ vi.mock('react-i18next', () => ({
 vi.mock('../Text', () => ({
   Text: ({ children }: { children?: ReactNode }) => createElement('span', { 'data-text': 'true' }, children),
 }));
-vi.mock('../../theme/colors', () => ({ brandColors: { primary: '#8C4A52' } }));
+vi.mock('../../theme/colors', () => ({ brandColors: { primary: '#6D28D9' } }));
 vi.mock('../../theme/tokens', () => ({
   borderRadius: { lg: 12 },
   spacing: { 2: 8, 3: 12, 4: 16 },

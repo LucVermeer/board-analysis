@@ -38,11 +38,10 @@ vi.mock('react-native-paper', () => ({
 
 vi.mock('../Text', () => ({ Text: ({ children }: { children?: ReactNode }) => createElement('span', null, children) }));
 vi.mock('../../lib/haptics', () => ({ hapticSelection: hapticSelectionMock }));
-vi.mock('../../theme/colors', () => ({ brandColors: { primary: '#8C4A52' } }));
 vi.mock('../../theme/ios-colors', () => ({ iosSystemColors: { systemGray4: '#ccc' } }));
 vi.mock('../../theme/tokens', () => ({ spacing: { 2: 8, 3: 12, 4: 16 } }));
 vi.mock('../../providers/theme-provider', () => ({
-  useTheme: () => ({ variant: ctrl.variant }),
+  useTheme: () => ({ variant: ctrl.variant, brandColors: { primaryFill: '#7C3AED' } }),
 }));
 
 import { SwitchRow } from '../SwitchRow';

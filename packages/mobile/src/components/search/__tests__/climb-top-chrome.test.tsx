@@ -79,7 +79,7 @@ vi.mock('../../../providers/theme-provider', () => ({
       separator: '#ccc',
       elevatedSurface: '#fff',
     },
-    brandColors: { primary: '#8C4A52', warning: '#FF9500' },
+    brandColors: { primary: '#6D28D9', warning: '#FF9500' },
   }),
 }));
 

@@ -28,14 +28,51 @@ export const iosSystemColors: Record<string, ColorValue> | null =
     : null;
 
 /**
- * Brand colors are the same on all platforms and in all color schemes.
+ * Brand colors — "Velvet Send" system, anchored on the logo's V11–V16 purples.
+ *
+ * `brandColors` holds the LIGHT-scheme values (and the scheme-agnostic anchors);
+ * `brandColorsDark` overrides the few roles that need a different value in dark
+ * mode so they stay legible. The ThemeProvider resolves the right set per scheme
+ * and exposes it as `useTheme().brandColors` — components should read brand
+ * colours from the theme (not these constants) wherever the colour scheme matters.
+ *
+ * Role split:
+ * - `primary`/`tint`: brand colour for FOREGROUND use (text, icons, links, borders).
+ * - `primaryFill`: brand colour for a FILLED surface/button background.
+ * - `onPrimary`: text/icon colour sitting on `primaryFill`.
+ * - `accent`: warm amber spark for highlights — FILL-ONLY, always pair with dark text.
+ *
+ * Contrast (WCAG, light): white-on-primary #6D28D9 = 7.10:1; black-on-accent = 8.95:1.
  */
 export const brandColors = {
-  tint: '#8C4A52',
-  primary: '#8C4A52',
-  success: '#6B9080',
-  warning: '#C4943C',
-  error: '#B8524C',
+  tint: '#6D28D9',
+  primary: '#6D28D9',
+  primaryFill: '#6D28D9',
+  onPrimary: '#FFFFFF',
+  accent: '#FF8A3D',
+  success: '#047857',
+  warning: '#B45309',
+  error: '#C81E1E',
+} as const;
+
+/**
+ * Dark-scheme brand overrides. The dark violet primary is too low-contrast as a
+ * foreground on near-black, so the tint lifts to #A78BFA; filled buttons use a
+ * brighter #7C3AED so white text still clears AA (5.70:1). Semantic tones brighten
+ * for legibility on dark surfaces. Same keys as `brandColors`.
+ *
+ * Contrast (WCAG, dark): #A78BFA tint ≥6.12:1 across the dark surface ladder;
+ * white-on-#7C3AED = 5.70:1.
+ */
+export const brandColorsDark = {
+  tint: '#A78BFA',
+  primary: '#A78BFA',
+  primaryFill: '#7C3AED',
+  onPrimary: '#FFFFFF',
+  accent: '#FF8A3D',
+  success: '#34D399',
+  warning: '#FBBF24',
+  error: '#F87171',
 } as const;
 
 /**
@@ -44,28 +81,29 @@ export const brandColors = {
  */
 export const androidFallbackColors = {
   light: {
-    background: '#FFFFFF',
-    secondaryBackground: '#F2F2F7',
+    background: '#F4F1FB',
+    secondaryBackground: '#FFFFFF',
     tertiaryBackground: '#FFFFFF',
-    groupedBackground: '#F2F2F7',
+    groupedBackground: '#F4F1FB',
     elevatedSurface: '#FFFFFF',
-    label: '#000000',
-    secondaryLabel: 'rgba(60, 60, 67, 0.6)',
-    tertiaryLabel: 'rgba(60, 60, 67, 0.3)',
-    separator: 'rgba(60, 60, 67, 0.29)',
-    fill: 'rgba(120, 120, 128, 0.2)',
+    label: '#16111F',
+    // Opaque (not 0.6-alpha) so secondary text clears WCAG AA: #5B5563 = 6.44:1 on bg.
+    secondaryLabel: '#5B5563',
+    tertiaryLabel: '#8E8898',
+    separator: 'rgba(60, 55, 75, 0.18)',
+    fill: 'rgba(109, 40, 217, 0.1)',
   },
   dark: {
-    background: '#000000',
-    secondaryBackground: '#1C1C1E',
-    tertiaryBackground: '#2C2C2E',
-    groupedBackground: '#000000',
-    elevatedSurface: '#2C2C2E',
-    label: '#FFFFFF',
-    secondaryLabel: 'rgba(235, 235, 245, 0.6)',
-    tertiaryLabel: 'rgba(235, 235, 245, 0.3)',
-    separator: 'rgba(84, 84, 88, 0.6)',
-    fill: 'rgba(120, 120, 128, 0.36)',
+    background: '#0F0B16',
+    secondaryBackground: '#181225',
+    tertiaryBackground: '#221A32',
+    groupedBackground: '#0F0B16',
+    elevatedSurface: '#221A32',
+    label: '#F5F2FB',
+    secondaryLabel: '#A9A2B6',
+    tertiaryLabel: '#6E687C',
+    separator: 'rgba(180, 168, 205, 0.2)',
+    fill: 'rgba(199, 184, 232, 0.12)',
   },
 } as const;
 
@@ -75,41 +113,42 @@ export const androidFallbackColors = {
  * directly as the resolved system colors on ANY platform when the user is on the
  * Material variant (including iOS 26 hardware where they chose Material).
  *
- * Neutrals are warmed toward the maroon brand tint (#8C4A52) so Material reads as
- * the same product as Liquid Glass rather than a generic M3 theme. The Material
- * feel comes from elevation shadows, ripple, the nav active-indicator pill, and
- * bounded radii — not from a different palette. Labels keep the iOS-derived
- * neutral values so text contrast matches the glass variant exactly.
+ * Neutrals are tinted toward the violet brand (#6D28D9) so Material reads as the
+ * same product as Liquid Glass rather than a generic M3 theme. The Material feel
+ * comes from elevation shadows, ripple, the nav active-indicator pill, and bounded
+ * radii — not from a different palette. Labels use opaque values so text contrast
+ * clears WCAG AA and matches the glass variant.
  */
 export const materialSurfaces = {
   light: {
-    // M3 base surface — warm-tinted so cards/elevation read against it.
-    background: '#F4ECEC',
+    // M3 base surface — violet-tinted so cards/elevation read against it.
+    background: '#F3EFFA',
     // Cards and sheets sit a step up from the base (surface container low).
     secondaryBackground: '#FFFFFF',
     tertiaryBackground: '#FFFFFF',
-    groupedBackground: '#F4ECEC',
+    groupedBackground: '#F3EFFA',
     // Raised tile (selected segmented pill, elevated bar) — surface + elevation.
     elevatedSurface: '#FFFFFF',
-    label: '#000000',
-    secondaryLabel: 'rgba(60, 60, 67, 0.6)',
-    tertiaryLabel: 'rgba(60, 60, 67, 0.3)',
+    label: '#16111F',
+    secondaryLabel: '#5B5563',
+    tertiaryLabel: '#8E8898',
     // M3 outline-variant.
-    separator: 'rgba(60, 60, 67, 0.18)',
-    // Faint maroon track for segmented controls / fills.
-    fill: 'rgba(140, 74, 82, 0.1)',
+    separator: 'rgba(60, 55, 75, 0.18)',
+    // Faint violet track for segmented controls / fills (bumped to 0.14 so selected
+    // pills read on white).
+    fill: 'rgba(109, 40, 217, 0.14)',
   },
   dark: {
-    background: '#141011',
-    secondaryBackground: '#1F1A1B',
-    tertiaryBackground: '#2A2425',
-    groupedBackground: '#141011',
-    elevatedSurface: '#2A2425',
-    label: '#FFFFFF',
-    secondaryLabel: 'rgba(235, 235, 245, 0.6)',
-    tertiaryLabel: 'rgba(235, 235, 245, 0.3)',
-    separator: 'rgba(235, 235, 245, 0.18)',
-    fill: 'rgba(235, 220, 222, 0.12)',
+    background: '#15101E',
+    secondaryBackground: '#221A33',
+    tertiaryBackground: '#2A2142',
+    groupedBackground: '#15101E',
+    elevatedSurface: '#2A2142',
+    label: '#F5F2FB',
+    secondaryLabel: '#A9A2B6',
+    tertiaryLabel: '#6E687C',
+    separator: 'rgba(180, 168, 205, 0.18)',
+    fill: 'rgba(199, 184, 232, 0.14)',
   },
 } as const;
 

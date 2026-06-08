@@ -6,7 +6,7 @@ import {
 } from '@boardsesh/board-constants/grade-colors';
 import type { RawBar, RawBarSegment } from '@boardsesh/profile-stats';
 import type { SessionGradeDistributionItem } from '@boardsesh/shared-schema';
-import { brandColors, withAlpha } from '../../theme/colors';
+import { brandColors, brandColorsDark, withAlpha } from '../../theme/colors';
 import { gradeSortValue } from './grade-sort-value';
 
 export { gradeSortValue } from './grade-sort-value';
@@ -82,9 +82,15 @@ export function gradeChartColor(gradeKey: string): string {
   return `hsla(${hDeg}, ${sMuted}%, ${lMuted}%, 0.75)`;
 }
 
-/** Flash = sage success, Redpoint = brick error — matches the web stats chart. */
-export function flashRedpointColor(seriesKey: 'flash' | 'redpoint'): string {
-  return seriesKey === 'flash' ? withAlpha(brandColors.success, 0.85) : withAlpha(brandColors.error, 0.85);
+/**
+ * Flash = emerald success, Redpoint = red error. Resolves the brand semantic tone
+ * for the current colour scheme so the bars stay vivid on dark chart surfaces
+ * (brighter #34D399 / #F87171 in dark). Pass the chart's `colorScheme` so a bar
+ * fill and its legend swatch always match.
+ */
+export function flashRedpointColor(seriesKey: 'flash' | 'redpoint', colorScheme: 'light' | 'dark' = 'light'): string {
+  const brand = colorScheme === 'dark' ? brandColorsDark : brandColors;
+  return seriesKey === 'flash' ? withAlpha(brand.success, 0.85) : withAlpha(brand.error, 0.85);
 }
 
 /**

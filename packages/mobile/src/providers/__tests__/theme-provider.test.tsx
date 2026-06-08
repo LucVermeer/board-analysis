@@ -148,7 +148,7 @@ describe('ThemeProvider', () => {
       expect(result.current.variant).toBe('material');
       // Material maps M3 tonal surfaces + the 20dp button radius.
       expect(result.current.radii.button).toBe(20);
-      expect(result.current.systemColors.background).toBe('#F4ECEC');
+      expect(result.current.systemColors.background).toBe('#F3EFFA');
     });
 
     it('setUiVariant persists to SecureStore and flips the resolved variant + tokens', async () => {
@@ -164,7 +164,7 @@ describe('ThemeProvider', () => {
       // Liquid Glass keeps the soft 10dp button radius and the (Android) system
       // surface — not the Material tonal map.
       expect(result.current.radii.button).toBe(10);
-      expect(result.current.systemColors.background).toBe('#FFFFFF');
+      expect(result.current.systemColors.background).toBe('#F4F1FB');
       expect(setMock).toHaveBeenCalledWith(UI_VARIANT_KEY, 'liquidGlass');
     });
 

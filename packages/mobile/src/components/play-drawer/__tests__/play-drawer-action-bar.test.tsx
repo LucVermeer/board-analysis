@@ -64,7 +64,7 @@ vi.mock('../../drawer-action-bar/DrawerActionBar', () => ({
     actionButtonPressed: {},
   },
 }));
-vi.mock('../../../theme/colors', () => ({ brandColors: { primary: '#8C4A52', success: '#6B9080' } }));
+vi.mock('../../../theme/colors', () => ({ brandColors: { primary: '#6D28D9', success: '#047857' } }));
 vi.mock('../../../theme/ios-colors', () => ({
   iosSystemColors: { white: '#FFFFFF', systemGray: '#8E8E93', systemRed: '#FF3B30', separator: '#ccc' },
 }));
@@ -102,7 +102,7 @@ describe('PlayDrawerActionBar', () => {
     const tick = container.querySelector('[data-icon="tick.outline"]') as HTMLElement;
 
     expect(tick).toBeTruthy();
-    expect(tick.getAttribute('data-color')).toBe('#6B9080');
+    expect(tick.getAttribute('data-color')).toBe('#047857');
     // The old solid-white-on-green tick is gone — no white tick glyph remains.
     expect(container.querySelector('[data-icon="tick.outline"][data-color="#FFFFFF"]')).toBeNull();
   });

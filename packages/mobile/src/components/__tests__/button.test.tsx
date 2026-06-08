@@ -25,10 +25,14 @@ vi.mock('../Text', () => ({ Text: ({ children }: { children?: ReactNode }) => cr
 vi.mock('../Icon', () => ({ Icon: () => createElement('i', null) }));
 vi.mock('../icon-map', () => ({ iconMap: { tick: { ios: 'checkmark', android: 'check' } } }));
 vi.mock('../../lib/haptics', () => ({ hapticLight: vi.fn() }));
-vi.mock('../../theme/colors', () => ({ brandColors: { primary: '#8C4A52' } }));
+vi.mock('../../theme/colors', () => ({ brandColors: { primary: '#6D28D9' } }));
 vi.mock('../../theme/ios-colors', () => ({ iosSystemColors: { white: '#FFFFFF' } }));
 vi.mock('../../providers/theme-provider', () => ({
-  useTheme: () => ({ variant: ctrl.variant, radii: { button: ctrl.variant === 'material' ? 20 : 10 } }),
+  useTheme: () => ({
+    variant: ctrl.variant,
+    radii: { button: ctrl.variant === 'material' ? 20 : 10 },
+    brandColors: { primary: '#6D28D9', primaryFill: '#6D28D9', onPrimary: '#FFFFFF', accent: '#FF8A3D' },
+  }),
 }));
 
 import { Button } from '../Button';

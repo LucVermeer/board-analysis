@@ -42,7 +42,7 @@ export const SMART_PLAYLISTS: SmartPlaylistPresentation[] = [
     type: 'PROJECTS',
     slug: 'projects',
     icon: '🎯',
-    color: '#d65a4f', // themeTokens.colors.accentRose
+    color: '#2563EB', // blue — distinct from the amber/purple/pink presets
     titleI18nKey: 'library.smart.projects.title',
     descriptionI18nKey: 'library.smart.projects.description',
   },
