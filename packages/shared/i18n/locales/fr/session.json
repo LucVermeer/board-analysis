@@ -275,7 +275,18 @@
       "cardLabelWithUser": "Video beta de @{{username}}",
       "cardLabel": "Video beta",
       "openError": "Impossible d ouvrir ce lien",
-      "urlInvalid": "Doit etre une URL Instagram ou TikTok"
+      "urlInvalid": "Doit etre une URL Instagram ou TikTok",
+      "shareTargetTitle": "Joindre ta beta",
+      "shareTargetPrompt": "Touche le bloc que tu as grimpe",
+      "shareSearchPlaceholder": "Cherche dans tes blocs enregistres",
+      "shareNoAscents": "Enregistre un bloc d abord, puis joins ta beta",
+      "shareNoResults": "Aucun bloc enregistre ne correspond",
+      "shareSignIn": "Connecte-toi pour joindre ta beta",
+      "shareSignInButton": "Se connecter",
+      "shareClose": "Fermer",
+      "shareReadingCaption": "Lecture de la description...",
+      "shareSuggestedTitle": "Trouve dans la description",
+      "shareOtherAscents": "Tes autres ascensions"
     },
     "angleSelector": {
       "title": "Choisir l'angle",

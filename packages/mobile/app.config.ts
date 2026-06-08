@@ -213,6 +213,17 @@ export default ({ config }: ConfigContext): ExpoConfig & { newArchEnabled?: bool
         : {}),
     },
     plugins: [
+      // MUST stay FIRST — do not move it after expo-share-intent. @expo/config-
+      // plugins composes withEntitlementsPlist mods so they execute in REVERSE
+      // registration order (the earliest-registered plugin's callback runs
+      // LAST). So registering this first is exactly what makes it run last and
+      // observe the final merged array after expo-share-intent has prepended its
+      // App Group. Verified against the installed @expo/config-plugins: with this
+      // plugin first the chain runs [share-intent, dedup] → one group; moving it
+      // after expo-share-intent runs [dedup, share-intent] → the duplicate
+      // survives. Same ordering rule the BoardseshWidgets build-settings plugin
+      // relies on below.
+      './plugins/with-share-intent-app-group-dedup',
       'expo-router',
       'expo-secure-store',
       'expo-localization',
@@ -245,6 +256,32 @@ export default ({ config }: ConfigContext): ExpoConfig & { newArchEnabled?: bool
       'expo-updates',
       'expo-web-browser',
       'react-native-ble-plx',
+      // Makes Boardsesh a share target so a beta video link shared from
+      // Instagram/TikTok (the OS share sheet) opens the app. iOS gets a no-UI
+      // Share Extension that redirects into the host app; Android gets an
+      // ACTION_SEND text intent filter. Restricted to links/text only (no
+      // image/movie/file activation rules) so it never appears for raw media.
+      // iosAppGroupIdentifier reuses the existing group.com.boardsesh.app (also
+      // the plugin default of group.<bundleId>) shared with the widget target;
+      // ./plugins/with-share-intent-app-group-dedup collapses the duplicate the
+      // plugin otherwise leaves in the main app's entitlements. Registered
+      // before @bacons/apple-targets — the share extension and the widget are
+      // independent Xcode targets, but EAS managed credentials must extend
+      // provisioning profiles for both com.boardsesh.app.share-extension and
+      // com.boardsesh.app.widgets on the next native build (NOT deliverable via
+      // OTA). androidIntentFilters only accepts text/* | image/* | video/* | */*.
+      [
+        'expo-share-intent',
+        {
+          iosActivationRules: {
+            NSExtensionActivationSupportsWebURLWithMaxCount: 1,
+            NSExtensionActivationSupportsText: true,
+          },
+          iosShareExtensionName: 'Boardsesh',
+          iosAppGroupIdentifier: 'group.com.boardsesh.app',
+          androidIntentFilters: ['text/*'],
+        },
+      ],
       // Signs the Android `release` build type with our keystore when the
       // ANDROID_KEYSTORE_* env vars are set (CI), falling back to debug signing
       // for local `expo prebuild`. Lets the android-apk-rn workflow produce a

@@ -64,3 +64,24 @@ export const GET_USER_BETA_LINKS = gql`
     }
   }
 `;
+
+export const BETA_LINK_PREVIEW = gql`
+  query BetaLinkPreview($link: String!) {
+    betaLinkPreview(link: $link) {
+      link
+      thumbnail
+      username
+      caption
+    }
+  }
+`;
+
+export type BetaLinkPreviewRow = {
+  link: string;
+  thumbnail: string | null;
+  username: string | null;
+  caption: string | null;
+};
+
+export type BetaLinkPreviewQueryVariables = { link: string };
+export type BetaLinkPreviewQueryResponse = { betaLinkPreview: BetaLinkPreviewRow };

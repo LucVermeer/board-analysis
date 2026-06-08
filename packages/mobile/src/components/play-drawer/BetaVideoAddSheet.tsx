@@ -7,6 +7,7 @@ import { isBetaVideoUrl } from '@boardsesh/shared-schema';
 import { Sheet } from '../Sheet';
 import { Text } from '../Text';
 import { useAttachBetaLink } from '../../lib/graphql/hooks';
+import { extractGraphqlMessage } from '../../lib/graphql/extract-error-message';
 import { useToast } from '../../providers/toast-provider';
 import { iosSystemColors } from '../../theme/ios-colors';
 import { brandColors } from '../../theme/colors';
@@ -128,18 +129,6 @@ export const BetaVideoAddSheet = forwardRef<BetaVideoAddSheetHandle, Props>(func
     </Sheet>
   );
 });
-
-// graphql-request throws ClientError-shaped errors with response.errors[].
-// Surface the first server message if present; otherwise fall back to the
-// generic toast string so we never leak fetch internals to users.
-function extractGraphqlMessage(error: unknown): string | null {
-  if (error && typeof error === 'object' && 'response' in error) {
-    const response = (error as { response?: { errors?: { message?: string }[] } }).response;
-    const first = response?.errors?.[0]?.message;
-    if (typeof first === 'string' && first.length > 0) return first;
-  }
-  return null;
-}
 
 const styles = StyleSheet.create({
   container: {

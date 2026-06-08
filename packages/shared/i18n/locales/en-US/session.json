@@ -275,7 +275,18 @@
       "cardLabelWithUser": "Beta video by @{{username}}",
       "cardLabel": "Beta video",
       "openError": "Couldn't open this link",
-      "urlInvalid": "Needs to be an Instagram or TikTok URL"
+      "urlInvalid": "Needs to be an Instagram or TikTok URL",
+      "shareTargetTitle": "Attach your beta",
+      "shareTargetPrompt": "Tap the climb you sent it on",
+      "shareSearchPlaceholder": "Search your logged climbs",
+      "shareNoAscents": "Log a climb first, then pin your beta to it",
+      "shareNoResults": "No logged climbs match that",
+      "shareSignIn": "Sign in to attach your beta",
+      "shareSignInButton": "Sign in",
+      "shareClose": "Close",
+      "shareReadingCaption": "Reading the caption…",
+      "shareSuggestedTitle": "Matched from the caption",
+      "shareOtherAscents": "Your other ascents"
     },
     "angleSelector": {
       "title": "Choose Angle",
