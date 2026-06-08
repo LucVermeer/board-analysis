@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render } from '@testing-library/react';
-import { createElement, type ReactNode, type CSSProperties } from 'react';
+import { createElement, useEffect, type ReactNode, type CSSProperties } from 'react';
 import type { Climb, ClimbQueueItem } from '@boardsesh/queue';
 import type { BoardConfig } from '../../../providers/drawer-host-provider';
 
@@ -45,13 +45,20 @@ vi.mock('react-native', () => ({
     accessibilityRole,
     accessibilityLabel,
     accessibilityActions,
+    onLayout,
   }: {
     children?: ReactNode;
     style?: unknown;
     accessibilityRole?: string;
     accessibilityLabel?: string;
     accessibilityActions?: ReadonlyArray<{ name: string; label?: string }>;
+    onLayout?: (event: { nativeEvent: { layout: { width: number; height: number } } }) => void;
   }) => {
+    // jsdom never lays out, so simulate the swipe viewport being measured —
+    // otherwise width stays 0, canPeek is false, and the peek slots never render.
+    useEffect(() => {
+      onLayout?.({ nativeEvent: { layout: { width: 400, height: 48 } } });
+    }, [onLayout]);
     const readStyleValue = (styleKey: string): unknown => {
       const styles = Array.isArray(style) ? style : [style];
       for (const styleEntry of styles) {
@@ -103,6 +110,7 @@ vi.mock('react-native-reanimated', () => ({
   runOnJS: (fn: (...args: unknown[]) => unknown) => fn,
   useAnimatedStyle: () => ({}),
   useDerivedValue: () => ({ value: 0 }),
+  useSharedValue: (initial: number) => ({ value: initial }),
 }));
 
 vi.mock('react-native-gesture-handler', () => {
