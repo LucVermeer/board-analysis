@@ -28,6 +28,7 @@ import { track } from '../lib/analytics';
 import { ClimbActionsSheet } from '../components/ClimbActionsSheet';
 import { AddToPlaylistSheet } from '../components/AddToPlaylistSheet';
 import { useToggleFavorite, useProfile } from '../lib/graphql/hooks';
+import { favoritesStore } from '@boardsesh/climb-actions';
 import { climbToQueueItem } from '../lib/climb-to-queue-item';
 import { useQueue } from './queue-provider';
 import { useQueueSnackbar } from './queue-snackbar-provider';
@@ -170,8 +171,9 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
   const handleAngleChange = useCallback(
     (newAngle: number) => {
       const cfg = activeBoardConfigRef.current;
-      if (cfg && newAngle === cfg.angle) return;
       if (boardConfigOverride) {
+        // Guard against the override's current angle, not the base board's.
+        if (newAngle === boardConfigOverride.angle) return;
         // The drawer is showing a climb from a board other than the user's
         // stored active board. Update only the override (so the drawer reflects
         // the change) — do NOT rewrite the stored active board's angle, which
@@ -179,6 +181,7 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
         // keep the angle write targeting the board actually shown.)
         setBoardConfigOverride((prev) => (prev ? { ...prev, angle: newAngle } : prev));
       } else {
+        if (cfg && newAngle === cfg.angle) return;
         // Fixed-angle boards can't be adjusted — do nothing (the pill is also
         // hidden for them, this is the safety net).
         if (activeBoard?.isAngleAdjustable === false) return;
@@ -245,8 +248,9 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
 
   const handleClimbActionsToggleFavorite = useCallback(() => {
     if (!climbActions) return;
+    const isNowFavorited = !favoritesStore.getIsFavorited(climbActions.climb.uuid);
     track(SHARED_EVENTS.FavoriteToggle, {
-      action: 'toggled',
+      action: isNowFavorited ? 'added' : 'removed',
       climbUuid: climbActions.climb.uuid,
       boardName: climbActions.boardConfig.boardName,
       layoutId: climbActions.boardConfig.layoutId,
