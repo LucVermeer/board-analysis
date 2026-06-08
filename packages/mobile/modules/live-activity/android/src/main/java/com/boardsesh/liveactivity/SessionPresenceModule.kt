@@ -52,6 +52,13 @@ class SessionPresenceModule : Module() {
     @Volatile
     private var hasListeners = false
 
+    // Whether a session is logically active (startSession called, endSession not
+    // yet). Set synchronously here rather than reading the service's running
+    // state, so the initial update that fires right after startSession isn't
+    // dropped by a race with the service's async onStartCommand.
+    @Volatile
+    private var sessionActive = false
+
     override fun definition() = ModuleDefinition {
         Name("SessionPresence")
 
@@ -78,6 +85,7 @@ class SessionPresenceModule : Module() {
 
         AsyncFunction("startSession") { options: StartSessionOptions ->
             val context = appContext.reactContext?.applicationContext ?: return@AsyncFunction
+            sessionActive = true
             val strings = options.androidNotification
             val intent = Intent(context, BoardSessionService::class.java).apply {
                 action = BoardSessionService.ACTION_START
@@ -97,6 +105,7 @@ class SessionPresenceModule : Module() {
             // Note: no bare `return@AsyncFunction` + stopService() — stopService
             // returns Boolean, which would clash with the Unit early-return. Use
             // a null-check so the lambda stays Unit-typed.
+            sessionActive = false
             val context = appContext.reactContext?.applicationContext
             if (context != null) {
                 context.stopService(Intent(context, BoardSessionService::class.java))
@@ -106,6 +115,13 @@ class SessionPresenceModule : Module() {
 
     private fun pushUpdate(options: SessionUpdateOptions) {
         val context = appContext.reactContext?.applicationContext ?: return
+        // Only update inside an active session window. An update outside one (no
+        // startSession, or after endSession) would issue startForegroundService()
+        // purely to push an update, obliging the service to call startForeground()
+        // within ~5 s — a contract that's easy to miss in the background and the
+        // source of ForegroundServiceDidNotStartInTimeException. startSession()
+        // owns promotion; updates just refresh the ongoing notification.
+        if (!sessionActive) return
         val subtitle = buildString {
             append(options.climbDifficulty)
             if (options.angle > 0) {
