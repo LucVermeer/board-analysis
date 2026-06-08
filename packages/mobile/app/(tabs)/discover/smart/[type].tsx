@@ -11,8 +11,12 @@ import {
 } from '@boardsesh/graphql/operations/playlists';
 import { Text } from '../../../../src/components/Text';
 import { Icon } from '../../../../src/components/Icon';
-import { ActivityIndicator } from '../../../../src/components/ActivityIndicator';
-import { PlaylistDetailView, PlaylistBackFab } from '../../../../src/components/playlist';
+import { ClimbListRowSkeleton } from '../../../../src/components/ClimbListRowSkeleton';
+import {
+  PlaylistDetailView,
+  PlaylistBackFab,
+  type PlaylistDetailEmptyState,
+} from '../../../../src/components/playlist';
 import { getHttpClient } from '../../../../src/lib/graphql/client';
 import { usePlaylistActivation } from '../../../../src/lib/playlists/use-playlist-activation';
 import { toQueueClimbs } from '../../../../src/lib/climb-types';
@@ -82,6 +86,20 @@ export default function SmartPlaylistDetail() {
     [preset, meta, allClimbs.length, t],
   );
 
+  // The liked-climbs surface gets a climber-voice empty state (heart prompt) on
+  // the Material branch; other smart playlists fall back to the generic message.
+  const emptyState = useMemo<PlaylistDetailEmptyState | undefined>(
+    () =>
+      preset?.type === 'LIKED_CLIMBS'
+        ? {
+            icon: 'favorite',
+            title: t('library.smart.likedClimbs.empty.title'),
+            supporting: t('library.smart.likedClimbs.empty.supporting'),
+          }
+        : undefined,
+    [preset, t],
+  );
+
   if (!preset && !query.isLoading) {
     return (
       <View style={styles.stateContainer}>
@@ -99,9 +117,13 @@ export default function SmartPlaylistDetail() {
 
   if (query.isLoading && allClimbs.length === 0) {
     return (
-      <View style={styles.stateContainer}>
+      <View style={styles.skeletonContainer}>
         <PlaylistBackFab />
-        <ActivityIndicator size="large" />
+        <View style={styles.skeletonList}>
+          {SKELETON_PLACEHOLDERS.map((key) => (
+            <ClimbListRowSkeleton key={key} />
+          ))}
+        </View>
       </View>
     );
   }
@@ -116,9 +138,13 @@ export default function SmartPlaylistDetail() {
       fetchNextPage={query.fetchNextPage}
       onActivateClimb={activate}
       emptyMessage={t('library.smart.empty')}
+      emptyState={emptyState}
     />
   );
 }
+
+// Stable hoisted keys for the first-page skeleton rows.
+const SKELETON_PLACEHOLDERS = Array.from({ length: 8 }, (_, index) => `skeleton-${index}`);
 
 const styles = StyleSheet.create({
   stateContainer: {
@@ -127,6 +153,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 32,
     gap: 8,
+  },
+  skeletonContainer: {
+    flex: 1,
+  },
+  skeletonList: {
+    paddingTop: 64,
   },
   stateTitle: {
     marginTop: 12,
