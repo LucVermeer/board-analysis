@@ -41,7 +41,10 @@ vi.mock('../../PressableSurface', () => ({
       {
         onClick: onPress,
         'data-hint': accessibilityHint ?? '',
-        'data-label': accessibilityLabel?.includes('•') ? accessibilityLabel : '',
+        // Always pass the label through (don't gate on the "•" separator): a
+        // named board with no angle has no bullet, and gating would make the
+        // button() helper silently return null and false-pass.
+        'data-label': accessibilityLabel ?? '',
       },
       children,
     ),
@@ -63,6 +66,20 @@ const typedBoard: BoardLabelFields = {
   boardType: 'kilter',
   sizeName: 'M',
   layoutName: 'Kilter Layout',
+};
+const namedBoard: BoardLabelFields = {
+  name: 'Garage Wall',
+  angle: 25,
+  boardType: 'tension',
+  sizeName: '8x10',
+  layoutName: 'Tension Layout',
+};
+const namedBoardNoAngle: BoardLabelFields = {
+  name: 'Garage Wall',
+  angle: null as unknown as number,
+  boardType: 'tension',
+  sizeName: '8x10',
+  layoutName: 'Tension Layout',
 };
 
 describe('BoardSwitcherButton', () => {
@@ -86,6 +103,18 @@ describe('BoardSwitcherButton', () => {
     fireEvent.click(target!);
     expect(onPress).toHaveBeenCalledTimes(1);
     expect(haptics.light).toHaveBeenCalledTimes(1);
+  });
+
+  it('leads with the custom board name for a named board', () => {
+    ctrl.board = namedBoard;
+    const { container } = render(createElement(BoardSwitcherButton, { onPress: vi.fn() }));
+    expect(button(container)?.getAttribute('data-label')).toBe('Garage Wall • 25°');
+  });
+
+  it('renders a named board with no angle (label has no separator)', () => {
+    ctrl.board = namedBoardNoAngle;
+    const { container } = render(createElement(BoardSwitcherButton, { onPress: vi.fn() }));
+    expect(button(container)?.getAttribute('data-label')).toBe('Garage Wall');
   });
 
   it('forwards the accessibility hint', () => {

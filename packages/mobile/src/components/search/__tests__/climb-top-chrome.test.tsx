@@ -530,8 +530,11 @@ describe('ClimbTopChrome', () => {
 
     expect(container.querySelector('[data-gradient]')).toBeNull();
     // The board switcher replaces the static Appbar.Content subtitle: the board
-    // label shows as the title with a down-caret affordance.
-    expect(capsule(container)?.getAttribute('data-capsule')).toBe('Display:kilter • 12x12 • 40°');
+    // label shows as the title with a down-caret affordance. Assert the hint too
+    // so this pins the BoardSwitcherButton specifically, not any [data-capsule].
+    const switcher = capsule(container);
+    expect(switcher?.getAttribute('data-capsule')).toBe('Display:kilter • 12x12 • 40°');
+    expect(switcher?.getAttribute('data-hint')).toBe('mobile.search.boardSwitcherHint');
     expect(container.querySelector('[data-icon="chevron.down"]')).not.toBeNull();
     expect(container.querySelector('[data-search-field]')).not.toBeNull();
     expect(container.querySelector('[data-pressable="mobile.search.gradeAction"]')?.textContent).toContain(

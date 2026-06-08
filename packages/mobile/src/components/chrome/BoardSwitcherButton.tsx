@@ -59,10 +59,13 @@ export function BoardSwitcherButton({ onPress, accessibilityHint }: BoardSwitche
 const styles = StyleSheet.create({
   // Fills the row left of the trailing actions (where Appbar.Content sat); the
   // label flex-shrinks and truncates so the caret stays visible and the actions
-  // are never pushed off-screen. paddingLeft lands the title near the M3 16dp
-  // margin (the Appbar adds its own ~4dp), aligning it with the search row below.
+  // are never pushed off-screen. alignSelf stretch overrides the Appbar's
+  // alignItems:'center' so the tap target spans the full app-bar height, not just
+  // the label line. paddingLeft lands the title near the M3 16dp margin (the
+  // Appbar adds its own ~4dp), aligning it with the search row below.
   press: {
     flex: 1,
+    alignSelf: 'stretch',
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing[1],
