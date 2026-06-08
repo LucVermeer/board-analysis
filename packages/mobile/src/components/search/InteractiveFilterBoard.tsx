@@ -69,7 +69,6 @@ export const InteractiveFilterBoard = React.memo(function InteractiveFilterBoard
   // The picker uses a long-press-style commit, but holds here only need a single
   // tap to open the picker, so we route both tap and "long press" to the same
   // handler (HoldTargetLayer requires both).
-  const handleHoldTap = onHoldTap;
 
   const activeHighlight = useMemo(() => {
     if (activeHoldId == null || renderWidth <= 0) return null;
@@ -130,8 +129,8 @@ export const InteractiveFilterBoard = React.memo(function InteractiveFilterBoard
               measuredWidth={renderWidth}
               mirrored={mirrored}
               showAllHolds
-              onPaint={handleHoldTap}
-              onLongPress={handleHoldTap}
+              onPaint={onHoldTap}
+              onLongPress={onHoldTap}
             />
           </Animated.View>
 
