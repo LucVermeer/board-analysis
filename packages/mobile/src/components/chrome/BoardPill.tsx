@@ -73,12 +73,12 @@ export function BoardPill({ onPress, accessibilityHint }: BoardPillProps) {
           style={StyleSheet.absoluteFill}
           pointerEvents="none"
         />
-        <Icon name="boards" size={14} color={systemColors.secondaryLabel as string} />
+        <Icon name="boards" size={14} color={systemColors.secondaryLabel} />
         <Text
           variant="caption1"
           numberOfLines={1}
           ellipsizeMode="tail"
-          color={systemColors.secondaryLabel as string}
+          color={systemColors.secondaryLabel}
           style={styles.text}
         >
           {boardLabel}

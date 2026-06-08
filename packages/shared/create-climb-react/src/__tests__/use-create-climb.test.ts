@@ -1,6 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import { useCreateClimb } from '../use-create-climb';
+import { useCreateClimb, holdsReducer, HISTORY_LIMIT } from '../use-create-climb';
+import type { HoldsHistory } from '../use-create-climb';
+import type { LitUpHoldsMap } from '@boardsesh/shared-schema';
 
 vi.mock('@boardsesh/board-constants/hold-states', () => ({
   HOLD_STATE_MAP: {
@@ -565,6 +567,31 @@ describe('useCreateClimb', () => {
       expect(result.current.litUpHoldsMap[100].state).toBe('STARTING');
       expect(result.current.litUpHoldsMap[200]).toBeUndefined();
       expect(result.current.canUndo).toBe(false);
+    });
+
+    it('redo caps past at HISTORY_LIMIT even when past is already full', () => {
+      // Normal hook usage cannot place past.length === HISTORY_LIMIT while future
+      // is non-empty (APPLY always clears future; UNDO always shrinks past before
+      // REDO can run). However, a future action that seeds past (e.g. a
+      // LOAD-with-history) could create exactly this state. This test calls the
+      // reducer directly with that edge-case state to verify capPast is applied.
+      // Without the capPast call in REDO the assertion fails: past grows to
+      // HISTORY_LIMIT + 1.
+      const foot = (id: number): LitUpHoldsMap => ({
+        [id]: { state: 'FOOT', color: '#FFA500', displayColor: '#FFA500' },
+      });
+
+      const edgeState: HoldsHistory = {
+        past: Array.from({ length: HISTORY_LIMIT }, (_, i) => foot(i + 1)),
+        present: foot(HISTORY_LIMIT + 1),
+        future: [foot(HISTORY_LIMIT + 2)],
+      };
+
+      const next = holdsReducer(edgeState, { type: 'REDO' });
+
+      expect(next.past.length).toBeLessThanOrEqual(HISTORY_LIMIT);
+      expect(next.present).toEqual(foot(HISTORY_LIMIT + 2));
+      expect(next.future).toHaveLength(0);
     });
   });
 });

@@ -5,7 +5,7 @@ import { borderRadius, spacing } from '../theme/tokens';
 
 export function ClimbListRowSkeleton() {
   const { systemColors } = useTheme();
-  const blockColor = systemColors.fill as string;
+  const blockColor = systemColors.fill;
 
   return (
     <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" testID="climb-list-row-skeleton">

@@ -140,7 +140,7 @@ export function DiscoverTopChrome({
             <GlassActionToolbar actionCount={leftActionCount}>
               {canCreate ? (
                 <GlassToolbarAction onPress={onCreate} accessibilityLabel={t('library.createFab.ariaLabel')}>
-                  <Icon name="plus" size={24} color={systemColors.label as string} />
+                  <Icon name="plus" size={24} color={systemColors.label} />
                 </GlassToolbarAction>
               ) : null}
               <AngleToolbarAction />
@@ -179,7 +179,7 @@ export function DiscoverTopChrome({
                   style={StyleSheet.absoluteFill}
                   pointerEvents="none"
                 />
-                <Text variant="subheadline" color={systemColors.label as string} style={styles.titleText}>
+                <Text variant="subheadline" color={systemColors.label} style={styles.titleText}>
                   {t('bottomTabBar.discover')}
                 </Text>
               </View>
@@ -209,7 +209,7 @@ export function DiscoverTopChrome({
             {activeBoard ? (
               <Animated.View pointerEvents={collapsed ? 'auto' : 'none'} style={boardGlyphStyle}>
                 <GlassToolbarAction onPress={onOpenBoardSwitcher} accessibilityLabel={tBoards('boardPill.switchHint')}>
-                  <Icon name="boards" size={20} color={systemColors.label as string} />
+                  <Icon name="boards" size={20} color={systemColors.label} />
                 </GlassToolbarAction>
               </Animated.View>
             ) : null}

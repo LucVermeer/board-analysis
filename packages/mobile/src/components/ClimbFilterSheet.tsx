@@ -104,7 +104,7 @@ function Chip({ label, selected, onPress }: { label: string; selected: boolean; 
     paddingHorizontal: spacing[3],
     paddingVertical: spacing[2],
     borderRadius: 20,
-    backgroundColor: selected ? brandColors.primary : (systemColors.fill as string),
+    backgroundColor: selected ? brandColors.primary : systemColors.fill,
   };
   return (
     <AnimatedPressable
@@ -390,7 +390,7 @@ export function ClimbFilterSheet({
   ]);
 
   const backgroundStyle: ViewStyle = {
-    backgroundColor: systemColors.secondaryBackground as string,
+    backgroundColor: systemColors.secondaryBackground,
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
   };
@@ -456,7 +456,7 @@ export function ClimbFilterSheet({
                   value={!!localFilters.hideCompleted}
                   onValueChange={(value) => setFiltersPatch({ hideCompleted: value || undefined })}
                 />
-                <View style={[styles.groupDivider, { backgroundColor: systemColors.separator as string }]} />
+                <View style={[styles.groupDivider, { backgroundColor: systemColors.separator }]} />
               </>
             ) : null}
             <SwitchRow
@@ -527,7 +527,7 @@ export function ClimbFilterSheet({
               accessibilityLabel={t('mobile.filter.setters')}
               style={({ pressed }) => [
                 styles.tappableRow,
-                { backgroundColor: systemColors.tertiaryBackground as string },
+                { backgroundColor: systemColors.tertiaryBackground },
                 pressed && styles.tappableRowPressed,
               ]}
             >
@@ -643,7 +643,7 @@ export function ClimbFilterSheet({
       <View
         style={[
           styles.footer,
-          { paddingBottom: insets.bottom + spacing[3], borderTopColor: systemColors.separator as string },
+          { paddingBottom: insets.bottom + spacing[3], borderTopColor: systemColors.separator },
         ]}
       >
         <Button title={applyLabel} onPress={handleApply} variant="filled" size="large" style={styles.applyButton} />

@@ -1,4 +1,4 @@
-import { Platform, PlatformColor, type ColorValue } from 'react-native';
+import { Platform, PlatformColor, type OpaqueColorValue } from 'react-native';
 
 /**
  * iOS semantic system colors via PlatformColor.
@@ -8,7 +8,7 @@ import { Platform, PlatformColor, type ColorValue } from 'react-native';
  * colors from `androidFallbackColors` instead. All color access should go
  * through `useTheme().systemColors` — never consume this directly.
  */
-export const iosSystemColors: Record<string, ColorValue> | null =
+export const iosSystemColors: Record<string, OpaqueColorValue> | null =
   Platform.OS === 'ios'
     ? {
         background: PlatformColor('systemBackground'),

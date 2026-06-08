@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Appearance, Platform, useColorScheme, type ColorValue } from 'react-native';
+import { Appearance, Platform, useColorScheme, type OpaqueColorValue } from 'react-native';
 import {
   THEME_OVERRIDE_KEY,
   isThemeOverride,
@@ -41,19 +41,21 @@ type ResolvedBrandColors = typeof brandColors | typeof brandColorsDark;
 
 /**
  * Resolved system colors for the current color scheme.
- * On iOS these are PlatformColor values; on Android they are hex/rgba strings.
+ * On iOS these are PlatformColor (OpaqueColorValue); on Android they are
+ * hex/rgba strings. The union matches Icon's `color` prop directly so callers
+ * never need `as string` casts when passing these to style props or components.
  */
 type ResolvedSystemColors = {
-  background: ColorValue;
-  secondaryBackground: ColorValue;
-  tertiaryBackground: ColorValue;
-  groupedBackground: ColorValue;
-  elevatedSurface: ColorValue;
-  label: ColorValue;
-  secondaryLabel: ColorValue;
-  tertiaryLabel: ColorValue;
-  separator: ColorValue;
-  fill: ColorValue;
+  background: string | OpaqueColorValue;
+  secondaryBackground: string | OpaqueColorValue;
+  tertiaryBackground: string | OpaqueColorValue;
+  groupedBackground: string | OpaqueColorValue;
+  elevatedSurface: string | OpaqueColorValue;
+  label: string | OpaqueColorValue;
+  secondaryLabel: string | OpaqueColorValue;
+  tertiaryLabel: string | OpaqueColorValue;
+  separator: string | OpaqueColorValue;
+  fill: string | OpaqueColorValue;
 };
 
 type Theme = {

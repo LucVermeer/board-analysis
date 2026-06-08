@@ -268,7 +268,7 @@ export const QuickTickBar = React.memo(function QuickTickBar({
           value={comment}
           onChangeText={setComment}
           placeholder={t('playView.tickBar.commentPlaceholder')}
-          placeholderTextColor={systemColors.tertiaryLabel as string}
+          placeholderTextColor={systemColors.tertiaryLabel}
           accessibilityLabel={t('playView.tickBar.commentAria')}
           multiline
           style={
@@ -276,7 +276,7 @@ export const QuickTickBar = React.memo(function QuickTickBar({
               flex: 1,
               fontSize: 14,
               lineHeight: 19,
-              color: systemColors.label as string,
+              color: systemColors.label,
               minHeight: 36,
               paddingVertical: spacing[1],
               textAlignVertical: 'top',
@@ -302,7 +302,7 @@ export const QuickTickBar = React.memo(function QuickTickBar({
           accessibilityLabel={t('playView.tickBar.logAscentAria', { status: 'attempt' })}
           style={({ pressed }) => [
             styles.attemptButton,
-            { borderColor: systemColors.separator as string },
+            { borderColor: systemColors.separator },
             pressed && styles.buttonPressed,
             saveTick.isPending && styles.buttonDisabled,
           ]}

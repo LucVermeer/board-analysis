@@ -22,7 +22,7 @@ type RadioGroupProps<T extends string> = {
 export function RadioGroup<T extends string>({ options, value, onChange }: RadioGroupProps<T>) {
   const { systemColors, brandColors } = useTheme();
   return (
-    <View style={[styles.container, { backgroundColor: systemColors.secondaryBackground as string }]}>
+    <View style={[styles.container, { backgroundColor: systemColors.secondaryBackground }]}>
       {options.map((option, index) => {
         const selected = option.value === value;
         const isLast = index === options.length - 1;

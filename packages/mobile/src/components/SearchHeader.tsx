@@ -130,7 +130,7 @@ export const SearchHeader = forwardRef<SearchHeaderHandle, SearchHeaderProps>(fu
           returnKeyType="search"
           onSubmitEditing={handleSubmit}
           clearButtonMode="never"
-          style={[styles.input, { color: systemColors.label as string }]}
+          style={[styles.input, { color: systemColors.label }]}
           accessibilityLabel={placeholder}
         />
         {text.length > 0 && (

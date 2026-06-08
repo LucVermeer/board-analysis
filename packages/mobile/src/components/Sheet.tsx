@@ -97,7 +97,7 @@ export const Sheet = forwardRef<BottomSheet, SheetProps>(function Sheet(
       style={[
         styles.footer,
         {
-          backgroundColor: systemColors.secondaryBackground as string,
+          backgroundColor: systemColors.secondaryBackground,
           borderTopColor: systemColors.separator,
           paddingBottom: insets.bottom + spacing[3],
         },

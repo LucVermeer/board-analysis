@@ -26,9 +26,9 @@ export function FilterButton({ activeFilterCount, onPress, onLongPress }: Filter
   // glyph, so it keeps the violet (white would vanish on the bare surface).
   const iconColor = active
     ? variant === 'material'
-      ? (brandColors.primary as string)
+      ? brandColors.primary
       : iosSystemColors.white
-    : (systemColors.secondaryLabel as string);
+    : systemColors.secondaryLabel;
 
   return (
     <GlassIconButton

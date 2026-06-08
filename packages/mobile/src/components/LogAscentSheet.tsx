@@ -99,7 +99,7 @@ export function LogAscentSheet({
   );
 
   const backgroundStyle: ViewStyle = {
-    backgroundColor: systemColors.secondaryBackground as string,
+    backgroundColor: systemColors.secondaryBackground,
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
   };
@@ -130,7 +130,7 @@ export function LogAscentSheet({
             hitSlop={8}
             style={({ pressed }) => [
               styles.closeButton,
-              { backgroundColor: systemColors.fill as string },
+              { backgroundColor: systemColors.fill },
               pressed && styles.closeButtonPressed,
             ]}
           >

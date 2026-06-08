@@ -74,10 +74,10 @@ export const CreateDrawerHeader = memo(function CreateDrawerHeader({
           value={name}
           onChangeText={onChangeName}
           placeholder={t('mobile.create.header.newClimb')}
-          placeholderTextColor={systemColors.tertiaryLabel as string}
+          placeholderTextColor={systemColors.tertiaryLabel}
           maxLength={NAME_MAX}
           returnKeyType="done"
-          style={[styles.nameInput, { color: systemColors.label as string }]}
+          style={[styles.nameInput, { color: systemColors.label }]}
         />
         <Text variant="caption1" color={systemColors.secondaryLabel} style={styles.subtitle}>
           {counts}

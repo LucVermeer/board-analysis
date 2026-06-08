@@ -17,7 +17,7 @@ function filterSupportedHoldsMap(boardName: BoardName, holdsMap: LitUpHoldsMap):
 }
 
 /** Max number of editing steps kept for undo. Oldest steps fall off the front. */
-const HISTORY_LIMIT = 50;
+export const HISTORY_LIMIT = 50;
 
 /**
  * Past/present/future undo history for the holds map. `present` is the live
@@ -25,7 +25,7 @@ const HISTORY_LIMIT = 50;
  * objects, so snapshotting is cheap). History is in-memory only — it resets on
  * remount, which is exactly the "current editing session" scope we want.
  */
-type HoldsHistory = {
+export type HoldsHistory = {
   past: LitUpHoldsMap[];
   present: LitUpHoldsMap;
   future: LitUpHoldsMap[];
@@ -49,7 +49,7 @@ function capPast(past: LitUpHoldsMap[]): LitUpHoldsMap[] {
   return past.length > HISTORY_LIMIT ? past.slice(past.length - HISTORY_LIMIT) : past;
 }
 
-function holdsReducer(state: HoldsHistory, action: HoldsAction): HoldsHistory {
+export function holdsReducer(state: HoldsHistory, action: HoldsAction): HoldsHistory {
   switch (action.type) {
     case 'APPLY': {
       const next = action.updater(state.present);
@@ -72,7 +72,7 @@ function holdsReducer(state: HoldsHistory, action: HoldsAction): HoldsHistory {
     case 'REDO': {
       if (state.future.length === 0) return state;
       const next = state.future[0];
-      return { past: [...state.past, state.present], present: next, future: state.future.slice(1) };
+      return { past: capPast([...state.past, state.present]), present: next, future: state.future.slice(1) };
     }
     default:
       return state;

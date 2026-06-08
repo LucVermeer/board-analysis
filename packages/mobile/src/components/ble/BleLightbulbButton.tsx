@@ -88,7 +88,7 @@ export function BleLightbulbButton({
   const visualState = getBleLightbulbVisualState({
     isConnected,
     connectedColor: brandColors.warning,
-    disconnectedColor: systemColors.secondaryLabel as string,
+    disconnectedColor: systemColors.secondaryLabel,
   });
 
   return (
