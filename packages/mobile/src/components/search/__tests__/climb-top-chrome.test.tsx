@@ -549,15 +549,99 @@ describe('ClimbTopChrome', () => {
     expect(haptics.light).toHaveBeenCalledTimes(1);
   });
 
+  it('excludes the dedicated grade chip from the Material filter badge count', () => {
+    ctrl.variant = 'material';
+    ctrl.board = typedBoard;
+    const { container, rerender } = render(
+      <ClimbTopChrome
+        {...makeProps({
+          onOpenFilters: vi.fn(),
+          activeFilterCount: 2,
+          gradeChip: { label: 'V6+', active: true, onClear: vi.fn() },
+          gradeBound: { minGradeId: 20, maxGradeId: undefined },
+          onOpenGrade: vi.fn(),
+          onGradeChange: vi.fn(),
+        })}
+      />,
+    );
+
+    expect(container.querySelector('[data-glass-icon="filter"]')?.getAttribute('data-badge')).toBe('1');
+
+    rerender(
+      <ClimbTopChrome
+        {...makeProps({
+          onOpenFilters: vi.fn(),
+          activeFilterCount: 1,
+          gradeChip: { label: 'V6+', active: true, onClear: vi.fn() },
+          gradeBound: { minGradeId: 20, maxGradeId: undefined },
+          onOpenGrade: vi.fn(),
+          onGradeChange: vi.fn(),
+        })}
+      />,
+    );
+    expect(container.querySelector('[data-glass-icon="filter"]')?.getAttribute('data-badge')).toBe('0');
+  });
+
+  it('omits the Material summary chip when only grade is active', () => {
+    ctrl.variant = 'material';
+    ctrl.board = typedBoard;
+    const onClearSummary = vi.fn();
+    const { container } = render(
+      <ClimbTopChrome
+        {...makeProps({
+          onOpenFilters: vi.fn(),
+          activeFilterCount: 1,
+          filterSummary: { text: 'V6+', onClear: onClearSummary },
+          gradeChip: { label: 'V6+', active: true, onClear: vi.fn() },
+          gradeBound: { minGradeId: 20, maxGradeId: undefined },
+          onOpenGrade: vi.fn(),
+          onGradeChange: vi.fn(),
+        })}
+      />,
+    );
+
+    expect(container.querySelector('[data-chip="V6+"]')).toBeNull();
+  });
+
+  it('clears only the Material summary chip callback for non-grade filters', () => {
+    ctrl.variant = 'material';
+    ctrl.board = typedBoard;
+    const onClearGrade = vi.fn();
+    const onClearSummary = vi.fn();
+    const { container } = render(
+      <ClimbTopChrome
+        {...makeProps({
+          onOpenFilters: vi.fn(),
+          activeFilterCount: 2,
+          filterSummary: { text: 'Benchmarks', onClear: onClearSummary },
+          gradeChip: { label: 'V6+', active: true, onClear: onClearGrade },
+          gradeBound: { minGradeId: 20, maxGradeId: undefined },
+          onOpenGrade: vi.fn(),
+          onGradeChange: vi.fn(),
+        })}
+      />,
+    );
+
+    fireEvent.click(container.querySelector('[data-chip="Benchmarks"]') as HTMLButtonElement);
+    expect(onClearSummary).toHaveBeenCalledTimes(1);
+    expect(onClearGrade).not.toHaveBeenCalled();
+
+    fireEvent.click(container.querySelector('[data-chip-close="Benchmarks"]') as HTMLSpanElement);
+    expect(onClearSummary).toHaveBeenCalledTimes(2);
+    expect(onClearGrade).not.toHaveBeenCalled();
+  });
+
   it('opens the inline grade rail from the Material grade chip and clears the active grade', () => {
     ctrl.variant = 'material';
     ctrl.board = typedBoard;
     const onOpenGrade = vi.fn();
+    const onCloseGrade = vi.fn();
     const onClearGrade = vi.fn();
     const { container, rerender } = render(
       <ClimbTopChrome
         {...makeProps({
           onOpenGrade,
+          onCloseGrade,
           onOpenFilters: vi.fn(),
           activeFilterCount: 1,
           gradeChip: { label: 'V6+', active: true, onClear: onClearGrade },
@@ -576,6 +660,7 @@ describe('ClimbTopChrome', () => {
       <ClimbTopChrome
         {...makeProps({
           onOpenGrade,
+          onCloseGrade,
           onOpenFilters: vi.fn(),
           activeFilterCount: 1,
           gradeRailVisible: true,
@@ -586,5 +671,8 @@ describe('ClimbTopChrome', () => {
       />,
     );
     expect(container.querySelector('[data-grade-rail="true"]')).not.toBeNull();
+    fireEvent.click(container.querySelector('[data-chip="mobile.search.gradeAction"]') as HTMLButtonElement);
+    expect(onCloseGrade).toHaveBeenCalledTimes(1);
+    expect(onOpenGrade).toHaveBeenCalledTimes(1);
   });
 });

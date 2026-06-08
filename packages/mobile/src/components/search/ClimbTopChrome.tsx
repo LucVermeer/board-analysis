@@ -133,7 +133,8 @@ export function ClimbTopChrome({
   if (variant === 'material') {
     const boardLabel = formatActiveBoardLabel(activeBoard);
     const hasGradeFilter = gradeChip?.active === true;
-    const hasNonGradeFilters = activeFilterCount > (hasGradeFilter ? 1 : 0);
+    const nonGradeFilterCount = Math.max(0, activeFilterCount - (hasGradeFilter ? 1 : 0));
+    const hasNonGradeFilters = nonGradeFilterCount > 0;
     const shouldShowFilterSummary = filterSummary != null && hasNonGradeFilters;
     const visibleFilterSummary = shouldShowFilterSummary ? filterSummary : null;
     const visibleGradeLabel = gradeChip?.label ?? t('mobile.filter.gradeRange');
@@ -197,7 +198,7 @@ export function ClimbTopChrome({
                   height={MATERIAL_SEARCH_HEIGHT}
                 />
               </View>
-              {onOpenFilters ? <FilterButton activeFilterCount={activeFilterCount} onPress={onOpenFilters} /> : null}
+              {onOpenFilters ? <FilterButton activeFilterCount={nonGradeFilterCount} onPress={onOpenFilters} /> : null}
             </View>
 
             <View pointerEvents="box-none" style={styles.materialQuickRow}>
@@ -367,6 +368,14 @@ function MaterialAngleAction() {
   const [visible, setVisible] = useState(false);
 
   const canAdjust = activeBoard?.isAngleAdjustable !== false && activeBoard?.angle != null;
+  const angleIcon = useCallback(
+    () => (
+      <Text variant="caption1" style={[styles.materialAngleText, { color: systemColors.label }]}>
+        {activeBoard?.angle}°
+      </Text>
+    ),
+    [activeBoard?.angle, systemColors.label],
+  );
   const handleOpen = useCallback(() => {
     if (!activeBoard || activeBoard.isAngleAdjustable === false || activeBoard.angle == null) return;
     hapticLight();
@@ -386,11 +395,7 @@ function MaterialAngleAction() {
   return (
     <>
       <Appbar.Action
-        icon={() => (
-          <Text variant="caption1" style={[styles.materialAngleText, { color: systemColors.label }]}>
-            {activeBoard.angle}°
-          </Text>
-        )}
+        icon={angleIcon}
         onPress={handleOpen}
         accessibilityLabel={tSession('mobile.angleSelector.title')}
       />

@@ -360,7 +360,7 @@ function ClimbListInner() {
     });
     if (renderData?.imageUrls) {
       for (const url of renderData.imageUrls) {
-        Image.prefetch(url);
+        void Image.prefetch(url);
       }
     }
   }, [activeBoard]);
@@ -550,6 +550,17 @@ function ClimbListInner() {
   const handleClearAllFilters = useCallback(() => {
     replaceSearch(DEFAULT_CLIMB_FILTER_STATE, name, DEFAULT_CLIMB_BOARD_FILTER_STATE);
   }, [replaceSearch, name]);
+  const handleClearNonGradeFilters = useCallback(() => {
+    replaceSearch(
+      {
+        ...DEFAULT_CLIMB_FILTER_STATE,
+        minGrade: filters.minGrade,
+        maxGrade: filters.maxGrade,
+      },
+      name,
+      DEFAULT_CLIMB_BOARD_FILTER_STATE,
+    );
+  }, [replaceSearch, name, filters.minGrade, filters.maxGrade]);
 
   const handleGradeChange = useCallback(
     (next: GradeBound) => {
@@ -595,16 +606,21 @@ function ClimbListInner() {
       }),
     [filters, boardFilters, grades, t, formatGradeByDifficultyId, patchFilters, patchBoardFilters, setGrade],
   );
+  const nonGradeFilterTokens = useMemo(
+    () => filterTokens.filter((filterToken) => filterToken.key !== 'grade'),
+    [filterTokens],
+  );
+  const summaryFilterTokens = variant === 'material' ? nonGradeFilterTokens : filterTokens;
   // Condensed one-line summary of the active filters for the capsule below the
   // board name (2 parts max, then "+N more"). Tapping the capsule clears them.
   const filterSummary = useMemo(() => {
-    if (filterTokens.length === 0) return null;
+    if (summaryFilterTokens.length === 0) return null;
     return formatFilterSummary(
-      filterTokens.map((token) => token.label),
+      summaryFilterTokens.map((token) => token.label),
       { more: (count) => t('mobile.search.more', { count }) },
       2,
     );
-  }, [filterTokens, t]);
+  }, [summaryFilterTokens, t]);
   const gradeFilterToken = useMemo(
     () => filterTokens.find((filterToken) => filterToken.key === 'grade'),
     [filterTokens],
@@ -718,6 +734,7 @@ function ClimbListInner() {
   }
 
   const isEmpty = visibleClimbs.length === 0 && !isClimbsLoading;
+  const filterSummaryClear = variant === 'material' ? handleClearNonGradeFilters : handleClearAllFilters;
 
   return (
     <View style={[styles.container, { backgroundColor: systemColors.background }]}>
@@ -785,7 +802,7 @@ function ClimbListInner() {
         onCloseGrade={handleDismissGrade}
         activeFilterCount={activeFilterCount}
         onOpenFilters={handleOpenFilters}
-        filterSummary={filterSummary ? { text: filterSummary, onClear: handleClearAllFilters } : undefined}
+        filterSummary={filterSummary ? { text: filterSummary, onClear: filterSummaryClear } : undefined}
         gradeBound={gradeBound}
         grades={grades}
         gradeRailVisible={showGrade}
