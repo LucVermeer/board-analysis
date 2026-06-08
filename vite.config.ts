@@ -158,6 +158,17 @@ export default defineConfig({
       codegen: {
         command:
           'bun packages/shared-schema/scripts/print-schema.ts && graphql-codegen && vp fmt packages/shared-schema/src/generated/ packages/shared/graphql/src/generated/',
+        input: [
+          'codegen.ts',
+          'packages/shared-schema/scripts/print-schema.ts',
+          'packages/shared-schema/src/schema/**/*.ts',
+          'packages/shared-schema/src/types/**/*.ts',
+          'packages/shared/graphql/src/**/*.ts',
+          '!packages/shared/graphql/src/generated/**',
+          'packages/web/app/**/*.{ts,tsx}',
+          '!packages/web/app/lib/graphql/**',
+          '!packages/web/**/*.test.{ts,tsx}',
+        ],
       },
 
       // --- Build (topological order via dependsOn) ---
