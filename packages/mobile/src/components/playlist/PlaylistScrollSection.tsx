@@ -14,6 +14,9 @@ export type PlaylistScrollSectionProps = {
   loading?: boolean;
   /** True while a subsequent page is loading (renders a trailing spinner). */
   isLoadingMore?: boolean;
+  /** Trailing header affordance (e.g. "See all") — expands the shelf to a full list. */
+  actionLabel?: string;
+  onActionPress?: () => void;
 };
 
 // Right-edge slop (px) at which onEndReached fires, so the next page starts
@@ -31,10 +34,12 @@ export function PlaylistScrollSection({
   onEndReached,
   loading,
   isLoadingMore,
+  actionLabel,
+  onActionPress,
 }: PlaylistScrollSectionProps) {
   return (
     <View style={styles.section}>
-      <SectionHeader title={title} />
+      <SectionHeader title={title} actionLabel={actionLabel} onActionPress={onActionPress} />
       {loading ? (
         <View style={styles.loadingRow}>
           <ActivityIndicator size="small" />

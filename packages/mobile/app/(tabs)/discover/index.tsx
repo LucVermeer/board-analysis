@@ -302,6 +302,8 @@ export default function DiscoverLibrary() {
             loading={userLoading && jumpBackIn.length === 0}
             isLoadingMore={userLoadingMore}
             onEndReached={loadMoreUser}
+            actionLabel={jumpBackIn.length > 0 ? t('library.allPlaylists.seeAll') : undefined}
+            onActionPress={jumpBackIn.length > 0 ? () => router.push('/(tabs)/discover/all') : undefined}
           >
             {jumpBackIn.map((playlist, index) => (
               <PlaylistCard

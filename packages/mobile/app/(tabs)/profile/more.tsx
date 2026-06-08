@@ -29,6 +29,7 @@ export default function MoreScreen() {
   } = useTheme();
   const { t } = useTranslation('common');
   const { t: tProfile } = useTranslation('profile');
+  const { t: tPlaylists } = useTranslation('playlists');
   const { signOut } = useAuth();
   const { data: profile } = useProfile();
   const { gradeFormat, setGradeFormat } = useGradeFormat();
@@ -58,6 +59,29 @@ export default function MoreScreen() {
   return (
     <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.container}>
       <DevMetadataPanel />
+
+      {profile?.id ? (
+        <View style={styles.section}>
+          <View
+            style={[
+              styles.card,
+              {
+                backgroundColor: systemColors.secondaryBackground,
+                borderRadius: borderRadius.lg,
+                marginHorizontal: spacing[4],
+              },
+            ]}
+          >
+            <ListRow
+              title={tPlaylists('library.allPlaylists.title')}
+              leading={<Icon name="playlist" size={22} color={systemColors.secondaryLabel} />}
+              showChevron
+              showSeparator={false}
+              onPress={() => router.push('/(tabs)/discover/all')}
+            />
+          </View>
+        </View>
+      ) : null}
 
       <View style={styles.section}>
         <SectionHeader title={t('mobile.more.appearance.title')} />

@@ -26,6 +26,17 @@ export default function DiscoverLayout() {
         }}
       />
       <Stack.Screen
+        name="all"
+        options={{
+          // "My Playlists" — a plain vertical list. A solid native header gives it
+          // a title + automatic back button and avoids the transparent-blur top
+          // inset the index screen manages with its floating chrome.
+          headerShown: true,
+          headerTransparent: false,
+          title: t('library.allPlaylists.title'),
+        }}
+      />
+      <Stack.Screen
         name="[playlist_uuid]"
         options={{
           // The detail view owns its full-bleed gradient hero with a floating
