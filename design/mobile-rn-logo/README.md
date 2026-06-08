@@ -1,7 +1,17 @@
 # Mobile React Native logo assets
 
-Source image: https://imgur.com/a/ZHNzW7W
-Direct source file: https://i.imgur.com/A2BZVMu.png
+Author: Marco de Jongh (`marcodejongh`)
+
+License and permission: created by Marco de Jongh for Boardsesh. Boardsesh has
+permission to use, modify, reproduce, and distribute this artwork as app
+branding, including installed app icons, splash screens, App Store assets,
+Google Play assets, website assets, and related marketing surfaces.
+
+Transport URL: https://imgur.com/a/ZHNzW7W
+Downloaded file: https://i.imgur.com/A2BZVMu.png
+
+The Imgur URL is only the handoff/download location. It is not the ownership or
+license provenance for this artwork.
 
 The source PNG has a dark RGB background. The transparent master removes that
 background with ImageMagick by building an HSL/luminance alpha mask, then the
