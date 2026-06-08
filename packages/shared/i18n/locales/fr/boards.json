@@ -217,6 +217,9 @@
     "all": "Tous",
     "allBoards": "Tous les boards"
   },
+  "boardPill": {
+    "switchHint": "Ouvre le sélecteur de board"
+  },
   "boardSwitchConfirm": {
     "session": {
       "title": "Quitter votre session ?",

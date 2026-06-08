@@ -1,6 +1,8 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { View, ScrollView, Pressable, StyleSheet } from 'react-native';
+import { View, Pressable, StyleSheet } from 'react-native';
+import Animated, { useAnimatedRef, useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated';
 import { router, useFocusEffect } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import {
   useDiscoverPlaylists,
@@ -17,17 +19,15 @@ import { SectionHeader } from '../../../src/components/SectionHeader';
 import {
   PlaylistCard,
   PlaylistScrollSection,
-  BoardFilterStrip,
-  CreatePlaylistFab,
   PlaylistFormSheet,
   type PlaylistFormValues,
 } from '../../../src/components/playlist';
-import type { BoardFilterSelection } from '../../../src/components/playlist';
+import { DiscoverTopChrome } from '../../../src/components/chrome';
 import { SMART_PLAYLISTS } from '../../../src/lib/smart-playlists';
 import { useAuth } from '../../../src/providers/auth-provider';
 import { useToast } from '../../../src/providers/toast-provider';
 import { useAuthToken } from '../../../src/lib/graphql/use-auth-token';
-import { useMyBoards, useProfile } from '../../../src/lib/graphql/hooks';
+import { useProfile } from '../../../src/lib/graphql/hooks';
 import { useActiveBoard } from '../../../src/lib/graphql/use-active-board';
 import { useBottomChromeMetrics } from '../../../src/hooks/use-bottom-chrome-metrics';
 import { brandColors } from '../../../src/theme/colors';
@@ -37,21 +37,36 @@ import { spacing } from '../../../src/theme/tokens';
 export default function DiscoverLibrary() {
   const { t } = useTranslation('playlists');
   const bottomChrome = useBottomChromeMetrics();
+  const insets = useSafeAreaInsets();
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   const { data: token = null, isLoading: tokenLoading } = useAuthToken();
   const { data: profile } = useProfile();
   const { data: activeBoard } = useActiveBoard();
-  const { data: myBoards } = useMyBoards(undefined, { enabled: isAuthenticated });
 
   const userId = profile?.id ?? null;
   const effectiveToken = isAuthenticated ? token : null;
 
-  // Board filter — defaults to "All". Selecting a chip scopes every section to
-  // that board's boardType + layoutId (the shared hooks reset on filter change).
-  const boards = useMemo(() => myBoards?.boards ?? [], [myBoards]);
-  const [boardFilter, setBoardFilter] = useState<BoardFilterSelection | null>(null);
-  const filterBoardType = boardFilter?.boardType;
-  const filterLayoutId = boardFilter?.layoutId;
+  // The board pill in the top chrome is the default filter: every section scopes
+  // to the active board's boardType + layoutId (the shared hooks reset on
+  // change). With no active board yet, sections stay unscoped so a signed-out or
+  // not-yet-onboarded user still sees community playlists.
+  const filterBoardType = activeBoard?.boardType;
+  const filterLayoutId = activeBoard?.layoutId;
+
+  // Measured top-chrome height so the scroll content clears the floating islands
+  // (seeded to the safe-area top + a row, like the Climbs list).
+  const [chromeHeight, setChromeHeight] = useState(() => insets.top + 56);
+
+  // Scroll offset drives the in-body "Discover" title collapsing into the chrome;
+  // tapping the collapsed title capsule scrolls back to the top.
+  const listRef = useAnimatedRef<Animated.ScrollView>();
+  const scrollY = useSharedValue(0);
+  const onScroll = useAnimatedScrollHandler((event) => {
+    scrollY.value = event.contentOffset.y;
+  });
+  const handleScrollToTop = useCallback(() => {
+    listRef.current?.scrollTo({ y: 0, animated: true });
+  }, [listRef]);
 
   // Smart-playlist counts gate which "Your Picks" cards render.
   const { data: smartCounts, isLoading: smartCountsLoading } = useSmartPlaylistCounts({
@@ -133,14 +148,13 @@ export default function DiscoverLibrary() {
   const { showToast } = useToast();
   const { createPlaylist, pinPlaylist, unpinPlaylist } = usePlaylistMutations();
 
-  // Create flow — the FAB needs a board (boardType + layoutId). Prefer the
-  // active board filter, fall back to the user's active board; with neither,
-  // guide the user to pick a board first (mirrors web's "select a board").
-  const createBoard = useMemo(() => {
-    if (boardFilter) return { boardType: boardFilter.boardType, layoutId: boardFilter.layoutId };
-    if (activeBoard) return { boardType: activeBoard.boardType, layoutId: activeBoard.layoutId };
-    return null;
-  }, [boardFilter, activeBoard]);
+  // Create flow — needs a board (boardType + layoutId). Use the active board (the
+  // pill's selection); with none, guide the user to pick one first (mirrors web's
+  // "select a board").
+  const createBoard = useMemo(
+    () => (activeBoard ? { boardType: activeBoard.boardType, layoutId: activeBoard.layoutId } : null),
+    [activeBoard],
+  );
 
   const [createVisible, setCreateVisible] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -221,13 +235,25 @@ export default function DiscoverLibrary() {
 
   return (
     <View style={styles.flex}>
-      <ScrollView
+      <Animated.ScrollView
+        ref={listRef}
         style={styles.flex}
-        contentInsetAdjustmentBehavior="automatic"
-        contentContainerStyle={{ paddingBottom: bottomChrome.scrollBottomPadding + spacing[6] }}
+        contentInsetAdjustmentBehavior="never"
+        contentContainerStyle={{
+          paddingTop: chromeHeight,
+          paddingBottom: bottomChrome.scrollBottomPadding + spacing[6],
+        }}
+        scrollIndicatorInsets={{ top: chromeHeight }}
         keyboardShouldPersistTaps="handled"
+        onScroll={onScroll}
+        scrollEventThrottle={16}
       >
-        <BoardFilterStrip boards={boards} selectedBoardUuid={boardFilter?.uuid ?? null} onSelect={setBoardFilter} />
+        {/* The screen's identity, in-body under the floating chrome (the grey
+            "Discover" stack header is gone). Collapses into a header capsule as it
+            scrolls up behind the glass. */}
+        <Text variant="largeTitle" style={styles.screenTitle}>
+          {t('bottomTabBar.discover')}
+        </Text>
 
         {showSignInPrompt ? (
           <Pressable style={styles.signInBanner} onPress={() => router.push('/auth/login')} accessibilityRole="button">
@@ -341,9 +367,16 @@ export default function DiscoverLibrary() {
             <ActivityIndicator size="large" />
           </View>
         ) : null}
-      </ScrollView>
+      </Animated.ScrollView>
 
-      {isAuthenticated ? <CreatePlaylistFab onPress={handleCreatePress} /> : null}
+      <DiscoverTopChrome
+        canCreate={isAuthenticated}
+        onCreate={handleCreatePress}
+        onOpenBoardSwitcher={() => router.push({ pathname: '/boards', params: { returnTo: '/(tabs)/discover' } })}
+        onHeightChange={setChromeHeight}
+        scrollY={scrollY}
+        onPressTitle={handleScrollToTop}
+      />
 
       <PlaylistFormSheet
         mode="create"
@@ -359,6 +392,11 @@ export default function DiscoverLibrary() {
 const styles = StyleSheet.create({
   flex: {
     flex: 1,
+  },
+  screenTitle: {
+    paddingHorizontal: spacing[4],
+    paddingTop: 0,
+    paddingBottom: spacing[2],
   },
   section: {
     marginTop: spacing[2],

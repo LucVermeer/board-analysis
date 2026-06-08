@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, StyleSheet, Pressable, Alert } from 'react-native';
+import { View, StyleSheet, Alert } from 'react-native';
 import { useLocalSearchParams, useNavigation } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -20,17 +20,19 @@ import {
   PlaylistDetailView,
   PlaylistFormSheet,
   PlaylistActionsMenu,
-  PlaylistPinButton,
   PlaylistFollowButton,
   type PlaylistFormValues,
 } from '../../../src/components/playlist';
+import { GlassIconButton } from '../../../src/components/GlassIconButton';
 import { getHttpClient } from '../../../src/lib/graphql/client';
 import { usePlaylistActivation } from '../../../src/lib/playlists/use-playlist-activation';
 import { recordPlaylistOpen } from '../../../src/lib/playlists/recents-store';
 import { toQueueClimbs } from '../../../src/lib/climb-types';
+import { hapticSelection } from '../../../src/lib/haptics';
 import { useAuth } from '../../../src/providers/auth-provider';
 import { useToast } from '../../../src/providers/toast-provider';
 import { useTheme } from '../../../src/providers/theme-provider';
+import { brandColors } from '../../../src/theme/colors';
 import { iosSystemColors } from '../../../src/theme/ios-colors';
 
 type DetailParams = {
@@ -270,44 +272,58 @@ export default function PlaylistDetail() {
     }
   }, []);
 
-  // Header actions: follow (public non-owner) + pin (auth) + owner more-menu.
-  useEffect(() => {
-    navigation.setOptions({
-      title: playlist?.name ?? t('metadata.detail.fallbackTitle'),
-      headerRight: () =>
-        playlist ? (
-          <View style={styles.headerActions}>
-            {isAuthenticated && isFollowable ? (
-              <PlaylistFollowButton isFollowing={isFollowing} onToggle={handleToggleFollow} loading={followLoading} />
-            ) : null}
-            {isAuthenticated ? <PlaylistPinButton isPinned={isPinned} onToggle={handleTogglePin} /> : null}
-            {isOwner ? (
-              <Pressable
-                onPress={() => setActionsVisible(true)}
-                hitSlop={8}
-                accessibilityRole="button"
-                accessibilityLabel={t('detail.actions')}
-              >
-                <Icon name="more" size={22} color={systemColors.label as string} />
-              </Pressable>
-            ) : null}
-          </View>
-        ) : null,
-    });
-  }, [
-    navigation,
-    playlist,
-    isAuthenticated,
-    isFollowable,
-    isFollowing,
-    followLoading,
-    isPinned,
-    isOwner,
-    handleToggleFollow,
-    handleTogglePin,
-    systemColors,
-    t,
-  ]);
+  // Floating action FABs over the hero (the native header bar is gone): follow
+  // (public non-owner) + pin (auth) + owner more-menu. Rendered with the current
+  // collapse state so the follow control swaps to an icon FAB in header mode.
+  const renderActions = useCallback(
+    (collapsed: boolean) =>
+      playlist ? (
+        <>
+          {isAuthenticated && isFollowable ? (
+            <PlaylistFollowButton
+              isFollowing={isFollowing}
+              onToggle={handleToggleFollow}
+              loading={followLoading}
+              collapsed={collapsed}
+            />
+          ) : null}
+          {isAuthenticated ? (
+            <GlassIconButton
+              iconName={isPinned ? 'pin.fill' : 'pin'}
+              iconColor={isPinned ? brandColors.primary : systemColors.label}
+              onPress={() => {
+                hapticSelection();
+                handleTogglePin();
+              }}
+              accessibilityLabel={isPinned ? t('library.pin.unpinAriaLabel') : t('library.pin.pinAriaLabel')}
+              fallbackColor={systemColors.fill}
+            />
+          ) : null}
+          {isOwner ? (
+            <GlassIconButton
+              iconName="more"
+              iconColor={systemColors.label}
+              onPress={() => setActionsVisible(true)}
+              accessibilityLabel={t('detail.actions')}
+              fallbackColor={systemColors.fill}
+            />
+          ) : null}
+        </>
+      ) : null,
+    [
+      playlist,
+      isAuthenticated,
+      isFollowable,
+      isFollowing,
+      handleToggleFollow,
+      followLoading,
+      isPinned,
+      handleTogglePin,
+      isOwner,
+      systemColors,
+      t,
+    ],
+  );
 
   const hero = useMemo(
     () => ({
@@ -358,6 +374,7 @@ export default function PlaylistDetail() {
         fetchNextPage={query.fetchNextPage}
         onActivateClimb={activate}
         emptyMessage={t('detail.empty')}
+        actions={renderActions}
       />
 
       <PlaylistActionsMenu
@@ -380,11 +397,6 @@ export default function PlaylistDetail() {
 }
 
 const styles = StyleSheet.create({
-  headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
   stateContainer: {
     flex: 1,
     alignItems: 'center',

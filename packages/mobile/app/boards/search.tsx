@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, TextInput, StyleSheet, Platform, Pressable } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import type { UserBoard } from '@boardsesh/shared-schema';
 import { useSetActiveBoard } from '../../src/lib/graphql/use-active-board';
@@ -16,6 +16,7 @@ import { BoardCarousel } from '../../src/components/board-discovery/BoardCarouse
 import { BoardDetailSheet } from '../../src/components/board-discovery/BoardDetailSheet';
 import { userBoardToItem } from '../../src/components/board-discovery/board-items';
 import type { DiscoveryBoardItem } from '../../src/components/board-discovery/BoardDiscoveryCard';
+import { resolveBoardReturnTo } from '../../src/lib/boards/board-return-to';
 import { brandColors } from '../../src/theme/colors';
 import { spacing, borderRadius } from '../../src/theme/tokens';
 
@@ -50,6 +51,8 @@ export default function BoardSearchScreen() {
   const { systemColors } = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { returnTo } = useLocalSearchParams<{ returnTo?: string }>();
+  const boardReturnTo = resolveBoardReturnTo(returnTo);
   const { t } = useTranslation('boards');
   const { showToast } = useToast();
   const setActiveBoard = useSetActiveBoard();
@@ -126,14 +129,14 @@ export default function BoardSearchScreen() {
         setSelectedUuid(null);
         // router.back() is the same foreground unmount the X button uses —
         // proven safe for expo-maps — closing the search screen first; then
-        // dismiss the boards modal back onto the climbs list.
+        // dismiss the boards modal back onto the tab it was opened from.
         router.back();
-        router.dismissTo('/(tabs)/climbs');
+        router.dismissTo(boardReturnTo);
       } catch {
         showToast(t('mobile.boardSwitchError'), 'error');
       }
     },
-    [setActiveBoard, router, showToast, t],
+    [setActiveBoard, router, boardReturnTo, showToast, t],
   );
 
   // Memoised so the native MapView doesn't re-bind the handler every render.

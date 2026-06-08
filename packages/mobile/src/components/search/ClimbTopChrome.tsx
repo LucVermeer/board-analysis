@@ -2,16 +2,20 @@
 // bar owns text input and this chrome carries board/angle/create/light controls.
 // On fallback devices, it also keeps a custom climb-name search row. The bottom
 // right filter FAB owns the full filter sheet and long-press grade rail.
+//
+// The board pill, the glass action islands and the angle / lightbulb controls are
+// shared with the Discover chrome — they live in `../chrome` so both tabs read as
+// one system. This file keeps the climbs-only pieces: the search row, the
+// Material filter button, and the active-filter summary capsule.
 
-import { type RefObject, useCallback, useMemo, useState } from 'react';
+import { type RefObject, useCallback } from 'react';
 import { Keyboard, type LayoutChangeEvent, StyleSheet, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
-import { formatBoardDisplayName } from '@boardsesh/board-config';
 import { useTheme } from '../../providers/theme-provider';
-import { useActiveBoard, useSetActiveBoard } from '../../lib/graphql/use-active-board';
+import { useActiveBoard } from '../../lib/graphql/use-active-board';
 import { useOptionalBluetoothContext } from '../../providers/bluetooth-provider';
 import { spacing, shadows } from '../../theme/tokens';
 import { glassSize } from '../../theme/layout';
@@ -22,13 +26,13 @@ import { PressableSurface } from '../PressableSurface';
 import { SearchHeader, type SearchHeaderHandle } from '../SearchHeader';
 import { Text } from '../Text';
 import { Icon } from '../Icon';
-import { AngleSelectorSheet } from '../play-drawer/AngleSelectorSheet';
+import { BoardPill } from '../chrome/BoardPill';
+import { GlassActionToolbar, GlassToolbarAction, TOP_ACTION_SIZE } from '../chrome/GlassActionToolbar';
+import { AngleToolbarAction } from '../chrome/AngleToolbarAction';
+import { LightbulbToolbarAction } from '../chrome/LightbulbToolbarAction';
 import { FilterButton } from './FilterButton';
 
-const CAPSULE_RADIUS = glassSize.capsule / 2;
-const TOP_ACTION_SIZE = glassSize.standard;
 const TOP_TOOLBAR_WIDTH = TOP_ACTION_SIZE * 2;
-const TOP_TOOLBAR_RADIUS = TOP_ACTION_SIZE / 2;
 const SUMMARY_CAPSULE_HEIGHT = glassSize.mini;
 const SUMMARY_CAPSULE_RADIUS = SUMMARY_CAPSULE_HEIGHT / 2;
 
@@ -73,45 +77,17 @@ export function ClimbTopChrome({
   filterSummary,
 }: ClimbTopChromeProps) {
   const { t } = useTranslation('climbs');
-  const { t: tSettings } = useTranslation('settings');
-  const { t: tCommon } = useTranslation('common');
-  const { t: tSession } = useTranslation('session');
-  const { systemColors, brandColors, variant } = useTheme();
+  const { systemColors, variant } = useTheme();
   const nativeGlass = useNativeGlass();
   const insets = useSafeAreaInsets();
   const { data: activeBoard } = useActiveBoard();
-  const setActiveBoard = useSetActiveBoard();
   const bluetooth = useOptionalBluetoothContext();
-  const bluetoothConnected = bluetooth?.isConnected ?? false;
-  const [angleSelectorVisible, setAngleSelectorVisible] = useState(false);
   const usesCustomSearch = searchMode === 'custom';
-
-  const boardLabel = useMemo(() => {
-    if (!activeBoard) return null;
-    const angle = activeBoard.angle != null ? `${activeBoard.angle}°` : null;
-    const isNamed = activeBoard.name != null && activeBoard.name.trim().length > 0;
-    const parts = isNamed
-      ? [activeBoard.name, angle]
-      : [formatBoardDisplayName(activeBoard.boardType), activeBoard.sizeName ?? activeBoard.layoutName ?? null, angle];
-    return parts.filter(Boolean).join(' • ');
-  }, [activeBoard]);
 
   const handleLayout = useCallback(
     (event: LayoutChangeEvent) => onHeightChange(event.nativeEvent.layout.height),
     [onHeightChange],
   );
-
-  const handleBoardPress = useCallback(() => {
-    hapticLight();
-    onOpenBoardDetail();
-  }, [onOpenBoardDetail]);
-
-  const handleBluetoothPress = useCallback(() => {
-    if (!bluetooth) return;
-    hapticLight();
-    if (bluetooth.isConnected) void bluetooth.disconnect();
-    else void bluetooth.connect();
-  }, [bluetooth]);
 
   const handleCloseOverlays = useCallback(() => {
     searchFieldRef.current?.blur();
@@ -120,24 +96,6 @@ export function ClimbTopChrome({
   }, [onCloseGrade, searchFieldRef]);
 
   useFocusEffect(useCallback(() => () => handleCloseOverlays(), [handleCloseOverlays]));
-
-  const handleOpenAngleSelector = useCallback(() => {
-    if (!activeBoard || activeBoard.isAngleAdjustable === false || activeBoard.angle == null) return;
-    hapticLight();
-    setAngleSelectorVisible(true);
-  }, [activeBoard]);
-
-  const handleCloseAngleSelector = useCallback(() => {
-    setAngleSelectorVisible(false);
-  }, []);
-
-  const handleAngleChange = useCallback(
-    (newAngle: number) => {
-      if (!activeBoard || activeBoard.isAngleAdjustable === false || newAngle === activeBoard.angle) return;
-      void setActiveBoard({ ...activeBoard, angle: newAngle });
-    },
-    [activeBoard, setActiveBoard],
-  );
 
   const handleFocus = useCallback(() => {
     onCloseGrade();
@@ -151,223 +109,109 @@ export function ClimbTopChrome({
   const canOpenAngleSelector = activeBoard?.isAngleAdjustable !== false && activeBoard?.angle != null;
   const leftActionCount = (canCreate ? 1 : 0) + (canOpenAngleSelector ? 1 : 0);
 
-  // Right toolbar: light/bluetooth only. The filter affordance now lives to the
-  // left of the search field (Material) or as the bottom FAB (Liquid Glass).
-  const rightActionCount = bluetooth ? 1 : 0;
-
   return (
-    <>
-      <View pointerEvents="box-none" style={[styles.container, { paddingTop: insets.top }]} onLayout={handleLayout}>
-        {/* Scrim: opaque screen background behind the controls, fading to clear at
-            the bottom edge — hides the climb list scrolling up behind the floating
-            islands (the gaps between them otherwise bleed list content = clutter). */}
-        <LinearGradient
-          pointerEvents="none"
-          colors={[systemColors.background, systemColors.background, 'transparent'] as const}
-          locations={[0, 0.7, 1]}
-          style={StyleSheet.absoluteFill}
-        />
-        <View pointerEvents="box-none" style={styles.row}>
-          <View pointerEvents="box-none" style={styles.leftSlot}>
-            {canCreate || canOpenAngleSelector ? (
-              <View
-                style={[
-                  styles.actionToolbar,
-                  { width: TOP_ACTION_SIZE * leftActionCount },
-                  !nativeGlass && shadows.sm,
-                  !nativeGlass && { borderWidth: StyleSheet.hairlineWidth, borderColor: systemColors.separator },
-                ]}
-              >
-                <GlassSurface
-                  glassEffectStyle="regular"
-                  fallbackColor={systemColors.elevatedSurface}
-                  borderRadius={TOP_TOOLBAR_RADIUS}
-                  style={StyleSheet.absoluteFill}
-                  pointerEvents="none"
-                />
-                {canCreate ? (
-                  <PressableSurface
-                    onPress={onCreate}
-                    feedback="opacity"
-                    hitSlop={4}
-                    accessibilityRole="button"
-                    accessibilityLabel={t('mobile.create.fab.ariaLabel')}
-                    style={styles.toolbarAction}
-                  >
-                    <Icon name="plus" size={24} color={systemColors.label as string} />
-                  </PressableSurface>
-                ) : null}
-                {canOpenAngleSelector ? (
-                  <PressableSurface
-                    onPress={handleOpenAngleSelector}
-                    feedback="opacity"
-                    hitSlop={4}
-                    accessibilityRole="button"
-                    accessibilityLabel={tSession('mobile.angleSelector.title')}
-                    style={styles.toolbarAction}
-                  >
-                    <Text variant="caption1" style={[styles.angleActionText, { color: systemColors.label }]}>
-                      {activeBoard.angle}°
-                    </Text>
-                  </PressableSurface>
-                ) : null}
-              </View>
-            ) : null}
-          </View>
-
-          <View pointerEvents="box-none" style={styles.centerSlot}>
-            {boardLabel ? (
-              <PressableSurface
-                onPress={handleBoardPress}
-                feedback="scale"
-                scaleTo={0.96}
-                accessibilityRole="button"
-                accessibilityLabel={boardLabel}
-                style={styles.capsulePress}
-              >
-                <View
-                  style={[
-                    styles.capsuleGlass,
-                    !nativeGlass && shadows.sm,
-                    !nativeGlass && { borderWidth: StyleSheet.hairlineWidth, borderColor: systemColors.separator },
-                  ]}
-                >
-                  <GlassSurface
-                    glassEffectStyle="regular"
-                    fallbackColor={systemColors.elevatedSurface}
-                    borderRadius={CAPSULE_RADIUS}
-                    style={StyleSheet.absoluteFill}
-                    pointerEvents="none"
-                  />
-                  <Icon name="boards" size={14} color={systemColors.secondaryLabel as string} />
-                  <Text
-                    variant="caption1"
-                    numberOfLines={1}
-                    ellipsizeMode="tail"
-                    color={systemColors.secondaryLabel as string}
-                    style={styles.capsuleText}
-                  >
-                    {boardLabel}
-                  </Text>
-                </View>
-              </PressableSurface>
-            ) : null}
-          </View>
-
-          <View pointerEvents="box-none" style={styles.rightSlot}>
-            {rightActionCount > 0 ? (
-              <View
-                style={[
-                  styles.actionToolbar,
-                  { width: TOP_ACTION_SIZE * rightActionCount },
-                  !nativeGlass && shadows.sm,
-                  !nativeGlass && { borderWidth: StyleSheet.hairlineWidth, borderColor: systemColors.separator },
-                ]}
-              >
-                <GlassSurface
-                  glassEffectStyle="regular"
-                  fallbackColor={systemColors.elevatedSurface}
-                  borderRadius={TOP_TOOLBAR_RADIUS}
-                  style={StyleSheet.absoluteFill}
-                  pointerEvents="none"
-                />
-                {bluetooth ? (
-                  <PressableSurface
-                    onPress={handleBluetoothPress}
-                    feedback="opacity"
-                    hitSlop={4}
-                    accessibilityRole="button"
-                    accessibilityLabel={
-                      bluetoothConnected ? tCommon('lightControl.disconnect') : tSettings('ble.connectBoard')
-                    }
-                    style={styles.toolbarAction}
-                  >
-                    <Icon
-                      name={bluetoothConnected ? 'lightbulb.fill' : 'lightbulb'}
-                      size={23}
-                      color={bluetoothConnected ? brandColors.warning : (systemColors.label as string)}
-                    />
-                  </PressableSurface>
-                ) : null}
-              </View>
-            ) : null}
-          </View>
+    <View pointerEvents="box-none" style={[styles.container, { paddingTop: insets.top }]} onLayout={handleLayout}>
+      {/* Scrim: opaque screen background behind the controls, fading to clear at
+          the bottom edge — hides the climb list scrolling up behind the floating
+          islands (the gaps between them otherwise bleed list content = clutter). */}
+      <LinearGradient
+        pointerEvents="none"
+        colors={[systemColors.background, systemColors.background, 'transparent'] as const}
+        locations={[0, 0.7, 1]}
+        style={StyleSheet.absoluteFill}
+      />
+      <View pointerEvents="box-none" style={styles.row}>
+        <View pointerEvents="box-none" style={styles.leftSlot}>
+          {leftActionCount > 0 ? (
+            <GlassActionToolbar actionCount={leftActionCount}>
+              {canCreate ? (
+                <GlassToolbarAction onPress={onCreate} accessibilityLabel={t('mobile.create.fab.ariaLabel')}>
+                  <Icon name="plus" size={24} color={systemColors.label as string} />
+                </GlassToolbarAction>
+              ) : null}
+              <AngleToolbarAction />
+            </GlassActionToolbar>
+          ) : null}
         </View>
 
-        {filterSummary ? (
-          <View pointerEvents="box-none" style={styles.summaryRow}>
-            <PressableSurface
-              onPress={() => {
-                hapticLight();
-                filterSummary.onClear();
-              }}
-              feedback="scale"
-              scaleTo={0.96}
-              accessibilityRole="button"
-              accessibilityLabel={filterSummary.text}
-              accessibilityHint={t('mobile.search.clearAll')}
-              style={styles.summaryPress}
-            >
-              <View
-                style={[
-                  styles.summaryCapsule,
-                  !nativeGlass && shadows.sm,
-                  !nativeGlass && { borderWidth: StyleSheet.hairlineWidth, borderColor: systemColors.separator },
-                ]}
-              >
-                <GlassSurface
-                  glassEffectStyle="regular"
-                  fallbackColor={systemColors.elevatedSurface}
-                  borderRadius={SUMMARY_CAPSULE_RADIUS}
-                  style={StyleSheet.absoluteFill}
-                  pointerEvents="none"
-                />
-                <Text
-                  variant="caption1"
-                  numberOfLines={1}
-                  ellipsizeMode="tail"
-                  color={systemColors.label as string}
-                  style={styles.summaryText}
-                >
-                  {filterSummary.text}
-                </Text>
-              </View>
-            </PressableSurface>
-          </View>
-        ) : null}
+        <View pointerEvents="box-none" style={styles.centerSlot}>
+          <BoardPill onPress={onOpenBoardDetail} />
+        </View>
 
-        {usesCustomSearch ? (
-          <View pointerEvents="box-none" style={styles.searchStack}>
-            <View pointerEvents="box-none" style={styles.searchRow}>
-              {variant === 'material' && onOpenFilters ? (
-                <FilterButton activeFilterCount={activeFilterCount} onPress={onOpenFilters} />
-              ) : null}
-              <View pointerEvents="box-none" style={styles.searchSlot}>
-                <SearchHeader
-                  ref={searchFieldRef}
-                  initialValue={searchInitialValue}
-                  placeholder={searchPlaceholder}
-                  onChangeText={onSearchChange}
-                  onFocus={handleFocus}
-                  onBlur={handleBlur}
-                  height={TOP_ACTION_SIZE}
-                />
-              </View>
+        <View pointerEvents="box-none" style={styles.rightSlot}>
+          {/* Right toolbar: light/bluetooth only. The filter affordance lives to
+              the left of the search field (Material) or as the bottom FAB. */}
+          {bluetooth ? (
+            <GlassActionToolbar actionCount={1}>
+              <LightbulbToolbarAction />
+            </GlassActionToolbar>
+          ) : null}
+        </View>
+      </View>
+
+      {filterSummary ? (
+        <View pointerEvents="box-none" style={styles.summaryRow}>
+          <PressableSurface
+            onPress={() => {
+              hapticLight();
+              filterSummary.onClear();
+            }}
+            feedback="scale"
+            scaleTo={0.96}
+            accessibilityRole="button"
+            accessibilityLabel={filterSummary.text}
+            accessibilityHint={t('mobile.search.clearAll')}
+            style={styles.summaryPress}
+          >
+            <View
+              style={[
+                styles.summaryCapsule,
+                !nativeGlass && shadows.sm,
+                !nativeGlass && { borderWidth: StyleSheet.hairlineWidth, borderColor: systemColors.separator },
+              ]}
+            >
+              <GlassSurface
+                glassEffectStyle="regular"
+                fallbackColor={systemColors.elevatedSurface}
+                borderRadius={SUMMARY_CAPSULE_RADIUS}
+                style={StyleSheet.absoluteFill}
+                pointerEvents="none"
+              />
+              <Text
+                variant="caption1"
+                numberOfLines={1}
+                ellipsizeMode="tail"
+                color={systemColors.label as string}
+                style={styles.summaryText}
+              >
+                {filterSummary.text}
+              </Text>
+            </View>
+          </PressableSurface>
+        </View>
+      ) : null}
+
+      {usesCustomSearch ? (
+        <View pointerEvents="box-none" style={styles.searchStack}>
+          <View pointerEvents="box-none" style={styles.searchRow}>
+            {variant === 'material' && onOpenFilters ? (
+              <FilterButton activeFilterCount={activeFilterCount} onPress={onOpenFilters} />
+            ) : null}
+            <View pointerEvents="box-none" style={styles.searchSlot}>
+              <SearchHeader
+                ref={searchFieldRef}
+                initialValue={searchInitialValue}
+                placeholder={searchPlaceholder}
+                onChangeText={onSearchChange}
+                onFocus={handleFocus}
+                onBlur={handleBlur}
+                height={TOP_ACTION_SIZE}
+              />
             </View>
           </View>
-        ) : null}
-      </View>
-      {activeBoard ? (
-        <AngleSelectorSheet
-          visible={angleSelectorVisible}
-          onClose={handleCloseAngleSelector}
-          boardName={activeBoard.boardType}
-          layoutId={activeBoard.layoutId}
-          currentAngle={activeBoard.angle}
-          onAngleChange={handleAngleChange}
-        />
+        </View>
       ) : null}
-    </>
+    </View>
   );
 }
 
@@ -401,41 +245,6 @@ const styles = StyleSheet.create({
     width: TOP_TOOLBAR_WIDTH,
     alignItems: 'flex-end',
     justifyContent: 'center',
-  },
-  capsulePress: {
-    height: glassSize.capsule,
-    maxWidth: 180,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  capsuleGlass: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    height: glassSize.capsule,
-    borderRadius: CAPSULE_RADIUS,
-    paddingHorizontal: 14,
-    gap: 6,
-  },
-  capsuleText: {
-    fontWeight: '500',
-    flexShrink: 1,
-  },
-  actionToolbar: {
-    height: TOP_ACTION_SIZE,
-    borderRadius: TOP_TOOLBAR_RADIUS,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    overflow: 'hidden',
-  },
-  toolbarAction: {
-    width: TOP_ACTION_SIZE,
-    height: TOP_ACTION_SIZE,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  angleActionText: {
-    fontWeight: '700',
   },
   searchStack: {
     paddingHorizontal: spacing[4],

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, ScrollView, StyleSheet } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import type BottomSheet from '@gorhom/bottom-sheet';
 import type { UserBoard } from '@boardsesh/shared-schema';
@@ -21,6 +21,7 @@ import { BluetoothQuickstartSheet } from '../../src/components/board-discovery/B
 import { userBoardToItem, popularConfigToItem } from '../../src/components/board-discovery/board-items';
 import type { DiscoveryBoardItem } from '../../src/components/board-discovery/BoardDiscoveryCard';
 import { useBottomChromeMetrics } from '../../src/hooks/use-bottom-chrome-metrics';
+import { resolveBoardReturnTo } from '../../src/lib/boards/board-return-to';
 import { iosSystemColors } from '../../src/theme/ios-colors';
 import { spacing } from '../../src/theme/tokens';
 
@@ -28,6 +29,8 @@ export default function BoardSelection() {
   const { isAuthenticated, refreshAuthState } = useAuth();
   const bottomChrome = useBottomChromeMetrics();
   const router = useRouter();
+  const { returnTo } = useLocalSearchParams<{ returnTo?: string }>();
+  const boardReturnTo = resolveBoardReturnTo(returnTo);
   const { t } = useTranslation('boards');
   const { showToast } = useToast();
 
@@ -76,14 +79,15 @@ export default function BoardSelection() {
         // only once the write succeeds (a failed write must not strand the user
         // on a board that won't survive the next cold start).
         await setActiveBoard(board);
-        // Dismiss the boards modal back onto the Climbs list (replaces with it if
-        // climbs isn't already underneath, e.g. opened from a deep link).
-        router.dismissTo('/(tabs)/climbs');
+        // Dismiss the boards modal back onto the tab it was opened from — Climbs
+        // by default, Discover when the pill there opened it (replaces with that
+        // tab if it isn't already underneath, e.g. opened from a deep link).
+        router.dismissTo(boardReturnTo);
       } catch {
         showToast(t('mobile.boardSwitchError'), 'error');
       }
     },
-    [setActiveBoard, router, showToast, t],
+    [setActiveBoard, router, boardReturnTo, showToast, t],
   );
 
   const myBoardItems = useMemo(
@@ -246,7 +250,7 @@ export default function BoardSelection() {
           <BoardModeCard
             icon="search"
             label={t('mobile.discovery.search')}
-            onPress={() => router.push('/boards/search')}
+            onPress={() => router.push({ pathname: '/boards/search', params: { returnTo: boardReturnTo } })}
           />
         </View>
 
