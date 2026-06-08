@@ -1,8 +1,9 @@
-import { memo, useEffect, useState } from 'react';
-import { InteractionManager, View, StyleSheet } from 'react-native';
+import { memo } from 'react';
+import { View, StyleSheet } from 'react-native';
 import type { BoardName } from '@boardsesh/shared-schema';
 import { SwipeBoardCarousel } from './SwipeBoardCarousel';
 import { iosSystemColors } from '../../theme/ios-colors';
+import { useDeferredAfterInteractions } from '../../hooks/use-deferred-after-interactions';
 
 type BoardRenderData = {
   boardWidth: number;
@@ -57,22 +58,12 @@ export const DeferredBoard = memo(function DeferredBoard({
   boardRenderData,
   ...carouselProps
 }: DeferredBoardProps) {
-  const [ready, setReady] = useState(false);
-
-  useEffect(() => {
-    if (!open) {
-      setReady(false);
-      return;
-    }
-
-    const handle = InteractionManager.runAfterInteractions(() => {
-      setReady(true);
-    });
-
-    return () => {
-      handle.cancel();
-    };
-  }, [open]);
+  // Gate on the open transition only (no resetKey) so the board stays mounted
+  // across in-drawer swipes once the drawer is open. The hook defers past the
+  // present animation in the common case but falls back to a bounded timeout, so
+  // a starved interaction queue can't leave the board permanently unmounted
+  // (the "blank board until you reopen" bug).
+  const ready = useDeferredAfterInteractions(open);
 
   if (!ready) {
     return (
