@@ -26,6 +26,7 @@ import { QueueSnackbarProvider } from '../src/providers/queue-snackbar-provider'
 import { DrawerHostProvider } from '../src/providers/drawer-host-provider';
 import { DeepLinkProvider } from '../src/providers/deep-link-provider';
 import { ShareTargetProvider } from '../src/providers/share-target-provider';
+import { TabBarHeightProvider } from '../src/providers/tab-bar-height-provider';
 import { FeatureFlagsProvider } from '../src/providers/feature-flags-provider';
 import { PartyProfileProvider } from '../src/providers/party-profile-provider';
 import { ConnectionSettingsProvider } from '../src/providers/connection-settings-provider';
@@ -269,36 +270,38 @@ function RootLayout() {
                                           <DrawerHostProvider>
                                             <DeepLinkProvider>
                                               <ShareTargetProvider>
-                                                <ThemedNavigation>
-                                                  <Stack
-                                                    screenOptions={{ headerShown: false }}
-                                                    initialRouteName="index"
-                                                  >
-                                                    <Stack.Screen name="index" />
-                                                    <Stack.Screen name="(tabs)" />
-                                                    <Stack.Screen
-                                                      name="auth"
-                                                      options={{ headerShown: false, gestureEnabled: false }}
-                                                    />
-                                                    <Stack.Screen name="session/[sessionId]" />
-                                                    <Stack.Screen
-                                                      name="join/[sessionId]"
-                                                      options={{ presentation: 'modal', headerShown: false }}
-                                                    />
-                                                    <Stack.Screen
-                                                      name="share-beta"
-                                                      options={{ presentation: 'modal', headerShown: false }}
-                                                    />
-                                                    {/* Board selection is a modal off the Climbs capsule /
+                                                <TabBarHeightProvider>
+                                                  <ThemedNavigation>
+                                                    <Stack
+                                                      screenOptions={{ headerShown: false }}
+                                                      initialRouteName="index"
+                                                    >
+                                                      <Stack.Screen name="index" />
+                                                      <Stack.Screen name="(tabs)" />
+                                                      <Stack.Screen
+                                                        name="auth"
+                                                        options={{ headerShown: false, gestureEnabled: false }}
+                                                      />
+                                                      <Stack.Screen name="session/[sessionId]" />
+                                                      <Stack.Screen
+                                                        name="join/[sessionId]"
+                                                        options={{ presentation: 'modal', headerShown: false }}
+                                                      />
+                                                      <Stack.Screen
+                                                        name="share-beta"
+                                                        options={{ presentation: 'modal', headerShown: false }}
+                                                      />
+                                                      {/* Board selection is a modal off the Climbs capsule /
                                                       no-board CTA — board switching is rare, so it doesn't
                                                       earn a tab. Its own _layout owns the headers. */}
-                                                    <Stack.Screen
-                                                      name="boards"
-                                                      options={{ presentation: 'modal', headerShown: false }}
-                                                    />
-                                                  </Stack>
-                                                </ThemedNavigation>
-                                                <PersistentQueueBar />
+                                                      <Stack.Screen
+                                                        name="boards"
+                                                        options={{ presentation: 'modal', headerShown: false }}
+                                                      />
+                                                    </Stack>
+                                                  </ThemedNavigation>
+                                                  <PersistentQueueBar />
+                                                </TabBarHeightProvider>
                                                 <AnalyticsScreenTracker />
                                               </ShareTargetProvider>
                                             </DeepLinkProvider>
