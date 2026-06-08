@@ -67,6 +67,22 @@ export default function SessionDetailScreen() {
 
   const handleTickPress = useCallback((tick: SessionDetailTick) => navigateToSessionClimb(router, tick), [router]);
 
+  // Stable per-row factory so the memoized `SessionTickRow`s keep their identity
+  // across re-renders — a fresh inline arrow would force FlashList to re-evaluate
+  // every visible item each pass.
+  const renderItem = useCallback(
+    ({ item }: { item: SessionDetailTick }) => (
+      <SessionTickRow
+        tick={item}
+        isMultiUser={isMultiUser}
+        participant={participantById.get(item.userId)}
+        onPress={handleTickPress}
+        onOpenComments={handleOpenTickComments}
+      />
+    ),
+    [isMultiUser, participantById, handleTickPress, handleOpenTickComments],
+  );
+
   // Header: title + edit overflow for an owned inferred session.
   useEffect(() => {
     navigation.setOptions({
@@ -137,15 +153,7 @@ export default function SessionDetailScreen() {
     <View style={styles.flex}>
       <FlashList
         data={session.ticks}
-        renderItem={({ item }) => (
-          <SessionTickRow
-            tick={item}
-            isMultiUser={isMultiUser}
-            participant={participantById.get(item.userId)}
-            onPress={handleTickPress}
-            onOpenComments={handleOpenTickComments}
-          />
-        )}
+        renderItem={renderItem}
         keyExtractor={(tick) => tick.uuid}
         ListHeaderComponent={header}
         contentContainerStyle={{ paddingBottom }}

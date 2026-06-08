@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Pressable, StyleSheet, TextInput } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { useLocalSearchParams, useRouter, useNavigation } from 'expo-router';
@@ -14,6 +14,46 @@ import { iosSystemColors } from '../../../src/theme/ios-colors';
 import { spacing } from '../../../src/theme/tokens';
 
 const SEARCH_DEBOUNCE_MS = 250;
+
+type SetterStat = { setterUsername: string; climbCount: number };
+
+/** Stable hairline separator — passed to FlashList by reference so it isn't a
+ *  fresh component type each render (which would remount every separator). The
+ *  separator colour is theme-static, so no per-render props are needed. */
+const SetterSeparator = memo(function SetterSeparator() {
+  return <View style={[styles.separator, { backgroundColor: iosSystemColors.separator }]} />;
+});
+
+type SetterRowProps = {
+  setter: SetterStat;
+  isSelected: boolean;
+  onToggle: (username: string) => void;
+};
+
+/** Memoized row so toggling one setter only re-renders that row, not the whole
+ *  windowed list. Pulls `t` / `brandColors` from hooks rather than props so the
+ *  parent's `renderItem` identity stays stable across selection changes. */
+const SetterRow = memo(function SetterRow({ setter, isSelected, onToggle }: SetterRowProps) {
+  const { t } = useTranslation('climbs');
+  const { brandColors } = useTheme();
+  return (
+    <Pressable
+      onPress={() => onToggle(setter.setterUsername)}
+      accessibilityRole="checkbox"
+      accessibilityState={{ checked: isSelected }}
+      accessibilityLabel={setter.setterUsername}
+      style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+    >
+      <View style={styles.rowText}>
+        <Text variant="body">{setter.setterUsername}</Text>
+        <Text variant="footnote" style={styles.count}>
+          {t('mobile.search.climbsCount', { count: setter.climbCount })}
+        </Text>
+      </View>
+      {isSelected ? <Icon name="check.small" size={20} color={brandColors.primary} /> : null}
+    </Pressable>
+  );
+});
 
 type Params = {
   boardName?: string;
@@ -45,6 +85,12 @@ export default function SettersPicker() {
   }, [params.selected]);
 
   const [selected, setSelected] = useState<Set<string>>(() => new Set(initialSelected));
+  // Mirror of `selected` so the stable `renderRow` can look up per-row selection
+  // without listing the whole Set as a dep (which would recreate `renderRow` —
+  // and thus re-render every windowed row — on each toggle). FlashList is told to
+  // re-render via `extraData={selected}` instead.
+  const selectedRef = useRef(selected);
+  selectedRef.current = selected;
   const [searchInput, setSearchInput] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -125,27 +171,10 @@ export default function SettersPicker() {
   }, []);
 
   const renderRow = useCallback(
-    ({ item }: { item: { setterUsername: string; climbCount: number } }) => {
-      const isSelected = selected.has(item.setterUsername);
-      return (
-        <Pressable
-          onPress={() => toggle(item.setterUsername)}
-          accessibilityRole="checkbox"
-          accessibilityState={{ checked: isSelected }}
-          accessibilityLabel={item.setterUsername}
-          style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
-        >
-          <View style={styles.rowText}>
-            <Text variant="body">{item.setterUsername}</Text>
-            <Text variant="footnote" style={styles.count}>
-              {t('mobile.search.climbsCount', { count: item.climbCount })}
-            </Text>
-          </View>
-          {isSelected ? <Icon name="check.small" size={20} color={brandColors.primary} /> : null}
-        </Pressable>
-      );
-    },
-    [selected, toggle, t, brandColors],
+    ({ item }: { item: SetterStat }) => (
+      <SetterRow setter={item} isSelected={selectedRef.current.has(item.setterUsername)} onToggle={toggle} />
+    ),
+    [toggle],
   );
 
   return (
@@ -184,11 +213,10 @@ export default function SettersPicker() {
       ) : (
         <FlashList
           data={setters ?? []}
+          extraData={selected}
           keyExtractor={(item) => item.setterUsername}
           renderItem={renderRow}
-          ItemSeparatorComponent={() => (
-            <View style={[styles.separator, { backgroundColor: iosSystemColors.separator }]} />
-          )}
+          ItemSeparatorComponent={SetterSeparator}
           contentInsetAdjustmentBehavior="automatic"
           ListEmptyComponent={
             <View style={styles.empty}>

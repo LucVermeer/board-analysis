@@ -19,7 +19,7 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FlashList } from '@shopify/flash-list';
 import { useTranslation } from 'react-i18next';
-import type { BoardName } from '@boardsesh/shared-schema';
+import type { BoardName, Climb as SchemaClimb } from '@boardsesh/shared-schema';
 import type { Climb } from '@boardsesh/queue';
 import { Text } from '../Text';
 import { Icon } from '../Icon';
@@ -156,6 +156,11 @@ export function PlaylistDetailView({
     if (hasNextPage && !isFetchingNextPage) fetchNextPage();
   }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
+  // Stable per-row activate handler so the memoized `ClimbListRow`s aren't handed
+  // a fresh closure each render — every renderItem rebuild (e.g. when the sticky
+  // header `collapsed` flips during scroll) would otherwise re-render every row.
+  const handleActivate = useCallback((tapped: SchemaClimb) => onActivateClimb(toQueueClimb(tapped)), [onActivateClimb]);
+
   const renderItem = useCallback(
     ({ item }: { item: Climb }) => {
       if (!boardConfig) return null;
@@ -167,11 +172,11 @@ export function PlaylistDetailView({
           sizeId={boardConfig.sizeId}
           setIds={boardConfig.setIds}
           angle={boardConfig.angle}
-          onPress={(tapped) => onActivateClimb(toQueueClimb(tapped))}
+          onPress={handleActivate}
         />
       );
     },
-    [boardConfig, onActivateClimb],
+    [boardConfig, handleActivate],
   );
 
   const baseColor = hero.color && isValidHexColor(hero.color) ? hero.color : PLAYLIST_COLORS[0];
