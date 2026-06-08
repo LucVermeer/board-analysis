@@ -158,7 +158,14 @@ function makeProps(overrides: {
   };
 
   return {
-    state: { routes, index: activeIndex },
+    state: {
+      key: 'tab-state',
+      type: 'tab',
+      stale: false as const,
+      routeNames: routes.map((r) => r.name),
+      routes,
+      index: activeIndex,
+    },
     descriptors,
     navigation,
     insets: { bottom: 0, top: 0, left: 0, right: 0 },
@@ -173,13 +180,13 @@ describe('MaterialTabBar', () => {
   describe('badge rendering', () => {
     it('renders a badge dot when tabBarBadge is set', () => {
       const props = makeProps({ tabBarBadge: '' });
-      const { queryByTestId } = render(<MaterialTabBar {...(props as Parameters<typeof MaterialTabBar>[0])} />);
+      const { queryByTestId } = render(<MaterialTabBar {...(props as unknown as Parameters<typeof MaterialTabBar>[0])} />);
       expect(queryByTestId('badge')).not.toBeNull();
     });
 
     it('does not render a badge when tabBarBadge is undefined', () => {
       const props = makeProps({ tabBarBadge: undefined });
-      const { queryByTestId } = render(<MaterialTabBar {...(props as Parameters<typeof MaterialTabBar>[0])} />);
+      const { queryByTestId } = render(<MaterialTabBar {...(props as unknown as Parameters<typeof MaterialTabBar>[0])} />);
       expect(queryByTestId('badge')).toBeNull();
     });
   });
@@ -187,7 +194,7 @@ describe('MaterialTabBar', () => {
   describe('navigation callbacks', () => {
     it('emits tabPress and navigates when an inactive tab is pressed', () => {
       const props = makeProps({ activeIndex: 0 });
-      const { getAllByRole } = render(<MaterialTabBar {...(props as Parameters<typeof MaterialTabBar>[0])} />);
+      const { getAllByRole } = render(<MaterialTabBar {...(props as unknown as Parameters<typeof MaterialTabBar>[0])} />);
       const tabs = getAllByRole('tab');
       // Press the second tab (index 1, inactive)
       fireEvent.click(tabs[1]);
@@ -201,7 +208,7 @@ describe('MaterialTabBar', () => {
 
     it('does not navigate when the already-focused tab is pressed', () => {
       const props = makeProps({ activeIndex: 0 });
-      const { getAllByRole } = render(<MaterialTabBar {...(props as Parameters<typeof MaterialTabBar>[0])} />);
+      const { getAllByRole } = render(<MaterialTabBar {...(props as unknown as Parameters<typeof MaterialTabBar>[0])} />);
       const tabs = getAllByRole('tab');
       // Press the first tab (already focused)
       fireEvent.click(tabs[0]);
@@ -215,7 +222,7 @@ describe('MaterialTabBar', () => {
 
     it('emits tabLongPress on long press', () => {
       const props = makeProps({ activeIndex: 0 });
-      const { getAllByRole } = render(<MaterialTabBar {...(props as Parameters<typeof MaterialTabBar>[0])} />);
+      const { getAllByRole } = render(<MaterialTabBar {...(props as unknown as Parameters<typeof MaterialTabBar>[0])} />);
       const tabs = getAllByRole('tab');
       fireEvent.contextMenu(tabs[1]);
       expect(props.navigation.emit).toHaveBeenCalledWith({
@@ -228,21 +235,21 @@ describe('MaterialTabBar', () => {
   describe('accessibility state', () => {
     it('marks the focused tab as selected', () => {
       const props = makeProps({ activeIndex: 0 });
-      const { getAllByRole } = render(<MaterialTabBar {...(props as Parameters<typeof MaterialTabBar>[0])} />);
+      const { getAllByRole } = render(<MaterialTabBar {...(props as unknown as Parameters<typeof MaterialTabBar>[0])} />);
       const tabs = getAllByRole('tab');
       expect(tabs[0].getAttribute('aria-selected')).toBe('true');
     });
 
     it('marks unfocused tabs as not selected', () => {
       const props = makeProps({ activeIndex: 0 });
-      const { getAllByRole } = render(<MaterialTabBar {...(props as Parameters<typeof MaterialTabBar>[0])} />);
+      const { getAllByRole } = render(<MaterialTabBar {...(props as unknown as Parameters<typeof MaterialTabBar>[0])} />);
       const tabs = getAllByRole('tab');
       expect(tabs[1].getAttribute('aria-selected')).toBe('false');
     });
 
     it('uses the title as the accessibility label', () => {
       const props = makeProps({ activeIndex: 0, title: 'Home' });
-      const { getAllByRole } = render(<MaterialTabBar {...(props as Parameters<typeof MaterialTabBar>[0])} />);
+      const { getAllByRole } = render(<MaterialTabBar {...(props as unknown as Parameters<typeof MaterialTabBar>[0])} />);
       const tabs = getAllByRole('tab');
       expect(tabs[0].getAttribute('aria-label')).toBe('Home');
     });
@@ -260,7 +267,7 @@ describe('MaterialTabBar', () => {
         },
         insets: { bottom: 0, top: 0, left: 0, right: 0 },
       };
-      const { getByRole } = render(<MaterialTabBar {...(props as Parameters<typeof MaterialTabBar>[0])} />);
+      const { getByRole } = render(<MaterialTabBar {...(props as unknown as Parameters<typeof MaterialTabBar>[0])} />);
       expect(getByRole('tab').getAttribute('aria-label')).toBe('boards');
     });
   });
