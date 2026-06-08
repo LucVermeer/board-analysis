@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useSyncExternalStore } from 'react';
 import { DEFAULT_GRADE_DISPLAY_FORMAT, type GradeDisplayFormat } from '@boardsesh/play-view';
 import { getPreference, setPreference } from './preference-store';
 
@@ -6,16 +6,19 @@ export const GRADE_DISPLAY_FORMATS = ['v-grade', 'font', 'both'] as const satisf
 
 const STORAGE_KEY = 'gradeDisplayFormat';
 
+// Module-level store. `current`/`hasLoaded` are the canonical snapshot every
+// consumer reads via `getSnapshot`/`getLoadedSnapshot`; `listeners` is the
+// React-managed `Set` that `notify()` fans out across after any mutation.
 let current: GradeDisplayFormat = DEFAULT_GRADE_DISPLAY_FORMAT;
 let hasLoaded = false;
-const listeners = new Set<(format: GradeDisplayFormat) => void>();
+const listeners = new Set<() => void>();
 
 function isGradeDisplayFormat(value: unknown): value is GradeDisplayFormat {
   return typeof value === 'string' && (GRADE_DISPLAY_FORMATS as readonly string[]).includes(value);
 }
 
 function notify(): void {
-  for (const listener of listeners) listener(current);
+  for (const listener of listeners) listener();
 }
 
 export async function loadGradeDisplayFormat(): Promise<GradeDisplayFormat> {
@@ -33,30 +36,44 @@ export async function setGradeDisplayFormatPreference(format: GradeDisplayFormat
   await setPreference(STORAGE_KEY, format);
 }
 
+// `useSyncExternalStore` plumbing. `subscribe` registers the React-supplied
+// store-change callback against the module `Set` (and kicks off the one-time
+// AsyncStorage load on first mount), returning the unsubscribe. The snapshot
+// getters return primitives so React's referential equality check is stable —
+// no new object per render, no tearing.
+function subscribe(onStoreChange: () => void): () => void {
+  listeners.add(onStoreChange);
+  if (!hasLoaded) {
+    void loadGradeDisplayFormat();
+  }
+  return () => {
+    listeners.delete(onStoreChange);
+  };
+}
+
+function getSnapshot(): GradeDisplayFormat {
+  return current;
+}
+
+function getServerSnapshot(): GradeDisplayFormat {
+  return DEFAULT_GRADE_DISPLAY_FORMAT;
+}
+
+function getLoadedSnapshot(): boolean {
+  return hasLoaded;
+}
+
+function getLoadedServerSnapshot(): boolean {
+  return false;
+}
+
 export function useGradeDisplayFormatPreference(): {
   gradeFormat: GradeDisplayFormat;
   loaded: boolean;
   setGradeFormat: (format: GradeDisplayFormat) => void;
 } {
-  const [gradeFormat, setGradeFormatState] = useState<GradeDisplayFormat>(current);
-  const [loaded, setLoaded] = useState<boolean>(hasLoaded);
-
-  useEffect(() => {
-    const listener = (next: GradeDisplayFormat) => {
-      setGradeFormatState(next);
-      setLoaded(true);
-    };
-    listeners.add(listener);
-    if (!hasLoaded) {
-      void loadGradeDisplayFormat();
-    } else {
-      setGradeFormatState(current);
-      setLoaded(true);
-    }
-    return () => {
-      listeners.delete(listener);
-    };
-  }, []);
+  const gradeFormat = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+  const loaded = useSyncExternalStore(subscribe, getLoadedSnapshot, getLoadedServerSnapshot);
 
   const setGradeFormat = useCallback((next: GradeDisplayFormat) => {
     void setGradeDisplayFormatPreference(next);
