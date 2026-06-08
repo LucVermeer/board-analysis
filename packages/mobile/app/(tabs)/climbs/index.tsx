@@ -605,6 +605,16 @@ function ClimbListInner() {
       2,
     );
   }, [filterTokens, t]);
+  const gradeFilterToken = useMemo(
+    () => filterTokens.find((filterToken) => filterToken.key === 'grade'),
+    [filterTokens],
+  );
+  const gradeChip = useMemo(() => {
+    if (gradeFilterToken) {
+      return { label: gradeFilterToken.label, active: true, onClear: gradeFilterToken.clear };
+    }
+    return { label: t('mobile.filter.gradeRange'), active: false };
+  }, [gradeFilterToken, t]);
 
   const stackOptions = useMemo(
     () =>
@@ -776,6 +786,12 @@ function ClimbListInner() {
         activeFilterCount={activeFilterCount}
         onOpenFilters={handleOpenFilters}
         filterSummary={filterSummary ? { text: filterSummary, onClear: handleClearAllFilters } : undefined}
+        gradeBound={gradeBound}
+        grades={grades}
+        gradeRailVisible={showGrade}
+        gradeChip={gradeChip}
+        onOpenGrade={handleOpenGrade}
+        onGradeChange={handleGradeChange}
       />
 
       {filterInTopChrome ? null : (
