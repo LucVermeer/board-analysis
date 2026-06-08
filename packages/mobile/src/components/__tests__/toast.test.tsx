@@ -56,7 +56,9 @@ vi.mock('../Text', () => ({
 }));
 vi.mock('../Icon', () => ({ Icon: ({ name }: { name: string }) => createElement('i', { 'data-icon': name }) }));
 vi.mock('../../theme/colors', () => ({
-  brandColors: { success: '#34C759', error: '#FF3B30', primary: '#6D28D9', warning: '#FF9500' },
+  // Real light-scheme brandColors values (the component reads these from useTheme;
+  // kept here in sync so the mock can't drift from the source palette).
+  brandColors: { success: '#047857', error: '#C81E1E', primary: '#6D28D9', warning: '#B45309' },
   withAlpha: (color: string) => color,
   // Encode both args so tests can assert the variant colour (foreground) and the
   // surface (background) both reach blendOpaque — i.e. the colour-selection logic.
@@ -69,6 +71,7 @@ vi.mock('../../providers/theme-provider', () => ({
   useTheme: () => ({
     variant: ctrl.variant,
     colorScheme: 'light',
+    brandColors: { success: '#047857', error: '#C81E1E', primary: '#6D28D9', warning: '#B45309' },
     systemColors: { secondaryBackground: '#EEE', label: '#000' },
   }),
 }));
@@ -89,7 +92,7 @@ describe('Toast', () => {
     // Variant cue carries through: leading icon, brand-tinted surface, alert role.
     expect(container.querySelector('[data-icon="success"]')).not.toBeNull();
     // blendOpaque(config.color, secondaryBackground): success → brand success hue.
-    expect(snackbar?.getAttribute('data-bg')).toBe('#34C759|#EEE');
+    expect(snackbar?.getAttribute('data-bg')).toBe('#047857|#EEE');
     expect(container.querySelector('[data-view][data-role="alert"]')).not.toBeNull();
     // The glass animated pill must not render on Material.
     expect(container.querySelector('[data-animated]')).toBeNull();
@@ -98,8 +101,8 @@ describe('Toast', () => {
   it('selects the matching icon + tint per variant on the Material variant', () => {
     ctrl.variant = 'material';
     const cases = [
-      { variant: 'error' as const, icon: 'error', color: '#FF3B30' },
-      { variant: 'warning' as const, icon: 'warning', color: '#FF9500' },
+      { variant: 'error' as const, icon: 'error', color: '#C81E1E' },
+      { variant: 'warning' as const, icon: 'warning', color: '#B45309' },
       { variant: 'info' as const, icon: 'info', color: '#6D28D9' },
     ];
     for (const { variant, icon, color } of cases) {

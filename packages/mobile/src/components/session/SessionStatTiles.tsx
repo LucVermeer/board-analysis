@@ -6,7 +6,6 @@ import { Icon } from '../Icon';
 import { type IconName } from '../icon-map';
 import { Card } from '../Card';
 import { gradeBadgeColor } from '../you/profile-chart-colors';
-import { brandColors } from '../../theme/colors';
 import { iosSystemColors } from '../../theme/ios-colors';
 import { spacing, borderRadius } from '../../theme/tokens';
 import { useTheme } from '../../providers/theme-provider';
@@ -23,6 +22,7 @@ type SessionStatTilesProps = {
 export function SessionStatTiles({ sends, flashes, attempts, hardestGrade }: SessionStatTilesProps) {
   const { t } = useTranslation('you');
   const { t: tFeed } = useTranslation('feed');
+  const { brandColors } = useTheme();
 
   return (
     <Card style={styles.card}>

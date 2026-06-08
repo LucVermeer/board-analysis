@@ -161,7 +161,11 @@ function SaveButton({ saveState, onSave }: { saveState: SaveButtonState; onSave:
       icon={view.icon ?? undefined}
       variant="filled"
       size="small"
-      tintColor={view.tint === 'success' ? brandColors.success : brandColors.primary}
+      // Success keeps the static green fill (white-legible in both schemes; the
+      // lifted dark success tint would fail white-on-fill). For the default tint
+      // we pass nothing so the filled Button uses its own scheme-aware
+      // `primaryFill` (lifts to #7C3AED in dark), matching every other CTA.
+      tintColor={view.tint === 'success' ? brandColors.success : undefined}
       disabled={view.disabled}
       onPress={onSave}
     />

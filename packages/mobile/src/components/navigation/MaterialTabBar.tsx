@@ -3,7 +3,7 @@ import type { BottomTabBarProps } from 'expo-router/tabs';
 import { Text } from '../Text';
 import { PressableSurface } from '../PressableSurface';
 import { useTheme } from '../../providers/theme-provider';
-import { withAlpha } from '../../theme/colors';
+import { brandColors as staticBrandColors, withAlpha } from '../../theme/colors';
 import { material } from '../../theme/tokens';
 import { TAB_BAR_HEIGHT } from '../../theme/layout';
 
@@ -73,7 +73,9 @@ export function MaterialTabBar({ state, descriptors, navigation, insets }: Botto
                   testID="badge"
                   style={[
                     styles.badge,
-                    { backgroundColor: brandColors.success, borderColor: systemColors.elevatedSurface },
+                    // Badge dot is a FILL (no text on it) → static light brand
+                    // success, not the scheme-lifted theme value.
+                    { backgroundColor: staticBrandColors.success, borderColor: systemColors.elevatedSurface },
                   ]}
                 />
               ) : null}

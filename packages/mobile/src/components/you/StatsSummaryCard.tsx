@@ -8,7 +8,6 @@ import { type IconName } from '../icon-map';
 import { Card } from '../Card';
 import { LayoutPercentageBar } from './LayoutPercentageBar';
 import { gradeBadgeColor } from './profile-chart-colors';
-import { brandColors } from '../../theme/colors';
 import { spacing, borderRadius } from '../../theme/tokens';
 import { useTheme } from '../../providers/theme-provider';
 
@@ -23,7 +22,7 @@ type StatsSummaryCardProps = {
 
 export function StatsSummaryCard({ statisticsSummary, hardestSend, hardestFlash, percentile }: StatsSummaryCardProps) {
   const { t } = useTranslation('profile');
-  const { systemColors } = useTheme();
+  const { systemColors, brandColors } = useTheme();
 
   const showPercentile = percentile != null && percentile.percentile > 0;
   // "Top X%" — invert the percentile, clamped so a 100th-percentile climber
@@ -54,7 +53,12 @@ export function StatsSummaryCard({ statisticsSummary, hardestSend, hardestFlash,
             </Text>
           </View>
           <View style={[styles.percentileTrack, { backgroundColor: systemColors.fill }]}>
-            <View style={[styles.percentileFill, { width: `${percentile.percentile}%` }]} />
+            <View
+              style={[
+                styles.percentileFill,
+                { width: `${percentile.percentile}%`, backgroundColor: brandColors.primary },
+              ]}
+            />
           </View>
           <Text variant="caption2" color={systemColors.tertiaryLabel} style={styles.percentileCaption}>
             {t('stats.moreSentThan', { value: percentile.percentile.toFixed(0) })}
@@ -131,7 +135,6 @@ const styles = StyleSheet.create({
   percentileFill: {
     height: '100%',
     borderRadius: borderRadius.full,
-    backgroundColor: brandColors.primary,
   },
   percentileCaption: {
     marginTop: spacing[1],

@@ -128,6 +128,7 @@ vi.mock('../../Icon', () => ({
 
 vi.mock('../../../providers/theme-provider', () => ({
   useTheme: () => ({
+    brandColors: { primary: '#6D28D9' },
     systemColors: {
       fill: '#eee',
       secondaryBackground: '#fff',

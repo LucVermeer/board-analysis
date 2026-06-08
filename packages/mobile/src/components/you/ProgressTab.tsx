@@ -11,7 +11,6 @@ import { StatsSummaryCard } from './StatsSummaryCard';
 import { StackedBarChart, GroupedBarChart, TotalAreaChart, type ChartLegendItem } from './YouCharts';
 import { layoutChartColor, flashRedpointColor } from './profile-chart-colors';
 import { useBottomChromeMetrics } from '../../hooks/use-bottom-chrome-metrics';
-import { brandColors } from '../../theme/colors';
 import { spacing } from '../../theme/tokens';
 import { useTheme } from '../../providers/theme-provider';
 
@@ -20,7 +19,7 @@ type YouData = ReturnType<typeof useYouProfileData>;
 export function ProgressTab({ data }: { data: YouData }) {
   const { t } = useTranslation('profile');
   const { t: tYou } = useTranslation('you');
-  const { systemColors, colorScheme } = useTheme();
+  const { systemColors, colorScheme, brandColors } = useTheme();
   const bottomChrome = useBottomChromeMetrics();
   const paddingBottom = bottomChrome.scrollBottomPadding + spacing[6];
 

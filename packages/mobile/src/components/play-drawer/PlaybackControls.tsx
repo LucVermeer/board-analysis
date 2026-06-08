@@ -17,7 +17,11 @@ import { Icon } from '../Icon';
 import type { IconName } from '../icon-map';
 import { useTheme } from '../../providers/theme-provider';
 import { hapticLight, hapticSelection, hapticSuccess } from '../../lib/haptics';
-import { brandColors } from '../../theme/colors';
+// Aliased: this file reads scheme-aware brand from `useTheme()` for foregrounds
+// (slider/progress fills). `staticBrandColors` is intentionally the static set,
+// used only for the active speed pill — a FILL with white text that must stay
+// legible in both schemes (the lifted dark tint would fail white-on-fill).
+import { brandColors as staticBrandColors } from '../../theme/colors';
 import { iosSystemColors } from '../../theme/ios-colors';
 import { spacing, borderRadius } from '../../theme/tokens';
 import { springs, timing } from '../../theme/animations';
@@ -132,7 +136,11 @@ function SpeedPill({
       accessibilityRole="button"
       accessibilityState={{ expanded: active }}
       accessibilityLabel={accessibilityLabel}
-      style={[styles.speedPill, { backgroundColor: active ? brandColors.primary : systemColors.fill }, animatedStyle]}
+      style={[
+        styles.speedPill,
+        { backgroundColor: active ? staticBrandColors.primary : systemColors.fill },
+        animatedStyle,
+      ]}
     >
       <Text variant="footnote" color={active ? iosSystemColors.white : systemColors.label} style={styles.speedPillText}>
         {label}
@@ -158,7 +166,8 @@ function SpeedSlider({
   onChange: (speed: number) => void;
   onLiveChange: (speed: number) => void;
 }) {
-  const { systemColors } = useTheme();
+  const theme = useTheme();
+  const { systemColors } = theme;
   const [trackWidth, setTrackWidth] = useState(0);
   const usable = Math.max(0, trackWidth - THUMB_SIZE);
   const position = useSharedValue(0);
@@ -261,7 +270,7 @@ function SpeedSlider({
     <GestureDetector gesture={composed}>
       <View style={styles.sliderTrackWrapper} onLayout={handleLayout}>
         <View style={[styles.sliderTrack, { backgroundColor: systemColors.fill }]} />
-        <Animated.View style={[styles.sliderFill, fillStyle]} />
+        <Animated.View style={[styles.sliderFill, { backgroundColor: theme.brandColors.primary }, fillStyle]} />
         <Animated.View style={[styles.sliderThumb, thumbStyle]} />
       </View>
     </GestureDetector>
@@ -288,7 +297,8 @@ export function PlaybackControls({
   onSeek,
   onSpeedChange,
 }: PlaybackControlsProps) {
-  const { systemColors } = useTheme();
+  const theme = useTheme();
+  const { systemColors } = theme;
   const { t } = useTranslation('session');
   const atFirstFrame = frameIndex <= 0;
   const atLastFrame = frameIndex >= frameCount - 1;
@@ -362,7 +372,10 @@ export function PlaybackControls({
 
   return (
     <View style={[styles.container, { backgroundColor: systemColors.tertiaryBackground }]}>
-      <Animated.View style={[styles.progressBar, progressStyle]} pointerEvents="none" />
+      <Animated.View
+        style={[styles.progressBar, { backgroundColor: theme.brandColors.primary }, progressStyle]}
+        pointerEvents="none"
+      />
 
       <View style={styles.transportRow}>
         <View style={styles.sideLeft}>
@@ -445,7 +458,6 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     height: 3,
-    backgroundColor: brandColors.primary,
   },
   transportRow: {
     flexDirection: 'row',
@@ -509,7 +521,6 @@ const styles = StyleSheet.create({
     left: 0,
     height: TRACK_HEIGHT,
     borderRadius: TRACK_HEIGHT / 2,
-    backgroundColor: brandColors.primary,
   },
   sliderThumb: {
     position: 'absolute',

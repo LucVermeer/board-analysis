@@ -50,7 +50,7 @@ export default function SessionSummaryScreen() {
   const { sessionId } = useLocalSearchParams<{ sessionId: string }>();
   const { data: summary, isLoading } = useSessionSummary(sessionId ?? null);
   const { t } = useTranslation('session');
-  const { systemColors } = useTheme();
+  const { systemColors, brandColors: brand } = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { formatGrade } = useGradeFormat();
@@ -58,7 +58,7 @@ export default function SessionSummaryScreen() {
   if (isLoading || !summary) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color={brandColors.primary} />
+        <ActivityIndicator size="large" color={brand.primary} />
       </View>
     );
   }

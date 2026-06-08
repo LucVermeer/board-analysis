@@ -17,7 +17,6 @@ import { useToast } from '../../src/providers/toast-provider';
 import { useSessionPreview, useMyBoards, useCreateBoard } from '../../src/lib/graphql/hooks';
 import { resolveBoardForSession } from '../../src/lib/board-path-to-user-board';
 import { spacing, borderRadius } from '../../src/theme/tokens';
-import { brandColors } from '../../src/theme/colors';
 
 /** Human board label for the confirmation card, e.g. "Kilter · 40°". */
 function boardLabelFromPath(boardPath: string): string {
@@ -30,7 +29,7 @@ function boardLabelFromPath(boardPath: string): string {
 export default function JoinSessionScreen() {
   const { sessionId } = useLocalSearchParams<{ sessionId: string }>();
   const { t } = useTranslation('session');
-  const { systemColors } = useTheme();
+  const { systemColors, brandColors } = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { isAuthenticated } = useAuth();

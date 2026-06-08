@@ -10,7 +10,6 @@ import { useTheme } from '../../../src/providers/theme-provider';
 import { useSetterStats } from '../../../src/lib/graphql/hooks';
 import { emitSetterSelection } from '../../../src/lib/filter-handoff';
 import { hapticSelection } from '../../../src/lib/haptics';
-import { brandColors } from '../../../src/theme/colors';
 import { iosSystemColors } from '../../../src/theme/ios-colors';
 import { spacing } from '../../../src/theme/tokens';
 
@@ -30,7 +29,7 @@ export default function SettersPicker() {
   const router = useRouter();
   const navigation = useNavigation();
   const { t } = useTranslation('climbs');
-  const { systemColors } = useTheme();
+  const { systemColors, brandColors } = useTheme();
 
   const initialSelected = useMemo<string[]>(() => {
     if (!params.selected) return [];
@@ -110,7 +109,7 @@ export default function SettersPicker() {
         </Pressable>
       ),
     });
-  }, [navigation, done, cancel, t]);
+  }, [navigation, done, cancel, t, brandColors]);
 
   const toggle = useCallback((username: string) => {
     hapticSelection();
@@ -146,7 +145,7 @@ export default function SettersPicker() {
         </Pressable>
       );
     },
-    [selected, toggle, t],
+    [selected, toggle, t, brandColors],
   );
 
   return (

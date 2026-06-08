@@ -8,7 +8,6 @@ import { type IconName } from '../../icon-map';
 import { Avatar } from '../../Avatar';
 import { useTheme } from '../../../providers/theme-provider';
 import { gradeBadgeColor } from '../../you/profile-chart-colors';
-import { brandColors } from '../../../theme/colors';
 import { spacing, borderRadius } from '../../../theme/tokens';
 import { hapticSuccess } from '../../../lib/haptics';
 import { useGradeFormat } from '../../../hooks/use-grade-format';
@@ -43,7 +42,7 @@ export function SessionAnalytics({
   gradeDistribution,
 }: SessionAnalyticsProps) {
   const { t } = useTranslation('session');
-  const { systemColors } = useTheme();
+  const { systemColors, brandColors } = useTheme();
   const { formatGrade, formatGradeByDifficultyId } = useGradeFormat();
 
   // Celebrate a fresh hardest grade once. Seeded with the initial grade so the

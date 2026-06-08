@@ -11,7 +11,6 @@ import { SwitchRow } from '../SwitchRow';
 import { PlaylistPreviewSquare } from './PlaylistPreviewSquare';
 import { PLAYLIST_COLORS } from './playlist-colors';
 import { useTheme } from '../../providers/theme-provider';
-import { brandColors } from '../../theme/colors';
 import { iosSystemColors } from '../../theme/ios-colors';
 import { spacing } from '../../theme/tokens';
 import { buildPlaylistFormValues, NAME_MAX, DESCRIPTION_MAX, type PlaylistFormValues } from './playlist-form-values';
@@ -42,7 +41,7 @@ type PlaylistFormSheetProps = {
  */
 export function PlaylistFormSheet({ mode, visible, submitting, playlist, onSubmit, onClose }: PlaylistFormSheetProps) {
   const { t } = useTranslation('playlists');
-  const { systemColors } = useTheme();
+  const { systemColors, brandColors } = useTheme();
   const sheetRef = useRef<BottomSheetModal>(null);
   const isEdit = mode === 'edit';
 
@@ -201,7 +200,9 @@ export function PlaylistFormSheet({ mode, visible, submitting, playlist, onSubmi
                 style={[
                   styles.emojiChip,
                   { backgroundColor: systemColors.fill },
-                  selected && styles.emojiChipSelected,
+                  // Selected border is a FOREGROUND → scheme-aware brand (the
+                  // StyleSheet can't read the theme, so the colour is inline).
+                  selected && [styles.emojiChipSelected, { borderColor: brandColors.primary }],
                 ]}
               >
                 <Text style={styles.emoji} allowFontScaling={false}>
@@ -303,7 +304,6 @@ const styles = StyleSheet.create({
   },
   emojiChipSelected: {
     borderWidth: 2,
-    borderColor: brandColors.primary,
   },
   emoji: {
     fontSize: 22,

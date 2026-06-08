@@ -65,6 +65,9 @@ vi.mock('../../drawer-action-bar/DrawerActionBar', () => ({
   },
 }));
 vi.mock('../../../theme/colors', () => ({ brandColors: { primary: '#6D28D9', success: '#047857' } }));
+vi.mock('../../../providers/theme-provider', () => ({
+  useTheme: () => ({ brandColors: { primary: '#6D28D9', success: '#047857' } }),
+}));
 vi.mock('../../../theme/ios-colors', () => ({
   iosSystemColors: { white: '#FFFFFF', systemGray: '#8E8E93', systemRed: '#FF3B30', separator: '#ccc' },
 }));

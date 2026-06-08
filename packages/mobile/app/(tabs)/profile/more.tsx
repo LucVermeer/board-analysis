@@ -7,7 +7,6 @@ import { useTheme } from '../../../src/providers/theme-provider';
 import { useAuth } from '../../../src/providers/auth-provider';
 import { useProfile } from '../../../src/lib/graphql/hooks';
 import { spacing } from '../../../src/theme/tokens';
-import { brandColors } from '../../../src/theme/colors';
 import { DevMetadataPanel } from '../../../src/components/DevMetadataPanel';
 import { Icon } from '../../../src/components/Icon';
 import { Text } from '../../../src/components/Text';
@@ -19,7 +18,15 @@ import { useGradeFormat } from '../../../src/hooks/use-grade-format';
 import { useGlassCapability } from '../../../src/hooks/use-glass-capability';
 
 export default function MoreScreen() {
-  const { systemColors, borderRadius, themeOverride, setThemeOverride, uiVariantPreference, setUiVariant } = useTheme();
+  const {
+    systemColors,
+    brandColors,
+    borderRadius,
+    themeOverride,
+    setThemeOverride,
+    uiVariantPreference,
+    setUiVariant,
+  } = useTheme();
   const { t } = useTranslation('common');
   const { t: tProfile } = useTranslation('profile');
   const { signOut } = useAuth();

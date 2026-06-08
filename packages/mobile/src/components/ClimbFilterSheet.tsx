@@ -49,7 +49,10 @@ import { useAuth } from '../providers/auth-provider';
 import { hapticSelection } from '../lib/haptics';
 import { subscribeToSetterSelection } from '../lib/filter-handoff';
 import { springs } from '../theme/animations';
-import { brandColors } from '../theme/colors';
+// Aliased: the active-filter label reads scheme-aware brand from `useTheme()`.
+// `staticBrandColors` is the static set, used only for the selected chip — a FILL
+// with white text that must stay legible in both schemes.
+import { brandColors as staticBrandColors } from '../theme/colors';
 import { iosSystemColors } from '../theme/ios-colors';
 import { spacing, borderRadius } from '../theme/tokens';
 import { GradeRangeRail } from './grade';
@@ -104,7 +107,8 @@ function Chip({ label, selected, onPress }: { label: string; selected: boolean; 
     paddingHorizontal: spacing[3],
     paddingVertical: spacing[2],
     borderRadius: 20,
-    backgroundColor: selected ? brandColors.primary : systemColors.fill,
+    // Selected chip is a FILL with white text (see `chipText` below) → static brand.
+    backgroundColor: selected ? staticBrandColors.primary : systemColors.fill,
   };
   return (
     <AnimatedPressable
@@ -420,7 +424,7 @@ export function ClimbFilterSheet({
       <View style={styles.header}>
         <Text variant="title3">{t('mobile.filter.title')}</Text>
         <Pressable onPress={handleReset} hitSlop={8} accessibilityRole="button" disabled={!anyActive}>
-          <Text variant="subheadline" color={anyActive ? brandColors.primary : systemColors.secondaryLabel}>
+          <Text variant="subheadline" color={anyActive ? theme.brandColors.primary : systemColors.secondaryLabel}>
             {t('mobile.filter.reset')}
           </Text>
         </Pressable>
@@ -641,10 +645,7 @@ export function ClimbFilterSheet({
       </BottomSheetScrollView>
 
       <View
-        style={[
-          styles.footer,
-          { paddingBottom: insets.bottom + spacing[3], borderTopColor: systemColors.separator },
-        ]}
+        style={[styles.footer, { paddingBottom: insets.bottom + spacing[3], borderTopColor: systemColors.separator }]}
       >
         <Button title={applyLabel} onPress={handleApply} variant="filled" size="large" style={styles.applyButton} />
       </View>

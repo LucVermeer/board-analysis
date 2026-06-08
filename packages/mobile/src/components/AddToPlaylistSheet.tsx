@@ -9,7 +9,7 @@ import { Icon } from './Icon';
 import { Text } from './Text';
 import { useToast } from '../providers/toast-provider';
 import { usePlaylistsContext, type Playlist } from '../providers/playlists-provider';
-import { brandColors } from '../theme/colors';
+import { useTheme } from '../providers/theme-provider';
 import { iosSystemColors } from '../theme/ios-colors';
 import { spacing } from '../theme/tokens';
 
@@ -29,6 +29,7 @@ function validHexColor(color: string | undefined): string | null {
 
 function AddToPlaylistSheet({ visible, climb, angle, onClose }: AddToPlaylistSheetProps) {
   const { t } = useTranslation('climbs');
+  const { brandColors, systemColors } = useTheme();
   const { showToast } = useToast();
   const { playlists, addToPlaylist, isLoading, isAuthenticated } = usePlaylistsContext();
   const sheetRef = useRef<BottomSheet>(null);
@@ -75,7 +76,7 @@ function AddToPlaylistSheet({ visible, climb, angle, onClose }: AddToPlaylistShe
   return (
     <Sheet ref={sheetRef} snapPoints={snapPoints} onClose={handleClose} enablePanDownToClose scrollable>
       <View style={styles.header}>
-        <Icon name="playlist" size={20} color={iosSystemColors.systemBlue} />
+        <Icon name="playlist" size={20} color={systemColors.accent} />
         <Text variant="headline" style={styles.headerTitle}>
           {t('actions.playlist.popover.title')}
         </Text>

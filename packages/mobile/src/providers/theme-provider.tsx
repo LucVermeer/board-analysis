@@ -56,6 +56,13 @@ type ResolvedSystemColors = {
   tertiaryLabel: string | OpaqueColorValue;
   separator: string | OpaqueColorValue;
   fill: string | OpaqueColorValue;
+  /**
+   * Interactive-accent foreground (links, active tab, edit·copy·open). iOS uses
+   * Apple's link blue; Android/Material use the brand violet, lifted to #A78BFA
+   * in dark so it clears AA on near-black. Replaces the static
+   * `iosSystemColors.systemBlue` for foreground use.
+   */
+  accent: string | OpaqueColorValue;
 };
 
 type Theme = {
@@ -120,6 +127,7 @@ function resolveSystemColors(colorScheme: ColorScheme, variant: UiVariant): Reso
     tertiaryLabel: fallback.tertiaryLabel,
     separator: fallback.separator,
     fill: fallback.fill,
+    accent: fallback.accent,
   };
 }
 

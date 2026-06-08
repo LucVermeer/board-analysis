@@ -4,7 +4,7 @@ import type { SessionSummary } from '@boardsesh/shared-schema';
 import { Text } from '../../Text';
 import { Icon } from '../../Icon';
 import { useTheme } from '../../../providers/theme-provider';
-import { brandColors } from '../../../theme/colors';
+import { brandColors as staticBrandColors } from '../../../theme/colors';
 import { spacing, borderRadius } from '../../../theme/tokens';
 import { useGradeFormat } from '../../../hooks/use-grade-format';
 import { SessionTimer } from './SessionTimer';
@@ -21,7 +21,7 @@ type SessionStatsHeaderProps = {
  */
 export function SessionStatsHeader({ summary }: SessionStatsHeaderProps) {
   const { t } = useTranslation('session');
-  const { systemColors } = useTheme();
+  const { systemColors, brandColors } = useTheme();
   const { formatGrade } = useGradeFormat();
 
   const sends = summary?.totalSends ?? 0;
@@ -62,7 +62,7 @@ export function SessionStatsHeader({ summary }: SessionStatsHeaderProps) {
             {t('mobile.session.inStatsHardest')}
           </Text>
           <View style={styles.hardestRow}>
-            <View style={[styles.gradeBadge, { backgroundColor: brandColors.primary }]}>
+            <View style={[styles.gradeBadge, { backgroundColor: staticBrandColors.primary }]}>
               <Text variant="subheadline" color="#FFFFFF" style={styles.gradeBadgeText}>
                 {formatGrade(hardest.grade) ?? hardest.grade}
               </Text>
@@ -70,6 +70,8 @@ export function SessionStatsHeader({ summary }: SessionStatsHeaderProps) {
             <Text variant="body" numberOfLines={1} style={styles.hardestName}>
               {hardest.climbName}
             </Text>
+            {/* gradeBadge above keeps the static brand fill (white text on it);
+                this star glyph is a foreground → scheme-aware brand warning. */}
             <Icon name="star.fill" size={18} color={brandColors.warning} />
           </View>
         </View>

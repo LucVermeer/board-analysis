@@ -12,7 +12,6 @@ import { ProgressTab } from '../../../src/components/you/ProgressTab';
 import { SessionsTab } from '../../../src/components/you/SessionsTab';
 import { LogbookTab } from '../../../src/components/you/LogbookTab';
 import { Icon } from '../../../src/components/Icon';
-import { brandColors } from '../../../src/theme/colors';
 import { iosSystemColors } from '../../../src/theme/ios-colors';
 
 type TabKey = 'progress' | 'sessions' | 'logbook';
@@ -20,7 +19,7 @@ type TabKey = 'progress' | 'sessions' | 'logbook';
 export default function YouScreen() {
   const navigation = useNavigation();
   const { t } = useTranslation('you');
-  const { systemColors } = useTheme();
+  const { systemColors, brandColors } = useTheme();
 
   const { data: profile } = useProfile();
   const userId = profile?.id;
@@ -87,7 +86,7 @@ export default function YouScreen() {
             )
           : undefined,
     });
-  }, [navigation, t, activeIndex, openFilters, youData.hasActiveFilters]);
+  }, [navigation, t, activeIndex, openFilters, youData.hasActiveFilters, brandColors]);
 
   return (
     <View style={[styles.container, { backgroundColor: systemColors.background }]}>

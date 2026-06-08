@@ -20,7 +20,6 @@ import { partitionAscentsForShare } from '../src/lib/match-ascents-to-caption';
 import { extractGraphqlMessage } from '../src/lib/graphql/extract-error-message';
 import { spacing, borderRadius } from '../src/theme/tokens';
 import { iosSystemColors } from '../src/theme/ios-colors';
-import { brandColors } from '../src/theme/colors';
 
 // Keep the ascents query from refiring on every keystroke; commit the search
 // term after a short pause.
@@ -36,7 +35,7 @@ const SEARCH_DEBOUNCE_MS = 300;
 export default function ShareBetaScreen() {
   const { link } = useLocalSearchParams<{ link: string }>();
   const { t } = useTranslation('session');
-  const { systemColors } = useTheme();
+  const { systemColors, brandColors } = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { isAuthenticated } = useAuth();

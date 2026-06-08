@@ -170,19 +170,21 @@ The React Native app is recolored onto a **violet brand** anchored on the logo (
 
 ### Brand & semantic
 
-| Role          | Light     | Dark      | Usage                                                            |
-| ------------- | --------- | --------- | --------------------------------------------------------------- |
-| `primary`/`tint` | `#6D28D9` | `#A78BFA` | Foreground brand: text, icons, links, borders, accent bars      |
-| `primaryFill` | `#6D28D9` | `#7C3AED` | Filled surface/button background (pair with `onPrimary`)         |
-| `onPrimary`   | `#FFFFFF` | `#FFFFFF` | Text/icon on `primaryFill`                                       |
-| `accent`      | `#FF8A3D` | `#FF8A3D` | Amber spark for highlights — **fill-only, always dark text**     |
-| `success`     | `#047857` | `#34D399` | Sends, positive confirmation                                    |
-| `warning`     | `#B45309` | `#FBBF24` | Flashes, caution                                                |
-| `error`       | `#C81E1E` | `#F87171` | Destructive, removals                                           |
+| Role             | Light     | Dark      | Usage                                                        |
+| ---------------- | --------- | --------- | ------------------------------------------------------------ |
+| `primary`/`tint` | `#6D28D9` | `#A78BFA` | Foreground brand: text, icons, links, borders, accent bars   |
+| `primaryFill`    | `#6D28D9` | `#7C3AED` | Filled surface/button background (pair with `onPrimary`)     |
+| `onPrimary`      | `#FFFFFF` | `#FFFFFF` | Text/icon on `primaryFill`                                   |
+| `accent`         | `#FF8A3D` | `#FF8A3D` | Amber spark for highlights — **fill-only, always dark text** |
+| `success`        | `#047857` | `#34D399` | Sends, positive confirmation                                 |
+| `warning`        | `#B45309` | `#FBBF24` | Flashes, caution                                             |
+| `error`          | `#C81E1E` | `#F87171` | Destructive, removals                                        |
 
 Contrast (WCAG): white-on-`#6D28D9` 7.10:1 · `#A78BFA` tint ≥6.12:1 across the dark ladder · white-on-`#7C3AED` 5.70:1 · black-on-`#FF8A3D` 8.95:1 (white-on-amber fails, so accent is fill-only).
 
-> **Scheme-aware rule.** Use `useTheme().brandColors.primary` for any brand **foreground** so dark mode lifts to `#A78BFA`. The static `brandColors` import is only safe for **fills** that carry white/`onPrimary` text (e.g. filled buttons, swipe-action panels), where the value is legible in both schemes. A number of legacy static foreground sites are not yet ported — tracked as a follow-up.
+> **Scheme-aware rule.** Use `useTheme().brandColors.primary` for any brand **foreground** so dark mode lifts to `#A78BFA`. The single discriminator: does white / `onPrimary` / auto-contrasted text (or a white icon) sit **on** the brand colour? If yes it's a **fill** — keep it static (filled buttons, badges, avatars, grade badges, swipe-action panels, selected chips, the amber `accent`), because the bright dark tints would break white-on-fill contrast. If no — icon/text/border/stroke/ripple/`tintColor`, low-alpha washes, and **text-free accent bars/fills** (tab underlines, slider fill+thumb, progress/percentile bars) — it's a foreground; read it from the theme. The legacy static foreground sites are now ported (issue #2583); the only intentional static foregrounds left are the root `ErrorBoundary` warning icon (renders outside `ThemeProvider`) and `PressableSurface`'s default Android ripple tint (core primitive, rarely-hit fallback).
+>
+> **Interactive accent.** `useTheme().systemColors.accent` is the scheme-aware foreground accent for links / active tab / "edit·copy·open" affordances — iOS `PlatformColor('link')`, Android/Material the brand violet (lifted to `#A78BFA` in dark). It replaces the static `iosSystemColors.systemBlue`, which now only backs the few white-text fills that used it.
 
 ### Neutrals
 
@@ -892,12 +894,12 @@ The Expo app (`packages/mobile/`) is a separate implementation from the web CSS 
 
 `packages/mobile/src/components/GlassSurface.tsx` is the single primitive for every translucent surface. It resolves the best material per device:
 
-| Condition                                   | Material                                              |
-| ------------------------------------------- | ----------------------------------------------------- |
-| iOS 26+ (Liquid Glass available)            | `expo-glass-effect` `GlassView`                       |
-| iOS < 26                                    | `@react-native-community/blur` `BlurView` (frosted)   |
-| Android                                     | Solid themed surface (`systemColors.secondaryBackground`) |
-| Reduce Transparency on (any platform)       | Solid themed surface                                  |
+| Condition                             | Material                                                  |
+| ------------------------------------- | --------------------------------------------------------- |
+| iOS 26+ (Liquid Glass available)      | `expo-glass-effect` `GlassView`                           |
+| iOS < 26                              | `@react-native-community/blur` `BlurView` (frosted)       |
+| Android                               | Solid themed surface (`systemColors.secondaryBackground`) |
+| Reduce Transparency on (any platform) | Solid themed surface                                      |
 
 Props: `glassEffectStyle` (`'regular'` for frosted chrome, `'clear'` for content-forward), `tintColor` (translucent hue composited onto the glass), `fallbackColor` (solid path).
 

@@ -55,7 +55,7 @@ export const CustomBoardSheet = forwardRef<BottomSheet, CustomBoardSheetProps>(f
   { seed, existingBoards, onCreated, onSelectExisting, onError },
   ref,
 ) {
-  const { systemColors } = useTheme();
+  const { systemColors, brandColors: themeBrandColors } = useTheme();
   const { t } = useTranslation('boards');
   const createBoard = useCreateBoard();
 
@@ -174,7 +174,10 @@ export const CustomBoardSheet = forwardRef<BottomSheet, CustomBoardSheetProps>(f
             style={[
               styles.chip,
               {
-                borderColor: selected ? brandColors.primary : systemColors.separator,
+                // Border is a foreground accent → scheme-aware (lifts in dark).
+                borderColor: selected ? themeBrandColors.primary : systemColors.separator,
+                // Fill stays static: the selected chip's label turns white and
+                // must sit on the saturated brand fill at full contrast.
                 backgroundColor: selected ? brandColors.primary : 'transparent',
               },
             ]}

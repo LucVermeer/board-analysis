@@ -17,10 +17,17 @@ import { spacing, borderRadius } from '../../theme/tokens';
 
 type TickStatusMeta = { icon: IconName; color: string };
 
+// The status badge is a FILL with a white icon on top, so the brand tones stay
+// STATIC (the lifted dark tints would fail white-on-fill contrast). Module-level
+// constants → zero allocation per row in this virtualised list.
+const STATUS_META: Record<string, TickStatusMeta> = {
+  flash: { icon: 'flash', color: brandColors.warning },
+  send: { icon: 'tick', color: brandColors.success },
+};
+const ATTEMPT_META: TickStatusMeta = { icon: 'circle', color: iosSystemColors.systemGray };
+
 function statusMeta(status: string): TickStatusMeta {
-  if (status === 'flash') return { icon: 'flash', color: brandColors.warning };
-  if (status === 'send') return { icon: 'tick', color: brandColors.success };
-  return { icon: 'circle', color: iosSystemColors.systemGray };
+  return STATUS_META[status] ?? ATTEMPT_META;
 }
 
 type TFunc = (key: string, options?: Record<string, unknown>) => string;

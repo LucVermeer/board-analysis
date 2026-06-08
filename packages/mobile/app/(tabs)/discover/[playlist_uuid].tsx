@@ -33,7 +33,6 @@ import { hapticSelection } from '../../../src/lib/haptics';
 import { useAuth } from '../../../src/providers/auth-provider';
 import { useToast } from '../../../src/providers/toast-provider';
 import { useTheme } from '../../../src/providers/theme-provider';
-import { brandColors } from '../../../src/theme/colors';
 import { iosSystemColors } from '../../../src/theme/ios-colors';
 
 type DetailParams = {
@@ -47,7 +46,7 @@ export default function PlaylistDetail() {
   const queryClient = useQueryClient();
   const { isAuthenticated } = useAuth();
   const { showToast } = useToast();
-  const { systemColors } = useTheme();
+  const { systemColors, brandColors } = useTheme();
   const { updatePlaylist, deletePlaylist, pinPlaylist, unpinPlaylist, followPlaylist, unfollowPlaylist } =
     usePlaylistMutations();
 
@@ -322,6 +321,7 @@ export default function PlaylistDetail() {
       handleTogglePin,
       isOwner,
       systemColors,
+      brandColors,
       t,
     ],
   );

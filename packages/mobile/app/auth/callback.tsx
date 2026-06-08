@@ -4,15 +4,16 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { exchangeTransferToken } from '../../src/lib/auth';
 import { classifyNativeAuthFailureReason } from '../../src/lib/native-auth-analytics';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
-import { brandColors } from '../../src/theme/colors';
 import { track } from '../../src/lib/analytics';
 import { useAuth } from '../../src/providers/auth-provider';
+import { useTheme } from '../../src/providers/theme-provider';
 
 export default function AuthCallback() {
   const { transferToken } = useLocalSearchParams<{ transferToken: string }>();
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
   const { refreshAuthState } = useAuth();
+  const theme = useTheme();
   const exchangedRef = useRef(false);
 
   useEffect(() => {
@@ -47,7 +48,7 @@ export default function AuthCallback() {
   if (error) {
     return (
       <View style={styles.container}>
-        <Text style={styles.errorText}>Sign in failed: {error}</Text>
+        <Text style={[styles.errorText, { color: theme.brandColors.error }]}>Sign in failed: {error}</Text>
       </View>
     );
   }
@@ -63,5 +64,5 @@ export default function AuthCallback() {
 const styles = StyleSheet.create({
   container: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 20 },
   text: { marginTop: 16, fontSize: 16 },
-  errorText: { fontSize: 16, color: brandColors.error, textAlign: 'center' },
+  errorText: { fontSize: 16, textAlign: 'center' },
 });

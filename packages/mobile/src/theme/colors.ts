@@ -24,6 +24,9 @@ export const iosSystemColors: Record<string, OpaqueColorValue> | null =
         tertiaryLabel: PlatformColor('tertiaryLabel'),
         separator: PlatformColor('separator'),
         fill: PlatformColor('systemFill'),
+        // Interactive-accent (links, active tab, edit·copy·open affordances).
+        // PlatformColor('link') is Apple's link blue and adapts to dark natively.
+        accent: PlatformColor('link'),
       }
     : null;
 
@@ -92,6 +95,9 @@ export const androidFallbackColors = {
     tertiaryLabel: '#8E8898',
     separator: 'rgba(60, 55, 75, 0.18)',
     fill: 'rgba(109, 40, 217, 0.1)',
+    // Interactive-accent foreground (links, active tab, edit·copy·open). The
+    // brand violet, lifted to #A78BFA in dark so it clears AA on near-black.
+    accent: '#6D28D9',
   },
   dark: {
     background: '#0F0B16',
@@ -104,6 +110,7 @@ export const androidFallbackColors = {
     tertiaryLabel: '#6E687C',
     separator: 'rgba(180, 168, 205, 0.2)',
     fill: 'rgba(199, 184, 232, 0.12)',
+    accent: '#A78BFA',
   },
 } as const;
 
@@ -137,6 +144,8 @@ export const materialSurfaces = {
     // Faint violet track for segmented controls / fills (bumped to 0.14 so selected
     // pills read on white).
     fill: 'rgba(109, 40, 217, 0.14)',
+    // Interactive-accent foreground — brand violet, lifted in dark.
+    accent: '#6D28D9',
   },
   dark: {
     background: '#15101E',
@@ -149,6 +158,7 @@ export const materialSurfaces = {
     tertiaryLabel: '#6E687C',
     separator: 'rgba(180, 168, 205, 0.18)',
     fill: 'rgba(199, 184, 232, 0.14)',
+    accent: '#A78BFA',
   },
 } as const;
 

@@ -150,7 +150,7 @@ export default function LoginScreen() {
         keyboardDismissMode="interactive"
       >
         <View style={styles.header}>
-          <Text style={styles.title}>Boardsesh</Text>
+          <Text style={[styles.title, { color: theme.brandColors.primary }]}>Boardsesh</Text>
           <Text style={styles.subtitle}>{t('nativeStart.tagline')}</Text>
         </View>
 
@@ -234,7 +234,7 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: { flexGrow: 1, justifyContent: 'center', padding: 24 },
   header: { alignItems: 'center', marginBottom: 32 },
-  title: { fontSize: 34, fontWeight: '700', marginBottom: 8, color: brandColors.primary },
+  title: { fontSize: 34, fontWeight: '700', marginBottom: 8 },
   subtitle: { fontSize: 17, opacity: 0.7 },
   form: { gap: 12 },
   input: {

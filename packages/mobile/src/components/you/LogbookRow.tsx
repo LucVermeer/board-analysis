@@ -20,6 +20,9 @@ type LogbookRowProps = {
   onPress: (ascent: AscentFeedItem) => void;
 };
 
+// The status badge is a FILL with a white icon on top, so the brand tones stay
+// STATIC (the lifted dark tints would fail white-on-fill contrast). Module-level
+// = zero allocation per row in this virtualised list.
 const STATUS_META: Record<AscentFeedItem['status'], { icon: IconName; color: string }> = {
   flash: { icon: 'flash', color: brandColors.warning },
   send: { icon: 'tick', color: brandColors.success },

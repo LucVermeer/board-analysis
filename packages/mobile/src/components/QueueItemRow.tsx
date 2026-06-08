@@ -14,7 +14,6 @@ import { Text } from './Text';
 import { Icon } from './Icon';
 import { ClimbListItemContent } from './ClimbListItemContent';
 import { THUMBNAIL_WIDTH } from './ClimbListThumbnail';
-import { brandColors } from '../theme/colors';
 import { iosSystemColors } from '../theme/ios-colors';
 import { spacing } from '../theme/tokens';
 import { springs } from '../theme/animations';
@@ -76,6 +75,7 @@ function PositionIndicator({
   isCurrentClimb: boolean;
   position: number;
 }) {
+  const { brandColors } = useTheme();
   if (isEditMode) {
     return (
       <Icon
@@ -114,7 +114,7 @@ export function QueueItemRow({
   queueIndex,
   isDraggable = false,
 }: QueueItemRowProps) {
-  const { systemColors } = useTheme();
+  const { systemColors, brandColors } = useTheme();
   const { t } = useTranslation('session');
   const translateX = useSharedValue(0);
   const rowOpacity = useSharedValue(1);
@@ -279,7 +279,7 @@ export function QueueItemRow({
       style={[
         styles.row,
         { backgroundColor: systemColors.secondaryBackground },
-        isCurrentClimb && !isHistoryItem && styles.currentClimbRow,
+        isCurrentClimb && !isHistoryItem && { backgroundColor: `${brandColors.primary}14` },
         isHistoryItem && styles.historyRow,
         rowAnimatedStyle,
       ]}
@@ -370,9 +370,6 @@ const styles = StyleSheet.create({
     columnGap: spacing[3],
     paddingVertical: spacing[2],
     paddingHorizontal: spacing[3],
-  },
-  currentClimbRow: {
-    backgroundColor: `${brandColors.primary}14`,
   },
   historyRow: {
     opacity: 0.5,

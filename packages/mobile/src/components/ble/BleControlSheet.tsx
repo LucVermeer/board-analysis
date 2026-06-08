@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { Sheet } from '../Sheet';
 import { ListRow } from '../ListRow';
 import { Icon } from '../Icon';
-import { brandColors } from '../../theme/colors';
+import { useTheme } from '../../providers/theme-provider';
 import { iosSystemColors } from '../../theme/ios-colors';
 import { spacing } from '../../theme/tokens';
 
@@ -23,6 +23,7 @@ type BleControlSheetProps = {
 function BleControlSheet({ visible, onReassert, onDisconnect, onClose }: BleControlSheetProps) {
   const { t: tSettings } = useTranslation('settings');
   const { t: tCommon } = useTranslation('common');
+  const { brandColors } = useTheme();
   const sheetRef = useRef<BottomSheet>(null);
 
   useEffect(() => {

@@ -4,7 +4,6 @@ import { Text } from '../Text';
 import { Icon } from '../Icon';
 import { useOptimisticVote } from './use-optimistic-vote';
 import { hapticLight } from '../../lib/haptics';
-import { brandColors } from '../../theme/colors';
 import { spacing } from '../../theme/tokens';
 import { useTheme } from '../../providers/theme-provider';
 
@@ -33,7 +32,7 @@ export function FeedSocialRow({
   onOpenComments,
   compact = false,
 }: FeedSocialRowProps) {
-  const { systemColors } = useTheme();
+  const { systemColors, brandColors } = useTheme();
   const { voted, count, toggle, isPending } = useOptimisticVote(entityId, upvotes, userVote, entityType);
 
   const iconSize = compact ? 16 : 18;

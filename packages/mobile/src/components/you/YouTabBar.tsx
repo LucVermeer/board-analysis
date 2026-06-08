@@ -3,7 +3,6 @@ import { View, Pressable, StyleSheet, type LayoutChangeEvent } from 'react-nativ
 import Animated, { useAnimatedStyle, useSharedValue, type SharedValue } from 'react-native-reanimated';
 import { Text } from '../Text';
 import { hapticSelection } from '../../lib/haptics';
-import { brandColors } from '../../theme/colors';
 import { useTheme } from '../../providers/theme-provider';
 
 export type YouTab<K extends string> = { key: K; label: string };
@@ -21,7 +20,7 @@ type YouTabBarProps<K extends string> = {
  * so it can glide between selected sections while labels update from state.
  */
 export function YouTabBar<K extends string>({ tabs, activeIndex, scrollPosition, onTabPress }: YouTabBarProps<K>) {
-  const { systemColors } = useTheme();
+  const { systemColors, brandColors } = useTheme();
   // Tab width lives on the UI thread so the indicator worklet always reads the
   // live value. A JS-thread useState captured in the worklet would go stale
   // after a resize / orientation change — the worklet wouldn't see the new width.
@@ -72,7 +71,7 @@ export function YouTabBar<K extends string>({ tabs, activeIndex, scrollPosition,
           </Pressable>
         );
       })}
-      <Animated.View style={[styles.indicator, indicatorStyle]} />
+      <Animated.View style={[styles.indicator, { backgroundColor: brandColors.primary }, indicatorStyle]} />
     </View>
   );
 }
@@ -99,6 +98,5 @@ const styles = StyleSheet.create({
     left: 0,
     height: 2.5,
     borderRadius: 2,
-    backgroundColor: brandColors.primary,
   },
 });

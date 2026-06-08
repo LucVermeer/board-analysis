@@ -12,7 +12,7 @@ import { AvatarGroup } from './AvatarGroup';
 import { FeedSocialRow } from './FeedSocialRow';
 import { StackedBarChart } from './YouCharts';
 import { gradeBadgeColor, buildSessionGradeBars } from './profile-chart-colors';
-import { brandColors, withAlpha } from '../../theme/colors';
+import { withAlpha } from '../../theme/colors';
 import { iosSystemColors } from '../../theme/ios-colors';
 import { spacing, borderRadius } from '../../theme/tokens';
 import { useTheme } from '../../providers/theme-provider';
@@ -40,7 +40,7 @@ export const SessionFeedCard = memo(function SessionFeedCard({
   onPress,
 }: SessionFeedCardProps) {
   const { t } = useTranslation('feed');
-  const { systemColors } = useTheme();
+  const { systemColors, brandColors } = useTheme();
   const { formatGrade } = useGradeFormat();
 
   const names = session.participants

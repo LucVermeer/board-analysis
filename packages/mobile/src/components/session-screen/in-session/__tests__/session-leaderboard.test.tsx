@@ -34,6 +34,11 @@ vi.mock('../../../SectionHeader', () => ({
 
 vi.mock('../../../../providers/theme-provider', () => ({
   useTheme: () => ({
+    brandColors: {
+      primary: '#007aff',
+      success: '#34c759',
+      warning: '#ff9500',
+    },
     systemColors: {
       secondaryBackground: '#f2f2f7',
       separator: '#c6c6c8',

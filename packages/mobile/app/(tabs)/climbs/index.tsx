@@ -56,7 +56,6 @@ import { getFilterSummary } from '../../../src/lib/filter-summary';
 import { getActiveFilterTokens } from '../../../src/lib/filter-tokens';
 import { normalizeSearchName } from '../../../src/lib/search-name';
 import { track } from '../../../src/lib/analytics';
-import { brandColors } from '../../../src/theme/colors';
 import { iosSystemColors } from '../../../src/theme/ios-colors';
 import { spacing } from '../../../src/theme/tokens';
 import { glassSize } from '../../../src/theme/layout';
@@ -104,7 +103,7 @@ function ClimbListInner() {
   const router = useRouter();
   const { t } = useTranslation('climbs');
   const { openClimbActions, openAddToPlaylist } = useDrawerHost();
-  const { systemColors, variant } = useTheme();
+  const { systemColors, variant, brandColors } = useTheme();
   const { addToQueue, state: queueState } = useQueue();
   const {
     filters,

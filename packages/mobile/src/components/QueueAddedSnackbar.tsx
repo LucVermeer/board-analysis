@@ -4,7 +4,6 @@ import Animated, { FadeInDown, FadeOutDown } from 'react-native-reanimated';
 import { Snackbar } from 'react-native-paper';
 import { useTranslation } from 'react-i18next';
 import { Text } from './Text';
-import { brandColors } from '../theme/colors';
 import { borderRadius, spacing, shadowColor } from '../theme/tokens';
 import { useTheme } from '../providers/theme-provider';
 import { useBottomChromeMetrics } from '../hooks/use-bottom-chrome-metrics';
@@ -77,7 +76,7 @@ function QueueAddedSnackbarGlass({
   onOpen,
   duration = DEFAULT_DURATION,
 }: QueueAddedSnackbarProps) {
-  const { systemColors } = useTheme();
+  const { systemColors, brandColors } = useTheme();
   const { t } = useTranslation('session');
   const bottomChrome = useBottomChromeMetrics();
 

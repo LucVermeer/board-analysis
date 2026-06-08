@@ -108,6 +108,9 @@ export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
   return (
     <View style={errorStyles.container}>
       <View style={errorStyles.iconContainer}>
+        {/* Static brand colour on purpose: this boundary can render outside the
+            ThemeProvider (the crash screen), where useTheme() would throw — so
+            it can't read the scheme-aware brand. */}
         <Icon name="warning" size={48} color={brandColors.warning} />
       </View>
       <Text variant="title2" style={errorStyles.title}>

@@ -17,7 +17,6 @@ import { BoardDetailSheet } from '../../src/components/board-discovery/BoardDeta
 import { userBoardToItem } from '../../src/components/board-discovery/board-items';
 import type { DiscoveryBoardItem } from '../../src/components/board-discovery/BoardDiscoveryCard';
 import { resolveBoardReturnTo } from '../../src/lib/boards/board-return-to';
-import { brandColors } from '../../src/theme/colors';
 import { spacing, borderRadius } from '../../src/theme/tokens';
 
 // Lazy/guarded expo-maps load: it's a native module, so a JS-only OTA push to a
@@ -49,7 +48,7 @@ const MapView = isApple ? expoMaps?.AppleMaps.View : expoMaps?.GoogleMaps.View;
 type Camera = { latitude: number; longitude: number; zoom: number };
 
 export default function BoardSearchScreen() {
-  const { systemColors } = useTheme();
+  const { systemColors, brandColors } = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { returnTo } = useLocalSearchParams<{ returnTo?: string }>();
@@ -176,7 +175,7 @@ export default function BoardSearchScreen() {
             }
           : base;
       }),
-    [pinned, selectedUuid],
+    [pinned, selectedUuid, brandColors],
   );
 
   const searchField = (

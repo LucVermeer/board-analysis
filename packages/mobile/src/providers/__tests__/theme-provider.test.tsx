@@ -183,6 +183,32 @@ describe('ThemeProvider', () => {
     });
   });
 
+  describe('scheme-aware brand + accent colours (#2583)', () => {
+    it('light scheme exposes the base brand palette and the violet accent', async () => {
+      useColorSchemeMock.mockReturnValue('light');
+      const { result } = renderHook(() => useTheme(), { wrapper });
+      await waitFor(() => expect(getMock).toHaveBeenCalled());
+      expect(result.current.colorScheme).toBe('light');
+      expect(result.current.brandColors.primary).toBe('#6D28D9');
+      expect(result.current.brandColors.success).toBe('#047857');
+      // New scheme-aware interactive accent (replaces the static systemBlue).
+      expect(result.current.systemColors.accent).toBe('#6D28D9');
+    });
+
+    it('dark scheme lifts brand foregrounds + the accent so they clear AA on near-black', async () => {
+      useColorSchemeMock.mockReturnValue('dark');
+      const { result } = renderHook(() => useTheme(), { wrapper });
+      await waitFor(() => expect(getMock).toHaveBeenCalled());
+      expect(result.current.colorScheme).toBe('dark');
+      // The core #2583 fix: foreground brand + semantic tones lift in dark.
+      expect(result.current.brandColors.primary).toBe('#A78BFA');
+      expect(result.current.brandColors.success).toBe('#34D399');
+      expect(result.current.brandColors.warning).toBe('#FBBF24');
+      expect(result.current.brandColors.error).toBe('#F87171');
+      expect(result.current.systemColors.accent).toBe('#A78BFA');
+    });
+  });
+
   describe('hydration race guard', () => {
     it("does not stomp the user's choice if setThemeOverride lands before the SecureStore read resolves", async () => {
       // Hold the hydration read until we say go. Lets us set the override

@@ -25,17 +25,18 @@ import {
 import { DiscoverTopChrome } from '../../../src/components/chrome';
 import { SMART_PLAYLISTS } from '../../../src/lib/smart-playlists';
 import { useAuth } from '../../../src/providers/auth-provider';
+import { useTheme } from '../../../src/providers/theme-provider';
 import { useToast } from '../../../src/providers/toast-provider';
 import { useAuthToken } from '../../../src/lib/graphql/use-auth-token';
 import { useProfile } from '../../../src/lib/graphql/hooks';
 import { useActiveBoard } from '../../../src/lib/graphql/use-active-board';
 import { useBottomChromeMetrics } from '../../../src/hooks/use-bottom-chrome-metrics';
-import { brandColors } from '../../../src/theme/colors';
 import { iosSystemColors } from '../../../src/theme/ios-colors';
 import { spacing } from '../../../src/theme/tokens';
 
 export default function DiscoverLibrary() {
   const { t } = useTranslation('playlists');
+  const { brandColors } = useTheme();
   const bottomChrome = useBottomChromeMetrics();
   const insets = useSafeAreaInsets();
   const { isAuthenticated, isLoading: authLoading } = useAuth();

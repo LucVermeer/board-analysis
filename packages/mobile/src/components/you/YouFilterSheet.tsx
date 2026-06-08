@@ -11,7 +11,6 @@ import { Sheet } from '../Sheet';
 import { Button } from '../Button';
 import { SegmentedControl } from '../SegmentedControl';
 import { SectionHeader } from '../SectionHeader';
-import { brandColors } from '../../theme/colors';
 import { spacing } from '../../theme/tokens';
 import { useTheme } from '../../providers/theme-provider';
 
@@ -32,7 +31,7 @@ export function YouFilterSheet({
   onSelectTimeframe,
 }: YouFilterSheetProps) {
   const { t } = useTranslation('you');
-  const { systemColors } = useTheme();
+  const { systemColors, brandColors } = useTheme();
 
   const boardOptions = useMemo(() => ['all', ...BOARD_TYPES], []);
   const timeframeOptions = useMemo<{ key: UnifiedTimeframeType; label: string }[]>(

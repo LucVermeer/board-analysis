@@ -6,7 +6,6 @@ import { getBoardRenderData } from '../../lib/board-details';
 import { hapticLight } from '../../lib/haptics';
 import { springs } from '../../theme/animations';
 import { spacing, borderRadius, overlays } from '../../theme/tokens';
-import { brandColors } from '../../theme/colors';
 import { iosSystemColors } from '../../theme/ios-colors';
 import { useTheme } from '../../providers/theme-provider';
 import { Text } from '../Text';
@@ -47,7 +46,7 @@ type BoardDiscoveryCardProps = {
 };
 
 export function BoardDiscoveryCard({ item, onPress }: BoardDiscoveryCardProps) {
-  const { systemColors } = useTheme();
+  const { systemColors, brandColors } = useTheme();
   const scale = useSharedValue(1);
 
   const animatedStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));

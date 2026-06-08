@@ -7,8 +7,8 @@ import { Text } from '../Text';
 import { Icon } from '../Icon';
 import { useBetaLinks } from '../../lib/graphql/hooks';
 import { useAuth } from '../../providers/auth-provider';
+import { useTheme } from '../../providers/theme-provider';
 import { iosSystemColors } from '../../theme/ios-colors';
-import { brandColors } from '../../theme/colors';
 import { spacing, borderRadius } from '../../theme/tokens';
 import { BetaVideoCard, BETA_CARD_WIDTH, BETA_CARD_HEIGHT } from './BetaVideoCard';
 import { BetaVideoAddSheet, type BetaVideoAddSheetHandle } from './BetaVideoAddSheet';
@@ -29,6 +29,7 @@ export const BetaVideosSection = memo(function BetaVideosSection({
 }: BetaVideosSectionProps) {
   const { t } = useTranslation('session');
   const { isAuthenticated } = useAuth();
+  const { brandColors } = useTheme();
   const addSheetRef = useRef<BetaVideoAddSheetHandle>(null);
   const { data: links, isLoading, isError, refetch, isRefetching } = useBetaLinks(boardName, climbUuid);
 
@@ -58,7 +59,7 @@ export const BetaVideosSection = memo(function BetaVideosSection({
             onPress={handleOpenAddSheet}
             accessibilityRole="button"
             accessibilityLabel={t('mobile.betaVideos.addButton')}
-            style={({ pressed }) => [styles.addButton, pressed && styles.addButtonPressed]}
+            style={({ pressed }) => [styles.addButton, pressed && { backgroundColor: `${brandColors.primary}1A` }]}
             hitSlop={8}
           >
             <Icon name="add" size={22} color={brandColors.primary} />
@@ -90,8 +91,9 @@ export const BetaVideosSection = memo(function BetaVideosSection({
             accessibilityLabel={t('mobile.betaVideos.retry')}
             style={({ pressed }) => [
               styles.retryButton,
+              { borderColor: brandColors.primary },
               isRefetching && styles.retryButtonDisabled,
-              pressed && !isRefetching && styles.retryButtonPressed,
+              pressed && !isRefetching && { backgroundColor: `${brandColors.primary}1A` },
             ]}
           >
             <Text variant="footnote" color={brandColors.primary}>
@@ -145,9 +147,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: borderRadius.full,
   },
-  addButtonPressed: {
-    backgroundColor: `${brandColors.primary}1A`,
-  },
   scrollContent: {
     gap: CARD_GAP,
     paddingVertical: spacing[1],
@@ -178,12 +177,8 @@ const styles = StyleSheet.create({
     paddingVertical: spacing[1],
     borderRadius: borderRadius.full,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: brandColors.primary,
   },
   retryButtonDisabled: {
     opacity: 0.5,
-  },
-  retryButtonPressed: {
-    backgroundColor: `${brandColors.primary}1A`,
   },
 });
