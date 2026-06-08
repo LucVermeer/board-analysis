@@ -1,5 +1,5 @@
-import { memo, useEffect, useMemo, useRef, useState } from 'react';
-import { InteractionManager, View, StyleSheet } from 'react-native';
+import { memo, useMemo } from 'react';
+import { View, StyleSheet } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import type { Climb } from '@boardsesh/shared-schema';
 import { CollapsibleSection } from '../CollapsibleSection';
@@ -8,6 +8,7 @@ import { SimilarClimbsSection } from './SimilarClimbsSection';
 import { CommunitySection } from './CommunitySection';
 import { BetaVideosSection } from './BetaVideosSection';
 import { spacing } from '../../theme/tokens';
+import { useDeferredAfterInteractions } from '../../hooks/use-deferred-after-interactions';
 
 type DeferredSectionsProps = {
   climb: Climb;
@@ -39,8 +40,11 @@ export const DeferredSections = memo(function DeferredSections({
   onBetaHeaderLayout,
 }: DeferredSectionsProps) {
   const { t } = useTranslation('session');
-  const [readyToRender, setReadyToRender] = useState(false);
-  const previousClimbUuid = useRef(climb.uuid);
+  // Defer the JS-heavy below-fold sections until just after the drawer's open
+  // animation. Re-defers per climb (resetKey = uuid) and — unlike a bare
+  // runAfterInteractions — falls back to a bounded timeout, so a starved
+  // interaction queue can't leave these sections blank until the drawer reopens.
+  const readyToRender = useDeferredAfterInteractions(enabled, climb.uuid);
 
   // Tally shown next to the collapsed Logbook header so the user sees their
   // history without expanding. Mirrors LogbookSection's summary fallback.
@@ -52,32 +56,6 @@ export const DeferredSections = memo(function DeferredSections({
     if (attempts > 0) return t('mobile.logbook.attemptsOnly', { attempts });
     return null;
   }, [climb.userAscents, climb.userAttempts, t]);
-
-  // Both effects key on climb.uuid. React runs effects in declaration order
-  // within the same commit, so the reset below always fires before the
-  // InteractionManager re-schedule — readyToRender goes false, then the
-  // deferred callback sets it back to true after animations settle.
-  useEffect(() => {
-    if (climb.uuid !== previousClimbUuid.current) {
-      previousClimbUuid.current = climb.uuid;
-      setReadyToRender(false);
-    }
-  }, [climb.uuid]);
-
-  useEffect(() => {
-    if (!enabled) {
-      setReadyToRender(false);
-      return;
-    }
-
-    const handle = InteractionManager.runAfterInteractions(() => {
-      setReadyToRender(true);
-    });
-
-    return () => {
-      handle.cancel();
-    };
-  }, [enabled, climb.uuid]);
 
   if (!enabled) {
     return null;
