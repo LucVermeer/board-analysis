@@ -32,6 +32,11 @@
         "vGrade": "Cotation V",
         "font": "Français",
         "both": "Les deux"
+      },
+      "language": {
+        "title": "Langue",
+        "system": "Système",
+        "description": "Système suit la langue de votre appareil."
       }
     },
     "nav": {

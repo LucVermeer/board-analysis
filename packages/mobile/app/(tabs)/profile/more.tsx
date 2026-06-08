@@ -3,7 +3,10 @@ import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import type { GradeDisplayFormat } from '@boardsesh/play-view';
 import type { ThemeOverride, UiVariantPreference } from '@boardsesh/key-value-storage';
+import { SUPPORTED_LOCALES, LOCALE_LABELS } from '@boardsesh/i18n';
 import { useTheme } from '../../../src/providers/theme-provider';
+import { useLocalePreference } from '../../../src/providers/i18n-provider';
+import type { LocaleOverride } from '../../../src/lib/i18n/locale-preference';
 import { useAuth } from '../../../src/providers/auth-provider';
 import { useProfile } from '../../../src/lib/graphql/hooks';
 import { spacing } from '../../../src/theme/tokens';
@@ -34,6 +37,15 @@ export default function MoreScreen() {
   const { data: profile } = useProfile();
   const { gradeFormat, setGradeFormat } = useGradeFormat();
   const glassCapable = useGlassCapability();
+  const { localePreference, setLocalePreference } = useLocalePreference();
+
+  // 'System' follows the device language; the rest are the supported locales,
+  // labelled in their own script (English / Español / Français) from
+  // LOCALE_LABELS — language names are intentionally not translated.
+  const languageOptions: { key: LocaleOverride; label: string }[] = [
+    { key: 'system', label: t('mobile.more.language.system') },
+    ...SUPPORTED_LOCALES.map((locale) => ({ key: locale, label: LOCALE_LABELS[locale] })),
+  ];
 
   const appearanceOptions: { key: ThemeOverride; label: string }[] = [
     { key: 'system', label: t('mobile.more.appearance.system') },
@@ -160,6 +172,37 @@ export default function MoreScreen() {
         </View>
       </View>
 
+      <View style={styles.section}>
+        <SectionHeader title={t('mobile.more.language.title')} />
+        <View
+          style={[
+            styles.card,
+            {
+              backgroundColor: systemColors.secondaryBackground,
+              borderRadius: borderRadius.lg,
+              marginHorizontal: spacing[4],
+            },
+          ]}
+        >
+          {languageOptions.map((option, index) => (
+            <ListRow
+              key={option.key}
+              title={option.label}
+              trailing={
+                localePreference === option.key ? (
+                  <Icon name="check.small" size={20} color={systemColors.accent} />
+                ) : undefined
+              }
+              showSeparator={index < languageOptions.length - 1}
+              onPress={() => setLocalePreference(option.key)}
+            />
+          ))}
+        </View>
+        <Text variant="footnote" color={systemColors.secondaryLabel} style={styles.languageHint}>
+          {t('mobile.more.language.description')}
+        </Text>
+      </View>
+
       {__DEV__ ? (
         <View style={styles.section}>
           <SectionHeader title={t('mobile.more.development')} />
@@ -238,6 +281,10 @@ const styles = StyleSheet.create({
   },
   settingHint: {
     marginTop: spacing[2],
+  },
+  languageHint: {
+    marginTop: spacing[2],
+    paddingHorizontal: spacing[4],
   },
   accountEmail: {
     paddingHorizontal: spacing[4],
