@@ -17,7 +17,7 @@ import { computeNavigationStateWithSuggestions, boardSupportsMirroring } from '@
 import { climbToQueueItem } from '../../lib/climb-to-queue-item';
 import type { ActiveSubDrawer } from '@boardsesh/play-view';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
-import { SwipeBoardCarousel } from './SwipeBoardCarousel';
+import { DeferredBoard } from './DeferredBoard';
 import { PlaybackControls } from './PlaybackControls';
 import { useMobilePlayback } from './use-mobile-playback';
 import { PlayDrawerHeader } from './PlayDrawerHeader';
@@ -682,7 +682,8 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
 
                 <View style={styles.boardSection}>
                   {boardRenderData && (
-                    <SwipeBoardCarousel
+                    <DeferredBoard
+                      open={isSheetOpen}
                       boardName={boardName as BoardName}
                       boardRenderData={boardRenderData}
                       layoutId={layoutId}
