@@ -90,7 +90,7 @@ vi.mock('../Text', () => ({
 }));
 
 vi.mock('../../providers/theme-provider', () => ({
-  useTheme: () => ({ variant: ctrl.variant, brandColors: { primary: '#8C4A52' } }),
+  useTheme: () => ({ variant: ctrl.variant, brandColors: { primary: '#6D28D9' } }),
 }));
 
 // The material branch maps the semantic name to its MDI glyph via iconMap.

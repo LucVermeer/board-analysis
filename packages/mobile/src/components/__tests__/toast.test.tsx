@@ -53,7 +53,7 @@ vi.mock('../Text', () => ({
 }));
 vi.mock('../Icon', () => ({ Icon: ({ name }: { name: string }) => createElement('i', { 'data-icon': name }) }));
 vi.mock('../../theme/colors', () => ({
-  brandColors: { success: '#34C759', error: '#FF3B30', primary: '#8C4A52', warning: '#FF9500' },
+  brandColors: { success: '#34C759', error: '#FF3B30', primary: '#6D28D9', warning: '#FF9500' },
   withAlpha: (color: string) => color,
 }));
 vi.mock('../../theme/tokens', () => ({ borderRadius: { full: 999 }, spacing: { 2: 8, 3: 12, 4: 16 } }));

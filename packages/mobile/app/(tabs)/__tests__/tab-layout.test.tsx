@@ -25,7 +25,7 @@ vi.mock('../../../src/components/queue-control/QueueBottomAccessory', () => ({
 }));
 
 vi.mock('../../../src/theme/colors', () => ({
-  brandColors: { success: '#6B9080' },
+  brandColors: { success: '#047857' },
 }));
 
 vi.mock('expo-router/unstable-native-tabs', () => {

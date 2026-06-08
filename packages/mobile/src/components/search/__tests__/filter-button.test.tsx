@@ -61,7 +61,7 @@ vi.mock('../../GlassIconButton', () => ({
 vi.mock('../../../providers/theme-provider', () => ({
   useTheme: () => ({
     systemColors: { fill: '#EEE', secondaryLabel: '#999' },
-    brandColors: { primary: '#8C4A52' },
+    brandColors: { primary: '#6D28D9' },
     variant: cfg.variant,
   }),
 }));
@@ -142,14 +142,14 @@ describe('FilterButton', () => {
     const filterButton = button(container);
     // Active on glass: white glyph reads on the maroon tint; glass tints/falls back to alpha-mixed maroon.
     expect(filterButton.getAttribute('data-icon-color')).toBe('#FFFFFF');
-    expect(filterButton.getAttribute('data-tint')).toBe('#8C4A52@0.18');
-    expect(filterButton.getAttribute('data-fallback')).toBe('#8C4A52@0.16');
+    expect(filterButton.getAttribute('data-tint')).toBe('#6D28D9@0.18');
+    expect(filterButton.getAttribute('data-fallback')).toBe('#6D28D9@0.16');
   });
 
   it('keeps the maroon glyph on Material when active (no tint behind it)', () => {
     cfg.variant = 'material';
     const { container } = render(<FilterButton activeFilterCount={2} onPress={() => {}} />);
-    expect(button(container).getAttribute('data-icon-color')).toBe('#8C4A52');
+    expect(button(container).getAttribute('data-icon-color')).toBe('#6D28D9');
   });
 
   it('omits the count from the a11y label when no filters are active', () => {

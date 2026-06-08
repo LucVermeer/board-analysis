@@ -52,17 +52,17 @@ describe('FONT_GRADE_COLORS', () => {
 
 describe('getVGradeColor', () => {
   it('returns correct color for known grades', () => {
-    expect(getVGradeColor('V0')).toBe('#FFEB3B');
-    expect(getVGradeColor('V5')).toBe('#F44336');
+    expect(getVGradeColor('V0')).toBe('#FFD400');
+    expect(getVGradeColor('V5')).toBe('#F03E3E');
     expect(getVGradeColor('V17')).toBe('#2A0054');
   });
 
   it('is case-insensitive', () => {
-    expect(getVGradeColor('v3')).toBe('#FF7043');
+    expect(getVGradeColor('v3')).toBe('#FF6D2E');
   });
 
   it('strips trailing + from V-grade', () => {
-    expect(getVGradeColor('V5+')).toBe('#F44336');
+    expect(getVGradeColor('V5+')).toBe('#F03E3E');
   });
 
   it('returns undefined for null/undefined/unknown', () => {
@@ -74,12 +74,12 @@ describe('getVGradeColor', () => {
 
 describe('getFontGradeColor', () => {
   it('returns correct color for known grades', () => {
-    expect(getFontGradeColor('6a')).toBe('#FF7043');
-    expect(getFontGradeColor('7b+')).toBe('#C62828');
+    expect(getFontGradeColor('6a')).toBe('#FF6D2E');
+    expect(getFontGradeColor('7b+')).toBe('#B81A5A');
   });
 
   it('is case-insensitive', () => {
-    expect(getFontGradeColor('6A')).toBe('#FF7043');
+    expect(getFontGradeColor('6A')).toBe('#FF6D2E');
   });
 
   it('returns undefined for null/undefined/unknown', () => {
@@ -90,11 +90,11 @@ describe('getFontGradeColor', () => {
 
 describe('getGradeColor', () => {
   it('extracts V-grade from combined string', () => {
-    expect(getGradeColor('6a/V3')).toBe('#FF7043');
+    expect(getGradeColor('6a/V3')).toBe('#FF6D2E');
   });
 
   it('falls back to font grade when no V-grade', () => {
-    expect(getGradeColor('7a')).toBe('#E53935');
+    expect(getGradeColor('7a')).toBe('#E22A2A');
   });
 
   it('returns undefined for null/undefined/unrecognized', () => {

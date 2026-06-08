@@ -8,7 +8,13 @@ import {
   isUiVariantPreference,
   type UiVariantPreference,
 } from '@boardsesh/key-value-storage';
-import { iosSystemColors, brandColors, androidFallbackColors, materialSurfaces } from '../theme/colors';
+import {
+  iosSystemColors,
+  brandColors,
+  brandColorsDark,
+  androidFallbackColors,
+  materialSurfaces,
+} from '../theme/colors';
 import { textStyles, type TextVariant } from '../theme/typography';
 import {
   spacing,
@@ -26,6 +32,12 @@ import { useGlassCapability } from '../hooks/use-glass-capability';
 import { secureStorePreferences } from '../lib/preferences/secure-store-adapter';
 
 type ColorScheme = 'light' | 'dark';
+
+/**
+ * Resolved brand colours for the current colour scheme. `brandColors` (light) and
+ * `brandColorsDark` share the same keys, so either set satisfies this shape.
+ */
+type ResolvedBrandColors = typeof brandColors | typeof brandColorsDark;
 
 /**
  * Resolved system colors for the current color scheme.
@@ -47,7 +59,7 @@ type ResolvedSystemColors = {
 type Theme = {
   colorScheme: ColorScheme;
   systemColors: ResolvedSystemColors;
-  brandColors: typeof brandColors;
+  brandColors: ResolvedBrandColors;
   textStyles: typeof textStyles;
   spacing: typeof spacing;
   borderRadius: typeof borderRadius;
@@ -107,6 +119,14 @@ function resolveSystemColors(colorScheme: ColorScheme, variant: UiVariant): Reso
     separator: fallback.separator,
     fill: fallback.fill,
   };
+}
+
+/**
+ * Pick the brand colour set for the current scheme. The dark set lifts the violet
+ * tint and brightens semantic tones so brand foregrounds stay legible on near-black.
+ */
+function resolveBrandColors(colorScheme: ColorScheme): ResolvedBrandColors {
+  return colorScheme === 'dark' ? brandColorsDark : brandColors;
 }
 
 type ThemeProviderProps = {
@@ -213,7 +233,7 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
     return {
       colorScheme,
       systemColors: resolvedSystemColors,
-      brandColors,
+      brandColors: resolveBrandColors(colorScheme),
       textStyles,
       spacing,
       borderRadius,

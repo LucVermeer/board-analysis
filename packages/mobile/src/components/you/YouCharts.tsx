@@ -192,7 +192,7 @@ type GroupedBarsProps = {
  * wider gap separating groups, and the grade label centered under each pair.
  */
 export function GroupedBarChart({ bars, height = 150, loading, emptyLabel, legend }: GroupedBarsProps) {
-  const { systemColors } = useTheme();
+  const { systemColors, colorScheme } = useTheme();
   const isEmpty = !bars || bars.length === 0;
   const groupGap = 14;
   const innerGap = 2;
@@ -210,7 +210,7 @@ export function GroupedBarChart({ bars, height = 150, loading, emptyLabel, legen
           const data = list.flatMap((bar) =>
             bar.values.map((value, valueIndex) => ({
               value: value.value,
-              frontColor: flashRedpointColor(value.key),
+              frontColor: flashRedpointColor(value.key, colorScheme),
               spacing: valueIndex === 0 ? innerGap : groupGap,
               label: valueIndex === 0 ? bar.label : undefined,
               labelWidth: barWidth * 2 + innerGap,

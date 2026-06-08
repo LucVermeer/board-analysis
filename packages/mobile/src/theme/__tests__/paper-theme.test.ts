@@ -14,18 +14,18 @@ import { buildPaperTheme } from '../paper-theme';
 describe('buildPaperTheme', () => {
   it('maps the brand + material surfaces onto MD3 roles (light)', () => {
     const theme = buildPaperTheme('light');
-    expect(theme.colors.primary).toBe('#8C4A52');
+    expect(theme.colors.primary).toBe('#6D28D9');
     expect(theme.colors.onPrimary).toBe('#FFFFFF');
-    expect(theme.colors.background).toBe('#F4ECEC'); // materialSurfaces.light.background
+    expect(theme.colors.background).toBe('#F3EFFA'); // materialSurfaces.light.background
     expect(theme.colors.surface).toBe('#FFFFFF'); // secondaryBackground
-    expect(theme.colors.error).toBe('#B8524C');
+    expect(theme.colors.error).toBe('#C81E1E');
     expect(theme.colors.elevation.level2).toBe('#FFFFFF'); // elevatedSurface (light)
   });
 
   it('uses the dark tonal surfaces for the dark scheme', () => {
     const theme = buildPaperTheme('dark');
-    expect(theme.colors.background).toBe('#141011');
-    expect(theme.colors.surface).toBe('#1F1A1B');
+    expect(theme.colors.background).toBe('#15101E');
+    expect(theme.colors.surface).toBe('#221A33');
   });
 
   it('passes a provided dynamic palette straight through (Material You hook)', () => {

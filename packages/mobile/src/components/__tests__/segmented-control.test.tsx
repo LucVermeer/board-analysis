@@ -45,7 +45,7 @@ vi.mock('../PressableSurface', () => ({
 }));
 vi.mock('../Text', () => ({ Text: ({ children }: { children?: ReactNode }) => createElement('span', null, children) }));
 vi.mock('../../lib/haptics', () => ({ hapticSelection: hapticSelectionMock }));
-vi.mock('../../theme/colors', () => ({ brandColors: { primary: '#8C4A52' } }));
+vi.mock('../../theme/colors', () => ({ brandColors: { primary: '#6D28D9' } }));
 vi.mock('../../theme/tokens', () => ({ spacing: { 2: 8 } }));
 vi.mock('../../providers/theme-provider', () => ({
   useTheme: () => ({
@@ -53,6 +53,7 @@ vi.mock('../../providers/theme-provider', () => ({
     colorScheme: 'light',
     systemColors: { elevatedSurface: '#fff', label: '#000' },
     opacity: { disabled: 0.4 },
+    brandColors: { primary: '#6D28D9' },
   }),
 }));
 

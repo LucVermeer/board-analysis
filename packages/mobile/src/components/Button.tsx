@@ -5,8 +5,6 @@ import { Icon } from './Icon';
 import { PressableSurface } from './PressableSurface';
 import { iconMap, type IconName } from './icon-map';
 import { hapticLight } from '../lib/haptics';
-import { brandColors } from '../theme/colors';
-import { iosSystemColors } from '../theme/ios-colors';
 import { useTheme } from '../providers/theme-provider';
 
 type ButtonVariant = 'filled' | 'outlined' | 'text';
@@ -52,9 +50,13 @@ function ButtonMaterial({
   disabled = false,
   loading = false,
   haptic = true,
-  tintColor = brandColors.primary,
+  tintColor,
   style,
 }: ButtonProps) {
+  const { brandColors: brand } = useTheme();
+  // Filled buttons sit on a brand FILL; outlined/text use the legible brand TINT.
+  const fillColor = tintColor ?? brand.primaryFill;
+  const accentColor = tintColor ?? brand.primary;
   const config = sizeConfig[size];
   const handlePress = () => {
     if (disabled || loading) return;
@@ -71,8 +73,8 @@ function ButtonMaterial({
       // Paper resolves the MDI glyph through our icon settings (see
       // material-theme-provider); map our semantic name to its MDI name.
       icon={icon ? iconMap[icon].android : undefined}
-      buttonColor={variant === 'filled' ? tintColor : undefined}
-      textColor={variant === 'filled' ? undefined : tintColor}
+      buttonColor={variant === 'filled' ? fillColor : undefined}
+      textColor={variant === 'filled' ? undefined : accentColor}
       accessibilityLabel={title}
       // Approximate the small/medium/large ladder on Paper's single-height button.
       labelStyle={{ fontSize: config.fontSize }}
@@ -94,12 +96,17 @@ function ButtonGlass({
   disabled = false,
   loading = false,
   haptic = true,
-  tintColor = brandColors.primary,
+  tintColor,
   style,
 }: ButtonProps) {
   const config = sizeConfig[size];
-  // Soft 10dp corner on Liquid Glass.
-  const { radii } = useTheme();
+  // Soft 10dp corner on Liquid Glass; brand colours resolve per colour scheme.
+  const { radii, brandColors: brand } = useTheme();
+  // Filled buttons sit on a brand FILL with on-primary text; outlined/text use the
+  // legible brand TINT for both border and label.
+  const fillColor = tintColor ?? brand.primaryFill;
+  const accentColor = tintColor ?? brand.primary;
+  const onFillColor = brand.onPrimary;
 
   const handlePress = () => {
     if (disabled || loading) return;
@@ -116,13 +123,13 @@ function ButtonGlass({
     paddingVertical: config.paddingVertical,
     borderRadius: radii.button,
     opacity: disabled ? 0.5 : 1,
-    ...(variant === 'filled' && { backgroundColor: tintColor }),
-    ...(variant === 'outlined' && { borderWidth: 1, borderColor: tintColor }),
+    ...(variant === 'filled' && { backgroundColor: fillColor }),
+    ...(variant === 'outlined' && { borderWidth: 1, borderColor: accentColor }),
   };
 
-  const textColor = variant === 'filled' ? iosSystemColors.white : tintColor;
-  // M3 ripple: onPrimary (white) over a filled button, the tint over outlined/text.
-  const rippleColor = variant === 'filled' ? iosSystemColors.white : tintColor;
+  const textColor = variant === 'filled' ? onFillColor : accentColor;
+  // M3 ripple: on-primary over a filled button, the tint over outlined/text.
+  const rippleColor = variant === 'filled' ? onFillColor : accentColor;
 
   return (
     <PressableSurface

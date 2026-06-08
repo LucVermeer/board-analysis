@@ -9,6 +9,7 @@ import { StackedBarChart, GroupedBarChart, type ChartLegendItem } from '../you/Y
 import { layoutChartColor, flashRedpointColor } from '../you/profile-chart-colors';
 import { sessionTicksToLogbook } from '../../lib/session-tick-mapping';
 import { useGradeFormat } from '../../hooks/use-grade-format';
+import { useTheme } from '../../providers/theme-provider';
 import { spacing } from '../../theme/tokens';
 
 /**
@@ -19,6 +20,7 @@ import { spacing } from '../../theme/tokens';
  */
 export function SessionAnalyticsSection({ ticks }: { ticks: SessionDetailTick[] }) {
   const { t } = useTranslation('profile');
+  const { colorScheme } = useTheme();
   // Match the grade format the Progress tab / useYouProfileData uses so a
   // session's charts read identically to the profile's.
   const { gradeFormat } = useGradeFormat();
@@ -48,9 +50,9 @@ export function SessionAnalyticsSection({ ticks }: { ticks: SessionDetailTick[] 
     () =>
       viewModel?.aggregatedFlashRedpointBars?.[0]?.values.map((value) => ({
         label: value.label,
-        color: flashRedpointColor(value.key),
+        color: flashRedpointColor(value.key, colorScheme),
       })),
-    [viewModel],
+    [viewModel, colorScheme],
   );
 
   if (!viewModel) return null;

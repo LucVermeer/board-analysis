@@ -311,7 +311,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing[2],
     gap: spacing[3],
   },
-  // Active-climb wash. Brand rose (#8C4A52) — kept distinct from the grade
+  // Active-climb wash. Brand violet (#6D28D9) — kept distinct from the grade
   // colour on the right of the row. Behind the content (crisp text). Bumped
   // from 0.14 → 0.18 so it reads on near-black OLED, where the accent bar
   // scrolls off during a swipe and the wash is the only state cue left.
@@ -321,7 +321,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(140, 74, 82, 0.18)',
+    backgroundColor: 'rgba(109, 40, 217, 0.18)',
   },
   selectedAccent: {
     position: 'absolute',

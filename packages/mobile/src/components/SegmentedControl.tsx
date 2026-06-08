@@ -3,7 +3,6 @@ import { SegmentedButtons } from 'react-native-paper';
 import { Text } from './Text';
 import { PressableSurface } from './PressableSurface';
 import { hapticSelection } from '../lib/haptics';
-import { brandColors } from '../theme/colors';
 import { spacing } from '../theme/tokens';
 import { useTheme } from '../providers/theme-provider';
 
@@ -39,7 +38,7 @@ function Segment({
   onPress: () => void;
   textVariant: 'subheadline' | 'footnote';
 }) {
-  const { systemColors, colorScheme, opacity } = useTheme();
+  const { systemColors, colorScheme, opacity, brandColors } = useTheme();
   const isDark = colorScheme === 'dark';
 
   // Selected pill is a raised tile over the track — elevatedSurface reads as a
@@ -61,8 +60,9 @@ function Segment({
     }),
   };
 
-  // Maroon brand accent reads well on the light pill; on the dark pill it's too
-  // low-contrast, so fall back to the high-contrast label colour there.
+  // Violet brand accent reads well on the light pill (#6D28D9 on white = 7.10:1);
+  // on the dark pill it's too low-contrast, so fall back to the high-contrast
+  // label colour there.
   const selectedTextColor = isDark ? systemColors.label : brandColors.primary;
 
   return (

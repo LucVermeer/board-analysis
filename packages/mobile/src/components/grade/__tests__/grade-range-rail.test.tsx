@@ -127,7 +127,7 @@ vi.mock('../../../providers/theme-provider', () => ({
 }));
 
 vi.mock('../../../theme/colors', () => ({
-  brandColors: { primary: '#8C4A52' },
+  brandColors: { primary: '#6D28D9' },
   withAlpha: (color: string, alpha: number) => `${color}@${alpha}`,
 }));
 
