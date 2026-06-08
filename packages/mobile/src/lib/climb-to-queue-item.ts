@@ -63,6 +63,7 @@ export function climbToQueueItem(climb: Climb, options?: { suggested?: boolean; 
       stars: climb.stars,
       difficulty_error: climb.difficulty_error,
       benchmark_difficulty: climb.benchmark_difficulty,
+      is_no_match: climb.is_no_match,
       userAscents: climb.userAscents,
       userAttempts: climb.userAttempts,
     },

@@ -683,7 +683,9 @@
         "flash": "Flasheado",
         "send": "Encadenado",
         "attempt": "Intentado"
-      }
+      },
+      "noMatch": "Sin igualar",
+      "benchmark": "Benchmark"
     },
     "climbActions": {
       "copyLink": "Copiar enlace",

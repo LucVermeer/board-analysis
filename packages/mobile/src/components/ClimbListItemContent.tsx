@@ -39,6 +39,9 @@ export type ClimbListItemClimb = {
   ascensionist_count?: number | null;
   quality_average: string;
   setter_username?: string | null;
+  // Intrinsic climb attributes shown as grey glyphs after the name.
+  is_no_match?: boolean | null;
+  benchmark_difficulty?: string | null;
 };
 
 type ClimbListItemContentProps = {
@@ -104,6 +107,12 @@ const ClimbListItemContent = React.memo(function ClimbListItemContent({
     return parts.length > 0 ? parts.join(' · ') : t('mobile.climbRow.projectFallback');
   }, [climb.is_draft, climb.ascensionist_count, climb.quality_average, climb.setter_username, t]);
 
+  // Intrinsic-attribute glyphs that sit after the name (web parity:
+  // packages/web/.../climb-card/climb-icons.tsx). benchmark_difficulty > 0 marks
+  // a benchmark/classic climb in the current data feeds.
+  const benchmarkValue = climb.benchmark_difficulty != null ? Number(climb.benchmark_difficulty) : null;
+  const isBenchmark = benchmarkValue !== null && benchmarkValue > 0 && !Number.isNaN(benchmarkValue);
+
   return (
     <>
       {/* Left: portrait thumbnail with ascent badge */}
@@ -118,11 +127,23 @@ const ClimbListItemContent = React.memo(function ClimbListItemContent({
         />
       </View>
 
-      {/* Center: name + subtitle */}
+      {/* Center: name (+ intrinsic-attribute glyphs) + subtitle */}
       <View style={styles.centerColumn}>
-        <Text variant="body" numberOfLines={1} style={styles.climbName}>
-          {climb.name}
-        </Text>
+        <View style={styles.nameRow}>
+          <Text variant="body" numberOfLines={1} style={styles.climbName}>
+            {climb.name}
+          </Text>
+          {isBenchmark ? (
+            <View accessibilityRole="image" accessibilityLabel={t('mobile.climbRow.benchmark')} style={styles.attrIcon}>
+              <Icon name="benchmark" size={14} color={theme.systemColors.secondaryLabel} />
+            </View>
+          ) : null}
+          {climb.is_no_match ? (
+            <View accessibilityRole="image" accessibilityLabel={t('mobile.climbRow.noMatch')} style={styles.attrIcon}>
+              <Icon name="no.match" size={14} color={theme.systemColors.secondaryLabel} />
+            </View>
+          ) : null}
+        </View>
         <Text variant="footnote" numberOfLines={1} style={styles.subtitle}>
           {subtitleText}
         </Text>
@@ -158,8 +179,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 2,
   },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    minWidth: 0,
+  },
   climbName: {
     fontWeight: '600',
+    // Shrink so the name (not the trailing attribute glyphs) absorbs truncation.
+    flexShrink: 1,
+  },
+  attrIcon: {
+    marginLeft: 4,
+    flexShrink: 0,
   },
   subtitle: {
     opacity: 0.6,
