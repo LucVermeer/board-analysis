@@ -6,7 +6,7 @@ import { normalizeAscentStatus, pickHighestAscentStatus, type AscentStatusValue 
  * The user's highest recorded ascent status (flash / send / attempt) for a climb
  * at a given angle, read from the denormalised logbook via `BoardProvider`.
  * Returns null when there are no ticks at this angle, or outside a BoardProvider.
- * Shared by the thumbnail `AscentStatusBadge` and the climb-row scan-line marker.
+ * Drives the climb-row status glyph in `ClimbListItemContent`.
  */
 export function useAscentStatus(climbUuid: string, angle: number, isMirror?: boolean): AscentStatusValue | null {
   const board = useOptionalBoardProvider();

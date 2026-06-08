@@ -678,7 +678,14 @@
       "addToQueue": "Add to queue",
       "toggleFavorite": "Toggle favorite",
       "share": "Share climb",
-      "projectFallback": "Project"
+      "projectFallback": "Project",
+      "ascentStatus": {
+        "flash": "Flashed",
+        "send": "Sent",
+        "attempt": "Tried"
+      },
+      "noMatch": "No matching",
+      "benchmark": "Benchmark"
     },
     "climbActions": {
       "copyLink": "Copy link",

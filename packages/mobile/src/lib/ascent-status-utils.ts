@@ -48,13 +48,10 @@ export type AscentLogEntry = {
 /**
  * Count of send/flash ticks for a climb at a given angle — drives the toolbar's
  * "already logged" state and its success burst (a fresh send bumps the count).
- * Mirrors the AscentStatusBadge selector so the badge and the toolbar agree.
+ * Shares `normalizeAscentStatus` with the climb-row status glyph so the toolbar
+ * and the list marker agree.
  */
-export function countSentAscents(
-  entries: readonly AscentLogEntry[],
-  climbUuid: string,
-  angle: number,
-): number {
+export function countSentAscents(entries: readonly AscentLogEntry[], climbUuid: string, angle: number): number {
   let count = 0;
   for (const entry of entries) {
     if (entry.climb_uuid !== climbUuid || entry.angle !== angle) continue;

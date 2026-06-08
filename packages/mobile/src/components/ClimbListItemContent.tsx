@@ -8,14 +8,20 @@ import { ClimbListThumbnail, THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT } from './ClimbLi
 import { formatSends, formatQuality } from '../lib/format-climb-stats';
 import { useGradeFormat } from '../hooks/use-grade-format';
 import { useAscentStatus } from '../hooks/use-ascent-status';
-import { iosSystemColors } from '../theme/ios-colors';
+import { useTheme } from '../providers/theme-provider';
+import { Icon } from './Icon';
+import { ClimbAttributeIcons } from './ClimbAttributeIcons';
+import type { IconName } from './icon-map';
 import type { AscentStatusValue } from '../lib/ascent-status-utils';
 
-// Scan-line status dot colours — green sent, yellow flash, orange attempted.
-const ASCENT_DOT_COLOR: Record<AscentStatusValue, string> = {
-  send: iosSystemColors.systemGreen,
-  flash: iosSystemColors.systemYellow,
-  attempt: iosSystemColors.systemOrange,
+// Scan-line status marker. Status is carried by glyph SHAPE in a single neutral
+// grey — not a colour — so it can't be mistaken for the colour-coded grade right
+// beside it, and so it stays readable for colour-blind users. ⚡ flashed,
+// ✓ sent, ✗ attempted.
+const ASCENT_STATUS_ICON: Record<AscentStatusValue, IconName> = {
+  flash: 'flash',
+  send: 'tick.outline',
+  attempt: 'ascent.attempt',
 };
 
 /**
@@ -34,6 +40,9 @@ export type ClimbListItemClimb = {
   ascensionist_count?: number | null;
   quality_average: string;
   setter_username?: string | null;
+  // Intrinsic climb attributes shown as grey glyphs after the name.
+  is_no_match?: boolean | null;
+  benchmark_difficulty?: string | null;
 };
 
 type ClimbListItemContentProps = {
@@ -63,10 +72,22 @@ const ClimbListItemContent = React.memo(function ClimbListItemContent({
 }: ClimbListItemContentProps) {
   const { t } = useTranslation('climbs');
   const { formatGrade } = useGradeFormat();
+  const theme = useTheme();
 
   const gradeColor = getGradeColor(climb.difficulty) ?? DEFAULT_GRADE_COLOR;
   const formattedGrade = formatGrade(climb.difficulty);
   const ascentStatus = useAscentStatus(climb.uuid, angle);
+
+  // Spoken by VoiceOver/TalkBack — the only non-visual signal now colour is gone.
+  // Literal keys (not a dynamic `t(...)`) so the i18n orphan checker sees them.
+  const ascentStatusLabel = useMemo(() => {
+    if (!ascentStatus) return undefined;
+    return {
+      flash: t('mobile.climbRow.ascentStatus.flash'),
+      send: t('mobile.climbRow.ascentStatus.send'),
+      attempt: t('mobile.climbRow.ascentStatus.attempt'),
+    }[ascentStatus];
+  }, [ascentStatus, t]);
 
   // Subtitle parts: sends · quality★ · setter (each dropped when absent).
   const subtitleText = useMemo(() => {
@@ -101,19 +122,26 @@ const ClimbListItemContent = React.memo(function ClimbListItemContent({
         />
       </View>
 
-      {/* Center: name + subtitle */}
+      {/* Center: name (+ intrinsic-attribute glyphs) + subtitle */}
       <View style={styles.centerColumn}>
-        <Text variant="body" numberOfLines={1} style={styles.climbName}>
-          {climb.name}
-        </Text>
+        <View style={styles.nameRow}>
+          <Text variant="body" numberOfLines={1} style={styles.climbName}>
+            {climb.name}
+          </Text>
+          <ClimbAttributeIcons isNoMatch={climb.is_no_match} benchmarkDifficulty={climb.benchmark_difficulty} />
+        </View>
         <Text variant="footnote" numberOfLines={1} style={styles.subtitle}>
           {subtitleText}
         </Text>
       </View>
 
-      {/* Right: ascent-status dot + colorized grade — the two scan keys together */}
+      {/* Right: ascent-status glyph + colorized grade — the two scan keys together */}
       <View style={styles.rightSection}>
-        {ascentStatus ? <View style={[styles.statusDot, { backgroundColor: ASCENT_DOT_COLOR[ascentStatus] }]} /> : null}
+        {ascentStatus ? (
+          <View accessibilityRole="image" accessibilityLabel={ascentStatusLabel}>
+            <Icon name={ASCENT_STATUS_ICON[ascentStatus]} size={16} color={theme.systemColors.secondaryLabel} />
+          </View>
+        ) : null}
         <Text variant="title3" numberOfLines={1} style={[styles.gradeText, { color: gradeColor }]}>
           {formattedGrade ?? climb.difficulty}
         </Text>
@@ -137,8 +165,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 2,
   },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    minWidth: 0,
+  },
   climbName: {
     fontWeight: '600',
+    // Shrink so the name (not the trailing attribute glyphs) absorbs truncation.
+    flexShrink: 1,
   },
   subtitle: {
     opacity: 0.6,
@@ -149,11 +184,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'flex-end',
     gap: 6,
-  },
-  statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
   },
   gradeText: {
     fontWeight: '700',

@@ -57,6 +57,14 @@ export const iconMap = {
   angle: { ios: 'angle', android: 'angle-acute' },
   tick: { ios: 'checkmark.circle.fill', android: 'check-circle' },
   'tick.outline': { ios: 'checkmark.circle', android: 'check-circle-outline' },
+  // Ascent-status "attempted" marker (tried, didn't send). A circled X that
+  // mirrors the circled check used for `send`, so the climb-row status glyphs
+  // (bolt / check / x) read as one matched set.
+  'ascent.attempt': { ios: 'xmark.circle', android: 'close-circle-outline' },
+  // Intrinsic climb-attribute glyphs shown after the name (web parity:
+  // climb-card/climb-icons.tsx © benchmark + ⊘ no-match).
+  'no.match': { ios: 'hand.raised.slash', android: 'hand-back-right-off-outline' },
+  benchmark: { ios: 'c.circle', android: 'copyright' },
   bluetooth: { ios: 'antenna.radiowaves.left.and.right', android: 'bluetooth' },
   'bluetooth.connected': { ios: 'antenna.radiowaves.left.and.right', android: 'bluetooth-connect' },
   'bluetooth.off': { ios: 'antenna.radiowaves.left.and.right.slash', android: 'bluetooth-off' },

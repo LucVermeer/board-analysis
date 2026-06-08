@@ -678,7 +678,14 @@
       "addToQueue": "Ajouter à la file",
       "toggleFavorite": "Basculer favori",
       "share": "Partager le bloc",
-      "projectFallback": "Projet"
+      "projectFallback": "Projet",
+      "ascentStatus": {
+        "flash": "Flashé",
+        "send": "Enchaîné",
+        "attempt": "Essayé"
+      },
+      "noMatch": "Une main par prise",
+      "benchmark": "Benchmark"
     },
     "climbActions": {
       "copyLink": "Copier le lien",
@@ -716,7 +723,7 @@
         "draftDescription": "Les brouillons restent privés jusqu’à publication.",
         "showAllHoldsLabel": "Afficher toutes les prises",
         "showAllHoldsDescription": "Met en évidence chaque prise cliquable du panneau.",
-        "noMatchLabel": "Sans matcher",
+        "noMatchLabel": "Une main par prise",
         "noMatchDescription": "Les mains ne peuvent pas se rejoindre sur la même prise"
       },
       "drafts": {

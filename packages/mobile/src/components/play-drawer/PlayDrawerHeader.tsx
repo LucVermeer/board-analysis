@@ -1,10 +1,11 @@
 import { memo, useMemo } from 'react';
-import { StyleSheet } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { getGradeColor, DEFAULT_GRADE_COLOR } from '@boardsesh/board-constants/grade-colors';
 import { formatSends, formatQuality } from '../../lib/format-climb-stats';
 import { Text } from '../Text';
 import { DrawerHeader } from '../DrawerHeader';
+import { ClimbAttributeIcons } from '../ClimbAttributeIcons';
 import { iosSystemColors } from '../../theme/ios-colors';
 
 type PlayDrawerHeaderProps = {
@@ -17,6 +18,9 @@ type PlayDrawerHeaderProps = {
   qualityAverage: string;
   ascensionistCount: number;
   setterUsername: string;
+  /** Intrinsic attributes shown as grey glyphs after the name. */
+  isNoMatch?: boolean | null;
+  benchmarkDifficulty?: string | null;
 };
 
 export const PlayDrawerHeader = memo(function PlayDrawerHeader({
@@ -26,6 +30,8 @@ export const PlayDrawerHeader = memo(function PlayDrawerHeader({
   qualityAverage,
   ascensionistCount,
   setterUsername,
+  isNoMatch,
+  benchmarkDifficulty,
 }: PlayDrawerHeaderProps) {
   const { t } = useTranslation('climbs');
   const gradeColor = useMemo(
@@ -43,9 +49,12 @@ export const PlayDrawerHeader = memo(function PlayDrawerHeader({
     <DrawerHeader
       center={
         <>
-          <Text variant="body" style={styles.nameText} numberOfLines={1}>
-            {name}
-          </Text>
+          <View style={styles.nameRow}>
+            <Text variant="body" style={styles.nameText} numberOfLines={1}>
+              {name}
+            </Text>
+            <ClimbAttributeIcons isNoMatch={isNoMatch} benchmarkDifficulty={benchmarkDifficulty} />
+          </View>
           <Text variant="caption1" style={styles.subtitleText} numberOfLines={1}>
             {subtitleParts.join(' · ')}
           </Text>
@@ -66,9 +75,17 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     textAlign: 'right',
   },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 0,
+  },
   nameText: {
     fontWeight: '700',
     textAlign: 'center',
+    // Shrink so a long name truncates while the attribute glyphs stay visible.
+    flexShrink: 1,
   },
   subtitleText: {
     color: iosSystemColors.systemGray,
