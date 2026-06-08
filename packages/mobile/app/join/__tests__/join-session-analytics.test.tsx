@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, render } from '@testing-library/react';
+import { act, render, waitFor } from '@testing-library/react';
 import { createElement, type ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -103,18 +103,20 @@ describe('JoinSessionScreen analytics', () => {
 
     await act(async () => {
       buttons.joinPress?.();
-      // performJoin awaits resolveBoardForSession → joinSession before tracking.
-      await Promise.resolve();
-      await Promise.resolve();
-      await Promise.resolve();
     });
 
+    // performJoin awaits resolveBoardForSession → joinSession before tracking;
+    // poll until those promises settle rather than flushing a fixed number of
+    // microtasks.
+    await waitFor(() =>
+      expect(analytics.track).toHaveBeenCalledWith('Session Joined', {
+        session_id: 'session-42',
+        board_name: 'kilter',
+        layout_id: 1,
+      }),
+    );
+
     expect(queue.joinSession).toHaveBeenCalledTimes(1);
-    expect(analytics.track).toHaveBeenCalledWith('Session Joined', {
-      session_id: 'session-42',
-      board_name: 'kilter',
-      layout_id: 1,
-    });
     expect(router.replace).toHaveBeenCalledWith('/(tabs)/record');
   });
 });

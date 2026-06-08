@@ -398,10 +398,12 @@ export function useCreateClimbScreen({
           publishedAt: result.publishedAt ?? savedClimb.publishedAt,
           isDraft: result.isDraft,
         });
+        // Match web's schema exactly (create-climb-form.tsx) so PostHog funnels
+        // that group by these props line up across platforms. Web emits the
+        // human-readable `layout_name`; mobile only carries the numeric layout id
+        // here, so `boardLayout` is the layout identity mobile already has.
         track(SHARED_EVENTS.ClimbUpdated, {
-          boardName: board.boardName,
-          layoutId: board.layoutId,
-          climbUuid: result.uuid,
+          boardLayout: board.layoutId,
           isDraft: result.isDraft,
           holdCount,
         });
@@ -422,10 +424,9 @@ export function useCreateClimbScreen({
           publishedAt: result.publishedAt ?? null,
           isDraft,
         });
+        // Match web's schema exactly (create-climb-form.tsx). See ClimbUpdated above.
         track(SHARED_EVENTS.ClimbCreated, {
-          boardName: board.boardName,
-          layoutId: board.layoutId,
-          climbUuid: result.uuid,
+          boardLayout: board.layoutId,
           isDraft,
           holdCount,
         });
@@ -444,9 +445,11 @@ export function useCreateClimbScreen({
       if (justSavedTimerRef.current) clearTimeout(justSavedTimerRef.current);
       justSavedTimerRef.current = setTimeout(() => setJustSaved(false), JUST_SAVED_MS);
     } catch (err) {
+      // Web emits only `{ boardLayout }` for this event (create-climb-form.tsx);
+      // match that, plus a mobile-only `error_reason` that doesn't affect any
+      // grouping web relies on.
       track(SHARED_EVENTS.ClimbCreateFailed, {
-        boardName: board.boardName,
-        layoutId: board.layoutId,
+        boardLayout: board.layoutId,
         error_reason: isDuplicateClimbError(err) ? 'duplicate' : 'exception',
       });
       if (isDuplicateClimbError(err)) {

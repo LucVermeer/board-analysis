@@ -140,7 +140,7 @@ beforeEach(() => {
 });
 
 describe('useCreateClimbScreen analytics', () => {
-  it('fires "Climb Created" with board + holdCount on a successful new save', async () => {
+  it('fires "Climb Created" with web-aligned boardLayout + holdCount on a successful new save', async () => {
     board.saveClimb.mockResolvedValue({
       uuid: 'new-climb',
       createdAt: null,
@@ -152,10 +152,9 @@ describe('useCreateClimbScreen analytics', () => {
     await nameAndSave(result);
 
     expect(board.saveClimb).toHaveBeenCalledTimes(1);
+    // Same schema as web's `Climb Created` (create-climb-form.tsx): { boardLayout, isDraft, holdCount }.
     expect(analytics.track).toHaveBeenCalledWith('Climb Created', {
-      boardName: 'kilter',
-      layoutId: 1,
-      climbUuid: 'new-climb',
+      boardLayout: 1,
       isDraft: true,
       holdCount: 3,
     });
@@ -188,10 +187,9 @@ describe('useCreateClimbScreen analytics', () => {
 
     expect(board.updateClimb).toHaveBeenCalledTimes(1);
     expect(board.saveClimb).not.toHaveBeenCalled();
+    // Same schema as web's `Climb Updated`: { boardLayout, isDraft, holdCount }.
     expect(analytics.track).toHaveBeenCalledWith('Climb Updated', {
-      boardName: 'kilter',
-      layoutId: 1,
-      climbUuid: 'existing-climb',
+      boardLayout: 1,
       isDraft: false,
       holdCount: 3,
     });
@@ -205,9 +203,9 @@ describe('useCreateClimbScreen analytics', () => {
     await nameAndSave(result);
 
     await waitFor(() =>
+      // Web emits `{ boardLayout }`; mobile adds a non-grouping `error_reason`.
       expect(analytics.track).toHaveBeenCalledWith('Climb Create Failed', {
-        boardName: 'kilter',
-        layoutId: 1,
+        boardLayout: 1,
         error_reason: 'duplicate',
       }),
     );
@@ -223,8 +221,7 @@ describe('useCreateClimbScreen analytics', () => {
 
     await waitFor(() =>
       expect(analytics.track).toHaveBeenCalledWith('Climb Create Failed', {
-        boardName: 'kilter',
-        layoutId: 1,
+        boardLayout: 1,
         error_reason: 'exception',
       }),
     );
