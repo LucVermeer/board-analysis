@@ -5,10 +5,14 @@ import { render, waitFor } from '@testing-library/react';
 const pushMock = vi.hoisted(() => vi.fn());
 const segmentsCtrl = vi.hoisted(() => ({ segments: ['(tabs)', 'climbs'] as string[] }));
 const hasSeenMock = vi.hoisted(() => vi.fn());
+const getInitialURLMock = vi.hoisted(() => vi.fn());
 
 vi.mock('expo-router', () => ({
   router: { push: pushMock },
   useSegments: () => segmentsCtrl.segments,
+}));
+vi.mock('expo-linking', () => ({
+  getInitialURL: getInitialURLMock,
 }));
 vi.mock('../../../lib/onboarding/onboarding-storage', () => ({
   hasSeenOnboarding: hasSeenMock,
@@ -20,6 +24,9 @@ describe('OnboardingGate', () => {
   beforeEach(() => {
     pushMock.mockClear();
     hasSeenMock.mockReset();
+    getInitialURLMock.mockReset();
+    // Default: a plain launch (no cold-start deep link).
+    getInitialURLMock.mockResolvedValue(null);
     segmentsCtrl.segments = ['(tabs)', 'climbs'];
   });
 
@@ -61,5 +68,41 @@ describe('OnboardingGate', () => {
     await Promise.resolve();
     await Promise.resolve();
     expect(pushMock).not.toHaveBeenCalled();
+  });
+
+  it('does not cover a cold-start deep link that lands ON a tab', async () => {
+    // The custom-scheme link resolved into the Climbs tab, so the segment guard
+    // sees a normal '(tabs)' landing and wouldn't catch it — the launch URL is
+    // what tells us the user arrived via an intentional deep link.
+    hasSeenMock.mockResolvedValue(false);
+    segmentsCtrl.segments = ['(tabs)', 'climbs'];
+    getInitialURLMock.mockResolvedValue('com.boardsesh.app://climbs/kilter');
+    render(<OnboardingGate ready />);
+    await waitFor(() => expect(getInitialURLMock).toHaveBeenCalled());
+    await Promise.resolve();
+    expect(pushMock).not.toHaveBeenCalled();
+  });
+
+  it('does not read the seen flag when launched via a deep link', async () => {
+    hasSeenMock.mockResolvedValue(false);
+    getInitialURLMock.mockResolvedValue('com.boardsesh.app://climbs/tension');
+    render(<OnboardingGate ready />);
+    await waitFor(() => expect(getInitialURLMock).toHaveBeenCalled());
+    await Promise.resolve();
+    expect(hasSeenMock).not.toHaveBeenCalled();
+  });
+
+  it('still shows once on a normal launch with no deep link', async () => {
+    hasSeenMock.mockResolvedValue(false);
+    getInitialURLMock.mockResolvedValue(null);
+    render(<OnboardingGate ready />);
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith('/onboarding'));
+  });
+
+  it('treats a launch-URL read error as a normal launch (shows the tour)', async () => {
+    hasSeenMock.mockResolvedValue(false);
+    getInitialURLMock.mockRejectedValue(new Error('linking unavailable'));
+    render(<OnboardingGate ready />);
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith('/onboarding'));
   });
 });

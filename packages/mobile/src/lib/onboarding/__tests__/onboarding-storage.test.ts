@@ -13,7 +13,7 @@ vi.mock('../../preferences/secure-store-adapter', () => ({
 }));
 
 import { ONBOARDING_SEEN_KEY } from '@boardsesh/key-value-storage';
-import { clearOnboardingSeen, hasSeenOnboarding, markOnboardingSeen } from '../onboarding-storage';
+import { clearOnboardingSeen, hasSeenOnboarding, markOnboardingSeen, replayOnboarding } from '../onboarding-storage';
 
 describe('onboarding storage', () => {
   beforeEach(() => {
@@ -48,5 +48,46 @@ describe('onboarding storage', () => {
     removeMock.mockResolvedValue(undefined);
     await clearOnboardingSeen();
     expect(removeMock).toHaveBeenCalledWith(ONBOARDING_SEEN_KEY);
+  });
+
+  describe('replayOnboarding', () => {
+    it('clears the seen flag BEFORE navigating (race-free)', async () => {
+      const order: string[] = [];
+      // remove resolves on the next microtask, after which navigate runs.
+      removeMock.mockImplementation(async () => {
+        order.push('clear');
+      });
+      const navigate = vi.fn(() => {
+        order.push('navigate');
+      });
+
+      await replayOnboarding(navigate);
+
+      expect(removeMock).toHaveBeenCalledWith(ONBOARDING_SEEN_KEY);
+      expect(navigate).toHaveBeenCalledTimes(1);
+      // The clear must settle first; otherwise a fast finish/skip could write the
+      // flag and a late clear would wipe it, re-showing the tour on next launch.
+      expect(order).toEqual(['clear', 'navigate']);
+    });
+
+    it('does not navigate until the clear promise resolves', async () => {
+      let resolveClear: () => void = () => {};
+      removeMock.mockImplementation(
+        () =>
+          new Promise<void>((resolve) => {
+            resolveClear = resolve;
+          }),
+      );
+      const navigate = vi.fn();
+
+      const pending = replayOnboarding(navigate);
+      // The clear is still in flight — navigation must NOT have happened yet.
+      await Promise.resolve();
+      expect(navigate).not.toHaveBeenCalled();
+
+      resolveClear();
+      await pending;
+      expect(navigate).toHaveBeenCalledTimes(1);
+    });
   });
 });

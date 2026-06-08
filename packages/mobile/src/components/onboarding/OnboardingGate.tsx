@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { router, useSegments } from 'expo-router';
+import * as Linking from 'expo-linking';
 import { hasSeenOnboarding } from '../../lib/onboarding/onboarding-storage';
 
 type OnboardingGateProps = {
@@ -36,11 +37,28 @@ export function OnboardingGate({ ready }: OnboardingGateProps) {
 
     let cancelled = false;
     void (async () => {
-      // Don't interrupt a deep-link / auth / share landing.
+      // Don't interrupt a deep-link / auth / share landing on a non-tab group.
       if (topSegmentRef.current && DEEP_LINK_SEGMENTS.has(topSegmentRef.current)) return;
+
+      // A custom-scheme deep link that resolves INTO a tab (e.g.
+      // com.boardsesh.app://climbs/...) lands with segments[0] === '(tabs)', so
+      // the segment guard above doesn't catch it and onboarding would cover the
+      // intended destination. The cold-start launch URL is the reliable signal:
+      // if the app was opened by ANY deep link, the user has explicit intent —
+      // don't auto-present the tour over it. A plain launch returns null here,
+      // so normal first-run (show once) is untouched.
+      let initialUrl: string | null = null;
+      try {
+        initialUrl = await Linking.getInitialURL();
+      } catch {
+        initialUrl = null;
+      }
+      if (cancelled) return;
+      if (initialUrl) return;
+
       const seen = await hasSeenOnboarding();
       if (cancelled || seen) return;
-      // Re-check the route after the async read — a deep link may have arrived
+      // Re-check the route after the async reads — a deep link may have arrived
       // in the meantime — so we never cover an intentional destination.
       if (topSegmentRef.current && DEEP_LINK_SEGMENTS.has(topSegmentRef.current)) return;
       router.push('/onboarding');

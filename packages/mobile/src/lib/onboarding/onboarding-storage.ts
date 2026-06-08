@@ -30,3 +30,16 @@ export async function markOnboardingSeen(): Promise<void> {
 export async function clearOnboardingSeen(): Promise<void> {
   await secureStorePreferences.remove(ONBOARDING_SEEN_KEY);
 }
+
+/**
+ * Replay the walkthrough from the "Replay" row: clear the seen flag, THEN
+ * navigate. The await is load-bearing — if navigation fired before the clear
+ * settled, a quickly finished/skipped replay could write `markOnboardingSeen`
+ * first and let a late clear wipe it, leaving the tour "unseen" and re-showing
+ * on the next cold start. `navigate` is injected so this stays unit-testable
+ * without Expo Router.
+ */
+export async function replayOnboarding(navigate: () => void): Promise<void> {
+  await clearOnboardingSeen();
+  navigate();
+}
