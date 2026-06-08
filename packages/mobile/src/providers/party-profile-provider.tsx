@@ -14,6 +14,7 @@
 // in this single provider; the issue lays out the cleaner split.
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { randomUUID } from 'expo-crypto';
 import { ensureProfile, type PartyProfile } from '@boardsesh/party-profile';
 import { reconcileAnalyticsIdentity } from '@boardsesh/analytics';
 import { partyProfileStorage } from '../lib/party-profile-store';
@@ -46,7 +47,9 @@ export function PartyProfileProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let mounted = true;
-    ensureProfile(partyProfileStorage)
+    // Inject expo-crypto's randomUUID: Hermes has no global crypto.randomUUID,
+    // so the shared default generator throws. Mirrors web, which injects uuid v4.
+    ensureProfile(partyProfileStorage, randomUUID)
       .then((loaded) => {
         if (mounted) setProfile(loaded);
       })
@@ -93,7 +96,7 @@ export function PartyProfileProvider({ children }: { children: ReactNode }) {
 
   const refreshProfile = useCallback(async () => {
     try {
-      const loaded = await ensureProfile(partyProfileStorage);
+      const loaded = await ensureProfile(partyProfileStorage, randomUUID);
       setProfile(loaded);
     } catch (err) {
       if (__DEV__) console.warn('[party-profile] refresh failed', err);
