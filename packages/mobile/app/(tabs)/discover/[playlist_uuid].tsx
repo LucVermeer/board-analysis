@@ -15,7 +15,7 @@ import {
 } from '@boardsesh/graphql/operations/playlists';
 import { Text } from '../../../src/components/Text';
 import { Icon } from '../../../src/components/Icon';
-import { ActivityIndicator } from '../../../src/components/ActivityIndicator';
+import { ClimbListRowSkeleton } from '../../../src/components/ClimbListRowSkeleton';
 import {
   PlaylistDetailView,
   PlaylistFormSheet,
@@ -359,9 +359,13 @@ export default function PlaylistDetail() {
 
   if (metaLoading && allClimbs.length === 0) {
     return (
-      <View style={styles.stateContainer}>
+      <View style={styles.skeletonContainer}>
         <PlaylistBackFab />
-        <ActivityIndicator size="large" />
+        <View style={styles.skeletonList}>
+          {SKELETON_PLACEHOLDERS.map((key) => (
+            <ClimbListRowSkeleton key={key} />
+          ))}
+        </View>
       </View>
     );
   }
@@ -399,6 +403,9 @@ export default function PlaylistDetail() {
   );
 }
 
+// Stable hoisted keys for the first-page skeleton rows.
+const SKELETON_PLACEHOLDERS = Array.from({ length: 8 }, (_, index) => `skeleton-${index}`);
+
 const styles = StyleSheet.create({
   stateContainer: {
     flex: 1,
@@ -406,6 +413,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 32,
     gap: 8,
+  },
+  skeletonContainer: {
+    flex: 1,
+  },
+  skeletonList: {
+    paddingTop: 64,
   },
   stateTitle: {
     marginTop: 12,
