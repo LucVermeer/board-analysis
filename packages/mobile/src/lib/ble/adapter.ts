@@ -1,4 +1,4 @@
-import { type Device, type Characteristic, State } from 'react-native-ble-plx';
+import { type Device, type Characteristic } from 'react-native-ble-plx';
 import {
   AURORA_ADVERTISED_SERVICE_UUID,
   UART_SERVICE_UUID,
@@ -8,6 +8,7 @@ import {
   parseSerialNumber,
 } from '@boardsesh/ble-protocol';
 import { bleManager } from './ble-manager';
+import { waitForBlePoweredOn } from './availability';
 import type { BluetoothAdapter, BleConnection, DevicePickerFn, DiscoveredDevice } from './types';
 import { SCAN_TIMEOUT_MS, SERIAL_RECONNECT_GRACE_MS } from '@boardsesh/ble-protocol/scan-constants';
 
@@ -24,12 +25,7 @@ export class RNBleAdapter implements BluetoothAdapter {
   constructor(private readonly devicePicker: DevicePickerFn) {}
 
   async isAvailable(): Promise<boolean> {
-    try {
-      const state = await bleManager.state();
-      return state === State.PoweredOn;
-    } catch {
-      return false;
-    }
+    return waitForBlePoweredOn();
   }
 
   // The scan/select flow (silent serial auto-select → grace-window picker

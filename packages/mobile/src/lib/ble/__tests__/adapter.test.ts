@@ -10,6 +10,7 @@ const mockBleManager = vi.hoisted(() => ({
   connectToDevice: vi.fn(),
   cancelDeviceConnection: vi.fn(),
   onDeviceDisconnected: vi.fn(),
+  onStateChange: vi.fn(),
 }));
 
 // ── Module mocks ────────────────────────────────────────────────────────
@@ -57,6 +58,7 @@ function createMockDevicePicker(): DevicePickerFn {
 describe('RNBleAdapter', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockBleManager.onStateChange.mockReturnValue({ remove: vi.fn() });
   });
 
   describe('isAvailable', () => {
@@ -80,12 +82,43 @@ describe('RNBleAdapter', () => {
     });
 
     it('returns false when bluetooth state is Unknown', async () => {
-      mockBleManager.state.mockResolvedValue(State.Unknown);
-      const adapter = new RNBleAdapter(createMockDevicePicker());
+      vi.useFakeTimers();
+      try {
+        mockBleManager.state.mockResolvedValue(State.Unknown);
+        const adapter = new RNBleAdapter(createMockDevicePicker());
 
-      const available = await adapter.isAvailable();
+        const availablePromise = adapter.isAvailable();
+        await vi.advanceTimersByTimeAsync(2_500);
+        const available = await availablePromise;
 
-      expect(available).toBe(false);
+        expect(available).toBe(false);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('waits for transient bluetooth state to become PoweredOn', async () => {
+      vi.useFakeTimers();
+      try {
+        const stateListeners: Array<(state: State) => void> = [];
+        const removeListener = vi.fn();
+        mockBleManager.state.mockResolvedValue(State.Unknown);
+        mockBleManager.onStateChange.mockImplementation((listener: (state: State) => void) => {
+          stateListeners.push(listener);
+          return { remove: removeListener };
+        });
+        const adapter = new RNBleAdapter(createMockDevicePicker());
+
+        const availablePromise = adapter.isAvailable();
+        await Promise.resolve();
+        expect(stateListeners).toHaveLength(1);
+        stateListeners[0](State.PoweredOn);
+
+        await expect(availablePromise).resolves.toBe(true);
+        expect(removeListener).toHaveBeenCalledOnce();
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('returns false when state() throws', async () => {
