@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { act, render, waitFor } from '@testing-library/react';
-import { createElement, useEffect, type ReactNode } from 'react';
+import { createElement, useEffect } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ClimbQueueItem, PlaylistSuggestionSource } from '@boardsesh/queue';
 import type { SessionUser, UserBoard } from '@boardsesh/shared-schema';
@@ -144,7 +144,7 @@ vi.mock('../queue-snackbar-provider', () => ({
   useQueueSnackbar: () => ({ showQueueAddedSnackbar: vi.fn() }),
 }));
 
-import { QueueProvider, useQueue } from '../queue-provider';
+import { QueueProvider, useQueue, useQueueLiveStats } from '../queue-provider';
 
 type Snapshot = {
   state: ReturnType<typeof useQueue>['state'];
@@ -207,11 +207,14 @@ function createDeferred<T>() {
 
 function Probe({ onSnapshot }: { onSnapshot: (snapshot: Snapshot) => void }) {
   const queue = useQueue();
+  // sessionUsers moved out of useQueue() into its own live-stats context so the
+  // ≤1/2s party push no longer re-renders every queue consumer; read it here.
+  const { sessionUsers } = useQueueLiveStats();
   useEffect(() => {
     onSnapshot({
       state: queue.state,
       sessionId: queue.sessionId,
-      users: queue.sessionUsers,
+      users: sessionUsers,
       driverParticipantId: queue.driverParticipantId,
       lastConnectedBoardSerial: queue.lastConnectedBoardSerial,
       playlistSuggestionSource: queue.playlistSuggestionSource,
@@ -229,7 +232,7 @@ function Probe({ onSnapshot }: { onSnapshot: (snapshot: Snapshot) => void }) {
   }, [
     queue.sessionId,
     queue.state,
-    queue.sessionUsers,
+    sessionUsers,
     queue.driverParticipantId,
     queue.lastConnectedBoardSerial,
     queue.playlistSuggestionSource,

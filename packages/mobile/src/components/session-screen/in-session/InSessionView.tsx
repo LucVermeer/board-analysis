@@ -1,12 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
+import { type NativeScrollEvent, type NativeSyntheticEvent, Pressable, StyleSheet, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import Animated, {
-  useAnimatedScrollHandler,
-  useSharedValue,
-  withSpring,
-  type SharedValue,
-} from 'react-native-reanimated';
+import { useSharedValue, withSpring, type SharedValue } from 'react-native-reanimated';
+import { FlashList } from '@shopify/flash-list';
 import { randomUUID } from 'expo-crypto';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -23,7 +19,7 @@ import { Icon } from '../../Icon';
 import { Text } from '../../Text';
 import { type IconName } from '../../icon-map';
 import { useTheme } from '../../../providers/theme-provider';
-import { useQueue } from '../../../providers/queue-provider';
+import { useQueue, useQueueLiveStats } from '../../../providers/queue-provider';
 import { useDrawerHost } from '../../../providers/drawer-host-provider';
 import { useSessionDetail, useSessionSummary } from '../../../lib/graphql/hooks';
 import { climbToQueueItem } from '../../../lib/climb-to-queue-item';
@@ -48,6 +44,10 @@ type InSessionViewProps = {
   /** Screen height for the dismiss-distance threshold. Absent in tab mode. */
   screenHeight?: number;
 };
+
+// Coalesce live-stats-triggered detail refetches: a burst of `SessionStatsUpdated`
+// pushes settles into one refetch of the (unbounded) tick list instead of N.
+const SESSION_DETAIL_REFETCH_DEBOUNCE_MS = 1500;
 
 type SessionHistoryStatus = 'attempt' | 'send' | 'flash';
 
@@ -116,6 +116,10 @@ function tickToQueueItem(tick: SessionDetailTick): ClimbQueueItem | null {
   return climbToQueueItem(climb, { uuid: randomUUID() });
 }
 
+function historyKeyExtractor(tick: SessionDetailTick): string {
+  return tick.uuid;
+}
+
 type SessionHistoryRowProps = {
   tick: SessionDetailTick;
   status: SessionHistoryStatus;
@@ -123,7 +127,12 @@ type SessionHistoryRowProps = {
   onPress: (tick: SessionDetailTick) => void;
 };
 
-function SessionHistoryRow({ tick, status, participant, onPress }: SessionHistoryRowProps) {
+const SessionHistoryRow = memo(function SessionHistoryRow({
+  tick,
+  status,
+  participant,
+  onPress,
+}: SessionHistoryRowProps) {
   const { t } = useTranslation('session');
   const { systemColors, brandColors } = useTheme();
   const { formatGrade, formatGradeByDifficultyId } = useGradeFormat();
@@ -213,7 +222,7 @@ function SessionHistoryRow({ tick, status, participant, onPress }: SessionHistor
       <View style={[styles.historySeparator, { backgroundColor: systemColors.separator }]} />
     </View>
   );
-}
+});
 
 export function InSessionView({ translateY, screenHeight }: InSessionViewProps) {
   const { t } = useTranslation('session');
@@ -222,8 +231,8 @@ export function InSessionView({ translateY, screenHeight }: InSessionViewProps) 
   const router = useRouter();
   const queryClient = useQueryClient();
   const { openPlayDrawer } = useDrawerHost();
-  const { sessionId, liveStats, sessionUsers, driverParticipantId, participantId, setCurrentClimb, endSession } =
-    useQueue();
+  const { sessionId, driverParticipantId, participantId, setCurrentClimb, endSession } = useQueue();
+  const { liveStats, sessionUsers } = useQueueLiveStats();
 
   // Seed the live view from the full session detail (rich grade split, flashes,
   // per-participant flashes, and the tick list used for hardest-send names and
@@ -244,13 +253,21 @@ export function InSessionView({ translateY, screenHeight }: InSessionViewProps) 
   const startedAt = summaryQuery.data?.startedAt ?? null;
 
   // Refresh detail whenever live tick aggregates move so the history list and
-  // hardest-send names catch the newly logged tick.
+  // hardest-send names catch the newly logged tick. The live push only carries
+  // aggregates (not the tick list), so a refetch is the only path by which a new
+  // tick reaches the history list — we can't drop it. But it pulls the full
+  // unbounded tick list, so we DEBOUNCE it: rapid pushes (the party stats stream
+  // is debounced server-side to ≤1/2s, and a busy party can still log several in
+  // a row) coalesce into a single refetch rather than one per push.
   const liveTickCount = live?.tickCount ?? null;
   const liveHardestGrade = live?.hardestGrade ?? null;
   useEffect(() => {
-    if (!sessionId) return;
-    if (liveTickCount == null && !liveHardestGrade) return;
-    void queryClient.invalidateQueries({ queryKey: ['sessionDetail', sessionId] });
+    if (!sessionId) return undefined;
+    if (liveTickCount == null && !liveHardestGrade) return undefined;
+    const handle = setTimeout(() => {
+      void queryClient.invalidateQueries({ queryKey: ['sessionDetail', sessionId] });
+    }, SESSION_DETAIL_REFETCH_DEBOUNCE_MS);
+    return () => clearTimeout(handle);
   }, [sessionId, liveTickCount, liveHardestGrade, queryClient]);
 
   // Live push takes precedence over the seed for every aggregate.
@@ -385,9 +402,17 @@ export function InSessionView({ translateY, screenHeight }: InSessionViewProps) 
   const overlayMode = translateY !== undefined && screenHeight !== undefined;
   const scrollOffset = useSharedValue(0);
   const startedAtTop = useSharedValue(true);
-  const scrollHandler = useAnimatedScrollHandler((event) => {
-    scrollOffset.value = event.contentOffset.y;
-  });
+  // FlashList forwards a plain JS scroll event (it isn't a reanimated host
+  // component), so we mirror the offset into the shared value here — the same
+  // pattern the climbs list uses to drive its collapsing chrome. The dismiss
+  // gesture only reads `scrollOffset.value <= 0` on start, so JS-thread latency
+  // is immaterial.
+  const handleScroll = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      scrollOffset.value = event.nativeEvent.contentOffset.y;
+    },
+    [scrollOffset],
+  );
   const dismissGesture = useMemo(() => {
     if (translateY === undefined || screenHeight === undefined) return null;
     return Gesture.Pan()
@@ -420,15 +445,35 @@ export function InSessionView({ translateY, screenHeight }: InSessionViewProps) 
     }
   }, [endSession, router]);
 
-  const scrollView = (
-    <Animated.ScrollView
-      style={styles.scroll}
-      contentContainerStyle={[styles.content, { paddingBottom: 100 + footerBottomPadding }]}
-      showsVerticalScrollIndicator={false}
-      onScroll={scrollHandler}
-      scrollEventThrottle={16}
-      bounces={false}
-    >
+  // The history tick list is unbounded (it grows with every logged ascent in a
+  // long party session), so it virtualizes through a FlashList instead of a
+  // `.map` inside a ScrollView. The presence row + analytics ride as the list
+  // header and the leaderboard as the footer, keeping the screen one scroll
+  // surface. The rounded "card" look around the rows is preserved by rounding
+  // the first/last row corners (they share the secondary-background fill).
+  const lastHistoryIndex = sessionHistoryTicks.length - 1;
+  const renderHistoryRow = useCallback(
+    ({ item: tick, index }: { item: SessionDetailTick & { status: SessionHistoryStatus }; index: number }) => (
+      <View
+        style={[
+          { backgroundColor: systemColors.secondaryBackground },
+          index === 0 ? styles.historyListFirst : null,
+          index === lastHistoryIndex ? styles.historyListLast : null,
+        ]}
+      >
+        <SessionHistoryRow
+          tick={tick}
+          status={tick.status}
+          participant={participantByUserId.get(tick.userId)}
+          onPress={handlePressHistoryTick}
+        />
+      </View>
+    ),
+    [systemColors.secondaryBackground, lastHistoryIndex, participantByUserId, handlePressHistoryTick],
+  );
+
+  const listHeader = (
+    <View style={styles.headerContent}>
       <SessionPresenceRow
         users={sessionUsers}
         driverParticipantId={driverParticipantId}
@@ -454,23 +499,35 @@ export function InSessionView({ translateY, screenHeight }: InSessionViewProps) 
               {t('mobile.session.inHistoryEmpty')}
             </Text>
           </View>
-        ) : (
-          <View style={[styles.historyList, { backgroundColor: systemColors.secondaryBackground }]}>
-            {sessionHistoryTicks.map((tick) => (
-              <SessionHistoryRow
-                key={tick.uuid}
-                tick={tick}
-                status={tick.status}
-                participant={participantByUserId.get(tick.userId)}
-                onPress={handlePressHistoryTick}
-              />
-            ))}
-          </View>
-        )}
+        ) : null}
       </View>
+    </View>
+  );
 
+  const listFooter = (
+    <View style={styles.footerContent}>
       <SessionLeaderboard participants={participants} driverUserId={driverUserId} selfUserId={selfUserId} />
-    </Animated.ScrollView>
+    </View>
+  );
+
+  const scrollView = (
+    <FlashList
+      style={styles.scroll}
+      data={sessionHistoryTicks}
+      renderItem={renderHistoryRow}
+      keyExtractor={historyKeyExtractor}
+      ListHeaderComponent={listHeader}
+      ListFooterComponent={listFooter}
+      contentContainerStyle={{
+        paddingHorizontal: spacing[4],
+        paddingTop: spacing[2],
+        paddingBottom: 100 + footerBottomPadding,
+      }}
+      showsVerticalScrollIndicator={false}
+      onScroll={handleScroll}
+      scrollEventThrottle={16}
+      bounces={false}
+    />
   );
 
   const body = (
@@ -512,10 +569,11 @@ const styles = StyleSheet.create({
   scroll: {
     flex: 1,
   },
-  content: {
-    paddingHorizontal: spacing[4],
-    paddingTop: spacing[2],
+  headerContent: {
     gap: spacing[5],
+  },
+  footerContent: {
+    marginTop: spacing[5],
   },
   historySection: {
     gap: spacing[2],
@@ -525,8 +583,19 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 0,
   },
-  historyList: {
-    borderRadius: borderRadius.lg,
+  // First/last history rows round the card's outer corners, reproducing the
+  // single rounded-card look the old `.map`-in-a-View had (it had
+  // overflow:hidden + borderRadius on the wrapping View). The first row also
+  // takes the spacing[2] label→card gap that lived inside `historySection`.
+  historyListFirst: {
+    marginTop: spacing[2],
+    borderTopLeftRadius: borderRadius.lg,
+    borderTopRightRadius: borderRadius.lg,
+    overflow: 'hidden',
+  },
+  historyListLast: {
+    borderBottomLeftRadius: borderRadius.lg,
+    borderBottomRightRadius: borderRadius.lg,
     overflow: 'hidden',
   },
   historyRow: {

@@ -84,17 +84,6 @@ type QueueContextValue = {
   dispatch: React.Dispatch<QueueAction>;
   sessionId: string | null;
   setSessionId: (id: string | null) => void;
-  /**
-   * Live aggregate stats for the active session, pushed over `sessionUpdates`
-   * (the `SessionStatsUpdated` event) as ticks are logged. Null until the first
-   * push arrives (or when there's no session).
-   */
-  liveStats: SessionLiveStatsEvent | null;
-  /**
-   * Connected participants in the active session. Seeded from the JOIN_SESSION
-   * response and kept current via UserJoined/UserLeft/UserPresenceChanged.
-   */
-  sessionUsers: SessionUser[];
   /** Participant id of the member currently driving the wall, if any. */
   driverParticipantId: string | null;
   /** Most recently published physical board serial for this session, if any. */
@@ -184,6 +173,59 @@ type QueueSessionControlContextValue = Pick<
 
 const QueueSessionControlContext = createContext<QueueSessionControlContextValue | null>(null);
 
+/**
+ * Live session analytics + presence, split out of the main QueueContext so the
+ * ≤1/2s `SessionStatsUpdated` party push (and roster deltas) re-renders only the
+ * session screen — not every `useQueue()` consumer (climb list, persistent bar,
+ * tab layout, board adapter, bluetooth provider, drawer host, live-activity
+ * bridge). Consumed solely by SessionScreen + InSessionView.
+ */
+type QueueLiveStatsContextValue = {
+  /**
+   * Live aggregate stats for the active session, pushed over `sessionUpdates`
+   * (the `SessionStatsUpdated` event) as ticks are logged. Null until the first
+   * push arrives (or when there's no session).
+   */
+  liveStats: SessionLiveStatsEvent | null;
+  /**
+   * Connected participants in the active session. Seeded from the JOIN_SESSION
+   * response and kept current via UserJoined/UserLeft/UserPresenceChanged.
+   */
+  sessionUsers: SessionUser[];
+};
+
+const QueueLiveStatsContext = createContext<QueueLiveStatsContextValue | null>(null);
+
+/**
+ * Active-climb selector context. Changes identity ONLY when the active climb's
+ * uuid changes, so the climb list (which highlights the active row) stops
+ * re-rendering on every unrelated queue mutation or party push.
+ */
+type QueueActiveClimbContextValue = {
+  activeClimbUuid: string | null;
+};
+
+const QueueActiveClimbContext = createContext<QueueActiveClimbContextValue | null>(null);
+
+/**
+ * Stable queue actions, split out so consumers that only dispatch actions (e.g.
+ * the climb list's add-to-queue) don't subscribe to the whole reducer `state`.
+ * Holds everything in QueueContextValue except `state`, `dispatch`, `sessionId`,
+ * `setSessionId`, and the live-stats fields (which live in their own contexts).
+ */
+type QueueActionsContextValue = Omit<
+  QueueContextValue,
+  | 'state'
+  | 'dispatch'
+  | 'sessionId'
+  | 'setSessionId'
+  | 'driverParticipantId'
+  | 'lastConnectedBoardSerial'
+  | 'participantId'
+>;
+
+const QueueActionsContext = createContext<QueueActionsContextValue | null>(null);
+
 export function useQueue(): QueueContextValue {
   const context = useContext(QueueContext);
   if (!context) throw new Error('useQueue must be used within QueueProvider');
@@ -193,6 +235,24 @@ export function useQueue(): QueueContextValue {
 export function useQueueSessionControls(): QueueSessionControlContextValue {
   const context = useContext(QueueSessionControlContext);
   if (!context) throw new Error('useQueueSessionControls must be used within QueueProvider');
+  return context;
+}
+
+export function useQueueLiveStats(): QueueLiveStatsContextValue {
+  const context = useContext(QueueLiveStatsContext);
+  if (!context) throw new Error('useQueueLiveStats must be used within QueueProvider');
+  return context;
+}
+
+export function useActiveClimbUuid(): string | null {
+  const context = useContext(QueueActiveClimbContext);
+  if (!context) throw new Error('useActiveClimbUuid must be used within QueueProvider');
+  return context.activeClimbUuid;
+}
+
+export function useQueueActions(): QueueActionsContextValue {
+  const context = useContext(QueueActionsContext);
+  if (!context) throw new Error('useQueueActions must be used within QueueProvider');
   return context;
 }
 
@@ -1179,17 +1239,13 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     [mutations],
   );
 
-  const contextValue = useMemo<QueueContextValue>(
+  // Stable action bundle. Split out of contextValue so consumers that only need
+  // to dispatch (the climb list's addToQueue) can subscribe via useQueueActions()
+  // without re-rendering on every reducer `state` change. Every member is an
+  // individually-stable useCallback, so this memo only ever recomputes if one of
+  // them genuinely changes identity (it shouldn't, in practice).
+  const actionsValue = useMemo<QueueActionsContextValue>(
     () => ({
-      state,
-      dispatch,
-      sessionId,
-      setSessionId,
-      liveStats,
-      sessionUsers,
-      driverParticipantId,
-      lastConnectedBoardSerial,
-      participantId,
       addToQueue,
       removeFromQueue,
       reorderQueue,
@@ -1213,13 +1269,6 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       publishPlaybackState,
     }),
     [
-      state,
-      sessionId,
-      liveStats,
-      sessionUsers,
-      driverParticipantId,
-      lastConnectedBoardSerial,
-      participantId,
       addToQueue,
       removeFromQueue,
       reorderQueue,
@@ -1242,6 +1291,33 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       subscribeToQueueEvents,
       publishPlaybackState,
     ],
+  );
+
+  const contextValue = useMemo<QueueContextValue>(
+    () => ({
+      state,
+      dispatch,
+      sessionId,
+      setSessionId,
+      driverParticipantId,
+      lastConnectedBoardSerial,
+      participantId,
+      ...actionsValue,
+    }),
+    [state, sessionId, driverParticipantId, lastConnectedBoardSerial, participantId, actionsValue],
+  );
+
+  // Active-climb selector: identity changes ONLY when the active climb uuid
+  // changes (memoized on the uuid string), so highlight-only consumers like the
+  // climb list don't re-render on unrelated queue mutations or party pushes.
+  const activeClimbUuid = state.currentClimbQueueItem?.climb?.uuid ?? null;
+  const activeClimbValue = useMemo<QueueActiveClimbContextValue>(() => ({ activeClimbUuid }), [activeClimbUuid]);
+
+  // Live analytics + presence: the ≤1/2s party push recreates only this small
+  // value, re-rendering only SessionScreen + InSessionView.
+  const liveStatsValue = useMemo<QueueLiveStatsContextValue>(
+    () => ({ liveStats, sessionUsers }),
+    [liveStats, sessionUsers],
   );
 
   const sessionControlValue = useMemo<QueueSessionControlContextValue>(
@@ -1269,7 +1345,13 @@ export function QueueProvider({ children }: { children: ReactNode }) {
 
   return (
     <QueueSessionControlContext.Provider value={sessionControlValue}>
-      <QueueContext.Provider value={contextValue}>{children}</QueueContext.Provider>
+      <QueueLiveStatsContext.Provider value={liveStatsValue}>
+        <QueueActionsContext.Provider value={actionsValue}>
+          <QueueActiveClimbContext.Provider value={activeClimbValue}>
+            <QueueContext.Provider value={contextValue}>{children}</QueueContext.Provider>
+          </QueueActiveClimbContext.Provider>
+        </QueueActionsContext.Provider>
+      </QueueLiveStatsContext.Provider>
     </QueueSessionControlContext.Provider>
   );
 }
