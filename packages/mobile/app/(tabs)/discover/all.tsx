@@ -7,7 +7,7 @@ import type { Playlist } from '@boardsesh/graphql/operations/playlists';
 import { Text } from '../../../src/components/Text';
 import { Icon } from '../../../src/components/Icon';
 import { ActivityIndicator } from '../../../src/components/ActivityIndicator';
-import { PlaylistListRow } from '../../../src/components/playlist';
+import { PlaylistListRow, PlaylistListRowSeparator } from '../../../src/components/playlist';
 import { useAuth } from '../../../src/providers/auth-provider';
 import { useTheme } from '../../../src/providers/theme-provider';
 import { useAuthToken } from '../../../src/lib/graphql/use-auth-token';
@@ -58,19 +58,23 @@ export default function AllPlaylistsScreen() {
     router.push(`/(tabs)/discover/${uuid}`);
   }, []);
 
+  // No `filtered.length` dependency: the row reports its own uuid to a single
+  // stable handler, and the hairline lives in `ItemSeparatorComponent`. So
+  // `renderItem` stays referentially stable across page appends and the memoised
+  // rows don't re-render while the library drains.
   const renderItem = useCallback(
     ({ item, index }: { item: Playlist; index: number }) => (
       <PlaylistListRow
+        uuid={item.uuid}
         name={item.name}
         climbCount={item.climbCount}
         color={item.color}
         icon={item.icon}
         index={index}
-        onPress={() => goToPlaylist(item.uuid)}
-        showSeparator={index < filtered.length - 1}
+        onPressUuid={goToPlaylist}
       />
     ),
-    [filtered.length, goToPlaylist],
+    [goToPlaylist],
   );
 
   // Signed-out (reachable only via deep link — the entry points are gated on auth).
@@ -158,6 +162,7 @@ export default function AllPlaylistsScreen() {
           data={filtered}
           keyExtractor={(item) => item.uuid}
           renderItem={renderItem}
+          ItemSeparatorComponent={PlaylistListRowSeparator}
           contentContainerStyle={{ paddingBottom: bottomChrome.scrollBottomPadding + spacing[6] }}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
