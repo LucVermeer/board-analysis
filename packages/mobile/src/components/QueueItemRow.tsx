@@ -333,10 +333,7 @@ function QueueItemRowComponent({
   );
 
   return (
-    <Animated.View
-      style={[containerAnimatedStyle, dragAnimatedStyle]}
-      onLayout={handleRowLayout}
-    >
+    <Animated.View style={[containerAnimatedStyle, dragAnimatedStyle]} onLayout={handleRowLayout}>
       <View style={styles.swipeContainer}>
         {/* Delete action behind the row */}
         {swipeEnabled && (
