@@ -22,6 +22,12 @@
       "smart": "Your Picks",
       "discover": "Discover"
     },
+    "allPlaylists": {
+      "title": "My Playlists",
+      "seeAll": "See all",
+      "searchPlaceholder": "Filter by title",
+      "noResults": "No playlists match \"{{query}}\""
+    },
     "pin": {
       "pinAriaLabel": "Pin playlist",
       "unpinAriaLabel": "Unpin playlist",

@@ -22,6 +22,12 @@
       "smart": "Vos sélections",
       "discover": "Découvrir"
     },
+    "allPlaylists": {
+      "title": "Mes listes",
+      "seeAll": "Tout voir",
+      "searchPlaceholder": "Filtrer par titre",
+      "noResults": "Aucune liste ne correspond à « {{query}} »"
+    },
     "pin": {
       "pinAriaLabel": "Épingler la playlist",
       "unpinAriaLabel": "Désépingler la playlist",
