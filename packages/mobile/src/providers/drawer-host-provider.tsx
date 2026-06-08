@@ -281,12 +281,20 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
   }, [climbActions]);
 
   const openQueueSheet = useCallback(() => {
-    setQueueSheetMounted(true);
-  }, []);
-  // Present only AFTER the sheet has mounted (and registered with the modal
-  // provider). Flipping `mounted` and `visible` in one commit drops the
-  // `present()` when another modal — the Play Drawer — is already open: that's
-  // the bug where the play drawer's queue button did nothing while the
+    // Already mounted (e.g. re-opening mid dismiss-animation, before
+    // handleQueueSheetDismissed has unmounted it): re-present directly.
+    // `setQueueSheetMounted(true)` would be a no-op and the mount effect below
+    // would never re-fire, leaving the sheet hidden.
+    if (queueSheetMounted) {
+      setQueueSheetVisible(true);
+    } else {
+      setQueueSheetMounted(true);
+    }
+  }, [queueSheetMounted]);
+  // Fresh mount: present only AFTER the sheet has mounted (and registered with
+  // the modal provider). Flipping `mounted` and `visible` in one commit drops
+  // the `present()` when another modal — the Play Drawer — is already open:
+  // that's the bug where the play drawer's queue button did nothing while the
   // snackbar's Open (fired with no modal open) worked. The two-commit path
   // mirrors the always-mounted angle selector — present fires on a real
   // `visible` transition over the already-stable Play Drawer.
@@ -447,7 +455,7 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
         <ClimbActionsSheet
           visible
           climb={climbActions.climb}
-          boardName={climbActions.boardConfig.boardName}
+          boardName={climbActions.boardConfig.boardName as BoardName}
           layoutId={climbActions.boardConfig.layoutId}
           sizeId={climbActions.boardConfig.sizeId}
           setIds={climbActions.boardConfig.setIds}
@@ -463,7 +471,7 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
         <AddToPlaylistSheet
           visible
           climb={playlistClimb.climb}
-          boardName={playlistClimb.boardConfig.boardName}
+          boardName={playlistClimb.boardConfig.boardName as BoardName}
           layoutId={playlistClimb.boardConfig.layoutId}
           sizeId={playlistClimb.boardConfig.sizeId}
           setIds={playlistClimb.boardConfig.setIds}

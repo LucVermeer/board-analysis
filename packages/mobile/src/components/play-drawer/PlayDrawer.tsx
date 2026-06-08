@@ -532,10 +532,6 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
     setActiveSubDrawer('actions');
   }, []);
 
-  const handleOpenQueue = useCallback(() => {
-    onOpenQueue();
-  }, [onOpenQueue]);
-
   const handleOpenAngleSelector = useCallback(() => {
     setActiveSubDrawer('angleSelector');
   }, []);
@@ -738,7 +734,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
                   onLightbulb={handleLightbulb}
                   onLightbulbLongPress={handleLightbulbLongPress}
                   onOpenActions={handleOpenActions}
-                  onOpenQueue={handleOpenQueue}
+                  onOpenQueue={onOpenQueue}
                   onShare={handleShare}
                   onTickPress={handleTickFabPress}
                   onTickLongPress={handleTickFabLongPress}
@@ -772,7 +768,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
       <ClimbActionsSheet
         visible={activeSubDrawer === 'actions'}
         climb={displayedClimb ?? null}
-        boardName={boardName}
+        boardName={boardName as BoardName}
         layoutId={layoutId}
         sizeId={sizeId}
         setIds={setIds}

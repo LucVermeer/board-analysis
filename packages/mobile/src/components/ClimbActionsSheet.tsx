@@ -23,7 +23,7 @@ import { track } from '../lib/analytics';
 type ClimbActionsSheetProps = {
   visible: boolean;
   climb: Climb | null;
-  boardName: string;
+  boardName: BoardName;
   layoutId: number;
   sizeId: number;
   setIds: string;
@@ -193,7 +193,7 @@ function ClimbActionsSheet({
       {climb && (
         <ClimbPreviewCard
           climb={climb}
-          boardName={boardName as BoardName}
+          boardName={boardName}
           layoutId={layoutId}
           sizeId={sizeId}
           setIds={setIds}
