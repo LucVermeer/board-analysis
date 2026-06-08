@@ -1,0 +1,100 @@
+import { memo, useEffect, useState } from 'react';
+import { InteractionManager, View, StyleSheet } from 'react-native';
+import type { BoardName } from '@boardsesh/shared-schema';
+import { SwipeBoardCarousel } from './SwipeBoardCarousel';
+import { iosSystemColors } from '../../theme/ios-colors';
+
+type BoardRenderData = {
+  boardWidth: number;
+  boardHeight: number;
+};
+
+type DeferredBoardProps = {
+  /** Drives the InteractionManager gate. While the sheet is presenting this is
+   *  false and a sized placeholder stands in for the board; once the present
+   *  animation settles it flips true and the interactive carousel mounts. */
+  open: boolean;
+  boardName: BoardName;
+  boardRenderData: BoardRenderData;
+  layoutId: number;
+  sizeId: number;
+  setIds: string;
+  currentFrames: string;
+  currentFrameOverride?: string | null;
+  nextFrames: string | null;
+  prevFrames: string | null;
+  mirrored: boolean;
+  canSwipeNext: boolean;
+  canSwipePrevious: boolean;
+  onSwipeNext: () => void;
+  onSwipePrevious: () => void;
+  onResetZoomReady?: (resetZoom: () => void) => void;
+  enabled?: boolean;
+};
+
+/**
+ * Defers mounting the interactive {@link SwipeBoardCarousel} until after the
+ * play drawer's present animation settles. The carousel mounts 2×
+ * `BoardImageNative` plus a pinch/swipe/zoom gesture composition; rendering all
+ * of that synchronously the moment the sheet opens blocks the present animation
+ * for ~0.5–1s (the user-reported stall). Mirrors `DeferredSections`'
+ * `InteractionManager.runAfterInteractions` approach: the sheet animates open
+ * immediately over a board-sized placeholder, then the board mounts a frame
+ * later.
+ *
+ * The gate is keyed on the OPEN TRANSITION (`open`), not on the displayed
+ * climb's uuid, so once the drawer is open, swiping to next/prev climbs renders
+ * the board immediately with no placeholder flash — the carousel stays mounted
+ * across in-drawer swipes.
+ *
+ * The placeholder occupies the board's exact footprint (`width: '100%'` +
+ * `aspectRatio`, identical to `BoardImageNative`) so the above-fold measurement
+ * that derives the peek snap-point is the same whether or not the board has
+ * mounted yet — no full→peek jump.
+ */
+export const DeferredBoard = memo(function DeferredBoard({
+  open,
+  boardRenderData,
+  ...carouselProps
+}: DeferredBoardProps) {
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    if (!open) {
+      setReady(false);
+      return;
+    }
+
+    const handle = InteractionManager.runAfterInteractions(() => {
+      setReady(true);
+    });
+
+    return () => {
+      handle.cancel();
+    };
+  }, [open]);
+
+  if (!ready) {
+    return (
+      <View
+        style={[styles.placeholder, { aspectRatio: boardRenderData.boardWidth / boardRenderData.boardHeight }]}
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
+        testID="deferred-board-placeholder"
+      />
+    );
+  }
+
+  return <SwipeBoardCarousel boardRenderData={boardRenderData} {...carouselProps} />;
+});
+
+const styles = StyleSheet.create({
+  placeholder: {
+    width: '100%',
+    // Faint board-coloured fill so the present animation lands on a soft skeleton
+    // rather than a hard gap. No image decode, no gesture handlers — cheap to
+    // mount on the present frame. Matches the section skeleton tint used
+    // elsewhere in the play drawer.
+    backgroundColor: `${iosSystemColors.systemGray}14`,
+  },
+});
