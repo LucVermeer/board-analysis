@@ -100,10 +100,16 @@ class BoardSessionService : Service() {
             0
         }
         if (tryStartForeground(notification, type)) return true
-        // The typed promotion was rejected (commonly a missing BLUETOOTH_CONNECT
-        // grant on API 34+). Retry as a typeless FGS so we still satisfy the
-        // start contract instead of timing out.
-        if (type != 0 && tryStartForeground(notification, 0)) return true
+        // The typed promotion was rejected. On API < 34 a typeless FGS is still a
+        // valid promotion, so retry to satisfy the start contract. On API 34+ a
+        // type-0 promotion throws MissingForegroundServiceTypeException for a
+        // service declared with a type, so retrying is pointless — the caller
+        // (SessionPresenceModule) gates the start on BLUETOOTH_CONNECT instead.
+        if (type != 0 && Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE &&
+            tryStartForeground(notification, 0)
+        ) {
+            return true
+        }
         return false
     }
 

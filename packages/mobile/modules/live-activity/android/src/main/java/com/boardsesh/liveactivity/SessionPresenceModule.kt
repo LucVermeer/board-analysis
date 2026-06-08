@@ -1,7 +1,10 @@
 package com.boardsesh.liveactivity
 
+import android.Manifest
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import androidx.core.content.ContextCompat
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
@@ -85,6 +88,15 @@ class SessionPresenceModule : Module() {
 
         AsyncFunction("startSession") { options: StartSessionOptions ->
             val context = appContext.reactContext?.applicationContext ?: return@AsyncFunction
+            // A connectedDevice foreground service requires BLUETOOTH_CONNECT on
+            // API 34+; without it startForeground() can't promote (the type is
+            // rejected and a typeless promotion throws
+            // MissingForegroundServiceTypeException), so the service would be
+            // killed with ForegroundServiceDidNotStartInTimeException. The FGS
+            // exists only to keep the BLE link alive, so when the permission isn't
+            // held there's nothing to keep alive — skip the start rather than
+            // create a contract we can't satisfy.
+            if (!canRunConnectedDeviceService(context)) return@AsyncFunction
             sessionActive = true
             val strings = options.androidNotification
             val intent = Intent(context, BoardSessionService::class.java).apply {
@@ -111,6 +123,15 @@ class SessionPresenceModule : Module() {
                 context.stopService(Intent(context, BoardSessionService::class.java))
             }
         }
+    }
+
+    // On API 34+ a connectedDevice foreground service can only be promoted while
+    // BLUETOOTH_CONNECT is granted. Below 34 the type isn't permission-gated at
+    // startForeground() time, so the service can always start.
+    private fun canRunConnectedDeviceService(context: Context): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) return true
+        return ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) ==
+            PackageManager.PERMISSION_GRANTED
     }
 
     private fun pushUpdate(options: SessionUpdateOptions) {
