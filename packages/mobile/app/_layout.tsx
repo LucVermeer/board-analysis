@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useMemo, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useMemo, useState, type ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 // Navigation theme comes from expo-router's vendored React Navigation. Expo
 // SDK 56's expo-router is not compatible with a separately-installed
@@ -46,10 +46,11 @@ import { brandColors } from '../src/theme/colors';
 import { iosDarkColors } from '../src/theme/ios-colors';
 import { spacing } from '../src/theme/tokens';
 import { wrapWithSentry, reportError } from '../src/lib/sentry';
+import { loadRequiredFonts } from '../src/lib/required-fonts';
 import { AnalyticsProvider } from '../src/components/analytics/AnalyticsProvider';
 import { AnalyticsScreenTracker } from '../src/components/analytics/AnalyticsScreenTracker';
 
-SplashScreen.preventAutoHideAsync();
+void SplashScreen.preventAutoHideAsync();
 
 const layoutStyles = StyleSheet.create({
   root: { flex: 1 },
@@ -201,9 +202,31 @@ function ThemedNavigation({ children }: { children: ReactNode }) {
 }
 
 function RootLayout() {
-  const onAuthReady = useCallback(() => {
-    SplashScreen.hideAsync();
+  const [authReady, setAuthReady] = useState(false);
+  const [fontsReady, setFontsReady] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    void loadRequiredFonts()
+      .catch((error: unknown) => {
+        reportError(error);
+      })
+      .finally(() => {
+        if (!cancelled) setFontsReady(true);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
+
+  const onAuthReady = useCallback(() => {
+    setAuthReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (!authReady || !fontsReady) return;
+    void SplashScreen.hideAsync();
+  }, [authReady, fontsReady]);
 
   return (
     <GestureHandlerRootView style={layoutStyles.root}>

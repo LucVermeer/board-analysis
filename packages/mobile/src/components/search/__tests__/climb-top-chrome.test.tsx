@@ -20,6 +20,7 @@ const ctrl = vi.hoisted(() => ({
   board: null as BoardLabelFields | null,
   bluetooth: null as BluetoothCtx,
   setActiveBoard: vi.fn(),
+  variant: 'liquidGlass' as 'liquidGlass' | 'material',
 }));
 const haptics = vi.hoisted(() => ({ light: vi.fn(), selection: vi.fn() }));
 
@@ -80,6 +81,7 @@ vi.mock('../../../providers/theme-provider', () => ({
       elevatedSurface: '#fff',
     },
     brandColors: { primary: '#6D28D9', warning: '#FF9500' },
+    variant: ctrl.variant,
   }),
 }));
 
@@ -264,6 +266,7 @@ describe('ClimbTopChrome', () => {
   beforeEach(() => {
     ctrl.board = null;
     ctrl.bluetooth = null;
+    ctrl.variant = 'liquidGlass';
     ctrl.setActiveBoard.mockClear();
     haptics.light.mockClear();
     haptics.selection.mockClear();
@@ -344,6 +347,13 @@ describe('ClimbTopChrome', () => {
     expect(lightbulb(container)).toBeNull();
     expect(container.querySelector('[data-search-field]')).not.toBeNull();
     expect(container.querySelector('[data-pressable^="mobile.search.filters"]')).toBeNull();
+  });
+
+  it('renders the Material filter affordance next to the custom search field', () => {
+    ctrl.variant = 'material';
+    const { container } = render(<ClimbTopChrome {...makeProps({ onOpenFilters: vi.fn() })} />);
+    expect(container.querySelector('[data-search-field]')).not.toBeNull();
+    expect(container.querySelector('[data-paper="icon-button"]')).not.toBeNull();
   });
 
   it('native search mode leaves text search in the stack header and does not render filter chrome', () => {

@@ -14,6 +14,7 @@ const accessibilityInfo = vi.hoisted(() => ({
 type LayoutEvent = { nativeEvent: { layout: { x: number; width: number; height: number; y: number } } };
 
 vi.mock('react-native', () => ({
+  Platform: { OS: 'android' },
   AccessibilityInfo: {
     isScreenReaderEnabled: accessibilityInfo.screenReaderEnabled,
     addEventListener: accessibilityInfo.addEventListener,
@@ -44,11 +45,20 @@ vi.mock('react-native-gesture-handler', () => ({
   },
   GestureDetector: ({ children }: { children?: ReactNode }) =>
     createElement('div', { 'data-gesture': 'true' }, children),
-  ScrollView: ({ children, onLayout }: { children?: ReactNode; onLayout?: (event: LayoutEvent) => void }) =>
+  ScrollView: ({
+    children,
+    nestedScrollEnabled,
+    onLayout,
+  }: {
+    children?: ReactNode;
+    nestedScrollEnabled?: boolean;
+    onLayout?: (event: LayoutEvent) => void;
+  }) =>
     createElement(
       'div',
       {
         'data-scroll': 'true',
+        'data-nested-scroll': nestedScrollEnabled ? 'true' : 'false',
         onClick: onLayout
           ? () => onLayout({ nativeEvent: { layout: { x: 0, width: 320, height: 44, y: 0 } } })
           : undefined,
@@ -142,7 +152,7 @@ vi.mock('../../../lib/haptics', () => ({ hapticSelection: haptics.selection }));
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
     t: (key: string, options?: Record<string, unknown>) => {
-      if (key.includes('Aria') && options?.grade) return `${key}:${options.grade}`;
+      if (key.includes('Aria') && typeof options?.grade === 'string') return `${key}:${options.grade}`;
       return key;
     },
   }),
@@ -230,7 +240,7 @@ describe('GradeRangeRail', () => {
     });
     // First tap: single grade selected, rail stays open
     fireEvent.click(getByText('V4'));
-    act(() => vi.advanceTimersByTime(0));
+    void act(() => vi.advanceTimersByTime(0));
     expect(onRequestClose).not.toHaveBeenCalled();
 
     // Rerender with the new bound — same onRequestClose ref
@@ -245,7 +255,7 @@ describe('GradeRangeRail', () => {
 
     // Second tap within window: range formed → close
     fireEvent.click(getByText('V6'));
-    act(() => vi.advanceTimersByTime(300));
+    void act(() => vi.advanceTimersByTime(300));
     expect(onRequestClose).toHaveBeenCalled();
   });
 
@@ -265,7 +275,7 @@ describe('GradeRangeRail', () => {
     // Tap V5 again (it's already selected) → deselects to "any". The rail must
     // stay open so the user can build a new range from here, not close.
     fireEvent.click(getByText('V5'));
-    act(() => vi.advanceTimersByTime(10000));
+    void act(() => vi.advanceTimersByTime(10000));
     expect(onRequestClose).not.toHaveBeenCalled();
   });
 
@@ -284,7 +294,7 @@ describe('GradeRangeRail', () => {
     });
     // Tap V4 (min endpoint of existing range) → trims to V5-V6 — still a range, rail stays open
     fireEvent.click(getByText('V4'));
-    act(() => vi.advanceTimersByTime(10000));
+    void act(() => vi.advanceTimersByTime(10000));
     expect(onRequestClose).not.toHaveBeenCalled();
   });
 
@@ -296,6 +306,21 @@ describe('GradeRangeRail', () => {
       vi.advanceTimersByTime(3000);
     });
     expect(onRequestClose).not.toHaveBeenCalled();
+  });
+
+  it('keeps the inline filter rail visible while grades are pending on Android', () => {
+    const { getByText, container } = render(
+      <GradeRangeRail
+        grades={[]}
+        bound={{ minGradeId: undefined, maxGradeId: undefined }}
+        onChange={vi.fn()}
+        dismissible={false}
+        showTitle
+      />,
+    );
+    expect(getByText('mobile.filter.gradeRange')).toBeTruthy();
+    expect(getByText('mobile.search.gradeClear')).toBeTruthy();
+    expect(container.querySelector('[data-scroll="true"]')?.getAttribute('data-nested-scroll')).toBe('true');
   });
 });
 
