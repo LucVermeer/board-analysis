@@ -10,10 +10,10 @@
 // swaps in a richer suggestion source so swiping through the play drawer walks
 // the whole playlist.
 
-import { useCallback, useMemo, startTransition } from 'react';
+import { useCallback, useMemo, useRef, startTransition } from 'react';
 import { usePlaylistClimbActivation, fetchPlaylistSuggestionClimbs } from '@boardsesh/playlists-react';
-import { getQueueBoardKey, type Climb } from '@boardsesh/queue';
-import { useQueueActions } from '../../providers/queue-provider';
+import { createPlaylistSuggestionSource, getQueueBoardKey, type Climb, type ClimbQueueItem } from '@boardsesh/queue';
+import { useIsPartyPreviewOnly, useQueueActions } from '../../providers/queue-provider';
 import { useDrawerHost } from '../../providers/drawer-host-provider';
 import { useActiveBoard } from '../graphql/use-active-board';
 import { climbToQueueItem } from '../climb-to-queue-item';
@@ -55,15 +55,27 @@ export function usePlaylistActivation({
   const { setCurrentClimb, refreshPlaylistSuggestionSource } = useQueueActions();
   const { openPlayDrawer } = useDrawerHost();
   const activeBoard = useActiveBoard().data ?? null;
+  const isPartyPreviewOnly = useIsPartyPreviewOnly();
+
+  // The queue item the returned callback already pinned in the drawer as
+  // previewQueueItem. queueApi.setCurrentClimb dispatches that exact item so
+  // the drawer's navigation anchor and the queue entry share one uuid —
+  // otherwise prev/remaining-count anchor on an orphan uuid that's never in
+  // the queue. Single-use; the climb-uuid match guards against a stale ref
+  // from an earlier tap whose activation never reached setCurrentClimb.
+  const pendingQueueItemRef = useRef<ClimbQueueItem | null>(null);
 
   // The shared hook expects setCurrentClimb to return the activated item (so it
   // knows activation succeeded and can fire onActivated). Mobile's provider
-  // method returns void, so wrap it: build the queue item, dispatch, and return
-  // the item.
+  // method returns void, so wrap it: reuse the pinned queue item (or build one
+  // for paths that bypassed the drawer pin), dispatch, and return the item.
   const queueApi = useMemo(
     () => ({
       setCurrentClimb: async (climb: Climb, options: Parameters<typeof setCurrentClimb>[1]) => {
-        const item = climbToQueueItem(toSchemaClimb(climb));
+        const pendingItem = pendingQueueItemRef.current;
+        pendingQueueItemRef.current = null;
+        const item =
+          pendingItem && pendingItem.climb.uuid === climb.uuid ? pendingItem : climbToQueueItem(toSchemaClimb(climb));
         // Mark as a non-urgent transition so React can flush the drawer's
         // opening animation frame before processing the queue re-renders.
         startTransition(() => {
@@ -136,11 +148,38 @@ export function usePlaylistActivation({
   // the animation frame runs.
   return useCallback(
     (climb: Climb) => {
-      openPlayDrawer(toSchemaClimb(climb), { setAsCurrent: false });
+      if (isPartyPreviewOnly) {
+        // Non-driver in a party session: never touch the shared queue (same
+        // gating as the queue sheet's tap paths). Open a local preview with a
+        // drawer-local suggestion source so next-swipes walk the playlist
+        // locally; the lightbulb promotes it via takeControl(queueItem,
+        // { playlistSuggestionSource }). Preview mode uses the loaded climbs
+        // only — no async full-list refresh, matching the queue-sheet preview.
+        const previewItem = climbToQueueItem(toSchemaClimb(climb), { suggested: true });
+        const target = resolveTarget(climb);
+        const previewSource = target
+          ? createPlaylistSuggestionSource({
+              playlistUuid: sourceId,
+              activatedClimb: climb,
+              climbs: allClimbs,
+              boardKey: target.boardKey,
+              isClimbable: target.isClimbable,
+            })
+          : null;
+        openPlayDrawer(toSchemaClimb(climb), {
+          setAsCurrent: false,
+          previewQueueItem: previewItem,
+          previewPlaylistSuggestionSource: previewSource,
+        });
+        return Promise.resolve();
+      }
+      const item = climbToQueueItem(toSchemaClimb(climb));
+      pendingQueueItemRef.current = item;
+      openPlayDrawer(toSchemaClimb(climb), { setAsCurrent: false, previewQueueItem: item });
       return activate(climb).catch((error: unknown) => {
         console.error('Playlist climb activation failed:', error);
       });
     },
-    [activate, openPlayDrawer],
+    [activate, openPlayDrawer, isPartyPreviewOnly, resolveTarget, sourceId, allClimbs],
   );
 }

@@ -63,6 +63,18 @@ export function useCarouselGesture({
     boardWidthSV.value = boardWidth;
   }, [boardWidth, boardWidthSV]);
 
+  // Mirror swipe availability into shared values for the same reason — these
+  // flip at queue boundaries (and on queue mutations during the commit window),
+  // and recomposing the gesture then would hit the same iOS RNGH wedge.
+  const canSwipeNextSV = useSharedValue(canSwipeNext);
+  useEffect(() => {
+    canSwipeNextSV.value = canSwipeNext;
+  }, [canSwipeNext, canSwipeNextSV]);
+  const canSwipePreviousSV = useSharedValue(canSwipePrevious);
+  useEffect(() => {
+    canSwipePreviousSV.value = canSwipePrevious;
+  }, [canSwipePrevious, canSwipePreviousSV]);
+
   const callbacksRef = useRef({ onSwipeNext, onSwipePrevious });
   callbacksRef.current = { onSwipeNext, onSwipePrevious };
 
@@ -73,6 +85,9 @@ export function useCarouselGesture({
     [],
   );
 
+  // The three JS callbacks below are captured ONCE by the gesture memo (it
+  // composes a single time per mount) — they must only close over refs and
+  // shared values. Route any new render-scoped value through callbacksRef.
   const triggerHaptic = () => {
     hapticMedium();
   };
@@ -168,8 +183,8 @@ export function useCarouselGesture({
 
           let offset = event.translationX;
 
-          if (offset < 0 && !canSwipeNext) offset = 0;
-          if (offset > 0 && !canSwipePrevious) offset = 0;
+          if (offset < 0 && !canSwipeNextSV.value) offset = 0;
+          if (offset > 0 && !canSwipePreviousSV.value) offset = 0;
 
           translateX.value = offset;
 
@@ -185,7 +200,7 @@ export function useCarouselGesture({
           const offset = translateX.value;
           const skipAnimation = reduceMotionSV.value;
 
-          if (offset < -SWIPE_THRESHOLD && canSwipeNext) {
+          if (offset < -SWIPE_THRESHOLD && canSwipeNextSV.value) {
             if (skipAnimation) {
               translateX.value = 0;
               runOnJS(commitImmediate)('next');
@@ -194,7 +209,7 @@ export function useCarouselGesture({
               translateX.value = withTiming(-boardWidthSV.value, { duration: EXIT_DURATION });
               runOnJS(scheduleCommit)('next');
             }
-          } else if (offset > SWIPE_THRESHOLD && canSwipePrevious) {
+          } else if (offset > SWIPE_THRESHOLD && canSwipePreviousSV.value) {
             if (skipAnimation) {
               translateX.value = 0;
               runOnJS(commitImmediate)('previous');
@@ -208,8 +223,8 @@ export function useCarouselGesture({
           }
         }),
     [
-      canSwipeNext,
-      canSwipePrevious,
+      canSwipeNextSV,
+      canSwipePreviousSV,
       boardWidthSV,
       translateX,
       isAnimating,

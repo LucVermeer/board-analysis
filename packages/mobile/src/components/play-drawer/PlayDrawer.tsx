@@ -227,10 +227,31 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   // When the board angle changes, drop the locally-pinned climb so the drawer
   // re-derives the displayed climb from currentClimbQueueItem — which the queue
   // re-grade effect patches with the new angle's grade. Without this, the header
-  // would keep showing the stale grade baked into the locally-held climb.
+  // would keep showing the stale grade baked into the locally-held climb. The
+  // preview suggestion source anchors peeks on that pinned climb, so it must
+  // drop with it — kept alone it would aim next-peeks at the wrong climb.
   useEffect(() => {
     setDrawerPreviewItem(null);
+    setDrawerPreviewSuggestionSource(null);
   }, [angle]);
+
+  // When this client stops being preview-only (took control, or the session
+  // ended), drop the drawer-local preview state: commits now go through the
+  // provider, and a lingering drawerPreviewSuggestionSource would keep shadowing
+  // the provider's source for displayed peeks while nextClimb() commits against
+  // the provider source. Transition-gated (true→false only) so entering preview
+  // mode or mounting never clears a fresh preview. Safe for the lightbulb flow:
+  // handleLightbulb reads drawerPreviewSuggestionSource synchronously at press
+  // time and hands it to takeControl before the driver flip lands here.
+  const wasPartyPreviewOnlyRef = useRef(isPartyPreviewOnly);
+  useEffect(() => {
+    const wasPreviewOnly = wasPartyPreviewOnlyRef.current;
+    wasPartyPreviewOnlyRef.current = isPartyPreviewOnly;
+    if (wasPreviewOnly && !isPartyPreviewOnly) {
+      setDrawerPreviewItem(null);
+      setDrawerPreviewSuggestionSource(null);
+    }
+  }, [isPartyPreviewOnly]);
 
   const { showToast } = useToast();
 
@@ -490,6 +511,13 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
           })
         ) {
           setDrawerPreviewItem((currentItem) => currentItem ?? queueItem);
+          // The optimistic driver flip cleared the drawer-local suggestion
+          // source (preview-only → driver transition effect above); the
+          // rollback restores preview-only, so restore the at-press source
+          // alongside the preview item to keep playlist peeks working.
+          if (drawerPreviewSuggestionSource) {
+            setDrawerPreviewSuggestionSource((currentSource) => currentSource ?? drawerPreviewSuggestionSource);
+          }
         }
       });
     armWallConfirmWatcher({

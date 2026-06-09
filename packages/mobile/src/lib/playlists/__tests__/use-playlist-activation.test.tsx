@@ -17,9 +17,11 @@ const mocks = vi.hoisted(() => ({
   refreshPlaylistSuggestionSource: vi.fn(),
   openPlayDrawer: vi.fn(),
   activeBoard: { boardType: 'kilter', layoutId: 1, sizeId: 2, setIds: '3', angle: 40 } as ActiveBoard,
+  isPartyPreviewOnly: false,
   activate: vi.fn<(climb: Climb) => Promise<void>>(),
   fetchSuggestion: vi.fn(),
   captured: undefined as UsePlaylistClimbActivationOptions | undefined,
+  queueItemCounter: 0,
 }));
 
 vi.mock('@boardsesh/playlists-react', () => ({
@@ -34,6 +36,7 @@ vi.mock('../../../providers/queue-provider', () => ({
     setCurrentClimb: mocks.setCurrentClimb,
     refreshPlaylistSuggestionSource: mocks.refreshPlaylistSuggestionSource,
   }),
+  useIsPartyPreviewOnly: () => mocks.isPartyPreviewOnly,
 }));
 vi.mock('../../../providers/drawer-host-provider', () => ({
   useDrawerHost: () => ({ openPlayDrawer: mocks.openPlayDrawer }),
@@ -41,8 +44,14 @@ vi.mock('../../../providers/drawer-host-provider', () => ({
 vi.mock('../../graphql/use-active-board', () => ({
   useActiveBoard: () => ({ data: mocks.activeBoard }),
 }));
+// Unique uuid per call (mirrors the real randomUUID wrapper) — the "same item"
+// assertions below would be vacuous if every call minted the same uuid.
 vi.mock('../../climb-to-queue-item', () => ({
-  climbToQueueItem: (climb: { uuid: string }) => ({ uuid: `qi-${climb.uuid}`, climb }),
+  climbToQueueItem: (climb: { uuid: string }, options?: { suggested?: boolean }) => ({
+    uuid: `qi-${climb.uuid}-${++mocks.queueItemCounter}`,
+    suggested: options?.suggested,
+    climb,
+  }),
 }));
 
 function makeClimb(uuid: string): Climb {
@@ -75,8 +84,10 @@ function captured(): UsePlaylistClimbActivationOptions {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.activeBoard = { boardType: 'kilter', layoutId: 1, sizeId: 2, setIds: '3', angle: 40 };
+  mocks.isPartyPreviewOnly = false;
   mocks.captured = undefined;
   mocks.activate.mockResolvedValue(undefined);
+  mocks.queueItemCounter = 0;
 });
 
 describe('usePlaylistActivation (mobile wrapper)', () => {
@@ -84,10 +95,12 @@ describe('usePlaylistActivation (mobile wrapper)', () => {
     renderActivation();
     const climb = makeClimb('a');
     const item = await captured().queueApi!.setCurrentClimb(climb, { playlistSuggestionSource: null });
-    expect(mocks.setCurrentClimb).toHaveBeenCalledWith({ uuid: 'qi-a', climb }, { playlistSuggestionSource: null });
+    expect(mocks.setCurrentClimb).toHaveBeenCalledWith(expect.objectContaining({ climb }), {
+      playlistSuggestionSource: null,
+    });
     // Returning the item (non-null) tells the shared hook the synchronous
     // activation phase succeeded.
-    expect(item).toEqual({ uuid: 'qi-a', climb });
+    expect(item).toEqual(mocks.setCurrentClimb.mock.calls[0][0]);
   });
 
   it('resolves the active board into a board target, or null when no board', () => {
@@ -108,11 +121,92 @@ describe('usePlaylistActivation (mobile wrapper)', () => {
     // The drawer opens FIRST — before the shared activation's setCurrentClimb +
     // suggestion-source work — so BottomSheetModal.present() fires on the same
     // frame as the tap. setAsCurrent:false stops the drawer re-dispatching and
-    // wiping the suggestion source the activation builds.
-    expect(mocks.openPlayDrawer).toHaveBeenCalledWith(climb, { setAsCurrent: false });
+    // wiping the suggestion source the activation builds. previewQueueItem is
+    // the navigation anchor the queue dispatch will reuse.
+    expect(mocks.openPlayDrawer).toHaveBeenCalledWith(climb, {
+      setAsCurrent: false,
+      previewQueueItem: expect.objectContaining({ climb }),
+    });
     // The shared activation still runs (suggestion source + the queue dispatch,
     // which is wrapped in startTransition).
     expect(mocks.activate).toHaveBeenCalledWith(climb);
+  });
+
+  it('dispatches the exact previewQueueItem instance the drawer pinned', async () => {
+    const { result } = renderActivation();
+    const climb = makeClimb('a');
+    await result.current(climb);
+    const previewItem = mocks.openPlayDrawer.mock.calls[0][1].previewQueueItem;
+
+    const item = await captured().queueApi!.setCurrentClimb(climb, { playlistSuggestionSource: null });
+    // Same instance, not a second item with a fresh uuid — otherwise the drawer
+    // anchors prev/remaining-count on an orphan uuid that is never in the queue.
+    expect(mocks.setCurrentClimb.mock.calls[0][0]).toBe(previewItem);
+    expect(item).toBe(previewItem);
+  });
+
+  it('reuses the pinned item once — a second dispatch builds a fresh item', async () => {
+    const { result } = renderActivation();
+    const climb = makeClimb('a');
+    await result.current(climb);
+    const previewItem = mocks.openPlayDrawer.mock.calls[0][1].previewQueueItem;
+
+    const first = await captured().queueApi!.setCurrentClimb(climb, { playlistSuggestionSource: null });
+    const second = await captured().queueApi!.setCurrentClimb(climb, { playlistSuggestionSource: null });
+    expect(first).toBe(previewItem);
+    expect(second).not.toBe(previewItem);
+    expect(second?.uuid).not.toBe(previewItem.uuid);
+  });
+
+  it('ignores the pinned item when the dispatched climb differs', async () => {
+    const { result } = renderActivation();
+    await result.current(makeClimb('a'));
+    const previewItem = mocks.openPlayDrawer.mock.calls[0][1].previewQueueItem;
+
+    const climbB = makeClimb('b');
+    const item = await captured().queueApi!.setCurrentClimb(climbB, { playlistSuggestionSource: null });
+    expect(item).not.toBe(previewItem);
+    expect(item?.climb).toEqual(climbB);
+  });
+
+  describe('party preview-only mode', () => {
+    beforeEach(() => {
+      mocks.isPartyPreviewOnly = true;
+    });
+
+    it('never dispatches to the shared queue — opens a local preview instead', async () => {
+      const { result } = renderActivation();
+      const climb = makeClimb('a');
+      await result.current(climb);
+
+      // A non-driver tap must not change the session's current climb for peers.
+      expect(mocks.activate).not.toHaveBeenCalled();
+      expect(mocks.setCurrentClimb).not.toHaveBeenCalled();
+      expect(mocks.openPlayDrawer).toHaveBeenCalledWith(climb, {
+        setAsCurrent: false,
+        previewQueueItem: expect.objectContaining({ climb, suggested: true }),
+        previewPlaylistSuggestionSource: expect.objectContaining({
+          playlistUuid: 'pl-1',
+          activatedClimbUuid: 'a',
+          boardKey: expect.stringContaining('kilter'),
+          climbs: expect.arrayContaining([expect.objectContaining({ uuid: 'a' })]),
+        }),
+      });
+    });
+
+    it('opens with a null preview source when no board resolves', async () => {
+      mocks.activeBoard = null;
+      const { result } = renderActivation();
+      const climb = makeClimb('a');
+      await result.current(climb);
+
+      expect(mocks.setCurrentClimb).not.toHaveBeenCalled();
+      expect(mocks.openPlayDrawer).toHaveBeenCalledWith(climb, {
+        setAsCurrent: false,
+        previewQueueItem: expect.objectContaining({ climb }),
+        previewPlaylistSuggestionSource: null,
+      });
+    });
   });
 
   it('fetchClimbsForBoard pages the playlist via the injected fetchPage', async () => {

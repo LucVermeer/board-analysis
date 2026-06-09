@@ -127,18 +127,32 @@ vi.mock('../../components/QueueAddedSnackbar', () => ({
   QueueAddedSnackbar: () => createElement('div', { 'data-queue-snackbar': 'true' }),
 }));
 
-vi.mock('../queue-provider', () => ({
-  useQueueActions: () => ({
-    addToQueue: queue.addToQueue,
-    setSessionBoardPath: queue.setSessionBoardPath,
-    setCurrentClimb: queue.setCurrentClimb,
-  }),
-  useQueueSessionControls: () => ({
-    sessionId: queue.sessionId,
-    driverParticipantId: queue.driverParticipantId,
-    participantId: queue.participantId,
-  }),
-}));
+vi.mock('../queue-provider', async () => {
+  const { deriveIsDriver } =
+    await vi.importActual<typeof import('@boardsesh/queue-runtime')>('@boardsesh/queue-runtime');
+  return {
+    useQueueActions: () => ({
+      addToQueue: queue.addToQueue,
+      setSessionBoardPath: queue.setSessionBoardPath,
+      setCurrentClimb: queue.setCurrentClimb,
+    }),
+    useQueueSessionControls: () => ({
+      sessionId: queue.sessionId,
+      driverParticipantId: queue.driverParticipantId,
+      participantId: queue.participantId,
+    }),
+    // Mirror the provider's real selector so the existing driver/participant
+    // fixtures keep driving the preview-only branch after the handlers moved
+    // to the useIsPartyPreviewOnly hook.
+    useIsPartyPreviewOnly: () =>
+      queue.sessionId !== null &&
+      !deriveIsDriver({
+        isPersistentSessionActive: true,
+        participantId: queue.participantId,
+        driverParticipantId: queue.driverParticipantId,
+      }),
+  };
+});
 
 vi.mock('../queue-snackbar-provider', () => ({
   useQueueSnackbar: () => ({

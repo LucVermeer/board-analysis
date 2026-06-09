@@ -32,6 +32,7 @@ import {
   createJoinSessionTracker,
   createReleaseControlOptimisticPlan,
   createTakeControlOptimisticPlan,
+  deriveIsDriver,
   mapSubscriptionEnvelopeToAction,
   shouldRollbackReleaseControlDriver,
   shouldRollbackTakeControlDriver,
@@ -169,6 +170,7 @@ const QueueContext = createContext<QueueContextValue | null>(null);
  * - useActiveClimbUuid(): row-level active-climb highlighting.
  * - useHasActiveClimb(): presence-only bottom chrome metrics.
  * - usePlaylistSuggestionSource(): playlist peek/suggestion navigation.
+ * - useIsPartyPreviewOnly(): party non-driver gating for activation taps.
  */
 type TakeControlOptions = {
   playlistSuggestionSource?: PlaylistSuggestionSource | null;
@@ -274,6 +276,19 @@ type QueuePlaylistSuggestionContextValue = {
 
 const QueuePlaylistSuggestionContext = createContext<QueuePlaylistSuggestionContextValue | null>(null);
 
+/**
+ * Boolean "this client may only preview, not mutate the shared queue" selector
+ * (party session active and someone else — or nobody — is driving). Identity
+ * flips ONLY on session start/end or driver gain/loss, never on queue mutations,
+ * serial changes, or party stat pushes. Consumed by the playlist-activation hook
+ * on the climbs/playlist screens, which must not subscribe to broader contexts.
+ */
+type QueuePartyPreviewOnlyContextValue = {
+  isPartyPreviewOnly: boolean;
+};
+
+const QueuePartyPreviewOnlyContext = createContext<QueuePartyPreviewOnlyContextValue | null>(null);
+
 export function useQueue(): QueueContextValue {
   const context = useContext(QueueContext);
   if (!context) throw new Error('useQueue must be used within QueueProvider');
@@ -325,6 +340,12 @@ export function usePlaylistSuggestionSource(): PlaylistSuggestionSource | null {
   const context = useContext(QueuePlaylistSuggestionContext);
   if (!context) throw new Error('usePlaylistSuggestionSource must be used within QueueProvider');
   return context.playlistSuggestionSource;
+}
+
+export function useIsPartyPreviewOnly(): boolean {
+  const context = useContext(QueuePartyPreviewOnlyContext);
+  if (!context) throw new Error('useIsPartyPreviewOnly must be used within QueueProvider');
+  return context.isPartyPreviewOnly;
 }
 
 const defaultSearchParams: QueueSearchParams = {};
@@ -1445,6 +1466,16 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     [playlistSuggestionSource],
   );
 
+  // Preview-only selector: same derivation as the play drawer's
+  // isPlayDrawerPreviewOnly and the queue sheet's inline deriveIsDriver checks
+  // (a released driver — driverParticipantId null — leaves everyone preview-only).
+  const isPartyPreviewOnly =
+    sessionId !== null && !deriveIsDriver({ isPersistentSessionActive: true, participantId, driverParticipantId });
+  const partyPreviewOnlyValue = useMemo<QueuePartyPreviewOnlyContextValue>(
+    () => ({ isPartyPreviewOnly }),
+    [isPartyPreviewOnly],
+  );
+
   const sessionControlValue = useMemo<QueueSessionControlContextValue>(
     () => ({
       sessionId,
@@ -1476,7 +1507,9 @@ export function QueueProvider({ children }: { children: ReactNode }) {
             <QueuePlaylistSuggestionContext.Provider value={playlistSuggestionValue}>
               <QueueActiveClimbContext.Provider value={activeClimbValue}>
                 <QueueHasActiveClimbContext.Provider value={hasActiveClimbValue}>
-                  <QueueContext.Provider value={contextValue}>{children}</QueueContext.Provider>
+                  <QueuePartyPreviewOnlyContext.Provider value={partyPreviewOnlyValue}>
+                    <QueueContext.Provider value={contextValue}>{children}</QueueContext.Provider>
+                  </QueuePartyPreviewOnlyContext.Provider>
                 </QueueHasActiveClimbContext.Provider>
               </QueueActiveClimbContext.Provider>
             </QueuePlaylistSuggestionContext.Provider>
