@@ -126,9 +126,15 @@ vi.mock('../../components/AddToPlaylistSheet', () => ({
 vi.mock('../../components/QueueAddedSnackbar', () => ({
   QueueAddedSnackbar: () => createElement('div', { 'data-queue-snackbar': 'true' }),
 }));
-vi.mock('../../components/board-presence/BoardSheet', () => ({
-  BoardSheet: () => createElement('div', { 'data-board-sheet': 'true' }),
-}));
+vi.mock('../../components/board-presence/BoardSheet', async () => {
+  const React = await vi.importActual<typeof import('react')>('react');
+  return {
+    BoardSheet: React.forwardRef((_props: unknown, ref) => {
+      React.useImperativeHandle(ref, () => ({ present: () => {}, dismiss: () => {} }));
+      return React.createElement('div', { 'data-board-sheet': 'true' });
+    }),
+  };
+});
 vi.mock('../../components/board-presence/UndoWallChangeSnackbar', () => ({
   UndoWallChangeSnackbar: () => createElement('div', { 'data-undo-snackbar': 'true' }),
 }));

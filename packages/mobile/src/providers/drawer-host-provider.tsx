@@ -24,7 +24,7 @@ import { LogAscentSheet } from '../components/LogAscentSheet';
 import { QueueSheet, type QueueSheetHandle } from '../components/play-drawer/QueueSheet';
 import { QueueAddedSnackbar } from '../components/QueueAddedSnackbar';
 import { UndoWallChangeSnackbar } from '../components/board-presence/UndoWallChangeSnackbar';
-import { BoardSheet } from '../components/board-presence/BoardSheet';
+import { BoardSheet, type BoardSheetHandle } from '../components/board-presence/BoardSheet';
 import type { QueueItemRowBoard } from '../components/QueueItemRow';
 import { useActiveBoard, useSetActiveBoard } from '../lib/graphql/use-active-board';
 import { formatActiveBoardLabel } from '../lib/boards/active-board-label';
@@ -108,15 +108,12 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
   // a silent no-op in this app, so we present/dismiss synchronously from the
   // handler — the same pattern PlayDrawer uses.
   const queueSheetRef = useRef<QueueSheetHandle>(null);
+  const boardSheetRef = useRef<BoardSheetHandle>(null);
   const { data: activeBoard } = useActiveBoard();
   const [boardConfigOverride, setBoardConfigOverride] = useState<BoardConfig | null>(null);
   const [logAscentInput, setLogAscentInput] = useState<LogAscentInput | null>(null);
   const [climbActions, setClimbActions] = useState<{ climb: Climb; boardConfig: BoardConfig } | null>(null);
   const [playlistClimb, setPlaylistClimb] = useState<{ climb: Climb; boardConfig: BoardConfig } | null>(null);
-  // Board sheet uses the same mounted/visible split (converted to an imperative
-  // ref in a later commit, mirroring the queue sheet).
-  const [boardSheetMounted, setBoardSheetMounted] = useState(false);
-  const [boardSheetVisible, setBoardSheetVisible] = useState(false);
   const { addToQueue, setSessionBoardPath, setCurrentClimb } = useQueueActions();
   const { sessionId } = useQueueSessionControls();
   const isPartyPreviewOnly = useIsPartyPreviewOnly();
@@ -330,27 +327,17 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
     queueSheetRef.current?.dismiss();
   }, []);
 
-  // Board sheet: same two-commit mount→present and animated-close→unmount dance
-  // as the queue sheet (see openQueueSheet above for why the split matters).
+  // Board sheet: present imperatively via the ref, exactly like the queue sheet
+  // and Play Drawer. gorhom's present() from a `visible`-prop effect is a silent
+  // no-op in this build.
   const openBoardSheet = useCallback(() => {
     track(SHARED_EVENTS.BoardSheetOpened, {
       boardId: boardPresenceBoardIdRef.current ?? undefined,
       source: 'board_pill',
     });
-    if (boardSheetMounted) {
-      setBoardSheetVisible(true);
-    } else {
-      setBoardSheetMounted(true);
-    }
-  }, [boardSheetMounted]);
-  useEffect(() => {
-    if (boardSheetMounted) setBoardSheetVisible(true);
-  }, [boardSheetMounted]);
-  const requestCloseBoardSheet = useCallback(() => setBoardSheetVisible(false), []);
-  const handleBoardSheetDismissed = useCallback(() => {
-    setBoardSheetVisible(false);
-    setBoardSheetMounted(false);
+    boardSheetRef.current?.present();
   }, []);
+  const requestCloseBoardSheet = useCallback(() => boardSheetRef.current?.dismiss(), []);
   // Snackbar "Open": dismiss the snackbar, then open the queue sheet.
   const handleSnackbarOpen = useCallback(() => {
     dismissSnackbar();
@@ -538,15 +525,13 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
           onTickHistory={handleQueueTickHistory}
         />
       ) : null}
-      {boardSheetMounted ? (
-        <BoardSheet
-          visible={boardSheetVisible}
-          boardLabel={boardSheetLabel}
-          onClose={requestCloseBoardSheet}
-          onDismissed={handleBoardSheetDismissed}
-          onSwitchBoard={handleSwitchBoardFromSheet}
-        />
-      ) : null}
+      <BoardSheet
+        ref={boardSheetRef}
+        boardLabel={boardSheetLabel}
+        boardConfig={activeBoardConfig}
+        onClose={requestCloseBoardSheet}
+        onSwitchBoard={handleSwitchBoardFromSheet}
+      />
       <QueueAddedSnackbar
         visible={snackbarVisible}
         nonce={snackbarNonce}

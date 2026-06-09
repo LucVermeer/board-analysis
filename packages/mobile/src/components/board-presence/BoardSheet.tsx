@@ -1,7 +1,8 @@
 // Board sheet — "now on the wall" (the board-presence primary surface).
 //
 // A gorhom BottomSheetModal sibling of QueueSheet: same visible→present/dismiss
-// split, GlassSheetBackground, FullWindowOverlay on iOS, stackBehavior="push".
+// split, GlassSheetBackground, stackBehavior="push". (No FullWindowOverlay — it
+// prevented the sheet from presenting in this app; QueueSheet/PlayDrawer omit it.)
 // Renders the wall's now-on-the-wall hero, a VIRTUALIZED history list
 // (BottomSheetFlatList — never .map), light stat tiles, and a SEPARATE
 // "Switch board" footer row that opens the existing board switcher.
@@ -10,7 +11,7 @@
 // history + stats), which is inert when the `board-presence` flag is off — so
 // this sheet is only ever opened from the BoardPill when the flag is on.
 
-import { useCallback, useEffect, useMemo, useRef, type ReactNode } from 'react';
+import { forwardRef, useCallback, useImperativeHandle, useMemo, useRef, type ReactNode } from 'react';
 import { Platform, Pressable, StyleSheet, View, type ColorValue } from 'react-native';
 import {
   BottomSheetModal,
@@ -50,8 +51,17 @@ function presenceClimbToThumbnailClimb(presenceClimb: BoardPresenceClimb): Climb
   };
 }
 
+/**
+ * Imperative handle — the host presents/dismisses the sheet by calling these
+ * directly from the tap handler (PlayDrawer's proven pattern). Driving gorhom's
+ * `present()` from a `visible`-prop effect was a silent no-op in this build.
+ */
+export type BoardSheetHandle = {
+  present: () => void;
+  dismiss: () => void;
+};
+
 type BoardSheetProps = {
-  visible: boolean;
   /** The active board label, shown as the sheet title + footer subtitle. */
   boardLabel: string | null;
   /**
@@ -61,15 +71,18 @@ type BoardSheetProps = {
    * interfering with gorhom's `present()`, so the sheet never appeared.
    */
   boardConfig: BoardConfig | null;
-  /** Request an animated close (header X) — host flips `visible` to false. */
+  /** Request an animated close (header X) — the host calls `dismiss()`. */
   onClose: () => void;
-  /** Fired AFTER the dismiss animation finishes so the host can unmount. */
-  onDismissed: () => void;
+  /** Optional: fired AFTER the dismiss animation finishes (gorhom `onDismiss`). */
+  onDismissed?: () => void;
   /** Open the existing board switcher (the separated "Switch board" control). */
   onSwitchBoard: () => void;
 };
 
-export function BoardSheet({ visible, boardLabel, boardConfig, onClose, onDismissed, onSwitchBoard }: BoardSheetProps) {
+export const BoardSheet = forwardRef<BoardSheetHandle, BoardSheetProps>(function BoardSheet(
+  { boardLabel, boardConfig, onClose, onDismissed, onSwitchBoard },
+  ref,
+) {
   const { t } = useTranslation('session');
   const insets = useSafeAreaInsets();
   const { systemColors, brandColors, sheet } = useTheme();
@@ -80,13 +93,14 @@ export function BoardSheet({ visible, boardLabel, boardConfig, onClose, onDismis
 
   const snapPoints = useMemo(() => ['55%', '92%'], []);
 
-  useEffect(() => {
-    if (visible) {
+  useImperativeHandle(ref, () => ({
+    present: () => {
       sheetRef.current?.present();
-    } else {
+    },
+    dismiss: () => {
       sheetRef.current?.dismiss();
-    }
-  }, [visible]);
+    },
+  }));
 
   const renderBackdrop = useCallback(
     (props: BottomSheetBackdropProps) => (
@@ -198,6 +212,10 @@ export function BoardSheet({ visible, boardLabel, boardConfig, onClose, onDismis
       ref={sheetRef}
       index={0}
       snapPoints={snapPoints}
+      // Height is driven by explicit snapPoints, so disable gorhom's dynamic
+      // content sizing — it doesn't play well with a BottomSheetFlatList (no
+      // bounded content height to measure).
+      enableDynamicSizing={false}
       stackBehavior="push"
       enablePanDownToClose
       backdropComponent={renderBackdrop}
@@ -249,7 +267,7 @@ export function BoardSheet({ visible, boardLabel, boardConfig, onClose, onDismis
       </Pressable>
     </BottomSheetModal>
   );
-}
+});
 
 type HeroProps = {
   climb: BoardPresenceClimb | null;

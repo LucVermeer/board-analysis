@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, fireEvent } from '@testing-library/react';
-import { createElement, forwardRef, useImperativeHandle, type ReactNode, type Ref } from 'react';
+import { createElement, createRef, forwardRef, useImperativeHandle, type ReactNode, type Ref } from 'react';
 import type { BoardPresenceClimb, BoardPresenceStats } from '@boardsesh/shared-schema';
 
 const presence = vi.hoisted(() => ({
@@ -55,10 +55,6 @@ vi.mock('@gorhom/bottom-sheet', () => ({
     ),
 }));
 
-vi.mock('react-native-screens', () => ({
-  FullWindowOverlay: ({ children }: ViewMockProps) => createElement('div', null, children),
-}));
-
 vi.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
 }));
@@ -103,9 +99,6 @@ vi.mock('../../../providers/theme-provider', () => ({
     sheet: { scrimOpacity: 0.3, handleStyle: {} },
   }),
 }));
-vi.mock('../../../providers/drawer-host-provider', () => ({
-  useDrawerHost: () => ({ boardConfig: { boardName: 'kilter', layoutId: 1, sizeId: 10, setIds: '1,2', angle: 40 } }),
-}));
 vi.mock('../../../hooks/use-grade-format', () => ({
   useGradeFormat: () => ({ formatGrade: (grade: string) => grade }),
 }));
@@ -114,7 +107,7 @@ vi.mock('../../../theme/tokens', () => ({
   borderRadius: { md: 8, lg: 12 },
 }));
 
-import { BoardSheet } from '../BoardSheet';
+import { BoardSheet, type BoardSheetHandle } from '../BoardSheet';
 
 function makeClimb(climbUuid: string, seq: number, overrides: Partial<BoardPresenceClimb> = {}): BoardPresenceClimb {
   return {
@@ -131,6 +124,7 @@ function makeClimb(climbUuid: string, seq: number, overrides: Partial<BoardPrese
 }
 
 const noop = () => {};
+const boardConfig = { boardName: 'kilter', layoutId: 1, sizeId: 10, setIds: '1,2', angle: 40 };
 
 describe('BoardSheet', () => {
   beforeEach(() => {
@@ -141,37 +135,33 @@ describe('BoardSheet', () => {
     sheetModal.dismiss.mockClear();
   });
 
-  it('presents when visible and dismisses when not', () => {
-    const { rerender } = render(
+  it('presents and dismisses via the imperative ref', () => {
+    const ref = createRef<BoardSheetHandle>();
+    render(
       createElement(BoardSheet, {
-        visible: true,
+        ref,
         boardLabel: 'Garage Wall • 45°',
         onClose: noop,
-        onDismissed: noop,
+        boardConfig,
         onSwitchBoard: noop,
       }),
     );
+    expect(sheetModal.present).not.toHaveBeenCalled();
+
+    ref.current?.present();
     expect(sheetModal.present).toHaveBeenCalled();
 
-    rerender(
-      createElement(BoardSheet, {
-        visible: false,
-        boardLabel: 'Garage Wall • 45°',
-        onClose: noop,
-        onDismissed: noop,
-        onSwitchBoard: noop,
-      }),
-    );
+    ref.current?.dismiss();
     expect(sheetModal.dismiss).toHaveBeenCalled();
   });
 
   it('renders the empty state when no climb is on the wall', () => {
     const { container } = render(
       createElement(BoardSheet, {
-        visible: true,
         boardLabel: 'Garage Wall',
         onClose: noop,
         onDismissed: noop,
+        boardConfig,
         onSwitchBoard: noop,
       }),
     );
@@ -191,10 +181,10 @@ describe('BoardSheet', () => {
 
     const { container } = render(
       createElement(BoardSheet, {
-        visible: true,
         boardLabel: 'Garage Wall',
         onClose: noop,
         onDismissed: noop,
+        boardConfig,
         onSwitchBoard: noop,
       }),
     );
@@ -213,10 +203,10 @@ describe('BoardSheet', () => {
     const onSwitchBoard = vi.fn();
     const { getByLabelText } = render(
       createElement(BoardSheet, {
-        visible: true,
         boardLabel: 'Garage Wall',
         onClose: noop,
         onDismissed: noop,
+        boardConfig,
         onSwitchBoard,
       }),
     );
@@ -228,10 +218,10 @@ describe('BoardSheet', () => {
     const onClose = vi.fn();
     const { getByLabelText } = render(
       createElement(BoardSheet, {
-        visible: true,
         boardLabel: 'Garage Wall',
         onClose,
         onDismissed: noop,
+        boardConfig,
         onSwitchBoard: noop,
       }),
     );
