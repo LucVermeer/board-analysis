@@ -16,6 +16,7 @@ export type BaseGeneratorOptions = {
   minAscents: number;
   minRating: number;
   onlyTallClimbs: boolean;
+  onlyWideClimbs: boolean;
 };
 
 export type VolumeOptions = {
@@ -75,6 +76,7 @@ export const DEFAULT_VOLUME_OPTIONS: Omit<VolumeOptions, 'targetGrade'> = {
   minAscents: 5,
   minRating: 2,
   onlyTallClimbs: false,
+  onlyWideClimbs: false,
 };
 
 export const DEFAULT_PYRAMID_OPTIONS: Omit<PyramidOptions, 'targetGrade'> = {
@@ -86,6 +88,7 @@ export const DEFAULT_PYRAMID_OPTIONS: Omit<PyramidOptions, 'targetGrade'> = {
   minAscents: 5,
   minRating: 2,
   onlyTallClimbs: false,
+  onlyWideClimbs: false,
 };
 
 export const DEFAULT_LADDER_OPTIONS: Omit<LadderOptions, 'targetGrade'> = {
@@ -97,6 +100,7 @@ export const DEFAULT_LADDER_OPTIONS: Omit<LadderOptions, 'targetGrade'> = {
   minAscents: 5,
   minRating: 2,
   onlyTallClimbs: false,
+  onlyWideClimbs: false,
 };
 
 export const DEFAULT_GRADE_FOCUS_OPTIONS: Omit<GradeFocusOptions, 'targetGrade'> = {
@@ -107,6 +111,7 @@ export const DEFAULT_GRADE_FOCUS_OPTIONS: Omit<GradeFocusOptions, 'targetGrade'>
   minAscents: 5,
   minRating: 2,
   onlyTallClimbs: false,
+  onlyWideClimbs: false,
 };
 
 export const WARM_UP_CONFIG = {
