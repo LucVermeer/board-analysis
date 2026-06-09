@@ -22,7 +22,7 @@ type BoardRenderData = {
 // filter plus per-hold coordinate math) on the PlayDrawer-open critical path and
 // on every carousel swap. The underlying placement data is static, so memoize by
 // board-config key. A session only ever touches a handful of distinct boards;
-// the cap just bounds memory if a picker churns through many.
+// the FIFO eviction cap just bounds memory if a picker churns through many.
 const RENDER_DATA_CACHE_LIMIT = 16;
 const renderDataCache = new Map<string, BoardRenderData | null>();
 

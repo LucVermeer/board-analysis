@@ -314,6 +314,11 @@ export function useQueueActions(): QueueActionsContextValue {
   return context;
 }
 
+/**
+ * Returns the active playlist suggestion source, or null when no playlist
+ * continuation is active. A missing context still throws: in-tree "no source"
+ * is represented by `null`, while no provider means the hook was misused.
+ */
 export function usePlaylistSuggestionSource(): PlaylistSuggestionSource | null {
   const context = useContext(QueuePlaylistSuggestionContext);
   if (!context) throw new Error('usePlaylistSuggestionSource must be used within QueueProvider');

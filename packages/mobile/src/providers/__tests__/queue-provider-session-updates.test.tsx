@@ -144,7 +144,14 @@ vi.mock('../queue-snackbar-provider', () => ({
   useQueueSnackbar: () => ({ showQueueAddedSnackbar: vi.fn() }),
 }));
 
-import { QueueProvider, usePlaylistSuggestionSource, useQueue, useQueueLiveStats } from '../queue-provider';
+import {
+  QueueProvider,
+  useHasActiveClimb,
+  usePlaylistSuggestionSource,
+  useQueue,
+  useQueueLiveStats,
+  useQueueSessionId,
+} from '../queue-provider';
 
 type Snapshot = {
   state: ReturnType<typeof useQueue>['state'];
@@ -163,6 +170,11 @@ type Snapshot = {
   releaseControl: ReturnType<typeof useQueue>['releaseControl'];
   confirmClimbOnWall: ReturnType<typeof useQueue>['confirmClimbOnWall'];
   setSessionBoardSerial: ReturnType<typeof useQueue>['setSessionBoardSerial'];
+};
+
+type SelectorSnapshot = {
+  sessionIdValue: ReturnType<typeof useQueueSessionId>;
+  hasActiveClimb: boolean;
 };
 
 const user = (overrides: Partial<SessionUser> = {}): SessionUser => ({
@@ -252,8 +264,31 @@ function Probe({ onSnapshot }: { onSnapshot: (snapshot: Snapshot) => void }) {
   return null;
 }
 
+function SelectorProbe({ onSnapshot }: { onSnapshot: (snapshot: SelectorSnapshot) => void }) {
+  const sessionIdValue = useQueueSessionId();
+  const hasActiveClimb = useHasActiveClimb();
+  useEffect(() => {
+    onSnapshot({ sessionIdValue, hasActiveClimb });
+  }, [hasActiveClimb, onSnapshot, sessionIdValue]);
+  return null;
+}
+
 function renderProvider(onSnapshot: (snapshot: Snapshot) => void) {
   return render(createElement(QueueProvider, null, createElement(Probe, { onSnapshot })));
+}
+
+function renderProviderWithSelectors(
+  onSnapshot: (snapshot: Snapshot) => void,
+  onSelectorSnapshot: (snapshot: SelectorSnapshot) => void,
+) {
+  return render(
+    createElement(
+      QueueProvider,
+      null,
+      createElement(Probe, { onSnapshot }),
+      createElement(SelectorProbe, { onSnapshot: onSelectorSnapshot }),
+    ),
+  );
 }
 
 describe('QueueProvider session update subscription', () => {
@@ -310,6 +345,76 @@ describe('QueueProvider session update subscription', () => {
         users: [user({ id: 'participant-self', username: 'Self', userId: 'db-self' })],
       },
     });
+  });
+
+  it('keeps the session-id selector value stable across queue mutations', async () => {
+    const snapshots: Snapshot[] = [];
+    const selectorSnapshots: SelectorSnapshot[] = [];
+    renderProviderWithSelectors(
+      (snapshot) => snapshots.push(snapshot),
+      (snapshot) => selectorSnapshots.push(snapshot),
+    );
+
+    await waitFor(() => {
+      expect(snapshots.at(-1)?.sessionId).toBe('session-1');
+      expect(selectorSnapshots.at(-1)?.sessionIdValue.sessionId).toBe('session-1');
+    });
+
+    const selectorSnapshotCount = selectorSnapshots.length;
+    const sessionIdValue = selectorSnapshots.at(-1)?.sessionIdValue;
+    const snapshot = snapshots.at(-1);
+    if (!snapshot || !sessionIdValue) throw new Error('queue selector snapshot was not captured');
+
+    act(() => {
+      snapshot.addToQueue(makeQueueItem('queue-extra', 'climb-extra'));
+    });
+
+    await waitFor(() => {
+      expect(snapshots.at(-1)?.state.queue.map((item) => item.uuid)).toContain('queue-extra');
+    });
+    expect(selectorSnapshots).toHaveLength(selectorSnapshotCount);
+    expect(selectorSnapshots.at(-1)?.sessionIdValue).toBe(sessionIdValue);
+  });
+
+  it('keeps the active-climb presence selector stable when switching between climbs', async () => {
+    const snapshots: Snapshot[] = [];
+    const selectorSnapshots: SelectorSnapshot[] = [];
+    renderProviderWithSelectors(
+      (snapshot) => snapshots.push(snapshot),
+      (snapshot) => selectorSnapshots.push(snapshot),
+    );
+
+    await waitFor(() => {
+      expect(snapshots.at(-1)?.sessionId).toBe('session-1');
+    });
+
+    const firstItem = makeQueueItem('queue-first', 'climb-first');
+    const initialSnapshot = snapshots.at(-1);
+    if (!initialSnapshot) throw new Error('queue snapshot was not captured');
+
+    act(() => {
+      initialSnapshot.setCurrentClimb(firstItem);
+    });
+
+    await waitFor(() => {
+      expect(snapshots.at(-1)?.state.currentClimbQueueItem?.uuid).toBe('queue-first');
+      expect(selectorSnapshots.at(-1)?.hasActiveClimb).toBe(true);
+    });
+
+    const selectorSnapshotCount = selectorSnapshots.length;
+    const secondItem = makeQueueItem('queue-second', 'climb-second');
+    const activeSnapshot = snapshots.at(-1);
+    if (!activeSnapshot) throw new Error('active queue snapshot was not captured');
+
+    act(() => {
+      activeSnapshot.setCurrentClimb(secondItem);
+    });
+
+    await waitFor(() => {
+      expect(snapshots.at(-1)?.state.currentClimbQueueItem?.uuid).toBe('queue-second');
+    });
+    expect(selectorSnapshots).toHaveLength(selectorSnapshotCount);
+    expect(selectorSnapshots.at(-1)?.hasActiveClimb).toBe(true);
   });
 
   it('applies roster and driver events to public context state', async () => {
