@@ -213,6 +213,18 @@ Source locations:
 - Widget extension target (Live Activity SwiftUI, AppIntents, WidgetNetworking, plus byte-identical copies of ClimbSessionAttributes / SharedConstants / SharedKeychain / Intent files): `packages/mobile/targets/BoardseshWidgets/` — managed by `@bacons/apple-targets`
 - Widget target build settings that @bacons/apple-targets does not expose directly, including `WIDGET_EXTENSION`: `packages/mobile/plugins/with-boardsesh-widget-build-settings.js`
 
+#### Swift unit tests and CI
+
+The RN app's `packages/mobile/ios/` directory is generated and gitignored, so tracked Swift
+unit tests live in `packages/mobile/ios-tests/`. The CI workflow runs Expo prebuild, then
+`scripts/prepare-rn-ios-tests.mjs` creates a generated `BoardseshTests` XCTest target and
+stages the Live Activity Swift sources into that target before invoking `xcodebuild`.
+
+Swift test coverage runs in two workflows:
+
+- `.github/workflows/ios-rn-ci.yml` builds and tests the React Native / Expo app and widget helpers.
+- `.github/workflows/ios-ci.yml` builds and tests the legacy Capacitor app Swift target.
+
 #### 1. Generate the native project
 
 ```bash

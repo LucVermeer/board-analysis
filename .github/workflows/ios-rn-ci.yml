@@ -1,29 +1,44 @@
-name: iOS CI
+name: iOS CI (React Native)
 
 on:
   pull_request:
     paths:
-      - 'mobile/**'
-      - '.github/workflows/ios-ci.yml'
+      - 'packages/mobile/**'
+      - 'packages/shared/**'
+      - 'packages/board-constants/**'
+      - 'packages/shared-schema/**'
+      - 'scripts/prepare-rn-ios-tests.mjs'
+      - '.github/workflows/ios-rn-ci.yml'
   push:
     branches-ignore: [main]
     paths:
-      - 'mobile/**'
-      - '.github/workflows/ios-ci.yml'
+      - 'packages/mobile/**'
+      - 'packages/shared/**'
+      - 'packages/board-constants/**'
+      - 'packages/shared-schema/**'
+      - 'scripts/prepare-rn-ios-tests.mjs'
+      - '.github/workflows/ios-rn-ci.yml'
   workflow_dispatch:
 
 concurrency:
-  group: ios-ci-${{ github.ref }}
+  group: ios-rn-ci-${{ github.ref }}
   cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
   build-and-test:
-    runs-on: macos-15
-    timeout-minutes: 30
+    runs-on: macos-26
+    timeout-minutes: 60
 
     env:
-      WORKSPACE_PATH: mobile/ios/App/App.xcworkspace
-      SCHEME: App
+      WORKSPACE_PATH: packages/mobile/ios/Boardsesh.xcworkspace
+      SCHEME: Boardsesh
+      EXPO_PUBLIC_BACKEND_URL: https://ws.boardsesh.com
+      EXPO_PUBLIC_WS_URL: wss://ws.boardsesh.com/graphql
+      EXPO_PUBLIC_WEB_URL: https://www.boardsesh.com
+      SENTRY_DISABLE_AUTO_UPLOAD: 'true'
 
     steps:
       - name: Checkout repository
@@ -36,30 +51,41 @@ jobs:
           node-version: 'lts'
           cache: true
 
+      - name: Install Node.js dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Write .env for Expo build-time inlining
+        working-directory: packages/mobile
+        run: |
+          cat > .env <<EOF
+          EXPO_PUBLIC_BACKEND_URL=$EXPO_PUBLIC_BACKEND_URL
+          EXPO_PUBLIC_WS_URL=$EXPO_PUBLIC_WS_URL
+          EXPO_PUBLIC_WEB_URL=$EXPO_PUBLIC_WEB_URL
+          EOF
+
+      - name: Expo prebuild (generate ios/)
+        working-directory: packages/mobile
+        run: bunx expo prebuild --platform ios --clean --no-install
+
       - name: Cache CocoaPods
         uses: actions/cache@v4
         with:
-          path: mobile/ios/App/Pods
-          key: ${{ runner.os }}-pods-${{ hashFiles('mobile/ios/App/Podfile.lock') }}
+          path: packages/mobile/ios/Pods
+          key: ${{ runner.os }}-pods-rn-ci-${{ hashFiles('packages/mobile/ios/Podfile.lock') }}
           restore-keys: |
-            ${{ runner.os }}-pods-
-
-      - name: Install Node.js dependencies
-        working-directory: mobile
-        run: bun install --frozen-lockfile
-
-      - name: Sync Capacitor iOS project
-        working-directory: mobile
-        run: bunx cap sync ios
+            ${{ runner.os }}-pods-rn-ci-
+            ${{ runner.os }}-pods-rn-
 
       - name: Install CocoaPods dependencies
-        working-directory: mobile/ios/App
+        working-directory: packages/mobile/ios
         run: pod install
+
+      - name: Add RN Swift test target
+        run: node scripts/prepare-rn-ios-tests.mjs
 
       - name: Resolve simulator destination
         id: simulator
         run: |
-          # Pick the first booted iPhone, or boot one from the latest available runtime
           DEVICE_NAME=$(xcrun simctl list devices available -j \
             | python3 -c "
           import json, sys
@@ -76,7 +102,7 @@ jobs:
           echo "device=$DEVICE_NAME" >> "$GITHUB_OUTPUT"
           echo "Using simulator: $DEVICE_NAME"
 
-      - name: Build for testing (compiler check)
+      - name: Build for testing
         run: |
           xcodebuild build-for-testing \
             -workspace "$WORKSPACE_PATH" \
@@ -87,7 +113,7 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO
 
-      - name: Run unit tests
+      - name: Run Swift unit tests
         run: |
           xcodebuild test-without-building \
             -workspace "$WORKSPACE_PATH" \

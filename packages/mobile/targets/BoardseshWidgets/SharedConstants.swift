@@ -219,6 +219,12 @@ struct SharedWidgetWallControl {
     let requiresServerAuthorization: Bool
 }
 
+enum SharedWidgetTakeControlAction: Equatable {
+    case enableLocalNavigation
+    case alreadyAllowed
+    case requestServerAuthorization
+}
+
 enum SharedWidgetWallControlState {
     static func save(navigationAllowed: Bool, isPartySession: Bool, to defaults: UserDefaults) {
         defaults.set(navigationAllowed, forKey: SharedConstants.widgetNavigationAllowedKey)
@@ -236,6 +242,26 @@ enum SharedWidgetWallControlState {
         return SharedWidgetWallControl(
             navigationAllowed: defaults.bool(forKey: SharedConstants.widgetNavigationAllowedKey),
             requiresServerAuthorization: true
+        )
+    }
+}
+
+enum SharedWidgetTakeControlRuntime {
+    static func action(for wallControl: SharedWidgetWallControl) -> SharedWidgetTakeControlAction {
+        if !wallControl.requiresServerAuthorization {
+            return .enableLocalNavigation
+        }
+        if wallControl.navigationAllowed {
+            return .alreadyAllowed
+        }
+        return .requestServerAuthorization
+    }
+
+    static func markControlClaimed(isPartySession: Bool, to defaults: UserDefaults) {
+        SharedWidgetWallControlState.save(
+            navigationAllowed: true,
+            isPartySession: isPartySession,
+            to: defaults
         )
     }
 }
