@@ -13,15 +13,16 @@ struct TakeControlIntent: LiveActivityIntent {
         guard let defaults = SharedConstants.sharedDefaults else { return .result() }
 
         let wallControl = SharedWidgetWallControlState.load(from: defaults)
-        guard wallControl.requiresServerAuthorization else {
-            SharedWidgetWallControlState.save(navigationAllowed: true, isPartySession: false, to: defaults)
+        switch SharedWidgetTakeControlRuntime.action(for: wallControl) {
+        case .enableLocalNavigation:
+            SharedWidgetTakeControlRuntime.markControlClaimed(isPartySession: false, to: defaults)
             await refreshActivities()
             return .result()
-        }
-
-        guard !wallControl.navigationAllowed else {
+        case .alreadyAllowed:
             await refreshActivities()
             return .result()
+        case .requestServerAuthorization:
+            break
         }
 
         let result = await WidgetNetworking.sendTakeControl()
@@ -30,7 +31,7 @@ struct TakeControlIntent: LiveActivityIntent {
             return .result()
         }
 
-        SharedWidgetWallControlState.save(navigationAllowed: true, isPartySession: true, to: defaults)
+        SharedWidgetTakeControlRuntime.markControlClaimed(isPartySession: true, to: defaults)
         await refreshActivities()
         return .result()
     }
