@@ -12,7 +12,7 @@ version = '1.0.0'
 
 android {
   namespace 'com.boardsesh.liveactivity'
-  compileSdk 35
+  compileSdk 36
 
   defaultConfig {
     minSdk 24
@@ -46,8 +46,7 @@ dependencies {
   // the foreground-service retry path. Robolectric runs the real Android
   // framework classes (Build.VERSION, Intent, Service, ServiceCompat) on the
   // JVM; mockk drives the injectable startForegroundService seam and the static
-  // ServiceCompat promotion outcomes. Robolectric 4.14 supports up to SDK 35,
-  // matching this module's compileSdk. Run via gradle after `expo prebuild`
+  // ServiceCompat promotion outcomes. Run via gradle after `expo prebuild`
   // (.github/workflows/android-pr-rn.yml runs :…:testDebugUnitTest on PRs); the
   // repo's `vp`/CI flow has no Kotlin test runner.
   testImplementation 'junit:junit:4.13.2'
