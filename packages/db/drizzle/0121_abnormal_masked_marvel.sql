@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "user_boards_unique_serial" ON "user_boards" USING btree ("serial_number") WHERE "user_boards"."serial_number" IS NOT NULL AND "user_boards"."deleted_at" IS NULL;
