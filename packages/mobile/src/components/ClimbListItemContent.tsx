@@ -52,6 +52,12 @@ type ClimbListItemContentProps = {
   sizeId: number;
   setIds: string;
   angle: number;
+  /**
+   * Whether to render the trailing ascent-status glyph. Defaults to true. Set
+   * false where the host already shows the ascent status (e.g. the in-session
+   * history row's leading badge) so it isn't duplicated beside the grade.
+   */
+  showAscentStatus?: boolean;
 };
 
 /**
@@ -107,6 +113,7 @@ const ClimbListItemContent = React.memo(function ClimbListItemContent({
   sizeId,
   setIds,
   angle,
+  showAscentStatus = true,
 }: ClimbListItemContentProps) {
   const { t } = useTranslation('climbs');
   const { formatGrade } = useGradeFormat();
@@ -162,7 +169,7 @@ const ClimbListItemContent = React.memo(function ClimbListItemContent({
 
       {/* Right: ascent-status glyph + colorized grade — the two scan keys together */}
       <View style={styles.rightSection}>
-        <AscentStatusGlyph climbUuid={climb.uuid} angle={angle} />
+        {showAscentStatus ? <AscentStatusGlyph climbUuid={climb.uuid} angle={angle} /> : null}
         <Text variant="title3" numberOfLines={1} style={[styles.gradeText, { color: gradeColor }]}>
           {formattedGrade ?? climb.difficulty}
         </Text>
