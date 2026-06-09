@@ -75,8 +75,8 @@ type UseBoardBluetoothOptions = {
 /**
  * Fire-and-forget GraphQL mutation recording the (serial, board config, API
  * level) the user was on when connecting. Failures are swallowed — connect must
- * not block on this. A null token still fires (the backend rejects it), keeping
- * behaviour identical to the previous unauthenticated POST.
+ * not block on this. The mutation requires auth, so a missing token is skipped
+ * rather than fired (a guaranteed 401), matching the mobile path.
  */
 function recordBoardSerial(
   serialNumber: string,
@@ -94,6 +94,9 @@ function recordBoardSerial(
   // strings — the mutation would error and the `.catch` would swallow it, so
   // the serial would never get recorded. Skip the call deliberately instead.
   if (!setIds) return;
+  // Skip when signed out — the mutation is auth-gated, so firing it without a
+  // token is a guaranteed 401 round-trip on every anonymous connect.
+  if (!token) return;
   const client = createGraphQLHttpClient(token);
   void client
     .request(RECORD_BOARD_SERIAL, {

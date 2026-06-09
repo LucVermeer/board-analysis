@@ -630,6 +630,11 @@ describe('recordBoardSerial', () => {
     return { values };
   }
 
+  // Saved-board uuids are RFC 4122 (the input schema validates strictly), so the
+  // ownership tests use real UUIDs rather than placeholder strings.
+  const FORGED_UUID = '11111111-1111-4111-8111-111111111111';
+  const OWNED_UUID = '22222222-2222-4222-8222-222222222222';
+
   it('drops a forged boardUuid (not owned by the caller and not public) to null', async () => {
     // saved lookup: no match → proceeds to write
     // ownership check: empty → uuid is neither owned-by-caller nor public
@@ -646,7 +651,7 @@ describe('recordBoardSerial', () => {
           sizeId: 10,
           setIds: '1,2',
           apiLevel: 3,
-          boardUuid: 'someone-elses-board-uuid',
+          boardUuid: FORGED_UUID,
         },
       },
       makeAuthCtx('user-1'),
@@ -663,8 +668,8 @@ describe('recordBoardSerial', () => {
     // ownership check returns a row → uuid is owned-by-caller or public
     const { values } = setupRecordSeq([
       [],
-      [{ uuid: 'my-board-uuid' }],
-      [recordingRow({ boardUuid: 'my-board-uuid', boardSlug: 'my-board' })],
+      [{ uuid: OWNED_UUID }],
+      [recordingRow({ boardUuid: OWNED_UUID, boardSlug: 'my-board' })],
     ]);
 
     const result = await socialBoardMutations.recordBoardSerial(
@@ -677,14 +682,14 @@ describe('recordBoardSerial', () => {
           sizeId: 10,
           setIds: '1,2',
           apiLevel: 3,
-          boardUuid: 'my-board-uuid',
+          boardUuid: OWNED_UUID,
         },
       },
       makeAuthCtx('user-1'),
     );
 
-    expect(values).toHaveBeenCalledWith(expect.objectContaining({ boardUuid: 'my-board-uuid' }));
-    expect(result?.boardUuid).toBe('my-board-uuid');
+    expect(values).toHaveBeenCalledWith(expect.objectContaining({ boardUuid: OWNED_UUID }));
+    expect(result?.boardUuid).toBe(OWNED_UUID);
     expect(result?.boardSlug).toBe('my-board');
   });
 });

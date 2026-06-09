@@ -121,5 +121,8 @@ export const RecordBoardSerialInputSchema = z.object({
     .max(256)
     .regex(/^\d+(,\d+)*$/, 'setIds must be a comma-separated list of integers'),
   apiLevel: z.number().int().nonnegative().optional(),
-  boardUuid: z.string().min(1).max(64).optional(),
+  // Saved-board uuids are RFC 4122 UUIDs; validate strictly like every other
+  // boardUuid in this file so a malformed value is rejected up front rather than
+  // reaching the ownership query as a garbage string that can't match anyway.
+  boardUuid: UUIDSchema.optional(),
 });
