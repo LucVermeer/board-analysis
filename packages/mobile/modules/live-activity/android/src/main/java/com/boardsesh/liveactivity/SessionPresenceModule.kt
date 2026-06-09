@@ -59,9 +59,11 @@ class SessionPresenceModule : Module() {
     @Volatile
     private var controller: SessionPresenceController? = null
 
-    // startSession needs a controller; if the react context is gone, surface it
-    // to JS (the hook's .catch resets) rather than no-op into an inconsistent
-    // "JS thinks active, native isn't" state.
+    // startSession needs a controller; if Expo's weak reactContext is gone,
+    // surface it to JS (the hook's .catch resets) rather than no-op into an
+    // inconsistent "JS thinks active, native isn't" state. The controller tests
+    // cover native rejection after a Context exists; the hook tests cover the JS
+    // reset/retry contract for any rejected native start.
     @Synchronized
     private fun requireController(): SessionPresenceController {
         controller?.let { return it }

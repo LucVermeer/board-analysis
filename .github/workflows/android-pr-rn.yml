@@ -110,8 +110,13 @@ jobs:
         # module is autolinking-derived, so discover it rather than hardcode.
         run: |
           set -euo pipefail
-          PROJECT=$(./gradlew -q projects | sed -n "s/.*Project '\(:[^']*live-activity[^']*\)'.*/\1/p" | head -1)
-          test -n "$PROJECT" || { echo "live-activity gradle project not found"; exit 1; }
+          mapfile -t PROJECTS < <(./gradlew -q projects | sed -n "s/.*Project '\(:[^']*live-activity[^']*\)'.*/\1/p")
+          if [ "${#PROJECTS[@]}" -ne 1 ]; then
+            echo "Expected exactly one live-activity Gradle project, found ${#PROJECTS[@]}:"
+            printf '  %s\n' "${PROJECTS[@]}"
+            exit 1
+          fi
+          PROJECT="${PROJECTS[0]}"
           echo "Testing module project: $PROJECT"
           ./gradlew "${PROJECT}:testDebugUnitTest" --stacktrace
 

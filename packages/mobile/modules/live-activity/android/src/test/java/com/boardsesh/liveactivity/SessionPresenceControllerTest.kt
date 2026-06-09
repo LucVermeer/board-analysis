@@ -6,6 +6,7 @@ import android.content.Intent
 import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -82,14 +83,19 @@ class SessionPresenceControllerTest {
 
     @Test
     @Config(sdk = [31])
-    fun `startup-path launch failure clears sessionActive`() {
-        val controller = SessionPresenceController(application) { _, _ -> throw fgsNotAllowed() }
+    fun `startup-path launch failure clears sessionActive and rejects startSession`() {
+        val startupFailure = fgsNotAllowed()
+        val controller = SessionPresenceController(application) { _, _ -> throw startupFailure }
 
-        controller.startSession(null)
+        val thrown = assertThrows(SessionForegroundServiceStartException::class.java) {
+            controller.startSession(null)
+        }
 
         // The initial promotion never landed, so later updates must not keep
-        // retrying a service that never started.
+        // retrying a service that never started. JS also needs the rejection so
+        // its active ref resets and a later foregrounded start can retry.
         assertFalse(controller.sessionActive)
+        assertSame(startupFailure, thrown.cause)
     }
 
     @Test
@@ -116,6 +122,19 @@ class SessionPresenceControllerTest {
         failNextLaunch = false
         controller.updateActivity(updateOptions())
         assertEquals(BoardSessionService.ACTION_UPDATE, launchedIntents.last().action)
+    }
+
+    @Test
+    @Config(sdk = [30])
+    fun `updateActivity includes flat board angle in the subtitle`() {
+        val (controller, launchedIntents) = recordingController()
+        controller.startSession(null)
+
+        controller.updateActivity(updateOptions().apply { angle = 0 })
+
+        val updateIntent = launchedIntents.last()
+        assertEquals(BoardSessionService.ACTION_UPDATE, updateIntent.action)
+        assertEquals("V5 · 0°", updateIntent.getStringExtra(BoardSessionService.EXTRA_SUBTITLE))
     }
 
     @Test

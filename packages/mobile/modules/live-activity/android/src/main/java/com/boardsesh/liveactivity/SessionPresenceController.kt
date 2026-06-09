@@ -21,6 +21,11 @@ internal class MissingBluetoothPermissionException :
 internal class ReactContextUnavailableException :
     CodedException("React context unavailable; cannot start a climbing session")
 
+// Startup startForegroundService failures mean the native session never activated.
+// Reject startSession so JS clears its active ref and can retry later.
+internal class SessionForegroundServiceStartException(cause: Throwable) :
+    CodedException("Unable to start the climbing session foreground service", cause)
+
 /**
  * Owns the BoardSessionService lifecycle and the logical `sessionActive` flag,
  * deliberately free of the Expo runtime so the lifecycle can be unit-tested.
@@ -71,7 +76,7 @@ internal class SessionPresenceController(
         if (!sessionActive) return
         val subtitle = buildString {
             append(options.climbDifficulty)
-            if (options.angle > 0) {
+            if (options.angle >= 0) {
                 if (isNotEmpty()) append(" · ")
                 append("${options.angle}°")
             }
@@ -105,8 +110,12 @@ internal class SessionPresenceController(
         try {
             startForegroundService(context, intent)
         } catch (error: Exception) {
-            Log.w(TAG, "startForegroundService failed: ${error.message}")
-            if (clearSessionOnFailure) sessionActive = false
+            val errorName = error.javaClass.simpleName.ifBlank { error.javaClass.name }
+            Log.w(TAG, "startForegroundService failed ($errorName): ${error.message}", error)
+            if (clearSessionOnFailure) {
+                sessionActive = false
+                throw SessionForegroundServiceStartException(error)
+            }
         }
     }
 
