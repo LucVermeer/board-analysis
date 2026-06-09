@@ -1,7 +1,6 @@
 ## Claude Review
 
-⚠️
-**Needs attention** - One missing authorization check in `reportBoardClimb` lets any authenticated user post to any board; two read endpoints have no auth with no explanation; migration missing `CONCURRENTLY`.
+⚠️ **Needs attention** - One missing authorization check in `reportBoardClimb` lets any authenticated user post to any board; two read endpoints have no auth with no explanation; migration missing `CONCURRENTLY`.
 
 ---
 
