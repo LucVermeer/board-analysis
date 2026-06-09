@@ -79,6 +79,7 @@ export default defineConfig({
       './packages/shared/queue/vite.config.ts',
       './packages/shared/queue-runtime/vite.config.ts',
       './packages/shared/board-presence/vite.config.ts',
+      './packages/shared/board-presence-react/vite.config.ts',
       './packages/shared/queue-react/vite.config.ts',
       './packages/shared/playlists-react/vite.config.ts',
       './packages/shared/party-profile/vite.config.ts',
@@ -285,6 +286,10 @@ export default defineConfig({
         command: 'bun run --filter=@boardsesh/board-presence typecheck',
         dependsOn: ['build:shared'],
       },
+      'typecheck:board-presence-react': {
+        command: 'bun run --filter=@boardsesh/board-presence-react typecheck',
+        dependsOn: ['build:shared'],
+      },
       'typecheck:playlists-react': {
         command: 'bun run --filter=@boardsesh/playlists-react typecheck',
       },
@@ -360,6 +365,7 @@ export default defineConfig({
           'typecheck:queue-runtime',
           'typecheck:queue-react',
           'typecheck:board-presence',
+          'typecheck:board-presence-react',
           'typecheck:playlists-react',
           'typecheck:board-react',
           'typecheck:create-climb-react',
