@@ -14,7 +14,7 @@ import { ActivityIndicator } from '../../src/components/ActivityIndicator';
 import { Icon } from '../../src/components/Icon';
 import { useTheme } from '../../src/providers/theme-provider';
 import { useAuth } from '../../src/providers/auth-provider';
-import { useQueue } from '../../src/providers/queue-provider';
+import { useQueueSessionId, useQueueActions } from '../../src/providers/queue-provider';
 import { useToast } from '../../src/providers/toast-provider';
 import { useSessionPreview, useMyBoards, useCreateBoard } from '../../src/lib/graphql/hooks';
 import { resolveBoardForSession } from '../../src/lib/board-path-to-user-board';
@@ -37,7 +37,8 @@ export default function JoinSessionScreen() {
   const { isAuthenticated } = useAuth();
   const { showToast } = useToast();
 
-  const { sessionId: activeSessionId, joinSession, clearSession } = useQueue();
+  const { sessionId: activeSessionId } = useQueueSessionId();
+  const { joinSession, clearSession } = useQueueActions();
 
   const preview = useSessionPreview(sessionId);
   const myBoards = useMyBoards(undefined, { enabled: isAuthenticated });
@@ -75,11 +76,13 @@ export default function JoinSessionScreen() {
       // queue provider only emits Session Started/Ended, never Joined. Mirror
       // web's props (session_id, board_name, layout_id), derived from the path.
       const parsedBoard = parseBoardPath(session.boardPath);
-      track(SHARED_EVENTS.SessionJoined, {
-        session_id: session.id,
-        board_name: parsedBoard?.boardName ?? null,
-        layout_id: parsedBoard?.layoutId ?? null,
-      });
+      if (parsedBoard) {
+        track(SHARED_EVENTS.SessionJoined, {
+          session_id: session.id,
+          board_name: parsedBoard.boardName,
+          layout_id: parsedBoard.layoutId,
+        });
+      }
       // Land on the Record tab so the user drops straight into the joined session.
       router.replace('/(tabs)/record');
     } catch (error) {

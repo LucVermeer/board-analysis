@@ -374,7 +374,6 @@
       "preWorkoutPreviewGenerating": "Creando tu entrenamiento…",
       "preWorkoutPreviewEmpty": "No hay bloques para este grado. Prueba otro.",
       "preWorkoutPreviewError": "No se pudo crear la vista previa. Inténtalo de nuevo.",
-      "preRegenerateClimb": "Cambiar este bloque",
       "preRegenerateClimbForClimb": "Cambiar {{name}}",
       "inStatsSends": "Encadenes",
       "inStatsAttempts": "Intentos",

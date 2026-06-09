@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, render } from '@testing-library/react';
+import { act, render, waitFor } from '@testing-library/react';
 import { createElement, type ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { GeneratorSelection } from '../GeneratorPickerCard';
@@ -85,7 +85,7 @@ vi.mock('../../../../providers/theme-provider', () => ({ useTheme: () => ({ syst
 vi.mock('../../../../lib/graphql/use-active-board', () => ({ useActiveBoard: () => activeBoard }));
 vi.mock('../../../../providers/auth-provider', () => ({ useAuth: () => ({ isAuthenticated: true }) }));
 vi.mock('../../../../providers/queue-provider', () => ({
-  useQueue: () => ({ startSession: queue.startSession, setQueue: queue.setQueue }),
+  useQueueActions: () => ({ startSession: queue.startSession, setQueue: queue.setQueue }),
 }));
 vi.mock('../../../../providers/drawer-host-provider', () => ({
   useDrawerHost: () => ({ openPlayDrawer: drawer.openPlayDrawer }),
@@ -149,6 +149,16 @@ describe('PreSessionView analytics', () => {
       await Promise.resolve();
       await Promise.resolve();
     });
+    await waitFor(() =>
+      expect(analytics.track).toHaveBeenCalledWith('Session Queue Generated', {
+        workoutType: 'volume',
+        boardName: 'kilter',
+        angle: 40,
+        // 2 climbs queued out of a 3-slot plan → 1 short.
+        savedCount: 2,
+        failedCount: 1,
+      }),
+    );
 
     // Queue replaced with the preview items, first climb set current.
     expect(queue.setQueue).toHaveBeenCalledTimes(1);
@@ -168,9 +178,8 @@ describe('PreSessionView analytics', () => {
 
     await act(async () => {
       startButton.onPress?.();
-      await Promise.resolve();
-      await Promise.resolve();
     });
+    await waitFor(() => expect(queue.startSession).toHaveBeenCalled());
 
     expect(queue.setQueue).not.toHaveBeenCalled();
     expect(analytics.track).not.toHaveBeenCalledWith('Session Queue Generated', expect.anything());

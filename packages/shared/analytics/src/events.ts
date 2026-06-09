@@ -55,13 +55,33 @@ export const SHARED_EVENTS = {
   BluetoothConnectionSuccess: 'Bluetooth Connection Success',
   BluetoothConnectionFailed: 'Bluetooth Connection Failed',
   BluetoothDisconnected: 'Bluetooth Disconnected',
+  // BLE lifecycle telemetry — added so a session recording (and PostHog) shows
+  // what the radio actually did. BluetoothConnectionStolen is the tug-of-war
+  // signal: a write failed with a disconnect error while we believed we were
+  // connected (another device grabbed the last-connection-wins board).
+  BluetoothScanStarted: 'Bluetooth Scan Started',
+  BluetoothConnectionStolen: 'Bluetooth Connection Stolen',
   ClimbSentToBoardSuccess: 'Climb Sent to Board Success',
   ClimbSentToBoardFailure: 'Climb Sent to Board Failure',
   // Search
   ClimbSearchPerformed: 'Climb Search Performed',
+  SearchHoldFilterChanged: 'Search Hold Filter Changed',
+  SearchHoldFilterCleared: 'Search Hold Filter Cleared',
+  SearchZoneEnabled: 'Search Zone Enabled',
+  SearchZoneUpdated: 'Search Zone Updated',
+  SearchZoneCleared: 'Search Zone Cleared',
+  SearchZoneModeChanged: 'Search Zone Mode Changed',
   // Beta videos
   BetaVideoLinkClicked: 'Beta Video Link Clicked',
   BetaVideoClimbClicked: 'Beta Video Climb Clicked',
+  // Onboarding tour (first-run walkthrough). Web fires the same names from its
+  // step-based guided tour; the mobile welcome carousel reuses them so both
+  // platforms land in one PostHog funnel.
+  OnboardingTourStarted: 'Onboarding Tour Started',
+  OnboardingTourStepViewed: 'Onboarding Tour Step Viewed',
+  OnboardingTourStepAdvanced: 'Onboarding Tour Step Advanced',
+  OnboardingTourCompleted: 'Onboarding Tour Completed',
+  OnboardingTourSkipped: 'Onboarding Tour Skipped',
   BetaVideoAdded: 'Beta Video Added',
 } as const;
 

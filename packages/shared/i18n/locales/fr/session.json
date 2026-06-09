@@ -374,7 +374,6 @@
       "preWorkoutPreviewGenerating": "Création de ta séance…",
       "preWorkoutPreviewEmpty": "Aucun bloc trouvé pour ce niveau. Essaie un autre.",
       "preWorkoutPreviewError": "Impossible de créer l'aperçu. Réessaie.",
-      "preRegenerateClimb": "Changer ce bloc",
       "preRegenerateClimbForClimb": "Changer {{name}}",
       "inStatsSends": "Enchaînées",
       "inStatsAttempts": "Essais",

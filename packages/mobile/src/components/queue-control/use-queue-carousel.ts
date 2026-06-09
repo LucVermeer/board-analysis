@@ -12,7 +12,7 @@ import { useTranslation } from 'react-i18next';
 import { computePeekOffset, computeNavigationStateWithSuggestions } from '@boardsesh/play-view';
 import type { ClimbQueueItem } from '@boardsesh/queue';
 import { useReduceMotion } from '../../hooks/use-reduce-motion';
-import { useQueue } from '../../providers/queue-provider';
+import { usePlaylistSuggestionSource, useQueue } from '../../providers/queue-provider';
 import { useDrawerHost } from '../../providers/drawer-host-provider';
 import { hapticLight, hapticSelection } from '../../lib/haptics';
 import { useCarouselGesture } from '../play-drawer/use-carousel-gesture';
@@ -51,7 +51,8 @@ export type QueueCarousel = {
 };
 
 export function useQueueCarousel(): QueueCarousel {
-  const { state, nextClimb, previousClimb, playlistSuggestionSource } = useQueue();
+  const { state, nextClimb, previousClimb } = useQueue();
+  const playlistSuggestionSource = usePlaylistSuggestionSource();
   const { openPlayDrawer } = useDrawerHost();
   const { t } = useTranslation('session');
   const reduceMotion = useReduceMotion();

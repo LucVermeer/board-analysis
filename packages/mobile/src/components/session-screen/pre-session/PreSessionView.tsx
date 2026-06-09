@@ -14,7 +14,7 @@ import { useTheme } from '../../../providers/theme-provider';
 import { borderRadius, spacing } from '../../../theme/tokens';
 import { useActiveBoard } from '../../../lib/graphql/use-active-board';
 import { useAuth } from '../../../providers/auth-provider';
-import { useQueue } from '../../../providers/queue-provider';
+import { useQueueActions } from '../../../providers/queue-provider';
 import { useToast } from '../../../providers/toast-provider';
 import { useDrawerHost } from '../../../providers/drawer-host-provider';
 import { useBottomChromeMetrics } from '../../../hooks/use-bottom-chrome-metrics';
@@ -41,7 +41,7 @@ export function PreSessionView() {
   const bottomChrome = useBottomChromeMetrics();
   const { data: activeBoard } = useActiveBoard();
   const { isAuthenticated } = useAuth();
-  const { startSession, setQueue } = useQueue();
+  const { startSession, setQueue } = useQueueActions();
   const { openPlayDrawer } = useDrawerHost();
   const { showToast } = useToast();
 

@@ -374,7 +374,6 @@
       "preWorkoutPreviewGenerating": "Building your workout…",
       "preWorkoutPreviewEmpty": "No climbs found for this grade. Try another.",
       "preWorkoutPreviewError": "Couldn't build the preview. Try again.",
-      "preRegenerateClimb": "Regenerate this climb",
       "preRegenerateClimbForClimb": "Regenerate {{name}}",
       "inStatsSends": "Sends",
       "inStatsAttempts": "Attempts",
