@@ -20,10 +20,15 @@ struct ReconnectBoardIntent: LiveActivityIntent {
     func perform() async throws -> some IntentResult {
         Self.logger.notice("ReconnectBoardIntent.perform() running process=\(ProcessInfo.processInfo.processName, privacy: .public)")
 
-        // Reconnect BLE to the last board. Runs in the main app process; compiled
-        // out of the widget-extension binary (which can't link BoardBleManager).
+        // Reconnect BLE to the last board. In the main app process (the path iOS
+        // takes for a registered LiveActivityIntent) this calls BoardBleManager
+        // directly. If iOS instead runs the intent in the widget extension — which
+        // can't link BoardBleManager — fall back to a Darwin notification so the
+        // live main app does the reconnect, mirroring ClimbNavigationIntent.
         #if !WIDGET_EXTENSION
         _ = await LiveActivityBleBridge.reconnectForIntent()
+        #else
+        postBleReconnectDarwinNotification()
         #endif
 
         // In a party session the climber who grabs the board also claims wall
@@ -49,5 +54,17 @@ struct ReconnectBoardIntent: LiveActivityIntent {
             let content = ActivityContent(state: activity.content.state, staleDate: Date().addingTimeInterval(180))
             await activity.update(content)
         }
+    }
+
+    /// Widget-extension fallback path: wake the live main app (where
+    /// BoardBleManager lives) to reconnect. LiveActivityModule observes this and
+    /// calls reconnectToLastKnownBoard. No-op if no main-app observer is alive.
+    private func postBleReconnectDarwinNotification() {
+        let name = SharedConstants.bleReconnectNotification as CFString
+        CFNotificationCenterPostNotification(
+            CFNotificationCenterGetDarwinNotifyCenter(),
+            CFNotificationName(name),
+            nil, nil, true
+        )
     }
 }

@@ -73,6 +73,11 @@ enum SharedConstants {
     /// session and the main app should re-register.
     static let pushRegistrationStaleNotification = "com.boardsesh.app.pushRegistrationStale"
 
+    /// Fallback for the Live Activity lightbulb's ReconnectBoardIntent: if iOS
+    /// runs that intent in the widget extension (which can't link BoardBleManager),
+    /// it posts this so the live main app reconnects BLE to the last known board.
+    static let bleReconnectNotification = "com.boardsesh.app.bleReconnect"
+
     // MARK: Live Activity
 
     /// Minimum seconds between consecutive ActivityKit pushes.
