@@ -77,6 +77,7 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [oauthInProgress, setOauthInProgress] = useState(false);
 
   const trimmedEmail = email.trim();
   const canSubmit = !submitting && trimmedEmail.length > 0 && password.length > 0;
@@ -122,33 +123,40 @@ export default function LoginScreen() {
   }
 
   async function handleOAuthSignIn(provider: 'apple' | 'google') {
+    // A rapid double-tap would open two concurrent auth sessions.
+    if (oauthInProgress) return;
+    setOauthInProgress(true);
     setError(null);
     track(SHARED_EVENTS.LoginAttempted, { auth_method: provider, flow: 'native' });
-    const result = await signIn(provider);
-    if (result.type === 'success') {
-      // On iOS the auth session consumes the callback redirect and returns it
-      // here instead of delivering a deep link, so we must route the transfer
-      // token to /auth/callback ourselves. On Android the deep link can also
-      // arrive via expo-router; the callback screen dedupes the exchange.
-      const { transferToken, error: callbackError } = parseAuthCallbackParams(result.url);
-      if (transferToken) {
-        router.replace({ pathname: '/auth/callback', params: { transferToken } });
-      } else {
-        // callbackError comes from our own server (session_missing /
-        // token_issue_failed), so it's safe as a low-cardinality reason.
-        track(SHARED_EVENTS.LoginFailed, {
-          auth_method: provider,
-          flow: 'native',
-          failure_reason: callbackError ?? 'no_transfer_token',
-        });
-        setError(t('nativeStart.oauthError'));
+    try {
+      const result = await signIn(provider);
+      if (result.type === 'success') {
+        // On iOS the auth session consumes the callback redirect and returns it
+        // here instead of delivering a deep link, so we must route the transfer
+        // token to /auth/callback ourselves. On Android the deep link can also
+        // arrive via expo-router; the callback screen dedupes the exchange.
+        const { transferToken, error: callbackError } = parseAuthCallbackParams(result.url);
+        if (transferToken) {
+          router.replace({ pathname: '/auth/callback', params: { transferToken } });
+        } else {
+          // callbackError comes from our own server (session_missing /
+          // token_issue_failed), so it's safe as a low-cardinality reason.
+          track(SHARED_EVENTS.LoginFailed, {
+            auth_method: provider,
+            flow: 'native',
+            failure_reason: callbackError ?? 'no_transfer_token',
+          });
+          setError(t('nativeStart.oauthError'));
+        }
+        return;
       }
-      return;
-    }
-    // The user dismissing the system sheet is only observable here — track it
-    // so the funnel sees the Attempted→Succeeded drop-off instead of a silent gap.
-    if (result.type === 'cancel' || result.type === 'dismiss') {
+      // Everything else never reaches /auth/callback, so it's only observable
+      // here. cancel/dismiss is the user closing the system sheet; track every
+      // non-success type so the funnel sees the Attempted→Succeeded drop-off
+      // instead of a silent gap.
       track(SHARED_EVENTS.LoginFailed, { auth_method: provider, flow: 'native', failure_reason: result.type });
+    } finally {
+      setOauthInProgress(false);
     }
   }
 
@@ -239,6 +247,7 @@ export default function LoginScreen() {
               onPress={() => {
                 void handleOAuthSignIn('apple');
               }}
+              disabled={oauthInProgress}
             />
           )}
           <SignInButton
@@ -246,6 +255,7 @@ export default function LoginScreen() {
             onPress={() => {
               void handleOAuthSignIn('google');
             }}
+            disabled={oauthInProgress}
           />
         </View>
       </ScrollView>

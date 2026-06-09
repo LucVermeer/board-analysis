@@ -13,6 +13,8 @@ import { useTheme } from '../../src/providers/theme-provider';
 // the login screen routes here explicitly with the URL openAuthSessionAsync
 // returned. Module-level so a remount can't replay (and fail) the exchange —
 // the duplicate mount just shows the spinner until AuthProvider redirects.
+// Never cleared: one short string per login attempt for the process lifetime
+// is negligible, and clearing would reopen the replay window.
 const exchangedTokens = new Set<string>();
 
 export default function AuthCallback() {
