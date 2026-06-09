@@ -65,6 +65,8 @@ export const SHARED_EVENTS = {
   ClimbSentToBoardFailure: 'Climb Sent to Board Failure',
   // Search
   ClimbSearchPerformed: 'Climb Search Performed',
+  SearchHoldFilterChanged: 'Search Hold Filter Changed',
+  SearchHoldFilterCleared: 'Search Hold Filter Cleared',
   // Beta videos
   BetaVideoLinkClicked: 'Beta Video Link Clicked',
   BetaVideoClimbClicked: 'Beta Video Climb Clicked',

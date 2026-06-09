@@ -275,7 +275,8 @@
       "climbs": "Bloques",
       "climb": "Bloque",
       "profile": "Perfil",
-      "setters": "Equipadores"
+      "setters": "Equipadores",
+      "holdFilter": "Tipos de presa"
     }
   },
   "lightControl": {

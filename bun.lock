@@ -360,6 +360,7 @@
       "name": "@boardsesh/climb-filters",
       "version": "1.0.0",
       "dependencies": {
+        "@boardsesh/board-constants": "*",
         "@boardsesh/shared-schema": "*",
       },
       "devDependencies": {

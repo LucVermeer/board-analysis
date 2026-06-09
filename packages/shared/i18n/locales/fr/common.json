@@ -77,7 +77,8 @@
       "climbs": "Blocs",
       "climb": "Bloc",
       "profile": "Profil",
-      "setters": "Ouvreurs"
+      "setters": "Ouvreurs",
+      "holdFilter": "Types de prise"
     }
   },
   "lightControl": {
