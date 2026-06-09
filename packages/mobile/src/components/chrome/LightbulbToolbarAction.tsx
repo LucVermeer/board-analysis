@@ -22,9 +22,18 @@ export function LightbulbToolbarAction() {
 
   const handlePress = useCallback(() => {
     if (!bluetooth) return;
+    // Ignore taps while a connect is already running — a second concurrent
+    // connect tears down the first attempt's scan and strands the picker.
+    if (bluetooth.loading) return;
     hapticLight();
-    if (bluetooth.isConnected) void bluetooth.disconnect();
-    else void bluetooth.connect();
+    if (bluetooth.isConnected) {
+      void bluetooth.disconnect();
+    } else {
+      // Reconnect silently to the remembered board when there is one for the
+      // current config (same behaviour as the play-drawer lightbulb);
+      // otherwise fall through to the device picker.
+      void bluetooth.connect(undefined, undefined, bluetooth.reconnectSerialForCurrentBoard ?? undefined);
+    }
   }, [bluetooth]);
 
   if (!bluetooth) return null;

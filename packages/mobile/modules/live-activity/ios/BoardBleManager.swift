@@ -6,6 +6,11 @@ struct BoardBleScanResult {
     let deviceId: String
     let name: String?
     let rssi: Int
+    /// Service UUIDs from the advertisement packet. The JS layer filters scan
+    /// results by these (plus name patterns) now that the scan itself runs
+    /// unfiltered — a native service-UUID filter would hide MoonBoard
+    /// controllers, which don't reliably advertise the UART service UUID.
+    let serviceUuids: [String]
 }
 
 enum BoardBleError: LocalizedError {
@@ -92,6 +97,12 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
 
     private var onScanResult: ((BoardBleScanResult) -> Void)?
     private var onDisconnect: ((String) -> Void)?
+    /// Fired whenever a connection becomes fully usable (write characteristic
+    /// discovered) — JS-initiated connects, widget-intent reconnects and
+    /// CoreBluetooth state restoration alike. The JS layer uses it to adopt
+    /// natively-established connections so the in-app lightbulb matches the
+    /// wall. Payload: (deviceId, deviceName).
+    private var onConnected: ((String, String?) -> Void)?
 
     override private init() {
         super.init()
@@ -114,13 +125,27 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
         }
     }
 
+    /// The currently-connected, write-ready board (id + best-known name), or
+    /// nil. Exposed to JS as `getConnectedDevice` so a foregrounding app can
+    /// adopt a connection established while it was backgrounded (widget
+    /// reconnect) even if the `connected` event was missed.
+    var connectedDeviceInfo: (deviceId: String, name: String?)? {
+        runOnBleQueueSync {
+            guard let peripheral = connectedPeripheral, writeCharacteristic != nil else { return nil }
+            let deviceId = peripheral.identifier.uuidString
+            return (deviceId, discoveredNames[deviceId] ?? peripheral.name)
+        }
+    }
+
     func setEventHandlers(
         onScanResult: ((BoardBleScanResult) -> Void)?,
-        onDisconnect: ((String) -> Void)?
+        onDisconnect: ((String) -> Void)?,
+        onConnected: ((String, String?) -> Void)? = nil
     ) {
         runOnBleQueue { [weak self] in
             self?.onScanResult = onScanResult
             self?.onDisconnect = onDisconnect
+            self?.onConnected = onConnected
         }
     }
 
@@ -163,14 +188,10 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
     /// scan, works while backgrounded); falls back to a time-boxed scan that
     /// connects when the stored UUID advertises.
     ///
-    /// Known limitation: this reconnects the native layer only. The wall re-lights
-    /// (displaySharedCurrentItemOnBleQueue) and widget next/prev keep driving it,
-    /// but the JS `isConnected` is NOT updated — there's no native→JS "connected"
-    /// event yet — so after a background widget reconnect the in-app lightbulb
-    /// shows disconnected and in-app climb navigation won't push to the wall until
-    /// the user taps it once (which connects JS to the already-connected board, a
-    /// fast no-op on the native side). Follow-up: bridge a `connected` event +
-    /// adopt the connection in NativeIosBleAdapter on app foreground.
+    /// The JS layer hears about the reconnect through the bridged `connected`
+    /// event (fired from didDiscoverCharacteristicsFor) and adopts the
+    /// connection; if the event fired while JS was suspended, the foreground
+    /// `getConnectedDevice` check in useBoardBluetooth picks it up instead.
     func reconnectToLastKnownBoard(completion: @escaping (Result<Void, Error>) -> Void) {
         runOnBleQueue { [weak self] in
             self?.reconnectToLastKnownBoardOnBleQueue(completion: completion)
@@ -258,8 +279,12 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
     }
 
     private func startScanOnBleQueue(serviceUuids: [String], completion: @escaping (Result<Void, Error>) -> Void) {
+        // An empty list means "scan unfiltered" (withServices: nil): the JS
+        // layer filters results itself so MoonBoard controllers — which don't
+        // reliably advertise the UART service UUID — still surface. Older JS
+        // bundles always pass explicit UUIDs and keep the filtered behaviour.
         let uuids = serviceUuids.compactMap { CBUUID(string: $0) }
-        scanServices = uuids.isEmpty ? [auroraServiceUuid] : uuids
+        scanServices = uuids
         scanRequested = true
 
         guard centralManager.state == .poweredOn else {
@@ -271,7 +296,10 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
             return
         }
 
-        centralManager.scanForPeripherals(withServices: scanServices, options: [CBCentralManagerScanOptionAllowDuplicatesKey: true])
+        centralManager.scanForPeripherals(
+            withServices: scanServices.isEmpty ? nil : scanServices,
+            options: [CBCentralManagerScanOptionAllowDuplicatesKey: true]
+        )
         completion(.success(()))
     }
 
@@ -558,7 +586,8 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
                 readyWaiters.signalAll()
             }
             if scanRequested {
-                central.scanForPeripherals(withServices: scanServices.isEmpty ? [auroraServiceUuid] : scanServices, options: [
+                // Empty scanServices = unfiltered scan (see startScanOnBleQueue).
+                central.scanForPeripherals(withServices: scanServices.isEmpty ? nil : scanServices, options: [
                     CBCentralManagerScanOptionAllowDuplicatesKey: true,
                 ])
             }
@@ -595,7 +624,9 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
         if let name {
             discoveredNames[deviceId] = name
         }
-        onScanResult?(BoardBleScanResult(deviceId: deviceId, name: name, rssi: RSSI.intValue))
+        let advertisedServiceUuids = (advertisementData[CBAdvertisementDataServiceUUIDsKey] as? [CBUUID] ?? [])
+            .map { $0.uuidString }
+        onScanResult?(BoardBleScanResult(deviceId: deviceId, name: name, rssi: RSSI.intValue, serviceUuids: advertisedServiceUuids))
 
         // Reconnect-by-last-known-board scan fallback: the stored board just
         // advertised — hand its completion to connectOnBleQueue (which stops the
@@ -698,6 +729,12 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
         persistLastConnectedPeripheral(peripheral)
         completePendingConnect(.success(()))
         logger.info("Connected to board BLE peripheral \(peripheral.identifier.uuidString, privacy: .public)")
+        // Tell JS the link is usable. This is the single success point for
+        // every connect path (JS connect, widget reconnect, state
+        // restoration), so the JS layer can adopt connections it didn't
+        // initiate.
+        let connectedDeviceId = peripheral.identifier.uuidString
+        onConnected?(connectedDeviceId, discoveredNames[connectedDeviceId] ?? peripheral.name)
         let hadPendingReadyWaiters = readyWaiters.hasPendingWaiters
         readyWaiters.signalAll()
         // Skip the implicit shared-state write when an intent is waiting on

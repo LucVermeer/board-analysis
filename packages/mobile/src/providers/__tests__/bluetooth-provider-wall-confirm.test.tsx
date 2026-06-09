@@ -6,6 +6,7 @@ import type { ClimbQueueItem } from '@boardsesh/queue';
 
 type BluetoothHookOptions = {
   onConnectSuccess?: (serial: string | null) => void;
+  holdsData?: unknown;
 };
 
 const wallConfirm = vi.hoisted(() => ({
@@ -79,6 +80,16 @@ vi.mock('../queue-provider', () => ({
     confirmClimbOnWall: queue.confirmClimbOnWall,
     setSessionBoardSerial: queue.setSessionBoardSerial,
   }),
+}));
+
+const boardDetails = vi.hoisted(() => ({
+  getBoardRenderData: vi.fn(() => ({
+    holdsData: [{ id: 100, mirroredHoldId: 200, cx: 0, cy: 0, r: 1 }],
+  })),
+}));
+
+vi.mock('../../lib/board-details', () => ({
+  getBoardRenderData: boardDetails.getBoardRenderData,
 }));
 
 import { BluetoothProvider } from '../bluetooth-provider';
@@ -227,5 +238,27 @@ describe('BluetoothProvider wall-confirm integration', () => {
 
     bluetooth.options?.onConnectSuccess?.('SERIAL-1');
     expect(queue.setSessionBoardSerial).not.toHaveBeenCalled();
+  });
+
+  it('threads the active board holds into the hook so mirrored sends can convert', () => {
+    render(
+      createElement(BluetoothProvider, {
+        boardName: 'kilter',
+        layoutId: 1,
+        sizeId: 10,
+        setIds: '26, 27',
+        children: createElement('div', null),
+      }),
+    );
+
+    expect(boardDetails.getBoardRenderData).toHaveBeenCalledWith({
+      boardName: 'kilter',
+      layoutId: 1,
+      sizeId: 10,
+      setIds: [26, 27],
+    });
+    expect((bluetooth.options as { holdsData?: unknown } | undefined)?.holdsData).toEqual([
+      { id: 100, mirroredHoldId: 200, cx: 0, cy: 0, r: 1 },
+    ]);
   });
 });

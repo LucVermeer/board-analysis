@@ -1,6 +1,5 @@
 import { type Device, type Characteristic } from 'react-native-ble-plx';
 import {
-  AURORA_ADVERTISED_SERVICE_UUID,
   UART_SERVICE_UUID,
   UART_WRITE_CHARACTERISTIC_UUID,
   splitMessages,
@@ -9,6 +8,7 @@ import {
 } from '@boardsesh/ble-protocol';
 import { bleManager } from './ble-manager';
 import { waitForBlePoweredOn } from './availability';
+import { isLikelyBoardDevice } from './board-device-filter';
 import type { BluetoothAdapter, BleConnection, DevicePickerFn, DiscoveredDevice } from './types';
 import { SCAN_TIMEOUT_MS, SERIAL_RECONNECT_GRACE_MS } from '@boardsesh/ble-protocol/scan-constants';
 
@@ -73,41 +73,45 @@ export class RNBleAdapter implements BluetoothAdapter {
     let scanTimeoutId: ReturnType<typeof setTimeout> | undefined;
     let selectedDeviceId: string;
     try {
-      bleManager.startDeviceScan(
-        [AURORA_ADVERTISED_SERVICE_UUID, UART_SERVICE_UUID],
-        null,
-        (scanError, scannedDevice) => {
-          if (scanError) {
-            bleManager.stopDeviceScan();
-            // Surface the failure immediately so the user sees feedback instead
-            // of waiting out the 30s scan window (the picker, if open, closes too).
-            rejectSelection(new Error(`BLE scan failed: ${scanError.message}`));
-            return;
+      // Scan unfiltered and filter results in JS: a service-UUID filter would
+      // hide MoonBoard controllers, which don't reliably advertise the UART
+      // service UUID (see isLikelyBoardDevice).
+      bleManager.startDeviceScan(null, null, (scanError, scannedDevice) => {
+        if (scanError) {
+          bleManager.stopDeviceScan();
+          // Surface the failure immediately so the user sees feedback instead
+          // of waiting out the 30s scan window (the picker, if open, closes too).
+          rejectSelection(new Error(`BLE scan failed: ${scanError.message}`));
+          return;
+        }
+
+        if (!scannedDevice) return;
+
+        const deviceName = scannedDevice.localName ?? scannedDevice.name ?? undefined;
+        if (!isLikelyBoardDevice({ name: deviceName, serviceUuids: scannedDevice.serviceUUIDs })) {
+          return;
+        }
+
+        const device: DiscoveredDevice = {
+          deviceId: scannedDevice.id,
+          name: deviceName,
+          rssi: scannedDevice.rssi ?? -100,
+        };
+
+        // Deduplicate by deviceId — react-native-ble-plx uses stable
+        // peripheral UUIDs on iOS and device addresses on Android.
+        devices.set(device.deviceId, device);
+        pushDevices();
+
+        // Auto-select the stored board only until the picker takes over.
+        if (autoSelecting && targetSerial) {
+          const serial = parseSerialNumber(device.name);
+          if (serial === targetSerial) {
+            autoSelecting = false;
+            resolveSelection(device.deviceId);
           }
-
-          if (!scannedDevice) return;
-
-          const device: DiscoveredDevice = {
-            deviceId: scannedDevice.id,
-            name: scannedDevice.localName ?? scannedDevice.name ?? undefined,
-            rssi: scannedDevice.rssi ?? -100,
-          };
-
-          // Deduplicate by deviceId — react-native-ble-plx uses stable
-          // peripheral UUIDs on iOS and device addresses on Android.
-          devices.set(device.deviceId, device);
-          pushDevices();
-
-          // Auto-select the stored board only until the picker takes over.
-          if (autoSelecting && targetSerial) {
-            const serial = parseSerialNumber(device.name);
-            if (serial === targetSerial) {
-              autoSelecting = false;
-              resolveSelection(device.deviceId);
-            }
-          }
-        },
-      );
+        }
+      });
 
       // Grace window: if the stored serial hasn't matched shortly, open the
       // picker (scan keeps running so it live-updates) instead of waiting out

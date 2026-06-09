@@ -1,21 +1,27 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert } from 'react-native';
+import { Alert, AppState } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import {
   getAuroraBluetoothPacket,
   parseApiLevel,
+  parseBoardTypeFromDeviceName,
   parseSerialNumber,
   type LedColorOverrides,
 } from '@boardsesh/ble-protocol/aurora';
 import { getMoonboardBluetoothPacket } from '@boardsesh/ble-protocol/moonboard';
-import { isDisconnectionError } from '@boardsesh/ble-protocol/connection-error';
+import { classifyBleFailure, isDisconnectionError } from '@boardsesh/ble-protocol/connection-error';
 import type { AuroraBoardName } from '@boardsesh/shared-schema';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { RECORD_BOARD_SERIAL } from '@boardsesh/graphql/operations';
 import { getHttpClient } from '../graphql/client';
 import { getAuthToken } from '../auth-store';
-import { createBluetoothAdapter, isNativeIosBleAdapter } from './adapter-factory';
+import {
+  createBluetoothAdapter,
+  getNativeBleConnectedDevice,
+  isNativeIosBleAdapter,
+  subscribeNativeBleConnected,
+} from './adapter-factory';
 import { requestBleRuntimePermissions } from './use-ble-permissions';
 import type { BluetoothAdapter, DevicePickerFn, DiscoveredDevice } from './types';
 import type { HoldPlacement } from '../../components/board-renderer/types';
@@ -125,26 +131,33 @@ const KEEP_AWAKE_TAG = 'boardsesh-ble';
 /**
  * Create a single AbortSignal that fires when either of the two input signals
  * is aborted. This lets us combine a caller-supplied signal with an internal
- * one without losing either.
+ * one without losing either. Callers must invoke `dispose` once the guarded
+ * work settles — the caller-supplied signal can be long-lived (the
+ * AutoSender's lifetime controller), and without the dispose every write
+ * would leave one more dangling 'abort' listener on it for the rest of the
+ * session.
  */
-function mergeAbortSignals(signalA: AbortSignal, signalB: AbortSignal): AbortSignal {
+function mergeAbortSignals(signalA: AbortSignal, signalB: AbortSignal): { signal: AbortSignal; dispose: () => void } {
   const controller = new AbortController();
 
-  const onAbort = () => {
-    controller.abort();
+  const detach = () => {
     signalA.removeEventListener('abort', onAbort);
     signalB.removeEventListener('abort', onAbort);
+  };
+  const onAbort = () => {
+    controller.abort();
+    detach();
   };
 
   if (signalA.aborted || signalB.aborted) {
     controller.abort();
-    return controller.signal;
+    return { signal: controller.signal, dispose: () => {} };
   }
 
   signalA.addEventListener('abort', onAbort);
   signalB.addEventListener('abort', onAbort);
 
-  return controller.signal;
+  return { signal: controller.signal, dispose: detach };
 }
 
 function classifyBleFailureReason(error: unknown): string {
@@ -166,6 +179,9 @@ export function useBoardBluetooth({
   onConnectSuccess,
 }: UseBoardBluetoothOptions) {
   const { t } = useTranslation('settings');
+  // Connect-failure copy lives in the shared `common.bluetooth.*` keys so web
+  // and mobile describe the same failure the same way.
+  const { t: tCommon } = useTranslation('common');
   const [loading, setLoading] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
 
@@ -179,7 +195,26 @@ export function useBoardBluetooth({
   const adapterRef = useRef<BluetoothAdapter | null>(null);
   const apiLevelRef = useRef<number>(3);
   const unsubDisconnectRef = useRef<(() => void) | null>(null);
+  // One AbortController per connection generation, shared by every write of
+  // that generation. connect()/disconnect() abort it so ALL in-flight and
+  // queued writes against the old adapter cancel — a per-write controller
+  // would only ever cover the most recent one.
   const writeAbortRef = useRef<AbortController | null>(null);
+  // Serialises every adapter.write across all callers of sendFramesToBoard.
+  // The AutoSender (first frame on climb change), the play-drawer playback
+  // drain (subsequent frames) and the create-climb preview each guard only
+  // their own writes, so without a shared mutex their independent latest-wins
+  // loops can overlap at the GATT boundary. RNBleAdapter splits a packet into
+  // 20-byte chunks written sequentially with inter-chunk delays — two
+  // overlapping writes interleave chunks of two different packets and corrupt
+  // both. Mirrors the web hook's writeChainRef; reset on connect/disconnect
+  // so a hung write can't wedge the next connection's sends.
+  const writeChainRef = useRef<Promise<void>>(Promise.resolve());
+  // True while a connect attempt is running. Guards against a second
+  // concurrent connect (double-tapped lightbulb): both attempts would share
+  // the singleton BLE manager, and the first attempt's scan teardown kills
+  // the second attempt's scan, stranding the picker.
+  const connectInFlightRef = useRef(false);
 
   const [pickerState, setPickerState] = useState<PickerState | null>(null);
   const pickerRejectRef = useRef<((error: Error) => void) | null>(null);
@@ -240,109 +275,134 @@ export function useBoardBluetooth({
       if (!adapterRef.current || !boardName || layoutId === undefined || sizeId === undefined) return;
       const boardAnalyticsProperties = { boardName, layoutId, sizeId, mirrored };
 
-      // Create an AbortController for this write so connect() can cancel
-      // an in-flight write when creating a new adapter.
-      const writeAbort = new AbortController();
-      writeAbortRef.current = writeAbort;
-
-      // Combine caller-provided signal with the internal abort controller
-      const combinedSignal = signal ? mergeAbortSignals(signal, writeAbort.signal) : writeAbort.signal;
-
-      try {
-        if (boardName === 'moonboard') {
-          const sent = await dispatchMoonboardPacket(
-            frames,
-            adapterRef.current.write.bind(adapterRef.current),
-            combinedSignal,
-          );
-          if (sent) track(SHARED_EVENTS.ClimbSentToBoardSuccess, boardAnalyticsProperties);
-          return sent;
-        }
-
-        // Empty frames = "clear all LEDs" for Aurora boards
-        if (frames === '') {
-          const clearResult = getAuroraBluetoothPacket('', {}, boardName as AuroraBoardName, apiLevelRef.current);
-          await adapterRef.current.write(clearResult.packet, combinedSignal);
-          return true;
-        }
-
-        let framesToSend = frames;
-
-        if (mirrored && holdsData && holdsData.length > 0) {
-          framesToSend = convertToMirroredFramesString(frames, holdsData);
-        }
-
-        if (!cachedGetLedPlacements) {
-          const mod = await import('@boardsesh/board-constants/led-placements');
-          cachedGetLedPlacements = mod.getLedPlacements as GetLedPlacementsFn;
-        }
-        const getLedPlacementsFn = cachedGetLedPlacements;
-        const placementPositions = getLedPlacementsFn(boardName, layoutId, sizeId);
-
-        if (Object.keys(placementPositions).length === 0) {
-          console.error(
-            `[BLE] LED placement map is empty for ${boardName} layout=${layoutId} size=${sizeId}. Board configuration may be incorrect or LED data may need regeneration.`,
-          );
-          Alert.alert(t('ble.notAvailable'), t('ble.errorLedMissing'));
-          track(SHARED_EVENTS.ClimbSentToBoardFailure, {
-            ...boardAnalyticsProperties,
-            failureReason: 'missing_led_placements',
-          });
-          return false;
-        }
-
-        const result = getAuroraBluetoothPacket(
-          framesToSend,
-          placementPositions,
-          boardName as AuroraBoardName,
-          apiLevelRef.current,
-          ledColorOverrides,
-        );
-
-        const skippedCount = result.skippedPositionCount + result.skippedRoleCount;
-
-        if (skippedCount > 0 && result.packet.length === 0) {
-          console.warn(`[BLE] All ${result.totalPlacements} placements skipped — climb incompatible with board`);
-          Alert.alert(t('ble.notAvailable'), t('ble.errorIncompatible'));
-          track(SHARED_EVENTS.ClimbSentToBoardFailure, {
-            ...boardAnalyticsProperties,
-            failureReason: 'incompatible_climb',
-          });
-          return false;
-        }
-
-        if (skippedCount > 0) {
-          console.warn(`[BLE] ${skippedCount} of ${result.totalPlacements} placements skipped`);
-        }
-
-        await adapterRef.current.write(result.packet, combinedSignal);
-        track(SHARED_EVENTS.ClimbSentToBoardSuccess, boardAnalyticsProperties);
-        return true;
-      } catch (error) {
-        if (error instanceof DOMException && error.name === 'AbortError') {
-          return;
-        }
-        console.error('Error sending frames to board:', error);
-        track(SHARED_EVENTS.ClimbSentToBoardFailure, {
-          ...boardAnalyticsProperties,
-          failureReason: classifyBleFailureReason(error),
-        });
-        // A write that fails because the link is gone (the board dropped or
-        // another device grabbed it — these boards are last-connection-wins) is
-        // often the only signal we get: the adapter's disconnect event may never
-        // fire. Mark the connection lost so the lightbulb stops showing
-        // "connected" and a deliberate reconnect can run. The native adapters
-        // throw the plain-Error signatures the predicate matches ("Not
-        // connected", "Device disconnected during write").
-        if (isDisconnectionError(error)) {
-          // The tug-of-war signal: we believed we were connected but a write just
-          // failed on a dead link. On a shared board this is usually another
-          // device having grabbed it. Recorded so the two-climber case is visible.
-          track(SHARED_EVENTS.BluetoothConnectionStolen, { boardName, layoutId, sizeId });
-          handleDisconnection();
-        }
-        return false;
+      // Lazily create the per-connection-generation controller so connect()
+      // can cancel every write of the old generation at once.
+      if (!writeAbortRef.current) {
+        writeAbortRef.current = new AbortController();
       }
+      const generationSignal = writeAbortRef.current.signal;
+
+      // Combine caller-provided signal with the generation controller.
+      const merged = signal ? mergeAbortSignals(signal, generationSignal) : null;
+      const combinedSignal = merged ? merged.signal : generationSignal;
+
+      const performSend = async (): Promise<boolean | undefined> => {
+        try {
+          // The send may have queued behind another write; by the time it runs
+          // the connection generation may be gone (reconnect/disconnect) — bail
+          // before touching the (possibly new) adapter.
+          if (combinedSignal.aborted || !adapterRef.current) return;
+
+          if (boardName === 'moonboard') {
+            const sent = await dispatchMoonboardPacket(
+              frames,
+              adapterRef.current.write.bind(adapterRef.current),
+              combinedSignal,
+            );
+            if (sent) track(SHARED_EVENTS.ClimbSentToBoardSuccess, boardAnalyticsProperties);
+            return sent;
+          }
+
+          // Empty frames = "clear all LEDs" for Aurora boards
+          if (frames === '') {
+            const clearResult = getAuroraBluetoothPacket('', {}, boardName as AuroraBoardName, apiLevelRef.current);
+            await adapterRef.current.write(clearResult.packet, combinedSignal);
+            return true;
+          }
+
+          let framesToSend = frames;
+
+          if (mirrored && holdsData && holdsData.length > 0) {
+            framesToSend = convertToMirroredFramesString(frames, holdsData);
+          }
+
+          if (!cachedGetLedPlacements) {
+            const mod = await import('@boardsesh/board-constants/led-placements');
+            cachedGetLedPlacements = mod.getLedPlacements as GetLedPlacementsFn;
+          }
+          const getLedPlacementsFn = cachedGetLedPlacements;
+          const placementPositions = getLedPlacementsFn(boardName, layoutId, sizeId);
+
+          if (Object.keys(placementPositions).length === 0) {
+            console.error(
+              `[BLE] LED placement map is empty for ${boardName} layout=${layoutId} size=${sizeId}. Board configuration may be incorrect or LED data may need regeneration.`,
+            );
+            Alert.alert(t('ble.notAvailable'), t('ble.errorLedMissing'));
+            track(SHARED_EVENTS.ClimbSentToBoardFailure, {
+              ...boardAnalyticsProperties,
+              failureReason: 'missing_led_placements',
+            });
+            return false;
+          }
+
+          const result = getAuroraBluetoothPacket(
+            framesToSend,
+            placementPositions,
+            boardName as AuroraBoardName,
+            apiLevelRef.current,
+            ledColorOverrides,
+          );
+
+          const skippedCount = result.skippedPositionCount + result.skippedRoleCount;
+
+          if (skippedCount > 0 && result.packet.length === 0) {
+            console.warn(`[BLE] All ${result.totalPlacements} placements skipped — climb incompatible with board`);
+            Alert.alert(t('ble.notAvailable'), t('ble.errorIncompatible'));
+            track(SHARED_EVENTS.ClimbSentToBoardFailure, {
+              ...boardAnalyticsProperties,
+              failureReason: 'incompatible_climb',
+            });
+            return false;
+          }
+
+          if (skippedCount > 0) {
+            console.warn(`[BLE] ${skippedCount} of ${result.totalPlacements} placements skipped`);
+          }
+
+          await adapterRef.current.write(result.packet, combinedSignal);
+          track(SHARED_EVENTS.ClimbSentToBoardSuccess, boardAnalyticsProperties);
+          return true;
+        } catch (error) {
+          // An aborted write (unmount, or a reconnect cancelling the old
+          // generation) is not a failure — some adapters surface it as a
+          // DOMException, others reject with their own cancellation error after
+          // the signal fired, so check the signal too.
+          if (combinedSignal.aborted || (error instanceof DOMException && error.name === 'AbortError')) {
+            return;
+          }
+          console.error('Error sending frames to board:', error);
+          track(SHARED_EVENTS.ClimbSentToBoardFailure, {
+            ...boardAnalyticsProperties,
+            failureReason: classifyBleFailureReason(error),
+          });
+          // A write that fails because the link is gone (the board dropped or
+          // another device grabbed it — these boards are last-connection-wins) is
+          // often the only signal we get: the adapter's disconnect event may never
+          // fire. Mark the connection lost so the lightbulb stops showing
+          // "connected" and a deliberate reconnect can run. The native adapters
+          // throw the plain-Error signatures the predicate matches ("Not
+          // connected", "Device disconnected during write").
+          if (isDisconnectionError(error)) {
+            // The tug-of-war signal: we believed we were connected but a write just
+            // failed on a dead link. On a shared board this is usually another
+            // device having grabbed it. Recorded so the two-climber case is visible.
+            track(SHARED_EVENTS.BluetoothConnectionStolen, { boardName, layoutId, sizeId });
+            handleDisconnection();
+          }
+          return false;
+        } finally {
+          merged?.dispose();
+        }
+      };
+
+      // Queue behind whatever write is already running or pending. The chain
+      // link swallows the result so one failed write never poisons the chain.
+      const queuedSend = writeChainRef.current.then(performSend, performSend);
+      writeChainRef.current = queuedSend.then(
+        () => undefined,
+        () => undefined,
+      );
+      return queuedSend;
     },
     [boardName, layoutId, sizeId, holdsData, ledColorOverrides, handleDisconnection],
   );
@@ -353,6 +413,14 @@ export function useBoardBluetooth({
         console.error('Cannot connect to Bluetooth without board name');
         return false;
       }
+
+      // A connect is already running (double-tapped lightbulb, or a second
+      // surface racing the first). Both attempts would share the singleton BLE
+      // manager and tear down each other's scans, so ignore the second tap.
+      if (connectInFlightRef.current) {
+        return false;
+      }
+      connectInFlightRef.current = true;
 
       setLoading(true);
 
@@ -367,14 +435,16 @@ export function useBoardBluetooth({
 
         const available = await adapter.isAvailable();
         if (!available) {
-          Alert.alert(t('ble.notAvailable'), t('ble.notAvailable'));
+          Alert.alert(t('ble.connectionFailedTitle'), tCommon('bluetooth.unavailable'));
           return false;
         }
 
-        // Abort any in-flight write from the previous adapter so it
-        // doesn't keep writing on a potentially-disconnected device.
+        // Abort every in-flight or queued write from the previous connection
+        // generation so nothing keeps writing on a potentially-disconnected
+        // device, and unblock the write chain in case a write hung.
         writeAbortRef.current?.abort();
         writeAbortRef.current = null;
+        writeChainRef.current = Promise.resolve();
 
         // Clean up any existing adapter
         if (adapterRef.current) {
@@ -478,21 +548,41 @@ export function useBoardBluetooth({
         pickerRejectRef.current = null;
         setPickerState(null);
 
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        const isUserCancel =
-          /user cancelled|cancel/i.test(errorMessage) || /Device selection cancelled/i.test(errorMessage);
-
-        if (!isUserCancel) {
-          Alert.alert(t('ble.notAvailable'), t('ble.errorConnectionFailed'));
+        // Classify the failure into actionable user copy via the shared,
+        // deliberately-tight predicate. A previous bare `/cancel/i` regex here
+        // also matched CoreBluetooth's "operation cancelled" / ble-plx's
+        // "Operation was cancelled", so those real failures showed nothing —
+        // the connect just looked like a dead tap. Only an explicit
+        // user-cancel stays silent now. Literal-key switch (the i18n linter
+        // forbids `t(variable)`).
+        const failureCategory = classifyBleFailure(error);
+        switch (failureCategory) {
+          case 'user_cancelled':
+            break;
+          case 'unavailable':
+            Alert.alert(t('ble.connectionFailedTitle'), tCommon('bluetooth.unavailable'));
+            break;
+          case 'board_not_found':
+            Alert.alert(t('ble.connectionFailedTitle'), tCommon('bluetooth.boardNotFound'));
+            break;
+          case 'service_missing':
+            Alert.alert(t('ble.connectionFailedTitle'), tCommon('bluetooth.serviceMissing'));
+            break;
+          case 'connect_failed':
+            Alert.alert(t('ble.connectionFailedTitle'), tCommon('bluetooth.connectFailed'));
+            break;
+          default:
+            Alert.alert(t('ble.connectionFailedTitle'), tCommon('bluetooth.unknownError'));
         }
 
         track(SHARED_EVENTS.BluetoothConnectionFailed, {
           boardName,
           layoutId,
           sizeId,
-          failureReason: classifyBleFailureReason(error),
+          failureReason: failureCategory === 'unknown' ? classifyBleFailureReason(error) : failureCategory,
         });
       } finally {
+        connectInFlightRef.current = false;
         setLoading(false);
       }
 
@@ -517,6 +607,11 @@ export function useBoardBluetooth({
     unsubDisconnectRef.current = null;
     const adapter = adapterRef.current;
     adapterRef.current = null;
+    // Cancel every in-flight and queued write of this connection generation,
+    // and unblock the write chain for the next connect.
+    writeAbortRef.current?.abort();
+    writeAbortRef.current = null;
+    writeChainRef.current = Promise.resolve();
     setIsConnected(false);
     // A deliberate disconnect clears the remembered board — only an involuntary
     // drop should offer a silent same-board reconnect.
@@ -524,6 +619,68 @@ export function useBoardBluetooth({
     onConnectionChange?.(false);
     await adapter?.disconnect();
   }, [onConnectionChange]);
+
+  // iOS-only: adopt a connection the native BoardBleManager established
+  // outside JS — the Dynamic Island lightbulb's reconnect-by-last-known-board,
+  // or CoreBluetooth state restoration after a relaunch. Without this the wall
+  // re-lights (native drives it) but the in-app lightbulb stays dark and climb
+  // navigation stops pushing until the user taps it again. Listens for the
+  // bridged `connected` event and re-checks on foreground (events fired while
+  // JS was suspended are missed). No-op on Android and on binaries older than
+  // the `getConnectedDevice` surface.
+  useEffect(() => {
+    const adopt = (deviceId: string, deviceName?: string) => {
+      // JS already has (or is establishing) its own adapter — nothing to adopt.
+      if (adapterRef.current || connectInFlightRef.current) return;
+      if (!boardName || layoutId === undefined || sizeId === undefined) return;
+      // Never adopt a different board type than the active config: the LED
+      // placement map wouldn't match and every send would misfire.
+      const adoptedBoardType = parseBoardTypeFromDeviceName(deviceName);
+      if (adoptedBoardType && adoptedBoardType !== boardName) return;
+
+      const adapter = createBluetoothAdapter(devicePicker);
+      if (!isNativeIosBleAdapter(adapter)) return;
+      adapter.adoptConnection(deviceId);
+      apiLevelRef.current = parseApiLevel(deviceName);
+      unsubDisconnectRef.current = adapter.onDisconnect(handleDisconnection);
+      adapterRef.current = adapter;
+      void adapter
+        .configureBoard({ boardName, layoutId, sizeId, apiLevel: apiLevelRef.current, deviceName })
+        .catch(() => {});
+
+      const serial = deviceName ? (parseSerialNumber(deviceName) ?? null) : null;
+      if (serial) {
+        setLastConnectedBoard({ serial, configKey: `${boardName}::${layoutId}::${sizeId}` });
+      }
+      setIsConnected(true);
+      onConnectionChange?.(true);
+      onConnectSuccess?.(serial);
+    };
+
+    const connectedSubscription = subscribeNativeBleConnected((payload) => {
+      // The bridge sends '' for a missing name — normalise so name parsing
+      // (board type, serial, API level) sees undefined instead.
+      adopt(payload.deviceId, payload.deviceName || undefined);
+    });
+    // null = platform/binary without the adoption surface — nothing to do.
+    if (!connectedSubscription) return;
+
+    const checkNativeConnection = () => {
+      void getNativeBleConnectedDevice().then((device) => {
+        if (device) adopt(device.deviceId, device.name || undefined);
+      });
+    };
+
+    checkNativeConnection();
+    const appStateSubscription = AppState.addEventListener('change', (appState) => {
+      if (appState === 'active') checkNativeConnection();
+    });
+
+    return () => {
+      connectedSubscription.remove();
+      appStateSubscription.remove();
+    };
+  }, [boardName, layoutId, sizeId, devicePicker, handleDisconnection, onConnectionChange, onConnectSuccess]);
 
   // Serial to silently reconnect to for the board currently in view, or null
   // when nothing is remembered or the user switched boards (in which case the
@@ -545,9 +702,13 @@ export function useBoardBluetooth({
   // Clean up on unmount
   useEffect(() => {
     return () => {
-      pickerRejectRef.current?.(new Error('Component unmounted'));
+      // Reject with the explicit user-cancel signature so a connect that's
+      // still awaiting the picker classifies as `user_cancelled` (silent)
+      // rather than popping an alert over whatever screen comes next.
+      pickerRejectRef.current?.(new Error('Device selection cancelled'));
       pickerRejectRef.current = null;
       unsubDisconnectRef.current?.();
+      writeAbortRef.current?.abort();
       void adapterRef.current?.disconnect();
     };
   }, []);

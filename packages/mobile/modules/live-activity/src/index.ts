@@ -6,10 +6,27 @@ export type NativeBleScanEvent = {
   device: { deviceId: string; name: string };
   localName: string;
   rssi: number;
+  /**
+   * Advertised service UUIDs from the advertisement packet. Only present on
+   * binaries new enough to scan unfiltered (the ones that also expose
+   * `getConnectedDevice`); older binaries scan with a native UUID filter and
+   * omit the field.
+   */
+  serviceUuids?: string[];
 };
 
 export type NativeBleDisconnectEvent = {
   deviceId: string;
+};
+
+export type NativeBleConnectedEvent = {
+  deviceId: string;
+  deviceName?: string;
+};
+
+export type NativeBleConnectedDevice = {
+  deviceId: string;
+  name?: string;
 };
 
 export type NativeBleConfigureBoardOptions = {
@@ -23,6 +40,7 @@ export type NativeBleConfigureBoardOptions = {
 
 type BoardBleNativeModule = {
   isAvailable(): Promise<{ available: boolean }>;
+  /** An empty `services` array means "scan unfiltered" on newer binaries. */
   startScan(services?: string[]): Promise<void>;
   stopScan(): Promise<void>;
   connect(deviceId: string): Promise<void>;
@@ -30,8 +48,17 @@ type BoardBleNativeModule = {
   write(value: string): Promise<void>;
   cancelWrites(): Promise<void>;
   configureBoard(options: NativeBleConfigureBoardOptions): Promise<void>;
+  /**
+   * Returns the natively-connected board, or null. Only present on newer
+   * binaries — its presence doubles as the feature gate for unfiltered
+   * scanning, the `connected` event and connection adoption, so always check
+   * `typeof getConnectedDevice === 'function'` before relying on any of them
+   * (an OTA JS update can run against an older binary).
+   */
+  getConnectedDevice?(): Promise<NativeBleConnectedDevice | null>;
   addListener(event: 'scanResult', listener: (payload: NativeBleScanEvent) => void): EventSubscription;
   addListener(event: 'disconnected', listener: (payload: NativeBleDisconnectEvent) => void): EventSubscription;
+  addListener(event: 'connected', listener: (payload: NativeBleConnectedEvent) => void): EventSubscription;
 };
 
 // requireOptionalNativeModule returns null in Expo Go or any binary without
