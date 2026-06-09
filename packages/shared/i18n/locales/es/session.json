@@ -292,6 +292,7 @@
       "removeClimb": "Eliminar bloque",
       "positionLabel": "posición {{position}}",
       "syncError": "Error de sincronización de cola",
+      "outOfSyncRefreshed": "La cola estaba desincronizada. Se actualizó con tu grupo.",
       "sessionCreateError": "No se pudo crear la sesión",
       "noBoardSelected": "Selecciona un board primero",
       "actionFailed": "Acción fallida. Inténtalo de nuevo.",

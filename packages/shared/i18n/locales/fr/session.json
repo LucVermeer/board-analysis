@@ -292,6 +292,7 @@
       "removeClimb": "Supprimer le bloc",
       "positionLabel": "position {{position}}",
       "syncError": "Erreur de synchronisation de la file",
+      "outOfSyncRefreshed": "La file était désynchronisée. Actualisée depuis ton groupe.",
       "sessionCreateError": "Impossible de créer la session",
       "noBoardSelected": "Choisissez d'abord un board",
       "actionFailed": "Action échouée. Réessayez.",

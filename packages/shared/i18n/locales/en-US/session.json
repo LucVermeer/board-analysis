@@ -292,6 +292,7 @@
       "removeClimb": "Remove climb",
       "positionLabel": "position {{position}}",
       "syncError": "Queue sync error",
+      "outOfSyncRefreshed": "Queue was out of sync. Refreshed from your crew.",
       "sessionCreateError": "Couldn't create session",
       "noBoardSelected": "Pick a board first",
       "actionFailed": "Action failed. Try again.",

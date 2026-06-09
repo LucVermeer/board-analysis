@@ -161,6 +161,7 @@ type Snapshot = {
   lastConnectedBoardSerial: string | null;
   playlistSuggestionSource: PlaylistSuggestionSource | null;
   addToQueue: ReturnType<typeof useQueue>['addToQueue'];
+  removeFromQueue: ReturnType<typeof useQueue>['removeFromQueue'];
   setCurrentClimb: ReturnType<typeof useQueue>['setCurrentClimb'];
   nextClimb: ReturnType<typeof useQueue>['nextClimb'];
   setPlaylistSuggestionSource: ReturnType<typeof useQueue>['setPlaylistSuggestionSource'];
@@ -232,6 +233,7 @@ function Probe({ onSnapshot }: { onSnapshot: (snapshot: Snapshot) => void }) {
       lastConnectedBoardSerial: queue.lastConnectedBoardSerial,
       playlistSuggestionSource,
       addToQueue: queue.addToQueue,
+      removeFromQueue: queue.removeFromQueue,
       setCurrentClimb: queue.setCurrentClimb,
       nextClimb: queue.nextClimb,
       setPlaylistSuggestionSource: queue.setPlaylistSuggestionSource,
@@ -250,6 +252,7 @@ function Probe({ onSnapshot }: { onSnapshot: (snapshot: Snapshot) => void }) {
     queue.lastConnectedBoardSerial,
     playlistSuggestionSource,
     queue.addToQueue,
+    queue.removeFromQueue,
     queue.setCurrentClimb,
     queue.nextClimb,
     queue.setPlaylistSuggestionSource,
@@ -1047,5 +1050,219 @@ describe('QueueProvider session update subscription', () => {
     });
     expect(toast.showToast).toHaveBeenCalledWith('mobile.toast.sessionEnded', 'success');
     expect(toast.showToast).not.toHaveBeenCalledWith('mobile.queue.actionFailed', 'error');
+  });
+});
+
+// ── SEED-1: queue mutations resync on failure (GH #2419) ─────────────────────
+//
+// addToQueue / removeFromQueue / clearQueue / dispatchSetCurrent apply an
+// optimistic reducer delta then fire the server mutation. When that mutation
+// rejects in a party session the local queue silently diverges from peers until
+// the next reconnect FullSync. These tests pin the recovery: a rejection with an
+// active session refetches the authoritative queueState (GET_SESSION_QUEUE_STATE
+// over the HTTP client → the mocked http.request) and replaces local state with
+// an INITIAL_QUEUE_DATA dispatch, then toasts. A rejection with no session must
+// NOT resync or toast.
+describe('QueueProvider mutation-failure resync', () => {
+  // The harness routes both endSession and the queueState query through
+  // http.request. Branch on the operation text so the resync query returns the
+  // authoritative snapshot while everything else keeps the default endSession
+  // response.
+  function routeHttpRequest(queueStateResponse: unknown, options: { onQueueStateCall?: () => void } = {}) {
+    http.request.mockImplementation(async (operation: unknown) => {
+      const operationText = typeof operation === 'string' ? operation : '';
+      if (operationText.includes('GetSessionQueueState')) {
+        options.onQueueStateCall?.();
+        return queueStateResponse;
+      }
+      return { endSession: { sessionId: 'session-1' } };
+    });
+  }
+
+  function queueStateResponse(items: ClimbQueueItem[], current: ClimbQueueItem | null = null) {
+    return {
+      session: {
+        queueState: {
+          queue: items.map((item) => ({ uuid: item.uuid, climb: item.climb })),
+          currentClimbQueueItem: current ? { uuid: current.uuid, climb: current.climb } : null,
+        },
+      },
+    };
+  }
+
+  it('resyncs once from the server and replaces state when an add fails in a session', async () => {
+    const snapshots: Snapshot[] = [];
+    // Server is authoritative: it holds a single climb the failed local add
+    // never reached, so a resync must overwrite the optimistic local queue.
+    const serverItem = makeQueueItem('server-item', 'climb-server');
+    let queueStateCalls = 0;
+    routeHttpRequest(queueStateResponse([serverItem]), { onQueueStateCall: () => (queueStateCalls += 1) });
+    queueMutations.addQueueItem.mockRejectedValueOnce(new Error('add failed'));
+
+    renderProvider((snapshot) => snapshots.push(snapshot));
+
+    await waitFor(() => {
+      expect(snapshots.at(-1)?.sessionId).toBe('session-1');
+    });
+
+    const snapshot = snapshots.at(-1);
+    if (!snapshot) throw new Error('queue snapshot was not captured');
+
+    act(() => {
+      snapshot.addToQueue(makeQueueItem('local-add', 'climb-local'));
+    });
+
+    await waitFor(() => {
+      // The reducer's INITIAL_QUEUE_DATA from the resync replaced the optimistic
+      // local item with the server's authoritative queue.
+      expect(snapshots.at(-1)?.state.queue.map((item) => item.uuid)).toEqual(['server-item']);
+    });
+    expect(queueStateCalls).toBe(1);
+    expect(toast.showToast).toHaveBeenCalledWith('mobile.queue.outOfSyncRefreshed', 'error');
+  });
+
+  it('resyncs and replaces state when a remove fails in a session', async () => {
+    const snapshots: Snapshot[] = [];
+    const serverItem = makeQueueItem('server-kept', 'climb-kept');
+    let queueStateCalls = 0;
+    routeHttpRequest(queueStateResponse([serverItem]), { onQueueStateCall: () => (queueStateCalls += 1) });
+    queueMutations.removeQueueItem.mockRejectedValueOnce(new Error('remove failed'));
+
+    renderProvider((snapshot) => snapshots.push(snapshot));
+
+    await waitFor(() => {
+      expect(snapshots.at(-1)?.sessionId).toBe('session-1');
+    });
+
+    const prepared = snapshots.at(-1);
+    if (!prepared) throw new Error('queue snapshot was not captured');
+    act(() => {
+      prepared.addToQueue(makeQueueItem('to-remove', 'climb-remove'));
+    });
+    await waitFor(() => {
+      expect(snapshots.at(-1)?.state.queue.map((item) => item.uuid)).toContain('to-remove');
+    });
+
+    const snapshot = snapshots.at(-1);
+    if (!snapshot) throw new Error('queue snapshot was not captured');
+    act(() => {
+      snapshot.removeFromQueue('to-remove');
+    });
+
+    await waitFor(() => {
+      expect(snapshots.at(-1)?.state.queue.map((item) => item.uuid)).toEqual(['server-kept']);
+    });
+    expect(queueStateCalls).toBe(1);
+    expect(toast.showToast).toHaveBeenCalledWith('mobile.queue.outOfSyncRefreshed', 'error');
+  });
+
+  it('resyncs and replaces current climb when setCurrentClimb fails in a session', async () => {
+    const snapshots: Snapshot[] = [];
+    const serverCurrent = makeQueueItem('server-current', 'climb-server-current');
+    let queueStateCalls = 0;
+    routeHttpRequest(queueStateResponse([serverCurrent], serverCurrent), {
+      onQueueStateCall: () => (queueStateCalls += 1),
+    });
+    queueMutations.setCurrentClimb.mockRejectedValueOnce(new Error('set current failed'));
+
+    renderProvider((snapshot) => snapshots.push(snapshot));
+
+    await waitFor(() => {
+      expect(snapshots.at(-1)?.sessionId).toBe('session-1');
+    });
+
+    const snapshot = snapshots.at(-1);
+    if (!snapshot) throw new Error('queue snapshot was not captured');
+    act(() => {
+      snapshot.setCurrentClimb(makeQueueItem('local-current', 'climb-local-current'));
+    });
+
+    await waitFor(() => {
+      expect(snapshots.at(-1)?.state.currentClimbQueueItem?.uuid).toBe('server-current');
+    });
+    expect(queueStateCalls).toBe(1);
+    expect(toast.showToast).toHaveBeenCalledWith('mobile.queue.outOfSyncRefreshed', 'error');
+    // Solo's "Action failed" toast must NOT fire in a party session.
+    expect(toast.showToast).not.toHaveBeenCalledWith('mobile.queue.actionFailed', 'error');
+  });
+
+  it('does not resync or toast when a mutation fails with no active session', async () => {
+    const snapshots: Snapshot[] = [];
+    let queueStateCalls = 0;
+    routeHttpRequest(queueStateResponse([]), { onQueueStateCall: () => (queueStateCalls += 1) });
+    queueMutations.addQueueItem.mockRejectedValueOnce(new Error('add failed'));
+
+    renderProvider((snapshot) => snapshots.push(snapshot));
+
+    await waitFor(() => {
+      expect(snapshots.at(-1)?.sessionId).toBe('session-1');
+    });
+
+    // End the session so the next add runs with no active session.
+    await act(async () => {
+      await snapshots.at(-1)?.endSession();
+    });
+    await waitFor(() => {
+      expect(snapshots.at(-1)?.sessionId).toBeNull();
+    });
+    toast.showToast.mockClear();
+
+    const snapshot = snapshots.at(-1);
+    if (!snapshot) throw new Error('queue snapshot was not captured');
+    act(() => {
+      snapshot.addToQueue(makeQueueItem('solo-add', 'climb-solo'));
+    });
+
+    await waitFor(() => {
+      expect(snapshots.at(-1)?.state.queue.map((item) => item.uuid)).toContain('solo-add');
+    });
+    // Let any (incorrectly scheduled) async resync settle before asserting.
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(queueStateCalls).toBe(0);
+    expect(toast.showToast).not.toHaveBeenCalled();
+    // The optimistic local add stays — no server overwrite in solo.
+    expect(snapshots.at(-1)?.state.queue.map((item) => item.uuid)).toEqual(['solo-add']);
+  });
+
+  it('does not retry-loop when the resync fetch itself fails', async () => {
+    const snapshots: Snapshot[] = [];
+    let queueStateCalls = 0;
+    http.request.mockImplementation(async (operation: unknown) => {
+      const operationText = typeof operation === 'string' ? operation : '';
+      if (operationText.includes('GetSessionQueueState')) {
+        queueStateCalls += 1;
+        throw new Error('resync fetch failed');
+      }
+      return { endSession: { sessionId: 'session-1' } };
+    });
+    queueMutations.addQueueItem.mockRejectedValueOnce(new Error('add failed'));
+
+    renderProvider((snapshot) => snapshots.push(snapshot));
+
+    await waitFor(() => {
+      expect(snapshots.at(-1)?.sessionId).toBe('session-1');
+    });
+
+    const snapshot = snapshots.at(-1);
+    if (!snapshot) throw new Error('queue snapshot was not captured');
+    act(() => {
+      snapshot.addToQueue(makeQueueItem('local-add', 'climb-local'));
+    });
+
+    await waitFor(() => {
+      // Optimistic add stays; the failed resync swallowed its error.
+      expect(snapshots.at(-1)?.state.queue.map((item) => item.uuid)).toContain('local-add');
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    // Exactly one attempt — the single-flight guard released cleanly and no
+    // retry loop fired. No "refreshed" toast since nothing was applied.
+    expect(queueStateCalls).toBe(1);
+    expect(toast.showToast).not.toHaveBeenCalledWith('mobile.queue.outOfSyncRefreshed', 'error');
   });
 });
