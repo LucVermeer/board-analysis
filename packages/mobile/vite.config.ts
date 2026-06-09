@@ -24,6 +24,12 @@ export default defineConfig({
       // so any suite can import a Paper-backed primitive; component tests that
       // assert Paper props register their own vi.mock which takes precedence.
       'react-native-paper': fileURLToPath(new URL('./test/react-native-paper-stub.tsx', import.meta.url)),
+      // @sentry/react-native's real entry pulls in react-native's Promise.js,
+      // which imports `promise/setimmediate/es6-extensions` (no extension) and
+      // fails to resolve under vitest's node ESM env — breaking every suite that
+      // transitively imports `src/lib/sentry`. Sentry is disabled in tests, so a
+      // lightweight stub satisfies the static imports.
+      '@sentry/react-native': fileURLToPath(new URL('./test/sentry-react-native-stub.ts', import.meta.url)),
     },
     // .tsx test files can opt into a jsdom environment per file via the
     // `// @vitest-environment jsdom` pragma — needed to render React

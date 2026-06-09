@@ -14,6 +14,7 @@ import { useAuth } from '../../../providers/auth-provider';
 import { useQueue } from '../../../providers/queue-provider';
 import { useToast } from '../../../providers/toast-provider';
 import { useBottomChromeMetrics } from '../../../hooks/use-bottom-chrome-metrics';
+import { reportError } from '../../../lib/sentry';
 import { BoardSummaryCard } from './BoardSummaryCard';
 import { GeneratorPickerCard, type GeneratorSelection } from './GeneratorPickerCard';
 import { selectClimbsForPlan } from './select-climbs-for-plan';
@@ -74,7 +75,8 @@ export function PreSessionView() {
           });
         }
       }
-    } catch {
+    } catch (error) {
+      reportError(error, { tags: { source: 'preSessionStart' } });
       showToast(t('mobile.session.preStartError'), 'error');
     } finally {
       setIsStarting(false);

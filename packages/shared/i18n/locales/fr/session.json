@@ -299,6 +299,7 @@
       "positionLabel": "position {{position}}",
       "syncError": "Erreur de synchronisation de la file",
       "sessionCreateError": "Impossible de créer la session",
+      "noBoardSelected": "Choisissez d'abord un board",
       "actionFailed": "Action échouée. Réessayez.",
       "endSession": "Terminer la session",
       "endSessionConfirm": "Êtes-vous sûr de vouloir terminer cette session ?",
