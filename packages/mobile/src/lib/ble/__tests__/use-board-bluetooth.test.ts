@@ -41,10 +41,17 @@ vi.mock('expo-keep-awake', () => ({
   deactivateKeepAwake: vi.fn().mockResolvedValue(undefined),
 }));
 
+const mockParseApiLevel = vi.hoisted(() => vi.fn());
+const mockParseSerialNumber = vi.hoisted(() => vi.fn());
 vi.mock('@boardsesh/ble-protocol/aurora', () => ({
   getAuroraBluetoothPacket: vi.fn(),
-  parseApiLevel: vi.fn(),
-  parseSerialNumber: vi.fn(),
+  parseApiLevel: mockParseApiLevel,
+  parseSerialNumber: mockParseSerialNumber,
+}));
+
+const mockTrack = vi.hoisted(() => vi.fn());
+vi.mock('../../analytics', () => ({
+  track: mockTrack,
 }));
 
 const mockGetMoonboardBluetoothPacket = vi.hoisted(() => vi.fn());
@@ -125,6 +132,75 @@ describe('useBoardBluetooth', () => {
     expect(connected).toBe(false);
     expect(Alert.alert).toHaveBeenCalledWith('ble.permissionRequired', 'ble.errorPermissionDenied');
     expect(createBluetoothAdapter).not.toHaveBeenCalled();
+  });
+
+  it('emits apiLevel and deviceNamePresent on the connection-success event', async () => {
+    reactNativePermissionHarness.permissionsAndroid.requestMultiple.mockResolvedValue({
+      BLUETOOTH_SCAN: 'granted',
+      BLUETOOTH_CONNECT: 'granted',
+    });
+    const fakeAdapter = {
+      isAvailable: vi.fn().mockResolvedValue(true),
+      requestAndConnect: vi.fn().mockResolvedValue({ deviceId: 'dev-1', deviceName: 'Kilter A1#0042@3' }),
+      disconnect: vi.fn().mockResolvedValue(undefined),
+      write: vi.fn().mockResolvedValue(undefined),
+      onDisconnect: vi.fn().mockReturnValue(() => {}),
+    };
+    vi.mocked(createBluetoothAdapter).mockReturnValue(fakeAdapter);
+    mockParseApiLevel.mockReturnValue(3);
+    mockParseSerialNumber.mockReturnValue('0042');
+
+    const { result } = renderHook(() =>
+      useBoardBluetooth({
+        boardName: 'kilter',
+        layoutId: 1,
+        sizeId: 1,
+        setIds: '1',
+      }),
+    );
+
+    await act(async () => {
+      await result.current.connect();
+    });
+
+    const successCall = mockTrack.mock.calls.find(([name]) => name === 'Bluetooth Connection Success');
+    expect(successCall).toBeDefined();
+    expect(successCall?.[1]).toMatchObject({ apiLevel: 3, deviceNamePresent: true });
+  });
+
+  it('reports deviceNamePresent=false and the v2 fallback level when no name is advertised', async () => {
+    reactNativePermissionHarness.permissionsAndroid.requestMultiple.mockResolvedValue({
+      BLUETOOTH_SCAN: 'granted',
+      BLUETOOTH_CONNECT: 'granted',
+    });
+    const fakeAdapter = {
+      isAvailable: vi.fn().mockResolvedValue(true),
+      requestAndConnect: vi.fn().mockResolvedValue({ deviceId: 'dev-2', deviceName: undefined }),
+      disconnect: vi.fn().mockResolvedValue(undefined),
+      write: vi.fn().mockResolvedValue(undefined),
+      onDisconnect: vi.fn().mockReturnValue(() => {}),
+    };
+    vi.mocked(createBluetoothAdapter).mockReturnValue(fakeAdapter);
+    // Mirrors parseApiLevel's real default for a missing/unparseable name.
+    mockParseApiLevel.mockReturnValue(2);
+    mockParseSerialNumber.mockReturnValue(undefined);
+
+    const { result } = renderHook(() =>
+      useBoardBluetooth({
+        boardName: 'kilter',
+        layoutId: 1,
+        sizeId: 1,
+        setIds: '1',
+      }),
+    );
+
+    await act(async () => {
+      await result.current.connect();
+    });
+
+    const successCall = mockTrack.mock.calls.find(([name]) => name === 'Bluetooth Connection Success');
+    expect(successCall).toBeDefined();
+    expect(successCall?.[1]).toMatchObject({ apiLevel: 2, deviceNamePresent: false });
   });
 });
 
