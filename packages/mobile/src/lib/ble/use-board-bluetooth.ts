@@ -233,6 +233,11 @@ export function useBoardBluetooth({
   // the singleton BLE manager, and the first attempt's scan teardown kills
   // the second attempt's scan, stranding the picker.
   const connectInFlightRef = useRef(false);
+  // True after an explicit user disconnect, false again on the next deliberate
+  // connect. While set, the native-connection adoption path is ignored — it
+  // would otherwise race the in-flight native disconnect and re-establish the
+  // connection the user just closed.
+  const adoptionSuppressedRef = useRef(false);
 
   const [pickerState, setPickerState] = useState<PickerState | null>(null);
   const pickerRejectRef = useRef<((error: Error) => void) | null>(null);
@@ -425,7 +430,7 @@ export function useBoardBluetooth({
       );
       return queuedSend;
     },
-    [boardName, layoutId, sizeId, holdsData, ledColorOverrides, handleDisconnection],
+    [boardName, layoutId, sizeId, holdsData, ledColorOverrides, handleDisconnection, t],
   );
 
   const connect = useCallback(
@@ -442,6 +447,9 @@ export function useBoardBluetooth({
         return false;
       }
       connectInFlightRef.current = true;
+      // A deliberate connect re-arms native-connection adoption after an
+      // earlier explicit disconnect suppressed it.
+      adoptionSuppressedRef.current = false;
 
       setLoading(true);
 
@@ -622,10 +630,17 @@ export function useBoardBluetooth({
       onConnectSuccess,
       sendFramesToBoard,
       devicePicker,
+      t,
+      tCommon,
     ],
   );
 
   const disconnect = useCallback(async () => {
+    // Suppress native-connection adoption until the next deliberate connect:
+    // the native disconnect below is async, so a backgrounding/foregrounding
+    // app could otherwise see getConnectedDevice still report the device the
+    // user just closed and silently re-adopt it.
+    adoptionSuppressedRef.current = true;
     unsubDisconnectRef.current?.();
     unsubDisconnectRef.current = null;
     const adapter = adapterRef.current;
@@ -658,14 +673,19 @@ export function useBoardBluetooth({
       const deviceName = rawDeviceName || undefined;
       // JS already has (or is establishing) its own adapter — nothing to adopt.
       if (adapterRef.current || connectInFlightRef.current) return;
+      // The user explicitly disconnected; don't re-adopt the connection the
+      // (possibly still in-flight) native disconnect is tearing down.
+      if (adoptionSuppressedRef.current) return;
       if (!boardName || layoutId === undefined || sizeId === undefined) return;
-      // Never adopt a different board type than the active config: the LED
-      // placement map / packet format wouldn't match and every send would
-      // misfire. Must recognise MoonBoard names too — parseBoardTypeFromDeviceName
-      // alone only knows Aurora boards, so a natively-reconnected MoonBoard
-      // would slip past an Aurora-config check (and vice versa).
+      // Only adopt a device positively identified as the active config's board
+      // type: the LED placement map / packet format wouldn't match otherwise
+      // and every send would misfire. Must recognise MoonBoard names too —
+      // parseBoardTypeFromDeviceName alone only knows Aurora boards, so a
+      // natively-reconnected MoonBoard would slip past an Aurora-config check.
+      // An unrecognisable (or missing) name also bails: a dark lightbulb beats
+      // streaming wrong-format packets at an unknown device.
       const adoptedBoardType = parseAnyBoardTypeFromDeviceName(deviceName);
-      if (adoptedBoardType && adoptedBoardType !== boardName) return;
+      if (!adoptedBoardType || adoptedBoardType !== boardName) return;
 
       const adapter = createBluetoothAdapter(devicePicker);
       if (!isNativeIosBleAdapter(adapter)) return;

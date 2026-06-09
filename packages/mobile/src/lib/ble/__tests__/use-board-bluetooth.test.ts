@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { Alert } from 'react-native';
 import type { HoldPlacement } from '../../../components/board-renderer/types';
@@ -58,6 +58,7 @@ vi.mock('@boardsesh/board-constants/led-placements', () => ({
 const mockGetMoonboardBluetoothPacket = vi.hoisted(() => vi.fn());
 vi.mock('@boardsesh/ble-protocol/moonboard', () => ({
   getMoonboardBluetoothPacket: mockGetMoonboardBluetoothPacket,
+  isMoonboardDeviceName: vi.fn((name?: string) => !!name && name.startsWith('MoonBoard')),
 }));
 
 vi.mock('react-i18next', () => ({
@@ -97,7 +98,13 @@ vi.mock('../adapter-factory', () => ({
   getNativeBleConnectedDevice: vi.fn(async () => null),
 }));
 
-import { createBluetoothAdapter } from '../adapter-factory';
+import {
+  createBluetoothAdapter,
+  getNativeBleConnectedDevice,
+  isNativeIosBleAdapter,
+  subscribeNativeBleConnected,
+} from '../adapter-factory';
+import { parseBoardTypeFromDeviceName } from '@boardsesh/ble-protocol/aurora';
 import { convertToMirroredFramesString, dispatchMoonboardPacket, useBoardBluetooth } from '../use-board-bluetooth';
 
 // ── Factory helpers ────────────────────────────────────────────────────────
@@ -344,6 +351,101 @@ describe('useBoardBluetooth', () => {
     // The aborted write resolves as a cancellation (undefined), not a failure.
     await expect(pendingSend).resolves.toBeUndefined();
     expect(fakeAdapter.disconnect).toHaveBeenCalled();
+  });
+});
+
+// ── Native connection adoption (iOS) ───────────────────────────────────────
+
+describe('useBoardBluetooth native connection adoption', () => {
+  type ConnectedListener = (payload: { deviceId: string; deviceName?: string }) => void;
+  let connectedListener: ConnectedListener | null = null;
+
+  function makeAdoptableAdapter() {
+    return {
+      ...makeFakeAdapter(),
+      adoptConnection: vi.fn(),
+      configureBoard: vi.fn().mockResolvedValue(undefined),
+    };
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resetReactNativePermissionHarness();
+    connectedListener = null;
+    vi.mocked(subscribeNativeBleConnected).mockImplementation((listener) => {
+      connectedListener = listener;
+      return { remove: vi.fn() };
+    });
+    vi.mocked(isNativeIosBleAdapter).mockReturnValue(true);
+    vi.mocked(parseBoardTypeFromDeviceName).mockImplementation((name?: string) =>
+      name?.toLowerCase().startsWith('kilter') ? 'kilter' : undefined,
+    );
+  });
+
+  afterEach(() => {
+    vi.mocked(subscribeNativeBleConnected).mockImplementation(() => null);
+    vi.mocked(getNativeBleConnectedDevice).mockImplementation(async () => null);
+    vi.mocked(isNativeIosBleAdapter).mockReturnValue(false);
+    vi.mocked(parseBoardTypeFromDeviceName).mockReset();
+  });
+
+  it('adopts a natively-connected board matching the active config', async () => {
+    const adapter = makeAdoptableAdapter();
+    vi.mocked(createBluetoothAdapter).mockReturnValue(adapter as unknown as ReturnType<typeof createBluetoothAdapter>);
+
+    const { result } = renderHook(() => useBoardBluetooth({ boardName: 'kilter', layoutId: 1, sizeId: 1 }));
+
+    await act(async () => {
+      connectedListener?.({ deviceId: 'native-dev', deviceName: 'Kilter Board#9@3' });
+    });
+
+    expect(adapter.adoptConnection).toHaveBeenCalledWith('native-dev');
+    expect(result.current.isConnected).toBe(true);
+  });
+
+  it('refuses to adopt a device it cannot positively identify as the active board type', async () => {
+    const adapter = makeAdoptableAdapter();
+    vi.mocked(createBluetoothAdapter).mockReturnValue(adapter as unknown as ReturnType<typeof createBluetoothAdapter>);
+
+    const { result } = renderHook(() => useBoardBluetooth({ boardName: 'kilter', layoutId: 1, sizeId: 1 }));
+
+    await act(async () => {
+      // Unnamed device ('' from the bridge) — could be anything, e.g. a
+      // MoonBoard that would receive Aurora-format packets.
+      connectedListener?.({ deviceId: 'mystery-dev', deviceName: '' });
+      // Recognisable, but the wrong family for the active config.
+      connectedListener?.({ deviceId: 'moon-dev', deviceName: 'MoonBoard A1' });
+    });
+
+    expect(adapter.adoptConnection).not.toHaveBeenCalled();
+    expect(result.current.isConnected).toBe(false);
+  });
+
+  it('does not re-adopt after an explicit disconnect until the next deliberate connect', async () => {
+    const adapter = makeAdoptableAdapter();
+    vi.mocked(createBluetoothAdapter).mockReturnValue(adapter as unknown as ReturnType<typeof createBluetoothAdapter>);
+
+    const { result } = renderHook(() => useBoardBluetooth({ boardName: 'kilter', layoutId: 1, sizeId: 1 }));
+
+    await act(async () => {
+      connectedListener?.({ deviceId: 'native-dev', deviceName: 'Kilter Board#9@3' });
+    });
+    expect(result.current.isConnected).toBe(true);
+
+    await act(async () => {
+      await result.current.disconnect();
+    });
+    expect(result.current.isConnected).toBe(false);
+
+    // The native disconnect can still be in flight when the app foregrounds —
+    // a late connected event (or getConnectedDevice poll) must not resurrect
+    // the connection the user just closed.
+    await act(async () => {
+      connectedListener?.({ deviceId: 'native-dev', deviceName: 'Kilter Board#9@3' });
+    });
+
+    expect(adapter.adoptConnection).toHaveBeenCalledTimes(1);
+    expect(result.current.isConnected).toBe(false);
   });
 });
 
