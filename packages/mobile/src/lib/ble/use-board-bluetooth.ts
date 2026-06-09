@@ -141,10 +141,10 @@ export function useBoardBluetooth({
     if (isConnected) {
       activateKeepAwakeAsync(KEEP_AWAKE_TAG).catch(() => {});
     } else {
-      deactivateKeepAwake(KEEP_AWAKE_TAG);
+      deactivateKeepAwake(KEEP_AWAKE_TAG).catch(() => {});
     }
     return () => {
-      deactivateKeepAwake(KEEP_AWAKE_TAG);
+      deactivateKeepAwake(KEEP_AWAKE_TAG).catch(() => {});
     };
   }, [isConnected]);
 
