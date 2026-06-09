@@ -34,6 +34,15 @@ describe('createSheetOpenSerializer', () => {
     expect(serializer.requestOpen('climb-b')).toBe('open-now');
   });
 
+  it('drops a stashed open when the sheet settles back on screen (aborted close)', () => {
+    const serializer = createSheetOpenSerializer<string>();
+    serializer.handleAnimate(-1); // close starts
+    expect(serializer.requestOpen('climb-b')).toBe('deferred'); // stashed mid-close
+    serializer.handleAnimate(0); // close aborted — sheet springs back
+    // The stash must not survive to replay on the next, unrelated close.
+    expect(serializer.takePendingOpen()).toBeNull();
+  });
+
   it('clears the dismissing flag after a flush so the next open is immediate', () => {
     const serializer = createSheetOpenSerializer<string>();
     serializer.handleAnimate(-1);

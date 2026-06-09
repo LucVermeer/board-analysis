@@ -28,7 +28,10 @@ export type SheetOpenSerializer<OpenArgs> = {
    * Wire to the modal's `onAnimate(fromIndex, toIndex)` with `toIndex`. The
    * sheet is dismissing exactly while it's settling toward index -1; settling
    * to any on-screen index (present, or a spring-back from an aborted swipe)
-   * clears the flag.
+   * clears the dismissing flag AND drops any stashed open — that stash's only
+   * legitimate consumer is the dismissal's `onDismiss`, which won't fire if the
+   * sheet is staying on screen, so leaving it would replay an old climb on the
+   * next real close.
    */
   handleAnimate: (toIndex: number) => void;
   /**
@@ -51,7 +54,16 @@ export function createSheetOpenSerializer<OpenArgs>(): SheetOpenSerializer<OpenA
       return 'deferred';
     },
     handleAnimate: (toIndex) => {
-      isDismissing = toIndex === -1;
+      if (toIndex === -1) {
+        isDismissing = true;
+        return;
+      }
+      // Settled back on screen (spring-back from an aborted close, or a
+      // present): the dismissal that stashed an open is no longer happening, so
+      // its `onDismiss` won't fire to consume the stash. Drop it now so it can't
+      // replay on the next, unrelated close.
+      isDismissing = false;
+      pendingOpen = null;
     },
     takePendingOpen: () => {
       isDismissing = false;

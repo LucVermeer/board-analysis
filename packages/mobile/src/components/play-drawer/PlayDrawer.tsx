@@ -38,7 +38,7 @@ import { useShareClimb } from '../../hooks/use-share-climb';
 import { getBoardRenderData } from '../../lib/board-details';
 import { hapticSuccess } from '../../lib/haptics';
 import { usePlayDrawerWakeLock } from './use-play-drawer-wake-lock';
-import { createSheetOpenSerializer } from './sheet-open-serializer';
+import { useDeferredSheetOpen } from './use-deferred-sheet-open';
 import {
   buildPlayDrawerBoardLayout,
   derivePlayDrawerLightbulbPressAction,
@@ -108,11 +108,6 @@ const DEFAULT_BETA_HEADER_HEIGHT = 52;
 // rendered inside the content instead; swipe-to-close still works via
 // enablePanDownToClose + enableContentPanningGesture.
 const renderNoHandle = () => null;
-// Safety net for an open() deferred behind an in-flight dismiss animation: if
-// gorhom ever skips the onDismiss that normally flushes the stashed open, this
-// bounded timeout flushes it instead so a tap is never silently dropped. The
-// close animation runs ~250ms; 400ms comfortably outlasts it.
-const DEFERRED_OPEN_FALLBACK_MS = 400;
 
 export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function PlayDrawer(
   { boardConfig, onAngleChange, isAngleAdjustable = true, onOpenQueue },
@@ -136,12 +131,6 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   const [belowFoldContentRequested, setBelowFoldContentRequested] = useState(false);
   const wallControlPressOperationRef = useRef(0);
   const resetZoomRef = useRef<(() => void) | null>(null);
-  // Serializes open() requests against the sheet's dismiss animation: calling
-  // present() mid-dismiss races gorhom's onDismiss, which then fires AFTER the
-  // re-present and wipes isSheetOpen — leaving the sheet visibly open with the
-  // board gated off forever (the intermittent blank-board-on-reopen bug).
-  const openSerializerRef = useRef(createSheetOpenSerializer<{ climb: Climb; options?: PlayDrawerOpenOptions }>());
-  const deferredOpenFallbackRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Beta Videos section-header height feeds the first-screen reserve so the
   // header teases at the bottom of the full-screen view (the cue that there's
@@ -333,50 +322,36 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
     [cancelPendingWallControlAttempt, state.currentClimbQueueItem, isPartyPreviewOnly, setCurrentClimb],
   );
 
-  // Flush a stashed open once the in-flight dismissal has fully settled.
-  // Idempotent (takePendingOpen is one-shot), so whichever of onDismiss / the
-  // fallback timeout runs first wins and the other is a no-op.
-  const flushPendingOpen = useCallback(() => {
-    if (deferredOpenFallbackRef.current !== null) {
-      clearTimeout(deferredOpenFallbackRef.current);
-      deferredOpenFallbackRef.current = null;
-    }
-    const pendingOpen = openSerializerRef.current.takePendingOpen();
-    if (pendingOpen) openDrawer(pendingOpen.climb, pendingOpen.options);
-  }, [openDrawer]);
-
-  useEffect(
-    () => () => {
-      if (deferredOpenFallbackRef.current !== null) clearTimeout(deferredOpenFallbackRef.current);
-    },
-    [],
+  // Serialize open() against the sheet's dismiss animation: presenting
+  // mid-dismiss races gorhom's onDismiss, which then fires AFTER the re-present
+  // and wipes isSheetOpen — leaving the sheet visibly open with the board gated
+  // off forever (the intermittent blank-board-on-reopen bug). The hook stashes
+  // an open requested mid-dismiss and replays it once the dismissal settles.
+  const openDrawerArgs = useCallback(
+    (args: { climb: Climb; options?: PlayDrawerOpenOptions }) => openDrawer(args.climb, args.options),
+    [openDrawer],
   );
+  const { requestOpen, onAnimate: handleSheetAnimateIndex, flushOnDismiss } = useDeferredSheetOpen(openDrawerArgs);
 
   useImperativeHandle(
     ref,
     () => ({
       open: (selectedClimb: Climb, options?: PlayDrawerOpenOptions) => {
-        const decision = openSerializerRef.current.requestOpen({ climb: selectedClimb, options });
-        if (decision === 'deferred') {
-          // The sheet is animating closed; present() now would race onDismiss.
-          // The open replays from handleClose, or from this bounded fallback if
-          // gorhom ever skips the dismiss callback.
-          if (deferredOpenFallbackRef.current !== null) clearTimeout(deferredOpenFallbackRef.current);
-          deferredOpenFallbackRef.current = setTimeout(flushPendingOpen, DEFERRED_OPEN_FALLBACK_MS);
-          return;
-        }
-        openDrawer(selectedClimb, options);
+        requestOpen({ climb: selectedClimb, options });
       },
       close: () => {
         sheetRef.current?.dismiss();
       },
     }),
-    [openDrawer, flushPendingOpen],
+    [requestOpen],
   );
 
-  const handleSheetAnimate = useCallback((_fromIndex: number, toIndex: number) => {
-    openSerializerRef.current.handleAnimate(toIndex);
-  }, []);
+  const handleSheetAnimate = useCallback(
+    (_fromIndex: number, toIndex: number) => {
+      handleSheetAnimateIndex(toIndex);
+    },
+    [handleSheetAnimateIndex],
+  );
 
   const handleClose = useCallback(() => {
     cancelPendingWallControlAttempt();
@@ -388,8 +363,8 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
     setActiveSubDrawer('none');
     // Replay an open() that arrived while this dismissal was animating — the
     // modal is now fully dismissed, so the re-present is clean.
-    flushPendingOpen();
-  }, [cancelPendingWallControlAttempt, flushPendingOpen]);
+    flushOnDismiss();
+  }, [cancelPendingWallControlAttempt, flushOnDismiss]);
 
   const handlePrev = useCallback(() => {
     cancelPendingWallControlAttempt();
