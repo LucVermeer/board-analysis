@@ -1,4 +1,4 @@
-import React, { useMemo, type ReactNode } from 'react';
+import React, { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { View, StyleSheet, Pressable } from 'react-native';
 import Animated from 'react-native-reanimated';
@@ -28,8 +28,6 @@ type InteractiveFilterBoardProps = {
   mirrored?: boolean;
   renderWidth: number;
   renderHeight: number;
-  /** Optional chrome (e.g. a floating toolbar) rendered over the board canvas. */
-  children?: ReactNode;
 };
 
 /**
@@ -57,7 +55,6 @@ export const InteractiveFilterBoard = React.memo(function InteractiveFilterBoard
   mirrored = false,
   renderWidth,
   renderHeight,
-  children,
 }: InteractiveFilterBoardProps) {
   const { t } = useTranslation('common');
   const { pinchGesture, zoomPanGesture, isZoomed, resetZoom, animatedZoomStyle } = useZoomPanGesture({
@@ -70,9 +67,15 @@ export const InteractiveFilterBoard = React.memo(function InteractiveFilterBoard
   // tap to open the picker, so we route both tap and "long press" to the same
   // handler (HoldTargetLayer requires both).
 
+  const holdById = useMemo(() => {
+    const map = new Map<number, BoardHoldTarget>();
+    for (const hold of holdTargets) map.set(hold.id, hold);
+    return map;
+  }, [holdTargets]);
+
   const activeHighlight = useMemo(() => {
     if (activeHoldId == null || renderWidth <= 0) return null;
-    const hold = holdTargets.find((target) => target.id === activeHoldId);
+    const hold = holdById.get(activeHoldId);
     if (!hold) return null;
     const geometry = holdGeometry(hold, boardWidth, boardHeight, renderWidth, mirrored);
     const diameter = geometry.ringDiameter * 1.5;
@@ -95,7 +98,7 @@ export const InteractiveFilterBoard = React.memo(function InteractiveFilterBoard
         ]}
       />
     );
-  }, [activeHoldId, holdTargets, boardWidth, boardHeight, renderWidth, mirrored]);
+  }, [activeHoldId, holdById, boardWidth, boardHeight, renderWidth, mirrored]);
 
   return (
     <View style={styles.root}>
@@ -149,7 +152,6 @@ export const InteractiveFilterBoard = React.memo(function InteractiveFilterBoard
           ) : null}
         </View>
       </GestureDetector>
-      {children}
     </View>
   );
 });

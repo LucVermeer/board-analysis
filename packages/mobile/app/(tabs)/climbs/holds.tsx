@@ -180,8 +180,10 @@ export default function HoldFilterScreen() {
       </View>
 
       <View style={styles.boardSection}>
-        {/* TODO: pass `mirrored` once BoardSearchConfig carries it — the board
-            renders un-mirrored here regardless of the search's mirror state. */}
+        {/* Known follow-up (not in this PR): `BoardSearchConfig` doesn't carry a
+            `mirrored` flag today, so the board always renders un-mirrored here
+            and a mirrored search shows its hold rings on the opposite side. Wire
+            `mirrored` through `BoardSearchConfig` to fix it. */}
         <InteractiveFilterBoard
           boardName={boardName}
           layoutId={layoutId}
