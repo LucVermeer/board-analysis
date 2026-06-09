@@ -6,11 +6,14 @@ import { ClimbListItemContent } from '../../ClimbListItemContent';
 import { THUMBNAIL_WIDTH } from '../../ClimbListThumbnail';
 import { Icon } from '../../Icon';
 import { PressableSurface } from '../../PressableSurface';
+import { Text } from '../../Text';
 import type { QueueItemRowBoard } from '../../QueueItemRow';
 import { useTheme } from '../../../providers/theme-provider';
 import { iosSystemColors } from '../../../theme/ios-colors';
 import { spacing } from '../../../theme/tokens';
 import { hapticSelection } from '../../../lib/haptics';
+import { formatQuality, formatSends } from '../../../lib/format-climb-stats';
+import { useGradeFormat } from '../../../hooks/use-grade-format';
 
 type WorkoutPreviewRowProps = {
   item: ClimbQueueItem;
@@ -46,7 +49,9 @@ function WorkoutPreviewRowComponent({
   onRefresh,
 }: WorkoutPreviewRowProps) {
   const { systemColors, brandColors, opacity } = useTheme();
-  const { t } = useTranslation('session');
+  const { t: sessionT } = useTranslation('session');
+  const { t: climbsT } = useTranslation('climbs');
+  const { formatGrade } = useGradeFormat();
   // Blocked while this row spins, or while another row holds the single refresh
   // slot. Only this row shows a spinner; the rest dim to read as "busy, wait".
   const refreshBlocked = isRefreshing || refreshDisabled;
@@ -63,7 +68,22 @@ function WorkoutPreviewRowComponent({
     onRefresh(item.uuid);
   }, [item.uuid, onRefresh]);
 
-  const climbName = item.climb?.name ?? t('mobile.queue.unknownClimb');
+  const climb: ClimbQueueItem['climb'] | null | undefined = item.climb;
+  const climbName = climb?.name ?? sessionT('mobile.queue.unknownClimb');
+  const formattedGrade = climb ? (formatGrade(climb.difficulty) ?? climb.difficulty) : null;
+  const quality = climb ? Number(formatQuality(climb.quality_average)) : 0;
+  const qualityStarCount = Math.round(quality);
+  const rowAccessibilityLabel = climb
+    ? [
+        climbName,
+        formattedGrade,
+        climb.ascensionist_count > 0 ? formatSends(climb.ascensionist_count, climbsT) : null,
+        qualityStarCount > 0 ? sessionT('playView.tickBar.starRating', { count: qualityStarCount }) : null,
+        climb.setter_username,
+      ]
+        .filter(Boolean)
+        .join(', ')
+    : climbName;
 
   return (
     <View>
@@ -78,18 +98,24 @@ function WorkoutPreviewRowComponent({
           onPress={handlePress}
           feedback="opacity"
           accessibilityRole="button"
-          accessibilityLabel={climbName}
+          accessibilityLabel={rowAccessibilityLabel}
           accessibilityState={{ selected: isActive }}
           style={styles.rowButton}
         >
-          <ClimbListItemContent
-            climb={item.climb}
-            boardName={board.boardName}
-            layoutId={board.layoutId}
-            sizeId={board.sizeId}
-            setIds={board.setIds}
-            angle={board.angle}
-          />
+          {climb ? (
+            <ClimbListItemContent
+              climb={climb}
+              boardName={board.boardName}
+              layoutId={board.layoutId}
+              sizeId={board.sizeId}
+              setIds={board.setIds}
+              angle={board.angle}
+            />
+          ) : (
+            <Text variant="body" color={systemColors.secondaryLabel} numberOfLines={1} style={styles.missingClimbText}>
+              {climbName}
+            </Text>
+          )}
         </PressableSurface>
 
         <PressableSurface
@@ -97,8 +123,9 @@ function WorkoutPreviewRowComponent({
           disabled={refreshBlocked}
           feedback="scale"
           hitSlop={2}
+          rippleBorderless
           accessibilityRole="button"
-          accessibilityLabel={t('mobile.session.preRegenerateClimbForClimb', { name: climbName })}
+          accessibilityLabel={sessionT('mobile.session.preRegenerateClimbForClimb', { name: climbName })}
           accessibilityState={{ disabled: refreshBlocked, busy: isRefreshing }}
           style={[styles.refreshButton, refreshDisabled && !isRefreshing ? { opacity: opacity.disabled } : null]}
         >
@@ -122,7 +149,7 @@ function WorkoutPreviewRowComponent({
 export const WorkoutPreviewRow = memo(WorkoutPreviewRowComponent, (prev, next) => {
   return (
     prev.item.uuid === next.item.uuid &&
-    prev.item.climb.uuid === next.item.climb.uuid &&
+    prev.item.climb?.uuid === next.item.climb?.uuid &&
     prev.isActive === next.isActive &&
     prev.isRefreshing === next.isRefreshing &&
     prev.refreshDisabled === next.refreshDisabled &&
@@ -140,19 +167,28 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    columnGap: spacing[3],
-    paddingHorizontal: spacing[3],
   },
   rowButton: {
     flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    columnGap: spacing[3],
     paddingVertical: spacing[2],
+    paddingLeft: spacing[3],
+    paddingRight: spacing[2],
+  },
+  missingClimbText: {
+    flex: 1,
+    fontWeight: '600',
   },
   refreshButton: {
     width: 44,
     height: 44,
     alignItems: 'center',
     justifyContent: 'center',
+    borderRadius: 22,
     flexShrink: 0,
+    marginRight: spacing[3],
   },
   separator: {
     height: StyleSheet.hairlineWidth,
