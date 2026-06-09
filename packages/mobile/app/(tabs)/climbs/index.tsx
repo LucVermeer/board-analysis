@@ -667,6 +667,43 @@ function ClimbListInner() {
     return { label: t('mobile.filter.gradeRange'), active: false };
   }, [gradeFilterToken, t]);
 
+  // Memoized so FlashList doesn't re-measure/re-render the header on every
+  // ClimbListInner render — only when the title, pills, or filters change.
+  const listHeader = useMemo(
+    () => (
+      <>
+        {/* Glass variant: the screen's identity in-body under the floating
+            chrome — the active filter ("V4–V6 · Quality") or "All climbs" —
+            collapsing into the centered header capsule as it scrolls up. The
+            Material variant shows the title in its Appbar instead. */}
+        {variant === 'material' ? null : (
+          <Text variant="largeTitle" numberOfLines={2} ellipsizeMode="tail" style={styles.screenTitle}>
+            {searchTitle}
+          </Text>
+        )}
+        {showRecentPills ? (
+          <RecentFilterPills
+            recentFilters={recentFilters}
+            currentFilters={filters}
+            currentSearchText={name}
+            onApply={handleApplyRecentFilter}
+            onClear={handleClearRecentFilters}
+          />
+        ) : null}
+      </>
+    ),
+    [
+      variant,
+      searchTitle,
+      showRecentPills,
+      recentFilters,
+      filters,
+      name,
+      handleApplyRecentFilter,
+      handleClearRecentFilters,
+    ],
+  );
+
   const stackOptions = useMemo(
     () =>
       useNativeSearch
@@ -791,28 +828,7 @@ function ClimbListInner() {
         refreshControl={
           <RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor={brandColors.primary} />
         }
-        ListHeaderComponent={
-          <>
-            {/* Glass variant: the screen's identity in-body under the floating
-                chrome — the active filter ("V4–V6 · Quality") or "All climbs" —
-                collapsing into the centered header capsule as it scrolls up. The
-                Material variant shows the title in its Appbar instead. */}
-            {variant === 'material' ? null : (
-              <Text variant="largeTitle" numberOfLines={2} ellipsizeMode="tail" style={styles.screenTitle}>
-                {searchTitle}
-              </Text>
-            )}
-            {showRecentPills ? (
-              <RecentFilterPills
-                recentFilters={recentFilters}
-                currentFilters={filters}
-                currentSearchText={name}
-                onApply={handleApplyRecentFilter}
-                onClear={handleClearRecentFilters}
-              />
-            ) : null}
-          </>
-        }
+        ListHeaderComponent={listHeader}
         ListFooterComponent={isFetchingNextPage ? <ClimbListSkeletonRows count={FOOTER_SKELETON_ROW_COUNT} /> : null}
         ListEmptyComponent={
           showInitialSkeletons ? (
