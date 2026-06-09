@@ -25,6 +25,7 @@ import {
   QueueArraySchema,
 } from '../../../validation/schemas';
 import { logger } from '../../../utils/logger';
+import { markErrorReported } from '../../../utils/sentry-dedupe';
 import type { CreateSessionInput } from '../shared/types';
 import { db } from '../../../db/client';
 import { esp32Controllers, userBoards } from '@boardsesh/db/schema/app';
@@ -340,10 +341,12 @@ export const sessionMutations = {
         color: input.color || null,
       };
     } catch (err) {
+      // Rate-limit hits are expected abuse-protection noise, not a session-start
+      // bug — let them flow through without a Sentry event.
+      if (err instanceof Error && err.message.startsWith('Rate limit exceeded')) throw err;
       // Production masks GraphQL errors to "Unexpected error" (yoga.ts), and the
       // mobile client discards the rest — so capture the true cause here, before
-      // masking, with enough context to triage a failed Start session. Rethrow so
-      // client behaviour and the existing error pipeline are unchanged.
+      // masking, with enough context to triage a failed Start session.
       Sentry.captureException(err, {
         tags: { source: 'createSession', transport: ctx.transport },
         extra: {
@@ -356,6 +359,10 @@ export const sessionMutations = {
           boardIdCount: input.boardIds?.length ?? 0,
         },
       });
+      // Mark so the generic Yoga error handler skips its own capture (this would
+      // otherwise be a second event). Rethrow so client behaviour and the rest of
+      // the error pipeline are unchanged.
+      markErrorReported(err);
       throw err;
     }
   },

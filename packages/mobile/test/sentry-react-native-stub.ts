@@ -15,6 +15,20 @@ export function init(): void {}
 
 export function captureException(): void {}
 
+export function captureMessage(): void {}
+
+export function addBreadcrumb(): void {}
+
+export function setUser(): void {}
+
+export function setContext(): void {}
+
+export function setTag(): void {}
+
+export function withScope(callback: (scope: unknown) => void): void {
+  callback({ setTag: () => {}, setContext: () => {}, setExtra: () => {} });
+}
+
 export function wrap<T>(component: T): T {
   return component;
 }
