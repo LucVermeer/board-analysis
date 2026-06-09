@@ -94,6 +94,8 @@ type QueueContextValue = {
   removeFromQueue: (uuid: string) => void;
   reorderQueue: (uuid: string, oldIndex: number, newIndex: number) => void;
   clearQueue: () => void;
+  /** Replace the entire queue (optimistic local UPDATE_QUEUE + best-effort party sync). */
+  setQueue: (queue: ClimbQueueItem[], currentClimbQueueItem?: ClimbQueueItem | null) => void;
   setCurrentClimb: (item: ClimbQueueItem, options?: SetCurrentClimbOptions) => void;
   nextClimb: () => void;
   previousClimb: () => void;
@@ -1089,6 +1091,21 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     });
   }, [mutations, showToast, t]);
 
+  // Replace the whole queue in one shot: optimistic local UPDATE_QUEUE (the
+  // source of truth for the user's queue) + a best-effort SET_QUEUE sync that
+  // no-ops in solo and broadcasts to party peers when a session exists. Same
+  // best-effort model as addToQueue — a sync failure leaves the local queue
+  // correct, so it must not toast.
+  const setQueue = useCallback(
+    (queue: ClimbQueueItem[], currentClimbQueueItem?: ClimbQueueItem | null) => {
+      dispatch({ type: 'UPDATE_QUEUE', payload: { queue, currentClimbQueueItem: currentClimbQueueItem ?? null } });
+      mutations.setQueue(queue, currentClimbQueueItem ?? undefined).catch((error) => {
+        if (__DEV__) console.warn('[queue] setQueue sync failed', error);
+      });
+    },
+    [mutations],
+  );
+
   // Optimistic local dispatch + correlated SET_CURRENT_CLIMB mutation. The
   // reducer stores `correlationId` in pendingCurrentClimbUpdates so the echoed
   // CurrentClimbChanged event (same id in `serverCorrelationId`) is suppressed
@@ -1250,6 +1267,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       removeFromQueue,
       reorderQueue,
       clearQueue,
+      setQueue,
       setCurrentClimb,
       nextClimb,
       previousClimb,
@@ -1273,6 +1291,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       removeFromQueue,
       reorderQueue,
       clearQueue,
+      setQueue,
       setCurrentClimb,
       nextClimb,
       previousClimb,

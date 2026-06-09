@@ -1,13 +1,24 @@
+import { useEffect, useMemo } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import type { BoardName } from '@boardsesh/shared-schema';
 import { getGradesForBoard } from '@boardsesh/board-config';
+import { isKilterHomewallTallSizeId, isKilterHomewallWideSizeId } from '@boardsesh/board-constants';
 import {
+  formatMinAscentsFilterCount,
+  getMinAscentsFilterOptions,
+  getMinRatingPickerValue,
+} from '@boardsesh/climb-filters';
+import {
+  CLIMB_BIAS_OPTIONS,
   DEFAULT_GRADE_FOCUS_OPTIONS,
   DEFAULT_LADDER_OPTIONS,
   DEFAULT_PYRAMID_OPTIONS,
   DEFAULT_VOLUME_OPTIONS,
+  WARM_UP_OPTIONS,
+  type ClimbBias,
   type GeneratorOptions,
+  type WarmUpType,
   type WorkoutType,
 } from '@boardsesh/playlist-generator';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
@@ -18,11 +29,16 @@ import { useGradeFormat } from '../../../hooks/use-grade-format';
 import { spacing, borderRadius } from '../../../theme/tokens';
 import { brandColors as staticBrandColors } from '../../../theme/colors';
 import { iosSystemColors } from '../../../theme/ios-colors';
+import { Icon } from '../../Icon';
+import { StarRating } from '../../StarRating';
+import { SwitchRow } from '../../SwitchRow';
 
 export type GeneratorSelection = { type: 'off' } | { type: 'on'; options: GeneratorOptions };
 
 type GeneratorPickerCardProps = {
   boardName: BoardName | null;
+  layoutId: number | null;
+  sizeId: number | null;
   /** Board angle, forwarded to the `Workout Generator Opened` event to match web. */
   angle: number | null;
   selection: GeneratorSelection;
@@ -30,6 +46,14 @@ type GeneratorPickerCardProps = {
 };
 
 type ChipValue = WorkoutType | 'off';
+type CommonGeneratorPatch = Partial<
+  Pick<
+    GeneratorOptions,
+    'warmUp' | 'targetGrade' | 'climbBias' | 'minAscents' | 'minRating' | 'onlyTallClimbs' | 'onlyWideClimbs'
+  >
+>;
+
+const KILTER_HOMEWALL_LAYOUT_ID = 8;
 
 // Static value list — the labels are looked up via inline `t('mobile.session.preGenerator…')`
 // calls in `chipLabel()` so the i18n key analyser can see every key as a
@@ -49,6 +73,28 @@ function chipLabel(value: ChipValue, t: (key: string) => string): string {
       return t('mobile.session.preGeneratorLadder');
     case 'gradeFocus':
       return t('mobile.session.preGeneratorGradeFocus');
+  }
+}
+
+function warmUpLabel(value: WarmUpType, t: (key: string) => string): string {
+  switch (value) {
+    case 'standard':
+      return t('mobile.session.preGeneratorWarmUpStandard');
+    case 'extended':
+      return t('mobile.session.preGeneratorWarmUpExtended');
+    case 'none':
+      return t('mobile.session.preGeneratorWarmUpNone');
+  }
+}
+
+function climbBiasLabel(value: ClimbBias, t: (key: string) => string): string {
+  switch (value) {
+    case 'unfamiliar':
+      return t('mobile.session.preGeneratorClimbBiasUnfamiliar');
+    case 'attempted':
+      return t('mobile.session.preGeneratorClimbBiasAttempted');
+    case 'any':
+      return t('mobile.session.preGeneratorClimbBiasAny');
   }
 }
 
@@ -72,16 +118,149 @@ function getDefaultTargetGrade(boardName: BoardName | null): number {
   return grades[Math.floor(grades.length / 2)].difficulty_id;
 }
 
+function clampStepperValue(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+type NumberStepperProps = {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  onChange: (nextValue: number) => void;
+  decreaseLabel: string;
+  increaseLabel: string;
+};
+
+function NumberStepper({ label, value, min, max, onChange, decreaseLabel, increaseLabel }: NumberStepperProps) {
+  const { systemColors, brandColors, opacity: themeOpacity } = useTheme();
+  const decrementDisabled = value <= min;
+  const incrementDisabled = value >= max;
+
+  const updateValue = (nextValue: number) => onChange(clampStepperValue(nextValue, min, max));
+
+  return (
+    <View style={styles.settingRow}>
+      <Text variant="footnote" color={systemColors.secondaryLabel} style={styles.settingLabel}>
+        {label}
+      </Text>
+      <View
+        style={[
+          styles.stepperShell,
+          { borderColor: systemColors.separator, backgroundColor: systemColors.tertiaryBackground },
+        ]}
+      >
+        <Text variant="subheadline" color={systemColors.label} style={styles.stepperValue}>
+          {value}
+        </Text>
+        <View style={styles.stepperButtons}>
+          <Pressable
+            onPress={() => updateValue(value - 1)}
+            disabled={decrementDisabled}
+            accessibilityRole="button"
+            accessibilityLabel={decreaseLabel}
+            style={({ pressed }) => [
+              styles.stepperButton,
+              pressed && !decrementDisabled ? styles.pressed : null,
+              decrementDisabled ? { opacity: themeOpacity.disabled } : null,
+            ]}
+          >
+            <Icon name="minus" size={16} color={decrementDisabled ? systemColors.tertiaryLabel : brandColors.primary} />
+          </Pressable>
+          <Pressable
+            onPress={() => updateValue(value + 1)}
+            disabled={incrementDisabled}
+            accessibilityRole="button"
+            accessibilityLabel={increaseLabel}
+            style={({ pressed }) => [
+              styles.stepperButton,
+              pressed && !incrementDisabled ? styles.pressed : null,
+              incrementDisabled ? { opacity: themeOpacity.disabled } : null,
+            ]}
+          >
+            <Icon name="plus" size={16} color={incrementDisabled ? systemColors.tertiaryLabel : brandColors.primary} />
+          </Pressable>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+type OptionChipProps = {
+  label: string;
+  active: boolean;
+  onPress: () => void;
+};
+
+function OptionChip({ label, active, onPress }: OptionChipProps) {
+  const { systemColors, brandColors } = useTheme();
+
+  return (
+    <Pressable
+      onPress={onPress}
+      style={[
+        styles.chip,
+        {
+          borderColor: active ? brandColors.primary : systemColors.separator,
+          backgroundColor: active ? staticBrandColors.primary : 'transparent',
+        },
+      ]}
+      accessibilityRole="button"
+      accessibilityState={{ selected: active }}
+      accessibilityLabel={label}
+    >
+      <Text variant="footnote" color={active ? iosSystemColors.white : systemColors.label}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
 /**
  * Workout-type selector. Off keeps the queue empty (user fills it manually);
  * any other choice pre-populates the queue from the shared `@boardsesh/playlist-generator`
  * algorithm and the chosen target grade. Defaults come from the shared package
  * so web and mobile agree on the starting state for each workout type.
  */
-export function GeneratorPickerCard({ boardName, angle, selection, onChange }: GeneratorPickerCardProps) {
+export function GeneratorPickerCard({
+  boardName,
+  layoutId,
+  sizeId,
+  angle,
+  selection,
+  onChange,
+}: GeneratorPickerCardProps) {
   const { t } = useTranslation('session');
   const { systemColors, brandColors } = useTheme();
   const { formatGrade } = useGradeFormat();
+
+  const isKilterHomewall = boardName === 'kilter' && layoutId === KILTER_HOMEWALL_LAYOUT_ID;
+  const showTallClimbsFilter = isKilterHomewall && sizeId != null && isKilterHomewallTallSizeId(sizeId);
+  const showWideClimbsFilter = isKilterHomewall && sizeId != null && isKilterHomewallWideSizeId(sizeId);
+
+  useEffect(() => {
+    if (selection.type !== 'on') return;
+    const shouldClearTallClimbs = selection.options.onlyTallClimbs && !showTallClimbsFilter;
+    const shouldClearWideClimbs = selection.options.onlyWideClimbs && !showWideClimbsFilter;
+    if (!shouldClearTallClimbs && !shouldClearWideClimbs) return;
+    onChange({
+      type: 'on',
+      options: {
+        ...selection.options,
+        ...(shouldClearTallClimbs ? { onlyTallClimbs: false } : {}),
+        ...(shouldClearWideClimbs ? { onlyWideClimbs: false } : {}),
+      },
+    });
+  }, [selection, showTallClimbsFilter, showWideClimbsFilter, onChange]);
+
+  const gradeChoices = boardName ? getGradesForBoard(boardName) : [];
+  const activeType = selection.type === 'on' ? selection.options.type : 'off';
+
+  const minAscentsOptions = useMemo(() => {
+    const baseOptions = getMinAscentsFilterOptions();
+    if (selection.type !== 'on' || baseOptions.includes(selection.options.minAscents)) return baseOptions;
+    return [...baseOptions, selection.options.minAscents].sort((first, second) => first - second);
+  }, [selection]);
 
   const handleSelectType = (value: ChipValue) => {
     if (value === 'off') {
@@ -100,13 +279,219 @@ export function GeneratorPickerCard({ boardName, angle, selection, onChange }: G
     onChange({ type: 'on', options: buildDefaultOptions(value, currentTarget) });
   };
 
-  const handleSelectGrade = (difficultyId: number) => {
+  const updateCommonOptions = (patch: CommonGeneratorPatch) => {
     if (selection.type !== 'on') return;
-    onChange({ type: 'on', options: { ...selection.options, targetGrade: difficultyId } });
+    onChange({ type: 'on', options: { ...selection.options, ...patch } });
   };
 
-  const gradeChoices = boardName ? getGradesForBoard(boardName) : [];
-  const activeType = selection.type === 'on' ? selection.options.type : 'off';
+  const renderWorkoutShapeOptions = (options: GeneratorOptions) => {
+    switch (options.type) {
+      case 'volume':
+        return (
+          <>
+            <NumberStepper
+              label={t('mobile.session.preGeneratorMainSetClimbs')}
+              value={options.mainSetClimbs}
+              min={1}
+              max={50}
+              onChange={(mainSetClimbs) => onChange({ type: 'on', options: { ...options, mainSetClimbs } })}
+              decreaseLabel={t('mobile.session.preGeneratorDecreaseOption', {
+                label: t('mobile.session.preGeneratorMainSetClimbs'),
+              })}
+              increaseLabel={t('mobile.session.preGeneratorIncreaseOption', {
+                label: t('mobile.session.preGeneratorMainSetClimbs'),
+              })}
+            />
+            <NumberStepper
+              label={t('mobile.session.preGeneratorMainSetVariability')}
+              value={options.mainSetVariability}
+              min={0}
+              max={5}
+              onChange={(mainSetVariability) => onChange({ type: 'on', options: { ...options, mainSetVariability } })}
+              decreaseLabel={t('mobile.session.preGeneratorDecreaseOption', {
+                label: t('mobile.session.preGeneratorMainSetVariability'),
+              })}
+              increaseLabel={t('mobile.session.preGeneratorIncreaseOption', {
+                label: t('mobile.session.preGeneratorMainSetVariability'),
+              })}
+            />
+          </>
+        );
+      case 'pyramid':
+      case 'ladder':
+        return (
+          <>
+            <NumberStepper
+              label={t('mobile.session.preGeneratorNumberOfSteps')}
+              value={options.numberOfSteps}
+              min={3}
+              max={15}
+              onChange={(numberOfSteps) => onChange({ type: 'on', options: { ...options, numberOfSteps } })}
+              decreaseLabel={t('mobile.session.preGeneratorDecreaseOption', {
+                label: t('mobile.session.preGeneratorNumberOfSteps'),
+              })}
+              increaseLabel={t('mobile.session.preGeneratorIncreaseOption', {
+                label: t('mobile.session.preGeneratorNumberOfSteps'),
+              })}
+            />
+            <NumberStepper
+              label={t('mobile.session.preGeneratorClimbsPerStep')}
+              value={options.climbsPerStep}
+              min={1}
+              max={5}
+              onChange={(climbsPerStep) => onChange({ type: 'on', options: { ...options, climbsPerStep } })}
+              decreaseLabel={t('mobile.session.preGeneratorDecreaseOption', {
+                label: t('mobile.session.preGeneratorClimbsPerStep'),
+              })}
+              increaseLabel={t('mobile.session.preGeneratorIncreaseOption', {
+                label: t('mobile.session.preGeneratorClimbsPerStep'),
+              })}
+            />
+          </>
+        );
+      case 'gradeFocus':
+        return (
+          <NumberStepper
+            label={t('mobile.session.preGeneratorNumberOfClimbs')}
+            value={options.numberOfClimbs}
+            min={1}
+            max={50}
+            onChange={(numberOfClimbs) => onChange({ type: 'on', options: { ...options, numberOfClimbs } })}
+            decreaseLabel={t('mobile.session.preGeneratorDecreaseOption', {
+              label: t('mobile.session.preGeneratorNumberOfClimbs'),
+            })}
+            increaseLabel={t('mobile.session.preGeneratorIncreaseOption', {
+              label: t('mobile.session.preGeneratorNumberOfClimbs'),
+            })}
+          />
+        );
+    }
+  };
+
+  const renderGeneratorOptions = () => {
+    if (selection.type !== 'on') return null;
+    const { options } = selection;
+    const minRatingPickerValue = getMinRatingPickerValue(options.minRating);
+
+    return (
+      <View style={styles.optionsSection}>
+        <View style={styles.settingBlock}>
+          <Text variant="footnote" color={systemColors.secondaryLabel} style={styles.settingLabel}>
+            {t('mobile.session.preGeneratorWarmUp')}
+          </Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+            {WARM_UP_OPTIONS.map((warmUp) => (
+              <OptionChip
+                key={warmUp}
+                label={warmUpLabel(warmUp, t)}
+                active={options.warmUp === warmUp}
+                onPress={() => updateCommonOptions({ warmUp })}
+              />
+            ))}
+          </ScrollView>
+        </View>
+
+        {boardName != null ? (
+          <View style={styles.settingBlock}>
+            <Text variant="footnote" color={systemColors.secondaryLabel} style={styles.settingLabel}>
+              {t('mobile.session.preGeneratorTargetGrade')}
+            </Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+              {gradeChoices.map((grade) => {
+                const isActive = grade.difficulty_id === options.targetGrade;
+                const gradeLabel = formatGrade(grade.difficulty_name) ?? grade.difficulty_name;
+                return (
+                  <OptionChip
+                    key={grade.difficulty_id}
+                    label={gradeLabel}
+                    active={isActive}
+                    onPress={() => updateCommonOptions({ targetGrade: grade.difficulty_id })}
+                  />
+                );
+              })}
+            </ScrollView>
+          </View>
+        ) : null}
+
+        {renderWorkoutShapeOptions(options)}
+
+        <View style={styles.settingBlock}>
+          <Text variant="footnote" color={systemColors.secondaryLabel} style={styles.settingLabel}>
+            {t('mobile.session.preGeneratorMinAscents')}
+          </Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+            {minAscentsOptions.map((minAscents) => {
+              const label = t('mobile.session.preGeneratorMinAscentsOption', {
+                value: formatMinAscentsFilterCount(minAscents),
+              });
+              return (
+                <OptionChip
+                  key={minAscents}
+                  label={label}
+                  active={options.minAscents === minAscents}
+                  onPress={() => updateCommonOptions({ minAscents })}
+                />
+              );
+            })}
+          </ScrollView>
+        </View>
+
+        <View style={styles.settingBlock}>
+          <Text variant="footnote" color={systemColors.secondaryLabel} style={styles.settingLabel}>
+            {t('mobile.session.preGeneratorMinRating')}
+          </Text>
+          <View style={styles.ratingRow}>
+            <OptionChip
+              label={t('mobile.session.preGeneratorAny')}
+              active={minRatingPickerValue == null}
+              onPress={() => updateCommonOptions({ minRating: 0 })}
+            />
+            <StarRating
+              value={minRatingPickerValue ?? undefined}
+              onChange={(rating) => updateCommonOptions({ minRating: rating ?? 0 })}
+            />
+          </View>
+        </View>
+
+        <View style={styles.settingBlock}>
+          <Text variant="footnote" color={systemColors.secondaryLabel} style={styles.settingLabel}>
+            {t('mobile.session.preGeneratorClimbBias')}
+          </Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+            {CLIMB_BIAS_OPTIONS.map((climbBias) => (
+              <OptionChip
+                key={climbBias}
+                label={climbBiasLabel(climbBias, t)}
+                active={options.climbBias === climbBias}
+                onPress={() => updateCommonOptions({ climbBias })}
+              />
+            ))}
+          </ScrollView>
+        </View>
+
+        {showTallClimbsFilter || showWideClimbsFilter ? (
+          <View style={[styles.switchGroup, { borderColor: systemColors.separator }]}>
+            {showTallClimbsFilter ? (
+              <SwitchRow
+                label={t('mobile.session.preGeneratorTallClimbsLabel')}
+                description={t('mobile.session.preGeneratorTallClimbsDescription')}
+                value={options.onlyTallClimbs}
+                onValueChange={(onlyTallClimbs) => updateCommonOptions({ onlyTallClimbs })}
+              />
+            ) : null}
+            {showWideClimbsFilter ? (
+              <SwitchRow
+                label={t('mobile.session.preGeneratorWideClimbsLabel')}
+                description={t('mobile.session.preGeneratorWideClimbsDescription')}
+                value={options.onlyWideClimbs}
+                onValueChange={(onlyWideClimbs) => updateCommonOptions({ onlyWideClimbs })}
+              />
+            ) : null}
+          </View>
+        ) : null}
+      </View>
+    );
+  };
 
   return (
     <View
@@ -143,40 +528,7 @@ export function GeneratorPickerCard({ boardName, angle, selection, onChange }: G
         })}
       </ScrollView>
 
-      {selection.type === 'on' && boardName != null ? (
-        <View style={styles.gradeSection}>
-          <Text variant="footnote" color={systemColors.secondaryLabel} style={styles.subLabel}>
-            {t('mobile.session.preGeneratorTargetGrade')}
-          </Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
-            {gradeChoices.map((grade) => {
-              const isActive = grade.difficulty_id === selection.options.targetGrade;
-              const gradeLabel = formatGrade(grade.difficulty_name) ?? grade.difficulty_name;
-              return (
-                <Pressable
-                  key={grade.difficulty_id}
-                  onPress={() => handleSelectGrade(grade.difficulty_id)}
-                  style={[
-                    styles.gradeChip,
-                    {
-                      // Border is a FOREGROUND → scheme-aware; active fill stays static.
-                      borderColor: isActive ? brandColors.primary : systemColors.separator,
-                      backgroundColor: isActive ? staticBrandColors.primary : 'transparent',
-                    },
-                  ]}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: isActive }}
-                  accessibilityLabel={gradeLabel}
-                >
-                  <Text variant="footnote" color={isActive ? iosSystemColors.white : systemColors.label}>
-                    {gradeLabel}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </ScrollView>
-        </View>
-      ) : null}
+      {renderGeneratorOptions()}
     </View>
   );
 }
@@ -186,14 +538,10 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.lg,
     borderWidth: StyleSheet.hairlineWidth,
     paddingVertical: spacing[3],
-    gap: spacing[2],
+    gap: spacing[3],
   },
   label: {
     paddingHorizontal: spacing[4],
-  },
-  subLabel: {
-    paddingHorizontal: spacing[4],
-    marginTop: spacing[1],
   },
   chipRow: {
     paddingHorizontal: spacing[4],
@@ -208,17 +556,56 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  gradeSection: {
+  optionsSection: {
+    gap: spacing[4],
+  },
+  settingBlock: {
     gap: spacing[2],
   },
-  gradeChip: {
-    paddingHorizontal: spacing[3],
-    paddingVertical: spacing[1],
-    borderRadius: 16,
-    borderWidth: 1,
+  settingRow: {
+    paddingHorizontal: spacing[4],
+    gap: spacing[2],
+  },
+  settingLabel: {
+    fontWeight: '700',
+    letterSpacing: 0,
+    textTransform: 'uppercase',
+  },
+  stepperShell: {
+    minHeight: 40,
+    borderRadius: borderRadius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    overflow: 'hidden',
+  },
+  stepperValue: {
     minWidth: 48,
-    minHeight: 32,
+    paddingHorizontal: spacing[3],
+    fontWeight: '700',
+  },
+  stepperButtons: {
+    flexDirection: 'row',
+  },
+  stepperButton: {
+    width: 40,
+    height: 40,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  pressed: {
+    opacity: 0.6,
+  },
+  ratingRow: {
+    paddingHorizontal: spacing[4],
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[3],
+    flexWrap: 'wrap',
+  },
+  switchGroup: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
 });

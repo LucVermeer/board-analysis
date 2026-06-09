@@ -202,6 +202,8 @@
       "climbBias": "Préférence de blocs",
       "tallClimbsLabel": "Blocs hauts uniquement",
       "tallClimbsTooltip": "Affiche uniquement les blocs qui utilisent les prises des 8 rangées du bas (uniquement sur les boards 8x12 et 10x12)",
+      "wideClimbsLabel": "Blocs larges uniquement",
+      "wideClimbsTooltip": "Affiche uniquement les blocs qui utilisent les colonnes latérales supplémentaires 10x10",
       "mainSetClimbs": "Blocs de la série principale",
       "mainSetVariability": "Variabilité de la série principale",
       "numberOfSteps": "Nombre de paliers",

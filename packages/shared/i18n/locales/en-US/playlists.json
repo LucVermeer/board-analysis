@@ -202,6 +202,8 @@
       "climbBias": "Climb Bias",
       "tallClimbsLabel": "Tall Climbs Only",
       "tallClimbsTooltip": "Show only climbs that use holds in the bottom 8 rows (only available on 8x12 and 10x12 boards)",
+      "wideClimbsLabel": "Wide Climbs Only",
+      "wideClimbsTooltip": "Show only climbs that use the 10x10 side expansion holds",
       "mainSetClimbs": "Main Set Climbs",
       "mainSetVariability": "Main Set Variability",
       "numberOfSteps": "Number of Steps",
