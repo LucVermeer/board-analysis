@@ -37,8 +37,8 @@ class BoardSessionService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        // Apply intent state first — these reads are cheap and can't throw, so
-        // they never jeopardise the 5 s startForeground() deadline.
+        // Apply intent state first (cheap, can't throw) so it never eats into the
+        // 5 s startForeground() deadline.
         when (intent?.action) {
             ACTION_START -> {
                 channelName = intent.getStringExtra(EXTRA_CHANNEL_NAME) ?: channelName
@@ -56,11 +56,10 @@ class BoardSessionService : Service() {
             }
         }
 
-        // Promote to the foreground on EVERY entry, including ACTION_STOP and the
-        // null-intent restart the OS hands us — the system may be holding a start
-        // token from startForegroundService() and will crash the process with
-        // ForegroundServiceDidNotStartInTimeException if we don't call
-        // startForeground() in time.
+        // Promote on EVERY entry, including ACTION_STOP and the null-intent
+        // restart: the system may hold a start token from startForegroundService()
+        // and crashes with ForegroundServiceDidNotStartInTimeException if we don't
+        // call startForeground() in time.
         val promoted = startInForeground()
 
         if (intent?.action == ACTION_STOP || !promoted) {
@@ -69,25 +68,24 @@ class BoardSessionService : Service() {
             return START_NOT_STICKY
         }
 
-        // START_NOT_STICKY: do NOT let the OS recreate the service in the
-        // background after a kill. A null-intent restart while the process is
-        // frozen/cold-starting can't promote within the 5 s window, which is a
-        // prime source of the timeout crash. The JS useLiveActivity effect
-        // re-starts the session when the app is reopened.
+        // START_NOT_STICKY: don't let the OS recreate the service in the background
+        // after a kill — a null-intent restart on a frozen/cold-starting process
+        // can't promote within 5 s. The JS useLiveActivity effect re-starts the
+        // session when the app reopens.
         return START_NOT_STICKY
     }
 
-    /**
-     * Promotes the service to the foreground. Returns true on success. Everything
-     * that could throw or be slow (channel creation, resource/icon load, pending
-     * intents) is guarded so startForeground() is always reached: build failures
-     * fall back to a minimal notification, and a rejected connectedDevice type
-     * (missing BLUETOOTH_CONNECT on API 34+) falls back to a typeless FGS rather
-     * than leaving the start contract unsatisfied.
-     */
+    // Promotes the service to the foreground; returns true on success. Channel
+    // creation is best-effort and independent of notification building so the
+    // fallback notification still has a channel to post to if buildNotification()
+    // throws.
     private fun startInForeground(): Boolean {
-        val notification = try {
+        try {
             ensureChannel()
+        } catch (error: Exception) {
+            Log.w(TAG, "ensureChannel failed: ${error.message}")
+        }
+        val notification = try {
             buildNotification()
         } catch (error: Exception) {
             Log.w(TAG, "buildNotification failed, using fallback: ${error.message}")
@@ -100,11 +98,9 @@ class BoardSessionService : Service() {
             0
         }
         if (tryStartForeground(notification, type)) return true
-        // The typed promotion was rejected. On API < 34 a typeless FGS is still a
-        // valid promotion, so retry to satisfy the start contract. On API 34+ a
-        // type-0 promotion throws MissingForegroundServiceTypeException for a
-        // service declared with a type, so retrying is pointless — the caller
-        // (SessionPresenceModule) gates the start on BLUETOOTH_CONNECT instead.
+        // On API < 34 a typeless FGS is a valid promotion, so retry to satisfy the
+        // contract. On API 34+ type 0 throws MissingForegroundServiceTypeException
+        // for a typed service, so the caller gates the start on BLUETOOTH_CONNECT.
         if (type != 0 && Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE &&
             tryStartForeground(notification, 0)
         ) {
@@ -172,10 +168,9 @@ class BoardSessionService : Service() {
         return builder.build()
     }
 
-    // Minimal, dependency-free notification used when buildNotification() throws.
-    // Only touches the small icon, a title and the channel — nothing that loads
-    // extra resources or creates pending intents — so it can satisfy the
-    // startForeground() contract even when the rich build fails.
+    // Minimal notification for when buildNotification() throws: no extra resource
+    // loads or pending intents, so it can still satisfy the startForeground()
+    // contract.
     private fun buildFallbackNotification(): Notification {
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_boardsesh_notification)
