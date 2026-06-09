@@ -214,6 +214,7 @@ export const QueueSheet = forwardRef<QueueSheetHandle, QueueSheetProps>(function
         showFullHistory={showFullHistory}
         selectedItems={selectedItems}
         playlistSuggestionSource={playlistSuggestionSource}
+        active={isPresented}
         autoScrollOnMount={isPresented}
         onToggleSelect={handleToggleSelect}
         onClimbPress={onClimbPress}

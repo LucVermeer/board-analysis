@@ -43,6 +43,11 @@ type QueueListProps = {
   showFullHistory: boolean;
   selectedItems: Set<string>;
   playlistSuggestionSource: PlaylistSuggestionSource | null;
+  /** True while the queue sheet is presented. Gates the suggestion feed query
+   *  so it only runs while the sheet is open — the sheet stays mounted (for the
+   *  imperative present()), so without this the feed would fetch continuously
+   *  for the whole session. */
+  active: boolean;
   autoScrollOnMount?: boolean;
   onToggleSelect: (uuid: string) => void;
   onClimbPress: (item: ClimbQueueItem) => void;
@@ -63,6 +68,7 @@ export function QueueList({
   showFullHistory,
   selectedItems,
   playlistSuggestionSource,
+  active,
   autoScrollOnMount,
   onToggleSelect,
   onClimbPress,
@@ -90,11 +96,12 @@ export function QueueList({
   // Suggested climbs flow directly after the queue rows — NO header, NO divider
   // (the intentional divergence from web). Playlist suggestions (when a playlist
   // is active) come first, then a popular (by-ascents) feed for the board tops
-  // the list up. The feed query is enabled unconditionally (not gated on the
-  // playlist source) — but this list only mounts while the queue sheet is open,
-  // so it only runs then. Fetching regardless of the source means suggestions
-  // never vanish when the source flips or its climbs go empty; they fall back to
-  // the feed. Everything already in the queue is excluded.
+  // the list up. The feed query is gated on `active` (sheet presented), not on
+  // the playlist source: the sheet stays mounted for the imperative present(),
+  // so without this gate the feed would fetch for the whole session. Fetching
+  // regardless of the source means suggestions never vanish when the source
+  // flips or its climbs go empty; they fall back to the feed. Everything already
+  // in the queue is excluded.
   const playlistSuggestions = useMemo(
     () => getPlaylistSuggestedClimbs(playlistSuggestionSource, queue),
     [playlistSuggestionSource, queue],
@@ -104,7 +111,7 @@ export function QueueList({
     () => toClimbSearchInput(DEFAULT_CLIMB_FILTER_STATE, board, { page: 0, pageSize: SUGGESTION_PAGE_SIZE }),
     [board],
   );
-  const { data: searchResult } = useSearchClimbs(searchInput, true, {
+  const { data: searchResult } = useSearchClimbs(searchInput, active, {
     staleTime: SUGGESTION_STALE_MS,
     gcTime: SUGGESTION_GC_MS,
   });
