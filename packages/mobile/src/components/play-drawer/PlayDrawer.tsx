@@ -48,6 +48,7 @@ import {
   resolvePlayDrawerWallControlQueueItem,
   shouldRestoreFailedTakeControlPreview,
 } from './lightbulb-control';
+import { usePreviewOnlyExitCleanup } from './use-preview-only-exit-cleanup';
 import { useWallConfirmFallback } from './use-wall-confirm-fallback';
 import { track } from '../../lib/analytics';
 import { iosSystemColors } from '../../theme/ios-colors';
@@ -244,15 +245,10 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   // mode or mounting never clears a fresh preview. Safe for the lightbulb flow:
   // handleLightbulb reads drawerPreviewSuggestionSource synchronously at press
   // time and hands it to takeControl before the driver flip lands here.
-  const wasPartyPreviewOnlyRef = useRef(isPartyPreviewOnly);
-  useEffect(() => {
-    const wasPreviewOnly = wasPartyPreviewOnlyRef.current;
-    wasPartyPreviewOnlyRef.current = isPartyPreviewOnly;
-    if (wasPreviewOnly && !isPartyPreviewOnly) {
-      setDrawerPreviewItem(null);
-      setDrawerPreviewSuggestionSource(null);
-    }
-  }, [isPartyPreviewOnly]);
+  usePreviewOnlyExitCleanup(isPartyPreviewOnly, () => {
+    setDrawerPreviewItem(null);
+    setDrawerPreviewSuggestionSource(null);
+  });
 
   const { showToast } = useToast();
 
