@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, Pressable, StyleSheet } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import { FlashList } from '@shopify/flash-list';
 import { useTranslation } from 'react-i18next';
@@ -17,8 +17,7 @@ import { SessionStatTiles } from '../../src/components/session/SessionStatTiles'
 import { SessionAnalyticsSection } from '../../src/components/session/SessionAnalyticsSection';
 import { SessionParticipantBreakdown } from '../../src/components/session/SessionParticipantBreakdown';
 import { SessionTickRow } from '../../src/components/session/SessionTickRow';
-import { SessionEditSheet } from '../../src/components/session/SessionEditSheet';
-import { useSessionDetail, useProfile } from '../../src/lib/graphql/hooks';
+import { useSessionDetail } from '../../src/lib/graphql/hooks';
 import { navigateToSessionClimb } from '../../src/lib/session-tick-mapping';
 import { useBottomChromeMetrics } from '../../src/hooks/use-bottom-chrome-metrics';
 import { spacing } from '../../src/theme/tokens';
@@ -34,9 +33,7 @@ export default function SessionDetailScreen() {
   const paddingBottom = bottomChrome.scrollBottomPadding + spacing[6];
 
   const { data: session, isPending } = useSessionDetail(sessionId);
-  const { data: profile } = useProfile();
 
-  const editSheetRef = useRef<BottomSheet | null>(null);
   const commentSheetRef = useRef<BottomSheet | null>(null);
   const [commentTarget, setCommentTarget] = useState<{ entityId: string; entityType: SocialEntityType } | null>(null);
 
@@ -53,9 +50,6 @@ export default function SessionDetailScreen() {
     for (const participant of session?.participants ?? []) map.set(participant.userId, participant);
     return map;
   }, [session]);
-
-  const isOwnedInferred =
-    !!session && session.sessionType === 'inferred' && !!profile?.id && session.ownerUserId === profile.id;
 
   const openComments = useCallback((entityId: string, entityType: SocialEntityType) => {
     setCommentTarget({ entityId, entityType });
@@ -83,24 +77,13 @@ export default function SessionDetailScreen() {
     [isMultiUser, participantById, handleTickPress, handleOpenTickComments],
   );
 
-  // Header: title + edit overflow for an owned inferred session.
+  // Header title follows the loaded session name/date.
   useEffect(() => {
     navigation.setOptions({
       headerShown: true,
       title: title || t('mobileDetail.title'),
-      headerRight: () =>
-        isOwnedInferred ? (
-          <Pressable
-            onPress={() => editSheetRef.current?.snapToIndex(0)}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel={t('mobileDetail.editTitle')}
-          >
-            <Icon name="more.actions" size={22} color={systemColors.label} />
-          </Pressable>
-        ) : null,
     });
-  }, [navigation, title, isOwnedInferred, systemColors, t]);
+  }, [navigation, title, t]);
 
   if (isPending) {
     return (
@@ -159,7 +142,6 @@ export default function SessionDetailScreen() {
         contentContainerStyle={{ paddingBottom }}
       />
 
-      <SessionEditSheet sheetRef={editSheetRef} session={session} onClose={() => undefined} />
       <CommentSheet
         sheetRef={commentSheetRef}
         entityId={commentTarget?.entityId ?? null}

@@ -32,7 +32,6 @@ import { esp32Controllers, userBoards } from '@boardsesh/db/schema/app';
 import { sessionBoards } from '../../../db/schema';
 import { eq, inArray } from 'drizzle-orm';
 import { generateSessionSummary } from './session-summary';
-import { adoptRecentTicksForSession, extractBoardType } from '../../../jobs/inferred-session-builder';
 import { endLiveActivity } from '../../../services/apns';
 import { takeSessionDriverControl } from '../../../services/session-driver-control';
 import { buildSessionPayload } from './helpers';
@@ -152,12 +151,6 @@ export const sessionMutations = {
     // Auto-authorize user's ESP32 controllers for this session (if authenticated)
     if (ctx.isAuthenticated && ctx.userId) {
       void authorizeUserControllersForSession(ctx.userId, sessionId);
-      // Adopt recent solo ticks into this session. The session row exists at
-      // this point (ensureSessionRecordExists ran inside roomManager.joinSession).
-      const boardTypeFromPath = extractBoardType(boardPath);
-      adoptRecentTicksForSession(ctx.userId, sessionId, boardTypeFromPath).catch((err) => {
-        logger.error(`[joinSession] Failed to adopt recent ticks for session ${sessionId}:`, err);
-      });
     }
 
     // Notify session about new or reconnected participant
@@ -277,15 +270,6 @@ export const sessionMutations = {
 
         updateContext(ctx.connectionId, { sessionId, participantId: result.participantId });
 
-        // Adopt recent solo ticks now that the session row exists in board_sessions
-        // (boardsesh_ticks.session_id is a FK to board_sessions.id)
-        if (ctx.isAuthenticated && ctx.userId) {
-          const boardTypeFromPath = extractBoardType(input.boardPath);
-          adoptRecentTicksForSession(ctx.userId, sessionId, boardTypeFromPath).catch((err) => {
-            logger.error(`[createSession] Failed to adopt recent ticks for session ${sessionId}:`, err);
-          });
-        }
-
         return {
           id: sessionId,
           name: input.name || null,
@@ -316,10 +300,7 @@ export const sessionMutations = {
         };
       }
 
-      // HTTP path: adoption is handled by joinSession when the client connects
-      // via WebSocket (avoids double invocation for HTTP + discoverable sessions).
-
-      // HTTP path: return session metadata only; client joins via WebSocket later
+      // HTTP path: session membership is handled by joinSession when the client connects via WebSocket.
       if (DEBUG) logger.info(`[createSession] HTTP request - returning session metadata without joining`);
 
       return {

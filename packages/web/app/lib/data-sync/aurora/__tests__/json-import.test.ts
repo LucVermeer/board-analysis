@@ -35,7 +35,6 @@ vi.mock('@/app/lib/db/schema', () => ({
   playlists: {},
   playlistClimbs: {},
   playlistOwnership: {},
-  inferredSessions: {},
 }));
 vi.mock('@/app/lib/board-data', () => ({
   fontGradeToDifficultyId: vi.fn(),

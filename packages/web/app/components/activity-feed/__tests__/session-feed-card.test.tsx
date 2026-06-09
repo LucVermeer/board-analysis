@@ -75,7 +75,7 @@ vi.mock('@/app/hooks/use-grade-format', () => ({
 function makeSession(overrides: Partial<SessionFeedItem> = {}): SessionFeedItem {
   return {
     sessionId: 'session-1',
-    sessionType: 'inferred',
+    sessionType: 'party',
     sessionName: null,
     ownerUserId: 'user-1',
     participants: [
@@ -118,7 +118,7 @@ describe('SessionFeedCard', () => {
     expect(screen.getByText('3 attempts')).toBeTruthy();
   });
 
-  it('shows single user header for inferred sessions', () => {
+  it('shows single user header for explicit sessions', () => {
     render(<SessionFeedCard session={makeSession()} />);
 
     // Should not show AvatarGroup (no multiple avatars)

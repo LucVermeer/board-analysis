@@ -14,7 +14,6 @@ import { randomUUID, createHash } from 'crypto';
 import { fontGradeToDifficultyId } from '@/app/lib/board-data';
 import { LAYOUTS, HOLE_PLACEMENTS } from '@/app/lib/board-constants';
 import type { AuroraBoardName } from '@boardsesh/shared-schema';
-import { buildInferredSessionsForUser } from './inferred-session-builder';
 import { populateDenormalizedColumns } from '@boardsesh/db/queries';
 
 const BATCH_SIZE = 100;
@@ -117,7 +116,6 @@ export type ImportProgressEvent =
   | { type: 'progress'; step: 'ascents'; current: number; total: number }
   | { type: 'progress'; step: 'attempts'; current: number; total: number }
   | { type: 'progress'; step: 'circuits'; current: number; total: number }
-  | { type: 'progress'; step: 'sessions'; message: string }
   | { type: 'complete'; results: ImportResult }
   | { type: 'error'; error: string };
 
@@ -481,7 +479,7 @@ export async function importJsonExportData(
   boardType: BoardType,
   data: AuroraExportData,
   onProgress?: (event: ImportProgressEvent) => void,
-  options?: { skipSessionBuild?: boolean },
+  options?: { skipFinalization?: boolean },
 ): Promise<ImportResult> {
   const result: ImportResult = {
     ascents: { imported: 0, skipped: 0, failed: 0 },
@@ -926,33 +924,17 @@ export async function importJsonExportData(
     });
   }
 
-  // Step 9: Final-chunk-only steps. Earlier chunks may have imported ticks
-  // even if this chunk only contains circuits — always run when not skipped.
-  // Both steps are best-effort: the user's ticks are already committed and
-  // we don't want to fail the whole import on a post-pass blip. But we do
-  // surface the failure on `partialError` so the UI can warn them their
-  // flashes or sessions may need a re-run.
-  if (!options?.skipSessionBuild) {
-    // 9a: Correct flash/send status across the user's full tick history.
-    // Runs before session-build so per-session flash counts come out right.
+  // Step 9: Final-chunk-only status correction. Earlier chunks may have
+  // imported ticks even if this chunk only contains circuits, so always run
+  // when not skipped. This is best-effort: the user's ticks are already
+  // committed, but we surface failure on `partialError` so the UI can warn
+  // them their flashes may need a re-run.
+  if (!options?.skipFinalization) {
     try {
       await correctFlashStatusForUser(db, userId);
     } catch (error) {
       console.error('Error correcting flash status after JSON import:', error);
       const msg = error instanceof Error ? error.message : 'Flash status correction failed';
-      result.partialError = result.partialError ? `${result.partialError}\n${msg}` : msg;
-    }
-
-    // 9b: Build inferred sessions for all unassigned ticks
-    onProgress?.({ type: 'progress', step: 'sessions', message: 'Building sessions...' });
-    try {
-      const assigned = await buildInferredSessionsForUser(userId);
-      if (assigned > 0) {
-        console.info(`Built inferred sessions: assigned ${assigned} ticks for user ${userId}`);
-      }
-    } catch (error) {
-      console.error('Error building inferred sessions after JSON import:', error);
-      const msg = error instanceof Error ? error.message : 'Session build failed';
       result.partialError = result.partialError ? `${result.partialError}\n${msg}` : msg;
     }
   }

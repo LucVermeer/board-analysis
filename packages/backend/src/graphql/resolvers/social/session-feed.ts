@@ -12,6 +12,7 @@ import type {
   SessionGradeDistributionItem,
   SessionFeedParticipant,
   SessionDetailTick,
+  ConnectionContext,
 } from '@boardsesh/shared-schema';
 import { logger } from '../../../utils/logger';
 import { buildGradeDistributionFromTicks, computeSessionAggregates } from './session-feed-utils';
@@ -24,8 +25,7 @@ type SessionFeedFilterOptions = {
 export const sessionFeedQueries = {
   /**
    * Session-grouped activity feed (public, no auth required).
-   * Groups ticks into sessions based on party mode sessionId or inferred sessions.
-   * Every tick now has either session_id or inferred_session_id set.
+   * Groups ticks by explicitly-created board sessions only.
    * Always chronological (newest first). Uses offset pagination.
    */
   sessionGroupedFeed: async (_: unknown, { input }: { input?: Record<string, unknown> }) => {
@@ -55,81 +55,48 @@ export const sessionFeedQueries = {
       }
     }
 
-    // Optimized query: read pre-computed stats from inferred_sessions table
-    // instead of aggregating all ticks on every request. Party sessions (small
-    // subset) still aggregate from ticks using the session_id index.
     let sessionRows;
     try {
-      // Build board filter conditions for inferred sessions (EXISTS subquery)
-      const inferredBoardFilter = boardTypeFilter
-        ? sql`AND EXISTS (
-            SELECT 1 FROM boardsesh_ticks tf
-            ${layoutIdFilter !== null ? sql`LEFT JOIN board_climb_aliases bca ON bca.board_type = tf.board_type AND bca.alias_uuid = tf.climb_uuid LEFT JOIN board_climbs cf ON cf.uuid = COALESCE(bca.canonical_uuid, tf.climb_uuid) AND cf.board_type = tf.board_type` : sql``}
-            WHERE tf.inferred_session_id = s.id
-              AND tf.board_type = ${boardTypeFilter}
-              ${layoutIdFilter !== null ? sql`AND cf.layout_id = ${layoutIdFilter}` : sql``}
-          )`
-        : sql``;
-
-      // Build board filter conditions for party session ticks
-      const partyBoardFilter = boardTypeFilter ? sql`AND t.board_type = ${boardTypeFilter}` : sql``;
-      const partyLayoutFilter = layoutIdFilter !== null ? sql`AND cf.layout_id = ${layoutIdFilter}` : sql``;
+      const sessionBoardFilter = boardTypeFilter ? sql`AND t.board_type = ${boardTypeFilter}` : sql``;
+      const sessionLayoutFilter = layoutIdFilter !== null ? sql`AND cf.layout_id = ${layoutIdFilter}` : sql``;
       // Resolve dedup-merged climbs to their canonical UUID before the layout
       // join — board_climbs only has a row on the canonical, so an aliased tick
       // would otherwise be dropped from a layout-filtered feed. The alias PK
       // (board_type, alias_uuid) keeps the hop to ≤1 row.
-      const partyLayoutJoin =
+      const sessionLayoutJoin =
         layoutIdFilter !== null
           ? sql`LEFT JOIN board_climb_aliases bca ON bca.board_type = t.board_type AND bca.alias_uuid = t.climb_uuid LEFT JOIN board_climbs cf ON cf.uuid = COALESCE(bca.canonical_uuid, t.climb_uuid) AND cf.board_type = t.board_type`
           : sql``;
 
       sessionRows = await dbRead.execute(sql`
-        WITH eligible_party_sessions AS (
+        WITH eligible_sessions AS (
           SELECT DISTINCT t.session_id
           FROM boardsesh_ticks t
-          ${partyLayoutJoin}
+          ${sessionLayoutJoin}
           WHERE t.session_id IS NOT NULL
             ${userId ? sql`AND t.user_id = ${userId}` : sql``}
-            ${partyBoardFilter}
-            ${partyLayoutFilter}
+            ${sessionBoardFilter}
+            ${sessionLayoutFilter}
         ),
         session_base AS (
-          -- Inferred sessions: read directly from materialized table (uses last_tick_idx)
           SELECT
-            s.id AS session_id,
-            'inferred'::text AS session_type,
-            s.first_tick_at AS session_first_tick,
-            s.last_tick_at AS session_last_tick,
-            s.tick_count::int AS tick_count,
-            s.total_sends::int AS total_sends,
-            s.total_flashes::int AS total_flashes,
-            s.total_attempts::int AS total_attempts
-          FROM inferred_sessions s
-          WHERE s.tick_count > 0
-            ${userId ? sql`AND s.user_id = ${userId}` : sql``}
-            ${inferredBoardFilter}
-
-          UNION ALL
-
-          -- Party sessions: aggregate from ticks (indexed by session_id, much smaller set)
-          SELECT
-            t.session_id,
-            'party'::text,
-            MIN(t.climbed_at),
-            MAX(t.climbed_at),
-            COUNT(*)::int,
-            COUNT(*) FILTER (WHERE t.status IN ('flash', 'send'))::int,
-            COUNT(*) FILTER (WHERE t.status = 'flash')::int,
+            t.session_id AS session_id,
+            'party'::text AS session_type,
+            MIN(t.climbed_at) AS session_first_tick,
+            MAX(t.climbed_at) AS session_last_tick,
+            COUNT(*)::int AS tick_count,
+            COUNT(*) FILTER (WHERE t.status IN ('flash', 'send'))::int AS total_sends,
+            COUNT(*) FILTER (WHERE t.status = 'flash')::int AS total_flashes,
             (
               COALESCE(SUM(GREATEST(t.attempt_count - 1, 0)) FILTER (WHERE t.status = 'send'), 0)
               + COALESCE(SUM(t.attempt_count) FILTER (WHERE t.status = 'attempt'), 0)
-            )::int
+            )::int AS total_attempts
           FROM boardsesh_ticks t
-          ${partyLayoutJoin}
-          ${userId ? sql`INNER JOIN eligible_party_sessions eps ON eps.session_id = t.session_id` : sql``}
+          ${sessionLayoutJoin}
+          ${userId ? sql`INNER JOIN eligible_sessions es ON es.session_id = t.session_id` : sql``}
           WHERE t.session_id IS NOT NULL
-            ${partyBoardFilter}
-            ${partyLayoutFilter}
+            ${sessionBoardFilter}
+            ${sessionLayoutFilter}
           GROUP BY t.session_id
         ),
         scored AS (
@@ -180,13 +147,12 @@ export const sessionFeedQueries = {
 
     // Batch enrichment: 4 queries total instead of scanning all ticks
     const sessionIds = resultRows.map((r) => r.session_id);
-    const sessionTypes = new Map(resultRows.map((r) => [r.session_id, r.session_type]));
     const filterOptions: SessionFeedFilterOptions = { boardTypeFilter, layoutIdFilter };
 
     const [participantMap, gradeDistMap, metaMap, boardTypesMap] = await Promise.all([
       fetchParticipantsBatch(sessionIds, filterOptions),
       fetchGradeDistributionBatch(sessionIds, filterOptions),
-      fetchSessionMetaBatch(sessionIds, sessionTypes),
+      fetchSessionMetaBatch(sessionIds),
       fetchBoardTypesBatch(sessionIds, filterOptions),
     ]);
 
@@ -202,7 +168,7 @@ export const sessionFeedQueries = {
 
       return {
         sessionId: row.session_id,
-        sessionType: row.session_type as 'party' | 'inferred',
+        sessionType: 'party',
         sessionName: sessionMeta?.name || null,
         ownerUserId: sessionMeta?.ownerUserId || null,
         participants,
@@ -238,36 +204,22 @@ export const sessionFeedQueries = {
   /**
    * Get full detail for a single session.
    */
-  sessionDetail: async (_: unknown, { sessionId }: { sessionId: string }): Promise<SessionDetail | null> => {
+  sessionDetail: async (
+    _: unknown,
+    { sessionId }: { sessionId: string },
+    ctx?: ConnectionContext,
+  ): Promise<SessionDetail | null> => {
     if (!sessionId) return null;
 
-    // Check if it's a party mode session
     const [partySession] = await dbRead
       .select()
       .from(dbSchema.boardSessions)
       .where(eq(dbSchema.boardSessions.id, sessionId))
       .limit(1);
 
-    const isParty = !!partySession;
-
-    // Check if it's an inferred session
-    let inferredSession: typeof dbSchema.inferredSessions.$inferSelect | undefined;
-    if (!isParty) {
-      const [result] = await dbRead
-        .select()
-        .from(dbSchema.inferredSessions)
-        .where(eq(dbSchema.inferredSessions.id, sessionId))
-        .limit(1);
-
-      if (!result) return null;
-      inferredSession = result;
-    }
+    if (!partySession) return null;
 
     // Fetch ticks for this session
-    const tickCondition = isParty
-      ? eq(dbSchema.boardseshTicks.sessionId, sessionId)
-      : eq(dbSchema.boardseshTicks.inferredSessionId, sessionId);
-
     const tickRows = await dbRead
       .select({
         tick: dbSchema.boardseshTicks,
@@ -315,7 +267,7 @@ export const sessionFeedQueries = {
           eq(dbSchema.boardseshTicks.angle, dbSchema.boardClimbStats.angle),
         ),
       )
-      .where(tickCondition)
+      .where(eq(dbSchema.boardseshTicks.sessionId, sessionId))
       .orderBy(desc(dbSchema.boardseshTicks.climbedAt));
 
     if (tickRows.length === 0) return null;
@@ -466,7 +418,7 @@ export const sessionFeedQueries = {
 
     const { totalSends, totalFlashes, totalAttempts } = computeSessionAggregates(tickRows);
 
-    const participants = await fetchParticipants(sessionId, isParty ? 'party' : 'inferred', userIds);
+    const participants = await fetchParticipants(sessionId, userIds);
     const gradeDistribution = buildGradeDistributionFromTicks(tickRows);
 
     // Timestamps
@@ -512,13 +464,26 @@ export const sessionFeedQueries = {
       );
 
     // Session metadata
-    const sessionName = isParty ? partySession?.name || null : inferredSession?.name || null;
-    const goal = isParty ? partySession?.goal || null : inferredSession?.description || null;
-    const ownerUserId = isParty ? partySession?.createdByUserId || null : inferredSession?.userId || null;
+    const sessionName = partySession.name || null;
+    const goal = partySession.goal || null;
+    const ownerUserId = partySession.createdByUserId || null;
+    const viewerUserId = ctx?.isAuthenticated ? (ctx.userId ?? null) : null;
+    const [healthKitWorkout] = viewerUserId
+      ? await dbRead
+          .select({ workoutId: dbSchema.sessionHealthKitWorkouts.workoutId })
+          .from(dbSchema.sessionHealthKitWorkouts)
+          .where(
+            and(
+              eq(dbSchema.sessionHealthKitWorkouts.sessionId, sessionId),
+              eq(dbSchema.sessionHealthKitWorkouts.userId, viewerUserId),
+            ),
+          )
+          .limit(1)
+      : [];
 
     return {
       sessionId,
-      sessionType: isParty ? 'party' : 'inferred',
+      sessionType: 'party',
       sessionName,
       ownerUserId,
       participants,
@@ -538,33 +503,16 @@ export const sessionFeedQueries = {
       downvotes: voteData ? Number(voteData.downvotes) : 0,
       voteScore: voteData ? Number(voteData.score) : 0,
       commentCount: commentData ? Number(commentData.count) : 0,
-      healthKitWorkoutId: isParty
-        ? partySession?.healthKitWorkoutId || null
-        : inferredSession?.healthKitWorkoutId || null,
+      healthKitWorkoutId: healthKitWorkout?.workoutId ?? null,
     };
   },
 };
 
 /**
- * Build WHERE clause for tick lookups.
- * - Party mode: filter by session_id
- * - Inferred: filter by inferred_session_id
- */
-function tickSessionFilter(sessionId: string, sessionType: string) {
-  return sessionType === 'party' ? sql`t.session_id = ${sessionId}` : sql`t.inferred_session_id = ${sessionId}`;
-}
-
-/**
  * Fetch participant info for a session
  */
-async function fetchParticipants(
-  sessionId: string,
-  sessionType: string,
-  userIds: string[],
-): Promise<SessionFeedParticipant[]> {
+async function fetchParticipants(sessionId: string, userIds: string[]): Promise<SessionFeedParticipant[]> {
   if (userIds.length === 0) return [];
-
-  const whereClause = tickSessionFilter(sessionId, sessionType);
 
   const participantRows = await dbRead.execute(sql`
     SELECT
@@ -580,7 +528,7 @@ async function fetchParticipants(
     FROM boardsesh_ticks t
     LEFT JOIN users u ON u.id = t.user_id
     LEFT JOIN user_profiles up ON up.user_id = t.user_id
-    WHERE ${whereClause}
+    WHERE t.session_id = ${sessionId}
     GROUP BY t.user_id, up.display_name, u.name, up.avatar_url, u.image
     ORDER BY sends DESC
   `);
@@ -630,7 +578,7 @@ async function fetchParticipantsBatch(
 
   const result = await dbRead.execute(sql`
     SELECT
-      COALESCE(t.session_id, t.inferred_session_id) AS effective_session_id,
+      t.session_id,
       t.user_id AS "userId",
       COALESCE(up.display_name, u.name) AS "displayName",
       COALESCE(up.avatar_url, u.image) AS "avatarUrl",
@@ -644,18 +592,18 @@ async function fetchParticipantsBatch(
     ${batchLayoutJoin}
     LEFT JOIN users u ON u.id = t.user_id
     LEFT JOIN user_profiles up ON up.user_id = t.user_id
-    WHERE COALESCE(t.session_id, t.inferred_session_id) IN ${sql`(${sql.join(
+    WHERE t.session_id IN ${sql`(${sql.join(
       sessionIds.map((id) => sql`${id}`),
       sql`, `,
     )})`}
       ${batchBoardFilter}
       ${batchLayoutFilter}
-    GROUP BY effective_session_id, t.user_id, up.display_name, u.name, up.avatar_url, u.image
+    GROUP BY t.session_id, t.user_id, up.display_name, u.name, up.avatar_url, u.image
     ORDER BY sends DESC
   `);
 
   const rows = rowsFromResult<{
-    effective_session_id: string;
+    session_id: string;
     userId: string;
     displayName: string | null;
     avatarUrl: string | null;
@@ -666,7 +614,7 @@ async function fetchParticipantsBatch(
 
   const map = new Map<string, SessionFeedParticipant[]>();
   for (const r of rows) {
-    const participants = map.get(r.effective_session_id) ?? [];
+    const participants = map.get(r.session_id) ?? [];
     participants.push({
       userId: r.userId,
       displayName: r.displayName,
@@ -675,7 +623,7 @@ async function fetchParticipantsBatch(
       flashes: r.flashes,
       attempts: r.attempts,
     });
-    map.set(r.effective_session_id, participants);
+    map.set(r.session_id, participants);
   }
   return map;
 }
@@ -701,7 +649,7 @@ async function fetchGradeDistributionBatch(
 
   const result = await dbRead.execute(sql`
     SELECT
-      COALESCE(t.session_id, t.inferred_session_id) AS effective_session_id,
+      t.session_id,
       COALESCE(t.difficulty, ROUND(bcs.display_difficulty)::int) AS diff_num,
       COUNT(*) FILTER (WHERE t.status = 'flash')::int AS flash,
       COUNT(*) FILTER (WHERE t.status = 'send')::int AS send,
@@ -716,19 +664,19 @@ async function fetchGradeDistributionBatch(
     LEFT JOIN board_climb_aliases bca ON bca.board_type = t.board_type AND bca.alias_uuid = t.climb_uuid
     ${batchLayoutJoin}
     LEFT JOIN board_climb_stats bcs ON bcs.climb_uuid = COALESCE(bca.canonical_uuid, t.climb_uuid) AND bcs.board_type = t.board_type AND bcs.angle = t.angle
-    WHERE COALESCE(t.session_id, t.inferred_session_id) IN ${sql`(${sql.join(
+    WHERE t.session_id IN ${sql`(${sql.join(
       sessionIds.map((id) => sql`${id}`),
       sql`, `,
     )})`}
       ${batchBoardFilter}
       ${batchLayoutFilter}
       AND COALESCE(t.difficulty, ROUND(bcs.display_difficulty)::int) IS NOT NULL
-    GROUP BY effective_session_id, diff_num
+    GROUP BY t.session_id, diff_num
     ORDER BY diff_num DESC
   `);
 
   const rows = rowsFromResult<{
-    effective_session_id: string;
+    session_id: string;
     diff_num: number;
     flash: number;
     send: number;
@@ -739,60 +687,36 @@ async function fetchGradeDistributionBatch(
   for (const r of rows) {
     const grade = getGradeLabel(r.diff_num);
     if (!grade) continue;
-    const distribution = map.get(r.effective_session_id) ?? [];
+    const distribution = map.get(r.session_id) ?? [];
     distribution.push({ grade, flash: r.flash, send: r.send, attempt: r.attempt });
-    map.set(r.effective_session_id, distribution);
+    map.set(r.session_id, distribution);
   }
   return map;
 }
 
 /**
- * Fetch session metadata (name, goal, ownerUserId) for multiple sessions in 2 queries.
+ * Fetch session metadata (name, goal, ownerUserId) for multiple sessions.
  * Returns a Map from sessionId to metadata.
  */
 async function fetchSessionMetaBatch(
   sessionIds: string[],
-  sessionTypes: Map<string, string>,
 ): Promise<Map<string, { name: string | null; goal: string | null; ownerUserId: string | null }>> {
   if (sessionIds.length === 0) return new Map();
 
-  const partyIds = sessionIds.filter((id) => sessionTypes.get(id) === 'party');
-  const inferredIds = sessionIds.filter((id) => sessionTypes.get(id) === 'inferred');
-
   const map = new Map<string, { name: string | null; goal: string | null; ownerUserId: string | null }>();
 
-  // Batch fetch party sessions
-  if (partyIds.length > 0) {
-    const partyRows = await dbRead
-      .select({
-        id: dbSchema.boardSessions.id,
-        name: dbSchema.boardSessions.name,
-        goal: dbSchema.boardSessions.goal,
-        createdByUserId: dbSchema.boardSessions.createdByUserId,
-      })
-      .from(dbSchema.boardSessions)
-      .where(inArray(dbSchema.boardSessions.id, partyIds));
+  const partyRows = await dbRead
+    .select({
+      id: dbSchema.boardSessions.id,
+      name: dbSchema.boardSessions.name,
+      goal: dbSchema.boardSessions.goal,
+      createdByUserId: dbSchema.boardSessions.createdByUserId,
+    })
+    .from(dbSchema.boardSessions)
+    .where(inArray(dbSchema.boardSessions.id, sessionIds));
 
-    for (const r of partyRows) {
-      map.set(r.id, { name: r.name, goal: r.goal, ownerUserId: r.createdByUserId });
-    }
-  }
-
-  // Batch fetch inferred sessions
-  if (inferredIds.length > 0) {
-    const inferredRows = await dbRead
-      .select({
-        id: dbSchema.inferredSessions.id,
-        name: dbSchema.inferredSessions.name,
-        description: dbSchema.inferredSessions.description,
-        userId: dbSchema.inferredSessions.userId,
-      })
-      .from(dbSchema.inferredSessions)
-      .where(inArray(dbSchema.inferredSessions.id, inferredIds));
-
-    for (const r of inferredRows) {
-      map.set(r.id, { name: r.name || null, goal: r.description || null, ownerUserId: r.userId });
-    }
+  for (const r of partyRows) {
+    map.set(r.id, { name: r.name, goal: r.goal, ownerUserId: r.createdByUserId });
   }
 
   return map;
@@ -819,27 +743,27 @@ async function fetchBoardTypesBatch(
 
   const result = await dbRead.execute(sql`
     SELECT
-      COALESCE(t.session_id, t.inferred_session_id) AS effective_session_id,
+      t.session_id,
       ARRAY_AGG(DISTINCT t.board_type) AS board_types
     FROM boardsesh_ticks t
     ${batchLayoutJoin}
-    WHERE COALESCE(t.session_id, t.inferred_session_id) IN ${sql`(${sql.join(
+    WHERE t.session_id IN ${sql`(${sql.join(
       sessionIds.map((id) => sql`${id}`),
       sql`, `,
     )})`}
       ${batchBoardFilter}
       ${batchLayoutFilter}
-    GROUP BY effective_session_id
+    GROUP BY t.session_id
   `);
 
   const rows = rowsFromResult<{
-    effective_session_id: string;
+    session_id: string;
     board_types: string[];
   }>(result);
 
   const map = new Map<string, string[]>();
   for (const r of rows) {
-    map.set(r.effective_session_id, r.board_types);
+    map.set(r.session_id, r.board_types);
   }
   return map;
 }

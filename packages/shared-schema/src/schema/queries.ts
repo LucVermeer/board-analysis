@@ -361,12 +361,12 @@ export const queriesTypeDefs = /* GraphQL */ `
 
     """
     Get session-grouped activity feed (public, no auth required).
-    Groups ticks into sessions (party mode or inferred by 4-hour gap).
+    Groups ticks by explicitly-created sessions.
     """
     sessionGroupedFeed(input: ActivityFeedInput): SessionFeedResult!
 
     """
-    Get full detail for a single session (party mode or inferred).
+    Get full detail for a single explicitly-created session.
     """
     sessionDetail(sessionId: ID!): SessionDetail
 

@@ -51,7 +51,7 @@ const mockUseWsAuthToken = vi.mocked(useWsAuthToken);
 function makeSessionFeedItem(id: string): SessionFeedItem {
   return {
     sessionId: id,
-    sessionType: 'inferred',
+    sessionType: 'party',
     sessionName: null,
     participants: [
       {

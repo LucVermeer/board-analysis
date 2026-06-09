@@ -99,11 +99,6 @@ vi.mock('../services/apns', () => ({
   endLiveActivity: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock('../jobs/inferred-session-builder', () => ({
-  adoptRecentTicksForSession: vi.fn(),
-  extractBoardType: vi.fn(() => 'kilter'),
-}));
-
 // Import after the mocks are wired so the module under test picks them up.
 const { sessionMutations } = await import('../graphql/resolvers/sessions/mutations');
 const { roomManager } = await import('../services/room-manager');

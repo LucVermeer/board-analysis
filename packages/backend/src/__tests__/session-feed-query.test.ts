@@ -75,7 +75,7 @@ describe('sessionGroupedFeed user filtering', () => {
       ])
       .mockResolvedValueOnce([
         {
-          effective_session_id: 'party-1',
+          session_id: 'party-1',
           userId: 'user-1',
           displayName: 'Alex',
           avatarUrl: null,
@@ -84,7 +84,7 @@ describe('sessionGroupedFeed user filtering', () => {
           attempts: 2,
         },
         {
-          effective_session_id: 'party-1',
+          session_id: 'party-1',
           userId: 'user-2',
           displayName: 'Sam',
           avatarUrl: null,
@@ -95,7 +95,7 @@ describe('sessionGroupedFeed user filtering', () => {
       ])
       .mockResolvedValueOnce([
         {
-          effective_session_id: 'party-1',
+          session_id: 'party-1',
           diff_num: 10,
           flash: 2,
           send: 3,
@@ -104,7 +104,7 @@ describe('sessionGroupedFeed user filtering', () => {
       ])
       .mockResolvedValueOnce([
         {
-          effective_session_id: 'party-1',
+          session_id: 'party-1',
           board_types: ['kilter'],
         },
       ]);
@@ -129,8 +129,8 @@ describe('sessionGroupedFeed user filtering', () => {
 
     const mainQueryText = sqlToText(sessionFeedTestState.executeMock.mock.calls[0][0]);
 
-    expect(mainQueryText).toContain('eligible_party_sessions');
-    expect(mainQueryText).toContain('INNER JOIN eligible_party_sessions eps ON eps.session_id = t.session_id');
+    expect(mainQueryText).toContain('eligible_sessions');
+    expect(mainQueryText).toContain('INNER JOIN eligible_sessions es ON es.session_id = t.session_id');
 
     expect(result.sessions).toHaveLength(1);
     expect(result.sessions[0]).toMatchObject({

@@ -174,7 +174,7 @@ export type SessionGradeDistributionItem = {
 
 export type SessionFeedItem = {
   sessionId: string;
-  sessionType: 'party' | 'inferred';
+  sessionType: 'party';
   sessionName?: string | null;
   ownerUserId?: string | null;
   participants: SessionFeedParticipant[];
@@ -227,7 +227,7 @@ export type SessionDetailTick = {
 
 export type SessionDetail = {
   sessionId: string;
-  sessionType: 'party' | 'inferred';
+  sessionType: 'party';
   sessionName?: string | null;
   ownerUserId?: string | null;
   participants: SessionFeedParticipant[];

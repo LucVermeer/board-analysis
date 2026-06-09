@@ -294,14 +294,14 @@ describe('streamImport', () => {
       // Should have made 2 fetch calls (2 ascent chunks)
       expect(fetchSpy).toHaveBeenCalledTimes(2);
 
-      // First chunk should have skipSessionBuild: true
+      // First chunk should skip finalization.
       const firstBody = JSON.parse(fetchSpy.mock.calls[0][1]!.body as string);
-      expect(firstBody.skipSessionBuild).toBe(true);
+      expect(firstBody.skipFinalization).toBe(true);
       expect(firstBody.data.ascents).toHaveLength(500);
 
-      // Last chunk should have skipSessionBuild: false
+      // Last chunk should run finalization.
       const lastBody = JSON.parse(fetchSpy.mock.calls[1][1]!.body as string);
-      expect(lastBody.skipSessionBuild).toBe(false);
+      expect(lastBody.skipFinalization).toBe(false);
       expect(lastBody.data.ascents).toHaveLength(100);
     });
 
@@ -375,10 +375,10 @@ describe('streamImport', () => {
 
       expect(fetchSpy).toHaveBeenCalledTimes(2);
 
-      // Last call should contain circuits and have skipSessionBuild: false
+      // Last call should contain circuits and run finalization.
       const lastBody = JSON.parse(fetchSpy.mock.calls[1][1]!.body as string);
       expect(lastBody.data.circuits).toHaveLength(1);
-      expect(lastBody.skipSessionBuild).toBe(false);
+      expect(lastBody.skipFinalization).toBe(false);
     });
 
     it('sends a single request for small data sets', async () => {
@@ -399,7 +399,7 @@ describe('streamImport', () => {
 
       expect(fetchSpy).toHaveBeenCalledTimes(1);
       const body = JSON.parse(fetchSpy.mock.calls[0][1]!.body as string);
-      expect(body.skipSessionBuild).toBe(false);
+      expect(body.skipFinalization).toBe(false);
     });
 
     it('handles empty data by sending a single empty chunk', async () => {
@@ -411,7 +411,7 @@ describe('streamImport', () => {
 
       expect(fetchSpy).toHaveBeenCalledTimes(1);
       const body = JSON.parse(fetchSpy.mock.calls[0][1]!.body as string);
-      expect(body.skipSessionBuild).toBe(false);
+      expect(body.skipFinalization).toBe(false);
       expect(body.data.ascents).toHaveLength(0);
       expect(body.data.attempts).toHaveLength(0);
       expect(body.data.circuits).toHaveLength(0);

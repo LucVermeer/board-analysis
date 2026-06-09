@@ -55,7 +55,7 @@ type BoardUnsyncedCounts = {
 
 export type ImportPhase = 'preview' | 'importing' | 'complete' | 'error';
 
-export type ImportStep = 'climbs' | 'resolving' | 'dedup' | 'ascents' | 'attempts' | 'circuits' | 'sessions';
+export type ImportStep = 'climbs' | 'resolving' | 'dedup' | 'ascents' | 'attempts' | 'circuits';
 
 export type ImportProgress = {
   step: ImportStep;
@@ -64,7 +64,7 @@ export type ImportProgress = {
   total?: number;
 };
 
-export const STEP_ORDER: ImportStep[] = ['climbs', 'resolving', 'dedup', 'ascents', 'attempts', 'circuits', 'sessions'];
+export const STEP_ORDER: ImportStep[] = ['climbs', 'resolving', 'dedup', 'ascents', 'attempts', 'circuits'];
 
 export const STEP_LABELS: Record<ImportStep, string> = {
   climbs: 'Importing draft climbs',
@@ -73,7 +73,6 @@ export const STEP_LABELS: Record<ImportStep, string> = {
   ascents: 'Importing ascents',
   attempts: 'Importing attempts',
   circuits: 'Importing circuits',
-  sessions: 'Building sessions',
 };
 
 function getStepLabels(t: TFunction<'settings'>): Record<ImportStep, string> {
@@ -84,7 +83,6 @@ function getStepLabels(t: TFunction<'settings'>): Record<ImportStep, string> {
     ascents: t('aurora.import.steps.ascents'),
     attempts: t('aurora.import.steps.attempts'),
     circuits: t('aurora.import.steps.circuits'),
-    sessions: t('aurora.import.steps.sessions'),
   };
 }
 

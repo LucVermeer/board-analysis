@@ -217,8 +217,7 @@
         "dedup": "Buscando duplicados",
         "ascents": "Importando encadenes",
         "attempts": "Importando intentos",
-        "circuits": "Importando circuitos",
-        "sessions": "Creando sesiones"
+        "circuits": "Importando circuitos"
       },
       "fileLabel": "Subir archivo JSON exportado de Aurora",
       "tooLarge": "El archivo es demasiado grande (máx. 200 MB). Comprueba que has elegido el archivo correcto.",

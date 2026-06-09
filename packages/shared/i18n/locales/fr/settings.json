@@ -217,8 +217,7 @@
         "dedup": "Vérification des doublons",
         "ascents": "Importation des ascensions",
         "attempts": "Importation des essais",
-        "circuits": "Importation des circuits",
-        "sessions": "Construction des sessions"
+        "circuits": "Importation des circuits"
       },
       "fileLabel": "Importer un fichier d'export JSON Aurora",
       "tooLarge": "Fichier trop volumineux (max 200 Mo). Vérifiez que vous avez choisi le bon fichier.",

@@ -10,7 +10,6 @@ import { getConsensusDifficultyName } from '../shared/sql-expressions';
 import { SaveTickInputSchema, UpdateTickInputSchema, AttachBetaLinkInputSchema } from '../../../validation/schemas';
 import { resolveBoardFromPath } from '../social/boards';
 import { publishSocialEvent } from '../../../events';
-import { assignInferredSession } from '../../../jobs/inferred-session-builder';
 import { publishDebouncedSessionStats } from '../sessions/debounced-stats-publisher';
 import { queueClimbStatsRecompute } from './debounced-climb-stats-publisher';
 import { getInstagramMediaId, isInstagramUrl } from '../../../lib/instagram-meta';
@@ -393,9 +392,7 @@ export const tickMutations = {
     // Bust the home-strip cache so newly-attached beta links surface on the
     // next read. Skip when the tick path didn't insert (no video URL, or
     // same-climb dup that was silently skipped) so we don't churn the cache
-    // for the common "just logging an attempt" case. Fire-and-forget so a
-    // slow Redis doesn't add latency to saveTick — matches the
-    // `assignInferredSession` pattern below.
+    // for the common "just logging an attempt" case.
     if (attachedVideoUrl && betaPlan.action === 'insert') {
       invalidateRecentBetaLinksCache().catch((err) => {
         logger.error('[saveTick] recent-beta-links cache invalidation failed:', err);
@@ -424,14 +421,6 @@ export const tickMutations = {
       auroraId: tick.auroraId,
       auroraSyncedAt: tick.auroraSyncedAt,
     };
-
-    // Assign inferred session for ticks not in party mode (fire-and-forget).
-    // On failure, the tick stays unassigned until the daily safety-net cron picks it up.
-    if (!validatedInput.sessionId) {
-      assignInferredSession(uuid, userId, climbedAt, validatedInput.status).catch((err) => {
-        logger.error(`[saveTick] Failed to assign inferred session for tick ${uuid} (user ${userId}):`, err);
-      });
-    }
 
     // Publish ascent.logged event for feed fan-out (only for successful ascents)
     if (tick.status === 'flash' || tick.status === 'send') {

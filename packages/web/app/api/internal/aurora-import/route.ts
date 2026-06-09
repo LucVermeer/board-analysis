@@ -16,7 +16,7 @@ export const maxDuration = 300;
 const requestSchema = z.object({
   boardType: z.enum(AURORA_BOARDS),
   data: auroraExportSchema,
-  skipSessionBuild: z.boolean().optional().default(false),
+  skipFinalization: z.boolean().optional().default(false),
 });
 
 export type AuroraImportResponse = {
@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid request body', details: parsed.error.flatten() }, { status: 400 });
     }
 
-    const { boardType, data, skipSessionBuild } = parsed.data;
+    const { boardType, data, skipFinalization } = parsed.data;
 
     const encoder = new TextEncoder();
 
@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
 
         try {
           const results = await importJsonExportData(session.user.id, boardType, data, send, {
-            skipSessionBuild,
+            skipFinalization,
           });
 
           send({ type: 'complete', results });
@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
             extra: {
               boardType,
               userId: session.user.id,
-              skipSessionBuild,
+              skipFinalization,
               dataCounts: {
                 ascents: data.ascents.length,
                 attempts: data.attempts.length,

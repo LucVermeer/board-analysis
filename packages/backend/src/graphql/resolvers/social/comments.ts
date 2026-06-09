@@ -239,7 +239,7 @@ export const socialCommentQueries = {
       ? sql`
         LEFT JOIN boardsesh_ticks bt_filter
           ON c."entity_type" = 'session'
-          AND (bt_filter.session_id = c."entity_id" OR bt_filter.inferred_session_id = c."entity_id")
+          AND bt_filter.session_id = c."entity_id"
         LEFT JOIN board_climbs bc_filter
           ON c."entity_type" = 'climb'
           AND bc_filter.uuid = c."entity_id"

@@ -6,6 +6,7 @@
 export const schemaSQL = `
   DROP TABLE IF EXISTS "board_session_queues" CASCADE;
   DROP TABLE IF EXISTS "board_session_clients" CASCADE;
+  DROP TABLE IF EXISTS "session_health_kit_workouts" CASCADE;
   DROP TABLE IF EXISTS "board_session_participants" CASCADE;
   DROP TABLE IF EXISTS "board_sessions" CASCADE;
   DROP TABLE IF EXISTS "user_climb_percentiles" CASCADE;
@@ -47,8 +48,16 @@ export const schemaSQL = `
     "ended_at" timestamp,
     "is_permanent" boolean DEFAULT false NOT NULL,
     "color" text,
-    "health_kit_workout_id" text,
     CONSTRAINT "board_sessions_status_check" CHECK (status IN ('active', 'inactive', 'ended'))
+  );
+
+  CREATE TABLE IF NOT EXISTS "session_health_kit_workouts" (
+    "session_id" text NOT NULL REFERENCES "board_sessions"("id") ON DELETE CASCADE,
+    "user_id" text NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+    "workout_id" text NOT NULL,
+    "created_at" timestamp DEFAULT now() NOT NULL,
+    "updated_at" timestamp DEFAULT now() NOT NULL,
+    PRIMARY KEY ("session_id", "user_id")
   );
 
   CREATE TABLE IF NOT EXISTS "board_session_participants" (
@@ -107,6 +116,8 @@ export const schemaSQL = `
   CREATE INDEX IF NOT EXISTS "board_sessions_status_idx" ON "board_sessions" ("status");
   CREATE INDEX IF NOT EXISTS "board_sessions_last_activity_idx" ON "board_sessions" ("last_activity");
   CREATE INDEX IF NOT EXISTS "board_sessions_discovery_idx" ON "board_sessions" ("discoverable", "status", "last_activity");
+  CREATE INDEX IF NOT EXISTS "session_health_kit_workouts_session_idx" ON "session_health_kit_workouts" ("session_id");
+  CREATE INDEX IF NOT EXISTS "session_health_kit_workouts_user_idx" ON "session_health_kit_workouts" ("user_id");
   CREATE INDEX IF NOT EXISTS "board_session_participants_session_idx" ON "board_session_participants" ("session_id");
   CREATE INDEX IF NOT EXISTS "board_session_participants_user_idx" ON "board_session_participants" ("user_id");
 
@@ -233,8 +244,6 @@ export const schemaSQL = `
     "created_at" timestamp DEFAULT now() NOT NULL,
     "updated_at" timestamp DEFAULT now() NOT NULL,
     "session_id" text,
-    "inferred_session_id" text,
-    "previous_inferred_session_id" text,
     "board_id" bigint,
     "aurora_type" text,
     "aurora_id" text,
@@ -280,18 +289,6 @@ export const schemaSQL = `
   );
   CREATE UNIQUE INDEX IF NOT EXISTS "unique_user_board_mapping" ON "user_board_mappings" ("user_id", "board_type");
   CREATE INDEX IF NOT EXISTS "board_user_mapping_idx" ON "user_board_mappings" ("board_type", "board_user_id");
-
-  DROP TABLE IF EXISTS "inferred_sessions" CASCADE;
-  CREATE TABLE IF NOT EXISTS "inferred_sessions" (
-    "id" text PRIMARY KEY NOT NULL,
-    "user_id" text NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
-    "board_type" text NOT NULL,
-    "started_at" timestamp NOT NULL,
-    "ended_at" timestamp,
-    "tick_count" integer DEFAULT 0 NOT NULL,
-    "health_kit_workout_id" text,
-    "created_at" timestamp DEFAULT now() NOT NULL
-  );
 
   -- user-data-export resolver joins these (playlists/favorites). Minimal DDL
   -- covering only the columns the export queries read.

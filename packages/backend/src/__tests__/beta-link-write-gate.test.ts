@@ -20,10 +20,6 @@ vi.mock('../events', () => ({
   publishSocialEvent: vi.fn(),
 }));
 
-vi.mock('../jobs/inferred-session-builder', () => ({
-  assignInferredSession: vi.fn(),
-}));
-
 vi.mock('../graphql/resolvers/sessions/debounced-stats-publisher', () => ({
   publishDebouncedSessionStats: vi.fn(),
 }));
