@@ -6,6 +6,7 @@ import { ClimbListItemContent } from '../../ClimbListItemContent';
 import { THUMBNAIL_WIDTH } from '../../ClimbListThumbnail';
 import { Icon } from '../../Icon';
 import { PressableSurface } from '../../PressableSurface';
+import { Text } from '../../Text';
 import type { QueueItemRowBoard } from '../../QueueItemRow';
 import { useTheme } from '../../../providers/theme-provider';
 import { iosSystemColors } from '../../../theme/ios-colors';
@@ -67,18 +68,22 @@ function WorkoutPreviewRowComponent({
     onRefresh(item.uuid);
   }, [item.uuid, onRefresh]);
 
-  const climbName = item.climb?.name ?? sessionT('mobile.queue.unknownClimb');
-  const formattedGrade = formatGrade(item.climb.difficulty) ?? item.climb.difficulty;
-  const quality = Number(formatQuality(item.climb.quality_average));
-  const rowAccessibilityLabel = [
-    climbName,
-    formattedGrade,
-    item.climb.ascensionist_count > 0 ? formatSends(item.climb.ascensionist_count, climbsT) : null,
-    quality > 0 ? sessionT('playView.tickBar.starRating', { count: quality }) : null,
-    item.climb.setter_username,
-  ]
-    .filter(Boolean)
-    .join(', ');
+  const climb: ClimbQueueItem['climb'] | null | undefined = item.climb;
+  const climbName = climb?.name ?? sessionT('mobile.queue.unknownClimb');
+  const formattedGrade = climb ? (formatGrade(climb.difficulty) ?? climb.difficulty) : null;
+  const quality = climb ? Number(formatQuality(climb.quality_average)) : 0;
+  const qualityStarCount = Math.round(quality);
+  const rowAccessibilityLabel = climb
+    ? [
+        climbName,
+        formattedGrade,
+        climb.ascensionist_count > 0 ? formatSends(climb.ascensionist_count, climbsT) : null,
+        qualityStarCount > 0 ? sessionT('playView.tickBar.starRating', { count: qualityStarCount }) : null,
+        climb.setter_username,
+      ]
+        .filter(Boolean)
+        .join(', ')
+    : climbName;
 
   return (
     <View>
@@ -97,14 +102,20 @@ function WorkoutPreviewRowComponent({
           accessibilityState={{ selected: isActive }}
           style={styles.rowButton}
         >
-          <ClimbListItemContent
-            climb={item.climb}
-            boardName={board.boardName}
-            layoutId={board.layoutId}
-            sizeId={board.sizeId}
-            setIds={board.setIds}
-            angle={board.angle}
-          />
+          {climb ? (
+            <ClimbListItemContent
+              climb={climb}
+              boardName={board.boardName}
+              layoutId={board.layoutId}
+              sizeId={board.sizeId}
+              setIds={board.setIds}
+              angle={board.angle}
+            />
+          ) : (
+            <Text variant="body" color={systemColors.secondaryLabel} numberOfLines={1} style={styles.missingClimbText}>
+              {climbName}
+            </Text>
+          )}
         </PressableSurface>
 
         <PressableSurface
@@ -138,7 +149,7 @@ function WorkoutPreviewRowComponent({
 export const WorkoutPreviewRow = memo(WorkoutPreviewRowComponent, (prev, next) => {
   return (
     prev.item.uuid === next.item.uuid &&
-    prev.item.climb.uuid === next.item.climb.uuid &&
+    prev.item.climb?.uuid === next.item.climb?.uuid &&
     prev.isActive === next.isActive &&
     prev.isRefreshing === next.isRefreshing &&
     prev.refreshDisabled === next.refreshDisabled &&
@@ -165,6 +176,10 @@ const styles = StyleSheet.create({
     paddingVertical: spacing[2],
     paddingLeft: spacing[3],
     paddingRight: spacing[2],
+  },
+  missingClimbText: {
+    flex: 1,
+    fontWeight: '600',
   },
   refreshButton: {
     width: 44,

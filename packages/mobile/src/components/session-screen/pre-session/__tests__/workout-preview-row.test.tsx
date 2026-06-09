@@ -56,6 +56,9 @@ vi.mock('react-i18next', () => ({
 vi.mock('../../../ClimbListItemContent', () => ({ ClimbListItemContent: () => null }));
 vi.mock('../../../ClimbListThumbnail', () => ({ THUMBNAIL_WIDTH: 64 }));
 vi.mock('../../../Icon', () => ({ Icon: () => createElement('span', { 'data-testid': 'refresh-icon' }) }));
+vi.mock('../../../Text', () => ({
+  Text: ({ children }: { children?: ReactNode }) => createElement('span', null, children),
+}));
 vi.mock('../../../../hooks/use-grade-format', () => ({ useGradeFormat: () => ({ formatGrade: () => 'V4' }) }));
 vi.mock('../../../../providers/theme-provider', () => ({
   useTheme: () => ({ systemColors: {}, brandColors: { primary: '#000' }, opacity: { disabled: 0.5 } }),
@@ -83,11 +86,18 @@ const item = {
 const REFRESH_LABEL = 'mobile.session.preRegenerateClimbForClimb';
 const refreshButton = () => surfaces.entries.find((entry) => entry.label === REFRESH_LABEL);
 const rowButton = () => surfaces.entries.find((entry) => entry.label?.startsWith(item.climb.name));
+const flattenStyle = (style: unknown): Record<string, unknown> => {
+  if (Array.isArray(style)) {
+    return Object.assign({}, ...style.map((entry) => flattenStyle(entry)));
+  }
+  if (style && typeof style === 'object') return style as Record<string, unknown>;
+  return {};
+};
 
-function renderRow(overrides: { isRefreshing: boolean; refreshDisabled: boolean }) {
+function renderRow(overrides: { isRefreshing: boolean; refreshDisabled: boolean; item?: ClimbQueueItem }) {
   return render(
     createElement(WorkoutPreviewRow, {
-      item,
+      item: overrides.item ?? item,
       board,
       isActive: false,
       onPress: vi.fn(),
@@ -104,12 +114,18 @@ beforeEach(() => {
 describe('WorkoutPreviewRow refresh button', () => {
   it('lays out the climb content horizontally', () => {
     renderRow({ isRefreshing: false, refreshDisabled: false });
-    expect(JSON.stringify(rowButton()?.style)).toContain('"flexDirection":"row"');
+    expect(flattenStyle(rowButton()?.style)).toMatchObject({ flexDirection: 'row', alignItems: 'center' });
   });
 
   it('announces the visible climb details on the row action', () => {
     renderRow({ isRefreshing: false, refreshDisabled: false });
-    expect(rowButton()?.label).toBe('Test Climb, V4, 12 sends, 4.2 stars, setter');
+    expect(rowButton()?.label).toBe('Test Climb, V4, 12 sends, 4 stars, setter');
+  });
+
+  it('falls back safely when the climb payload is missing', () => {
+    const missingClimbItem = { uuid: 'qi-missing' } as unknown as ClimbQueueItem;
+    renderRow({ item: missingClimbItem, isRefreshing: false, refreshDisabled: false });
+    expect(surfaces.entries[0]?.label).toBe('mobile.queue.unknownClimb');
   });
 
   it('is tappable when no row is regenerating', () => {
