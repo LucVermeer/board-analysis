@@ -5,14 +5,14 @@ import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { getLayout } from '@boardsesh/board-constants/product-sizes';
-import { countFilteredHolds, toggleHoldFilterType } from '@boardsesh/climb-filters';
+import { countFilteredHolds, parseHoldsFilter, toggleHoldFilterType } from '@boardsesh/climb-filters';
 import type { BoardName, HoldFilterEntry, HoldFilterMode, HoldFilterType, HoldsFilter } from '@boardsesh/shared-schema';
 import { Text } from '../../../src/components/Text';
 import { ActivityIndicator } from '../../../src/components/ActivityIndicator';
 import { InteractiveFilterBoard } from '../../../src/components/search/InteractiveFilterBoard';
 import { HoldFilterPicker } from '../../../src/components/search/HoldFilterPicker';
 import { useTheme } from '../../../src/providers/theme-provider';
-import { getCreateBoardHolds } from '../../../src/lib/create-board-holds';
+import { getCreateBoardHolds, parseSetIdsParam } from '../../../src/lib/create-board-holds';
 import { emitHoldsFilterSelection } from '../../../src/lib/hold-filter-handoff';
 import { track } from '../../../src/lib/analytics';
 import { spacing } from '../../../src/theme/tokens';
@@ -32,19 +32,6 @@ type Params = {
 // long as the budget is in the right ballpark, and `availHeight` is clamped
 // below.
 const CHROME_BUDGET = 132;
-
-function parseHoldsFilter(raw: string | undefined): HoldsFilter {
-  if (!raw) return {};
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-      return parsed as HoldsFilter;
-    }
-  } catch {
-    // Malformed param → start empty rather than crash.
-  }
-  return {};
-}
 
 /**
  * Full-screen board sub-screen for the hold-type search filter. Mirrors the
@@ -85,7 +72,7 @@ export default function HoldFilterScreen() {
       boardName,
       layoutId,
       sizeId,
-      setIds: setIds.split(',').map(Number).filter(Number.isFinite),
+      setIds: parseSetIdsParam(setIds),
     });
   }, [boardName, layoutId, sizeId, setIds]);
 
