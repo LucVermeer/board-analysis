@@ -65,6 +65,13 @@ vi.mock('../../graphql/client', () => ({
   getHttpClient: vi.fn(() => ({ request: vi.fn().mockResolvedValue({ recordBoardSerial: null }) })),
 }));
 
+// The serial-recording path also reads the stored auth token to skip the
+// mutation when signed out. auth-store imports expo-secure-store directly, which
+// is unavailable in the test environment — stub it with a present token.
+vi.mock('../../auth-store', () => ({
+  getAuthToken: vi.fn().mockResolvedValue('test-token'),
+}));
+
 vi.mock('../adapter', () => ({
   RNBleAdapter: vi.fn(),
 }));

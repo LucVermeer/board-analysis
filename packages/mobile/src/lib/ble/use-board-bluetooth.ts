@@ -14,6 +14,7 @@ import type { AuroraBoardName } from '@boardsesh/shared-schema';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { RECORD_BOARD_SERIAL } from '@boardsesh/graphql/operations';
 import { getHttpClient } from '../graphql/client';
+import { getAuthToken } from '../auth-store';
 import { createBluetoothAdapter, isNativeIosBleAdapter } from './adapter-factory';
 import { requestBleRuntimePermissions } from './use-ble-permissions';
 import type { BluetoothAdapter, DevicePickerFn, DiscoveredDevice } from './types';
@@ -66,9 +67,16 @@ function recordBoardSerial(input: {
     .sort((first, second) => Number(first) - Number(second))
     .join(',');
   if (!setIds) return;
-  void getHttpClient()
-    .request(RECORD_BOARD_SERIAL, { input: { ...input, setIds } })
-    .catch(() => {});
+  // The mutation requires auth, so firing it while signed out is a guaranteed
+  // 401 round-trip on every anonymous connect. Skip when there's no stored
+  // token. (Web threads a token through and fires regardless, but on mobile the
+  // token lives in SecureStore, so a cheap async check here avoids the noise.)
+  void getAuthToken().then((token) => {
+    if (!token) return;
+    return getHttpClient()
+      .request(RECORD_BOARD_SERIAL, { input: { ...input, setIds } })
+      .catch(() => {});
+  });
 }
 
 type GetLedPlacementsFn = (boardName: string, layoutId: number, sizeId: number) => Record<number, number>;

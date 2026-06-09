@@ -610,4 +610,81 @@ describe('recordBoardSerial', () => {
     ).rejects.toThrow();
     expect(mockDb.insert).not.toHaveBeenCalled();
   });
+
+  // Wires an arbitrary sequence of select() results. Supplying a boardUuid adds
+  // an intermediate ownership select, so these tests model all three queries in
+  // order: saved-board lookup → ownership check → post-upsert re-select.
+  function setupRecordSeq(selectResults: unknown[][]) {
+    let selectCall = 0;
+    mockDb.select.mockImplementation(() => {
+      const rows = selectResults[selectCall++] ?? [];
+      const limit = vi.fn().mockResolvedValue(rows);
+      const where = vi.fn().mockReturnValue({ limit });
+      const leftJoin = vi.fn().mockReturnValue({ where });
+      const from = vi.fn().mockReturnValue({ where, leftJoin });
+      return { from };
+    });
+    const onConflictDoUpdate = vi.fn().mockResolvedValue(undefined);
+    const values = vi.fn().mockReturnValue({ onConflictDoUpdate });
+    mockDb.insert.mockReturnValue({ values });
+    return { values };
+  }
+
+  it('drops a forged boardUuid (not owned by the caller and not public) to null', async () => {
+    // saved lookup: no match → proceeds to write
+    // ownership check: empty → uuid is neither owned-by-caller nor public
+    // re-select: row with no linked board
+    const { values } = setupRecordSeq([[], [], [recordingRow({ boardUuid: null, boardSlug: null })]]);
+
+    const result = await socialBoardMutations.recordBoardSerial(
+      null,
+      {
+        input: {
+          serialNumber: 'SN42',
+          boardName: 'kilter',
+          layoutId: 1,
+          sizeId: 10,
+          setIds: '1,2',
+          apiLevel: 3,
+          boardUuid: 'someone-elses-board-uuid',
+        },
+      },
+      makeAuthCtx('user-1'),
+    );
+
+    // The security property: a uuid the caller can't reach is never persisted as
+    // a link — it silently becomes null so the controller can't be attached to
+    // another user's private board.
+    expect(values).toHaveBeenCalledWith(expect.objectContaining({ boardUuid: null }));
+    expect(result?.boardUuid).toBeNull();
+  });
+
+  it('links a boardUuid the caller is allowed to reach', async () => {
+    // ownership check returns a row → uuid is owned-by-caller or public
+    const { values } = setupRecordSeq([
+      [],
+      [{ uuid: 'my-board-uuid' }],
+      [recordingRow({ boardUuid: 'my-board-uuid', boardSlug: 'my-board' })],
+    ]);
+
+    const result = await socialBoardMutations.recordBoardSerial(
+      null,
+      {
+        input: {
+          serialNumber: 'SN42',
+          boardName: 'kilter',
+          layoutId: 1,
+          sizeId: 10,
+          setIds: '1,2',
+          apiLevel: 3,
+          boardUuid: 'my-board-uuid',
+        },
+      },
+      makeAuthCtx('user-1'),
+    );
+
+    expect(values).toHaveBeenCalledWith(expect.objectContaining({ boardUuid: 'my-board-uuid' }));
+    expect(result?.boardUuid).toBe('my-board-uuid');
+    expect(result?.boardSlug).toBe('my-board');
+  });
 });

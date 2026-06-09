@@ -1,6 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import { eq, and, count, isNull, sql, ilike, or, desc, inArray, like } from 'drizzle-orm';
 import type { ConnectionContext } from '@boardsesh/shared-schema';
+import { normaliseSetIds } from '@boardsesh/board-config';
 import { rowsFromResult } from '@boardsesh/db/client';
 import { db } from '../../../db/client';
 import * as dbSchema from '@boardsesh/db/schema';
@@ -70,25 +71,6 @@ async function generateUniqueSlug(name: string): Promise<string> {
 
   // Fallback: append UUID fragment
   return `${baseSlug}-${uuidv4().slice(0, 8)}`;
-}
-
-/**
- * Normalise a comma-separated set_ids string to a deduped, numerically-sorted
- * representation so order/whitespace differences don't trigger spurious
- * mismatches when comparing a recording against a saved board's config.
- * Mirrors `normaliseSetIds` in the web app's `board-config-match.ts`.
- */
-function normaliseSetIds(setIds: string): string {
-  return [
-    ...new Set(
-      setIds
-        .split(',')
-        .map((part) => part.trim())
-        .filter((part) => part.length > 0),
-    ),
-  ]
-    .sort((first, second) => Number(first) - Number(second))
-    .join(',');
 }
 
 /**
@@ -1184,7 +1166,13 @@ export const socialBoardMutations = {
    */
   recordBoardSerial: async (_: unknown, { input }: { input: unknown }, ctx: ConnectionContext) => {
     requireAuthenticated(ctx);
-    await applyRateLimit(ctx, 30);
+    // Dedicated `recordBoardSerial` namespace so this 30/min budget is isolated
+    // from the shared 'default' bucket. requireAuthenticated already rejects
+    // anonymous callers before any DB work, so an unauthenticated flood never
+    // reaches here — the per-user limit (in-memory + Redis, keyed on the
+    // validated token's userId) replaces the deleted REST route's IP guard,
+    // which only existed to throttle that pre-auth path.
+    await applyRateLimit(ctx, 30, 'recordBoardSerial');
 
     const validatedInput = validateInput(RecordBoardSerialInputSchema, input, 'input');
     const userId = ctx.userId!;
@@ -1243,6 +1231,11 @@ export const socialBoardMutations = {
       }
     }
 
+    // Coalesce to an explicit null rather than letting `undefined` fall through.
+    // On the insert path the two are equivalent, but in the onConflictDoUpdate
+    // `set` below Drizzle omits `undefined` columns from the UPDATE — which would
+    // preserve a stale api_level from a previous connect instead of recording
+    // what *this* connect observed. The explicit null keeps the row honest.
     const apiLevelValue = apiLevel ?? null;
 
     await db
@@ -1291,6 +1284,14 @@ export const socialBoardMutations = {
         and(eq(dbSchema.userBoardSerials.userId, userId), eq(dbSchema.userBoardSerials.serialNumber, serialNumber)),
       )
       .limit(1);
+
+    // The upsert above always writes a row, so the re-select can only come back
+    // empty under a concurrent delete of this exact (userId, serialNumber). Guard
+    // it so that race surfaces as a clean GraphQL error instead of an untyped
+    // "cannot read property of undefined" crash.
+    if (!row) {
+      throw new Error('Failed to record board serial');
+    }
 
     return {
       serialNumber: row.serialNumber,
