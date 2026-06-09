@@ -29,7 +29,7 @@ import { ClimbActionsSheet } from '../ClimbActionsSheet';
 import { BleControlSheet } from '../ble/BleControlSheet';
 import { GlassSheetBackground } from '../GlassSheetBackground';
 import { Icon } from '../Icon';
-import { useQueue } from '../../providers/queue-provider';
+import { usePlaylistSuggestionSource, useQueue } from '../../providers/queue-provider';
 import { useOptionalBluetoothContext } from '../../providers/bluetooth-provider';
 import { useToast } from '../../providers/toast-provider';
 import { useToggleFavorite } from '../../lib/graphql/hooks';
@@ -127,6 +127,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   const [activeSubDrawer, setActiveSubDrawer] = useState<ActiveSubDrawer>('none');
   const [bleControlOpen, setBleControlOpen] = useState(false);
   const [pendingClimbUuid, setPendingClimbUuid] = useState<string | null>(null);
+  const [belowFoldContentRequested, setBelowFoldContentRequested] = useState(false);
   const wallControlPressOperationRef = useRef(0);
   const resetZoomRef = useRef<(() => void) | null>(null);
 
@@ -143,7 +144,6 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
     setCurrentClimb,
     nextClimb,
     previousClimb,
-    playlistSuggestionSource,
     sessionId,
     addToQueue,
     takeControl,
@@ -152,6 +152,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
     participantId,
     lastConnectedBoardSerial,
   } = useQueue();
+  const playlistSuggestionSource = usePlaylistSuggestionSource();
   const bluetooth = useOptionalBluetoothContext();
   const { mutate: toggleFavoriteMutate } = useToggleFavorite();
   const { formatGrade } = useGradeFormat();
@@ -215,6 +216,13 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   useEffect(() => {
     setIsTickBarActive(false);
   }, [displayedClimbUuid]);
+
+  // Once the user has requested below-fold content in an open sheet, keep it
+  // mounted across climb changes because the scroll view stays below the fold.
+  // Reset only after close so the next fresh open starts cheap again.
+  useEffect(() => {
+    if (!isSheetOpen) setBelowFoldContentRequested(false);
+  }, [isSheetOpen]);
 
   // When the board angle changes, drop the locally-pinned climb so the drawer
   // re-derives the displayed climb from currentClimbQueueItem — which the queue
@@ -523,6 +531,10 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
     setActiveSubDrawer('actions');
   }, []);
 
+  const handleScrollTowardBelowFold = useCallback(() => {
+    setBelowFoldContentRequested(true);
+  }, []);
+
   const handleOpenAngleSelector = useCallback(() => {
     setActiveSubDrawer('angleSelector');
   }, []);
@@ -620,7 +632,11 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
         handleComponent={renderNoHandle}
         onDismiss={handleClose}
       >
-        <BottomSheetScrollView style={styles.content} contentContainerStyle={{ paddingBottom: insets.bottom }}>
+        <BottomSheetScrollView
+          style={styles.content}
+          contentContainerStyle={{ paddingBottom: insets.bottom }}
+          onScrollBeginDrag={handleScrollTowardBelowFold}
+        >
           {displayedClimb && (
             <>
               <View style={[styles.firstScreen, { height: firstScreenHeight, paddingTop: insets.top }]}>
@@ -723,6 +739,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
                 setIds={setIds}
                 angle={angle}
                 enabled={isSheetOpen}
+                contentEnabled={belowFoldContentRequested}
                 onSimilarClimbPress={handleSimilarClimbPress}
                 onBetaHeaderLayout={handleBetaHeaderLayout}
               />

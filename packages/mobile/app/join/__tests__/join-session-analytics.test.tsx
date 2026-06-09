@@ -70,8 +70,8 @@ vi.mock('../../../src/providers/theme-provider', () => ({
 }));
 vi.mock('../../../src/providers/auth-provider', () => ({ useAuth: () => ({ isAuthenticated: true }) }));
 vi.mock('../../../src/providers/queue-provider', () => ({
-  useQueue: () => ({
-    sessionId: queue.sessionId,
+  useQueueSessionId: () => ({ sessionId: queue.sessionId }),
+  useQueueActions: () => ({
     joinSession: queue.joinSession,
     clearSession: queue.clearSession,
   }),
