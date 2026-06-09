@@ -251,6 +251,10 @@ describe('thumb variant', () => {
     vi.mocked(getBoardRenderData).mockReturnValue({
       boardWidth: 100,
       boardHeight: 100,
+      edgeLeft: 0,
+      edgeRight: 11,
+      edgeBottom: 0,
+      edgeTop: 18,
       holdsData: [],
       imageUrls: ['https://www.boardsesh.com/images/kilter/product_sizes_layouts_sets/36-1.png'],
     } as ReturnType<typeof getBoardRenderData>);
@@ -271,6 +275,10 @@ describe('thumb variant', () => {
     vi.mocked(getBoardRenderData).mockReturnValue({
       boardWidth: 100,
       boardHeight: 100,
+      edgeLeft: 0,
+      edgeRight: 11,
+      edgeBottom: 0,
+      edgeTop: 18,
       holdsData: [],
       // Tension has no thumbs/ entry in the mock manifest.
       imageUrls: ['https://www.boardsesh.com/images/tension/product_sizes_layouts_sets/12.png'],
