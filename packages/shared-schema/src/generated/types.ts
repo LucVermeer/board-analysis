@@ -396,6 +396,8 @@ export type BoardLeaderboardInput = {
  */
 export type BoardSerialConfig = {
   __typename?: 'BoardSerialConfig';
+  /** API/protocol level from the BLE device name (the @N suffix); null if never observed */
+  apiLevel?: Maybe<Scalars['Int']['output']>;
   /** Board type (kilter, tension, ...) */
   boardName: Scalars['String']['output'];
   /** Linked saved board slug (resolved from boardUuid) */
@@ -1923,6 +1925,12 @@ export type Mutation = {
    */
   publishPlaybackState: Scalars['Boolean']['output'];
   /**
+   * Record the board configuration seen when connecting to a controller over
+   * BLE, keyed by serial. Upserts the current user's serial→config recording.
+   * Returns null when a saved board already matches the connect (nothing to record).
+   */
+  recordBoardSerial?: Maybe<BoardSerialConfig>;
+  /**
    * Register an APNs device token for Live Activity push updates in a session.
    * Caller must be authenticated and be a participant in the session.
    * Upserts: if the token already exists, updates the associated session.
@@ -2301,6 +2309,11 @@ export type MutationPinPlaylistArgs = {
 /** Root mutation type for all write operations. */
 export type MutationPublishPlaybackStateArgs = {
   input: PlaybackStateInput;
+};
+
+/** Root mutation type for all write operations. */
+export type MutationRecordBoardSerialArgs = {
+  input: RecordBoardSerialInput;
 };
 
 /** Root mutation type for all write operations. */
@@ -3854,6 +3867,27 @@ export type RecentBetaLink = {
   boardType: Scalars['String']['output'];
   climbName?: Maybe<Scalars['String']['output']>;
   layoutId?: Maybe<Scalars['Int']['output']>;
+};
+
+/**
+ * Input for recording the board configuration seen when connecting to a
+ * controller over BLE (serial + config + advertised API level).
+ */
+export type RecordBoardSerialInput = {
+  /** API/protocol level parsed from the BLE device name (the @N suffix) */
+  apiLevel?: InputMaybe<Scalars['Int']['input']>;
+  /** Board type (kilter, tension, ...) */
+  boardName: Scalars['String']['input'];
+  /** Optional UUID of a saved board to link (when connecting from a /b/{slug}/... route) */
+  boardUuid?: InputMaybe<Scalars['String']['input']>;
+  /** Layout ID at connect */
+  layoutId: Scalars['Int']['input'];
+  /** Controller box serial number */
+  serialNumber: Scalars['String']['input'];
+  /** Comma-separated set IDs at connect */
+  setIds: Scalars['String']['input'];
+  /** Size ID at connect */
+  sizeId: Scalars['Int']['input'];
 };
 
 export type RegisterControllerInput = {
@@ -5509,6 +5543,7 @@ export type ResolversTypes = ResolversObject<{
   QueueReordered: ResolverTypeWrapper<QueueReordered>;
   QueueState: ResolverTypeWrapper<QueueState>;
   RecentBetaLink: ResolverTypeWrapper<RecentBetaLink>;
+  RecordBoardSerialInput: RecordBoardSerialInput;
   RegisterControllerInput: RegisterControllerInput;
   RemoveClimbFromPlaylistInput: RemoveClimbFromPlaylistInput;
   RemoveGymMemberInput: RemoveGymMemberInput;
@@ -5764,6 +5799,7 @@ export type ResolversParentTypes = ResolversObject<{
   QueueReordered: QueueReordered;
   QueueState: QueueState;
   RecentBetaLink: RecentBetaLink;
+  RecordBoardSerialInput: RecordBoardSerialInput;
   RegisterControllerInput: RegisterControllerInput;
   RemoveClimbFromPlaylistInput: RemoveClimbFromPlaylistInput;
   RemoveGymMemberInput: RemoveGymMemberInput;
@@ -6031,6 +6067,7 @@ export type BoardSerialConfigResolvers<
   ContextType = ConnectionContext,
   ParentType extends ResolversParentTypes['BoardSerialConfig'] = ResolversParentTypes['BoardSerialConfig'],
 > = ResolversObject<{
+  apiLevel?: Resolver<Maybe<ResolversTypes['Int']>, ParentType, ContextType>;
   boardName?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   boardSlug?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   boardUuid?: Resolver<Maybe<ResolversTypes['ID']>, ParentType, ContextType>;
@@ -6961,6 +6998,12 @@ export type MutationResolvers<
     ParentType,
     ContextType,
     RequireFields<MutationPublishPlaybackStateArgs, 'input'>
+  >;
+  recordBoardSerial?: Resolver<
+    Maybe<ResolversTypes['BoardSerialConfig']>,
+    ParentType,
+    ContextType,
+    RequireFields<MutationRecordBoardSerialArgs, 'input'>
   >;
   registerActivityPushToken?: Resolver<
     ResolversTypes['Boolean'],

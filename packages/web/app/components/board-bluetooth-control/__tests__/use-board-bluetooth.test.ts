@@ -14,6 +14,7 @@ const {
   mockShowMessage,
   mockParseSerialNumber,
   mockFetch,
+  mockGraphqlRequest,
   mockTrack,
 } = vi.hoisted(() => {
   const mockAdapter = {
@@ -66,9 +67,20 @@ const {
     mockShowMessage: vi.fn(),
     mockParseSerialNumber: vi.fn<(name: string) => string | undefined>(() => undefined),
     mockFetch: vi.fn<typeof fetch>(() => Promise.resolve(new Response(null, { status: 204 }))),
+    mockGraphqlRequest: vi.fn<(document: unknown, variables?: unknown) => Promise<unknown>>(() =>
+      Promise.resolve({ recordBoardSerial: null }),
+    ),
     mockTrack: vi.fn(),
   };
 });
+
+vi.mock('@/app/lib/graphql/client', () => ({
+  createGraphQLHttpClient: vi.fn(() => ({ request: mockGraphqlRequest })),
+}));
+
+vi.mock('@/app/hooks/use-ws-auth-token', () => ({
+  useWsAuthToken: () => ({ token: 'test-token', isAuthenticated: true, isLoading: false, error: null }),
+}));
 
 vi.mock('@/app/lib/ble/adapter-factory', () => ({
   createBluetoothAdapter: mockCreateBluetoothAdapter,
@@ -143,6 +155,7 @@ describe('useBoardBluetooth', () => {
     mockParseSerialNumber.mockReturnValue(undefined);
     mockFetch.mockResolvedValue(new Response(null, { status: 204 }));
     vi.stubGlobal('fetch', mockFetch);
+    mockGraphqlRequest.mockResolvedValue({ recordBoardSerial: null });
     mockCreateBluetoothAdapter.mockResolvedValue(mockAdapter);
     mockAdapter.isAvailable.mockResolvedValue(true);
     mockAdapter.requestAndConnect.mockResolvedValue({
@@ -393,7 +406,7 @@ describe('useBoardBluetooth', () => {
 
   // Traditional `[board_name]/[layout_id]/[size_id]/[set_ids]/[angle]/...` routes
   // don't carry a boardUuid — the recorded serial mapping should reflect that
-  // (the API row gets a NULL board_uuid). The /b/{slug}/... case sends a UUID.
+  // (the recording row gets a NULL board_uuid). The /b/{slug}/... case sends a UUID.
   it('records traditional-route serial with no boardUuid when prop is omitted', async () => {
     mockParseSerialNumber.mockReturnValueOnce('AB1234');
     const traditionalRouteDetails = {
@@ -407,11 +420,14 @@ describe('useBoardBluetooth', () => {
       await result.current.connect();
     });
 
-    const recordCall = mockFetch.mock.calls.find(([url]) => url === '/api/internal/board-serials');
+    const recordCall = mockGraphqlRequest.mock.calls.find(
+      ([, variables]) => !!(variables as { input?: unknown })?.input,
+    );
     expect(recordCall).toBeDefined();
-    const body = JSON.parse((recordCall![1] as RequestInit).body as string);
-    expect(body.serialNumber).toBe('AB1234');
-    expect(body.boardUuid).toBeUndefined();
+    const { input } = recordCall![1] as { input: Record<string, unknown> };
+    expect(input.serialNumber).toBe('AB1234');
+    expect(input.apiLevel).toBe(3);
+    expect(input.boardUuid).toBeUndefined();
   });
 
   it('records saved-board serial with boardUuid when prop is provided', async () => {
@@ -429,10 +445,12 @@ describe('useBoardBluetooth', () => {
       await result.current.connect();
     });
 
-    const recordCall = mockFetch.mock.calls.find(([url]) => url === '/api/internal/board-serials');
+    const recordCall = mockGraphqlRequest.mock.calls.find(
+      ([, variables]) => !!(variables as { input?: unknown })?.input,
+    );
     expect(recordCall).toBeDefined();
-    const body = JSON.parse((recordCall![1] as RequestInit).body as string);
-    expect(body.boardUuid).toBe('board-uuid-xyz');
+    const { input } = recordCall![1] as { input: Record<string, unknown> };
+    expect(input.boardUuid).toBe('board-uuid-xyz');
   });
 
   describe('connect failure messaging', () => {

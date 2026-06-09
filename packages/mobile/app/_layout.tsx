@@ -149,7 +149,13 @@ function BluetoothProviderWrapper({ children }: { children: ReactNode }) {
   }
 
   return (
-    <BluetoothProvider boardName={activeBoard.boardType} layoutId={activeBoard.layoutId} sizeId={activeBoard.sizeId}>
+    <BluetoothProvider
+      boardName={activeBoard.boardType}
+      layoutId={activeBoard.layoutId}
+      sizeId={activeBoard.sizeId}
+      setIds={activeBoard.setIds}
+      boardUuid={activeBoard.uuid}
+    >
       <LiveActivityBridge
         boardName={activeBoard.boardType}
         layoutId={activeBoard.layoutId}

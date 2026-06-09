@@ -360,6 +360,13 @@ export const mutationsTypeDefs = /* GraphQL */ `
     """
     unfollowBoard(input: FollowBoardInput!): Boolean!
 
+    """
+    Record the board configuration seen when connecting to a controller over
+    BLE, keyed by serial. Upserts the current user's serial→config recording.
+    Returns null when a saved board already matches the connect (nothing to record).
+    """
+    recordBoardSerial(input: RecordBoardSerialInput!): BoardSerialConfig
+
     # ============================================
     # Gym Entity Mutations (require auth)
     # ============================================
