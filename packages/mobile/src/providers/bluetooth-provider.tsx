@@ -5,14 +5,13 @@ import { emitWallConfirm } from '@boardsesh/play-view';
 import { useBoardBluetooth } from '../lib/ble/use-board-bluetooth';
 import { registerBluetoothConnection } from '../lib/ble/bluetooth-status-store';
 import { useQueue, useQueueSessionControls } from './queue-provider';
-import { hapticSuccess, hapticError } from '../lib/haptics';
+import { hapticSuccess } from '../lib/haptics';
 import { DevicePickerSheet } from '../components/ble/DevicePickerSheet';
 import { track } from '../lib/analytics';
 
 type BluetoothContextValue = {
   isConnected: boolean;
   loading: boolean;
-  disconnectedUnexpectedly: boolean;
   connect: (initialFrames?: string, mirrored?: boolean, targetSerial?: string) => Promise<boolean>;
   disconnect: () => Promise<void>;
   sendFramesToBoard: (frames: string, mirrored?: boolean, signal?: AbortSignal) => Promise<boolean | undefined>;
@@ -248,17 +247,14 @@ export function BluetoothProvider({ boardName, layoutId, sizeId, children }: Blu
     return release;
   }, [isConnected, disconnect]);
 
-  // Fire haptic error on unexpected disconnect. Track via ref so we only
-  // fire when isConnected transitions from true to false without a user-
-  // initiated disconnect() call.
+  // Detect an unexpected drop (connected → disconnected without a user-initiated
+  // disconnect) for telemetry only. `isUserDisconnectRef` suppresses deliberate ones.
   const wasConnectedRef = useRef(false);
   const isUserDisconnectRef = useRef(false);
-  const [disconnectedUnexpectedly, setDisconnectedUnexpectedly] = useState(false);
 
   // Wrap disconnect to track user-initiated disconnects
   const wrappedDisconnect = useCallback(async () => {
     isUserDisconnectRef.current = true;
-    setDisconnectedUnexpectedly(false);
     track(SHARED_EVENTS.BluetoothDisconnected, { boardName, reason: 'user', inSession: sessionIdRef.current != null });
     try {
       await disconnect();
@@ -267,41 +263,18 @@ export function BluetoothProvider({ boardName, layoutId, sizeId, children }: Blu
     }
   }, [disconnect, boardName]);
 
-  // Clear unexpected-disconnect flag when reconnecting
-  const wrappedConnect = useCallback(
-    async (initialFrames?: string, mirrored?: boolean, targetSerial?: string) => {
-      setDisconnectedUnexpectedly(false);
-      return connect(initialFrames, mirrored, targetSerial);
-    },
-    [connect],
-  );
-
-  // Latest wrappedConnect, read by the unexpected-disconnect effect below without
-  // listing it as a dependency — the effect must fire exactly on the connected→
-  // disconnected transition, not whenever the callback identity changes.
-  const wrappedConnectRef = useRef(wrappedConnect);
-  useEffect(() => {
-    wrappedConnectRef.current = wrappedConnect;
-  }, [wrappedConnect]);
-
-  // Deliberately NO auto-reconnect: these boards are last-connection-wins, so
-  // silently re-grabbing the link would steal the wall back from whoever took it
-  // (a flickering ping-pong). Instead, on an unexpected drop we open the device
-  // picker so the climber re-picks their board in one tap — recovery stays
-  // explicit. The native BoardBleManager no longer auto-reconnects either.
+  // Losing the BLE link is expected (RF noise, or another climber grabbing the
+  // last-connection-wins board), so an unexpected drop just lets the lightbulb go
+  // unlit (driven by isConnected) — we never auto-reconnect, buzz an error, or pop
+  // the device picker. Reconnecting stays a deliberate lightbulb tap. Recorded so
+  // drop frequency stays visible in analytics.
   useEffect(() => {
     if (wasConnectedRef.current && !isConnected && !isUserDisconnectRef.current) {
-      hapticError();
-      setDisconnectedUnexpectedly(true);
       track(SHARED_EVENTS.BluetoothDisconnected, {
         boardName,
         reason: 'unexpected',
         inSession: sessionIdRef.current != null,
       });
-      // Open the picker (no target serial → fresh scan + selection sheet). The
-      // scan itself emits BluetoothScanStarted, so the drop→scan timeline is
-      // already captured without a separate "reconnect attempt" event.
-      void wrappedConnectRef.current();
     }
     wasConnectedRef.current = isConnected;
   }, [isConnected, boardName]);
@@ -310,8 +283,7 @@ export function BluetoothProvider({ boardName, layoutId, sizeId, children }: Blu
     () => ({
       isConnected,
       loading,
-      disconnectedUnexpectedly,
-      connect: wrappedConnect,
+      connect,
       disconnect: wrappedDisconnect,
       sendFramesToBoard,
       clearBoard,
@@ -321,8 +293,7 @@ export function BluetoothProvider({ boardName, layoutId, sizeId, children }: Blu
     [
       isConnected,
       loading,
-      disconnectedUnexpectedly,
-      wrappedConnect,
+      connect,
       wrappedDisconnect,
       sendFramesToBoard,
       clearBoard,

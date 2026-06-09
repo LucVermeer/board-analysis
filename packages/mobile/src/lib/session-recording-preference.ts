@@ -47,7 +47,15 @@ export async function setSessionRecordingEnabledPreference(enabled: boolean): Pr
 
 let loadPromise: Promise<boolean> | null = null;
 function ensureSessionRecordingLoaded(): Promise<boolean> {
-  if (!loadPromise) loadPromise = loadSessionRecordingEnabled();
+  if (!loadPromise) {
+    loadPromise = loadSessionRecordingEnabled().catch((error: unknown) => {
+      // A failed read (e.g. an AsyncStorage error) must not leave a rejected
+      // promise cached — clear the singleton so the next mount retries instead
+      // of staying stuck at the default until the app restarts.
+      loadPromise = null;
+      throw error;
+    });
+  }
   return loadPromise;
 }
 
@@ -74,7 +82,9 @@ export function useSessionRecordingPreference(): {
   const { enabled, loaded } = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 
   useEffect(() => {
-    void ensureSessionRecordingLoaded();
+    // Swallow read failures here — the load already clears its cached promise so
+    // a later mount retries; nothing to do at this call site.
+    ensureSessionRecordingLoaded().catch(() => {});
   }, []);
 
   const setEnabled = useCallback((next: boolean) => {

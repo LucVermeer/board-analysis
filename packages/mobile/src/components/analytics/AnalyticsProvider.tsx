@@ -23,9 +23,13 @@ export function AnalyticsProvider({ children }: { children: ReactNode }) {
   // No-op when analytics is disabled (setSessionRecordingEnabled guards on a null
   // client). Runs once.
   useEffect(() => {
-    void loadSessionRecordingEnabled().then((enabled) => {
-      if (enabled) setSessionRecordingEnabled(true);
-    });
+    loadSessionRecordingEnabled()
+      .then((enabled) => {
+        if (enabled) setSessionRecordingEnabled(true);
+      })
+      .catch(() => {
+        // A failed preference read leaves recording off (the safe default).
+      });
   }, []);
 
   if (!client) return <>{children}</>;
