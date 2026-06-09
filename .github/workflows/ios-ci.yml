@@ -4,11 +4,13 @@ on:
   pull_request:
     paths:
       - 'mobile/**'
+      - 'packages/mobile/**'
       - '.github/workflows/ios-ci.yml'
   push:
     branches-ignore: [main]
     paths:
       - 'mobile/**'
+      - 'packages/mobile/**'
       - '.github/workflows/ios-ci.yml'
   workflow_dispatch:
 

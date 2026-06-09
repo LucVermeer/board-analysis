@@ -132,7 +132,6 @@ function findGroupKey(project, groupName) {
 function ensureGroup(project, groupName) {
   const existingGroupKey = findGroupKey(project, groupName);
   if (existingGroupKey) {
-    delete project.hash.project.objects.PBXGroup[existingGroupKey].path;
     return existingGroupKey;
   }
 
@@ -366,11 +365,21 @@ function updateScheme(testTargetUuid) {
             </BuildableReference>
          </TestableReference>
       </Testables>`;
+  const testablesPattern = /\n\s*<Testables\b[^>]*>[\s\S]*?\n\s*<\/Testables>/;
+  const testActionClosePattern = /(\s*)<\/TestAction>/;
 
-  if (scheme.includes('<Testables>')) {
-    scheme = scheme.replace(/      <Testables>[\s\S]*?      <\/Testables>/, testables);
+  if (testablesPattern.test(scheme)) {
+    scheme = scheme.replace(testablesPattern, `\n${testables}`);
   } else {
-    scheme = scheme.replace(/   <\/TestAction>/, `${testables}\n   </TestAction>`);
+    const testActionCloseMatch = scheme.match(testActionClosePattern);
+    if (!testActionCloseMatch) {
+      throw new Error(`Could not find TestAction close tag in ${schemePath}`);
+    }
+    scheme = scheme.replace(testActionClosePattern, `\n${testables}\n${testActionCloseMatch[1]}</TestAction>`);
+  }
+
+  if (!scheme.includes(`BlueprintIdentifier = "${testTargetUuid}"`)) {
+    throw new Error(`Could not attach ${TEST_TARGET_NAME} to ${schemePath}`);
   }
 
   writeFileSync(schemePath, scheme);
