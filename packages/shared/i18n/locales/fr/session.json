@@ -320,6 +320,25 @@
       "open": "Ouvrir",
       "openAria": "Ouvrir la file"
     },
+    "boardPresence": {
+      "title": "Sur le mur maintenant",
+      "switchBoard": "Changer de mur",
+      "switchBoardAria": "Passer à un autre mur",
+      "close": "Fermer",
+      "setByLine": "Ouvert par {{setter}}",
+      "litByLine": "Allumé par {{name}}",
+      "emptyTitle": "Personne sur ce mur pour l'instant",
+      "emptyBody": "Connecte-toi et envoie un bloc pour lancer l'historique.",
+      "historyHeader": "Envoyés sur ce mur",
+      "statsHeader": "Ce mur",
+      "statSentToday": "envoyés",
+      "statClimbers": "grimpeurs",
+      "statHardest": "le plus dur",
+      "statTopGrade": "cotation top",
+      "wallChanged": "Tu as changé le mur",
+      "undo": "Annuler",
+      "undoAria": "Annuler le changement du mur"
+    },
     "toast": {
       "sessionEnded": "Session terminée"
     },

@@ -28,6 +28,7 @@ import { DeepLinkProvider } from '../src/providers/deep-link-provider';
 import { ShareTargetProvider } from '../src/providers/share-target-provider';
 import { TabBarHeightProvider } from '../src/providers/tab-bar-height-provider';
 import { FeatureFlagsProvider } from '../src/providers/feature-flags-provider';
+import { MobileBoardPresenceProvider } from '../src/providers/board-presence-provider';
 import { PartyProfileProvider } from '../src/providers/party-profile-provider';
 import { ConnectionSettingsProvider } from '../src/providers/connection-settings-provider';
 import { FavoritesProvider } from '../src/providers/favorites-provider';
@@ -246,61 +247,70 @@ function RootLayout() {
                                     throws "BottomSheetModalInternalContext
                                     cannot be null". */}
                                       <BottomSheetModalProvider>
-                                        <BluetoothProviderWrapper>
-                                          <DrawerHostProvider>
-                                            <DeepLinkProvider>
-                                              <ShareTargetProvider>
-                                                <TabBarHeightProvider>
-                                                  <ThemedNavigation>
-                                                    <Stack
-                                                      screenOptions={{ headerShown: false }}
-                                                      initialRouteName="index"
-                                                    >
-                                                      <Stack.Screen name="index" />
-                                                      <Stack.Screen name="(tabs)" />
-                                                      <Stack.Screen
-                                                        name="auth"
-                                                        options={{ headerShown: false, gestureEnabled: false }}
-                                                      />
-                                                      <Stack.Screen name="session/[sessionId]" />
-                                                      <Stack.Screen
-                                                        name="join/[sessionId]"
-                                                        options={{ presentation: 'modal', headerShown: false }}
-                                                      />
-                                                      <Stack.Screen
-                                                        name="share-beta"
-                                                        options={{ presentation: 'modal', headerShown: false }}
-                                                      />
-                                                      {/* Board selection is a modal off the Climbs capsule /
+                                        {/* Board presence ("now on the wall") owns the
+                                    connected boardId + the wall feed. Mounted
+                                    OUTSIDE BluetoothProviderWrapper so the BLE
+                                    flow can resolve+report through it, and
+                                    OUTSIDE DrawerHostProvider so the Board sheet
+                                    can read the wall state. Inert (boardId null)
+                                    until the `board-presence` flag is on. */}
+                                        <MobileBoardPresenceProvider>
+                                          <BluetoothProviderWrapper>
+                                            <DrawerHostProvider>
+                                              <DeepLinkProvider>
+                                                <ShareTargetProvider>
+                                                  <TabBarHeightProvider>
+                                                    <ThemedNavigation>
+                                                      <Stack
+                                                        screenOptions={{ headerShown: false }}
+                                                        initialRouteName="index"
+                                                      >
+                                                        <Stack.Screen name="index" />
+                                                        <Stack.Screen name="(tabs)" />
+                                                        <Stack.Screen
+                                                          name="auth"
+                                                          options={{ headerShown: false, gestureEnabled: false }}
+                                                        />
+                                                        <Stack.Screen name="session/[sessionId]" />
+                                                        <Stack.Screen
+                                                          name="join/[sessionId]"
+                                                          options={{ presentation: 'modal', headerShown: false }}
+                                                        />
+                                                        <Stack.Screen
+                                                          name="share-beta"
+                                                          options={{ presentation: 'modal', headerShown: false }}
+                                                        />
+                                                        {/* Board selection is a modal off the Climbs capsule /
                                                       no-board CTA — board switching is rare, so it doesn't
                                                       earn a tab. Its own _layout owns the headers. */}
-                                                      <Stack.Screen
-                                                        name="boards"
-                                                        options={{ presentation: 'modal', headerShown: false }}
-                                                      />
-                                                      {/* First-run welcome walkthrough. Full-screen cover
+                                                        <Stack.Screen
+                                                          name="boards"
+                                                          options={{ presentation: 'modal', headerShown: false }}
+                                                        />
+                                                        {/* First-run welcome walkthrough. Full-screen cover
                                                       over the Climbs tab; gesture disabled so the user
                                                       leaves only via Skip / finish / the final CTA, never
                                                       an accidental swipe-dismiss. */}
-                                                      <Stack.Screen
-                                                        name="onboarding"
-                                                        options={{
-                                                          presentation: 'fullScreenModal',
-                                                          headerShown: false,
-                                                          gestureEnabled: false,
-                                                          animation: 'fade',
-                                                        }}
-                                                      />
-                                                    </Stack>
-                                                  </ThemedNavigation>
-                                                  <PersistentQueueBar />
-                                                  <OnboardingGate ready={authReady && fontsReady} />
-                                                </TabBarHeightProvider>
-                                                <AnalyticsScreenTracker />
-                                              </ShareTargetProvider>
-                                            </DeepLinkProvider>
-                                          </DrawerHostProvider>
-                                        </BluetoothProviderWrapper>
+                                                        <Stack.Screen
+                                                          name="onboarding"
+                                                          options={{
+                                                            presentation: 'fullScreenModal',
+                                                            headerShown: false,
+                                                            gestureEnabled: false,
+                                                            animation: 'fade',
+                                                          }}
+                                                        />
+                                                      </Stack>
+                                                    </ThemedNavigation>
+                                                    <PersistentQueueBar />
+                                                    <OnboardingGate ready={authReady && fontsReady} />
+                                                  </TabBarHeightProvider>
+                                                  <AnalyticsScreenTracker />
+                                                </ShareTargetProvider>
+                                              </DeepLinkProvider>
+                                            </DrawerHostProvider>
+                                          </BluetoothProviderWrapper>
+                                        </MobileBoardPresenceProvider>
                                       </BottomSheetModalProvider>
                                     </BoardProviderWrapper>
                                   </PlaylistsAdapterWrapper>

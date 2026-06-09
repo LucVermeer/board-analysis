@@ -49,6 +49,34 @@ vi.mock('@boardsesh/play-view', () => ({
   emitWallConfirm: wallConfirm.emitWallConfirm,
 }));
 
+const presence = vi.hoisted(() => ({
+  enabled: false,
+  boardId: null as number | null,
+  resolveAndBindBoard: vi.fn(async () => null),
+  reportClimb: vi.fn(async () => true),
+  showUndoWallChangeSnackbar: vi.fn(),
+}));
+
+vi.mock('@boardsesh/board-presence-react', () => ({
+  useBoardPresenceContext: () => ({ reportClimb: presence.reportClimb }),
+}));
+
+vi.mock('../board-presence-provider', () => ({
+  useBoardPresenceControls: () => ({
+    enabled: presence.enabled,
+    boardId: presence.boardId,
+    resolveAndBindBoard: presence.resolveAndBindBoard,
+  }),
+}));
+
+vi.mock('../queue-snackbar-provider', () => ({
+  useQueueSnackbar: () => ({ showUndoWallChangeSnackbar: presence.showUndoWallChangeSnackbar }),
+}));
+
+vi.mock('../../lib/climb-to-queue-item', () => ({
+  toClimbInput: (climb: { uuid: string }) => ({ uuid: climb.uuid }),
+}));
+
 vi.mock('../../lib/ble/use-board-bluetooth', () => ({
   useBoardBluetooth: bluetooth.useBoardBluetooth,
 }));
@@ -142,6 +170,13 @@ describe('BluetoothProvider wall-confirm integration', () => {
     bluetooth.state.sendFramesToBoard.mockReset();
     bluetooth.state.sendFramesToBoard.mockResolvedValue(true);
     bluetooth.useBoardBluetooth.mockClear();
+    presence.enabled = false;
+    presence.boardId = null;
+    presence.resolveAndBindBoard.mockClear();
+    presence.resolveAndBindBoard.mockResolvedValue(null);
+    presence.reportClimb.mockClear();
+    presence.reportClimb.mockResolvedValue(true);
+    presence.showUndoWallChangeSnackbar.mockClear();
   });
 
   afterEach(() => {
@@ -260,5 +295,75 @@ describe('BluetoothProvider wall-confirm integration', () => {
     expect((bluetooth.options as { holdsData?: unknown } | undefined)?.holdsData).toEqual([
       { id: 100, mirroredHoldId: 200, cx: 0, cy: 0, r: 1 },
     ]);
+  });
+
+  describe('board-presence wiring (flag on)', () => {
+    it('resolves+binds the board on connect with the active board config', () => {
+      presence.enabled = true;
+      renderProvider();
+
+      bluetooth.options?.onConnectSuccess?.('SERIAL-1');
+
+      expect(presence.resolveAndBindBoard).toHaveBeenCalledWith({
+        serial: 'SERIAL-1',
+        boardType: 'kilter',
+        layoutId: 1,
+        sizeId: 10,
+        setIds: '',
+      });
+    });
+
+    it('does NOT resolve the board on connect when the flag is off', () => {
+      presence.enabled = false;
+      renderProvider();
+
+      bluetooth.options?.onConnectSuccess?.('SERIAL-1');
+
+      expect(presence.resolveAndBindBoard).not.toHaveBeenCalled();
+    });
+
+    it('reports the lit climb to the wall on wall-confirm, in a SOLO flow, then shows the Undo snackbar', async () => {
+      presence.enabled = true;
+      presence.boardId = 99;
+      queue.sessionId = null; // solo — no session
+
+      renderProvider();
+
+      await waitFor(() => {
+        expect(presence.reportClimb).toHaveBeenCalledTimes(1);
+      });
+      // Reported the lit climb (the queue item) with its angle; no session needed.
+      expect(presence.reportClimb).toHaveBeenCalledWith({ uuid: 'queue-climb-1', climb: { uuid: 'climb-1' } }, 40);
+      expect(queue.confirmClimbOnWall).not.toHaveBeenCalled();
+
+      await waitFor(() => {
+        expect(presence.showUndoWallChangeSnackbar).toHaveBeenCalledTimes(1);
+      });
+    });
+
+    it('does NOT report to the wall when no board is bound', async () => {
+      presence.enabled = true;
+      presence.boardId = null;
+
+      renderProvider();
+
+      await waitFor(() => {
+        expect(wallConfirm.emitWallConfirm).toHaveBeenCalled();
+      });
+      expect(presence.reportClimb).not.toHaveBeenCalled();
+      expect(presence.showUndoWallChangeSnackbar).not.toHaveBeenCalled();
+    });
+
+    it('does NOT report to the wall when the flag is off', async () => {
+      presence.enabled = false;
+      presence.boardId = 99;
+
+      renderProvider();
+
+      await waitFor(() => {
+        expect(wallConfirm.emitWallConfirm).toHaveBeenCalled();
+      });
+      expect(presence.reportClimb).not.toHaveBeenCalled();
+    });
   });
 });

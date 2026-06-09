@@ -179,6 +179,12 @@ vi.mock('../../play-drawer/use-carousel-gesture', () => ({
   useCarouselGesture: () => ({ gesture: carousel.gesture, translateX: carousel.translateX }),
 }));
 
+// Board-presence source flip: default identity passthrough (flag off / no wall
+// feed) so the capsule renders the local queue head exactly as today.
+vi.mock('../use-wall-or-queue-climb', () => ({
+  useWallOrQueueCurrentClimb: (localClimb: unknown) => localClimb,
+}));
+
 import { ClimbCapsule } from '../ClimbCapsule';
 
 function makeClimb(over: Partial<Climb> = {}): Climb {

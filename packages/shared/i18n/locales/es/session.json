@@ -320,6 +320,25 @@
       "open": "Abrir",
       "openAria": "Abrir cola"
     },
+    "boardPresence": {
+      "title": "Ahora en el muro",
+      "switchBoard": "Cambiar de muro",
+      "switchBoardAria": "Cambiar a otro muro",
+      "close": "Cerrar",
+      "setByLine": "Creado por {{setter}}",
+      "litByLine": "Encendido por {{name}}",
+      "emptyTitle": "Aún no hay nadie en este muro",
+      "emptyBody": "Conéctate y envía un bloque para empezar el historial.",
+      "historyHeader": "Enviados a este muro",
+      "statsHeader": "Este muro",
+      "statSentToday": "enviados",
+      "statClimbers": "escaladores",
+      "statHardest": "más difícil",
+      "statTopGrade": "grado top",
+      "wallChanged": "Has cambiado el muro",
+      "undo": "Deshacer",
+      "undoAria": "Deshacer el cambio del muro"
+    },
     "toast": {
       "sessionEnded": "Sesión terminada"
     },

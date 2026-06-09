@@ -13,16 +13,21 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { randomUUID } from 'expo-crypto';
+import { router } from 'expo-router';
 import type { BoardName, Climb } from '@boardsesh/shared-schema';
 import { buildBoardPath } from '@boardsesh/board-config';
 import type { Climb as QueueClimb, ClimbQueueItem, PlaylistSuggestionSource } from '@boardsesh/queue';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
+import { useBoardPresenceContext } from '@boardsesh/board-presence-react';
 import { PlayDrawer, type PlayDrawerHandle, type PlayDrawerOpenOptions } from '../components/play-drawer';
 import { LogAscentSheet } from '../components/LogAscentSheet';
 import { QueueSheet, type QueueSheetHandle } from '../components/play-drawer/QueueSheet';
 import { QueueAddedSnackbar } from '../components/QueueAddedSnackbar';
+import { UndoWallChangeSnackbar } from '../components/board-presence/UndoWallChangeSnackbar';
+import { BoardSheet } from '../components/board-presence/BoardSheet';
 import type { QueueItemRowBoard } from '../components/QueueItemRow';
 import { useActiveBoard, useSetActiveBoard } from '../lib/graphql/use-active-board';
+import { formatActiveBoardLabel } from '../lib/boards/active-board-label';
 import { track } from '../lib/analytics';
 import { ClimbActionsSheet } from '../components/ClimbActionsSheet';
 import { AddToPlaylistSheet } from '../components/AddToPlaylistSheet';
@@ -31,6 +36,7 @@ import { favoritesStore } from '@boardsesh/climb-actions';
 import { climbToQueueItem } from '../lib/climb-to-queue-item';
 import { useIsPartyPreviewOnly, useQueueActions, useQueueSessionControls } from './queue-provider';
 import { useQueueSnackbar } from './queue-snackbar-provider';
+import { useBoardPresenceControls } from './board-presence-provider';
 
 export type BoardConfig = {
   boardName: string;
@@ -81,6 +87,10 @@ type DrawerHostValue = {
   /** Opens the queue list sheet (from the play-drawer queue button or the
    *  "Climb added to queue" snackbar's Open action). */
   openQueueSheet: () => void;
+  /** Opens the board sheet ("now on the wall" — wall feed, history, stats, and a
+   *  separate Switch-board control). Wired to the BoardPill when the
+   *  `board-presence` flag is on. */
+  openBoardSheet: () => void;
 };
 
 const DrawerHostContext = createContext<DrawerHostValue | null>(null);
@@ -103,11 +113,39 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
   const [logAscentInput, setLogAscentInput] = useState<LogAscentInput | null>(null);
   const [climbActions, setClimbActions] = useState<{ climb: Climb; boardConfig: BoardConfig } | null>(null);
   const [playlistClimb, setPlaylistClimb] = useState<{ climb: Climb; boardConfig: BoardConfig } | null>(null);
+  // Board sheet uses the same mounted/visible split (converted to an imperative
+  // ref in a later commit, mirroring the queue sheet).
+  const [boardSheetMounted, setBoardSheetMounted] = useState(false);
+  const [boardSheetVisible, setBoardSheetVisible] = useState(false);
   const { addToQueue, setSessionBoardPath, setCurrentClimb } = useQueueActions();
   const { sessionId } = useQueueSessionControls();
   const isPartyPreviewOnly = useIsPartyPreviewOnly();
   const setActiveBoard = useSetActiveBoard();
-  const { visible: snackbarVisible, nonce: snackbarNonce, dismissSnackbar } = useQueueSnackbar();
+  const {
+    visible: snackbarVisible,
+    nonce: snackbarNonce,
+    dismissSnackbar,
+    undoWallChangeVisible,
+    undoWallChangeNonce,
+    dismissUndoWallChangeSnackbar,
+  } = useQueueSnackbar();
+  const { undo: undoWallChange, currentClimb: wallCurrentClimb } = useBoardPresenceContext();
+  const { boardId: boardPresenceBoardId } = useBoardPresenceControls();
+  const boardPresenceBoardIdRef = useRef(boardPresenceBoardId);
+  boardPresenceBoardIdRef.current = boardPresenceBoardId;
+
+  // Instrument the "viewed the wall" signal that's invisible today: fire once
+  // per distinct wall climb received from the live feed.
+  const lastReceivedWallClimbRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!wallCurrentClimb) return;
+    if (lastReceivedWallClimbRef.current === wallCurrentClimb.climbUuid) return;
+    lastReceivedWallClimbRef.current = wallCurrentClimb.climbUuid;
+    track(SHARED_EVENTS.BoardNowPlayingReceived, {
+      boardId: boardPresenceBoardIdRef.current ?? undefined,
+      climbUuid: wallCurrentClimb.climbUuid,
+    });
+  }, [wallCurrentClimb]);
   const { mutate: toggleFavoriteMutate } = useToggleFavorite();
   const { data: profile } = useProfile();
 
@@ -291,6 +329,28 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
   const requestCloseQueueSheet = useCallback(() => {
     queueSheetRef.current?.dismiss();
   }, []);
+
+  // Board sheet: same two-commit mount→present and animated-close→unmount dance
+  // as the queue sheet (see openQueueSheet above for why the split matters).
+  const openBoardSheet = useCallback(() => {
+    track(SHARED_EVENTS.BoardSheetOpened, {
+      boardId: boardPresenceBoardIdRef.current ?? undefined,
+      source: 'board_pill',
+    });
+    if (boardSheetMounted) {
+      setBoardSheetVisible(true);
+    } else {
+      setBoardSheetMounted(true);
+    }
+  }, [boardSheetMounted]);
+  useEffect(() => {
+    if (boardSheetMounted) setBoardSheetVisible(true);
+  }, [boardSheetMounted]);
+  const requestCloseBoardSheet = useCallback(() => setBoardSheetVisible(false), []);
+  const handleBoardSheetDismissed = useCallback(() => {
+    setBoardSheetVisible(false);
+    setBoardSheetMounted(false);
+  }, []);
   // Snackbar "Open": dismiss the snackbar, then open the queue sheet.
   const handleSnackbarOpen = useCallback(() => {
     dismissSnackbar();
@@ -371,6 +431,24 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
     [sessionId],
   );
 
+  // Switch-board control inside the board sheet: dismiss the sheet, then open
+  // the existing board switcher (today's BoardPill destination).
+  const handleSwitchBoardFromSheet = useCallback(() => {
+    track(SHARED_EVENTS.BoardSwapInvokedFromSheet, { boardName: activeBoardConfigRef.current?.boardName });
+    requestCloseBoardSheet();
+    router.push('/boards');
+  }, [requestCloseBoardSheet]);
+
+  // Undo a wall change YOU just caused: re-light the previous wall climb. The
+  // re-send + re-report happen inside the board-presence context's undo(); this
+  // just fires it and dismisses the snackbar. Queue navigation is untouched.
+  const handleUndoWallChange = useCallback(() => {
+    void undoWallChange();
+    dismissUndoWallChangeSnackbar();
+  }, [undoWallChange, dismissUndoWallChangeSnackbar]);
+
+  const boardSheetLabel = useMemo(() => formatActiveBoardLabel(activeBoard), [activeBoard]);
+
   const value = useMemo<DrawerHostValue>(
     () => ({
       boardConfig: activeBoardConfig,
@@ -380,6 +458,7 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
       closeClimbActions,
       openAddToPlaylist,
       openQueueSheet,
+      openBoardSheet,
     }),
     [
       activeBoardConfig,
@@ -389,6 +468,7 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
       closeClimbActions,
       openAddToPlaylist,
       openQueueSheet,
+      openBoardSheet,
     ],
   );
 
@@ -458,11 +538,26 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
           onTickHistory={handleQueueTickHistory}
         />
       ) : null}
+      {boardSheetMounted ? (
+        <BoardSheet
+          visible={boardSheetVisible}
+          boardLabel={boardSheetLabel}
+          onClose={requestCloseBoardSheet}
+          onDismissed={handleBoardSheetDismissed}
+          onSwitchBoard={handleSwitchBoardFromSheet}
+        />
+      ) : null}
       <QueueAddedSnackbar
         visible={snackbarVisible}
         nonce={snackbarNonce}
         onDismiss={dismissSnackbar}
         onOpen={handleSnackbarOpen}
+      />
+      <UndoWallChangeSnackbar
+        visible={undoWallChangeVisible}
+        nonce={undoWallChangeNonce}
+        onDismiss={dismissUndoWallChangeSnackbar}
+        onUndo={handleUndoWallChange}
       />
     </DrawerHostContext.Provider>
   );

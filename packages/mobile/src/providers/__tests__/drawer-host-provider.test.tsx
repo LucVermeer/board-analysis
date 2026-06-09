@@ -126,6 +126,27 @@ vi.mock('../../components/AddToPlaylistSheet', () => ({
 vi.mock('../../components/QueueAddedSnackbar', () => ({
   QueueAddedSnackbar: () => createElement('div', { 'data-queue-snackbar': 'true' }),
 }));
+vi.mock('../../components/board-presence/BoardSheet', () => ({
+  BoardSheet: () => createElement('div', { 'data-board-sheet': 'true' }),
+}));
+vi.mock('../../components/board-presence/UndoWallChangeSnackbar', () => ({
+  UndoWallChangeSnackbar: () => createElement('div', { 'data-undo-snackbar': 'true' }),
+}));
+
+vi.mock('expo-router', () => ({
+  router: { push: vi.fn() },
+}));
+
+vi.mock('@boardsesh/board-presence-react', () => ({
+  useBoardPresenceContext: () => ({
+    undo: vi.fn(async () => false),
+    currentClimb: null,
+  }),
+}));
+
+vi.mock('../board-presence-provider', () => ({
+  useBoardPresenceControls: () => ({ enabled: false, boardId: null, resolveAndBindBoard: vi.fn(async () => null) }),
+}));
 
 vi.mock('../queue-provider', async () => {
   const { deriveIsDriver } =
@@ -159,6 +180,9 @@ vi.mock('../queue-snackbar-provider', () => ({
     visible: false,
     nonce: 0,
     dismissSnackbar: vi.fn(),
+    undoWallChangeVisible: false,
+    undoWallChangeNonce: 0,
+    dismissUndoWallChangeSnackbar: vi.fn(),
   }),
 }));
 

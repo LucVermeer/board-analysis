@@ -4,6 +4,7 @@ import { NativeTabs } from 'expo-router/unstable-native-tabs';
 import { useQueue } from '../../providers/queue-provider';
 import { glassSize } from '../../theme/layout';
 import { NativeAccessoryClimbRow } from './NativeAccessoryClimbRow';
+import { useWallOrQueueCurrentClimb } from './use-wall-or-queue-climb';
 
 const ACCESSORY_MAX_WIDTH = 344;
 const ACCESSORY_SCREEN_GUTTER = 32;
@@ -17,7 +18,10 @@ export function QueueBottomAccessory() {
   const placement = NativeTabs.BottomAccessory.usePlacement();
   const { width: screenWidth } = useWindowDimensions();
   const { state } = useQueue();
-  const currentClimb = state.currentClimbQueueItem?.climb;
+  // Show the accessory when there's a local queue climb OR a live wall climb
+  // (the flag-gated source flip — see useWallOrQueueCurrentClimb). The row itself
+  // re-applies the same selector for what it renders + ticks.
+  const currentClimb = useWallOrQueueCurrentClimb(state.currentClimbQueueItem?.climb ?? null);
 
   const accessoryWidth = useMemo(() => {
     return Math.max(glassSize.standard * 2, Math.min(ACCESSORY_MAX_WIDTH, screenWidth - ACCESSORY_SCREEN_GUTTER));

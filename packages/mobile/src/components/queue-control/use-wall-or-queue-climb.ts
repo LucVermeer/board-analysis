@@ -1,0 +1,61 @@
+// Source-of-truth selector for the current-climb accessory.
+//
+// When the `board-presence` flag is on AND a board feed is live with a current
+// climb, the accessory should reflect the wall's actual lit climb instead of the
+// local queue head. Otherwise it stays on the local queue head (today's
+// behaviour).
+//
+// PERF (RN hot-path checklist): this read is O(1) — it touches a SINGLE current
+// value (`currentClimb`) from the board-presence context, never the volatile
+// `history` array, and never a per-row scan. It is memoized so the accessory row
+// only re-renders when the *displayed* climb actually changes. The board-presence
+// context value is split (current vs history) upstream in
+// `@boardsesh/board-presence-react`, so reading `currentClimb` here does not
+// subscribe the accessory to history churn.
+
+import { useMemo } from 'react';
+import type { Climb } from '@boardsesh/queue';
+import type { BoardPresenceClimb } from '@boardsesh/shared-schema';
+import { useBoardPresenceContext } from '@boardsesh/board-presence-react';
+import { useBoardPresenceControls } from '../../providers/board-presence-provider';
+
+/** Map a wall presence climb to the minimal `Climb` the accessory row renders. */
+function presenceClimbToClimb(presenceClimb: BoardPresenceClimb): Climb {
+  return {
+    uuid: presenceClimb.climbUuid,
+    name: presenceClimb.name ?? '',
+    frames: presenceClimb.frames ?? '',
+    setter_username: presenceClimb.setter ?? '',
+    angle: presenceClimb.angle ?? 0,
+    ascensionist_count: 0,
+    difficulty: presenceClimb.grade ?? '',
+    quality_average: '',
+    stars: 0,
+    difficulty_error: '',
+    benchmark_difficulty: null,
+  };
+}
+
+/**
+ * Returns the climb the accessory should show. With the flag off (or no live
+ * wall feed / no wall climb), returns `localClimb` unchanged so behaviour is
+ * exactly as today. With a live wall feed, returns the wall's current climb.
+ *
+ * Pass the local queue head as `localClimb`; the override never affects queue
+ * navigation/swipe — only what the leading slot displays.
+ */
+export function useWallOrQueueCurrentClimb(localClimb: Climb | null): Climb | null {
+  const { enabled, boardId } = useBoardPresenceControls();
+  const { currentClimb: wallClimb, isLive } = useBoardPresenceContext();
+
+  const useWall = enabled && boardId !== null && isLive && wallClimb !== null;
+
+  return useMemo(() => {
+    if (useWall && wallClimb) {
+      return presenceClimbToClimb(wallClimb);
+    }
+    return localClimb;
+    // `wallClimb` only changes on a wall event (bounded, not per-frame), so
+    // recomputing when its identity changes keeps the read O(1) on the hot path.
+  }, [useWall, wallClimb, localClimb]);
+}

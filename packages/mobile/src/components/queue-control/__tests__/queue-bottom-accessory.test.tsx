@@ -42,6 +42,11 @@ vi.mock('../NativeAccessoryClimbRow', () => ({
       'data-row-width': String(width),
     }),
 }));
+// Board-presence source flip: identity passthrough (flag off / no wall feed), so
+// the accessory render-gate keys on the local queue head exactly as today.
+vi.mock('../use-wall-or-queue-climb', () => ({
+  useWallOrQueueCurrentClimb: (localClimb: unknown) => localClimb,
+}));
 
 import { QueueBottomAccessory } from '../QueueBottomAccessory';
 

@@ -1,0 +1,241 @@
+// @vitest-environment jsdom
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, fireEvent } from '@testing-library/react';
+import { createElement, forwardRef, useImperativeHandle, type ReactNode, type Ref } from 'react';
+import type { BoardPresenceClimb, BoardPresenceStats } from '@boardsesh/shared-schema';
+
+const presence = vi.hoisted(() => ({
+  currentClimb: null as BoardPresenceClimb | null,
+  history: [] as BoardPresenceClimb[],
+  stats: null as BoardPresenceStats | null,
+}));
+
+const sheetModal = vi.hoisted(() => ({ present: vi.fn(), dismiss: vi.fn() }));
+
+type ViewMockProps = { children?: ReactNode; style?: unknown };
+vi.mock('react-native', () => ({
+  Platform: { OS: 'ios', select: (options: Record<string, unknown>) => options.ios ?? options.default },
+  StyleSheet: { create: (styles: Record<string, unknown>) => styles, hairlineWidth: 1 },
+  View: ({ children }: ViewMockProps) => createElement('div', null, children),
+  Pressable: ({
+    children,
+    onPress,
+    accessibilityLabel,
+  }: ViewMockProps & { onPress?: () => void; accessibilityLabel?: string }) =>
+    createElement('button', { onClick: onPress, 'aria-label': accessibilityLabel }, children),
+}));
+
+vi.mock('@gorhom/bottom-sheet', () => ({
+  BottomSheetModal: forwardRef(({ children }: { children?: ReactNode }, ref: Ref<unknown>) => {
+    useImperativeHandle(ref, () => ({ present: sheetModal.present, dismiss: sheetModal.dismiss }));
+    return createElement('div', { 'data-sheet': 'true' }, children);
+  }),
+  BottomSheetBackdrop: () => createElement('div', { 'data-backdrop': 'true' }),
+  // Render the list inline so header + items + empty state appear in the DOM.
+  BottomSheetFlatList: ({
+    data,
+    renderItem,
+    ListHeaderComponent,
+    ListEmptyComponent,
+    keyExtractor,
+  }: {
+    data: BoardPresenceClimb[];
+    renderItem: (info: { item: BoardPresenceClimb }) => ReactNode;
+    ListHeaderComponent?: ReactNode;
+    ListEmptyComponent?: ReactNode;
+    keyExtractor: (item: BoardPresenceClimb) => string;
+  }) =>
+    createElement(
+      'div',
+      { 'data-list': 'true' },
+      ListHeaderComponent,
+      data.length === 0
+        ? ListEmptyComponent
+        : data.map((item) => createElement('div', { key: keyExtractor(item) }, renderItem({ item }))),
+    ),
+}));
+
+vi.mock('react-native-screens', () => ({
+  FullWindowOverlay: ({ children }: ViewMockProps) => createElement('div', null, children),
+}));
+
+vi.mock('react-native-safe-area-context', () => ({
+  useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
+}));
+
+vi.mock('react-i18next', () => ({
+  useTranslation: () => ({
+    t: (key: string, opts?: Record<string, unknown>) => (opts ? `${key}:${Object.values(opts).join(',')}` : key),
+  }),
+}));
+
+vi.mock('@boardsesh/board-constants/grade-colors', () => ({
+  getGradeColor: () => '#abcdef',
+  DEFAULT_GRADE_COLOR: '#999999',
+}));
+
+vi.mock('@boardsesh/board-presence-react', () => ({
+  useBoardPresenceContext: () => ({
+    currentClimb: presence.currentClimb,
+    history: presence.history,
+    stats: presence.stats,
+  }),
+}));
+
+vi.mock('../../GlassSheetBackground', () => ({ GlassSheetBackground: () => createElement('div', null) }));
+vi.mock('../../Text', () => ({
+  Text: ({ children }: { children?: ReactNode }) => createElement('span', { 'data-text': 'true' }, children),
+}));
+vi.mock('../../Icon', () => ({ Icon: ({ name }: { name: string }) => createElement('span', { 'data-icon': name }) }));
+vi.mock('../../queue-control/AccessoryClimbThumbnail', () => ({
+  AccessoryClimbThumbnail: () => createElement('div', { 'data-thumb': 'true' }),
+}));
+vi.mock('../../../providers/theme-provider', () => ({
+  useTheme: () => ({
+    systemColors: {
+      label: '#000',
+      secondaryLabel: '#666',
+      tertiaryLabel: '#999',
+      secondaryBackground: '#f2f2f7',
+      separator: '#ccc',
+    },
+    brandColors: { warning: '#B45309', primary: '#6D28D9' },
+    sheet: { scrimOpacity: 0.3, handleStyle: {} },
+  }),
+}));
+vi.mock('../../../providers/drawer-host-provider', () => ({
+  useDrawerHost: () => ({ boardConfig: { boardName: 'kilter', layoutId: 1, sizeId: 10, setIds: '1,2', angle: 40 } }),
+}));
+vi.mock('../../../hooks/use-grade-format', () => ({
+  useGradeFormat: () => ({ formatGrade: (grade: string) => grade }),
+}));
+vi.mock('../../../theme/tokens', () => ({
+  spacing: { 2: 8, 3: 12, 4: 16, 6: 24, 8: 32 },
+  borderRadius: { md: 8, lg: 12 },
+}));
+
+import { BoardSheet } from '../BoardSheet';
+
+function makeClimb(climbUuid: string, seq: number, overrides: Partial<BoardPresenceClimb> = {}): BoardPresenceClimb {
+  return {
+    climbUuid,
+    seq,
+    sentAt: '2026-06-09T00:00:00.000Z',
+    name: `Climb ${climbUuid}`,
+    grade: 'V5',
+    angle: 40,
+    setter: 'Some Setter',
+    sentByDisplayName: 'Marco',
+    ...overrides,
+  };
+}
+
+const noop = () => {};
+
+describe('BoardSheet', () => {
+  beforeEach(() => {
+    presence.currentClimb = null;
+    presence.history = [];
+    presence.stats = null;
+    sheetModal.present.mockClear();
+    sheetModal.dismiss.mockClear();
+  });
+
+  it('presents when visible and dismisses when not', () => {
+    const { rerender } = render(
+      createElement(BoardSheet, {
+        visible: true,
+        boardLabel: 'Garage Wall • 45°',
+        onClose: noop,
+        onDismissed: noop,
+        onSwitchBoard: noop,
+      }),
+    );
+    expect(sheetModal.present).toHaveBeenCalled();
+
+    rerender(
+      createElement(BoardSheet, {
+        visible: false,
+        boardLabel: 'Garage Wall • 45°',
+        onClose: noop,
+        onDismissed: noop,
+        onSwitchBoard: noop,
+      }),
+    );
+    expect(sheetModal.dismiss).toHaveBeenCalled();
+  });
+
+  it('renders the empty state when no climb is on the wall', () => {
+    const { container } = render(
+      createElement(BoardSheet, {
+        visible: true,
+        boardLabel: 'Garage Wall',
+        onClose: noop,
+        onDismissed: noop,
+        onSwitchBoard: noop,
+      }),
+    );
+    expect(container.textContent).toContain('mobile.boardPresence.emptyTitle');
+  });
+
+  it('renders the hero, stats and virtualized history when there is wall activity', () => {
+    presence.currentClimb = makeClimb('c1', 3);
+    presence.history = [makeClimb('c1', 3), makeClimb('c0', 2, { name: 'Older Climb' })];
+    presence.stats = {
+      climbsSentCount: 14,
+      distinctClimbersCount: 5,
+      hardestGrade: 'V9',
+      topGrade: 'V5',
+      lastSentAt: null,
+    };
+
+    const { container } = render(
+      createElement(BoardSheet, {
+        visible: true,
+        boardLabel: 'Garage Wall',
+        onClose: noop,
+        onDismissed: noop,
+        onSwitchBoard: noop,
+      }),
+    );
+
+    // Hero climb name + history item name both render.
+    expect(container.textContent).toContain('Climb c1');
+    expect(container.textContent).toContain('Older Climb');
+    // Stats tiles.
+    expect(container.textContent).toContain('14');
+    expect(container.textContent).toContain('mobile.boardPresence.historyHeader');
+    // History list rendered one node per item.
+    expect(container.querySelector('[data-list="true"]')).not.toBeNull();
+  });
+
+  it('fires onSwitchBoard from the separated footer control', () => {
+    const onSwitchBoard = vi.fn();
+    const { getByLabelText } = render(
+      createElement(BoardSheet, {
+        visible: true,
+        boardLabel: 'Garage Wall',
+        onClose: noop,
+        onDismissed: noop,
+        onSwitchBoard,
+      }),
+    );
+    fireEvent.click(getByLabelText('mobile.boardPresence.switchBoardAria'));
+    expect(onSwitchBoard).toHaveBeenCalledTimes(1);
+  });
+
+  it('fires onClose from the header X', () => {
+    const onClose = vi.fn();
+    const { getByLabelText } = render(
+      createElement(BoardSheet, {
+        visible: true,
+        boardLabel: 'Garage Wall',
+        onClose,
+        onDismissed: noop,
+        onSwitchBoard: noop,
+      }),
+    );
+    fireEvent.click(getByLabelText('mobile.boardPresence.close'));
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+});
