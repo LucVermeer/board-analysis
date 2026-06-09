@@ -1,7 +1,11 @@
 package com.boardsesh.liveactivity
 
+import android.Manifest
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
+import android.util.Log
 import androidx.core.content.ContextCompat
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
@@ -52,6 +56,13 @@ class SessionPresenceModule : Module() {
     @Volatile
     private var hasListeners = false
 
+    // Whether a session is logically active (startSession called, endSession not
+    // yet). Set synchronously here rather than reading the service's running
+    // state, so the initial update that fires right after startSession isn't
+    // dropped by a race with the service's async onStartCommand.
+    @Volatile
+    private var sessionActive = false
+
     override fun definition() = ModuleDefinition {
         Name("SessionPresence")
 
@@ -78,6 +89,12 @@ class SessionPresenceModule : Module() {
 
         AsyncFunction("startSession") { options: StartSessionOptions ->
             val context = appContext.reactContext?.applicationContext ?: return@AsyncFunction
+            // On API 34+ a connectedDevice FGS can't promote without
+            // BLUETOOTH_CONNECT, so skip the start rather than create a
+            // startForeground() contract we can't satisfy. The FGS only keeps the
+            // BLE link alive, so without the permission there's nothing to keep.
+            if (!canRunConnectedDeviceService(context)) return@AsyncFunction
+            sessionActive = true
             val strings = options.androidNotification
             val intent = Intent(context, BoardSessionService::class.java).apply {
                 action = BoardSessionService.ACTION_START
@@ -87,7 +104,7 @@ class SessionPresenceModule : Module() {
                 putExtra(BoardSessionService.EXTRA_PREV_LABEL, strings?.previousLabel ?: "Previous")
                 putExtra(BoardSessionService.EXTRA_NEXT_LABEL, strings?.nextLabel ?: "Next")
             }
-            ContextCompat.startForegroundService(context, intent)
+            launchService(context, intent)
         }
 
         AsyncFunction("updateActivity") { options: SessionUpdateOptions -> pushUpdate(options) }
@@ -97,6 +114,7 @@ class SessionPresenceModule : Module() {
             // Note: no bare `return@AsyncFunction` + stopService() — stopService
             // returns Boolean, which would clash with the Unit early-return. Use
             // a null-check so the lambda stays Unit-typed.
+            sessionActive = false
             val context = appContext.reactContext?.applicationContext
             if (context != null) {
                 context.stopService(Intent(context, BoardSessionService::class.java))
@@ -104,8 +122,32 @@ class SessionPresenceModule : Module() {
         }
     }
 
+    // Below API 34 the connectedDevice type isn't permission-gated at
+    // startForeground() time, so the service can always start.
+    private fun canRunConnectedDeviceService(context: Context): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) return true
+        return ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) ==
+            PackageManager.PERMISSION_GRANTED
+    }
+
+    // startForegroundService() throws ForegroundServiceStartNotAllowedException on
+    // API 31+ when the app is backgrounded. Clear sessionActive on failure so
+    // later updates don't keep retrying a service that never started.
+    private fun launchService(context: Context, intent: Intent) {
+        try {
+            ContextCompat.startForegroundService(context, intent)
+        } catch (error: Exception) {
+            Log.w(TAG, "startForegroundService failed: ${error.message}")
+            sessionActive = false
+        }
+    }
+
     private fun pushUpdate(options: SessionUpdateOptions) {
         val context = appContext.reactContext?.applicationContext ?: return
+        // Only update inside an active session window. startSession() owns
+        // promotion; a stray update would issue startForegroundService() just to
+        // refresh, risking ForegroundServiceDidNotStartInTimeException.
+        if (!sessionActive) return
         val subtitle = buildString {
             append(options.climbDifficulty)
             if (options.angle > 0) {
@@ -121,7 +163,7 @@ class SessionPresenceModule : Module() {
             putExtra(BoardSessionService.EXTRA_HAS_PREVIOUS, options.hasPrevious)
             putExtra(BoardSessionService.EXTRA_CURRENT_INDEX, options.currentIndex)
         }
-        ContextCompat.startForegroundService(context, intent)
+        launchService(context, intent)
     }
 
     private fun emit(event: Map<String, Any?>) {
@@ -142,6 +184,7 @@ class SessionPresenceModule : Module() {
 
     companion object {
         private const val MAX_BUFFERED_EVENTS = 32
+        private const val TAG = "BoardSession"
 
         @Volatile
         private var instance: WeakReference<SessionPresenceModule>? = null
