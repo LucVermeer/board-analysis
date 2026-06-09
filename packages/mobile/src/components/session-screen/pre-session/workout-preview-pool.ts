@@ -76,9 +76,9 @@ export async function buildPools(
 }
 
 /**
- * Walk each slot's shuffled pool, skipping climbs already chosen. Short pool →
- * repeat `pool[0]` rather than leave a gap; empty pool → skip the slot (the
- * caller reports the shortfall as `failedCount`).
+ * Walk each slot's shuffled pool, skipping climbs already chosen. Short or
+ * empty pools skip the slot so the caller can report the shortfall as
+ * `failedCount`, matching the web generator's behavior.
  */
 export function selectItemsFromPools(
   slots: readonly PlannedClimbSlot[],
@@ -88,7 +88,7 @@ export function selectItemsFromPools(
   const usedUuids = new Set<string>();
   for (const slot of slots) {
     const pool = pools.get(slot.grade) ?? [];
-    const next = pickUnused(pool, usedUuids) ?? pool[0];
+    const next = pickUnused(pool, usedUuids);
     if (!next) continue;
     usedUuids.add(next.uuid);
     items.push({ slot, item: climbToQueueItem(next, { suggested: true }) });

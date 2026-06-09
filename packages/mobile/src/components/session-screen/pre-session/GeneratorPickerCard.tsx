@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import type { BoardName } from '@boardsesh/shared-schema';
 import { getGradesForBoard } from '@boardsesh/board-config';
@@ -30,6 +30,7 @@ import { spacing, borderRadius } from '../../../theme/tokens';
 import { brandColors as staticBrandColors } from '../../../theme/colors';
 import { iosSystemColors } from '../../../theme/ios-colors';
 import { Icon } from '../../Icon';
+import { PressableSurface } from '../../PressableSurface';
 import { StarRating } from '../../StarRating';
 import { SwitchRow } from '../../SwitchRow';
 
@@ -154,32 +155,28 @@ function NumberStepper({ label, value, min, max, onChange, decreaseLabel, increa
           {value}
         </Text>
         <View style={styles.stepperButtons}>
-          <Pressable
+          <PressableSurface
             onPress={() => updateValue(value - 1)}
             disabled={decrementDisabled}
+            feedback="scale"
+            hitSlop={2}
             accessibilityRole="button"
             accessibilityLabel={decreaseLabel}
-            style={({ pressed }) => [
-              styles.stepperButton,
-              pressed && !decrementDisabled ? styles.pressed : null,
-              decrementDisabled ? { opacity: themeOpacity.disabled } : null,
-            ]}
+            style={[styles.stepperButton, decrementDisabled ? { opacity: themeOpacity.disabled } : null]}
           >
             <Icon name="minus" size={16} color={decrementDisabled ? systemColors.tertiaryLabel : brandColors.primary} />
-          </Pressable>
-          <Pressable
+          </PressableSurface>
+          <PressableSurface
             onPress={() => updateValue(value + 1)}
             disabled={incrementDisabled}
+            feedback="scale"
+            hitSlop={2}
             accessibilityRole="button"
             accessibilityLabel={increaseLabel}
-            style={({ pressed }) => [
-              styles.stepperButton,
-              pressed && !incrementDisabled ? styles.pressed : null,
-              incrementDisabled ? { opacity: themeOpacity.disabled } : null,
-            ]}
+            style={[styles.stepperButton, incrementDisabled ? { opacity: themeOpacity.disabled } : null]}
           >
             <Icon name="plus" size={16} color={incrementDisabled ? systemColors.tertiaryLabel : brandColors.primary} />
-          </Pressable>
+          </PressableSurface>
         </View>
       </View>
     </View>
@@ -190,14 +187,17 @@ type OptionChipProps = {
   label: string;
   active: boolean;
   onPress: () => void;
+  accessibilityLabel?: string;
 };
 
-function OptionChip({ label, active, onPress }: OptionChipProps) {
+function OptionChip({ label, active, onPress, accessibilityLabel }: OptionChipProps) {
   const { systemColors, brandColors } = useTheme();
 
   return (
-    <Pressable
+    <PressableSurface
       onPress={onPress}
+      feedback="scale"
+      hitSlop={2}
       style={[
         styles.chip,
         {
@@ -207,12 +207,12 @@ function OptionChip({ label, active, onPress }: OptionChipProps) {
       ]}
       accessibilityRole="button"
       accessibilityState={{ selected: active }}
-      accessibilityLabel={label}
+      accessibilityLabel={accessibilityLabel ?? label}
     >
       <Text variant="footnote" color={active ? iosSystemColors.white : systemColors.label}>
         {label}
       </Text>
-    </Pressable>
+    </PressableSurface>
   );
 }
 
@@ -372,12 +372,17 @@ export function GeneratorPickerCard({
     if (selection.type !== 'on') return null;
     const { options } = selection;
     const minRatingPickerValue = getMinRatingPickerValue(options.minRating);
+    const targetGradeLabel = t('mobile.session.preGeneratorTargetGrade');
+    const warmUpGroupLabel = t('mobile.session.preGeneratorWarmUp');
+    const minAscentsGroupLabel = t('mobile.session.preGeneratorMinAscents');
+    const minRatingGroupLabel = t('mobile.session.preGeneratorMinRating');
+    const climbBiasGroupLabel = t('mobile.session.preGeneratorClimbBias');
 
     return (
       <View style={styles.optionsSection}>
         <View style={styles.settingBlock}>
           <Text variant="footnote" color={systemColors.secondaryLabel} style={styles.settingLabel}>
-            {t('mobile.session.preGeneratorWarmUp')}
+            {warmUpGroupLabel}
           </Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
             {WARM_UP_OPTIONS.map((warmUp) => (
@@ -386,6 +391,10 @@ export function GeneratorPickerCard({
                 label={warmUpLabel(warmUp, t)}
                 active={options.warmUp === warmUp}
                 onPress={() => updateCommonOptions({ warmUp })}
+                accessibilityLabel={t('mobile.session.preGeneratorOptionAccessibilityLabel', {
+                  group: warmUpGroupLabel,
+                  value: warmUpLabel(warmUp, t),
+                })}
               />
             ))}
           </ScrollView>
@@ -394,7 +403,7 @@ export function GeneratorPickerCard({
         {boardName != null ? (
           <View style={styles.settingBlock}>
             <Text variant="footnote" color={systemColors.secondaryLabel} style={styles.settingLabel}>
-              {t('mobile.session.preGeneratorTargetGrade')}
+              {targetGradeLabel}
             </Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
               {gradeChoices.map((grade) => {
@@ -406,6 +415,10 @@ export function GeneratorPickerCard({
                     label={gradeLabel}
                     active={isActive}
                     onPress={() => updateCommonOptions({ targetGrade: grade.difficulty_id })}
+                    accessibilityLabel={t('mobile.session.preGeneratorOptionAccessibilityLabel', {
+                      group: targetGradeLabel,
+                      value: gradeLabel,
+                    })}
                   />
                 );
               })}
@@ -417,7 +430,7 @@ export function GeneratorPickerCard({
 
         <View style={styles.settingBlock}>
           <Text variant="footnote" color={systemColors.secondaryLabel} style={styles.settingLabel}>
-            {t('mobile.session.preGeneratorMinAscents')}
+            {minAscentsGroupLabel}
           </Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
             {minAscentsOptions.map((minAscents) => {
@@ -430,6 +443,10 @@ export function GeneratorPickerCard({
                   label={label}
                   active={options.minAscents === minAscents}
                   onPress={() => updateCommonOptions({ minAscents })}
+                  accessibilityLabel={t('mobile.session.preGeneratorOptionAccessibilityLabel', {
+                    group: minAscentsGroupLabel,
+                    value: label,
+                  })}
                 />
               );
             })}
@@ -438,24 +455,37 @@ export function GeneratorPickerCard({
 
         <View style={styles.settingBlock}>
           <Text variant="footnote" color={systemColors.secondaryLabel} style={styles.settingLabel}>
-            {t('mobile.session.preGeneratorMinRating')}
+            {minRatingGroupLabel}
           </Text>
           <View style={styles.ratingRow}>
             <OptionChip
               label={t('mobile.session.preGeneratorAny')}
               active={minRatingPickerValue == null}
               onPress={() => updateCommonOptions({ minRating: 0 })}
+              accessibilityLabel={t('mobile.session.preGeneratorOptionAccessibilityLabel', {
+                group: minRatingGroupLabel,
+                value: t('mobile.session.preGeneratorAny'),
+              })}
             />
             <StarRating
               value={minRatingPickerValue ?? undefined}
               onChange={(rating) => updateCommonOptions({ minRating: rating ?? 0 })}
+              accessibilityHint={t('mobile.session.preGeneratorMinRatingStarHint')}
+              getAccessibilityLabel={(rating, selected) =>
+                t(
+                  selected
+                    ? 'mobile.session.preGeneratorMinRatingStarSelectedAccessibilityLabel'
+                    : 'mobile.session.preGeneratorMinRatingStarAccessibilityLabel',
+                  { count: rating },
+                )
+              }
             />
           </View>
         </View>
 
         <View style={styles.settingBlock}>
           <Text variant="footnote" color={systemColors.secondaryLabel} style={styles.settingLabel}>
-            {t('mobile.session.preGeneratorClimbBias')}
+            {climbBiasGroupLabel}
           </Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
             {CLIMB_BIAS_OPTIONS.map((climbBias) => (
@@ -464,6 +494,10 @@ export function GeneratorPickerCard({
                 label={climbBiasLabel(climbBias, t)}
                 active={options.climbBias === climbBias}
                 onPress={() => updateCommonOptions({ climbBias })}
+                accessibilityLabel={t('mobile.session.preGeneratorOptionAccessibilityLabel', {
+                  group: climbBiasGroupLabel,
+                  value: climbBiasLabel(climbBias, t),
+                })}
               />
             ))}
           </ScrollView>
@@ -504,26 +538,18 @@ export function GeneratorPickerCard({
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
         {CHIP_VALUES.map((value) => {
           const isActive = value === activeType;
+          const label = chipLabel(value, t);
           return (
-            <Pressable
+            <OptionChip
               key={value}
+              label={label}
+              active={isActive}
               onPress={() => handleSelectType(value)}
-              style={[
-                styles.chip,
-                {
-                  // Border is a FOREGROUND → scheme-aware brand; the active fill
-                  // (white text on it) stays the static light brand.
-                  borderColor: isActive ? brandColors.primary : systemColors.separator,
-                  backgroundColor: isActive ? staticBrandColors.primary : 'transparent',
-                },
-              ]}
-              accessibilityRole="button"
-              accessibilityState={{ selected: isActive }}
-            >
-              <Text variant="footnote" color={isActive ? iosSystemColors.white : systemColors.label}>
-                {chipLabel(value, t)}
-              </Text>
-            </Pressable>
+              accessibilityLabel={t('mobile.session.preGeneratorOptionAccessibilityLabel', {
+                group: t('mobile.session.preGeneratorLabel'),
+                value: label,
+              })}
+            />
           );
         })}
       </ScrollView>
@@ -552,7 +578,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing[1],
     borderRadius: borderRadius.full,
     borderWidth: 1,
-    minHeight: 32,
+    minHeight: 44,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -589,13 +615,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
   },
   stepperButton: {
-    width: 40,
-    height: 40,
+    width: 44,
+    height: 44,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  pressed: {
-    opacity: 0.6,
   },
   ratingRow: {
     paddingHorizontal: spacing[4],

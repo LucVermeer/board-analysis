@@ -81,6 +81,17 @@ function renderPreview(fetchPool: FetchGradePool, initial: GeneratorSelection = 
   );
 }
 
+type AuthProps = { selection: GeneratorSelection; isAuthenticated: boolean };
+function renderPreviewWithAuth(fetchPool: FetchGradePool, initial: GeneratorSelection = OFF, isAuthenticated = false) {
+  return renderHook(
+    ({ selection, isAuthenticated: authState }: AuthProps) =>
+      useWorkoutPreview(selection, board, { isAuthenticated: authState }, { fetchPool, grades }),
+    {
+      initialProps: { selection: initial, isAuthenticated },
+    },
+  );
+}
+
 afterEach(() => {
   vi.useRealTimers();
   toast.showToast.mockClear();
@@ -132,6 +143,19 @@ describe('useWorkoutPreview', () => {
     fetchPool.mockClear();
 
     rerender({ selection: on(10, { mainSetClimbs: 21 }) });
+
+    await waitFor(() => expect(fetchPool).toHaveBeenCalledTimes(1));
+  });
+
+  it('rebuilds when authentication changes because climb-bias filters depend on auth', async () => {
+    const fetchPool = vi.fn<FetchGradePool>(async () => [makeClimb('a'), makeClimb('b'), makeClimb('c')]);
+    const selection = on(10, { climbBias: 'unfamiliar' });
+    const { result, rerender } = renderPreviewWithAuth(fetchPool, selection, false);
+
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+    fetchPool.mockClear();
+
+    rerender({ selection, isAuthenticated: true });
 
     await waitFor(() => expect(fetchPool).toHaveBeenCalledTimes(1));
   });
@@ -204,6 +228,38 @@ describe('useWorkoutPreview', () => {
 
     expect(result.current.status).toBe('ready');
     expect(result.current.items.every((preview) => preview.item.climb.uuid === 'fresh')).toBe(true);
+  });
+
+  it('drops a stale row refresh after the preview is cleared', async () => {
+    let resolveRefresh: ((climbs: Climb[]) => void) | null = null;
+    const fetchPool = vi
+      .fn<FetchGradePool>()
+      .mockResolvedValueOnce([makeClimb('a'), makeClimb('b')])
+      .mockImplementationOnce(
+        () =>
+          new Promise<Climb[]>((resolve) => {
+            resolveRefresh = resolve;
+          }),
+      );
+    const { result, rerender } = renderPreview(fetchPool, on(10));
+
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+    const targetUuid = result.current.items[0].item.uuid;
+
+    await act(async () => {
+      result.current.refreshSlot(targetUuid);
+      await Promise.resolve();
+    });
+    rerender({ selection: OFF });
+    await waitFor(() => expect(result.current.status).toBe('idle'));
+
+    await act(async () => {
+      resolveRefresh?.([makeClimb('c')]);
+      await Promise.resolve();
+    });
+
+    expect(result.current.status).toBe('idle');
+    expect(result.current.items).toEqual([]);
   });
 
   it('sets error status, toasts, and leaves previous items in place when a rebuild fails', async () => {

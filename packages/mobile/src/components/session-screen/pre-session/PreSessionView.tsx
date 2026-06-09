@@ -93,6 +93,11 @@ export function PreSessionView() {
 
   const handleStart = useCallback(async () => {
     if (!activeBoard) return;
+    const generatedItems = selection.type === 'on' ? toQueueItems() : [];
+    if (selection.type === 'on' && (status !== 'ready' || refreshingUuids.size > 0 || generatedItems.length === 0)) {
+      return;
+    }
+
     setIsStarting(true);
     try {
       const newSessionId = await startSession();
@@ -102,29 +107,39 @@ export function PreSessionView() {
       }
 
       if (selection.type === 'on') {
-        const items = toQueueItems();
-        if (items.length > 0) {
-          // Replace the queue with the reviewed preview (set the first climb
-          // current so the session opens on climb #1). setQueue dispatches
-          // UPDATE_QUEUE locally + best-effort party sync.
-          setQueue(items, items[0]);
-          track(SHARED_EVENTS.SessionQueueGenerated, {
-            workoutType: selection.options.type,
-            boardName: activeBoard.boardType,
-            angle: activeBoard.angle,
-            savedCount: items.length,
-            failedCount: plannedCount - items.length,
-          });
-        }
+        // Replace the queue with the reviewed preview (set the first climb
+        // current so the session opens on climb #1). setQueue dispatches
+        // UPDATE_QUEUE locally + best-effort party sync.
+        setQueue(generatedItems, generatedItems[0]);
+        track(SHARED_EVENTS.SessionQueueGenerated, {
+          workoutType: selection.options.type,
+          boardName: activeBoard.boardType,
+          angle: activeBoard.angle,
+          savedCount: generatedItems.length,
+          failedCount: plannedCount - generatedItems.length,
+        });
       }
     } catch {
       showToast(t('mobile.session.preStartError'), 'error');
     } finally {
       setIsStarting(false);
     }
-  }, [activeBoard, selection, toQueueItems, plannedCount, startSession, setQueue, showToast, t]);
+  }, [
+    activeBoard,
+    selection,
+    toQueueItems,
+    status,
+    refreshingUuids,
+    plannedCount,
+    startSession,
+    setQueue,
+    showToast,
+    t,
+  ]);
 
-  const canStart = activeBoard != null && !isStarting;
+  const generatorPreviewReady =
+    selection.type !== 'on' || (status === 'ready' && previewItems.length > 0 && refreshingUuids.size === 0);
+  const canStart = activeBoard != null && !isStarting && generatorPreviewReady;
   const footerBottomPadding = bottomChrome.scrollBottomPadding + spacing[3];
 
   // Inline status copy shown above an empty preview (loading / no results /

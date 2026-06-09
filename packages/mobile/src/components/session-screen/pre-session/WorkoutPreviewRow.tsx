@@ -1,10 +1,11 @@
 import { memo, useCallback, useRef } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import type { ClimbQueueItem } from '@boardsesh/queue';
 import { ClimbListItemContent } from '../../ClimbListItemContent';
 import { THUMBNAIL_WIDTH } from '../../ClimbListThumbnail';
 import { Icon } from '../../Icon';
+import { PressableSurface } from '../../PressableSurface';
 import type { QueueItemRowBoard } from '../../QueueItemRow';
 import { useTheme } from '../../../providers/theme-provider';
 import { iosSystemColors } from '../../../theme/ios-colors';
@@ -55,32 +56,39 @@ function WorkoutPreviewRowComponent({
 
   return (
     <View>
-      <Pressable
-        onPress={handlePress}
-        accessibilityRole="button"
-        accessibilityLabel={climbName}
-        accessibilityState={{ selected: isActive }}
+      <View
         style={[
           styles.row,
           { backgroundColor: systemColors.secondaryBackground },
           isActive && { backgroundColor: `${brandColors.primary}14` },
         ]}
       >
-        <ClimbListItemContent
-          climb={item.climb}
-          boardName={board.boardName}
-          layoutId={board.layoutId}
-          sizeId={board.sizeId}
-          setIds={board.setIds}
-          angle={board.angle}
-        />
+        <PressableSurface
+          onPress={handlePress}
+          feedback="opacity"
+          accessibilityRole="button"
+          accessibilityLabel={climbName}
+          accessibilityState={{ selected: isActive }}
+          style={styles.rowButton}
+        >
+          <ClimbListItemContent
+            climb={item.climb}
+            boardName={board.boardName}
+            layoutId={board.layoutId}
+            sizeId={board.sizeId}
+            setIds={board.setIds}
+            angle={board.angle}
+          />
+        </PressableSurface>
 
-        <Pressable
+        <PressableSurface
           onPress={handleRefresh}
           disabled={isRefreshing}
-          hitSlop={8}
+          feedback="scale"
+          hitSlop={2}
           accessibilityRole="button"
-          accessibilityLabel={t('mobile.session.preRegenerateClimb')}
+          accessibilityLabel={t('mobile.session.preRegenerateClimbForClimb', { name: climbName })}
+          accessibilityState={{ disabled: isRefreshing, busy: isRefreshing }}
           style={styles.refreshButton}
         >
           {isRefreshing ? (
@@ -88,8 +96,8 @@ function WorkoutPreviewRowComponent({
           ) : (
             <Icon name="refresh" size={22} color={iosSystemColors.systemGray} />
           )}
-        </Pressable>
-      </Pressable>
+        </PressableSurface>
+      </View>
 
       <View style={[styles.separator, { backgroundColor: systemColors.separator }]} />
     </View>
@@ -121,11 +129,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     columnGap: spacing[3],
-    paddingVertical: spacing[2],
     paddingHorizontal: spacing[3],
   },
+  rowButton: {
+    flex: 1,
+    paddingVertical: spacing[2],
+  },
   refreshButton: {
-    width: 36,
+    width: 44,
     height: 44,
     alignItems: 'center',
     justifyContent: 'center',

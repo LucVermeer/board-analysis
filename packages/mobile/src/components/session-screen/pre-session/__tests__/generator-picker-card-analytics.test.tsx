@@ -17,7 +17,10 @@ vi.mock('react-native', () => ({
   View: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
   ScrollView: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
   StyleSheet: { create: (styles: unknown) => styles, hairlineWidth: 1 },
-  Pressable: ({
+}));
+
+vi.mock('../../../PressableSurface', () => ({
+  PressableSurface: ({
     onPress,
     accessibilityLabel,
     children,
@@ -31,7 +34,16 @@ vi.mock('react-native', () => ({
   },
 }));
 
-vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
+vi.mock('react-i18next', () => ({
+  useTranslation: () => ({
+    t: (key: string, options?: Record<string, string>) => {
+      if (key === 'mobile.session.preGeneratorOptionAccessibilityLabel' && options) {
+        return `${options.group}, ${options.value}`;
+      }
+      return key;
+    },
+  }),
+}));
 vi.mock('@boardsesh/board-config', () => ({
   // Two grades so getDefaultTargetGrade picks the middle one deterministically.
   getGradesForBoard: () => [
@@ -102,7 +114,7 @@ vi.mock('../../../Text', () => ({
   Text: ({ children }: { children?: ReactNode }) => createElement('span', null, children),
 }));
 vi.mock('../../../../providers/theme-provider', () => ({
-  useTheme: () => ({ systemColors: {}, brandColors: {} }),
+  useTheme: () => ({ systemColors: {}, brandColors: {}, opacity: { disabled: 0.5 } }),
 }));
 vi.mock('../../../../hooks/use-grade-format', () => ({
   useGradeFormat: () => ({ formatGrade: (name: string) => name }),
@@ -187,7 +199,9 @@ describe('GeneratorPickerCard analytics', () => {
       }),
     );
 
-    chips.entries.find((entry) => entry.label === 'mobile.session.preGeneratorWarmUpExtended')?.onPress();
+    chips.entries
+      .find((entry) => entry.label === 'mobile.session.preGeneratorWarmUp, mobile.session.preGeneratorWarmUpExtended')
+      ?.onPress();
 
     expect(onChange).toHaveBeenCalledWith({
       type: 'on',

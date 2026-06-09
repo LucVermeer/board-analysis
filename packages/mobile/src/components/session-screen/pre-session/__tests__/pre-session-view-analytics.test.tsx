@@ -29,10 +29,16 @@ const previewItems = vi.hoisted(() => [
   { uuid: 'c1', climb: { uuid: 'x' } },
   { uuid: 'c2', climb: { uuid: 'y' } },
 ]);
+const previewRows = vi.hoisted(() =>
+  previewItems.map((item, index) => ({
+    item,
+    slot: { grade: 10, section: 'main', index },
+  })),
+);
 const preview = vi.hoisted(() => ({
   result: {
-    items: [] as unknown[],
-    status: 'ready' as const,
+    items: previewRows as unknown[],
+    status: 'ready' as 'idle' | 'loading' | 'ready' | 'error',
     refreshingUuids: new Set<string>(),
     plannedCount: 3,
     regenerate: vi.fn(),
@@ -107,6 +113,9 @@ beforeEach(() => {
   queue.startSession.mockResolvedValue('session-1');
   queue.setQueue.mockClear();
   activeBoard.data = { boardType: 'kilter', layoutId: 8, sizeId: 21, setIds: '1,2', angle: 40 };
+  preview.result.items = previewRows as unknown[];
+  preview.result.status = 'ready';
+  preview.result.refreshingUuids = new Set<string>();
   picker.onChange = null;
   startButton.onPress = null;
 });
@@ -165,5 +174,36 @@ describe('PreSessionView analytics', () => {
 
     expect(queue.setQueue).not.toHaveBeenCalled();
     expect(analytics.track).not.toHaveBeenCalledWith('Session Queue Generated', expect.anything());
+  });
+
+  it('does not start a generated session while the preview is still loading', async () => {
+    preview.result.status = 'loading';
+    render(createElement(PreSessionView));
+
+    act(() => {
+      picker.onChange?.({
+        type: 'on',
+        options: {
+          type: 'volume',
+          targetGrade: 10,
+          warmUp: 'none',
+          mainSetClimbs: 20,
+          mainSetVariability: 0,
+          minAscents: 0,
+          minRating: 0,
+          onlyTallClimbs: false,
+          onlyWideClimbs: false,
+          climbBias: 'any',
+        },
+      });
+    });
+
+    await act(async () => {
+      startButton.onPress?.();
+      await Promise.resolve();
+    });
+
+    expect(queue.startSession).not.toHaveBeenCalled();
+    expect(queue.setQueue).not.toHaveBeenCalled();
   });
 });

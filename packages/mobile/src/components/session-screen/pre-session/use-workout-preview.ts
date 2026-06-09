@@ -180,13 +180,15 @@ export function useWorkoutPreview(
 
   const refreshSlot = useCallback(
     async (itemUuid: string) => {
-      if (inFlightSlotsRef.current.has(itemUuid)) return; // already refreshing this row
+      if (inFlightSlotsRef.current.size > 0) return; // serialize row refreshes to avoid whole-state overwrite races
       const ctx = buildCtx();
       if (!ctx) return;
+      const token = genTokenRef.current;
       inFlightSlotsRef.current.add(itemUuid);
       setRefreshingUuids((prev) => new Set(prev).add(itemUuid));
       try {
         const result = await refreshSlotInState(dataRef.current, itemUuid, ctx, fetchPoolRef.current);
+        if (token !== genTokenRef.current) return;
         if (result.changed) {
           dataRef.current = result.state;
           setItems(result.state.items);
@@ -211,6 +213,7 @@ export function useWorkoutPreview(
   // Debounced live rebuild. `off`/no-board clears immediately; a real change
   // schedules a rebuild and supersedes any pending one via the cleared timer.
   const generationKey = useMemo(() => getSelectionGenerationKey(selection), [selection]);
+  const authKey = options.isAuthenticated ? 'authenticated' : 'anonymous';
   const boardKey = board
     ? `${board.boardType}:${board.layoutId}:${board.sizeId}:${board.setIds}:${board.angle}`
     : 'none';
@@ -220,9 +223,11 @@ export function useWorkoutPreview(
       void regenerate(); // synchronous clear to idle (reads refs)
       return undefined;
     }
+    genTokenRef.current++; // mark existing preview/row refreshes stale during the debounce window
+    setStatus('loading');
     const handle = setTimeout(() => void regenerate(), DEBOUNCE_MS);
     return () => clearTimeout(handle);
-  }, [generationKey, boardKey, regenerate]);
+  }, [generationKey, boardKey, authKey, regenerate]);
 
   const regenerateVoid = useCallback(() => void regenerate(), [regenerate]);
   const refreshSlotVoid = useCallback((itemUuid: string) => void refreshSlot(itemUuid), [refreshSlot]);

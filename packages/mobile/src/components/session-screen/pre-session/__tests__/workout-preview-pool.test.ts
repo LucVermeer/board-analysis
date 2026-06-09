@@ -70,10 +70,10 @@ describe('selectItemsFromPools', () => {
     expect(usedUuids).toEqual(new Set(['a', 'b', 'c']));
   });
 
-  it('repeats pool[0] when the pool is shorter than the slot count', () => {
+  it('skips slots when the pool is shorter than the slot count', () => {
     const pools = new Map([[10, [makeClimb('a')]]]);
     const { items } = selectItemsFromPools([slot(10, 0), slot(10, 1)], pools);
-    expect(items.map((preview) => preview.item.climb.uuid)).toEqual(['a', 'a']);
+    expect(items.map((preview) => preview.item.climb.uuid)).toEqual(['a']);
   });
 
   it('skips a slot whose grade pool is empty', () => {
