@@ -1,13 +1,13 @@
 ## Claude Review
 
-⚨
- **Needs attention** - One missing authorization check in `reportBoardClimb` lets any authenticated user post to any board; two read endpoints have no auth with no explanation; migration missing `CONCURRENTLY`.
+⚠️
+**Needs attention** - One missing authorization check in `reportBoardClimb` lets any authenticated user post to any board; two read endpoints have no auth with no explanation; migration missing `CONCURRENTLY`.
 
 ---
 
 ### Security
 
-**`reportBoardClimb` — missing board membership check** (`packages/backend/src/graphql/resolvers/board-presence/mutations.ts`, lines 166–234)
+**`reportBoardClimb` —"missing board membership check** (`packages/backend/src/graphql/resolvers/board-presence/mutations.ts`, lines 166–234)
 
 The mutation requires authentication and rate-limits to 60/min, but never verifies the caller has any relationship to the target board. Any authenticated user who knows or guesses a `boardId` can inject climb reports onto that board's feed. Sender identity is correctly server-derived so names can't be forged, but board access is unguarded.
 
@@ -17,7 +17,7 @@ Suggested fix before the profile lookup:
 
 ---
 
-**`boardRecentClimbs` / `boardPresenceStats` — No authentication** (`packages/backend/src/graphql/resolvers/board-presence/queries.ts`, lines 14–22 and 34–50)
+**`boardRecentClimbs` / `boardPresenceStats` — no authentication** (`packages/backend/src/graphql/resolvers/board-presence/queries.ts`, lines 14–22 and 34–50)
 
 Both resolvers accept `_ctx: ConnectionContext` and never use it. `boardPresenceStats` queries `boardsesh_ticks` with no access control. The subscription explicitly documents "membership-free" access with a rationale comment; these queries have no such comment. If public read is intentional, add the same comment. If not, add `requireAuthenticated(ctx)`.
 
@@ -27,7 +27,7 @@ Both resolvers accept `_ctx: ConnectionContext` and never use it. `boardPresence
 
 **Migration 0121 — index creation without `CONCURRENTLY`** (`packages/db/drizzle/0121_abnormal_masked_marvel.sql`, line 1)
 
-`CREATE UNIQUE INDEX "user_boards_unique_serial" ON "user_boards"` takes a write lock for the full index build. Table is small today but the pattern is worth fixing before it grows.
+`CREATE UNIQUEINDEX "user_boards_unique_serial" ON "user_boards"` takes a write lock for the full index build. Table is small today but the pattern is worth fixing before it grows.
 
 ---
 
