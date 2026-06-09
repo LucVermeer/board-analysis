@@ -136,14 +136,6 @@ export type AddGymMemberInput = {
   userId: Scalars['ID']['input'];
 };
 
-/** Input for adding a user to an inferred session. */
-export type AddUserToSessionInput = {
-  /** ID of the inferred session */
-  sessionId: Scalars['ID']['input'];
-  /** User ID to add */
-  userId: Scalars['ID']['input'];
-};
-
 /** Result of fetching the authenticated user's playlists, paginated. */
 export type AllUserPlaylistsResult = {
   __typename?: 'AllUserPlaylistsResult';
@@ -1810,11 +1802,6 @@ export type Mutation = {
    */
   addQueueItem: ClimbQueueItem;
   /**
-   * Add a user to an inferred session by reassigning their overlapping ticks.
-   * Must be a participant of the session.
-   */
-  addUserToSession?: Maybe<SessionDetail>;
-  /**
    * Attach an Instagram post or reel as beta for a climb. Idempotent on
    * (boardType, climbUuid, link).
    */
@@ -1945,11 +1932,6 @@ export type Mutation = {
   removeGymMember: Scalars['Boolean']['output'];
   /** Remove a climb from the queue by its queue item UUID. */
   removeQueueItem: Scalars['Boolean']['output'];
-  /**
-   * Remove a user from an inferred session, restoring their ticks to original sessions.
-   * Must be a participant of the session.
-   */
-  removeUserFromSession?: Maybe<SessionDetail>;
   /** Move a queue item from one position to another. */
   reorderQueueItem: Scalars['Boolean']['output'];
   /** Replace a queue item with a new one (same UUID). */
@@ -1979,12 +1961,6 @@ export type Mutation = {
    */
   setCurrentClimb?: Maybe<ClimbQueueItem>;
   /**
-   * Record that an inferred session has been mirrored to Apple HealthKit,
-   * storing the workout UUID for de-duplication and UI status.
-   * Must be a participant of the session.
-   */
-  setInferredSessionHealthKitWorkoutId: Scalars['Boolean']['output'];
-  /**
    * Replace the entire queue state.
    * Used for bulk operations or syncing from external sources.
    */
@@ -2012,6 +1988,12 @@ export type Mutation = {
    * resolved from the WebSocket connection context — no `sessionId` argument is required.
    */
   setSessionBoardSerial: Session;
+  /**
+   * Record that an explicitly-created session has been mirrored to Apple HealthKit,
+   * storing the workout UUID for de-duplication and UI status.
+   * Must be a participant of the session.
+   */
+  setSessionHealthKitWorkoutId: Scalars['Boolean']['output'];
   /** Setter override: directly set community status for your own climb. */
   setterOverrideCommunityStatus: ClimbCommunityStatus;
   /**
@@ -2068,11 +2050,6 @@ export type Mutation = {
   updateComment: Comment;
   /** Update a gym's metadata. */
   updateGym: Gym;
-  /**
-   * Update an inferred session's name and/or description.
-   * Must be a participant of the session.
-   */
-  updateInferredSession?: Maybe<SessionDetail>;
   /** Update playlist metadata. */
   updatePlaylist: Playlist;
   /** Update only lastAccessedAt for a playlist (does not update updatedAt). */
@@ -2111,11 +2088,6 @@ export type MutationAddGymMemberArgs = {
 export type MutationAddQueueItemArgs = {
   item: ClimbQueueItemInput;
   position?: InputMaybe<Scalars['Int']['input']>;
-};
-
-/** Root mutation type for all write operations. */
-export type MutationAddUserToSessionArgs = {
-  input: AddUserToSessionInput;
 };
 
 /** Root mutation type for all write operations. */
@@ -2340,11 +2312,6 @@ export type MutationRemoveQueueItemArgs = {
 };
 
 /** Root mutation type for all write operations. */
-export type MutationRemoveUserFromSessionArgs = {
-  input: RemoveUserFromSessionInput;
-};
-
-/** Root mutation type for all write operations. */
 export type MutationReorderQueueItemArgs = {
   newIndex: Scalars['Int']['input'];
   oldIndex: Scalars['Int']['input'];
@@ -2412,12 +2379,6 @@ export type MutationSetCurrentClimbArgs = {
 };
 
 /** Root mutation type for all write operations. */
-export type MutationSetInferredSessionHealthKitWorkoutIdArgs = {
-  sessionId: Scalars['ID']['input'];
-  workoutId: Scalars['String']['input'];
-};
-
-/** Root mutation type for all write operations. */
 export type MutationSetQueueArgs = {
   currentClimbQueueItem?: InputMaybe<ClimbQueueItemInput>;
   queue: Array<ClimbQueueItemInput>;
@@ -2431,6 +2392,12 @@ export type MutationSetSessionBoardPathArgs = {
 /** Root mutation type for all write operations. */
 export type MutationSetSessionBoardSerialArgs = {
   serial: Scalars['String']['input'];
+};
+
+/** Root mutation type for all write operations. */
+export type MutationSetSessionHealthKitWorkoutIdArgs = {
+  sessionId: Scalars['ID']['input'];
+  workoutId: Scalars['String']['input'];
 };
 
 /** Root mutation type for all write operations. */
@@ -2517,11 +2484,6 @@ export type MutationUpdateCommentArgs = {
 /** Root mutation type for all write operations. */
 export type MutationUpdateGymArgs = {
   input: UpdateGymInput;
-};
-
-/** Root mutation type for all write operations. */
-export type MutationUpdateInferredSessionArgs = {
-  input: UpdateInferredSessionInput;
 };
 
 /** Root mutation type for all write operations. */
@@ -3220,11 +3182,11 @@ export type Query = {
    * Returns null if session doesn't exist.
    */
   session?: Maybe<Session>;
-  /** Get full detail for a single session (party mode or inferred). */
+  /** Get full detail for a single explicitly-created session. */
   sessionDetail?: Maybe<SessionDetail>;
   /**
    * Get session-grouped activity feed (public, no auth required).
-   * Groups ticks into sessions (party mode or inferred by 4-hour gap).
+   * Groups ticks by explicitly-created sessions.
    */
   sessionGroupedFeed: SessionFeedResult;
   /**
@@ -3907,14 +3869,6 @@ export type RemoveClimbFromPlaylistInput = {
 export type RemoveGymMemberInput = {
   /** Gym UUID */
   gymUuid: Scalars['ID']['input'];
-  /** User ID to remove */
-  userId: Scalars['ID']['input'];
-};
-
-/** Input for removing a user from an inferred session. */
-export type RemoveUserFromSessionInput = {
-  /** ID of the inferred session */
-  sessionId: Scalars['ID']['input'];
   /** User ID to remove */
   userId: Scalars['ID']['input'];
 };
@@ -4974,16 +4928,6 @@ export type UpdateGymInput = {
   name?: InputMaybe<Scalars['String']['input']>;
   /** New slug */
   slug?: InputMaybe<Scalars['String']['input']>;
-};
-
-/** Input for updating an inferred session's metadata. */
-export type UpdateInferredSessionInput = {
-  /** New session description/notes (optional) */
-  description?: InputMaybe<Scalars['String']['input']>;
-  /** New session name (optional) */
-  name?: InputMaybe<Scalars['String']['input']>;
-  /** ID of the inferred session to update */
-  sessionId: Scalars['ID']['input'];
 };
 
 /** Input for updating a playlist. */

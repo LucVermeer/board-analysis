@@ -25,7 +25,6 @@ const TABLES_TO_RESET = [
   'board_session_participants',
   'board_sessions',
   'boardsesh_ticks',
-  'inferred_sessions',
   'board_climb_holds',
   'board_climb_stats',
   'board_climbs',

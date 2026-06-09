@@ -1,10 +1,5 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-  GET_SESSION_DETAIL,
-  UPDATE_INFERRED_SESSION,
-  type GetSessionDetailQueryResponse,
-} from '@boardsesh/graphql/operations';
-import type { SessionDetail, UpdateInferredSessionInput } from '@boardsesh/shared-schema';
+import { useQuery } from '@tanstack/react-query';
+import { GET_SESSION_DETAIL, type GetSessionDetailQueryResponse } from '@boardsesh/graphql/operations';
 import { GET_SESSION, type GetSessionQueryResponse, type SessionPreview } from '../operations';
 import { getHttpClient } from '../client';
 
@@ -25,31 +20,6 @@ export function useSessionDetail(sessionId: string | undefined) {
         .then((response) => response.sessionDetail),
     enabled: !!sessionId,
     staleTime: SESSION_DETAIL_STALE_TIME_MS,
-  });
-}
-
-type UpdateInferredSessionResponse = {
-  updateInferredSession: SessionDetail;
-};
-
-/**
- * Rename / edit the goal of an inferred session the user owns. Patches the
- * cached detail and invalidates the session feed so both surfaces reflect the
- * edit. Web maps the user-facing "goal" onto the `description` input field.
- */
-export function useUpdateInferredSession(sessionId: string) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (input: Omit<UpdateInferredSessionInput, 'sessionId'>) =>
-      getHttpClient()
-        .request<UpdateInferredSessionResponse>(UPDATE_INFERRED_SESSION, { input: { sessionId, ...input } })
-        .then((response) => response.updateInferredSession),
-    onSuccess: (updated) => {
-      queryClient.setQueryData<SessionDetail | null>(['sessionDetail', sessionId], (prev) =>
-        prev ? { ...prev, ...updated } : updated,
-      );
-      void queryClient.invalidateQueries({ queryKey: ['sessionGroupedFeed'] });
-    },
   });
 }
 

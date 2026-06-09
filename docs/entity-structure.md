@@ -430,7 +430,7 @@ The activity feed shows social activity from followed users and boards.
 | Enhancement                      | Description                                                               |
 | -------------------------------- | ------------------------------------------------------------------------- |
 | SSR with URL filtering           | Move filtering to URL search params for server-rendering and deep linking |
-| Session summaries                | Group ascents by session or timestamp proximity (2hr window)              |
+| Session summaries                | Group ascents by explicit `session_id`; solo ticks are not grouped        |
 | Multi-user session summaries     | "Bob, Marco, Anton sent 32 problems"                                      |
 | Grade bar chart in summaries     | Reuse `profile-stats-charts.tsx` pattern                                  |
 | Hardest climbs slideshow         | Image slideshow of 5 hardest climbs per session                           |

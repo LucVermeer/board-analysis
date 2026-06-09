@@ -3180,38 +3180,6 @@ type VoteSummary {
 }
 
 """
-Input for updating an inferred session's metadata.
-"""
-input UpdateInferredSessionInput {
-  "ID of the inferred session to update"
-  sessionId: ID!
-  "New session name (optional)"
-  name: String
-  "New session description/notes (optional)"
-  description: String
-}
-
-"""
-Input for adding a user to an inferred session.
-"""
-input AddUserToSessionInput {
-  "ID of the inferred session"
-  sessionId: ID!
-  "User ID to add"
-  userId: ID!
-}
-
-"""
-Input for removing a user from an inferred session.
-"""
-input RemoveUserFromSessionInput {
-  "ID of the inferred session"
-  sessionId: ID!
-  "User ID to remove"
-  userId: ID!
-}
-
-"""
 Input for adding a comment.
 """
 input AddCommentInput {
@@ -3903,12 +3871,12 @@ type Query {
 
   """
   Get session-grouped activity feed (public, no auth required).
-  Groups ticks into sessions (party mode or inferred by 4-hour gap).
+  Groups ticks by explicitly-created sessions.
   """
   sessionGroupedFeed(input: ActivityFeedInput): SessionFeedResult!
 
   """
-  Get full detail for a single session (party mode or inferred).
+  Get full detail for a single explicitly-created session.
   """
   sessionDetail(sessionId: ID!): SessionDetail
 
@@ -4544,34 +4512,12 @@ type Mutation {
   """
   linkBoardToGym(input: LinkBoardToGymInput!): Boolean!
 
-  # ============================================
-  # Session Editing Mutations (require auth)
-  # ============================================
-
   """
-  Update an inferred session's name and/or description.
-  Must be a participant of the session.
-  """
-  updateInferredSession(input: UpdateInferredSessionInput!): SessionDetail
-
-  """
-  Add a user to an inferred session by reassigning their overlapping ticks.
-  Must be a participant of the session.
-  """
-  addUserToSession(input: AddUserToSessionInput!): SessionDetail
-
-  """
-  Remove a user from an inferred session, restoring their ticks to original sessions.
-  Must be a participant of the session.
-  """
-  removeUserFromSession(input: RemoveUserFromSessionInput!): SessionDetail
-
-  """
-  Record that an inferred session has been mirrored to Apple HealthKit,
+  Record that an explicitly-created session has been mirrored to Apple HealthKit,
   storing the workout UUID for de-duplication and UI status.
   Must be a participant of the session.
   """
-  setInferredSessionHealthKitWorkoutId(sessionId: ID!, workoutId: String!): Boolean!
+  setSessionHealthKitWorkoutId(sessionId: ID!, workoutId: String!): Boolean!
 
   # ============================================
   # Notification Mutations (require auth)

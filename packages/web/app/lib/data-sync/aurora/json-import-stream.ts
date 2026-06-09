@@ -13,7 +13,7 @@ type ChunkPayload = {
     circuits: unknown[];
     climbs: unknown[];
   };
-  skipSessionBuild: boolean;
+  skipFinalization: boolean;
 };
 
 /**
@@ -192,7 +192,7 @@ export async function streamImport(
     allChunks.push({
       boardType,
       data: { ...emptyData, climbs },
-      skipSessionBuild: true,
+      skipFinalization: true,
     });
   }
 
@@ -200,7 +200,7 @@ export async function streamImport(
     allChunks.push({
       boardType,
       data: { ...emptyData, ascents: batch },
-      skipSessionBuild: true,
+      skipFinalization: true,
     });
   }
 
@@ -208,7 +208,7 @@ export async function streamImport(
     allChunks.push({
       boardType,
       data: { ...emptyData, attempts: batch },
-      skipSessionBuild: true,
+      skipFinalization: true,
     });
   }
 
@@ -217,7 +217,7 @@ export async function streamImport(
     allChunks.push({
       boardType,
       data: { ...emptyData, circuits },
-      skipSessionBuild: true,
+      skipFinalization: true,
     });
   }
 
@@ -226,12 +226,12 @@ export async function streamImport(
     allChunks.push({
       boardType,
       data: emptyData,
-      skipSessionBuild: false,
+      skipFinalization: false,
     });
   }
 
-  // The last chunk triggers session building
-  allChunks[allChunks.length - 1].skipSessionBuild = false;
+  // The last chunk runs final import correction after all ticks are present.
+  allChunks[allChunks.length - 1].skipFinalization = false;
 
   const emptyResult: ImportResult = {
     ascents: { imported: 0, skipped: 0, failed: 0 },

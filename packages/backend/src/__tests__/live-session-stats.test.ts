@@ -86,14 +86,6 @@ describe('buildSessionStatsUpdatedEvent', () => {
     expect(sessionDetailMock).toHaveBeenCalledWith(null, { sessionId: 'session-1' });
   });
 
-  it('returns null for non-party sessions', async () => {
-    sessionDetailMock.mockResolvedValue(makeSessionDetail({ sessionType: 'inferred' }));
-
-    const result = await buildSessionStatsUpdatedEvent('session-1');
-
-    expect(result).toBeNull();
-  });
-
   it('maps party session detail into SessionStatsUpdated with ticks', async () => {
     const detail = makeSessionDetail();
     sessionDetailMock.mockResolvedValue(detail);

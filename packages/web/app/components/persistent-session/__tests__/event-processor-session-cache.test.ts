@@ -139,8 +139,8 @@ describe('useEventProcessor - SessionStatsUpdated → React Query cache', () => 
     queryClient.setQueryData(
       SESSION_DETAIL_QUERY_KEY('session-abc'),
       createExistingSession({
-        sessionType: 'inferred',
-        sessionName: 'My Inferred Session',
+        sessionType: 'party',
+        sessionName: 'My Session',
         ownerUserId: 'owner-123',
         upvotes: 5,
         downvotes: 1,
@@ -164,9 +164,9 @@ describe('useEventProcessor - SessionStatsUpdated → React Query cache', () => 
     });
 
     const cached = queryClient.getQueryData<SessionDetail>(SESSION_DETAIL_QUERY_KEY('session-abc'));
-    expect(cached!.sessionType).toBe('inferred');
+    expect(cached!.sessionType).toBe('party');
     expect(cached!.ownerUserId).toBe('owner-123');
-    expect(cached!.sessionName).toBe('My Inferred Session');
+    expect(cached!.sessionName).toBe('My Session');
     expect(cached!.upvotes).toBe(5);
     expect(cached!.commentCount).toBe(3);
     expect(cached!.totalSends).toBe(5);

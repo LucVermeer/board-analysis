@@ -347,38 +347,6 @@ export const socialTypeDefs = /* GraphQL */ `
   }
 
   """
-  Input for updating an inferred session's metadata.
-  """
-  input UpdateInferredSessionInput {
-    "ID of the inferred session to update"
-    sessionId: ID!
-    "New session name (optional)"
-    name: String
-    "New session description/notes (optional)"
-    description: String
-  }
-
-  """
-  Input for adding a user to an inferred session.
-  """
-  input AddUserToSessionInput {
-    "ID of the inferred session"
-    sessionId: ID!
-    "User ID to add"
-    userId: ID!
-  }
-
-  """
-  Input for removing a user from an inferred session.
-  """
-  input RemoveUserFromSessionInput {
-    "ID of the inferred session"
-    sessionId: ID!
-    "User ID to remove"
-    userId: ID!
-  }
-
-  """
   Input for adding a comment.
   """
   input AddCommentInput {

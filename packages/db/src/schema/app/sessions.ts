@@ -9,6 +9,7 @@ import {
   bigserial,
   doublePrecision,
   index,
+  primaryKey,
   uniqueIndex,
 } from 'drizzle-orm/pg-core';
 import type { ClimbQueueItem } from '@boardsesh/shared-schema';
@@ -53,8 +54,6 @@ export const boardSessions = pgTable(
     isPermanent: boolean('is_permanent').default(false).notNull(),
     // Hex color for multi-session display
     color: text('color'),
-    // Apple HealthKit workout UUID once the session has been mirrored to HealthKit.
-    healthKitWorkoutId: text('health_kit_workout_id'),
   },
   (table) => ({
     locationIdx: index('board_sessions_location_idx').on(table.latitude, table.longitude),
@@ -63,6 +62,26 @@ export const boardSessions = pgTable(
     statusIdx: index('board_sessions_status_idx').on(table.status),
     lastActivityIdx: index('board_sessions_last_activity_idx').on(table.lastActivity),
     discoveryIdx: index('board_sessions_discovery_idx').on(table.discoverable, table.status, table.lastActivity),
+  }),
+);
+
+export const sessionHealthKitWorkouts = pgTable(
+  'session_health_kit_workouts',
+  {
+    sessionId: text('session_id')
+      .references(() => boardSessions.id, { onDelete: 'cascade' })
+      .notNull(),
+    userId: text('user_id')
+      .references(() => users.id, { onDelete: 'cascade' })
+      .notNull(),
+    workoutId: text('workout_id').notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.sessionId, table.userId] }),
+    sessionIdx: index('session_health_kit_workouts_session_idx').on(table.sessionId),
+    userIdx: index('session_health_kit_workouts_user_idx').on(table.userId),
   }),
 );
 
@@ -111,6 +130,8 @@ export const sessionBoards = pgTable(
 // Type exports for use in other files
 export type BoardSession = typeof boardSessions.$inferSelect;
 export type NewBoardSession = typeof boardSessions.$inferInsert;
+export type SessionHealthKitWorkout = typeof sessionHealthKitWorkouts.$inferSelect;
+export type NewSessionHealthKitWorkout = typeof sessionHealthKitWorkouts.$inferInsert;
 export type BoardSessionClient = typeof boardSessionClients.$inferSelect;
 export type NewBoardSessionClient = typeof boardSessionClients.$inferInsert;
 export type BoardSessionQueue = typeof boardSessionQueues.$inferSelect;

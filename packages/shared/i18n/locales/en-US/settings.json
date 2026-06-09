@@ -217,8 +217,7 @@
         "dedup": "Checking for duplicates",
         "ascents": "Importing ascents",
         "attempts": "Importing attempts",
-        "circuits": "Importing circuits",
-        "sessions": "Building sessions"
+        "circuits": "Importing circuits"
       },
       "fileLabel": "Upload Aurora JSON export file",
       "tooLarge": "File is too large (max 200MB). Please check you selected the correct file.",

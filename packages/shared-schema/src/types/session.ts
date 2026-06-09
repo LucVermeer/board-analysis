@@ -43,19 +43,3 @@ export type SessionSummary = {
   durationMinutes?: number | null;
   goal?: string | null;
 };
-
-export type UpdateInferredSessionInput = {
-  sessionId: string;
-  name?: string | null;
-  description?: string | null;
-};
-
-export type AddUserToSessionInput = {
-  sessionId: string;
-  userId: string;
-};
-
-export type RemoveUserFromSessionInput = {
-  sessionId: string;
-  userId: string;
-};

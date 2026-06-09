@@ -411,34 +411,12 @@ export const mutationsTypeDefs = /* GraphQL */ `
     """
     linkBoardToGym(input: LinkBoardToGymInput!): Boolean!
 
-    # ============================================
-    # Session Editing Mutations (require auth)
-    # ============================================
-
     """
-    Update an inferred session's name and/or description.
-    Must be a participant of the session.
-    """
-    updateInferredSession(input: UpdateInferredSessionInput!): SessionDetail
-
-    """
-    Add a user to an inferred session by reassigning their overlapping ticks.
-    Must be a participant of the session.
-    """
-    addUserToSession(input: AddUserToSessionInput!): SessionDetail
-
-    """
-    Remove a user from an inferred session, restoring their ticks to original sessions.
-    Must be a participant of the session.
-    """
-    removeUserFromSession(input: RemoveUserFromSessionInput!): SessionDetail
-
-    """
-    Record that an inferred session has been mirrored to Apple HealthKit,
+    Record that an explicitly-created session has been mirrored to Apple HealthKit,
     storing the workout UUID for de-duplication and UI status.
     Must be a participant of the session.
     """
-    setInferredSessionHealthKitWorkoutId(sessionId: ID!, workoutId: String!): Boolean!
+    setSessionHealthKitWorkoutId(sessionId: ID!, workoutId: String!): Boolean!
 
     # ============================================
     # Notification Mutations (require auth)
