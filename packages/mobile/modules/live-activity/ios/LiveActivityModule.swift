@@ -249,6 +249,8 @@ public class LiveActivityModule: Module {
     }
 
     private func handleBleReconnectFromWidget() {
+        guard #available(iOS 17.0, *) else { return }
+
         Task { @MainActor in
             _ = await LiveActivityBleBridge.reconnectForIntent()
         }
