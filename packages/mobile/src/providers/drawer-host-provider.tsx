@@ -16,7 +16,6 @@ import { randomUUID } from 'expo-crypto';
 import type { BoardName, Climb } from '@boardsesh/shared-schema';
 import { buildBoardPath } from '@boardsesh/board-config';
 import type { Climb as QueueClimb, ClimbQueueItem, PlaylistSuggestionSource } from '@boardsesh/queue';
-import { deriveIsDriver } from '@boardsesh/queue-runtime';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { PlayDrawer, type PlayDrawerHandle, type PlayDrawerOpenOptions } from '../components/play-drawer';
 import { LogAscentSheet } from '../components/LogAscentSheet';
@@ -30,7 +29,7 @@ import { AddToPlaylistSheet } from '../components/AddToPlaylistSheet';
 import { useToggleFavorite, useProfile } from '../lib/graphql/hooks';
 import { favoritesStore } from '@boardsesh/climb-actions';
 import { climbToQueueItem } from '../lib/climb-to-queue-item';
-import { useQueueActions, useQueueSessionControls } from './queue-provider';
+import { useIsPartyPreviewOnly, useQueueActions, useQueueSessionControls } from './queue-provider';
 import { useQueueSnackbar } from './queue-snackbar-provider';
 
 export type BoardConfig = {
@@ -105,7 +104,8 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
   const [climbActions, setClimbActions] = useState<{ climb: Climb; boardConfig: BoardConfig } | null>(null);
   const [playlistClimb, setPlaylistClimb] = useState<{ climb: Climb; boardConfig: BoardConfig } | null>(null);
   const { addToQueue, setSessionBoardPath, setCurrentClimb } = useQueueActions();
-  const { sessionId, driverParticipantId, participantId } = useQueueSessionControls();
+  const { sessionId } = useQueueSessionControls();
+  const isPartyPreviewOnly = useIsPartyPreviewOnly();
   const setActiveBoard = useSetActiveBoard();
   const { visible: snackbarVisible, nonce: snackbarNonce, dismissSnackbar } = useQueueSnackbar();
   const { mutate: toggleFavoriteMutate } = useToggleFavorite();
@@ -312,13 +312,6 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
   // Tap a queue item → make it current and show it in the play drawer.
   const handleQueueClimbPress = useCallback(
     (item: ClimbQueueItem) => {
-      const isPartyPreviewOnly =
-        sessionId !== null &&
-        !deriveIsDriver({
-          isPersistentSessionActive: true,
-          participantId,
-          driverParticipantId,
-        });
       if (isPartyPreviewOnly) {
         openPlayDrawer(item.climb, { setAsCurrent: false, previewQueueItem: item });
         requestCloseQueueSheet();
@@ -328,7 +321,7 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
       openPlayDrawer(item.climb, { setAsCurrent: false, previewQueueItem: item });
       requestCloseQueueSheet();
     },
-    [driverParticipantId, participantId, sessionId, setCurrentClimb, openPlayDrawer, requestCloseQueueSheet],
+    [isPartyPreviewOnly, setCurrentClimb, openPlayDrawer, requestCloseQueueSheet],
   );
 
   // Tap a suggestion → activate it with a suggestion source built from the
@@ -338,13 +331,6 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
     (climb: QueueClimb, source: PlaylistSuggestionSource) => {
       const item = climbToQueueItem(climb, { suggested: true });
       const schemaClimb = item.climb as Climb;
-      const isPartyPreviewOnly =
-        sessionId !== null &&
-        !deriveIsDriver({
-          isPersistentSessionActive: true,
-          participantId,
-          driverParticipantId,
-        });
       if (isPartyPreviewOnly) {
         openPlayDrawer(schemaClimb, {
           setAsCurrent: false,
@@ -358,7 +344,7 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
       openPlayDrawer(schemaClimb, { setAsCurrent: false, previewQueueItem: item });
       requestCloseQueueSheet();
     },
-    [driverParticipantId, participantId, sessionId, setCurrentClimb, openPlayDrawer, requestCloseQueueSheet],
+    [isPartyPreviewOnly, setCurrentClimb, openPlayDrawer, requestCloseQueueSheet],
   );
 
   // Tick a history climb → open the log-ascent sheet (stacks above the queue
