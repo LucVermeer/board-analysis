@@ -26,6 +26,15 @@ describe('buildHoldFilterOptions', () => {
     expect(starting?.color).toMatch(/^#/);
     expect(starting?.color).not.toBe(ANY_HOLD_COLOR);
   });
+
+  it('never surfaces non-setter hold states (OFF / NOT / AUX) as options', () => {
+    // MoonBoard's HOLD_STATE_MAP carries an AUX live-preview role; the membership
+    // guard must keep it (and any OFF/NOT) out of the filter options.
+    const types = buildHoldFilterOptions('moonboard').map((option) => option.type);
+    expect(types).not.toContain('AUX');
+    expect(types).not.toContain('OFF');
+    expect(types).not.toContain('NOT');
+  });
 });
 
 describe('toggleHoldFilterType', () => {

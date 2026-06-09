@@ -1,4 +1,4 @@
-import { HOLD_STATE_MAP, type HoldStateInfo } from '@boardsesh/board-constants/hold-states';
+import { HOLD_STATE_MAP } from '@boardsesh/board-constants/hold-states';
 import type { BoardName, HoldFilterEntry, HoldFilterMode, HoldFilterType } from '@boardsesh/shared-schema';
 
 /**
@@ -14,6 +14,10 @@ import type { BoardName, HoldFilterEntry, HoldFilterMode, HoldFilterType } from 
 
 // Display order of the named setting roles in the picker.
 const SETTER_STATE_ORDER: readonly HoldFilterType[] = ['STARTING', 'HAND', 'FINISH', 'FOOT'];
+
+// Membership guard for narrowing `HOLD_STATE_MAP` entry names (a `HoldState`,
+// which also includes OFF/NOT/AUX/ANY) down to a selectable `HoldFilterType`.
+const SETTER_STATE_ORDER_SET = new Set<string>(SETTER_STATE_ORDER);
 
 // Per-board allowlist of selectable named states. MoonBoard climbs are
 // STARTING / HAND / FINISH only — its extra HOLD_STATE_MAP entries exist to
@@ -45,7 +49,10 @@ export function buildHoldFilterOptions(boardName: BoardName): HoldFilterOption[]
   const boardMap = HOLD_STATE_MAP[boardName];
   const colorByState = new Map<HoldFilterType, string>();
   if (boardMap) {
-    for (const entry of Object.values(boardMap) as HoldStateInfo[]) {
+    for (const entry of Object.values(boardMap)) {
+      // Skip non-selectable states (OFF / NOT / AUX / ANY) so the narrowing to
+      // HoldFilterType is sound — no unsafe cast.
+      if (!SETTER_STATE_ORDER_SET.has(entry.name)) continue;
       const name = entry.name as HoldFilterType;
       if (!colorByState.has(name)) colorByState.set(name, entry.displayColor ?? entry.color);
     }
