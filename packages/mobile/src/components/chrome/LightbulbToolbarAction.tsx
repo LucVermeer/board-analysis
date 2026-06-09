@@ -1,8 +1,6 @@
-import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../providers/theme-provider';
-import { useOptionalBluetoothContext } from '../../providers/bluetooth-provider';
-import { hapticLight } from '../../lib/haptics';
+import { useLightbulbToggle } from '../ble/use-lightbulb-toggle';
 import { Icon } from '../Icon';
 import { GlassToolbarAction } from './GlassActionToolbar';
 
@@ -17,24 +15,7 @@ export function LightbulbToolbarAction() {
   const { systemColors, brandColors } = useTheme();
   const { t: tCommon } = useTranslation('common');
   const { t: tSettings } = useTranslation('settings');
-  const bluetooth = useOptionalBluetoothContext();
-  const connected = bluetooth?.isConnected ?? false;
-
-  const handlePress = useCallback(() => {
-    if (!bluetooth) return;
-    // Ignore taps while a connect is already running — a second concurrent
-    // connect tears down the first attempt's scan and strands the picker.
-    if (bluetooth.loading) return;
-    hapticLight();
-    if (bluetooth.isConnected) {
-      void bluetooth.disconnect();
-    } else {
-      // Reconnect silently to the remembered board when there is one for the
-      // current config (same behaviour as the play-drawer lightbulb);
-      // otherwise fall through to the device picker.
-      void bluetooth.connect(undefined, undefined, bluetooth.reconnectSerialForCurrentBoard ?? undefined);
-    }
-  }, [bluetooth]);
+  const { bluetooth, connected, handlePress } = useLightbulbToggle();
 
   if (!bluetooth) return null;
 

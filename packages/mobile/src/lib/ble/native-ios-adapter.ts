@@ -102,6 +102,12 @@ export class NativeIosBleAdapter implements BluetoothAdapter {
       if (scanUnfiltered && !isLikelyBoardDevice({ name: deviceName, serviceUuids: payload.serviceUuids })) {
         return;
       }
+      // Repeat advertisements of an unchanged device don't need a state
+      // update (or a picker re-render) — only a new device or a late-arriving
+      // name does.
+      const alreadyListed = devices.get(payload.device.deviceId);
+      if (alreadyListed && alreadyListed.name === deviceName) return;
+
       const device: DiscoveredDevice = {
         deviceId: payload.device.deviceId,
         name: deviceName,

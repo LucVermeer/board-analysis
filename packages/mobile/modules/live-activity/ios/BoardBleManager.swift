@@ -73,6 +73,12 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
 
     private var discoveredPeripherals: [String: CBPeripheral] = [:]
     private var discoveredNames: [String: String] = [:]
+    // What was last emitted to JS for each device in the CURRENT scan
+    // (name + advertised UUIDs). With allow-duplicates on and (on newer JS)
+    // an unfiltered scan, didDiscover fires continuously for every nearby
+    // device; without this gate every repeat advertisement would cross the
+    // native→JS bridge. Cleared on every startScan so a fresh scan re-emits.
+    private var emittedScanResults: [String: String] = [:]
     private var connectedPeripheral: CBPeripheral?
     private var writeCharacteristic: CBCharacteristic?
     private var pendingConnectCompletion: ((Result<Void, Error>) -> Void)?
@@ -286,6 +292,7 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
         let uuids = serviceUuids.compactMap { CBUUID(string: $0) }
         scanServices = uuids
         scanRequested = true
+        emittedScanResults = [:]
 
         guard centralManager.state == .poweredOn else {
             if isAvailableOnBleQueue {
@@ -624,9 +631,19 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
         if let name {
             discoveredNames[deviceId] = name
         }
-        let advertisedServiceUuids = (advertisementData[CBAdvertisementDataServiceUUIDsKey] as? [CBUUID] ?? [])
+        // Overflow UUIDs cover peripherals whose advertisement is too full to
+        // carry the service list in the main packet.
+        let advertisedServiceUuids = ((advertisementData[CBAdvertisementDataServiceUUIDsKey] as? [CBUUID] ?? [])
+            + (advertisementData[CBAdvertisementDataOverflowServiceUUIDsKey] as? [CBUUID] ?? []))
             .map { $0.uuidString }
-        onScanResult?(BoardBleScanResult(deviceId: deviceId, name: name, rssi: RSSI.intValue, serviceUuids: advertisedServiceUuids))
+        // Only cross the bridge when something material changed for this
+        // device (first sighting, name arriving in a later scan response, or
+        // a different advertised UUID set).
+        let emissionKey = "\(name ?? "")|\(advertisedServiceUuids.joined(separator: ","))"
+        if emittedScanResults[deviceId] != emissionKey {
+            emittedScanResults[deviceId] = emissionKey
+            onScanResult?(BoardBleScanResult(deviceId: deviceId, name: name, rssi: RSSI.intValue, serviceUuids: advertisedServiceUuids))
+        }
 
         // Reconnect-by-last-known-board scan fallback: the stored board just
         // advertised — hand its completion to connectOnBleQueue (which stops the

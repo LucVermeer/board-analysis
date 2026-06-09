@@ -9,7 +9,7 @@ import {
   parseSerialNumber,
   type LedColorOverrides,
 } from '@boardsesh/ble-protocol/aurora';
-import { getMoonboardBluetoothPacket } from '@boardsesh/ble-protocol/moonboard';
+import { getMoonboardBluetoothPacket, isMoonboardDeviceName } from '@boardsesh/ble-protocol/moonboard';
 import { classifyBleFailure, isDisconnectionError } from '@boardsesh/ble-protocol/connection-error';
 import type { AuroraBoardName } from '@boardsesh/shared-schema';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
@@ -45,6 +45,24 @@ export type PickerState = {
   handleSelect: (deviceId: string) => void;
   handleCancel: () => void;
 };
+
+// Identity of a board pairing: the silent-reconnect and adoption guards only
+// trust a remembered/native connection while the active config still matches.
+// Deliberately excludes set_ids — see the reconnectSerialForCurrentBoard note.
+function boardConfigKey(boardName: string, layoutId: number, sizeId: number): string {
+  return `${boardName}::${layoutId}::${sizeId}`;
+}
+
+/**
+ * Board type parsed from a BLE device name, covering both families: Aurora
+ * names via the product-name prefix, MoonBoard via its name prefixes. Returns
+ * undefined when the name identifies neither.
+ */
+function parseAnyBoardTypeFromDeviceName(deviceName?: string): string | undefined {
+  if (!deviceName) return undefined;
+  if (isMoonboardDeviceName(deviceName)) return 'moonboard';
+  return parseBoardTypeFromDeviceName(deviceName);
+}
 
 /**
  * Fire-and-forget GraphQL mutation recording the (serial, board config, API
@@ -395,9 +413,12 @@ export function useBoardBluetooth({
         }
       };
 
-      // Queue behind whatever write is already running or pending. The chain
-      // link swallows the result so one failed write never poisons the chain.
-      const queuedSend = writeChainRef.current.then(performSend, performSend);
+      // Queue behind whatever write is already running or pending.
+      // writeChainRef.current is never left rejected (the bookkeeping below
+      // coerces both outcomes), so a single fulfilled-arm .then suffices here;
+      // the rejected arm below is belt-and-suspenders so a future edit that
+      // lets performSend throw still can't wedge the chain.
+      const queuedSend = writeChainRef.current.then(performSend);
       writeChainRef.current = queuedSend.then(
         () => undefined,
         () => undefined,
@@ -518,9 +539,11 @@ export function useBoardBluetooth({
 
         // Remember the board (keyed to the config it was paired against) so an
         // involuntary drop can be recovered with a silent reconnect. Only Aurora
-        // boards expose a parseable serial; moonboard can't be reconnected by serial.
-        if (parsedSerial) {
-          setLastConnectedBoard({ serial: parsedSerial, configKey: `${boardName}::${layoutId}::${sizeId}` });
+        // boards expose a parseable serial; moonboard can't be reconnected by
+        // serial. Without a full config there is no usable key (and the
+        // reconnect comparison against currentConfigKey could never match).
+        if (parsedSerial && layoutId !== undefined && sizeId !== undefined) {
+          setLastConnectedBoard({ serial: parsedSerial, configKey: boardConfigKey(boardName, layoutId, sizeId) });
         }
 
         // Send initial frames if provided
@@ -629,13 +652,19 @@ export function useBoardBluetooth({
   // JS was suspended are missed). No-op on Android and on binaries older than
   // the `getConnectedDevice` surface.
   useEffect(() => {
-    const adopt = (deviceId: string, deviceName?: string) => {
+    const adopt = (deviceId: string, rawDeviceName?: string) => {
+      // The bridge sends '' for a missing name — normalise so name parsing
+      // (board type, serial, API level) sees undefined instead.
+      const deviceName = rawDeviceName || undefined;
       // JS already has (or is establishing) its own adapter — nothing to adopt.
       if (adapterRef.current || connectInFlightRef.current) return;
       if (!boardName || layoutId === undefined || sizeId === undefined) return;
       // Never adopt a different board type than the active config: the LED
-      // placement map wouldn't match and every send would misfire.
-      const adoptedBoardType = parseBoardTypeFromDeviceName(deviceName);
+      // placement map / packet format wouldn't match and every send would
+      // misfire. Must recognise MoonBoard names too — parseBoardTypeFromDeviceName
+      // alone only knows Aurora boards, so a natively-reconnected MoonBoard
+      // would slip past an Aurora-config check (and vice versa).
+      const adoptedBoardType = parseAnyBoardTypeFromDeviceName(deviceName);
       if (adoptedBoardType && adoptedBoardType !== boardName) return;
 
       const adapter = createBluetoothAdapter(devicePicker);
@@ -650,7 +679,7 @@ export function useBoardBluetooth({
 
       const serial = deviceName ? (parseSerialNumber(deviceName) ?? null) : null;
       if (serial) {
-        setLastConnectedBoard({ serial, configKey: `${boardName}::${layoutId}::${sizeId}` });
+        setLastConnectedBoard({ serial, configKey: boardConfigKey(boardName, layoutId, sizeId) });
       }
       setIsConnected(true);
       onConnectionChange?.(true);
@@ -658,16 +687,14 @@ export function useBoardBluetooth({
     };
 
     const connectedSubscription = subscribeNativeBleConnected((payload) => {
-      // The bridge sends '' for a missing name — normalise so name parsing
-      // (board type, serial, API level) sees undefined instead.
-      adopt(payload.deviceId, payload.deviceName || undefined);
+      adopt(payload.deviceId, payload.deviceName);
     });
     // null = platform/binary without the adoption surface — nothing to do.
     if (!connectedSubscription) return;
 
     const checkNativeConnection = () => {
       void getNativeBleConnectedDevice().then((device) => {
-        if (device) adopt(device.deviceId, device.name || undefined);
+        if (device) adopt(device.deviceId, device.name);
       });
     };
 
@@ -693,7 +720,7 @@ export function useBoardBluetooth({
   // of set_ids. Don't thread set_ids in here without also passing it to the
   // provider.
   const currentConfigKey =
-    boardName && layoutId !== undefined && sizeId !== undefined ? `${boardName}::${layoutId}::${sizeId}` : null;
+    boardName && layoutId !== undefined && sizeId !== undefined ? boardConfigKey(boardName, layoutId, sizeId) : null;
   const reconnectSerialForCurrentBoard =
     lastConnectedBoard && currentConfigKey && lastConnectedBoard.configKey === currentConfigKey
       ? lastConnectedBoard.serial

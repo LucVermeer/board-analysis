@@ -88,18 +88,30 @@ export class RNBleAdapter implements BluetoothAdapter {
         if (!scannedDevice) return;
 
         const deviceName = scannedDevice.localName ?? scannedDevice.name ?? undefined;
-        if (!isLikelyBoardDevice({ name: deviceName, serviceUuids: scannedDevice.serviceUUIDs })) {
+        // Overflow UUIDs cover iOS peripherals whose advertisement is too full
+        // to carry the service list in the main packet.
+        const advertisedServiceUuids = [
+          ...(scannedDevice.serviceUUIDs ?? []),
+          ...(scannedDevice.overflowServiceUUIDs ?? []),
+        ];
+        if (!isLikelyBoardDevice({ name: deviceName, serviceUuids: advertisedServiceUuids })) {
           return;
         }
+
+        // Deduplicate by deviceId — react-native-ble-plx uses stable
+        // peripheral UUIDs on iOS and device addresses on Android. An
+        // unfiltered scan re-fires this callback for every repeat
+        // advertisement, so only update state (and re-render the picker) when
+        // something material changed: a new device, or its name arriving in a
+        // later scan-response packet.
+        const alreadyListed = devices.get(scannedDevice.id);
+        if (alreadyListed && alreadyListed.name === deviceName) return;
 
         const device: DiscoveredDevice = {
           deviceId: scannedDevice.id,
           name: deviceName,
           rssi: scannedDevice.rssi ?? -100,
         };
-
-        // Deduplicate by deviceId — react-native-ble-plx uses stable
-        // peripheral UUIDs on iOS and device addresses on Android.
         devices.set(device.deviceId, device);
         pushDevices();
 
