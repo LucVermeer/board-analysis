@@ -51,6 +51,27 @@ export default function ClimbsLayout() {
           animation: 'fade',
         }}
       />
+      <Stack.Screen
+        name="holds"
+        options={{
+          // Full-screen interactive board for the hold-type filter. Owns its own
+          // header (Done / Clear all), and the board gestures need the full card,
+          // so the native header is hidden and it's a pushed route (not a modal,
+          // which would compete with the board's pan/pinch).
+          title: t('mobile.nav.holdFilter'),
+          headerShown: false,
+        }}
+      />
+      <Stack.Screen
+        name="zone"
+        options={{
+          // Full-screen interactive board for the board-region (zone) filter.
+          // Like the hold filter: owns its own header and a pushed route so the
+          // board's drag/pinch never competes with a modal sheet's pan.
+          title: t('mobile.nav.zoneFilter'),
+          headerShown: false,
+        }}
+      />
     </Stack>
   );
 }

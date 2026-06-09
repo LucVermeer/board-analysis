@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render } from '@testing-library/react';
-import { createElement, type ReactNode, type CSSProperties } from 'react';
+import { createElement, useEffect, type ReactNode, type CSSProperties } from 'react';
 import type { Climb, ClimbQueueItem } from '@boardsesh/queue';
 import type { BoardConfig } from '../../../providers/drawer-host-provider';
 
@@ -36,6 +36,14 @@ const nav = vi.hoisted(() => ({
   },
 }));
 
+function styleDataValue(styleValue: unknown): string {
+  if (styleValue == null) return '';
+  if (typeof styleValue === 'string' || typeof styleValue === 'number' || typeof styleValue === 'boolean') {
+    return String(styleValue);
+  }
+  return JSON.stringify(styleValue);
+}
+
 vi.mock('react-native', () => ({
   Platform: { OS: 'ios' },
   PlatformColor: (name: string) => name,
@@ -45,13 +53,20 @@ vi.mock('react-native', () => ({
     accessibilityRole,
     accessibilityLabel,
     accessibilityActions,
+    onLayout,
   }: {
     children?: ReactNode;
     style?: unknown;
     accessibilityRole?: string;
     accessibilityLabel?: string;
     accessibilityActions?: ReadonlyArray<{ name: string; label?: string }>;
+    onLayout?: (event: { nativeEvent: { layout: { width: number; height: number } } }) => void;
   }) => {
+    // jsdom never lays out, so simulate the swipe viewport being measured —
+    // otherwise width stays 0, canPeek is false, and the peek slots never render.
+    useEffect(() => {
+      onLayout?.({ nativeEvent: { layout: { width: 400, height: 48 } } });
+    }, [onLayout]);
     const readStyleValue = (styleKey: string): unknown => {
       const styles = Array.isArray(style) ? style : [style];
       for (const styleEntry of styles) {
@@ -76,14 +91,14 @@ vi.mock('react-native', () => ({
     return createElement(
       'div',
       {
-        'data-width': width == null ? '' : String(width),
-        'data-height': height == null ? '' : String(height),
-        'data-padding-right': paddingRight == null ? '' : String(paddingRight),
-        'data-background-color': backgroundColor == null ? '' : String(backgroundColor),
-        'data-border-width': borderWidth == null ? '' : String(borderWidth),
-        'data-border-color': borderColor == null ? '' : String(borderColor),
-        'data-border-radius': borderRadius == null ? '' : String(borderRadius),
-        'data-overflow': overflow == null ? '' : String(overflow),
+        'data-width': styleDataValue(width),
+        'data-height': styleDataValue(height),
+        'data-padding-right': styleDataValue(paddingRight),
+        'data-background-color': styleDataValue(backgroundColor),
+        'data-border-width': styleDataValue(borderWidth),
+        'data-border-color': styleDataValue(borderColor),
+        'data-border-radius': styleDataValue(borderRadius),
+        'data-overflow': styleDataValue(overflow),
         'data-role': accessibilityRole ?? '',
         'data-label': accessibilityLabel ?? '',
         'data-actions': Array.isArray(accessibilityActions)
@@ -103,6 +118,7 @@ vi.mock('react-native-reanimated', () => ({
   runOnJS: (fn: (...args: unknown[]) => unknown) => fn,
   useAnimatedStyle: () => ({}),
   useDerivedValue: () => ({ value: 0 }),
+  useSharedValue: (initial: number) => ({ value: initial }),
 }));
 
 vi.mock('react-native-gesture-handler', () => {
@@ -170,6 +186,7 @@ vi.mock('../../../providers/queue-provider', () => ({
     nextClimb: queue.nextClimb,
     previousClimb: queue.previousClimb,
   }),
+  usePlaylistSuggestionSource: () => null,
 }));
 
 vi.mock('../../../providers/drawer-host-provider', () => ({
@@ -241,10 +258,10 @@ vi.mock('../../BoardImageNative', () => ({
       'data-thumbnail': frames,
       'data-mirrored': mirrored ? 'true' : 'false',
       'data-filled': filledStyle ? 'true' : 'false',
-      'data-board-width': width == null ? '' : String(width),
-      'data-board-height': height == null ? '' : String(height),
-      'data-board-border-radius': borderRadius == null ? '' : String(borderRadius),
-      'data-board-overflow': overflow == null ? '' : String(overflow),
+      'data-board-width': styleDataValue(width),
+      'data-board-height': styleDataValue(height),
+      'data-board-border-radius': styleDataValue(borderRadius),
+      'data-board-overflow': styleDataValue(overflow),
     });
   },
 }));

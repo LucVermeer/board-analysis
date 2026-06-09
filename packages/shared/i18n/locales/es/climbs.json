@@ -665,6 +665,7 @@
       "gradeAction": "Ajustar el rango de grado",
       "gradeOpenHint": "Abre el selector de grado",
       "gradeCloseHint": "Cierra el selector de grado",
+      "boardSwitcherHint": "Abre el selector de tabla",
       "allClimbs": "Todas las vías"
     },
     "gradeRail": {
@@ -753,6 +754,47 @@
         "done": "Guardado",
         "draftToast": "Borrador guardado",
         "publishedToast": "Vía publicada"
+      }
+    },
+    "holdFilter": {
+      "title": "Tipos de presa",
+      "pickerTitle": "Filtro de presas",
+      "include": "Incluir",
+      "exclude": "Excluir",
+      "applyModeLabel": "Incluir o excluir",
+      "includedSuffix": "incluida",
+      "excludedSuffix": "excluida",
+      "clearHold": "Borrar presa",
+      "pickerHelp": "Toca un color para incluir o excluir ese tipo de presa. Cambia el interruptor para pasar una presa a excluir.",
+      "hint": "Toca las presas del muro para filtrar por el tipo que deben ser.",
+      "summaryCount_one": "{{count}} presa",
+      "summaryCount_other": "{{count}} presas",
+      "type": {
+        "starting": "Inicio",
+        "hand": "Mano",
+        "finish": "Final",
+        "foot": "Pie",
+        "any": "Cualquiera"
+      }
+    },
+    "zoneFilter": {
+      "title": "Zona del muro",
+      "summaryActive": "Activada",
+      "enable": "Añadir una zona",
+      "clearZone": "Borrar zona",
+      "allHolds": "Todas las presas",
+      "anyHold": "Alguna presa",
+      "modeLabel": "Qué presas deben caber en la zona",
+      "hint": "Añade una zona para encontrar bloques que se queden en una parte del muro.",
+      "activeHint": "Arrastra la caja y sus esquinas para fijar la zona. Todas las presas deben caber dentro; cambia a Alguna presa para conservar los bloques que la alcancen.",
+      "regionLabel": "Zona del muro",
+      "regionHint": "Desliza hacia arriba o abajo para mover la zona por el muro.",
+      "corner": {
+        "topLeft": "Esquina superior izquierda",
+        "topRight": "Esquina superior derecha",
+        "bottomLeft": "Esquina inferior izquierda",
+        "bottomRight": "Esquina inferior derecha",
+        "hint": "Desliza hacia arriba o abajo para agrandar o reducir la zona desde esta esquina."
       }
     }
   }

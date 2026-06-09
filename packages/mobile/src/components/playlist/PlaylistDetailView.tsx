@@ -1,5 +1,6 @@
 import { type ReactNode, useCallback, useState } from 'react';
 import {
+  type ColorValue,
   type LayoutChangeEvent,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
@@ -329,6 +330,10 @@ export function PlaylistDetailView({
           <Animated.View style={[styles.materialAppbarTitle, headerBarStyle]}>
             <Appbar.Content title={hero.name} titleStyle={styles.materialAppbarTitleText} />
           </Animated.View>
+          {/* Owner / follow / pin controls. The app bar is always present on Material,
+              so we ask for the compact icon form (`actions(true)`) — `GlassIconButton`
+              routes to a Paper `IconButton` here, fitting the bar. */}
+          {actions?.(true)}
           {climbs.length > 0 ? (
             <Appbar.Action
               icon="play"
@@ -499,8 +504,8 @@ function MaterialEmptyState({
   icon: IconName;
   title: string;
   supporting?: string;
-  titleColor: string | import('react-native').OpaqueColorValue;
-  supportingColor: string | import('react-native').OpaqueColorValue;
+  titleColor: ColorValue;
+  supportingColor: ColorValue;
 }) {
   return (
     <View style={styles.stateContainer}>
@@ -524,8 +529,9 @@ function keyExtractor(item: Climb) {
 }
 
 // Hoisted stable keys for the first-page skeleton rows — never reorder, so index
-// keys are fine and avoid allocating an array on every render.
-const SKELETON_PLACEHOLDERS = Array.from({ length: SKELETON_ROW_COUNT }, (_, index) => `skeleton-${index}`);
+// keys are fine and avoid allocating an array on every render. Exported so the
+// route-level early-return skeletons share the same count (no drift from this view).
+export const SKELETON_PLACEHOLDERS = Array.from({ length: SKELETON_ROW_COUNT }, (_, index) => `skeleton-${index}`);
 
 const styles = StyleSheet.create({
   container: {

@@ -38,6 +38,7 @@ vi.mock('../../../lib/route-segments', () => ({
 }));
 vi.mock('../../../providers/queue-provider', () => ({
   useQueue: () => ({ state: { currentClimbQueueItem: cfg.currentClimbQueueItem } }),
+  useHasActiveClimb: () => cfg.currentClimbQueueItem?.climb != null,
 }));
 vi.mock('../../../hooks/use-reduce-motion', () => ({ useReduceMotion: () => true }));
 vi.mock('../../../theme/animations', () => ({ timing: { fast: 150, normal: 250 } }));

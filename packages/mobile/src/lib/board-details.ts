@@ -7,15 +7,61 @@ import { WEB_BASE_URL } from './env';
 type BoardRenderData = {
   boardWidth: number;
   boardHeight: number;
+  // Board playing-surface edges in placement-grid coordinates (the `edge_*`
+  // columns / BoardDetails). The zone search filter maps its grid-space box to
+  // SVG pixels through these.
+  edgeLeft: number;
+  edgeRight: number;
+  edgeBottom: number;
+  edgeTop: number;
   imageUrls: string[];
   holdsData: HoldPlacement[];
 };
 
+// `getBoardRenderData` is pure but does O(n) work over ~1400 hold tuples (a
+// filter plus per-hold coordinate math) on the PlayDrawer-open critical path and
+// on every carousel swap. The underlying placement data is static, so memoize by
+// board-config key. A session only ever touches a handful of distinct boards;
+// the cap just bounds memory if a picker churns through many.
+const RENDER_DATA_CACHE_LIMIT = 16;
+const renderDataCache = new Map<string, BoardRenderData | null>();
+
 /**
  * Computes board rendering data (dimensions, image URLs, hold positions)
  * from board config parameters. Mirrors the web's `getBoardDetails()`.
+ * Cached by board config — the placement data behind it never changes.
  */
 export function getBoardRenderData(params: {
+  boardName: BoardName;
+  layoutId: number;
+  sizeId: number;
+  setIds: number[];
+}): BoardRenderData | null {
+  const { boardName, layoutId, sizeId, setIds } = params;
+
+  const cacheKey = `${boardName}-${layoutId}-${sizeId}-${setIds.join(',')}`;
+  const cached = renderDataCache.get(cacheKey);
+  if (cached !== undefined) return cached;
+
+  const result = computeBoardRenderData(params);
+  if (renderDataCache.size >= RENDER_DATA_CACHE_LIMIT) {
+    const oldestKey = renderDataCache.keys().next().value;
+    if (oldestKey !== undefined) renderDataCache.delete(oldestKey);
+  }
+  renderDataCache.set(cacheKey, result);
+  return result;
+}
+
+/**
+ * Clears the render-data memo. Production never needs this (the placement data
+ * behind a board key is static), but tests mock different board data under the
+ * same config key and must reset between cases.
+ */
+export function clearBoardRenderDataCache(): void {
+  renderDataCache.clear();
+}
+
+function computeBoardRenderData(params: {
   boardName: BoardName;
   layoutId: number;
   sizeId: number;
@@ -66,7 +112,7 @@ export function getBoardRenderData(params: {
 
   const imageUrls = imageFilenames.map((filename) => `${WEB_BASE_URL}/images/${boardName}/${filename}`);
 
-  return { boardWidth, boardHeight, imageUrls, holdsData };
+  return { boardWidth, boardHeight, edgeLeft, edgeRight, edgeBottom, edgeTop, imageUrls, holdsData };
 }
 
 function getMoonBoardRenderData(params: {
@@ -93,6 +139,10 @@ function getMoonBoardRenderData(params: {
     return {
       boardWidth: details.boardWidth,
       boardHeight: details.boardHeight,
+      edgeLeft: details.edge_left,
+      edgeRight: details.edge_right,
+      edgeBottom: details.edge_bottom,
+      edgeTop: details.edge_top,
       imageUrls,
       holdsData,
     };

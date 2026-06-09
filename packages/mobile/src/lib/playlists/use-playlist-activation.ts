@@ -13,7 +13,7 @@
 import { useCallback, useMemo, startTransition } from 'react';
 import { usePlaylistClimbActivation, fetchPlaylistSuggestionClimbs } from '@boardsesh/playlists-react';
 import { getQueueBoardKey, type Climb } from '@boardsesh/queue';
-import { useQueue } from '../../providers/queue-provider';
+import { useQueueActions } from '../../providers/queue-provider';
 import { useDrawerHost } from '../../providers/drawer-host-provider';
 import { useActiveBoard } from '../graphql/use-active-board';
 import { climbToQueueItem } from '../climb-to-queue-item';
@@ -52,7 +52,7 @@ export function usePlaylistActivation({
   fetchPage,
   refreshErrorMessage,
 }: UsePlaylistActivationOptions): (climb: Climb) => Promise<void> {
-  const { setCurrentClimb, refreshPlaylistSuggestionSource } = useQueue();
+  const { setCurrentClimb, refreshPlaylistSuggestionSource } = useQueueActions();
   const { openPlayDrawer } = useDrawerHost();
   const activeBoard = useActiveBoard().data ?? null;
 

@@ -72,6 +72,10 @@ describe('ensureBackgroundsCached', () => {
     vi.mocked(getBoardRenderData).mockReturnValue({
       boardWidth: 100,
       boardHeight: 100,
+      edgeLeft: 0,
+      edgeRight: 11,
+      edgeBottom: 0,
+      edgeTop: 18,
       holdsData: [],
       imageUrls: ['https://www.boardsesh.com/images/kilter/product_sizes_layouts_sets/36-1.png'],
     } as ReturnType<typeof getBoardRenderData>);
@@ -94,6 +98,10 @@ describe('ensureBackgroundsCached', () => {
     vi.mocked(getBoardRenderData).mockReturnValue({
       boardWidth: 100,
       boardHeight: 100,
+      edgeLeft: 0,
+      edgeRight: 11,
+      edgeBottom: 0,
+      edgeTop: 18,
       holdsData: [],
       // Server URLs always come back with .png; manifest only has .webp.
       imageUrls: ['https://www.boardsesh.com/images/tension/product_sizes_layouts_sets/12.png'],
@@ -113,6 +121,10 @@ describe('ensureBackgroundsCached', () => {
     vi.mocked(getBoardRenderData).mockReturnValue({
       boardWidth: 100,
       boardHeight: 100,
+      edgeLeft: 0,
+      edgeRight: 11,
+      edgeBottom: 0,
+      edgeTop: 18,
       holdsData: [],
       imageUrls: ['https://www.boardsesh.com/images/newboard/bg.png'],
     } as ReturnType<typeof getBoardRenderData>);
@@ -135,6 +147,10 @@ describe('ensureBackgroundsCached', () => {
     vi.mocked(getBoardRenderData).mockReturnValue({
       boardWidth: 100,
       boardHeight: 100,
+      edgeLeft: 0,
+      edgeRight: 11,
+      edgeBottom: 0,
+      edgeTop: 18,
       holdsData: [],
       // First URL resolves via the manifest; second is a Tension layer
       // we never bundled (the bug this fix targets).
@@ -167,6 +183,10 @@ describe('tryGetBackgroundPathsSync', () => {
     vi.mocked(getBoardRenderData).mockReturnValue({
       boardWidth: 100,
       boardHeight: 100,
+      edgeLeft: 0,
+      edgeRight: 11,
+      edgeBottom: 0,
+      edgeTop: 18,
       holdsData: [],
       imageUrls: ['https://www.boardsesh.com/images/kilter/product_sizes_layouts_sets/36-1.png'],
     } as ReturnType<typeof getBoardRenderData>);
@@ -185,6 +205,10 @@ describe('tryGetBackgroundPathsSync', () => {
     vi.mocked(getBoardRenderData).mockReturnValue({
       boardWidth: 100,
       boardHeight: 100,
+      edgeLeft: 0,
+      edgeRight: 11,
+      edgeBottom: 0,
+      edgeTop: 18,
       holdsData: [],
       imageUrls: [
         'https://www.boardsesh.com/images/kilter/product_sizes_layouts_sets/36-1.png',

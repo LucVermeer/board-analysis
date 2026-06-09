@@ -1,4 +1,5 @@
 import type { BoardName } from '@boardsesh/shared-schema';
+import type { BoardEdges } from '@boardsesh/climb-filters';
 import { getBoardRenderData } from './board-details';
 
 /**
@@ -9,12 +10,22 @@ import { getBoardRenderData } from './board-details';
  */
 export type BoardHoldTarget = { id: number; cx: number; cy: number; r: number };
 
-export type CreateBoardHolds = {
+export type CreateBoardHolds = BoardEdges & {
   holdTargets: BoardHoldTarget[];
   boardWidth: number;
   boardHeight: number;
   family: 'aurora' | 'moonboard';
 };
+
+/**
+ * Parse a comma-separated `setIds` route/param string into numeric set ids.
+ * Mirrors the `split(',').map(Number).filter(Boolean)` pattern the board render
+ * pipeline uses (see `use-native-climb-render.ts`): an empty string yields `[]`
+ * (not `[0]`), and any `0`/blank token is dropped — set ids are positive.
+ */
+export function parseSetIdsParam(setIds: string): number[] {
+  return setIds.split(',').map(Number).filter(Boolean);
+}
 
 /**
  * Resolve the full set of tappable holds for a board configuration, board-family
@@ -33,6 +44,10 @@ export function getCreateBoardHolds(cfg: {
     holdTargets: data.holdsData.map((hold) => ({ id: hold.id, cx: hold.cx, cy: hold.cy, r: hold.r })),
     boardWidth: data.boardWidth,
     boardHeight: data.boardHeight,
+    edgeLeft: data.edgeLeft,
+    edgeRight: data.edgeRight,
+    edgeBottom: data.edgeBottom,
+    edgeTop: data.edgeTop,
     family: cfg.boardName === 'moonboard' ? 'moonboard' : 'aurora',
   };
 }
