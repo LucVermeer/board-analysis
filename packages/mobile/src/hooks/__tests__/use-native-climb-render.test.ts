@@ -57,17 +57,24 @@ const {
 describe('buildCacheKey', () => {
   it('hashes the frames component so the key fits in a filename', () => {
     const key = buildCacheKey('kilter', 1, 10, '24,25', 'p1r42p2r43');
-    // v<version>_<style>_<board>_<layout>_<size>_<sets>_<8-hex-hash>
-    // style defaults to 's' (stroke-only / non-filled).
-    expect(key).toMatch(/^v\d+_s_kilter_1_10_24,25_[0-9a-f]{8}$/);
+    // v<version>_<style>_w<width>_<board>_<layout>_<size>_<sets>_<8-hex-hash>
+    // style defaults to 's' (stroke-only / non-filled); width defaults to
+    // 'full' (native board width, used by the play view).
+    expect(key).toMatch(/^v\d+_s_wfull_kilter_1_10_24,25_[0-9a-f]{8}$/);
   });
 
-  it('does not include output-width or quality suffixes (single PNG per climb)', () => {
-    const key = buildCacheKey('kilter', 1, 10, '24', 'p1r42');
-    // Old key shape carried _w<n> and _<quality>; the unified renderer
-    // produces one PNG per climb so neither belongs in the key.
-    expect(key).not.toMatch(/_w\d+/);
-    expect(key).not.toMatch(/_(thumbnail|full)/);
+  it('defaults to the full-width token and switches to a numeric token when renderWidth is set', () => {
+    // Small surfaces pass a renderWidth so the overlay is rasterized small;
+    // the token keeps that PNG separate from the play view's native-width
+    // one, so neither is reused at the wrong resolution.
+    expect(buildCacheKey('kilter', 1, 10, '24', 'p1r42')).toMatch(/_wfull_/);
+    expect(buildCacheKey('kilter', 1, 10, '24', 'p1r42', false, 400)).toMatch(/_w400_/);
+  });
+
+  it('produces distinct keys for the small and full overlay widths', () => {
+    const full = buildCacheKey('kilter', 1, 10, '24', 'p1r42', true);
+    const small = buildCacheKey('kilter', 1, 10, '24', 'p1r42', true, 400);
+    expect(small).not.toBe(full);
   });
 
   it('uses RENDERER_VERSION v2 to invalidate v1 composited PNGs', () => {
@@ -163,6 +170,16 @@ describe('buildBoardKey', () => {
     // Without a separator, "1-10" and "11-0" would both serialise to
     // "110". Guard against any regression that drops the dashes.
     expect(buildBoardKey('kilter', 1, 10, '24')).not.toBe(buildBoardKey('kilter', 11, 0, '24'));
+  });
+
+  it('differs by variant so a recycled row cannot mix thumb and full paths', () => {
+    // A FlashList row recycled between a thumb context (list) and a full
+    // context must re-resolve, not surface the previous size's paths.
+    expect(buildBoardKey('kilter', 1, 10, '24', 'thumb')).not.toBe(buildBoardKey('kilter', 1, 10, '24', 'full'));
+  });
+
+  it('defaults to the full variant', () => {
+    expect(buildBoardKey('kilter', 1, 10, '24')).toBe(buildBoardKey('kilter', 1, 10, '24', 'full'));
   });
 });
 

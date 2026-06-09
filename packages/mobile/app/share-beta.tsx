@@ -159,7 +159,14 @@ export default function ShareBetaScreen() {
 
       <View style={[styles.linkCard, { backgroundColor: systemColors.secondaryBackground }]}>
         {thumbnail ? (
-          <Image source={{ uri: thumbnail }} style={styles.thumb} contentFit="cover" transition={150} />
+          <Image
+            source={{ uri: thumbnail }}
+            style={styles.thumb}
+            contentFit="cover"
+            transition={150}
+            // Remote thumbnail — skip expo-image's main-thread downscale resample.
+            allowDownscaling={false}
+          />
         ) : (
           <View style={[styles.thumb, styles.thumbFallback]}>
             <Icon name="video" size={20} color={brandColors.primary} />

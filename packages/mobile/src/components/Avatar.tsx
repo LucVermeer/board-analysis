@@ -1,4 +1,5 @@
-import { View, Image, StyleSheet } from 'react-native';
+import { View, Image, StyleSheet, PixelRatio } from 'react-native';
+import { snapToAllowedImageSize } from '@boardsesh/shared-schema';
 import { Text } from './Text';
 import { getInitials } from '../lib/get-initials';
 import { brandColors } from '../theme/colors';
@@ -10,6 +11,20 @@ type AvatarProps = {
   size?: number;
 };
 
+/**
+ * Request a pre-sized variant for backend-served avatars so the device
+ * fetches a small image instead of the full user upload (which can be
+ * multiple megapixels). Snaps the display size (× DPR) to a backend-honored
+ * bucket via the shared allowlist. Third-party avatar URLs are passed
+ * through — the backend can only resize what it stores.
+ */
+function sizedAvatarUri(uri: string, displaySize: number): string {
+  if (!uri.includes('/static/avatars/')) return uri;
+  const bucket = snapToAllowedImageSize(Math.ceil(displaySize * PixelRatio.get()));
+  const separator = uri.includes('?') ? '&' : '?';
+  return `${uri}${separator}size=${bucket}`;
+}
+
 export function Avatar({ uri, name, size = 40 }: AvatarProps) {
   const borderRadius = size / 2;
 
@@ -17,8 +32,13 @@ export function Avatar({ uri, name, size = 40 }: AvatarProps) {
 
   if (uri) {
     return (
+      // Uses react-native's core <Image> (not expo-image), so there's no
+      // allowDownscaling prop — but none is needed: RCTImageLoader decodes
+      // and downscales off the main thread, and sizedAvatarUri requests a
+      // ≤280px source, so any resize is trivial. Avatars were never part of
+      // the expo-image main-thread hang this PR fixes.
       <Image
-        source={{ uri }}
+        source={{ uri: sizedAvatarUri(uri, size) }}
         accessibilityLabel={accessibilityLabel}
         style={[styles.image, { width: size, height: size, borderRadius }]}
       />

@@ -53,6 +53,11 @@ const LayeredClimbImage = React.memo(function LayeredClimbImage({
           style={styles.layer}
           contentFit="contain"
           cachePolicy="memory-disk"
+          // Skip expo-image's main-thread downscale resample (the iOS app
+          // hang). Sources are already sized to the surface — thumb-variant
+          // backgrounds for the list, native-res for the play view — so
+          // there's nothing large to downscale; the CALayer scales to fit.
+          allowDownscaling={false}
         />
       ))}
       {missingBackgroundCount > 0 &&
@@ -79,6 +84,10 @@ const LayeredClimbImage = React.memo(function LayeredClimbImage({
           recyclingKey={recyclingKey}
           cachePolicy="memory-disk"
           transition={150}
+          // Overlay PNG is rasterized at the surface size (small for the
+          // list/accessory, native for play) so no main-thread downscale
+          // is needed — skip expo-image's resample.
+          allowDownscaling={false}
         />
       )}
     </View>

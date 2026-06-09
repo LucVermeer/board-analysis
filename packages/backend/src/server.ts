@@ -11,6 +11,7 @@ import { handleHealthCheck } from './handlers/health';
 import { handleSessionJoin } from './handlers/join';
 import { handleAvatarUpload } from './handlers/avatars';
 import { handleStaticAvatar, handleStaticBetaThumbnail } from './handlers/static';
+import { parseSizeParam } from './lib/image-resize';
 import { handleOcrTestDataUpload } from './handlers/ocr-test-data';
 import { handlePosthogProxy } from './handlers/posthog';
 import { handleUserDataExport, handleUserDataExportDownload } from './handlers/user-data-export';
@@ -299,11 +300,11 @@ export async function startServer(): Promise<ServerResources> {
         return;
       }
 
-      // Static avatar files
+      // Static avatar files (optional ?size= for a resized variant)
       if (pathname.startsWith('/static/avatars/')) {
         const fileName = pathname.slice('/static/avatars/'.length);
         if (fileName) {
-          await handleStaticAvatar(req, res, fileName);
+          await handleStaticAvatar(req, res, fileName, parseSizeParam(url.searchParams.get('size')));
           return;
         }
       }
@@ -316,7 +317,7 @@ export async function startServer(): Promise<ServerResources> {
           const platform = remainder.slice(0, slashIndex);
           const fileName = remainder.slice(slashIndex + 1);
           if (fileName) {
-            await handleStaticBetaThumbnail(req, res, platform, fileName);
+            await handleStaticBetaThumbnail(req, res, platform, fileName, parseSizeParam(url.searchParams.get('size')));
             return;
           }
         }

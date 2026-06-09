@@ -49,6 +49,10 @@ const ClimbListThumbnail = React.memo(function ClimbListThumbnail({
     sizeId,
     setIds,
     filledStyle: true,
+    // Render the overlay + resolve the thumb-sized background at ~400px
+    // (covers the 76×96 cell at up to ~3× DPR) so expo-image never has to
+    // downscale a ~1080px source on the main thread while scrolling.
+    renderWidth: 400,
   });
 
   return (

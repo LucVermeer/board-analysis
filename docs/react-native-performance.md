@@ -210,6 +210,25 @@ past climb is an instant cache hit with zero network and zero per-row SVG work. 
 the no-network offline rule — missing layers render as visible gray blocks rather than silently
 fetching.
 
+**Cache key shape (`buildCacheKey` in `use-native-climb-render.ts`):**
+`v<RENDERER_VERSION>_<style>_w<width>_<board>_<layout>_<size>_<setIds>_<framesHash>`. Each token is
+a collision-prevention contract — two climbs that share every token reuse one PNG, so a token must
+exist for every input that changes the rendered pixels:
+
+- `style`: `s` (stroke-only, the full-size play view) vs `f` (filled dots, the list/accessory
+  thumbnail). Same climb, different hold styling.
+- `width`: `full` (native board width, ~1080px — the play view) vs `<n>` (e.g. `400` — the
+  list/accessory, which pass `renderWidth` so the Rust renderer rasterizes a small PNG instead of
+  downscaling a large one on the main thread). Without this token the small and full overlays would
+  collide and one would be reused at the wrong resolution. The token tracks the _requested_ width,
+  not the clamped output, so it's stable per `(board, renderWidth)`.
+
+The list thumbnail and the accessory thumbnail deliberately use the **same** `style` + `width`
+tokens (`_f_` + `_w400_`) so a climb seen in the list is an instant cache hit in the accessory bar.
+The matching `buildBoardKey` (which guards background-path state across FlashList row recycling)
+carries a `full`/`thumb` variant token for the same reason — a recycled row must re-resolve, not
+surface the previous size's bundled background paths.
+
 **Examples in this repo:**
 
 - Warm path (use this): `packages/mobile/src/hooks/use-native-climb-render.ts` +
