@@ -379,7 +379,8 @@ export function useCreateClimbScreen({
     const frames = generateFramesString();
     // Encode the no-match marker into the description only at save time.
     const fullDescription = withNoMatch(description, noMatch);
-    // Mirror web's `holdCount` property (create-climb-form.tsx).
+    // The reducer removes OFF-state holds from the map, so key count equals
+    // web's `totalHolds` (non-OFF hold count, used in Climb Created events).
     const holdCount = Object.keys(litUpHoldsMap).length;
     // Web sends the human-readable layout name (`boardDetails.layout_name || ''`)
     // for `boardLayout`; mobile only carries the numeric layout id, so resolve it

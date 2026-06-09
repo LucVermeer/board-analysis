@@ -75,11 +75,13 @@ export default function JoinSessionScreen() {
       // queue provider only emits Session Started/Ended, never Joined. Mirror
       // web's props (session_id, board_name, layout_id), derived from the path.
       const parsedBoard = parseBoardPath(session.boardPath);
-      track(SHARED_EVENTS.SessionJoined, {
-        session_id: session.id,
-        board_name: parsedBoard?.boardName ?? null,
-        layout_id: parsedBoard?.layoutId ?? null,
-      });
+      if (parsedBoard) {
+        track(SHARED_EVENTS.SessionJoined, {
+          session_id: session.id,
+          board_name: parsedBoard.boardName,
+          layout_id: parsedBoard.layoutId,
+        });
+      }
       // Land on the Record tab so the user drops straight into the joined session.
       router.replace('/(tabs)/record');
     } catch (error) {

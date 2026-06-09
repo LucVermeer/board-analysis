@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, render } from '@testing-library/react';
+import { act, render, waitFor } from '@testing-library/react';
 import { createElement, type ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { GeneratorSelection } from '../GeneratorPickerCard';
@@ -92,31 +92,33 @@ describe('PreSessionView analytics', () => {
         type: 'on',
         options: {
           type: 'volume',
+          warmUp: 'standard',
+          mainSetClimbs: 3,
+          mainSetVariability: 0,
           targetGrade: 10,
           minAscents: 0,
           minRating: 0,
           onlyTallClimbs: false,
-          climbBias: 'none',
-        } as never,
+          climbBias: 'any',
+        },
       });
     });
 
     await act(async () => {
       startButton.onPress?.();
-      // Let the async handleStart chain (startSession → select → track) settle.
-      await Promise.resolve();
-      await Promise.resolve();
     });
+    await waitFor(() =>
+      expect(analytics.track).toHaveBeenCalledWith('Session Queue Generated', {
+        workoutType: 'volume',
+        boardName: 'kilter',
+        angle: 40,
+        // 2 climbs queued out of a 3-slot plan → 1 short.
+        savedCount: 2,
+        failedCount: 1,
+      }),
+    );
 
     expect(queue.addToQueue).toHaveBeenCalledTimes(2);
-    expect(analytics.track).toHaveBeenCalledWith('Session Queue Generated', {
-      workoutType: 'volume',
-      boardName: 'kilter',
-      angle: 40,
-      // 2 climbs queued out of a 3-slot plan → 1 short.
-      savedCount: 2,
-      failedCount: 1,
-    });
   });
 
   it('does not fire when the generator is off', async () => {
@@ -124,9 +126,8 @@ describe('PreSessionView analytics', () => {
 
     await act(async () => {
       startButton.onPress?.();
-      await Promise.resolve();
-      await Promise.resolve();
     });
+    await waitFor(() => expect(queue.startSession).toHaveBeenCalled());
 
     expect(analytics.track).not.toHaveBeenCalledWith('Session Queue Generated', expect.anything());
   });
