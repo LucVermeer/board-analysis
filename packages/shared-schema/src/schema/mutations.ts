@@ -138,6 +138,34 @@ export const mutationsTypeDefs = /* GraphQL */ `
     setSessionBoardPath(boardPath: String!): Session!
 
     # ============================================
+    # Board Presence Mutations ("now on the wall")
+    # ============================================
+
+    """
+    Resolve (and bind) the shared board for a BLE serial. Returns the one board
+    everyone at this physical wall shares; find-or-creates on first sighting
+    (owned by the first connector) and enforces serial → exactly one board.
+    Called once on BLE connect; supplies the board name the UI shows. The board
+    config args are used only to create the board the first time a serial is seen.
+    """
+    resolveBoardForSerial(
+      serial: String!
+      boardType: String!
+      layoutId: Int!
+      sizeId: Int!
+      setIds: String!
+    ): ResolvedBoard!
+
+    """
+    Report the climb a connected phone just lit on the wall to the board's live
+    "now on the wall" feed. Requires auth; the sender's identity is derived
+    server-side (never client-supplied). Fire-and-forget after the BLE write
+    succeeded — no confirm/timeout handshake. \`angle\` is the wall angle the
+    climb was sent at (null = unspecified).
+    """
+    reportBoardClimb(boardId: Int!, climb: ClimbQueueItemInput!, angle: Int): Boolean!
+
+    # ============================================
     # User Management Mutations (require auth)
     # ============================================
 

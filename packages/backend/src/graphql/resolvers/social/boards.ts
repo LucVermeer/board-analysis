@@ -32,7 +32,7 @@ import { redisClientManager } from '../../../redis/client';
  * Uses a single query to fetch all existing slugs that share the same prefix,
  * then picks the next available suffix in-memory — no sequential DB loop.
  */
-async function generateUniqueSlug(name: string): Promise<string> {
+export async function generateUniqueSlug(name: string): Promise<string> {
   const baseSlug =
     name
       .toLowerCase()

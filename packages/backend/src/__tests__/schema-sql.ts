@@ -338,4 +338,49 @@ export const schemaSQL = `
     "created_at" timestamp DEFAULT now() NOT NULL,
     "updated_at" timestamp DEFAULT now() NOT NULL
   );
+
+  DROP TABLE IF EXISTS "user_profiles" CASCADE;
+  CREATE TABLE IF NOT EXISTS "user_profiles" (
+    "user_id" text PRIMARY KEY NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+    "display_name" text,
+    "avatar_url" text,
+    "created_at" timestamp DEFAULT now() NOT NULL,
+    "updated_at" timestamp DEFAULT now() NOT NULL
+  );
+
+  DROP TABLE IF EXISTS "user_boards" CASCADE;
+  CREATE TABLE IF NOT EXISTS "user_boards" (
+    "id" bigserial PRIMARY KEY NOT NULL,
+    "uuid" text NOT NULL UNIQUE,
+    "slug" text NOT NULL,
+    "owner_id" text NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+    "board_type" text NOT NULL,
+    "layout_id" bigint NOT NULL,
+    "size_id" bigint NOT NULL,
+    "set_ids" text NOT NULL,
+    "name" text NOT NULL,
+    "description" text,
+    "location_name" text,
+    "latitude" double precision,
+    "longitude" double precision,
+    "is_public" boolean DEFAULT true NOT NULL,
+    "is_unlisted" boolean DEFAULT false NOT NULL,
+    "hide_location" boolean DEFAULT false NOT NULL,
+    "is_owned" boolean DEFAULT true NOT NULL,
+    "angle" bigint DEFAULT 40 NOT NULL,
+    "is_angle_adjustable" boolean DEFAULT true NOT NULL,
+    "created_at" timestamp DEFAULT now() NOT NULL,
+    "updated_at" timestamp DEFAULT now() NOT NULL,
+    "serial_number" text,
+    "gym_id" bigint,
+    "deleted_at" timestamp
+  );
+  -- Board presence: a BLE serial maps to exactly one active board.
+  CREATE UNIQUE INDEX IF NOT EXISTS "user_boards_unique_serial"
+    ON "user_boards" ("serial_number")
+    WHERE "serial_number" IS NOT NULL AND "deleted_at" IS NULL;
+  -- One active board per owner per config (mirrors the prod partial unique index).
+  CREATE UNIQUE INDEX IF NOT EXISTS "user_boards_unique_owner_config"
+    ON "user_boards" ("owner_id", "board_type", "layout_id", "size_id", "set_ids")
+    WHERE "deleted_at" IS NULL AND "owner_id" != '00000000-0000-0000-0000-000000000000';
 `;

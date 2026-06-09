@@ -109,6 +109,8 @@ export const ticksTypeDefs = /* GraphQL */ `
     sizeId: Int
     "Set IDs for board resolution"
     setIds: String
+    "Resolved shared board id (from resolveBoardForSerial). When present, used directly instead of resolving from board config — the BLE-connected wall everyone is logging to."
+    boardId: Int
     "Optional Instagram post or reel URL to attach as beta for the climb"
     videoUrl: String
   }

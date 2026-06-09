@@ -329,6 +329,16 @@
         "typescript": "~6.0.3",
       },
     },
+    "packages/shared/board-presence": {
+      "name": "@boardsesh/board-presence",
+      "version": "1.0.0",
+      "dependencies": {
+        "@boardsesh/shared-schema": "*",
+      },
+      "devDependencies": {
+        "typescript": "^5.9.3",
+      },
+    },
     "packages/shared/board-react": {
       "name": "@boardsesh/board-react",
       "version": "1.0.0",
@@ -977,6 +987,8 @@
     "@boardsesh/board-config": ["@boardsesh/board-config@workspace:packages/shared/board-config"],
 
     "@boardsesh/board-constants": ["@boardsesh/board-constants@workspace:packages/board-constants"],
+
+    "@boardsesh/board-presence": ["@boardsesh/board-presence@workspace:packages/shared/board-presence"],
 
     "@boardsesh/board-react": ["@boardsesh/board-react@workspace:packages/shared/board-react"],
 
@@ -4459,6 +4471,8 @@
     "@bacons/xcode/uuid": ["uuid@8.3.2", "", { "bin": { "uuid": "dist/bin/uuid" } }, "sha512-+NYs2QeMWy+GWFOEm9xnn6HCDp0l7QBD7ml8zLUmJ+93Q5NF0NocErnwkTkXVFNiX3/fpC6afS8Dhb/gz7R7eg=="],
 
     "@boardsesh/aurora-sync/typescript": ["typescript@5.9.3", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw=="],
+
+    "@boardsesh/board-presence/typescript": ["typescript@5.9.3", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw=="],
 
     "@boardsesh/board-react/typescript": ["typescript@5.9.3", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw=="],
 

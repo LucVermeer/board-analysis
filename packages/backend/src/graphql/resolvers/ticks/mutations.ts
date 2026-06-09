@@ -293,9 +293,16 @@ export const tickMutations = {
     const now = new Date().toISOString();
     const climbedAt = new Date(validatedInput.climbedAt).toISOString();
 
-    // Resolve board ID from board config if provided
+    // Resolve the tick's board_id. When the client passes an explicit
+    // `boardId` (the shared connected-wall board, resolved via
+    // resolveBoardForSerial on BLE connect), use it directly — that's the
+    // board everyone at the physical wall is logging to, which may not be the
+    // caller's own config-derived board. Otherwise fall back to resolving from
+    // the board config (today's behaviour).
     let boardId: number | null = null;
-    if (validatedInput.layoutId && validatedInput.sizeId && validatedInput.setIds) {
+    if (validatedInput.boardId != null) {
+      boardId = validatedInput.boardId;
+    } else if (validatedInput.layoutId && validatedInput.sizeId && validatedInput.setIds) {
       boardId = await resolveBoardFromPath(
         userId,
         validatedInput.boardType,

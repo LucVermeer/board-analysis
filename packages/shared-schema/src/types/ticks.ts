@@ -57,6 +57,10 @@ export type SaveTickInput = {
   layoutId?: number;
   sizeId?: number;
   setIds?: string;
+  // Resolved shared board id (from resolveBoardForSerial). When present, used
+  // directly for the tick's board_id instead of resolving from board config —
+  // the BLE-connected wall everyone is logging to.
+  boardId?: number | null;
   videoUrl?: string | null;
 };
 

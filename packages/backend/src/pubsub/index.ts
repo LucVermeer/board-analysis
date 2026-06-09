@@ -4,6 +4,8 @@ import type {
   NotificationEvent,
   CommentEvent,
   NewClimbCreatedEvent,
+  BoardPresenceEvent,
+  BoardPresenceClimb,
 } from '@boardsesh/shared-schema';
 import { redisClientManager } from '../redis/client';
 import { createRedisPubSubAdapter, type RedisPubSubAdapter } from './redis-adapter';
@@ -14,6 +16,14 @@ type SessionSubscriber = (event: SessionEvent) => void;
 type NotificationSubscriber = (event: NotificationEvent) => void;
 type CommentSubscriber = (event: CommentEvent) => void;
 type NewClimbSubscriber = (event: NewClimbCreatedEvent) => void;
+type BoardPresenceSubscriber = (event: BoardPresenceEvent) => void;
+
+// Board-presence durable history (Redis FIFO) configuration. The live
+// "now on the wall" feed is ephemeral; this buffer backfills late joiners
+// before the `boardNowPlaying` subscription takes over.
+const BOARD_HISTORY_SIZE = 50; // Keep the last 50 climbs per board
+const BOARD_HISTORY_TTL = 86_400; // 24 hours
+const BOARD_SEQ_TTL = 86_400; // 24 hours
 
 /** External hook called after every queue event publish. Fire-and-forget. */
 type QueueEventHook = (sessionId: string, event: QueueEvent) => void;
@@ -40,6 +50,11 @@ class PubSub {
   private notificationSubscribers = new Map<string, Set<NotificationSubscriber>>();
   private commentSubscribers = new Map<string, Set<CommentSubscriber>>();
   private newClimbSubscribers = new Map<string, Set<NewClimbSubscriber>>();
+  private boardPresenceSubscribers = new Map<string, Set<BoardPresenceSubscriber>>();
+  // Local-only fallback for the per-board monotonic seq counter. In Redis
+  // mode the authoritative counter is `board:${boardId}:seq` (INCR); this map
+  // only ever serves single-instance deployments that have no Redis.
+  private localBoardSeq = new Map<string, number>();
   private redisAdapter: RedisPubSubAdapter | null = null;
   private initialized = false;
   private redisRequired = false;
@@ -144,6 +159,10 @@ class PubSub {
 
     this.redisAdapter.onNewClimbMessage((channelKey, event) => {
       this.dispatchToLocalNewClimbSubscribers(channelKey, event);
+    });
+
+    this.redisAdapter.onBoardPresenceMessage((boardId, event) => {
+      this.dispatchToLocalBoardPresenceSubscribers(boardId, event);
     });
   }
 
@@ -605,6 +624,165 @@ class PubSub {
           logger.error('Error in new climb subscriber:', error);
         }
       }
+    }
+  }
+
+  // ============================================
+  // Board presence ("now on the wall")
+  //
+  // Keyed on the shared board_id (userBoards.id, resolved from the BLE
+  // serial). Membership-free: anyone who has connected to the board can watch
+  // its live feed. Mirrors the new-climb domain exactly, plus a per-board
+  // monotonic seq and a durable Redis FIFO for late-joiner backfill.
+  // ============================================
+
+  /**
+   * Subscribe to board-presence events for a shared board.
+   * @param boardId stringified userBoards.id
+   * @returns Promise that resolves to an unsubscribe function
+   */
+  async subscribeBoardPresence(boardId: string, callback: BoardPresenceSubscriber): Promise<() => void> {
+    this.ensureRedisIfRequired();
+
+    const isFirstSubscriber = !this.boardPresenceSubscribers.has(boardId);
+
+    if (!this.boardPresenceSubscribers.has(boardId)) {
+      this.boardPresenceSubscribers.set(boardId, new Set());
+    }
+    this.boardPresenceSubscribers.get(boardId)!.add(callback);
+
+    if (isFirstSubscriber && this.redisAdapter) {
+      try {
+        await this.redisAdapter.subscribeBoardPresenceChannel(boardId);
+      } catch (error) {
+        logger.error(`[PubSub] Failed to subscribe to Redis board presence channel: ${String(error)}`);
+        this.boardPresenceSubscribers.get(boardId)?.delete(callback);
+        if (this.boardPresenceSubscribers.get(boardId)?.size === 0) {
+          this.boardPresenceSubscribers.delete(boardId);
+        }
+        if (this.redisRequired) {
+          throw error;
+        }
+      }
+    }
+
+    return () => {
+      this.boardPresenceSubscribers.get(boardId)?.delete(callback);
+      if (this.boardPresenceSubscribers.get(boardId)?.size === 0) {
+        this.boardPresenceSubscribers.delete(boardId);
+        if (this.redisAdapter) {
+          this.redisAdapter.unsubscribeBoardPresenceChannel(boardId).catch((error) => {
+            logger.error(`[PubSub] Failed to unsubscribe from Redis board presence channel: ${String(error)}`);
+          });
+        }
+      }
+    };
+  }
+
+  /**
+   * Publish a board-presence event to subscribers.
+   * Dispatches locally first, then publishes to Redis for other instances.
+   */
+  publishBoardPresenceEvent(boardId: string, event: BoardPresenceEvent): void {
+    this.dispatchToLocalBoardPresenceSubscribers(boardId, event);
+
+    if (this.redisAdapter) {
+      this.redisAdapter.publishBoardPresenceEvent(boardId, event).catch((error) => {
+        logger.error('[PubSub] Redis board presence publish failed:', error);
+      });
+    }
+  }
+
+  private dispatchToLocalBoardPresenceSubscribers(boardId: string, event: BoardPresenceEvent): void {
+    const subscribers = this.boardPresenceSubscribers.get(boardId);
+    if (subscribers) {
+      for (const callback of subscribers) {
+        try {
+          callback(event);
+        } catch (error) {
+          logger.error('Error in board presence subscriber:', error);
+        }
+      }
+    }
+  }
+
+  /**
+   * Atomically allocate the next monotonic sequence number for a board.
+   * Redis `INCR` (cluster-safe across instances); falls back to an in-memory
+   * counter in local-only mode. The key expires after 24h of inactivity so
+   * an idle board's counter doesn't leak in Redis — a new climb that day just
+   * restarts at 1, which is fine because the history buffer expires together.
+   */
+  async nextBoardSeq(boardId: string): Promise<number> {
+    if (this.redisAdapter && this.isRedisConnected()) {
+      try {
+        const { publisher } = redisClientManager.getClients();
+        const key = `board:${boardId}:seq`;
+        const next = await publisher.incr(key);
+        await publisher.expire(key, BOARD_SEQ_TTL);
+        return next;
+      } catch (error) {
+        logger.error('[PubSub] Failed to allocate board seq from Redis, falling back to local:', error);
+      }
+    }
+
+    const next = (this.localBoardSeq.get(boardId) ?? 0) + 1;
+    this.localBoardSeq.set(boardId, next);
+    return next;
+  }
+
+  /**
+   * Append a climb to a board's durable FIFO history (newest-first, capped at
+   * 50, 24h TTL). No-op without Redis — late joiners then just rely on the
+   * live subscription.
+   */
+  async storeBoardClimb(boardId: string, climb: BoardPresenceClimb): Promise<void> {
+    if (!this.redisAdapter || !this.isRedisConnected()) {
+      return;
+    }
+
+    try {
+      const { publisher } = redisClientManager.getClients();
+      const key = `board:${boardId}:history`;
+      await publisher.lpush(key, JSON.stringify(climb));
+      await publisher.ltrim(key, 0, BOARD_HISTORY_SIZE - 1);
+      await publisher.expire(key, BOARD_HISTORY_TTL);
+    } catch (error) {
+      logger.error('[PubSub] Failed to store board climb in history:', error);
+      // Non-fatal: the live event was already published.
+    }
+  }
+
+  /**
+   * Read a board's recent climbs, newest-first by seq (cap 50). Empty without
+   * Redis.
+   */
+  async getRecentBoardClimbs(boardId: string): Promise<BoardPresenceClimb[]> {
+    if (!this.redisAdapter || !this.isRedisConnected()) {
+      return [];
+    }
+
+    try {
+      const { publisher } = redisClientManager.getClients();
+      const key = `board:${boardId}:history`;
+      const entries = await publisher.lrange(key, 0, -1);
+
+      const climbs: BoardPresenceClimb[] = [];
+      for (const json of entries) {
+        try {
+          climbs.push(JSON.parse(json) as BoardPresenceClimb);
+        } catch (parseError) {
+          logger.error('[PubSub] Failed to parse board history entry:', parseError);
+        }
+      }
+
+      // The list is already newest-first (lpush), but sort by seq DESC so a
+      // late, out-of-order write can't surface above a newer climb.
+      climbs.sort((a, b) => b.seq - a.seq);
+      return climbs.slice(0, BOARD_HISTORY_SIZE);
+    } catch (error) {
+      logger.error('[PubSub] Failed to read board history:', error);
+      return [];
     }
   }
 
