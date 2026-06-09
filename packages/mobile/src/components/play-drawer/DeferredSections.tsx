@@ -18,6 +18,7 @@ type DeferredSectionsProps = {
   setIds: string;
   angle: number;
   enabled: boolean;
+  contentEnabled: boolean;
   onSimilarClimbPress: (climb: Climb) => void;
   /** Reports the measured height of the Beta Videos section header (drives the play
    *  drawer's first-screen reserve so the header teases at the bottom of the fold). */
@@ -37,15 +38,19 @@ export const DeferredSections = memo(function DeferredSections({
   setIds,
   angle,
   enabled,
+  contentEnabled,
   onSimilarClimbPress,
   onBetaHeaderLayout,
 }: DeferredSectionsProps) {
   const { t } = useTranslation('session');
   // Defer the JS-heavy below-fold sections until just after the drawer's open
-  // animation. Re-defers per climb (resetKey = uuid) and — unlike a bare
+  // animation and only after the user has started scrolling below the fold.
+  // Beta videos stay eager below because their header/body is the user's first
+  // scroll affordance once the drawer opens.
+  // Re-defers per climb (resetKey = uuid) and — unlike a bare
   // runAfterInteractions — falls back to a bounded timeout, so a starved
   // interaction queue can't leave these sections blank until the drawer reopens.
-  const readyToRender = useDeferredAfterInteractions(enabled, climb.uuid);
+  const readyToRender = useDeferredAfterInteractions(enabled && contentEnabled, climb.uuid);
 
   // Tally shown next to the collapsed Logbook header so the user sees their
   // history without expanding. Mirrors LogbookSection's summary fallback.
@@ -62,12 +67,9 @@ export const DeferredSections = memo(function DeferredSections({
     return null;
   }
 
-  // Beta Videos section renders eagerly so its header height is laid out
-  // immediately — this is what drives the play drawer's first-screen reserve
-  // (the header teases at the bottom of the fold). Without eager render the
-  // reserve would only settle after InteractionManager fires, causing the board
-  // to visibly resize on first open. BetaVideosSection's data fetch is React
-  // Query and cheap to schedule; only the JS-heavy sub-sections wait below.
+  // Keep Beta Videos eager so it can measure immediately and tease real content
+  // at the bottom of the first screen. The heavier Logbook/Community/Similar
+  // sections still wait for scroll + the interaction queue.
   return (
     <View style={styles.container}>
       <CollapsibleSection title={t('mobile.betaVideos.title')} keepExpanded onHeaderLayout={onBetaHeaderLayout}>

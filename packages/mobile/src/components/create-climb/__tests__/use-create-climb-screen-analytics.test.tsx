@@ -86,7 +86,7 @@ vi.mock('../../../lib/graphql/hooks', () => ({
   useClimb: () => ({ data: editClimb.data }),
 }));
 vi.mock('../../../providers/queue-provider', () => ({
-  useQueue: () => ({ setCurrentClimb: queue.setCurrentClimb }),
+  useQueueActions: () => ({ setCurrentClimb: queue.setCurrentClimb }),
 }));
 vi.mock('../../../providers/bluetooth-provider', () => ({
   useOptionalBluetoothContext: () => null,

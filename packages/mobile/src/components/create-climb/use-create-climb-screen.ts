@@ -19,7 +19,7 @@ import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { track } from '../../lib/analytics';
 import { useAuth } from '../../providers/auth-provider';
 import { useProfile, useClimb } from '../../lib/graphql/hooks';
-import { useQueue } from '../../providers/queue-provider';
+import { useQueueActions } from '../../providers/queue-provider';
 import { useOptionalBluetoothContext } from '../../providers/bluetooth-provider';
 import { useToast } from '../../providers/toast-provider';
 import { climbToQueueItem } from '../../lib/climb-to-queue-item';
@@ -91,7 +91,7 @@ export function useCreateClimbScreen({
   const { isAuthenticated, saveClimb, updateClimb } = useBoardProvider();
   const auth = useAuth();
   const { data: profile } = useProfile();
-  const { setCurrentClimb } = useQueue();
+  const { setCurrentClimb } = useQueueActions();
   const bluetooth = useOptionalBluetoothContext();
   const { showToast } = useToast();
   const queryClient = useQueryClient();
@@ -441,8 +441,8 @@ export function useCreateClimbScreen({
       await clearDraft(draftKey);
       // Refresh the inline Open Drafts table so the just-saved climb appears /
       // updates (delete already invalidates these keys; save must too).
-      queryClient.invalidateQueries({ queryKey: ['searchClimbs'] });
-      queryClient.invalidateQueries({ queryKey: ['searchClimbsCount'] });
+      void queryClient.invalidateQueries({ queryKey: ['searchClimbs'] });
+      void queryClient.invalidateQueries({ queryKey: ['searchClimbsCount'] });
       setJustSaved(true);
       showToast(isDraft ? t('mobile.create.save.draftToast') : t('mobile.create.save.publishedToast'), 'success');
       // A publish is commit-and-done — dismiss the drawer so the toast shows

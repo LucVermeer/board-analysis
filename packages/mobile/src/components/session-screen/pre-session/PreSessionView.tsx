@@ -11,7 +11,7 @@ import { useTheme } from '../../../providers/theme-provider';
 import { spacing } from '../../../theme/tokens';
 import { useActiveBoard } from '../../../lib/graphql/use-active-board';
 import { useAuth } from '../../../providers/auth-provider';
-import { useQueue } from '../../../providers/queue-provider';
+import { useQueueActions } from '../../../providers/queue-provider';
 import { useToast } from '../../../providers/toast-provider';
 import { useBottomChromeMetrics } from '../../../hooks/use-bottom-chrome-metrics';
 import { BoardSummaryCard } from './BoardSummaryCard';
@@ -30,7 +30,7 @@ export function PreSessionView() {
   const bottomChrome = useBottomChromeMetrics();
   const { data: activeBoard } = useActiveBoard();
   const { isAuthenticated } = useAuth();
-  const { startSession, addToQueue } = useQueue();
+  const { startSession, addToQueue } = useQueueActions();
   const { showToast } = useToast();
 
   const [selection, setSelection] = useState<GeneratorSelection>({ type: 'off' });

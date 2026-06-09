@@ -137,6 +137,7 @@ vi.mock('../../../providers/theme-provider', () => ({
 
 vi.mock('../../../providers/queue-provider', () => ({
   useQueue: () => ({ state: queue.state, nextClimb: queue.nextClimb, previousClimb: queue.previousClimb }),
+  usePlaylistSuggestionSource: () => null,
 }));
 
 vi.mock('../../../providers/drawer-host-provider', () => ({

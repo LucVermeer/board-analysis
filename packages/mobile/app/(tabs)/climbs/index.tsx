@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
+import { memo, useState, useCallback, useMemo, useRef, useEffect, type ComponentProps } from 'react';
 import {
   View,
   StyleSheet,
@@ -112,6 +112,17 @@ export default function ClimbList() {
   );
 }
 
+// Reads the active-climb selector itself, so navigating climbs re-renders only
+// these cheap row wrappers (and the two ClimbListRows whose `selected` flips) —
+// never ClimbListInner or the FlashList. ClimbListRow stays presentational (a
+// plain `selected` prop), so PlaylistDetailView's rows are unaffected.
+const ActiveAwareClimbListRow = memo(function ActiveAwareClimbListRow(
+  props: Omit<ComponentProps<typeof ClimbListRow>, 'selected'>,
+) {
+  const activeClimbUuid = useActiveClimbUuid();
+  return <ClimbListRow {...props} selected={props.climb.uuid === activeClimbUuid} />;
+});
+
 function ClimbListInner() {
   const router = useRouter();
   const { t } = useTranslation('climbs');
@@ -130,11 +141,6 @@ function ClimbListInner() {
     patchFilters,
     patchBoardFilters,
   } = useClimbSearch();
-  // The active climb (driving the board / persistent queue bar). We highlight
-  // its row so the search → tap → change-active loop is always visible. The
-  // selector changes identity only when the active uuid changes, so unrelated
-  // queue mutations / party pushes no longer re-render this screen.
-  const activeClimbUuid = useActiveClimbUuid();
   const { getLogbook } = useBoardProvider();
   const searchHeaderRef = useRef<SearchHeaderHandle>(null);
   const nativeSearchRef = useRef<NativeSearchBarRef>(null);
@@ -696,7 +702,7 @@ function ClimbListInner() {
 
   const renderClimbItem = useCallback(
     ({ item: climb }: { item: Climb }) => (
-      <ClimbListRow
+      <ActiveAwareClimbListRow
         climb={climb}
         boardName={boardName as BoardName}
         layoutId={layoutId}
@@ -707,7 +713,6 @@ function ClimbListInner() {
         onOpenActions={openClimbActions}
         onOpenPlaylist={openAddToPlaylist}
         onAddToQueue={handleAddToQueue}
-        selected={climb.uuid === activeClimbUuid}
       />
     ),
     [
@@ -720,7 +725,6 @@ function ClimbListInner() {
       openClimbActions,
       openAddToPlaylist,
       handleAddToQueue,
-      activeClimbUuid,
     ],
   );
 

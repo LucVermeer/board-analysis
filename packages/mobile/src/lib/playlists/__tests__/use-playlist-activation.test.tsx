@@ -30,7 +30,7 @@ vi.mock('@boardsesh/playlists-react', () => ({
   fetchPlaylistSuggestionClimbs: (args: unknown) => mocks.fetchSuggestion(args),
 }));
 vi.mock('../../../providers/queue-provider', () => ({
-  useQueue: () => ({
+  useQueueActions: () => ({
     setCurrentClimb: mocks.setCurrentClimb,
     refreshPlaylistSuggestionSource: mocks.refreshPlaylistSuggestionSource,
   }),

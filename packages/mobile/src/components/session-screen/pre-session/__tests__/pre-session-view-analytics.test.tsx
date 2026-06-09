@@ -52,7 +52,7 @@ vi.mock('../../../../providers/theme-provider', () => ({ useTheme: () => ({ syst
 vi.mock('../../../../lib/graphql/use-active-board', () => ({ useActiveBoard: () => activeBoard }));
 vi.mock('../../../../providers/auth-provider', () => ({ useAuth: () => ({ isAuthenticated: true }) }));
 vi.mock('../../../../providers/queue-provider', () => ({
-  useQueue: () => ({ startSession: queue.startSession, addToQueue: queue.addToQueue }),
+  useQueueActions: () => ({ startSession: queue.startSession, addToQueue: queue.addToQueue }),
 }));
 vi.mock('../../../../providers/toast-provider', () => ({ useToast: () => ({ showToast: vi.fn() }) }));
 vi.mock('../../../../hooks/use-bottom-chrome-metrics', () => ({
