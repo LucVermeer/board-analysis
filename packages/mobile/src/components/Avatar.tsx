@@ -32,6 +32,11 @@ export function Avatar({ uri, name, size = 40 }: AvatarProps) {
 
   if (uri) {
     return (
+      // Uses react-native's core <Image> (not expo-image), so there's no
+      // allowDownscaling prop — but none is needed: RCTImageLoader decodes
+      // and downscales off the main thread, and sizedAvatarUri requests a
+      // ≤280px source, so any resize is trivial. Avatars were never part of
+      // the expo-image main-thread hang this PR fixes.
       <Image
         source={{ uri: sizedAvatarUri(uri, size) }}
         accessibilityLabel={accessibilityLabel}
