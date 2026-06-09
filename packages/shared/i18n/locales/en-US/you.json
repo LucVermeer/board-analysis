@@ -62,6 +62,9 @@
     },
     "logbook": {
       "empty": "Your logbook's empty — log your first send.",
+      "errorTitle": "Couldn't load your logbook",
+      "errorBody": "Check your connection and try again.",
+      "retry": "Try again",
       "editTitle": "Edit ascent",
       "statusLabel": "Status",
       "gradeLabel": "Grade",

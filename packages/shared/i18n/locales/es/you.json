@@ -62,6 +62,9 @@
     },
     "logbook": {
       "empty": "Tu historial está vacío — registra tu primer encadene.",
+      "errorTitle": "No se pudo cargar tu historial",
+      "errorBody": "Comprueba tu conexión e inténtalo de nuevo.",
+      "retry": "Inténtalo de nuevo",
       "editTitle": "Editar ascenso",
       "statusLabel": "Estado",
       "gradeLabel": "Grado",

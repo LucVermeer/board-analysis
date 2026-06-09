@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from 'react';
-import { View, RefreshControl, StyleSheet } from 'react-native';
+import { View, RefreshControl, Pressable, StyleSheet } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { useTranslation } from 'react-i18next';
 import type BottomSheet from '@gorhom/bottom-sheet';
@@ -13,7 +13,7 @@ import { LogbookRow } from './LogbookRow';
 import { LogbookEditSheet } from './LogbookEditSheet';
 import { useUserAscentsFeed } from '../../lib/graphql/hooks';
 import { useBottomChromeMetrics } from '../../hooks/use-bottom-chrome-metrics';
-import { spacing } from '../../theme/tokens';
+import { spacing, borderRadius } from '../../theme/tokens';
 import { useTheme } from '../../providers/theme-provider';
 
 export function LogbookTab({ userId }: { userId: string | undefined }) {
@@ -38,6 +38,10 @@ export function LogbookTab({ userId }: { userId: string | undefined }) {
     if (feed.hasNextPage && !feed.isFetchingNextPage) void feed.fetchNextPage();
   }, [feed]);
 
+  const handleRetry = useCallback(() => {
+    void feed.refetch();
+  }, [feed]);
+
   const renderItem = useCallback(
     ({ item }: { item: AscentFeedItem }) => <LogbookRow ascent={item} onPress={handlePress} />,
     [handlePress],
@@ -47,6 +51,36 @@ export function LogbookTab({ userId }: { userId: string | undefined }) {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" />
+      </View>
+    );
+  }
+
+  if (feed.isError) {
+    return (
+      <View style={styles.errorContainer}>
+        <Icon name="error" size={48} color={systemColors.tertiaryLabel} />
+        <Text variant="headline" style={styles.errorTitle}>
+          {t('mobile.logbook.errorTitle')}
+        </Text>
+        <Text variant="subheadline" style={styles.errorBody}>
+          {t('mobile.logbook.errorBody')}
+        </Text>
+        <Pressable
+          onPress={handleRetry}
+          disabled={feed.isRefetching}
+          accessibilityRole="button"
+          accessibilityLabel={t('mobile.logbook.retry')}
+          style={({ pressed }) => [
+            styles.retryButton,
+            { borderColor: brandColors.primary },
+            feed.isRefetching && styles.retryButtonDisabled,
+            pressed && !feed.isRefetching && { backgroundColor: `${brandColors.primary}1A` },
+          ]}
+        >
+          <Text variant="footnote" color={brandColors.primary}>
+            {t('mobile.logbook.retry')}
+          </Text>
+        </Pressable>
       </View>
     );
   }
@@ -101,4 +135,21 @@ const styles = StyleSheet.create({
     gap: spacing[2],
   },
   emptyTitle: { opacity: 0.6, marginTop: spacing[3], textAlign: 'center' },
+  errorContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing[8],
+    gap: spacing[2],
+  },
+  errorTitle: { marginTop: spacing[3], textAlign: 'center' },
+  errorBody: { opacity: 0.6, textAlign: 'center' },
+  retryButton: {
+    marginTop: spacing[3],
+    paddingHorizontal: spacing[4],
+    paddingVertical: spacing[2],
+    borderRadius: borderRadius.full,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  retryButtonDisabled: { opacity: 0.5 },
 });
