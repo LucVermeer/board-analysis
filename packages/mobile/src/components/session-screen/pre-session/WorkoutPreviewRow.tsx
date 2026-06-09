@@ -11,6 +11,8 @@ import { useTheme } from '../../../providers/theme-provider';
 import { iosSystemColors } from '../../../theme/ios-colors';
 import { spacing } from '../../../theme/tokens';
 import { hapticSelection } from '../../../lib/haptics';
+import { formatQuality, formatSends } from '../../../lib/format-climb-stats';
+import { useGradeFormat } from '../../../hooks/use-grade-format';
 
 type WorkoutPreviewRowProps = {
   item: ClimbQueueItem;
@@ -46,7 +48,9 @@ function WorkoutPreviewRowComponent({
   onRefresh,
 }: WorkoutPreviewRowProps) {
   const { systemColors, brandColors, opacity } = useTheme();
-  const { t } = useTranslation('session');
+  const { t: sessionT } = useTranslation('session');
+  const { t: climbsT } = useTranslation('climbs');
+  const { formatGrade } = useGradeFormat();
   // Blocked while this row spins, or while another row holds the single refresh
   // slot. Only this row shows a spinner; the rest dim to read as "busy, wait".
   const refreshBlocked = isRefreshing || refreshDisabled;
@@ -63,7 +67,18 @@ function WorkoutPreviewRowComponent({
     onRefresh(item.uuid);
   }, [item.uuid, onRefresh]);
 
-  const climbName = item.climb?.name ?? t('mobile.queue.unknownClimb');
+  const climbName = item.climb?.name ?? sessionT('mobile.queue.unknownClimb');
+  const formattedGrade = formatGrade(item.climb.difficulty) ?? item.climb.difficulty;
+  const quality = Number(formatQuality(item.climb.quality_average));
+  const rowAccessibilityLabel = [
+    climbName,
+    formattedGrade,
+    item.climb.ascensionist_count > 0 ? formatSends(item.climb.ascensionist_count, climbsT) : null,
+    quality > 0 ? sessionT('playView.tickBar.starRating', { count: quality }) : null,
+    item.climb.setter_username,
+  ]
+    .filter(Boolean)
+    .join(', ');
 
   return (
     <View>
@@ -78,7 +93,7 @@ function WorkoutPreviewRowComponent({
           onPress={handlePress}
           feedback="opacity"
           accessibilityRole="button"
-          accessibilityLabel={climbName}
+          accessibilityLabel={rowAccessibilityLabel}
           accessibilityState={{ selected: isActive }}
           style={styles.rowButton}
         >
@@ -97,8 +112,9 @@ function WorkoutPreviewRowComponent({
           disabled={refreshBlocked}
           feedback="scale"
           hitSlop={2}
+          rippleBorderless
           accessibilityRole="button"
-          accessibilityLabel={t('mobile.session.preRegenerateClimbForClimb', { name: climbName })}
+          accessibilityLabel={sessionT('mobile.session.preRegenerateClimbForClimb', { name: climbName })}
           accessibilityState={{ disabled: refreshBlocked, busy: isRefreshing }}
           style={[styles.refreshButton, refreshDisabled && !isRefreshing ? { opacity: opacity.disabled } : null]}
         >
@@ -140,8 +156,6 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    columnGap: spacing[3],
-    paddingHorizontal: spacing[3],
   },
   rowButton: {
     flex: 1,
@@ -149,13 +163,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     columnGap: spacing[3],
     paddingVertical: spacing[2],
+    paddingLeft: spacing[3],
+    paddingRight: spacing[2],
   },
   refreshButton: {
     width: 44,
     height: 44,
     alignItems: 'center',
     justifyContent: 'center',
+    borderRadius: 22,
     flexShrink: 0,
+    marginRight: spacing[3],
   },
   separator: {
     height: StyleSheet.hairlineWidth,
