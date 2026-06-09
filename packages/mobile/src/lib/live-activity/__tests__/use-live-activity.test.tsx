@@ -108,17 +108,28 @@ describe('useLiveActivity start-failure contract', () => {
   it('retries the start on a later activation after a failure', async () => {
     plugin.startLiveActivitySession.mockRejectedValueOnce(new Error('permission denied')).mockResolvedValue(undefined);
 
-    const { rerender } = render(<Harness {...activeProps()} />);
+    // Reuse one props object (stable queue array) so toggling isSessionActive is
+    // the only change — otherwise a fresh queue array would refire the queue-sync
+    // effect and muddy the update assertion below.
+    const props = activeProps();
+    const { rerender } = render(<Harness {...props} />);
     await waitFor(() => expect(plugin.startLiveActivitySession).toHaveBeenCalledTimes(1));
+    expect(plugin.updateLiveActivity).not.toHaveBeenCalled();
 
     // Session deactivates, then activates again — the hook should attempt a fresh
     // start rather than stay stuck after the earlier failure.
-    rerender(<Harness {...activeProps({ isSessionActive: false })} />);
+    rerender(<Harness {...props} isSessionActive={false} />);
     await act(async () => {
       await Promise.resolve();
     });
-    rerender(<Harness {...activeProps()} />);
+    rerender(<Harness {...props} />);
 
     await waitFor(() => expect(plugin.startLiveActivitySession).toHaveBeenCalledTimes(2));
+    // The successful retry must push the initial state, just like a clean start.
+    await waitFor(() =>
+      expect(plugin.updateLiveActivity).toHaveBeenCalledWith(
+        expect.objectContaining({ climbName: 'Test Climb', currentIndex: 0, totalClimbs: 1 }),
+      ),
+    );
   });
 });

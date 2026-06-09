@@ -46,11 +46,12 @@ dependencies {
   // the foreground-service retry path. Robolectric runs the real Android
   // framework classes (Build.VERSION, Intent, Service, ServiceCompat) on the
   // JVM; mockk drives the injectable startForegroundService seam and the static
-  // ServiceCompat promotion outcomes. NOTE: run via gradle
-  // (./gradlew :live-activity:testDebugUnitTest) — these are not yet wired into
-  // the repo's `vp`/CI flow, which has no Kotlin test runner.
+  // ServiceCompat promotion outcomes. Robolectric 4.14 supports up to SDK 35,
+  // matching this module's compileSdk. Run via gradle after `expo prebuild`
+  // (.github/workflows/android-pr-rn.yml runs :…:testDebugUnitTest on PRs); the
+  // repo's `vp`/CI flow has no Kotlin test runner.
   testImplementation 'junit:junit:4.13.2'
-  testImplementation 'org.robolectric:robolectric:4.13'
+  testImplementation 'org.robolectric:robolectric:4.14.1'
   testImplementation 'androidx.test:core:1.6.1'
-  testImplementation 'io.mockk:mockk:1.13.12'
+  testImplementation 'io.mockk:mockk:1.13.13'
 }

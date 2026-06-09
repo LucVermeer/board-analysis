@@ -53,12 +53,16 @@ class SessionPresenceModule : Module() {
 
     // Created lazily on the first session call so it can capture the application
     // context. The lifecycle/sessionActive logic lives in the controller so it
-    // can be unit-tested without the Expo runtime.
+    // can be unit-tested without the Expo runtime. @Volatile + @Synchronized init
+    // so two concurrent async invocations can't each build a controller and have
+    // the second clobber state (e.g. sessionActive) the first already set.
+    @Volatile
     private var controller: SessionPresenceController? = null
 
     // startSession needs a controller; if the react context is gone, surface it
     // to JS (the hook's .catch resets) rather than no-op into an inconsistent
     // "JS thinks active, native isn't" state.
+    @Synchronized
     private fun requireController(): SessionPresenceController {
         controller?.let { return it }
         val context = appContext.reactContext?.applicationContext ?: throw ReactContextUnavailableException()
@@ -98,6 +102,9 @@ class SessionPresenceModule : Module() {
         AsyncFunction("updateActivity") { options: SessionUpdateOptions -> controller?.updateActivity(options) }
         AsyncFunction("updateActivityClimb") { options: SessionUpdateOptions -> controller?.updateActivity(options) }
 
+        // No-op (not a throw) when no session was ever started: there's nothing to
+        // tear down, and the JS hook has already cleared its own state. Kept
+        // deliberately lenient unlike startSession's error-surfacing contract.
         AsyncFunction("endSession") { controller?.endSession() }
     }
 
