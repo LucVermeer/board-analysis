@@ -7,6 +7,7 @@ import {
   isTikTokUrl,
   mapBetaLinkRow as mapBetaLinkRowShared,
   mapBetaLinksResponse as mapBetaLinksResponseShared,
+  BETA_THUMBNAIL_REQUEST_SIZE,
   type BetaLink,
   type BetaLinksGqlRow,
 } from '@boardsesh/shared-schema';
@@ -31,14 +32,6 @@ export type { BetaLink, BetaLinksGqlRow };
  * origin so the browser actually hits the backend instead of 404-ing
  * against the frontend host.
  */
-/**
- * Width (px) requested for beta thumbnails — the ~140px card at 2× DPR.
- * Must be one of the backend's `ALLOWED_IMAGE_SIZES` buckets
- * (packages/backend/src/lib/image-resize.ts), else the backend serves the
- * full-size original.
- */
-const BETA_THUMBNAIL_REQUEST_SIZE = 280;
-
 function withThumbnailSize(url: string): string {
   const separator = url.includes('?') ? '&' : '?';
   return `${url}${separator}size=${BETA_THUMBNAIL_REQUEST_SIZE}`;

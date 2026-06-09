@@ -144,7 +144,9 @@ export async function handleStaticAvatar(
     return;
   }
 
-  // Serve from local storage
+  // Serve from local storage. Note: the `?size=` resize path is S3-only — in
+  // local-dev (no S3) we serve the full-size original, so avatar sizing is a
+  // no-op there. That's intentional; production runs with S3 configured.
   const avatarsDir = getAvatarsDir();
   const filePath = path.join(avatarsDir, fileName);
 

@@ -1,4 +1,4 @@
-import { mapBetaLinkRow, mapBetaLinksResponse } from '@boardsesh/shared-schema';
+import { mapBetaLinkRow, mapBetaLinksResponse, BETA_THUMBNAIL_REQUEST_SIZE } from '@boardsesh/shared-schema';
 import type { BetaLink, BetaLinksGqlRow } from '@boardsesh/shared-schema';
 import { BACKEND_URL } from './env';
 
@@ -12,16 +12,6 @@ export {
   BETA_VIDEO_URL_VALIDATION_MESSAGE,
 } from '@boardsesh/shared-schema';
 export type { BetaLink, BetaLinksGqlRow };
-
-/**
- * Width (px) requested for beta thumbnails — the 140px card at 2× DPR.
- * Must be one of the backend's `ALLOWED_IMAGE_SIZES` buckets
- * (packages/backend/src/lib/image-resize.ts), otherwise the backend serves
- * the full-size original. Requesting a pre-sized thumbnail keeps the bytes
- * (and expo-image's decode) small; `allowDownscaling={false}` on the card
- * <Image> handles the rest.
- */
-const BETA_THUMBNAIL_REQUEST_SIZE = 280;
 
 /**
  * Beta thumbnails are served by the backend's `/static/beta-link-thumbnails/...`

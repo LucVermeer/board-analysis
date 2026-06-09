@@ -1,4 +1,5 @@
 import { View, Image, StyleSheet, PixelRatio } from 'react-native';
+import { snapToAllowedImageSize } from '@boardsesh/shared-schema';
 import { Text } from './Text';
 import { getInitials } from '../lib/get-initials';
 import { brandColors } from '../theme/colors';
@@ -11,24 +12,15 @@ type AvatarProps = {
 };
 
 /**
- * Mirror of the backend's `ALLOWED_IMAGE_SIZES`
- * (packages/backend/src/lib/image-resize.ts). A `?size=` value outside this
- * set makes the backend serve the full-size original, so snap to the
- * smallest bucket that covers the display size at the device pixel ratio.
- */
-const AVATAR_SIZE_BUCKETS = [44, 64, 80, 128, 140, 280] as const;
-
-/**
  * Request a pre-sized variant for backend-served avatars so the device
  * fetches a small image instead of the full user upload (which can be
- * multiple megapixels). Third-party avatar URLs are passed through — the
- * backend can only resize what it stores.
+ * multiple megapixels). Snaps the display size (× DPR) to a backend-honored
+ * bucket via the shared allowlist. Third-party avatar URLs are passed
+ * through — the backend can only resize what it stores.
  */
 function sizedAvatarUri(uri: string, displaySize: number): string {
   if (!uri.includes('/static/avatars/')) return uri;
-  const target = Math.ceil(displaySize * PixelRatio.get());
-  const bucket =
-    AVATAR_SIZE_BUCKETS.find((candidate) => candidate >= target) ?? AVATAR_SIZE_BUCKETS[AVATAR_SIZE_BUCKETS.length - 1];
+  const bucket = snapToAllowedImageSize(Math.ceil(displaySize * PixelRatio.get()));
   const separator = uri.includes('?') ? '&' : '?';
   return `${uri}${separator}size=${bucket}`;
 }

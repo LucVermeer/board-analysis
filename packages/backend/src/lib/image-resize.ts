@@ -1,15 +1,11 @@
 import sharp from 'sharp';
 import type { Readable } from 'stream';
+import { ALLOWED_IMAGE_SIZES, type AllowedImageSize } from '@boardsesh/shared-schema';
 
-/**
- * Bounded allowlist of resize widths (px). Keeping this small caps how
- * many cached S3 variants we ever mint and stops a caller from creating
- * unbounded keys. Values cover the on-device display sizes: avatars
- * (28–60pt logical at 2–3× DPR) and beta-video thumbnails (44–140pt at
- * 2× DPR). Requests for any other value serve the original, unresized.
- */
-export const ALLOWED_IMAGE_SIZES = [44, 64, 80, 128, 140, 280] as const;
-export type AllowedImageSize = (typeof ALLOWED_IMAGE_SIZES)[number];
+// Re-exported so handlers importing from this module get the allowlist from a
+// single source (it lives in @boardsesh/shared-schema so the web + mobile
+// clients that build `?size=` URLs share the same values).
+export { ALLOWED_IMAGE_SIZES, type AllowedImageSize };
 
 /**
  * Parse a `?size=` query value against the allowlist. Returns null for
@@ -39,7 +35,12 @@ export async function resizeImageBuffer(input: Buffer, size: AllowedImageSize): 
   return sharp(input).resize(size, size, { fit: 'cover', withoutEnlargement: true }).jpeg({ quality: 80 }).toBuffer();
 }
 
-/** Collect a readable stream into a single Buffer. */
+/**
+ * Collect a readable stream into a single Buffer. No size cap — callers only
+ * pass it size-bounded objects (avatars are limited by the upload handler;
+ * beta thumbnails by the fetch/cache step). Add a cap before reusing this for
+ * arbitrary/user-controlled object sizes.
+ */
 export async function streamToBuffer(stream: Readable): Promise<Buffer> {
   const chunks: Buffer[] = [];
   for await (const chunk of stream) {
