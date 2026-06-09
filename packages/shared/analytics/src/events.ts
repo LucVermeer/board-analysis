@@ -55,6 +55,12 @@ export const SHARED_EVENTS = {
   BluetoothConnectionSuccess: 'Bluetooth Connection Success',
   BluetoothConnectionFailed: 'Bluetooth Connection Failed',
   BluetoothDisconnected: 'Bluetooth Disconnected',
+  // BLE lifecycle telemetry — added so a session recording (and PostHog) shows
+  // what the radio actually did. BluetoothConnectionStolen is the tug-of-war
+  // signal: a write failed with a disconnect error while we believed we were
+  // connected (another device grabbed the last-connection-wins board).
+  BluetoothScanStarted: 'Bluetooth Scan Started',
+  BluetoothConnectionStolen: 'Bluetooth Connection Stolen',
   ClimbSentToBoardSuccess: 'Climb Sent to Board Success',
   ClimbSentToBoardFailure: 'Climb Sent to Board Failure',
   // Search

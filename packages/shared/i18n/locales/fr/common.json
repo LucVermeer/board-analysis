@@ -37,6 +37,11 @@
         "title": "Langue",
         "system": "Système",
         "description": "Système suit la langue de votre appareil."
+      },
+      "diagnostics": {
+        "title": "Diagnostic",
+        "recording": "Aidez-nous à régler le Bluetooth",
+        "recordingDescription": "Quand le mur décroche sans arrêt, activez ceci. On enregistre votre écran et la connexion Bluetooth pour voir ce qui cloche. Ce que vous tapez reste masqué, et c'est désactivé tant que vous ne l'activez pas."
       }
     },
     "onboarding": {
