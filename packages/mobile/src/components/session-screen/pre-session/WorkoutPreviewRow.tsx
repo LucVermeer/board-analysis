@@ -145,6 +145,9 @@ const styles = StyleSheet.create({
   },
   rowButton: {
     flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    columnGap: spacing[3],
     paddingVertical: spacing[2],
   },
   refreshButton: {

@@ -8,7 +8,12 @@ import type { QueueItemRowBoard } from '../../../QueueItemRow';
 // Each PressableSurface render lands here so the test can read the refresh
 // button's disabled/accessibility state.
 const surfaces = vi.hoisted(() => ({
-  entries: [] as Array<{ label?: string; disabled?: boolean; accessibilityState?: Record<string, unknown> }>,
+  entries: [] as Array<{
+    label?: string;
+    disabled?: boolean;
+    accessibilityState?: Record<string, unknown>;
+    style?: unknown;
+  }>,
 }));
 
 vi.mock('react-native', () => ({
@@ -22,14 +27,16 @@ vi.mock('../../../PressableSurface', () => ({
     accessibilityLabel,
     disabled,
     accessibilityState,
+    style,
     children,
   }: {
     accessibilityLabel?: string;
     disabled?: boolean;
     accessibilityState?: Record<string, unknown>;
+    style?: unknown;
     children?: ReactNode;
   }) => {
-    surfaces.entries.push({ label: accessibilityLabel, disabled, accessibilityState });
+    surfaces.entries.push({ label: accessibilityLabel, disabled, accessibilityState, style });
     return createElement('button', null, children);
   },
 }));
@@ -53,6 +60,7 @@ const item = { uuid: 'qi-1', climb: { uuid: 'c1', name: 'Test Climb' } } as unkn
 // The mocked `t` returns the key, so the refresh button surfaces under its key.
 const REFRESH_LABEL = 'mobile.session.preRegenerateClimbForClimb';
 const refreshButton = () => surfaces.entries.find((entry) => entry.label === REFRESH_LABEL);
+const rowButton = () => surfaces.entries.find((entry) => entry.label === item.climb.name);
 
 function renderRow(overrides: { isRefreshing: boolean; refreshDisabled: boolean }) {
   return render(
@@ -72,6 +80,11 @@ beforeEach(() => {
 });
 
 describe('WorkoutPreviewRow refresh button', () => {
+  it('lays out the climb content horizontally', () => {
+    renderRow({ isRefreshing: false, refreshDisabled: false });
+    expect(JSON.stringify(rowButton()?.style)).toContain('"flexDirection":"row"');
+  });
+
   it('is tappable when no row is regenerating', () => {
     renderRow({ isRefreshing: false, refreshDisabled: false });
     expect(refreshButton()?.disabled).toBe(false);
