@@ -1,8 +1,8 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { View, StyleSheet, Pressable } from 'react-native';
-import Animated from 'react-native-reanimated';
-import { GestureDetector } from 'react-native-gesture-handler';
+import Animated, { type SharedValue } from 'react-native-reanimated';
+import { GestureDetector, type GestureType } from 'react-native-gesture-handler';
 import type { BoardName, HoldsFilter } from '@boardsesh/shared-schema';
 import { BoardImageNative } from '../BoardImageNative';
 import { Text } from '../Text';
@@ -13,6 +13,16 @@ import { overlays } from '../../theme/tokens';
 import type { BoardHoldTarget } from '../../lib/create-board-holds';
 import { SearchHoldFilterRings } from './SearchHoldFilterRings';
 
+/** Context handed to an overlay rendered inside the board's zoom transform. */
+export type FilterBoardTransformContext = {
+  /** The board's pinch gesture, to compose overlay pans Simultaneous with it. */
+  pinchGesture: GestureType;
+  /** Live zoom scale, so an overlay can convert screen-pixel deltas to board px. */
+  scaleSV: SharedValue<number>;
+  renderWidth: number;
+  renderHeight: number;
+};
+
 type InteractiveFilterBoardProps = {
   boardName: BoardName;
   layoutId: number;
@@ -21,13 +31,21 @@ type InteractiveFilterBoardProps = {
   boardWidth: number;
   boardHeight: number;
   holdTargets: BoardHoldTarget[];
-  holdsFilter: HoldsFilter;
+  /** Hold-type filter rings, when this board edits hold types. Omit for zone mode. */
+  holdsFilter?: HoldsFilter;
   /** The hold the picker is currently editing — drawn with a bright ring. */
-  activeHoldId: number | null;
-  onHoldTap: (holdId: number) => void;
+  activeHoldId?: number | null;
+  /** Tap handler that opens the hold picker. Omit to disable hold taps (zone mode). */
+  onHoldTap?: (holdId: number) => void;
   mirrored?: boolean;
   renderWidth: number;
   renderHeight: number;
+  /**
+   * Overlay rendered INSIDE the zoom transform (like the hold filter rings) so it
+   * tracks the board at any zoom — used by the zone editor for the draggable
+   * rectangle. Receives the board pinch + live scale so its pans compose cleanly.
+   */
+  renderInTransform?: (context: FilterBoardTransformContext) => ReactNode;
 };
 
 /**
@@ -50,14 +68,15 @@ export const InteractiveFilterBoard = React.memo(function InteractiveFilterBoard
   boardHeight,
   holdTargets,
   holdsFilter,
-  activeHoldId,
+  activeHoldId = null,
   onHoldTap,
   mirrored = false,
   renderWidth,
   renderHeight,
+  renderInTransform,
 }: InteractiveFilterBoardProps) {
   const { t } = useTranslation('common');
-  const { pinchGesture, zoomPanGesture, isZoomed, resetZoom, animatedZoomStyle } = useZoomPanGesture({
+  const { pinchGesture, zoomPanGesture, isZoomed, scaleSV, resetZoom, animatedZoomStyle } = useZoomPanGesture({
     enabled: true,
     containerWidth: renderWidth,
     containerHeight: renderHeight,
@@ -66,6 +85,11 @@ export const InteractiveFilterBoard = React.memo(function InteractiveFilterBoard
   // The picker uses a long-press-style commit, but holds here only need a single
   // tap to open the picker, so we route both tap and "long press" to the same
   // handler (HoldTargetLayer requires both).
+
+  const transformContext = useMemo<FilterBoardTransformContext>(
+    () => ({ pinchGesture, scaleSV, renderWidth, renderHeight }),
+    [pinchGesture, scaleSV, renderWidth, renderHeight],
+  );
 
   const holdById = useMemo(() => {
     const map = new Map<number, BoardHoldTarget>();
@@ -115,32 +139,50 @@ export const InteractiveFilterBoard = React.memo(function InteractiveFilterBoard
               boardHeight={boardHeight}
               mirrored={mirrored}
             />
-            <SearchHoldFilterRings
-              boardName={boardName}
-              holdsFilter={holdsFilter}
-              holdTargets={holdTargets}
-              boardWidth={boardWidth}
-              boardHeight={boardHeight}
-              measuredWidth={renderWidth}
-              mirrored={mirrored}
-            />
+            {holdsFilter ? (
+              <SearchHoldFilterRings
+                boardName={boardName}
+                holdsFilter={holdsFilter}
+                holdTargets={holdTargets}
+                boardWidth={boardWidth}
+                boardHeight={boardHeight}
+                measuredWidth={renderWidth}
+                mirrored={mirrored}
+              />
+            ) : null}
             {activeHighlight}
-            <HoldTargetLayer
-              holdTargets={holdTargets}
-              boardWidth={boardWidth}
-              boardHeight={boardHeight}
-              measuredWidth={renderWidth}
-              mirrored={mirrored}
-              showAllHolds
-              onPaint={onHoldTap}
-              onLongPress={onHoldTap}
-            />
+            {onHoldTap ? (
+              <HoldTargetLayer
+                holdTargets={holdTargets}
+                boardWidth={boardWidth}
+                boardHeight={boardHeight}
+                measuredWidth={renderWidth}
+                mirrored={mirrored}
+                showAllHolds
+                onPaint={onHoldTap}
+                onLongPress={onHoldTap}
+              />
+            ) : null}
           </Animated.View>
 
+          {/* 1-finger pan-to-reposition the zoomed board. Sits ABOVE the board
+              layer (so a drag over the bare board pans it) but BELOW the
+              `renderInTransform` overlay layer (so the zone rectangle + corner
+              handles still win their touches while zoomed). */}
           {isZoomed ? (
             <GestureDetector gesture={zoomPanGesture}>
               <View style={StyleSheet.absoluteFill} />
             </GestureDetector>
+          ) : null}
+
+          {/* Overlay rendered INSIDE the same zoom transform but ABOVE the
+              pan-reset layer, so its gestures (e.g. the zone rectangle) receive
+              touches even when zoomed. Its root is `pointerEvents="box-none"`,
+              so taps on empty space fall through to the pan-reset layer below. */}
+          {renderInTransform ? (
+            <Animated.View pointerEvents="box-none" style={[StyleSheet.absoluteFill, animatedZoomStyle]}>
+              {renderInTransform(transformContext)}
+            </Animated.View>
           ) : null}
 
           {isZoomed ? (
