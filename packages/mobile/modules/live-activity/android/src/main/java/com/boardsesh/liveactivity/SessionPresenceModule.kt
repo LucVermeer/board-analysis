@@ -1,12 +1,7 @@
 package com.boardsesh.liveactivity
 
-import android.Manifest
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
-import android.os.Build
-import android.util.Log
-import androidx.core.content.ContextCompat
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import expo.modules.kotlin.records.Field
@@ -43,11 +38,11 @@ class SessionUpdateOptions : Record {
 }
 
 /**
- * Android counterpart to the iOS LiveActivity module. Owns the lifecycle of the
- * BoardSessionService (a connectedDevice foreground service) and bridges the
- * notification's Previous/Next taps back into JS as `queueNavigate` events — the
- * exact same event contract the iOS widget uses, so the shared JS seam needs no
- * per-platform branching.
+ * Android counterpart to the iOS LiveActivity module. Thin Expo adapter over
+ * [SessionPresenceController] (which owns the BoardSessionService lifecycle and
+ * the sessionActive flag) and the `queueNavigate` event bridge — the exact same
+ * event contract the iOS widget uses, so the shared JS seam needs no per-platform
+ * branching.
  */
 class SessionPresenceModule : Module() {
 
@@ -56,12 +51,19 @@ class SessionPresenceModule : Module() {
     @Volatile
     private var hasListeners = false
 
-    // Whether a session is logically active (startSession called, endSession not
-    // yet). Set synchronously here rather than reading the service's running
-    // state, so the initial update that fires right after startSession isn't
-    // dropped by a race with the service's async onStartCommand.
-    @Volatile
-    private var sessionActive = false
+    // Created lazily on the first session call so it can capture the application
+    // context. The lifecycle/sessionActive logic lives in the controller so it
+    // can be unit-tested without the Expo runtime.
+    private var controller: SessionPresenceController? = null
+
+    // startSession needs a controller; if the react context is gone, surface it
+    // to JS (the hook's .catch resets) rather than no-op into an inconsistent
+    // "JS thinks active, native isn't" state.
+    private fun requireController(): SessionPresenceController {
+        controller?.let { return it }
+        val context = appContext.reactContext?.applicationContext ?: throw ReactContextUnavailableException()
+        return SessionPresenceController(context).also { controller = it }
+    }
 
     override fun definition() = ModuleDefinition {
         Name("SessionPresence")
@@ -88,82 +90,15 @@ class SessionPresenceModule : Module() {
         AsyncFunction("isAvailable") { mapOf("available" to true) }
 
         AsyncFunction("startSession") { options: StartSessionOptions ->
-            val context = appContext.reactContext?.applicationContext ?: return@AsyncFunction
-            // On API 34+ a connectedDevice FGS can't promote without
-            // BLUETOOTH_CONNECT, so skip the start rather than create a
-            // startForeground() contract we can't satisfy. The FGS only keeps the
-            // BLE link alive, so without the permission there's nothing to keep.
-            if (!canRunConnectedDeviceService(context)) return@AsyncFunction
-            sessionActive = true
-            val strings = options.androidNotification
-            val intent = Intent(context, BoardSessionService::class.java).apply {
-                action = BoardSessionService.ACTION_START
-                putExtra(BoardSessionService.EXTRA_CHANNEL_NAME, strings?.channelName ?: "Active climbing session")
-                putExtra(BoardSessionService.EXTRA_CHANNEL_DESC, strings?.channelDescription ?: "")
-                putExtra(BoardSessionService.EXTRA_TITLE_FALLBACK, strings?.contentTitleFallback ?: "Climbing session")
-                putExtra(BoardSessionService.EXTRA_PREV_LABEL, strings?.previousLabel ?: "Previous")
-                putExtra(BoardSessionService.EXTRA_NEXT_LABEL, strings?.nextLabel ?: "Next")
-            }
-            launchService(context, intent)
+            requireController().startSession(options.androidNotification)
         }
 
-        AsyncFunction("updateActivity") { options: SessionUpdateOptions -> pushUpdate(options) }
-        AsyncFunction("updateActivityClimb") { options: SessionUpdateOptions -> pushUpdate(options) }
+        // Updates are no-ops until a session is started (controller null). Routed
+        // through the controller's sessionActive guard once it exists.
+        AsyncFunction("updateActivity") { options: SessionUpdateOptions -> controller?.updateActivity(options) }
+        AsyncFunction("updateActivityClimb") { options: SessionUpdateOptions -> controller?.updateActivity(options) }
 
-        AsyncFunction("endSession") {
-            // Note: no bare `return@AsyncFunction` + stopService() — stopService
-            // returns Boolean, which would clash with the Unit early-return. Use
-            // a null-check so the lambda stays Unit-typed.
-            sessionActive = false
-            val context = appContext.reactContext?.applicationContext
-            if (context != null) {
-                context.stopService(Intent(context, BoardSessionService::class.java))
-            }
-        }
-    }
-
-    // Below API 34 the connectedDevice type isn't permission-gated at
-    // startForeground() time, so the service can always start.
-    private fun canRunConnectedDeviceService(context: Context): Boolean {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) return true
-        return ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) ==
-            PackageManager.PERMISSION_GRANTED
-    }
-
-    // startForegroundService() throws ForegroundServiceStartNotAllowedException on
-    // API 31+ when the app is backgrounded. Clear sessionActive on failure so
-    // later updates don't keep retrying a service that never started.
-    private fun launchService(context: Context, intent: Intent) {
-        try {
-            ContextCompat.startForegroundService(context, intent)
-        } catch (error: Exception) {
-            Log.w(TAG, "startForegroundService failed: ${error.message}")
-            sessionActive = false
-        }
-    }
-
-    private fun pushUpdate(options: SessionUpdateOptions) {
-        val context = appContext.reactContext?.applicationContext ?: return
-        // Only update inside an active session window. startSession() owns
-        // promotion; a stray update would issue startForegroundService() just to
-        // refresh, risking ForegroundServiceDidNotStartInTimeException.
-        if (!sessionActive) return
-        val subtitle = buildString {
-            append(options.climbDifficulty)
-            if (options.angle > 0) {
-                if (isNotEmpty()) append(" · ")
-                append("${options.angle}°")
-            }
-        }
-        val intent = Intent(context, BoardSessionService::class.java).apply {
-            action = BoardSessionService.ACTION_UPDATE
-            putExtra(BoardSessionService.EXTRA_CLIMB_NAME, options.climbName)
-            putExtra(BoardSessionService.EXTRA_SUBTITLE, subtitle)
-            putExtra(BoardSessionService.EXTRA_HAS_NEXT, options.hasNext)
-            putExtra(BoardSessionService.EXTRA_HAS_PREVIOUS, options.hasPrevious)
-            putExtra(BoardSessionService.EXTRA_CURRENT_INDEX, options.currentIndex)
-        }
-        launchService(context, intent)
+        AsyncFunction("endSession") { controller?.endSession() }
     }
 
     private fun emit(event: Map<String, Any?>) {
@@ -184,7 +119,6 @@ class SessionPresenceModule : Module() {
 
     companion object {
         private const val MAX_BUFFERED_EVENTS = 32
-        private const val TAG = "BoardSession"
 
         @Volatile
         private var instance: WeakReference<SessionPresenceModule>? = null
