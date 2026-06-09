@@ -43,7 +43,6 @@
     "ordinalSecond": "{{n}}º",
     "ordinalThird": "{{n}}º",
     "ordinalDefault": "{{n}}º",
-    "sessionNotesPlaceholder": "Notas de la sesión u objetivo...",
     "noClimbsYet": "Sin bloques todavía",
     "logSomeClimbs": "Registra algunos bloques para ver el desglose por grados",
     "climbsLogged_one": "{{count}} bloque registrado",
@@ -72,11 +71,6 @@
     "notFound": {
       "title": "Sesión no encontrada",
       "subtitle": "No se pudo encontrar esta sesión. Puede que haya sido eliminada."
-    },
-    "userSearch": {
-      "title": "Añadir escalador",
-      "placeholder": "Buscar por nombre...",
-      "noUsersFound": "No se encontraron usuarios"
     }
   },
   "join": {
@@ -475,13 +469,7 @@
   },
   "mobileDetail": {
     "notFound": "Sesión no encontrada",
-    "editTitle": "Editar sesión",
-    "nameLabel": "Nombre",
-    "goalLabel": "Objetivo",
-    "save": "Guardar",
     "participants": "Escaladores",
-    "updated": "Sesión actualizada",
-    "updateError": "No se pudo actualizar la sesión",
     "title": "Sesión"
   },
   "mobileJoin": {

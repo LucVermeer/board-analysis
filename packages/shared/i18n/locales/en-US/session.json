@@ -43,7 +43,6 @@
     "ordinalSecond": "{{n}}nd",
     "ordinalThird": "{{n}}rd",
     "ordinalDefault": "{{n}}th",
-    "sessionNotesPlaceholder": "Session notes or goal...",
     "noClimbsYet": "No climbs yet",
     "logSomeClimbs": "Log some climbs to see your grade breakdown",
     "climbsLogged_one": "{{count}} climb logged",
@@ -72,11 +71,6 @@
     "notFound": {
       "title": "Session Not Found",
       "subtitle": "This session could not be found. It may have been removed."
-    },
-    "userSearch": {
-      "title": "Add Climber",
-      "placeholder": "Search by name...",
-      "noUsersFound": "No users found"
     }
   },
   "join": {
@@ -475,13 +469,7 @@
   },
   "mobileDetail": {
     "notFound": "Session not found",
-    "editTitle": "Edit session",
-    "nameLabel": "Name",
-    "goalLabel": "Goal",
-    "save": "Save",
     "participants": "Climbers",
-    "updated": "Session updated",
-    "updateError": "Couldn't update session",
     "title": "Session"
   },
   "mobileJoin": {

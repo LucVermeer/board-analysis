@@ -43,7 +43,6 @@
     "ordinalSecond": "{{n}}e",
     "ordinalThird": "{{n}}e",
     "ordinalDefault": "{{n}}e",
-    "sessionNotesPlaceholder": "Notes ou objectif de session…",
     "noClimbsYet": "Aucun bloc pour l'instant",
     "logSomeClimbs": "Enregistre quelques blocs pour voir la répartition par cotation",
     "climbsLogged_one": "{{count}} bloc enregistré",
@@ -72,11 +71,6 @@
     "notFound": {
       "title": "Session introuvable",
       "subtitle": "Cette session est introuvable. Elle a peut-être été supprimée."
-    },
-    "userSearch": {
-      "title": "Ajouter un grimpeur",
-      "placeholder": "Rechercher par nom…",
-      "noUsersFound": "Aucun utilisateur trouvé"
     }
   },
   "join": {
@@ -475,13 +469,7 @@
   },
   "mobileDetail": {
     "notFound": "Session introuvable",
-    "editTitle": "Modifier la session",
-    "nameLabel": "Nom",
-    "goalLabel": "Objectif",
-    "save": "Enregistrer",
     "participants": "Grimpeurs",
-    "updated": "Session mise à jour",
-    "updateError": "Impossible de mettre à jour la session",
     "title": "Session"
   },
   "mobileJoin": {

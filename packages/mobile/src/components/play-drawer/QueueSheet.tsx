@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { forwardRef, useCallback, useImperativeHandle, useMemo, useRef, useState, type ReactNode } from 'react';
 import { View, Pressable, Platform, StyleSheet } from 'react-native';
 import { BottomSheetModal, BottomSheetBackdrop, type BottomSheetBackdropProps } from '@gorhom/bottom-sheet';
 import { FullWindowOverlay } from 'react-native-screens';
@@ -26,26 +26,35 @@ function ModalSheetContainer({ children }: { children?: ReactNode }) {
 const modalContainerComponent = Platform.OS === 'ios' ? ModalSheetContainer : undefined;
 
 type QueueSheetProps = {
-  visible: boolean;
   board: QueueItemRowBoard;
-  /** Request an animated close (header button) — host flips `visible` to false. */
+  /** Request an animated close (header button) — calls the imperative handle's
+   *  `dismiss()` on the host side. */
   onClose: () => void;
-  /** Fired AFTER the dismiss animation finishes so the host can unmount. */
-  onDismissed: () => void;
+  /** Optional: fired AFTER the dismiss animation finishes. The imperative model
+   *  no longer needs this to unmount, so callers may omit it. */
+  onDismissed?: () => void;
   onClimbPress: (item: ClimbQueueItem) => void;
   onSuggestionPress: (climb: Climb, source: PlaylistSuggestionSource) => void;
   onTickHistory: (item: ClimbQueueItem) => void;
 };
 
-export function QueueSheet({
-  visible,
-  board,
-  onClose,
-  onDismissed,
-  onClimbPress,
-  onSuggestionPress,
-  onTickHistory,
-}: QueueSheetProps) {
+/**
+ * Imperative handle exposed to DrawerHostProvider. gorhom `present()` driven
+ * from a `visible`-prop effect is a silent no-op in this app (RN 0.79 / Expo
+ * SDK 56 / @gorhom/bottom-sheet v5 / react-native-screens): the effect runs and
+ * `present()` is called, but gorhom never fires `onAnimate`/`onChange` and the
+ * sheet never appears. Calling `present()` synchronously from the tap handler —
+ * the same pattern PlayDrawer uses — fixes it.
+ */
+export type QueueSheetHandle = {
+  present: () => void;
+  dismiss: () => void;
+};
+
+export const QueueSheet = forwardRef<QueueSheetHandle, QueueSheetProps>(function QueueSheet(
+  { board, onClose, onDismissed, onClimbPress, onSuggestionPress, onTickHistory },
+  ref,
+) {
   const { t } = useTranslation('session');
   const insets = useSafeAreaInsets();
   const { systemColors, sheet } = useTheme();
@@ -60,18 +69,27 @@ export function QueueSheet({
   const [showFullHistory, setShowFullHistory] = useState(false);
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const [isDragging, setIsDragging] = useState(false);
+  // Tracks whether the sheet is currently presented so the list only
+  // auto-scrolls to the current item on a real open (not on background mounts).
+  const [isPresented, setIsPresented] = useState(false);
 
   const snapPoints = useMemo(() => ['70%', '95%'], []);
 
   const currentItemUuid = currentClimbQueueItem?.uuid ?? null;
 
-  useEffect(() => {
-    if (visible) {
-      sheetRef.current?.present();
-    } else {
-      sheetRef.current?.dismiss();
-    }
-  }, [visible]);
+  useImperativeHandle(
+    ref,
+    () => ({
+      present: () => {
+        setIsPresented(true);
+        sheetRef.current?.present();
+      },
+      dismiss: () => {
+        sheetRef.current?.dismiss();
+      },
+    }),
+    [],
+  );
 
   const resetState = useCallback(() => {
     setIsEditMode(false);
@@ -80,10 +98,12 @@ export function QueueSheet({
   }, []);
 
   // The modal's dismiss animation has finished (header request, backdrop, or
-  // pan-down). Reset local UI state and let the host unmount.
+  // pan-down). Reset local UI state; the sheet stays mounted (imperative model)
+  // and is re-presented on the next open.
   const handleDismissed = useCallback(() => {
+    setIsPresented(false);
     resetState();
-    onDismissed();
+    onDismissed?.();
   }, [resetState, onDismissed]);
 
   const handleToggleEditMode = useCallback(() => {
@@ -194,7 +214,7 @@ export function QueueSheet({
         showFullHistory={showFullHistory}
         selectedItems={selectedItems}
         playlistSuggestionSource={playlistSuggestionSource}
-        autoScrollOnMount={visible}
+        autoScrollOnMount={isPresented}
         onToggleSelect={handleToggleSelect}
         onClimbPress={onClimbPress}
         onRemove={handleRemove}
@@ -230,7 +250,7 @@ export function QueueSheet({
       )}
     </BottomSheetModal>
   );
-}
+});
 
 const styles = StyleSheet.create({
   sheet: {

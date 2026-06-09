@@ -20,7 +20,7 @@ import { deriveIsDriver } from '@boardsesh/queue-runtime';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { PlayDrawer, type PlayDrawerHandle, type PlayDrawerOpenOptions } from '../components/play-drawer';
 import { LogAscentSheet } from '../components/LogAscentSheet';
-import { QueueSheet } from '../components/play-drawer/QueueSheet';
+import { QueueSheet, type QueueSheetHandle } from '../components/play-drawer/QueueSheet';
 import { QueueAddedSnackbar } from '../components/QueueAddedSnackbar';
 import type { QueueItemRowBoard } from '../components/QueueItemRow';
 import { useActiveBoard, useSetActiveBoard } from '../lib/graphql/use-active-board';
@@ -94,17 +94,16 @@ export function useDrawerHost(): DrawerHostValue {
 
 export function DrawerHostProvider({ children }: { children: ReactNode }) {
   const playDrawerRef = useRef<PlayDrawerHandle>(null);
+  // QueueSheet stays mounted (whenever a board is resolved) and is opened via its
+  // imperative handle. gorhom `present()` driven from a `visible`-prop effect is
+  // a silent no-op in this app, so we present/dismiss synchronously from the
+  // handler — the same pattern PlayDrawer uses.
+  const queueSheetRef = useRef<QueueSheetHandle>(null);
   const { data: activeBoard } = useActiveBoard();
   const [boardConfigOverride, setBoardConfigOverride] = useState<BoardConfig | null>(null);
   const [logAscentInput, setLogAscentInput] = useState<LogAscentInput | null>(null);
   const [climbActions, setClimbActions] = useState<{ climb: Climb; boardConfig: BoardConfig } | null>(null);
   const [playlistClimb, setPlaylistClimb] = useState<{ climb: Climb; boardConfig: BoardConfig } | null>(null);
-  // `mounted` controls whether QueueSheet is in the tree (so its suggestion
-  // query only runs while open); `visible` drives the present/dismiss animation.
-  // Splitting them lets a programmatic close play the dismiss animation before
-  // unmounting instead of vanishing instantly.
-  const [queueSheetMounted, setQueueSheetMounted] = useState(false);
-  const [queueSheetVisible, setQueueSheetVisible] = useState(false);
   const { addToQueue, setSessionBoardPath, setCurrentClimb } = useQueueActions();
   const { sessionId, driverParticipantId, participantId } = useQueueSessionControls();
   const setActiveBoard = useSetActiveBoard();
@@ -280,33 +279,17 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
     });
   }, [climbActions]);
 
+  // Present the always-mounted queue sheet imperatively. Calling `present()`
+  // synchronously from the handler (rather than from a `visible`-prop effect)
+  // is what actually shows the sheet — see QueueSheetHandle for the gorhom
+  // no-op this avoids.
   const openQueueSheet = useCallback(() => {
-    // Already mounted (e.g. re-opening mid dismiss-animation, before
-    // handleQueueSheetDismissed has unmounted it): re-present directly.
-    // `setQueueSheetMounted(true)` would be a no-op and the mount effect below
-    // would never re-fire, leaving the sheet hidden.
-    if (queueSheetMounted) {
-      setQueueSheetVisible(true);
-    } else {
-      setQueueSheetMounted(true);
-    }
-  }, [queueSheetMounted]);
-  // Fresh mount: present only AFTER the sheet has mounted (and registered with
-  // the modal provider). Flipping `mounted` and `visible` in one commit drops
-  // the `present()` when another modal — the Play Drawer — is already open:
-  // that's the bug where the play drawer's queue button did nothing while the
-  // snackbar's Open (fired with no modal open) worked. The two-commit path
-  // mirrors the always-mounted angle selector — present fires on a real
-  // `visible` transition over the already-stable Play Drawer.
-  useEffect(() => {
-    if (queueSheetMounted) setQueueSheetVisible(true);
-  }, [queueSheetMounted]);
-  // Request an animated close (flip `visible`; the sheet's dismiss animation then
-  // fires onDismissed → unmount).
-  const requestCloseQueueSheet = useCallback(() => setQueueSheetVisible(false), []);
-  const handleQueueSheetDismissed = useCallback(() => {
-    setQueueSheetVisible(false);
-    setQueueSheetMounted(false);
+    queueSheetRef.current?.present();
+  }, []);
+  // Request an animated close. The sheet's dismiss animation plays and it stays
+  // mounted, ready to be re-presented on the next open.
+  const requestCloseQueueSheet = useCallback(() => {
+    queueSheetRef.current?.dismiss();
   }, []);
   // Snackbar "Open": dismiss the snackbar, then open the queue sheet.
   const handleSnackbarOpen = useCallback(() => {
@@ -479,12 +462,11 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
           onClose={closeAddToPlaylist}
         />
       ) : null}
-      {queueSheetMounted && queueBoard ? (
+      {queueBoard ? (
         <QueueSheet
-          visible={queueSheetVisible}
+          ref={queueSheetRef}
           board={queueBoard}
           onClose={requestCloseQueueSheet}
-          onDismissed={handleQueueSheetDismissed}
           onClimbPress={handleQueueClimbPress}
           onSuggestionPress={handleQueueSuggestionPress}
           onTickHistory={handleQueueTickHistory}

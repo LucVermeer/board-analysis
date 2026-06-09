@@ -21,12 +21,12 @@ const playDrawer = vi.hoisted(() => ({
 
 const queueSheet = vi.hoisted(() => ({
   props: null as null | {
-    visible: boolean;
     onClose: () => void;
-    onDismissed: () => void;
     onClimbPress: (item: ClimbQueueItem) => void;
     onSuggestionPress: (climb: ClimbQueueItem['climb'], source: PlaylistSuggestionSource) => void;
   },
+  present: vi.fn(),
+  dismiss: vi.fn(),
 }));
 
 const climbActions = vi.hoisted(() => ({
@@ -88,18 +88,28 @@ vi.mock('../../components/play-drawer', async () => {
   };
 });
 
-vi.mock('../../components/play-drawer/QueueSheet', () => ({
-  QueueSheet: (props: {
-    visible: boolean;
-    onClose: () => void;
-    onDismissed: () => void;
-    onClimbPress: (item: ClimbQueueItem) => void;
-    onSuggestionPress: (climb: ClimbQueueItem['climb'], source: PlaylistSuggestionSource) => void;
-  }) => {
-    queueSheet.props = props;
-    return createElement('div', { 'data-queue-sheet': 'true' });
-  },
-}));
+vi.mock('../../components/play-drawer/QueueSheet', async () => {
+  const React = await vi.importActual<typeof import('react')>('react');
+  return {
+    QueueSheet: React.forwardRef(
+      (
+        props: {
+          onClose: () => void;
+          onClimbPress: (item: ClimbQueueItem) => void;
+          onSuggestionPress: (climb: ClimbQueueItem['climb'], source: PlaylistSuggestionSource) => void;
+        },
+        ref,
+      ) => {
+        queueSheet.props = props;
+        React.useImperativeHandle(ref, () => ({
+          present: queueSheet.present,
+          dismiss: queueSheet.dismiss,
+        }));
+        return React.createElement('div', { 'data-queue-sheet': 'true' });
+      },
+    ),
+  };
+});
 
 vi.mock('../../components/LogAscentSheet', () => ({
   LogAscentSheet: () => createElement('div', { 'data-log-ascent': 'true' }),
@@ -205,6 +215,8 @@ describe('DrawerHostProvider queue sheet wall-control gating', () => {
     playDrawer.open.mockClear();
     playDrawer.close.mockClear();
     queueSheet.props = null;
+    queueSheet.present.mockClear();
+    queueSheet.dismiss.mockClear();
     climbActions.props = null;
   });
 
@@ -329,69 +341,54 @@ describe('DrawerHostProvider queue sheet open / re-open', () => {
     queue.driverParticipantId = 'participant-other';
     queue.participantId = 'participant-self';
     queueSheet.props = null;
+    queueSheet.present.mockClear();
+    queueSheet.dismiss.mockClear();
     climbActions.props = null;
   });
 
-  it('presents the queue sheet on open (mount first, then visible on the next commit)', async () => {
-    const hosts: Array<ReturnType<typeof useDrawerHost>> = [];
-    renderHost((host) => hosts.push(host));
-    await waitFor(() => expect(hosts.at(-1)).toBeDefined());
-
-    act(() => {
-      hosts.at(-1)?.openQueueSheet();
-    });
-
-    await waitFor(() => expect(queueSheet.props?.visible).toBe(true));
-  });
-
-  it('re-presents the queue sheet when re-opened mid dismiss-animation, before it unmounts', async () => {
-    const hosts: Array<ReturnType<typeof useDrawerHost>> = [];
-    renderHost((host) => hosts.push(host));
-    await waitFor(() => expect(hosts.at(-1)).toBeDefined());
-
-    act(() => {
-      hosts.at(-1)?.openQueueSheet();
-    });
-    await waitFor(() => expect(queueSheet.props?.visible).toBe(true));
-
-    // Animated close request: visible flips false but the sheet stays mounted
-    // until its dismiss animation reports back via onDismissed (not fired here).
-    act(() => {
-      queueSheet.props?.onClose();
-    });
-    await waitFor(() => expect(queueSheet.props?.visible).toBe(false));
-
-    // Re-open while still mounted. The fresh-mount path alone (set mounted only)
-    // would no-op here — mounted is already true — and the mount effect would
-    // never re-fire, leaving the sheet hidden. This guards the direct re-present.
-    act(() => {
-      hosts.at(-1)?.openQueueSheet();
-    });
-    await waitFor(() => expect(queueSheet.props?.visible).toBe(true));
-  });
-
-  it('unmounts after the dismiss animation completes, then re-opens cleanly', async () => {
+  it('stays mounted and presents via the imperative handle on open', async () => {
     const hosts: Array<ReturnType<typeof useDrawerHost>> = [];
     const { container } = renderHost((host) => hosts.push(host));
     await waitFor(() => expect(hosts.at(-1)).toBeDefined());
 
-    act(() => {
-      hosts.at(-1)?.openQueueSheet();
-    });
-    await waitFor(() => expect(queueSheet.props?.visible).toBe(true));
-
-    act(() => {
-      queueSheet.props?.onClose(); // request animated close
-    });
-    act(() => {
-      queueSheet.props?.onDismissed(); // animation finished → host unmounts the sheet
-    });
-    await waitFor(() => expect(container.querySelector('[data-queue-sheet]')).toBeNull());
+    // The sheet is always mounted (gorhom present() from a visible-prop effect
+    // was a confirmed no-op), so it's in the tree before any open.
+    expect(container.querySelector('[data-queue-sheet]')).not.toBeNull();
+    expect(queueSheet.present).not.toHaveBeenCalled();
 
     act(() => {
       hosts.at(-1)?.openQueueSheet();
     });
-    await waitFor(() => expect(queueSheet.props?.visible).toBe(true));
+
+    await waitFor(() => expect(queueSheet.present).toHaveBeenCalledTimes(1));
+  });
+
+  it('dismisses via the imperative handle on close, then re-presents on re-open without remounting', async () => {
+    const hosts: Array<ReturnType<typeof useDrawerHost>> = [];
+    const { container } = renderHost((host) => hosts.push(host));
+    await waitFor(() => expect(hosts.at(-1)).toBeDefined());
+
+    const sheetNode = container.querySelector('[data-queue-sheet]');
+    expect(sheetNode).not.toBeNull();
+
+    act(() => {
+      hosts.at(-1)?.openQueueSheet();
+    });
+    await waitFor(() => expect(queueSheet.present).toHaveBeenCalledTimes(1));
+
+    // Animated close request goes through the handle's dismiss().
+    act(() => {
+      queueSheet.props?.onClose();
+    });
+    await waitFor(() => expect(queueSheet.dismiss).toHaveBeenCalledTimes(1));
+
+    // Re-open: the always-mounted sheet is presented again (no remount, so the
+    // same DOM node persists).
+    act(() => {
+      hosts.at(-1)?.openQueueSheet();
+    });
+    await waitFor(() => expect(queueSheet.present).toHaveBeenCalledTimes(2));
+    expect(container.querySelector('[data-queue-sheet]')).toBe(sheetNode);
   });
 });
 
