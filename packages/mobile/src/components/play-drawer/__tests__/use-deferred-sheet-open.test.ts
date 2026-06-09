@@ -71,6 +71,15 @@ describe('useDeferredSheetOpen', () => {
     expect(openNow).not.toHaveBeenCalled();
   });
 
+  it('replays a falsy stashed value (generic OpenArgs may be falsy)', () => {
+    const openNow = vi.fn();
+    const { result } = renderHook(() => useDeferredSheetOpen<number>(openNow, FALLBACK_MS));
+    act(() => result.current.onAnimate(-1));
+    act(() => result.current.requestOpen(0)); // 0 is a valid, falsy OpenArgs
+    act(() => result.current.flushOnDismiss());
+    expect(openNow).toHaveBeenCalledExactlyOnceWith(0);
+  });
+
   it('clears the fallback timer on unmount', () => {
     const openNow = vi.fn();
     const { result, unmount } = renderHook(() => useDeferredSheetOpen(openNow, FALLBACK_MS));

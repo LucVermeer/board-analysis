@@ -327,11 +327,11 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   // and wipes isSheetOpen — leaving the sheet visibly open with the board gated
   // off forever (the intermittent blank-board-on-reopen bug). The hook stashes
   // an open requested mid-dismiss and replays it once the dismissal settles.
-  const openDrawerArgs = useCallback(
+  const openDrawerFromArgs = useCallback(
     (args: { climb: Climb; options?: PlayDrawerOpenOptions }) => openDrawer(args.climb, args.options),
     [openDrawer],
   );
-  const { requestOpen, onAnimate: handleSheetAnimateIndex, flushOnDismiss } = useDeferredSheetOpen(openDrawerArgs);
+  const { requestOpen, onAnimate: handleSheetAnimateIndex, flushOnDismiss } = useDeferredSheetOpen(openDrawerFromArgs);
 
   useImperativeHandle(
     ref,

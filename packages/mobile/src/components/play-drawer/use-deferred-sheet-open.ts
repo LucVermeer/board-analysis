@@ -63,7 +63,9 @@ export function useDeferredSheetOpen<OpenArgs>(
   const flush = useCallback(() => {
     clearFallback();
     const pending = serializerRef.current.takePendingOpen();
-    if (pending) openNowRef.current(pending);
+    // Explicit null check: OpenArgs is generic and could itself be falsy, so a
+    // truthy test would wrongly skip a legitimately stashed value.
+    if (pending !== null) openNowRef.current(pending);
   }, [clearFallback]);
 
   const requestOpen = useCallback(
