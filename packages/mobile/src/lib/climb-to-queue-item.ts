@@ -66,6 +66,10 @@ export function climbToQueueItem(climb: Climb, options?: { suggested?: boolean; 
       is_no_match: climb.is_no_match,
       userAscents: climb.userAscents,
       userAttempts: climb.userAttempts,
+      // Carry multi-frame playback metadata so a climb queued from search /
+      // detail plays back at the setter's pace instead of DEFAULT_PACE_MS.
+      framesCount: climb.framesCount,
+      framesPace: climb.framesPace,
     },
   };
 }

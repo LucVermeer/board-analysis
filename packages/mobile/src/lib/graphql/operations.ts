@@ -85,6 +85,8 @@ const CLIMB_SEARCH_FIELDS = `
   created_at
   userAscents
   userAttempts
+  framesCount
+  framesPace
 `;
 
 const CLIMB_DETAIL_FIELDS = `
@@ -107,6 +109,8 @@ const CLIMB_DETAIL_FIELDS = `
   is_draft
   created_at
   published_at
+  framesCount
+  framesPace
 `;
 
 // ============================================
@@ -1013,6 +1017,10 @@ const SUBSCRIPTION_CLIMB_FIELDS = `
   stars
   difficulty_error
   benchmark_difficulty
+  mirrored
+  is_no_match
+  framesCount
+  framesPace
 `;
 
 // QueueItemAdded.item is ClimbQueueItem! and CurrentClimbChanged.item is
