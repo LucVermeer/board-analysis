@@ -24,6 +24,13 @@ export const PRODUCT_SIZES: Record<BoardName, Record<number, ProductSizeData>> =
 
 export { LAYOUTS, SETS, IMAGE_FILENAMES, HOLE_PLACEMENTS };
 
+// The Kilter Homewall is layout 8 / product 7 in Aurora's data. These gate the
+// tall/wide climb filters and the expansion-aware hold filtering, so web,
+// mobile, and the db query layer all read the same value from here rather than
+// each redefining the magic number.
+export const KILTER_HOMEWALL_LAYOUT_ID = 8;
+export const KILTER_HOMEWALL_PRODUCT_ID = 7;
+
 // 23/24 are 8x12 Full Ride/Mainline, 25/26 are 10x12 Full Ride/Mainline.
 const KILTER_HOMEWALL_TALL_SIZE_ID_SET: ReadonlySet<number> = new Set([23, 24, 25, 26]);
 

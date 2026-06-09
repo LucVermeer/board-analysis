@@ -3,7 +3,11 @@ import { ScrollView, StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import type { BoardName } from '@boardsesh/shared-schema';
 import { getGradesForBoard } from '@boardsesh/board-config';
-import { isKilterHomewallTallSizeId, isKilterHomewallWideSizeId } from '@boardsesh/board-constants';
+import {
+  KILTER_HOMEWALL_LAYOUT_ID,
+  isKilterHomewallTallSizeId,
+  isKilterHomewallWideSizeId,
+} from '@boardsesh/board-constants';
 import {
   formatMinAscentsFilterCount,
   getMinAscentsFilterOptions,
@@ -53,8 +57,6 @@ type CommonGeneratorPatch = Partial<
     'warmUp' | 'targetGrade' | 'climbBias' | 'minAscents' | 'minRating' | 'onlyTallClimbs' | 'onlyWideClimbs'
   >
 >;
-
-const KILTER_HOMEWALL_LAYOUT_ID = 8;
 
 // Static value list — the labels are looked up via inline `t('mobile.session.preGenerator…')`
 // calls in `chipLabel()` so the i18n key analyser can see every key as a
@@ -231,7 +233,7 @@ export function GeneratorPickerCard({
   onChange,
 }: GeneratorPickerCardProps) {
   const { t } = useTranslation('session');
-  const { systemColors, brandColors } = useTheme();
+  const { systemColors } = useTheme();
   const { formatGrade } = useGradeFormat();
 
   const isKilterHomewall = boardName === 'kilter' && layoutId === KILTER_HOMEWALL_LAYOUT_ID;

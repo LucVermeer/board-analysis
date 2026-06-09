@@ -52,6 +52,7 @@ vi.mock('@boardsesh/board-config', () => ({
   ],
 }));
 vi.mock('@boardsesh/board-constants', () => ({
+  KILTER_HOMEWALL_LAYOUT_ID: 8,
   isKilterHomewallTallSizeId: () => false,
   isKilterHomewallWideSizeId: () => false,
 }));

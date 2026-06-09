@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { useTranslation } from 'react-i18next';
@@ -52,6 +52,24 @@ export function PreSessionView() {
   const preview = useWorkoutPreview(selection, activeBoard ?? null, { isAuthenticated });
   const { items: previewItems, status, refreshingUuids, plannedCount, refreshSlot, toQueueItems } = preview;
 
+  // Refreshes run one at a time, so once any row is regenerating every row's
+  // refresh button is disabled (the rows dim it). Derived as a primitive so
+  // renderItem keeps a stable, length-free dep.
+  const isRefreshingAnyRow = refreshingUuids.size > 0;
+
+  // A rebuild (generator options changed) mints fresh queue-item uuids, so a
+  // previously highlighted preview row no longer exists. Drop the stale uuid so
+  // the highlight doesn't point at a row that's gone. (A single-row refresh
+  // keeps its uuid, so this leaves an active refresh's highlight intact.)
+  useEffect(() => {
+    if (
+      activePreviewUuid !== null &&
+      !previewItems.some((previewItem) => previewItem.item.uuid === activePreviewUuid)
+    ) {
+      setActivePreviewUuid(null);
+    }
+  }, [previewItems, activePreviewUuid]);
+
   // Board context for the preview rows (thumbnails + grade colours).
   const previewBoard = useMemo<QueueItemRowBoard | null>(() => {
     if (!activeBoard) return null;
@@ -77,18 +95,20 @@ export function PreSessionView() {
   const renderPreviewRow = useCallback(
     ({ item: previewItem }: { item: PreviewItem }) => {
       if (!previewBoard) return null;
+      const isRefreshing = refreshingUuids.has(previewItem.item.uuid);
       return (
         <WorkoutPreviewRow
           item={previewItem.item}
           board={previewBoard}
           isActive={previewItem.item.uuid === activePreviewUuid}
-          isRefreshing={refreshingUuids.has(previewItem.item.uuid)}
+          isRefreshing={isRefreshing}
+          refreshDisabled={isRefreshingAnyRow && !isRefreshing}
           onPress={handlePreviewPress}
           onRefresh={refreshSlot}
         />
       );
     },
-    [previewBoard, activePreviewUuid, refreshingUuids, handlePreviewPress, refreshSlot],
+    [previewBoard, activePreviewUuid, refreshingUuids, isRefreshingAnyRow, handlePreviewPress, refreshSlot],
   );
 
   const handleStart = useCallback(async () => {
