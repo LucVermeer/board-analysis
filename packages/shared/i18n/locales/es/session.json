@@ -299,6 +299,7 @@
       "positionLabel": "posición {{position}}",
       "syncError": "Error de sincronización de cola",
       "sessionCreateError": "No se pudo crear la sesión",
+      "noBoardSelected": "Selecciona un board primero",
       "actionFailed": "Acción fallida. Inténtalo de nuevo.",
       "endSession": "Terminar sesión",
       "endSessionConfirm": "¿Estás seguro de que quieres terminar esta sesión?",

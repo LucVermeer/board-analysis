@@ -18,6 +18,7 @@ import { useQueueActions } from '../../../providers/queue-provider';
 import { useToast } from '../../../providers/toast-provider';
 import { useDrawerHost } from '../../../providers/drawer-host-provider';
 import { useBottomChromeMetrics } from '../../../hooks/use-bottom-chrome-metrics';
+import { reportError } from '../../../lib/sentry';
 import { BoardSummaryCard } from './BoardSummaryCard';
 import { GeneratorPickerCard, type GeneratorSelection } from './GeneratorPickerCard';
 import { WorkoutPreviewRow } from './WorkoutPreviewRow';
@@ -139,7 +140,8 @@ export function PreSessionView() {
           failedCount: plannedCount - generatedItems.length,
         });
       }
-    } catch {
+    } catch (error) {
+      reportError(error, { tags: { source: 'preSessionStart' } });
       showToast(t('mobile.session.preStartError'), 'error');
     } finally {
       setIsStarting(false);

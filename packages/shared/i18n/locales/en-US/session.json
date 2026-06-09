@@ -299,6 +299,7 @@
       "positionLabel": "position {{position}}",
       "syncError": "Queue sync error",
       "sessionCreateError": "Couldn't create session",
+      "noBoardSelected": "Pick a board first",
       "actionFailed": "Action failed. Try again.",
       "endSession": "End session",
       "endSessionConfirm": "Are you sure you want to end this session?",

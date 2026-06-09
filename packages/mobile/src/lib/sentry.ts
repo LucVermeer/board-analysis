@@ -23,11 +23,13 @@ if (isSentryEnabled) {
 }
 
 /**
- * Report an error to Sentry if it is active. No-op otherwise.
+ * Report an error to Sentry if it is active. No-op otherwise. The optional
+ * `context` (tags/extra/etc.) is forwarded to `captureException` so callers can
+ * attach triage data — e.g. boardPath and HTTP status on a failed session start.
  */
-export function reportError(error: unknown): void {
+export function reportError(error: unknown, context?: Parameters<typeof Sentry.captureException>[1]): void {
   if (!isSentryEnabled) return;
-  Sentry.captureException(error);
+  Sentry.captureException(error, context);
 }
 
 /**

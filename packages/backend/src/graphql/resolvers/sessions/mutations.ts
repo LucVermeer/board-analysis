@@ -1,4 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
+import * as Sentry from '@sentry/node';
 import type { ConnectionContext, SessionEvent, ClimbQueueItem } from '@boardsesh/shared-schema';
 import { roomManager } from '../../../services/room-manager';
 import { pubsub } from '../../../pubsub/index';
@@ -24,6 +25,7 @@ import {
   QueueArraySchema,
 } from '../../../validation/schemas';
 import { logger } from '../../../utils/logger';
+import { markErrorReported } from '../../../utils/sentry-dedupe';
 import type { CreateSessionInput } from '../shared/types';
 import { db } from '../../../db/client';
 import { esp32Controllers, userBoards } from '@boardsesh/db/schema/app';
@@ -194,115 +196,143 @@ export const sessionMutations = {
    * Optionally creates a discoverable session with GPS coordinates
    */
   createSession: async (_: unknown, { input }: { input: CreateSessionInput }, ctx: ConnectionContext) => {
-    if (DEBUG) logger.info(`[createSession] START - connectionId: ${ctx.connectionId}, boardPath: ${input.boardPath}`);
-
-    await applyRateLimit(ctx, 5); // Limit session creation to prevent abuse
-
-    // Validate input
-    validateInput(CreateSessionInputSchema, input, 'createSession input');
-
-    // Generate a unique session ID
-    const sessionId = uuidv4();
-    if (DEBUG) logger.info(`[createSession] Generated sessionId: ${sessionId}`);
-
-    if (input.discoverable) {
-      // Discoverable sessions require authentication (they write to DB with userId)
-      requireAuthenticated(ctx);
-      // Use authenticated userId from context
-      const userId = ctx.userId || ctx.connectionId;
-      await roomManager.createDiscoverableSession(
-        sessionId,
-        input.boardPath,
-        userId,
-        input.latitude,
-        input.longitude,
-        input.name,
-        input.goal,
-        input.isPermanent,
-        input.color,
-      );
-
-      // If boardIds provided, create sessionBoards junction rows
-      if (input.boardIds && input.boardIds.length > 0) {
-        // Verify boards exist
-        const boards = await db
-          .select({ id: userBoards.id, gymId: userBoards.gymId })
-          .from(userBoards)
-          .where(inArray(userBoards.id, input.boardIds));
-
-        if (boards.length !== input.boardIds.length) {
-          throw new Error('One or more board IDs do not exist');
-        }
-
-        // Validate all boards share the same gym (multi-board requires same gym)
-        const gymIds = new Set(boards.map((b) => b.gymId).filter(Boolean));
-        if (gymIds.size > 1) {
-          throw new Error('All boards must belong to the same gym for multi-board sessions');
-        }
-
-        // Insert junction rows
-        await db.insert(sessionBoards).values(
-          input.boardIds.map((boardId) => ({
-            sessionId,
-            boardId,
-          })),
-        );
-      }
-    }
-
-    // For HTTP requests (stateless), skip joining the session in-memory.
-    // The creator will join via WebSocket when they navigate to the board page.
-    const isHttpRequest = ctx.transport === 'http';
-
-    if (!isHttpRequest) {
-      // WebSocket path: join the session as the creator.
-      // For non-discoverable sessions, this also creates the board_sessions row
-      // via ensureSessionRecordExists inside roomManager.joinSession.
-      const result = await roomManager.joinSession(
-        ctx.connectionId,
-        sessionId,
-        input.boardPath,
-        undefined, // username will be set later
-        undefined, // avatarUrl will be set later
-        undefined, // initialQueue
-        null, // initialCurrentClimb
-        input.discoverable ? undefined : input.name,
-      );
+    try {
       if (DEBUG)
-        logger.info(`[createSession] Joined session - clientId: ${result.clientId}, isLeader: ${result.isLeader}`);
+        logger.info(`[createSession] START - connectionId: ${ctx.connectionId}, boardPath: ${input.boardPath}`);
 
-      updateContext(ctx.connectionId, { sessionId, participantId: result.participantId });
+      await applyRateLimit(ctx, 5); // Limit session creation to prevent abuse
 
-      // Adopt recent solo ticks now that the session row exists in board_sessions
-      // (boardsesh_ticks.session_id is a FK to board_sessions.id)
-      if (ctx.isAuthenticated && ctx.userId) {
-        const boardTypeFromPath = extractBoardType(input.boardPath);
-        adoptRecentTicksForSession(ctx.userId, sessionId, boardTypeFromPath).catch((err) => {
-          logger.error(`[createSession] Failed to adopt recent ticks for session ${sessionId}:`, err);
-        });
+      // Validate input
+      validateInput(CreateSessionInputSchema, input, 'createSession input');
+
+      // Generate a unique session ID
+      const sessionId = uuidv4();
+      if (DEBUG) logger.info(`[createSession] Generated sessionId: ${sessionId}`);
+
+      if (input.discoverable) {
+        // Discoverable sessions require authentication (they write to DB with userId)
+        requireAuthenticated(ctx);
+        // Use authenticated userId from context
+        const userId = ctx.userId || ctx.connectionId;
+        await roomManager.createDiscoverableSession(
+          sessionId,
+          input.boardPath,
+          userId,
+          input.latitude,
+          input.longitude,
+          input.name,
+          input.goal,
+          input.isPermanent,
+          input.color,
+        );
+
+        // If boardIds provided, create sessionBoards junction rows
+        if (input.boardIds && input.boardIds.length > 0) {
+          // Verify boards exist
+          const boards = await db
+            .select({ id: userBoards.id, gymId: userBoards.gymId })
+            .from(userBoards)
+            .where(inArray(userBoards.id, input.boardIds));
+
+          if (boards.length !== input.boardIds.length) {
+            throw new Error('One or more board IDs do not exist');
+          }
+
+          // Validate all boards share the same gym (multi-board requires same gym)
+          const gymIds = new Set(boards.map((b) => b.gymId).filter(Boolean));
+          if (gymIds.size > 1) {
+            throw new Error('All boards must belong to the same gym for multi-board sessions');
+          }
+
+          // Insert junction rows
+          await db.insert(sessionBoards).values(
+            input.boardIds.map((boardId) => ({
+              sessionId,
+              boardId,
+            })),
+          );
+        }
       }
+
+      // For HTTP requests (stateless), skip joining the session in-memory.
+      // The creator will join via WebSocket when they navigate to the board page.
+      const isHttpRequest = ctx.transport === 'http';
+
+      if (!isHttpRequest) {
+        // WebSocket path: join the session as the creator.
+        // For non-discoverable sessions, this also creates the board_sessions row
+        // via ensureSessionRecordExists inside roomManager.joinSession.
+        const result = await roomManager.joinSession(
+          ctx.connectionId,
+          sessionId,
+          input.boardPath,
+          undefined, // username will be set later
+          undefined, // avatarUrl will be set later
+          undefined, // initialQueue
+          null, // initialCurrentClimb
+          input.discoverable ? undefined : input.name,
+        );
+        if (DEBUG)
+          logger.info(`[createSession] Joined session - clientId: ${result.clientId}, isLeader: ${result.isLeader}`);
+
+        updateContext(ctx.connectionId, { sessionId, participantId: result.participantId });
+
+        // Adopt recent solo ticks now that the session row exists in board_sessions
+        // (boardsesh_ticks.session_id is a FK to board_sessions.id)
+        if (ctx.isAuthenticated && ctx.userId) {
+          const boardTypeFromPath = extractBoardType(input.boardPath);
+          adoptRecentTicksForSession(ctx.userId, sessionId, boardTypeFromPath).catch((err) => {
+            logger.error(`[createSession] Failed to adopt recent ticks for session ${sessionId}:`, err);
+          });
+        }
+
+        return {
+          id: sessionId,
+          name: input.name || null,
+          boardPath: input.boardPath,
+          users: result.users,
+          queueState: {
+            sequence: result.sequence,
+            stateHash: result.stateHash,
+            queue: result.queue,
+            currentClimbQueueItem: result.currentClimbQueueItem,
+          },
+          isLeader: result.isLeader,
+          // Newly created sessions start with no driver — the creator must press
+          // the lightbulb to claim the wall. Null here lets the bar render the
+          // empty/outlined state in PR 2 onward.
+          driverParticipantId: null,
+          // No board has been paired yet; gets set the first time anyone in the
+          // session calls setSessionBoardSerial.
+          lastConnectedBoardSerial: null,
+          clientId: result.clientId,
+          participantId: result.participantId,
+          goal: input.goal || null,
+          isPublic: true,
+          startedAt: new Date().toISOString(),
+          endedAt: null,
+          isPermanent: input.isPermanent || false,
+          color: input.color || null,
+        };
+      }
+
+      // HTTP path: adoption is handled by joinSession when the client connects
+      // via WebSocket (avoids double invocation for HTTP + discoverable sessions).
+
+      // HTTP path: return session metadata only; client joins via WebSocket later
+      if (DEBUG) logger.info(`[createSession] HTTP request - returning session metadata without joining`);
 
       return {
         id: sessionId,
         name: input.name || null,
         boardPath: input.boardPath,
-        users: result.users,
-        queueState: {
-          sequence: result.sequence,
-          stateHash: result.stateHash,
-          queue: result.queue,
-          currentClimbQueueItem: result.currentClimbQueueItem,
-        },
-        isLeader: result.isLeader,
-        // Newly created sessions start with no driver — the creator must press
-        // the lightbulb to claim the wall. Null here lets the bar render the
-        // empty/outlined state in PR 2 onward.
+        users: [],
+        queueState: null,
+        isLeader: false,
         driverParticipantId: null,
-        // No board has been paired yet; gets set the first time anyone in the
-        // session calls setSessionBoardSerial.
         lastConnectedBoardSerial: null,
-        clientId: result.clientId,
-        participantId: result.participantId,
+        clientId: null,
+        participantId: ctx.participantId || ctx.connectionId || '',
         goal: input.goal || null,
         isPublic: true,
         startedAt: new Date().toISOString(),
@@ -310,32 +340,31 @@ export const sessionMutations = {
         isPermanent: input.isPermanent || false,
         color: input.color || null,
       };
+    } catch (err) {
+      // Rate-limit hits are expected abuse-protection noise, not a session-start
+      // bug — let them flow through without a Sentry event.
+      if (err instanceof Error && err.message.startsWith('Rate limit exceeded')) throw err;
+      // Production masks GraphQL errors to "Unexpected error" (yoga.ts), and the
+      // mobile client discards the rest — so capture the true cause here, before
+      // masking, with enough context to triage a failed Start session.
+      Sentry.captureException(err, {
+        tags: { source: 'createSession', transport: ctx.transport },
+        extra: {
+          boardPath: input.boardPath,
+          discoverable: input.discoverable,
+          isAuthenticated: ctx.isAuthenticated,
+          userId: ctx.userId,
+          hasName: !!input.name,
+          hasGoal: !!input.goal,
+          boardIdCount: input.boardIds?.length ?? 0,
+        },
+      });
+      // Mark so the generic Yoga error handler skips its own capture (this would
+      // otherwise be a second event). Rethrow so client behaviour and the rest of
+      // the error pipeline are unchanged.
+      markErrorReported(err);
+      throw err;
     }
-
-    // HTTP path: adoption is handled by joinSession when the client connects
-    // via WebSocket (avoids double invocation for HTTP + discoverable sessions).
-
-    // HTTP path: return session metadata only; client joins via WebSocket later
-    if (DEBUG) logger.info(`[createSession] HTTP request - returning session metadata without joining`);
-
-    return {
-      id: sessionId,
-      name: input.name || null,
-      boardPath: input.boardPath,
-      users: [],
-      queueState: null,
-      isLeader: false,
-      driverParticipantId: null,
-      lastConnectedBoardSerial: null,
-      clientId: null,
-      participantId: ctx.participantId || ctx.connectionId || '',
-      goal: input.goal || null,
-      isPublic: true,
-      startedAt: new Date().toISOString(),
-      endedAt: null,
-      isPermanent: input.isPermanent || false,
-      color: input.color || null,
-    };
   },
 
   /**

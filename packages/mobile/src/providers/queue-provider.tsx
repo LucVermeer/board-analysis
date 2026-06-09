@@ -68,6 +68,8 @@ import { toClimbQueueItem, type SubscriptionQueueItem } from '../lib/queue-conve
 import { toMobileSessionRuntimeEvent } from '../lib/session-runtime-event';
 import { climbToQueueItem, toClimbInput } from '../lib/climb-to-queue-item';
 import { track } from '../lib/analytics';
+import { reportError } from '../lib/sentry';
+import { extractGraphqlMessage } from '../lib/graphql/extract-error-message';
 import { useToast } from './toast-provider';
 import { useQueueSnackbar } from './queue-snackbar-provider';
 
@@ -745,7 +747,13 @@ export function QueueProvider({ children }: { children: ReactNode }) {
 
       const createPromise = (async () => {
         const activeBoard = await getStoredActiveBoard();
-        if (!activeBoard) return null;
+        if (!activeBoard) {
+          // The Start button is gated on the React Query copy of the active board;
+          // if the stored board is somehow missing, fail loudly so the user knows
+          // to pick a board instead of tapping into a silent no-op.
+          showToast(t('mobile.queue.noBoardSelected'), 'error');
+          return null;
+        }
 
         const boardPath = buildBoardPath(
           activeBoard.boardType,
@@ -778,8 +786,25 @@ export function QueueProvider({ children }: { children: ReactNode }) {
           });
           await setStoredSessionId(newId);
           return newId;
-        } catch {
-          showToast(t('mobile.queue.sessionCreateError'), 'error');
+        } catch (error) {
+          // Production masks the GraphQL message to "Unexpected error", but the
+          // graphql-request ClientError still carries the HTTP status — so Sentry
+          // can distinguish network-down from a 4xx/5xx from a masked server
+          // throw. Capture it with boardPath context; the backend captures the
+          // unmasked cause for the same request (see createSession resolver).
+          const httpStatus =
+            error && typeof error === 'object' && 'response' in error
+              ? ((error as { response?: { status?: number } }).response?.status ?? null)
+              : null;
+          reportError(error, {
+            tags: { source: 'createSession' },
+            extra: { boardPath, httpStatus, discoverable: config?.discoverable ?? false },
+          });
+          // Against a local backend (dev) errors aren't masked, so surface the
+          // real server message to speed up diagnosis; shipped builds keep the
+          // friendly fallback.
+          const devMessage = __DEV__ ? extractGraphqlMessage(error) : null;
+          showToast(devMessage ?? t('mobile.queue.sessionCreateError'), 'error');
           return null;
         } finally {
           sessionCreationRef.current = null;
