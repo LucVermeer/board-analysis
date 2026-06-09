@@ -19,6 +19,13 @@ type WorkoutPreviewRowProps = {
   isActive: boolean;
   /** Show a spinner + disable the refresh button while this row regenerates. */
   isRefreshing: boolean;
+  /**
+   * Dim + disable this row's refresh button while a *different* row is
+   * regenerating. Refreshes run one at a time (the hook serializes them to avoid
+   * clobbering each other's state), so this makes that constraint visible
+   * instead of silently swallowing the tap.
+   */
+  refreshDisabled: boolean;
   onPress: (item: ClimbQueueItem) => void;
   onRefresh: (uuid: string) => void;
 };
@@ -34,11 +41,15 @@ function WorkoutPreviewRowComponent({
   board,
   isActive,
   isRefreshing,
+  refreshDisabled,
   onPress,
   onRefresh,
 }: WorkoutPreviewRowProps) {
-  const { systemColors, brandColors } = useTheme();
+  const { systemColors, brandColors, opacity } = useTheme();
   const { t } = useTranslation('session');
+  // Blocked while this row spins, or while another row holds the single refresh
+  // slot. Only this row shows a spinner; the rest dim to read as "busy, wait".
+  const refreshBlocked = isRefreshing || refreshDisabled;
   const itemRef = useRef(item);
   itemRef.current = item;
 
@@ -83,13 +94,13 @@ function WorkoutPreviewRowComponent({
 
         <PressableSurface
           onPress={handleRefresh}
-          disabled={isRefreshing}
+          disabled={refreshBlocked}
           feedback="scale"
           hitSlop={2}
           accessibilityRole="button"
           accessibilityLabel={t('mobile.session.preRegenerateClimbForClimb', { name: climbName })}
-          accessibilityState={{ disabled: isRefreshing, busy: isRefreshing }}
-          style={styles.refreshButton}
+          accessibilityState={{ disabled: refreshBlocked, busy: isRefreshing }}
+          style={[styles.refreshButton, refreshDisabled && !isRefreshing ? { opacity: opacity.disabled } : null]}
         >
           {isRefreshing ? (
             <ActivityIndicator size="small" color={iosSystemColors.systemGray} />
@@ -114,6 +125,7 @@ export const WorkoutPreviewRow = memo(WorkoutPreviewRowComponent, (prev, next) =
     prev.item.climb.uuid === next.item.climb.uuid &&
     prev.isActive === next.isActive &&
     prev.isRefreshing === next.isRefreshing &&
+    prev.refreshDisabled === next.refreshDisabled &&
     prev.onPress === next.onPress &&
     prev.onRefresh === next.onRefresh &&
     prev.board.boardName === next.board.boardName &&

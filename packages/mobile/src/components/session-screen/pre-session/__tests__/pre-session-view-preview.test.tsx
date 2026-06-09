@@ -1,0 +1,147 @@
+// @vitest-environment jsdom
+import { act, render } from '@testing-library/react';
+import { createElement, type ReactNode } from 'react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ClimbQueueItem } from '@boardsesh/queue';
+
+// The preview hook is mocked; the test mutates `preview.result.items` /
+// `refreshingUuids` and rerenders to drive the view's row props.
+const preview = vi.hoisted(() => ({
+  result: {
+    items: [] as unknown[],
+    status: 'ready' as 'idle' | 'loading' | 'ready' | 'error',
+    refreshingUuids: new Set<string>(),
+    plannedCount: 0,
+    regenerate: vi.fn(),
+    refreshSlot: vi.fn(),
+    toQueueItems: () => [] as ClimbQueueItem[],
+  },
+}));
+
+// Captures every WorkoutPreviewRow render so the test can read isActive /
+// refreshDisabled per row, plus the latest onPress to simulate a tap.
+const rows = vi.hoisted(() => ({
+  rendered: [] as Array<{ uuid: string; isActive: boolean; isRefreshing: boolean; refreshDisabled: boolean }>,
+  onPress: null as ((item: ClimbQueueItem) => void) | null,
+}));
+
+vi.mock('react-native', () => ({
+  View: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
+  StyleSheet: { create: (styles: unknown) => styles, hairlineWidth: 1 },
+}));
+
+vi.mock('@shopify/flash-list', () => ({
+  // Render the header plus each data row through renderItem (the real FlashList's
+  // rows are what we assert on here).
+  FlashList: ({
+    ListHeaderComponent,
+    data,
+    renderItem,
+  }: {
+    ListHeaderComponent?: ReactNode;
+    data?: unknown[];
+    renderItem?: (info: { item: unknown }) => ReactNode;
+  }) =>
+    createElement(
+      'div',
+      null,
+      ListHeaderComponent,
+      ...(data ?? []).map((rowItem, index) => createElement('div', { key: index }, renderItem?.({ item: rowItem }))),
+    ),
+}));
+
+vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
+vi.mock('@boardsesh/board-config', () => ({ toBoardName: (boardType: string) => boardType }));
+vi.mock('../../../../lib/analytics', () => ({ track: vi.fn() }));
+vi.mock('../../../Button', () => ({ Button: () => createElement('button') }));
+vi.mock('../../../Text', () => ({
+  Text: ({ children }: { children?: ReactNode }) => createElement('span', null, children),
+}));
+vi.mock('../../../../providers/theme-provider', () => ({ useTheme: () => ({ systemColors: {} }) }));
+vi.mock('../../../../lib/graphql/use-active-board', () => ({
+  useActiveBoard: () => ({ data: { boardType: 'kilter', layoutId: 1, sizeId: 10, setIds: '1,2', angle: 40 } }),
+}));
+vi.mock('../../../../providers/auth-provider', () => ({ useAuth: () => ({ isAuthenticated: true }) }));
+vi.mock('../../../../providers/queue-provider', () => ({
+  useQueueActions: () => ({ startSession: vi.fn(), setQueue: vi.fn() }),
+}));
+vi.mock('../../../../providers/drawer-host-provider', () => ({ useDrawerHost: () => ({ openPlayDrawer: vi.fn() }) }));
+vi.mock('../../../../providers/toast-provider', () => ({ useToast: () => ({ showToast: vi.fn() }) }));
+vi.mock('../../../../hooks/use-bottom-chrome-metrics', () => ({
+  useBottomChromeMetrics: () => ({ scrollBottomPadding: 0 }),
+}));
+vi.mock('../../../../theme/tokens', () => ({ spacing: {}, borderRadius: {} }));
+vi.mock('../BoardSummaryCard', () => ({ BoardSummaryCard: () => null }));
+vi.mock('../GeneratorPickerCard', () => ({ GeneratorPickerCard: () => null }));
+vi.mock('../use-workout-preview', () => ({ useWorkoutPreview: () => preview.result }));
+vi.mock('../WorkoutPreviewRow', () => ({
+  WorkoutPreviewRow: ({
+    item,
+    isActive,
+    isRefreshing,
+    refreshDisabled,
+    onPress,
+  }: {
+    item: ClimbQueueItem;
+    isActive: boolean;
+    isRefreshing: boolean;
+    refreshDisabled: boolean;
+    onPress: (item: ClimbQueueItem) => void;
+  }) => {
+    rows.rendered.push({ uuid: item.uuid, isActive, isRefreshing, refreshDisabled });
+    rows.onPress = onPress;
+    return null;
+  },
+}));
+
+import { PreSessionView } from '../PreSessionView';
+
+function makeRow(uuid: string) {
+  return {
+    item: { uuid, climb: { uuid: `${uuid}-climb`, name: uuid } },
+    slot: { grade: 10, section: 'main', index: 0 },
+  };
+}
+
+beforeEach(() => {
+  rows.rendered = [];
+  rows.onPress = null;
+  preview.result.items = [makeRow('a'), makeRow('b')] as unknown[];
+  preview.result.refreshingUuids = new Set<string>();
+});
+
+describe('PreSessionView preview rows', () => {
+  it('clears the active highlight once a regeneration replaces the rows', () => {
+    const view = render(createElement(PreSessionView));
+
+    // Tap row "a" → it becomes the highlighted preview row.
+    act(() => {
+      rows.onPress?.({ uuid: 'a' } as ClimbQueueItem);
+    });
+    expect(rows.rendered.some((row) => row.uuid === 'a' && row.isActive)).toBe(true);
+
+    // Regenerate: fresh uuids replace the old rows, so "a" no longer exists.
+    rows.rendered = [];
+    preview.result.items = [makeRow('c'), makeRow('d')] as unknown[];
+    act(() => {
+      view.rerender(createElement(PreSessionView));
+    });
+
+    // The effect dropped the stale uuid, so nothing is highlighted.
+    expect(rows.rendered.length).toBeGreaterThan(0);
+    expect(rows.rendered.every((row) => !row.isActive)).toBe(true);
+  });
+
+  it('blocks the other rows refresh button while one row regenerates', () => {
+    preview.result.refreshingUuids = new Set<string>(['a']);
+    render(createElement(PreSessionView));
+
+    const rowA = rows.rendered.find((row) => row.uuid === 'a');
+    const rowB = rows.rendered.find((row) => row.uuid === 'b');
+    // The regenerating row spins (isRefreshing) rather than going to the dimmed
+    // disabled state, so refreshDisabled stays false for it.
+    expect(rowA).toMatchObject({ isRefreshing: true, refreshDisabled: false });
+    // Every other row's refresh is disabled so the dropped tap is visible.
+    expect(rowB).toMatchObject({ isRefreshing: false, refreshDisabled: true });
+  });
+});

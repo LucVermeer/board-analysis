@@ -1,5 +1,7 @@
 import { type SQL, eq, gt, gte, sql, like, notLike, inArray, isNull, or, and } from 'drizzle-orm';
 import {
+  KILTER_HOMEWALL_LAYOUT_ID,
+  KILTER_HOMEWALL_PRODUCT_ID,
   getHolePlacements,
   getProductSize,
   isKilterHomewallTallSizeId,
@@ -19,9 +21,8 @@ import {
 } from '../../schema/index';
 import type { BoardRouteParams, ClimbSearchParams } from './types';
 
-// Kilter Homewall constants for expansion-aware filtering
-const KILTER_HOMEWALL_LAYOUT_ID = 8;
-const KILTER_HOMEWALL_PRODUCT_ID = 7;
+// Kilter Homewall constants for expansion-aware filtering (layout/product ids
+// come from @boardsesh/board-constants; these sizes/sets are db-query-local).
 const KILTER_HOMEWALL_SMALL_SIZE_ID = 17;
 const KILTER_HOMEWALL_WIDE_REFERENCE_SIZE_ID = 21;
 const KILTER_HOMEWALL_WIDE_EXPANSION_SET_IDS = [26, 27, 28, 29] as const;
