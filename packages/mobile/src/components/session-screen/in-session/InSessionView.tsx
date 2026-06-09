@@ -192,6 +192,7 @@ const SessionHistoryRow = memo(function SessionHistoryRow({
             sizeId={boardConfig.sizeId}
             setIds={boardConfig.setIds.join(',')}
             angle={tick.angle}
+            showAscentStatus={false}
           />
         ) : (
           <>
@@ -212,12 +213,6 @@ const SessionHistoryRow = memo(function SessionHistoryRow({
             ) : null}
           </>
         )}
-
-        <View style={[styles.historyStatusPill, { backgroundColor: withAlpha(statusColor, 0.15) }]}>
-          <Text variant="caption1" color={statusColor} style={styles.historyStatusLabel}>
-            {statusLabel}
-          </Text>
-        </View>
       </Pressable>
       <View style={[styles.historySeparator, { backgroundColor: systemColors.separator }]} />
     </View>
@@ -635,16 +630,6 @@ const styles = StyleSheet.create({
   },
   historyGradeText: {
     fontWeight: '700',
-  },
-  historyStatusPill: {
-    flexShrink: 0,
-    paddingHorizontal: spacing[2],
-    paddingVertical: 3,
-    borderRadius: borderRadius.full,
-  },
-  historyStatusLabel: {
-    fontWeight: '700',
-    textTransform: 'capitalize',
   },
   historySeparator: {
     height: StyleSheet.hairlineWidth,
