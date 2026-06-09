@@ -224,7 +224,9 @@ function RootLayout() {
           <QueryProvider>
             <ThemeProvider>
               <MaterialThemeProvider>
-                <FeatureFlagsProvider>
+                <FeatureFlagsProvider
+                  flags={process.env.EXPO_PUBLIC_BOARD_PRESENCE === 'true' ? { 'board-presence': true } : undefined}
+                >
                   <AuthProvider onReady={onAuthReady}>
                     <PartyProfileProvider>
                       <ConnectionSettingsProvider>

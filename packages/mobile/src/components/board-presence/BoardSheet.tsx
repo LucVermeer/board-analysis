@@ -18,7 +18,6 @@ import {
   BottomSheetFlatList,
   type BottomSheetBackdropProps,
 } from '@gorhom/bottom-sheet';
-import { FullWindowOverlay } from 'react-native-screens';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { getGradeColor, DEFAULT_GRADE_COLOR } from '@boardsesh/board-constants/grade-colors';
@@ -30,16 +29,9 @@ import { Text } from '../Text';
 import { Icon } from '../Icon';
 import { AccessoryClimbThumbnail } from '../queue-control/AccessoryClimbThumbnail';
 import { useTheme } from '../../providers/theme-provider';
-import { useDrawerHost, type BoardConfig } from '../../providers/drawer-host-provider';
+import type { BoardConfig } from '../../providers/drawer-host-provider';
 import { useGradeFormat } from '../../hooks/use-grade-format';
 import { spacing, borderRadius } from '../../theme/tokens';
-
-// iOS renders the modal in a native window overlay so it sits above the
-// persistent queue bar (mirrors QueueSheet). Android's modal portal covers it.
-function ModalSheetContainer({ children }: { children?: ReactNode }) {
-  return <FullWindowOverlay>{children}</FullWindowOverlay>;
-}
-const modalContainerComponent = Platform.OS === 'ios' ? ModalSheetContainer : undefined;
 
 /** Minimal Climb shape the board-art thumbnail needs from a presence climb. */
 function presenceClimbToThumbnailClimb(presenceClimb: BoardPresenceClimb): Climb {
@@ -62,6 +54,13 @@ type BoardSheetProps = {
   visible: boolean;
   /** The active board label, shown as the sheet title + footer subtitle. */
   boardLabel: string | null;
+  /**
+   * Active board config for the climb thumbnails. Passed by the host (NOT read
+   * via `useDrawerHost`) so BoardSheet stays out of the drawer-host require cycle
+   * and doesn't subscribe to that volatile context — re-renders from it were
+   * interfering with gorhom's `present()`, so the sheet never appeared.
+   */
+  boardConfig: BoardConfig | null;
   /** Request an animated close (header X) — host flips `visible` to false. */
   onClose: () => void;
   /** Fired AFTER the dismiss animation finishes so the host can unmount. */
@@ -70,11 +69,10 @@ type BoardSheetProps = {
   onSwitchBoard: () => void;
 };
 
-export function BoardSheet({ visible, boardLabel, onClose, onDismissed, onSwitchBoard }: BoardSheetProps) {
+export function BoardSheet({ visible, boardLabel, boardConfig, onClose, onDismissed, onSwitchBoard }: BoardSheetProps) {
   const { t } = useTranslation('session');
   const insets = useSafeAreaInsets();
   const { systemColors, brandColors, sheet } = useTheme();
-  const { boardConfig } = useDrawerHost();
   const { formatGrade } = useGradeFormat();
   const sheetRef = useRef<BottomSheetModal>(null);
 
@@ -203,7 +201,6 @@ export function BoardSheet({ visible, boardLabel, onClose, onDismissed, onSwitch
       stackBehavior="push"
       enablePanDownToClose
       backdropComponent={renderBackdrop}
-      containerComponent={modalContainerComponent}
       onDismiss={onDismissed}
       handleIndicatorStyle={sheet.handleStyle}
       backgroundComponent={GlassSheetBackground}

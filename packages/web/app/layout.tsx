@@ -98,7 +98,13 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                   <SnackbarProvider>
                     <NativeDeepLinkListener />
                     <AuthModalProvider>
-                      <FeatureFlagsProvider flags={EMPTY_FEATURE_FLAGS}>
+                      <FeatureFlagsProvider
+                        flags={
+                          process.env.BOARD_PRESENCE_ENABLED === 'true'
+                            ? { 'board-presence': true }
+                            : EMPTY_FEATURE_FLAGS
+                        }
+                      >
                         <PersistentSessionWrapper boardConfigs={boardConfigs}>
                           <OnboardingTourProvider>
                             <NotificationSubscriptionManager>{children}</NotificationSubscriptionManager>
