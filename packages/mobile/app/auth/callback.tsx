@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { exchangeTransferToken } from '../../src/lib/auth';
 import { classifyNativeAuthFailureReason } from '../../src/lib/native-auth-analytics';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
@@ -8,25 +9,34 @@ import { track } from '../../src/lib/analytics';
 import { useAuth } from '../../src/providers/auth-provider';
 import { useTheme } from '../../src/providers/theme-provider';
 
+// Transfer tokens are one-time use, and this screen can mount twice for the
+// same token: on Android the callback deep link is routed by expo-router AND
+// the login screen routes here explicitly with the URL openAuthSessionAsync
+// returned. Module-level so a remount can't replay (and fail) the exchange —
+// the duplicate mount just shows the spinner until AuthProvider redirects.
+// Never cleared: one short string per login attempt for the process lifetime
+// is negligible, and clearing would reopen the replay window.
+const exchangedTokens = new Set<string>();
+
 export default function AuthCallback() {
   const { transferToken } = useLocalSearchParams<{ transferToken: string }>();
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
   const { refreshAuthState } = useAuth();
+  const { t } = useTranslation('auth');
   const theme = useTheme();
-  const exchangedRef = useRef(false);
 
   useEffect(() => {
     if (!transferToken) {
       // auth_method is unknown here — the OAuth provider isn't echoed back on the
       // transfer-token exchange (same reason Login Succeeded omits it).
       track(SHARED_EVENTS.LoginFailed, { flow: 'native', failure_reason: 'no_transfer_token' });
-      setError('No transfer token received');
+      setError(t('nativeStart.noTransferToken'));
       return;
     }
 
-    if (exchangedRef.current) return;
-    exchangedRef.current = true;
+    if (exchangedTokens.has(transferToken)) return;
+    exchangedTokens.add(transferToken);
 
     exchangeTransferToken(transferToken)
       .then(async (result) => {
@@ -41,14 +51,16 @@ export default function AuthCallback() {
       })
       .catch((exchangeError: unknown) => {
         track(SHARED_EVENTS.LoginFailed, { flow: 'native', failure_reason: 'exception' });
-        setError(exchangeError instanceof Error ? exchangeError.message : 'Unexpected error');
+        setError(exchangeError instanceof Error ? exchangeError.message : t('nativeStart.unexpectedError'));
       });
-  }, [transferToken, router, refreshAuthState]);
+  }, [transferToken, router, refreshAuthState, t]);
 
   if (error) {
     return (
       <View style={styles.container}>
-        <Text style={[styles.errorText, { color: theme.brandColors.error }]}>Sign in failed: {error}</Text>
+        <Text style={[styles.errorText, { color: theme.brandColors.error }]}>
+          {t('nativeStart.signInFailed', { reason: error })}
+        </Text>
       </View>
     );
   }
@@ -56,7 +68,7 @@ export default function AuthCallback() {
   return (
     <View style={styles.container}>
       <ActivityIndicator size="large" />
-      <Text style={styles.text}>Signing in...</Text>
+      <Text style={styles.text}>{t('nativeStart.signingIn')}</Text>
     </View>
   );
 }
