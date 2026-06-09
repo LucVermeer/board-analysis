@@ -27,7 +27,7 @@ public class BoardBleModule: Module {
     public func definition() -> ModuleDefinition {
         Name("BoardBle")
 
-        Events("scanResult", "disconnected")
+        Events("scanResult", "disconnected", "connected")
 
         OnCreate {
             BoardBleManager.shared.setEventHandlers(
@@ -38,17 +38,24 @@ public class BoardBleModule: Module {
                             "name": result.name ?? ""
                         ],
                         "localName": result.name ?? "",
-                        "rssi": result.rssi
+                        "rssi": result.rssi,
+                        "serviceUuids": result.serviceUuids
                     ])
                 },
                 onDisconnect: { [weak self] deviceId in
                     self?.emitOrBuffer(name: "disconnected", body: ["deviceId": deviceId])
+                },
+                onConnected: { [weak self] deviceId, deviceName in
+                    self?.emitOrBuffer(name: "connected", body: [
+                        "deviceId": deviceId,
+                        "deviceName": deviceName ?? ""
+                    ])
                 }
             )
         }
 
         OnDestroy {
-            BoardBleManager.shared.setEventHandlers(onScanResult: nil, onDisconnect: nil)
+            BoardBleManager.shared.setEventHandlers(onScanResult: nil, onDisconnect: nil, onConnected: nil)
         }
 
         OnStartObserving {
@@ -128,6 +135,17 @@ public class BoardBleModule: Module {
 
         AsyncFunction("cancelWrites") { () -> Void in
             BoardBleManager.shared.cancelWrites()
+        }
+
+        // Presence of this function doubles as the JS feature gate for the
+        // newer native surface (unfiltered scanning, the `connected` event,
+        // connection adoption) — see BoardBleNativeModule in src/index.ts.
+        AsyncFunction("getConnectedDevice") { () -> [String: Any]? in
+            guard let device = BoardBleManager.shared.connectedDeviceInfo else { return nil }
+            return [
+                "deviceId": device.deviceId,
+                "name": device.name ?? ""
+            ]
         }
 
         AsyncFunction("configureBoard") { (options: ConfigureBoardOptions) -> Void in

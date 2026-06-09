@@ -23,7 +23,10 @@ vi.mock('react-native', () => ({
 }));
 
 vi.mock('../adapter', () => ({ RNBleAdapter: harness.RNBleAdapter }));
-vi.mock('../native-ios-adapter', () => ({ NativeIosBleAdapter: harness.NativeIosBleAdapter }));
+vi.mock('../native-ios-adapter', () => ({
+  NativeIosBleAdapter: harness.NativeIosBleAdapter,
+  nativeBleSupportsConnectionAdoption: vi.fn(() => false),
+}));
 vi.mock('../../../../modules/live-activity/src/index', () => ({
   get boardBleNative() {
     return harness.module.boardBleNative;

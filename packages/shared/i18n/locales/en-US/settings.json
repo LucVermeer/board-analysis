@@ -372,10 +372,10 @@
     "relightBoard": "Re-light board",
     "holdForControls": "Hold for board controls",
     "notAvailable": "Bluetooth is not available",
+    "connectionFailedTitle": "Couldn't connect",
     "permissionRequired": "Bluetooth permission required",
     "errorPermissionDenied": "Allow Bluetooth permissions to connect a board.",
     "errorLedMissing": "Could not send to board — LED data missing for this board configuration.",
-    "errorIncompatible": "This climb is for a different board configuration.",
-    "errorConnectionFailed": "Could not connect to the board. Make sure it is powered on and nearby."
+    "errorIncompatible": "This climb is for a different board configuration."
   }
 }

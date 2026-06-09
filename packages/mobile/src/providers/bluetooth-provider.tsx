@@ -1,8 +1,10 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { ClimbQueueItem } from '@boardsesh/queue';
+import type { BoardName } from '@boardsesh/shared-schema';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { emitWallConfirm } from '@boardsesh/play-view';
 import { useBoardBluetooth } from '../lib/ble/use-board-bluetooth';
+import { getBoardRenderData } from '../lib/board-details';
 import { registerBluetoothConnection } from '../lib/ble/bluetooth-status-store';
 import { useQueue, useQueueSessionControls } from './queue-provider';
 import { hapticSuccess } from '../lib/haptics';
@@ -229,6 +231,24 @@ export function BluetoothProvider({
     [boardName, setSessionBoardSerial],
   );
 
+  // Hold placements for the active board, required by the hook's
+  // mirrored-frames conversion (hold id → mirroredHoldId). Without this every
+  // `mirrored: true` send silently wrote the unmirrored frames to the wall.
+  // getBoardRenderData is pure + memoised by board-config key, so this is a
+  // cache lookup on re-render.
+  const holdsData = useMemo(() => {
+    if (!boardName || layoutId === undefined || sizeId === undefined || !setIds) return undefined;
+    const parsedSetIds = setIds
+      .split(',')
+      .map((setId) => Number(setId.trim()))
+      .filter((setId) => Number.isInteger(setId));
+    if (parsedSetIds.length === 0) return undefined;
+    return (
+      getBoardRenderData({ boardName: boardName as BoardName, layoutId, sizeId, setIds: parsedSetIds })?.holdsData ??
+      undefined
+    );
+  }, [boardName, layoutId, sizeId, setIds]);
+
   const { isConnected, loading, connect, disconnect, sendFramesToBoard, pickerState, reconnectSerialForCurrentBoard } =
     useBoardBluetooth({
       boardName,
@@ -236,6 +256,7 @@ export function BluetoothProvider({
       sizeId,
       setIds,
       boardUuid,
+      holdsData,
       onConnectSuccess: handleConnectSuccess,
     });
 

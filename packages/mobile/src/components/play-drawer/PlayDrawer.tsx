@@ -416,8 +416,17 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   }, [cancelPendingWallControlAttempt, isPartyPreviewOnly, navigationState.nextItem, nextClimb]);
 
   const handleMirror = useCallback(() => {
-    setIsMirrored((prev) => !prev);
-  }, []);
+    const nextMirrored = !isMirrored;
+    setIsMirrored(nextMirrored);
+    // The wall doesn't follow the toggle by itself: the AutoSender keys off
+    // the queue item's own `climb.mirrored`, not this drawer-local state, so
+    // without an explicit re-push the LEDs would keep showing the previous
+    // orientation. isConnected means this device holds the BLE link (and
+    // therefore drives the wall).
+    if (bluetooth?.isConnected && displayedClimb?.frames) {
+      void bluetooth.sendFramesToBoard(displayedClimb.frames, nextMirrored);
+    }
+  }, [isMirrored, bluetooth, displayedClimb]);
 
   const handleToggleFavorite = useCallback(() => {
     if (!displayedClimb) return;
