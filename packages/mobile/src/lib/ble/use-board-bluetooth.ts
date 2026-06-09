@@ -461,7 +461,19 @@ export function useBoardBluetooth({
         setIsConnected(true);
         onConnectionChange?.(true);
         onConnectSuccess?.(parsedSerial);
-        track(SHARED_EVENTS.BluetoothConnectionSuccess, { boardName, layoutId, sizeId });
+        // apiLevel is the level parseApiLevel actually picked; deviceNamePresent
+        // records whether an advertised name was even available. parseApiLevel
+        // silently defaults to v2 when the name is missing/unparseable, and v2
+        // encoding drops LED positions > 1023 — so a v3 board connecting with no
+        // advertised name would light only part of the wall. These two props let
+        // us see in PostHog whether that fallback ever fires in the wild.
+        track(SHARED_EVENTS.BluetoothConnectionSuccess, {
+          boardName,
+          layoutId,
+          sizeId,
+          apiLevel: apiLevelRef.current,
+          deviceNamePresent: !!connection.deviceName,
+        });
         return true;
       } catch (error) {
         console.error('Error connecting to Bluetooth:', error);
