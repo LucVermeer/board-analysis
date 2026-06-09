@@ -9,7 +9,7 @@ import { useLocalePreference } from '../../../src/providers/i18n-provider';
 import type { LocaleOverride } from '../../../src/lib/i18n/locale-preference';
 import { useAuth } from '../../../src/providers/auth-provider';
 import { useProfile } from '../../../src/lib/graphql/hooks';
-import { spacing } from '../../../src/theme/tokens';
+import { borderRadius, spacing } from '../../../src/theme/tokens';
 import { DevMetadataPanel } from '../../../src/components/DevMetadataPanel';
 import { Icon } from '../../../src/components/Icon';
 import { Text } from '../../../src/components/Text';
@@ -19,17 +19,12 @@ import { SegmentedControl } from '../../../src/components/SegmentedControl';
 import { isPreviewBuild } from '../../../src/lib/eas-api';
 import { useGradeFormat } from '../../../src/hooks/use-grade-format';
 import { useGlassCapability } from '../../../src/hooks/use-glass-capability';
+import { useToast } from '../../../src/providers/toast-provider';
+import { replayOnboarding } from '../../../src/lib/onboarding/onboarding-storage';
+import { reportError } from '../../../src/lib/sentry';
 
 export default function MoreScreen() {
-  const {
-    systemColors,
-    brandColors,
-    borderRadius,
-    themeOverride,
-    setThemeOverride,
-    uiVariantPreference,
-    setUiVariant,
-  } = useTheme();
+  const { systemColors, brandColors, themeOverride, setThemeOverride, uiVariantPreference, setUiVariant } = useTheme();
   const { t } = useTranslation('common');
   const { t: tProfile } = useTranslation('profile');
   const { t: tPlaylists } = useTranslation('playlists');
@@ -38,6 +33,7 @@ export default function MoreScreen() {
   const { gradeFormat, setGradeFormat } = useGradeFormat();
   const glassCapable = useGlassCapability();
   const { localePreference, setLocalePreference } = useLocalePreference();
+  const { showToast } = useToast();
 
   // 'System' follows the device language; the rest are the supported locales,
   // labelled in their own script (English / Español / Français) from
@@ -68,6 +64,24 @@ export default function MoreScreen() {
     { key: 'both', label: t('mobile.more.gradeFormat.both') },
   ];
 
+  const handleReplayWalkthrough = () => {
+    // Clear the "seen" flag BEFORE opening the tour (the await is inside
+    // replayOnboarding). Ordering matters: if the replayed tour is
+    // finished/skipped before the clear settles, markOnboardingSeen() could land
+    // first and a late clear would wipe the flag — leaving the tour "unseen" and
+    // re-showing on the next cold start.
+    //
+    // If the SecureStore clear rejects (keychain locked / unavailable),
+    // replayOnboarding never navigates, so surface an error toast instead of the
+    // row silently doing nothing. Log + report so we notice a recurring failure.
+    replayOnboarding(() => router.push('/onboarding')).catch((error: unknown) => {
+      // eslint-disable-next-line no-console
+      console.warn('[onboarding] Failed to replay walkthrough', error);
+      reportError(error);
+      showToast(t('mobile.onboarding.replayError'), 'error');
+    });
+  };
+
   return (
     <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.container}>
       <DevMetadataPanel />
@@ -75,16 +89,7 @@ export default function MoreScreen() {
       {profile?.id ? (
         <View style={styles.section}>
           <SectionHeader title={t('mobile.more.library')} />
-          <View
-            style={[
-              styles.card,
-              {
-                backgroundColor: systemColors.secondaryBackground,
-                borderRadius: borderRadius.lg,
-                marginHorizontal: spacing[4],
-              },
-            ]}
-          >
+          <View style={[styles.card, { backgroundColor: systemColors.secondaryBackground }]}>
             <ListRow
               title={tPlaylists('library.allPlaylists.title')}
               leading={<Icon name="playlist" size={22} color={systemColors.secondaryLabel} />}
@@ -98,17 +103,7 @@ export default function MoreScreen() {
 
       <View style={styles.section}>
         <SectionHeader title={t('mobile.more.appearance.title')} />
-        <View
-          style={[
-            styles.card,
-            {
-              backgroundColor: systemColors.secondaryBackground,
-              borderRadius: borderRadius.lg,
-              marginHorizontal: spacing[4],
-              padding: spacing[3],
-            },
-          ]}
-        >
+        <View style={[styles.card, styles.cardPadded, { backgroundColor: systemColors.secondaryBackground }]}>
           <SegmentedControl
             options={appearanceOptions}
             selectedKey={themeOverride}
@@ -121,17 +116,7 @@ export default function MoreScreen() {
 
       <View style={styles.section}>
         <SectionHeader title={t('mobile.more.uiStyle.title')} />
-        <View
-          style={[
-            styles.card,
-            {
-              backgroundColor: systemColors.secondaryBackground,
-              borderRadius: borderRadius.lg,
-              marginHorizontal: spacing[4],
-              padding: spacing[3],
-            },
-          ]}
-        >
+        <View style={[styles.card, styles.cardPadded, { backgroundColor: systemColors.secondaryBackground }]}>
           <SegmentedControl
             options={uiStyleOptions}
             selectedKey={uiVariantPreference}
@@ -148,17 +133,7 @@ export default function MoreScreen() {
 
       <View style={styles.section}>
         <SectionHeader title={t('mobile.more.gradeFormat.title')} />
-        <View
-          style={[
-            styles.card,
-            {
-              backgroundColor: systemColors.secondaryBackground,
-              borderRadius: borderRadius.lg,
-              marginHorizontal: spacing[4],
-              padding: spacing[3],
-            },
-          ]}
-        >
+        <View style={[styles.card, styles.cardPadded, { backgroundColor: systemColors.secondaryBackground }]}>
           <SegmentedControl
             options={gradeFormatOptions}
             selectedKey={gradeFormat}
@@ -174,16 +149,7 @@ export default function MoreScreen() {
 
       <View style={styles.section}>
         <SectionHeader title={t('mobile.more.language.title')} />
-        <View
-          style={[
-            styles.card,
-            {
-              backgroundColor: systemColors.secondaryBackground,
-              borderRadius: borderRadius.lg,
-              marginHorizontal: spacing[4],
-            },
-          ]}
-        >
+        <View style={[styles.card, { backgroundColor: systemColors.secondaryBackground }]}>
           {languageOptions.map((option, index) => (
             <ListRow
               key={option.key}
@@ -203,19 +169,24 @@ export default function MoreScreen() {
         </Text>
       </View>
 
+      <View style={styles.section}>
+        <SectionHeader title={t('mobile.onboarding.replaySection')} />
+        <View style={[styles.card, { backgroundColor: systemColors.secondaryBackground }]}>
+          <ListRow
+            title={t('mobile.onboarding.replayTitle')}
+            subtitle={t('mobile.onboarding.replaySubtitle')}
+            leading={<Icon name="play.circle" size={22} color={systemColors.secondaryLabel} />}
+            showChevron
+            showSeparator={false}
+            onPress={handleReplayWalkthrough}
+          />
+        </View>
+      </View>
+
       {__DEV__ ? (
         <View style={styles.section}>
           <SectionHeader title={t('mobile.more.development')} />
-          <View
-            style={[
-              styles.card,
-              {
-                backgroundColor: systemColors.secondaryBackground,
-                borderRadius: borderRadius.lg,
-                marginHorizontal: spacing[4],
-              },
-            ]}
-          >
+          <View style={[styles.card, { backgroundColor: systemColors.secondaryBackground }]}>
             <ListRow
               title={t('mobile.more.metroServersTitle')}
               subtitle={t('mobile.more.metroServersSubtitle')}
@@ -253,7 +224,7 @@ export default function MoreScreen() {
           </Text>
         ) : null}
         <Pressable
-          style={[styles.signOut, { borderColor: systemColors.separator, marginHorizontal: spacing[4] }]}
+          style={[styles.signOut, { borderColor: systemColors.separator }]}
           onPress={signOut}
           accessibilityRole="button"
         >
@@ -278,6 +249,11 @@ const styles = StyleSheet.create({
   },
   card: {
     overflow: 'hidden',
+    borderRadius: borderRadius.lg,
+    marginHorizontal: spacing[4],
+  },
+  cardPadded: {
+    padding: spacing[3],
   },
   settingHint: {
     marginTop: spacing[2],
@@ -293,6 +269,7 @@ const styles = StyleSheet.create({
   signOut: {
     alignItems: 'center',
     paddingVertical: spacing[3],
+    marginHorizontal: spacing[4],
     borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
   },
