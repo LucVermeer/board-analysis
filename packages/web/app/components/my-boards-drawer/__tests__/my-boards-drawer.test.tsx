@@ -12,6 +12,19 @@ vi.mock('react-i18next', () => ({
   Trans: ({ children }: { children?: React.ReactNode }) => children ?? null,
 }));
 
+// jsdom/happy-dom doesn't implement IntersectionObserver, which the infinite-scroll
+// hook in MyBoardsDrawer instantiates on mount. Provide a no-op stub so the effect
+// doesn't throw during render.
+class IntersectionObserverStub {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+  takeRecords() {
+    return [];
+  }
+}
+globalThis.IntersectionObserver = IntersectionObserverStub as unknown as typeof IntersectionObserver;
+
 // Mock data
 let mockBoards: Array<Record<string, unknown>> = [];
 let mockIsLoading = false;
@@ -21,6 +34,9 @@ vi.mock('@/app/hooks/use-my-boards', () => ({
   useMyBoards: () => ({
     boards: mockBoards,
     isLoading: mockIsLoading,
+    isFetchingMore: false,
+    hasMore: false,
+    loadMore: vi.fn(),
     error: mockError,
   }),
 }));
