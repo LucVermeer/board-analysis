@@ -18,6 +18,26 @@
       "gradeRange": " de {{first}} a {{last}}"
     }
   },
+  "boardPresence": {
+    "title": "Ahora en el muro",
+    "open": "En el muro",
+    "openAria": "Ver qué hay en el muro",
+    "close": "Cerrar",
+    "switchBoard": "Cambiar de muro",
+    "switchBoardAria": "Cambiar a otro muro",
+    "setByLine": "Creado por {{setter}}",
+    "litByLine": "Encendido por {{name}}",
+    "emptyTitle": "Aún no hay nadie en este muro",
+    "emptyBody": "Conéctate y envía un bloque para empezar el historial.",
+    "historyHeader": "Enviados a este muro",
+    "statsHeader": "Este muro",
+    "statSentToday": "enviados",
+    "statClimbers": "escaladores",
+    "statHardest": "más difícil",
+    "statTopGrade": "grado top",
+    "wallChanged": "Has cambiado el muro",
+    "undo": "Deshacer"
+  },
   "detail": {
     "subtitleSends_one": "{{count}} encadene",
     "subtitleSends_other": "{{count}} encadenes",

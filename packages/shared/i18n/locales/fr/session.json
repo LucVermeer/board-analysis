@@ -18,6 +18,26 @@
       "gradeRange": " de {{first}} à {{last}}"
     }
   },
+  "boardPresence": {
+    "title": "Sur le mur maintenant",
+    "open": "Sur le mur",
+    "openAria": "Voir ce qui est sur le mur",
+    "close": "Fermer",
+    "switchBoard": "Changer de mur",
+    "switchBoardAria": "Passer à un autre mur",
+    "setByLine": "Ouvert par {{setter}}",
+    "litByLine": "Allumé par {{name}}",
+    "emptyTitle": "Personne sur ce mur pour l'instant",
+    "emptyBody": "Connecte-toi et envoie un bloc pour lancer l'historique.",
+    "historyHeader": "Envoyés sur ce mur",
+    "statsHeader": "Ce mur",
+    "statSentToday": "envoyés",
+    "statClimbers": "grimpeurs",
+    "statHardest": "le plus dur",
+    "statTopGrade": "cotation top",
+    "wallChanged": "Tu as changé le mur",
+    "undo": "Annuler"
+  },
   "detail": {
     "subtitleSends_one": "{{count}} enchaînement",
     "subtitleSends_other": "{{count}} enchaînements",
