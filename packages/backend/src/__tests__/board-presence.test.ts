@@ -264,6 +264,23 @@ describe('board-presence resolvers', () => {
       expect(second.boardId).toBe(first.boardId);
     });
 
+    it('converges case/whitespace variants of the same serial onto one board', async () => {
+      const base = `case${Date.now().toString(36)}`;
+      const first = await boardPresenceMutations.resolveBoardForSerial(
+        undefined,
+        { serial: base.toLowerCase(), boardType: 'kilter', layoutId: 1, sizeId: 10, setIds: '1,2' },
+        authCtx(),
+      );
+      // A second phone whose BLE name differs only in case + surrounding
+      // whitespace must NOT mint a duplicate board.
+      const second = await boardPresenceMutations.resolveBoardForSerial(
+        undefined,
+        { serial: `  ${base.toUpperCase()}  `, boardType: 'kilter', layoutId: 1, sizeId: 10, setIds: '1,2' },
+        authCtx({ connectionId: 'conn-2' }),
+      );
+      expect(second.boardId).toBe(first.boardId);
+    });
+
     it("binds the serial onto the caller's existing config-matching board", async () => {
       // Pre-create a board for this config with NO serial.
       await db.execute(sql`

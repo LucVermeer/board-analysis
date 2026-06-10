@@ -7,6 +7,7 @@ import {
   LongitudeSchema,
   SlugSchema,
   BoardSerialSchema,
+  normalizeSerial,
 } from './primitives';
 
 const OptionalBoardSerialInputSchema = z.preprocess((value) => {
@@ -120,7 +121,9 @@ export const PopularBoardConfigsInputSchema = z.object({
  * massive IN-list into the resolver.
  */
 export const SerialNumberLookupSchema = z.object({
-  serialNumbers: z.array(z.string().trim().min(1).max(64)).max(20),
+  // Normalized so a lookup matches the canonical serials stored by the resolve
+  // and record paths (see normalizeSerial).
+  serialNumbers: z.array(z.string().trim().min(1).max(64).transform(normalizeSerial)).max(20),
 });
 
 /**
@@ -130,7 +133,7 @@ export const SerialNumberLookupSchema = z.object({
  * boards advertise a serial in this format, so `boardName` is the Aurora enum.
  */
 export const RecordBoardSerialInputSchema = z.object({
-  serialNumber: z.string().trim().min(1).max(64),
+  serialNumber: z.string().trim().min(1).max(64).transform(normalizeSerial),
   boardName: z.enum(AURORA_BOARDS),
   layoutId: z.number().int().nonnegative(),
   sizeId: z.number().int().nonnegative(),
