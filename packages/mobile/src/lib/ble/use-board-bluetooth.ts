@@ -138,25 +138,42 @@ const KEEP_AWAKE_TAG = 'boardsesh-ble';
  * Create a single AbortSignal that fires when either of the two input signals
  * is aborted. This lets us combine a caller-supplied signal with an internal
  * one without losing either.
+ *
+ * Returns the merged `signal` plus a `dispose()` that detaches the abort
+ * listeners from both inputs. The caller MUST call `dispose()` once the write
+ * settles (success or failure), via a `finally`. Without it, a write that never
+ * aborts (the common case) would leave the `onAbort` listener permanently
+ * parked on the caller's long-lived signal — the AutoSender hands its single
+ * lifetime signal to every send, so the listeners (and the per-write
+ * controllers they retain) accumulate for the life of the connection.
+ *
+ * Exported for testing the listener lifecycle.
  */
-function mergeAbortSignals(signalA: AbortSignal, signalB: AbortSignal): AbortSignal {
+export function mergeAbortSignals(
+  signalA: AbortSignal,
+  signalB: AbortSignal,
+): { signal: AbortSignal; dispose: () => void } {
   const controller = new AbortController();
+
+  if (signalA.aborted || signalB.aborted) {
+    controller.abort();
+    // Nothing was attached; dispose is a safe no-op on the early-aborted path.
+    return { signal: controller.signal, dispose: () => {} };
+  }
 
   const onAbort = () => {
     controller.abort();
+  };
+
+  const dispose = () => {
     signalA.removeEventListener('abort', onAbort);
     signalB.removeEventListener('abort', onAbort);
   };
 
-  if (signalA.aborted || signalB.aborted) {
-    controller.abort();
-    return controller.signal;
-  }
-
   signalA.addEventListener('abort', onAbort);
   signalB.addEventListener('abort', onAbort);
 
-  return controller.signal;
+  return { signal: controller.signal, dispose };
 }
 
 function classifyBleFailureReason(error: unknown): string {
@@ -257,8 +274,17 @@ export function useBoardBluetooth({
       const writeAbort = new AbortController();
       writeAbortRef.current = writeAbort;
 
-      // Combine caller-provided signal with the internal abort controller
-      const combinedSignal = signal ? mergeAbortSignals(signal, writeAbort.signal) : writeAbort.signal;
+      // Combine caller-provided signal with the internal abort controller. The
+      // merge attaches abort listeners to both inputs; `disposeMergedSignal`
+      // detaches them once the write settles so a non-aborting write doesn't
+      // leak a listener on the AutoSender's long-lived signal.
+      let combinedSignal = writeAbort.signal;
+      let disposeMergedSignal: (() => void) | undefined;
+      if (signal) {
+        const merged = mergeAbortSignals(signal, writeAbort.signal);
+        combinedSignal = merged.signal;
+        disposeMergedSignal = merged.dispose;
+      }
 
       try {
         if (boardName === 'moonboard') {
@@ -368,6 +394,12 @@ export function useBoardBluetooth({
           handleDisconnection();
         }
         return false;
+      } finally {
+        // Detach the merged-signal listeners now the write has settled. Without
+        // this, a non-aborting write leaves a listener parked on the caller's
+        // long-lived signal (the AutoSender's lifetime signal), retaining the
+        // per-write AbortController for the connection.
+        disposeMergedSignal?.();
       }
     },
     [boardName, layoutId, sizeId, holdsData, ledColorOverrides, handleDisconnection],

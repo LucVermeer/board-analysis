@@ -94,7 +94,12 @@ vi.mock('../adapter-factory', () => ({
 }));
 
 import { createBluetoothAdapter } from '../adapter-factory';
-import { convertToMirroredFramesString, dispatchMoonboardPacket, useBoardBluetooth } from '../use-board-bluetooth';
+import {
+  convertToMirroredFramesString,
+  dispatchMoonboardPacket,
+  mergeAbortSignals,
+  useBoardBluetooth,
+} from '../use-board-bluetooth';
 
 // ── Factory helper ─────────────────────────────────────────────────────────
 
@@ -383,5 +388,54 @@ describe('dispatchMoonboardPacket', () => {
 
     expect(result).toBe(true);
     expect(write).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ── mergeAbortSignals ───────────────────────────────────────────────────────
+
+describe('mergeAbortSignals', () => {
+  it('removes the abort listener from the long-lived signal once disposed (no leak per write)', () => {
+    // The AutoSender passes one lifetime-scoped signal to every send. Each send
+    // creates a fresh per-write controller and merges. Without dispose, every
+    // successful (non-aborted) write parked a permanent listener on the
+    // lifetime signal, leaking the per-write controller for the connection.
+    const lifetime = new AbortController();
+    const addSpy = vi.spyOn(lifetime.signal, 'addEventListener');
+    const removeSpy = vi.spyOn(lifetime.signal, 'removeEventListener');
+
+    // Simulate N consecutive successful sends: merge, then dispose without aborting.
+    for (let send = 0; send < 5; send++) {
+      const perWrite = new AbortController();
+      const { dispose } = mergeAbortSignals(lifetime.signal, perWrite.signal);
+      dispose();
+    }
+
+    // Every listener added to the lifetime signal must have been removed again.
+    const abortListenersAdded = addSpy.mock.calls.filter(([eventName]) => eventName === 'abort').length;
+    const abortListenersRemoved = removeSpy.mock.calls.filter(([eventName]) => eventName === 'abort').length;
+    expect(abortListenersAdded).toBe(5);
+    expect(abortListenersRemoved).toBe(5);
+  });
+
+  it('still aborts the merged signal when an input signal aborts', () => {
+    const lifetime = new AbortController();
+    const perWrite = new AbortController();
+    const { signal } = mergeAbortSignals(lifetime.signal, perWrite.signal);
+
+    expect(signal.aborted).toBe(false);
+    perWrite.abort();
+    expect(signal.aborted).toBe(true);
+  });
+
+  it('returns an already-aborted signal when an input is already aborted', () => {
+    const lifetime = new AbortController();
+    lifetime.abort();
+    const perWrite = new AbortController();
+
+    const { signal, dispose } = mergeAbortSignals(lifetime.signal, perWrite.signal);
+
+    expect(signal.aborted).toBe(true);
+    // dispose must be safe to call even on the early-aborted path.
+    expect(() => dispose()).not.toThrow();
   });
 });
