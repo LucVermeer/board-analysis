@@ -214,6 +214,16 @@ describe('DiscoverLibrary error handling', () => {
     expect(userHook.refetch).not.toHaveBeenCalled();
   });
 
+  it('retries only the forYou stream when only it failed', () => {
+    forYouHook.hasError = true;
+    const { getByLabelText } = renderHub();
+
+    fireEvent.click(getByLabelText('library.errors.tryAgain'));
+    expect(forYouHook.refetch).toHaveBeenCalledTimes(1);
+    expect(communityHook.refetch).not.toHaveBeenCalled();
+    expect(userHook.refetch).not.toHaveBeenCalled();
+  });
+
   it('keeps showing content (no error block) when a section errored but data is present', () => {
     userHook.hasError = true;
     userHook.playlists = [{ uuid: 'a', name: 'Alpha', climbCount: 1 }];

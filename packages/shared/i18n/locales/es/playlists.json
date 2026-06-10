@@ -20,8 +20,11 @@
     "sections": {
       "jumpBackIn": "Continúa donde lo dejaste",
       "smart": "Tus selecciones",
-      "discover": "Descubre"
+      "discover": "Descubre",
+      "forYou": "Para ti",
+      "community": "Playlists de la comunidad"
     },
+    "communityByline": "{{creatorName}} - {{climbCount}}",
     "allPlaylists": {
       "title": "Mis listas",
       "seeAll": "Ver todas",

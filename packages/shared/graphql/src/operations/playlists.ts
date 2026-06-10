@@ -584,7 +584,6 @@ export const SEARCH_PLAYLISTS = gql`
         climbCount
         creatorId
         creatorName
-        isGeneratedRecommendation
         createdAt
         updatedAt
       }
