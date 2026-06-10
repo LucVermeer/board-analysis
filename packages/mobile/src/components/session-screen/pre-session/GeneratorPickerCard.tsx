@@ -299,10 +299,12 @@ export function GeneratorPickerCard({
     return parts.join(' · ');
   }, [selection, t]);
 
-  // A stepper row keyed by a translation key for its label; resolves the decrease
-  // / increase accessibility labels off the same key.
+  // A stepper row with an already-translated label; resolves the decrease /
+  // increase accessibility labels off the same label. Callers pass the resolved
+  // string (via a literal `t('mobile.session.preGenerator…')`) so the i18n key
+  // stays statically analysable.
   const stepperRow = (
-    labelKey: string,
+    label: string,
     fieldKey: string,
     value: number,
     min: number,
@@ -312,13 +314,13 @@ export function GeneratorPickerCard({
     key: fieldKey,
     node: (
       <Stepper
-        label={t(labelKey)}
+        label={label}
         value={value}
         min={min}
         max={max}
         onChange={onValue}
-        decreaseLabel={t('mobile.session.preGeneratorDecreaseOption', { label: t(labelKey) })}
-        increaseLabel={t('mobile.session.preGeneratorIncreaseOption', { label: t(labelKey) })}
+        decreaseLabel={t('mobile.session.preGeneratorDecreaseOption', { label })}
+        increaseLabel={t('mobile.session.preGeneratorIncreaseOption', { label })}
       />
     ),
   });
@@ -330,7 +332,7 @@ export function GeneratorPickerCard({
       case 'volume':
         return [
           stepperRow(
-            'mobile.session.preGeneratorMainSetClimbs',
+            t('mobile.session.preGeneratorMainSetClimbs'),
             'mainSetClimbs',
             options.mainSetClimbs,
             1,
@@ -342,7 +344,7 @@ export function GeneratorPickerCard({
       case 'ladder':
         return [
           stepperRow(
-            'mobile.session.preGeneratorNumberOfSteps',
+            t('mobile.session.preGeneratorNumberOfSteps'),
             'numberOfSteps',
             options.numberOfSteps,
             3,
@@ -353,7 +355,7 @@ export function GeneratorPickerCard({
       case 'gradeFocus':
         return [
           stepperRow(
-            'mobile.session.preGeneratorNumberOfClimbs',
+            t('mobile.session.preGeneratorNumberOfClimbs'),
             'numberOfClimbs',
             options.numberOfClimbs,
             1,
@@ -372,7 +374,7 @@ export function GeneratorPickerCard({
       case 'volume':
         return [
           stepperRow(
-            'mobile.session.preGeneratorMainSetVariability',
+            t('mobile.session.preGeneratorMainSetVariability'),
             'mainSetVariability',
             options.mainSetVariability,
             0,
@@ -384,7 +386,7 @@ export function GeneratorPickerCard({
       case 'ladder':
         return [
           stepperRow(
-            'mobile.session.preGeneratorClimbsPerStep',
+            t('mobile.session.preGeneratorClimbsPerStep'),
             'climbsPerStep',
             options.climbsPerStep,
             1,
@@ -555,9 +557,7 @@ export function GeneratorPickerCard({
           ) : null}
 
           <View style={[styles.inset, styles.steppersInset]}>
-            <GroupedSteppers
-              rows={[...primarySteppers(selection.options), ...secondarySteppers(selection.options)]}
-            />
+            <GroupedSteppers rows={[...primarySteppers(selection.options), ...secondarySteppers(selection.options)]} />
           </View>
 
           <View style={[styles.inset, styles.tuningInset]}>

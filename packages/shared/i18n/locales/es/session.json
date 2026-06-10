@@ -376,7 +376,6 @@
       "preWorkoutPreviewError": "No se pudo crear la vista previa. Inténtalo de nuevo.",
       "preRegenerateClimbForClimb": "Cambiar {{name}}",
       "inStatsSends": "Encadenes",
-      "inStatsAttempts": "Intentos",
       "inStatsDuration": "Duración",
       "inStatsHardest": "Encadene más duro",
       "inStatsGrades": "Distribución de grados",
