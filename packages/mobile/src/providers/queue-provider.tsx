@@ -46,7 +46,7 @@ import type { SessionSummary, SubscriptionQueueEvent, SessionUser, UserBoard } f
 import { execute } from '@boardsesh/graphql-client';
 import { buildBoardPath, parseBoardPath } from '@boardsesh/board-config';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
-import { JOIN_SESSION } from '@boardsesh/graphql/operations/queue-session';
+import { JOIN_SESSION, LEAVE_SESSION } from '@boardsesh/graphql/operations/queue-session';
 import { getWsClient } from '../lib/graphql/ws-client';
 import { getHttpClient } from '../lib/graphql/client';
 import {
@@ -108,7 +108,12 @@ type QueueContextValue = {
   setPlaylistSuggestionSource: (source: PlaylistSuggestionSource | null) => void;
   /** Refresh the suggestion source in place (no-op unless it matches the active one). */
   refreshPlaylistSuggestionSource: (source: PlaylistSuggestionSource) => void;
-  clearSession: () => Promise<void>;
+  /**
+   * Reset the active session locally. Pass `{ notifyServer: true }` on an
+   * intentional leave (e.g. switching sessions) to emit LEAVE_SESSION so peers
+   * see the departure immediately instead of after the disconnect grace timer.
+   */
+  clearSession: (options?: { notifyServer?: boolean }) => Promise<void>;
   endSession: () => Promise<SessionSummary | null>;
   /**
    * Explicitly create a session with optional config (name, goal, etc.).
@@ -529,7 +534,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
   showToastRef.current = showToast;
   const tRef = useRef(t);
   tRef.current = t;
-  const clearSessionRef = useRef<() => Promise<void>>(async () => {});
+  const clearSessionRef = useRef<(options?: { notifyServer?: boolean }) => Promise<void>>(async () => {});
   const locallyEndingSessionIdRef = useRef<string | null>(null);
   const suppressedRemoteEndSessionIdRef = useRef<string | null>(null);
 
@@ -1423,7 +1428,22 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     );
   }, []);
 
-  const clearSession = useCallback(async () => {
+  const clearSession = useCallback(async (options?: { notifyServer?: boolean }) => {
+    // When the user intentionally leaves a session (switching into another via
+    // the join-confirm dialog), tell the backend so peers see them leave NOW —
+    // the driver/presence release shouldn't wait on the 60s disconnect grace
+    // timer. Best-effort and BEFORE we reset local state, so the WS registration
+    // for the old session is still alive: a failed/timed-out leave degrades to
+    // the prior disconnect-grace behavior. Default false keeps every other
+    // caller (remote SessionEnded, endSession) unchanged. Mirrors web's
+    // sendLeaveOnCleanup in use-session-lifecycle.ts.
+    if (options?.notifyServer && sessionIdRef.current) {
+      try {
+        await execute(getWsClient(), { query: LEAVE_SESSION }, 5000);
+      } catch (error) {
+        if (__DEV__) console.warn('[queue] leaveSession on switch failed', error);
+      }
+    }
     sessionIdRef.current = null;
     setSessionId(null);
     dispatch({

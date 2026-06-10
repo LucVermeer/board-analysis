@@ -103,7 +103,9 @@ export default function JoinSessionScreen() {
           style: 'destructive',
           onPress: () => {
             void (async () => {
-              await clearSession();
+              // notifyServer: leave session A on the backend before joining B so
+              // peers see the departure now, not after the 60s disconnect grace.
+              await clearSession({ notifyServer: true });
               await performJoin();
             })();
           },
