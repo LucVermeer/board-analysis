@@ -26,6 +26,7 @@ export const boardSessions = pgTable(
     lastActivity: timestamp('last_activity').defaultNow().notNull(),
     // Persistent lifecycle status. Live active/inactive presence is tracked in Redis;
     // SQL only uses ended/not-ended for durable history and discovery filtering.
+    // (A legacy CHECK from backend migration 0005 also permits 'inactive' — never written.)
     status: text('status').default('active').notNull(),
     // GPS coordinates for session discovery
     latitude: doublePrecision('latitude'),

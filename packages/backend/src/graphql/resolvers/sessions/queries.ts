@@ -1,4 +1,4 @@
-import type { ConnectionContext, EventsReplayResponse, SessionLiveness, SessionStatus } from '@boardsesh/shared-schema';
+import type { ConnectionContext, EventsReplayResponse, SessionStatus } from '@boardsesh/shared-schema';
 import { eq } from 'drizzle-orm';
 import { roomManager, type DiscoverableSession } from '../../../services/room-manager';
 import { pubsub } from '../../../pubsub/index';
@@ -139,23 +139,25 @@ export const sessionQueries = {
    * tell an ended session apart from a dormant-but-active one. Clients call this
    * on cold start to decide whether to restore or drop a persisted session id
    * (#2683). No auth: it exposes only existence + ended-state, and auth may not
-   * be restored yet at cold start.
+   * be restored yet at cold start. Returns the bare SessionStatus enum; null
+   * means no such session.
    */
-  sessionLiveness: async (_: unknown, { sessionId }: { sessionId: string }): Promise<SessionLiveness | null> => {
+  sessionStatus: async (_: unknown, { sessionId }: { sessionId: string }): Promise<SessionStatus | null> => {
     validateInput(SessionIdSchema, sessionId, 'sessionId');
     const rows = await dbRead
-      .select({ id: sessions.id, status: sessions.status, endedAt: sessions.endedAt })
+      .select({ status: sessions.status, endedAt: sessions.endedAt })
       .from(sessions)
       .where(eq(sessions.id, sessionId))
       .limit(1);
     const row = rows[0];
     if (!row) return null;
-    return {
-      id: row.id,
-      // status is a free-text column constrained by a DB CHECK to
-      // ('active','inactive','ended'); narrow the string for callers.
-      status: row.status as SessionStatus,
-      endedAt: row.endedAt ? row.endedAt.toISOString() : null,
-    };
+    // Ended-ness is the only durable signal. endedAt is ORed in as insurance
+    // against a skewed row (endSession and the inactivity sweep set status and
+    // endedAt together, so it can only diverge via manual edits). Everything
+    // else — including 'inactive', which the legacy DB CHECK (backend
+    // migration 0005) still permits but nothing writes — normalizes to
+    // 'active': a dormant row is exactly the restore-safe case this query
+    // exists to preserve (#2683).
+    return row.status === 'ended' || row.endedAt != null ? 'ended' : 'active';
   },
 };
