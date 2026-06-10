@@ -287,6 +287,7 @@ export function useCreateClimbScreen({
     // a Save straight after Clear reuses the old name and skips the name prompt.
     setName('');
     setDescription('');
+    setNoMatch(false);
     setIsDraft(true);
     setSavedClimb(null);
     setPublishDuplicateError(null);
