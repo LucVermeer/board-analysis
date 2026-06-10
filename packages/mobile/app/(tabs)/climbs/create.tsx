@@ -5,6 +5,7 @@ import type { BoardName } from '@boardsesh/shared-schema';
 import { CreateClimbScreen } from '../../../src/components/create-climb/CreateClimbScreen';
 import { ActivityIndicator } from '../../../src/components/ActivityIndicator';
 import { useActiveBoard } from '../../../src/lib/graphql/use-active-board';
+import { createClimbScreenKey } from '../../../src/lib/create-climb-screen-key';
 
 type CreateClimbParams = {
   boardName?: string;
@@ -48,11 +49,13 @@ export default function CreateClimbRoute() {
   }
 
   return (
-    // Key by the edited climb so switching drafts (router.replace with a new
-    // editClimbUuid) remounts the editor — a clean re-seed and a fresh undo
-    // history per editing session.
+    // Key by the edited climb AND the board's hold-identity tuple so switching
+    // drafts OR boards (e.g. a bare-open screen while the active board changes)
+    // remounts the editor — a clean re-seed, fresh undo history, and dropped
+    // holds that don't exist on the new layout/size. Angle is excluded so a
+    // session-sync angle change doesn't wipe an in-progress paint.
     <CreateClimbScreen
-      key={params.editClimbUuid ?? 'new'}
+      key={createClimbScreenKey(params.editClimbUuid, board)}
       board={board}
       forkFrames={params.forkFrames}
       forkName={params.forkName}
