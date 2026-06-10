@@ -912,6 +912,13 @@ Glass is for **floating chrome only** — never for content canvases or text-hea
 - **Glass:** the bottom tab bar (`BlurTabBar`), the persistent floating toolbar — the climb-name capsule (`ClimbCapsule`), log-ascent FAB (`LogAscentFab`), and search FAB (`SearchFab`) — the `QuickTickBar`, the create-playlist FAB, the top board-name chrome (`ClimbTopChrome`), the session overlay (`SessionScreenHost`), and the `PlayDrawer` background. All use `'regular'` glass.
 - **Opaque:** the remaining bottom sheets (`Sheet`, `QueueSheet`, `AngleSelectorSheet`, etc.) use themed `secondaryBackground`.
 
+### Chrome primitives
+
+Two shared primitives compose the floating top/bottom chrome (both `'regular'` glass via `GlassSurface`, with `!nativeGlass` hairline/shadow fallbacks so they stay legible on Android):
+
+- **`CollapsingLargeTitleHeader`** (`src/components/chrome/CollapsingLargeTitleHeader.tsx`) — the board-agnostic kernel: a fade scrim, left/right glass-island slots + an optional centred control, and the screen's large in-body title collapsing into a centred glass capsule on scroll (transform-only, so the live glass never flattens). The board-aware `CollapsingTopChrome` (the Discover/Climbs/Record board pill + board-glyph dock) **composes** it; the Profile/Record/Discover top chromes are thin wrappers. Reports its measured height via `onHeightChange` so the list insets its top.
+- **`PinnedActionBar`** (`src/components/PinnedActionBar.tsx`) — the measured glass bottom-action toolbar shared by the session Start/End footers. Anchors at `useBottomChromeMetrics().fixedFooterBottom` (flush above the tab bar, lifted to clear the queue accessory) and reports its own height via `onHeightChange`, so the host list reserves exactly `height + fixedFooterBottom` and content never scrolls under the button.
+
 ### Dark mode & appearance
 
 - iOS resolves system colors via `PlatformColor` (auto-adapting); Android uses the `androidFallbackColors.{light,dark}` maps in `theme/colors.ts`. Components read everything through `useTheme().systemColors`.

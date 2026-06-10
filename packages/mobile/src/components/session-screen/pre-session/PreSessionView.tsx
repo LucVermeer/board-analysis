@@ -236,13 +236,12 @@ export function PreSessionView({ showChrome = false }: PreSessionViewProps) {
           {t('mobile.session.headerStart')}
         </Text>
 
-        {/* The board pill in the chrome now owns board identity, so the summary
-            card only stands in as a prompt to pick a board when none is set. */}
-        {activeBoard ? null : (
-          <View style={styles.cardInset}>
-            <BoardSummaryCard onPress={handleOpenBoardSwitcher} />
-          </View>
-        )}
+        {/* The chrome pill owns board identity but collapses on scroll, so this
+            keeps the full config (name · size · angle) persistently visible when a
+            board is set, and prompts to pick one when none is. */}
+        <View style={styles.cardInset}>
+          <BoardSummaryCard onPress={handleOpenBoardSwitcher} board={activeBoard ?? null} />
+        </View>
 
         <GeneratorPickerCard
           boardName={activeBoard ? toBoardName(activeBoard.boardType) : null}
