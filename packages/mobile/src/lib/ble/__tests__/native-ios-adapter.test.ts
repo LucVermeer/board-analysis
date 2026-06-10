@@ -5,12 +5,17 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 vi.mock('@boardsesh/ble-protocol', () => ({
   AURORA_ADVERTISED_SERVICE_UUID: 'AURORA-UUID',
   UART_SERVICE_UUID: 'UART-UUID',
-  parseSerialNumber: (name?: string) => name ?? null,
+  parseSerialNumber: (name?: string) => name?.match(/#([^@]+)/)?.[1] ?? undefined,
 }));
 
 // Mock the Expo native module the adapter delegates to. vi.hoisted runs
 // before the vi.mock factory so the shared state is initialized in time.
-type ScanListener = (payload: { device: { deviceId: string; name: string }; localName: string; rssi: number }) => void;
+type ScanListener = (payload: {
+  device: { deviceId: string; name: string };
+  localName: string;
+  rssi: number;
+  serviceUuids?: string[];
+}) => void;
 type DisconnectListener = (payload: { deviceId: string }) => void;
 const harness = vi.hoisted(() => {
   const scanListeners: ScanListener[] = [];
@@ -166,8 +171,8 @@ describe('NativeIosBleAdapter scan timeout', () => {
     // The board finally advertises after the picker opened — it shows up as a
     // pickable device (auto-select has stopped), and the user taps it.
     scanListeners[0]?.({
-      device: { deviceId: 'late-dev', name: 'NEEDLE-SERIAL' },
-      localName: 'NEEDLE-SERIAL',
+      device: { deviceId: 'late-dev', name: 'Garage Wall#NEEDLE-SERIAL@3' },
+      localName: 'Garage Wall#NEEDLE-SERIAL@3',
       rssi: -50,
     });
     manualPick('late-dev');
@@ -181,19 +186,19 @@ describe('NativeIosBleAdapter scan timeout', () => {
 describe('NativeIosBleAdapter connect flow', () => {
   it('auto-selects a discovered device matching targetSerial', async () => {
     const adapter = new NativeIosBleAdapter(() => Promise.reject(new Error('picker should not open')));
-    const connectPromise = adapter.requestAndConnect('Kilter A1B2C3');
+    const connectPromise = adapter.requestAndConnect('A1B2C3');
     await Promise.resolve();
 
     scanListeners[0]?.({
-      device: { deviceId: 'dev-9', name: 'Kilter A1B2C3' },
-      localName: 'Kilter A1B2C3',
+      device: { deviceId: 'dev-9', name: 'Kilter Board#A1B2C3@3' },
+      localName: 'Kilter Board#A1B2C3@3',
       rssi: -55,
     });
     await vi.runAllTimersAsync();
     await connectPromise;
 
     expect(nativeMock.connect).toHaveBeenCalledWith('dev-9');
-    expect(nativeMock.startScan).toHaveBeenCalledWith(['AURORA-UUID', 'UART-UUID']);
+    expect(nativeMock.startScan).toHaveBeenCalledWith(['AURORA-UUID']);
   });
 
   it('does not mask the original failure when stopScan rejects in the cleanup path', async () => {
@@ -207,11 +212,11 @@ describe('NativeIosBleAdapter connect flow', () => {
 
   it('flushes the native write queue when an in-flight write is aborted', async () => {
     const adapter = new NativeIosBleAdapter(() => Promise.reject(new Error('picker should not open')));
-    const connectPromise = adapter.requestAndConnect('Kilter A1B2C3');
+    const connectPromise = adapter.requestAndConnect('A1B2C3');
     await Promise.resolve();
     scanListeners[0]?.({
-      device: { deviceId: 'dev-9', name: 'Kilter A1B2C3' },
-      localName: 'Kilter A1B2C3',
+      device: { deviceId: 'dev-9', name: 'Kilter Board#A1B2C3@3' },
+      localName: 'Kilter Board#A1B2C3@3',
       rssi: -55,
     });
     await vi.runAllTimersAsync();
@@ -235,6 +240,44 @@ describe('NativeIosBleAdapter connect flow', () => {
     // adapter normalises it to AbortError so callers treat it as cancellation.
     rejectNativeWrite(new Error('BLE write cancelled'));
     await expect(writePromise).rejects.toMatchObject({ name: 'AbortError' });
+  });
+
+  it('does not call native.disconnect on a never-connected adapter', async () => {
+    const adapter = new NativeIosBleAdapter(() => Promise.reject(new Error('picker should not open')));
+
+    await expect(adapter.disconnect()).resolves.toBeUndefined();
+    expect(nativeMock.disconnect).not.toHaveBeenCalled();
+  });
+
+  it('skips native.disconnect after the device self-cleaned on a disconnected event', async () => {
+    const adapter = new NativeIosBleAdapter(() => Promise.reject(new Error('picker should not open')));
+    const connectPromise = adapter.requestAndConnect('A1B2C3');
+    await Promise.resolve();
+    scanListeners[0]?.({
+      device: { deviceId: 'dev-9', name: 'Kilter Board#A1B2C3@3' },
+      localName: 'Kilter Board#A1B2C3@3',
+      rssi: -55,
+    });
+    await vi.runAllTimersAsync();
+    await connectPromise;
+
+    // The native side reports the board dropped — the adapter self-cleans and
+    // nulls connectedDeviceId.
+    disconnectListeners[0]?.({ deviceId: 'dev-9' });
+
+    // A blind native.disconnect() here could cancel a connection a newer
+    // adapter adopted after this one was abandoned, so it must be skipped.
+    await adapter.disconnect();
+    expect(nativeMock.disconnect).not.toHaveBeenCalled();
+  });
+
+  it('calls native.disconnect after adoptConnection while still tracking a device', async () => {
+    const adapter = new NativeIosBleAdapter(() => Promise.reject(new Error('picker should not open')));
+
+    adapter.adoptConnection('adopted-dev');
+    await adapter.disconnect();
+
+    expect(nativeMock.disconnect).toHaveBeenCalled();
   });
 
   it('adoptConnection wires writes and the disconnect callback without scanning', async () => {
@@ -271,6 +314,7 @@ describe('NativeIosBleAdapter on newer binaries (adoption surface present)', () 
             seenDeviceIds.splice(0, seenDeviceIds.length, ...devices.map((device) => device.deviceId));
           });
         }),
+      'moonboard',
     );
     const connectPromise = adapter.requestAndConnect();
     await Promise.resolve();
@@ -299,5 +343,45 @@ describe('NativeIosBleAdapter on newer binaries (adoption surface present)', () 
     await vi.runAllTimersAsync();
     await connectPromise;
     expect(nativeMock.connect).toHaveBeenCalledWith('moon-1');
+  });
+
+  it('uses the Aurora service filter and drops unrelated devices on Aurora scans', async () => {
+    let manualPick: (deviceId: string) => void = () => {};
+    const seenDeviceIds: string[] = [];
+    const adapter = new NativeIosBleAdapter(
+      (subscribe) =>
+        new Promise<string>((resolve) => {
+          manualPick = resolve;
+          subscribe((devices) => {
+            seenDeviceIds.splice(0, seenDeviceIds.length, ...devices.map((device) => device.deviceId));
+          });
+        }),
+      'aurora',
+    );
+    const connectPromise = adapter.requestAndConnect();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(nativeMock.startScan).toHaveBeenCalledWith(['AURORA-UUID']);
+
+    scanListeners[0]?.({
+      device: { deviceId: 'airpods', name: "Marco's AirPods #1" },
+      localName: "Marco's AirPods #1",
+      rssi: -30,
+      serviceUuids: [],
+    });
+    scanListeners[0]?.({
+      device: { deviceId: 'aurora-1', name: 'Kilter Board#751737@3' },
+      localName: 'Kilter Board#751737@3',
+      rssi: -40,
+      serviceUuids: ['AURORA-UUID'],
+    });
+
+    expect(seenDeviceIds).toEqual(['aurora-1']);
+
+    manualPick('aurora-1');
+    await vi.runAllTimersAsync();
+    await connectPromise;
+    expect(nativeMock.connect).toHaveBeenCalledWith('aurora-1');
   });
 });

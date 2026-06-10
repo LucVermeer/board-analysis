@@ -1024,10 +1024,14 @@ export type DeviceLogEntry = {
 
 /** Input for discovering public playlists. */
 export type DiscoverPlaylistsInput = {
+  /** Board angle for generated recommendation filters */
+  angle?: InputMaybe<Scalars['Int']['input']>;
   /** Board type (optional — omit to discover across all boards) */
   boardType?: InputMaybe<Scalars['String']['input']>;
   /** Filter by creator IDs */
   creatorIds?: InputMaybe<Array<Scalars['ID']['input']>>;
+  /** Filter by generated recommendation status */
+  generatedRecommendation?: InputMaybe<Scalars['Boolean']['input']>;
   /** Layout ID (optional — omit to discover across all layouts) */
   layoutId?: InputMaybe<Scalars['Int']['input']>;
   /** Filter by name (partial match) */
@@ -1036,6 +1040,8 @@ export type DiscoverPlaylistsInput = {
   page?: InputMaybe<Scalars['Int']['input']>;
   /** Page size */
   pageSize?: InputMaybe<Scalars['Int']['input']>;
+  /** Board size ID for generated recommendation filters */
+  sizeId?: InputMaybe<Scalars['Int']['input']>;
   /** Sort by: 'recent' (default) or 'popular' */
   sortBy?: InputMaybe<Scalars['String']['input']>;
 };
@@ -1072,6 +1078,8 @@ export type DiscoverablePlaylist = {
   icon?: Maybe<Scalars['String']['output']>;
   /** Database ID */
   id: Scalars['ID']['output'];
+  /** Whether this is a system-generated recommendation playlist */
+  isGeneratedRecommendation: Scalars['Boolean']['output'];
   /** Layout ID */
   layoutId?: Maybe<Scalars['Int']['output']>;
   /** Playlist name */
@@ -6196,6 +6204,7 @@ export type DiscoverPlaylistsQuery = {
       climbCount: number;
       creatorId: string;
       creatorName: string;
+      isGeneratedRecommendation: boolean;
     }>;
   };
 };
@@ -6243,6 +6252,7 @@ export type SearchPlaylistsQuery = {
       climbCount: number;
       creatorId: string;
       creatorName: string;
+      isGeneratedRecommendation: boolean;
       createdAt: string;
       updatedAt: string;
     }>;
@@ -10099,6 +10109,7 @@ export const DiscoverPlaylistsDocument = {
                       { kind: 'Field', name: { kind: 'Name', value: 'climbCount' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'creatorId' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'creatorName' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'isGeneratedRecommendation' } },
                     ],
                   },
                 },
@@ -10239,6 +10250,7 @@ export const SearchPlaylistsDocument = {
                       { kind: 'Field', name: { kind: 'Name', value: 'climbCount' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'creatorId' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'creatorName' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'isGeneratedRecommendation' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
                     ],

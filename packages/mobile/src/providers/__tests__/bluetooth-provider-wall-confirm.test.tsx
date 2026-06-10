@@ -3,6 +3,9 @@ import { render, waitFor, cleanup } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createElement, type ReactNode } from 'react';
 import type { ClimbQueueItem } from '@boardsesh/queue';
+import type { BoardSerialConfig } from '@boardsesh/graphql/operations';
+import type { ResolvedBoardEntry } from '../../lib/ble/resolve-serials';
+import type { PickerState } from '../../lib/ble/use-board-bluetooth';
 
 type BluetoothHookOptions = {
   onConnectSuccess?: (serial: string | null) => void;
@@ -15,6 +18,10 @@ const wallConfirm = vi.hoisted(() => ({
 
 const analytics = vi.hoisted(() => ({
   track: vi.fn(),
+}));
+
+const alert = vi.hoisted(() => ({
+  alert: vi.fn(),
 }));
 
 const queue = vi.hoisted(() => ({
@@ -34,7 +41,7 @@ const bluetooth = vi.hoisted(() => {
       connect: vi.fn(async () => true),
       disconnect: vi.fn(async () => {}),
       sendFramesToBoard: vi.fn(async () => true as boolean | undefined),
-      pickerState: null,
+      pickerState: null as PickerState | null,
       reconnectSerialForCurrentBoard: null,
     },
     useBoardBluetooth: vi.fn((options: BluetoothHookOptions) => {
@@ -45,12 +52,32 @@ const bluetooth = vi.hoisted(() => {
   return mock;
 });
 
+type PickerSheetProps = {
+  onSelect: (deviceId: string) => void;
+};
+
+const pickerSheet = vi.hoisted(() => ({
+  props: null as PickerSheetProps | null,
+}));
+
+const resolvedBoards = vi.hoisted(() => ({
+  value: new Map<string, ResolvedBoardEntry>(),
+}));
+
+vi.mock('react-native', () => ({
+  Alert: { alert: alert.alert },
+}));
+
 vi.mock('@boardsesh/play-view', () => ({
   emitWallConfirm: wallConfirm.emitWallConfirm,
 }));
 
 vi.mock('../../lib/ble/use-board-bluetooth', () => ({
   useBoardBluetooth: bluetooth.useBoardBluetooth,
+}));
+
+vi.mock('../../lib/ble/resolve-serials', () => ({
+  useResolvedBleDeviceBoards: () => resolvedBoards.value,
 }));
 
 vi.mock('../../lib/ble/bluetooth-status-store', () => ({
@@ -66,8 +93,17 @@ vi.mock('../../lib/analytics', () => ({
   track: analytics.track,
 }));
 
+// The provider calls useSetActiveBoard for the "switch to correct config" flow.
+// The real hook needs a QueryClientProvider this suite doesn't mount, so stub it.
+vi.mock('../../lib/graphql/use-active-board', () => ({
+  useSetActiveBoard: () => vi.fn(async () => {}),
+}));
+
 vi.mock('../../components/ble/DevicePickerSheet', () => ({
-  DevicePickerSheet: () => createElement('div', { 'data-testid': 'device-picker' }),
+  DevicePickerSheet: (props: PickerSheetProps) => {
+    pickerSheet.props = props;
+    return createElement('div', { 'data-testid': 'device-picker' });
+  },
 }));
 
 vi.mock('../queue-provider', () => ({
@@ -120,9 +156,25 @@ function renderProvider(children?: ReactNode) {
       boardName: 'kilter',
       layoutId: 1,
       sizeId: 10,
+      setIds: '1,20',
       children: children ?? createElement('div', null),
     }),
   );
+}
+
+function makeSerialConfig(overrides: Partial<BoardSerialConfig> = {}): BoardSerialConfig {
+  return {
+    serialNumber: 'SN-1',
+    boardName: 'kilter',
+    layoutId: 1,
+    sizeId: 10,
+    setIds: '1,20',
+    apiLevel: 3,
+    updatedAt: '2026-01-02T00:00:00.000Z',
+    boardUuid: null,
+    boardSlug: null,
+    ...overrides,
+  };
 }
 
 describe('BluetoothProvider wall-confirm integration', () => {
@@ -134,6 +186,9 @@ describe('BluetoothProvider wall-confirm integration', () => {
     queue.setSessionBoardSerial.mockClear();
     wallConfirm.emitWallConfirm.mockClear();
     analytics.track.mockClear();
+    alert.alert.mockClear();
+    pickerSheet.props = null;
+    resolvedBoards.value = new Map();
     bluetooth.options = undefined;
     bluetooth.state.isConnected = true;
     bluetooth.state.loading = false;
@@ -260,5 +315,45 @@ describe('BluetoothProvider wall-confirm integration', () => {
     expect((bluetooth.options as { holdsData?: unknown } | undefined)?.holdsData).toEqual([
       { id: 100, mirroredHoldId: 200, cx: 0, cy: 0, r: 1 },
     ]);
+  });
+
+  it('forwards picker selection immediately when the resolved board config matches', () => {
+    const handleSelect = vi.fn();
+    bluetooth.state.pickerState = {
+      devices: [{ deviceId: 'device-1', name: 'Kilter Board#SN-1@3', rssi: -40 }],
+      isScanning: false,
+      handleSelect,
+      handleCancel: vi.fn(),
+    };
+    resolvedBoards.value = new Map([['SN-1', { kind: 'recorded', config: makeSerialConfig({ setIds: '20,1' }) }]]);
+
+    renderProvider();
+    pickerSheet.props?.onSelect('device-1');
+
+    expect(handleSelect).toHaveBeenCalledWith('device-1');
+    expect(alert.alert).not.toHaveBeenCalled();
+  });
+
+  it('asks before forwarding picker selection when the resolved board config mismatches', () => {
+    const handleSelect = vi.fn();
+    bluetooth.state.pickerState = {
+      devices: [{ deviceId: 'device-2', name: 'Tension Board#SN-2@2', rssi: -50 }],
+      isScanning: false,
+      handleSelect,
+      handleCancel: vi.fn(),
+    };
+    resolvedBoards.value = new Map([
+      ['SN-2', { kind: 'recorded', config: makeSerialConfig({ serialNumber: 'SN-2', boardName: 'tension' }) }],
+    ]);
+
+    renderProvider();
+    pickerSheet.props?.onSelect('device-2');
+
+    expect(handleSelect).not.toHaveBeenCalled();
+    expect(alert.alert).toHaveBeenCalledOnce();
+
+    const buttons = alert.alert.mock.calls[0]?.[2] as Array<{ onPress?: () => void }> | undefined;
+    buttons?.[1]?.onPress?.();
+    expect(handleSelect).toHaveBeenCalledWith('device-2');
   });
 });
