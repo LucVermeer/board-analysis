@@ -42,6 +42,10 @@
         "title": "Diagnostic",
         "recording": "Aidez-nous à régler le Bluetooth",
         "recordingDescription": "Quand le mur décroche sans arrêt, activez ceci. On enregistre votre écran et la connexion Bluetooth pour voir ce qui cloche. Ce que vous tapez reste masqué, et c'est désactivé tant que vous ne l'activez pas."
+      },
+      "integrations": {
+        "title": "Applications connectées",
+        "subtitle": "Apple Health et Strava"
       }
     },
     "onboarding": {

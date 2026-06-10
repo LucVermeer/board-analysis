@@ -3543,6 +3543,54 @@ type BetaLinkPreview {
   caption: String
 }
 
+# ============================================
+# External Platform Integration Types
+# ============================================
+
+"""
+Server-side external platform integrations. Device-local integrations
+(Apple Health, Health Connect) are intentionally absent — they never hold
+server-side credentials and are managed entirely on the device.
+"""
+enum IntegrationProvider {
+  STRAVA
+}
+
+"""
+Connection state of one external platform integration for the current user.
+"""
+type IntegrationStatus {
+  provider: IntegrationProvider!
+  "Whether the user has linked an account for this provider"
+  connected: Boolean!
+  "Display name of the linked external account (e.g. Strava athlete name)"
+  externalAccountName: String
+  "Whether finished sessions upload automatically"
+  autoSyncEnabled: Boolean!
+  "Credential health: 'active' | 'expired' | 'error' | 'revoked'. Null when not connected."
+  status: String
+  "ISO 8601 timestamp of the last successful upload"
+  lastSyncAt: String
+  "Most recent sync or token error, if any"
+  lastError: String
+}
+
+"""
+Result of exporting a session to an external platform.
+"""
+type IntegrationExportResult {
+  provider: IntegrationProvider!
+  sessionId: ID!
+  "Activity ID on the external platform; null when the export failed"
+  externalActivityId: String
+  "Web URL of the activity on the external platform"
+  externalActivityUrl: String
+  "ISO 8601 timestamp of the export"
+  syncedAt: String
+  "Error message when the export failed"
+  error: String
+}
+
 """
 Root query type for all read operations.
 """
@@ -4141,6 +4189,13 @@ type Query {
   null fields rather than throwing when the post is unavailable.
   """
   betaLinkPreview(link: String!): BetaLinkPreview!
+
+  """
+  Connection state of every supported external platform integration for the
+  current user, including never-connected providers (connected: false).
+  Requires authentication.
+  """
+  integrations: [IntegrationStatus!]!
 }
 
 """
@@ -4707,6 +4762,30 @@ type Mutation {
   associated with the user.
   """
   submitAppFeedback(input: SubmitAppFeedbackInput!): Boolean!
+
+  # ============================================
+  # External Platform Integration Mutations
+  # ============================================
+
+  """
+  Unlink an external platform integration. Revokes the token on the
+  provider's side (best-effort) and deletes the stored credentials.
+  Requires authentication.
+  """
+  disconnectIntegration(provider: IntegrationProvider!): Boolean!
+
+  """
+  Toggle automatic upload of finished sessions for a connected integration.
+  Requires authentication.
+  """
+  setIntegrationAutoSync(provider: IntegrationProvider!, enabled: Boolean!): IntegrationStatus!
+
+  """
+  Export an ended session to an external platform. Idempotent: returns the
+  existing export when the session was already uploaded (e.g. by auto-sync).
+  Caller must be a participant of the session. Requires authentication.
+  """
+  syncSessionToIntegration(provider: IntegrationProvider!, sessionId: ID!): IntegrationExportResult!
 }
 
 """

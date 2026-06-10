@@ -1,10 +1,16 @@
 // @vitest-environment jsdom
-import { render } from '@testing-library/react';
+import { act, render } from '@testing-library/react';
 import { createElement, type ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const footer = vi.hoisted(() => ({
   styles: [] as unknown[],
+}));
+
+const endSessionHarness = vi.hoisted(() => ({
+  endSession: vi.fn(async (): Promise<unknown> => null),
+  runSessionEndExports: vi.fn(),
+  sheetProps: null as { onConfirm: () => void } | null,
 }));
 
 const bottomChrome = vi.hoisted(() => ({
@@ -77,7 +83,12 @@ vi.mock('../../../PressableSurface', () => ({
 vi.mock('../../../SectionHeader', () => ({ SectionHeader: () => null }));
 vi.mock('../../RecordTopChrome', () => ({ RecordTopChrome: () => null }));
 vi.mock('../../../ClimbListItemContent', () => ({ ClimbListItemContent: () => null }));
-vi.mock('../../../EndSessionSheet', () => ({ EndSessionSheet: () => null }));
+vi.mock('../../../EndSessionSheet', () => ({
+  EndSessionSheet: (props: { onConfirm: () => void }) => {
+    endSessionHarness.sheetProps = props;
+    return null;
+  },
+}));
 vi.mock('../../../Icon', () => ({ Icon: () => null }));
 vi.mock('../../../Text', () => ({
   Text: ({ children }: { children?: ReactNode }) => createElement('span', null, children),
@@ -94,7 +105,7 @@ vi.mock('../../../../providers/theme-provider', () => ({
   }),
 }));
 vi.mock('../../../../providers/queue-provider', () => ({
-  useQueueActions: () => ({ endSession: vi.fn(async () => null), setCurrentClimb: vi.fn() }),
+  useQueueActions: () => ({ endSession: endSessionHarness.endSession, setCurrentClimb: vi.fn() }),
   useQueueLiveStats: () => ({ liveStats: null, sessionUsers: [] }),
   useQueueSessionControls: () => ({
     driverParticipantId: null,
@@ -109,6 +120,10 @@ vi.mock('../../../../lib/graphql/hooks', () => ({
     data: { totalSends: 0, totalFlashes: 0, gradeDistribution: [], participants: [], hardestGrade: null, ticks: [] },
   }),
   useSessionSummary: () => ({ data: { startedAt: '2026-01-01T00:00:00.000Z' } }),
+}));
+vi.mock('../../../../lib/graphql/use-active-board', () => ({ useActiveBoard: () => ({ data: null }) }));
+vi.mock('../../../../lib/integrations', () => ({
+  runSessionEndExports: endSessionHarness.runSessionEndExports,
 }));
 vi.mock('../../../../lib/climb-to-queue-item', () => ({ climbToQueueItem: vi.fn() }));
 vi.mock('../../../../lib/playlists/board-details-for-playlist', () => ({ getBoardConfigForPlaylist: () => null }));
@@ -145,6 +160,10 @@ describe('InSessionView footer', () => {
   beforeEach(() => {
     footer.styles = [];
     bottomChrome.metrics = { fixedFooterBottom: 88, tabBarBottom: 50 };
+    endSessionHarness.sheetProps = null;
+    endSessionHarness.endSession.mockReset();
+    endSessionHarness.endSession.mockResolvedValue(null);
+    endSessionHarness.runSessionEndExports.mockReset();
   });
 
   it('pins the End bar above the bottom chrome (matching the pre-session Start bar)', () => {
@@ -153,5 +172,32 @@ describe('InSessionView footer', () => {
     // fixedFooterBottom collapses to the tab-bar clearance when no accessory is
     // present and lifts to clear it when there is one.
     expect(getStyleNumber(footer.styles, 'bottom')).toBe(88);
+  });
+
+  it('hands the ended session to the integrations exporter on confirm', async () => {
+    const summary = {
+      sessionId: 'session-1',
+      startedAt: '2026-01-01T00:00:00.000Z',
+      endedAt: '2026-01-01T01:00:00.000Z',
+      totalSends: 3,
+      totalAttempts: 5,
+    };
+    endSessionHarness.endSession.mockResolvedValueOnce(summary);
+
+    render(createElement(InSessionView));
+    expect(endSessionHarness.sheetProps).not.toBeNull();
+
+    await act(async () => {
+      endSessionHarness.sheetProps?.onConfirm();
+      // handleConfirmEnd awaits endSession before exporting; flush it.
+      await Promise.resolve();
+    });
+
+    // Mocked session detail has no ticks and no active board, so the export
+    // context is empty — the assertion pins the handoff, not the contents.
+    expect(endSessionHarness.runSessionEndExports).toHaveBeenCalledWith(summary, {
+      boardType: '',
+      lapTimestamps: [],
+    });
   });
 });

@@ -563,5 +563,29 @@ export const mutationsTypeDefs = /* GraphQL */ `
     associated with the user.
     """
     submitAppFeedback(input: SubmitAppFeedbackInput!): Boolean!
+
+    # ============================================
+    # External Platform Integration Mutations
+    # ============================================
+
+    """
+    Unlink an external platform integration. Revokes the token on the
+    provider's side (best-effort) and deletes the stored credentials.
+    Requires authentication.
+    """
+    disconnectIntegration(provider: IntegrationProvider!): Boolean!
+
+    """
+    Toggle automatic upload of finished sessions for a connected integration.
+    Requires authentication.
+    """
+    setIntegrationAutoSync(provider: IntegrationProvider!, enabled: Boolean!): IntegrationStatus!
+
+    """
+    Export an ended session to an external platform. Idempotent: returns the
+    existing export when the session was already uploaded (e.g. by auto-sync).
+    Caller must be a participant of the session. Requires authentication.
+    """
+    syncSessionToIntegration(provider: IntegrationProvider!, sessionId: ID!): IntegrationExportResult!
   }
 `;

@@ -14,6 +14,7 @@ export * from './create-session';
 export * from './climb-stats-history';
 export * from './feedback';
 export * from './beta-links';
+export * from './integrations';
 // queue-session.ts is intentionally NOT re-exported here: its CREATE_SESSION,
 // END_SESSION etc. collide with the per-feature operations above. Import it
 // directly via `@boardsesh/graphql/operations/queue-session`.

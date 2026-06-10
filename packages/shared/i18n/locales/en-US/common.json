@@ -42,6 +42,10 @@
         "title": "Diagnostics",
         "recording": "Help fix Bluetooth",
         "recordingDescription": "When the board keeps dropping, flip this on. We'll record your screen and the Bluetooth connection so we can see what's going wrong. Your typing stays hidden, and it's off until you turn it on."
+      },
+      "integrations": {
+        "title": "Connected apps",
+        "subtitle": "Apple Health, Strava"
       }
     },
     "onboarding": {

@@ -379,5 +379,34 @@
     "errorPermissionDenied": "Allow Bluetooth permissions to connect a board.",
     "errorLedMissing": "Could not send to board — LED data missing for this board configuration.",
     "errorIncompatible": "This climb is for a different board configuration."
+  },
+  "integrations": {
+    "title": "Connected apps",
+    "appleHealth": {
+      "title": "Apple Health",
+      "autoSave": "Save sessions automatically",
+      "autoSaveDescription": "Finished sessions are added to Apple Health as climbing workouts with estimated calories.",
+      "permissionDenied": "Health access is off. Allow Boardsesh to write workouts in Settings.",
+      "openSettings": "Open Settings"
+    },
+    "strava": {
+      "title": "Strava",
+      "connect": "Connect with Strava",
+      "connectedAs": "Connected as {{name}}",
+      "connected": "Connected",
+      "autoSync": "Upload sessions automatically",
+      "autoSyncDescription": "Finished sessions appear on your Strava feed as rock climbing activities.",
+      "disconnect": "Disconnect",
+      "disconnectConfirmTitle": "Disconnect Strava?",
+      "disconnectConfirmBody": "New sessions will stop uploading to Strava. Activities already uploaded stay on Strava.",
+      "reconnect": "Reconnect",
+      "expired": "Connection expired. Reconnect to keep uploading."
+    },
+    "toast": {
+      "connected": "Strava connected",
+      "connectFailed": "Couldn't connect to Strava",
+      "disconnected": "Strava disconnected",
+      "syncFailed": "Upload failed. Try again."
+    }
   }
 }

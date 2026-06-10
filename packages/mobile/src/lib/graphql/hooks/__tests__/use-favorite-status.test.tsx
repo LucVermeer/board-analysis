@@ -41,6 +41,12 @@ vi.mock('../use-social', () => ({
   useAddComment: vi.fn(),
 }));
 vi.mock('../use-session-detail', () => ({ useSessionDetail: vi.fn(), useSessionPreview: vi.fn() }));
+vi.mock('../use-integrations', () => ({
+  useIntegrationStatuses: vi.fn(),
+  useDisconnectIntegration: vi.fn(),
+  useSetIntegrationAutoSync: vi.fn(),
+  useSyncSessionToIntegration: vi.fn(),
+}));
 
 import { useFavoriteStatus, useToggleFavorite } from '../index';
 

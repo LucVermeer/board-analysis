@@ -88,6 +88,13 @@ export const SHARED_EVENTS = {
   OnboardingTourCompleted: 'Onboarding Tour Completed',
   OnboardingTourSkipped: 'Onboarding Tour Skipped',
   BetaVideoAdded: 'Beta Video Added',
+  // External platform integrations (Apple Health, Strava). Props:
+  // { integration: 'apple_health' | 'strava', trigger?: 'auto' | 'manual',
+  //   enabled?: boolean }
+  IntegrationConnected: 'Integration Connected',
+  IntegrationDisconnected: 'Integration Disconnected',
+  IntegrationAutoSyncToggled: 'Integration Auto Sync Toggled',
+  SessionExportedToIntegration: 'Session Exported to Integration',
 } as const;
 
 export type SharedEventKey = keyof typeof SHARED_EVENTS;

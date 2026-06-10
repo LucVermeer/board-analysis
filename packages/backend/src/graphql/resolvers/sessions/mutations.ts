@@ -32,6 +32,7 @@ import { esp32Controllers, userBoards } from '@boardsesh/db/schema/app';
 import { sessionBoards } from '../../../db/schema';
 import { eq, inArray } from 'drizzle-orm';
 import { generateSessionSummary } from './session-summary';
+import { autoSyncSessionToIntegrations } from '../../../integrations/export-service';
 import { endLiveActivity } from '../../../services/apns';
 import { takeSessionDriverControl } from '../../../services/session-driver-control';
 import { buildSessionPayload } from './helpers';
@@ -751,6 +752,15 @@ export const sessionMutations = {
 
     // Generate and return summary
     const summary = await generateSessionSummary(sessionId);
+
+    // Fire-and-forget: upload the finished session to every participant's
+    // connected external integration (Strava) that has auto-sync on. Never
+    // blocks or fails the endSession response — failures are logged inside the
+    // service and here as a backstop.
+    autoSyncSessionToIntegrations(sessionId, summary, sessionData.boardPath).catch((error: unknown) => {
+      logger.error(`[Integrations] auto-sync dispatch failed for session ${sessionId}:`, error);
+    });
+
     return summary;
   },
 

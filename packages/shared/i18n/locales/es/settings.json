@@ -379,5 +379,34 @@
     "errorPermissionDenied": "Permite los permisos de Bluetooth para conectar un tablero.",
     "errorLedMissing": "No se pudo enviar al tablero — faltan datos LED para esta configuración.",
     "errorIncompatible": "Este boulder es para una configuración de tablero diferente."
+  },
+  "integrations": {
+    "title": "Aplicaciones conectadas",
+    "appleHealth": {
+      "title": "Apple Health",
+      "autoSave": "Guardar sesiones automáticamente",
+      "autoSaveDescription": "Las sesiones terminadas se añaden a Apple Health como entrenamientos de escalada con calorías estimadas.",
+      "permissionDenied": "El acceso a Salud está desactivado. Permite que Boardsesh escriba entrenamientos en Ajustes.",
+      "openSettings": "Abrir Ajustes"
+    },
+    "strava": {
+      "title": "Strava",
+      "connect": "Conectar con Strava",
+      "connectedAs": "Conectado como {{name}}",
+      "connected": "Conectado",
+      "autoSync": "Subir sesiones automáticamente",
+      "autoSyncDescription": "Las sesiones terminadas aparecen en tu feed de Strava como actividades de escalada.",
+      "disconnect": "Desconectar",
+      "disconnectConfirmTitle": "¿Desconectar Strava?",
+      "disconnectConfirmBody": "Las nuevas sesiones dejarán de subirse a Strava. Las actividades ya subidas se quedan en Strava.",
+      "reconnect": "Reconectar",
+      "expired": "La conexión caducó. Reconecta para seguir subiendo."
+    },
+    "toast": {
+      "connected": "Strava conectado",
+      "connectFailed": "No se pudo conectar con Strava",
+      "disconnected": "Strava desconectado",
+      "syncFailed": "Error al subir. Inténtalo de nuevo."
+    }
   }
 }

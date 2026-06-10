@@ -1705,6 +1705,46 @@ export type GymMembersInput = {
   offset?: InputMaybe<Scalars['Int']['input']>;
 };
 
+/** Result of exporting a session to an external platform. */
+export type IntegrationExportResult = {
+  __typename?: 'IntegrationExportResult';
+  /** Error message when the export failed */
+  error?: Maybe<Scalars['String']['output']>;
+  /** Activity ID on the external platform; null when the export failed */
+  externalActivityId?: Maybe<Scalars['String']['output']>;
+  /** Web URL of the activity on the external platform */
+  externalActivityUrl?: Maybe<Scalars['String']['output']>;
+  provider: IntegrationProvider;
+  sessionId: Scalars['ID']['output'];
+  /** ISO 8601 timestamp of the export */
+  syncedAt?: Maybe<Scalars['String']['output']>;
+};
+
+/**
+ * Server-side external platform integrations. Device-local integrations
+ * (Apple Health, Health Connect) are intentionally absent — they never hold
+ * server-side credentials and are managed entirely on the device.
+ */
+export type IntegrationProvider = 'STRAVA';
+
+/** Connection state of one external platform integration for the current user. */
+export type IntegrationStatus = {
+  __typename?: 'IntegrationStatus';
+  /** Whether finished sessions upload automatically */
+  autoSyncEnabled: Scalars['Boolean']['output'];
+  /** Whether the user has linked an account for this provider */
+  connected: Scalars['Boolean']['output'];
+  /** Display name of the linked external account (e.g. Strava athlete name) */
+  externalAccountName?: Maybe<Scalars['String']['output']>;
+  /** Most recent sync or token error, if any */
+  lastError?: Maybe<Scalars['String']['output']>;
+  /** ISO 8601 timestamp of the last successful upload */
+  lastSyncAt?: Maybe<Scalars['String']['output']>;
+  provider: IntegrationProvider;
+  /** Credential health: 'active' | 'expired' | 'error' | 'revoked'. Null when not connected. */
+  status?: Maybe<Scalars['String']['output']>;
+};
+
 /** Statistics for a specific board layout. */
 export type LayoutStats = {
   __typename?: 'LayoutStats';
@@ -1866,6 +1906,12 @@ export type Mutation = {
   deleteProposal: Scalars['Boolean']['output'];
   /** Delete a tick (climb attempt record). Only the owner can delete. */
   deleteTick: Scalars['Boolean']['output'];
+  /**
+   * Unlink an external platform integration. Revokes the token on the
+   * provider's side (best-effort) and deletes the stored credentials.
+   * Requires authentication.
+   */
+  disconnectIntegration: Scalars['Boolean']['output'];
   /** End a session (active participant only). */
   endSession?: Maybe<SessionSummary>;
   /** Follow a board. */
@@ -1971,6 +2017,11 @@ export type Mutation = {
    */
   setCurrentClimb?: Maybe<ClimbQueueItem>;
   /**
+   * Toggle automatic upload of finished sessions for a connected integration.
+   * Requires authentication.
+   */
+  setIntegrationAutoSync: IntegrationStatus;
+  /**
    * Replace the entire queue state.
    * Used for bulk operations or syncing from external sources.
    */
@@ -2014,6 +2065,12 @@ export type Mutation = {
   submitAppFeedback: Scalars['Boolean']['output'];
   /** Subscribe to new climbs for a board type and layout. */
   subscribeNewClimbs: Scalars['Boolean']['output'];
+  /**
+   * Export an ended session to an external platform. Idempotent: returns the
+   * existing export when the session was already uploaded (e.g. by auto-sync).
+   * Caller must be a participant of the session. Requires authentication.
+   */
+  syncSessionToIntegration: IntegrationExportResult;
   /**
    * Claim wall-control authority in the current session and optionally broadcast a climb.
    * Any session participant may call — yank-on-press by design. If `climb` is provided, also
@@ -2196,6 +2253,11 @@ export type MutationDeleteProposalArgs = {
 /** Root mutation type for all write operations. */
 export type MutationDeleteTickArgs = {
   uuid: Scalars['ID']['input'];
+};
+
+/** Root mutation type for all write operations. */
+export type MutationDisconnectIntegrationArgs = {
+  provider: IntegrationProvider;
 };
 
 /** Root mutation type for all write operations. */
@@ -2394,6 +2456,12 @@ export type MutationSetCurrentClimbArgs = {
 };
 
 /** Root mutation type for all write operations. */
+export type MutationSetIntegrationAutoSyncArgs = {
+  enabled: Scalars['Boolean']['input'];
+  provider: IntegrationProvider;
+};
+
+/** Root mutation type for all write operations. */
 export type MutationSetQueueArgs = {
   currentClimbQueueItem?: InputMaybe<ClimbQueueItemInput>;
   queue: Array<ClimbQueueItemInput>;
@@ -2428,6 +2496,12 @@ export type MutationSubmitAppFeedbackArgs = {
 /** Root mutation type for all write operations. */
 export type MutationSubscribeNewClimbsArgs = {
   input: NewClimbSubscriptionInput;
+};
+
+/** Root mutation type for all write operations. */
+export type MutationSyncSessionToIntegrationArgs = {
+  provider: IntegrationProvider;
+  sessionId: Scalars['ID']['input'];
 };
 
 /** Root mutation type for all write operations. */
@@ -3093,6 +3167,12 @@ export type Query = {
   gymBySlug?: Maybe<Gym>;
   /** Get members of a gym. */
   gymMembers: GymMemberConnection;
+  /**
+   * Connection state of every supported external platform integration for the
+   * current user, including never-connected providers (connected: false).
+   * Requires authentication.
+   */
+  integrations: Array<IntegrationStatus>;
   /**
    * Check if the current user follows a specific user.
    * Requires authentication.

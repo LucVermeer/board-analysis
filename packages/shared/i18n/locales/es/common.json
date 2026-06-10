@@ -240,6 +240,10 @@
         "title": "Diagnóstico",
         "recording": "Ayúdanos a arreglar el Bluetooth",
         "recordingDescription": "Cuando la tabla se desconecte una y otra vez, activa esto. Grabaremos tu pantalla y la conexión Bluetooth para ver qué falla. Lo que escribes queda oculto, y está apagado hasta que lo enciendas."
+      },
+      "integrations": {
+        "title": "Aplicaciones conectadas",
+        "subtitle": "Apple Health y Strava"
       }
     },
     "onboarding": {

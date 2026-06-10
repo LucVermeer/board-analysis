@@ -1,0 +1,109 @@
+// Signed OAuth `state` parameter for the integration handshake. Carries the
+// initiating userId + provider through the redirect to the provider and back,
+// so the callback can attribute tokens without a server-side session.
+//
+// Format mirrors verifyTransferToken in handlers/native-auth.ts: base64url JSON
+// payload + '.' + base64url HMAC-SHA256 keyed by NEXTAUTH_SECRET, constant-time
+// compare, iat/exp checks, 10-minute lifetime, random nonce to defeat
+// guessability.
+
+import crypto from 'crypto';
+import type { ProviderName } from './registry';
+import { isSupportedProvider } from './registry';
+import { logger } from '../utils/logger';
+
+/** State lifetime: a user has 10 minutes to complete the provider handshake. */
+const STATE_LIFETIME_SECONDS = 10 * 60;
+
+/** Clock skew tolerance for iat/exp checks (seconds). */
+const CLOCK_SKEW_TOLERANCE_SECONDS = 5;
+
+type StatePayload = {
+  userId: string;
+  provider: ProviderName;
+  nonce: string;
+  iat: number;
+  exp: number;
+};
+
+export function signIntegrationState(input: { userId: string; provider: ProviderName }): string {
+  const secret = process.env.NEXTAUTH_SECRET;
+  if (!secret) {
+    throw new Error('NEXTAUTH_SECRET is not configured');
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  const payload: StatePayload = {
+    userId: input.userId,
+    provider: input.provider,
+    nonce: crypto.randomBytes(16).toString('base64url'),
+    iat: now,
+    exp: now + STATE_LIFETIME_SECONDS,
+  };
+
+  const encodedPayload = Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');
+  const signature = crypto.createHmac('sha256', secret).update(encodedPayload).digest('base64url');
+  return `${encodedPayload}.${signature}`;
+}
+
+export function verifyIntegrationState(state: string): { userId: string; provider: ProviderName } | null {
+  const secret = process.env.NEXTAUTH_SECRET;
+  if (!secret) {
+    logger.warn('[Integrations] NEXTAUTH_SECRET not configured');
+    return null;
+  }
+
+  const parts = state.split('.');
+  if (parts.length !== 2 || !parts[0] || !parts[1]) {
+    return null;
+  }
+  const [encodedPayload, signature] = parts;
+
+  const expectedSignature = crypto.createHmac('sha256', secret).update(encodedPayload).digest('base64url');
+
+  const sigBuffer = Buffer.from(signature);
+  const expectedSigBuffer = Buffer.from(expectedSignature);
+
+  // Pad both buffers to the same length so the comparison is always
+  // constant-time — no length oracle, no JIT short-circuit.
+  const maxLen = Math.max(sigBuffer.length, expectedSigBuffer.length);
+  const paddedSig = Buffer.alloc(maxLen);
+  const paddedExpected = Buffer.alloc(maxLen);
+  sigBuffer.copy(paddedSig);
+  expectedSigBuffer.copy(paddedExpected);
+
+  if (!crypto.timingSafeEqual(paddedSig, paddedExpected)) {
+    return null;
+  }
+
+  let payload: StatePayload;
+  try {
+    payload = JSON.parse(Buffer.from(encodedPayload, 'base64url').toString('utf8')) as StatePayload;
+  } catch {
+    return null;
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  if (
+    !payload.userId ||
+    !payload.provider ||
+    !payload.exp ||
+    !payload.iat ||
+    payload.exp < now - CLOCK_SKEW_TOLERANCE_SECONDS ||
+    payload.iat > now + CLOCK_SKEW_TOLERANCE_SECONDS
+  ) {
+    return null;
+  }
+
+  // Reject tokens whose embedded lifetime exceeds the contract — a tampered or
+  // forged payload could otherwise claim a far-future exp.
+  if (payload.exp - payload.iat > STATE_LIFETIME_SECONDS + CLOCK_SKEW_TOLERANCE_SECONDS) {
+    return null;
+  }
+
+  if (!isSupportedProvider(payload.provider)) {
+    return null;
+  }
+
+  return { userId: payload.userId, provider: payload.provider };
+}

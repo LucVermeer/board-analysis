@@ -597,5 +597,12 @@ export const queriesTypeDefs = /* GraphQL */ `
     null fields rather than throwing when the post is unavailable.
     """
     betaLinkPreview(link: String!): BetaLinkPreview!
+
+    """
+    Connection state of every supported external platform integration for the
+    current user, including never-connected providers (connected: false).
+    Requires authentication.
+    """
+    integrations: [IntegrationStatus!]!
   }
 `;
