@@ -10,13 +10,23 @@ export type NativeAuthFailureReason =
   | 'http_error'
   | 'exception';
 
+// Which backend exchange produced the failure. A 401 means "invalid
+// credentials" on /auth/native/credentials but "invalid or expired transfer
+// token" on /auth/native/exchange — classify by the call site instead of
+// string-matching server copy (which silently broke when the backend's 401
+// body said 'Invalid email or password').
+export type NativeAuthFailureSource = 'credentials' | 'exchange';
+
 type NativeAuthFailure = { success: false; status: number | null; error: string };
 
-export function classifyNativeAuthFailureReason(failure: NativeAuthFailure): NativeAuthFailureReason {
+export function classifyNativeAuthFailureReason(
+  failure: NativeAuthFailure,
+  source: NativeAuthFailureSource,
+): NativeAuthFailureReason {
   if (failure.error === 'network') return 'network';
   if (failure.status === 400) return 'invalid_request';
   if (failure.status === 401) {
-    return failure.error === 'Invalid credentials' ? 'invalid_credentials' : 'invalid_transfer_token';
+    return source === 'credentials' ? 'invalid_credentials' : 'invalid_transfer_token';
   }
   if (failure.status === 409) return 'transfer_token_replay';
   if (failure.status === 429) return 'rate_limited';

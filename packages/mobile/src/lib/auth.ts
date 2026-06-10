@@ -1,20 +1,57 @@
+import { Linking, Platform } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
 import { createTimeoutSignal } from './abort-timeout';
+import { raceBrowserSignIn } from './auth-session-race';
 import { storeTokens, clearTokens, getRefreshToken } from './auth-store';
 import { BACKEND_URL, WEB_BASE_URL } from './env';
 
 export type AuthProvider = 'google' | 'apple';
 
-// Returns the WebBrowser result because it's the only reliable way to receive
-// the callback. On iOS the in-app auth session consumes the redirect to the
-// callback scheme and returns it as `{ type: 'success', url }` — the URL is
-// never delivered to the app as a deep link, so the caller must parse
-// `result.url` (see parseAuthCallbackParams) and route the transfer token to
-// /auth/callback itself. Cancel/dismiss is likewise only observable here.
+const AUTH_CALLBACK_URL = 'com.boardsesh.app://auth/callback';
+
+// The transfer-token exchange doesn't echo the OAuth provider back, so the
+// callback screen reads the in-flight attempt's provider from here to attribute
+// its Login Succeeded/Failed events. Overwritten by each new attempt.
+let pendingOAuthProvider: AuthProvider | null = null;
+
+export function getPendingOAuthProvider(): AuthProvider | null {
+  return pendingOAuthProvider;
+}
+
+// The two platforms deliver the OAuth callback differently:
+// - Android: openAuthSessionAsync's custom tab. The callback arrives both as
+//   the resolved result URL and as an expo-router deep link; the callback
+//   screen dedupes the exchange.
+// - iOS: a plain SFSafariViewController raced against the OS deep link the
+//   server's callback page fires (see auth-session-race.ts for why
+//   openAuthSessionAsync is deliberately avoided here). Expo Router also
+//   routes the deep link to /auth/callback; the same dedupe applies.
 export async function startSignIn(provider: AuthProvider): Promise<WebBrowser.WebBrowserAuthSessionResult> {
+  pendingOAuthProvider = provider;
   const callbackUrl = encodeURIComponent('/api/auth/native/callback?next=/');
   const url = `${WEB_BASE_URL}/auth/native-start?provider=${provider}&callbackUrl=${callbackUrl}`;
-  return WebBrowser.openAuthSessionAsync(url, 'com.boardsesh.app://auth/callback');
+
+  if (Platform.OS !== 'ios') {
+    return WebBrowser.openAuthSessionAsync(url, AUTH_CALLBACK_URL);
+  }
+
+  const result = await raceBrowserSignIn(
+    {
+      addUrlListener: (listener) => Linking.addEventListener('url', listener),
+      openBrowser: (browserUrl) => WebBrowser.openBrowserAsync(browserUrl),
+      dismissBrowser: () => WebBrowser.dismissBrowser(),
+    },
+    url,
+    AUTH_CALLBACK_URL,
+  );
+  if (result.type === 'error') {
+    // Surfaces in the login screen's catch, which reports the message as
+    // failure_detail — the old flow filed browser failures under 'cancel'.
+    throw new Error(result.message);
+  }
+  return result.type === 'success'
+    ? { type: 'success', url: result.url }
+    : { type: WebBrowser.WebBrowserResultType.CANCEL };
 }
 
 type NativeAuthFailure = { success: false; status: number | null; error: string };

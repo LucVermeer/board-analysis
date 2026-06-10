@@ -34,7 +34,10 @@ vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => k
 const auth = vi.hoisted(() => ({
   exchangeTransferToken: vi.fn(async () => ({ success: false, error: 'Invalid or expired transfer token' })),
 }));
-vi.mock('../../../src/lib/auth', () => ({ exchangeTransferToken: auth.exchangeTransferToken }));
+vi.mock('../../../src/lib/auth', () => ({
+  exchangeTransferToken: auth.exchangeTransferToken,
+  getPendingOAuthProvider: () => 'apple',
+}));
 vi.mock('../../../src/lib/native-auth-analytics', () => ({ classifyNativeAuthFailureReason: () => 'invalid_token' }));
 vi.mock('../../../src/providers/auth-provider', () => ({
   useAuth: () => ({ refreshAuthState: vi.fn(async () => {}) }),
@@ -76,8 +79,8 @@ describe('AuthCallback localization', () => {
     expect(container.textContent).not.toContain('Invalid or expired transfer token');
   });
 
-  // Android mounts this screen twice for one login: expo-router routes the
-  // deep link AND login.tsx routes here with openAuthSessionAsync's URL. The
+  // This screen mounts twice for one login: expo-router routes the callback
+  // deep link AND login.tsx routes here with the URL startSignIn resolved. The
   // module-level exchangedTokens set must keep the duplicate mount from
   // replaying the one-time token — the duplicate shows the spinner, never a
   // "token already used" failure.
