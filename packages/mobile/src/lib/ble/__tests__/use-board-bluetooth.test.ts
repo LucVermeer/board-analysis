@@ -790,6 +790,58 @@ describe('useBoardBluetooth config-switch teardown', () => {
     });
     expect(result.current.isConnected).toBe(true);
   });
+
+  it('defers config-switch teardown until after an in-flight connect completes', async () => {
+    // Race: config changes WHILE connect is awaiting requestAndConnect.
+    // adapterRef and connectedConfigKeyRef are both null at that point, so the
+    // config-switch effect must return early. Once the connect resolves and
+    // isConnected flips to true the effect re-runs, finds the mismatch, and
+    // calls teardown.
+    let resolveConnect!: (connection: { deviceId: string; deviceName?: string }) => void;
+    const fakeAdapter = makeFakeAdapter({
+      requestAndConnect: vi.fn(
+        () =>
+          new Promise<{ deviceId: string; deviceName?: string }>((resolve) => {
+            resolveConnect = resolve;
+          }),
+      ),
+    });
+    vi.mocked(createBluetoothAdapter).mockReturnValue(
+      fakeAdapter as unknown as ReturnType<typeof createBluetoothAdapter>,
+    );
+
+    const { result, rerender } = renderHook((props) => useBoardBluetooth(props), {
+      initialProps: { boardName: 'kilter', layoutId: 1, sizeId: 1 },
+    });
+
+    // Start connect but do not let it complete — requestAndConnect is pending.
+    let connectPromise!: Promise<boolean>;
+    await act(async () => {
+      connectPromise = result.current.connect();
+      // Advance past the synchronous pre-connect awaits (permissions,
+      // isAvailable) so the request is truly in-flight.
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // Config switches while connect is blocked on requestAndConnect.
+    // adapterRef.current is still null so the config-switch effect exits early.
+    await act(async () => {
+      rerender({ boardName: 'kilter', layoutId: 2, sizeId: 1 });
+    });
+    expect(fakeAdapter.disconnect).not.toHaveBeenCalled();
+    expect(result.current.isConnected).toBe(false);
+
+    // Connect resolves against the OLD config (kilter/1/1). isConnected briefly
+    // flips to true, which re-triggers the config-switch effect; it sees the
+    // mismatch and calls teardown.
+    await act(async () => {
+      resolveConnect({ deviceId: 'device-1', deviceName: 'Kilter Board#123@3' });
+      await connectPromise;
+    });
+    expect(fakeAdapter.disconnect).toHaveBeenCalled();
+    expect(result.current.isConnected).toBe(false);
+  });
 });
 
 describe('convertToMirroredFramesString', () => {
