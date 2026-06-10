@@ -24,7 +24,7 @@ import {
   type PlaylistFormValues,
 } from '../../../src/components/playlist';
 import { DiscoverTopChrome } from '../../../src/components/chrome';
-import { SMART_PLAYLISTS } from '../../../src/lib/smart-playlists';
+import { DEFAULT_PINNED_SMART_PLAYLIST_TYPES, SMART_PLAYLISTS } from '../../../src/lib/smart-playlists';
 import { useAuth } from '../../../src/providers/auth-provider';
 import { useTheme } from '../../../src/providers/theme-provider';
 import { useToast } from '../../../src/providers/toast-provider';
@@ -42,8 +42,8 @@ export default function DiscoverLibrary() {
   const insets = useSafeAreaInsets();
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   const { data: token = null, isLoading: tokenLoading } = useAuthToken();
-  const { data: profile } = useProfile();
-  const { data: activeBoard } = useActiveBoard();
+  const { data: profile, isLoading: profileLoading } = useProfile();
+  const { data: activeBoard, isLoading: activeBoardLoading } = useActiveBoard();
   const queryClient = useQueryClient();
 
   const userId = profile?.id ?? null;
@@ -55,6 +55,8 @@ export default function DiscoverLibrary() {
   // not-yet-onboarded user still sees community playlists.
   const filterBoardType = activeBoard?.boardType;
   const filterLayoutId = activeBoard?.layoutId;
+  const filterSizeId = activeBoard?.sizeId;
+  const filterAngle = activeBoard?.angle;
 
   // Measured top-chrome height so the scroll content clears the floating islands
   // (seeded to the safe-area top + a row, like the Climbs list).
@@ -71,20 +73,21 @@ export default function DiscoverLibrary() {
     listRef.current?.scrollTo({ y: 0, animated: true });
   }, [listRef]);
 
-  // Smart-playlist counts gate which "Your Picks" cards render.
+  // Smart-playlist counts supply the badge counts for the built-in "Your Picks"
+  // defaults. The default cards still render at zero.
   const { data: smartCounts, isLoading: smartCountsLoading } = useSmartPlaylistCounts({
     token: effectiveToken,
     tokenLoading,
     isAuthenticated,
   });
 
-  // Owned playlists (paginated). Feeds "Jump Back In" + the pinned fallback pool.
+  // Owned playlists (paginated). Feeds the "See all" affordance and receives
+  // refreshes after creates/pin changes; the visible Your Picks section only
+  // renders defaults + real pins.
   const {
     playlists: userPlaylists,
     isLoading: userLoading,
-    isLoadingMore: userLoadingMore,
     hasError: userError,
-    loadMore: loadMoreUser,
     refetch: refetchUser,
   } = useUserPlaylists({
     token: effectiveToken,
@@ -97,51 +100,83 @@ export default function DiscoverLibrary() {
     token: effectiveToken,
     boardType: filterBoardType,
     layoutId: filterLayoutId,
-    candidatePlaylists: userPlaylists,
+    candidatePlaylists: [],
+  });
+
+  // Generated recommendation playlists (popular + recent streams, merged).
+  const {
+    popular: forYouPopular,
+    recent: forYouRecent,
+    isLoading: forYouLoading,
+    isLoadingMore: forYouLoadingMore,
+    hasError: forYouError,
+    loadMore: loadMoreForYou,
+    refetch: refetchForYou,
+  } = useDiscoverPlaylists({
+    boardType: filterBoardType,
+    layoutId: filterLayoutId,
+    sizeId: filterSizeId,
+    angle: filterAngle,
+    pageSize: 10,
+    generatedRecommendation: true,
+    enabled: !activeBoardLoading,
   });
 
   // Community playlists (popular + recent streams, merged).
   const {
-    popular,
-    recent,
-    isLoading: discoverLoading,
-    isLoadingMore: discoverLoadingMore,
-    hasError: discoverError,
-    loadMore: loadMoreDiscover,
-    refetch: refetchDiscover,
+    popular: communityPopular,
+    recent: communityRecent,
+    isLoading: communityLoading,
+    isLoadingMore: communityLoadingMore,
+    hasError: communityError,
+    loadMore: loadMoreCommunity,
+    refetch: refetchCommunity,
   } = useDiscoverPlaylists({
     boardType: filterBoardType,
     layoutId: filterLayoutId,
     pageSize: 10,
+    generatedRecommendation: false,
+    enabled: !activeBoardLoading,
   });
 
-  // Pinned playlists lead "Jump Back In"; owned playlists follow with pinned
-  // ones removed so they don't appear twice.
-  const jumpBackIn = useMemo(() => {
-    const pinnedUuids = new Set(pinnedPlaylists.map((playlist) => playlist.uuid));
-    return [...pinnedPlaylists, ...userPlaylists.filter((playlist) => !pinnedUuids.has(playlist.uuid))];
-  }, [pinnedPlaylists, userPlaylists]);
-
-  // Merge popular + recent, de-duped and excluding the current user's own.
-  const discoverItems = useMemo(() => {
+  // Merge generated popular + recent, de-duped.
+  const forYouItems = useMemo(() => {
     const merged: DiscoverablePlaylist[] = [];
     const seen = new Set<string>();
-    for (const playlist of [...popular, ...recent]) {
+    for (const playlist of [...forYouPopular, ...forYouRecent]) {
+      if (seen.has(playlist.uuid)) continue;
+      seen.add(playlist.uuid);
+      merged.push(playlist);
+    }
+    return merged;
+  }, [forYouPopular, forYouRecent]);
+
+  // Merge community popular + recent, de-duped and excluding the current user's own.
+  const communityItems = useMemo(() => {
+    const merged: DiscoverablePlaylist[] = [];
+    const seen = new Set<string>();
+    for (const playlist of [...communityPopular, ...communityRecent]) {
       if (seen.has(playlist.uuid)) continue;
       if (userId && playlist.creatorId === userId) continue;
       seen.add(playlist.uuid);
       merged.push(playlist);
     }
     return merged;
-  }, [popular, recent, userId]);
+  }, [communityPopular, communityRecent, userId]);
 
-  const smartCardsToShow = useMemo(() => {
-    if (!userId || !smartCounts) return [];
-    return SMART_PLAYLISTS.map((preset) => {
-      const found = smartCounts.find((entry) => entry.type === preset.type);
-      return { preset, count: found?.count ?? 0 };
-    }).filter((entry) => entry.count > 0);
-  }, [userId, smartCounts]);
+  const smartCountsByType = useMemo(
+    () => new Map((smartCounts ?? []).map((smartCount) => [smartCount.type, smartCount.count])),
+    [smartCounts],
+  );
+
+  const defaultSmartCards = useMemo(() => {
+    if (!userId) return [];
+    return DEFAULT_PINNED_SMART_PLAYLIST_TYPES.map((smartPlaylistType) => {
+      const preset = SMART_PLAYLISTS.find((smartPlaylist) => smartPlaylist.type === smartPlaylistType);
+      if (!preset) return null;
+      return { preset, count: smartCountsByType.get(smartPlaylistType) ?? 0 };
+    }).filter((entry): entry is { preset: (typeof SMART_PLAYLISTS)[number]; count: number } => entry !== null);
+  }, [userId, smartCountsByType]);
 
   const goToPlaylist = useCallback((uuid: string) => {
     router.push(`/(tabs)/discover/${uuid}`);
@@ -208,7 +243,7 @@ export default function DiscoverLibrary() {
     [createBoard, createPlaylist, queryClient, showToast, t, refetchUser],
   );
 
-  // Pin / unpin straight from a "Jump Back In" card. The shared-hook arrays
+  // Pin / unpin straight from a "Your Picks" card. The shared-hook arrays
   // aren't ours to mutate optimistically, so refetch both lists once the
   // mutation lands and let the pinned ordering + icon re-derive.
   const handleToggleCardPin = useCallback(
@@ -250,12 +285,18 @@ export default function DiscoverLibrary() {
   // — show a retry rather than the "no playlists yet" empty state, which would
   // mislead a user who actually has playlists into thinking they have none.
   const showLoadError =
-    (userError || discoverError) && jumpBackIn.length === 0 && discoverItems.length === 0 && !smartCountsLoading;
+    (userError || forYouError || communityError) &&
+    userPlaylists.length === 0 &&
+    pinnedPlaylists.length === 0 &&
+    forYouItems.length === 0 &&
+    communityItems.length === 0 &&
+    !smartCountsLoading;
 
   const handleRetryLoad = useCallback(() => {
     if (userError) refetchUser();
-    if (discoverError) refetchDiscover();
-  }, [userError, discoverError, refetchUser, refetchDiscover]);
+    if (forYouError) refetchForYou();
+    if (communityError) refetchCommunity();
+  }, [userError, forYouError, communityError, refetchUser, refetchForYou, refetchCommunity]);
 
   return (
     <View style={styles.flex}>
@@ -296,12 +337,16 @@ export default function DiscoverLibrary() {
           </Pressable>
         ) : null}
 
-        {/* Your Picks — smart-playlist grid (non-empty presets only). */}
-        {smartCardsToShow.length > 0 ? (
+        {/* Your Picks — built-in smart defaults + real pinned playlists only. */}
+        {isAuthenticated && (defaultSmartCards.length > 0 || pinnedPlaylists.length > 0) ? (
           <View style={styles.section}>
-            <SectionHeader title={t('library.sections.smart')} />
+            <SectionHeader
+              title={t('library.sections.smart')}
+              actionLabel={userPlaylists.length > 0 ? t('library.allPlaylists.seeAll') : undefined}
+              onActionPress={userPlaylists.length > 0 ? () => router.push('/(tabs)/discover/all') : undefined}
+            />
             <View style={styles.grid}>
-              {smartCardsToShow.map(({ preset, count }, index) => (
+              {defaultSmartCards.map(({ preset, count }, index) => (
                 <View key={preset.slug} style={styles.gridItem}>
                   <PlaylistCard
                     name={t(preset.titleI18nKey)}
@@ -314,21 +359,34 @@ export default function DiscoverLibrary() {
                   />
                 </View>
               ))}
+              {pinnedPlaylists.map((playlist, index) => (
+                <View key={playlist.uuid} style={styles.gridItem}>
+                  <PlaylistCard
+                    name={playlist.name}
+                    climbCount={playlist.climbCount}
+                    color={playlist.color}
+                    icon={playlist.icon}
+                    variant="grid"
+                    index={defaultSmartCards.length + index}
+                    onPress={() => goToPlaylist(playlist.uuid)}
+                    isPinned={playlist.isPinnedByMe}
+                    onTogglePin={() => handleToggleCardPin(playlist)}
+                  />
+                </View>
+              ))}
             </View>
           </View>
         ) : null}
 
-        {/* Jump Back In — pinned + owned playlists. */}
-        {isAuthenticated && (userLoading || jumpBackIn.length > 0) ? (
+        {/* For You — generated recommendation playlists. */}
+        {forYouLoading || forYouItems.length > 0 ? (
           <PlaylistScrollSection
-            title={t('library.sections.jumpBackIn')}
-            loading={userLoading && jumpBackIn.length === 0}
-            isLoadingMore={userLoadingMore}
-            onEndReached={loadMoreUser}
-            actionLabel={jumpBackIn.length > 0 ? t('library.allPlaylists.seeAll') : undefined}
-            onActionPress={jumpBackIn.length > 0 ? () => router.push('/(tabs)/discover/all') : undefined}
+            title={t('library.sections.forYou')}
+            loading={forYouLoading && forYouItems.length === 0}
+            isLoadingMore={forYouLoadingMore}
+            onEndReached={loadMoreForYou}
           >
-            {jumpBackIn.map((playlist, index) => (
+            {forYouItems.map((playlist, index) => (
               <PlaylistCard
                 key={playlist.uuid}
                 name={playlist.name}
@@ -338,22 +396,20 @@ export default function DiscoverLibrary() {
                 variant="scroll"
                 index={index}
                 onPress={() => goToPlaylist(playlist.uuid)}
-                isPinned={playlist.isPinnedByMe}
-                onTogglePin={() => handleToggleCardPin(playlist)}
               />
             ))}
           </PlaylistScrollSection>
         ) : null}
 
-        {/* Discover — community playlists. */}
-        {discoverLoading || discoverItems.length > 0 ? (
+        {/* Community Playlists — user-made public playlists. */}
+        {communityLoading || communityItems.length > 0 ? (
           <PlaylistScrollSection
-            title={t('library.sections.discover')}
-            loading={discoverLoading && discoverItems.length === 0}
-            isLoadingMore={discoverLoadingMore}
-            onEndReached={loadMoreDiscover}
+            title={t('library.sections.community')}
+            loading={communityLoading && communityItems.length === 0}
+            isLoadingMore={communityLoadingMore}
+            onEndReached={loadMoreCommunity}
           >
-            {discoverItems.map((playlist, index) => (
+            {communityItems.map((playlist, index) => (
               <PlaylistCard
                 key={playlist.uuid}
                 name={playlist.name}
@@ -361,6 +417,10 @@ export default function DiscoverLibrary() {
                 color={playlist.color}
                 icon={playlist.icon}
                 variant="scroll"
+                metaLabel={t('library.communityByline', {
+                  creatorName: playlist.creatorName,
+                  climbCount: t('detail.climbCount', { count: playlist.climbCount }),
+                })}
                 index={index}
                 onPress={() => goToPlaylist(playlist.uuid)}
               />
@@ -395,12 +455,15 @@ export default function DiscoverLibrary() {
         {/* Empty state: signed in, nothing anywhere, nothing loading, no error. */}
         {isAuthenticated &&
         !userLoading &&
-        !discoverLoading &&
+        !forYouLoading &&
+        !communityLoading &&
+        !profileLoading &&
         !smartCountsLoading &&
         !showLoadError &&
-        jumpBackIn.length === 0 &&
-        discoverItems.length === 0 &&
-        smartCardsToShow.length === 0 ? (
+        defaultSmartCards.length === 0 &&
+        pinnedPlaylists.length === 0 &&
+        forYouItems.length === 0 &&
+        communityItems.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Icon name="playlist" size={48} color={iosSystemColors.systemGray4} />
             <Text variant="headline" style={styles.emptyTitle}>
@@ -413,7 +476,10 @@ export default function DiscoverLibrary() {
         ) : null}
 
         {/* Initial spinner before any section has resolved. */}
-        {(authLoading || tokenLoading) && jumpBackIn.length === 0 && discoverItems.length === 0 ? (
+        {(authLoading || tokenLoading) &&
+        defaultSmartCards.length === 0 &&
+        forYouItems.length === 0 &&
+        communityItems.length === 0 ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" />
           </View>

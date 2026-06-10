@@ -21,6 +21,8 @@ export type PlaylistCardProps = {
   variant: 'grid' | 'scroll';
   /** Index into the preview's fallback colour palette. */
   index?: number;
+  /** Optional byline shown under the name. Defaults to localized climb count. */
+  metaLabel?: string;
   onPress: () => void;
   /** When set, renders a pin toggle overlay on the preview (library cards). */
   isPinned?: boolean;
@@ -34,6 +36,7 @@ export const PlaylistCard = memo(function PlaylistCard({
   icon,
   variant,
   index = 0,
+  metaLabel,
   onPress,
   isPinned,
   onTogglePin,
@@ -48,6 +51,7 @@ export const PlaylistCard = memo(function PlaylistCard({
   const isScroll = variant === 'scroll';
   const squareSize = isScroll ? SCROLL_SQUARE : GRID_SQUARE;
   const countLabel = t('detail.climbCount', { count: climbCount });
+  const displayMeta = metaLabel ?? countLabel;
 
   // Preview square + optional pin overlay (top-right). The pin sits in its own
   // Pressable so tapping it toggles without triggering the card's navigation.
@@ -65,7 +69,7 @@ export const PlaylistCard = memo(function PlaylistCard({
       <Pressable
         onPress={handlePress}
         accessibilityRole="button"
-        accessibilityLabel={`${name}, ${countLabel}`}
+        accessibilityLabel={`${name}, ${displayMeta}`}
         style={[styles.scrollCard, { width: SCROLL_SQUARE }]}
       >
         {preview}
@@ -73,7 +77,7 @@ export const PlaylistCard = memo(function PlaylistCard({
           {name}
         </Text>
         <Text variant="caption1" numberOfLines={1} style={styles.meta}>
-          {countLabel}
+          {displayMeta}
         </Text>
       </Pressable>
     );
@@ -83,7 +87,7 @@ export const PlaylistCard = memo(function PlaylistCard({
     <Pressable
       onPress={handlePress}
       accessibilityRole="button"
-      accessibilityLabel={`${name}, ${countLabel}`}
+      accessibilityLabel={`${name}, ${displayMeta}`}
       style={styles.gridCard}
     >
       {preview}
@@ -92,7 +96,7 @@ export const PlaylistCard = memo(function PlaylistCard({
           {name}
         </Text>
         <Text variant="caption1" numberOfLines={1} style={styles.meta}>
-          {countLabel}
+          {displayMeta}
         </Text>
       </View>
     </Pressable>
