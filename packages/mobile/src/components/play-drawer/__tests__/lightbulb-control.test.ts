@@ -119,6 +119,10 @@ describe('play drawer lightbulb control', () => {
   });
 
   it('derives the lightbulb tap action', () => {
+    // Party driver with no BLE on this client at all (bluetooth === null): the
+    // driver branch can't reconnect, so it falls back to release. This is the
+    // `if (args.hasBluetooth) return 'reconnect_ble'` else-branch in
+    // derivePlayDrawerLightbulbPressAction — kept reachable on purpose.
     expect(
       derivePlayDrawerLightbulbPressAction({
         hasBluetooth: false,
