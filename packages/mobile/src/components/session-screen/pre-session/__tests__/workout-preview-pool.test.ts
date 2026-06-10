@@ -164,13 +164,10 @@ describe('refreshSlotInState', () => {
     // Pyramid/ladder workouts put different grades in different slots. Refreshing
     // a grade-18 row must always land on another grade-18 climb, never the
     // grade-17 slot's climbs — the pool is keyed by slot.grade.
-    let state = buildState(
-      { 17: ['g17-a', 'g17-b', 'g17-c'], 18: ['g18-a', 'g18-b', 'g18-c'] },
-      [
-        [17, 0],
-        [18, 1],
-      ],
-    );
+    let state = buildState({ 17: ['g17-a', 'g17-b', 'g17-c'], 18: ['g18-a', 'g18-b', 'g18-c'] }, [
+      [17, 0],
+      [18, 1],
+    ]);
     const grade18Uuid = state.items[1].item.uuid; // queue-item uuid is preserved across refreshes
     const fetchPool = vi.fn();
 
