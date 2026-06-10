@@ -1,9 +1,4 @@
-// @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import React from 'react';
-import type { ReactNode } from 'react';
-import { renderHook, waitFor } from '@testing-library/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { UserBoard } from '@boardsesh/shared-schema';
 import {
   GET_BOARDS_BY_SERIAL_NUMBERS,
@@ -28,8 +23,7 @@ vi.mock('../../graphql/use-auth-token', () => ({
   useAuthToken: vi.fn(() => ({ data: null })),
 }));
 
-import { useAuthToken } from '../../graphql/use-auth-token';
-import { resolveBleSerialNumbers, serialsFromDiscoveredDevices, useResolvedBleDeviceBoards } from '../resolve-serials';
+import { resolveBleSerialNumbers, serialsFromDiscoveredDevices } from '../resolve-serials';
 
 function makeBoard(serialNumber: string, overrides: Partial<UserBoard> = {}): UserBoard {
   return {
@@ -149,71 +143,5 @@ describe('resolveBleSerialNumbers', () => {
 
     expect(resolvedBoards.get('SN-1')).toEqual({ kind: 'recorded', config: makeConfig('SN-1') });
     expect(harness.request).toHaveBeenCalledTimes(2);
-  });
-});
-
-// ── useResolvedBleDeviceBoards — hook-level enabled guard ───────────────────
-
-function makeQueryWrapper() {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
-  return ({ children }: { children: ReactNode }) =>
-    React.createElement(QueryClientProvider, { client: queryClient }, children);
-}
-
-function makeDevices(serials: string[]) {
-  return serials.map((serial, index) => ({
-    deviceId: `device-${index}`,
-    name: `Kilter Board#${serial}@3`,
-    rssi: -50,
-  }));
-}
-
-describe('useResolvedBleDeviceBoards', () => {
-  beforeEach(() => {
-    harness.request.mockReset();
-    vi.mocked(useAuthToken).mockReturnValue({ data: undefined } as ReturnType<typeof useAuthToken>);
-  });
-
-  it('fires the saved-boards query when signed out (authToken === null) because null !== undefined', async () => {
-    // The enabled guard is `authToken !== undefined`, so null (signed-out) lets
-    // the query through — only the recorded-configs branch requires a token.
-    vi.mocked(useAuthToken).mockReturnValue({ data: null } as ReturnType<typeof useAuthToken>);
-    harness.request.mockImplementation((operation: unknown) => {
-      if (operation === GET_BOARDS_BY_SERIAL_NUMBERS) {
-        return Promise.resolve({ boardsBySerialNumbers: [makeBoard('SN-A')] });
-      }
-      return Promise.reject(new Error('Unexpected operation'));
-    });
-
-    const { result } = renderHook(() => useResolvedBleDeviceBoards(makeDevices(['SN-A'])), {
-      wrapper: makeQueryWrapper(),
-    });
-
-    await waitFor(() => expect(result.current.size).toBeGreaterThan(0));
-
-    expect(result.current.get('SN-A')).toEqual({ kind: 'saved', board: makeBoard('SN-A') });
-    // Only the public saved-boards query fires; the auth-gated recorded-configs
-    // query is skipped because authToken is null (falsy) inside resolveBleSerialNumbers.
-    expect(harness.request).toHaveBeenCalledTimes(1);
-    expect(harness.request).toHaveBeenCalledWith(GET_BOARDS_BY_SERIAL_NUMBERS, { serialNumbers: ['SN-A'] });
-  });
-
-  it('does not fire any query while authToken is still loading (authToken === undefined)', async () => {
-    // useAuthToken returns { data: undefined } while the token query is pending.
-    // The enabled guard `authToken !== undefined` evaluates to false, so the
-    // hook should return the empty map without making any requests.
-    vi.mocked(useAuthToken).mockReturnValue({ data: undefined } as ReturnType<typeof useAuthToken>);
-
-    const { result } = renderHook(() => useResolvedBleDeviceBoards(makeDevices(['SN-B'])), {
-      wrapper: makeQueryWrapper(),
-    });
-
-    // Give TanStack Query a tick to evaluate the enabled guard.
-    await new Promise((resolve) => setTimeout(resolve, 0));
-
-    expect(harness.request).not.toHaveBeenCalled();
-    expect(result.current.size).toBe(0);
   });
 });

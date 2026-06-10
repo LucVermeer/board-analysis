@@ -99,6 +99,14 @@ vi.mock('../../lib/graphql/use-active-board', () => ({
   useSetActiveBoard: () => vi.fn(async () => {}),
 }));
 
+// The recorded-config switch path imports the GraphQL HTTP client, which
+// transitively pulls in expo-secure-store (via the auth interceptor) —
+// unavailable in the test environment. Short-circuit it; this suite stubs
+// useSetActiveBoard and never drives a real board fetch.
+vi.mock('../../lib/graphql/client', () => ({
+  getHttpClient: () => ({ request: vi.fn(async () => ({ board: null })) }),
+}));
+
 vi.mock('../../components/ble/DevicePickerSheet', () => ({
   DevicePickerSheet: (props: PickerSheetProps) => {
     pickerSheet.props = props;

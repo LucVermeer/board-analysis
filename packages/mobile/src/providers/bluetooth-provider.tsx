@@ -355,15 +355,18 @@ export function BluetoothProvider({
   // leave a stale one-shot armed that would fire on a much-later, unrelated
   // switch to the same config.
   //
-  // Dep is the configKey rather than the full object so that re-calling
-  // setPendingAutoConnect with the same configKey (a race) does not silently
-  // extend the TTL window by resetting the timer.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // Depend on the configKey rather than the whole `pendingAutoConnect` object so
+  // re-arming with the same configKey (a race) doesn't reset the timer and
+  // silently extend the TTL. Reading it into a local also keeps the dep array
+  // exhaustive — configKey is always a string on a live request (never null
+  // while the object is set), so the falsy guard only short-circuits the cleared
+  // (null) state.
+  const pendingConfigKey = pendingAutoConnect?.configKey;
   useEffect(() => {
-    if (!pendingAutoConnect) return;
+    if (!pendingConfigKey) return;
     const expiryTimeoutId = setTimeout(() => setPendingAutoConnect(null), PENDING_AUTO_CONNECT_TTL_MS);
     return () => clearTimeout(expiryTimeoutId);
-  }, [pendingAutoConnect?.configKey]);
+  }, [pendingConfigKey]);
 
   useEffect(() => {
     if (!pendingAutoConnect) return;
