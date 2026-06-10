@@ -86,6 +86,7 @@ vi.mock('../../../../providers/queue-provider', () => ({
     participantId: 'participant-1',
     sessionId: 'session-1',
   }),
+  useIsPartyPreviewOnly: () => false,
 }));
 vi.mock('../../../../providers/drawer-host-provider', () => ({ useDrawerHost: () => ({ openPlayDrawer: vi.fn() }) }));
 vi.mock('../../../../lib/graphql/hooks', () => ({
