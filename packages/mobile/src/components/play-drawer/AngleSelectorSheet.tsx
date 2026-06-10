@@ -70,7 +70,13 @@ export const AngleSelectorSheet = memo(function AngleSelectorSheet({
   // diagram, grade, stars and sends all reflect this as the user slides.
   const [selectedAngle, setSelectedAngle] = useState(currentAngle);
 
-  const { data: statsHistory } = useClimbStatsHistory(boardName, climbUuid ?? null);
+  // The sheet stays mounted as a PlayDrawer sibling (stackBehavior=push needs an
+  // always-mounted modal), so gate the stats-history fetch on the sheet actually
+  // being presented — otherwise CLIMB_STATS_HISTORY would fire for every climb the
+  // user swipes through in the drawer, even when they never open the angle selector
+  // (mirrors the QueueList active-gate). React Query's 5-min staleTime keeps stats
+  // warm across re-opens and still dedupes with CommunitySection's below-fold query.
+  const { data: statsHistory } = useClimbStatsHistory(boardName, visible ? (climbUuid ?? null) : null);
   const statsByAngle = useMemo(() => buildAngleStatsMap(statsHistory, gradeFormat), [statsHistory, gradeFormat]);
   const stats: AngleStats | undefined = statsByAngle.get(selectedAngle);
   const quality = stats?.quality ?? 0;
