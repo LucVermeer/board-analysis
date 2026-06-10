@@ -46,9 +46,7 @@ export function getStoredQueueSnapshot(): Promise<LocalQueueSnapshot | null> {
   return getPreference<LocalQueueSnapshot>(QUEUE_SNAPSHOT_KEY);
 }
 
-export function setStoredQueueSnapshot(
-  snapshot: Omit<LocalQueueSnapshot, 'savedAt'>,
-): Promise<void> {
+export function setStoredQueueSnapshot(snapshot: Omit<LocalQueueSnapshot, 'savedAt'>): Promise<void> {
   return setPreference<LocalQueueSnapshot>(QUEUE_SNAPSHOT_KEY, {
     ...snapshot,
     playlistSuggestionSource: capSuggestionSource(snapshot.playlistSuggestionSource),
