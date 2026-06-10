@@ -1,15 +1,9 @@
 import { useCallback, useMemo, useState } from 'react';
 import { type LayoutChangeEvent } from 'react-native';
 import { Gesture, type ComposedGesture } from 'react-native-gesture-handler';
-import {
-  runOnJS,
-  useAnimatedStyle,
-  useDerivedValue,
-  useSharedValue,
-  type AnimatedStyle,
-} from 'react-native-reanimated';
+import { runOnJS, useAnimatedStyle, useSharedValue, type AnimatedStyle } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
-import { computePeekOffset, computeNavigationStateWithSuggestions } from '@boardsesh/play-view';
+import { computeNavigationStateWithSuggestions } from '@boardsesh/play-view';
 import type { ClimbQueueItem } from '@boardsesh/queue';
 import { useReduceMotion } from '../../hooks/use-reduce-motion';
 import { useIsPartyPreviewOnly, usePlaylistSuggestionSource, useQueue } from '../../providers/queue-provider';
@@ -164,14 +158,22 @@ export function useQueueCarousel(): QueueCarousel {
   );
 
   const currentLabelStyle = useAnimatedStyle(() => ({ transform: [{ translateX: translateX.value }] }));
-  const nextPeekX = useDerivedValue(() =>
-    computePeekOffset({ direction: 'next', swipeOffset: translateX.value, viewportWidth: widthSV.value }),
-  );
-  const prevPeekX = useDerivedValue(() =>
-    computePeekOffset({ direction: 'prev', swipeOffset: translateX.value, viewportWidth: widthSV.value }),
-  );
-  const nextPeekStyle = useAnimatedStyle(() => ({ transform: [{ translateX: nextPeekX.value }] }));
-  const prevPeekStyle = useAnimatedStyle(() => ({ transform: [{ translateX: prevPeekX.value }] }));
+  // Peek labels are hidden + parked off-screen at rest (translateX 0) and only
+  // shown while a swipe/commit is in flight — so a stale or zero measured width
+  // can never stack them on the current label. Mirrors SwipeBoardCarousel's
+  // peekStyle guard. The offset math is inlined from computePeekOffset in
+  // @boardsesh/play-view (cross-module worklet calls are avoided elsewhere too —
+  // see clampTranslation in use-zoom-pan-gesture.ts); the shared fn stays the
+  // canonical spec + test target. Reading widthSV/translateX directly here also
+  // sidesteps the Android "derived value doesn't rebuild on width change" symptom.
+  const nextPeekStyle = useAnimatedStyle(() => {
+    if (translateX.value === 0) return { opacity: 0, transform: [{ translateX: widthSV.value }] };
+    return { opacity: 1, transform: [{ translateX: Math.max(0, widthSV.value + translateX.value) }] };
+  });
+  const prevPeekStyle = useAnimatedStyle(() => {
+    if (translateX.value === 0) return { opacity: 0, transform: [{ translateX: -widthSV.value }] };
+    return { opacity: 1, transform: [{ translateX: Math.min(0, -widthSV.value + translateX.value) }] };
+  });
 
   const swipeAccessibilityActions: AccessibilityAction[] = [
     ...(canPrevious ? [{ name: 'previous', label: t('mobile.queue.previousClimb') }] : []),
