@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { View, Pressable, StyleSheet } from 'react-native';
 import Animated, { useAnimatedRef, useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated';
+import { useQueryClient } from '@tanstack/react-query';
 import { router, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
@@ -43,6 +44,7 @@ export default function DiscoverLibrary() {
   const { data: token = null, isLoading: tokenLoading } = useAuthToken();
   const { data: profile } = useProfile();
   const { data: activeBoard } = useActiveBoard();
+  const queryClient = useQueryClient();
 
   const userId = profile?.id ?? null;
   const effectiveToken = isAuthenticated ? token : null;
@@ -187,6 +189,13 @@ export default function DiscoverLibrary() {
         });
         setCreateVisible(false);
         showToast(t('bottomTabBar.createdPlaylistToast', { name: created.name }), 'success');
+        // refetchUser() only refreshes useUserPlaylists' own useState store
+        // (the Discover/all shelves). The Add-to-Playlist picker reads the
+        // react-query ['userPlaylists'] cache instead, which that refetch never
+        // touches — and the mobile QueryProvider wires no focus/online refetch,
+        // so the new playlist would stay missing from the picker for the rest
+        // of the session. Prepend it directly so it shows up immediately.
+        queryClient.setQueryData<Playlist[]>(['userPlaylists'], (prev) => (prev ? [created, ...prev] : [created]));
         refetchUser();
         router.push(`/(tabs)/discover/${created.uuid}`);
       } catch (err) {
@@ -196,7 +205,7 @@ export default function DiscoverLibrary() {
         setCreating(false);
       }
     },
-    [createBoard, createPlaylist, showToast, t, refetchUser],
+    [createBoard, createPlaylist, queryClient, showToast, t, refetchUser],
   );
 
   // Pin / unpin straight from a "Jump Back In" card. The shared-hook arrays

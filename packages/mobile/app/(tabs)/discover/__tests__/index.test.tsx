@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, fireEvent } from '@testing-library/react';
+import { render, fireEvent, act } from '@testing-library/react';
 import { createElement, type ReactNode } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 type PlaylistItem = { uuid: string; name: string; climbCount: number; creatorId?: string };
 
@@ -33,6 +34,10 @@ vi.mock('@boardsesh/playlists-react', () => ({
   useSmartPlaylistCounts: () => ({ data: [], isLoading: false }),
   usePlaylistMutations: () => ({ createPlaylist, pinPlaylist: vi.fn(), unpinPlaylist: vi.fn() }),
 }));
+
+// @tanstack/react-query is NOT mocked — the create flow writes to the real
+// ['userPlaylists'] cache, which the Add-to-Playlist picker reads, so the test
+// asserts against the live cache. Renders are wrapped in a QueryClientProvider.
 
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock('expo-router', () => ({ router: { push: vi.fn() }, useFocusEffect: () => undefined }));
@@ -101,17 +106,35 @@ vi.mock('../../../../src/components/ActivityIndicator', () => ({
 vi.mock('../../../../src/components/SectionHeader', () => ({
   SectionHeader: ({ title }: { title: string }) => createElement('div', { 'data-section': title }),
 }));
+// The form sheet exposes a submit button driving onSubmit with fixed form
+// values, so the test can trigger the create flow without the real sheet UI.
+const FORM_VALUES = { name: 'Crimps', description: '', color: undefined, icon: undefined, isPublic: false };
 vi.mock('../../../../src/components/playlist', () => ({
   PlaylistCard: ({ name }: { name: string }) => createElement('div', { 'data-card': name }),
   PlaylistScrollSection: ({ children, title }: { children?: ReactNode; title: string }) =>
     createElement('div', { 'data-scroll-section': title }, children),
-  PlaylistFormSheet: () => createElement('div', { 'data-form-sheet': 'true' }),
+  PlaylistFormSheet: ({ onSubmit }: { onSubmit: (values: typeof FORM_VALUES) => void }) =>
+    createElement('button', { 'aria-label': 'submit-create', onClick: () => onSubmit(FORM_VALUES) }, 'submit'),
 }));
+// The chrome exposes the create button so the test can open + submit the flow.
 vi.mock('../../../../src/components/chrome', () => ({
-  DiscoverTopChrome: () => createElement('div', { 'data-chrome': 'true' }),
+  DiscoverTopChrome: ({ onCreate }: { onCreate: () => void }) =>
+    createElement('button', { 'aria-label': 'open-create', onClick: onCreate }, 'create'),
 }));
 
 import DiscoverLibrary from '../index';
+
+// The hub calls useQueryClient(); give it a real client so cache writes/reads
+// behave. Surface the client so the create test can read ['userPlaylists'].
+function renderHub() {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const utils = render(
+    <QueryClientProvider client={queryClient}>
+      <DiscoverLibrary />
+    </QueryClientProvider>,
+  );
+  return { ...utils, queryClient };
+}
 
 beforeEach(() => {
   userHook.playlists = [];
@@ -123,12 +146,13 @@ beforeEach(() => {
   discoverHook.isLoading = false;
   discoverHook.hasError = false;
   discoverHook.refetch.mockClear();
+  createPlaylist.mockReset();
 });
 
 describe('DiscoverLibrary error handling', () => {
   it('shows a load-error state with a retry (not the empty state) when a section fails and the hub is empty', () => {
     userHook.hasError = true;
-    const { getByText, queryByText, getByLabelText } = render(<DiscoverLibrary />);
+    const { getByText, queryByText, getByLabelText } = renderHub();
 
     expect(getByText('library.errors.loadTitle')).toBeTruthy();
     // Must not fall through to the misleading "no playlists yet" empty copy.
@@ -140,7 +164,7 @@ describe('DiscoverLibrary error handling', () => {
 
   it('retries only the discover stream when only it failed', () => {
     discoverHook.hasError = true;
-    const { getByLabelText } = render(<DiscoverLibrary />);
+    const { getByLabelText } = renderHub();
 
     fireEvent.click(getByLabelText('library.errors.tryAgain'));
     expect(discoverHook.refetch).toHaveBeenCalledTimes(1);
@@ -150,15 +174,47 @@ describe('DiscoverLibrary error handling', () => {
   it('keeps showing content (no error block) when a section errored but data is present', () => {
     userHook.hasError = true;
     userHook.playlists = [{ uuid: 'a', name: 'Alpha', climbCount: 1 }];
-    const { queryByText } = render(<DiscoverLibrary />);
+    const { queryByText } = renderHub();
 
     expect(queryByText('library.errors.loadTitle')).toBeNull();
   });
 
   it('still shows the empty state (not an error) when both sections succeed with no playlists', () => {
-    const { getByText, queryByText } = render(<DiscoverLibrary />);
+    const { getByText, queryByText } = renderHub();
 
     expect(getByText('library.empty.title')).toBeTruthy();
     expect(queryByText('library.errors.loadTitle')).toBeNull();
+  });
+});
+
+describe('DiscoverLibrary create flow', () => {
+  it('prepends a created playlist to the ["userPlaylists"] cache the picker reads', async () => {
+    const created = {
+      id: '99',
+      uuid: 'p-new',
+      name: 'Crimps',
+      climbCount: 0,
+      boardType: 'kilter',
+      layoutId: 1,
+      isPublic: false,
+      followerCount: 0,
+      isFollowedByMe: false,
+      isPinnedByMe: false,
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-01T00:00:00Z',
+    };
+    createPlaylist.mockResolvedValue(created);
+
+    const { getByLabelText, queryClient } = renderHub();
+    // Seed the picker's cache so the prepend is observable against existing data.
+    queryClient.setQueryData(['userPlaylists'], [{ ...created, uuid: 'p-old', name: 'Slopers' }]);
+
+    fireEvent.click(getByLabelText('open-create'));
+    await act(async () => {
+      fireEvent.click(getByLabelText('submit-create'));
+    });
+
+    const cached = queryClient.getQueryData<Array<{ uuid: string }>>(['userPlaylists']);
+    expect(cached?.map((playlist) => playlist.uuid)).toEqual(['p-new', 'p-old']);
   });
 });
