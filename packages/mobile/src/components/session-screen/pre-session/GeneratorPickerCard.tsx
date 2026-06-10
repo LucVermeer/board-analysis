@@ -364,8 +364,9 @@ export function GeneratorPickerCard({
     }
   };
 
-  // Secondary count stepper(s) that live inside Tuning. Volume's grade spread,
-  // and pyramid/ladder's climbs-per-step.
+  // Each shape's secondary knob — Volume's variability ("grade spread") and
+  // pyramid/ladder's climbs-per-step. Shown in the primary group next to the main
+  // count (promoted out of Tuning for discoverability); Grade Focus has none.
   const secondarySteppers = (options: GeneratorOptions): StepperRow[] => {
     switch (options.type) {
       case 'volume':
@@ -407,7 +408,6 @@ export function GeneratorPickerCard({
 
   const renderTuning = (options: GeneratorOptions): ReactNode => {
     const minRatingPickerValue = getMinRatingPickerValue(options.minRating);
-    const secondary = secondarySteppers(options);
     return (
       <View style={styles.tuningBody}>
         <SegmentedControl
@@ -418,8 +418,6 @@ export function GeneratorPickerCard({
           trackColor={systemColors.fill}
           accessibilityLabel={t('mobile.session.preGeneratorWarmUp')}
         />
-
-        {secondary.length > 0 ? <GroupedSteppers rows={secondary} /> : null}
 
         <View>
           <Text variant="footnote" style={styles.subsectionLabel}>
@@ -557,7 +555,9 @@ export function GeneratorPickerCard({
           ) : null}
 
           <View style={[styles.inset, styles.steppersInset]}>
-            <GroupedSteppers rows={primarySteppers(selection.options)} />
+            <GroupedSteppers
+              rows={[...primarySteppers(selection.options), ...secondarySteppers(selection.options)]}
+            />
           </View>
 
           <View style={[styles.inset, styles.tuningInset]}>

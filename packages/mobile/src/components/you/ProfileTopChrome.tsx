@@ -8,7 +8,7 @@
 import { useCallback, useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { type SharedValue } from 'react-native-reanimated';
-import { router } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../providers/theme-provider';
 import { useNativeGlass } from '../../hooks/use-native-glass';
@@ -52,6 +52,7 @@ export function ProfileTopChrome({
   onHeightChange,
 }: ProfileTopChromeProps) {
   const { t } = useTranslation('you');
+  const router = useRouter();
   const { systemColors, brandColors, variant } = useTheme();
   const nativeGlass = useNativeGlass();
   // On Material the segmented control is Paper's SegmentedButtons, which draws its
@@ -63,7 +64,7 @@ export function ProfileTopChrome({
 
   const handleOpenSettings = useCallback(() => {
     router.push('/(tabs)/profile/more');
-  }, []);
+  }, [router]);
 
   const segmentOptions = useMemo(
     () => [
