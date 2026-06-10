@@ -111,8 +111,8 @@ export const material = {
   /** M3 pressed state-layer opacity, used to tint ripples. */
   pressedStateLayer: 0.12,
   navBar: {
-    /** Tonal pill behind the focused tab's icon. */
-    activeIndicatorWidth: 56,
+    /** Tonal pill behind the focused tab's icon (M3 spec: 64×32). */
+    activeIndicatorWidth: 64,
     activeIndicatorHeight: 32,
     activeIndicatorRadius: 16,
     /** Resting elevation of the solid Android nav surface. */

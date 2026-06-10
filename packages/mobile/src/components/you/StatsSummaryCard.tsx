@@ -22,24 +22,51 @@ type StatsSummaryCardProps = {
 
 export function StatsSummaryCard({ statisticsSummary, hardestSend, hardestFlash, percentile }: StatsSummaryCardProps) {
   const { t } = useTranslation('profile');
-  const { systemColors, brandColors } = useTheme();
+  const { systemColors, brandColors, variant, m3 } = useTheme();
+  const isMaterial = variant === 'material';
 
   const showPercentile = percentile != null && percentile.percentile > 0;
   // "Top X%" — invert the percentile, clamped so a 100th-percentile climber
   // reads "Top 0.1%" rather than "Top 0%".
   const topPercent = showPercentile ? Math.max(0.1, 100 - percentile.percentile) : 0;
 
+  // On Material the three tiles read as one tonal family (neutral · primary ·
+  // tertiary container) so they don't land as two saturated grade-coloured alert
+  // blocks; the vivid grade hue survives only as the small tick/flash glyph. On
+  // Liquid Glass the grade tiles stay full grade-coloured fills (the original).
+  const countTileColor = isMaterial ? m3.surfaceVariant : systemColors.fill;
+  const countTextColor = isMaterial ? m3.onSurfaceVariant : undefined;
+  const countLabelColor = isMaterial ? m3.onSurfaceVariant : systemColors.secondaryLabel;
+
   return (
     <Card style={styles.card}>
       <View style={styles.tiles}>
-        <View style={[styles.tile, { backgroundColor: systemColors.fill }]}>
-          <Text variant="title2">{statisticsSummary.totalAscents}</Text>
-          <Text variant="caption1" color={systemColors.secondaryLabel}>
+        <View style={[styles.tile, { backgroundColor: countTileColor }]}>
+          <Text variant="title2" color={countTextColor}>
+            {statisticsSummary.totalAscents}
+          </Text>
+          <Text variant="caption1" color={countLabelColor}>
             {t('stats.problems')}
           </Text>
         </View>
-        {hardestSend && <GradeTile highlight={hardestSend} label={t('stats.send')} icon="tick" />}
-        {hardestFlash && <GradeTile highlight={hardestFlash} label={t('stats.flash')} icon="flash" />}
+        {hardestSend && (
+          <GradeTile
+            highlight={hardestSend}
+            label={t('stats.send')}
+            icon="tick"
+            background={isMaterial ? m3.primaryContainer : undefined}
+            textColor={isMaterial ? m3.onPrimaryContainer : undefined}
+          />
+        )}
+        {hardestFlash && (
+          <GradeTile
+            highlight={hardestFlash}
+            label={t('stats.flash')}
+            icon="flash"
+            background={isMaterial ? m3.tertiaryContainer : undefined}
+            textColor={isMaterial ? m3.onTertiaryContainer : undefined}
+          />
+        )}
       </View>
 
       {showPercentile && (
@@ -71,20 +98,39 @@ export function StatsSummaryCard({ statisticsSummary, hardestSend, hardestFlash,
   );
 }
 
-function GradeTile({ highlight, label, icon }: { highlight: RawGradeHighlight; label: string; icon: IconName }) {
-  const background = gradeBadgeColor(highlight.label);
-  const textColor = getGradeTextColor(background);
+function GradeTile({
+  highlight,
+  label,
+  icon,
+  background,
+  textColor,
+}: {
+  highlight: RawGradeHighlight;
+  label: string;
+  icon: IconName;
+  /** Tonal container fill (Material). Glass falls back to the vivid grade fill. */
+  background?: string;
+  /** On-container text (Material). Glass falls back to the contrast-aware colour. */
+  textColor?: string;
+}) {
+  // Glass: the whole tile is the grade's vivid colour, text picks the contrast
+  // colour. Material: a tonal container carries the tile, so the grade hue lives
+  // only on the leading glyph (the small accent) and text uses the on-container role.
+  const gradeFill = gradeBadgeColor(highlight.label);
+  const tileBackground = background ?? gradeFill;
+  const onTile = textColor ?? getGradeTextColor(gradeFill);
+  const accentColor = background ? gradeFill : onTile;
   return (
-    <View style={[styles.tile, { backgroundColor: background }]}>
+    <View style={[styles.tile, { backgroundColor: tileBackground }]}>
       <View style={styles.gradeRow}>
-        <Icon name={icon} size={14} color={textColor} />
-        <Text variant="title3" color={textColor}>
+        <Icon name={icon} size={14} color={accentColor} />
+        <Text variant="title3" color={onTile}>
           {highlight.label}
         </Text>
       </View>
       {/* Match the grade/icon's contrast-aware colour; secondaryLabel is a grey
           that washes out on saturated grade tiles. Dim slightly for hierarchy. */}
-      <Text variant="caption1" color={textColor} style={styles.gradeTileLabel}>
+      <Text variant="caption1" color={onTile} style={styles.gradeTileLabel}>
         {label}
       </Text>
     </View>
