@@ -120,8 +120,9 @@ export const InteractiveFilterBoard = React.memo(function InteractiveFilterBoard
     containerWidthSV,
     containerHeightSV,
     hitTargets,
+    // Long-press falls back to onTap in the hook, so a held hold opens the
+    // picker too — same as HoldTargetLayer wiring both to onHoldTap at rest.
     onTap: onHoldTap,
-    onLongPress: onHoldTap,
   });
 
   const holdById = useMemo(() => {
