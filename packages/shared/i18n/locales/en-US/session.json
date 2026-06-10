@@ -150,6 +150,9 @@
     "savingToAppleHealth": "Saving to Apple Health…",
     "savedToAppleHealth": "Saved to Apple Health",
     "saveToAppleHealthRetry": "Save to Apple Health (retry)",
+    "loadErrorTitle": "Couldn't load your session",
+    "loadErrorMessage": "Your climbs are saved — the recap just didn't load. Try again or head back.",
+    "retry": "Try again",
     "minutes": "{{count}}min",
     "hours": "{{count}}h",
     "hoursAndMinutes": "{{hours}}h {{mins}}min"

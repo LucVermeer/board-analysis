@@ -150,6 +150,9 @@
     "savingToAppleHealth": "Enregistrement dans Apple Santé…",
     "savedToAppleHealth": "Enregistré dans Apple Santé",
     "saveToAppleHealthRetry": "Enregistrer dans Apple Santé (réessayer)",
+    "loadErrorTitle": "Impossible de charger ta session",
+    "loadErrorMessage": "Tes voies sont enregistrées, seul le récap n'a pas chargé. Réessaie ou reviens en arrière.",
+    "retry": "Réessayer",
     "minutes": "{{count}} min",
     "hours": "{{count}} h",
     "hoursAndMinutes": "{{hours}} h {{mins}} min"

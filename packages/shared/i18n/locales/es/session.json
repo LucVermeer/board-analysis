@@ -150,6 +150,9 @@
     "savingToAppleHealth": "Guardando en Apple Health…",
     "savedToAppleHealth": "Guardado en Apple Health",
     "saveToAppleHealthRetry": "Guardar en Apple Health (reintentar)",
+    "loadErrorTitle": "No se pudo cargar tu sesión",
+    "loadErrorMessage": "Tus vías están guardadas, solo falló el resumen. Inténtalo de nuevo o vuelve atrás.",
+    "retry": "Reintentar",
     "minutes": "{{count}}min",
     "hours": "{{count}}h",
     "hoursAndMinutes": "{{hours}}h {{mins}}min"
