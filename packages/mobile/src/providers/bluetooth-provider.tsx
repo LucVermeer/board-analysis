@@ -14,6 +14,7 @@ import {
   type BleBoardConfig,
   type PickerSelectionDecision,
 } from '../lib/ble/board-config-match';
+import { summarizePickerResolution, type PickerResolutionStats } from '../lib/ble/picker-resolution-stats';
 import { useSetActiveBoard } from '../lib/graphql/use-active-board';
 import type { GetBoardQueryResponse } from '../lib/graphql/operations';
 import { getBoardRenderData } from '../lib/board-details';
@@ -312,6 +313,26 @@ export function BluetoothProvider({
   resolvedPickerBoardsRef.current = resolvedPickerBoards;
   const currentBoardConfigRef = useRef(currentBoardConfig);
   currentBoardConfigRef.current = currentBoardConfig;
+
+  // Track how often the picker's serial→board resolution actually pays off:
+  // keep the tallies fresh while the sheet is open (devices and resolutions
+  // both stream in), then flush ONE summary event when it closes — per-device
+  // or per-render events would massively overcount repeat advertisements.
+  const pickerResolutionStatsRef = useRef<PickerResolutionStats | null>(null);
+  useEffect(() => {
+    if (pickerState) {
+      pickerResolutionStatsRef.current = summarizePickerResolution(
+        pickerState.devices,
+        resolvedPickerBoards,
+        currentBoardConfig,
+      );
+      return;
+    }
+    const finalStats = pickerResolutionStatsRef.current;
+    if (!finalStats) return;
+    pickerResolutionStatsRef.current = null;
+    track(SHARED_EVENTS.BlePickerDevicesResolved, { ...finalStats, boardName });
+  }, [pickerState, resolvedPickerBoards, currentBoardConfig, boardName]);
 
   const setActiveBoard = useSetActiveBoard();
 

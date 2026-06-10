@@ -402,6 +402,43 @@ describe('BluetoothProvider mismatch switch', () => {
     expect(lastAlertButtons()).toHaveLength(2);
   });
 
+  it('flushes one resolution-stats event when the picker closes', () => {
+    bluetooth.state.pickerState = makeMismatchingPickerState();
+    resolvedBoards.value = new Map([['SN-2', { kind: 'saved', board: makeBoard() }]]);
+
+    const { rerender } = renderProvider(KILTER_PROPS);
+    // Open picker → tallies are tracked but nothing is emitted yet.
+    expect(analytics.track).not.toHaveBeenCalledWith('BLE Picker Devices Resolved', expect.anything());
+
+    bluetooth.state.pickerState = null;
+    rerender(
+      createElement(BluetoothProvider, {
+        ...KILTER_PROPS,
+        children: createElement('div', null),
+      }),
+    );
+
+    const statsCalls = analytics.track.mock.calls.filter(([name]) => name === 'BLE Picker Devices Resolved');
+    expect(statsCalls).toHaveLength(1);
+    expect(statsCalls[0]?.[1]).toMatchObject({
+      devicesTotal: 1,
+      devicesWithSerial: 1,
+      resolvedSaved: 1,
+      resolvedRecorded: 0,
+      unresolvedWithSerial: 0,
+      boardName: 'kilter',
+    });
+
+    // A later unrelated re-render must not re-emit the summary.
+    rerender(
+      createElement(BluetoothProvider, {
+        ...KILTER_PROPS,
+        children: createElement('div', null),
+      }),
+    );
+    expect(analytics.track.mock.calls.filter(([name]) => name === 'BLE Picker Devices Resolved')).toHaveLength(1);
+  });
+
   it('surfaces the switch-failed alert and keeps the picker open when setActiveBoard rejects', async () => {
     const pickerState = makeMismatchingPickerState();
     bluetooth.state.pickerState = pickerState;

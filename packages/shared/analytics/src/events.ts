@@ -61,6 +61,11 @@ export const SHARED_EVENTS = {
   // connected (another device grabbed the last-connection-wins board).
   BluetoothScanStarted: 'Bluetooth Scan Started',
   BluetoothConnectionStolen: 'Bluetooth Connection Stolen',
+  // Fired once per device-picker session (on close) with tallies of how each
+  // listed device's board preview resolved: saved board, recorded serial
+  // config, current-board fallback, or no preview at all. Measures how often
+  // the serial→board resolution actually pays off in the picker UI.
+  BlePickerDevicesResolved: 'BLE Picker Devices Resolved',
   ClimbSentToBoardSuccess: 'Climb Sent to Board Success',
   ClimbSentToBoardFailure: 'Climb Sent to Board Failure',
   // Search
