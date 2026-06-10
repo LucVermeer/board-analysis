@@ -81,6 +81,7 @@ export default function DiscoverLibrary() {
     playlists: userPlaylists,
     isLoading: userLoading,
     isLoadingMore: userLoadingMore,
+    hasError: userError,
     loadMore: loadMoreUser,
     refetch: refetchUser,
   } = useUserPlaylists({
@@ -103,7 +104,9 @@ export default function DiscoverLibrary() {
     recent,
     isLoading: discoverLoading,
     isLoadingMore: discoverLoadingMore,
+    hasError: discoverError,
     loadMore: loadMoreDiscover,
+    refetch: refetchDiscover,
   } = useDiscoverPlaylists({
     boardType: filterBoardType,
     layoutId: filterLayoutId,
@@ -234,6 +237,17 @@ export default function DiscoverLibrary() {
 
   const showSignInPrompt = !isAuthenticated && !authLoading;
 
+  // The first-page fetch of one (or both) sections failed and the hub is empty
+  // — show a retry rather than the "no playlists yet" empty state, which would
+  // mislead a user who actually has playlists into thinking they have none.
+  const showLoadError =
+    (userError || discoverError) && jumpBackIn.length === 0 && discoverItems.length === 0 && !smartCountsLoading;
+
+  const handleRetryLoad = useCallback(() => {
+    if (userError) refetchUser();
+    if (discoverError) refetchDiscover();
+  }, [userError, discoverError, refetchUser, refetchDiscover]);
+
   return (
     <View style={styles.flex}>
       <Animated.ScrollView
@@ -345,11 +359,36 @@ export default function DiscoverLibrary() {
           </PlaylistScrollSection>
         ) : null}
 
-        {/* Empty state: signed in, nothing anywhere, nothing loading. */}
+        {/* Load error: a section's first page failed and the hub is empty.
+            Offer a retry instead of falsely claiming the library is empty. */}
+        {showLoadError ? (
+          <View style={styles.emptyContainer}>
+            <Icon name="error" size={48} color={iosSystemColors.systemGray4} />
+            <Text variant="headline" style={styles.emptyTitle}>
+              {t('library.errors.loadTitle')}
+            </Text>
+            <Text variant="subheadline" style={styles.emptySubtitle}>
+              {t('library.errors.loadDescription')}
+            </Text>
+            <Pressable
+              onPress={handleRetryLoad}
+              accessibilityRole="button"
+              accessibilityLabel={t('library.errors.tryAgain')}
+              hitSlop={8}
+            >
+              <Text variant="subheadline" color={brandColors.primary} style={styles.retryCta}>
+                {t('library.errors.tryAgain')}
+              </Text>
+            </Pressable>
+          </View>
+        ) : null}
+
+        {/* Empty state: signed in, nothing anywhere, nothing loading, no error. */}
         {isAuthenticated &&
         !userLoading &&
         !discoverLoading &&
         !smartCountsLoading &&
+        !showLoadError &&
         jumpBackIn.length === 0 &&
         discoverItems.length === 0 &&
         smartCardsToShow.length === 0 ? (
@@ -455,6 +494,10 @@ const styles = StyleSheet.create({
   emptySubtitle: {
     opacity: 0.4,
     textAlign: 'center',
+  },
+  retryCta: {
+    marginTop: spacing[3],
+    fontWeight: '600',
   },
   loadingContainer: {
     paddingTop: spacing[10] * 3,
