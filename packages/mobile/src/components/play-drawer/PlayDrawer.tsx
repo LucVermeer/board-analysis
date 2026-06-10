@@ -516,6 +516,16 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
       return;
     }
 
+    if (pressAction === 'reconnect_ble') {
+      if (!bluetooth) return;
+      // Party driver whose BLE link was stolen — reconnect to the remembered board
+      // without releasing wall control, so it relights in one tap. No control
+      // changes hands here, and connect() already emits BluetoothConnectionSuccess,
+      // so we don't fire 'Wall Control Taken' (which would inflate party-take counts).
+      void bluetooth.connect(undefined, undefined, bluetooth.reconnectSerialForCurrentBoard ?? undefined);
+      return;
+    }
+
     if (pressAction === 'connect_solo') {
       if (!bluetooth) return;
       track('Wall Control Taken', {
@@ -717,12 +727,22 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   const lightbulbAccessibilityLabel = useMemo(() => {
     if (!lightbulbState.isPersistentSessionActive) return undefined;
     if (lightbulbState.isDriver) {
+      // Still the driver but the board link dropped — the tap reconnects, not
+      // releases, so the label must match (see derivePlayDrawerLightbulbPressAction).
+      if (bluetooth && !bluetoothConnected) return t('playView.actionBar.lightbulb.reconnect');
       if (!displayedClimb) return t('playView.actionBar.lightbulb.driving');
       return t('playView.actionBar.lightbulb.drivingNamed', { name: displayedClimb.name });
     }
     if (!displayedClimb) return t('playView.actionBar.lightbulb.take');
     return t('playView.actionBar.lightbulb.takeNamed', { name: displayedClimb.name });
-  }, [displayedClimb, lightbulbState.isDriver, lightbulbState.isPersistentSessionActive, t]);
+  }, [
+    displayedClimb,
+    lightbulbState.isDriver,
+    lightbulbState.isPersistentSessionActive,
+    bluetooth,
+    bluetoothConnected,
+    t,
+  ]);
 
   return (
     <>

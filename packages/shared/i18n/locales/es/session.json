@@ -440,6 +440,7 @@
       "lightbulb": {
         "drivingNamed": "Estás controlando “{{name}}”. Toca para soltar.",
         "driving": "Estás controlando. Toca para soltar.",
+        "reconnect": "Tablero desconectado. Toca para reconectar.",
         "takeNamed": "Tomar el control y enviar “{{name}}”",
         "take": "Tomar el control del muro",
         "coachmark": "Enviar al muro"
