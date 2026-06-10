@@ -33,7 +33,12 @@ import { sessionQueries } from '../graphql/resolvers/sessions/queries';
 
 describe('sessionLiveness query', () => {
   beforeEach(() => {
+    // limit holds per-test return values, so reset it; the chain stubs keep
+    // their mockReturnThis impl but get their call history cleared.
     dbClient.limit.mockReset();
+    dbClient.db.select.mockClear();
+    dbClient.db.from.mockClear();
+    dbClient.db.where.mockClear();
   });
 
   it('returns active liveness for a live session row', async () => {

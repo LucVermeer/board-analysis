@@ -19,6 +19,7 @@ import type {
   FollowConnection,
   TickStatus,
   SessionUser,
+  SessionStatus,
   SessionFeedParticipant,
   SessionGradeDistributionItem,
 } from '@boardsesh/shared-schema';
@@ -611,7 +612,7 @@ export const SESSION_LIVENESS = gql`
 
 export type SessionLivenessResult = {
   id: string;
-  status: string;
+  status: SessionStatus;
   endedAt: string | null;
 };
 

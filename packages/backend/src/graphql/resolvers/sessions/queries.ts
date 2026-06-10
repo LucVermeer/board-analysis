@@ -1,4 +1,4 @@
-import type { ConnectionContext, EventsReplayResponse, SessionLiveness } from '@boardsesh/shared-schema';
+import type { ConnectionContext, EventsReplayResponse, SessionLiveness, SessionStatus } from '@boardsesh/shared-schema';
 import { eq } from 'drizzle-orm';
 import { roomManager, type DiscoverableSession } from '../../../services/room-manager';
 import { pubsub } from '../../../pubsub/index';
@@ -7,7 +7,7 @@ import { SessionIdSchema, LatitudeSchema, LongitudeSchema, RadiusMetersSchema } 
 import { generateSessionSummary } from './session-summary';
 import { getDistributedState } from '../../../services/distributed-state';
 import { buildSessionPayload } from './helpers';
-import { db } from '../../../db/client';
+import { dbRead } from '../../../db/client';
 import { sessions } from '../../../db/schema';
 
 export const sessionQueries = {
@@ -143,7 +143,7 @@ export const sessionQueries = {
    */
   sessionLiveness: async (_: unknown, { sessionId }: { sessionId: string }): Promise<SessionLiveness | null> => {
     validateInput(SessionIdSchema, sessionId, 'sessionId');
-    const rows = await db
+    const rows = await dbRead
       .select({ id: sessions.id, status: sessions.status, endedAt: sessions.endedAt })
       .from(sessions)
       .where(eq(sessions.id, sessionId))
@@ -152,7 +152,9 @@ export const sessionQueries = {
     if (!row) return null;
     return {
       id: row.id,
-      status: row.status,
+      // status is a free-text column constrained by a DB CHECK to
+      // ('active','inactive','ended'); narrow the string for callers.
+      status: row.status as SessionStatus,
       endedAt: row.endedAt ? row.endedAt.toISOString() : null,
     };
   },

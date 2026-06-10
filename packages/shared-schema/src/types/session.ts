@@ -44,9 +44,12 @@ export type SessionSummary = {
   goal?: string | null;
 };
 
+/** Durable session lifecycle status (DB CHECK: board_sessions.status). */
+export type SessionStatus = 'active' | 'inactive' | 'ended';
+
 /** Durable lifecycle status of a session, independent of live presence. */
 export type SessionLiveness = {
   id: string;
-  status: string;
+  status: SessionStatus;
   endedAt?: string | null;
 };

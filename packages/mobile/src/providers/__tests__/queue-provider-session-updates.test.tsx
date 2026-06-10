@@ -850,6 +850,26 @@ describe('QueueProvider session update subscription', () => {
     expect(ws.getSessionUpdatesSink()).toBeNull();
   });
 
+  it('drops a stored session whose status is ended even if endedAt is null (#2683)', async () => {
+    // A partial-ended row (status flipped, timestamp not yet set) must still be
+    // treated as ended — the status check, not just endedAt, gates the clear.
+    sessionStore.getStoredSessionId.mockResolvedValue('session-ended');
+    http.request.mockImplementation((operation: string) =>
+      operation.includes('SessionLiveness')
+        ? Promise.resolve(livenessResponse('session-ended', 'ended', null))
+        : Promise.resolve({ endSession: { sessionId: 'session-ended' } }),
+    );
+
+    const snapshots: Snapshot[] = [];
+    renderProvider((snapshot) => snapshots.push(snapshot));
+
+    await waitFor(() => {
+      expect(sessionStore.clearStoredSessionId).toHaveBeenCalled();
+    });
+    expect(snapshots.at(-1)?.sessionId).toBeNull();
+    expect(graph.execute).not.toHaveBeenCalled();
+  });
+
   it('restores optimistically when the liveness check fails (offline cold start)', async () => {
     http.request.mockImplementation((operation: string) =>
       operation.includes('SessionLiveness')
