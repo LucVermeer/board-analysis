@@ -14,6 +14,7 @@ import {
 } from '../lib/auth';
 import { reset as resetAnalytics, track } from '../lib/analytics';
 import { reportError } from '../lib/sentry';
+import { setOnForcedSignOut } from '../lib/auth-interceptor';
 import { resetHttpClient } from '../lib/graphql/client';
 import { disposeWsClient } from '../lib/graphql/ws-client';
 import { clearStoredSessionId } from '../lib/session-store';
@@ -119,11 +120,18 @@ export function AuthProvider({ children, onReady }: AuthProviderProps) {
     [checkAuth],
   );
 
-  const signOut = useCallback(async () => {
-    track(SHARED_EVENTS.Logout, { method: 'manual' });
-    await authSignOut();
+  // The shared signed-out cleanup, used by both the manual `signOut` below and
+  // the interceptor's forced sign-out (failed-refresh 401). It deliberately
+  // omits the two caller-specific steps: the manual `Logout` analytics event,
+  // and `authSignOut()` (the token revoke + clear) — the forced path's caller
+  // already revoked, so running it here would double-revoke.
+  const runSignedOutCleanup = useCallback(async () => {
     resetAnalytics();
-    await Promise.all([clearStoredSessionId(), clearStoredActiveBoard()]);
+    // Best-effort store clears — clearStoredSessionId/clearStoredActiveBoard hit
+    // SecureStore/AsyncStorage and can reject. allSettled (not all) so a failed
+    // delete can't abort the rest of the teardown and leave the user stuck on the
+    // authenticated screens with the critical setIsAuthenticated(false) skipped.
+    await Promise.allSettled([clearStoredSessionId(), clearStoredActiveBoard()]);
     // Drop the in-memory active-board cache too. It's `staleTime: Infinity`, so
     // without this the next user to sign in on a shared device would inherit the
     // previous user's board until a manual switch.
@@ -138,6 +146,28 @@ export function AuthProvider({ children, onReady }: AuthProviderProps) {
     queryClient.clear();
     setIsAuthenticated(false);
   }, [queryClient]);
+
+  const signOut = useCallback(async () => {
+    track(SHARED_EVENTS.Logout, { method: 'manual' });
+    await authSignOut();
+    await runSignedOutCleanup();
+  }, [runSignedOutCleanup]);
+
+  // Let the lib-layer 401 interceptor drive the same cleanup. On a failed-refresh
+  // 401 it has already revoked + cleared tokens; this flips the provider out of
+  // the authenticated UI right away instead of waiting for the next foreground
+  // checkAuth. `setOnForcedSignOut` is our own module setter (not React state),
+  // so the function value is stored verbatim. Each caller emits its own Logout
+  // event so manual vs. server-revoked sign-outs are distinguishable in PostHog.
+  useEffect(() => {
+    setOnForcedSignOut(() => {
+      track(SHARED_EVENTS.Logout, { method: 'forced' });
+      // runSignedOutCleanup swallows store-clear failures internally; report any
+      // unexpected rejection rather than letting it become an unhandled one.
+      runSignedOutCleanup().catch(reportError);
+    });
+    return () => setOnForcedSignOut(null);
+  }, [runSignedOutCleanup]);
 
   const onReadyRef = useRef(onReady);
   onReadyRef.current = onReady;

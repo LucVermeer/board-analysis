@@ -66,6 +66,16 @@ vi.mock('../../lib/graphql/use-active-board', () => ({
   ACTIVE_BOARD_QUERY_KEY: ['activeBoard'] as const,
 }));
 
+// The provider registers its forced-sign-out cleanup against this lib-layer hook
+// (and lazily imports ensureFreshToken in checkAuth). Record the register/clear
+// calls so the lifecycle test can assert the contract.
+const setOnForcedSignOutMock = vi.fn();
+const ensureFreshTokenMock = vi.fn().mockResolvedValue(true);
+vi.mock('../../lib/auth-interceptor', () => ({
+  setOnForcedSignOut: (callback: (() => void) | null) => setOnForcedSignOutMock(callback),
+  ensureFreshToken: () => ensureFreshTokenMock(),
+}));
+
 import { AuthProvider, useAuth } from '../auth-provider';
 
 describe('AuthProvider.signOut', () => {
@@ -145,6 +155,35 @@ describe('AuthProvider.signOut', () => {
     // Active board cache was wiped — both the targeted removeQueries and the
     // subsequent clear() do this; verifying the end state is enough.
     expect(queryClient.getQueryData(['activeBoard'])).toBeUndefined();
+  });
+});
+
+describe('AuthProvider forced sign-out registration', () => {
+  beforeEach(() => {
+    getAuthTokenMock.mockReset();
+    isTokenExpiringSoonMock.mockReset();
+    setOnForcedSignOutMock.mockReset();
+    getAuthTokenMock.mockResolvedValue('jwt-token');
+    isTokenExpiringSoonMock.mockResolvedValue(false);
+  });
+
+  // The interceptor's null-guard is the safety net, but the provider owns the
+  // contract: register a callable while mounted, clear it (null) on unmount so a
+  // 401 firing after teardown can't drive a dead provider.
+  it('registers the forced-sign-out hook on mount and clears it on unmount', async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const { unmount } = render(
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>{null}</AuthProvider>
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => expect(setOnForcedSignOutMock).toHaveBeenCalled());
+    const registered = setOnForcedSignOutMock.mock.calls.at(-1)?.[0];
+    expect(typeof registered).toBe('function');
+
+    unmount();
+    expect(setOnForcedSignOutMock).toHaveBeenLastCalledWith(null);
   });
 });
 
