@@ -22,6 +22,8 @@ type RawSelectResult = {
   description: string | null;
   created_at: string | null;
   published_at: string | null;
+  frames_count: number | null;
+  frames_pace: number | null;
 };
 
 function mapResultToClimbRow(result: RawSelectResult, params: BoardRouteParams): ClimbRow {
@@ -43,6 +45,8 @@ function mapResultToClimbRow(result: RawSelectResult, params: BoardRouteParams):
     description: result.description || '',
     created_at: result.created_at,
     published_at: result.published_at,
+    framesCount: result.frames_count ?? null,
+    framesPace: result.frames_pace ?? null,
   };
 }
 
@@ -198,6 +202,8 @@ async function statsDrivenSearch(
     description: boardClimbs.description,
     created_at: boardClimbs.createdAt,
     published_at: boardClimbs.publishedAt,
+    frames_count: boardClimbs.framesCount,
+    frames_pace: boardClimbs.framesPace,
   };
 
   const results: RawSelectResult[] = (await db
@@ -313,6 +319,8 @@ async function standardSearch(
     description: boardClimbs.description,
     created_at: boardClimbs.createdAt,
     published_at: boardClimbs.publishedAt,
+    frames_count: boardClimbs.framesCount,
+    frames_pace: boardClimbs.framesPace,
   };
 
   const orderByClause = sortOrder === 'asc' ? sql`${sortColumn} ASC NULLS FIRST` : sql`${sortColumn} DESC NULLS LAST`;

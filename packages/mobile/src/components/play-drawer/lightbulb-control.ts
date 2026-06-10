@@ -10,7 +10,13 @@ export type PlayDrawerLightbulbState = {
   lightbulbPending: boolean;
 };
 
-export type PlayDrawerLightbulbPressAction = 'noop' | 'release_party' | 'connect_solo' | 'reassert_solo' | 'take_party';
+export type PlayDrawerLightbulbPressAction =
+  | 'noop'
+  | 'release_party'
+  | 'reconnect_ble'
+  | 'connect_solo'
+  | 'reassert_solo'
+  | 'take_party';
 
 export function derivePlayDrawerLightbulbState(args: {
   sessionId: string | null;
@@ -30,7 +36,11 @@ export function derivePlayDrawerLightbulbState(args: {
   return {
     isPersistentSessionActive,
     isDriver,
-    lightbulbActive: isPersistentSessionActive ? isDriver : args.isBluetoothConnected,
+    // "Lit" follows the real BLE link in both modes, matching the climbs-list
+    // lightbulb. In solo mode deriveIsDriver is always true, so this collapses to
+    // isBluetoothConnected; in a party session it stays unlit unless you both hold
+    // wall control and have the board connected, so a stolen link unlights it.
+    lightbulbActive: isDriver && args.isBluetoothConnected,
     lightbulbPending: args.isBluetoothLoading || args.pendingClimbUuid !== null,
   };
 }
@@ -55,7 +65,14 @@ export function derivePlayDrawerLightbulbPressAction(args: {
   isBluetoothConnected: boolean;
 }): PlayDrawerLightbulbPressAction {
   if (args.isPersistentSessionActive) {
-    if (args.isDriver) return 'release_party';
+    if (args.isDriver) {
+      if (args.isBluetoothConnected) return 'release_party';
+      // Driver but the link was stolen — reconnect and keep wall control, so it
+      // takes one tap (not two: release then re-take) to relight the board.
+      if (args.hasBluetooth) return 'reconnect_ble';
+      // No BLE on this client at all — releasing control is the only action left.
+      return 'release_party';
+    }
     return args.hasDisplayedClimb ? 'take_party' : 'noop';
   }
   if (!args.hasBluetooth) return 'noop';

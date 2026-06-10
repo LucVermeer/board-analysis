@@ -47,7 +47,8 @@
     "comments": {
       "title": "Comentarios",
       "empty": "Aún no hay comentarios — abre la conversación",
-      "placeholder": "Añade un comentario…"
+      "placeholder": "Añade un comentario…",
+      "sendError": "No se pudo publicar tu comentario. Inténtalo de nuevo."
     },
     "filter": {
       "title": "Filtros",
@@ -62,6 +63,9 @@
     },
     "logbook": {
       "empty": "Tu historial está vacío — registra tu primer encadene.",
+      "errorTitle": "No se pudo cargar tu historial",
+      "errorBody": "Comprueba tu conexión e inténtalo de nuevo.",
+      "retry": "Inténtalo de nuevo",
       "editTitle": "Editar ascenso",
       "statusLabel": "Estado",
       "gradeLabel": "Grado",

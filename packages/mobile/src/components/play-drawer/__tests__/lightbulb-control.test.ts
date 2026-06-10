@@ -65,13 +65,32 @@ describe('play drawer lightbulb control', () => {
     });
   });
 
-  it('uses driver state for the party lightbulb', () => {
+  it('keeps the party lightbulb unlit when the driver has no BLE link', () => {
+    // Driver in a session but the board link was stolen — the bulb must go unlit,
+    // matching the climbs-list bulb, instead of staying lit on wall-control alone.
     expect(
       derivePlayDrawerLightbulbState({
         sessionId: 'session-1',
         driverParticipantId: 'participant-1',
         participantId: 'participant-1',
         isBluetoothConnected: false,
+        isBluetoothLoading: false,
+        pendingClimbUuid: null,
+      }),
+    ).toEqual({
+      isPersistentSessionActive: true,
+      isDriver: true,
+      lightbulbActive: false,
+      lightbulbPending: false,
+    });
+
+    // Driver with the board connected — lit.
+    expect(
+      derivePlayDrawerLightbulbState({
+        sessionId: 'session-1',
+        driverParticipantId: 'participant-1',
+        participantId: 'participant-1',
+        isBluetoothConnected: true,
         isBluetoothLoading: false,
         pendingClimbUuid: null,
       }),
@@ -100,6 +119,10 @@ describe('play drawer lightbulb control', () => {
   });
 
   it('derives the lightbulb tap action', () => {
+    // Party driver with no BLE on this client at all (bluetooth === null): the
+    // driver branch can't reconnect, so it falls back to release. This is the
+    // `if (args.hasBluetooth) return 'reconnect_ble'` else-branch in
+    // derivePlayDrawerLightbulbPressAction — kept reachable on purpose.
     expect(
       derivePlayDrawerLightbulbPressAction({
         hasBluetooth: false,
@@ -145,6 +168,7 @@ describe('play drawer lightbulb control', () => {
         isBluetoothConnected: true,
       }),
     ).toBe('reassert_solo');
+    // Party driver whose link was stolen reconnects BLE in one tap, keeping control.
     expect(
       derivePlayDrawerLightbulbPressAction({
         hasBluetooth: true,
@@ -152,6 +176,16 @@ describe('play drawer lightbulb control', () => {
         isPersistentSessionActive: true,
         isDriver: true,
         isBluetoothConnected: false,
+      }),
+    ).toBe('reconnect_ble');
+    // Party driver still connected releases wall control.
+    expect(
+      derivePlayDrawerLightbulbPressAction({
+        hasBluetooth: true,
+        hasDisplayedClimb: true,
+        isPersistentSessionActive: true,
+        isDriver: true,
+        isBluetoothConnected: true,
       }),
     ).toBe('release_party');
     expect(

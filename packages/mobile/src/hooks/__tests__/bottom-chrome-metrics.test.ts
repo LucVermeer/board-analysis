@@ -25,6 +25,7 @@ describe('computeBottomChromeMetrics', () => {
     expect(metrics.tabBarBottom).toBe(34);
     expect(metrics.scrollBottomPadding).toBe(34);
     expect(metrics.floatingControlBottom).toBe(34);
+    expect(metrics.fixedFooterBottom).toBe(34);
     expect(metrics.jsQueueToolbarVisible).toBe(false);
     expect(metrics.nativeAccessoryVisible).toBe(false);
   });
@@ -41,6 +42,7 @@ describe('computeBottomChromeMetrics', () => {
     expect(metrics.jsQueueReserve).toBe(TOOLBAR_RESERVE);
     expect(metrics.scrollBottomPadding).toBe(TAB_BAR_HEIGHT + TOOLBAR_RESERVE);
     expect(metrics.floatingControlBottom).toBe(TAB_BAR_HEIGHT + TOOLBAR_RESERVE);
+    expect(metrics.fixedFooterBottom).toBe(TAB_BAR_HEIGHT + TOOLBAR_RESERVE);
   });
 
   it('reserves the docked Material bar when the JS toolbar is visible', () => {
@@ -55,6 +57,7 @@ describe('computeBottomChromeMetrics', () => {
     expect(metrics.jsQueueReserve).toBe(MATERIAL_ACTIVE_CONTEXT_BAR_HEIGHT);
     expect(metrics.scrollBottomPadding).toBe(TAB_BAR_HEIGHT + MATERIAL_ACTIVE_CONTEXT_BAR_HEIGHT);
     expect(metrics.floatingControlBottom).toBe(TAB_BAR_HEIGHT + MATERIAL_ACTIVE_CONTEXT_BAR_HEIGHT);
+    expect(metrics.fixedFooterBottom).toBe(MATERIAL_ACTIVE_CONTEXT_BAR_HEIGHT);
   });
 
   it('does not pad scroll content for the UIKit-owned native accessory', () => {
@@ -73,6 +76,21 @@ describe('computeBottomChromeMetrics', () => {
     // But floating controls must still clear the accessory.
     expect(metrics.nativeAccessoryReserve).toBe(NATIVE_ACCESSORY_RESERVE);
     expect(metrics.floatingControlBottom).toBe(TAB_BAR_HEIGHT + NATIVE_ACCESSORY_RESERVE);
+    expect(metrics.fixedFooterBottom).toBe(TAB_BAR_HEIGHT + NATIVE_ACCESSORY_RESERVE);
+  });
+
+  it('reserves queue chrome for fixed footers outside the tabs group', () => {
+    const metrics = computeBottomChromeMetrics({
+      uiVariant: 'liquidGlass',
+      insetsBottom: 34,
+      insideTabs: false,
+      hasCurrentClimb: true,
+      nativeAccessoryMounted: false,
+    });
+
+    expect(metrics.tabBarHeight).toBe(0);
+    expect(metrics.scrollBottomPadding).toBe(34 + TOOLBAR_RESERVE);
+    expect(metrics.fixedFooterBottom).toBe(34 + TOOLBAR_RESERVE);
   });
 
   it('keeps the tab bar but no toolbar reserve when no climb is set, even if the accessory is mounted', () => {
@@ -87,6 +105,21 @@ describe('computeBottomChromeMetrics', () => {
     expect(metrics.nativeAccessoryVisible).toBe(false); // mounted, but no climb to show
     expect(metrics.scrollBottomPadding).toBe(34 + TAB_BAR_HEIGHT);
     expect(metrics.floatingControlBottom).toBe(34 + TAB_BAR_HEIGHT);
+    expect(metrics.fixedFooterBottom).toBe(34 + TAB_BAR_HEIGHT);
+  });
+
+  it('keeps scroll tab clearance but not fixed-footer tab clearance inside Material tabs', () => {
+    const metrics = computeBottomChromeMetrics({
+      uiVariant: 'material',
+      insetsBottom: 24,
+      insideTabs: true,
+      hasCurrentClimb: false,
+      nativeAccessoryMounted: false,
+    });
+
+    expect(metrics.tabBarBottom).toBe(24 + TAB_BAR_HEIGHT);
+    expect(metrics.scrollBottomPadding).toBe(24 + TAB_BAR_HEIGHT);
+    expect(metrics.fixedFooterBottom).toBe(0);
   });
 
   it('never reports both the JS toolbar and the native accessory as visible at once', () => {

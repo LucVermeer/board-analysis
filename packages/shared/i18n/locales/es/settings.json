@@ -371,8 +371,6 @@
     "noDevicesFound": "No se encontraron tableros cercanos",
     "cancel": "Cancelar",
     "unknownBoard": "Tablero desconocido",
-    "disconnected": "Tablero desconectado",
-    "reconnect": "Reconectar",
     "connectBoard": "Conectar tablero",
     "relightBoard": "Reiluminar tablero",
     "holdForControls": "Mantén pulsado para los controles",

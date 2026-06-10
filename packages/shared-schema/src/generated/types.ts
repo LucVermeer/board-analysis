@@ -3193,6 +3193,14 @@ export type Query = {
    */
   sessionGroupedFeed: SessionFeedResult;
   /**
+   * Lightweight, presence-independent lifecycle check for a session.
+   * Reads the durable session row (not live Redis presence), so it tells an
+   * ended session apart from one that is merely empty. Returns null when the
+   * session does not exist. Clients use this on cold start to decide whether
+   * to restore or drop a persisted session id.
+   */
+  sessionStatus?: Maybe<SessionStatus>;
+  /**
    * Get a session summary (stats, grade distribution, participants).
    * Available for ended sessions or active sessions with ticks.
    */
@@ -3615,6 +3623,11 @@ export type QuerySessionDetailArgs = {
 /** Root query type for all read operations. */
 export type QuerySessionGroupedFeedArgs = {
   input?: InputMaybe<ActivityFeedInput>;
+};
+
+/** Root query type for all read operations. */
+export type QuerySessionStatusArgs = {
+  sessionId: Scalars['ID']['input'];
 };
 
 /** Root query type for all read operations. */
@@ -4309,6 +4322,19 @@ export type SessionStatsUpdated = {
   /** Total sends (flash + send) */
   totalSends: Scalars['Int']['output'];
 };
+
+/**
+ * Durable session lifecycle status, independent of live presence. Backed by
+ * the persisted session row rather than Redis, so an ended session reads as
+ * ended even when no participants are currently connected. Lowercase values
+ * match the strings stored in board_sessions.status so resolvers and clients
+ * pass them through without mapping (same convention as TickStatus).
+ */
+export type SessionStatus =
+  /** Live or dormant; safe for a client to restore on cold start */
+  | 'active'
+  /** Explicitly ended, or auto-finished by the inactivity sweep */
+  | 'ended';
 
 /** Summary of a completed session including stats, grade distribution, and participants. */
 export type SessionSummary = {
@@ -5520,6 +5546,7 @@ export type ResolversTypes = ResolversObject<{
   SessionHardestClimb: ResolverTypeWrapper<SessionHardestClimb>;
   SessionParticipant: ResolverTypeWrapper<SessionParticipant>;
   SessionStatsUpdated: ResolverTypeWrapper<SessionStatsUpdated>;
+  SessionStatus: SessionStatus;
   SessionSummary: ResolverTypeWrapper<SessionSummary>;
   SessionUser: ResolverTypeWrapper<SessionUser>;
   SetCommunitySettingInput: SetCommunitySettingInput;
@@ -7833,6 +7860,12 @@ export type QueryResolvers<
     ParentType,
     ContextType,
     Partial<QuerySessionGroupedFeedArgs>
+  >;
+  sessionStatus?: Resolver<
+    Maybe<ResolversTypes['SessionStatus']>,
+    ParentType,
+    ContextType,
+    RequireFields<QuerySessionStatusArgs, 'sessionId'>
   >;
   sessionSummary?: Resolver<
     Maybe<ResolversTypes['SessionSummary']>,

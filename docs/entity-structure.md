@@ -239,19 +239,19 @@ A session represents a climbing session on one or more boards — the real-time 
 
 **Current properties:**
 
-| Property             | Type               | Notes                                           |
-| -------------------- | ------------------ | ----------------------------------------------- |
-| `id`                 | `text`             | PK                                              |
-| `board_path`         | `text`             | `/{board_type}/{layout_id}/{size_id}/{set_ids}` |
-| `created_at`         | `timestamp`        | DEFAULT now()                                   |
-| `last_activity`      | `timestamp`        | DEFAULT now(), updated on interaction           |
-| `status`             | `text`             | 'active', 'inactive', 'ended'                   |
-| `latitude`           | `double precision` | Nullable, for discovery                         |
-| `longitude`          | `double precision` | Nullable, for discovery                         |
-| `discoverable`       | `boolean`          | DEFAULT false                                   |
-| `created_by_user_id` | `text`             | FK → users.id, SET NULL                         |
-| `name`               | `text`             | Nullable, display name                          |
-| `board_id`           | `bigint`           | FK → user_boards.id, SET NULL                   |
+| Property             | Type               | Notes                                                                   |
+| -------------------- | ------------------ | ----------------------------------------------------------------------- |
+| `id`                 | `text`             | PK                                                                      |
+| `board_path`         | `text`             | `/{board_type}/{layout_id}/{size_id}/{set_ids}`                         |
+| `created_at`         | `timestamp`        | DEFAULT now()                                                           |
+| `last_activity`      | `timestamp`        | DEFAULT now(), updated on interaction                                   |
+| `status`             | `text`             | 'active', 'ended' (legacy CHECK also permits 'inactive', never written) |
+| `latitude`           | `double precision` | Nullable, for discovery                                                 |
+| `longitude`          | `double precision` | Nullable, for discovery                                                 |
+| `discoverable`       | `boolean`          | DEFAULT false                                                           |
+| `created_by_user_id` | `text`             | FK → users.id, SET NULL                                                 |
+| `name`               | `text`             | Nullable, display name                                                  |
+| `board_id`           | `bigint`           | FK → user_boards.id, SET NULL                                           |
 
 **Planned additions:**
 

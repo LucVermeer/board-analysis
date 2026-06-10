@@ -27,18 +27,20 @@ import { computeFirstScreenHeight } from './play-drawer-layout';
 import { AngleSelectorSheet } from './AngleSelectorSheet';
 import { ClimbActionsSheet } from '../ClimbActionsSheet';
 import { BleControlSheet } from '../ble/BleControlSheet';
+import { disconnectAllBluetooth } from '../../lib/ble/bluetooth-status-store';
 import { GlassSheetBackground } from '../GlassSheetBackground';
 import { Icon } from '../Icon';
 import { usePlaylistSuggestionSource, useQueue } from '../../providers/queue-provider';
 import { useOptionalBluetoothContext } from '../../providers/bluetooth-provider';
 import { useToast } from '../../providers/toast-provider';
-import { useToggleFavorite } from '../../lib/graphql/hooks';
+import { useToggleFavorite, useFavoriteStatus } from '../../lib/graphql/hooks';
 import { useGradeFormat } from '../../hooks/use-grade-format';
 import { useShareClimb } from '../../hooks/use-share-climb';
 import { getBoardRenderData } from '../../lib/board-details';
 import { hapticSuccess } from '../../lib/haptics';
 import { usePlayDrawerWakeLock } from './use-play-drawer-wake-lock';
 import { useDeferredSheetOpen } from './use-deferred-sheet-open';
+import { resolveFavoriteRollback } from './favorite-rollback';
 import {
   buildPlayDrawerBoardLayout,
   derivePlayDrawerLightbulbPressAction,
@@ -123,7 +125,11 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
     null,
   );
   const [isMirrored, setIsMirrored] = useState(false);
-  const [isFavorited, setIsFavorited] = useState(false);
+  // Local optimistic override for the heart. `null` means "no local change —
+  // show the server's favorite status". A tap sets it optimistically, the
+  // mutation's returned `favorited` confirms it, and a failure rolls it back.
+  // Cleared on every climb change so the next climb shows its real status.
+  const [favoriteOverride, setFavoriteOverride] = useState<boolean | null>(null);
   const [isTickBarActive, setIsTickBarActive] = useState(false);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [activeSubDrawer, setActiveSubDrawer] = useState<ActiveSubDrawer>('none');
@@ -162,6 +168,10 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   const { boardName, layoutId, sizeId, setIds, angle } = boardConfig;
   const bluetoothConnected = bluetooth?.isConnected ?? false;
   const bluetoothLoading = bluetooth?.loading ?? false;
+  // Single source for "is a board's BLE available at all" so the lightbulb's
+  // accessibility label and its press action stay in lockstep — both read this
+  // instead of one checking `bluetooth` and the other `bluetooth !== null`.
+  const hasBluetooth = bluetooth !== null;
 
   usePlayDrawerWakeLock(isSheetOpen);
 
@@ -184,6 +194,17 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   const displayedClimb = displayedQueueItem?.climb;
   const displayedClimbUuidRef = useRef<string | null>(null);
   displayedClimbUuidRef.current = displayedClimb?.uuid ?? null;
+
+  // Real favorite status for the heart, keyed on (boardName, climbUuid, angle).
+  // Gated on the sheet being open so it doesn't fetch while the drawer is closed.
+  // The displayed state is the local optimistic override when set, otherwise the
+  // server's truth — so the heart reflects whether the climb is already a favorite
+  // on open, and a single tap can't invert reality (the previous always-false
+  // local state silently un-favorited already-favorited climbs).
+  const { data: serverFavorited } = useFavoriteStatus(boardName, displayedClimb?.uuid ?? null, angle, {
+    enabled: isSheetOpen,
+  });
+  const isFavorited = favoriteOverride ?? serverFavorited ?? false;
   const lightbulbState = useMemo(
     () =>
       derivePlayDrawerLightbulbState({
@@ -213,10 +234,13 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
     isOpen: isSheetOpen,
   });
 
-  // Auto-close tick bar when climb changes
+  // Auto-close tick bar and drop the favorite override when climb changes, so the
+  // new climb's heart shows its real (server) status rather than the previous
+  // climb's optimistic value.
   const displayedClimbUuid = displayedClimb?.uuid;
   useEffect(() => {
     setIsTickBarActive(false);
+    setFavoriteOverride(null);
   }, [displayedClimbUuid]);
 
   // Once the user has requested below-fold content in an open sheet, keep it
@@ -325,7 +349,9 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
       setDrawerPreviewSuggestionSource(previewPlaylistSuggestionSource);
       setDrawerPreviewItem(selectedItem);
       setIsMirrored(false);
-      setIsFavorited(false);
+      // Drop any stale optimistic heart so the opened climb shows its real
+      // (server) favorite status rather than a leftover from the last climb.
+      setFavoriteOverride(null);
       setIsTickBarActive(false);
       setIsSheetOpen(true);
       setActiveSubDrawer('none');
@@ -394,7 +420,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
       previousClimb();
     }
     setIsMirrored(false);
-    setIsFavorited(false);
+    // The favorite override is cleared by the climb-change effect.
   }, [cancelPendingWallControlAttempt, isPartyPreviewOnly, navigationState.prevItem, previousClimb]);
 
   const handleNext = useCallback(() => {
@@ -408,7 +434,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
       nextClimb();
     }
     setIsMirrored(false);
-    setIsFavorited(false);
+    // The favorite override is cleared by the climb-change effect.
   }, [cancelPendingWallControlAttempt, isPartyPreviewOnly, navigationState.nextItem, nextClimb]);
 
   const handleMirror = useCallback(() => {
@@ -428,7 +454,8 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
     if (!displayedClimb) return;
     hapticSuccess();
     const nextIsFavorited = !isFavorited;
-    setIsFavorited(nextIsFavorited);
+    const previousOverride = favoriteOverride;
+    setFavoriteOverride(nextIsFavorited);
     track(SHARED_EVENTS.FavoriteToggle, {
       action: nextIsFavorited ? 'added' : 'removed',
       climbUuid: displayedClimb.uuid,
@@ -436,18 +463,37 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
       layoutId,
       source: 'mobile_play_drawer',
     });
-    toggleFavoriteMutate({
-      input: {
-        boardName,
-        climbUuid: displayedClimb.uuid,
-        angle,
+    toggleFavoriteMutate(
+      {
+        input: {
+          boardName,
+          climbUuid: displayedClimb.uuid,
+          angle,
+        },
       },
-    });
-  }, [displayedClimb, isFavorited, boardName, layoutId, angle, toggleFavoriteMutate]);
+      {
+        // Reconcile to the server's authoritative result — the backend toggles
+        // off the real DB state, so this is the truth even if our optimistic
+        // guess was wrong.
+        onSuccess: (response) => {
+          setFavoriteOverride(response.toggleFavorite.favorited);
+        },
+        // Roll back the optimistic flip and tell the user it didn't stick, rather
+        // than leaving the heart diverged from the server. Only undo OUR flip,
+        // though: if a newer tap (or a climb change, which resets the override to
+        // null) has since moved the heart, this late error must not clobber the
+        // current state with this tap's stale previous value.
+        onError: () => {
+          setFavoriteOverride((current) => resolveFavoriteRollback(current, nextIsFavorited, previousOverride));
+          showToast(t('playView.favoriteError'), 'error');
+        },
+      },
+    );
+  }, [displayedClimb, isFavorited, favoriteOverride, boardName, layoutId, angle, toggleFavoriteMutate, showToast, t]);
 
   const handleLightbulb = useCallback(() => {
     const pressAction = derivePlayDrawerLightbulbPressAction({
-      hasBluetooth: bluetooth !== null,
+      hasBluetooth,
       hasDisplayedClimb: displayedClimb !== null,
       isPersistentSessionActive: lightbulbState.isPersistentSessionActive,
       isDriver: lightbulbState.isDriver,
@@ -472,6 +518,20 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
         .catch((error: unknown) => {
           console.error('[playDrawer] failed to release wall control:', error);
         });
+      return;
+    }
+
+    if (pressAction === 'reconnect_ble') {
+      if (!bluetooth) return;
+      // Ignore taps while a connect is already in flight, matching the climbs-list
+      // lightbulb (use-lightbulb-toggle.ts). The connect() in-flight ref also guards,
+      // but bailing here avoids a misleading haptic and a dead tap.
+      if (bluetoothLoading) return;
+      // Party driver whose BLE link was stolen — reconnect to the remembered board
+      // without releasing wall control, so it relights in one tap. No control
+      // changes hands here, and connect() already emits BluetoothConnectionSuccess,
+      // so we don't fire 'Wall Control Taken' (which would inflate party-take counts).
+      void bluetooth.connect(undefined, undefined, bluetooth.reconnectSerialForCurrentBoard ?? undefined);
       return;
     }
 
@@ -565,6 +625,8 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
     });
   }, [
     bluetooth,
+    hasBluetooth,
+    bluetoothLoading,
     driverParticipantId,
     participantId,
     lightbulbState.isPersistentSessionActive,
@@ -636,7 +698,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
       setDrawerPreviewItem(queueItem);
       setDrawerPreviewSuggestionSource(null);
       setIsMirrored(false);
-      setIsFavorited(false);
+      // The favorite override is cleared by the climb-change effect.
       setIsTickBarActive(false);
       if (isPartyPreviewOnly) return;
       addToQueue(queueItem);
@@ -676,12 +738,23 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   const lightbulbAccessibilityLabel = useMemo(() => {
     if (!lightbulbState.isPersistentSessionActive) return undefined;
     if (lightbulbState.isDriver) {
+      // Still the driver but the board link dropped — the tap reconnects, not
+      // releases, so the label must match (see derivePlayDrawerLightbulbPressAction,
+      // which keys the reconnect action off this same hasBluetooth condition).
+      if (hasBluetooth && !bluetoothConnected) return t('playView.actionBar.lightbulb.reconnect');
       if (!displayedClimb) return t('playView.actionBar.lightbulb.driving');
       return t('playView.actionBar.lightbulb.drivingNamed', { name: displayedClimb.name });
     }
     if (!displayedClimb) return t('playView.actionBar.lightbulb.take');
     return t('playView.actionBar.lightbulb.takeNamed', { name: displayedClimb.name });
-  }, [displayedClimb, lightbulbState.isDriver, lightbulbState.isPersistentSessionActive, t]);
+  }, [
+    displayedClimb,
+    lightbulbState.isDriver,
+    lightbulbState.isPersistentSessionActive,
+    hasBluetooth,
+    bluetoothConnected,
+    t,
+  ]);
 
   return (
     <>
@@ -882,7 +955,8 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
         <BleControlSheet
           visible={bleControlOpen}
           onReassert={bluetooth.reassertWall}
-          onDisconnect={() => void bluetooth.disconnect()}
+          onClearLights={() => void bluetooth.clearBoard()}
+          onDisconnect={disconnectAllBluetooth}
           onClose={() => setBleControlOpen(false)}
         />
       )}

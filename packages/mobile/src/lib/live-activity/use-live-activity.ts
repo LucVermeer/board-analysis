@@ -195,8 +195,20 @@ export function useLiveActivity({
           });
         })
         .catch((error) => {
+          // A newer start superseded this one — its own .then/.catch owns the
+          // state, so stay silent.
+          if (generationRef.current !== startGeneration) return;
+          // Log first so a real start failure is never swallowed, even if the
+          // session was torn down (isActiveRef false) while the start was in
+          // flight — only the state reset below is conditional on still being active.
           console.warn('[LiveActivity] startSession failed:', error);
+          if (!isActiveRef.current) return;
           isActiveRef.current = false;
+          // Native startSession connects the WebSocket and writes the shared
+          // keychain/App-Group state BEFORE the Activity.request that threw, so
+          // tear those down here — JS otherwise believes nothing is active and
+          // never reaches the teardown paths. endSession is idempotent.
+          void endLiveActivitySession();
         });
     } else if (!shouldBeActive && isActiveRef.current) {
       void endLiveActivitySession();

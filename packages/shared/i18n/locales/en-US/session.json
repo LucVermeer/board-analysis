@@ -150,6 +150,9 @@
     "savingToAppleHealth": "Saving to Apple Health…",
     "savedToAppleHealth": "Saved to Apple Health",
     "saveToAppleHealthRetry": "Save to Apple Health (retry)",
+    "loadErrorTitle": "Couldn't load your session",
+    "loadErrorMessage": "Your climbs are saved — the recap just didn't load. Try again or head back.",
+    "retry": "Try again",
     "minutes": "{{count}}min",
     "hours": "{{count}}h",
     "hoursAndMinutes": "{{hours}}h {{mins}}min"
@@ -292,6 +295,7 @@
       "removeClimb": "Remove climb",
       "positionLabel": "position {{position}}",
       "syncError": "Queue sync error",
+      "outOfSyncRefreshed": "Queue was out of sync. Refreshed from your crew.",
       "sessionCreateError": "Couldn't create session",
       "noBoardSelected": "Pick a board first",
       "actionFailed": "Action failed. Try again.",
@@ -421,6 +425,7 @@
     "triesCount_other": "{{count}} tries",
     "tickError": "Couldn't save your tick — it's saved as a draft",
     "shareError": "Couldn't share — try again",
+    "favoriteError": "Couldn't update your favorites — try again",
     "closeAria": "Close",
     "actionBar": {
       "previousAria": "Previous climb",
@@ -435,6 +440,7 @@
       "lightbulb": {
         "drivingNamed": "You’re driving “{{name}}”. Tap to release control.",
         "driving": "You’re driving. Tap to release control.",
+        "reconnect": "Board disconnected. Tap to reconnect.",
         "takeNamed": "Take wall control and send “{{name}}”",
         "take": "Take wall control",
         "coachmark": "Send to the wall"

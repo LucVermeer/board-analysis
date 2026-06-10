@@ -1,5 +1,6 @@
-import { useEffect, useMemo } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { useEffect, useMemo, type ReactNode } from 'react';
+import { StyleSheet, View } from 'react-native';
+import { ScrollView } from 'react-native-gesture-handler';
 import { useTranslation } from 'react-i18next';
 import type { BoardName } from '@boardsesh/shared-schema';
 import { getGradesForBoard } from '@boardsesh/board-config';
@@ -218,6 +219,20 @@ function OptionChip({ label, active, onPress, accessibilityLabel }: OptionChipPr
   );
 }
 
+function ChipRail({ children }: { children: ReactNode }) {
+  return (
+    <ScrollView
+      horizontal
+      nestedScrollEnabled
+      showsHorizontalScrollIndicator={false}
+      keyboardShouldPersistTaps="handled"
+      contentContainerStyle={styles.chipRow}
+    >
+      {children}
+    </ScrollView>
+  );
+}
+
 /**
  * Workout-type selector. Off keeps the queue empty (user fills it manually);
  * any other choice pre-populates the queue from the shared `@boardsesh/playlist-generator`
@@ -386,7 +401,7 @@ export function GeneratorPickerCard({
           <Text variant="footnote" color={systemColors.secondaryLabel} style={styles.settingLabel}>
             {warmUpGroupLabel}
           </Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+          <ChipRail>
             {WARM_UP_OPTIONS.map((warmUp) => (
               <OptionChip
                 key={warmUp}
@@ -399,7 +414,7 @@ export function GeneratorPickerCard({
                 })}
               />
             ))}
-          </ScrollView>
+          </ChipRail>
         </View>
 
         {boardName != null ? (
@@ -407,7 +422,7 @@ export function GeneratorPickerCard({
             <Text variant="footnote" color={systemColors.secondaryLabel} style={styles.settingLabel}>
               {targetGradeLabel}
             </Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+            <ChipRail>
               {gradeChoices.map((grade) => {
                 const isActive = grade.difficulty_id === options.targetGrade;
                 const gradeLabel = formatGrade(grade.difficulty_name) ?? grade.difficulty_name;
@@ -424,7 +439,7 @@ export function GeneratorPickerCard({
                   />
                 );
               })}
-            </ScrollView>
+            </ChipRail>
           </View>
         ) : null}
 
@@ -434,7 +449,7 @@ export function GeneratorPickerCard({
           <Text variant="footnote" color={systemColors.secondaryLabel} style={styles.settingLabel}>
             {minAscentsGroupLabel}
           </Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+          <ChipRail>
             {minAscentsOptions.map((minAscents) => {
               const label = t('mobile.session.preGeneratorMinAscentsOption', {
                 value: formatMinAscentsFilterCount(minAscents),
@@ -452,7 +467,7 @@ export function GeneratorPickerCard({
                 />
               );
             })}
-          </ScrollView>
+          </ChipRail>
         </View>
 
         <View style={styles.settingBlock}>
@@ -489,7 +504,7 @@ export function GeneratorPickerCard({
           <Text variant="footnote" color={systemColors.secondaryLabel} style={styles.settingLabel}>
             {climbBiasGroupLabel}
           </Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+          <ChipRail>
             {CLIMB_BIAS_OPTIONS.map((climbBias) => (
               <OptionChip
                 key={climbBias}
@@ -502,7 +517,7 @@ export function GeneratorPickerCard({
                 })}
               />
             ))}
-          </ScrollView>
+          </ChipRail>
         </View>
 
         {showTallClimbsFilter || showWideClimbsFilter ? (
@@ -537,7 +552,7 @@ export function GeneratorPickerCard({
         {t('mobile.session.preGeneratorLabel')}
       </Text>
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+      <ChipRail>
         {CHIP_VALUES.map((value) => {
           const isActive = value === activeType;
           const label = chipLabel(value, t);
@@ -554,7 +569,7 @@ export function GeneratorPickerCard({
             />
           );
         })}
-      </ScrollView>
+      </ChipRail>
 
       {renderGeneratorOptions()}
     </View>

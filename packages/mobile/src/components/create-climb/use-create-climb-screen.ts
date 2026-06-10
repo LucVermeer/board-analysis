@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { AppState, type AppStateStatus } from 'react-native';
 import { randomUUID } from 'expo-crypto';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -23,7 +24,13 @@ import { useQueueActions } from '../../providers/queue-provider';
 import { useOptionalBluetoothContext } from '../../providers/bluetooth-provider';
 import { useToast } from '../../providers/toast-provider';
 import { climbToQueueItem } from '../../lib/climb-to-queue-item';
-import { loadDraft, saveDraft, clearDraft, createClimbDraftKey } from '../../lib/create-climb-draft-store';
+import {
+  loadDraft,
+  saveDraft,
+  clearDraft,
+  createClimbDraftKey,
+  type CreateClimbDraft,
+} from '../../lib/create-climb-draft-store';
 import { getPaintRoles, type BrushRole } from './brush-roles';
 
 // The save button's visual state, derived from auth + the saved-climb snapshot +
@@ -234,25 +241,66 @@ export function useCreateClimbScreen({
 
   // ---- Local autosave (debounced). ----
   const holdsJson = useMemo(() => JSON.stringify(litUpHoldsMap), [litUpHoldsMap]);
+  // The most recent autosave payload, kept current by the debounced effect so a
+  // flush-on-unmount / background can persist it synchronously without waiting
+  // for the (suspended-when-backgrounded) debounce timer. `dirty` gates whether
+  // there is anything worth flushing for the current per-board new-draft slot.
+  const pendingDraftRef = useRef<{ key: string; draft: CreateClimbDraft; dirty: boolean }>({
+    key: draftKey,
+    draft: { holdsJson, name, description, isDraft },
+    dirty: false,
+  });
+  // Forks seed from another climb's frames and skip restore, so — like edit
+  // mode — they must never write the shared per-board new-draft autosave slot,
+  // or merely opening a fork would clobber a real new-climb WIP under the same
+  // (board-config-only) key and resurface as a phantom on the next "new climb".
+  const autosaveDisabled = isEditing || isForking || !!savedClimb;
   useEffect(() => {
     if (!restoredRef.current) return;
-    // Edit mode operates on an existing climb — never persist it into the
-    // per-board new-draft autosave slot, or it resurfaces as a phantom draft.
-    if (isEditing) return;
-    // Once the WIP has been saved, stop autosaving. `handleSave` clears the
-    // draft and sets `savedClimb`; without this guard the debounced timer would
-    // re-write the just-cleared draft and resurface it as a phantom on reopen.
-    if (savedClimb) return;
+    // Edit mode / forks operate on a seeded climb, and a just-saved WIP is owned
+    // by the server row — none of them belong in the new-draft autosave slot.
+    if (autosaveDisabled) {
+      pendingDraftRef.current.dirty = false;
+      return;
+    }
     const hasContent = holdsJson !== '{}' || name.trim() !== '' || description.trim() !== '';
+    const draft: CreateClimbDraft = { holdsJson, name, description: withNoMatch(description, noMatch), isDraft };
+    // Mirror the latest payload so a flush (unmount/background) can persist the
+    // pending edit even before the debounce fires.
+    pendingDraftRef.current = { key: draftKey, draft, dirty: hasContent };
     const handle = setTimeout(() => {
       if (!hasContent) {
         void clearDraft(draftKey);
+        pendingDraftRef.current.dirty = false;
         return;
       }
-      void saveDraft(draftKey, { holdsJson, name, description: withNoMatch(description, noMatch), isDraft });
+      void saveDraft(draftKey, draft);
+      pendingDraftRef.current.dirty = false;
     }, AUTOSAVE_DEBOUNCE_MS);
     return () => clearTimeout(handle);
-  }, [holdsJson, name, description, noMatch, isDraft, draftKey, savedClimb]);
+  }, [holdsJson, name, description, noMatch, isDraft, draftKey, autosaveDisabled]);
+
+  // ---- Flush the pending draft on unmount / background. ----
+  // JS timers are suspended when the app is backgrounded and the cleanup's
+  // clearTimeout drops the pending edit when the drawer closes within the
+  // debounce window, so persist the latest payload immediately on both
+  // transitions. Keeps the draft-store's "a backgrounded app doesn't lose
+  // work-in-progress" promise.
+  const flushPendingDraft = useCallback(() => {
+    const pending = pendingDraftRef.current;
+    if (!restoredRef.current || !pending.dirty) return;
+    pending.dirty = false;
+    void saveDraft(pending.key, pending.draft);
+  }, []);
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state: AppStateStatus) => {
+      if (state === 'background' || state === 'inactive') flushPendingDraft();
+    });
+    return () => {
+      subscription.remove();
+      flushPendingDraft();
+    };
+  }, [flushPendingDraft]);
 
   // ---- BLE preview (debounced) while connected. ----
   const sendFramesRef = useRef(bluetooth?.sendFramesToBoard);
@@ -287,6 +335,7 @@ export function useCreateClimbScreen({
     // a Save straight after Clear reuses the old name and skips the name prompt.
     setName('');
     setDescription('');
+    setNoMatch(false);
     setIsDraft(true);
     setSavedClimb(null);
     setPublishDuplicateError(null);

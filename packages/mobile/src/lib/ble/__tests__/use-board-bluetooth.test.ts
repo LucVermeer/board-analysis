@@ -43,11 +43,18 @@ vi.mock('expo-keep-awake', () => ({
 }));
 
 const mockGetAuroraBluetoothPacket = vi.hoisted(() => vi.fn());
+const mockParseApiLevel = vi.hoisted(() => vi.fn());
+const mockParseSerialNumber = vi.hoisted(() => vi.fn());
 vi.mock('@boardsesh/ble-protocol/aurora', () => ({
   getAuroraBluetoothPacket: mockGetAuroraBluetoothPacket,
-  parseApiLevel: vi.fn(),
+  parseApiLevel: mockParseApiLevel,
   parseBoardTypeFromDeviceName: vi.fn(),
-  parseSerialNumber: vi.fn(),
+  parseSerialNumber: mockParseSerialNumber,
+}));
+
+const mockTrack = vi.hoisted(() => vi.fn());
+vi.mock('../../analytics', () => ({
+  track: mockTrack,
 }));
 
 const mockGetLedPlacements = vi.hoisted(() => vi.fn());
@@ -296,32 +303,72 @@ describe('useBoardBluetooth', () => {
     expect(writeEvents).toEqual(['start-1', 'end-1', 'start-2', 'end-2']);
   });
 
-  it('converts frames through the mirror map when mirrored and holdsData are provided', async () => {
-    const fakeAdapter = makeFakeAdapter();
+  it('refuses a mirrored send on a mirroring board when holdsData is missing (never sends un-mirrored frames)', async () => {
+    // Tension layout 1 supports mirroring. holdsData is intentionally omitted —
+    // the provider must thread it in; without it we must NOT silently send the
+    // un-mirrored frames (which would light the wrong holds on the wall).
+    const fakeAdapter = makeFakeAdapter({
+      requestAndConnect: vi.fn().mockResolvedValue({ deviceId: 'dev-1', deviceName: 'Tension A1#0042@3' }),
+    });
     vi.mocked(createBluetoothAdapter).mockReturnValue(
       fakeAdapter as unknown as ReturnType<typeof createBluetoothAdapter>,
     );
-    mockGetLedPlacements.mockReturnValue({ 200: 7 });
-    mockGetAuroraBluetoothPacket.mockReturnValue({
-      packet: new Uint8Array([9]),
-      skippedPositionCount: 0,
-      skippedRoleCount: 0,
-      totalPlacements: 1,
-    });
+    mockParseApiLevel.mockReturnValue(3);
+    mockParseSerialNumber.mockReturnValue('0042');
 
-    const holdsData = [makePlacement(100, 200)];
-    const { result } = renderHook(() => useBoardBluetooth({ boardName: 'kilter', layoutId: 1, sizeId: 1, holdsData }));
+    const { result } = renderHook(() => useBoardBluetooth({ boardName: 'tension', layoutId: 1, sizeId: 1 }));
 
     await act(async () => {
       await result.current.connect();
     });
 
+    let sendResult: boolean | undefined;
     await act(async () => {
-      await result.current.sendFramesToBoard('p100r12', true);
+      sendResult = await result.current.sendFramesToBoard('p1r12', true);
     });
 
-    expect(mockGetAuroraBluetoothPacket).toHaveBeenCalledWith('p200r12', { 200: 7 }, 'kilter', undefined, undefined);
-    expect(fakeAdapter.write).toHaveBeenCalledWith(new Uint8Array([9]), expect.anything());
+    expect(sendResult).toBe(false);
+    expect(Alert.alert).toHaveBeenCalledWith('ble.notAvailable', 'ble.errorIncompatible');
+    // The board must never receive the original (un-mirrored) frames.
+    expect(fakeAdapter.write).not.toHaveBeenCalled();
+    const failureCall = mockTrack.mock.calls.find(([name]) => name === 'Climb Sent to Board Failure');
+    expect(failureCall?.[1]).toMatchObject({ failureReason: 'missing_mirror_data', mirrored: true });
+  });
+
+  it('mirrors and sends when holdsData is present on a mirroring board', async () => {
+    const fakeAdapter = makeFakeAdapter({
+      requestAndConnect: vi.fn().mockResolvedValue({ deviceId: 'dev-1', deviceName: 'Tension A1#0042@3' }),
+    });
+    vi.mocked(createBluetoothAdapter).mockReturnValue(
+      fakeAdapter as unknown as ReturnType<typeof createBluetoothAdapter>,
+    );
+    mockParseApiLevel.mockReturnValue(3);
+    mockParseSerialNumber.mockReturnValue('0042');
+    // A non-empty placement map lets the write proceed past the empty-placement guard.
+    mockGetLedPlacements.mockReturnValue({ 1: 0, 99: 1 });
+    mockGetAuroraBluetoothPacket.mockReturnValue({
+      packet: new Uint8Array([0x01]),
+      skippedPositionCount: 0,
+      skippedRoleCount: 0,
+      totalPlacements: 1,
+    });
+
+    const holdsData = [makePlacement(1, 99)];
+    const { result } = renderHook(() => useBoardBluetooth({ boardName: 'tension', layoutId: 1, sizeId: 1, holdsData }));
+
+    await act(async () => {
+      await result.current.connect();
+    });
+
+    let sendResult: boolean | undefined;
+    await act(async () => {
+      sendResult = await result.current.sendFramesToBoard('p1r12', true);
+    });
+
+    expect(sendResult).toBe(true);
+    expect(fakeAdapter.write).toHaveBeenCalledTimes(1);
+    // The mirrored frame (hold 1 -> 99) must have been fed to the packet builder.
+    expect(mockGetAuroraBluetoothPacket).toHaveBeenCalledWith('p99r12', expect.anything(), 'tension', 3, undefined);
   });
 
   it('aborts queued and in-flight writes on disconnect', async () => {
@@ -387,6 +434,49 @@ describe('useBoardBluetooth', () => {
 
     expect(fakeAdapter.disconnect).toHaveBeenCalled();
     expect(result.current.isConnected).toBe(false);
+  });
+
+  it('emits apiLevel and deviceNamePresent on the connection-success event', async () => {
+    const fakeAdapter = makeFakeAdapter({
+      requestAndConnect: vi.fn().mockResolvedValue({ deviceId: 'dev-1', deviceName: 'Kilter A1#0042@3' }),
+    });
+    vi.mocked(createBluetoothAdapter).mockReturnValue(
+      fakeAdapter as unknown as ReturnType<typeof createBluetoothAdapter>,
+    );
+    mockParseApiLevel.mockReturnValue(3);
+    mockParseSerialNumber.mockReturnValue('0042');
+
+    const { result } = renderHook(() => useBoardBluetooth({ boardName: 'kilter', layoutId: 1, sizeId: 1 }));
+
+    await act(async () => {
+      await result.current.connect();
+    });
+
+    const successCall = mockTrack.mock.calls.find(([name]) => name === 'Bluetooth Connection Success');
+    expect(successCall).toBeDefined();
+    expect(successCall?.[1]).toMatchObject({ apiLevel: 3, deviceNamePresent: true });
+  });
+
+  it('reports deviceNamePresent=false and the v2 fallback level when no name is advertised', async () => {
+    const fakeAdapter = makeFakeAdapter({
+      requestAndConnect: vi.fn().mockResolvedValue({ deviceId: 'dev-2', deviceName: undefined }),
+    });
+    vi.mocked(createBluetoothAdapter).mockReturnValue(
+      fakeAdapter as unknown as ReturnType<typeof createBluetoothAdapter>,
+    );
+    // Mirrors parseApiLevel's real default for a missing/unparseable name.
+    mockParseApiLevel.mockReturnValue(2);
+    mockParseSerialNumber.mockReturnValue(undefined);
+
+    const { result } = renderHook(() => useBoardBluetooth({ boardName: 'kilter', layoutId: 1, sizeId: 1 }));
+
+    await act(async () => {
+      await result.current.connect();
+    });
+
+    const successCall = mockTrack.mock.calls.find(([name]) => name === 'Bluetooth Connection Success');
+    expect(successCall).toBeDefined();
+    expect(successCall?.[1]).toMatchObject({ apiLevel: 2, deviceNamePresent: false });
   });
 });
 
@@ -794,7 +884,12 @@ describe('dispatchMoonboardPacket', () => {
 
   it('calls write() with the packet bytes, not the full packet object', async () => {
     const fakePacket = new Uint8Array([0x01, 0x02, 0x03]);
-    mockGetMoonboardBluetoothPacket.mockReturnValue({ packet: fakePacket });
+    mockGetMoonboardBluetoothPacket.mockReturnValue({
+      packet: fakePacket,
+      totalPlacements: 2,
+      skippedRoleCount: 0,
+      skippedPositionCount: 0,
+    });
     const write = vi.fn().mockResolvedValue(undefined);
 
     await dispatchMoonboardPacket('p1r12p2r14', write);
@@ -806,7 +901,12 @@ describe('dispatchMoonboardPacket', () => {
   });
 
   it('returns true on success', async () => {
-    mockGetMoonboardBluetoothPacket.mockReturnValue({ packet: new Uint8Array([0x00]) });
+    mockGetMoonboardBluetoothPacket.mockReturnValue({
+      packet: new Uint8Array([0x00]),
+      totalPlacements: 1,
+      skippedRoleCount: 0,
+      skippedPositionCount: 0,
+    });
     const write = vi.fn().mockResolvedValue(undefined);
 
     const result = await dispatchMoonboardPacket('p1r12', write);
@@ -825,12 +925,51 @@ describe('dispatchMoonboardPacket', () => {
 
   it('forwards the AbortSignal to write()', async () => {
     const fakePacket = new Uint8Array([0xaa]);
-    mockGetMoonboardBluetoothPacket.mockReturnValue({ packet: fakePacket });
+    mockGetMoonboardBluetoothPacket.mockReturnValue({
+      packet: fakePacket,
+      totalPlacements: 1,
+      skippedRoleCount: 0,
+      skippedPositionCount: 0,
+    });
     const write = vi.fn().mockResolvedValue(undefined);
     const controller = new AbortController();
 
     await dispatchMoonboardPacket('p5r3', write, controller.signal);
 
     expect(write).toHaveBeenCalledWith(fakePacket, controller.signal);
+  });
+
+  it('returns false and never writes when every placement is skipped (board would go dark)', async () => {
+    // getMoonboardBluetoothPacket emits the "clear all" packet `l##` with
+    // skippedRoleCount === totalPlacements when no hold maps to a known role.
+    // Writing that would silently dark the board while reporting success.
+    mockGetMoonboardBluetoothPacket.mockReturnValue({
+      packet: new TextEncoder().encode('l##'),
+      totalPlacements: 2,
+      skippedRoleCount: 2,
+      skippedPositionCount: 0,
+    });
+    const write = vi.fn().mockResolvedValue(undefined);
+
+    const result = await dispatchMoonboardPacket('p1r99p2r98', write);
+
+    expect(result).toBe(false);
+    expect(write).not.toHaveBeenCalled();
+  });
+
+  it('writes and returns true when only some placements are skipped', async () => {
+    const fakePacket = new TextEncoder().encode('l#S0#');
+    mockGetMoonboardBluetoothPacket.mockReturnValue({
+      packet: fakePacket,
+      totalPlacements: 2,
+      skippedRoleCount: 1,
+      skippedPositionCount: 0,
+    });
+    const write = vi.fn().mockResolvedValue(undefined);
+
+    const result = await dispatchMoonboardPacket('p1r42p2r99', write);
+
+    expect(result).toBe(true);
+    expect(write).toHaveBeenCalledTimes(1);
   });
 });

@@ -4,6 +4,17 @@ import { BACKEND_URL } from './env';
 
 let refreshPromise: Promise<boolean> | null = null;
 
+// The interceptor lives in the lib layer and can't import the AuthProvider, but
+// a failed-refresh 401 means the session is dead and the provider must run its
+// full signed-out cleanup (flip isAuthenticated → redirect to login, dispose the
+// WS client, reset analytics, clear caches). The provider registers that cleanup
+// here in a useEffect; we invoke it from the 401 branch below.
+let onForcedSignOut: (() => void) | null = null;
+
+export function setOnForcedSignOut(callback: (() => void) | null): void {
+  onForcedSignOut = callback;
+}
+
 async function refreshTokens(): Promise<boolean> {
   const currentRefreshToken = await getRefreshToken();
   if (!currentRefreshToken) return false;
@@ -45,6 +56,31 @@ export async function ensureFreshToken(): Promise<boolean> {
   return deduplicatedRefresh();
 }
 
+let forcedSignOutPromise: Promise<void> | null = null;
+
+// A burst of concurrent requests all 401 and all see deduplicatedRefresh() return
+// false, so without collapsing them each would revoke + fire onForcedSignOut —
+// duplicate `forced` Logout events and redundant provider cleanup. Run the sign-out
+// once; reset on settle so a genuinely new 401 (after a later sign-in) still signs
+// out. signOut() must complete (revoke + clearTokens) before onForcedSignOut runs.
+function forceSignOut(): Promise<void> {
+  if (!forcedSignOutPromise) {
+    // Capture the hook now. signOut() awaits a network revoke; if the provider
+    // unmounts during that window its effect nulls the module ref, but the
+    // cleanup it registered must still run (dispose the WS, reset the http
+    // client, clear caches) or the forced sign-out silently drops — the exact
+    // failure this path exists to prevent.
+    const notifyProvider = onForcedSignOut;
+    forcedSignOutPromise = (async () => {
+      await signOut();
+      notifyProvider?.();
+    })().finally(() => {
+      forcedSignOutPromise = null;
+    });
+  }
+  return forcedSignOutPromise;
+}
+
 export async function authenticatedFetch(url: string | URL | Request, options: RequestInit = {}): Promise<Response> {
   await ensureFreshToken();
 
@@ -67,7 +103,10 @@ export async function authenticatedFetch(url: string | URL | Request, options: R
         return fetch(url, { ...options, headers });
       }
     }
-    await signOut();
+    // signOut() only revokes + clears tokens. forceSignOut also tells the provider
+    // to run the rest of the cleanup so the UI leaves the authenticated screens
+    // immediately, instead of waiting for the next background→foreground checkAuth.
+    await forceSignOut();
   }
 
   return response;

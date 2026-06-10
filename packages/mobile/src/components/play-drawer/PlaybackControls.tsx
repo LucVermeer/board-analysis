@@ -25,6 +25,7 @@ import { brandColors as staticBrandColors } from '../../theme/colors';
 import { iosSystemColors } from '../../theme/ios-colors';
 import { spacing, borderRadius } from '../../theme/tokens';
 import { springs, timing } from '../../theme/animations';
+import { roundedReportSpeed, shouldReportSpeed } from './playback-speed-report';
 
 // Continuous range; mirrors web's effective span. 1× is the natural default and
 // gets a gentle release-magnet (see commit()).
@@ -175,6 +176,10 @@ function SpeedSlider({
   const dragging = useSharedValue(false);
   const thumbScale = useSharedValue(1);
   const lastNotch = useSharedValue(-1);
+  // The last 0.1×-rounded speed pushed via `reportLive`, so the per-frame
+  // worklet skips the cross-thread `runOnJS` hop (and the PlaybackControls
+  // re-render it triggers) when the displayed value hasn't actually changed.
+  const lastReported = useSharedValue(-1);
 
   const ratioToSpeed = useCallback(
     (ratio: number) => Math.round((MIN_SPEED + clamp01(ratio) * (MAX_SPEED - MIN_SPEED)) * 10) / 10,
@@ -218,6 +223,7 @@ function SpeedSlider({
           thumbScale.value = withSpring(1.25, springs.snappy);
           lastNotch.value =
             Math.round((MIN_SPEED + (usable > 0 ? position.value / usable : 0) * (MAX_SPEED - MIN_SPEED)) * 2) / 2;
+          lastReported.value = roundedReportSpeed(position.value, usable);
           runOnJS(hapticSelection)();
         })
         .onUpdate((event) => {
@@ -230,7 +236,14 @@ function SpeedSlider({
             lastNotch.value = notch;
             runOnJS(hapticSelection)();
           }
-          runOnJS(reportLive)(next);
+          // Gate the cross-thread report on the 0.1×-rounded display value
+          // changing — without this it fires a runOnJS hop + a React setState
+          // (and a PlaybackControls re-render) on every drag frame.
+          const report = shouldReportSpeed(next, usable, lastReported.value);
+          if (report.changed) {
+            lastReported.value = report.rounded;
+            runOnJS(reportLive)(next);
+          }
         })
         .onEnd(() => {
           runOnJS(commit)(position.value);
@@ -239,7 +252,7 @@ function SpeedSlider({
           dragging.value = false;
           thumbScale.value = withSpring(1, springs.snappy);
         }),
-    [usable, position, startPosition, dragging, thumbScale, lastNotch, reportLive, commit],
+    [usable, position, startPosition, dragging, thumbScale, lastNotch, lastReported, reportLive, commit],
   );
 
   // Tap-to-seek on the track.

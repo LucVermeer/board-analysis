@@ -43,3 +43,12 @@ export type SessionSummary = {
   durationMinutes?: number | null;
   goal?: string | null;
 };
+
+/**
+ * Durable session lifecycle status. Only 'active' and 'ended' are ever
+ * written: live presence moved to Redis, so the abandoned 'inactive' value
+ * survives only in the legacy DB CHECK (backend migration
+ * 0005_session_status_tracking.sql). The sessionStatus resolver normalizes
+ * any such legacy row to 'active'.
+ */
+export type SessionStatus = 'active' | 'ended';

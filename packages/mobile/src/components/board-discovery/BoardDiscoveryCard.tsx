@@ -89,6 +89,13 @@ export function BoardDiscoveryCard({ item, onPress }: BoardDiscoveryCardProps) {
             setIds={item.setIds}
             boardWidth={render.boardWidth}
             boardHeight={render.boardHeight}
+            // Resolve the thumb-sized (416px) background + a 400px overlay
+            // instead of the full-res native webp (up to ~1461px). A 168px cell
+            // doesn't need the native source, and decoding it on the main thread
+            // for every card in three stacked carousels stutters / hangs the
+            // picker. Matches ClimbListThumbnail's renderWidth so the thumb
+            // background and overlay cache entries are shared across surfaces.
+            renderWidth={400}
             style={styles.boardImage}
           />
         ) : (

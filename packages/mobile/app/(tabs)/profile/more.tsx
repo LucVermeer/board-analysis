@@ -31,6 +31,7 @@ export default function MoreScreen() {
   const { t } = useTranslation('common');
   const { t: tProfile } = useTranslation('profile');
   const { t: tPlaylists } = useTranslation('playlists');
+  const { t: tSettings } = useTranslation('settings');
   const { signOut } = useAuth();
   const { data: profile } = useProfile();
   const { gradeFormat, setGradeFormat } = useGradeFormat();
@@ -247,11 +248,22 @@ export default function MoreScreen() {
         ) : null}
         <Pressable
           style={[styles.signOut, { borderColor: systemColors.separator }]}
-          onPress={signOut}
+          onPress={() => {
+            void signOut();
+          }}
           accessibilityRole="button"
         >
           <Text variant="body" color={brandColors.error}>
             {tProfile('mobile.signOut')}
+          </Text>
+        </Pressable>
+        <Pressable
+          style={styles.deleteAccount}
+          onPress={() => router.push('/(tabs)/profile/delete-account')}
+          accessibilityRole="button"
+        >
+          <Text variant="body" color={brandColors.error}>
+            {tSettings('deleteAccount.button')}
           </Text>
         </Pressable>
       </View>
@@ -294,5 +306,15 @@ const styles = StyleSheet.create({
     marginHorizontal: spacing[4],
     borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
+  },
+  // Deliberately subordinate to Sign Out: a borderless red text link, not the
+  // bordered button above. Sign Out is the routine action; account deletion is
+  // rare and irreversible, so it reads as a quieter, secondary affordance rather
+  // than competing for equal visual weight.
+  deleteAccount: {
+    alignItems: 'center',
+    paddingVertical: spacing[3],
+    marginHorizontal: spacing[4],
+    marginTop: spacing[2],
   },
 });

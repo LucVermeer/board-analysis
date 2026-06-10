@@ -437,18 +437,6 @@ export function BluetoothProvider({
   const [reassertNonce, setReassertNonce] = useState(0);
   const reassertWall = useCallback(() => setReassertNonce((nonce) => nonce + 1), []);
 
-  // Register with the module-level status store so consumers rendered
-  // outside this provider (e.g. the root tab bar) can observe BT connection
-  // state and trigger disconnect. The store expects () => void, so wrap the
-  // async disconnect.
-  useEffect(() => {
-    if (!isConnected) return;
-    const release = registerBluetoothConnection(() => {
-      void disconnect();
-    });
-    return release;
-  }, [isConnected, disconnect]);
-
   // Detect an unexpected drop (connected → disconnected without a user-initiated
   // disconnect) for telemetry only. `isUserDisconnectRef` suppresses deliberate ones.
   const wasConnectedRef = useRef(false);
@@ -460,10 +448,29 @@ export function BluetoothProvider({
     track(SHARED_EVENTS.BluetoothDisconnected, { boardName, reason: 'user', inSession: sessionIdRef.current != null });
     try {
       await disconnect();
+    } catch {
+      // The native iOS adapter's disconnect() can reject (e.g. peripheral
+      // already torn down). Callers `void` this promise, so an unhandled
+      // rejection would surface as Sentry noise. Connection state is cleared
+      // before the await, so the disconnect is effectively done either way —
+      // safe to swallow, matching the keep-awake `.catch(() => {})` pattern.
     } finally {
       isUserDisconnectRef.current = false;
     }
   }, [disconnect, boardName]);
+
+  // Register with the module-level status store so consumers rendered outside
+  // this provider (e.g. the root tab bar, the long-press BLE controls sheet) can
+  // observe BT connection state and force a disconnect. Register the instrumented
+  // `wrappedDisconnect` so a force-disconnect is still tracked as user-initiated
+  // (not mis-tagged as an unexpected drop). The store expects () => void.
+  useEffect(() => {
+    if (!isConnected) return;
+    const release = registerBluetoothConnection(() => {
+      void wrappedDisconnect();
+    });
+    return release;
+  }, [isConnected, wrappedDisconnect]);
 
   // Losing the BLE link is expected (RF noise, or another climber grabbing the
   // last-connection-wins board), so an unexpected drop just lets the lightbulb go

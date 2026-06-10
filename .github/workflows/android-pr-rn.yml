@@ -102,6 +102,24 @@ jobs:
           TAILSCALE_HOSTS: ''
         run: bunx expo prebuild --platform android --clean --no-install
 
+      - name: Run live-activity module unit tests (Robolectric)
+        working-directory: packages/mobile/android
+        # Robolectric/JUnit tests for the session-presence lifecycle + the
+        # foreground-service retry path. Run before the slow APK build so a
+        # regression surfaces fast. The gradle project path for an Expo local
+        # module is autolinking-derived, so discover it rather than hardcode.
+        run: |
+          set -euo pipefail
+          mapfile -t PROJECTS < <(./gradlew -q projects | sed -n "s/.*Project '\(:[^']*live-activity[^']*\)'.*/\1/p")
+          if [ "${#PROJECTS[@]}" -ne 1 ]; then
+            echo "Expected exactly one live-activity Gradle project, found ${#PROJECTS[@]}:"
+            printf '  %s\n' "${PROJECTS[@]}"
+            exit 1
+          fi
+          PROJECT="${PROJECTS[0]}"
+          echo "Testing module project: $PROJECT"
+          ./gradlew "${PROJECT}:testDebugUnitTest" --stacktrace
+
       - name: Build debug-signed release APK (compiles all native modules + plugins)
         working-directory: packages/mobile/android
         # No ANDROID_KEYSTORE_* env here → with-android-release-signing falls back

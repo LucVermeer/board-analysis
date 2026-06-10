@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
+import { ScrollView as GestureScrollView } from 'react-native-gesture-handler';
 import { useTranslation } from 'react-i18next';
 import { toBoardName } from '@boardsesh/board-config';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
@@ -19,6 +20,7 @@ import { useToast } from '../../../providers/toast-provider';
 import { useDrawerHost } from '../../../providers/drawer-host-provider';
 import { useBottomChromeMetrics } from '../../../hooks/use-bottom-chrome-metrics';
 import { reportError } from '../../../lib/sentry';
+import { SESSION_FOOTER_CLEARANCE } from '../session-footer-clearance';
 import { BoardSummaryCard } from './BoardSummaryCard';
 import { GeneratorPickerCard, type GeneratorSelection } from './GeneratorPickerCard';
 import { WorkoutPreviewRow } from './WorkoutPreviewRow';
@@ -162,7 +164,7 @@ export function PreSessionView() {
   const generatorPreviewReady =
     selection.type !== 'on' || (status === 'ready' && previewItems.length > 0 && refreshingUuids.size === 0);
   const canStart = activeBoard != null && !isStarting && generatorPreviewReady;
-  const footerBottomPadding = bottomChrome.scrollBottomPadding + spacing[3];
+  const footerBottomPadding = spacing[3] + bottomChrome.fixedFooterBottom;
 
   // Inline status copy shown above an empty preview (loading / no results /
   // error). When rows are already present a rebuild keeps them mounted, so these
@@ -179,53 +181,75 @@ export function PreSessionView() {
             ? t('mobile.session.preWorkoutPreviewEmpty')
             : null;
 
-  const listHeader = (
-    <View style={styles.header}>
-      <Text variant="footnote" color={systemColors.secondaryLabel} style={styles.eyebrow}>
-        {t('mobile.session.headerStart')}
-      </Text>
+  const listHeader = useMemo(
+    () => (
+      <View style={styles.header}>
+        <Text variant="footnote" color={systemColors.secondaryLabel} style={styles.eyebrow}>
+          {t('mobile.session.headerStart')}
+        </Text>
 
-      <BoardSummaryCard board={activeBoard ?? null} />
+        <BoardSummaryCard board={activeBoard ?? null} />
 
-      <GeneratorPickerCard
-        boardName={activeBoard ? toBoardName(activeBoard.boardType) : null}
-        layoutId={activeBoard?.layoutId ?? null}
-        sizeId={activeBoard?.sizeId ?? null}
-        angle={activeBoard?.angle ?? null}
-        selection={selection}
-        onChange={setSelection}
-      />
+        <GeneratorPickerCard
+          boardName={activeBoard ? toBoardName(activeBoard.boardType) : null}
+          layoutId={activeBoard?.layoutId ?? null}
+          sizeId={activeBoard?.sizeId ?? null}
+          angle={activeBoard?.angle ?? null}
+          selection={selection}
+          onChange={setSelection}
+        />
 
-      {showPreviewSection ? (
-        <View style={styles.previewSection}>
-          <Text variant="footnote" color={systemColors.secondaryLabel} style={styles.sectionLabel}>
-            {t('mobile.session.preWorkoutPreviewTitle')}
-          </Text>
-          {previewStateMessage ? (
-            <View style={[styles.stateCard, { backgroundColor: systemColors.secondaryBackground }]}>
-              <Text variant="body" color={systemColors.secondaryLabel}>
-                {previewStateMessage}
-              </Text>
-            </View>
-          ) : null}
-        </View>
-      ) : null}
-    </View>
+        {showPreviewSection ? (
+          <View style={styles.previewSection}>
+            <Text variant="footnote" color={systemColors.secondaryLabel} style={styles.sectionLabel}>
+              {t('mobile.session.preWorkoutPreviewTitle')}
+            </Text>
+            {previewStateMessage ? (
+              <View style={[styles.stateCard, { backgroundColor: systemColors.secondaryBackground }]}>
+                <Text variant="body" color={systemColors.secondaryLabel}>
+                  {previewStateMessage}
+                </Text>
+              </View>
+            ) : null}
+          </View>
+        ) : null}
+      </View>
+    ),
+    [
+      activeBoard,
+      previewStateMessage,
+      selection,
+      setSelection,
+      showPreviewSection,
+      systemColors.secondaryBackground,
+      systemColors.secondaryLabel,
+      t,
+    ],
   );
 
   return (
     <View style={styles.container}>
       <FlashList
-        style={styles.list}
+        style={styles.scroll}
         data={previewItems}
         renderItem={renderPreviewRow}
         keyExtractor={previewKeyExtractor}
         ListHeaderComponent={listHeader}
-        contentContainerStyle={{ paddingBottom: 100 + footerBottomPadding }}
+        // Supported in FlashList 2.3.1: typed in FlashListProps and consumed at
+        // runtime (useSecondaryProps wraps it via createAnimatedComponent). Use a
+        // gesture-handler scroll host so Android nested chip rails keep their
+        // horizontal gestures while the preview rows stay virtualized.
+        renderScrollComponent={GestureScrollView}
+        contentContainerStyle={{ paddingBottom: SESSION_FOOTER_CLEARANCE + footerBottomPadding }}
         showsVerticalScrollIndicator={false}
+        nestedScrollEnabled
+        keyboardShouldPersistTaps="handled"
       />
 
-      <View style={[styles.footer, { backgroundColor: systemColors.background, paddingBottom: footerBottomPadding }]}>
+      <View
+        testID="pre-session-footer"
+        style={[styles.footer, { backgroundColor: systemColors.background, paddingBottom: footerBottomPadding }]}
+      >
         <Button
           title={isStarting ? t('mobile.session.preStarting') : t('mobile.session.preStart')}
           onPress={() => void handleStart()}
@@ -243,7 +267,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  list: {
+  scroll: {
     flex: 1,
   },
   header: {

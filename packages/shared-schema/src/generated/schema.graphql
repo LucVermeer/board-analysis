@@ -375,6 +375,20 @@ type Session {
 }
 
 """
+Durable session lifecycle status, independent of live presence. Backed by
+the persisted session row rather than Redis, so an ended session reads as
+ended even when no participants are currently connected. Lowercase values
+match the strings stored in board_sessions.status so resolvers and clients
+pass them through without mapping (same convention as TickStatus).
+"""
+enum SessionStatus {
+  "Live or dormant; safe for a client to restore on cold start"
+  active
+  "Explicitly ended, or auto-finished by the inactivity sweep"
+  ended
+}
+
+"""
 A session that can be discovered by nearby users via GPS.
 """
 type DiscoverableSession {
@@ -3542,6 +3556,15 @@ type Query {
   Available for ended sessions or active sessions with ticks.
   """
   sessionSummary(sessionId: ID!): SessionSummary
+
+  """
+  Lightweight, presence-independent lifecycle check for a session.
+  Reads the durable session row (not live Redis presence), so it tells an
+  ended session apart from one that is merely empty. Returns null when the
+  session does not exist. Clients use this on cold start to decide whether
+  to restore or drop a persisted session id.
+  """
+  sessionStatus(sessionId: ID!): SessionStatus
 
   # ============================================
   # Board Configuration Queries

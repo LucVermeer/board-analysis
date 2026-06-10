@@ -150,6 +150,9 @@
     "savingToAppleHealth": "Enregistrement dans Apple Santé…",
     "savedToAppleHealth": "Enregistré dans Apple Santé",
     "saveToAppleHealthRetry": "Enregistrer dans Apple Santé (réessayer)",
+    "loadErrorTitle": "Impossible de charger ta session",
+    "loadErrorMessage": "Tes voies sont enregistrées, seul le récap n'a pas chargé. Réessaie ou reviens en arrière.",
+    "retry": "Réessayer",
     "minutes": "{{count}} min",
     "hours": "{{count}} h",
     "hoursAndMinutes": "{{hours}} h {{mins}} min"
@@ -292,6 +295,7 @@
       "removeClimb": "Supprimer le bloc",
       "positionLabel": "position {{position}}",
       "syncError": "Erreur de synchronisation de la file",
+      "outOfSyncRefreshed": "La file était désynchronisée. Actualisée depuis ton groupe.",
       "sessionCreateError": "Impossible de créer la session",
       "noBoardSelected": "Choisissez d'abord un board",
       "actionFailed": "Action échouée. Réessayez.",
@@ -421,6 +425,7 @@
     "triesCount_other": "{{count}} essais",
     "tickError": "Impossible d'enregistrer ton tick. Sauvegardé en brouillon.",
     "shareError": "Impossible de partager — réessaie",
+    "favoriteError": "Impossible de mettre à jour tes favoris — réessaie",
     "closeAria": "Fermer",
     "actionBar": {
       "previousAria": "Bloc précédent",
@@ -435,6 +440,7 @@
       "lightbulb": {
         "drivingNamed": "Tu contrôles «{{name}}». Touche pour relâcher.",
         "driving": "Tu contrôles. Touche pour relâcher.",
+        "reconnect": "Tableau déconnecté. Touche pour reconnecter.",
         "takeNamed": "Prendre le contrôle et envoyer «{{name}}»",
         "take": "Prendre le contrôle du mur",
         "coachmark": "Envoyer au mur"

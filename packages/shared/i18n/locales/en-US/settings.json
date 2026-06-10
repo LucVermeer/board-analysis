@@ -371,8 +371,6 @@
     "noDevicesFound": "No boards found nearby",
     "cancel": "Cancel",
     "unknownBoard": "Unknown Board",
-    "disconnected": "Board disconnected",
-    "reconnect": "Reconnect",
     "connectBoard": "Connect Board",
     "relightBoard": "Re-light board",
     "holdForControls": "Hold for board controls",

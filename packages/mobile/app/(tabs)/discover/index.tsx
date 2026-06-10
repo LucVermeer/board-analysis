@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { View, Pressable, StyleSheet } from 'react-native';
 import Animated, { useAnimatedRef, useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated';
+import { useQueryClient } from '@tanstack/react-query';
 import { router, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
@@ -43,6 +44,7 @@ export default function DiscoverLibrary() {
   const { data: token = null, isLoading: tokenLoading } = useAuthToken();
   const { data: profile } = useProfile();
   const { data: activeBoard } = useActiveBoard();
+  const queryClient = useQueryClient();
 
   const userId = profile?.id ?? null;
   const effectiveToken = isAuthenticated ? token : null;
@@ -81,6 +83,7 @@ export default function DiscoverLibrary() {
     playlists: userPlaylists,
     isLoading: userLoading,
     isLoadingMore: userLoadingMore,
+    hasError: userError,
     loadMore: loadMoreUser,
     refetch: refetchUser,
   } = useUserPlaylists({
@@ -103,7 +106,9 @@ export default function DiscoverLibrary() {
     recent,
     isLoading: discoverLoading,
     isLoadingMore: discoverLoadingMore,
+    hasError: discoverError,
     loadMore: loadMoreDiscover,
+    refetch: refetchDiscover,
   } = useDiscoverPlaylists({
     boardType: filterBoardType,
     layoutId: filterLayoutId,
@@ -184,6 +189,13 @@ export default function DiscoverLibrary() {
         });
         setCreateVisible(false);
         showToast(t('bottomTabBar.createdPlaylistToast', { name: created.name }), 'success');
+        // refetchUser() only refreshes useUserPlaylists' own useState store
+        // (the Discover/all shelves). The Add-to-Playlist picker reads the
+        // react-query ['userPlaylists'] cache instead, which that refetch never
+        // touches — and the mobile QueryProvider wires no focus/online refetch,
+        // so the new playlist would stay missing from the picker for the rest
+        // of the session. Prepend it directly so it shows up immediately.
+        queryClient.setQueryData<Playlist[]>(['userPlaylists'], (prev) => (prev ? [created, ...prev] : [created]));
         refetchUser();
         router.push(`/(tabs)/discover/${created.uuid}`);
       } catch (err) {
@@ -193,7 +205,7 @@ export default function DiscoverLibrary() {
         setCreating(false);
       }
     },
-    [createBoard, createPlaylist, showToast, t, refetchUser],
+    [createBoard, createPlaylist, queryClient, showToast, t, refetchUser],
   );
 
   // Pin / unpin straight from a "Jump Back In" card. The shared-hook arrays
@@ -233,6 +245,17 @@ export default function DiscoverLibrary() {
   );
 
   const showSignInPrompt = !isAuthenticated && !authLoading;
+
+  // The first-page fetch of one (or both) sections failed and the hub is empty
+  // — show a retry rather than the "no playlists yet" empty state, which would
+  // mislead a user who actually has playlists into thinking they have none.
+  const showLoadError =
+    (userError || discoverError) && jumpBackIn.length === 0 && discoverItems.length === 0 && !smartCountsLoading;
+
+  const handleRetryLoad = useCallback(() => {
+    if (userError) refetchUser();
+    if (discoverError) refetchDiscover();
+  }, [userError, discoverError, refetchUser, refetchDiscover]);
 
   return (
     <View style={styles.flex}>
@@ -345,11 +368,36 @@ export default function DiscoverLibrary() {
           </PlaylistScrollSection>
         ) : null}
 
-        {/* Empty state: signed in, nothing anywhere, nothing loading. */}
+        {/* Load error: a section's first page failed and the hub is empty.
+            Offer a retry instead of falsely claiming the library is empty. */}
+        {showLoadError ? (
+          <View style={styles.emptyContainer}>
+            <Icon name="error" size={48} color={iosSystemColors.systemGray4} />
+            <Text variant="headline" style={styles.emptyTitle}>
+              {t('library.errors.loadTitle')}
+            </Text>
+            <Text variant="subheadline" style={styles.emptySubtitle}>
+              {t('library.errors.loadDescription')}
+            </Text>
+            <Pressable
+              onPress={handleRetryLoad}
+              accessibilityRole="button"
+              accessibilityLabel={t('library.errors.tryAgain')}
+              hitSlop={8}
+            >
+              <Text variant="subheadline" color={brandColors.primary} style={styles.retryCta}>
+                {t('library.errors.tryAgain')}
+              </Text>
+            </Pressable>
+          </View>
+        ) : null}
+
+        {/* Empty state: signed in, nothing anywhere, nothing loading, no error. */}
         {isAuthenticated &&
         !userLoading &&
         !discoverLoading &&
         !smartCountsLoading &&
+        !showLoadError &&
         jumpBackIn.length === 0 &&
         discoverItems.length === 0 &&
         smartCardsToShow.length === 0 ? (
@@ -455,6 +503,10 @@ const styles = StyleSheet.create({
   emptySubtitle: {
     opacity: 0.4,
     textAlign: 'center',
+  },
+  retryCta: {
+    marginTop: spacing[3],
+    fontWeight: '600',
   },
   loadingContainer: {
     paddingTop: spacing[10] * 3,

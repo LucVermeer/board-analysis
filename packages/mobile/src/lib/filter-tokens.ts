@@ -15,6 +15,7 @@ import type { Grade } from '@boardsesh/shared-schema';
 import {
   getGradeName,
   applyStatusChange,
+  countFilteredHolds,
   DEFAULT_CLIMB_FILTER_STATE,
   type ClimbFilterState,
   type ClimbBoardFilterState,
@@ -197,12 +198,31 @@ export function getActiveFilterTokens({
     tokens.push({ key: 'climbType', label, clear: () => patchFilters({ boulders: true, routes: false }) });
   }
 
-  // Board-renderer filters: only `onlyBenchmarks` is user-settable today.
+  // Board-renderer filters: benchmark, hold types, and board region are all
+  // user-settable from the filter sheet, so each gets a removable token. Their
+  // labels reuse the same keys the sheet's refine summary uses.
   if (boardFilters.onlyBenchmarks) {
     tokens.push({
       key: 'benchmark',
       label: t('mobile.filter.benchmark'),
       clear: () => patchBoardFilters({ onlyBenchmarks: false }),
+    });
+  }
+
+  const holdCount = countFilteredHolds(boardFilters.holdsFilter);
+  if (holdCount > 0) {
+    tokens.push({
+      key: 'holds',
+      label: t('mobile.holdFilter.summaryCount', { count: holdCount }),
+      clear: () => patchBoardFilters({ holdsFilter: undefined }),
+    });
+  }
+
+  if (boardFilters.zoneBox != null) {
+    tokens.push({
+      key: 'zone',
+      label: t('mobile.zoneFilter.title'),
+      clear: () => patchBoardFilters({ zoneBox: null, zoneMode: undefined }),
     });
   }
 
