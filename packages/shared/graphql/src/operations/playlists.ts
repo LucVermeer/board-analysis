@@ -158,6 +158,8 @@ export const GET_PLAYLIST_CLIMBS = gql`
         name
         description
         frames
+        framesCount
+        framesPace
         angle
         ascensionist_count
         difficulty
@@ -402,6 +404,8 @@ export type PlaylistClimbsResult = {
     name: string;
     description: string;
     frames: string;
+    framesCount?: number | null;
+    framesPace?: number | null;
     angle: number;
     ascensionist_count: number;
     difficulty: string;
@@ -694,6 +698,8 @@ export const GET_SMART_PLAYLIST = gql`
         name
         description
         frames
+        framesCount
+        framesPace
         angle
         ascensionist_count
         difficulty

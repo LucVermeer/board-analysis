@@ -5604,6 +5604,8 @@ export type GetUserFavoriteClimbsQuery = {
       name: string;
       description?: string | null;
       frames: string;
+      framesCount?: number | null;
+      framesPace?: number | null;
       angle: number;
       ascensionist_count: number;
       difficulty: string;
@@ -6156,6 +6158,8 @@ export type GetPlaylistClimbsQuery = {
       name: string;
       description?: string | null;
       frames: string;
+      framesCount?: number | null;
+      framesPace?: number | null;
       angle: number;
       ascensionist_count: number;
       difficulty: string;
@@ -6284,6 +6288,8 @@ export type GetSmartPlaylistQuery = {
       name: string;
       description?: string | null;
       frames: string;
+      framesCount?: number | null;
+      framesPace?: number | null;
       angle: number;
       ascensionist_count: number;
       difficulty: string;
@@ -7035,6 +7041,8 @@ export type GetSetterClimbsFullQuery = {
       name: string;
       description?: string | null;
       frames: string;
+      framesCount?: number | null;
+      framesPace?: number | null;
       angle: number;
       ascensionist_count: number;
       difficulty: string;
@@ -7065,6 +7073,8 @@ export type GetUserClimbsQuery = {
       name: string;
       description?: string | null;
       frames: string;
+      framesCount?: number | null;
+      framesPace?: number | null;
       angle: number;
       ascensionist_count: number;
       difficulty: string;
@@ -8454,6 +8464,8 @@ export const GetUserFavoriteClimbsDocument = {
                       { kind: 'Field', name: { kind: 'Name', value: 'name' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'description' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'frames' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'framesCount' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'framesPace' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'angle' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'ascensionist_count' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'difficulty' } },
@@ -10013,6 +10025,8 @@ export const GetPlaylistClimbsDocument = {
                       { kind: 'Field', name: { kind: 'Name', value: 'name' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'description' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'frames' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'framesCount' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'framesPace' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'angle' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'ascensionist_count' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'difficulty' } },
@@ -10372,6 +10386,8 @@ export const GetSmartPlaylistDocument = {
                       { kind: 'Field', name: { kind: 'Name', value: 'name' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'description' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'frames' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'framesCount' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'framesPace' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'angle' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'ascensionist_count' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'difficulty' } },
@@ -12237,6 +12253,8 @@ export const GetSetterClimbsFullDocument = {
                       { kind: 'Field', name: { kind: 'Name', value: 'name' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'description' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'frames' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'framesCount' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'framesPace' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'angle' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'ascensionist_count' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'difficulty' } },
@@ -12300,6 +12318,8 @@ export const GetUserClimbsDocument = {
                       { kind: 'Field', name: { kind: 'Name', value: 'name' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'description' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'frames' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'framesCount' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'framesPace' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'angle' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'ascensionist_count' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'difficulty' } },

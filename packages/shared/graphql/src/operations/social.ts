@@ -366,6 +366,8 @@ export const GET_SETTER_CLIMBS_FULL = gql`
         name
         description
         frames
+        framesCount
+        framesPace
         angle
         ascensionist_count
         difficulty
@@ -417,6 +419,8 @@ export const GET_USER_CLIMBS = gql`
         name
         description
         frames
+        framesCount
+        framesPace
         angle
         ascensionist_count
         difficulty
