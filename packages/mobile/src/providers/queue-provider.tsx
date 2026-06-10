@@ -1475,6 +1475,11 @@ export function QueueProvider({ children }: { children: ReactNode }) {
         if (__DEV__) console.warn('[queue] leaveSession on switch failed', error);
       }
     }
+    // A resync fetch that never settles (hung connection) would leave the
+    // single-flight guard stuck true; a mounted provider carries that across a
+    // session switch and would block every future resync. Reset at the teardown
+    // boundary so the next session always starts clean.
+    resyncInFlightRef.current = false;
     sessionIdRef.current = null;
     setSessionId(null);
     dispatch({

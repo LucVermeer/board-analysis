@@ -39,6 +39,7 @@ import { getBoardRenderData } from '../../lib/board-details';
 import { hapticSuccess } from '../../lib/haptics';
 import { usePlayDrawerWakeLock } from './use-play-drawer-wake-lock';
 import { useDeferredSheetOpen } from './use-deferred-sheet-open';
+import { resolveFavoriteRollback } from './favorite-rollback';
 import {
   buildPlayDrawerBoardLayout,
   derivePlayDrawerLightbulbPressAction,
@@ -473,9 +474,12 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
           setFavoriteOverride(response.toggleFavorite.favorited);
         },
         // Roll back the optimistic flip and tell the user it didn't stick, rather
-        // than leaving the heart diverged from the server.
+        // than leaving the heart diverged from the server. Only undo OUR flip,
+        // though: if a newer tap (or a climb change, which resets the override to
+        // null) has since moved the heart, this late error must not clobber the
+        // current state with this tap's stale previous value.
         onError: () => {
-          setFavoriteOverride(previousOverride);
+          setFavoriteOverride((current) => resolveFavoriteRollback(current, nextIsFavorited, previousOverride));
           showToast(t('playView.favoriteError'), 'error');
         },
       },
