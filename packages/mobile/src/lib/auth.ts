@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { getRandomBytes } from 'expo-crypto';
 import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
@@ -6,6 +7,22 @@ import { storeTokens, clearTokens, getRefreshToken } from './auth-store';
 import { BACKEND_URL } from './env';
 
 export type AuthProvider = 'google' | 'apple';
+
+/**
+ * Whether the build shipped the Google config the native flow needs, so the
+ * login screen can hide the button instead of advertising a sign-in that would
+ * fail on tap. Mirrors the app.config.ts plugin gating: the webClientId is
+ * always required (it's the idToken audience), and on iOS the reversed-client
+ * URL scheme that the google-signin config plugin registers must be present too
+ * (an Apple-only build omits it). Android needs no URL scheme.
+ */
+export function isGoogleSignInConfigured(): boolean {
+  if (!process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID) return false;
+  if (Platform.OS === 'ios') {
+    return Boolean(process.env.EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME || process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID);
+  }
+  return true;
+}
 
 type ForwardedName = { firstName?: string; lastName?: string };
 

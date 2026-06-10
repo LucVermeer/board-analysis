@@ -17,6 +17,7 @@ import { GoogleSigninButton } from '@react-native-google-signin/google-signin';
 import { useTranslation } from 'react-i18next';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { classifyNativeAuthFailureReason } from '../../src/lib/native-auth-analytics';
+import { isGoogleSignInConfigured } from '../../src/lib/auth';
 import { useAuth } from '../../src/providers/auth-provider';
 import { useTheme } from '../../src/providers/theme-provider';
 import { track } from '../../src/lib/analytics';
@@ -183,6 +184,14 @@ export default function LoginScreen() {
     { backgroundColor: inputBackground, borderColor: inputBorder, color: inputTextColor },
   ];
 
+  // Sign in with Apple is iOS-only; Google only when the build shipped its
+  // native config (an Apple-only / misconfigured build hides it rather than
+  // showing a button that fails on tap). Hide the whole social section if
+  // neither is available so the divider doesn't dangle.
+  const showAppleSignIn = Platform.OS === 'ios';
+  const showGoogleSignIn = isGoogleSignInConfigured();
+  const showSocialSignIn = showAppleSignIn || showGoogleSignIn;
+
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView
@@ -251,44 +260,51 @@ export default function LoginScreen() {
           ) : null}
         </View>
 
-        <View style={styles.dividerRow}>
-          <View style={styles.dividerLine} />
-          <Text style={styles.dividerLabel}>{t('nativeStart.orContinueWith')}</Text>
-          <View style={styles.dividerLine} />
-        </View>
+        {showSocialSignIn && (
+          <>
+            <View style={styles.dividerRow}>
+              <View style={styles.dividerLine} />
+              <Text style={styles.dividerLabel}>{t('nativeStart.orContinueWith')}</Text>
+              <View style={styles.dividerLine} />
+            </View>
 
-        <View style={styles.buttons}>
-          {Platform.OS === 'ios' && (
-            // Apple's official native button — App Review requires it when other
-            // third-party logins are offered. Self-labeled/localized; colour and
-            // corner radius come from the dedicated props (not `style`).
-            <AppleAuthentication.AppleAuthenticationButton
-              buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
-              buttonStyle={
-                isDark
-                  ? AppleAuthentication.AppleAuthenticationButtonStyle.WHITE
-                  : AppleAuthentication.AppleAuthenticationButtonStyle.BLACK
-              }
-              cornerRadius={12}
-              style={styles.appleButton}
-              onPress={() => {
-                hapticLight();
-                void handleOAuthSignIn('apple');
-              }}
-            />
-          )}
-          {/* Google's official brand-compliant button. */}
-          <GoogleSigninButton
-            size={GoogleSigninButton.Size.Wide}
-            color={isDark ? GoogleSigninButton.Color.Dark : GoogleSigninButton.Color.Light}
-            disabled={oauthInProgress}
-            style={styles.googleButton}
-            onPress={() => {
-              hapticLight();
-              void handleOAuthSignIn('google');
-            }}
-          />
-        </View>
+            <View style={styles.buttons}>
+              {showAppleSignIn && (
+                // Apple's official native button — App Review requires it when other
+                // third-party logins are offered. Self-labeled/localized; colour and
+                // corner radius come from the dedicated props (not `style`).
+                <AppleAuthentication.AppleAuthenticationButton
+                  buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+                  buttonStyle={
+                    isDark
+                      ? AppleAuthentication.AppleAuthenticationButtonStyle.WHITE
+                      : AppleAuthentication.AppleAuthenticationButtonStyle.BLACK
+                  }
+                  cornerRadius={12}
+                  style={styles.appleButton}
+                  onPress={() => {
+                    hapticLight();
+                    void handleOAuthSignIn('apple');
+                  }}
+                />
+              )}
+              {/* Google's official brand-compliant button — only when the build
+                  shipped the Google native config (otherwise it would fail on tap). */}
+              {showGoogleSignIn && (
+                <GoogleSigninButton
+                  size={GoogleSigninButton.Size.Wide}
+                  color={isDark ? GoogleSigninButton.Color.Dark : GoogleSigninButton.Color.Light}
+                  disabled={oauthInProgress}
+                  style={styles.googleButton}
+                  onPress={() => {
+                    hapticLight();
+                    void handleOAuthSignIn('google');
+                  }}
+                />
+              )}
+            </View>
+          </>
+        )}
       </ScrollView>
     </KeyboardAvoidingView>
   );
