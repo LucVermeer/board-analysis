@@ -31,9 +31,10 @@ vi.mock('expo-router', () => ({
 // up verbatim and fail the assertions below.
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 
-vi.mock('../../../src/lib/auth', () => ({
+const auth = vi.hoisted(() => ({
   exchangeTransferToken: vi.fn(async () => ({ success: false, error: 'Invalid or expired transfer token' })),
 }));
+vi.mock('../../../src/lib/auth', () => ({ exchangeTransferToken: auth.exchangeTransferToken }));
 vi.mock('../../../src/lib/native-auth-analytics', () => ({ classifyNativeAuthFailureReason: () => 'invalid_token' }));
 vi.mock('../../../src/providers/auth-provider', () => ({
   useAuth: () => ({ refreshAuthState: vi.fn(async () => {}) }),
@@ -45,6 +46,7 @@ import AuthCallback from '../callback';
 beforeEach(() => {
   analytics.track.mockClear();
   router.replace.mockClear();
+  auth.exchangeTransferToken.mockClear();
   params.transferToken = undefined;
 });
 
@@ -72,5 +74,20 @@ describe('AuthCallback localization', () => {
     await waitFor(() => expect(container.textContent).toContain('callback.failed'));
     // The raw English/server string must never reach the user.
     expect(container.textContent).not.toContain('Invalid or expired transfer token');
+  });
+
+  // Android mounts this screen twice for one login: expo-router routes the
+  // deep link AND login.tsx routes here with openAuthSessionAsync's URL. The
+  // module-level exchangedTokens set must keep the duplicate mount from
+  // replaying the one-time token — the duplicate shows the spinner, never a
+  // "token already used" failure.
+  it('exchanges a token only once across a double mount', async () => {
+    params.transferToken = 'tok-double-mount';
+    const firstMount = render(createElement(AuthCallback));
+    const secondMount = render(createElement(AuthCallback));
+    await waitFor(() => expect(firstMount.container.textContent).toContain('callback.failed'));
+    expect(auth.exchangeTransferToken).toHaveBeenCalledTimes(1);
+    expect(secondMount.container.textContent).toContain('nativeStart.signingIn');
+    expect(secondMount.container.textContent).not.toContain('callback.failed');
   });
 });
