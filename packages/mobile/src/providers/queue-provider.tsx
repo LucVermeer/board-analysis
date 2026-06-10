@@ -86,6 +86,8 @@ export type StartSessionConfig = {
   isPermanent?: boolean;
 };
 
+const JOIN_SESSION_RETRY_BACKOFF_MS = [1_000, 2_500, 5_000] as const;
+
 type QueueContextValue = {
   state: QueueState;
   dispatch: React.Dispatch<QueueAction>;
@@ -603,8 +605,17 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     let subscriptionStartToken = 0;
     let queueUpdatesCleanup: (() => void) | null = null;
     let sessionUpdatesCleanup: (() => void) | null = null;
+    let joinRetryTimer: ReturnType<typeof setTimeout> | null = null;
+    let joinRetryCount = 0;
+
+    const clearJoinRetryTimer = () => {
+      if (!joinRetryTimer) return;
+      clearTimeout(joinRetryTimer);
+      joinRetryTimer = null;
+    };
 
     const cleanupSubscriptions = () => {
+      clearJoinRetryTimer();
       queueUpdatesCleanup?.();
       sessionUpdatesCleanup?.();
       queueUpdatesCleanup = null;
@@ -616,6 +627,17 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       if (__DEV__) console.warn('[queue] joinSession failed', err);
     };
 
+    const scheduleJoinRetry = (failedStartToken: number) => {
+      const retryDelayMs =
+        JOIN_SESSION_RETRY_BACKOFF_MS[Math.min(joinRetryCount, JOIN_SESSION_RETRY_BACKOFF_MS.length - 1)];
+      joinRetryCount++;
+      joinRetryTimer = setTimeout(() => {
+        joinRetryTimer = null;
+        if (disposed || failedStartToken !== subscriptionStartToken || sessionIdRef.current !== sessionId) return;
+        void startJoinedSubscriptions();
+      }, retryDelayMs);
+    };
+
     const startJoinedSubscriptions = async () => {
       const currentStartToken = ++subscriptionStartToken;
       cleanupSubscriptions();
@@ -623,11 +645,17 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       try {
         await ensureJoined(sessionId);
       } catch (joinError) {
-        if (!disposed) logJoinFailure(joinError);
+        if (disposed || currentStartToken !== subscriptionStartToken || sessionIdRef.current !== sessionId) return;
+        logJoinFailure(joinError);
+        if (joinRetryCount === 0) {
+          showToastRef.current(tRef.current('mobile.queue.syncError'), 'error');
+        }
+        scheduleJoinRetry(currentStartToken);
         return;
       }
 
       if (disposed || currentStartToken !== subscriptionStartToken || sessionIdRef.current !== sessionId) return;
+      joinRetryCount = 0;
 
       queueUpdatesCleanup = wsClient.subscribe<{ queueUpdates: QueueUpdateEvent }>(
         {
@@ -808,6 +836,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     const unsubClosed = wsClient.on('closed', () => {
       joinTracker.bumpEpoch();
       subscriptionStartToken++;
+      joinRetryCount = 0;
       cleanupSubscriptions();
     });
     const unsubConnected = wsClient.on('connected', () => {

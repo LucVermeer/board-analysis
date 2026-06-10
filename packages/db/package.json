@@ -42,7 +42,6 @@
       "default": "./src/client/index.ts"
     },
     "./migration-journal": {
-      "types": "./drizzle/meta/_journal.json",
       "import": "./drizzle/meta/_journal.json",
       "default": "./drizzle/meta/_journal.json"
     },

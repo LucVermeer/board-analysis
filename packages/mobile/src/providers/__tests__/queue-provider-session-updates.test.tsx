@@ -413,6 +413,74 @@ describe('QueueProvider session update subscription', () => {
     });
   });
 
+  it('retries a failed JOIN_SESSION before opening subscriptions', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+
+    try {
+      const snapshots: Snapshot[] = [];
+      const selectorSnapshots: SelectorSnapshot[] = [];
+      graph.execute.mockRejectedValueOnce(new Error('temporary join failure'));
+
+      renderProviderWithSelectors(
+        (snapshot) => snapshots.push(snapshot),
+        (selectorSnapshot) => selectorSnapshots.push(selectorSnapshot),
+      );
+
+      await waitFor(() => {
+        expect(snapshots.at(-1)?.sessionId).toBe('session-1');
+        expect(graph.execute).toHaveBeenCalledTimes(1);
+      });
+      expect(ws.client.subscribe).not.toHaveBeenCalled();
+      expect(toast.showToast).toHaveBeenCalledWith('mobile.queue.syncError', 'error');
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1_000);
+      });
+
+      await waitFor(() => {
+        expect(graph.execute).toHaveBeenCalledTimes(2);
+        expect(ws.client.subscribe).toHaveBeenCalledTimes(2);
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps retrying JOIN_SESSION with capped backoff while the socket stays live', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+
+    try {
+      const snapshots: Snapshot[] = [];
+      const selectorSnapshots: SelectorSnapshot[] = [];
+      graph.execute.mockRejectedValue(new Error('temporary join failure'));
+
+      renderProviderWithSelectors(
+        (snapshot) => snapshots.push(snapshot),
+        (selectorSnapshot) => selectorSnapshots.push(selectorSnapshot),
+      );
+
+      await waitFor(() => {
+        expect(snapshots.at(-1)?.sessionId).toBe('session-1');
+        expect(graph.execute).toHaveBeenCalledTimes(1);
+      });
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1_000);
+        await vi.advanceTimersByTimeAsync(2_500);
+        await vi.advanceTimersByTimeAsync(5_000);
+        await vi.advanceTimersByTimeAsync(5_000);
+      });
+
+      await waitFor(() => {
+        expect(graph.execute).toHaveBeenCalledTimes(5);
+      });
+      expect(ws.client.subscribe).not.toHaveBeenCalled();
+      expect(toast.showToast).toHaveBeenCalledWith('mobile.queue.syncError', 'error');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('rejoins before reopening subscriptions after a websocket reconnect', async () => {
     const snapshots: Snapshot[] = [];
     const selectorSnapshots: SelectorSnapshot[] = [];

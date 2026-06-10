@@ -831,7 +831,7 @@ sequenceDiagram
 - Exponential backoff: 1s, 2s, 4s, 8s, 16s, 30s (max)
 - Up to 10 retry attempts
 - On reconnection: re-join session with the same `participantId` and sync state
-- Queue and session subscription `error`/`complete` callbacks schedule a reconnect/resubscribe pass, so a completed subscription does not leave the client silently joined but deaf to future events. Mobile clears subscription refs and reopens them only after the rejoin promise resolves.
+- `graphql-ws` socket `closed`/`connected` events drive teardown and rejoin/resubscribe. Subscription `error`/`complete` handlers do not directly trigger reconnect; mobile clears subscription refs on socket close and reopens them only after the rejoin promise resolves.
 - Delta sync attempted if gap ≤ 100 events and the replay buffer has contiguous coverage
 - Falls back to full sync if the gap is too large, replay is incomplete, or the local hash disagrees despite no sequence gap
 - Client-side supervisor detects stale connections and triggers reconnect (see [Client-Side Connection Supervisor](#client-side-connection-supervisor))

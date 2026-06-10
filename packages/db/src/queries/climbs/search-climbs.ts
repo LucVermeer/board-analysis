@@ -76,7 +76,9 @@ function getExecute(db: SearchDb): SearchDbExecute | null {
  * Search for climbs with various filters.
  * Shared between the GraphQL backend resolver and Next.js SSR.
  *
- * @param db Drizzle database instance
+ * @param db Top-level Drizzle database instance. Transaction-scoped callers
+ * would need an explicit signature change and must preserve standardSearch's
+ * transaction-scoped SET LOCAL guard.
  * @param params Board route parameters
  * @param searchParams Search/filter parameters
  * @param userId Optional user ID for personal progress filters
@@ -303,9 +305,10 @@ async function standardSearch(
     });
   }
 
-  // Transaction handles cannot start nested transactions, but SET LOCAL still
-  // applies to their outer transaction. Lightweight query test doubles omit
-  // execute(), so they skip only this production planner guard.
+  // Reached only by execute-only query test doubles. Production call sites pass
+  // top-level DbInstance values so the transaction branch scopes SET LOCAL
+  // correctly; do not broaden searchClimbs to TransactionDb without revisiting
+  // that planner guard.
   const execute = getExecute(db);
   if (execute) {
     await execute(sql`SET LOCAL max_parallel_workers_per_gather = 0`);

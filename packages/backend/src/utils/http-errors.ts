@@ -3,7 +3,17 @@ import { asErrorLikeRecord } from './error-utils';
 const CLIENT_ABORT_ERROR_CODES = new Set(['ECONNRESET', 'EPIPE', 'ERR_STREAM_PREMATURE_CLOSE']);
 const CLIENT_ABORT_ERROR_MESSAGES = new Set(['aborted', 'socket hang up']);
 
-export function isClientAbortError(error: unknown, depth = 0): boolean {
+type ClientAbortContext = {
+  requestDestroyed?: boolean;
+  responseDestroyed?: boolean;
+  socketDestroyed?: boolean;
+};
+
+function isDestroyedConnection(context: ClientAbortContext | undefined): boolean {
+  return !!(context?.requestDestroyed || context?.responseDestroyed || context?.socketDestroyed);
+}
+
+export function isClientAbortError(error: unknown, context?: ClientAbortContext, depth = 0): boolean {
   if (depth > 3) return false;
 
   const errorRecord = asErrorLikeRecord(error);
@@ -19,8 +29,8 @@ export function isClientAbortError(error: unknown, depth = 0): boolean {
   }
 
   if (typeof errorRecord.name === 'string' && errorRecord.name === 'AbortError') {
-    return true;
+    return isDestroyedConnection(context);
   }
 
-  return isClientAbortError(errorRecord.cause, depth + 1);
+  return isClientAbortError(errorRecord.cause, context, depth + 1);
 }

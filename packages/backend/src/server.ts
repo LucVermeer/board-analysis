@@ -76,9 +76,11 @@ export async function startServer(): Promise<ServerResources> {
   // tag (dev) / `instanceId` field (prod) once Redis is connected, and
   // an untagged line when running without Redis.
   setInstanceIdProvider(() => pubsub.getInstanceId());
-  // Crash before accepting traffic if this backend bundle is older than the
-  // database schema. A stale backend against a newer schema is riskier than a
-  // failed deploy, so verifyDeployCompatibility intentionally throws.
+  // Crash before accepting traffic only when migration state proves this
+  // backend bundle predates the database. That deliberately blocks rollbacks
+  // to bundles whose journal is older than an applied migration, including
+  // backward-compatible/index-only migrations; unknown DB state warns and
+  // continues so a transient DB read failure does not create a crash loop.
   await verifyDeployCompatibility();
 
   // Initialize RoomManager with Redis for session persistence
@@ -383,7 +385,13 @@ export async function startServer(): Promise<ServerResources> {
       res.writeHead(404, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'Not found' }));
     } catch (error) {
-      if (isClientAbortError(error)) {
+      if (
+        isClientAbortError(error, {
+          requestDestroyed: req.destroyed,
+          responseDestroyed: res.destroyed,
+          socketDestroyed: res.socket?.destroyed,
+        })
+      ) {
         logger.info('Request aborted by client', { method: req.method, url: req.url });
         return;
       }
