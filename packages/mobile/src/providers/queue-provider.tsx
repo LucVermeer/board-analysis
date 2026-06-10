@@ -1120,6 +1120,18 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     };
     state.queue.forEach(consider);
     consider(state.currentClimbQueueItem);
+    // Also re-grade the single displayed playlist peek (the next-up suggestion
+    // shown at the queue tail). It lives in playlistSuggestionSource.climbs —
+    // NOT in state.queue — so the queue-only pass above never touches it, and
+    // the bar/drawer would keep showing the activation-angle grade until the
+    // peek is committed. Only the next-up climb is ever displayed, so re-grade
+    // that one alone; re-grading the whole source could be hundreds of climbs.
+    const peekItem = findNextQueueItemWithSuggestions(
+      state.queue,
+      state.currentClimbQueueItem,
+      playlistSuggestionSourceRef.current,
+    );
+    if (peekItem && isPlaylistPeekQueueItemUuid(peekItem.uuid)) consider(peekItem);
     if (uuids.size === 0) return undefined;
 
     const targetUuids = [...uuids];
@@ -1168,13 +1180,30 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       }
       if (Object.keys(grades).length > 0) {
         dispatch({ type: 'REGRADE_CLIMBS', payload: { grades } });
+        // REGRADE_CLIMBS only patches the reducer's queue + current item. The
+        // displayed peek lives in the provider-state suggestion source, so patch
+        // its climbs here too (same patch map) — otherwise the next-up grade pill
+        // keeps the old angle until the peek is committed. Idempotent: skips
+        // climbs already at the live angle, and preserves the prev reference when
+        // nothing changes so this never churns the source state.
+        setPlaylistSuggestionSourceState((prev) => {
+          if (!prev) return prev;
+          let changed = false;
+          const climbs = prev.climbs.map((climb) => {
+            const patch = grades[climb.uuid];
+            if (!patch || climb.angle === patch.angle) return climb;
+            changed = true;
+            return { ...climb, ...patch };
+          });
+          return changed ? { ...prev, climbs } : prev;
+        });
       }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [state.queue, state.currentClimbQueueItem, activeBoard]);
+  }, [state.queue, state.currentClimbQueueItem, activeBoard, playlistSuggestionSource]);
 
   // The reducer raises `needsResync` when it filters corrupted (null) items out
   // of a server FullSync/UPDATE_QUEUE — the local queue is now known-stale.
