@@ -128,19 +128,23 @@ beforeEach(() => {
 
 function renderPlayback(climb: Climb | null) {
   return renderHook(
-    (props: { climb: Climb | null }) =>
+    (props: { climb: Climb | null; mirrored?: boolean }) =>
       useMobilePlayback({
         climb: props.climb,
         boardName: KILTER,
-        mirrored: false,
+        mirrored: props.mirrored ?? false,
         isOpen: true,
       }),
-    { initialProps: { climb } },
+    { initialProps: { climb } as { climb: Climb | null; mirrored?: boolean } },
   );
 }
 
 /** Push a new current frame and rerender so the BLE effect re-evaluates. */
-async function setFrame(rerender: (props: { climb: Climb | null }) => void, climb: Climb | null, frame: string) {
+async function setFrame(
+  rerender: (props: { climb: Climb | null; mirrored?: boolean }) => void,
+  climb: Climb | null,
+  frame: string,
+) {
   await act(async () => {
     mocks.playback.currentFrameString = frame;
     rerender({ climb });
@@ -229,6 +233,50 @@ describe('useMobilePlayback — BLE drain', () => {
 
     await setFrame(rerender, climb, 'F0');
     expect(mocks.bluetooth.sendFramesToBoard).not.toHaveBeenCalled();
+  });
+
+  it('re-sends the current frame with the new orientation when mirror toggles on a stable frame', async () => {
+    const climb = climbWith('c1');
+    const { rerender } = renderPlayback(climb);
+
+    // Settle on a frame (e.g. paused / last frame): write it and resolve.
+    await setFrame(rerender, climb, 'F0');
+    await act(async () => {
+      mocks.sendCalls[0].resolve(true);
+    });
+    expect(mocks.bluetooth.sendFramesToBoard).toHaveBeenCalledTimes(1);
+    expect(mocks.sendCalls[0].mirrored).toBe(false);
+
+    // Toggle mirror with the SAME current frame string (no frame tick). The wall
+    // must re-flush the current frame with the flipped orientation rather than
+    // sitting on the old one until a frame change.
+    await act(async () => {
+      rerender({ climb, mirrored: true });
+    });
+    expect(mocks.bluetooth.sendFramesToBoard).toHaveBeenCalledTimes(2);
+    expect(mocks.sendCalls[1].frame).toBe('F0');
+    expect(mocks.sendCalls[1].mirrored).toBe(true);
+
+    await act(async () => {
+      mocks.sendCalls[1].resolve(true);
+    });
+  });
+
+  it('does not re-send when the mirror flag is unchanged across a rerender', async () => {
+    const climb = climbWith('c1');
+    const { rerender } = renderPlayback(climb);
+
+    await setFrame(rerender, climb, 'F0');
+    await act(async () => {
+      mocks.sendCalls[0].resolve(true);
+    });
+    expect(mocks.bluetooth.sendFramesToBoard).toHaveBeenCalledTimes(1);
+
+    // A rerender with the same (false) mirror flag and same frame must not write.
+    await act(async () => {
+      rerender({ climb, mirrored: false });
+    });
+    expect(mocks.bluetooth.sendFramesToBoard).toHaveBeenCalledTimes(1);
   });
 });
 

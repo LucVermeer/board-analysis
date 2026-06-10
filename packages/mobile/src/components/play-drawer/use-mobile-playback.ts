@@ -118,6 +118,7 @@ export function useMobilePlayback({
   const isWritingFrameRef = useRef(false);
   const pendingFrameRef = useRef<string | null>(null);
   const lastSentFrameRef = useRef<string | null>(null);
+  const lastSentMirroredRef = useRef(mirrored);
   const mirroredRef = useRef(mirrored);
   mirroredRef.current = mirrored;
 
@@ -127,6 +128,18 @@ export function useMobilePlayback({
     lastSentFrameRef.current = null;
     pendingFrameRef.current = null;
   }, [climbUuid]);
+
+  // A mirror toggle changes no frame string, so the writer effect's
+  // `currentFrameString === lastSentFrameRef.current` guard would skip the write
+  // and the wall would keep the old orientation while the on-screen board flips
+  // — visible whenever playback is paused (or sitting on a stable frame). Invalidate
+  // the last-sent frame so the current frame re-flushes with the new orientation.
+  // (During active playback this self-heals as frames tick; this covers the paused
+  // case web's bluetooth-context auto-sender covers there but mobile's does not.)
+  if (mirrored !== lastSentMirroredRef.current) {
+    lastSentMirroredRef.current = mirrored;
+    lastSentFrameRef.current = null;
+  }
 
   const { currentFrameString, isAnimatable } = playback;
   const bluetoothConnected = bluetooth?.isConnected ?? false;
@@ -168,7 +181,10 @@ export function useMobilePlayback({
       }
     };
     void drain();
-  }, [isOpen, isAnimatable, bluetoothConnected, bluetooth, currentFrameString]);
+    // `mirrored` is a dep so a mirror-only toggle (which leaves currentFrameString
+    // unchanged) re-runs this effect; the invalidation above clears the last-sent
+    // frame so the current frame re-flushes with the new orientation.
+  }, [isOpen, isAnimatable, bluetoothConnected, bluetooth, currentFrameString, mirrored]);
 
   const play = useCallback(() => {
     // Fire the analytics seam only on a deliberate user play of a route — peer
