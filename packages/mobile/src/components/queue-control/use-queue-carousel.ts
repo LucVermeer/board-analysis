@@ -12,7 +12,7 @@ import { useTranslation } from 'react-i18next';
 import { computePeekOffset, computeNavigationStateWithSuggestions } from '@boardsesh/play-view';
 import type { ClimbQueueItem } from '@boardsesh/queue';
 import { useReduceMotion } from '../../hooks/use-reduce-motion';
-import { usePlaylistSuggestionSource, useQueue } from '../../providers/queue-provider';
+import { useIsPartyPreviewOnly, usePlaylistSuggestionSource, useQueue } from '../../providers/queue-provider';
 import { useDrawerHost } from '../../providers/drawer-host-provider';
 import { hapticLight, hapticSelection } from '../../lib/haptics';
 import { useCarouselGesture } from '../play-drawer/use-carousel-gesture';
@@ -53,6 +53,13 @@ export type QueueCarousel = {
 export function useQueueCarousel(): QueueCarousel {
   const { state, nextClimb, previousClimb } = useQueue();
   const playlistSuggestionSource = usePlaylistSuggestionSource();
+  // Party non-drivers may only preview — stepping the current climb is a
+  // shared-session mutation reserved for the driver. Mirrors PlayDrawer's
+  // prev/next gating and the climb-list activation guard (784f2a823): the
+  // always-visible bar is the one remaining ungated stepper, so a non-driver
+  // swipe (or VoiceOver next/previous action) must NOT call nextClimb/
+  // previousClimb and overwrite the driver's wall climb for everyone.
+  const isPartyPreviewOnly = useIsPartyPreviewOnly();
   const { openPlayDrawer } = useDrawerHost();
   const { t } = useTranslation('session');
   const reduceMotion = useReduceMotion();
@@ -71,20 +78,29 @@ export function useQueueCarousel(): QueueCarousel {
   // queue tail of an active playlist, `nextItem` falls through to the next
   // playlist climb (a transient "peek") instead of stopping. canPrevious/prevItem
   // stay queue-only — there is no backward suggestion fall-through.
-  const { canPrevious, canNext, nextItem, prevItem } = useMemo(
+  const nav = useMemo(
     () => computeNavigationStateWithSuggestions(queue, currentClimbQueueItem, playlistSuggestionSource),
     [queue, currentClimbQueueItem, playlistSuggestionSource],
   );
+  const { nextItem, prevItem } = nav;
+  // Preview-only members can't step the shared current climb, so the swipe and
+  // a11y prev/next actions are disabled for them (matching the queue sheet's
+  // precedent). The peek labels still render — non-drivers may *see* what's
+  // next, they just can't commit it.
+  const canPrevious = nav.canPrevious && !isPartyPreviewOnly;
+  const canNext = nav.canNext && !isPartyPreviewOnly;
 
   const handleNext = useCallback(() => {
+    if (isPartyPreviewOnly) return;
     hapticSelection();
     nextClimb();
-  }, [nextClimb]);
+  }, [isPartyPreviewOnly, nextClimb]);
 
   const handlePrevious = useCallback(() => {
+    if (isPartyPreviewOnly) return;
     hapticSelection();
     previousClimb();
-  }, [previousClimb]);
+  }, [isPartyPreviewOnly, previousClimb]);
 
   const handleOpenPlay = useCallback(() => {
     if (!currentClimbQueueItem?.climb) return;
