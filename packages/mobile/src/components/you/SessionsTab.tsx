@@ -13,7 +13,7 @@ import { SessionFeedCard } from './SessionFeedCard';
 import { SessionsFeedHeader } from './SessionsFeedHeader';
 import { FeedSectionLabel } from './FeedSectionLabel';
 import { CommentSheet } from './CommentSheet';
-import { bucketSessionsByRecency, type FeedRecencyBucket } from '../../lib/feed-time-buckets';
+import { bucketSessionsByRecency, dedupeSessionsById, type FeedRecencyBucket } from '../../lib/feed-time-buckets';
 import { useSessionGroupedFeed, useBulkVoteSummaries } from '../../lib/graphql/hooks';
 import { useBottomChromeMetrics } from '../../hooks/use-bottom-chrome-metrics';
 import { spacing } from '../../theme/tokens';
@@ -41,8 +41,11 @@ export function SessionsTab({ userId }: { userId: string | undefined }) {
   const [commentSessionId, setCommentSessionId] = useState<string | null>(null);
 
   const feed = useSessionGroupedFeed({ userId }, !!userId);
+  // De-dupe across pages: the OFFSET-paginated feed can return the same session
+  // on two adjacent pages when its rank shifts mid-refetch, which would
+  // otherwise produce duplicate FlashList keys (keyExtractor returns sessionId).
   const sessions = useMemo(
-    () => feed.data?.pages.flatMap((page) => page.sessionGroupedFeed.sessions) ?? [],
+    () => dedupeSessionsById(feed.data?.pages.flatMap((page) => page.sessionGroupedFeed.sessions) ?? []),
     [feed.data],
   );
 

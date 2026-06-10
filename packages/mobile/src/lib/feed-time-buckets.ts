@@ -13,6 +13,26 @@ export type FeedSessionGroup<TSession extends RecencySession> = {
 // Bucket order is fixed (most recent first); empty buckets are dropped.
 const BUCKET_ORDER: FeedRecencyBucket[] = ['today', 'thisWeek', 'earlier'];
 
+/** Minimal shape needed to de-duplicate a session by its id. */
+type IdentifiableSession = { sessionId: string };
+
+/**
+ * De-duplicate a flattened, multi-page session feed by `sessionId`, keeping the
+ * first occurrence (i.e. the earlier page wins). The backend feed uses OFFSET
+ * pagination over an `ORDER BY session_last_tick DESC` that mutates whenever a
+ * tick lands, so a session straddling a page boundary during a refetch can be
+ * returned in two adjacent pages. Without this guard the duplicate `sessionId`
+ * becomes a duplicate FlashList key (React duplicate-key warning + a doubled or
+ * dropped row). Pure and order-preserving.
+ */
+export function dedupeSessionsById<TSession extends IdentifiableSession>(sessions: TSession[]): TSession[] {
+  const byId = new Map<string, TSession>();
+  for (const session of sessions) {
+    if (!byId.has(session.sessionId)) byId.set(session.sessionId, session);
+  }
+  return [...byId.values()];
+}
+
 /**
  * Group sessions into Today / This week / Earlier buckets by their `lastTickAt`,
  * sorted most-recent-first within each bucket and across buckets. Pure: `now` is
