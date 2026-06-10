@@ -47,7 +47,8 @@
     "comments": {
       "title": "Commentaires",
       "empty": "Aucun commentaire — lancez la discussion",
-      "placeholder": "Ajouter un commentaire…"
+      "placeholder": "Ajouter un commentaire…",
+      "sendError": "Impossible de publier ton commentaire. Réessaie."
     },
     "filter": {
       "title": "Filtres",

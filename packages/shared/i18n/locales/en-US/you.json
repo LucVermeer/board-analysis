@@ -47,7 +47,8 @@
     "comments": {
       "title": "Comments",
       "empty": "No comments yet — start the conversation",
-      "placeholder": "Add a comment…"
+      "placeholder": "Add a comment…",
+      "sendError": "Couldn't post your comment. Give it another go."
     },
     "filter": {
       "title": "Filters",
