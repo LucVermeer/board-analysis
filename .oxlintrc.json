@@ -101,12 +101,12 @@
           {
             "object": "Intl",
             "property": "RelativeTimeFormat",
-            "message": "Hermes does not implement Intl.RelativeTimeFormat — it crashes the mobile app in release builds (tests pass because Node has full Intl). Use dayjs relativeTime via @boardsesh/profile-stats instead."
+            "message": "Hermes does not implement Intl.RelativeTimeFormat — crashes mobile release builds. Use dayjs relativeTime via @boardsesh/profile-stats."
           },
           {
             "object": "Intl",
             "property": "ListFormat",
-            "message": "Hermes does not implement Intl.ListFormat — it crashes the mobile app in release builds. Join the parts manually or via i18n."
+            "message": "Hermes does not implement Intl.ListFormat — crashes mobile release builds. Join the parts manually or via i18n."
           }
         ]
       }
