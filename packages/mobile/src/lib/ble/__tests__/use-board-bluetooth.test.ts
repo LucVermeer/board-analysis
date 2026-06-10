@@ -104,7 +104,7 @@ import {
   isNativeIosBleAdapter,
   subscribeNativeBleConnected,
 } from '../adapter-factory';
-import { parseBoardTypeFromDeviceName } from '@boardsesh/ble-protocol/aurora';
+import { parseBoardTypeFromDeviceName, parseSerialNumber } from '@boardsesh/ble-protocol/aurora';
 import { convertToMirroredFramesString, dispatchMoonboardPacket, useBoardBluetooth } from '../use-board-bluetooth';
 
 // ── Factory helpers ────────────────────────────────────────────────────────
@@ -382,6 +382,7 @@ describe('useBoardBluetooth native connection adoption', () => {
     vi.mocked(parseBoardTypeFromDeviceName).mockImplementation((name?: string) =>
       name?.toLowerCase().startsWith('kilter') ? 'kilter' : undefined,
     );
+    vi.mocked(parseSerialNumber).mockImplementation((name?: string) => name?.match(/#([^@]+)/)?.[1]);
   });
 
   afterEach(() => {
@@ -389,6 +390,7 @@ describe('useBoardBluetooth native connection adoption', () => {
     vi.mocked(getNativeBleConnectedDevice).mockImplementation(async () => null);
     vi.mocked(isNativeIosBleAdapter).mockReturnValue(false);
     vi.mocked(parseBoardTypeFromDeviceName).mockReset();
+    vi.mocked(parseSerialNumber).mockReset();
   });
 
   it('adopts a natively-connected board matching the active config', async () => {
@@ -421,6 +423,75 @@ describe('useBoardBluetooth native connection adoption', () => {
 
     expect(adapter.adoptConnection).not.toHaveBeenCalled();
     expect(result.current.isConnected).toBe(false);
+  });
+
+  it('clears stale adapters after native disconnects so later native connections can be adopted', async () => {
+    let firstDisconnectCallback: (() => void) | null = null;
+    const firstAdapter = {
+      ...makeAdoptableAdapter(),
+      onDisconnect: vi.fn((callback: () => void) => {
+        firstDisconnectCallback = callback;
+        return vi.fn();
+      }),
+    };
+    const secondAdapter = makeAdoptableAdapter();
+    vi.mocked(createBluetoothAdapter)
+      .mockReturnValueOnce(firstAdapter as unknown as ReturnType<typeof createBluetoothAdapter>)
+      .mockReturnValueOnce(secondAdapter as unknown as ReturnType<typeof createBluetoothAdapter>);
+
+    const { result } = renderHook(() => useBoardBluetooth({ boardName: 'kilter', layoutId: 1, sizeId: 1 }));
+
+    await act(async () => {
+      connectedListener?.({ deviceId: 'native-dev-1', deviceName: 'Kilter Board#9@3' });
+    });
+    expect(result.current.isConnected).toBe(true);
+
+    await act(async () => {
+      firstDisconnectCallback?.();
+    });
+    expect(result.current.isConnected).toBe(false);
+
+    await act(async () => {
+      connectedListener?.({ deviceId: 'native-dev-2', deviceName: 'Kilter Board#9@3' });
+    });
+
+    expect(secondAdapter.adoptConnection).toHaveBeenCalledWith('native-dev-2');
+    expect(result.current.isConnected).toBe(true);
+  });
+
+  it('adopts a nameless native reconnect when it matches the remembered current-board config', async () => {
+    let firstDisconnectCallback: (() => void) | null = null;
+    const firstAdapter = {
+      ...makeAdoptableAdapter(),
+      onDisconnect: vi.fn((callback: () => void) => {
+        firstDisconnectCallback = callback;
+        return vi.fn();
+      }),
+    };
+    const secondAdapter = makeAdoptableAdapter();
+    const onConnectSuccess = vi.fn();
+    vi.mocked(createBluetoothAdapter)
+      .mockReturnValueOnce(firstAdapter as unknown as ReturnType<typeof createBluetoothAdapter>)
+      .mockReturnValueOnce(secondAdapter as unknown as ReturnType<typeof createBluetoothAdapter>);
+
+    const { result } = renderHook(() =>
+      useBoardBluetooth({ boardName: 'kilter', layoutId: 1, sizeId: 1, onConnectSuccess }),
+    );
+
+    await act(async () => {
+      connectedListener?.({ deviceId: 'native-dev-1', deviceName: 'Kilter Board#9@3' });
+    });
+    await act(async () => {
+      firstDisconnectCallback?.();
+    });
+
+    await act(async () => {
+      connectedListener?.({ deviceId: 'native-dev-2', deviceName: '' });
+    });
+
+    expect(secondAdapter.adoptConnection).toHaveBeenCalledWith('native-dev-2');
+    expect(result.current.isConnected).toBe(true);
+    expect(onConnectSuccess).toHaveBeenLastCalledWith('9');
   });
 
   it('does not re-adopt after an explicit disconnect until the next deliberate connect', async () => {

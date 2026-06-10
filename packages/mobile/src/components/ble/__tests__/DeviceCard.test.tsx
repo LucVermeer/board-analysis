@@ -177,4 +177,19 @@ describe('DeviceCard', () => {
     expect(container.querySelector('[data-board-image="kilter"]')).not.toBeNull();
     expect(container.querySelector('[data-icon="info"]')).not.toBeNull();
   });
+
+  it('does not use the active board preview when an unresolved device name identifies another board', () => {
+    const { container, getByText } = render(
+      <DeviceCard
+        device={{ deviceId: 'device-4', name: 'Tension Board#SN-4@2', rssi: -70 }}
+        onSelect={vi.fn()}
+        resolvedBoards={new Map()}
+        currentBoardConfig={{ boardName: 'kilter', layoutId: 1, sizeId: 10, setIds: '1,20' }}
+      />,
+    );
+
+    expect(getByText('Tension')).not.toBeNull();
+    expect(container.querySelector('[data-board-image="kilter"]')).toBeNull();
+    expect(container.querySelector('[data-icon="boards"]')).not.toBeNull();
+  });
 });

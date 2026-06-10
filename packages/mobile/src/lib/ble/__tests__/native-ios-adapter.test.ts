@@ -5,7 +5,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 vi.mock('@boardsesh/ble-protocol', () => ({
   AURORA_ADVERTISED_SERVICE_UUID: 'AURORA-UUID',
   UART_SERVICE_UUID: 'UART-UUID',
-  parseSerialNumber: (name?: string) => name?.match(/#([^@]+)/)?.[1] ?? name ?? null,
+  parseSerialNumber: (name?: string) => name?.match(/#([^@]+)/)?.[1] ?? undefined,
 }));
 
 // Mock the Expo native module the adapter delegates to. vi.hoisted runs
@@ -186,12 +186,12 @@ describe('NativeIosBleAdapter scan timeout', () => {
 describe('NativeIosBleAdapter connect flow', () => {
   it('auto-selects a discovered device matching targetSerial', async () => {
     const adapter = new NativeIosBleAdapter(() => Promise.reject(new Error('picker should not open')));
-    const connectPromise = adapter.requestAndConnect('Kilter A1B2C3');
+    const connectPromise = adapter.requestAndConnect('A1B2C3');
     await Promise.resolve();
 
     scanListeners[0]?.({
-      device: { deviceId: 'dev-9', name: 'Kilter A1B2C3' },
-      localName: 'Kilter A1B2C3',
+      device: { deviceId: 'dev-9', name: 'Kilter Board#A1B2C3@3' },
+      localName: 'Kilter Board#A1B2C3@3',
       rssi: -55,
     });
     await vi.runAllTimersAsync();
@@ -212,11 +212,11 @@ describe('NativeIosBleAdapter connect flow', () => {
 
   it('flushes the native write queue when an in-flight write is aborted', async () => {
     const adapter = new NativeIosBleAdapter(() => Promise.reject(new Error('picker should not open')));
-    const connectPromise = adapter.requestAndConnect('Kilter A1B2C3');
+    const connectPromise = adapter.requestAndConnect('A1B2C3');
     await Promise.resolve();
     scanListeners[0]?.({
-      device: { deviceId: 'dev-9', name: 'Kilter A1B2C3' },
-      localName: 'Kilter A1B2C3',
+      device: { deviceId: 'dev-9', name: 'Kilter Board#A1B2C3@3' },
+      localName: 'Kilter Board#A1B2C3@3',
       rssi: -55,
     });
     await vi.runAllTimersAsync();

@@ -408,6 +408,66 @@ describe('RNBleAdapter', () => {
       expect(mockWriteFn).not.toHaveBeenCalled();
     });
 
+    it('does not write the next chunk when aborted during the inter-chunk delay', async () => {
+      vi.useFakeTimers();
+      try {
+        const mockWriteFn = vi.fn().mockResolvedValue(undefined);
+        const mockCharacteristic = {
+          uuid: 'uart-write-uuid',
+          writeWithoutResponse: mockWriteFn,
+        };
+
+        const mockDeviceWithServices = {
+          id: 'abort-delay-device',
+          characteristicsForService: vi.fn().mockResolvedValue([mockCharacteristic]),
+          requestMTU: vi.fn().mockResolvedValue(undefined),
+          discoverAllServicesAndCharacteristics: vi.fn().mockReturnThis(),
+        };
+
+        const mockConnectedDevice = {
+          id: 'abort-delay-device',
+          requestMTU: vi.fn().mockResolvedValue(undefined),
+          discoverAllServicesAndCharacteristics: vi.fn().mockReturnValue(mockDeviceWithServices),
+        };
+
+        mockBleManager.connectToDevice.mockResolvedValue(mockConnectedDevice);
+        mockBleManager.onDeviceDisconnected.mockReturnValue({ remove: vi.fn() });
+        mockBleManager.startDeviceScan.mockImplementation(
+          (_uuids: unknown, _opts: unknown, callback: (error: unknown, device: unknown) => void) => {
+            callback(null, {
+              id: 'abort-delay-device',
+              localName: 'Kilter Board#TEST@3',
+              name: 'Kilter Board#TEST@3',
+              rssi: -40,
+              serviceUUIDs: ['aurora-uuid'],
+            });
+          },
+        );
+
+        const adapter = new RNBleAdapter(() => Promise.resolve('abort-delay-device'));
+        await adapter.requestAndConnect();
+
+        const chunk1 = new Uint8Array([0x01]);
+        const chunk2 = new Uint8Array([0x02]);
+        vi.mocked(splitMessages).mockReturnValue([chunk1, chunk2]);
+
+        const abortController = new AbortController();
+        const writePromise = adapter.write(new Uint8Array([0x01, 0x02]), abortController.signal);
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(mockWriteFn).toHaveBeenCalledTimes(1);
+        const writeExpectation = expect(writePromise).rejects.toThrow('Write aborted');
+        abortController.abort();
+        await vi.runAllTimersAsync();
+
+        await writeExpectation;
+        expect(mockWriteFn).toHaveBeenCalledTimes(1);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('normalises a write failure to the disconnect signature when the link is gone', async () => {
       // react-native-ble-plx surfaces a mid-write drop as a CharacteristicWriteFailed
       // BleError that doesn't name the disconnect. The adapter probes the live

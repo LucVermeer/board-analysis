@@ -1,10 +1,11 @@
 import { useCallback, useMemo } from 'react';
 import { View, Pressable, StyleSheet } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import { formatBoardDisplayName, toBoardName } from '@boardsesh/board-config';
+import { formatBoardDisplayName } from '@boardsesh/board-config';
 import { parseBoardTypeFromDeviceName, parseSerialNumber } from '@boardsesh/ble-protocol';
 import type { DiscoveredDevice } from '../../lib/ble/types';
 import type { ResolvedBoardEntry } from '../../lib/ble/resolve-serials';
+import { configFromResolvedEntry, type BleBoardConfig } from '../../lib/ble/board-config-match';
 import { getBoardRenderData } from '../../lib/board-details';
 import { Text } from '../Text';
 import { Icon } from '../Icon';
@@ -14,7 +15,6 @@ import { hapticLight } from '../../lib/haptics';
 import { spacing, borderRadius } from '../../theme/tokens';
 import { iosSystemColors } from '../../theme/ios-colors';
 import { formatRelativeTime } from '../create-climb/draft-format';
-import type { DevicePickerBoardConfig } from './DevicePickerSheet';
 
 type RssiStrength = 'strong' | 'good' | 'weak';
 
@@ -64,13 +64,13 @@ type DeviceCardProps = {
   device: DiscoveredDevice;
   onSelect: (deviceId: string) => void;
   resolvedBoards: ReadonlyMap<string, ResolvedBoardEntry>;
-  currentBoardConfig?: DevicePickerBoardConfig;
+  currentBoardConfig?: BleBoardConfig;
 };
 
 type DevicePresentation = {
   title: string;
   subtitle?: string;
-  previewConfig?: DevicePickerBoardConfig;
+  previewConfig?: BleBoardConfig;
   isUnknown: boolean;
 };
 
@@ -79,28 +79,6 @@ function parseSetIds(setIds: string): number[] {
     .split(',')
     .map((setId) => Number(setId.trim()))
     .filter((setId) => Number.isInteger(setId));
-}
-
-function configFromResolvedEntry(entry: ResolvedBoardEntry): DevicePickerBoardConfig | undefined {
-  if (entry.kind === 'saved') {
-    const boardName = toBoardName(entry.board.boardType);
-    if (!boardName) return undefined;
-    return {
-      boardName,
-      layoutId: entry.board.layoutId,
-      sizeId: entry.board.sizeId,
-      setIds: entry.board.setIds,
-    };
-  }
-
-  const boardName = toBoardName(entry.config.boardName);
-  if (!boardName) return undefined;
-  return {
-    boardName,
-    layoutId: entry.config.layoutId,
-    sizeId: entry.config.sizeId,
-    setIds: entry.config.setIds,
-  };
 }
 
 function describeSavedBoard(entry: Extract<ResolvedBoardEntry, { kind: 'saved' }>): string | undefined {
@@ -130,7 +108,7 @@ function getPreviewImageStyle(boardWidth: number, boardHeight: number): PreviewI
   };
 }
 
-function BoardPreview({ previewConfig, isUnknown }: { previewConfig?: DevicePickerBoardConfig; isUnknown: boolean }) {
+function BoardPreview({ previewConfig, isUnknown }: { previewConfig?: BleBoardConfig; isUnknown: boolean }) {
   const { systemColors } = useTheme();
   const setIds = useMemo(() => (previewConfig ? parseSetIds(previewConfig.setIds) : []), [previewConfig]);
   const renderData = useMemo(() => {
@@ -176,6 +154,7 @@ export function DeviceCard({ device, onSelect, resolvedBoards, currentBoardConfi
   const { systemColors } = useTheme();
   const serialNumber = parseSerialNumber(device.name);
   const resolvedEntry = serialNumber ? resolvedBoards.get(serialNumber) : undefined;
+  const inferredBoardType = parseBoardTypeFromDeviceName(device.name);
 
   const handlePress = useCallback(() => {
     hapticLight();
@@ -203,12 +182,13 @@ export function DeviceCard({ device, onSelect, resolvedBoards, currentBoardConfi
 
     return {
       title: device.name ?? t('devicePicker.unknownDevice'),
-      previewConfig: currentBoardConfig,
+      previewConfig:
+        !inferredBoardType || inferredBoardType === currentBoardConfig?.boardName ? currentBoardConfig : undefined,
       isUnknown: true,
     };
-  }, [currentBoardConfig, device.name, resolvedEntry, t]);
+  }, [currentBoardConfig, device.name, inferredBoardType, resolvedEntry, t]);
 
-  const boardType = presentation.previewConfig?.boardName ?? parseBoardTypeFromDeviceName(device.name);
+  const boardType = presentation.previewConfig?.boardName ?? inferredBoardType;
   const boardLabel = boardType ? formatBoardDisplayName(boardType) : undefined;
 
   return (

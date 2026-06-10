@@ -11,6 +11,7 @@ import {
 import type { UserBoard } from '@boardsesh/shared-schema';
 import { getAuthToken } from '../auth-store';
 import { getHttpClient } from '../graphql/client';
+import { useAuthToken } from '../graphql/use-auth-token';
 import type { DiscoveredDevice } from './types';
 
 export type ResolvedBoardEntry = { kind: 'saved'; board: UserBoard } | { kind: 'recorded'; config: BoardSerialConfig };
@@ -28,14 +29,17 @@ export function serialsFromDiscoveredDevices(devices: ReadonlyArray<DiscoveredDe
   return [...serials];
 }
 
-export async function resolveBleSerialNumbers(serialNumbers: string[]): Promise<Map<string, ResolvedBoardEntry>> {
+export async function resolveBleSerialNumbers(
+  serialNumbers: string[],
+  providedAuthToken?: string | null,
+): Promise<Map<string, ResolvedBoardEntry>> {
   const uniqueSerialNumbers = [
     ...new Set(serialNumbers.filter((serialNumber) => serialNumber.trim().length > 0)),
   ].slice(0, MAX_SERIALS_PER_REQUEST);
   if (uniqueSerialNumbers.length === 0) return new Map();
 
   const client = getHttpClient();
-  const authToken = await getAuthToken();
+  const authToken = providedAuthToken === undefined ? await getAuthToken() : providedAuthToken;
   const recordedRequest = authToken
     ? client
         .request<GetMyBoardSerialConfigsQueryResponse>(GET_MY_BOARD_SERIAL_CONFIGS, {
@@ -69,10 +73,12 @@ export async function resolveBleSerialNumbers(serialNumbers: string[]): Promise<
 
 export function useResolvedBleDeviceBoards(devices: ReadonlyArray<DiscoveredDevice>): Map<string, ResolvedBoardEntry> {
   const serialNumbers = useMemo(() => serialsFromDiscoveredDevices(devices), [devices]);
+  const authTokenQuery = useAuthToken();
+  const authToken = authTokenQuery.data;
   const { data } = useQuery({
-    queryKey: ['bleDeviceSerials', serialNumbers],
-    queryFn: () => resolveBleSerialNumbers(serialNumbers),
-    enabled: serialNumbers.length > 0,
+    queryKey: ['bleDeviceSerials', authToken ?? null, serialNumbers],
+    queryFn: () => resolveBleSerialNumbers(serialNumbers, authToken ?? null),
+    enabled: serialNumbers.length > 0 && authToken !== undefined,
     staleTime: 30_000,
   });
   return data ?? EMPTY_RESOLVED_BOARDS;

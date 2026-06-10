@@ -252,15 +252,18 @@ export class RNBleAdapter implements BluetoothAdapter {
         throw new DOMException('Write aborted', 'AbortError');
       }
 
+      if (chunkIndex > 0) {
+        await delay(INTER_CHUNK_DELAY_MS);
+        if (signal?.aborted) {
+          throw new DOMException('Write aborted', 'AbortError');
+        }
+      }
+
       // Re-check the characteristic before each chunk — a mid-write
       // disconnect sets it to null via the onDeviceDisconnected handler.
       const characteristic = this.writeCharacteristic;
       if (!characteristic) {
         throw new Error('Device disconnected during write');
-      }
-
-      if (chunkIndex > 0) {
-        await delay(INTER_CHUNK_DELAY_MS);
       }
 
       const chunk = chunks[chunkIndex];

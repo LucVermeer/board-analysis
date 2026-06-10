@@ -1,11 +1,15 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { Alert } from 'react-native';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import type { ClimbQueueItem } from '@boardsesh/queue';
 import type { BoardName } from '@boardsesh/shared-schema';
-import { toBoardName } from '@boardsesh/board-config';
+import { formatBoardDisplayName, toBoardName } from '@boardsesh/board-config';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { emitWallConfirm } from '@boardsesh/play-view';
 import { useBoardBluetooth } from '../lib/ble/use-board-bluetooth';
 import { useResolvedBleDeviceBoards } from '../lib/ble/resolve-serials';
+import { decideBlePickerSelection, type BleBoardConfig } from '../lib/ble/board-config-match';
 import { getBoardRenderData } from '../lib/board-details';
 import { registerBluetoothConnection } from '../lib/ble/bluetooth-status-store';
 import { useQueue, useQueueSessionControls } from './queue-provider';
@@ -38,6 +42,15 @@ type BluetoothContextValue = {
 
 const BluetoothContext = createContext<BluetoothContextValue | null>(null);
 const EMPTY_PICKER_DEVICES: [] = [];
+
+function formatPickerBoardConfig(t: TFunction<'settings'>, config: BleBoardConfig): string {
+  return t('boardConfigMismatch.mobileConfigValue', {
+    board: formatBoardDisplayName(config.boardName),
+    layoutId: config.layoutId,
+    sizeId: config.sizeId,
+    setIds: config.setIds,
+  });
+}
 
 /**
  * Isolated child component that subscribes to the queue's currentClimbQueueItem
@@ -198,6 +211,7 @@ export function BluetoothProvider({
   children,
 }: BluetoothProviderProps) {
   const { sessionId, confirmClimbOnWall, setSessionBoardSerial, lastConnectedBoardSerial } = useQueueSessionControls();
+  const { t } = useTranslation('settings');
   const sessionIdRef = useRef(sessionId);
   useEffect(() => {
     sessionIdRef.current = sessionId;
@@ -275,6 +289,44 @@ export function BluetoothProvider({
       setIds,
     };
   }, [boardName, layoutId, sizeId, setIds]);
+
+  const handlePickerSelect = useCallback(
+    (deviceId: string) => {
+      if (!pickerState) return;
+      const decision = decideBlePickerSelection({
+        deviceId,
+        devices: pickerState.devices,
+        resolvedBoards: resolvedPickerBoards,
+        currentBoardConfig,
+      });
+      if (decision.kind === 'forward') {
+        pickerState.handleSelect(deviceId);
+        return;
+      }
+
+      const currentLabel = currentBoardConfig
+        ? formatPickerBoardConfig(t, currentBoardConfig)
+        : t('boardConfigMismatch.mobileUnknownConfig');
+      const recordedLabel = formatPickerBoardConfig(t, decision.config);
+      Alert.alert(
+        t('boardConfigMismatch.title'),
+        [
+          t('boardConfigMismatch.intro'),
+          t('boardConfigMismatch.mobileCurrentLabel', { config: currentLabel }),
+          t('boardConfigMismatch.mobileRecordedLabel', { config: recordedLabel }),
+        ].join('\n\n'),
+        [
+          { text: t('boardConfigMismatch.cancel'), style: 'cancel' },
+          {
+            text: t('boardConfigMismatch.connectAnyway'),
+            style: 'destructive',
+            onPress: () => pickerState.handleSelect(deviceId),
+          },
+        ],
+      );
+    },
+    [currentBoardConfig, pickerState, resolvedPickerBoards, t],
+  );
 
   const clearBoard = useCallback(() => sendFramesToBoard(''), [sendFramesToBoard]);
 
@@ -363,7 +415,7 @@ export function BluetoothProvider({
       {pickerState && (
         <DevicePickerSheet
           devices={pickerState.devices}
-          onSelect={pickerState.handleSelect}
+          onSelect={handlePickerSelect}
           onDismiss={pickerState.handleCancel}
           isScanning={pickerState.isScanning}
           resolvedBoards={resolvedPickerBoards}

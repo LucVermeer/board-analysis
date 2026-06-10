@@ -213,6 +213,8 @@ export function useBoardBluetooth({
   // points at the same board — switching board/layout/size invalidates it and
   // callers fall back to the picker. Mirrors the web `reconnectSerialForCurrentBoard`.
   const [lastConnectedBoard, setLastConnectedBoard] = useState<{ serial: string; configKey: string } | null>(null);
+  const lastConnectedBoardRef = useRef(lastConnectedBoard);
+  lastConnectedBoardRef.current = lastConnectedBoard;
 
   const adapterRef = useRef<BluetoothAdapter | null>(null);
   const apiLevelRef = useRef<number>(3);
@@ -292,10 +294,20 @@ export function useBoardBluetooth({
     });
   }, []);
 
-  const handleDisconnection = useCallback(() => {
+  const clearConnectionAfterDrop = useCallback(() => {
+    unsubDisconnectRef.current?.();
+    unsubDisconnectRef.current = null;
+    adapterRef.current = null;
+    writeAbortRef.current?.abort();
+    writeAbortRef.current = null;
+    writeChainRef.current = Promise.resolve();
     setIsConnected(false);
     onConnectionChange?.(false);
   }, [onConnectionChange]);
+
+  const handleDisconnection = useCallback(() => {
+    clearConnectionAfterDrop();
+  }, [clearConnectionAfterDrop]);
 
   const sendFramesToBoard = useCallback(
     async (frames: string, mirrored: boolean = false, signal?: AbortSignal) => {
@@ -682,14 +694,20 @@ export function useBoardBluetooth({
       if (adoptionSuppressedRef.current) return;
       if (!boardName || layoutId === undefined || sizeId === undefined) return;
       // Only adopt a device positively identified as the active config's board
-      // type: the LED placement map / packet format wouldn't match otherwise
-      // and every send would misfire. Must recognise MoonBoard names too —
-      // parseBoardTypeFromDeviceName alone only knows Aurora boards, so a
-      // natively-reconnected MoonBoard would slip past an Aurora-config check.
-      // An unrecognisable (or missing) name also bails: a dark lightbulb beats
-      // streaming wrong-format packets at an unknown device.
+      // type, or a nameless native reconnect for the exact config we most
+      // recently paired. The latter covers CoreBluetooth retrieval/state
+      // restoration paths that can become write-ready without a fresh
+      // advertisement name.
       const adoptedBoardType = parseAnyBoardTypeFromDeviceName(deviceName);
-      if (!adoptedBoardType || adoptedBoardType !== boardName) return;
+      const currentConfigKey = boardConfigKey(boardName, layoutId, sizeId);
+      const rememberedBoard = lastConnectedBoardRef.current;
+      const canAdoptNamelessRememberedBoard = !adoptedBoardType && rememberedBoard?.configKey === currentConfigKey;
+      if (
+        (!adoptedBoardType && !canAdoptNamelessRememberedBoard) ||
+        (adoptedBoardType && adoptedBoardType !== boardName)
+      ) {
+        return;
+      }
 
       const adapter = createBluetoothAdapter(devicePicker, scanFamilyForBoard(boardName));
       if (!isNativeIosBleAdapter(adapter)) return;
@@ -701,9 +719,9 @@ export function useBoardBluetooth({
         .configureBoard({ boardName, layoutId, sizeId, apiLevel: apiLevelRef.current, deviceName })
         .catch(() => {});
 
-      const serial = deviceName ? (parseSerialNumber(deviceName) ?? null) : null;
+      const serial = deviceName ? (parseSerialNumber(deviceName) ?? null) : (rememberedBoard?.serial ?? null);
       if (serial) {
-        setLastConnectedBoard({ serial, configKey: boardConfigKey(boardName, layoutId, sizeId) });
+        setLastConnectedBoard({ serial, configKey: currentConfigKey });
       }
       setIsConnected(true);
       onConnectionChange?.(true);
@@ -731,7 +749,15 @@ export function useBoardBluetooth({
       connectedSubscription.remove();
       appStateSubscription.remove();
     };
-  }, [boardName, layoutId, sizeId, devicePicker, handleDisconnection, onConnectionChange, onConnectSuccess]);
+  }, [
+    boardName,
+    layoutId,
+    sizeId,
+    devicePicker,
+    handleDisconnection,
+    onConnectionChange,
+    onConnectSuccess,
+  ]);
 
   // Serial to silently reconnect to for the board currently in view, or null
   // when nothing is remembered or the user switched boards (in which case the

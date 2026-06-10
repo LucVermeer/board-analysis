@@ -19,6 +19,10 @@ vi.mock('../../graphql/client', () => ({
   getHttpClient: () => ({ request: harness.request }),
 }));
 
+vi.mock('../../graphql/use-auth-token', () => ({
+  useAuthToken: vi.fn(() => ({ data: null })),
+}));
+
 import { resolveBleSerialNumbers, serialsFromDiscoveredDevices } from '../resolve-serials';
 
 function makeBoard(serialNumber: string, overrides: Partial<UserBoard> = {}): UserBoard {
@@ -122,5 +126,22 @@ describe('resolveBleSerialNumbers', () => {
     expect(resolvedBoards.size).toBe(0);
     expect(harness.request).toHaveBeenCalledTimes(1);
     expect(harness.request).toHaveBeenCalledWith(GET_BOARDS_BY_SERIAL_NUMBERS, { serialNumbers: ['SN-1'] });
+  });
+
+  it('uses the provided auth token instead of reading storage', async () => {
+    harness.request.mockImplementation((operation: unknown) => {
+      if (operation === GET_BOARDS_BY_SERIAL_NUMBERS) {
+        return Promise.resolve({ boardsBySerialNumbers: [] });
+      }
+      if (operation === GET_MY_BOARD_SERIAL_CONFIGS) {
+        return Promise.resolve({ myBoardSerialConfigs: [makeConfig('SN-1')] });
+      }
+      return Promise.reject(new Error('Unexpected operation'));
+    });
+
+    const resolvedBoards = await resolveBleSerialNumbers(['SN-1'], 'token-from-hook');
+
+    expect(resolvedBoards.get('SN-1')).toEqual({ kind: 'recorded', config: makeConfig('SN-1') });
+    expect(harness.request).toHaveBeenCalledTimes(2);
   });
 });

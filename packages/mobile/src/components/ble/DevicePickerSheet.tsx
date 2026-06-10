@@ -10,9 +10,9 @@ import {
 import { FullWindowOverlay } from 'react-native-screens';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
-import type { BoardName } from '@boardsesh/shared-schema';
 import type { DiscoveredDevice } from '../../lib/ble/types';
 import type { ResolvedBoardEntry } from '../../lib/ble/resolve-serials';
+import type { BleBoardConfig } from '../../lib/ble/board-config-match';
 import { Text } from '../Text';
 import { Button } from '../Button';
 import { DeviceCard } from './DeviceCard';
@@ -27,14 +27,7 @@ type DevicePickerSheetProps = {
   onDismiss: () => void;
   isScanning: boolean;
   resolvedBoards: ReadonlyMap<string, ResolvedBoardEntry>;
-  currentBoardConfig?: DevicePickerBoardConfig;
-};
-
-export type DevicePickerBoardConfig = {
-  boardName: BoardName;
-  layoutId: number;
-  sizeId: number;
-  setIds: string;
+  currentBoardConfig?: BleBoardConfig;
 };
 
 function DevicePickerModalContainer({ children }: PropsWithChildren) {
