@@ -49,6 +49,14 @@ describe('sessionLiveness query', () => {
     expect(result).toEqual({ id: 'session-1', status: 'active', endedAt: null });
   });
 
+  it("normalizes a legacy 'inactive' row to active (CHECK-permitted, never written; restore-safe)", async () => {
+    dbClient.limit.mockResolvedValue([{ id: 'session-1', status: 'inactive', endedAt: null }]);
+
+    const result = await sessionQueries.sessionLiveness({}, { sessionId: 'session-1' });
+
+    expect(result).toEqual({ id: 'session-1', status: 'active', endedAt: null });
+  });
+
   it('reports an ended session (ISO endedAt) even with zero connected participants', async () => {
     dbClient.limit.mockResolvedValue([
       { id: 'session-1', status: 'ended', endedAt: new Date('2026-06-10T12:00:00.000Z') },

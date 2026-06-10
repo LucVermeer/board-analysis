@@ -44,12 +44,19 @@ export type SessionSummary = {
   goal?: string | null;
 };
 
-/** Durable session lifecycle status (DB CHECK: board_sessions.status). */
-export type SessionStatus = 'active' | 'inactive' | 'ended';
+/**
+ * Durable session lifecycle status. Only 'active' and 'ended' are ever
+ * written: live presence moved to Redis, so the abandoned 'inactive' value
+ * survives only in the legacy DB CHECK (backend migration
+ * 0005_session_status_tracking.sql). The sessionLiveness resolver normalizes
+ * any such legacy row to 'active'.
+ */
+export type SessionStatus = 'active' | 'ended';
 
 /** Durable lifecycle status of a session, independent of live presence. */
 export type SessionLiveness = {
   id: string;
   status: SessionStatus;
-  endedAt?: string | null;
+  /** ISO 8601 end timestamp; null while the session has not ended. */
+  endedAt: string | null;
 };

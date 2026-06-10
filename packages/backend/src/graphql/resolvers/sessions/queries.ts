@@ -1,4 +1,4 @@
-import type { ConnectionContext, EventsReplayResponse, SessionLiveness, SessionStatus } from '@boardsesh/shared-schema';
+import type { ConnectionContext, EventsReplayResponse, SessionLiveness } from '@boardsesh/shared-schema';
 import { eq } from 'drizzle-orm';
 import { roomManager, type DiscoverableSession } from '../../../services/room-manager';
 import { pubsub } from '../../../pubsub/index';
@@ -152,9 +152,14 @@ export const sessionQueries = {
     if (!row) return null;
     return {
       id: row.id,
-      // status is a free-text column constrained by a DB CHECK to
-      // ('active','inactive','ended'); narrow the string for callers.
-      status: row.status as SessionStatus,
+      // The legacy DB CHECK (backend migration 0005) still permits 'inactive',
+      // but nothing writes it — presence moved to Redis and the durable row is
+      // only ever 'active' or 'ended'. Normalize anyway: a non-member value
+      // would fail GraphQL enum serialization (error response, which the
+      // mobile client treats as "can't verify" and restores optimistically,
+      // with error noise), and a hypothetical dormant 'inactive' row is
+      // exactly the restore-safe case this query exists to preserve (#2683).
+      status: row.status === 'ended' ? 'ended' : 'active',
       endedAt: row.endedAt ? row.endedAt.toISOString() : null,
     };
   },

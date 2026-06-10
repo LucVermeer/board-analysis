@@ -3,7 +3,7 @@ import { act, render, waitFor } from '@testing-library/react';
 import { createElement, useEffect } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ClimbQueueItem, PlaylistSuggestionSource } from '@boardsesh/queue';
-import type { SessionUser, UserBoard } from '@boardsesh/shared-schema';
+import type { SessionStatus, SessionUser, UserBoard } from '@boardsesh/shared-schema';
 
 const ws = vi.hoisted(() => {
   let sessionUpdatesSink: { next: (payload: { data?: { sessionUpdates?: unknown } }) => void } | null = null;
@@ -192,7 +192,7 @@ const user = (overrides: Partial<SessionUser> = {}): SessionUser => ({
 
 // Response shape for the cold-start SESSION_LIVENESS check. status 'active'
 // (endedAt null) means restore the session; 'ended' means drop the stored id.
-const livenessResponse = (id: string, status: 'active' | 'ended' = 'active', endedAt: string | null = null) => ({
+const livenessResponse = (id: string, status: SessionStatus = 'active', endedAt: string | null = null) => ({
   sessionLiveness: { id, status, endedAt },
 });
 

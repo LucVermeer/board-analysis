@@ -19,7 +19,7 @@ import type {
   FollowConnection,
   TickStatus,
   SessionUser,
-  SessionStatus,
+  SessionLiveness,
   SessionFeedParticipant,
   SessionGradeDistributionItem,
 } from '@boardsesh/shared-schema';
@@ -610,14 +610,8 @@ export const SESSION_LIVENESS = gql`
   }
 `;
 
-export type SessionLivenessResult = {
-  id: string;
-  status: SessionStatus;
-  endedAt: string | null;
-};
-
 export type SessionLivenessQueryResponse = {
-  sessionLiveness: SessionLivenessResult | null;
+  sessionLiveness: SessionLiveness | null;
 };
 
 // Authoritative queue snapshot for the active session, fetched after a queue

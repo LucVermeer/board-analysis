@@ -245,7 +245,7 @@ A session represents a climbing session on one or more boards — the real-time 
 | `board_path`         | `text`             | `/{board_type}/{layout_id}/{size_id}/{set_ids}` |
 | `created_at`         | `timestamp`        | DEFAULT now()                                   |
 | `last_activity`      | `timestamp`        | DEFAULT now(), updated on interaction           |
-| `status`             | `text`             | 'active', 'inactive', 'ended'                   |
+| `status`             | `text`             | 'active', 'ended' (legacy CHECK also permits 'inactive', never written) |
 | `latitude`           | `double precision` | Nullable, for discovery                         |
 | `longitude`          | `double precision` | Nullable, for discovery                         |
 | `discoverable`       | `boolean`          | DEFAULT false                                   |

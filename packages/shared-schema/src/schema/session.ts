@@ -64,6 +64,18 @@ export const sessionTypeDefs = /* GraphQL */ `
   }
 
   """
+  Durable session lifecycle status. Lowercase values match the strings stored
+  in board_sessions.status so resolvers and clients pass them through without
+  mapping (same convention as TickStatus).
+  """
+  enum SessionStatus {
+    "Live or dormant; safe for a client to restore on cold start"
+    active
+    "Explicitly ended, or auto-finished by the inactivity sweep"
+    ended
+  }
+
+  """
   Durable lifecycle status of a session, independent of live presence.
   Backed by the persisted session row rather than Redis, so an ended session
   is reported as ended even when no participants are currently connected.
@@ -71,8 +83,8 @@ export const sessionTypeDefs = /* GraphQL */ `
   type SessionLiveness {
     "Unique session identifier"
     id: ID!
-    "Durable lifecycle status: 'active' or 'ended'"
-    status: String!
+    "Durable lifecycle status"
+    status: SessionStatus!
     "When the session was ended (ISO 8601); null while still active"
     endedAt: String
   }

@@ -476,6 +476,17 @@ Because the sweep mutates rows asynchronously to any connected clients, no `Sess
 
 The frontend displays the summary in a dialog when the session ends, and optionally as a feed item in the activity feed.
 
+### Cold-Start Liveness Check (`sessionLiveness`)
+
+The mobile app persists the active session id (expo-secure-store) and tries to restore it on cold start. Before rejoining it must tell two states apart that look identical to the presence-gated `session` query: an **ended** session (drop the stored id) and a **dormant-but-active** one in the WARM or DORMANT lifecycle states above (restore it). `session` returns null for any empty roster, so it can't make that call — and blindly sending `JOIN_SESSION` against an ended id recreates the room as an empty zombie (#2683).
+
+The `sessionLiveness(sessionId)` query exists solely for this disambiguation:
+
+- It is a plain SELECT of the durable `board_sessions` row (`id`, `status`, `endedAt`) on the read path — no Redis, no room-manager involvement, so it can never resurrect hot state. It returns `null` for an unknown id.
+- `status` is the two-value `SessionStatus` enum (`active` | `ended`). The legacy DB CHECK from backend migration `0005_session_status_tracking.sql` still permits `'inactive'`, but nothing has ever written it (presence moved to Redis); the resolver normalizes such a row to `active`, which is the restore-safe reading.
+- It requires no auth by design: it exposes only existence + ended-state, and auth may not be restored yet at cold start. This is also why mobile can't reuse the web flow described above — the `GET_SESSION_SUMMARY` pre-flight requires an authenticated caller.
+- Client behaviour (`packages/mobile/src/providers/queue-provider.tsx`): ended or missing → clear the stored id; alive → restore; fetch failure (offline cold start) → restore optimistically so the queue still comes back, since a dead session stays escapable via End Session.
+
 ### Multi-Board Sessions
 
 Sessions can be linked to multiple boards within the same gym via the `sessionBoards` junction table. This is validated at creation time:

@@ -532,6 +532,9 @@ export function QueueProvider({ children }: { children: ReactNode }) {
         // durable session row (sessionLiveness), NOT the presence-gated `session`
         // query — that one returns null for any empty session, so it can't tell
         // an ended session apart from a dormant-but-active solo session.
+        // SessionStatus is two-valued ('active' | 'ended'), so the 'ended'
+        // check is exhaustive; the endedAt OR is belt-and-braces against a
+        // skewed row (both writers set status and endedAt together).
         const { sessionLiveness } = await getHttpClient().request<SessionLivenessQueryResponse>(SESSION_LIVENESS, {
           sessionId: storedId,
         });
