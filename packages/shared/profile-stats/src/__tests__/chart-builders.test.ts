@@ -196,6 +196,43 @@ describe('buildWeeklyBars', () => {
     expect(keys).toContain('2025-W1');
     expect(result.find((b) => b.key === '2024-W52')!.label).toContain("'24");
   });
+
+  // Regression: derive-view-model concatenates per-board tick arrays in
+  // BOARD_TYPES order (Object.values(...).flat()), each newest-first, so the
+  // combined array is NOT globally sorted. An early board (Kilter, 2024) whose
+  // oldest tick is newer than a later board's newest is impossible, but the
+  // reverse — an early board entirely older than a later board — makes
+  // entries[0] (treated as newest) older than entries[last] (treated as
+  // oldest), so first > last, the week loop never runs, and the whole chart
+  // disappears.
+  it('spans the full range for unsorted multi-board input (regression A5-you-profile-001)', () => {
+    // Kilter ticks from early 2024 (newest-first), then Tension ticks from
+    // late 2024 (newest-first) — concatenated, NOT globally sorted, and within
+    // the 52-week cap. Before the fix, entries[0] (treated as global-newest)
+    // was the Kilter March tick while entries[last] (treated as global-oldest)
+    // was the Tension October tick, so first > last and the loop produced no
+    // weeks → the whole chart returned null.
+    const kilterEarly2024 = [
+      makeEntry({ climbed_at: '2024-03-15T12:00:00Z', difficulty: 22 }),
+      makeEntry({ climbed_at: '2024-03-01T12:00:00Z', difficulty: 22 }),
+    ];
+    const tensionLate2024 = [
+      makeEntry({ climbed_at: '2024-10-15T12:00:00Z', difficulty: 16 }),
+      makeEntry({ climbed_at: '2024-10-01T12:00:00Z', difficulty: 16 }),
+    ];
+    const unsorted = [...kilterEarly2024, ...tensionLate2024];
+
+    const result = buildWeeklyBars(unsorted);
+    expect(result).not.toBeNull();
+    const keys = result!.map((b) => b.key);
+    // Range must cover both the March and October weeks, not collapse to empty.
+    expect(keys).toContain(
+      `${dayjs('2024-03-01T12:00:00Z').isoWeekYear()}-W${dayjs('2024-03-01T12:00:00Z').isoWeek()}`,
+    );
+    expect(keys).toContain(
+      `${dayjs('2024-10-15T12:00:00Z').isoWeekYear()}-W${dayjs('2024-10-15T12:00:00Z').isoWeek()}`,
+    );
+  });
 });
 
 describe('buildFlashRedpointBars', () => {
