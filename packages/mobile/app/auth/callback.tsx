@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { exchangeTransferToken } from '../../src/lib/auth';
+import { exchangeTransferToken, getPendingOAuthProvider } from '../../src/lib/auth';
 import { classifyNativeAuthFailureReason } from '../../src/lib/native-auth-analytics';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { track } from '../../src/lib/analytics';
@@ -10,16 +10,19 @@ import { useAuth } from '../../src/providers/auth-provider';
 import { useTheme } from '../../src/providers/theme-provider';
 
 // Transfer tokens are one-time use, and this screen can mount twice for the
-// same token: on Android the callback deep link is routed by expo-router AND
-// the login screen routes here explicitly with the URL openAuthSessionAsync
-// returned. Module-level so a remount can't replay (and fail) the exchange —
-// the duplicate mount just shows the spinner until AuthProvider redirects.
+// same token: the callback deep link is routed by expo-router AND the login
+// screen routes here explicitly with the callback URL startSignIn resolved.
+// Module-level so a remount can't replay (and fail) the exchange — the
+// duplicate mount just shows the spinner until AuthProvider redirects.
 // Never cleared: one short string per login attempt for the process lifetime
 // is negligible, and clearing would reopen the replay window.
 const exchangedTokens = new Set<string>();
 
 export default function AuthCallback() {
-  const { transferToken } = useLocalSearchParams<{ transferToken: string }>();
+  const { transferToken, error: serverCallbackError } = useLocalSearchParams<{
+    transferToken: string;
+    error?: string;
+  }>();
   const { t } = useTranslation('auth');
   // Holds a translated, user-facing failure message — never raw server text,
   // which the backend returns in English only.
@@ -29,10 +32,24 @@ export default function AuthCallback() {
   const theme = useTheme();
 
   useEffect(() => {
+    // The transfer-token exchange doesn't echo the OAuth provider back, so
+    // attribute events to the attempt startSignIn recorded. Without this,
+    // social Login Succeeded events have no auth_method and disappear from
+    // every per-method funnel.
+    const authMethod = getPendingOAuthProvider() ?? undefined;
+
     if (!transferToken) {
-      // auth_method is unknown here — the OAuth provider isn't echoed back on the
-      // transfer-token exchange (same reason Login Succeeded omits it).
-      track(SHARED_EVENTS.LoginFailed, { flow: 'native', failure_reason: 'no_transfer_token' });
+      // When the server deep-links an explicit error (session_missing /
+      // token_issue_failed), login.tsx already tracked it with the precise
+      // reason from the same URL — expo-router just also routed it here.
+      // Tracking again would double-count one failed attempt.
+      if (!serverCallbackError) {
+        track(SHARED_EVENTS.LoginFailed, {
+          auth_method: authMethod,
+          flow: 'native',
+          failure_reason: 'no_transfer_token',
+        });
+      }
       setError(t('callback.noTransferToken'));
       return;
     }
@@ -43,21 +60,25 @@ export default function AuthCallback() {
     exchangeTransferToken(transferToken)
       .then(async (result) => {
         if (result.success) {
-          track(SHARED_EVENTS.LoginSucceeded, { flow: 'native' });
+          track(SHARED_EVENTS.LoginSucceeded, { auth_method: authMethod, flow: 'native' });
           await refreshAuthState();
           router.replace('/(tabs)/climbs');
         } else {
-          track(SHARED_EVENTS.LoginFailed, { flow: 'native', failure_reason: classifyNativeAuthFailureReason(result) });
+          track(SHARED_EVENTS.LoginFailed, {
+            auth_method: authMethod,
+            flow: 'native',
+            failure_reason: classifyNativeAuthFailureReason(result, 'exchange'),
+          });
           // result.error is a raw English/server string; show a translated
           // generic message instead (mirrors login.tsx's networkError pattern).
           setError(t('callback.failed'));
         }
       })
       .catch(() => {
-        track(SHARED_EVENTS.LoginFailed, { flow: 'native', failure_reason: 'exception' });
+        track(SHARED_EVENTS.LoginFailed, { auth_method: authMethod, flow: 'native', failure_reason: 'exception' });
         setError(t('callback.unexpectedError'));
       });
-  }, [transferToken, router, refreshAuthState, t]);
+  }, [transferToken, serverCallbackError, router, refreshAuthState, t]);
 
   if (error) {
     return (

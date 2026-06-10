@@ -44,6 +44,12 @@ export const RemoveClimbFromPlaylistInputSchema = z.object({
   climbUuid: ExternalUUIDSchema,
 });
 
+export const ReorderPlaylistClimbInputSchema = z.object({
+  playlistId: z.string().min(1),
+  climbUuid: ExternalUUIDSchema,
+  newIndex: z.number().int().min(0),
+});
+
 export const GetUserPlaylistsInputSchema = z.object({
   boardType: BoardNameSchema,
   layoutId: z.number().int().positive(),
@@ -94,8 +100,11 @@ export const GetPlaylistClimbsInputSchema = z.object({
 export const DiscoverPlaylistsInputSchema = z.object({
   boardType: BoardNameSchema.optional(),
   layoutId: z.number().int().positive().optional(),
+  sizeId: z.number().int().positive().nullable().optional(),
+  angle: z.number().int().min(0).max(90).nullable().optional(),
   name: z.string().max(100).optional(),
   creatorIds: z.array(z.string().min(1)).optional(),
+  generatedRecommendation: z.boolean().nullable().optional(),
   sortBy: z.enum(['recent', 'popular']).optional(),
   page: z.number().int().min(0).optional(),
   pageSize: z.number().int().min(1).max(100).optional(),

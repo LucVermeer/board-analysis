@@ -32,7 +32,7 @@ import {
   createJoinSessionTracker,
   createReleaseControlOptimisticPlan,
   createTakeControlOptimisticPlan,
-  deriveIsDriver,
+  derivePreviewOnly,
   mapSubscriptionEnvelopeToAction,
   shouldRollbackReleaseControlDriver,
   shouldRollbackTakeControlDriver,
@@ -68,6 +68,7 @@ import {
 import { getStoredActiveBoard } from '../lib/active-board-store';
 import { useActiveBoard, useSetActiveBoard } from '../lib/graphql/use-active-board';
 import { getStoredSessionId, setStoredSessionId, clearStoredSessionId } from '../lib/session-store';
+import { getStoredQueueSnapshot, setStoredQueueSnapshot, clearStoredQueueSnapshot } from '../lib/queue-snapshot-store';
 import { emitWallConfirm, findPreviousQueueItem, findNextQueueItemWithSuggestions } from '@boardsesh/play-view';
 import { toClimbQueueItem, type SubscriptionQueueItem } from '../lib/queue-conversion';
 import { toMobileSessionRuntimeEvent } from '../lib/session-runtime-event';
@@ -287,10 +288,12 @@ const QueuePlaylistSuggestionContext = createContext<QueuePlaylistSuggestionCont
 
 /**
  * Boolean "this client may only preview, not mutate the shared queue" selector
- * (party session active and someone else — or nobody — is driving). Identity
- * flips ONLY on session start/end or driver gain/loss, never on queue mutations,
- * serial changes, or party stat pushes. Consumed by the playlist-activation hook
- * on the climbs/playlist screens, which must not subscribe to broader contexts.
+ * (a session with 2+ live participants where someone else — or nobody — is
+ * driving; a solo occupant always keeps full control). Identity flips ONLY on
+ * session start/end, roster solo↔party transitions, or driver gain/loss, never
+ * on queue mutations, serial changes, or party stat pushes. Consumed by the
+ * playlist-activation hook on the climbs/playlist screens, which must not
+ * subscribe to broader contexts.
  */
 type QueuePartyPreviewOnlyContextValue = {
   isPartyPreviewOnly: boolean;
@@ -518,48 +521,8 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     sessionIdRef.current = sessionId;
   }, [sessionId]);
 
-  useEffect(() => {
-    let cancelled = false;
-    void getStoredSessionId().then(async (storedId) => {
-      if (__DEV__) {
-        console.info(`[session] restored from store: ${storedId ?? '(none)'}`);
-      }
-      if (!storedId) return;
-      try {
-        // Verify the stored session is still alive before rejoining. Without
-        // this, JOIN_SESSION recreates a server-ended room as an empty zombie
-        // and we land in InSessionView with no peers (#2683). sessionStatus
-        // reads the durable session row, NOT the presence-gated `session`
-        // query — that one returns null for any empty session, so it can't
-        // tell an ended session apart from a dormant-but-active solo session.
-        // null means the session row no longer exists; anything but 'active'
-        // means drop the stored id.
-        const { sessionStatus } = await getHttpClient().request<SessionStatusQueryResponse>(SESSION_STATUS, {
-          sessionId: storedId,
-        });
-        if (cancelled) return;
-        if (sessionStatus !== 'active') {
-          if (__DEV__) {
-            console.info(`[session] stored session ${storedId} ended/missing; clearing`);
-          }
-          await clearStoredSessionId();
-          return;
-        }
-        setSessionId(storedId);
-      } catch (err) {
-        // Offline cold start: can't verify the session status, so restore
-        // optimistically so the queue still comes back. A genuinely-dead
-        // session stays escapable via End Session.
-        if (__DEV__) {
-          console.warn('[session] status check failed; restoring optimistically', err);
-        }
-        if (!cancelled) setSessionId(storedId);
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  // Cold-start restore lives below, after restoreQueueSnapshot is defined —
+  // it needs the snapshot helper for the solo-queue branch.
 
   // showToast and t aren't stable callbacks — capture via refs so the WS
   // subscription effect doesn't tear down & re-subscribe on locale change
@@ -814,6 +777,58 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     };
   }, [sessionId, coordinator, ensureJoined, joinTracker]);
 
+  // Server-side queue mutations live in @boardsesh/queue-react (shared with
+  // web). The `ensureReady` seam resolves + joins the session before each
+  // mutation; returning null makes the action a silent no-op. With no session
+  // active every queue mutation is local-only — sessions are created ONLY by
+  // the explicit Start button (createSessionWithConfig below) or an explicit
+  // join, matching web. Optimistic local dispatch + correlation tracking stay
+  // here; the shared hook only talks to the server and owns the
+  // serialize-and-supersede coalescer for rapid swipes.
+  const mutations = useQueueMutations<ClimbQueueItem>({
+    getClient: () => getWsClient(),
+    getSessionId: () => sessionIdRef.current,
+    // Strip the climb to ClimbInput fields — sending the raw search climb (with
+    // created_at) makes the server reject the mutation and silently breaks queue
+    // sync to peers. See toClimbInput.
+    toQueueItemInput: (item) => ({ uuid: item.uuid, climb: toClimbInput(item.climb) }),
+    ensureReady: async (capturedSessionId) => {
+      if (!capturedSessionId) return null;
+      await ensureJoined(capturedSessionId);
+      return capturedSessionId;
+    },
+    // Best-effort sync failures (coalescer drains for setCurrent / superseded
+    // queue-adds) must not alarm: the local reducer already applied the change
+    // and the WS subscription reconciles. Dev-log only — a user-facing "Action
+    // failed" on a swipe-to-queue or a rapid current-climb change is noise.
+    onBestEffortError: (action, error) => {
+      if (__DEV__) console.warn(`[queue] best-effort ${action} failed`, error);
+    },
+  });
+
+  // Broadcast the session's boardPath (angle/board) to party members. The
+  // shared mutation already swallows transport errors and is a true no-op in
+  // solo (never lazily creates a session), so callers can fire it freely.
+  const setSessionBoardPath = useCallback((boardPath: string) => mutations.setSessionBoardPath(boardPath), [mutations]);
+  const restoreQueueSnapshot = useCallback(
+    (snapshot: {
+      queue: ClimbQueueItem[];
+      currentClimbQueueItem: ClimbQueueItem | null;
+      playlistSuggestionSource: PlaylistSuggestionSource | null;
+    }) => {
+      dispatch({
+        type: 'UPDATE_QUEUE',
+        payload: { queue: snapshot.queue, currentClimbQueueItem: snapshot.currentClimbQueueItem },
+      });
+      dispatch({ type: 'SET_PLAYLIST_SUGGESTION_SOURCE', payload: snapshot.playlistSuggestionSource });
+      setPlaylistSuggestionSourceState(snapshot.playlistSuggestionSource);
+    },
+    [],
+  );
+
+  // Explicit session creation — the Start button (PreSessionView) and nothing
+  // else. Sessions are never created lazily: the solo queue lives locally
+  // (queue-snapshot-store) until the user starts or joins one, matching web.
   const createSessionWithConfig = useCallback(
     async (config?: StartSessionConfig): Promise<string | null> => {
       if (sessionIdRef.current) return sessionIdRef.current;
@@ -852,13 +867,33 @@ export function QueueProvider({ children }: { children: ReactNode }) {
           });
           const newId = response.createSession.id;
           sessionIdRef.current = newId;
+          await setStoredSessionId(newId);
+          // Seed the session with the locally-built queue BEFORE setSessionId
+          // mounts the queueUpdates subscription — the subscription's FullSync
+          // for an empty room would wipe the local queue via INITIAL_QUEUE_DATA.
+          // SET_QUEUE is connection-scoped, so JOIN first (the subscription
+          // effect's later eager ensureJoined hits the tracker cache).
+          const { queue, currentClimbQueueItem } = stateRef.current;
+          if (queue.length > 0 || currentClimbQueueItem) {
+            try {
+              await ensureJoined(newId);
+              await mutations.setQueue(queue, currentClimbQueueItem ?? undefined);
+              // Queue ownership moved to the session — drop the local snapshot
+              // so a stale copy can't resurrect after the session ends. Only on
+              // a successful seed: if seeding failed, the snapshot is the sole
+              // surviving copy and a relaunch can still recover the queue.
+              await clearStoredQueueSnapshot();
+            } catch (seedError) {
+              if (__DEV__) console.warn('[queue] session queue seed failed', seedError);
+              reportError(seedError, { tags: { source: 'startSessionSeed' } });
+            }
+          }
           setSessionId(newId);
           track(SHARED_EVENTS.SessionStarted, {
             boardName: activeBoard.boardType,
             hasGoal: !!config?.goal,
             isDiscoverable: config?.discoverable ?? false,
           });
-          await setStoredSessionId(newId);
           return newId;
         } catch (error) {
           // Production masks the GraphQL message to "Unexpected error", but the
@@ -888,64 +923,104 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       sessionCreationRef.current = createPromise;
       return createPromise;
     },
-    [showToast, t],
+    [ensureJoined, mutations, showToast, t],
   );
 
-  // Internal lazy-create path used by addToQueue / setCurrentClimb when the user
-  // mutates the queue before explicitly starting a session.
-  const ensureSession = useCallback(() => createSessionWithConfig(), [createSessionWithConfig]);
-
-  const ensureSessionRef = useRef(ensureSession);
-  ensureSessionRef.current = ensureSession;
-
-  // Server-side queue mutations live in @boardsesh/queue-react (shared with
-  // web). The `ensureReady` seam resolves — and on the create-flavoured actions
-  // lazily creates — then joins the session before each mutation; returning
-  // null makes the action a silent no-op (e.g. removing with no active
-  // session). Optimistic local dispatch + correlation tracking stay here; the
-  // shared hook only talks to the server and owns the serialize-and-supersede
-  // coalescer for rapid swipes.
-  const mutations = useQueueMutations<ClimbQueueItem>({
-    getClient: () => getWsClient(),
-    getSessionId: () => sessionIdRef.current,
-    // Strip the climb to ClimbInput fields — sending the raw search climb (with
-    // created_at) makes the server reject the mutation and silently breaks queue
-    // sync to peers. See toClimbInput.
-    toQueueItemInput: (item) => ({ uuid: item.uuid, climb: toClimbInput(item.climb) }),
-    ensureReady: async (capturedSessionId) => {
-      const sessionId = capturedSessionId ?? (await ensureSessionRef.current());
-      if (!sessionId) return null;
-      await ensureJoined(sessionId);
-      return sessionId;
-    },
-    // Best-effort sync failures (coalescer drains for setCurrent / superseded
-    // queue-adds) must not alarm: the local reducer already applied the change
-    // and the WS subscription reconciles. Dev-log only — a user-facing "Action
-    // failed" on a swipe-to-queue or a rapid current-climb change is noise.
-    onBestEffortError: (action, error) => {
-      if (__DEV__) console.warn(`[queue] best-effort ${action} failed`, error);
-    },
-  });
-
-  // Broadcast the session's boardPath (angle/board) to party members. The
-  // shared mutation already swallows transport errors and is a true no-op in
-  // solo (never lazily creates a session), so callers can fire it freely.
-  const setSessionBoardPath = useCallback((boardPath: string) => mutations.setSessionBoardPath(boardPath), [mutations]);
-  const restoreQueueSnapshot = useCallback(
-    (snapshot: {
-      queue: ClimbQueueItem[];
-      currentClimbQueueItem: ClimbQueueItem | null;
-      playlistSuggestionSource: PlaylistSuggestionSource | null;
-    }) => {
-      dispatch({
-        type: 'UPDATE_QUEUE',
-        payload: { queue: snapshot.queue, currentClimbQueueItem: snapshot.currentClimbQueueItem },
+  // Cold-start restore, explicit-session first: a stored session id (persisted
+  // only on explicit start/join) is verified and rejoined; otherwise the local
+  // solo queue snapshot hydrates the reducer. The gate flag below keeps the
+  // save effect from clobbering a stored snapshot with the initial empty state.
+  const snapshotHydratedRef = useRef(false);
+  useEffect(() => {
+    let cancelled = false;
+    const hydrateLocalSnapshot = async () => {
+      const snapshot = await getStoredQueueSnapshot();
+      if (cancelled || !snapshot) return;
+      // The user may have started acting — or a session may have appeared —
+      // before the async load resolved; never clobber newer state.
+      if (sessionIdRef.current !== null) return;
+      if (stateRef.current.queue.length > 0 || stateRef.current.currentClimbQueueItem) return;
+      restoreQueueSnapshot(snapshot);
+    };
+    void getStoredSessionId()
+      .then(async (storedId) => {
+        if (__DEV__) {
+          console.info(`[session] restored from store: ${storedId ?? '(none)'}`);
+        }
+        if (!storedId) {
+          await hydrateLocalSnapshot();
+          return;
+        }
+        try {
+          // Verify the stored session is still alive before rejoining. Without
+          // this, JOIN_SESSION recreates a server-ended room as an empty zombie
+          // and we land in InSessionView with no peers (#2683). sessionStatus
+          // reads the durable session row, NOT the presence-gated `session`
+          // query — that one returns null for any empty session, so it can't
+          // tell an ended session apart from a dormant-but-active solo session.
+          // null means the session row no longer exists; anything but 'active'
+          // means drop the stored id.
+          const { sessionStatus } = await getHttpClient().request<SessionStatusQueryResponse>(SESSION_STATUS, {
+            sessionId: storedId,
+          });
+          if (cancelled) return;
+          if (sessionStatus !== 'active') {
+            if (__DEV__) {
+              console.info(`[session] stored session ${storedId} ended/missing; clearing`);
+            }
+            await clearStoredSessionId();
+            await hydrateLocalSnapshot();
+            return;
+          }
+          setSessionId(storedId);
+        } catch (err) {
+          // graphql-request's ClientError always carries `response`; a genuine
+          // network failure (fetch reject) doesn't — same structural check as
+          // createSessionWithConfig's error handling above.
+          const isServerResponse = !!err && typeof err === 'object' && 'response' in err;
+          if (isServerResponse) {
+            // The backend answered but the query failed (version skew — an
+            // older backend without sessionStatus — or a masked 500). Don't
+            // restore: a zombie session would put the whole app "in session".
+            // Don't clear either: the id may verify fine once backend/app
+            // versions align, so the next launch retries.
+            reportError(err, { tags: { source: 'sessionRestore' } });
+            await hydrateLocalSnapshot();
+            return;
+          }
+          // Offline cold start: can't verify the session status, so restore
+          // optimistically so the queue still comes back. A genuinely-dead
+          // session stays escapable via End Session.
+          if (__DEV__) {
+            console.warn('[session] status check failed; restoring optimistically', err);
+          }
+          if (!cancelled) setSessionId(storedId);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) snapshotHydratedRef.current = true;
       });
-      dispatch({ type: 'SET_PLAYLIST_SUGGESTION_SOURCE', payload: snapshot.playlistSuggestionSource });
-      setPlaylistSuggestionSourceState(snapshot.playlistSuggestionSource);
-    },
-    [],
-  );
+    return () => {
+      cancelled = true;
+    };
+  }, [restoreQueueSnapshot]);
+
+  // Persist the SOLO queue across launches. Only while no session is active —
+  // a session's queue is server-owned (the rejoin FullSync restores it) — and
+  // only after the cold-start hydrate settles. Writing the empty state doubles
+  // as the clear when the user empties the queue or a session teardown resets
+  // it; the debounce coalesces mutation bursts (swipes, clear-queue removals).
+  useEffect(() => {
+    if (!snapshotHydratedRef.current || sessionId !== null) return undefined;
+    const persistTimeout = setTimeout(() => {
+      void setStoredQueueSnapshot({
+        queue: state.queue,
+        currentClimbQueueItem: state.currentClimbQueueItem,
+        playlistSuggestionSource,
+      });
+    }, 500);
+    return () => clearTimeout(persistTimeout);
+  }, [state.queue, state.currentClimbQueueItem, playlistSuggestionSource, sessionId]);
 
   // Reconcile the local queue against the server's authoritative snapshot after
   // a party-session mutation fails. The optimistic reducer delta already applied
@@ -1262,10 +1337,10 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       // Optimistic local dispatch is the source of truth for the user's queue.
       // The server echoes this item via the WS subscription, but
       // DELTA_ADD_QUEUE_ITEM dedupes by uuid so the echo is a no-op. The shared
-      // mutation lazily creates + joins a session purely to SYNC the add to a
-      // party. That sync is best-effort: a solo user with no session, an offline
-      // phone, or a transient WS error must NOT see "Action failed" when the
-      // local queue is already correct. Dev-log only.
+      // mutation only SYNCs the add to an existing session (solo is local-only —
+      // it never creates one). That sync is best-effort: a solo user with no
+      // session, an offline phone, or a transient WS error must NOT see "Action
+      // failed" when the local queue is already correct. Dev-log only.
       dispatch({ type: 'DELTA_ADD_QUEUE_ITEM', payload: { item } });
       track(SHARED_EVENTS.ClimbAddedToQueue, {
         climbUuid: item.climb.uuid,
@@ -1290,8 +1365,8 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     (uuid: string) => {
       const removedItem = stateRef.current.queue.find((queueItem) => queueItem.uuid === uuid);
       // Same best-effort model as addToQueue: the reducer already removed the
-      // item locally; the server mutation only syncs it to a party session (and
-      // no-ops when there's none — it never lazily creates one just to remove).
+      // item locally; the server mutation only syncs it to an existing session
+      // (and no-ops when there's none).
       dispatch({ type: 'DELTA_REMOVE_QUEUE_ITEM', payload: { uuid } });
       track(SHARED_EVENTS.ClimbRemovedFromQueue, {
         climbUuid: removedItem?.climb.uuid ?? null,
@@ -1512,15 +1587,15 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       showToast(t('mobile.toast.sessionEnded'), 'success');
       return response.endSession;
     } catch {
-      if (suppressedRemoteEndSessionIdRef.current === currentSessionId) {
-        locallyEndingSessionIdRef.current = null;
-        suppressedRemoteEndSessionIdRef.current = null;
-        await clearSession();
-        showToast(t('mobile.toast.sessionEnded'), 'success');
-        return null;
-      }
+      const remoteEndAlreadyApplied = suppressedRemoteEndSessionIdRef.current === currentSessionId;
       locallyEndingSessionIdRef.current = null;
-      showToast(t('mobile.queue.actionFailed'), 'error');
+      suppressedRemoteEndSessionIdRef.current = null;
+      await clearSession();
+      if (remoteEndAlreadyApplied) {
+        showToast(t('mobile.toast.sessionEnded'), 'success');
+      } else {
+        showToast(t('mobile.queue.actionFailed'), 'error');
+      }
       return null;
     }
   }, [clearSession, showToast, t]);
@@ -1538,6 +1613,9 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       sessionIdRef.current = sessionToJoin;
       setSessionId(sessionToJoin);
       await setStoredSessionId(sessionToJoin);
+      // The session's FullSync replaces the local queue — drop the solo
+      // snapshot so a stale copy can't resurrect on a later cold start.
+      await clearStoredQueueSnapshot();
     },
     [setActiveBoard],
   );
@@ -1644,11 +1722,17 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     [playlistSuggestionSource],
   );
 
-  // Preview-only selector: same derivation as the play drawer's
-  // isPlayDrawerPreviewOnly and the queue sheet's inline deriveIsDriver checks
-  // (a released driver — driverParticipantId null — leaves everyone preview-only).
-  const isPartyPreviewOnly =
-    sessionId !== null && !deriveIsDriver({ isPersistentSessionActive: true, participantId, driverParticipantId });
+  // Preview-only selector — the single queue-mutation gate (play drawer, queue
+  // sheet, activation taps, widget nav all consume this hook). Roster-aware:
+  // a solo occupant of a session always keeps full control of the queue; with
+  // 2+ live participants, a released driver (driverParticipantId null) leaves
+  // everyone preview-only until someone takes wall control.
+  const isPartyPreviewOnly = derivePreviewOnly({
+    isSessionActive: sessionId !== null,
+    participantId,
+    driverParticipantId,
+    sessionUserCount: sessionUsers.length,
+  });
   const partyPreviewOnlyValue = useMemo<QueuePartyPreviewOnlyContextValue>(
     () => ({ isPartyPreviewOnly }),
     [isPartyPreviewOnly],

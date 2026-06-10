@@ -46,6 +46,25 @@ export default defineConfig({
         files: ['packages/mobile/**/*.{ts,tsx}', 'packages/shared/**/*.{ts,tsx}'],
         rules: {
           'react/jsx-no-constructed-context-values': 'error',
+          // Hermes ships an incomplete Intl: RelativeTimeFormat and ListFormat
+          // are missing on device, so any use crashes mobile release builds
+          // while tests pass on Node's full Intl (see the drafts-list crash).
+          // Use dayjs relativeTime via @boardsesh/profile-stats instead.
+          'no-restricted-properties': [
+            'error',
+            {
+              object: 'Intl',
+              property: 'RelativeTimeFormat',
+              message:
+                'Hermes does not implement Intl.RelativeTimeFormat — crashes mobile release builds. Use dayjs relativeTime via @boardsesh/profile-stats.',
+            },
+            {
+              object: 'Intl',
+              property: 'ListFormat',
+              message:
+                'Hermes does not implement Intl.ListFormat — crashes mobile release builds. Join the parts manually or via i18n.',
+            },
+          ],
         },
       },
       {

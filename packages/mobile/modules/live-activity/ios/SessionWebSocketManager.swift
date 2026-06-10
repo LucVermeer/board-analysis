@@ -341,6 +341,11 @@ final class SessionWebSocketManager {
 
         let task = self.urlSession.webSocketTask(with: url, protocols: ["graphql-transport-ws"])
         self.webSocketTask = task
+        // Measure ping freshness from connect time. Without this, the first
+        // ping-timeout window after a reconnect compares against the stale
+        // pre-disconnect timestamp and can immediately tear the new socket
+        // down if the server is quiet, churning through reconnect attempts.
+        self.lastMessageReceived = Date()
         task.resume()
         self.sendConnectionInit()
         self.listenForMessages(for: task)

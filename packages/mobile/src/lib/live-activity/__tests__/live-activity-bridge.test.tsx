@@ -6,8 +6,7 @@ import { LiveActivityBridge } from '../live-activity-bridge';
 
 const queue = vi.hoisted(() => ({
   sessionId: 'session-1' as string | null,
-  driverParticipantId: 'participant-other' as string | null,
-  participantId: 'participant-self' as string | null,
+  isPartyPreviewOnly: false,
   nextClimb: vi.fn(),
   previousClimb: vi.fn(),
   state: {
@@ -29,11 +28,10 @@ vi.mock('../../../providers/queue-provider', () => ({
   useQueue: () => ({
     state: queue.state,
     sessionId: queue.sessionId,
-    driverParticipantId: queue.driverParticipantId,
-    participantId: queue.participantId,
     nextClimb: queue.nextClimb,
     previousClimb: queue.previousClimb,
   }),
+  useIsPartyPreviewOnly: () => queue.isPartyPreviewOnly,
 }));
 
 vi.mock('../use-live-activity', () => ({
@@ -49,6 +47,11 @@ vi.mock('../live-activity-plugin', () => ({
   },
 }));
 
+const climbItem = {
+  uuid: 'queue-item-1',
+  climb: { uuid: 'climb-1' },
+} as unknown as ClimbQueueItem;
+
 function renderBridge() {
   return render(<LiveActivityBridge boardName="kilter" layoutId={1} sizeId={10} setIds="1,2" />);
 }
@@ -56,15 +59,16 @@ function renderBridge() {
 describe('LiveActivityBridge wall-control gating', () => {
   beforeEach(() => {
     queue.sessionId = 'session-1';
-    queue.driverParticipantId = 'participant-other';
-    queue.participantId = 'participant-self';
+    queue.isPartyPreviewOnly = false;
+    queue.state = { queue: [], currentClimbQueueItem: null };
     queue.nextClimb.mockClear();
     queue.previousClimb.mockClear();
     widget.listener = null;
     widget.useLiveActivity.mockClear();
   });
 
-  it('ignores widget navigation for party non-drivers', () => {
+  it('ignores widget navigation when preview-only (party non-driver)', () => {
+    queue.isPartyPreviewOnly = true;
     renderBridge();
 
     act(() => {
@@ -82,8 +86,7 @@ describe('LiveActivityBridge wall-control gating', () => {
     );
   });
 
-  it('allows widget navigation for the current party driver', () => {
-    queue.driverParticipantId = 'participant-self';
+  it('allows widget navigation when not preview-only (driver or solo occupant)', () => {
     renderBridge();
 
     act(() => {
@@ -101,9 +104,8 @@ describe('LiveActivityBridge wall-control gating', () => {
     );
   });
 
-  it('allows widget navigation outside party sessions', () => {
+  it('allows widget navigation outside sessions', () => {
     queue.sessionId = null;
-    queue.driverParticipantId = null;
     renderBridge();
 
     act(() => {
@@ -115,6 +117,37 @@ describe('LiveActivityBridge wall-control gating', () => {
       expect.objectContaining({
         widgetNavigationAllowed: true,
         isPartySession: false,
+      }),
+    );
+  });
+});
+
+describe('LiveActivityBridge session-presence gating', () => {
+  beforeEach(() => {
+    queue.sessionId = 'session-1';
+    queue.isPartyPreviewOnly = false;
+    queue.state = { queue: [], currentClimbQueueItem: null };
+    widget.useLiveActivity.mockClear();
+  });
+
+  it('keeps a solo queue (no session) out of session presence', () => {
+    queue.sessionId = null;
+    queue.state = { queue: [climbItem], currentClimbQueueItem: climbItem };
+    renderBridge();
+
+    expect(widget.useLiveActivity).toHaveBeenCalledWith(
+      expect.objectContaining({
+        isSessionActive: false,
+      }),
+    );
+  });
+
+  it('marks an explicit session active even before any climb is queued', () => {
+    renderBridge();
+
+    expect(widget.useLiveActivity).toHaveBeenCalledWith(
+      expect.objectContaining({
+        isSessionActive: true,
       }),
     );
   });

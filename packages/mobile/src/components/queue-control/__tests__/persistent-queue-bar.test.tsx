@@ -7,13 +7,16 @@ import type { ClimbQueueItem } from '@boardsesh/queue';
 // Hoisted, per-test-configurable view of the global state the bar reads.
 const cfg = vi.hoisted(() => ({
   onClimbsTab: true,
+  insideTabs: true,
   currentClimbQueueItem: { climb: { uuid: 'c1', angle: 40 } } as unknown as ClimbQueueItem | null,
   wallClimb: null as null | { uuid: string; angle: number },
   variant: 'liquidGlass' as 'liquidGlass' | 'material',
   measuredTabBarHeight: null as number | null,
+  nativeAccessoryActive: false,
 }));
 
 vi.mock('react-native', () => ({
+  Platform: { OS: 'ios' },
   View: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
   StyleSheet: { create: (styles: Record<string, unknown>) => styles },
 }));
@@ -35,7 +38,7 @@ vi.mock('react-native-safe-area-context', () => ({
 vi.mock('expo-router', () => ({ useSegments: () => [] }));
 vi.mock('../../../lib/route-segments', () => ({
   isClimbsTabRoute: () => cfg.onClimbsTab,
-  isTabsRoute: () => false,
+  isTabsRoute: () => cfg.insideTabs,
 }));
 vi.mock('../../../providers/queue-provider', () => ({
   useQueue: () => ({ state: { currentClimbQueueItem: cfg.currentClimbQueueItem } }),
@@ -68,7 +71,7 @@ vi.mock('../../../providers/theme-provider', () => ({ useTheme: () => ({ variant
 // reads now (variant-aware); the capability function stays for other callers.
 vi.mock('../../../hooks/use-bottom-accessory', () => ({
   isBottomAccessoryAvailable: () => false,
-  useNativeAccessoryActive: () => false,
+  useNativeAccessoryActive: () => cfg.nativeAccessoryActive,
 }));
 vi.mock('../ClimbCapsule', () => ({
   ClimbCapsule: ({
@@ -110,10 +113,12 @@ import { PersistentQueueBar } from '../persistent-queue-bar';
 describe('PersistentQueueBar', () => {
   beforeEach(() => {
     cfg.onClimbsTab = true;
+    cfg.insideTabs = true;
     cfg.currentClimbQueueItem = { climb: { uuid: 'c1', angle: 40 } } as unknown as ClimbQueueItem;
     cfg.wallClimb = null;
     cfg.variant = 'liquidGlass';
     cfg.measuredTabBarHeight = null;
+    cfg.nativeAccessoryActive = false;
   });
 
   it('renders nothing when no climb is current', () => {
@@ -124,6 +129,26 @@ describe('PersistentQueueBar', () => {
 
   it('shows the capsule and standalone tick when a climb is current', () => {
     const { container } = render(<PersistentQueueBar />);
+    expect(container.querySelector('[data-capsule]')).not.toBeNull();
+    expect(container.querySelector('[data-tick]')).not.toBeNull();
+  });
+
+  it('does not render the JS toolbar when the native bottom accessory is active', () => {
+    cfg.nativeAccessoryActive = true;
+    cfg.insideTabs = true;
+
+    const { container } = render(<PersistentQueueBar />);
+
+    expect(container.querySelector('[data-capsule]')).toBeNull();
+    expect(container.querySelector('[data-tick]')).toBeNull();
+  });
+
+  it('keeps the JS toolbar fallback outside tabs when the native accessory path is active', () => {
+    cfg.nativeAccessoryActive = true;
+    cfg.insideTabs = false;
+
+    const { container } = render(<PersistentQueueBar />);
+
     expect(container.querySelector('[data-capsule]')).not.toBeNull();
     expect(container.querySelector('[data-tick]')).not.toBeNull();
   });

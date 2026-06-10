@@ -1,5 +1,6 @@
-import { memo, useMemo } from 'react';
-import { View, ScrollView, RefreshControl, StyleSheet } from 'react-native';
+import { memo, useEffect, useMemo } from 'react';
+import { View, RefreshControl, StyleSheet, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
+import Animated, { useAnimatedRef } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
 import type { useYouProfileData } from '../../lib/graphql/hooks';
 import { Text } from '../Text';
@@ -16,15 +17,39 @@ import { useTheme } from '../../providers/theme-provider';
 
 type YouData = ReturnType<typeof useYouProfileData>;
 
-export const ProgressTab = memo(function ProgressTab({ data }: { data: YouData }) {
+type ProgressTabProps = {
+  data: YouData;
+  /** Plain-JS scroll handler from the screen, writing the shared scroll offset
+   *  that drives the floating chrome's title collapse. */
+  onScroll: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
+  /** Measured chrome height — the scroll content insets its top by this so the
+   *  first card rests below the floating chrome and the rest scroll under it. */
+  topInset: number;
+  /** Register this tab's scroll-to-top so the screen's title capsule can reach it. */
+  registerScrollToTop: (scrollToTop: (() => void) | null) => void;
+};
+
+export const ProgressTab = memo(function ProgressTab({
+  data,
+  onScroll,
+  topInset,
+  registerScrollToTop,
+}: ProgressTabProps) {
   const { t } = useTranslation('profile');
   const { t: tYou } = useTranslation('you');
   const { systemColors, colorScheme, brandColors } = useTheme();
   const bottomChrome = useBottomChromeMetrics();
   const paddingBottom = bottomChrome.scrollBottomPadding + spacing[6];
 
+  const scrollRef = useAnimatedRef<Animated.ScrollView>();
+  useEffect(() => {
+    registerScrollToTop(() => scrollRef.current?.scrollTo({ y: 0, animated: true }));
+    return () => registerScrollToTop(null);
+  }, [registerScrollToTop, scrollRef]);
+
   const totalAscents = data.statisticsSummary.totalAscents;
   const noAscentData = t('empty.noAscentData');
+  const dashboardTitle = tYou('metadata.dashboard.title');
 
   // Legends so the layout-colored grade-distribution bars and the
   // flash-vs-redpoint pairs can be decoded (charts are color-only otherwise).
@@ -44,21 +69,31 @@ export const ProgressTab = memo(function ProgressTab({ data }: { data: YouData }
 
   if (data.loading) {
     return (
-      <View style={styles.centered}>
+      <View style={[styles.centered, { paddingTop: topInset }]}>
         <ActivityIndicator size="large" />
       </View>
     );
   }
 
   return (
-    <ScrollView
+    <Animated.ScrollView
+      ref={scrollRef}
       style={styles.flex}
-      contentInsetAdjustmentBehavior="automatic"
-      contentContainerStyle={{ paddingBottom }}
+      contentInsetAdjustmentBehavior="never"
+      contentContainerStyle={{ paddingTop: topInset, paddingBottom }}
+      scrollIndicatorInsets={{ top: topInset }}
+      onScroll={onScroll}
+      scrollEventThrottle={16}
       refreshControl={
         <RefreshControl refreshing={data.refreshing} onRefresh={data.refetch} tintColor={brandColors.primary} />
       }
     >
+      {/* The screen's identity, in-body under the floating chrome — collapses into
+          the header capsule as it scrolls up behind the glass. */}
+      <Text variant="largeTitle" style={styles.screenTitle}>
+        {dashboardTitle}
+      </Text>
+
       {totalAscents === 0 ? (
         <View style={styles.empty}>
           <Icon name="chart.bar" size={48} color={systemColors.tertiaryLabel} />
@@ -68,7 +103,7 @@ export const ProgressTab = memo(function ProgressTab({ data }: { data: YouData }
         </View>
       ) : (
         <>
-          <View style={styles.topGap} />
+          <SectionHeader title={t('stats.summary')} />
           <StatsSummaryCard
             statisticsSummary={data.statisticsSummary}
             hardestSend={data.hardestSend}
@@ -119,14 +154,18 @@ export const ProgressTab = memo(function ProgressTab({ data }: { data: YouData }
           )}
         </>
       )}
-    </ScrollView>
+    </Animated.ScrollView>
   );
 });
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  topGap: { height: spacing[4] },
+  screenTitle: {
+    paddingHorizontal: spacing[4],
+    paddingTop: 0,
+    paddingBottom: spacing[2],
+  },
   chartCard: { marginHorizontal: spacing[4] },
   vpTotal: { marginBottom: spacing[2] },
   empty: {

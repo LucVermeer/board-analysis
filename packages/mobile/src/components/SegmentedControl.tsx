@@ -52,11 +52,15 @@ function Segment({
     ...(disabled && { opacity: opacity.disabled }),
     ...(selected && {
       backgroundColor: systemColors.elevatedSurface,
+      // A hairline edge + lift so the thumb reads clearly even over a translucent
+      // glass track in dark mode, where the fill-vs-thumb luminance delta is small.
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: systemColors.separator,
       shadowColor: '#000',
       shadowOffset: { width: 0, height: 1 },
-      shadowOpacity: 0.15,
-      shadowRadius: 2,
-      elevation: 2,
+      shadowOpacity: 0.2,
+      shadowRadius: 3,
+      elevation: 3,
     }),
   };
 

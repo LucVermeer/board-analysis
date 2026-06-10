@@ -1100,10 +1100,14 @@ export type DeviceLogEntry = {
 
 /** Input for discovering public playlists. */
 export type DiscoverPlaylistsInput = {
+  /** Board angle for generated recommendation filters */
+  angle?: InputMaybe<Scalars['Int']['input']>;
   /** Board type (optional — omit to discover across all boards) */
   boardType?: InputMaybe<Scalars['String']['input']>;
   /** Filter by creator IDs */
   creatorIds?: InputMaybe<Array<Scalars['ID']['input']>>;
+  /** Filter by generated recommendation status */
+  generatedRecommendation?: InputMaybe<Scalars['Boolean']['input']>;
   /** Layout ID (optional — omit to discover across all layouts) */
   layoutId?: InputMaybe<Scalars['Int']['input']>;
   /** Filter by name (partial match) */
@@ -1112,6 +1116,8 @@ export type DiscoverPlaylistsInput = {
   page?: InputMaybe<Scalars['Int']['input']>;
   /** Page size */
   pageSize?: InputMaybe<Scalars['Int']['input']>;
+  /** Board size ID for generated recommendation filters */
+  sizeId?: InputMaybe<Scalars['Int']['input']>;
   /** Sort by: 'recent' (default) or 'popular' */
   sortBy?: InputMaybe<Scalars['String']['input']>;
 };
@@ -1148,6 +1154,8 @@ export type DiscoverablePlaylist = {
   icon?: Maybe<Scalars['String']['output']>;
   /** Database ID */
   id: Scalars['ID']['output'];
+  /** Whether this is a system-generated recommendation playlist */
+  isGeneratedRecommendation: Scalars['Boolean']['output'];
   /** Layout ID */
   layoutId?: Maybe<Scalars['Int']['output']>;
   /** Playlist name */
@@ -2008,6 +2016,8 @@ export type Mutation = {
   removeGymMember: Scalars['Boolean']['output'];
   /** Remove a climb from the queue by its queue item UUID. */
   removeQueueItem: Scalars['Boolean']['output'];
+  /** Reorder a climb within a playlist by moving it to a new index (owner/editor). */
+  reorderPlaylistClimb: Scalars['Boolean']['output'];
   /** Move a queue item from one position to another. */
   reorderQueueItem: Scalars['Boolean']['output'];
   /** Replace a queue item with a new one (same UUID). */
@@ -2407,6 +2417,11 @@ export type MutationRemoveGymMemberArgs = {
 /** Root mutation type for all write operations. */
 export type MutationRemoveQueueItemArgs = {
   uuid: Scalars['ID']['input'];
+};
+
+/** Root mutation type for all write operations. */
+export type MutationReorderPlaylistClimbArgs = {
+  input: ReorderPlaylistClimbInput;
 };
 
 /** Root mutation type for all write operations. */
@@ -4027,6 +4042,16 @@ export type RemoveGymMemberInput = {
   gymUuid: Scalars['ID']['input'];
   /** User ID to remove */
   userId: Scalars['ID']['input'];
+};
+
+/** Input for reordering a climb within a playlist (single move). */
+export type ReorderPlaylistClimbInput = {
+  /** Climb UUID to move */
+  climbUuid: Scalars['String']['input'];
+  /** Target 0-based index in the playlist's full ordered list */
+  newIndex: Scalars['Int']['input'];
+  /** Playlist ID */
+  playlistId: Scalars['ID']['input'];
 };
 
 export type ResolveProposalInput = {
@@ -5695,6 +5720,7 @@ export type ResolversTypes = ResolversObject<{
   RegisterControllerInput: RegisterControllerInput;
   RemoveClimbFromPlaylistInput: RemoveClimbFromPlaylistInput;
   RemoveGymMemberInput: RemoveGymMemberInput;
+  ReorderPlaylistClimbInput: ReorderPlaylistClimbInput;
   ResolveProposalInput: ResolveProposalInput;
   ResolvedBoard: ResolverTypeWrapper<ResolvedBoard>;
   RevokeRoleInput: RevokeRoleInput;
@@ -5955,6 +5981,7 @@ export type ResolversParentTypes = ResolversObject<{
   RegisterControllerInput: RegisterControllerInput;
   RemoveClimbFromPlaylistInput: RemoveClimbFromPlaylistInput;
   RemoveGymMemberInput: RemoveGymMemberInput;
+  ReorderPlaylistClimbInput: ReorderPlaylistClimbInput;
   ResolveProposalInput: ResolveProposalInput;
   ResolvedBoard: ResolvedBoard;
   RevokeRoleInput: RevokeRoleInput;
@@ -6614,6 +6641,7 @@ export type DiscoverablePlaylistResolvers<
   description?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   icon?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   id?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
+  isGeneratedRecommendation?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
   layoutId?: Resolver<Maybe<ResolversTypes['Int']>, ParentType, ContextType>;
   name?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   updatedAt?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
@@ -7235,6 +7263,12 @@ export type MutationResolvers<
     ParentType,
     ContextType,
     RequireFields<MutationRemoveQueueItemArgs, 'uuid'>
+  >;
+  reorderPlaylistClimb?: Resolver<
+    ResolversTypes['Boolean'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationReorderPlaylistClimbArgs, 'input'>
   >;
   reorderQueueItem?: Resolver<
     ResolversTypes['Boolean'],

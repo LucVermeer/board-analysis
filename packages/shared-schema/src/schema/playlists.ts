@@ -130,6 +130,18 @@ export const playlistsTypeDefs = /* GraphQL */ `
   }
 
   """
+  Input for reordering a climb within a playlist (single move).
+  """
+  input ReorderPlaylistClimbInput {
+    "Playlist ID"
+    playlistId: ID!
+    "Climb UUID to move"
+    climbUuid: String!
+    "Target 0-based index in the playlist's full ordered list"
+    newIndex: Int!
+  }
+
+  """
   Input for getting user's playlists.
   """
   input GetUserPlaylistsInput {
@@ -293,6 +305,8 @@ export const playlistsTypeDefs = /* GraphQL */ `
     creatorId: ID!
     "Creator's display name"
     creatorName: String!
+    "Whether this is a system-generated recommendation playlist"
+    isGeneratedRecommendation: Boolean!
   }
 
   """
@@ -303,10 +317,16 @@ export const playlistsTypeDefs = /* GraphQL */ `
     boardType: String
     "Layout ID (optional — omit to discover across all layouts)"
     layoutId: Int
+    "Board size ID for generated recommendation filters"
+    sizeId: Int
+    "Board angle for generated recommendation filters"
+    angle: Int
     "Filter by name (partial match)"
     name: String
     "Filter by creator IDs"
     creatorIds: [ID!]
+    "Filter by generated recommendation status"
+    generatedRecommendation: Boolean
     "Sort by: 'recent' (default) or 'popular'"
     sortBy: String
     "Page number"

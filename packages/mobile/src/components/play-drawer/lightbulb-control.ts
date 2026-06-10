@@ -53,10 +53,6 @@ export function derivePlayDrawerPreviousDriver(args: {
   return args.driverParticipantId === args.participantId ? 'self' : 'other';
 }
 
-export function isPlayDrawerPreviewOnly(args: { isPersistentSessionActive: boolean; isDriver: boolean }): boolean {
-  return args.isPersistentSessionActive && !args.isDriver;
-}
-
 export function derivePlayDrawerLightbulbPressAction(args: {
   hasBluetooth: boolean;
   hasDisplayedClimb: boolean;

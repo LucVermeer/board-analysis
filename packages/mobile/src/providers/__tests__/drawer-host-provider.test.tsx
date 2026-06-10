@@ -9,6 +9,9 @@ const queue = vi.hoisted(() => ({
   sessionId: 'session-1' as string | null,
   driverParticipantId: 'participant-other' as string | null,
   participantId: 'participant-self' as string | null,
+  // Two live participants: preview-only is roster-aware (derivePreviewOnly),
+  // so a solo occupant is never gated — these fixtures model a real party.
+  sessionUserCount: 2,
   setCurrentClimb: vi.fn(),
   addToQueue: vi.fn(),
   setSessionBoardPath: vi.fn(async () => {}),
@@ -157,7 +160,7 @@ vi.mock('../bluetooth-provider', () => ({
 }));
 
 vi.mock('../queue-provider', async () => {
-  const { deriveIsDriver } =
+  const { derivePreviewOnly } =
     await vi.importActual<typeof import('@boardsesh/queue-runtime')>('@boardsesh/queue-runtime');
   return {
     useQueueActions: () => ({
@@ -170,15 +173,15 @@ vi.mock('../queue-provider', async () => {
       driverParticipantId: queue.driverParticipantId,
       participantId: queue.participantId,
     }),
-    // Mirror the provider's real selector so the existing driver/participant
+    // Mirror the provider's real selector so the driver/participant/roster
     // fixtures keep driving the preview-only branch after the handlers moved
     // to the useIsPartyPreviewOnly hook.
     useIsPartyPreviewOnly: () =>
-      queue.sessionId !== null &&
-      !deriveIsDriver({
-        isPersistentSessionActive: true,
+      derivePreviewOnly({
+        isSessionActive: queue.sessionId !== null,
         participantId: queue.participantId,
         driverParticipantId: queue.driverParticipantId,
+        sessionUserCount: queue.sessionUserCount,
       }),
   };
 });

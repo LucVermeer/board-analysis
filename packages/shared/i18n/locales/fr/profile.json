@@ -54,6 +54,7 @@
     "percentile": "Percentile",
     "topPercent": "Top {{value}} %",
     "moreSentThan": "Plus de blocs enchaînés que {{value}} % des grimpeurs",
+    "summary": "Résumé",
     "activity": "Activité",
     "gradeDistribution": "Répartition par cotation",
     "flashVsRedpoint": "Flash vs après-travail",

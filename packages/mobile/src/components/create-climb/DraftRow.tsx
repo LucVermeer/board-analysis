@@ -8,7 +8,8 @@ import { useTheme } from '../../providers/theme-provider';
 import { hapticLight } from '../../lib/haptics';
 import { spacing, borderRadius } from '../../theme/tokens';
 import { iosSystemColors } from '../../theme/ios-colors';
-import { countHolds, formatRelativeTime } from './draft-format';
+import { countHolds } from './draft-format';
+import { formatRelativeTime } from '../../lib/format-relative-time';
 
 type DraftRowProps = {
   climb: Climb;

@@ -1,8 +1,9 @@
-import { memo, useCallback, useEffect, useMemo, useState } from 'react';
-import { type NativeScrollEvent, type NativeSyntheticEvent, Pressable, StyleSheet, View } from 'react-native';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type NativeScrollEvent, type NativeSyntheticEvent, StyleSheet, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useSharedValue, withSpring, type SharedValue } from 'react-native-reanimated';
-import { FlashList } from '@shopify/flash-list';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import { randomUUID } from 'expo-crypto';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -13,13 +14,22 @@ import type { Climb, SessionDetailTick, SessionFeedParticipant } from '@boardses
 import { getGradeTextColor } from '@boardsesh/play-view';
 import { formatTickRelativeTime, tickTimeMs } from '@boardsesh/profile-stats';
 import { Button } from '../../Button';
+import { Card } from '../../Card';
+import { PinnedActionBar } from '../../PinnedActionBar';
 import { ClimbListItemContent } from '../../ClimbListItemContent';
 import { EndSessionSheet } from '../../EndSessionSheet';
 import { Icon } from '../../Icon';
+import { PressableSurface } from '../../PressableSurface';
+import { SectionHeader } from '../../SectionHeader';
 import { Text } from '../../Text';
 import { type IconName } from '../../icon-map';
 import { useTheme } from '../../../providers/theme-provider';
-import { useQueueSessionControls, useQueueActions, useQueueLiveStats } from '../../../providers/queue-provider';
+import {
+  useQueueSessionControls,
+  useQueueActions,
+  useQueueLiveStats,
+  useIsPartyPreviewOnly,
+} from '../../../providers/queue-provider';
 import { useDrawerHost } from '../../../providers/drawer-host-provider';
 import { useSessionDetail, useSessionSummary } from '../../../lib/graphql/hooks';
 import { climbToQueueItem } from '../../../lib/climb-to-queue-item';
@@ -31,14 +41,22 @@ import { withAlpha } from '../../../theme/colors';
 import { iosSystemColors } from '../../../theme/ios-colors';
 import { springs } from '../../../theme/animations';
 import { borderRadius, spacing } from '../../../theme/tokens';
+import { glassSize } from '../../../theme/layout';
 import { gradeBadgeColor } from '../../you/profile-chart-colors';
 import { hapticSelection } from '../../../lib/haptics';
+import { RecordTopChrome } from '../RecordTopChrome';
 import { SessionAnalytics } from './SessionAnalytics';
 import { SessionLeaderboard } from './SessionLeaderboard';
 import { SessionPresenceRow } from './SessionPresenceRow';
 import { sortHardestSends, type HardestSend } from './hardest-sends';
 
 type InSessionViewProps = {
+  /** Render the floating glass chrome (large title + board pill + share). True
+   *  in the Record tab; false in the overlay host, where the header strip owns
+   *  the top and the share button. */
+  showChrome?: boolean;
+  /** Open the invite sheet. The chrome docks the share/invite glyph (tab mode). */
+  onShare?: () => void;
   /** Host overlay offset (0 = presented). The body pull-to-dismiss drives it. Absent in tab mode. */
   translateY?: SharedValue<number>;
   /** Screen height for the dismiss-distance threshold. Absent in tab mode. */
@@ -169,8 +187,10 @@ const SessionHistoryRow = memo(function SessionHistoryRow({
 
   return (
     <View>
-      <Pressable
+      <PressableSurface
         onPress={handlePress}
+        feedback="opacity"
+        opacityTo={0.7}
         accessibilityRole="button"
         accessibilityLabel={t('mobile.session.historyRowAria', {
           name: tick.climbName ?? t('detail.unknownClimb'),
@@ -213,15 +233,16 @@ const SessionHistoryRow = memo(function SessionHistoryRow({
             ) : null}
           </>
         )}
-      </Pressable>
+      </PressableSurface>
       <View style={[styles.historySeparator, { backgroundColor: systemColors.separator }]} />
     </View>
   );
 });
 
-export function InSessionView({ translateY, screenHeight }: InSessionViewProps) {
+export function InSessionView({ showChrome = false, onShare, translateY, screenHeight }: InSessionViewProps) {
   const { t } = useTranslation('session');
-  const { systemColors } = useTheme();
+  const { systemColors, brandColors } = useTheme();
+  const insets = useSafeAreaInsets();
   const bottomChrome = useBottomChromeMetrics();
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -333,12 +354,10 @@ export function InSessionView({ translateY, screenHeight }: InSessionViewProps) 
     [sessionUsers, participantId],
   );
 
-  const isSessionDriver = deriveIsDriver({
-    isPersistentSessionActive: !!sessionId,
-    participantId,
-    driverParticipantId,
-  });
-  const canControlWall = isSessionDriver;
+  // History-tick taps mutate the shared queue (setCurrentClimb) — gate them on
+  // the provider's roster-aware preview-only selector, not on raw driver state,
+  // so a solo occupant keeps control of their own session.
+  const canControlWall = !useIsPartyPreviewOnly();
   const driverUserId = useMemo(
     () =>
       sessionUsers.find((user) =>
@@ -402,13 +421,27 @@ export function InSessionView({ translateY, screenHeight }: InSessionViewProps) 
   // component), so we mirror the offset into the shared value here — the same
   // pattern the climbs list uses to drive its collapsing chrome. The dismiss
   // gesture only reads `scrollOffset.value <= 0` on start, so JS-thread latency
-  // is immaterial.
+  // is immaterial. The same shared value also drives the floating chrome's
+  // title collapse in tab mode (one shared value, both consumers).
   const handleScroll = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
       scrollOffset.value = event.nativeEvent.contentOffset.y;
     },
     [scrollOffset],
   );
+  const listRef = useRef<FlashListRef<SessionDetailTick & { status: SessionHistoryStatus }>>(null);
+  const handleScrollToTop = useCallback(() => {
+    listRef.current?.scrollToTop({ animated: true });
+  }, []);
+  const handleOpenBoardSwitcher = useCallback(() => {
+    router.push('/boards');
+  }, [router]);
+  // Measured chrome height (incl. the top safe-area inset) so the list pads its
+  // top by it. Only used when the floating chrome renders (tab mode).
+  const [chromeHeight, setChromeHeight] = useState(() => insets.top + 56);
+  // Teach the share affordance while solo — an in-body row, since the chrome's
+  // bare glass glyph can't carry a label. Drops once a friend joins.
+  const soloInvite = sessionUsers.length <= 1;
   const dismissGesture = useMemo(() => {
     if (translateY === undefined || screenHeight === undefined) return null;
     return Gesture.Pan()
@@ -429,7 +462,13 @@ export function InSessionView({ translateY, screenHeight }: InSessionViewProps) 
 
   const [showEndSession, setShowEndSession] = useState(false);
   const [isEnding, setIsEnding] = useState(false);
-  const footerBottomPadding = bottomChrome.scrollBottomPadding + spacing[3];
+  // The End bar matches the pre-session Start bar: a PinnedActionBar glass
+  // toolbar above the bottom chrome that reports its measured height. The list
+  // reserves that height plus the same bottom-chrome offset. Seed near the
+  // rendered size (large button + the bar's vertical padding) so the first paint
+  // is close before onLayout settles.
+  const footerBottom = bottomChrome.fixedFooterBottom;
+  const [footerHeight, setFooterHeight] = useState(glassSize.hero + spacing[3] * 2);
 
   const handleConfirmEnd = useCallback(async () => {
     setIsEnding(true);
@@ -470,11 +509,42 @@ export function InSessionView({ translateY, screenHeight }: InSessionViewProps) 
 
   const listHeader = (
     <View style={styles.headerContent}>
+      {/* The screen's identity in-body under the floating chrome, collapsing into
+          the centred header capsule on scroll. Only meaningful in tab mode; the
+          overlay header strip already names the screen, so it's hidden there. */}
+      {showChrome ? (
+        <Text variant="largeTitle" style={styles.screenTitle}>
+          {t('mobile.session.headerActive')}
+        </Text>
+      ) : null}
+
       <SessionPresenceRow
         users={sessionUsers}
         driverParticipantId={driverParticipantId}
         selfParticipantId={participantId}
       />
+
+      {/* Solo teaching row for the chrome's bare share glyph (tab mode). A glass
+          square can't hold a label, so the affordance is explained here until a
+          friend joins. Laid out as a ListRow-style leading icon / label / chevron
+          inside a pressable Card (so it picks up the glass-vs-material surface)
+          without ListRow's extra inset doubling the card padding. */}
+      {showChrome && onShare && soloInvite ? (
+        <Card onPress={onShare}>
+          <View style={styles.inviteRow}>
+            <Icon name="person.badge.plus" size={22} color={brandColors.primary} />
+            <View style={styles.inviteTextColumn}>
+              <Text variant="body" color={brandColors.primary} style={styles.inviteTitle}>
+                {t('mobile.session.invite')}
+              </Text>
+              <Text variant="footnote" color={systemColors.secondaryLabel}>
+                {t('mobile.session.inviteSubtitle')}
+              </Text>
+            </View>
+            <Icon name="chevron.right" size={18} color={systemColors.tertiaryLabel} />
+          </View>
+        </Card>
+      ) : null}
 
       <SessionAnalytics
         sends={sends}
@@ -485,16 +555,18 @@ export function InSessionView({ translateY, screenHeight }: InSessionViewProps) 
         gradeDistribution={gradeDistribution}
       />
 
-      <View style={styles.historySection}>
-        <Text variant="footnote" color={systemColors.secondaryLabel} style={styles.sectionLabel}>
-          {t('mobile.session.inHistoryTitle')}
-        </Text>
+      <View>
+        {/* SectionHeader self-insets 16px; the list already pads 16, so bleed the
+            header back by 16 to keep its label flush with the screen gutter. */}
+        <View style={styles.sectionHeaderBleed}>
+          <SectionHeader title={t('mobile.session.inHistoryTitle')} />
+        </View>
         {sessionHistoryTicks.length === 0 ? (
-          <View style={[styles.emptyCard, { backgroundColor: systemColors.secondaryBackground }]}>
+          <Card>
             <Text variant="body" color={systemColors.secondaryLabel}>
               {t('mobile.session.inHistoryEmpty')}
             </Text>
-          </View>
+          </Card>
         ) : null}
       </View>
     </View>
@@ -506,19 +578,28 @@ export function InSessionView({ translateY, screenHeight }: InSessionViewProps) 
     </View>
   );
 
+  // Tab mode insets the list top by the measured floating-chrome height; the
+  // overlay host renders its own header strip above, so just a small inset there.
+  const listPaddingTop = showChrome ? chromeHeight : spacing[2];
+
   const scrollView = (
     <FlashList
+      ref={listRef}
       style={styles.scroll}
       data={sessionHistoryTicks}
       renderItem={renderHistoryRow}
       keyExtractor={historyKeyExtractor}
       ListHeaderComponent={listHeader}
       ListFooterComponent={listFooter}
+      // The floating chrome owns the top inset (tab mode), so pad manually by the
+      // measured chrome height and never auto-inset under the (absent) header.
+      contentInsetAdjustmentBehavior="never"
       contentContainerStyle={{
         paddingHorizontal: spacing[4],
-        paddingTop: spacing[2],
-        paddingBottom: 100 + footerBottomPadding,
+        paddingTop: listPaddingTop,
+        paddingBottom: footerHeight + footerBottom,
       }}
+      scrollIndicatorInsets={{ top: showChrome ? chromeHeight : 0 }}
       showsVerticalScrollIndicator={false}
       onScroll={handleScroll}
       scrollEventThrottle={16}
@@ -530,14 +611,25 @@ export function InSessionView({ translateY, screenHeight }: InSessionViewProps) 
     <View style={styles.container}>
       {scrollView}
 
-      <View style={[styles.footer, { backgroundColor: systemColors.background, paddingBottom: footerBottomPadding }]}>
+      {showChrome ? (
+        <RecordTopChrome
+          title={t('mobile.session.headerActive')}
+          onOpenBoardSwitcher={handleOpenBoardSwitcher}
+          onHeightChange={setChromeHeight}
+          scrollY={scrollOffset}
+          onPressTitle={handleScrollToTop}
+          onShare={onShare}
+        />
+      ) : null}
+
+      <PinnedActionBar testID="in-session-footer" onHeightChange={setFooterHeight}>
         <Button
           title={t('mobile.session.inEndSession')}
           onPress={() => setShowEndSession(true)}
           variant="outlined"
           size="large"
         />
-      </View>
+      </PinnedActionBar>
 
       <EndSessionSheet
         visible={showEndSession}
@@ -568,16 +660,18 @@ const styles = StyleSheet.create({
   headerContent: {
     gap: spacing[5],
   },
+  // The list pads its content by 16px; the largeTitle rides at that gutter, so it
+  // needs no extra horizontal padding (it collapses into the chrome capsule).
+  screenTitle: {
+    paddingBottom: spacing[2],
+  },
+  // SectionHeader self-insets 16px; the list already pads 16, so bleed the header
+  // back by 16 to keep its label flush with the screen gutter.
+  sectionHeaderBleed: {
+    marginHorizontal: -spacing[4],
+  },
   footerContent: {
     marginTop: spacing[5],
-  },
-  historySection: {
-    gap: spacing[2],
-  },
-  sectionLabel: {
-    textTransform: 'uppercase',
-    fontWeight: '700',
-    letterSpacing: 0,
   },
   // First/last history rows round the card's outer corners, reproducing the
   // single rounded-card look the old `.map`-in-a-View had (it had
@@ -635,12 +729,16 @@ const styles = StyleSheet.create({
     height: StyleSheet.hairlineWidth,
     marginLeft: spacing[3] + 28 + spacing[3],
   },
-  emptyCard: {
-    borderRadius: borderRadius.lg,
-    padding: spacing[4],
+  inviteRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[3],
   },
-  footer: {
-    paddingHorizontal: spacing[4],
-    paddingTop: spacing[3],
+  inviteTextColumn: {
+    flex: 1,
+    gap: 2,
+  },
+  inviteTitle: {
+    fontWeight: '600',
   },
 });

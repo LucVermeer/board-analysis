@@ -1,5 +1,6 @@
 import { type Device, type Characteristic } from 'react-native-ble-plx';
 import {
+  AURORA_ADVERTISED_SERVICE_UUID,
   UART_SERVICE_UUID,
   UART_WRITE_CHARACTERISTIC_UUID,
   splitMessages,
@@ -9,7 +10,7 @@ import {
 import { bleManager } from './ble-manager';
 import { waitForBlePoweredOn } from './availability';
 import { isLikelyBoardDevice } from './board-device-filter';
-import type { BluetoothAdapter, BleConnection, DevicePickerFn, DiscoveredDevice } from './types';
+import type { BluetoothAdapter, BleConnection, BoardScanFamily, DevicePickerFn, DiscoveredDevice } from './types';
 import { SCAN_TIMEOUT_MS, SERIAL_RECONNECT_GRACE_MS } from '@boardsesh/ble-protocol/scan-constants';
 
 const CONNECTION_TIMEOUT_MS = 12_000;
@@ -22,7 +23,10 @@ export class RNBleAdapter implements BluetoothAdapter {
   private disconnectCallback: (() => void) | null = null;
   private disconnectSubscription: { remove: () => void } | null = null;
 
-  constructor(private readonly devicePicker: DevicePickerFn) {}
+  constructor(
+    private readonly devicePicker: DevicePickerFn,
+    private readonly scanFamily: BoardScanFamily = 'aurora',
+  ) {}
 
   async isAvailable(): Promise<boolean> {
     return waitForBlePoweredOn();
@@ -73,10 +77,10 @@ export class RNBleAdapter implements BluetoothAdapter {
     let scanTimeoutId: ReturnType<typeof setTimeout> | undefined;
     let selectedDeviceId: string;
     try {
-      // Scan unfiltered and filter results in JS: a service-UUID filter would
-      // hide MoonBoard controllers, which don't reliably advertise the UART
-      // service UUID (see isLikelyBoardDevice).
-      bleManager.startDeviceScan(null, null, (scanError, scannedDevice) => {
+      // Aurora scans can stay service-filtered. MoonBoard scans stay unfiltered
+      // so name-prefix controllers without advertised UART still surface.
+      const scanServiceUuids = this.scanFamily === 'aurora' ? [AURORA_ADVERTISED_SERVICE_UUID] : null;
+      bleManager.startDeviceScan(scanServiceUuids, null, (scanError, scannedDevice) => {
         if (scanError) {
           bleManager.stopDeviceScan();
           // Surface the failure immediately so the user sees feedback instead
@@ -94,7 +98,9 @@ export class RNBleAdapter implements BluetoothAdapter {
           ...(scannedDevice.serviceUUIDs ?? []),
           ...(scannedDevice.overflowServiceUUIDs ?? []),
         ];
-        if (!isLikelyBoardDevice({ name: deviceName, serviceUuids: advertisedServiceUuids })) {
+        if (
+          !isLikelyBoardDevice({ name: deviceName, serviceUuids: advertisedServiceUuids, scanFamily: this.scanFamily })
+        ) {
           return;
         }
 
@@ -246,15 +252,18 @@ export class RNBleAdapter implements BluetoothAdapter {
         throw new DOMException('Write aborted', 'AbortError');
       }
 
+      if (chunkIndex > 0) {
+        await delay(INTER_CHUNK_DELAY_MS);
+        if (signal?.aborted) {
+          throw new DOMException('Write aborted', 'AbortError');
+        }
+      }
+
       // Re-check the characteristic before each chunk — a mid-write
       // disconnect sets it to null via the onDeviceDisconnected handler.
       const characteristic = this.writeCharacteristic;
       if (!characteristic) {
         throw new Error('Device disconnected during write');
-      }
-
-      if (chunkIndex > 0) {
-        await delay(INTER_CHUNK_DELAY_MS);
       }
 
       const chunk = chunks[chunkIndex];

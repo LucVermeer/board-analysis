@@ -54,6 +54,7 @@
     "percentile": "Percentil",
     "topPercent": "Top {{value}}%",
     "moreSentThan": "Más bloques encadenados que el {{value}}% de los escaladores",
+    "summary": "Resumen",
     "activity": "Actividad",
     "gradeDistribution": "Distribución por grados",
     "flashVsRedpoint": "Flash vs Trabajado",

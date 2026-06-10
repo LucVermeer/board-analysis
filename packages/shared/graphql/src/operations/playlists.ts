@@ -146,6 +146,13 @@ export const REMOVE_CLIMB_FROM_PLAYLIST = gql`
   }
 `;
 
+// Reorder a climb within a playlist (single move to a new 0-based index)
+export const REORDER_PLAYLIST_CLIMB = gql`
+  mutation ReorderPlaylistClimb($input: ReorderPlaylistClimbInput!) {
+    reorderPlaylistClimb(input: $input)
+  }
+`;
+
 // Get climbs in a playlist with full climb data
 export const GET_PLAYLIST_CLIMBS = gql`
   query GetPlaylistClimbs($input: GetPlaylistClimbsInput!) {
@@ -158,6 +165,8 @@ export const GET_PLAYLIST_CLIMBS = gql`
         name
         description
         frames
+        framesCount
+        framesPace
         angle
         ascensionist_count
         difficulty
@@ -378,6 +387,20 @@ export type RemoveClimbFromPlaylistMutationResponse = {
   removeClimbFromPlaylist: boolean;
 };
 
+export type ReorderPlaylistClimbInput = {
+  playlistId: string;
+  climbUuid: string;
+  newIndex: number;
+};
+
+export type ReorderPlaylistClimbMutationVariables = {
+  input: ReorderPlaylistClimbInput;
+};
+
+export type ReorderPlaylistClimbMutationResponse = {
+  reorderPlaylistClimb: boolean;
+};
+
 export type GetPlaylistClimbsInput = {
   playlistId: string;
   boardName?: string;
@@ -402,6 +425,8 @@ export type PlaylistClimbsResult = {
     name: string;
     description: string;
     frames: string;
+    framesCount?: number | null;
+    framesPace?: number | null;
     angle: number;
     ascensionist_count: number;
     difficulty: string;
@@ -444,13 +469,17 @@ export type DiscoverablePlaylist = {
   climbCount: number;
   creatorId: string;
   creatorName: string;
+  isGeneratedRecommendation: boolean;
 };
 
 export type DiscoverPlaylistsInput = {
   boardType?: string;
   layoutId?: number;
+  sizeId?: number | null;
+  angle?: number | null;
   name?: string;
   creatorIds?: string[];
+  generatedRecommendation?: boolean | null;
   sortBy?: 'recent' | 'popular';
   page?: number;
   pageSize?: number;
@@ -502,6 +531,7 @@ export const DISCOVER_PLAYLISTS = gql`
         climbCount
         creatorId
         creatorName
+        isGeneratedRecommendation
       }
       totalCount
       hasMore
@@ -694,6 +724,8 @@ export const GET_SMART_PLAYLIST = gql`
         name
         description
         frames
+        framesCount
+        framesPace
         angle
         ascensionist_count
         difficulty

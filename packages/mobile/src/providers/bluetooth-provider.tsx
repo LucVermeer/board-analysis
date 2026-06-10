@@ -1,11 +1,26 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { Alert } from 'react-native';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import type { ClimbQueueItem } from '@boardsesh/queue';
-import type { BoardName } from '@boardsesh/shared-schema';
+import type { BoardName, UserBoard } from '@boardsesh/shared-schema';
+import { formatBoardDisplayName, toBoardName } from '@boardsesh/board-config';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { useBoardPresenceCurrent } from '@boardsesh/board-presence-react';
 import type { BoardPresenceClimb, ClimbQueueItemInput } from '@boardsesh/shared-schema';
 import { emitWallConfirm } from '@boardsesh/play-view';
-import { useBoardBluetooth } from '../lib/ble/use-board-bluetooth';
+import { useBoardBluetooth, boardConfigKey } from '../lib/ble/use-board-bluetooth';
+import { useResolvedBleDeviceBoards } from '../lib/ble/resolve-serials';
+import {
+  decideBlePickerSelection,
+  type BleBoardConfig,
+  type PickerSelectionDecision,
+} from '../lib/ble/board-config-match';
+import { summarizePickerResolution, type PickerResolutionStats } from '../lib/ble/picker-resolution-stats';
+import { useSetActiveBoard } from '../lib/graphql/use-active-board';
+import { getHttpClient } from '../lib/graphql/client';
+import { GET_BOARD } from '../lib/graphql/operations';
+import type { GetBoardQueryResponse } from '../lib/graphql/operations';
 import { getBoardRenderData } from '../lib/board-details';
 import { registerBluetoothConnection } from '../lib/ble/bluetooth-status-store';
 import { useQueue, useQueueSessionControls } from './queue-provider';
@@ -45,6 +60,19 @@ type BluetoothContextValue = {
 };
 
 const BluetoothContext = createContext<BluetoothContextValue | null>(null);
+const EMPTY_PICKER_DEVICES: [] = [];
+// How long a switch-to-config auto-connect request stays armed waiting for the
+// switched board's props to reach this provider before it is dropped.
+const PENDING_AUTO_CONNECT_TTL_MS = 15_000;
+
+function formatPickerBoardConfig(t: TFunction<'settings'>, config: BleBoardConfig): string {
+  return t('boardConfigMismatch.mobileConfigValue', {
+    board: formatBoardDisplayName(config.boardName),
+    layoutId: config.layoutId,
+    sizeId: config.sizeId,
+    setIds: config.setIds,
+  });
+}
 
 type PendingWallReport = {
   item: ClimbQueueItem;
@@ -98,6 +126,7 @@ function BluetoothAutoSender({
   sendFramesToBoard,
   onWallConfirmed,
   reassertNonce,
+  connectInitialSendRef,
 }: {
   sendFramesToBoard: (frames: string, mirrored?: boolean, signal?: AbortSignal) => Promise<boolean | undefined>;
   /**
@@ -107,6 +136,9 @@ function BluetoothAutoSender({
    */
   onWallConfirmed: (item: ClimbQueueItem) => void;
   reassertNonce: number;
+  // One-shot seed: what connect() already wrote as initialFrames, so the
+  // freshly mounted AutoSender doesn't repeat a byte-identical first send.
+  connectInitialSendRef: React.MutableRefObject<{ frames: string; mirrored: boolean } | null>;
 }) {
   const { state } = useQueue();
   const { currentClimbQueueItem } = state;
@@ -172,6 +204,24 @@ function BluetoothAutoSender({
         while (toSend) {
           if (signal?.aborted) return;
           const item = toSend;
+
+          // connect() may have just written these exact frames as its
+          // initialFrames (connect-and-light flows like the play drawer).
+          // Seed the dedup signature so this freshly mounted AutoSender
+          // doesn't immediately repeat the byte-identical write and
+          // double-fire the success haptic. One-shot — and a pending
+          // reassert below still wins and forces a re-push.
+          const connectSend = connectInitialSendRef.current;
+          if (connectSend) {
+            connectInitialSendRef.current = null;
+            if (
+              lastSentSignatureRef.current === null &&
+              connectSend.frames === item.climb.frames &&
+              connectSend.mirrored === !!item.climb.mirrored
+            ) {
+              lastSentSignatureRef.current = `${item.climb.uuid}::${item.climb.frames}::${item.climb.mirrored ? 1 : 0}`;
+            }
+          }
 
           // Honour a pending reassert exactly when the climb is picked up —
           // clearing the signature here (rather than in the effect) survives an
@@ -242,6 +292,7 @@ export function BluetoothProvider({
   children,
 }: BluetoothProviderProps) {
   const { sessionId, confirmClimbOnWall, setSessionBoardSerial, lastConnectedBoardSerial } = useQueueSessionControls();
+  const { t } = useTranslation('settings');
   // Board presence ("now on the wall"). All of these are inert when the
   // `board-presence` flag is off: `enabled` is false, `boardId` is null, and the
   // shared wall context's report/undo no-op for a null board — so the BLE flow
@@ -266,7 +317,6 @@ export function BluetoothProvider({
   sizeIdRef.current = sizeId;
   const setIdsRef = useRef(setIds);
   setIdsRef.current = setIds;
-
   const sessionIdRef = useRef(sessionId);
   useEffect(() => {
     sessionIdRef.current = sessionId;
@@ -456,7 +506,10 @@ export function BluetoothProvider({
     const parsedSetIds = setIds
       .split(',')
       .map((setId) => Number(setId.trim()))
-      .filter((setId) => Number.isInteger(setId));
+      // `Number('')` is 0, so a trailing comma would smuggle a bogus set ID 0
+      // into the render-data lookup — real set IDs are positive. Keep in
+      // lockstep with DeviceCard's parseSetIds.
+      .filter((setId) => Number.isInteger(setId) && setId > 0);
     if (parsedSetIds.length === 0) return undefined;
     return (
       getBoardRenderData({ boardName: boardName as BoardName, layoutId, sizeId, setIds: parsedSetIds })?.holdsData ??
@@ -464,17 +517,210 @@ export function BluetoothProvider({
     );
   }, [boardName, layoutId, sizeId, setIds]);
 
-  const { isConnected, loading, connect, disconnect, sendFramesToBoard, pickerState, reconnectSerialForCurrentBoard } =
-    useBoardBluetooth({
-      boardName,
+  const {
+    isConnected,
+    loading,
+    connect,
+    disconnect,
+    sendFramesToBoard,
+    pickerState,
+    reconnectSerialForCurrentBoard,
+    connectInitialSendRef,
+  } = useBoardBluetooth({
+    boardName,
+    layoutId,
+    sizeId,
+    setIds,
+    boardUuid,
+    holdsData,
+    analyticsBoardId: presenceBoardId,
+    onConnectSuccess: handleConnectSuccess,
+  });
+
+  const resolvedPickerBoards = useResolvedBleDeviceBoards(pickerState?.devices ?? EMPTY_PICKER_DEVICES);
+  const currentBoardConfig = useMemo(() => {
+    if (!boardName || layoutId === undefined || sizeId === undefined || !setIds) return undefined;
+    const typedBoardName = toBoardName(boardName);
+    if (!typedBoardName) return undefined;
+    return {
+      boardName: typedBoardName,
       layoutId,
       sizeId,
       setIds,
-      boardUuid,
-      holdsData,
-      analyticsBoardId: presenceBoardId,
-      onConnectSuccess: handleConnectSuccess,
-    });
+    };
+  }, [boardName, layoutId, sizeId, setIds]);
+
+  // handlePickerSelect, handleMismatchSwitch and the auto-connect effect all
+  // need the latest pickerState / resolvedPickerBoards / currentBoardConfig, but
+  // pickerState is a fresh object on every scan-progress push. Listing it in a
+  // useCallback dep array would churn the onSelect identity each push and defeat
+  // DeviceCard's React.memo. Mirror the volatile inputs into refs and read
+  // through them — latest-value semantics are exactly right for a tap handler,
+  // so keep these handlers free of stale-closure-sensitive logic.
+  const pickerStateRef = useRef(pickerState);
+  pickerStateRef.current = pickerState;
+  const resolvedPickerBoardsRef = useRef(resolvedPickerBoards);
+  resolvedPickerBoardsRef.current = resolvedPickerBoards;
+  const currentBoardConfigRef = useRef(currentBoardConfig);
+  currentBoardConfigRef.current = currentBoardConfig;
+
+  // Track how often the picker's serial→board resolution actually pays off:
+  // keep the tallies fresh while the sheet is open (devices and resolutions
+  // both stream in), then flush ONE summary event when it closes — per-device
+  // or per-render events would massively overcount repeat advertisements.
+  const pickerResolutionStatsRef = useRef<PickerResolutionStats | null>(null);
+  useEffect(() => {
+    if (pickerState) {
+      pickerResolutionStatsRef.current = summarizePickerResolution(
+        pickerState.devices,
+        resolvedPickerBoards,
+        currentBoardConfig,
+      );
+      return;
+    }
+    const finalStats = pickerResolutionStatsRef.current;
+    if (!finalStats) return;
+    pickerResolutionStatsRef.current = null;
+    track(SHARED_EVENTS.BlePickerDevicesResolved, { ...finalStats, boardName });
+  }, [pickerState, resolvedPickerBoards, currentBoardConfig, boardName]);
+
+  const setActiveBoard = useSetActiveBoard();
+
+  // One-shot request to silently reconnect to `serial` once the active board
+  // config has actually switched to `configKey`. Set by the switch flow, cleared
+  // by the effect below the moment it fires the reconnect. A single slot is
+  // deliberate (last writer wins): each successful switch cancels the picker
+  // that produced it, so a second request can only come from a newer flow whose
+  // intent supersedes the first.
+  const [pendingAutoConnect, setPendingAutoConnect] = useState<{ serial: string; configKey: string } | null>(null);
+
+  // The switched config normally propagates within one re-render, so a request
+  // still pending after this window means it can no longer complete (e.g. the
+  // board switch was reverted before the props arrived). Drop it rather than
+  // leave a stale one-shot armed that would fire on a much-later, unrelated
+  // switch to the same config.
+  //
+  // Depend on the configKey rather than the whole `pendingAutoConnect` object so
+  // re-arming with the same configKey (a race) doesn't reset the timer and
+  // silently extend the TTL. Reading it into a local also keeps the dep array
+  // exhaustive — configKey is always a string on a live request (never null
+  // while the object is set), so the falsy guard only short-circuits the cleared
+  // (null) state.
+  const pendingConfigKey = pendingAutoConnect?.configKey;
+  useEffect(() => {
+    if (!pendingConfigKey) return;
+    const expiryTimeoutId = setTimeout(() => setPendingAutoConnect(null), PENDING_AUTO_CONNECT_TTL_MS);
+    return () => clearTimeout(expiryTimeoutId);
+  }, [pendingConfigKey]);
+
+  useEffect(() => {
+    if (!pendingAutoConnect) return;
+    // Still on the old config — setActiveBoard's cache write hasn't propagated
+    // new board props into this provider yet. Wait for the matching config so we
+    // don't auto-connect against the LED placement map we're switching away from.
+    if (!boardName || layoutId === undefined || sizeId === undefined) return;
+    if (boardConfigKey(boardName, layoutId, sizeId) !== pendingAutoConnect.configKey) return;
+    // The old cancelled connect may still be settling. connect() bails while
+    // connectInFlightRef is set (which tracks `loading`), so a new connect fired
+    // now would be silently swallowed — wait for it to clear first.
+    if (loading) return;
+    const { serial } = pendingAutoConnect;
+    setPendingAutoConnect(null);
+    // connect's third param does a silent serial auto-select, falling back to the
+    // picker only if that serial never advertises.
+    void connect(undefined, undefined, serial);
+  }, [pendingAutoConnect, boardName, layoutId, sizeId, loading, connect]);
+
+  const handleMismatchSwitch = useCallback(
+    async (decision: Extract<PickerSelectionDecision, { kind: 'mismatch' }>) => {
+      try {
+        let board: UserBoard;
+        if (decision.entry.kind === 'saved') {
+          board = decision.entry.board;
+        } else {
+          const { boardUuid: recordedBoardUuid } = decision.entry.config;
+          if (!recordedBoardUuid) {
+            throw new Error('Recorded board config has no saved board to switch to');
+          }
+          const response = await getHttpClient().request<GetBoardQueryResponse>(GET_BOARD, {
+            boardUuid: recordedBoardUuid,
+          });
+          if (!response.board) {
+            throw new Error(`No board found for uuid ${recordedBoardUuid}`);
+          }
+          board = response.board;
+        }
+        await setActiveBoard(board);
+        // Only cancel the picker once the switch actually went through: a failed
+        // board fetch above leaves the picker open so the user can still pick a
+        // device or use Connect anyway. The cancel rejects the old connect's
+        // picker promise with the silent user-cancel signature (no "connection
+        // failed" alert), which clears `loading` and lets the auto-connect
+        // effect fire against the switched config.
+        pickerStateRef.current?.handleCancel();
+        setPendingAutoConnect({
+          serial: decision.serial,
+          configKey: boardConfigKey(decision.config.boardName, decision.config.layoutId, decision.config.sizeId),
+        });
+      } catch (error) {
+        console.error('Failed to switch to correct board config:', error);
+        Alert.alert(t('boardConfigMismatch.title'), t('boardConfigMismatch.mobileSwitchFailed'));
+      }
+    },
+    [setActiveBoard, t],
+  );
+
+  const handlePickerSelect = useCallback(
+    (deviceId: string) => {
+      const activePickerState = pickerStateRef.current;
+      if (!activePickerState) return;
+      const activeBoardConfig = currentBoardConfigRef.current;
+      const decision = decideBlePickerSelection({
+        deviceId,
+        devices: activePickerState.devices,
+        resolvedBoards: resolvedPickerBoardsRef.current,
+        currentBoardConfig: activeBoardConfig,
+      });
+      if (decision.kind === 'forward') {
+        activePickerState.handleSelect(deviceId);
+        return;
+      }
+
+      const currentLabel = activeBoardConfig
+        ? formatPickerBoardConfig(t, activeBoardConfig)
+        : t('boardConfigMismatch.mobileUnknownConfig');
+      const recordedLabel = formatPickerBoardConfig(t, decision.config);
+      const canSwitch =
+        decision.entry.kind === 'saved' ||
+        (decision.entry.kind === 'recorded' && decision.entry.config.boardUuid != null);
+      const buttons = [
+        { text: t('boardConfigMismatch.cancel'), style: 'cancel' as const },
+        {
+          text: t('boardConfigMismatch.connectAnyway'),
+          style: 'destructive' as const,
+          onPress: () => activePickerState.handleSelect(deviceId),
+        },
+        ...(canSwitch
+          ? [
+              {
+                text: t('boardConfigMismatch.switchToCorrect'),
+                onPress: () => void handleMismatchSwitch(decision),
+              },
+            ]
+          : []),
+      ];
+      Alert.alert(
+        t('boardConfigMismatch.title'),
+        [
+          t('boardConfigMismatch.intro'),
+          t('boardConfigMismatch.mobileCurrentLabel', { config: currentLabel }),
+          t('boardConfigMismatch.mobileRecordedLabel', { config: recordedLabel }),
+        ].join('\n\n'),
+        buttons,
+      );
+    },
+    [handleMismatchSwitch, t],
+  );
 
   const undoWallChange = useCallback(async (): Promise<boolean> => {
     const undoTarget = undoWallChangeTargetRef.current;
@@ -603,15 +849,18 @@ export function BluetoothProvider({
           sendFramesToBoard={sendFramesToBoard}
           onWallConfirmed={handleWallConfirmed}
           reassertNonce={reassertNonce}
+          connectInitialSendRef={connectInitialSendRef}
         />
       )}
       {children}
       {pickerState && (
         <DevicePickerSheet
           devices={pickerState.devices}
-          onSelect={pickerState.handleSelect}
+          onSelect={handlePickerSelect}
           onDismiss={pickerState.handleCancel}
           isScanning={pickerState.isScanning}
+          resolvedBoards={resolvedPickerBoards}
+          currentBoardConfig={currentBoardConfig}
         />
       )}
     </BluetoothContext.Provider>

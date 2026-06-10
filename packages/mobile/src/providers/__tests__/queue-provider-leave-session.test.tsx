@@ -81,6 +81,11 @@ vi.mock('@boardsesh/play-view', async (importOriginal) => ({
 }));
 vi.mock('../../lib/graphql/ws-client', () => ({ getWsClient: () => ws.client }));
 vi.mock('../../lib/session-store', () => sessionStore);
+vi.mock('../../lib/queue-snapshot-store', () => ({
+  getStoredQueueSnapshot: vi.fn(async () => null),
+  setStoredQueueSnapshot: vi.fn(async () => {}),
+  clearStoredQueueSnapshot: vi.fn(async () => {}),
+}));
 vi.mock('../../lib/active-board-store', () => ({ getStoredActiveBoard: activeBoard.getStoredActiveBoard }));
 vi.mock('../../lib/graphql/use-active-board', () => ({
   useActiveBoard: () => ({ data: activeBoard.stored }),
@@ -121,12 +126,24 @@ function leaveSessionCalls() {
   });
 }
 
+function operationText(operation: unknown): string {
+  if (typeof operation === 'string') return operation;
+  if (operation == null || typeof operation !== 'object') return '';
+  const operationRecord = operation as Record<string, unknown>;
+  if (typeof operationRecord.query === 'string') return operationRecord.query;
+  const loc = operationRecord.loc;
+  if (loc == null || typeof loc !== 'object') return '';
+  const source = (loc as Record<string, unknown>).source;
+  if (source == null || typeof source !== 'object') return '';
+  const body = (source as Record<string, unknown>).body;
+  return typeof body === 'string' ? body : '';
+}
+
 // resyncQueueFromServer is the only thing that fires GET_SESSION_QUEUE_STATE, so
 // counting these calls tracks how many mutation-failure resyncs actually ran.
 function queueStateCalls() {
   return http.request.mock.calls.filter((call) => {
-    const operation = call[0];
-    return typeof operation === 'string' && operation.includes('GetSessionQueueState');
+    return operationText(call[0]).includes('GetSessionQueueState');
   });
 }
 
@@ -146,8 +163,8 @@ describe('QueueProvider clearSession notifyServer', () => {
     // Cold-start restore verifies the session via SESSION_STATUS (#2683);
     // keep the stored session active so these tests land in-session before
     // clearSession.
-    http.request.mockImplementation(async (operation: string) =>
-      operation.includes('SessionStatus') ? { sessionStatus: 'active' } : {},
+    http.request.mockImplementation(async (operation: unknown) =>
+      operationText(operation).includes('SessionStatus') ? { sessionStatus: 'active' } : {},
     );
     graph.execute.mockReset();
     // joinSession resolves the active session; leaveSession resolves true.
@@ -216,10 +233,10 @@ describe('QueueProvider clearSession notifyServer', () => {
     // session switch on a still-mounted provider, blocks every future resync.
     let hangNextQueueState = false;
     http.request.mockImplementation((operation: unknown) => {
-      const operationText = typeof operation === 'string' ? operation : '';
+      const queryText = operationText(operation);
       // Match GetSessionQueueState before the generic GetSession branch — its name
       // contains 'GetSession' too.
-      if (operationText.includes('GetSessionQueueState')) {
+      if (queryText.includes('GetSessionQueueState')) {
         // The first resync hangs (pins the guard true); later resyncs resolve.
         if (hangNextQueueState) return new Promise<never>(() => {});
         return Promise.resolve({ session: { queueState: { queue: [], currentClimbQueueItem: null } } });
@@ -228,10 +245,10 @@ describe('QueueProvider clearSession notifyServer', () => {
       // replaces the beforeEach mock wholesale, so it must answer SessionStatus
       // itself — otherwise the restore guard sees no status and clears the
       // stored session before the test gets in-session.
-      if (operationText.includes('SessionStatus')) {
+      if (queryText.includes('SessionStatus')) {
         return Promise.resolve({ sessionStatus: 'active' });
       }
-      if (operationText.includes('GetSession')) {
+      if (queryText.includes('GetSession')) {
         return Promise.resolve({ session: { id: 'session-1', endedAt: null } });
       }
       return Promise.resolve({});

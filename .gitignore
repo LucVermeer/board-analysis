@@ -96,6 +96,10 @@ packages/mobile/.env
 packages/mobile/.expo/
 packages/mobile/ios/
 packages/mobile/android/
+# Native-module gradle/cmake build cache from `expo run:android` (the module's
+# android/ source is tracked, but these generated dirs must not be).
+packages/mobile/modules/**/android/.cxx/
+packages/mobile/modules/**/android/build/
 packages/mobile/dist/
 packages/mobile/.bundle-check-output/
 .claude/worktrees/

@@ -30,6 +30,17 @@ export default defineConfig({
       // transitively imports `src/lib/sentry`. Sentry is disabled in tests, so a
       // lightweight stub satisfies the static imports.
       '@sentry/react-native': fileURLToPath(new URL('./test/sentry-react-native-stub.ts', import.meta.url)),
+      // @react-native-async-storage/async-storage's ESM entry imports
+      // `./createAsyncStorage` without a file extension, which fails to resolve
+      // under vitest's node ESM env — breaking any suite that transitively loads
+      // a storage-backed module (the active-board store via the bluetooth
+      // provider, the preference store, etc.) even when it never touches
+      // storage. A tiny in-memory stub satisfies the static imports; suites that
+      // assert storage behaviour register their own vi.mock, which takes
+      // precedence.
+      '@react-native-async-storage/async-storage': fileURLToPath(
+        new URL('./test/async-storage-stub.ts', import.meta.url),
+      ),
     },
     // .tsx test files can opt into a jsdom environment per file via the
     // `// @vitest-environment jsdom` pragma — needed to render React

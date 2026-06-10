@@ -4,6 +4,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createElement, type ReactNode } from 'react';
 import type { ClimbQueueItem } from '@boardsesh/queue';
 import type { BoardPresenceClimb } from '@boardsesh/shared-schema';
+import type { BoardSerialConfig } from '@boardsesh/graphql/operations';
+import type { ResolvedBoardEntry } from '../../lib/ble/resolve-serials';
+import type { PickerState } from '../../lib/ble/use-board-bluetooth';
 
 type TestResolvedBoard = { boardId: number };
 
@@ -18,6 +21,10 @@ const wallConfirm = vi.hoisted(() => ({
 
 const analytics = vi.hoisted(() => ({
   track: vi.fn(),
+}));
+
+const alert = vi.hoisted(() => ({
+  alert: vi.fn(),
 }));
 
 const queue = vi.hoisted(() => ({
@@ -37,8 +44,9 @@ const bluetooth = vi.hoisted(() => {
       connect: vi.fn(async () => true),
       disconnect: vi.fn(async () => {}),
       sendFramesToBoard: vi.fn(async () => true as boolean | undefined),
-      pickerState: null,
+      pickerState: null as PickerState | null,
       reconnectSerialForCurrentBoard: null,
+      connectInitialSendRef: { current: null as { frames: string; mirrored: boolean } | null },
     },
     useBoardBluetooth: vi.fn((options: BluetoothHookOptions) => {
       mock.options = options;
@@ -56,6 +64,22 @@ const presence = vi.hoisted(() => ({
   resolveAndBindBoardByConfig: vi.fn(async (): Promise<TestResolvedBoard | null> => null),
   reportClimbForBoard: vi.fn(async () => true),
   showUndoWallChangeSnackbar: vi.fn(),
+}));
+
+type PickerSheetProps = {
+  onSelect: (deviceId: string) => void;
+};
+
+const pickerSheet = vi.hoisted(() => ({
+  props: null as PickerSheetProps | null,
+}));
+
+const resolvedBoards = vi.hoisted(() => ({
+  value: new Map<string, ResolvedBoardEntry>(),
+}));
+
+vi.mock('react-native', () => ({
+  Alert: { alert: alert.alert },
 }));
 
 vi.mock('@boardsesh/play-view', () => ({
@@ -93,6 +117,10 @@ vi.mock('../../lib/ble/use-board-bluetooth', () => ({
   useBoardBluetooth: bluetooth.useBoardBluetooth,
 }));
 
+vi.mock('../../lib/ble/resolve-serials', () => ({
+  useResolvedBleDeviceBoards: () => resolvedBoards.value,
+}));
+
 vi.mock('../../lib/ble/bluetooth-status-store', () => ({
   registerBluetoothConnection: vi.fn(() => vi.fn()),
 }));
@@ -106,8 +134,25 @@ vi.mock('../../lib/analytics', () => ({
   track: analytics.track,
 }));
 
+// The provider calls useSetActiveBoard for the "switch to correct config" flow.
+// The real hook needs a QueryClientProvider this suite doesn't mount, so stub it.
+vi.mock('../../lib/graphql/use-active-board', () => ({
+  useSetActiveBoard: () => vi.fn(async () => {}),
+}));
+
+// The recorded-config switch path imports the GraphQL HTTP client, which
+// transitively pulls in expo-secure-store (via the auth interceptor) —
+// unavailable in the test environment. Short-circuit it; this suite stubs
+// useSetActiveBoard and never drives a real board fetch.
+vi.mock('../../lib/graphql/client', () => ({
+  getHttpClient: () => ({ request: vi.fn(async () => ({ board: null })) }),
+}));
+
 vi.mock('../../components/ble/DevicePickerSheet', () => ({
-  DevicePickerSheet: () => createElement('div', { 'data-testid': 'device-picker' }),
+  DevicePickerSheet: (props: PickerSheetProps) => {
+    pickerSheet.props = props;
+    return createElement('div', { 'data-testid': 'device-picker' });
+  },
 }));
 
 vi.mock('../queue-provider', () => ({
@@ -175,6 +220,7 @@ function renderProvider(children?: ReactNode) {
       boardName: 'kilter',
       layoutId: 1,
       sizeId: 10,
+      setIds: '1,20',
       children: children ?? createElement('div', null),
     }),
   );
@@ -187,6 +233,21 @@ function BluetoothProbe() {
   return null;
 }
 
+function makeSerialConfig(overrides: Partial<BoardSerialConfig> = {}): BoardSerialConfig {
+  return {
+    serialNumber: 'SN-1',
+    boardName: 'kilter',
+    layoutId: 1,
+    sizeId: 10,
+    setIds: '1,20',
+    apiLevel: 3,
+    updatedAt: '2026-01-02T00:00:00.000Z',
+    boardUuid: null,
+    boardSlug: null,
+    ...overrides,
+  };
+}
+
 describe('BluetoothProvider wall-confirm integration', () => {
   beforeEach(() => {
     queue.currentClimbQueueItem = makeQueueItem('climb-1');
@@ -196,6 +257,9 @@ describe('BluetoothProvider wall-confirm integration', () => {
     queue.setSessionBoardSerial.mockClear();
     wallConfirm.emitWallConfirm.mockClear();
     analytics.track.mockClear();
+    alert.alert.mockClear();
+    pickerSheet.props = null;
+    resolvedBoards.value = new Map();
     bluetooth.options = undefined;
     bluetooth.state.isConnected = true;
     bluetooth.state.loading = false;
@@ -203,6 +267,7 @@ describe('BluetoothProvider wall-confirm integration', () => {
     bluetooth.state.reconnectSerialForCurrentBoard = null;
     bluetooth.state.sendFramesToBoard.mockReset();
     bluetooth.state.sendFramesToBoard.mockResolvedValue(true);
+    bluetooth.state.connectInitialSendRef.current = null;
     bluetooth.useBoardBluetooth.mockClear();
     presence.enabled = false;
     presence.boardId = null;
@@ -230,6 +295,36 @@ describe('BluetoothProvider wall-confirm integration', () => {
 
     expect(wallConfirm.emitWallConfirm).toHaveBeenCalledWith('climb-1');
     expect(queue.confirmClimbOnWall).toHaveBeenCalledWith('climb-1');
+  });
+
+  it('skips the duplicate send when connect() already wrote the same frames, but still confirms', async () => {
+    // connect(initialFrames) wrote the current climb before the AutoSender
+    // mounted; the seed must suppress the byte-identical re-send (and its
+    // doubled haptic) while still confirming the wall state.
+    bluetooth.state.connectInitialSendRef.current = { frames: 'p1r12', mirrored: false };
+
+    renderProvider();
+
+    await waitFor(() => {
+      expect(wallConfirm.emitWallConfirm).toHaveBeenCalledWith('climb-1');
+    });
+
+    expect(bluetooth.state.sendFramesToBoard).not.toHaveBeenCalled();
+    // One-shot: the seed is consumed on first pickup.
+    expect(bluetooth.state.connectInitialSendRef.current).toBeNull();
+  });
+
+  it('still sends when connect() wrote different frames than the current climb', async () => {
+    // e.g. the create-climb editor connected with its in-progress frames; the
+    // queue's current climb differs, so the AutoSender must not be suppressed.
+    bluetooth.state.connectInitialSendRef.current = { frames: 'p9r15', mirrored: false };
+
+    renderProvider();
+
+    await waitFor(() => {
+      expect(bluetooth.state.sendFramesToBoard).toHaveBeenCalledWith('p1r12', false, expect.any(AbortSignal));
+    });
+    expect(bluetooth.state.connectInitialSendRef.current).toBeNull();
   });
 
   it('keeps the local wall confirm in solo mode without sending a session mutation', async () => {
@@ -348,7 +443,7 @@ describe('BluetoothProvider wall-confirm integration', () => {
         boardType: 'kilter',
         layoutId: 1,
         sizeId: 10,
-        setIds: '',
+        setIds: '1,20',
       });
     });
 
@@ -372,7 +467,7 @@ describe('BluetoothProvider wall-confirm integration', () => {
         boardType: 'kilter',
         layoutId: 1,
         sizeId: 10,
-        setIds: '',
+        setIds: '1,20',
       });
       expect(queue.setSessionBoardSerial).not.toHaveBeenCalled();
     });
@@ -575,5 +670,45 @@ describe('BluetoothProvider wall-confirm integration', () => {
       const allTrackedValues = analytics.track.mock.calls.flatMap(([, properties]) => Object.values(properties ?? {}));
       expect(allTrackedValues).not.toContain('SERIAL-SECRET-123');
     });
+  });
+
+  it('forwards picker selection immediately when the resolved board config matches', () => {
+    const handleSelect = vi.fn();
+    bluetooth.state.pickerState = {
+      devices: [{ deviceId: 'device-1', name: 'Kilter Board#SN-1@3', rssi: -40 }],
+      isScanning: false,
+      handleSelect,
+      handleCancel: vi.fn(),
+    };
+    resolvedBoards.value = new Map([['SN-1', { kind: 'recorded', config: makeSerialConfig({ setIds: '20,1' }) }]]);
+
+    renderProvider();
+    pickerSheet.props?.onSelect('device-1');
+
+    expect(handleSelect).toHaveBeenCalledWith('device-1');
+    expect(alert.alert).not.toHaveBeenCalled();
+  });
+
+  it('asks before forwarding picker selection when the resolved board config mismatches', () => {
+    const handleSelect = vi.fn();
+    bluetooth.state.pickerState = {
+      devices: [{ deviceId: 'device-2', name: 'Tension Board#SN-2@2', rssi: -50 }],
+      isScanning: false,
+      handleSelect,
+      handleCancel: vi.fn(),
+    };
+    resolvedBoards.value = new Map([
+      ['SN-2', { kind: 'recorded', config: makeSerialConfig({ serialNumber: 'SN-2', boardName: 'tension' }) }],
+    ]);
+
+    renderProvider();
+    pickerSheet.props?.onSelect('device-2');
+
+    expect(handleSelect).not.toHaveBeenCalled();
+    expect(alert.alert).toHaveBeenCalledOnce();
+
+    const buttons = alert.alert.mock.calls[0]?.[2] as Array<{ onPress?: () => void }> | undefined;
+    buttons?.[1]?.onPress?.();
+    expect(handleSelect).toHaveBeenCalledWith('device-2');
   });
 });

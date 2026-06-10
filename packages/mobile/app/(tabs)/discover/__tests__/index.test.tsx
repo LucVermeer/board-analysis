@@ -4,7 +4,15 @@ import { render, fireEvent, act } from '@testing-library/react';
 import { createElement, type ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
-type PlaylistItem = { uuid: string; name: string; climbCount: number; creatorId?: string };
+type PlaylistItem = {
+  uuid: string;
+  name: string;
+  climbCount: number;
+  creatorId?: string;
+  creatorName?: string;
+  color?: string;
+  icon?: string;
+};
 
 // Mutable hook return values — each test sets the slice it needs. The two
 // section hooks both expose `hasError`; the hub must read them.
@@ -16,7 +24,16 @@ const userHook = vi.hoisted(() => ({
   loadMore: vi.fn(),
   refetch: vi.fn(),
 }));
-const discoverHook = vi.hoisted(() => ({
+const forYouHook = vi.hoisted(() => ({
+  popular: [] as PlaylistItem[],
+  recent: [] as PlaylistItem[],
+  isLoading: false,
+  isLoadingMore: false,
+  hasError: false,
+  loadMore: vi.fn(),
+  refetch: vi.fn(),
+}));
+const communityHook = vi.hoisted(() => ({
   popular: [] as PlaylistItem[],
   recent: [] as PlaylistItem[],
   isLoading: false,
@@ -29,7 +46,8 @@ const createPlaylist = vi.hoisted(() => vi.fn());
 
 vi.mock('@boardsesh/playlists-react', () => ({
   useUserPlaylists: () => userHook,
-  useDiscoverPlaylists: () => discoverHook,
+  useDiscoverPlaylists: (options: { generatedRecommendation?: boolean }) =>
+    options.generatedRecommendation ? forYouHook : communityHook,
   usePinnedPlaylists: () => ({ pinned: [], refetch: vi.fn() }),
   useSmartPlaylistCounts: () => ({ data: [], isLoading: false }),
   usePlaylistMutations: () => ({ createPlaylist, pinPlaylist: vi.fn(), unpinPlaylist: vi.fn() }),
@@ -92,7 +110,25 @@ vi.mock('../../../../src/lib/graphql/use-active-board', () => ({
 vi.mock('../../../../src/hooks/use-bottom-chrome-metrics', () => ({
   useBottomChromeMetrics: () => ({ scrollBottomPadding: 0 }),
 }));
-vi.mock('../../../../src/lib/smart-playlists', () => ({ SMART_PLAYLISTS: [] }));
+vi.mock('../../../../src/lib/smart-playlists', () => ({
+  DEFAULT_PINNED_SMART_PLAYLIST_TYPES: ['LIKED_CLIMBS', 'FIVE_STARS'],
+  SMART_PLAYLISTS: [
+    {
+      type: 'LIKED_CLIMBS',
+      slug: 'liked-climbs',
+      icon: '❤️',
+      color: '#EC4899',
+      titleI18nKey: 'library.smart.likedClimbs.title',
+    },
+    {
+      type: 'FIVE_STARS',
+      slug: 'five-stars',
+      icon: '⭐',
+      color: '#FBBF24',
+      titleI18nKey: 'library.smart.fiveStars.title',
+    },
+  ],
+}));
 
 vi.mock('../../../../src/components/Text', () => ({
   Text: ({ children }: { children?: ReactNode }) => createElement('span', null, children),
@@ -110,7 +146,8 @@ vi.mock('../../../../src/components/SectionHeader', () => ({
 // values, so the test can trigger the create flow without the real sheet UI.
 const FORM_VALUES = { name: 'Crimps', description: '', color: undefined, icon: undefined, isPublic: false };
 vi.mock('../../../../src/components/playlist', () => ({
-  PlaylistCard: ({ name }: { name: string }) => createElement('div', { 'data-card': name }),
+  PlaylistCard: ({ name, metaLabel }: { name: string; metaLabel?: string }) =>
+    createElement('div', { 'data-card': name }, metaLabel ? `${name} ${metaLabel}` : name),
   PlaylistScrollSection: ({ children, title }: { children?: ReactNode; title: string }) =>
     createElement('div', { 'data-scroll-section': title }, children),
   PlaylistFormSheet: ({ onSubmit }: { onSubmit: (values: typeof FORM_VALUES) => void }) =>
@@ -141,11 +178,16 @@ beforeEach(() => {
   userHook.isLoading = false;
   userHook.hasError = false;
   userHook.refetch.mockClear();
-  discoverHook.popular = [];
-  discoverHook.recent = [];
-  discoverHook.isLoading = false;
-  discoverHook.hasError = false;
-  discoverHook.refetch.mockClear();
+  forYouHook.popular = [];
+  forYouHook.recent = [];
+  forYouHook.isLoading = false;
+  forYouHook.hasError = false;
+  forYouHook.refetch.mockClear();
+  communityHook.popular = [];
+  communityHook.recent = [];
+  communityHook.isLoading = false;
+  communityHook.hasError = false;
+  communityHook.refetch.mockClear();
   createPlaylist.mockReset();
 });
 
@@ -162,12 +204,23 @@ describe('DiscoverLibrary error handling', () => {
     expect(userHook.refetch).toHaveBeenCalledTimes(1);
   });
 
-  it('retries only the discover stream when only it failed', () => {
-    discoverHook.hasError = true;
+  it('retries only the community stream when only it failed', () => {
+    communityHook.hasError = true;
     const { getByLabelText } = renderHub();
 
     fireEvent.click(getByLabelText('library.errors.tryAgain'));
-    expect(discoverHook.refetch).toHaveBeenCalledTimes(1);
+    expect(communityHook.refetch).toHaveBeenCalledTimes(1);
+    expect(forYouHook.refetch).not.toHaveBeenCalled();
+    expect(userHook.refetch).not.toHaveBeenCalled();
+  });
+
+  it('retries only the forYou stream when only it failed', () => {
+    forYouHook.hasError = true;
+    const { getByLabelText } = renderHub();
+
+    fireEvent.click(getByLabelText('library.errors.tryAgain'));
+    expect(forYouHook.refetch).toHaveBeenCalledTimes(1);
+    expect(communityHook.refetch).not.toHaveBeenCalled();
     expect(userHook.refetch).not.toHaveBeenCalled();
   });
 
@@ -179,11 +232,24 @@ describe('DiscoverLibrary error handling', () => {
     expect(queryByText('library.errors.loadTitle')).toBeNull();
   });
 
-  it('still shows the empty state (not an error) when both sections succeed with no playlists', () => {
+  it('shows the default smart cards instead of the empty state when all sections succeed with no playlists', () => {
     const { getByText, queryByText } = renderHub();
 
-    expect(getByText('library.empty.title')).toBeTruthy();
+    expect(getByText('library.smart.likedClimbs.title')).toBeTruthy();
+    expect(queryByText('library.empty.title')).toBeNull();
     expect(queryByText('library.errors.loadTitle')).toBeNull();
+  });
+
+  it('renders for-you and community playlists from separate discover streams', () => {
+    forYouHook.popular = [{ uuid: 'generated', name: 'Fresh for you', climbCount: 4 }];
+    communityHook.popular = [
+      { uuid: 'community', name: 'Setter picks', climbCount: 7, creatorId: 'creator-2', creatorName: 'Jess' },
+    ];
+
+    const { getByText } = renderHub();
+
+    expect(getByText('Fresh for you')).toBeTruthy();
+    expect(getByText('Setter picks library.communityByline')).toBeTruthy();
   });
 });
 

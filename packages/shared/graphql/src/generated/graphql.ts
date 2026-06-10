@@ -1097,10 +1097,14 @@ export type DeviceLogEntry = {
 
 /** Input for discovering public playlists. */
 export type DiscoverPlaylistsInput = {
+  /** Board angle for generated recommendation filters */
+  angle?: InputMaybe<Scalars['Int']['input']>;
   /** Board type (optional — omit to discover across all boards) */
   boardType?: InputMaybe<Scalars['String']['input']>;
   /** Filter by creator IDs */
   creatorIds?: InputMaybe<Array<Scalars['ID']['input']>>;
+  /** Filter by generated recommendation status */
+  generatedRecommendation?: InputMaybe<Scalars['Boolean']['input']>;
   /** Layout ID (optional — omit to discover across all layouts) */
   layoutId?: InputMaybe<Scalars['Int']['input']>;
   /** Filter by name (partial match) */
@@ -1109,6 +1113,8 @@ export type DiscoverPlaylistsInput = {
   page?: InputMaybe<Scalars['Int']['input']>;
   /** Page size */
   pageSize?: InputMaybe<Scalars['Int']['input']>;
+  /** Board size ID for generated recommendation filters */
+  sizeId?: InputMaybe<Scalars['Int']['input']>;
   /** Sort by: 'recent' (default) or 'popular' */
   sortBy?: InputMaybe<Scalars['String']['input']>;
 };
@@ -1145,6 +1151,8 @@ export type DiscoverablePlaylist = {
   icon?: Maybe<Scalars['String']['output']>;
   /** Database ID */
   id: Scalars['ID']['output'];
+  /** Whether this is a system-generated recommendation playlist */
+  isGeneratedRecommendation: Scalars['Boolean']['output'];
   /** Layout ID */
   layoutId?: Maybe<Scalars['Int']['output']>;
   /** Playlist name */
@@ -2005,6 +2013,8 @@ export type Mutation = {
   removeGymMember: Scalars['Boolean']['output'];
   /** Remove a climb from the queue by its queue item UUID. */
   removeQueueItem: Scalars['Boolean']['output'];
+  /** Reorder a climb within a playlist by moving it to a new index (owner/editor). */
+  reorderPlaylistClimb: Scalars['Boolean']['output'];
   /** Move a queue item from one position to another. */
   reorderQueueItem: Scalars['Boolean']['output'];
   /** Replace a queue item with a new one (same UUID). */
@@ -2404,6 +2414,11 @@ export type MutationRemoveGymMemberArgs = {
 /** Root mutation type for all write operations. */
 export type MutationRemoveQueueItemArgs = {
   uuid: Scalars['ID']['input'];
+};
+
+/** Root mutation type for all write operations. */
+export type MutationReorderPlaylistClimbArgs = {
+  input: ReorderPlaylistClimbInput;
 };
 
 /** Root mutation type for all write operations. */
@@ -4024,6 +4039,16 @@ export type RemoveGymMemberInput = {
   gymUuid: Scalars['ID']['input'];
   /** User ID to remove */
   userId: Scalars['ID']['input'];
+};
+
+/** Input for reordering a climb within a playlist (single move). */
+export type ReorderPlaylistClimbInput = {
+  /** Climb UUID to move */
+  climbUuid: Scalars['String']['input'];
+  /** Target 0-based index in the playlist's full ordered list */
+  newIndex: Scalars['Int']['input'];
+  /** Playlist ID */
+  playlistId: Scalars['ID']['input'];
 };
 
 export type ResolveProposalInput = {
@@ -5777,6 +5802,8 @@ export type GetUserFavoriteClimbsQuery = {
       name: string;
       description?: string | null;
       frames: string;
+      framesCount?: number | null;
+      framesPace?: number | null;
       angle: number;
       ascensionist_count: number;
       difficulty: string;
@@ -6310,6 +6337,12 @@ export type RemoveClimbFromPlaylistMutationVariables = Exact<{
 
 export type RemoveClimbFromPlaylistMutation = { __typename?: 'Mutation'; removeClimbFromPlaylist: boolean };
 
+export type ReorderPlaylistClimbMutationVariables = Exact<{
+  input: ReorderPlaylistClimbInput;
+}>;
+
+export type ReorderPlaylistClimbMutation = { __typename?: 'Mutation'; reorderPlaylistClimb: boolean };
+
 export type GetPlaylistClimbsQueryVariables = Exact<{
   input: GetPlaylistClimbsInput;
 }>;
@@ -6329,6 +6362,8 @@ export type GetPlaylistClimbsQuery = {
       name: string;
       description?: string | null;
       frames: string;
+      framesCount?: number | null;
+      framesPace?: number | null;
       angle: number;
       ascensionist_count: number;
       difficulty: string;
@@ -6365,6 +6400,7 @@ export type DiscoverPlaylistsQuery = {
       climbCount: number;
       creatorId: string;
       creatorName: string;
+      isGeneratedRecommendation: boolean;
     }>;
   };
 };
@@ -6457,6 +6493,8 @@ export type GetSmartPlaylistQuery = {
       name: string;
       description?: string | null;
       frames: string;
+      framesCount?: number | null;
+      framesPace?: number | null;
       angle: number;
       ascensionist_count: number;
       difficulty: string;
@@ -7208,6 +7246,8 @@ export type GetSetterClimbsFullQuery = {
       name: string;
       description?: string | null;
       frames: string;
+      framesCount?: number | null;
+      framesPace?: number | null;
       angle: number;
       ascensionist_count: number;
       difficulty: string;
@@ -7238,6 +7278,8 @@ export type GetUserClimbsQuery = {
       name: string;
       description?: string | null;
       frames: string;
+      framesCount?: number | null;
+      framesPace?: number | null;
       angle: number;
       ascensionist_count: number;
       difficulty: string;
@@ -8627,6 +8669,8 @@ export const GetUserFavoriteClimbsDocument = {
                       { kind: 'Field', name: { kind: 'Name', value: 'name' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'description' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'frames' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'framesCount' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'framesPace' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'angle' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'ascensionist_count' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'difficulty' } },
@@ -10140,6 +10184,42 @@ export const RemoveClimbFromPlaylistDocument = {
     },
   ],
 } as unknown as DocumentNode<RemoveClimbFromPlaylistMutation, RemoveClimbFromPlaylistMutationVariables>;
+export const ReorderPlaylistClimbDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'mutation',
+      name: { kind: 'Name', value: 'ReorderPlaylistClimb' },
+      variableDefinitions: [
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'input' } },
+          type: {
+            kind: 'NonNullType',
+            type: { kind: 'NamedType', name: { kind: 'Name', value: 'ReorderPlaylistClimbInput' } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'reorderPlaylistClimb' },
+            arguments: [
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'input' },
+                value: { kind: 'Variable', name: { kind: 'Name', value: 'input' } },
+              },
+            ],
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<ReorderPlaylistClimbMutation, ReorderPlaylistClimbMutationVariables>;
 export const GetPlaylistClimbsDocument = {
   kind: 'Document',
   definitions: [
@@ -10186,6 +10266,8 @@ export const GetPlaylistClimbsDocument = {
                       { kind: 'Field', name: { kind: 'Name', value: 'name' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'description' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'frames' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'framesCount' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'framesPace' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'angle' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'ascensionist_count' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'difficulty' } },
@@ -10258,6 +10340,7 @@ export const DiscoverPlaylistsDocument = {
                       { kind: 'Field', name: { kind: 'Name', value: 'climbCount' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'creatorId' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'creatorName' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'isGeneratedRecommendation' } },
                     ],
                   },
                 },
@@ -10545,6 +10628,8 @@ export const GetSmartPlaylistDocument = {
                       { kind: 'Field', name: { kind: 'Name', value: 'name' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'description' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'frames' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'framesCount' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'framesPace' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'angle' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'ascensionist_count' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'difficulty' } },
@@ -12410,6 +12495,8 @@ export const GetSetterClimbsFullDocument = {
                       { kind: 'Field', name: { kind: 'Name', value: 'name' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'description' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'frames' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'framesCount' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'framesPace' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'angle' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'ascensionist_count' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'difficulty' } },
@@ -12473,6 +12560,8 @@ export const GetUserClimbsDocument = {
                       { kind: 'Field', name: { kind: 'Name', value: 'name' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'description' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'frames' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'framesCount' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'framesPace' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'angle' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'ascensionist_count' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'difficulty' } },

@@ -20,8 +20,11 @@
     "sections": {
       "jumpBackIn": "Reprendre",
       "smart": "Vos sélections",
-      "discover": "Découvrir"
+      "discover": "Découvrir",
+      "forYou": "Pour vous",
+      "community": "Playlists de la communauté"
     },
+    "communityByline": "{{creatorName}} - {{climbCount}}",
     "allPlaylists": {
       "title": "Mes listes",
       "seeAll": "Tout voir",
@@ -31,6 +34,8 @@
       "noResults": "Aucune liste ne correspond à « {{query}} »"
     },
     "pin": {
+      "pin": "Épingler",
+      "unpin": "Désépingler",
       "pinAriaLabel": "Épingler la playlist",
       "unpinAriaLabel": "Désépingler la playlist",
       "pinFailed": "Échec de l'épinglage de la playlist",
@@ -105,6 +110,7 @@
     },
     "menu": {
       "generate": "Générer",
+      "editClimbs": "Modifier les blocs",
       "edit": "Modifier",
       "delete": "Supprimer"
     },
@@ -138,6 +144,20 @@
       "loadDescription": "Erreur lors du chargement de cette playlist. Réessayez.",
       "tryAgain": "Réessayer"
     }
+  },
+  "editClimbs": {
+    "done": "Terminé",
+    "editDetailsAria": "Modifier les détails de la playlist",
+    "removeAria": "Retirer {{name}}",
+    "dragHandleAria": "Faites glisser pour réorganiser {{name}}",
+    "removeConfirm": {
+      "title": "Retirer le bloc ?",
+      "message": "Retirer « {{name}} » de cette playlist ?",
+      "confirm": "Retirer",
+      "cancel": "Annuler"
+    },
+    "removeFailed": "Impossible de retirer le bloc",
+    "reorderFailed": "Impossible d'enregistrer le nouvel ordre"
   },
   "edit": {
     "title": "Modifier la playlist",

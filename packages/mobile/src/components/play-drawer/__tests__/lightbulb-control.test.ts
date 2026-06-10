@@ -5,7 +5,6 @@ import {
   derivePlayDrawerLightbulbPressAction,
   derivePlayDrawerLightbulbState,
   derivePlayDrawerPreviousDriver,
-  isPlayDrawerPreviewOnly,
   resolvePlayDrawerWallControlQueueItem,
   shouldRestoreFailedTakeControlPreview,
 } from '../lightbulb-control';
@@ -217,12 +216,6 @@ describe('play drawer lightbulb control', () => {
       derivePlayDrawerPreviousDriver({ driverParticipantId: 'participant-2', participantId: 'participant-1' }),
     ).toBe('other');
     expect(buildPlayDrawerBoardLayout({ boardName: 'kilter', layoutId: 1, sizeId: 10 })).toBe('kilter:1:10');
-  });
-
-  it('keeps party non-drivers in preview-only drawer mode', () => {
-    expect(isPlayDrawerPreviewOnly({ isPersistentSessionActive: true, isDriver: false })).toBe(true);
-    expect(isPlayDrawerPreviewOnly({ isPersistentSessionActive: true, isDriver: true })).toBe(false);
-    expect(isPlayDrawerPreviewOnly({ isPersistentSessionActive: false, isDriver: true })).toBe(false);
   });
 
   it('only restores a failed take-control preview for the still-current operation and climb', () => {

@@ -298,6 +298,11 @@ export const mutationsTypeDefs = /* GraphQL */ `
     removeClimbFromPlaylist(input: RemoveClimbFromPlaylistInput!): Boolean!
 
     """
+    Reorder a climb within a playlist by moving it to a new index (owner/editor).
+    """
+    reorderPlaylistClimb(input: ReorderPlaylistClimbInput!): Boolean!
+
+    """
     Update only lastAccessedAt for a playlist (does not update updatedAt).
     """
     updatePlaylistLastAccessed(playlistId: ID!): Boolean!

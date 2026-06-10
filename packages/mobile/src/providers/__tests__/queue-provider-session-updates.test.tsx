@@ -38,6 +38,12 @@ const sessionStore = vi.hoisted(() => ({
   clearStoredSessionId: vi.fn(async () => {}),
 }));
 
+const queueSnapshotStore = vi.hoisted(() => ({
+  getStoredQueueSnapshot: vi.fn(async () => null),
+  setStoredQueueSnapshot: vi.fn(async () => {}),
+  clearStoredQueueSnapshot: vi.fn(async () => {}),
+}));
+
 const activeBoard = vi.hoisted(() => ({
   stored: {
     uuid: 'board-1',
@@ -121,6 +127,8 @@ vi.mock('../../lib/graphql/ws-client', () => ({
 
 vi.mock('../../lib/session-store', () => sessionStore);
 
+vi.mock('../../lib/queue-snapshot-store', () => queueSnapshotStore);
+
 vi.mock('../../lib/active-board-store', () => ({
   getStoredActiveBoard: activeBoard.getStoredActiveBoard,
 }));
@@ -149,11 +157,13 @@ vi.mock('../queue-snackbar-provider', () => ({
 import {
   QueueProvider,
   useHasActiveClimb,
+  useIsPartyPreviewOnly,
   usePlaylistSuggestionSource,
   useQueue,
   useQueueLiveStats,
   useQueueSessionId,
 } from '../queue-provider';
+import { clearStoredSessionId } from '../../lib/session-store';
 
 type Snapshot = {
   state: ReturnType<typeof useQueue>['state'];
@@ -343,6 +353,7 @@ describe('QueueProvider session update subscription', () => {
     sessionStore.setStoredSessionId.mockClear();
     sessionStore.clearStoredSessionId.mockClear();
     graph.execute.mockReset();
+    vi.mocked(clearStoredSessionId).mockClear();
     http.request.mockReset();
     // The restore effect verifies the session via SESSION_STATUS before
     // rejoining (#2683). Default to an active session so existing tests still
@@ -1128,6 +1139,54 @@ describe('QueueProvider session update subscription', () => {
     expect(toast.showToast).toHaveBeenCalledWith('mobile.toast.sessionEnded', 'success');
     expect(toast.showToast).not.toHaveBeenCalledWith('mobile.queue.actionFailed', 'error');
   });
+
+  it('clears local persisted session state when an explicit end-session request fails', async () => {
+    const snapshots: Snapshot[] = [];
+    renderProvider((snapshot) => snapshots.push(snapshot));
+
+    await waitFor(() => {
+      expect(snapshots.at(-1)?.sessionId).toBe('session-1');
+    });
+
+    const currentItem = makeQueueItem('queue-current', 'climb-current');
+    const suggestedItem = makeQueueItem('queue-suggested', 'climb-suggested', { suggested: true });
+    const playlistSuggestionSource: PlaylistSuggestionSource = {
+      playlistUuid: 'playlist-1',
+      activatedClimbUuid: currentItem.climb.uuid,
+      boardKey: 'kilter:1:10:1,2',
+      climbs: [currentItem.climb, suggestedItem.climb],
+    };
+    const preparedSnapshot = snapshots.at(-1);
+    if (!preparedSnapshot) throw new Error('queue snapshot was not captured');
+
+    act(() => {
+      preparedSnapshot.addToQueue(currentItem);
+      preparedSnapshot.setPlaylistSuggestionSource(playlistSuggestionSource);
+    });
+
+    await waitFor(() => {
+      const latestSnapshot = snapshots.at(-1);
+      expect(latestSnapshot?.state.queue.map((item) => item.uuid)).toEqual(['queue-current']);
+      expect(latestSnapshot?.playlistSuggestionSource).toEqual(playlistSuggestionSource);
+    });
+
+    http.request.mockRejectedValueOnce(new Error('stale session'));
+
+    await act(async () => {
+      await snapshots.at(-1)?.endSession();
+    });
+
+    await waitFor(() => {
+      const latestSnapshot = snapshots.at(-1);
+      expect(latestSnapshot?.sessionId).toBeNull();
+      expect(latestSnapshot?.state.queue).toEqual([]);
+      expect(latestSnapshot?.state.currentClimbQueueItem).toBeNull();
+      expect(latestSnapshot?.playlistSuggestionSource).toBeNull();
+    });
+    expect(clearStoredSessionId).toHaveBeenCalledTimes(1);
+    expect(toast.showToast).toHaveBeenCalledWith('mobile.queue.actionFailed', 'error');
+    expect(toast.showToast).not.toHaveBeenCalledWith('mobile.toast.sessionEnded', 'success');
+  });
 });
 
 // ── SEED-1: queue mutations resync on failure (GH #2419) ─────────────────────
@@ -1141,6 +1200,10 @@ describe('QueueProvider session update subscription', () => {
 // an INITIAL_QUEUE_DATA dispatch, then toasts. A rejection with no session must
 // NOT resync or toast.
 describe('QueueProvider mutation-failure resync', () => {
+  beforeEach(() => {
+    toast.showToast.mockClear();
+  });
+
   // The harness routes both endSession and the queueState query through
   // http.request. Branch on the operation text so the resync query returns the
   // authoritative snapshot while everything else keeps the default endSession
@@ -1348,5 +1411,142 @@ describe('QueueProvider mutation-failure resync', () => {
     // retry loop fired. No "refreshed" toast since nothing was applied.
     expect(queueStateCalls).toBe(1);
     expect(toast.showToast).not.toHaveBeenCalledWith('mobile.queue.outOfSyncRefreshed', 'error');
+  });
+});
+
+function PreviewOnlyProbe({ onValue }: { onValue: (value: boolean) => void }) {
+  const isPartyPreviewOnly = useIsPartyPreviewOnly();
+  useEffect(() => {
+    onValue(isPartyPreviewOnly);
+  }, [isPartyPreviewOnly, onValue]);
+  return null;
+}
+
+describe('QueueProvider preview-only roster gating', () => {
+  beforeEach(() => {
+    ws.reset();
+    ws.client.on.mockClear();
+    ws.client.subscribe.mockClear();
+    activeBoard.getStoredActiveBoard.mockReset();
+    activeBoard.getStoredActiveBoard.mockResolvedValue(activeBoard.stored);
+    for (const mutation of Object.values(queueMutations) as Array<ReturnType<typeof vi.fn>>) {
+      mutation.mockReset();
+      mutation.mockResolvedValue(undefined);
+    }
+    sessionStore.getStoredSessionId.mockReset();
+    sessionStore.getStoredSessionId.mockResolvedValue('session-1');
+    sessionStore.clearStoredSessionId.mockClear();
+    queueSnapshotStore.getStoredQueueSnapshot.mockReset();
+    queueSnapshotStore.getStoredQueueSnapshot.mockResolvedValue(null);
+    graph.execute.mockReset();
+    http.request.mockReset();
+    http.request.mockImplementation((operation: string) =>
+      operation.includes('SessionStatus')
+        ? Promise.resolve(statusResponse())
+        : Promise.resolve({ endSession: { sessionId: 'session-1' } }),
+    );
+    graph.execute.mockResolvedValue({
+      joinSession: {
+        participantId: 'participant-self',
+        clientId: 'client-self',
+        isLeader: false,
+        driverParticipantId: null,
+        lastConnectedBoardSerial: null,
+        boardPath: '/kilter/1/10/1,2/40/list',
+        users: [user({ id: 'participant-self', username: 'Self', userId: 'db-self' })],
+      },
+    });
+  });
+
+  it('never gates a solo occupant, gates party non-drivers, releases for the driver', async () => {
+    const previewOnlyValues: boolean[] = [];
+    render(
+      createElement(
+        QueueProvider,
+        null,
+        createElement(PreviewOnlyProbe, { onValue: (value) => previewOnlyValues.push(value) }),
+      ),
+    );
+
+    // Restored solo session: roster is just us, no driver claimed — a solo
+    // occupant keeps full queue control (the bug this guards against: a
+    // driverless session bricking every activation tap).
+    await waitFor(() => {
+      expect(ws.getSessionUpdatesSink()).not.toBeNull();
+    });
+    expect(previewOnlyValues.at(-1)).toBe(false);
+
+    const sessionUpdatesSink = ws.getSessionUpdatesSink();
+    if (!sessionUpdatesSink) throw new Error('session updates sink was not captured');
+
+    // A second participant joins with no driver: everyone is preview-only
+    // until someone takes wall control.
+    act(() => {
+      sessionUpdatesSink.next({
+        data: {
+          sessionUpdates: {
+            __typename: 'UserJoined',
+            user: user({ id: 'participant-2', username: 'Bo', userId: 'db-bo' }),
+          },
+        },
+      });
+    });
+    await waitFor(() => {
+      expect(previewOnlyValues.at(-1)).toBe(true);
+    });
+
+    // We take control: gate releases for us.
+    act(() => {
+      sessionUpdatesSink.next({
+        data: {
+          sessionUpdates: {
+            __typename: 'DriverChanged',
+            driverParticipantId: 'participant-self',
+            previousDriverParticipantId: null,
+          },
+        },
+      });
+    });
+    await waitFor(() => {
+      expect(previewOnlyValues.at(-1)).toBe(false);
+    });
+
+    // The peer takes control: we're preview-only again.
+    act(() => {
+      sessionUpdatesSink.next({
+        data: {
+          sessionUpdates: {
+            __typename: 'DriverChanged',
+            driverParticipantId: 'participant-2',
+            previousDriverParticipantId: 'participant-self',
+          },
+        },
+      });
+    });
+    await waitFor(() => {
+      expect(previewOnlyValues.at(-1)).toBe(true);
+    });
+  });
+
+  it('does not restore or clear the stored session when the status check fails with a server response', async () => {
+    // A GraphQL-level failure (older backend without sessionStatus, masked
+    // 500) is not "offline" — restoring optimistically would resurrect a
+    // zombie session on every launch. Keep the id for a retry next launch.
+    http.request.mockImplementation((operation: string) =>
+      operation.includes('SessionStatus')
+        ? Promise.reject(Object.assign(new Error('Cannot query field "sessionStatus"'), { response: { status: 400 } }))
+        : Promise.resolve({ endSession: { sessionId: 'session-1' } }),
+    );
+
+    const snapshots: Snapshot[] = [];
+    renderProvider((snapshot) => snapshots.push(snapshot));
+
+    // The failed check must hydrate the local solo snapshot instead.
+    await waitFor(() => {
+      expect(queueSnapshotStore.getStoredQueueSnapshot).toHaveBeenCalled();
+    });
+    expect(snapshots.at(-1)?.sessionId).toBeNull();
+    expect(sessionStore.clearStoredSessionId).not.toHaveBeenCalled();
+    expect(graph.execute).not.toHaveBeenCalled();
   });
 });

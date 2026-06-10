@@ -63,11 +63,38 @@ vi.mock('react-native', () => ({
   StyleSheet: { create: (styles: unknown) => styles, hairlineWidth: 1 },
 }));
 
+vi.mock('react-native-gesture-handler', () => ({
+  ScrollView: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
+}));
+
+vi.mock('react-native-safe-area-context', () => ({
+  useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
+}));
+
+vi.mock('react-native-reanimated', () => ({
+  useSharedValue: (value: number) => ({ value }),
+}));
+
+vi.mock('expo-router', () => ({ useRouter: () => ({ push: vi.fn() }) }));
+
 vi.mock('@shopify/flash-list', () => ({
-  // Render just the header (which holds the generator picker); the rows are
-  // irrelevant to the analytics flow and WorkoutPreviewRow is mocked to null.
-  FlashList: ({ ListHeaderComponent }: { ListHeaderComponent?: ReactNode }) =>
-    createElement('div', null, ListHeaderComponent),
+  FlashList: ({
+    data,
+    renderItem,
+    ListHeaderComponent,
+  }: {
+    data?: unknown[];
+    renderItem?: (info: { item: unknown; index: number }) => ReactNode;
+    ListHeaderComponent?: ReactNode;
+  }) =>
+    createElement(
+      'div',
+      null,
+      ListHeaderComponent,
+      ...(data ?? []).map((rowItem, index) =>
+        createElement('div', { key: index }, renderItem?.({ item: rowItem, index })),
+      ),
+    ),
 }));
 
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
@@ -81,6 +108,12 @@ vi.mock('../../../Button', () => ({
 vi.mock('../../../Text', () => ({
   Text: ({ children }: { children?: ReactNode }) => createElement('span', null, children),
 }));
+vi.mock('../../../Card', () => ({
+  Card: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
+}));
+vi.mock('../../../GlassSurface', () => ({ GlassSurface: () => null }));
+vi.mock('../../../SectionHeader', () => ({ SectionHeader: () => null }));
+vi.mock('../../RecordTopChrome', () => ({ RecordTopChrome: () => null }));
 vi.mock('../../../../providers/theme-provider', () => ({ useTheme: () => ({ systemColors: {} }) }));
 vi.mock('../../../../lib/graphql/use-active-board', () => ({ useActiveBoard: () => activeBoard }));
 vi.mock('../../../../providers/auth-provider', () => ({ useAuth: () => ({ isAuthenticated: true }) }));
@@ -92,9 +125,16 @@ vi.mock('../../../../providers/drawer-host-provider', () => ({
 }));
 vi.mock('../../../../providers/toast-provider', () => ({ useToast: () => ({ showToast: vi.fn() }) }));
 vi.mock('../../../../hooks/use-bottom-chrome-metrics', () => ({
-  useBottomChromeMetrics: () => ({ scrollBottomPadding: 0 }),
+  useBottomChromeMetrics: () => ({
+    insideTabs: true,
+    scrollBottomPadding: 0,
+    tabBarBottom: 0,
+    tabBarHeight: 0,
+    fixedFooterBottom: 0,
+  }),
 }));
-vi.mock('../../../../theme/tokens', () => ({ spacing: {}, borderRadius: {} }));
+vi.mock('../../../../hooks/use-native-glass', () => ({ useNativeGlass: () => false }));
+vi.mock('../../../../theme/tokens', () => ({ spacing: { 2: 8, 3: 12, 4: 16 }, borderRadius: { lg: 16 } }));
 vi.mock('../BoardSummaryCard', () => ({ BoardSummaryCard: () => null }));
 vi.mock('../WorkoutPreviewRow', () => ({ WorkoutPreviewRow: () => null }));
 vi.mock('../use-workout-preview', () => ({ useWorkoutPreview: () => preview.result }));

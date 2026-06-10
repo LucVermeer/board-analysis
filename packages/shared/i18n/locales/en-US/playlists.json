@@ -20,8 +20,11 @@
     "sections": {
       "jumpBackIn": "Jump Back In",
       "smart": "Your Picks",
-      "discover": "Discover"
+      "discover": "Discover",
+      "forYou": "For You",
+      "community": "Community Playlists"
     },
+    "communityByline": "{{creatorName}} - {{climbCount}}",
     "allPlaylists": {
       "title": "My Playlists",
       "seeAll": "See all",
@@ -31,6 +34,8 @@
       "noResults": "No playlists match \"{{query}}\""
     },
     "pin": {
+      "pin": "Pin",
+      "unpin": "Unpin",
       "pinAriaLabel": "Pin playlist",
       "unpinAriaLabel": "Unpin playlist",
       "pinFailed": "Failed to pin playlist",
@@ -105,6 +110,7 @@
     },
     "menu": {
       "generate": "Generate",
+      "editClimbs": "Edit climbs",
       "edit": "Edit",
       "delete": "Delete"
     },
@@ -138,6 +144,20 @@
       "loadDescription": "There was an error loading this playlist. Please try again.",
       "tryAgain": "Try Again"
     }
+  },
+  "editClimbs": {
+    "done": "Done",
+    "editDetailsAria": "Edit playlist details",
+    "removeAria": "Remove {{name}}",
+    "dragHandleAria": "Drag to reorder {{name}}",
+    "removeConfirm": {
+      "title": "Remove climb?",
+      "message": "Remove \"{{name}}\" from this playlist?",
+      "confirm": "Remove",
+      "cancel": "Cancel"
+    },
+    "removeFailed": "Couldn't remove the climb",
+    "reorderFailed": "Couldn't save the new order"
   },
   "edit": {
     "title": "Edit Playlist",

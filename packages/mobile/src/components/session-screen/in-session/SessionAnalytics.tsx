@@ -6,9 +6,11 @@ import { Text } from '../../Text';
 import { Icon } from '../../Icon';
 import { type IconName } from '../../icon-map';
 import { Avatar } from '../../Avatar';
+import { Card } from '../../Card';
+import { SectionHeader } from '../../SectionHeader';
 import { useTheme } from '../../../providers/theme-provider';
 import { gradeBadgeColor } from '../../you/profile-chart-colors';
-import { spacing, borderRadius } from '../../../theme/tokens';
+import { spacing } from '../../../theme/tokens';
 import { hapticSuccess } from '../../../lib/haptics';
 import { useGradeFormat } from '../../../hooks/use-grade-format';
 import { SessionGradeChart } from './SessionGradeChart';
@@ -64,7 +66,6 @@ export function SessionAnalytics({
           label={t('mobile.session.inStatsSends')}
           icon="tick"
           tint={brandColors.success}
-          background={systemColors.secondaryBackground}
           labelColor={systemColors.secondaryLabel}
         />
         <StatTile
@@ -72,51 +73,54 @@ export function SessionAnalytics({
           label={t('mobile.session.inStatsFlashes')}
           icon="flash"
           tint={brandColors.warning}
-          background={systemColors.secondaryBackground}
           labelColor={systemColors.secondaryLabel}
         />
-        <View style={[styles.statCard, { backgroundColor: systemColors.secondaryBackground }]}>
-          <Icon name="clock" size={18} color={systemColors.secondaryLabel} />
-          {startedAt ? (
-            <SessionTimer startedAt={startedAt} />
-          ) : (
-            <Text variant="title2" style={styles.statValue}>
-              —
+        <Card style={styles.statCard}>
+          <View style={styles.statTileBody}>
+            <Icon name="clock" size={18} color={systemColors.secondaryLabel} />
+            {startedAt ? (
+              <SessionTimer startedAt={startedAt} />
+            ) : (
+              <Text variant="title2" style={styles.statValue}>
+                —
+              </Text>
+            )}
+            <Text variant="caption1" color={systemColors.secondaryLabel}>
+              {t('mobile.session.inStatsDuration')}
             </Text>
-          )}
-          <Text variant="caption1" color={systemColors.secondaryLabel}>
-            {t('mobile.session.inStatsDuration')}
-          </Text>
-        </View>
+          </View>
+        </Card>
       </View>
 
       {hardestSends.length > 0 ? (
-        <View style={[styles.hardestCard, { backgroundColor: systemColors.secondaryBackground }]}>
-          <Text variant="caption1" color={systemColors.secondaryLabel}>
-            {t(hardestSends.length > 1 ? 'mobile.session.inStatsHardestEach' : 'mobile.session.inStatsHardest')}
-          </Text>
-          {hardestSends.map((send, index) => (
-            <View key={send.userId ?? `solo-${index}`} style={styles.hardestRow}>
-              {send.userId ? <Avatar uri={send.avatarUrl} name={send.displayName} size={28} /> : null}
-              {/* Grade as bold coloured text — no pill, per the chip cleanup. */}
-              <Text variant="title3" color={gradeBadgeColor(send.grade)} style={styles.hardestGrade}>
-                {formatGradeByDifficultyId(send.difficultyId) ?? formatGrade(send.grade) ?? send.grade}
-              </Text>
-              {send.climbName ? (
-                <Text variant="body" numberOfLines={1} style={styles.hardestName}>
-                  {send.climbName}
+        <Card>
+          <View style={styles.hardestBody}>
+            <Text variant="caption1" color={systemColors.secondaryLabel}>
+              {t(hardestSends.length > 1 ? 'mobile.session.inStatsHardestEach' : 'mobile.session.inStatsHardest')}
+            </Text>
+            {hardestSends.map((send, index) => (
+              <View key={send.userId ?? `solo-${index}`} style={styles.hardestRow}>
+                {send.userId ? <Avatar uri={send.avatarUrl} name={send.displayName} size={28} /> : null}
+                {/* Grade as bold coloured text — no pill, per the chip cleanup. */}
+                <Text variant="title3" color={gradeBadgeColor(send.grade)} style={styles.hardestGrade}>
+                  {formatGradeByDifficultyId(send.difficultyId) ?? formatGrade(send.grade) ?? send.grade}
                 </Text>
-              ) : null}
-            </View>
-          ))}
-        </View>
+                {send.climbName ? (
+                  <Text variant="body" numberOfLines={1} style={styles.hardestName}>
+                    {send.climbName}
+                  </Text>
+                ) : null}
+              </View>
+            ))}
+          </View>
+        </Card>
       ) : null}
 
       {gradeDistribution.length > 0 ? (
-        <View style={styles.section}>
-          <Text variant="footnote" color={systemColors.secondaryLabel} style={styles.sectionLabel}>
-            {t('mobile.session.inStatsGrades')}
-          </Text>
+        <View>
+          <View style={styles.sectionHeaderBleed}>
+            <SectionHeader title={t('mobile.session.inStatsGrades')} />
+          </View>
           <SessionGradeChart distribution={gradeDistribution} />
         </View>
       ) : null}
@@ -129,21 +133,22 @@ type StatTileProps = {
   label: string;
   icon: IconName;
   tint: ColorValue;
-  background: ColorValue;
   labelColor: ColorValue;
 };
 
-function StatTile({ value, label, icon, tint, background, labelColor }: StatTileProps) {
+function StatTile({ value, label, icon, tint, labelColor }: StatTileProps) {
   return (
-    <View style={[styles.statCard, { backgroundColor: background }]}>
-      <Icon name={icon} size={18} color={tint} />
-      <Text variant="title2" style={styles.statValue}>
-        {value}
-      </Text>
-      <Text variant="caption1" color={labelColor}>
-        {label}
-      </Text>
-    </View>
+    <Card style={styles.statCard}>
+      <View style={styles.statTileBody}>
+        <Icon name={icon} size={18} color={tint} />
+        <Text variant="title2" style={styles.statValue}>
+          {value}
+        </Text>
+        <Text variant="caption1" color={labelColor}>
+          {label}
+        </Text>
+      </View>
+    </Card>
   );
 }
 
@@ -155,19 +160,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: spacing[2],
   },
+  // The three stat tiles share the row width evenly; Card owns the surface and
+  // padding, so the tile only sets its flex.
   statCard: {
     flex: 1,
+  },
+  statTileBody: {
     alignItems: 'center',
-    paddingVertical: spacing[3],
-    borderRadius: borderRadius.lg,
     gap: spacing[1],
   },
   statValue: {
     fontWeight: '700',
   },
-  hardestCard: {
-    padding: spacing[3],
-    borderRadius: borderRadius.lg,
+  hardestBody: {
     gap: spacing[2],
   },
   hardestRow: {
@@ -182,11 +187,9 @@ const styles = StyleSheet.create({
   hardestName: {
     flex: 1,
   },
-  section: {
-    gap: spacing[2],
-  },
-  sectionLabel: {
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+  // SectionHeader self-insets 16px; SessionAnalytics renders inside the list's
+  // 16px gutter, so bleed the header back by 16 to keep the label flush.
+  sectionHeaderBleed: {
+    marginHorizontal: -spacing[4],
   },
 });
