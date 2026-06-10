@@ -104,9 +104,11 @@ describe('decideBlePickerSelection', () => {
   });
 
   it('returns mismatch when the resolved serial belongs to another config', () => {
-    const resolvedBoards = new Map<string, ResolvedBoardEntry>([
-      ['SN-2', { kind: 'recorded', config: makeConfig({ boardName: 'tension', setIds: '1' }) }],
-    ]);
+    const recordedEntry: ResolvedBoardEntry = {
+      kind: 'recorded',
+      config: makeConfig({ boardName: 'tension', setIds: '1' }),
+    };
+    const resolvedBoards = new Map<string, ResolvedBoardEntry>([['SN-2', recordedEntry]]);
 
     const decision = decideBlePickerSelection({
       deviceId: 'device-2',
@@ -125,6 +127,28 @@ describe('decideBlePickerSelection', () => {
         setIds: '1',
         boardSlug: null,
       },
+      entry: recordedEntry,
     });
+  });
+
+  it('carries the recorded entry boardUuid in the mismatch decision', () => {
+    const recordedEntry: ResolvedBoardEntry = {
+      kind: 'recorded',
+      config: makeConfig({ boardName: 'tension', setIds: '1', boardUuid: 'recorded-board-uuid' }),
+    };
+    const resolvedBoards = new Map<string, ResolvedBoardEntry>([['SN-2', recordedEntry]]);
+
+    const decision = decideBlePickerSelection({
+      deviceId: 'device-2',
+      devices: [{ deviceId: 'device-2', name: 'Tension Board#SN-2@2', rssi: -50 }],
+      resolvedBoards,
+      currentBoardConfig: makeCurrentConfig(),
+    });
+
+    expect(decision.kind).toBe('mismatch');
+    if (decision.kind !== 'mismatch') throw new Error('expected mismatch decision');
+    expect(decision.entry.kind).toBe('recorded');
+    if (decision.entry.kind !== 'recorded') throw new Error('expected recorded entry');
+    expect(decision.entry.config.boardUuid).toBe('recorded-board-uuid');
   });
 });

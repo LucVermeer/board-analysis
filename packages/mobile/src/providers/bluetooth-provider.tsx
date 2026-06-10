@@ -3,13 +3,19 @@ import { Alert } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import type { ClimbQueueItem } from '@boardsesh/queue';
-import type { BoardName } from '@boardsesh/shared-schema';
+import type { BoardName, UserBoard } from '@boardsesh/shared-schema';
 import { formatBoardDisplayName, toBoardName } from '@boardsesh/board-config';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { emitWallConfirm } from '@boardsesh/play-view';
-import { useBoardBluetooth } from '../lib/ble/use-board-bluetooth';
+import { useBoardBluetooth, boardConfigKey } from '../lib/ble/use-board-bluetooth';
 import { useResolvedBleDeviceBoards } from '../lib/ble/resolve-serials';
-import { decideBlePickerSelection, type BleBoardConfig } from '../lib/ble/board-config-match';
+import {
+  decideBlePickerSelection,
+  type BleBoardConfig,
+  type PickerSelectionDecision,
+} from '../lib/ble/board-config-match';
+import { useSetActiveBoard } from '../lib/graphql/use-active-board';
+import type { GetBoardQueryResponse } from '../lib/graphql/operations';
 import { getBoardRenderData } from '../lib/board-details';
 import { registerBluetoothConnection } from '../lib/ble/bluetooth-status-store';
 import { useQueue, useQueueSessionControls } from './queue-provider';
@@ -290,24 +296,127 @@ export function BluetoothProvider({
     };
   }, [boardName, layoutId, sizeId, setIds]);
 
+  // handlePickerSelect, handleMismatchSwitch and the auto-connect effect all
+  // need the latest pickerState / resolvedPickerBoards / currentBoardConfig, but
+  // pickerState is a fresh object on every scan-progress push. Listing it in a
+  // useCallback dep array would churn the onSelect identity each push and defeat
+  // DeviceCard's React.memo. Mirror the volatile inputs into refs and read
+  // through them — latest-value semantics are exactly right for a tap handler,
+  // so keep these handlers free of stale-closure-sensitive logic.
+  const pickerStateRef = useRef(pickerState);
+  pickerStateRef.current = pickerState;
+  const resolvedPickerBoardsRef = useRef(resolvedPickerBoards);
+  resolvedPickerBoardsRef.current = resolvedPickerBoards;
+  const currentBoardConfigRef = useRef(currentBoardConfig);
+  currentBoardConfigRef.current = currentBoardConfig;
+
+  const setActiveBoard = useSetActiveBoard();
+
+  // One-shot request to silently reconnect to `serial` once the active board
+  // config has actually switched to `configKey`. Set by the switch flow, cleared
+  // by the effect below the moment it fires the reconnect.
+  const [pendingAutoConnect, setPendingAutoConnect] = useState<{ serial: string; configKey: string } | null>(null);
+
+  useEffect(() => {
+    if (!pendingAutoConnect) return;
+    // Still on the old config — setActiveBoard's cache write hasn't propagated
+    // new board props into this provider yet. Wait for the matching config so we
+    // don't auto-connect against the LED placement map we're switching away from.
+    if (!boardName || layoutId === undefined || sizeId === undefined) return;
+    if (boardConfigKey(boardName, layoutId, sizeId) !== pendingAutoConnect.configKey) return;
+    // The old cancelled connect may still be settling. connect() bails while
+    // connectInFlightRef is set (which tracks `loading`), so a new connect fired
+    // now would be silently swallowed — wait for it to clear first.
+    if (loading) return;
+    const { serial } = pendingAutoConnect;
+    setPendingAutoConnect(null);
+    // connect's third param does a silent serial auto-select, falling back to the
+    // picker only if that serial never advertises.
+    void connect(undefined, undefined, serial);
+  }, [pendingAutoConnect, boardName, layoutId, sizeId, loading, connect]);
+
+  const handleMismatchSwitch = useCallback(
+    async (decision: Extract<PickerSelectionDecision, { kind: 'mismatch' }>) => {
+      // Reject the old connect's picker promise with the silent user-cancel
+      // signature so it doesn't pop a "connection failed" alert; the switch will
+      // re-open a fresh connect against the correct config.
+      pickerStateRef.current?.handleCancel();
+      try {
+        let board: UserBoard;
+        if (decision.entry.kind === 'saved') {
+          board = decision.entry.board;
+        } else {
+          const { boardUuid: recordedBoardUuid } = decision.entry.config;
+          if (!recordedBoardUuid) {
+            throw new Error('Recorded board config has no saved board to switch to');
+          }
+          // Lazy-import the GraphQL client + document so the static module graph
+          // (and the expo-secure-store auth chain it drags in) only loads when a
+          // recorded-config switch actually runs.
+          const [{ getHttpClient }, { GET_BOARD }] = await Promise.all([
+            import('../lib/graphql/client'),
+            import('../lib/graphql/operations'),
+          ]);
+          const response = await getHttpClient().request<GetBoardQueryResponse>(GET_BOARD, {
+            boardUuid: recordedBoardUuid,
+          });
+          if (!response.board) {
+            throw new Error(`No board found for uuid ${recordedBoardUuid}`);
+          }
+          board = response.board;
+        }
+        await setActiveBoard(board);
+        setPendingAutoConnect({
+          serial: decision.serial,
+          configKey: boardConfigKey(decision.config.boardName, decision.config.layoutId, decision.config.sizeId),
+        });
+      } catch (error) {
+        console.error('Failed to switch to correct board config:', error);
+        Alert.alert(t('boardConfigMismatch.title'), t('boardConfigMismatch.mobileSwitchFailed'));
+      }
+    },
+    [setActiveBoard, t],
+  );
+
   const handlePickerSelect = useCallback(
     (deviceId: string) => {
-      if (!pickerState) return;
+      const activePickerState = pickerStateRef.current;
+      if (!activePickerState) return;
+      const activeBoardConfig = currentBoardConfigRef.current;
       const decision = decideBlePickerSelection({
         deviceId,
-        devices: pickerState.devices,
-        resolvedBoards: resolvedPickerBoards,
-        currentBoardConfig,
+        devices: activePickerState.devices,
+        resolvedBoards: resolvedPickerBoardsRef.current,
+        currentBoardConfig: activeBoardConfig,
       });
       if (decision.kind === 'forward') {
-        pickerState.handleSelect(deviceId);
+        activePickerState.handleSelect(deviceId);
         return;
       }
 
-      const currentLabel = currentBoardConfig
-        ? formatPickerBoardConfig(t, currentBoardConfig)
+      const currentLabel = activeBoardConfig
+        ? formatPickerBoardConfig(t, activeBoardConfig)
         : t('boardConfigMismatch.mobileUnknownConfig');
       const recordedLabel = formatPickerBoardConfig(t, decision.config);
+      const canSwitch =
+        decision.entry.kind === 'saved' ||
+        (decision.entry.kind === 'recorded' && decision.entry.config.boardUuid != null);
+      const buttons = [
+        { text: t('boardConfigMismatch.cancel'), style: 'cancel' as const },
+        {
+          text: t('boardConfigMismatch.connectAnyway'),
+          style: 'destructive' as const,
+          onPress: () => activePickerState.handleSelect(deviceId),
+        },
+        ...(canSwitch
+          ? [
+              {
+                text: t('boardConfigMismatch.switchToCorrect'),
+                onPress: () => void handleMismatchSwitch(decision),
+              },
+            ]
+          : []),
+      ];
       Alert.alert(
         t('boardConfigMismatch.title'),
         [
@@ -315,17 +424,10 @@ export function BluetoothProvider({
           t('boardConfigMismatch.mobileCurrentLabel', { config: currentLabel }),
           t('boardConfigMismatch.mobileRecordedLabel', { config: recordedLabel }),
         ].join('\n\n'),
-        [
-          { text: t('boardConfigMismatch.cancel'), style: 'cancel' },
-          {
-            text: t('boardConfigMismatch.connectAnyway'),
-            style: 'destructive',
-            onPress: () => pickerState.handleSelect(deviceId),
-          },
-        ],
+        buttons,
       );
     },
-    [currentBoardConfig, pickerState, resolvedPickerBoards, t],
+    [handleMismatchSwitch, t],
   );
 
   const clearBoard = useCallback(() => sendFramesToBoard(''), [sendFramesToBoard]);

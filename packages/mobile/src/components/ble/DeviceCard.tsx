@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react';
+import { memo, useCallback, useMemo } from 'react';
 import { View, Pressable, StyleSheet } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { formatBoardDisplayName } from '@boardsesh/board-config';
@@ -149,7 +149,12 @@ function BoardPreview({ previewConfig, isUnknown }: { previewConfig?: BleBoardCo
   );
 }
 
-export function DeviceCard({ device, onSelect, resolvedBoards, currentBoardConfig }: DeviceCardProps) {
+export const DeviceCard = memo(function DeviceCard({
+  device,
+  onSelect,
+  resolvedBoards,
+  currentBoardConfig,
+}: DeviceCardProps) {
   const { t } = useTranslation('settings');
   const { systemColors } = useTheme();
   const serialNumber = parseSerialNumber(device.name);
@@ -237,7 +242,7 @@ export function DeviceCard({ device, onSelect, resolvedBoards, currentBoardConfi
       </View>
     </Pressable>
   );
-}
+});
 
 const styles = StyleSheet.create({
   container: {

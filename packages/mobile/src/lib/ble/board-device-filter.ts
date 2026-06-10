@@ -23,6 +23,12 @@ export function isLikelyBoardDevice({
   scanFamily: BoardScanFamily;
 }): boolean {
   if (scanFamily === 'aurora') {
+    // `undefined` serviceUuids only occur on old iOS binaries whose native scan
+    // already filtered by the Aurora service UUID — the native side vouched for
+    // the device, so trust it. RNBleAdapter always passes an array (possibly
+    // empty), so this never loosens Android / new-binary filtering. `null` is
+    // NOT vouched and falls through to the name checks below.
+    if (serviceUuids === undefined) return true;
     if (serviceUuids?.some((serviceUuid) => serviceUuid.toLowerCase() === AURORA_SERVICE_UUID)) {
       return true;
     }

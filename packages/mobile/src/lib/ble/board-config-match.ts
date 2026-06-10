@@ -14,7 +14,7 @@ export type BleBoardConfig = {
 
 export type PickerSelectionDecision =
   | { kind: 'forward' }
-  | { kind: 'mismatch'; serial: string; config: BleBoardConfig };
+  | { kind: 'mismatch'; serial: string; config: BleBoardConfig; entry: ResolvedBoardEntry };
 
 export function configFromResolvedEntry(entry: ResolvedBoardEntry): BleBoardConfig | undefined {
   if (entry.kind === 'saved') {
@@ -71,5 +71,5 @@ export function decideBlePickerSelection({
   const config = configFromResolvedEntry(resolvedEntry);
   if (!config || matchesBleBoardConfig(config, currentBoardConfig)) return { kind: 'forward' };
 
-  return { kind: 'mismatch', serial, config };
+  return { kind: 'mismatch', serial, config, entry: resolvedEntry };
 }

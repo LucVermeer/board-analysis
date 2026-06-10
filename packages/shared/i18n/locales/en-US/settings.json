@@ -342,6 +342,7 @@
     "mobileRecordedLabel": "Recorded for this controller: {{config}}",
     "mobileConfigValue": "{{board}} layout {{layoutId}}, size {{sizeId}}, sets {{setIds}}",
     "mobileUnknownConfig": "Unknown board config",
+    "mobileSwitchFailed": "Couldn't switch to that board's config. Try Connect anyway.",
     "cancel": "Cancel",
     "connectAnyway": "Connect anyway",
     "switchToCorrect": "Switch to correct config"

@@ -242,6 +242,44 @@ describe('NativeIosBleAdapter connect flow', () => {
     await expect(writePromise).rejects.toMatchObject({ name: 'AbortError' });
   });
 
+  it('does not call native.disconnect on a never-connected adapter', async () => {
+    const adapter = new NativeIosBleAdapter(() => Promise.reject(new Error('picker should not open')));
+
+    await expect(adapter.disconnect()).resolves.toBeUndefined();
+    expect(nativeMock.disconnect).not.toHaveBeenCalled();
+  });
+
+  it('skips native.disconnect after the device self-cleaned on a disconnected event', async () => {
+    const adapter = new NativeIosBleAdapter(() => Promise.reject(new Error('picker should not open')));
+    const connectPromise = adapter.requestAndConnect('A1B2C3');
+    await Promise.resolve();
+    scanListeners[0]?.({
+      device: { deviceId: 'dev-9', name: 'Kilter Board#A1B2C3@3' },
+      localName: 'Kilter Board#A1B2C3@3',
+      rssi: -55,
+    });
+    await vi.runAllTimersAsync();
+    await connectPromise;
+
+    // The native side reports the board dropped — the adapter self-cleans and
+    // nulls connectedDeviceId.
+    disconnectListeners[0]?.({ deviceId: 'dev-9' });
+
+    // A blind native.disconnect() here could cancel a connection a newer
+    // adapter adopted after this one was abandoned, so it must be skipped.
+    await adapter.disconnect();
+    expect(nativeMock.disconnect).not.toHaveBeenCalled();
+  });
+
+  it('calls native.disconnect after adoptConnection while still tracking a device', async () => {
+    const adapter = new NativeIosBleAdapter(() => Promise.reject(new Error('picker should not open')));
+
+    adapter.adoptConnection('adopted-dev');
+    await adapter.disconnect();
+
+    expect(nativeMock.disconnect).toHaveBeenCalled();
+  });
+
   it('adoptConnection wires writes and the disconnect callback without scanning', async () => {
     const adapter = new NativeIosBleAdapter(() => Promise.reject(new Error('picker should not open')));
 

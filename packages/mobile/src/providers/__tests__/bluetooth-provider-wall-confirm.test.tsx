@@ -93,6 +93,12 @@ vi.mock('../../lib/analytics', () => ({
   track: analytics.track,
 }));
 
+// The provider calls useSetActiveBoard for the "switch to correct config" flow.
+// The real hook needs a QueryClientProvider this suite doesn't mount, so stub it.
+vi.mock('../../lib/graphql/use-active-board', () => ({
+  useSetActiveBoard: () => vi.fn(async () => {}),
+}));
+
 vi.mock('../../components/ble/DevicePickerSheet', () => ({
   DevicePickerSheet: (props: PickerSheetProps) => {
     pickerSheet.props = props;

@@ -50,6 +50,15 @@ describe('isLikelyBoardDevice', () => {
     expect(isLikelyBoardDevice({ name: 'Garage Wall#900001', serviceUuids: [], scanFamily: 'aurora' })).toBe(false);
   });
 
+  it('trusts old-iOS-binary Aurora scans that omit serviceUuids entirely', () => {
+    // Old iOS binaries scan-filter natively by the Aurora service UUID and report
+    // `serviceUuids` as undefined, so a renamed board with no #serial@api suffix
+    // still surfaces. An empty array or `null` is not vouched for.
+    expect(isLikelyBoardDevice({ name: 'Garage Wall', serviceUuids: undefined, scanFamily: 'aurora' })).toBe(true);
+    expect(isLikelyBoardDevice({ name: 'Garage Wall', serviceUuids: [], scanFamily: 'aurora' })).toBe(false);
+    expect(isLikelyBoardDevice({ name: 'Garage Wall', serviceUuids: null, scanFamily: 'aurora' })).toBe(false);
+  });
+
   it('rejects unrelated devices', () => {
     expect(isLikelyBoardDevice({ name: 'JBL Flip 6', serviceUuids: [], scanFamily: 'moonboard' })).toBe(false);
     expect(isLikelyBoardDevice({ name: undefined, serviceUuids: [], scanFamily: 'aurora' })).toBe(false);

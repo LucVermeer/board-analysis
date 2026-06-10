@@ -229,9 +229,17 @@ export class NativeIosBleAdapter implements BluetoothAdapter {
   }
 
   async disconnect(): Promise<void> {
-    const native = this.requireNative();
+    // Belt-and-suspenders: drop the disconnect subscription regardless so an
+    // abandoned adapter leaves no listener behind.
     this.disconnectSubscription?.remove();
     this.disconnectSubscription = null;
+    // The native BoardBleManager is a singleton. After an event-driven
+    // self-clean (the 'disconnected' listener in trackConnectedDevice already
+    // nulled connectedDeviceId), a blind native.disconnect() could cancel a
+    // connection that was adopted by a *new* adapter after this one was
+    // abandoned. So when we no longer track a device, skip the native call.
+    if (!this.connectedDeviceId) return;
+    const native = this.requireNative();
     this.connectedDeviceId = null;
     await native.disconnect();
   }
