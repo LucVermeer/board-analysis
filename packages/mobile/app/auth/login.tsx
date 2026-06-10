@@ -11,6 +11,7 @@ import {
   type TextInput as RNTextInput,
 } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
+import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
@@ -180,6 +181,7 @@ export default function LoginScreen() {
         keyboardDismissMode="interactive"
       >
         <View style={styles.header}>
+          <Image source={require('../../assets/splash-icon.png')} style={styles.logo} contentFit="contain" />
           <Text style={[styles.title, { color: theme.brandColors.primary }]}>Boardsesh</Text>
           <Text style={styles.subtitle}>{t('nativeStart.tagline')}</Text>
         </View>
@@ -266,6 +268,7 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: { flexGrow: 1, justifyContent: 'center', padding: 24 },
   header: { alignItems: 'center', marginBottom: 32 },
+  logo: { width: 96, height: 96, marginBottom: 16 },
   title: { fontSize: 34, fontWeight: '700', marginBottom: 8 },
   subtitle: { fontSize: 17, opacity: 0.7 },
   form: { gap: 12 },
