@@ -53,10 +53,7 @@ export function LogbookTab({ userId, onScroll, topInset = 0, registerScrollToTop
 
   const feed = useUserAscentsFeed(userId);
   // Stabilise the FlashList `data` identity so it doesn't re-diff every render.
-  const items = useMemo(
-    () => feed.data?.pages.flatMap((page) => page.userAscentsFeed.items) ?? [],
-    [feed.data],
-  );
+  const items = useMemo(() => feed.data?.pages.flatMap((page) => page.userAscentsFeed.items) ?? [], [feed.data]);
 
   const handlePress = useCallback((ascent: AscentFeedItem) => {
     track(SHARED_EVENTS.LogbookRowClicked, { climbUuid: ascent.climbUuid });

@@ -290,7 +290,9 @@ export function GeneratorPickerCard({
     if (selection.type !== 'on') return null;
     const { options } = selection;
     const parts: string[] = [warmUpLabel(options.warmUp, t)];
-    parts.push(t('mobile.session.preGeneratorMinAscentsOption', { value: formatMinAscentsFilterCount(options.minAscents) }));
+    parts.push(
+      t('mobile.session.preGeneratorMinAscentsOption', { value: formatMinAscentsFilterCount(options.minAscents) }),
+    );
     const ratingValue = getMinRatingPickerValue(options.minRating);
     if (ratingValue != null && ratingValue > 0) parts.push('★'.repeat(ratingValue));
     parts.push(climbBiasLabel(options.climbBias, t));
@@ -327,21 +329,36 @@ export function GeneratorPickerCard({
     switch (options.type) {
       case 'volume':
         return [
-          stepperRow('mobile.session.preGeneratorMainSetClimbs', 'mainSetClimbs', options.mainSetClimbs, 1, 50, (mainSetClimbs) =>
-            onChange({ type: 'on', options: { ...options, mainSetClimbs } }),
+          stepperRow(
+            'mobile.session.preGeneratorMainSetClimbs',
+            'mainSetClimbs',
+            options.mainSetClimbs,
+            1,
+            50,
+            (mainSetClimbs) => onChange({ type: 'on', options: { ...options, mainSetClimbs } }),
           ),
         ];
       case 'pyramid':
       case 'ladder':
         return [
-          stepperRow('mobile.session.preGeneratorNumberOfSteps', 'numberOfSteps', options.numberOfSteps, 3, 15, (numberOfSteps) =>
-            onChange({ type: 'on', options: { ...options, numberOfSteps } }),
+          stepperRow(
+            'mobile.session.preGeneratorNumberOfSteps',
+            'numberOfSteps',
+            options.numberOfSteps,
+            3,
+            15,
+            (numberOfSteps) => onChange({ type: 'on', options: { ...options, numberOfSteps } }),
           ),
         ];
       case 'gradeFocus':
         return [
-          stepperRow('mobile.session.preGeneratorNumberOfClimbs', 'numberOfClimbs', options.numberOfClimbs, 1, 50, (numberOfClimbs) =>
-            onChange({ type: 'on', options: { ...options, numberOfClimbs } }),
+          stepperRow(
+            'mobile.session.preGeneratorNumberOfClimbs',
+            'numberOfClimbs',
+            options.numberOfClimbs,
+            1,
+            50,
+            (numberOfClimbs) => onChange({ type: 'on', options: { ...options, numberOfClimbs } }),
           ),
         ];
     }
@@ -365,8 +382,13 @@ export function GeneratorPickerCard({
       case 'pyramid':
       case 'ladder':
         return [
-          stepperRow('mobile.session.preGeneratorClimbsPerStep', 'climbsPerStep', options.climbsPerStep, 1, 5, (climbsPerStep) =>
-            onChange({ type: 'on', options: { ...options, climbsPerStep } }),
+          stepperRow(
+            'mobile.session.preGeneratorClimbsPerStep',
+            'climbsPerStep',
+            options.climbsPerStep,
+            1,
+            5,
+            (climbsPerStep) => onChange({ type: 'on', options: { ...options, climbsPerStep } }),
           ),
         ];
       case 'gradeFocus':

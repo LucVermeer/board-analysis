@@ -15,9 +15,9 @@ const chips = vi.hoisted(() => ({ entries: [] as Array<{ label?: string; onPress
 
 // Surfaces the mocked SegmentedControls so a test can drive a specific group's
 // onSelect (warm-up, climb bias) by its accessibilityLabel.
-const segments = vi.hoisted(
-  () => ({ entries: [] as Array<{ accessibilityLabel?: string; onSelect: (key: string) => void }> }),
-);
+const segments = vi.hoisted(() => ({
+  entries: [] as Array<{ accessibilityLabel?: string; onSelect: (key: string) => void }>,
+}));
 
 vi.mock('../../../../lib/analytics', () => ({ track: analytics.track }));
 
@@ -126,7 +126,9 @@ vi.mock('@boardsesh/playlist-generator', () => ({
     onlyWideClimbs: false,
   },
 }));
-vi.mock('../../../SectionHeader', () => ({ SectionHeader: ({ title }: { title: string }) => createElement('h2', null, title) }));
+vi.mock('../../../SectionHeader', () => ({
+  SectionHeader: ({ title }: { title: string }) => createElement('h2', null, title),
+}));
 vi.mock('../../../SegmentedControl', () => ({
   SegmentedControl: ({
     accessibilityLabel,

@@ -139,10 +139,7 @@ export function CollapsingLargeTitleHeader({
 
         {/* Centred at-rest control; fades out as the title takes over. */}
         {centerContent ? (
-          <Animated.View
-            pointerEvents={collapsed ? 'none' : 'box-none'}
-            style={[styles.centerAnchor, centerFadeStyle]}
-          >
+          <Animated.View pointerEvents={collapsed ? 'none' : 'box-none'} style={[styles.centerAnchor, centerFadeStyle]}>
             {centerContent}
           </Animated.View>
         ) : null}
