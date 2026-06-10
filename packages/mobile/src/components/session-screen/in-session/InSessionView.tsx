@@ -38,6 +38,7 @@ import { springs } from '../../../theme/animations';
 import { borderRadius, spacing } from '../../../theme/tokens';
 import { gradeBadgeColor } from '../../you/profile-chart-colors';
 import { hapticSelection } from '../../../lib/haptics';
+import { SESSION_FOOTER_CLEARANCE } from '../session-footer-clearance';
 import { SessionAnalytics } from './SessionAnalytics';
 import { SessionLeaderboard } from './SessionLeaderboard';
 import { SessionPresenceRow } from './SessionPresenceRow';
@@ -432,7 +433,7 @@ export function InSessionView({ translateY, screenHeight }: InSessionViewProps) 
 
   const [showEndSession, setShowEndSession] = useState(false);
   const [isEnding, setIsEnding] = useState(false);
-  const footerBottomPadding = bottomChrome.scrollBottomPadding + spacing[3];
+  const footerBottomPadding = bottomChrome.fixedFooterBottom + spacing[3];
 
   const handleConfirmEnd = useCallback(async () => {
     setIsEnding(true);
@@ -520,7 +521,7 @@ export function InSessionView({ translateY, screenHeight }: InSessionViewProps) 
       contentContainerStyle={{
         paddingHorizontal: spacing[4],
         paddingTop: spacing[2],
-        paddingBottom: 100 + footerBottomPadding,
+        paddingBottom: SESSION_FOOTER_CLEARANCE + footerBottomPadding,
       }}
       showsVerticalScrollIndicator={false}
       onScroll={handleScroll}
@@ -533,7 +534,10 @@ export function InSessionView({ translateY, screenHeight }: InSessionViewProps) 
     <View style={styles.container}>
       {scrollView}
 
-      <View style={[styles.footer, { backgroundColor: systemColors.background, paddingBottom: footerBottomPadding }]}>
+      <View
+        testID="in-session-footer"
+        style={[styles.footer, { backgroundColor: systemColors.background, paddingBottom: footerBottomPadding }]}
+      >
         <Button
           title={t('mobile.session.inEndSession')}
           onPress={() => setShowEndSession(true)}

@@ -1,5 +1,11 @@
 import { useState, useCallback, useEffect, useRef, type Dispatch, type SetStateAction } from 'react';
-import { type Client, createGraphQLClient, execute, subscribe } from '../../graphql-queue/graphql-client';
+import {
+  type Client,
+  createGraphQLClient,
+  execute,
+  subscribe,
+  GraphQLOperationError,
+} from '../../graphql-queue/graphql-client';
 import {
   INITIAL_RETRY_DELAY_MS,
   MAX_RETRY_DELAY_MS,
@@ -494,6 +500,17 @@ export function useSessionLifecycle({
 
         return joinedSession;
       } catch (err) {
+        // The server refuses to resurrect an ended session (#2696). Drop the
+        // stored session immediately instead of treating it as a transient
+        // failure and burning several backoff retries on a dead session.
+        if (err instanceof GraphQLOperationError && err.extensions?.code === 'SESSION_ENDED') {
+          if (DEBUG) console.info('[PersistentSession] Session has ended; clearing stored session');
+          removePreference(ACTIVE_SESSION_KEY).catch(() => {});
+          if (mountedRef.current) {
+            setActiveSession(null);
+          }
+          return null;
+        }
         console.error('[PersistentSession] JoinSession failed:', err);
         return null;
       }

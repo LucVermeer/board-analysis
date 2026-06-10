@@ -11,12 +11,32 @@ const analytics = vi.hoisted(() => ({ track: vi.fn() }));
 // test can tap a specific chip.
 const chips = vi.hoisted(() => ({ entries: [] as Array<{ label?: string; onPress: () => void }> }));
 
+const scrollViews = vi.hoisted(() => ({
+  props: [] as Array<{ horizontal?: boolean; nestedScrollEnabled?: boolean; keyboardShouldPersistTaps?: unknown }>,
+}));
+
 vi.mock('../../../../lib/analytics', () => ({ track: analytics.track }));
 
 vi.mock('react-native', () => ({
   View: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
-  ScrollView: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
   StyleSheet: { create: (styles: unknown) => styles, hairlineWidth: 1 },
+}));
+
+vi.mock('react-native-gesture-handler', () => ({
+  ScrollView: ({
+    children,
+    horizontal,
+    nestedScrollEnabled,
+    keyboardShouldPersistTaps,
+  }: {
+    children?: ReactNode;
+    horizontal?: boolean;
+    nestedScrollEnabled?: boolean;
+    keyboardShouldPersistTaps?: unknown;
+  }) => {
+    scrollViews.props.push({ horizontal, nestedScrollEnabled, keyboardShouldPersistTaps });
+    return createElement('div', null, children);
+  },
 }));
 
 vi.mock('../../../PressableSurface', () => ({
@@ -129,9 +149,45 @@ import { GeneratorPickerCard } from '../GeneratorPickerCard';
 beforeEach(() => {
   analytics.track.mockClear();
   chips.entries = [];
+  scrollViews.props = [];
 });
 
 describe('GeneratorPickerCard analytics', () => {
+  it('renders chip rails as nested horizontal gesture scroll views', () => {
+    render(
+      createElement(GeneratorPickerCard, {
+        boardName: 'kilter',
+        layoutId: 8,
+        sizeId: 21,
+        angle: 40,
+        selection: {
+          type: 'on',
+          options: {
+            type: 'volume',
+            warmUp: 'standard',
+            targetGrade: 20,
+            mainSetClimbs: 20,
+            mainSetVariability: 0,
+            climbBias: 'unfamiliar',
+            minAscents: 5,
+            minRating: 2,
+            onlyTallClimbs: false,
+            onlyWideClimbs: false,
+          },
+        } satisfies GeneratorSelection,
+        onChange: vi.fn(),
+      }),
+    );
+
+    expect(scrollViews.props.length).toBeGreaterThanOrEqual(5);
+    expect(
+      scrollViews.props.every(
+        ({ horizontal, nestedScrollEnabled, keyboardShouldPersistTaps }) =>
+          horizontal === true && nestedScrollEnabled === true && keyboardShouldPersistTaps === 'handled',
+      ),
+    ).toBe(true);
+  });
+
   it('fires "Workout Generator Opened" with web-aligned targetType + angle when switching off → a workout type', () => {
     render(
       createElement(GeneratorPickerCard, {

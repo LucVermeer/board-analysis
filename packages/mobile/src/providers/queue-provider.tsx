@@ -1587,15 +1587,15 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       showToast(t('mobile.toast.sessionEnded'), 'success');
       return response.endSession;
     } catch {
-      if (suppressedRemoteEndSessionIdRef.current === currentSessionId) {
-        locallyEndingSessionIdRef.current = null;
-        suppressedRemoteEndSessionIdRef.current = null;
-        await clearSession();
-        showToast(t('mobile.toast.sessionEnded'), 'success');
-        return null;
-      }
+      const remoteEndAlreadyApplied = suppressedRemoteEndSessionIdRef.current === currentSessionId;
       locallyEndingSessionIdRef.current = null;
-      showToast(t('mobile.queue.actionFailed'), 'error');
+      suppressedRemoteEndSessionIdRef.current = null;
+      await clearSession();
+      if (remoteEndAlreadyApplied) {
+        showToast(t('mobile.toast.sessionEnded'), 'success');
+      } else {
+        showToast(t('mobile.queue.actionFailed'), 'error');
+      }
       return null;
     }
   }, [clearSession, showToast, t]);

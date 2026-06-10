@@ -163,6 +163,7 @@ import {
   useQueueLiveStats,
   useQueueSessionId,
 } from '../queue-provider';
+import { clearStoredSessionId } from '../../lib/session-store';
 
 type Snapshot = {
   state: ReturnType<typeof useQueue>['state'];
@@ -352,6 +353,7 @@ describe('QueueProvider session update subscription', () => {
     sessionStore.setStoredSessionId.mockClear();
     sessionStore.clearStoredSessionId.mockClear();
     graph.execute.mockReset();
+    vi.mocked(clearStoredSessionId).mockClear();
     http.request.mockReset();
     // The restore effect verifies the session via SESSION_STATUS before
     // rejoining (#2683). Default to an active session so existing tests still
@@ -1137,6 +1139,54 @@ describe('QueueProvider session update subscription', () => {
     expect(toast.showToast).toHaveBeenCalledWith('mobile.toast.sessionEnded', 'success');
     expect(toast.showToast).not.toHaveBeenCalledWith('mobile.queue.actionFailed', 'error');
   });
+
+  it('clears local persisted session state when an explicit end-session request fails', async () => {
+    const snapshots: Snapshot[] = [];
+    renderProvider((snapshot) => snapshots.push(snapshot));
+
+    await waitFor(() => {
+      expect(snapshots.at(-1)?.sessionId).toBe('session-1');
+    });
+
+    const currentItem = makeQueueItem('queue-current', 'climb-current');
+    const suggestedItem = makeQueueItem('queue-suggested', 'climb-suggested', { suggested: true });
+    const playlistSuggestionSource: PlaylistSuggestionSource = {
+      playlistUuid: 'playlist-1',
+      activatedClimbUuid: currentItem.climb.uuid,
+      boardKey: 'kilter:1:10:1,2',
+      climbs: [currentItem.climb, suggestedItem.climb],
+    };
+    const preparedSnapshot = snapshots.at(-1);
+    if (!preparedSnapshot) throw new Error('queue snapshot was not captured');
+
+    act(() => {
+      preparedSnapshot.addToQueue(currentItem);
+      preparedSnapshot.setPlaylistSuggestionSource(playlistSuggestionSource);
+    });
+
+    await waitFor(() => {
+      const latestSnapshot = snapshots.at(-1);
+      expect(latestSnapshot?.state.queue.map((item) => item.uuid)).toEqual(['queue-current']);
+      expect(latestSnapshot?.playlistSuggestionSource).toEqual(playlistSuggestionSource);
+    });
+
+    http.request.mockRejectedValueOnce(new Error('stale session'));
+
+    await act(async () => {
+      await snapshots.at(-1)?.endSession();
+    });
+
+    await waitFor(() => {
+      const latestSnapshot = snapshots.at(-1);
+      expect(latestSnapshot?.sessionId).toBeNull();
+      expect(latestSnapshot?.state.queue).toEqual([]);
+      expect(latestSnapshot?.state.currentClimbQueueItem).toBeNull();
+      expect(latestSnapshot?.playlistSuggestionSource).toBeNull();
+    });
+    expect(clearStoredSessionId).toHaveBeenCalledTimes(1);
+    expect(toast.showToast).toHaveBeenCalledWith('mobile.queue.actionFailed', 'error');
+    expect(toast.showToast).not.toHaveBeenCalledWith('mobile.toast.sessionEnded', 'success');
+  });
 });
 
 // ── SEED-1: queue mutations resync on failure (GH #2419) ─────────────────────
@@ -1150,6 +1200,10 @@ describe('QueueProvider session update subscription', () => {
 // an INITIAL_QUEUE_DATA dispatch, then toasts. A rejection with no session must
 // NOT resync or toast.
 describe('QueueProvider mutation-failure resync', () => {
+  beforeEach(() => {
+    toast.showToast.mockClear();
+  });
+
   // The harness routes both endSession and the queueState query through
   // http.request. Branch on the operation text so the resync query returns the
   // authoritative snapshot while everything else keeps the default endSession
