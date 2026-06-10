@@ -296,7 +296,12 @@ describe('dispatchMoonboardPacket', () => {
 
   it('calls write() with the packet bytes, not the full packet object', async () => {
     const fakePacket = new Uint8Array([0x01, 0x02, 0x03]);
-    mockGetMoonboardBluetoothPacket.mockReturnValue({ packet: fakePacket });
+    mockGetMoonboardBluetoothPacket.mockReturnValue({
+      packet: fakePacket,
+      totalPlacements: 2,
+      skippedRoleCount: 0,
+      skippedPositionCount: 0,
+    });
     const write = vi.fn().mockResolvedValue(undefined);
 
     await dispatchMoonboardPacket('p1r12p2r14', write);
@@ -308,7 +313,12 @@ describe('dispatchMoonboardPacket', () => {
   });
 
   it('returns true on success', async () => {
-    mockGetMoonboardBluetoothPacket.mockReturnValue({ packet: new Uint8Array([0x00]) });
+    mockGetMoonboardBluetoothPacket.mockReturnValue({
+      packet: new Uint8Array([0x00]),
+      totalPlacements: 1,
+      skippedRoleCount: 0,
+      skippedPositionCount: 0,
+    });
     const write = vi.fn().mockResolvedValue(undefined);
 
     const result = await dispatchMoonboardPacket('p1r12', write);
@@ -327,12 +337,51 @@ describe('dispatchMoonboardPacket', () => {
 
   it('forwards the AbortSignal to write()', async () => {
     const fakePacket = new Uint8Array([0xaa]);
-    mockGetMoonboardBluetoothPacket.mockReturnValue({ packet: fakePacket });
+    mockGetMoonboardBluetoothPacket.mockReturnValue({
+      packet: fakePacket,
+      totalPlacements: 1,
+      skippedRoleCount: 0,
+      skippedPositionCount: 0,
+    });
     const write = vi.fn().mockResolvedValue(undefined);
     const controller = new AbortController();
 
     await dispatchMoonboardPacket('p5r3', write, controller.signal);
 
     expect(write).toHaveBeenCalledWith(fakePacket, controller.signal);
+  });
+
+  it('returns false and never writes when every placement is skipped (board would go dark)', async () => {
+    // getMoonboardBluetoothPacket emits the "clear all" packet `l##` with
+    // skippedRoleCount === totalPlacements when no hold maps to a known role.
+    // Writing that would silently dark the board while reporting success.
+    mockGetMoonboardBluetoothPacket.mockReturnValue({
+      packet: new TextEncoder().encode('l##'),
+      totalPlacements: 2,
+      skippedRoleCount: 2,
+      skippedPositionCount: 0,
+    });
+    const write = vi.fn().mockResolvedValue(undefined);
+
+    const result = await dispatchMoonboardPacket('p1r99p2r98', write);
+
+    expect(result).toBe(false);
+    expect(write).not.toHaveBeenCalled();
+  });
+
+  it('writes and returns true when only some placements are skipped', async () => {
+    const fakePacket = new TextEncoder().encode('l#S0#');
+    mockGetMoonboardBluetoothPacket.mockReturnValue({
+      packet: fakePacket,
+      totalPlacements: 2,
+      skippedRoleCount: 1,
+      skippedPositionCount: 0,
+    });
+    const write = vi.fn().mockResolvedValue(undefined);
+
+    const result = await dispatchMoonboardPacket('p1r42p2r99', write);
+
+    expect(result).toBe(true);
+    expect(write).toHaveBeenCalledTimes(1);
   });
 });

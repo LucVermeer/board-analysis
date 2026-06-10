@@ -22,13 +22,25 @@ import type { HoldPlacement } from '../../components/board-renderer/types';
 import { track } from '../analytics';
 
 // Exported for testing — isolates the .packet extraction so regressions are caught.
+//
+// Returns:
+//  - undefined when there are no frames (nothing to send)
+//  - false when every placement was skipped (the packet builder still emits the
+//    "clear all" packet `l##`, so writing it would silently dark the board while
+//    the caller reported success). The caller surfaces the incompatible-climb
+//    error instead of writing — web parity (use-board-bluetooth.ts:348-363).
+//  - true after a successful write.
 export async function dispatchMoonboardPacket(
   frames: string,
   write: BluetoothAdapter['write'],
   signal?: AbortSignal,
-): Promise<true | undefined> {
+): Promise<boolean | undefined> {
   if (!frames) return undefined;
-  const { packet } = getMoonboardBluetoothPacket(frames);
+  const { packet, skippedRoleCount, skippedPositionCount, totalPlacements } = getMoonboardBluetoothPacket(frames);
+  const skippedCount = skippedRoleCount + skippedPositionCount;
+  if (totalPlacements > 0 && skippedCount === totalPlacements) {
+    return false;
+  }
   await write(packet, signal);
   return true;
 }
@@ -255,6 +267,20 @@ export function useBoardBluetooth({
             adapterRef.current.write.bind(adapterRef.current),
             combinedSignal,
           );
+          // false = every placement was skipped (unrecognised/corrupt hold
+          // data). The packet builder would emit a "clear all" packet, darking
+          // the board, so dispatchMoonboardPacket refuses to write. Surface the
+          // same incompatible-climb error the Aurora branch uses instead of
+          // letting the AutoSender buzz success on a dark board.
+          if (sent === false) {
+            console.warn('[BLE] All MoonBoard placements skipped — climb has unrecognised hold data');
+            Alert.alert(t('ble.notAvailable'), t('ble.errorIncompatible'));
+            track(SHARED_EVENTS.ClimbSentToBoardFailure, {
+              ...boardAnalyticsProperties,
+              failureReason: 'incompatible_climb',
+            });
+            return false;
+          }
           if (sent) track(SHARED_EVENTS.ClimbSentToBoardSuccess, boardAnalyticsProperties);
           return sent;
         }
