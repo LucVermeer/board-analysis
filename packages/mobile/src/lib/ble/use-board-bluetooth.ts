@@ -209,6 +209,12 @@ export function useBoardBluetooth({
   const apiLevelRef = useRef<number>(3);
   const unsubDisconnectRef = useRef<(() => void) | null>(null);
   const writeAbortRef = useRef<AbortController | null>(null);
+  // Synchronous in-flight latch for connect(). The lightbulb button isn't
+  // disabled while a connect is pending (isScanning only drives a pulse), so a
+  // double-tap can re-enter connect(); without this, the second attempt creates
+  // a second adapter and starts a second scan on the shared BleManager
+  // singleton, and each flow's stopDeviceScan kills the other's scan.
+  const isConnectingRef = useRef(false);
 
   const [pickerState, setPickerState] = useState<PickerState | null>(null);
   const pickerRejectRef = useRef<((error: Error) => void) | null>(null);
@@ -412,6 +418,14 @@ export function useBoardBluetooth({
         return false;
       }
 
+      // Drop a re-entrant connect (lightbulb double-tap) — the first attempt
+      // owns the shared BleManager scan for its lifetime. Set synchronously
+      // before any await so two back-to-back calls can't both pass.
+      if (isConnectingRef.current) {
+        return false;
+      }
+      isConnectingRef.current = true;
+
       setLoading(true);
 
       try {
@@ -564,6 +578,7 @@ export function useBoardBluetooth({
         });
       } finally {
         setLoading(false);
+        isConnectingRef.current = false;
       }
 
       return false;

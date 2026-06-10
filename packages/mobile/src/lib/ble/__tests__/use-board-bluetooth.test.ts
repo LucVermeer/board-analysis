@@ -207,6 +207,55 @@ describe('useBoardBluetooth', () => {
     expect(successCall).toBeDefined();
     expect(successCall?.[1]).toMatchObject({ apiLevel: 2, deviceNamePresent: false });
   });
+
+  it('ignores a second connect() while the first is still in flight (no concurrent scan)', async () => {
+    reactNativePermissionHarness.permissionsAndroid.requestMultiple.mockResolvedValue({
+      BLUETOOTH_SCAN: 'granted',
+      BLUETOOTH_CONNECT: 'granted',
+    });
+
+    // The in-flight latch is set synchronously at the top of connect() before
+    // any await, so firing two connects back-to-back (a lightbulb double-tap)
+    // must let only the first proceed. Without the latch, both run to
+    // completion and each creates an adapter + starts a scan on the shared
+    // BleManager singleton, with each flow's stopDeviceScan killing the other.
+    const requestAndConnect = vi.fn().mockResolvedValue({ deviceId: 'dev-1', deviceName: 'Kilter A1#0042@3' });
+    const fakeAdapter = {
+      isAvailable: vi.fn().mockResolvedValue(true),
+      requestAndConnect,
+      disconnect: vi.fn().mockResolvedValue(undefined),
+      write: vi.fn().mockResolvedValue(undefined),
+      onDisconnect: vi.fn().mockReturnValue(() => {}),
+    };
+    vi.mocked(createBluetoothAdapter).mockReturnValue(fakeAdapter);
+    mockParseApiLevel.mockReturnValue(3);
+    mockParseSerialNumber.mockReturnValue('0042');
+
+    const { result } = renderHook(() =>
+      useBoardBluetooth({
+        boardName: 'kilter',
+        layoutId: 1,
+        sizeId: 1,
+        setIds: '1',
+      }),
+    );
+
+    let firstConnectResult: boolean | undefined;
+    let secondConnectResult: boolean | undefined;
+    await act(async () => {
+      // Fire both back-to-back; the second must early-return false because the
+      // first already holds the in-flight latch.
+      const first = result.current.connect();
+      const second = result.current.connect();
+      [firstConnectResult, secondConnectResult] = await Promise.all([first, second]);
+    });
+
+    expect(firstConnectResult).toBe(true);
+    expect(secondConnectResult).toBe(false);
+    // Exactly one adapter + one scan despite the double-tap.
+    expect(createBluetoothAdapter).toHaveBeenCalledTimes(1);
+    expect(requestAndConnect).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('convertToMirroredFramesString', () => {
