@@ -11,7 +11,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const analytics = vi.hoisted(() => ({ track: vi.fn() }));
 const router = vi.hoisted(() => ({ replace: vi.fn() }));
-const params = vi.hoisted(() => ({ transferToken: undefined as string | undefined }));
+const params = vi.hoisted(() => ({
+  transferToken: undefined as string | undefined,
+  error: undefined as string | undefined,
+}));
 
 vi.mock('../../../src/lib/analytics', () => ({ track: analytics.track }));
 
@@ -23,21 +26,29 @@ vi.mock('react-native', () => ({
 }));
 
 vi.mock('expo-router', () => ({
-  useLocalSearchParams: () => ({ transferToken: params.transferToken }),
+  useLocalSearchParams: () => ({ transferToken: params.transferToken, error: params.error }),
   useRouter: () => router,
 }));
 
 // `t` echoes the key, so any English literal left in the component would show
-// up verbatim and fail the assertions below.
-vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
+// up verbatim and fail the assertions below. Stable identity (like the real
+// hook's) so the effect depending on it doesn't re-fire on every render.
+const stableT = vi.hoisted(() => (key: string) => key);
+vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: stableT }) }));
 
 const auth = vi.hoisted(() => ({
   exchangeTransferToken: vi.fn(async () => ({ success: false, error: 'Invalid or expired transfer token' })),
 }));
-vi.mock('../../../src/lib/auth', () => ({ exchangeTransferToken: auth.exchangeTransferToken }));
+vi.mock('../../../src/lib/auth', () => ({
+  exchangeTransferToken: auth.exchangeTransferToken,
+  getPendingOAuthProvider: () => 'apple',
+}));
 vi.mock('../../../src/lib/native-auth-analytics', () => ({ classifyNativeAuthFailureReason: () => 'invalid_token' }));
+// Stable across renders like the real provider's useCallback — a fresh fn per
+// render would re-fire the effect after setError's re-render and double-track.
+const refreshAuthStateMock = vi.hoisted(() => vi.fn(async () => {}));
 vi.mock('../../../src/providers/auth-provider', () => ({
-  useAuth: () => ({ refreshAuthState: vi.fn(async () => {}) }),
+  useAuth: () => ({ refreshAuthState: refreshAuthStateMock }),
 }));
 vi.mock('../../../src/providers/theme-provider', () => ({ useTheme: () => ({ brandColors: { error: '#FF3B30' } }) }));
 
@@ -48,6 +59,7 @@ beforeEach(() => {
   router.replace.mockClear();
   auth.exchangeTransferToken.mockClear();
   params.transferToken = undefined;
+  params.error = undefined;
 });
 
 describe('AuthCallback localization', () => {
@@ -66,6 +78,19 @@ describe('AuthCallback localization', () => {
     // The old screen prefixed every error with hardcoded 'Sign in failed:'.
     expect(container.textContent).not.toContain('Sign in failed');
     expect(container.textContent).not.toContain('No transfer token received');
+    // A genuinely missing token (no server error param) is this screen's to report.
+    expect(analytics.track).toHaveBeenCalledTimes(1);
+  });
+
+  // When the server deep-links an explicit error (?error=session_missing),
+  // login.tsx tracks it with the precise reason from the same URL; this screen
+  // mounting via expo-router's auto-route must not double-count the attempt.
+  it('shows the error but does not track when the server sent an explicit error param', async () => {
+    params.transferToken = undefined;
+    params.error = 'session_missing';
+    const { container } = render(createElement(AuthCallback));
+    await waitFor(() => expect(container.textContent).toContain('callback.noTransferToken'));
+    expect(analytics.track).not.toHaveBeenCalled();
   });
 
   it('renders a translated generic message instead of raw server error text', async () => {
@@ -76,8 +101,8 @@ describe('AuthCallback localization', () => {
     expect(container.textContent).not.toContain('Invalid or expired transfer token');
   });
 
-  // Android mounts this screen twice for one login: expo-router routes the
-  // deep link AND login.tsx routes here with openAuthSessionAsync's URL. The
+  // This screen mounts twice for one login: expo-router routes the callback
+  // deep link AND login.tsx routes here with the URL startSignIn resolved. The
   // module-level exchangedTokens set must keep the duplicate mount from
   // replaying the one-time token — the duplicate shows the spinner, never a
   // "token already used" failure.

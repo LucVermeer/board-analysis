@@ -99,7 +99,7 @@ export default function LoginScreen() {
       if (!result.success) {
         track(SHARED_EVENTS.LoginFailed, {
           auth_method: 'credentials',
-          failure_reason: classifyNativeAuthFailureReason(result),
+          failure_reason: classifyNativeAuthFailureReason(result, 'credentials'),
         });
         if (result.error === 'network') {
           setError(t('nativeStart.networkError'));
@@ -129,13 +129,17 @@ export default function LoginScreen() {
     setOauthInProgress(true);
     setError(null);
     track(SHARED_EVENTS.LoginAttempted, { auth_method: provider, flow: 'native' });
+    // duration_ms separates a human abandoning the browser (seconds-to-minutes)
+    // from the flow dying programmatically (sub-second) — the iOS 26 auth-session
+    // bug surfaced as 100–250ms "cancels" that looked like user action.
+    const attemptStartedAt = Date.now();
     try {
       const result = await signIn(provider);
       if (result.type === 'success') {
-        // On iOS the auth session consumes the callback redirect and returns it
-        // here instead of delivering a deep link, so we must route the transfer
-        // token to /auth/callback ourselves. On Android the deep link can also
-        // arrive via expo-router; the callback screen dedupes the exchange.
+        // The browser result is one of two delivery paths for the callback URL
+        // (the other is the OS deep link expo-router routes to /auth/callback);
+        // route the transfer token there ourselves and let the callback screen
+        // dedupe the exchange.
         const { transferToken, error: callbackError } = parseAuthCallbackParams(result.url);
         if (transferToken) {
           router.replace({ pathname: '/auth/callback', params: { transferToken } });
@@ -146,16 +150,32 @@ export default function LoginScreen() {
             auth_method: provider,
             flow: 'native',
             failure_reason: callbackError ?? 'no_transfer_token',
+            duration_ms: Date.now() - attemptStartedAt,
           });
           setError(t('nativeStart.oauthError'));
         }
         return;
       }
-      // Everything else never reaches /auth/callback, so it's only observable
-      // here. cancel/dismiss is the user closing the system sheet; track every
-      // non-success type so the funnel sees the Attempted→Succeeded drop-off
-      // instead of a silent gap.
-      track(SHARED_EVENTS.LoginFailed, { auth_method: provider, flow: 'native', failure_reason: result.type });
+      // cancel/dismiss: the user closed the browser (iOS) or system sheet
+      // (Android) without completing OAuth. Programmatic failures no longer
+      // land here — startSignIn throws them into the catch below.
+      track(SHARED_EVENTS.LoginFailed, {
+        auth_method: provider,
+        flow: 'native',
+        failure_reason: result.type,
+        duration_ms: Date.now() - attemptStartedAt,
+      });
+    } catch (oauthError) {
+      // e.g. the in-app browser failed to open or another one is already
+      // presented. Previously an unhandled rejection with no event.
+      track(SHARED_EVENTS.LoginFailed, {
+        auth_method: provider,
+        flow: 'native',
+        failure_reason: 'exception',
+        failure_detail: oauthError instanceof Error ? oauthError.message : undefined,
+        duration_ms: Date.now() - attemptStartedAt,
+      });
+      setError(t('nativeStart.oauthError'));
     } finally {
       setOauthInProgress(false);
     }
