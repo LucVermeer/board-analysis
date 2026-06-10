@@ -48,6 +48,9 @@ type BluetoothContextValue = {
 
 const BluetoothContext = createContext<BluetoothContextValue | null>(null);
 const EMPTY_PICKER_DEVICES: [] = [];
+// How long a switch-to-config auto-connect request stays armed waiting for the
+// switched board's props to reach this provider before it is dropped.
+const PENDING_AUTO_CONNECT_TTL_MS = 15_000;
 
 function formatPickerBoardConfig(t: TFunction<'settings'>, config: BleBoardConfig): string {
   return t('boardConfigMismatch.mobileConfigValue', {
@@ -316,6 +319,17 @@ export function BluetoothProvider({
   // config has actually switched to `configKey`. Set by the switch flow, cleared
   // by the effect below the moment it fires the reconnect.
   const [pendingAutoConnect, setPendingAutoConnect] = useState<{ serial: string; configKey: string } | null>(null);
+
+  // The switched config normally propagates within one re-render, so a request
+  // still pending after this window means it can no longer complete (e.g. the
+  // board switch was reverted before the props arrived). Drop it rather than
+  // leave a stale one-shot armed that would fire on a much-later, unrelated
+  // switch to the same config.
+  useEffect(() => {
+    if (!pendingAutoConnect) return;
+    const expiryTimeoutId = setTimeout(() => setPendingAutoConnect(null), PENDING_AUTO_CONNECT_TTL_MS);
+    return () => clearTimeout(expiryTimeoutId);
+  }, [pendingAutoConnect]);
 
   useEffect(() => {
     if (!pendingAutoConnect) return;

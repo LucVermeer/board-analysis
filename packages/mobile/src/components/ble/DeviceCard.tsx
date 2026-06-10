@@ -14,7 +14,7 @@ import { useTheme } from '../../providers/theme-provider';
 import { hapticLight } from '../../lib/haptics';
 import { spacing, borderRadius } from '../../theme/tokens';
 import { iosSystemColors } from '../../theme/ios-colors';
-import { formatRelativeTime } from '../create-climb/draft-format';
+import { formatRelativeTime } from '../../lib/format-relative-time';
 
 type RssiStrength = 'strong' | 'good' | 'weak';
 

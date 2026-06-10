@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, waitFor, cleanup } from '@testing-library/react';
+import { render, waitFor, cleanup, act } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createElement, type ReactNode } from 'react';
 import type { ClimbQueueItem } from '@boardsesh/queue';
@@ -297,6 +297,98 @@ describe('BluetoothProvider mismatch switch', () => {
       }),
     );
     expect(bluetooth.state.connect).toHaveBeenCalledOnce();
+  });
+
+  it('drops a pending auto-connect whose switched config never propagates', async () => {
+    // Fake timers: the TTL guard's setTimeout must be controllable; the mocked
+    // async switch handler still settles on the (unfaked) microtask queue.
+    vi.useFakeTimers();
+    try {
+      const pickerState = makeMismatchingPickerState();
+      bluetooth.state.pickerState = pickerState;
+      const savedBoard = makeBoard();
+      resolvedBoards.value = new Map([['SN-2', { kind: 'saved', board: savedBoard }]]);
+
+      const { rerender } = renderProvider(KILTER_PROPS);
+      pickerSheet.props?.onSelect('device-2');
+      lastAlertButtons()[2]?.onPress?.();
+
+      await act(async () => {});
+      expect(activeBoard.setActiveBoard).toHaveBeenCalledWith(savedBoard);
+
+      // The TTL elapses before the switched config ever reaches the provider
+      // (e.g. the board switch was reverted) — the one-shot must disarm.
+      await act(async () => {
+        vi.advanceTimersByTime(15_000);
+      });
+
+      rerender(
+        createElement(BluetoothProvider, {
+          ...TENSION_PROPS,
+          children: createElement('div', null),
+        }),
+      );
+      await act(async () => {});
+      expect(bluetooth.state.connect).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('fetches the saved board for a recorded config with a board uuid and switches to it', async () => {
+    const pickerState = makeMismatchingPickerState();
+    bluetooth.state.pickerState = pickerState;
+    resolvedBoards.value = new Map([['SN-2', { kind: 'recorded', config: makeSerialConfig({ boardUuid: 'uuid-9' }) }]]);
+    const fetchedBoard = makeBoard({ uuid: 'uuid-9' });
+    graphql.request.mockResolvedValue({ board: fetchedBoard });
+
+    renderProvider(KILTER_PROPS);
+    pickerSheet.props?.onSelect('device-2');
+    lastAlertButtons()[2]?.onPress?.();
+
+    await waitFor(() => {
+      expect(activeBoard.setActiveBoard).toHaveBeenCalledWith(fetchedBoard);
+    });
+    expect(graphql.request).toHaveBeenCalledWith(expect.anything(), { boardUuid: 'uuid-9' });
+    expect(pickerState.handleCancel).toHaveBeenCalledOnce();
+  });
+
+  it('keeps the picker open and alerts when the recorded-config board fetch fails', async () => {
+    const pickerState = makeMismatchingPickerState();
+    bluetooth.state.pickerState = pickerState;
+    resolvedBoards.value = new Map([['SN-2', { kind: 'recorded', config: makeSerialConfig({ boardUuid: 'uuid-9' }) }]]);
+    graphql.request.mockRejectedValue(new Error('network down'));
+
+    renderProvider(KILTER_PROPS);
+    pickerSheet.props?.onSelect('device-2');
+    lastAlertButtons()[2]?.onPress?.();
+
+    await waitFor(() => {
+      expect(alert.alert).toHaveBeenCalledTimes(2);
+    });
+    const failureCall = alert.alert.mock.calls[1];
+    expect(failureCall?.[1]).toBe('boardConfigMismatch.mobileSwitchFailed');
+    expect(activeBoard.setActiveBoard).not.toHaveBeenCalled();
+    expect(pickerState.handleCancel).not.toHaveBeenCalled();
+  });
+
+  it('treats a null board response for the recorded-config fetch as a failed switch', async () => {
+    const pickerState = makeMismatchingPickerState();
+    bluetooth.state.pickerState = pickerState;
+    resolvedBoards.value = new Map([['SN-2', { kind: 'recorded', config: makeSerialConfig({ boardUuid: 'uuid-9' }) }]]);
+    // The beforeEach default already resolves { board: null } — assert it's
+    // surfaced as a failure, not a crash or a silent no-op.
+
+    renderProvider(KILTER_PROPS);
+    pickerSheet.props?.onSelect('device-2');
+    lastAlertButtons()[2]?.onPress?.();
+
+    await waitFor(() => {
+      expect(alert.alert).toHaveBeenCalledTimes(2);
+    });
+    expect(alert.alert.mock.calls[1]?.[1]).toBe('boardConfigMismatch.mobileSwitchFailed');
+    expect(activeBoard.setActiveBoard).not.toHaveBeenCalled();
+    expect(pickerState.handleCancel).not.toHaveBeenCalled();
   });
 
   it('omits the Switch button for a recorded config with no saved board uuid', () => {
