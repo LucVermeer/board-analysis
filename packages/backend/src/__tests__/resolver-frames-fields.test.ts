@@ -160,7 +160,55 @@ describe('userFavoriteClimbs surfaces framesCount/framesPace', () => {
 });
 
 // ============================================================
-// hydrateClimbsByRefs (covers playlistClimbs + smartPlaylist)
+// playlistClimbs — fetchSpecificBoardClimbs (the real-world path:
+// web + mobile always supply boardName, so hydrateClimbsByRefs is
+// only the all-boards fallback; this is the broken path identified
+// in the PR review)
+// ============================================================
+
+vi.mock('../graphql/resolvers/playlists/helpers/enrichment', () => ({
+  verifyPlaylistAccess: vi.fn().mockResolvedValue(BigInt(1)),
+}));
+
+describe('playlistClimbs (specific-board) surfaces framesCount/framesPace', () => {
+  beforeEach(() => mockDb.select.mockReset());
+
+  it('maps frame fields from fetchSpecificBoardClimbs', async () => {
+    const { playlistClimbs } = await import('../graphql/resolvers/playlists/queries/playlist-climbs');
+
+    // count query
+    mockDb.select.mockReturnValueOnce(makeChain([{ count: 1 }]));
+    // climb data (fetchSpecificBoardClimbs)
+    mockDb.select.mockReturnValueOnce(makeChain([rawClimbRow()]));
+
+    const result = await playlistClimbs(
+      null,
+      { input: { playlistId: '1', boardName: 'kilter', angle: 40 } },
+      makeCtx(),
+    );
+
+    expect(result.climbs[0].framesCount).toBe(3);
+    expect(result.climbs[0].framesPace).toBe(900);
+  });
+
+  it('passes framesCount/framesPace columns to the DB select', async () => {
+    const { playlistClimbs } = await import('../graphql/resolvers/playlists/queries/playlist-climbs');
+
+    mockDb.select.mockReturnValueOnce(makeChain([{ count: 1 }]));
+    mockDb.select.mockReturnValueOnce(makeChain([rawClimbRow()]));
+
+    await playlistClimbs(null, { input: { playlistId: '1', boardName: 'kilter', angle: 40 } }, makeCtx());
+
+    const dataSelectArg = mockDb.select.mock.calls[1]?.[0] as Record<string, unknown> | undefined;
+    const keys = dataSelectArg ? Object.keys(dataSelectArg) : [];
+    expect(keys).toContain('frames_count');
+    expect(keys).toContain('frames_pace');
+  });
+});
+
+// ============================================================
+// hydrateClimbsByRefs (covers the all-boards playlist path +
+// smartPlaylist)
 // ============================================================
 
 describe('hydrateClimbsByRefs surfaces framesCount/framesPace', () => {
@@ -279,6 +327,10 @@ describe('setterClimbsFull (all-boards) surfaces framesCount/framesPace', () => 
 describe('userClimbs surfaces framesCount/framesPace', () => {
   beforeEach(() => {
     mockDb.select.mockReset();
+    // vi.resetModules() re-registers the mock for @boardsesh/db/client so the
+    // dynamic import below picks up a fresh mock instance. executeRows must be
+    // imported AFTER resetModules so it resolves to the new mock; importing it
+    // at the top of the file would capture the stale pre-reset reference.
     vi.resetModules();
   });
 
