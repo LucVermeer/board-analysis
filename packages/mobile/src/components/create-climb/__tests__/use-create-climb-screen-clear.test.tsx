@@ -31,6 +31,11 @@ const createClimb = vi.hoisted(() => ({
   canRedo: false,
 }));
 
+// The controller only touches `AppState` from react-native (autosave flush);
+// stub it so the test transformer doesn't load the real RN.
+vi.mock('react-native', () => ({
+  AppState: { addEventListener: () => ({ remove: () => {} }) },
+}));
 vi.mock('../../../lib/analytics', () => ({ track: vi.fn() }));
 vi.mock('expo-crypto', () => ({ randomUUID: () => 'preview-uuid' }));
 vi.mock('expo-router', () => ({ useRouter: () => router }));
