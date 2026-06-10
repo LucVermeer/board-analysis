@@ -6252,7 +6252,6 @@ export type SearchPlaylistsQuery = {
       climbCount: number;
       creatorId: string;
       creatorName: string;
-      isGeneratedRecommendation: boolean;
       createdAt: string;
       updatedAt: string;
     }>;
@@ -10250,7 +10249,6 @@ export const SearchPlaylistsDocument = {
                       { kind: 'Field', name: { kind: 'Name', value: 'climbCount' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'creatorId' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'creatorName' } },
-                      { kind: 'Field', name: { kind: 'Name', value: 'isGeneratedRecommendation' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
                     ],
