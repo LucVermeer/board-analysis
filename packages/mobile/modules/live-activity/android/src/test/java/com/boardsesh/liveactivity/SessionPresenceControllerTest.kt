@@ -139,6 +139,19 @@ class SessionPresenceControllerTest {
 
     @Test
     @Config(sdk = [30])
+    fun `updateActivity omits the degree marker for a negative sentinel angle`() {
+        val (controller, launchedIntents) = recordingController()
+        controller.startSession(null)
+
+        // angle < 0 is the "no angle" sentinel (the >= 0 guard renders a flat 0°
+        // but suppresses negatives), so the subtitle is the difficulty alone.
+        controller.updateActivity(updateOptions().apply { angle = -1 })
+
+        assertEquals("V5", launchedIntents.last().getStringExtra(BoardSessionService.EXTRA_SUBTITLE))
+    }
+
+    @Test
+    @Config(sdk = [30])
     fun `updateActivity before a session starts is a no-op`() {
         val (controller, launchedIntents) = recordingController()
 

@@ -26,8 +26,6 @@ android {
       // Robolectric needs the merged Android resources/manifest on the unit-test
       // classpath to build the foreground-service notification under test.
       includeAndroidResources true
-      // Don't fail the build for framework calls Robolectric already shadows.
-      returnDefaultValues true
     }
   }
 }
