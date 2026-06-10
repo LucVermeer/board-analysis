@@ -1,8 +1,8 @@
 // Renderer-agnostic React hook over the pure board-presence reducer.
 //
 // Binds a `BoardPresenceClient` (injected transport) to
-// `boardPresenceReducer`, exposing the wall's "now playing" state plus two
-// actions (report a fresh climb, and undo an accidental takeover). All platform
+// `boardPresenceReducer`, exposing the wall's "now playing" state plus actions
+// for reporting a fresh climb and reading the captured undo target. All platform
 // I/O is injected — this package imports no GraphQL client and no host
 // components, so it runs unchanged on web and mobile.
 //
@@ -21,29 +21,8 @@ import {
   mapBoardPresenceEnvelopeToAction,
   type BoardPresenceState,
 } from '@boardsesh/board-presence';
-import type { BoardPresenceClimb, BoardPresenceStats, ClimbInput, ClimbQueueItemInput } from '@boardsesh/shared-schema';
+import type { BoardPresenceClimb, BoardPresenceStats, ClimbQueueItemInput } from '@boardsesh/shared-schema';
 import type { BoardPresenceClient } from './types';
-
-/**
- * Reconstruct the minimal `ClimbInput` needed to re-report a wall climb from
- * the denormalised `BoardPresenceClimb`. The presence feed only carries display
- * fields, so the rest are filled with neutral defaults; the server re-derives
- * canonical climb metadata from the uuid. Only the uuid + angle drive a report.
- */
-function presenceClimbToClimbInput(presenceClimb: BoardPresenceClimb): ClimbInput {
-  return {
-    uuid: presenceClimb.climbUuid,
-    setter_username: presenceClimb.setter ?? '',
-    name: presenceClimb.name ?? '',
-    frames: presenceClimb.frames ?? '',
-    angle: presenceClimb.angle ?? 0,
-    ascensionist_count: 0,
-    difficulty: presenceClimb.grade ?? '',
-    quality_average: '',
-    stars: 0,
-    difficulty_error: '',
-  };
-}
 
 export type UseBoardPresenceResult = {
   currentClimb: BoardPresenceCurrentState['currentClimb'];
@@ -55,8 +34,6 @@ export type UseBoardPresenceResult = {
   reportClimb: BoardPresenceActions['reportClimb'];
   reportClimbWithUndoTarget: BoardPresenceActions['reportClimbWithUndoTarget'];
   getUndoTarget: BoardPresenceActions['getUndoTarget'];
-  reportUndoClimb: BoardPresenceActions['reportUndoClimb'];
-  undo: BoardPresenceActions['undo'];
 };
 
 export type BoardPresenceReportResult = {
@@ -69,8 +46,8 @@ export type BoardPresenceCurrentState = {
   previousClimb: BoardPresenceState['previousClimb'];
   /**
    * The wall climb that should be restored for this device's latest accepted
-   * report. Platforms should relight this over BLE, then call
-   * `reportUndoClimb` after the BLE write succeeds.
+   * report. Platforms should relight this over BLE, then report the restored
+   * climb after the BLE write succeeds.
    */
   undoTarget: BoardPresenceClimb | null;
   /** True while a live subscription is attached for the active board. */
@@ -94,18 +71,6 @@ export type BoardPresenceActions = {
   reportClimbWithUndoTarget: (climb: ClimbQueueItemInput, angle: number | null) => Promise<BoardPresenceReportResult>;
   /** Latest captured undo target for action-only consumers that need a ref-like read. */
   getUndoTarget: () => BoardPresenceClimb | null;
-  /**
-   * Re-report a climb after the platform has successfully relit it over BLE.
-   * When omitted, falls back to the latest captured undo target, then the
-   * reducer's previous climb for compatibility.
-   */
-  reportUndoClimb: (target?: BoardPresenceClimb | null) => Promise<boolean>;
-  /**
-   * Compatibility alias for `reportUndoClimb()`. It does not write to BLE; the
-   * host platform owns the relight step and should call `reportUndoClimb`
-   * after that write succeeds.
-   */
-  undo: () => Promise<boolean>;
 };
 
 export function useBoardPresence(boardId: number | null, client: BoardPresenceClient | null): UseBoardPresenceResult {
@@ -122,8 +87,6 @@ export function useBoardPresence(boardId: number | null, client: BoardPresenceCl
   clientRef.current = client;
   const currentClimbRef = useRef<BoardPresenceClimb | null>(state.currentClimb);
   currentClimbRef.current = state.currentClimb;
-  const previousClimbRef = useRef<BoardPresenceClimb | null>(state.previousClimb);
-  previousClimbRef.current = state.previousClimb;
   const undoTargetRef = useRef<BoardPresenceClimb | null>(undoTarget);
   undoTargetRef.current = undoTarget;
 
@@ -238,25 +201,6 @@ export function useBoardPresence(boardId: number | null, client: BoardPresenceCl
 
   const getUndoTarget = useCallback((): BoardPresenceClimb | null => undoTargetRef.current, []);
 
-  const reportUndoClimb = useCallback(async (target?: BoardPresenceClimb | null): Promise<boolean> => {
-    const activeBoardId = boardIdRef.current;
-    const activeClient = clientRef.current;
-    const climbToRestore = target === undefined ? (undoTargetRef.current ?? previousClimbRef.current) : target;
-    if (activeBoardId === null || activeClient === null || climbToRestore === null) {
-      return false;
-    }
-    // Re-report the climb after the host platform has relit it over BLE. We
-    // forward the angle the climb was sent at; the server re-derives canonical
-    // metadata from the climb uuid and caller identity.
-    const climb: ClimbQueueItemInput = {
-      uuid: climbToRestore.queueItemUuid ?? `undo:${climbToRestore.climbUuid}:${climbToRestore.seq}`,
-      climb: presenceClimbToClimbInput(climbToRestore),
-    };
-    return activeClient.reportClimb(activeBoardId, climb, climbToRestore.angle ?? null);
-  }, []);
-
-  const undo = useCallback(async (): Promise<boolean> => reportUndoClimb(), [reportUndoClimb]);
-
   return useMemo<UseBoardPresenceResult>(
     () => ({
       currentClimb: state.currentClimb,
@@ -268,8 +212,6 @@ export function useBoardPresence(boardId: number | null, client: BoardPresenceCl
       reportClimb,
       reportClimbWithUndoTarget,
       getUndoTarget,
-      reportUndoClimb,
-      undo,
     }),
     [
       state.currentClimb,
@@ -281,8 +223,6 @@ export function useBoardPresence(boardId: number | null, client: BoardPresenceCl
       reportClimb,
       reportClimbWithUndoTarget,
       getUndoTarget,
-      reportUndoClimb,
-      undo,
     ],
   );
 }

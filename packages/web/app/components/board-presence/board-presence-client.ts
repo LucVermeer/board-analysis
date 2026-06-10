@@ -60,7 +60,7 @@ export type WebBoardPresenceClient = BoardPresenceClient & {
  */
 export function createWebBoardPresenceClient(getClient: () => Client): WebBoardPresenceClient {
   return {
-    subscribeNowPlaying(boardId, onEvent, onError) {
+    subscribeNowPlaying(boardId, onEvent, onError, onComplete) {
       return subscribe<BoardNowPlayingData>(
         getClient(),
         { query: BOARD_NOW_PLAYING, variables: { boardId } },
@@ -74,7 +74,7 @@ export function createWebBoardPresenceClient(getClient: () => Client): WebBoardP
             onError?.(err);
           },
           complete: () => {
-            onError?.(new Error('boardNowPlaying subscription completed'));
+            onComplete?.();
           },
         },
       );

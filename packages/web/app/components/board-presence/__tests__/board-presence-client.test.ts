@@ -42,8 +42,9 @@ describe('createWebBoardPresenceClient', () => {
     const client = createWebBoardPresenceClient(getClient);
     const onEvent = vi.fn();
     const onError = vi.fn();
+    const onComplete = vi.fn();
 
-    const unsubscribe = client.subscribeNowPlaying(42, onEvent, onError);
+    const unsubscribe = client.subscribeNowPlaying(42, onEvent, onError, onComplete);
 
     expect(transport.subscribe).toHaveBeenCalledTimes(1);
     const [passedClient, operation, sink] = transport.subscribe.mock.calls[0];
@@ -59,9 +60,8 @@ describe('createWebBoardPresenceClient', () => {
     expect(onError).toHaveBeenCalledWith(new Error('socket dropped'));
 
     sink.complete();
-    expect(onError).toHaveBeenCalledWith(
-      expect.objectContaining({ message: 'boardNowPlaying subscription completed' }),
-    );
+    expect(onComplete).toHaveBeenCalledTimes(1);
+    expect(onError).toHaveBeenCalledTimes(1);
 
     expect(typeof unsubscribe).toBe('function');
   });

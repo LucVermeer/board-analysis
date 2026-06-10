@@ -229,15 +229,14 @@ const DISABLED_CONTROLS: BoardPresenceControlsValue = {
 };
 
 /**
- * The wall's report/undo actions, read safely. Unlike the shared
- * the throwing shared hooks, this
+ * The wall's report action, read safely. Unlike the throwing shared hooks, this
  * returns inert no-ops when rendered outside the provider — so the BLE flow,
  * which may mount before/without the presence provider in tests, never crashes.
  * The BluetoothProvider uses this to fire `reportClimb` on a wall confirm.
  */
 export function useOptionalWallReport(): Pick<
   UseBoardPresenceResult,
-  'currentClimb' | 'previousClimb' | 'reportClimb' | 'undo'
+  'currentClimb' | 'previousClimb' | 'reportClimb'
 > {
   const currentContext = useContext(BoardPresenceCurrentContext);
   const actionsContext = useContext(BoardPresenceActionsContext);
@@ -246,15 +245,13 @@ export function useOptionalWallReport(): Pick<
     currentClimb: currentContext.currentClimb,
     previousClimb: currentContext.previousClimb,
     reportClimb: actionsContext.reportClimb,
-    undo: actionsContext.undo,
   };
 }
 
-const DISABLED_WALL_REPORT: Pick<UseBoardPresenceResult, 'currentClimb' | 'previousClimb' | 'reportClimb' | 'undo'> = {
+const DISABLED_WALL_REPORT: Pick<UseBoardPresenceResult, 'currentClimb' | 'previousClimb' | 'reportClimb'> = {
   currentClimb: null,
   previousClimb: null,
   reportClimb: async (_climb: ClimbQueueItemInput, _angle: number | null) => false,
-  undo: async () => false,
 };
 
 export { BoardPresenceControlsContext };

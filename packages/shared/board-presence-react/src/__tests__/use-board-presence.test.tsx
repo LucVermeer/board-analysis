@@ -154,10 +154,9 @@ describe('useBoardPresence — null inputs', () => {
     expect(result.current.isLive).toBe(false);
   });
 
-  it('report/undo no-op (resolve false) when inert', async () => {
+  it('report no-ops (resolves false) when inert', async () => {
     const { result } = renderHook(() => useBoardPresence(null, null));
     await expect(result.current.reportClimb({ uuid: 'q', climb: { uuid: 'c' } } as never, 40)).resolves.toBe(false);
-    await expect(result.current.undo()).resolves.toBe(false);
   });
 });
 
@@ -335,56 +334,6 @@ describe('useBoardPresence — actions', () => {
     expect(reportResult.undoTarget?.climbUuid).toBe('restore-me');
     expect(result.current.undoTarget?.climbUuid).toBe('restore-me');
     expect(result.current.getUndoTarget()?.climbUuid).toBe('restore-me');
-  });
-
-  it('reportUndoClimb re-reports the provided undo target after the platform relights it', async () => {
-    const harness = makeClient();
-    const { result } = renderHook(() => useBoardPresence(3, harness.client));
-
-    // Two sets: the first becomes `previousClimb` after the second.
-    act(() => {
-      harness.emit(setEvent(climb('first', 1, { angle: 30, queueItemUuid: 'qi-first' })));
-    });
-    act(() => {
-      harness.emit(setEvent(climb('second', 2)));
-    });
-    expect(result.current.currentClimb?.climbUuid).toBe('second');
-    expect(result.current.previousClimb?.climbUuid).toBe('first');
-
-    await act(async () => {
-      await result.current.reportUndoClimb(result.current.previousClimb);
-    });
-
-    expect(harness.reportClimb).toHaveBeenCalledTimes(1);
-    // Re-reports the previous climb: queue-item uuid carried through, the climb
-    // uuid reconstructed into ClimbInput, and the previous angle forwarded.
-    expect(harness.reportClimb).toHaveBeenCalledWith(
-      3,
-      expect.objectContaining({ uuid: 'qi-first', climb: expect.objectContaining({ uuid: 'first' }) }),
-      30,
-    );
-  });
-
-  it('undo compatibility alias is a no-op (resolves false) when there is no target', async () => {
-    const harness = makeClient();
-    const { result } = renderHook(() => useBoardPresence(3, harness.client));
-    await expect(result.current.undo()).resolves.toBe(false);
-    expect(harness.reportClimb).not.toHaveBeenCalled();
-  });
-
-  it('reportUndoClimb no-ops for an explicit null target instead of falling back', async () => {
-    const harness = makeClient();
-    const { result } = renderHook(() => useBoardPresence(3, harness.client));
-
-    act(() => {
-      harness.emit(setEvent(climb('first', 1)));
-    });
-    act(() => {
-      harness.emit(setEvent(climb('second', 2)));
-    });
-
-    await expect(result.current.reportUndoClimb(null)).resolves.toBe(false);
-    expect(harness.reportClimb).not.toHaveBeenCalled();
   });
 });
 

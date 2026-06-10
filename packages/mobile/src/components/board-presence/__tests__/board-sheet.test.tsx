@@ -10,6 +10,14 @@ const presence = vi.hoisted(() => ({
   stats: null as BoardPresenceStats | null,
 }));
 
+const presenceControls = vi.hoisted(() => ({
+  boardId: 123 as number | null,
+}));
+
+const analytics = vi.hoisted(() => ({
+  track: vi.fn(),
+}));
+
 const sheetModal = vi.hoisted(() => ({ present: vi.fn(), dismiss: vi.fn() }));
 
 type ViewMockProps = { children?: ReactNode; style?: unknown };
@@ -80,6 +88,18 @@ vi.mock('@boardsesh/board-presence-react', () => ({
   useBoardPresenceFeed: () => ({ history: presence.history, stats: presence.stats }),
 }));
 
+vi.mock('../../../providers/board-presence-provider', () => ({
+  useBoardPresenceControls: () => ({
+    enabled: true,
+    boardId: presenceControls.boardId,
+    resolveAndBindBoard: vi.fn(async () => null),
+  }),
+}));
+
+vi.mock('../../../lib/analytics', () => ({
+  track: analytics.track,
+}));
+
 vi.mock('../../GlassSheetBackground', () => ({ GlassSheetBackground: () => createElement('div', null) }));
 vi.mock('../../Text', () => ({
   Text: ({ children }: { children?: ReactNode }) => createElement('span', { 'data-text': 'true' }, children),
@@ -110,6 +130,7 @@ vi.mock('../../../theme/tokens', () => ({
 }));
 
 import { BoardSheet, type BoardSheetHandle } from '../BoardSheet';
+import { SHARED_EVENTS } from '@boardsesh/analytics';
 
 function makeClimb(climbUuid: string, seq: number, overrides: Partial<BoardPresenceClimb> = {}): BoardPresenceClimb {
   return {
@@ -133,6 +154,8 @@ describe('BoardSheet', () => {
     presence.currentClimb = null;
     presence.history = [];
     presence.stats = null;
+    presenceControls.boardId = 123;
+    analytics.track.mockClear();
     sheetModal.present.mockClear();
     sheetModal.dismiss.mockClear();
   });
@@ -155,6 +178,46 @@ describe('BoardSheet', () => {
 
     ref.current?.dismiss();
     expect(sheetModal.dismiss).toHaveBeenCalled();
+  });
+
+  it('tracks distinct now-on-the-wall climbs from the presence feed', () => {
+    presence.currentClimb = makeClimb('c1', 3);
+
+    render(
+      createElement(BoardSheet, {
+        boardLabel: 'Garage Wall',
+        onClose: noop,
+        boardConfig,
+        onSwitchBoard: noop,
+      }),
+    );
+
+    expect(analytics.track).toHaveBeenCalledWith(SHARED_EVENTS.BoardNowPlayingReceived, {
+      boardId: 123,
+      climbUuid: 'c1',
+    });
+  });
+
+  it('tracks history views from the imperative present call', () => {
+    presence.history = [makeClimb('c1', 3), makeClimb('c0', 2)];
+    const ref = createRef<BoardSheetHandle>();
+    render(
+      createElement(BoardSheet, {
+        ref,
+        boardLabel: 'Garage Wall',
+        onClose: noop,
+        boardConfig,
+        onSwitchBoard: noop,
+      }),
+    );
+
+    ref.current?.present();
+
+    expect(analytics.track).toHaveBeenCalledWith(SHARED_EVENTS.BoardHistoryViewed, {
+      boardId: 123,
+      itemCount: 2,
+    });
+    expect(sheetModal.present).toHaveBeenCalled();
   });
 
   it('renders the empty state when no climb is on the wall', () => {

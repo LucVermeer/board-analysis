@@ -32,10 +32,8 @@ export function BoardPresenceProvider({
       reportClimb: value.reportClimb,
       reportClimbWithUndoTarget: value.reportClimbWithUndoTarget,
       getUndoTarget: value.getUndoTarget,
-      reportUndoClimb: value.reportUndoClimb,
-      undo: value.undo,
     }),
-    [value.reportClimb, value.reportClimbWithUndoTarget, value.getUndoTarget, value.reportUndoClimb, value.undo],
+    [value.reportClimb, value.reportClimbWithUndoTarget, value.getUndoTarget],
   );
   const current = useMemo<BoardPresenceCurrentState>(
     () => ({

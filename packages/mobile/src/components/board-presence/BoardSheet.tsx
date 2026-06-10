@@ -11,7 +11,7 @@
 // contexts, which are inert when the `board-presence` flag is off — so this
 // sheet is only ever opened from the BoardPill when the flag is on.
 
-import { forwardRef, memo, useCallback, useImperativeHandle, useMemo, useRef, type ReactNode } from 'react';
+import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef } from 'react';
 import { Platform, Pressable, StyleSheet, View, type ColorValue } from 'react-native';
 import {
   BottomSheetModal,
@@ -23,6 +23,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { getGradeColor, DEFAULT_GRADE_COLOR } from '@boardsesh/board-constants/grade-colors';
 import { useBoardPresenceCurrent, useBoardPresenceFeed } from '@boardsesh/board-presence-react';
+import { SHARED_EVENTS } from '@boardsesh/analytics';
 import type { BoardPresenceClimb } from '@boardsesh/shared-schema';
 import type { Climb } from '@boardsesh/queue';
 import { GlassSheetBackground } from '../GlassSheetBackground';
@@ -31,7 +32,9 @@ import { Icon } from '../Icon';
 import { AccessoryClimbThumbnail } from '../queue-control/AccessoryClimbThumbnail';
 import { useTheme } from '../../providers/theme-provider';
 import type { BoardConfig } from '../../providers/drawer-host-provider';
+import { useBoardPresenceControls } from '../../providers/board-presence-provider';
 import { useGradeFormat } from '../../hooks/use-grade-format';
+import { track } from '../../lib/analytics';
 import { spacing, borderRadius } from '../../theme/tokens';
 
 /** Minimal Climb shape the board-art thumbnail needs from a presence climb. */
@@ -95,11 +98,34 @@ export const BoardSheet = forwardRef<BoardSheetHandle, BoardSheetProps>(function
 
   const { currentClimb } = useBoardPresenceCurrent();
   const { history, stats } = useBoardPresenceFeed();
+  const { boardId: boardPresenceBoardId } = useBoardPresenceControls();
+  const boardPresenceBoardIdRef = useRef(boardPresenceBoardId);
+  boardPresenceBoardIdRef.current = boardPresenceBoardId;
+  const historyCountRef = useRef(history.length);
+  historyCountRef.current = history.length;
+
+  const lastReceivedWallClimbRef = useRef<string | null>(null);
+  useEffect(() => {
+    const currentClimbUuid = currentClimb?.climbUuid;
+    if (!currentClimbUuid) return;
+    if (lastReceivedWallClimbRef.current === currentClimbUuid) return;
+    lastReceivedWallClimbRef.current = currentClimbUuid;
+    track(SHARED_EVENTS.BoardNowPlayingReceived, {
+      boardId: boardPresenceBoardIdRef.current ?? undefined,
+      climbUuid: currentClimbUuid,
+    });
+  }, [currentClimb?.climbUuid]);
 
   const snapPoints = useMemo(() => ['55%', '92%'], []);
 
   useImperativeHandle(ref, () => ({
     present: () => {
+      if (historyCountRef.current > 0) {
+        track(SHARED_EVENTS.BoardHistoryViewed, {
+          boardId: boardPresenceBoardIdRef.current ?? undefined,
+          itemCount: historyCountRef.current,
+        });
+      }
       sheetRef.current?.present();
     },
     dismiss: () => {
