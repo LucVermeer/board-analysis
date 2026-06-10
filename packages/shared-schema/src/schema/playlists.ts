@@ -130,6 +130,18 @@ export const playlistsTypeDefs = /* GraphQL */ `
   }
 
   """
+  Input for reordering a climb within a playlist (single move).
+  """
+  input ReorderPlaylistClimbInput {
+    "Playlist ID"
+    playlistId: ID!
+    "Climb UUID to move"
+    climbUuid: String!
+    "Target 0-based index in the playlist's full ordered list"
+    newIndex: Int!
+  }
+
+  """
   Input for getting user's playlists.
   """
   input GetUserPlaylistsInput {

@@ -1935,6 +1935,8 @@ export type Mutation = {
   removeGymMember: Scalars['Boolean']['output'];
   /** Remove a climb from the queue by its queue item UUID. */
   removeQueueItem: Scalars['Boolean']['output'];
+  /** Reorder a climb within a playlist by moving it to a new index (owner/editor). */
+  reorderPlaylistClimb: Scalars['Boolean']['output'];
   /** Move a queue item from one position to another. */
   reorderQueueItem: Scalars['Boolean']['output'];
   /** Replace a queue item with a new one (same UUID). */
@@ -2312,6 +2314,11 @@ export type MutationRemoveGymMemberArgs = {
 /** Root mutation type for all write operations. */
 export type MutationRemoveQueueItemArgs = {
   uuid: Scalars['ID']['input'];
+};
+
+/** Root mutation type for all write operations. */
+export type MutationReorderPlaylistClimbArgs = {
+  input: ReorderPlaylistClimbInput;
 };
 
 /** Root mutation type for all write operations. */
@@ -3887,6 +3894,16 @@ export type RemoveGymMemberInput = {
   gymUuid: Scalars['ID']['input'];
   /** User ID to remove */
   userId: Scalars['ID']['input'];
+};
+
+/** Input for reordering a climb within a playlist (single move). */
+export type ReorderPlaylistClimbInput = {
+  /** Climb UUID to move */
+  climbUuid: Scalars['String']['input'];
+  /** Target 0-based index in the playlist's full ordered list */
+  newIndex: Scalars['Int']['input'];
+  /** Playlist ID */
+  playlistId: Scalars['ID']['input'];
 };
 
 export type ResolveProposalInput = {
@@ -5516,6 +5533,7 @@ export type ResolversTypes = ResolversObject<{
   RegisterControllerInput: RegisterControllerInput;
   RemoveClimbFromPlaylistInput: RemoveClimbFromPlaylistInput;
   RemoveGymMemberInput: RemoveGymMemberInput;
+  ReorderPlaylistClimbInput: ReorderPlaylistClimbInput;
   ResolveProposalInput: ResolveProposalInput;
   RevokeRoleInput: RevokeRoleInput;
   SaveAuroraCredentialInput: SaveAuroraCredentialInput;
@@ -5770,6 +5788,7 @@ export type ResolversParentTypes = ResolversObject<{
   RegisterControllerInput: RegisterControllerInput;
   RemoveClimbFromPlaylistInput: RemoveClimbFromPlaylistInput;
   RemoveGymMemberInput: RemoveGymMemberInput;
+  ReorderPlaylistClimbInput: ReorderPlaylistClimbInput;
   ResolveProposalInput: ResolveProposalInput;
   RevokeRoleInput: RevokeRoleInput;
   SaveAuroraCredentialInput: SaveAuroraCredentialInput;
@@ -6994,6 +7013,12 @@ export type MutationResolvers<
     ParentType,
     ContextType,
     RequireFields<MutationRemoveQueueItemArgs, 'uuid'>
+  >;
+  reorderPlaylistClimb?: Resolver<
+    ResolversTypes['Boolean'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationReorderPlaylistClimbArgs, 'input'>
   >;
   reorderQueueItem?: Resolver<
     ResolversTypes['Boolean'],

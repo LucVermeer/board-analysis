@@ -44,6 +44,12 @@ export const RemoveClimbFromPlaylistInputSchema = z.object({
   climbUuid: ExternalUUIDSchema,
 });
 
+export const ReorderPlaylistClimbInputSchema = z.object({
+  playlistId: z.string().min(1),
+  climbUuid: ExternalUUIDSchema,
+  newIndex: z.number().int().min(0),
+});
+
 export const GetUserPlaylistsInputSchema = z.object({
   boardType: BoardNameSchema,
   layoutId: z.number().int().positive(),

@@ -1502,6 +1502,18 @@ input RemoveClimbFromPlaylistInput {
 }
 
 """
+Input for reordering a climb within a playlist (single move).
+"""
+input ReorderPlaylistClimbInput {
+  "Playlist ID"
+  playlistId: ID!
+  "Climb UUID to move"
+  climbUuid: String!
+  "Target 0-based index in the playlist's full ordered list"
+  newIndex: Int!
+}
+
+"""
 Input for getting user's playlists.
 """
 input GetUserPlaylistsInput {
@@ -4385,6 +4397,11 @@ type Mutation {
   Remove a climb from a playlist.
   """
   removeClimbFromPlaylist(input: RemoveClimbFromPlaylistInput!): Boolean!
+
+  """
+  Reorder a climb within a playlist by moving it to a new index (owner/editor).
+  """
+  reorderPlaylistClimb(input: ReorderPlaylistClimbInput!): Boolean!
 
   """
   Update only lastAccessedAt for a playlist (does not update updatedAt).

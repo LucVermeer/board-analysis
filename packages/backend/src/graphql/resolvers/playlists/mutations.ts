@@ -1,4 +1,4 @@
-import { eq, and, sql } from 'drizzle-orm';
+import { eq, and, asc, sql } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import type { ConnectionContext } from '@boardsesh/shared-schema';
 import { db } from '../../../db/client';
@@ -9,6 +9,7 @@ import {
   UpdatePlaylistInputSchema,
   AddClimbToPlaylistInputSchema,
   RemoveClimbFromPlaylistInputSchema,
+  ReorderPlaylistClimbInputSchema,
   FollowPlaylistInputSchema,
   PinPlaylistInputSchema,
 } from '../../../validation/schemas';
@@ -331,6 +332,80 @@ export const playlistMutations = {
 
     // Update playlist updatedAt
     await db.update(dbSchema.playlists).set({ updatedAt: new Date() }).where(eq(dbSchema.playlists.id, playlistId));
+
+    return true;
+  },
+
+  /**
+   * Reorder a climb within a playlist by moving it to a new 0-based index.
+   *
+   * Single-move semantics: the server derives the climb's current index from the
+   * DB (so position gaps left by prior deletions don't matter, and the client
+   * never has to send a stale oldIndex), splices it to the clamped target index,
+   * then renumbers positions to a dense 0..n-1. Only rows whose position actually
+   * changed are written.
+   */
+  reorderPlaylistClimb: async (_: unknown, { input }: { input: unknown }, ctx: ConnectionContext): Promise<boolean> => {
+    requireAuthenticated(ctx);
+    const validatedInput = validateInput(ReorderPlaylistClimbInputSchema, input, 'input');
+
+    const userId = ctx.userId!;
+
+    // Check ownership/access (same userId-match gate as add/remove climb).
+    const ownership = await db
+      .select({ id: dbSchema.playlists.id })
+      .from(dbSchema.playlistOwnership)
+      .innerJoin(dbSchema.playlists, eq(dbSchema.playlists.id, dbSchema.playlistOwnership.playlistId))
+      .where(and(eq(dbSchema.playlists.uuid, validatedInput.playlistId), eq(dbSchema.playlistOwnership.userId, userId)))
+      .limit(1);
+
+    if (ownership.length === 0) {
+      throw new Error('Playlist not found or you do not have permission to edit it');
+    }
+
+    const playlistId = ownership[0].id;
+
+    await db.transaction(async (tx) => {
+      // Full ordered list — the same order clients see (position, then addedAt).
+      // `for('update')` locks these rows for the transaction so two overlapping
+      // reorders on the same playlist can't both read the same snapshot and have
+      // the second renumber clobber the first (silently losing a move).
+      const rows = await tx
+        .select({
+          id: dbSchema.playlistClimbs.id,
+          climbUuid: dbSchema.playlistClimbs.climbUuid,
+          position: dbSchema.playlistClimbs.position,
+        })
+        .from(dbSchema.playlistClimbs)
+        .where(eq(dbSchema.playlistClimbs.playlistId, playlistId))
+        .orderBy(asc(dbSchema.playlistClimbs.position), asc(dbSchema.playlistClimbs.addedAt))
+        .for('update');
+
+      const oldIndex = rows.findIndex((row) => row.climbUuid === validatedInput.climbUuid);
+      if (oldIndex === -1) {
+        throw new Error('Climb not found in playlist');
+      }
+
+      // Clamp the target into range; a no-op move still falls through to the
+      // updatedAt bump below (cheap, and keeps the mutation idempotent-friendly).
+      const targetIndex = Math.min(Math.max(validatedInput.newIndex, 0), rows.length - 1);
+      const [moved] = rows.splice(oldIndex, 1);
+      rows.splice(targetIndex, 0, moved);
+
+      // Renumber to a dense 0..n-1, writing only the rows that actually shifted.
+      // The position column has no unique constraint, so transient equal
+      // positions mid-loop are fine.
+      for (let index = 0; index < rows.length; index++) {
+        if (rows[index].position !== index) {
+          await tx
+            .update(dbSchema.playlistClimbs)
+            .set({ position: index })
+            .where(eq(dbSchema.playlistClimbs.id, rows[index].id));
+        }
+      }
+
+      await tx.update(dbSchema.playlists).set({ updatedAt: new Date() }).where(eq(dbSchema.playlists.id, playlistId));
+    });
 
     return true;
   },

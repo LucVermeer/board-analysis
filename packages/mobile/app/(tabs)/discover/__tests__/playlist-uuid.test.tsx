@@ -33,6 +33,10 @@ vi.mock('@boardsesh/playlists-react', () => ({
     followPlaylist: vi.fn(),
     unfollowPlaylist: vi.fn(),
   }),
+  usePlaylistItemMutations: () => ({
+    reorderPlaylistClimb: vi.fn(),
+    removeClimbFromPlaylist: vi.fn(),
+  }),
 }));
 
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
@@ -94,6 +98,8 @@ vi.mock('../../../../src/components/playlist', () => ({
   PlaylistFormSheet: () => null,
   PlaylistActionsMenu: () => null,
   PlaylistFollowButton: () => null,
+  PlaylistEditDoneButton: () => null,
+  PlaylistOwnerToolbar: () => null,
   PlaylistBackFab: () => createElement('div', { 'data-back-fab': 'true' }),
 }));
 

@@ -3,7 +3,8 @@ import { View, StyleSheet, Alert, Pressable } from 'react-native';
 import { useLocalSearchParams, useNavigation } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { usePlaylistClimbs, usePlaylistMutations } from '@boardsesh/playlists-react';
+import { usePlaylistClimbs, usePlaylistMutations, usePlaylistItemMutations } from '@boardsesh/playlists-react';
+import type { Climb } from '@boardsesh/queue';
 import {
   GET_PLAYLIST,
   GET_PLAYLIST_CLIMBS,
@@ -22,6 +23,8 @@ import {
   PlaylistFormSheet,
   PlaylistActionsMenu,
   PlaylistFollowButton,
+  PlaylistEditDoneButton,
+  PlaylistOwnerToolbar,
   PlaylistBackFab,
   type PlaylistFormValues,
 } from '../../../src/components/playlist';
@@ -51,6 +54,7 @@ export default function PlaylistDetail() {
   const { systemColors, brandColors } = useTheme();
   const { updatePlaylist, deletePlaylist, pinPlaylist, unpinPlaylist, followPlaylist, unfollowPlaylist } =
     usePlaylistMutations();
+  const { reorderPlaylistClimb, removeClimbFromPlaylist } = usePlaylistItemMutations();
 
   // Playlist metadata for the hero (name, climb count, colour, icon, ownership,
   // pin/follow state).
@@ -135,6 +139,104 @@ export default function PlaylistDetail() {
   const [editVisible, setEditVisible] = useState(false);
   const [actionsVisible, setActionsVisible] = useState(false);
   const [savingEdit, setSavingEdit] = useState(false);
+
+  // Climbs edit mode (reorder + remove). `editClimbs` is a frozen snapshot of the
+  // loaded list seeded on entry; the list renders from it while editing so
+  // moves/removals show instantly. A ref mirrors it for the async handlers' reads
+  // and revert snapshots. Pagination is paused while editing (v1 edits the loaded
+  // window); on exit we invalidate so the canonical server order reloads.
+  const [editMode, setEditMode] = useState(false);
+  const [editClimbs, setEditClimbs] = useState<Climb[]>([]);
+  const editClimbsRef = useRef<Climb[]>([]);
+  const pendingEditClimbsRef = useRef(false);
+
+  const setEditList = useCallback((list: Climb[]) => {
+    editClimbsRef.current = list;
+    setEditClimbs(list);
+  }, []);
+
+  const enterEditMode = useCallback(() => {
+    setEditList(allClimbs);
+    setEditMode(true);
+  }, [allClimbs, setEditList]);
+
+  const exitEditMode = useCallback(() => {
+    setEditMode(false);
+    setEditList([]);
+    void queryClient.invalidateQueries({ queryKey: ['playlistClimbs', playlistUuid] });
+    void queryClient.invalidateQueries({ queryKey: ['playlist', playlistUuid] });
+  }, [setEditList, queryClient, playlistUuid]);
+
+  const handleReorderClimb = useCallback(
+    async (climbUuid: string, newIndex: number) => {
+      const current = editClimbsRef.current;
+      const oldIndex = current.findIndex((climb) => climb.uuid === climbUuid);
+      if (oldIndex === -1 || oldIndex === newIndex) return;
+      const next = [...current];
+      const [moved] = next.splice(oldIndex, 1);
+      next.splice(newIndex, 0, moved);
+      setEditList(next);
+      try {
+        await reorderPlaylistClimb({ playlistId: playlistUuid, climbUuid, newIndex });
+      } catch (err) {
+        console.error('Failed to reorder playlist climb:', err);
+        // Only wholesale-restore the pre-move snapshot if no other edit landed in
+        // the meantime; otherwise a concurrent op's optimistic state would be
+        // clobbered, so reconcile from the server instead.
+        if (editClimbsRef.current === next) {
+          setEditList(current);
+        } else {
+          void queryClient.invalidateQueries({ queryKey: ['playlistClimbs', playlistUuid] });
+        }
+        showToast(t('editClimbs.reorderFailed'), 'error');
+      }
+    },
+    [reorderPlaylistClimb, playlistUuid, setEditList, queryClient, showToast, t],
+  );
+
+  const handleRemoveClimb = useCallback(
+    (climbUuid: string) => {
+      const target = editClimbsRef.current.find((climb) => climb.uuid === climbUuid);
+      Alert.alert(
+        t('editClimbs.removeConfirm.title'),
+        t('editClimbs.removeConfirm.message', { name: target?.name ?? '' }),
+        [
+          { text: t('editClimbs.removeConfirm.cancel'), style: 'cancel' },
+          {
+            text: t('editClimbs.removeConfirm.confirm'),
+            style: 'destructive',
+            onPress: async () => {
+              const current = editClimbsRef.current;
+              const next = current.filter((climb) => climb.uuid !== climbUuid);
+              if (next.length === current.length) return;
+              setEditList(next);
+              // Optimistically decrement the hero climb count.
+              queryClient.setQueryData<Playlist | null>(['playlist', playlistUuid], (prev) =>
+                prev ? { ...prev, climbCount: Math.max(0, prev.climbCount - 1) } : prev,
+              );
+              try {
+                await removeClimbFromPlaylist({ playlistId: playlistUuid, climbUuid });
+              } catch (err) {
+                console.error('Failed to remove playlist climb:', err);
+                // Restore only if no concurrent edit landed since; otherwise
+                // reconcile from the server so we don't clobber it.
+                if (editClimbsRef.current === next) {
+                  setEditList(current);
+                } else {
+                  void queryClient.invalidateQueries({ queryKey: ['playlistClimbs', playlistUuid] });
+                }
+                queryClient.setQueryData<Playlist | null>(['playlist', playlistUuid], (prev) =>
+                  prev ? { ...prev, climbCount: prev.climbCount + 1 } : prev,
+                );
+                showToast(t('editClimbs.removeFailed'), 'error');
+              }
+            },
+          },
+        ],
+      );
+    },
+    [removeClimbFromPlaylist, playlistUuid, setEditList, queryClient, showToast, t],
+  );
 
   // Re-seed interactive state whenever the cached playlist changes — including
   // after a mutation writes its response back via setQueryData. Safe because the
@@ -265,12 +367,20 @@ export default function PlaylistDetail() {
     ]);
   }, [playlist, deletePlaylist, queryClient, playlistUuid, showToast, t, navigation]);
 
-  // Hand the menu → edit sheet off sequentially: close the menu first, then
-  // open the edit sheet from the menu's onClose. Opening both in one tick would
-  // animate two gorhom sheets (and their backdrops) at once.
-  const pendingEditRef = useRef(false);
-  const openEdit = useCallback(() => {
-    pendingEditRef.current = true;
+  // Cog (shown in edit mode) → open the edit-details sheet directly. No menu is
+  // involved, so no sheet-handoff dance is needed.
+  const openEditDetails = useCallback(() => setEditVisible(true), []);
+
+  // Collapsed overflow menu (owner): Pin toggles in place; Delete confirms; Edit
+  // enters the climbs edit mode once the menu sheet has dismissed (deferred via
+  // the pending ref so the sheet's exit animation doesn't fight the top-bar swap).
+  const menuTogglePin = useCallback(() => {
+    setActionsVisible(false);
+    handleTogglePin();
+  }, [handleTogglePin]);
+
+  const menuEnterEdit = useCallback(() => {
+    pendingEditClimbsRef.current = true;
     setActionsVisible(false);
   }, []);
 
@@ -281,18 +391,44 @@ export default function PlaylistDetail() {
 
   const handleActionsClose = useCallback(() => {
     setActionsVisible(false);
-    if (pendingEditRef.current) {
-      pendingEditRef.current = false;
-      setEditVisible(true);
+    if (pendingEditClimbsRef.current) {
+      pendingEditClimbsRef.current = false;
+      enterEditMode();
     }
-  }, []);
+  }, [enterEditMode]);
 
-  // Floating action FABs over the hero (the native header bar is gone): follow
-  // (public non-owner) + pin (auth) + owner more-menu. Rendered with the current
-  // collapse state so the follow control swaps to an icon FAB in header mode.
+  // Floating controls over the hero. Owners get a pin · edit · delete glass
+  // toolbar that collapses to a single overflow ⋯ on scroll (and always on
+  // Material, which asks for the collapsed form). Non-owners keep follow + pin.
+  // Edit mode replaces everything with Done.
   const renderActions = useCallback(
-    (collapsed: boolean) =>
-      playlist ? (
+    (collapsed: boolean) => {
+      if (!playlist) return null;
+      if (editMode) {
+        return <PlaylistEditDoneButton onPress={exitEditMode} collapsed={collapsed} />;
+      }
+      if (isOwner) {
+        if (collapsed) {
+          return (
+            <GlassIconButton
+              iconName="more"
+              iconColor={systemColors.label}
+              onPress={() => setActionsVisible(true)}
+              accessibilityLabel={t('detail.actions')}
+              fallbackColor={systemColors.fill}
+            />
+          );
+        }
+        return (
+          <PlaylistOwnerToolbar
+            isPinned={isPinned}
+            onTogglePin={handleTogglePin}
+            onEdit={enterEditMode}
+            onDelete={handleDelete}
+          />
+        );
+      }
+      return (
         <>
           {isAuthenticated && isFollowable ? (
             <PlaylistFollowButton
@@ -314,27 +450,23 @@ export default function PlaylistDetail() {
               fallbackColor={systemColors.fill}
             />
           ) : null}
-          {isOwner ? (
-            <GlassIconButton
-              iconName="more"
-              iconColor={systemColors.label}
-              onPress={() => setActionsVisible(true)}
-              accessibilityLabel={t('detail.actions')}
-              fallbackColor={systemColors.fill}
-            />
-          ) : null}
         </>
-      ) : null,
+      );
+    },
     [
       playlist,
+      editMode,
+      exitEditMode,
+      isOwner,
+      isPinned,
+      handleTogglePin,
+      enterEditMode,
+      handleDelete,
       isAuthenticated,
       isFollowable,
       isFollowing,
       handleToggleFollow,
       followLoading,
-      isPinned,
-      handleTogglePin,
-      isOwner,
       systemColors,
       brandColors,
       t,
@@ -422,21 +554,28 @@ export default function PlaylistDetail() {
     <>
       <PlaylistDetailView
         hero={hero}
-        climbs={allClimbs}
+        climbs={editMode ? editClimbs : allClimbs}
         renderBoard={renderBoard}
         boardBanner={boardBanner}
         isLoading={query.isLoading}
-        isFetchingNextPage={query.isFetchingNextPage}
-        hasNextPage={query.hasNextPage ?? false}
+        // Pagination is paused while editing the loaded window.
+        isFetchingNextPage={editMode ? false : query.isFetchingNextPage}
+        hasNextPage={editMode ? false : (query.hasNextPage ?? false)}
         fetchNextPage={query.fetchNextPage}
         onActivateClimb={activate}
         emptyMessage={t('detail.empty')}
         actions={renderActions}
+        editMode={editMode}
+        onReorderClimb={handleReorderClimb}
+        onRemoveClimb={handleRemoveClimb}
+        onEditDetails={openEditDetails}
       />
 
       <PlaylistActionsMenu
         visible={actionsVisible}
-        onEdit={openEdit}
+        isPinned={isPinned}
+        onTogglePin={menuTogglePin}
+        onEdit={menuEnterEdit}
         onDelete={openDelete}
         onClose={handleActionsClose}
       />

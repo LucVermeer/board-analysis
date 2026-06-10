@@ -24,6 +24,15 @@ vi.mock('react-native', () => ({
     if (onLayout) attrs['data-has-layout'] = 'true';
     return createElement('div', attrs, children);
   },
+  Pressable: ({
+    children,
+    onPress,
+    accessibilityLabel,
+  }: {
+    children?: ReactNode;
+    onPress?: () => void;
+    accessibilityLabel?: string;
+  }) => createElement('button', { onClick: onPress, 'aria-label': accessibilityLabel }, children),
   StyleSheet: {
     create: (s: Record<string, unknown>) => s,
     absoluteFill: {},
@@ -189,6 +198,18 @@ vi.mock('../../GlassIconButton', () => ({
 
 vi.mock('../PlaylistBoardBackdrop', () => ({
   PlaylistBoardBackdrop: ({ boardType }: { boardType: string }) => createElement('div', { 'data-backdrop': boardType }),
+}));
+
+// Edit-mode helpers pull in react-native-gesture-handler / reanimated worklets
+// that don't parse under jsdom; the view defaults editMode off, so stub them.
+vi.mock('../use-playlist-drag', () => ({
+  usePlaylistDrag: () => ({
+    isDragging: false,
+    controls: { shared: {}, onRowHeight: () => {}, makeHandleGesture: () => ({}) },
+  }),
+}));
+vi.mock('../PlaylistEditClimbRow', () => ({
+  PlaylistEditClimbRow: () => null,
 }));
 
 // Use real playlist-gradient and playlist-colors (pure TS, no RN imports).

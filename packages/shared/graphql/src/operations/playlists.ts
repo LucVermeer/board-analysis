@@ -146,6 +146,13 @@ export const REMOVE_CLIMB_FROM_PLAYLIST = gql`
   }
 `;
 
+// Reorder a climb within a playlist (single move to a new 0-based index)
+export const REORDER_PLAYLIST_CLIMB = gql`
+  mutation ReorderPlaylistClimb($input: ReorderPlaylistClimbInput!) {
+    reorderPlaylistClimb(input: $input)
+  }
+`;
+
 // Get climbs in a playlist with full climb data
 export const GET_PLAYLIST_CLIMBS = gql`
   query GetPlaylistClimbs($input: GetPlaylistClimbsInput!) {
@@ -378,6 +385,20 @@ export type RemoveClimbFromPlaylistMutationVariables = {
 
 export type RemoveClimbFromPlaylistMutationResponse = {
   removeClimbFromPlaylist: boolean;
+};
+
+export type ReorderPlaylistClimbInput = {
+  playlistId: string;
+  climbUuid: string;
+  newIndex: number;
+};
+
+export type ReorderPlaylistClimbMutationVariables = {
+  input: ReorderPlaylistClimbInput;
+};
+
+export type ReorderPlaylistClimbMutationResponse = {
+  reorderPlaylistClimb: boolean;
 };
 
 export type GetPlaylistClimbsInput = {

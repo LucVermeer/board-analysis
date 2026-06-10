@@ -31,6 +31,8 @@
       "noResults": "Ninguna lista coincide con \"{{query}}\""
     },
     "pin": {
+      "pin": "Fijar",
+      "unpin": "Desfijar",
       "pinAriaLabel": "Fijar playlist",
       "unpinAriaLabel": "Desfijar playlist",
       "pinFailed": "No se pudo fijar la playlist",
@@ -105,6 +107,7 @@
     },
     "menu": {
       "generate": "Generar",
+      "editClimbs": "Editar bloques",
       "edit": "Editar",
       "delete": "Eliminar"
     },
@@ -138,6 +141,20 @@
       "loadDescription": "Hubo un error al cargar esta playlist. Inténtalo de nuevo.",
       "tryAgain": "Reintentar"
     }
+  },
+  "editClimbs": {
+    "done": "Listo",
+    "editDetailsAria": "Editar detalles de la playlist",
+    "removeAria": "Quitar {{name}}",
+    "dragHandleAria": "Arrastra para reordenar {{name}}",
+    "removeConfirm": {
+      "title": "¿Quitar bloque?",
+      "message": "¿Quitar \"{{name}}\" de esta playlist?",
+      "confirm": "Quitar",
+      "cancel": "Cancelar"
+    },
+    "removeFailed": "No se pudo quitar el bloque",
+    "reorderFailed": "No se pudo guardar el nuevo orden"
   },
   "edit": {
     "title": "Editar lista",
