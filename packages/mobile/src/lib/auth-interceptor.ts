@@ -56,6 +56,25 @@ export async function ensureFreshToken(): Promise<boolean> {
   return deduplicatedRefresh();
 }
 
+let forcedSignOutPromise: Promise<void> | null = null;
+
+// A burst of concurrent requests all 401 and all see deduplicatedRefresh() return
+// false, so without collapsing them each would revoke + fire onForcedSignOut —
+// duplicate `forced` Logout events and redundant provider cleanup. Run the sign-out
+// once; reset on settle so a genuinely new 401 (after a later sign-in) still signs
+// out. signOut() must complete (revoke + clearTokens) before onForcedSignOut runs.
+function forceSignOut(): Promise<void> {
+  if (!forcedSignOutPromise) {
+    forcedSignOutPromise = (async () => {
+      await signOut();
+      onForcedSignOut?.();
+    })().finally(() => {
+      forcedSignOutPromise = null;
+    });
+  }
+  return forcedSignOutPromise;
+}
+
 export async function authenticatedFetch(url: string | URL | Request, options: RequestInit = {}): Promise<Response> {
   await ensureFreshToken();
 
@@ -78,11 +97,10 @@ export async function authenticatedFetch(url: string | URL | Request, options: R
         return fetch(url, { ...options, headers });
       }
     }
-    await signOut();
-    // signOut() only revoked + cleared tokens. Tell the provider to run the rest
-    // of the cleanup so the UI leaves the authenticated screens immediately,
-    // instead of waiting for the next background→foreground checkAuth.
-    onForcedSignOut?.();
+    // signOut() only revokes + clears tokens. forceSignOut also tells the provider
+    // to run the rest of the cleanup so the UI leaves the authenticated screens
+    // immediately, instead of waiting for the next background→foreground checkAuth.
+    await forceSignOut();
   }
 
   return response;

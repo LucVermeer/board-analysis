@@ -13,7 +13,6 @@ vi.mock('../auth-store', () => ({
   getAuthToken: vi.fn().mockResolvedValue('test-jwt'),
   getRefreshToken: vi.fn().mockResolvedValue('test-refresh-token'),
   storeTokens: vi.fn().mockResolvedValue(undefined),
-  clearTokens: vi.fn().mockResolvedValue(undefined),
   isTokenExpiringSoon: vi.fn().mockResolvedValue(false),
   getTokenExpiresAt: vi.fn().mockResolvedValue(null),
 }));
@@ -204,6 +203,33 @@ describe('authenticatedFetch', () => {
     // screens immediately, and only after the token revoke/clear.
     expect(onForcedSignOut).toHaveBeenCalledTimes(1);
     expect(mockSignOut.mock.invocationCallOrder[0]).toBeLessThan(onForcedSignOut.mock.invocationCallOrder[0]);
+  });
+
+  it('fires the forced-sign-out hook once when concurrent requests both 401 and refresh fails', async () => {
+    // deduplicatedRefresh collapses the refresh, but each waiting caller still
+    // sees refreshed=false. The forced sign-out must run once — not once per
+    // request — so PostHog gets a single `forced` Logout, not N duplicates.
+    mockIsTokenExpiringSoon.mockResolvedValue(false);
+    mockGetAuthToken.mockResolvedValue('old-jwt');
+    const onForcedSignOut = vi.fn();
+    setOnForcedSignOut(onForcedSignOut);
+
+    // Key on the URL rather than call order: any data request 401s, the refresh
+    // 403s — so the assertion can't hinge on how the two requests interleave.
+    mockFetch.mockImplementation((url: string) =>
+      Promise.resolve(url.includes('/auth/native/refresh') ? { ok: false, status: 403 } : { status: 401, ok: false }),
+    );
+
+    const [responseA, responseB] = await Promise.all([
+      authenticatedFetch('https://api.example.com/a'),
+      authenticatedFetch('https://api.example.com/b'),
+    ]);
+
+    expect(responseA.status).toBe(401);
+    expect(responseB.status).toBe(401);
+    // One refresh fetch (deduped), one revoke, one cleanup callback.
+    expect(mockSignOut).toHaveBeenCalledTimes(1);
+    expect(onForcedSignOut).toHaveBeenCalledTimes(1);
   });
 
   it('handles a failed-refresh 401 without throwing when no forced-sign-out hook is registered', async () => {
