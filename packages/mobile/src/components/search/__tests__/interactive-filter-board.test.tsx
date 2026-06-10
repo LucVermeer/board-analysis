@@ -45,6 +45,7 @@ vi.mock('../../play-drawer/use-zoom-pan-gesture', () => ({
 // QA; here we only assert the zoomed chrome, so return a placeholder gesture.
 vi.mock('../../create-climb/use-zoomed-hold-tap-gesture', () => ({
   useZoomedHoldTapGesture: () => ({}),
+  PAN_ACTIVATION_OFFSET: 8,
 }));
 
 vi.mock('../../BoardImageNative', () => ({

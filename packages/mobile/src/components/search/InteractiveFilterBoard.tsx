@@ -9,14 +9,10 @@ import { Text } from '../Text';
 import { useZoomPanGesture } from '../play-drawer/use-zoom-pan-gesture';
 import { HoldTargetLayer } from '../create-climb/HoldTargetLayer';
 import { holdGeometry, buildHoldHitTargets } from '../create-climb/holdLayout';
-import { useZoomedHoldTapGesture } from '../create-climb/use-zoomed-hold-tap-gesture';
+import { useZoomedHoldTapGesture, PAN_ACTIVATION_OFFSET } from '../create-climb/use-zoomed-hold-tap-gesture';
 import { overlays } from '../../theme/tokens';
 import type { BoardHoldTarget } from '../../lib/create-board-holds';
 import { SearchHoldFilterRings } from './SearchHoldFilterRings';
-
-/** Drag distance (px) before the zoom-pan activates, so a stationary hold tap
- *  while zoomed isn't stolen by the pan. */
-const PAN_ACTIVATION_OFFSET = 8;
 
 /** Context handed to an overlay rendered inside the board's zoom transform. */
 export type FilterBoardTransformContext = {

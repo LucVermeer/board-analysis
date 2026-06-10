@@ -4,13 +4,20 @@ import { runOnJS, type SharedValue } from 'react-native-reanimated';
 import { resolveHoldAtPoint, type HoldHitTarget } from './holdLayout';
 
 // Match the per-hold detectors in HoldTarget.tsx so a tap while zoomed behaves
-// identically to a tap at rest. Keep in sync.
+// identically to a tap at rest. Keep in sync. As in HoldTarget, a release in the
+// 300–400ms gap between maxDuration and minDuration fires neither tap nor
+// long-press — intentional parity with the at-rest behaviour, not a new dead zone.
 const TAP_MAX_DURATION_MS = 300;
 const TAP_MAX_DISTANCE_PX = 15;
 const LONG_PRESS_MIN_DURATION_MS = 400;
 
 // Tap/LongPress default to a single pointer, so a 2-finger pinch fails them and
 // falls through to the ancestor pinch — same as HoldTarget.tsx at rest.
+
+/** Default drag distance (px) before the zoom-pan activates. Boards that compose
+ *  this hook pass it to useZoomPanGesture's `panActivationOffset`, so a stationary
+ *  tap stays under the tap detector instead of being eaten by the pan. */
+export const PAN_ACTIVATION_OFFSET = 8;
 
 type UseZoomedHoldTapGestureOptions = {
   /** The board's 1-finger zoom-pan, built with `panActivationOffset` so a

@@ -12,11 +12,7 @@ import type { BoardHoldTarget } from '../../lib/create-board-holds';
 import { HoldTargetLayer } from './HoldTargetLayer';
 import { PaintedHoldsLayer } from './PaintedHoldsLayer';
 import { buildHoldHitTargets } from './holdLayout';
-import { useZoomedHoldTapGesture } from './use-zoomed-hold-tap-gesture';
-
-/** Drag distance (px) before the zoom-pan activates, so a stationary paint tap
- *  while zoomed isn't stolen by the pan. Matches the original editor's value. */
-const PAN_ACTIVATION_OFFSET = 8;
+import { useZoomedHoldTapGesture, PAN_ACTIVATION_OFFSET } from './use-zoomed-hold-tap-gesture';
 
 type InteractiveCreateBoardProps = {
   boardName: BoardName;
