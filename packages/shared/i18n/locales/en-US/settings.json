@@ -370,7 +370,6 @@
     "devicesFound_other": "{{count}} boards found",
     "noDevicesFound": "No boards found nearby",
     "cancel": "Cancel",
-    "unknownBoard": "Unknown Board",
     "connectBoard": "Connect Board",
     "relightBoard": "Re-light board",
     "holdForControls": "Hold for board controls",

@@ -80,12 +80,14 @@ type DevicePresentation = {
 };
 
 function parseSetIds(setIds: string): number[] {
-  return setIds
-    .split(',')
-    .map((setId) => Number(setId.trim()))
-    // `Number('')` is 0, so a malformed "1,,20" would otherwise yield a bogus
-    // set ID 0 — real set IDs are positive.
-    .filter((setId) => Number.isInteger(setId) && setId > 0);
+  return (
+    setIds
+      .split(',')
+      .map((setId) => Number(setId.trim()))
+      // `Number('')` is 0, so a malformed "1,,20" would otherwise yield a bogus
+      // set ID 0 — real set IDs are positive.
+      .filter((setId) => Number.isInteger(setId) && setId > 0)
+  );
 }
 
 // Exported for testing.

@@ -12,6 +12,13 @@ describe('countHolds', () => {
     expect(countHolds('not a frames string')).toBe(0);
   });
 
+  it('returns 0 for null or undefined frames', () => {
+    // The Climb type says frames is a string, but a stale cache or edge-case
+    // response must not crash the draft row.
+    expect(countHolds(null)).toBe(0);
+    expect(countHolds(undefined)).toBe(0);
+  });
+
   it('ignores stray characters between tokens', () => {
     // Aurora frames have no separators, but be robust to anything non-token.
     expect(countHolds(' p1r2 , p3r4 ')).toBe(2);

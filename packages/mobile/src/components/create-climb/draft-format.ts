@@ -3,7 +3,7 @@
 // Relative-time formatting moved to src/lib/format-relative-time.ts.
 
 // Count painted holds in an Aurora frames string (`p{id}r{code}` per hold).
-export function countHolds(frames: string): number {
-  const matches = frames.match(/p\d+r\d+/g);
+export function countHolds(frames: string | null | undefined): number {
+  const matches = frames?.match(/p\d+r\d+/g);
   return matches ? matches.length : 0;
 }
