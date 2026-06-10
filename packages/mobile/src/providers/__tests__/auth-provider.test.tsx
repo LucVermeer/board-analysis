@@ -37,7 +37,8 @@ vi.mock('../../lib/sentry', () => ({
 
 const authSignOutMock = vi.fn();
 vi.mock('../../lib/auth', () => ({
-  startSignIn: vi.fn(),
+  signInWithApple: vi.fn(),
+  signInWithGoogle: vi.fn(),
   signOut: () => authSignOutMock(),
   signInWithCredentials: vi.fn(),
 }));

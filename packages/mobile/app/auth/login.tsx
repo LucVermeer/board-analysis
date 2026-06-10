@@ -12,11 +12,11 @@ import {
 } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { Image } from 'expo-image';
-import { useRouter } from 'expo-router';
+import * as AppleAuthentication from 'expo-apple-authentication';
+import { GoogleSigninButton } from '@react-native-google-signin/google-signin';
 import { useTranslation } from 'react-i18next';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { classifyNativeAuthFailureReason } from '../../src/lib/native-auth-analytics';
-import { parseAuthCallbackParams } from '../../src/lib/auth-callback-url';
 import { useAuth } from '../../src/providers/auth-provider';
 import { useTheme } from '../../src/providers/theme-provider';
 import { track } from '../../src/lib/analytics';
@@ -68,8 +68,7 @@ function SignInButton({
 }
 
 export default function LoginScreen() {
-  const { signIn, signInWithCredentials } = useAuth();
-  const router = useRouter();
+  const { signInWithApple, signInWithGoogle, signInWithCredentials } = useAuth();
   const { t } = useTranslation('auth');
   const theme = useTheme();
   const passwordRef = useRef<RNTextInput>(null);
@@ -124,50 +123,41 @@ export default function LoginScreen() {
   }
 
   async function handleOAuthSignIn(provider: 'apple' | 'google') {
-    // A rapid double-tap would open two concurrent auth sessions.
+    // A rapid double-tap would open two concurrent native sheets.
     if (oauthInProgress) return;
     setOauthInProgress(true);
     setError(null);
     track(SHARED_EVENTS.LoginAttempted, { auth_method: provider, flow: 'native' });
-    // duration_ms separates a human abandoning the browser (seconds-to-minutes)
-    // from the flow dying programmatically (sub-second) — the iOS 26 auth-session
-    // bug surfaced as 100–250ms "cancels" that looked like user action.
+    // duration_ms separates a human dismissing the system sheet (seconds) from
+    // the flow dying programmatically (sub-second).
     const attemptStartedAt = Date.now();
     try {
-      const result = await signIn(provider);
-      if (result.type === 'success') {
-        // The browser result is one of two delivery paths for the callback URL
-        // (the other is the OS deep link expo-router routes to /auth/callback);
-        // route the transfer token there ourselves and let the callback screen
-        // dedupe the exchange.
-        const { transferToken, error: callbackError } = parseAuthCallbackParams(result.url);
-        if (transferToken) {
-          router.replace({ pathname: '/auth/callback', params: { transferToken } });
-        } else {
-          // callbackError comes from our own server (session_missing /
-          // token_issue_failed), so it's safe as a low-cardinality reason.
-          track(SHARED_EVENTS.LoginFailed, {
-            auth_method: provider,
-            flow: 'native',
-            failure_reason: callbackError ?? 'no_transfer_token',
-            duration_ms: Date.now() - attemptStartedAt,
-          });
-          setError(t('nativeStart.oauthError'));
-        }
+      const result = provider === 'apple' ? await signInWithApple() : await signInWithGoogle();
+      if (result.success) {
+        track(SHARED_EVENTS.LoginSucceeded, { auth_method: provider, flow: 'native' });
+        // AuthProvider flips isAuthenticated and the redirect handles navigation.
         return;
       }
-      // cancel/dismiss: the user closed the browser (iOS) or system sheet
-      // (Android) without completing OAuth. Programmatic failures no longer
-      // land here — startSignIn throws them into the catch below.
+      if ('cancelled' in result) {
+        // The user dismissed the provider sheet — not an error, no message shown.
+        track(SHARED_EVENTS.LoginFailed, {
+          auth_method: provider,
+          flow: 'native',
+          failure_reason: 'cancel',
+          duration_ms: Date.now() - attemptStartedAt,
+        });
+        return;
+      }
+      // A real backend/token failure carrying the server's status + error.
       track(SHARED_EVENTS.LoginFailed, {
         auth_method: provider,
         flow: 'native',
-        failure_reason: result.type,
+        failure_reason: classifyNativeAuthFailureReason(result, 'oauth'),
         duration_ms: Date.now() - attemptStartedAt,
       });
+      setError(result.error === 'network' ? t('nativeStart.networkError') : t('nativeStart.oauthError'));
     } catch (oauthError) {
-      // e.g. the in-app browser failed to open or another one is already
-      // presented. Previously an unhandled rejection with no event.
+      // The native module threw (Play Services missing, no presenter, …).
       track(SHARED_EVENTS.LoginFailed, {
         auth_method: provider,
         flow: 'native',
@@ -269,20 +259,34 @@ export default function LoginScreen() {
 
         <View style={styles.buttons}>
           {Platform.OS === 'ios' && (
-            <SignInButton
-              title={t('nativeStart.signInApple')}
+            // Apple's official native button — App Review requires it when other
+            // third-party logins are offered. Self-labeled/localized; colour and
+            // corner radius come from the dedicated props (not `style`).
+            <AppleAuthentication.AppleAuthenticationButton
+              buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+              buttonStyle={
+                isDark
+                  ? AppleAuthentication.AppleAuthenticationButtonStyle.WHITE
+                  : AppleAuthentication.AppleAuthenticationButtonStyle.BLACK
+              }
+              cornerRadius={12}
+              style={styles.appleButton}
               onPress={() => {
+                hapticLight();
                 void handleOAuthSignIn('apple');
               }}
-              disabled={oauthInProgress}
             />
           )}
-          <SignInButton
-            title={t('nativeStart.signInGoogle')}
+          {/* Google's official brand-compliant button. */}
+          <GoogleSigninButton
+            size={GoogleSigninButton.Size.Wide}
+            color={isDark ? GoogleSigninButton.Color.Dark : GoogleSigninButton.Color.Light}
+            disabled={oauthInProgress}
+            style={styles.googleButton}
             onPress={() => {
+              hapticLight();
               void handleOAuthSignIn('google');
             }}
-            disabled={oauthInProgress}
           />
         </View>
       </ScrollView>
@@ -325,6 +329,9 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   buttons: { gap: 12 },
+  // Apple's native button needs explicit height + width or it renders nothing.
+  appleButton: { width: '100%', height: 50 },
+  googleButton: { width: '100%', height: 50 },
   button: {
     backgroundColor: brandColors.primary,
     paddingVertical: 16,

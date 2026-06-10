@@ -1,82 +1,141 @@
-import { Linking, Platform } from 'react-native';
-import * as WebBrowser from 'expo-web-browser';
+import * as AppleAuthentication from 'expo-apple-authentication';
+import { getRandomBytes } from 'expo-crypto';
+import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 import { createTimeoutSignal } from './abort-timeout';
-import { raceBrowserSignIn } from './auth-session-race';
 import { storeTokens, clearTokens, getRefreshToken } from './auth-store';
-import { BACKEND_URL, WEB_BASE_URL } from './env';
+import { BACKEND_URL } from './env';
 
 export type AuthProvider = 'google' | 'apple';
 
-const AUTH_CALLBACK_URL = 'com.boardsesh.app://auth/callback';
-
-// The transfer-token exchange doesn't echo the OAuth provider back, so the
-// callback screen reads the in-flight attempt's provider from here to attribute
-// its Login Succeeded/Failed events. Overwritten by each new attempt.
-let pendingOAuthProvider: AuthProvider | null = null;
-
-export function getPendingOAuthProvider(): AuthProvider | null {
-  return pendingOAuthProvider;
-}
-
-// The two platforms deliver the OAuth callback differently:
-// - Android: openAuthSessionAsync's custom tab. The callback arrives both as
-//   the resolved result URL and as an expo-router deep link; the callback
-//   screen dedupes the exchange.
-// - iOS: a plain SFSafariViewController raced against the OS deep link the
-//   server's callback page fires (see auth-session-race.ts for why
-//   openAuthSessionAsync is deliberately avoided here). Expo Router also
-//   routes the deep link to /auth/callback; the same dedupe applies.
-export async function startSignIn(provider: AuthProvider): Promise<WebBrowser.WebBrowserAuthSessionResult> {
-  pendingOAuthProvider = provider;
-  const callbackUrl = encodeURIComponent('/api/auth/native/callback?next=/');
-  const url = `${WEB_BASE_URL}/auth/native-start?provider=${provider}&callbackUrl=${callbackUrl}`;
-
-  if (Platform.OS !== 'ios') {
-    return WebBrowser.openAuthSessionAsync(url, AUTH_CALLBACK_URL);
-  }
-
-  const result = await raceBrowserSignIn(
-    {
-      addUrlListener: (listener) => Linking.addEventListener('url', listener),
-      openBrowser: (browserUrl) => WebBrowser.openBrowserAsync(browserUrl),
-      dismissBrowser: () => WebBrowser.dismissBrowser(),
-    },
-    url,
-    AUTH_CALLBACK_URL,
-  );
-  if (result.type === 'error') {
-    // Surfaces in the login screen's catch, which reports the message as
-    // failure_detail — the old flow filed browser failures under 'cancel'.
-    throw new Error(result.message);
-  }
-  return result.type === 'success'
-    ? { type: 'success', url: result.url }
-    : { type: WebBrowser.WebBrowserResultType.CANCEL };
-}
+type ForwardedName = { firstName?: string; lastName?: string };
 
 type NativeAuthFailure = { success: false; status: number | null; error: string };
 
-export async function exchangeTransferToken(
-  transferToken: string,
-): Promise<{ success: true; expiresAt: string } | NativeAuthFailure> {
+// A native OAuth attempt resolves to one of: success, an explicit user
+// cancellation (no error shown), or a real failure carrying the server's
+// status/error (mapped to a translated message by the caller).
+export type OAuthSignInResult = { success: true } | { success: false; cancelled: true } | NativeAuthFailure;
+
+/**
+ * POST a verified provider identity token to the backend, which verifies it
+ * against the provider's JWKS and returns our mobile JWT pair. Mirrors
+ * signInWithCredentials' failure shape so the analytics classifier is reused.
+ */
+export async function oauthNativeSignIn(
+  provider: AuthProvider,
+  identityToken: string,
+  extra?: { nonce?: string; name?: ForwardedName },
+): Promise<OAuthSignInResult> {
+  let response: Response;
   try {
-    const response = await fetch(`${BACKEND_URL}/auth/native/exchange`, {
+    response = await fetch(`${BACKEND_URL}/auth/native/oauth`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ transferToken }),
+      body: JSON.stringify({ provider, identityToken, nonce: extra?.nonce, name: extra?.name }),
       signal: createTimeoutSignal(15_000),
     });
+  } catch {
+    // Network failure / timeout. The caller maps this to a translated message.
+    return { success: false, status: null, error: 'network' };
+  }
 
-    if (!response.ok) {
-      const errorBody = await response.text();
-      return { success: false, status: response.status, error: errorBody || `HTTP ${response.status}` };
+  if (!response.ok) {
+    let serverError = `HTTP ${response.status}`;
+    try {
+      const parsed = (await response.json()) as { error?: unknown };
+      if (typeof parsed.error === 'string' && parsed.error.length > 0) {
+        serverError = parsed.error;
+      }
+    } catch {
+      // Body wasn't JSON; fall back to the HTTP status string above.
     }
+    return { success: false, status: response.status, error: serverError };
+  }
 
-    const data = (await response.json()) as { jwt: string; refreshToken: string; expiresAt: string };
-    await storeTokens(data.jwt, data.refreshToken, data.expiresAt);
-    return { success: true, expiresAt: data.expiresAt };
+  const data = (await response.json()) as { jwt: string; refreshToken: string; expiresAt: string };
+  await storeTokens(data.jwt, data.refreshToken, data.expiresAt);
+  return { success: true };
+}
+
+// CSPRNG nonce. Apple embeds SHA-256(nonce) in the identity token's `nonce`
+// claim; the backend recomputes the hash to bind the token to this attempt.
+function generateNonce(): string {
+  const bytes = getRandomBytes(16);
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+// expo-apple-authentication rejects with a CodedError whose `.code` is
+// `ERR_REQUEST_CANCELED` when the user dismisses the system sheet.
+function isAppleCancellation(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && (error as { code?: unknown }).code === 'ERR_REQUEST_CANCELED';
+}
+
+export async function signInWithApple(): Promise<OAuthSignInResult> {
+  const nonce = generateNonce();
+  let credential: AppleAuthentication.AppleAuthenticationCredential;
+  try {
+    credential = await AppleAuthentication.signInAsync({
+      requestedScopes: [
+        AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+        AppleAuthentication.AppleAuthenticationScope.EMAIL,
+      ],
+      nonce,
+    });
   } catch (error) {
-    return { success: false, status: null, error: error instanceof Error ? error.message : 'Exchange failed' };
+    if (isAppleCancellation(error)) return { success: false, cancelled: true };
+    throw error;
+  }
+
+  if (!credential.identityToken) {
+    return { success: false, status: null, error: 'no_identity_token' };
+  }
+
+  // Apple delivers the name only on the first authorization; forward it when
+  // present so a brand-new account gets a display name.
+  const fullName = credential.fullName;
+  const name: ForwardedName | undefined =
+    fullName && (fullName.givenName || fullName.familyName)
+      ? { firstName: fullName.givenName ?? undefined, lastName: fullName.familyName ?? undefined }
+      : undefined;
+
+  return oauthNativeSignIn('apple', credential.identityToken, { nonce, name });
+}
+
+let googleConfigured = false;
+function configureGoogleSignin(): void {
+  if (googleConfigured) return;
+  // webClientId is required to receive an idToken; iosClientId scopes the
+  // native flow on iOS. Both are inlined at build time (EXPO_PUBLIC_*).
+  GoogleSignin.configure({
+    webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
+    iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
+  });
+  googleConfigured = true;
+}
+
+function isGoogleCancellation(error: unknown): boolean {
+  return (
+    typeof error === 'object' && error !== null && (error as { code?: unknown }).code === statusCodes.SIGN_IN_CANCELLED
+  );
+}
+
+export async function signInWithGoogle(): Promise<OAuthSignInResult> {
+  configureGoogleSignin();
+  try {
+    // No-op on iOS; on Android ensures Play Services is present/updatable.
+    await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+    const response = await GoogleSignin.signIn();
+    if (response.type === 'cancelled') {
+      return { success: false, cancelled: true };
+    }
+    const idToken = response.data.idToken;
+    if (!idToken) {
+      return { success: false, status: null, error: 'no_id_token' };
+    }
+    return oauthNativeSignIn('google', idToken);
+  } catch (error) {
+    if (isGoogleCancellation(error)) return { success: false, cancelled: true };
+    throw error;
   }
 }
 
