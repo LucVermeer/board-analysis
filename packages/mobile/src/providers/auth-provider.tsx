@@ -58,23 +58,74 @@ export function AuthProvider({ children, onReady }: AuthProviderProps) {
     }
   }, []);
 
+  // Persisted (SecureStore/AsyncStorage-backed) per-user state that outlives a
+  // relaunch. allSettled (not all) so one failing delete can't abort the rest.
+  // These are the only sign-out leftovers that can carry a previous user across
+  // a cold start on a shared device, so a signed-out checkAuth clears them even
+  // when there's no live in-session cache to wipe (see handleSignedOutTransition).
+  const clearPersistedUserStores = useCallback(
+    () => Promise.allSettled([clearStoredSessionId(), clearStoredActiveBoard()]),
+    [],
+  );
+
+  // The shared signed-out cleanup, used by the manual `signOut`, the
+  // interceptor's forced sign-out (failed-refresh 401), and checkAuth's
+  // proactive expiry path. It deliberately omits the two caller-specific steps:
+  // the manual `Logout` analytics event, and `authSignOut()` (the token revoke +
+  // clear) — the forced/expiry paths' token is already revoked, so running it
+  // here would double-revoke.
+  const runSignedOutCleanup = useCallback(async () => {
+    resetAnalytics();
+    await clearPersistedUserStores();
+    // Drop the in-memory active-board cache too. It's `staleTime: Infinity`, so
+    // without this the next user to sign in on a shared device would inherit the
+    // previous user's board until a manual switch.
+    queryClient.removeQueries({ queryKey: ACTIVE_BOARD_QUERY_KEY });
+    resetHttpClient();
+    disposeWsClient();
+    // Drop every cached query so the next signed-in user doesn't inherit the
+    // previous user's data. Query keys don't currently include a user/token
+    // dimension, and individual keys' staleTime (e.g. userPlaylists' 5 min)
+    // would otherwise paper over the cross-user leak. Doing this at the auth
+    // boundary keeps the rest of the hooks simple.
+    queryClient.clear();
+    setIsAuthenticated(false);
+  }, [clearPersistedUserStores, queryClient]);
+
+  // checkAuth lands here when a token read/refresh shows the session is gone. If
+  // we were authenticated this session, run the full cleanup (cache + clients are
+  // live). Otherwise — a logged-out cold start / relaunch — the cache is empty
+  // and the clients are null, so only the persisted stores can carry a prior
+  // user forward; clear those. Gating the heavy cleanup on the transition keeps a
+  // normal logged-out launch from churning an empty cache. Both branches flip
+  // isAuthenticated → false, so checkAuth doesn't repeat it.
+  const handleSignedOutTransition = useCallback(async () => {
+    if (authStateRef.current.isAuthenticated) {
+      await runSignedOutCleanup();
+    } else {
+      resetAnalyticsForSignedOutTransition();
+      await clearPersistedUserStores();
+      setIsAuthenticated(false);
+    }
+  }, [runSignedOutCleanup, clearPersistedUserStores, resetAnalyticsForSignedOutTransition]);
+
   const checkAuth = useCallback(async () => {
     try {
       const token = await getAuthToken();
       if (!token) {
-        resetAnalyticsForSignedOutTransition();
-        setIsAuthenticated(false);
+        await handleSignedOutTransition();
         return;
       }
       const expiring = await isTokenExpiringSoon();
       if (expiring) {
         const { ensureFreshToken } = await import('../lib/auth-interceptor');
         const refreshed = await ensureFreshToken();
-        if (!refreshed) resetAnalyticsForSignedOutTransition();
-        setIsAuthenticated(refreshed);
-      } else {
-        setIsAuthenticated(true);
+        if (!refreshed) {
+          await handleSignedOutTransition();
+          return;
+        }
       }
+      setIsAuthenticated(true);
     } catch (authCheckError) {
       // SecureStore.getItemAsync REJECTS (not returns null) when the keychain
       // is inaccessible — a background launch before first unlock, or an
@@ -88,7 +139,7 @@ export function AuthProvider({ children, onReady }: AuthProviderProps) {
     } finally {
       setIsLoading(false);
     }
-  }, [resetAnalyticsForSignedOutTransition]);
+  }, [handleSignedOutTransition]);
 
   useEffect(() => {
     // Belt-and-braces: checkAuth already resolves its own rejections, but keep
@@ -119,33 +170,6 @@ export function AuthProvider({ children, onReady }: AuthProviderProps) {
     },
     [checkAuth],
   );
-
-  // The shared signed-out cleanup, used by both the manual `signOut` below and
-  // the interceptor's forced sign-out (failed-refresh 401). It deliberately
-  // omits the two caller-specific steps: the manual `Logout` analytics event,
-  // and `authSignOut()` (the token revoke + clear) — the forced path's caller
-  // already revoked, so running it here would double-revoke.
-  const runSignedOutCleanup = useCallback(async () => {
-    resetAnalytics();
-    // Best-effort store clears — clearStoredSessionId/clearStoredActiveBoard hit
-    // SecureStore/AsyncStorage and can reject. allSettled (not all) so a failed
-    // delete can't abort the rest of the teardown and leave the user stuck on the
-    // authenticated screens with the critical setIsAuthenticated(false) skipped.
-    await Promise.allSettled([clearStoredSessionId(), clearStoredActiveBoard()]);
-    // Drop the in-memory active-board cache too. It's `staleTime: Infinity`, so
-    // without this the next user to sign in on a shared device would inherit the
-    // previous user's board until a manual switch.
-    queryClient.removeQueries({ queryKey: ACTIVE_BOARD_QUERY_KEY });
-    resetHttpClient();
-    disposeWsClient();
-    // Drop every cached query so the next signed-in user doesn't inherit the
-    // previous user's data. Query keys don't currently include a user/token
-    // dimension, and individual keys' staleTime (e.g. userPlaylists' 5 min)
-    // would otherwise paper over the cross-user leak. Doing this at the auth
-    // boundary keeps the rest of the hooks simple.
-    queryClient.clear();
-    setIsAuthenticated(false);
-  }, [queryClient]);
 
   const signOut = useCallback(async () => {
     track(SHARED_EVENTS.Logout, { method: 'manual' });
