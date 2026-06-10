@@ -13,6 +13,7 @@ import {
   type CredentialsSignInResult,
 } from '../lib/auth';
 import { reset as resetAnalytics, track } from '../lib/analytics';
+import { reportError } from '../lib/sentry';
 import { resetHttpClient } from '../lib/graphql/client';
 import { disposeWsClient } from '../lib/graphql/ws-client';
 import { clearStoredSessionId } from '../lib/session-store';
@@ -57,33 +58,47 @@ export function AuthProvider({ children, onReady }: AuthProviderProps) {
   }, []);
 
   const checkAuth = useCallback(async () => {
-    const token = await getAuthToken();
-    if (!token) {
-      resetAnalyticsForSignedOutTransition();
+    try {
+      const token = await getAuthToken();
+      if (!token) {
+        resetAnalyticsForSignedOutTransition();
+        setIsAuthenticated(false);
+        return;
+      }
+      const expiring = await isTokenExpiringSoon();
+      if (expiring) {
+        const { ensureFreshToken } = await import('../lib/auth-interceptor');
+        const refreshed = await ensureFreshToken();
+        if (!refreshed) resetAnalyticsForSignedOutTransition();
+        setIsAuthenticated(refreshed);
+      } else {
+        setIsAuthenticated(true);
+      }
+    } catch (authCheckError) {
+      // SecureStore.getItemAsync REJECTS (not returns null) when the keychain
+      // is inaccessible — a background launch before first unlock, or an
+      // undecryptable entry after an Android backup restore. Without this catch
+      // the rejection escapes, isLoading never clears, onReady never fires, and
+      // the splash screen hangs forever. Treat a read failure as logged-out so
+      // the loading gate always releases. Do NOT clear tokens: a later
+      // successful read (the AppState 'active' re-check below) restores auth.
+      reportError(authCheckError);
       setIsAuthenticated(false);
+    } finally {
       setIsLoading(false);
-      return;
     }
-    const expiring = await isTokenExpiringSoon();
-    if (expiring) {
-      const { ensureFreshToken } = await import('../lib/auth-interceptor');
-      const refreshed = await ensureFreshToken();
-      if (!refreshed) resetAnalyticsForSignedOutTransition();
-      setIsAuthenticated(refreshed);
-    } else {
-      setIsAuthenticated(true);
-    }
-    setIsLoading(false);
   }, [resetAnalyticsForSignedOutTransition]);
 
   useEffect(() => {
-    checkAuth();
+    // Belt-and-braces: checkAuth already resolves its own rejections, but keep
+    // the invocation from producing an unhandled rejection if that ever changes.
+    void checkAuth();
   }, [checkAuth]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextAppState) => {
       if (nextAppState === 'active') {
-        checkAuth();
+        void checkAuth();
       }
     });
     return () => subscription.remove();
