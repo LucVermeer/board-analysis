@@ -10,6 +10,7 @@ import {
 } from '@boardsesh/ble-protocol/aurora';
 import { getMoonboardBluetoothPacket } from '@boardsesh/ble-protocol/moonboard';
 import { isDisconnectionError } from '@boardsesh/ble-protocol/connection-error';
+import { boardSupportsMirroring } from '@boardsesh/play-view';
 import type { AuroraBoardName } from '@boardsesh/shared-schema';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { RECORD_BOARD_SERIAL } from '@boardsesh/graphql/operations';
@@ -22,13 +23,25 @@ import type { HoldPlacement } from '../../components/board-renderer/types';
 import { track } from '../analytics';
 
 // Exported for testing — isolates the .packet extraction so regressions are caught.
+//
+// Returns:
+//  - undefined when there are no frames (nothing to send)
+//  - false when every placement was skipped (the packet builder still emits the
+//    "clear all" packet `l##`, so writing it would silently dark the board while
+//    the caller reported success). The caller surfaces the incompatible-climb
+//    error instead of writing — web parity (use-board-bluetooth.ts:348-363).
+//  - true after a successful write.
 export async function dispatchMoonboardPacket(
   frames: string,
   write: BluetoothAdapter['write'],
   signal?: AbortSignal,
-): Promise<true | undefined> {
+): Promise<boolean | undefined> {
   if (!frames) return undefined;
-  const { packet } = getMoonboardBluetoothPacket(frames);
+  const { packet, skippedRoleCount, skippedPositionCount, totalPlacements } = getMoonboardBluetoothPacket(frames);
+  const skippedCount = skippedRoleCount + skippedPositionCount;
+  if (totalPlacements > 0 && skippedCount === totalPlacements) {
+    return false;
+  }
   await write(packet, signal);
   return true;
 }
@@ -126,25 +139,42 @@ const KEEP_AWAKE_TAG = 'boardsesh-ble';
  * Create a single AbortSignal that fires when either of the two input signals
  * is aborted. This lets us combine a caller-supplied signal with an internal
  * one without losing either.
+ *
+ * Returns the merged `signal` plus a `dispose()` that detaches the abort
+ * listeners from both inputs. The caller MUST call `dispose()` once the write
+ * settles (success or failure), via a `finally`. Without it, a write that never
+ * aborts (the common case) would leave the `onAbort` listener permanently
+ * parked on the caller's long-lived signal — the AutoSender hands its single
+ * lifetime signal to every send, so the listeners (and the per-write
+ * controllers they retain) accumulate for the life of the connection.
+ *
+ * Exported for testing the listener lifecycle.
  */
-function mergeAbortSignals(signalA: AbortSignal, signalB: AbortSignal): AbortSignal {
+export function mergeAbortSignals(
+  signalA: AbortSignal,
+  signalB: AbortSignal,
+): { signal: AbortSignal; dispose: () => void } {
   const controller = new AbortController();
+
+  if (signalA.aborted || signalB.aborted) {
+    controller.abort();
+    // Nothing was attached; dispose is a safe no-op on the early-aborted path.
+    return { signal: controller.signal, dispose: () => {} };
+  }
 
   const onAbort = () => {
     controller.abort();
+  };
+
+  const dispose = () => {
     signalA.removeEventListener('abort', onAbort);
     signalB.removeEventListener('abort', onAbort);
   };
 
-  if (signalA.aborted || signalB.aborted) {
-    controller.abort();
-    return controller.signal;
-  }
-
   signalA.addEventListener('abort', onAbort);
   signalB.addEventListener('abort', onAbort);
 
-  return controller.signal;
+  return { signal: controller.signal, dispose };
 }
 
 function classifyBleFailureReason(error: unknown): string {
@@ -180,6 +210,12 @@ export function useBoardBluetooth({
   const apiLevelRef = useRef<number>(3);
   const unsubDisconnectRef = useRef<(() => void) | null>(null);
   const writeAbortRef = useRef<AbortController | null>(null);
+  // Synchronous in-flight latch for connect(). The lightbulb button isn't
+  // disabled while a connect is pending (isScanning only drives a pulse), so a
+  // double-tap can re-enter connect(); without this, the second attempt creates
+  // a second adapter and starts a second scan on the shared BleManager
+  // singleton, and each flow's stopDeviceScan kills the other's scan.
+  const isConnectingRef = useRef(false);
 
   const [pickerState, setPickerState] = useState<PickerState | null>(null);
   const pickerRejectRef = useRef<((error: Error) => void) | null>(null);
@@ -245,8 +281,17 @@ export function useBoardBluetooth({
       const writeAbort = new AbortController();
       writeAbortRef.current = writeAbort;
 
-      // Combine caller-provided signal with the internal abort controller
-      const combinedSignal = signal ? mergeAbortSignals(signal, writeAbort.signal) : writeAbort.signal;
+      // Combine caller-provided signal with the internal abort controller. The
+      // merge attaches abort listeners to both inputs; `disposeMergedSignal`
+      // detaches them once the write settles so a non-aborting write doesn't
+      // leak a listener on the AutoSender's long-lived signal.
+      let combinedSignal = writeAbort.signal;
+      let disposeMergedSignal: (() => void) | undefined;
+      if (signal) {
+        const merged = mergeAbortSignals(signal, writeAbort.signal);
+        combinedSignal = merged.signal;
+        disposeMergedSignal = merged.dispose;
+      }
 
       try {
         if (boardName === 'moonboard') {
@@ -255,6 +300,20 @@ export function useBoardBluetooth({
             adapterRef.current.write.bind(adapterRef.current),
             combinedSignal,
           );
+          // false = every placement was skipped (unrecognised/corrupt hold
+          // data). The packet builder would emit a "clear all" packet, darking
+          // the board, so dispatchMoonboardPacket refuses to write. Surface the
+          // same incompatible-climb error the Aurora branch uses instead of
+          // letting the AutoSender buzz success on a dark board.
+          if (sent === false) {
+            console.warn('[BLE] All MoonBoard placements skipped — climb has unrecognised hold data');
+            Alert.alert(t('ble.notAvailable'), t('ble.errorIncompatible'));
+            track(SHARED_EVENTS.ClimbSentToBoardFailure, {
+              ...boardAnalyticsProperties,
+              failureReason: 'incompatible_climb',
+            });
+            return false;
+          }
           if (sent) track(SHARED_EVENTS.ClimbSentToBoardSuccess, boardAnalyticsProperties);
           return sent;
         }
@@ -268,7 +327,23 @@ export function useBoardBluetooth({
 
         let framesToSend = frames;
 
-        if (mirrored && holdsData && holdsData.length > 0) {
+        if (mirrored && boardSupportsMirroring(boardName, layoutId)) {
+          // On a board that supports mirroring, a mirrored send REQUIRES the
+          // hold map to produce mirrored frames. If it's missing/empty we must
+          // refuse rather than send the original (un-mirrored) frames — that
+          // would light the wrong holds on the wall while the AutoSender buzzed
+          // success. Web parity (use-board-bluetooth.ts:397-403).
+          if (!holdsData || holdsData.length === 0) {
+            console.error(
+              `[BLE] Cannot mirror frames: holdsData is missing or empty for ${boardName} layout=${layoutId}`,
+            );
+            Alert.alert(t('ble.notAvailable'), t('ble.errorIncompatible'));
+            track(SHARED_EVENTS.ClimbSentToBoardFailure, {
+              ...boardAnalyticsProperties,
+              failureReason: 'missing_mirror_data',
+            });
+            return false;
+          }
           framesToSend = convertToMirroredFramesString(frames, holdsData);
         }
 
@@ -342,6 +417,12 @@ export function useBoardBluetooth({
           handleDisconnection();
         }
         return false;
+      } finally {
+        // Detach the merged-signal listeners now the write has settled. Without
+        // this, a non-aborting write leaves a listener parked on the caller's
+        // long-lived signal (the AutoSender's lifetime signal), retaining the
+        // per-write AbortController for the connection.
+        disposeMergedSignal?.();
       }
     },
     [boardName, layoutId, sizeId, holdsData, ledColorOverrides, handleDisconnection],
@@ -353,6 +434,14 @@ export function useBoardBluetooth({
         console.error('Cannot connect to Bluetooth without board name');
         return false;
       }
+
+      // Drop a re-entrant connect (lightbulb double-tap) — the first attempt
+      // owns the shared BleManager scan for its lifetime. Set synchronously
+      // before any await so two back-to-back calls can't both pass.
+      if (isConnectingRef.current) {
+        return false;
+      }
+      isConnectingRef.current = true;
 
       setLoading(true);
 
@@ -506,6 +595,7 @@ export function useBoardBluetooth({
         });
       } finally {
         setLoading(false);
+        isConnectingRef.current = false;
       }
 
       return false;

@@ -59,6 +59,14 @@ vi.mock('@boardsesh/ble-protocol/moonboard', () => ({
   getMoonboardBluetoothPacket: mockGetMoonboardBluetoothPacket,
 }));
 
+// The Aurora send path lazily imports the LED placement map. Provide a
+// non-empty map so a happy-path mirrored write reaches getAuroraBluetoothPacket
+// instead of bailing on the empty-placement guard.
+const mockGetLedPlacements = vi.hoisted(() => vi.fn(() => ({ 1: 0, 99: 1 })));
+vi.mock('@boardsesh/board-constants/led-placements', () => ({
+  getLedPlacements: mockGetLedPlacements,
+}));
+
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
     t: (key: string) => key,
@@ -93,8 +101,14 @@ vi.mock('../adapter-factory', () => ({
   isNativeIosBleAdapter: vi.fn().mockReturnValue(false),
 }));
 
+import { getAuroraBluetoothPacket } from '@boardsesh/ble-protocol/aurora';
 import { createBluetoothAdapter } from '../adapter-factory';
-import { convertToMirroredFramesString, dispatchMoonboardPacket, useBoardBluetooth } from '../use-board-bluetooth';
+import {
+  convertToMirroredFramesString,
+  dispatchMoonboardPacket,
+  mergeAbortSignals,
+  useBoardBluetooth,
+} from '../use-board-bluetooth';
 
 // ── Factory helper ─────────────────────────────────────────────────────────
 
@@ -202,6 +216,151 @@ describe('useBoardBluetooth', () => {
     expect(successCall).toBeDefined();
     expect(successCall?.[1]).toMatchObject({ apiLevel: 2, deviceNamePresent: false });
   });
+
+  it('ignores a second connect() while the first is still in flight (no concurrent scan)', async () => {
+    reactNativePermissionHarness.permissionsAndroid.requestMultiple.mockResolvedValue({
+      BLUETOOTH_SCAN: 'granted',
+      BLUETOOTH_CONNECT: 'granted',
+    });
+
+    // The in-flight latch is set synchronously at the top of connect() before
+    // any await, so firing two connects back-to-back (a lightbulb double-tap)
+    // must let only the first proceed. Without the latch, both run to
+    // completion and each creates an adapter + starts a scan on the shared
+    // BleManager singleton, with each flow's stopDeviceScan killing the other.
+    const requestAndConnect = vi.fn().mockResolvedValue({ deviceId: 'dev-1', deviceName: 'Kilter A1#0042@3' });
+    const fakeAdapter = {
+      isAvailable: vi.fn().mockResolvedValue(true),
+      requestAndConnect,
+      disconnect: vi.fn().mockResolvedValue(undefined),
+      write: vi.fn().mockResolvedValue(undefined),
+      onDisconnect: vi.fn().mockReturnValue(() => {}),
+    };
+    vi.mocked(createBluetoothAdapter).mockReturnValue(fakeAdapter);
+    mockParseApiLevel.mockReturnValue(3);
+    mockParseSerialNumber.mockReturnValue('0042');
+
+    const { result } = renderHook(() =>
+      useBoardBluetooth({
+        boardName: 'kilter',
+        layoutId: 1,
+        sizeId: 1,
+        setIds: '1',
+      }),
+    );
+
+    let firstConnectResult: boolean | undefined;
+    let secondConnectResult: boolean | undefined;
+    await act(async () => {
+      // Fire both back-to-back; the second must early-return false because the
+      // first already holds the in-flight latch.
+      const first = result.current.connect();
+      const second = result.current.connect();
+      [firstConnectResult, secondConnectResult] = await Promise.all([first, second]);
+    });
+
+    expect(firstConnectResult).toBe(true);
+    expect(secondConnectResult).toBe(false);
+    // Exactly one adapter + one scan despite the double-tap.
+    expect(createBluetoothAdapter).toHaveBeenCalledTimes(1);
+    expect(requestAndConnect).toHaveBeenCalledTimes(1);
+  });
+
+  it('refuses a mirrored send on a mirroring board when holdsData is missing (never sends un-mirrored frames)', async () => {
+    reactNativePermissionHarness.permissionsAndroid.requestMultiple.mockResolvedValue({
+      BLUETOOTH_SCAN: 'granted',
+      BLUETOOTH_CONNECT: 'granted',
+    });
+    const write = vi.fn().mockResolvedValue(undefined);
+    const fakeAdapter = {
+      isAvailable: vi.fn().mockResolvedValue(true),
+      requestAndConnect: vi.fn().mockResolvedValue({ deviceId: 'dev-1', deviceName: 'Tension A1#0042@3' }),
+      disconnect: vi.fn().mockResolvedValue(undefined),
+      write,
+      onDisconnect: vi.fn().mockReturnValue(() => {}),
+    };
+    vi.mocked(createBluetoothAdapter).mockReturnValue(fakeAdapter);
+    mockParseApiLevel.mockReturnValue(3);
+    mockParseSerialNumber.mockReturnValue('0042');
+
+    // Tension layout 1 supports mirroring. holdsData is intentionally omitted —
+    // the provider must thread it in; without it we must NOT silently send the
+    // un-mirrored frames (which would light the wrong holds on the wall).
+    const { result } = renderHook(() =>
+      useBoardBluetooth({
+        boardName: 'tension',
+        layoutId: 1,
+        sizeId: 1,
+        setIds: '1',
+      }),
+    );
+
+    await act(async () => {
+      await result.current.connect();
+    });
+
+    let sendResult: boolean | undefined;
+    await act(async () => {
+      sendResult = await result.current.sendFramesToBoard('p1r12', true);
+    });
+
+    expect(sendResult).toBe(false);
+    expect(Alert.alert).toHaveBeenCalledWith('ble.notAvailable', 'ble.errorIncompatible');
+    // The board must never receive the original (un-mirrored) frames.
+    expect(write).not.toHaveBeenCalled();
+    const failureCall = mockTrack.mock.calls.find(([name]) => name === 'Climb Sent to Board Failure');
+    expect(failureCall?.[1]).toMatchObject({ failureReason: 'missing_mirror_data', mirrored: true });
+  });
+
+  it('mirrors and sends when holdsData is present on a mirroring board', async () => {
+    reactNativePermissionHarness.permissionsAndroid.requestMultiple.mockResolvedValue({
+      BLUETOOTH_SCAN: 'granted',
+      BLUETOOTH_CONNECT: 'granted',
+    });
+    const write = vi.fn().mockResolvedValue(undefined);
+    const fakeAdapter = {
+      isAvailable: vi.fn().mockResolvedValue(true),
+      requestAndConnect: vi.fn().mockResolvedValue({ deviceId: 'dev-1', deviceName: 'Tension A1#0042@3' }),
+      disconnect: vi.fn().mockResolvedValue(undefined),
+      write,
+      onDisconnect: vi.fn().mockReturnValue(() => {}),
+    };
+    vi.mocked(createBluetoothAdapter).mockReturnValue(fakeAdapter);
+    mockParseApiLevel.mockReturnValue(3);
+    mockParseSerialNumber.mockReturnValue('0042');
+    // getAuroraBluetoothPacket is mocked at the module level (returns a stub
+    // packet) so a non-empty placement map lets the write proceed.
+    vi.mocked(getAuroraBluetoothPacket).mockReturnValue({
+      packet: new Uint8Array([0x01]),
+      skippedPositionCount: 0,
+      skippedRoleCount: 0,
+      totalPlacements: 1,
+    });
+
+    const { result } = renderHook(() =>
+      useBoardBluetooth({
+        boardName: 'tension',
+        layoutId: 1,
+        sizeId: 1,
+        setIds: '1',
+        holdsData: [makePlacement(1, 99)],
+      }),
+    );
+
+    await act(async () => {
+      await result.current.connect();
+    });
+
+    let sendResult: boolean | undefined;
+    await act(async () => {
+      sendResult = await result.current.sendFramesToBoard('p1r12', true);
+    });
+
+    expect(sendResult).toBe(true);
+    expect(write).toHaveBeenCalledTimes(1);
+    // The mirrored frame (hold 1 -> 99) must have been fed to the packet builder.
+    expect(getAuroraBluetoothPacket).toHaveBeenCalledWith('p99r12', expect.anything(), 'tension', 3, undefined);
+  });
 });
 
 describe('convertToMirroredFramesString', () => {
@@ -296,7 +455,12 @@ describe('dispatchMoonboardPacket', () => {
 
   it('calls write() with the packet bytes, not the full packet object', async () => {
     const fakePacket = new Uint8Array([0x01, 0x02, 0x03]);
-    mockGetMoonboardBluetoothPacket.mockReturnValue({ packet: fakePacket });
+    mockGetMoonboardBluetoothPacket.mockReturnValue({
+      packet: fakePacket,
+      totalPlacements: 2,
+      skippedRoleCount: 0,
+      skippedPositionCount: 0,
+    });
     const write = vi.fn().mockResolvedValue(undefined);
 
     await dispatchMoonboardPacket('p1r12p2r14', write);
@@ -308,7 +472,12 @@ describe('dispatchMoonboardPacket', () => {
   });
 
   it('returns true on success', async () => {
-    mockGetMoonboardBluetoothPacket.mockReturnValue({ packet: new Uint8Array([0x00]) });
+    mockGetMoonboardBluetoothPacket.mockReturnValue({
+      packet: new Uint8Array([0x00]),
+      totalPlacements: 1,
+      skippedRoleCount: 0,
+      skippedPositionCount: 0,
+    });
     const write = vi.fn().mockResolvedValue(undefined);
 
     const result = await dispatchMoonboardPacket('p1r12', write);
@@ -327,12 +496,100 @@ describe('dispatchMoonboardPacket', () => {
 
   it('forwards the AbortSignal to write()', async () => {
     const fakePacket = new Uint8Array([0xaa]);
-    mockGetMoonboardBluetoothPacket.mockReturnValue({ packet: fakePacket });
+    mockGetMoonboardBluetoothPacket.mockReturnValue({
+      packet: fakePacket,
+      totalPlacements: 1,
+      skippedRoleCount: 0,
+      skippedPositionCount: 0,
+    });
     const write = vi.fn().mockResolvedValue(undefined);
     const controller = new AbortController();
 
     await dispatchMoonboardPacket('p5r3', write, controller.signal);
 
     expect(write).toHaveBeenCalledWith(fakePacket, controller.signal);
+  });
+
+  it('returns false and never writes when every placement is skipped (board would go dark)', async () => {
+    // getMoonboardBluetoothPacket emits the "clear all" packet `l##` with
+    // skippedRoleCount === totalPlacements when no hold maps to a known role.
+    // Writing that would silently dark the board while reporting success.
+    mockGetMoonboardBluetoothPacket.mockReturnValue({
+      packet: new TextEncoder().encode('l##'),
+      totalPlacements: 2,
+      skippedRoleCount: 2,
+      skippedPositionCount: 0,
+    });
+    const write = vi.fn().mockResolvedValue(undefined);
+
+    const result = await dispatchMoonboardPacket('p1r99p2r98', write);
+
+    expect(result).toBe(false);
+    expect(write).not.toHaveBeenCalled();
+  });
+
+  it('writes and returns true when only some placements are skipped', async () => {
+    const fakePacket = new TextEncoder().encode('l#S0#');
+    mockGetMoonboardBluetoothPacket.mockReturnValue({
+      packet: fakePacket,
+      totalPlacements: 2,
+      skippedRoleCount: 1,
+      skippedPositionCount: 0,
+    });
+    const write = vi.fn().mockResolvedValue(undefined);
+
+    const result = await dispatchMoonboardPacket('p1r42p2r99', write);
+
+    expect(result).toBe(true);
+    expect(write).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ── mergeAbortSignals ───────────────────────────────────────────────────────
+
+describe('mergeAbortSignals', () => {
+  it('removes the abort listener from the long-lived signal once disposed (no leak per write)', () => {
+    // The AutoSender passes one lifetime-scoped signal to every send. Each send
+    // creates a fresh per-write controller and merges. Without dispose, every
+    // successful (non-aborted) write parked a permanent listener on the
+    // lifetime signal, leaking the per-write controller for the connection.
+    const lifetime = new AbortController();
+    const addSpy = vi.spyOn(lifetime.signal, 'addEventListener');
+    const removeSpy = vi.spyOn(lifetime.signal, 'removeEventListener');
+
+    // Simulate N consecutive successful sends: merge, then dispose without aborting.
+    for (let send = 0; send < 5; send++) {
+      const perWrite = new AbortController();
+      const { dispose } = mergeAbortSignals(lifetime.signal, perWrite.signal);
+      dispose();
+    }
+
+    // Every listener added to the lifetime signal must have been removed again.
+    const abortListenersAdded = addSpy.mock.calls.filter(([eventName]) => eventName === 'abort').length;
+    const abortListenersRemoved = removeSpy.mock.calls.filter(([eventName]) => eventName === 'abort').length;
+    expect(abortListenersAdded).toBe(5);
+    expect(abortListenersRemoved).toBe(5);
+  });
+
+  it('still aborts the merged signal when an input signal aborts', () => {
+    const lifetime = new AbortController();
+    const perWrite = new AbortController();
+    const { signal } = mergeAbortSignals(lifetime.signal, perWrite.signal);
+
+    expect(signal.aborted).toBe(false);
+    perWrite.abort();
+    expect(signal.aborted).toBe(true);
+  });
+
+  it('returns an already-aborted signal when an input is already aborted', () => {
+    const lifetime = new AbortController();
+    lifetime.abort();
+    const perWrite = new AbortController();
+
+    const { signal, dispose } = mergeAbortSignals(lifetime.signal, perWrite.signal);
+
+    expect(signal.aborted).toBe(true);
+    // dispose must be safe to call even on the early-aborted path.
+    expect(() => dispose()).not.toThrow();
   });
 });
