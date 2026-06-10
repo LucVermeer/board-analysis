@@ -31,7 +31,8 @@ import type { PreviewItem } from './workout-preview-pool';
  * First screen of the session overlay before a session is live: pick a board,
  * optionally generate a workout, review (and tweak) a live preview of the queue,
  * then tap Start. The preview is built/refreshed by `useWorkoutPreview`; Start
- * replaces the user's queue with the preview and lazily creates the session, so
+ * creates the session (the ONLY create path besides joining — sessions are never
+ * created lazily) and replaces the user's queue with the preview, so
  * SessionScreen re-renders into InSessionView when `sessionId` flips.
  */
 function previewKeyExtractor(previewItem: PreviewItem): string {

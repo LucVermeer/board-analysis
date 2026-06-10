@@ -19,7 +19,12 @@ import { Icon } from '../../Icon';
 import { Text } from '../../Text';
 import { type IconName } from '../../icon-map';
 import { useTheme } from '../../../providers/theme-provider';
-import { useQueueSessionControls, useQueueActions, useQueueLiveStats } from '../../../providers/queue-provider';
+import {
+  useQueueSessionControls,
+  useQueueActions,
+  useQueueLiveStats,
+  useIsPartyPreviewOnly,
+} from '../../../providers/queue-provider';
 import { useDrawerHost } from '../../../providers/drawer-host-provider';
 import { useSessionDetail, useSessionSummary } from '../../../lib/graphql/hooks';
 import { climbToQueueItem } from '../../../lib/climb-to-queue-item';
@@ -334,12 +339,10 @@ export function InSessionView({ translateY, screenHeight }: InSessionViewProps) 
     [sessionUsers, participantId],
   );
 
-  const isSessionDriver = deriveIsDriver({
-    isPersistentSessionActive: !!sessionId,
-    participantId,
-    driverParticipantId,
-  });
-  const canControlWall = isSessionDriver;
+  // History-tick taps mutate the shared queue (setCurrentClimb) — gate them on
+  // the provider's roster-aware preview-only selector, not on raw driver state,
+  // so a solo occupant keeps control of their own session.
+  const canControlWall = !useIsPartyPreviewOnly();
   const driverUserId = useMemo(
     () =>
       sessionUsers.find((user) =>
