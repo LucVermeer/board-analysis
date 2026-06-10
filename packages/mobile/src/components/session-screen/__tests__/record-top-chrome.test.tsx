@@ -19,6 +19,10 @@ type ChromeProps = {
 // Captures every prop CollapsingTopChrome receives so the wrapper's forwarding +
 // gating contract can be asserted directly.
 const chrome = vi.hoisted(() => ({ props: null as ChromeProps | null }));
+const ctrl = vi.hoisted(() => ({ variant: 'glass' as 'glass' | 'material' }));
+// Captures the Material app bar's title + actions so the material branch can be
+// asserted without a real Paper render.
+const appbar = vi.hoisted(() => ({ title: null as string | null, actions: [] as string[] }));
 
 vi.mock('react-native', () => ({
   StyleSheet: { create: (styles: unknown) => styles, hairlineWidth: 1 },
@@ -29,10 +33,30 @@ vi.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
 }));
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
-// No `variant` → the glass branch runs, exercising the CollapsingTopChrome
-// forwarding contract below.
+// `ctrl.variant` drives which branch renders: 'glass' (default) exercises the
+// CollapsingTopChrome forwarding contract; 'material' exercises the Paper app bar.
 vi.mock('../../../providers/theme-provider', () => ({
-  useTheme: () => ({ brandColors: { primary: '#6D28D9' } }),
+  useTheme: () => ({
+    brandColors: { primary: '#6D28D9' },
+    systemColors: { label: '#000', secondaryBackground: '#111', separator: '#333' },
+    variant: ctrl.variant,
+  }),
+}));
+vi.mock('react-native-paper', () => ({
+  Appbar: {
+    Header: ({ children }: { children?: ReactNode }) => createElement('div', { 'data-appbar': 'true' }, children),
+    Content: ({ title }: { title?: string }) => {
+      appbar.title = title ?? null;
+      return createElement('div', { 'data-appbar-title': title ?? '' });
+    },
+    Action: ({ accessibilityLabel }: { accessibilityLabel?: string }) => {
+      if (accessibilityLabel) appbar.actions.push(accessibilityLabel);
+      return createElement('div', { 'data-appbar-action': accessibilityLabel ?? '' });
+    },
+  },
+}));
+vi.mock('../../icon-map', () => ({
+  iconMap: { 'person.badge.plus': { ios: 'person.badge.plus', android: 'account-plus-outline' } },
 }));
 vi.mock('../../Icon', () => ({ Icon: ({ name }: { name: string }) => createElement('span', { 'data-icon': name }) }));
 vi.mock('../../chrome', () => ({
@@ -69,6 +93,9 @@ function makeProps(over: Partial<Parameters<typeof RecordTopChrome>[0]> = {}) {
 describe('RecordTopChrome', () => {
   beforeEach(() => {
     chrome.props = null;
+    ctrl.variant = 'glass';
+    appbar.title = null;
+    appbar.actions = [];
   });
 
   it('gates the create island off (canCreate=false)', () => {
@@ -105,5 +132,27 @@ describe('RecordTopChrome', () => {
     expect(shareButton).not.toBeNull();
     shareButton!.click();
     expect(onShare).toHaveBeenCalledTimes(1);
+  });
+
+  describe('material variant', () => {
+    beforeEach(() => {
+      ctrl.variant = 'material';
+    });
+
+    it('renders the Paper app bar with the session title (no CollapsingTopChrome)', () => {
+      const { container } = render(<RecordTopChrome {...makeProps({ title: 'Active session' })} />);
+      expect(container.querySelector('[data-appbar="true"]')).not.toBeNull();
+      expect(container.querySelector('[data-chrome="true"]')).toBeNull();
+      expect(appbar.title).toBe('Active session');
+    });
+
+    it('shows the share app-bar action only while a session is live (onShare set)', () => {
+      const { rerender } = render(<RecordTopChrome {...makeProps()} />);
+      expect(appbar.actions).not.toContain('mobile.session.invite');
+
+      appbar.actions = [];
+      rerender(<RecordTopChrome {...makeProps({ onShare: vi.fn() })} />);
+      expect(appbar.actions).toContain('mobile.session.invite');
+    });
   });
 });

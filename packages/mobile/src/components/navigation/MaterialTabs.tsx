@@ -73,7 +73,7 @@ export function MaterialTabs<K extends string = string>({
   onSelect,
   accessibilityLabel,
 }: MaterialTabsProps<K>) {
-  const { m3, brandColors } = useTheme();
+  const { m3 } = useTheme();
   const [containerWidth, setContainerWidth] = useState(0);
 
   const handleLayout = useCallback((event: LayoutChangeEvent) => {
@@ -119,7 +119,7 @@ export function MaterialTabs<K extends string = string>({
             label={option.label}
             selected={option.key === selectedKey}
             onPress={() => handleSelect(option.key)}
-            rippleColor={brandColors.primary}
+            rippleColor={m3.primary}
             activeColor={m3.primary}
             inactiveColor={m3.onSurfaceVariant}
           />
