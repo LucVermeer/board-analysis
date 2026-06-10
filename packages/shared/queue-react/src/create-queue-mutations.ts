@@ -14,9 +14,10 @@
 //   - Web (no `ensureReady`): the session is already joined. Core mutations
 //     THROW 'Not connected to session' when disconnected — preserving web's
 //     exact behavior.
-//   - Mobile (`ensureReady` provided): the seam resolves/lazily-creates and
-//     joins the session before mutating; returning null makes the action a
-//     silent no-op.
+//   - Mobile (`ensureReady` provided): the seam resolves and joins the session
+//     before mutating; returning null makes the action a silent no-op (mobile
+//     keeps the solo queue purely local — sessions are created only by the
+//     explicit Start button / an explicit join, never lazily here).
 // Party / best-effort actions (takeControl, releaseControl, confirmClimbOnWall,
 // setSessionBoardSerial, setSessionBoardPath) no-op on BOTH platforms when
 // there is no active session.
@@ -65,11 +66,12 @@ export type QueueMutationsDeps<TItem> = {
   /** Platform mapper: item -> wire input (web: toClimbQueueItemInput; mobile: thin {uuid,climb}). */
   toQueueItemInput: (item: TItem) => ClimbQueueItemInput;
   /**
-   * Optional session-resolution seam. When provided (mobile), it resolves /
-   * lazily-creates and joins the session before mutating, returning the
-   * resolved id (or null to no-op). When ABSENT (web), core actions throw on a
+   * Optional session-resolution seam. When provided (mobile), it resolves and
+   * joins the session before mutating, returning the resolved id (or null to
+   * no-op — mobile returns null for a null `capturedSessionId`, keeping the
+   * solo queue local). When ABSENT (web), core actions throw on a
    * missing/flipped session. `capturedSessionId` is the id snapshotted at the
-   * call's enqueue time; null means "no session yet — create one if allowed".
+   * call's enqueue time; null means no session existed then.
    */
   ensureReady?: (capturedSessionId: string | null) => Promise<string | null>;
   /** Sink for swallowed transport errors (best-effort actions + coalescer drains). */
@@ -136,8 +138,9 @@ export function createQueueMutations<TItem>(deps: QueueMutationsDeps<TItem>): Qu
 
   // Core mutating actions. Web (no ensureReady) THROWS when disconnected;
   // mobile (ensureReady) silently no-ops by returning null. `allowCreate`
-  // controls whether mobile may lazily create a session (add / setCurrent) vs
-  // requires an existing one (remove / mirror / setQueue / replace).
+  // historically let mobile lazily create a session on add / setCurrent;
+  // mobile's seam no longer creates (solo stays local), so today the flag only
+  // controls whether ensureReady is consulted at all on a null captured id.
   async function resolveCore({ allowCreate }: { allowCreate: boolean }): Promise<Ready | null> {
     const client = getClient();
     const captured = getSessionId();
@@ -180,10 +183,11 @@ export function createQueueMutations<TItem>(deps: QueueMutationsDeps<TItem>): Qu
         throw new Error(NOT_CONNECTED);
       }
       if (ensureReady) {
-        // Mobile: a null captured id means "no session yet" — ensureReady
-        // creates one. A concrete captured id that no longer matches the live
-        // session means it flipped mid-flight; drop rather than apply a stale
-        // setCurrent to the new session.
+        // Mobile: a null captured id means "no session" — the seam returns
+        // null and the send is dropped (solo stays local). A concrete captured
+        // id that no longer matches the live session means it flipped
+        // mid-flight; drop rather than apply a stale setCurrent to the new
+        // session.
         const sessionId = await ensureReady(capturedSessionId);
         if (!sessionId) return;
         if (capturedSessionId !== null && getSessionId() !== capturedSessionId) return;

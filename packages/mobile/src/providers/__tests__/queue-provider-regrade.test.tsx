@@ -79,6 +79,11 @@ vi.mock('../../lib/session-store', () => ({
   setStoredSessionId: vi.fn(async () => {}),
   clearStoredSessionId: vi.fn(async () => {}),
 }));
+vi.mock('../../lib/queue-snapshot-store', () => ({
+  getStoredQueueSnapshot: vi.fn(async () => null),
+  setStoredQueueSnapshot: vi.fn(async () => {}),
+  clearStoredQueueSnapshot: vi.fn(async () => {}),
+}));
 vi.mock('../../lib/active-board-store', () => ({ getStoredActiveBoard: activeBoard.getStoredActiveBoard }));
 vi.mock('../../lib/graphql/use-active-board', () => ({
   useActiveBoard: () => ({ data: activeBoard.stored }),

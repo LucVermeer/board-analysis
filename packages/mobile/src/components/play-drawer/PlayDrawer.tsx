@@ -30,7 +30,7 @@ import { BleControlSheet } from '../ble/BleControlSheet';
 import { disconnectAllBluetooth } from '../../lib/ble/bluetooth-status-store';
 import { GlassSheetBackground } from '../GlassSheetBackground';
 import { Icon } from '../Icon';
-import { usePlaylistSuggestionSource, useQueue } from '../../providers/queue-provider';
+import { useIsPartyPreviewOnly, usePlaylistSuggestionSource, useQueue } from '../../providers/queue-provider';
 import { useOptionalBluetoothContext } from '../../providers/bluetooth-provider';
 import { useToast } from '../../providers/toast-provider';
 import { useToggleFavorite, useFavoriteStatus } from '../../lib/graphql/hooks';
@@ -46,7 +46,6 @@ import {
   derivePlayDrawerLightbulbPressAction,
   derivePlayDrawerLightbulbState,
   derivePlayDrawerPreviousDriver,
-  isPlayDrawerPreviewOnly,
   resolvePlayDrawerWallControlQueueItem,
   shouldRestoreFailedTakeControlPreview,
 } from './lightbulb-control';
@@ -217,7 +216,10 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
       }),
     [sessionId, driverParticipantId, participantId, bluetoothConnected, bluetoothLoading, pendingClimbUuid],
   );
-  const isPartyPreviewOnly = isPlayDrawerPreviewOnly(lightbulbState);
+  // Queue-mutation gating comes from the provider's roster-aware selector (a
+  // solo occupant keeps full control); lightbulbState stays driver-based for
+  // the wall-control press semantics only.
+  const isPartyPreviewOnly = useIsPartyPreviewOnly();
   const navigationSuggestionSource = drawerPreviewSuggestionSource ?? playlistSuggestionSource;
   const navigationState = useMemo(
     () => computeNavigationStateWithSuggestions(state.queue, displayedQueueItem, navigationSuggestionSource),

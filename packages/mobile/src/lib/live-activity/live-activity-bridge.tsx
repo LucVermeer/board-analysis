@@ -1,7 +1,6 @@
 import { useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { deriveIsDriver } from '@boardsesh/queue-runtime';
-import { useQueue } from '../../providers/queue-provider';
+import { useIsPartyPreviewOnly, useQueue } from '../../providers/queue-provider';
 import { useLiveActivity } from './use-live-activity';
 import { addWidgetQueueNavigateListener } from './live-activity-plugin';
 
@@ -22,15 +21,11 @@ type LiveActivityBridgeProps = {
 // selected) so a guest user without a board doesn't trigger Live Activity
 // authorization prompts at random.
 export function LiveActivityBridge({ boardName, layoutId, sizeId, setIds }: LiveActivityBridgeProps) {
-  const { state, sessionId, driverParticipantId, participantId, nextClimb, previousClimb } = useQueue();
+  const { state, sessionId, nextClimb, previousClimb } = useQueue();
   const { t } = useTranslation('session');
-  const canNavigateFromWidget =
-    sessionId === null ||
-    deriveIsDriver({
-      isPersistentSessionActive: true,
-      participantId,
-      driverParticipantId,
-    });
+  // Widget Next/Previous are queue mutations — gate them on the same
+  // roster-aware preview-only selector as every other mutation path.
+  const canNavigateFromWidget = !useIsPartyPreviewOnly();
 
   // Localized strings for the Android foreground-service notification (channel +
   // Previous/Next actions). Built here because hooks need a component context;
@@ -51,7 +46,9 @@ export function LiveActivityBridge({ boardName, layoutId, sizeId, setIds }: Live
     currentClimbQueueItem: state.currentClimbQueueItem,
     board: { boardName, layoutId, sizeId, setIds },
     sessionId,
-    isSessionActive: state.queue.length > 0 || state.currentClimbQueueItem !== null,
+    // Session presence follows real (explicitly started/joined) sessions only —
+    // a solo queue never raises the lock-screen widget / Dynamic Island.
+    isSessionActive: sessionId !== null,
     widgetNavigationAllowed: canNavigateFromWidget,
     isPartySession: sessionId !== null,
     androidNotification,
