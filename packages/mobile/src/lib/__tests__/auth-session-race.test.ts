@@ -82,11 +82,31 @@ describe('raceBrowserSignIn', () => {
     harness.fireDeepLink(`${CALLBACK_PREFIX}?transferToken=tok-3`);
     // dismissBrowser() closing the browser resolves openBrowser afterwards.
     harness.closeBrowser();
+    await Promise.resolve();
 
     await expect(racePromise).resolves.toEqual({
       type: 'success',
       url: `${CALLBACK_PREFIX}?transferToken=tok-3`,
     });
+    // Promise resolve() is idempotent, so the value alone can't prove the
+    // double-settle guard held — the listener teardown running once can.
+    expect(harness.removeListener).toHaveBeenCalledTimes(1);
+  });
+
+  it('settles error and removes the listener when openBrowser throws synchronously', async () => {
+    const harness = createIoHarness();
+    const throwingIo: AuthSessionRaceIo = {
+      ...harness.io,
+      openBrowser: () => {
+        throw new Error('no browser available');
+      },
+    };
+
+    await expect(raceBrowserSignIn(throwingIo, AUTH_URL, CALLBACK_PREFIX)).resolves.toEqual({
+      type: 'error',
+      message: 'no browser available',
+    });
+    expect(harness.removeListener).toHaveBeenCalledTimes(1);
   });
 
   it('resolves error with the message when the browser fails to open', async () => {

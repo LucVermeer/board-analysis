@@ -19,7 +19,10 @@ import { useTheme } from '../../src/providers/theme-provider';
 const exchangedTokens = new Set<string>();
 
 export default function AuthCallback() {
-  const { transferToken } = useLocalSearchParams<{ transferToken: string }>();
+  const { transferToken, error: serverCallbackError } = useLocalSearchParams<{
+    transferToken: string;
+    error?: string;
+  }>();
   const { t } = useTranslation('auth');
   // Holds a translated, user-facing failure message — never raw server text,
   // which the backend returns in English only.
@@ -36,11 +39,17 @@ export default function AuthCallback() {
     const authMethod = getPendingOAuthProvider() ?? undefined;
 
     if (!transferToken) {
-      track(SHARED_EVENTS.LoginFailed, {
-        auth_method: authMethod,
-        flow: 'native',
-        failure_reason: 'no_transfer_token',
-      });
+      // When the server deep-links an explicit error (session_missing /
+      // token_issue_failed), login.tsx already tracked it with the precise
+      // reason from the same URL — expo-router just also routed it here.
+      // Tracking again would double-count one failed attempt.
+      if (!serverCallbackError) {
+        track(SHARED_EVENTS.LoginFailed, {
+          auth_method: authMethod,
+          flow: 'native',
+          failure_reason: 'no_transfer_token',
+        });
+      }
       setError(t('callback.noTransferToken'));
       return;
     }
@@ -69,7 +78,7 @@ export default function AuthCallback() {
         track(SHARED_EVENTS.LoginFailed, { auth_method: authMethod, flow: 'native', failure_reason: 'exception' });
         setError(t('callback.unexpectedError'));
       });
-  }, [transferToken, router, refreshAuthState, t]);
+  }, [transferToken, serverCallbackError, router, refreshAuthState, t]);
 
   if (error) {
     return (

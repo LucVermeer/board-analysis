@@ -47,15 +47,23 @@ export function raceBrowserSignIn(
       settle({ type: 'success', url });
     });
 
-    io.openBrowser(authUrl).then(
-      // Resolves when the browser closes. Reaching this un-settled means no
-      // callback deep link arrived — the user closed it without finishing.
-      () => settle({ type: 'cancel' }),
-      (openBrowserError: unknown) =>
-        settle({
-          type: 'error',
-          message: openBrowserError instanceof Error ? openBrowserError.message : 'browser failed to open',
-        }),
-    );
+    const settleOpenFailure = (openBrowserError: unknown) =>
+      settle({
+        type: 'error',
+        message: openBrowserError instanceof Error ? openBrowserError.message : 'browser failed to open',
+      });
+
+    try {
+      io.openBrowser(authUrl).then(
+        // Resolves when the browser closes. Reaching this un-settled means no
+        // callback deep link arrived — the user closed it without finishing.
+        () => settle({ type: 'cancel' }),
+        settleOpenFailure,
+      );
+    } catch (openBrowserError) {
+      // A synchronous throw would otherwise leak the URL listener and hang
+      // the returned promise forever.
+      settleOpenFailure(openBrowserError);
+    }
   });
 }
