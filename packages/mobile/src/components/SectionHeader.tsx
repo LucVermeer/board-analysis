@@ -3,6 +3,7 @@ import { Text } from './Text';
 import { Icon } from './Icon';
 import { PressableSurface } from './PressableSurface';
 import { useTheme } from '../providers/theme-provider';
+import { spacing } from '../theme/tokens';
 
 type SectionHeaderProps = {
   title: string;
@@ -51,9 +52,9 @@ export function SectionHeader({ title, actionLabel, onActionPress }: SectionHead
 
 const styles = StyleSheet.create({
   container: {
-    paddingHorizontal: 16,
-    paddingTop: 24,
-    paddingBottom: 8,
+    paddingHorizontal: spacing[4],
+    paddingTop: spacing[6],
+    paddingBottom: spacing[2],
   },
   containerWithAction: {
     flexDirection: 'row',

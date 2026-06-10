@@ -30,10 +30,11 @@ export function StatsSummaryCard({ statisticsSummary, hardestSend, hardestFlash,
   // reads "Top 0.1%" rather than "Top 0%".
   const topPercent = showPercentile ? Math.max(0.1, 100 - percentile.percentile) : 0;
 
-  // On Material the three tiles read as one tonal family (neutral · primary ·
-  // tertiary container) so they don't land as two saturated grade-coloured alert
-  // blocks; the vivid grade hue survives only as the small tick/flash glyph. On
-  // Liquid Glass the grade tiles stay full grade-coloured fills (the original).
+  // On Material the three tiles read as one tonal family (neutral surfaceVariant ·
+  // primary · secondary container — all brand violet, no amber) so they don't land
+  // as two saturated grade-coloured alert blocks; the vivid grade hue survives only
+  // as the small tick/flash glyph. On Liquid Glass the grade tiles stay full
+  // grade-coloured fills (the original).
   const countTileColor = isMaterial ? m3.surfaceVariant : systemColors.fill;
   const countTextColor = isMaterial ? m3.onSurfaceVariant : undefined;
   const countLabelColor = isMaterial ? m3.onSurfaceVariant : systemColors.secondaryLabel;
@@ -63,8 +64,8 @@ export function StatsSummaryCard({ statisticsSummary, hardestSend, hardestFlash,
             highlight={hardestFlash}
             label={t('stats.flash')}
             icon="flash"
-            background={isMaterial ? m3.tertiaryContainer : undefined}
-            textColor={isMaterial ? m3.onTertiaryContainer : undefined}
+            background={isMaterial ? m3.secondaryContainer : undefined}
+            textColor={isMaterial ? m3.onSecondaryContainer : undefined}
           />
         )}
       </View>
