@@ -28,6 +28,8 @@ import {
 } from '@boardsesh/playlist-generator';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { track } from '../../../lib/analytics';
+import { Card } from '../../Card';
+import { SectionHeader } from '../../SectionHeader';
 import { Text } from '../../Text';
 import { useTheme } from '../../../providers/theme-provider';
 import { useGradeFormat } from '../../../hooks/use-grade-format';
@@ -226,6 +228,7 @@ function ChipRail({ children }: { children: ReactNode }) {
       nestedScrollEnabled
       showsHorizontalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
+      style={styles.chipRail}
       contentContainerStyle={styles.chipRow}
     >
       {children}
@@ -545,49 +548,57 @@ export function GeneratorPickerCard({
   };
 
   return (
-    <View
-      style={[styles.card, { backgroundColor: systemColors.secondaryBackground, borderColor: systemColors.separator }]}
-    >
-      <Text variant="footnote" color={systemColors.secondaryLabel} style={styles.label}>
-        {t('mobile.session.preGeneratorLabel')}
-      </Text>
+    <View>
+      <SectionHeader title={t('mobile.session.preGeneratorLabel')} />
+      <View style={styles.cardInset}>
+        <Card>
+          <View style={styles.cardBody}>
+          <ChipRail>
+            {CHIP_VALUES.map((value) => {
+              const isActive = value === activeType;
+              const label = chipLabel(value, t);
+              return (
+                <OptionChip
+                  key={value}
+                  label={label}
+                  active={isActive}
+                  onPress={() => handleSelectType(value)}
+                  accessibilityLabel={t('mobile.session.preGeneratorOptionAccessibilityLabel', {
+                    group: t('mobile.session.preGeneratorLabel'),
+                    value: label,
+                  })}
+                />
+              );
+            })}
+          </ChipRail>
 
-      <ChipRail>
-        {CHIP_VALUES.map((value) => {
-          const isActive = value === activeType;
-          const label = chipLabel(value, t);
-          return (
-            <OptionChip
-              key={value}
-              label={label}
-              active={isActive}
-              onPress={() => handleSelectType(value)}
-              accessibilityLabel={t('mobile.session.preGeneratorOptionAccessibilityLabel', {
-                group: t('mobile.session.preGeneratorLabel'),
-                value: label,
-              })}
-            />
-          );
-        })}
-      </ChipRail>
-
-      {renderGeneratorOptions()}
+          {renderGeneratorOptions()}
+        </View>
+        </Card>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  card: {
-    borderRadius: borderRadius.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    paddingVertical: spacing[3],
+  // SectionHeader brings its own 16px inset; the Card body needs matching
+  // horizontal padding to line its edge up with the screen's other cards.
+  cardInset: {
+    paddingHorizontal: spacing[4],
+  },
+  // Card supplies the 16px surface padding; the body just sets the vertical
+  // rhythm between the workout-type rail and the revealed options.
+  cardBody: {
     gap: spacing[3],
   },
-  label: {
-    paddingHorizontal: spacing[4],
+  // The chip rails bleed out to the card's edges (cancelling Card's 16px
+  // horizontal padding) so the first/last chip sit flush against the surface
+  // edge and scroll edge-to-edge, while `chipRow` re-pads the content by 16.
+  chipRail: {
+    marginHorizontal: -16,
   },
   chipRow: {
-    paddingHorizontal: spacing[4],
+    paddingHorizontal: 16,
     gap: spacing[2],
   },
   chip: {
@@ -606,7 +617,6 @@ const styles = StyleSheet.create({
     gap: spacing[2],
   },
   settingRow: {
-    paddingHorizontal: spacing[4],
     gap: spacing[2],
   },
   settingLabel: {
@@ -638,13 +648,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   ratingRow: {
-    paddingHorizontal: spacing[4],
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing[3],
     flexWrap: 'wrap',
   },
   switchGroup: {
+    // Full-bleed to the card edges (cancel Card's 16px padding) so the
+    // top/bottom hairline separators span the whole card width.
+    marginHorizontal: -16,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },

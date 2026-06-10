@@ -1,7 +1,15 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
-import { FlashList } from '@shopify/flash-list';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  StyleSheet,
+  View,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
+} from 'react-native';
+import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import { ScrollView as GestureScrollView } from 'react-native-gesture-handler';
+import { useSharedValue } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { toBoardName } from '@boardsesh/board-config';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
@@ -9,10 +17,12 @@ import type { BoardName, Climb } from '@boardsesh/shared-schema';
 import type { ClimbQueueItem } from '@boardsesh/queue';
 import { track } from '../../../lib/analytics';
 import { Button } from '../../Button';
+import { Card } from '../../Card';
+import { SectionHeader } from '../../SectionHeader';
 import { Text } from '../../Text';
 import type { QueueItemRowBoard } from '../../QueueItemRow';
 import { useTheme } from '../../../providers/theme-provider';
-import { borderRadius, spacing } from '../../../theme/tokens';
+import { spacing } from '../../../theme/tokens';
 import { useActiveBoard } from '../../../lib/graphql/use-active-board';
 import { useAuth } from '../../../providers/auth-provider';
 import { useQueueActions } from '../../../providers/queue-provider';
@@ -20,12 +30,19 @@ import { useToast } from '../../../providers/toast-provider';
 import { useDrawerHost } from '../../../providers/drawer-host-provider';
 import { useBottomChromeMetrics } from '../../../hooks/use-bottom-chrome-metrics';
 import { reportError } from '../../../lib/sentry';
+import { RecordTopChrome } from '../RecordTopChrome';
 import { SESSION_FOOTER_CLEARANCE } from '../session-footer-clearance';
 import { BoardSummaryCard } from './BoardSummaryCard';
 import { GeneratorPickerCard, type GeneratorSelection } from './GeneratorPickerCard';
 import { WorkoutPreviewRow } from './WorkoutPreviewRow';
 import { useWorkoutPreview } from './use-workout-preview';
 import type { PreviewItem } from './workout-preview-pool';
+
+type PreSessionViewProps = {
+  /** Render the floating glass chrome (large title + board pill). True in the
+   *  Record tab; false in the overlay host, where the header strip owns the top. */
+  showChrome?: boolean;
+};
 
 /**
  * First screen of the session overlay before a session is live: pick a board,
@@ -38,15 +55,39 @@ function previewKeyExtractor(previewItem: PreviewItem): string {
   return previewItem.item.uuid;
 }
 
-export function PreSessionView() {
+export function PreSessionView({ showChrome = false }: PreSessionViewProps) {
   const { t } = useTranslation('session');
   const { systemColors } = useTheme();
+  const insets = useSafeAreaInsets();
+  const router = useRouter();
   const bottomChrome = useBottomChromeMetrics();
   const { data: activeBoard } = useActiveBoard();
   const { isAuthenticated } = useAuth();
   const { startSession, setQueue } = useQueueActions();
   const { openPlayDrawer } = useDrawerHost();
   const { showToast } = useToast();
+
+  // Scroll offset drives the floating large-title chrome's collapse; tapping the
+  // collapsed title capsule scrolls the list back to the top. FlashList forwards
+  // a plain JS scroll event, so we mirror the offset into the shared value (the
+  // same pattern the climbs list uses).
+  const listRef = useRef<FlashListRef<PreviewItem>>(null);
+  const scrollY = useSharedValue(0);
+  const handleScroll = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      scrollY.value = event.nativeEvent.contentOffset.y;
+    },
+    [scrollY],
+  );
+  const handleScrollToTop = useCallback(() => {
+    listRef.current?.scrollToTop({ animated: true });
+  }, []);
+  // Measured chrome height (incl. the top safe-area inset) so the list pads its
+  // top by it. Only used when the floating chrome renders (tab mode).
+  const [chromeHeight, setChromeHeight] = useState(() => insets.top + 56);
+  const handleOpenBoardSwitcher = useCallback(() => {
+    router.push('/boards');
+  }, [router]);
 
   const [selection, setSelection] = useState<GeneratorSelection>({ type: 'off' });
   const [isStarting, setIsStarting] = useState(false);
@@ -184,11 +225,19 @@ export function PreSessionView() {
   const listHeader = useMemo(
     () => (
       <View style={styles.header}>
-        <Text variant="footnote" color={systemColors.secondaryLabel} style={styles.eyebrow}>
+        {/* The screen's identity in-body under the floating chrome, collapsing
+            into the centred header capsule as it scrolls up. */}
+        <Text variant="largeTitle" style={styles.screenTitle}>
           {t('mobile.session.headerStart')}
         </Text>
 
-        <BoardSummaryCard board={activeBoard ?? null} />
+        {/* The board pill in the chrome now owns board identity, so the summary
+            card only stands in as a prompt to pick a board when none is set. */}
+        {activeBoard ? null : (
+          <View style={styles.cardInset}>
+            <BoardSummaryCard onPress={handleOpenBoardSwitcher} />
+          </View>
+        )}
 
         <GeneratorPickerCard
           boardName={activeBoard ? toBoardName(activeBoard.boardType) : null}
@@ -200,15 +249,15 @@ export function PreSessionView() {
         />
 
         {showPreviewSection ? (
-          <View style={styles.previewSection}>
-            <Text variant="footnote" color={systemColors.secondaryLabel} style={styles.sectionLabel}>
-              {t('mobile.session.preWorkoutPreviewTitle')}
-            </Text>
+          <View>
+            <SectionHeader title={t('mobile.session.preWorkoutPreviewTitle')} />
             {previewStateMessage ? (
-              <View style={[styles.stateCard, { backgroundColor: systemColors.secondaryBackground }]}>
-                <Text variant="body" color={systemColors.secondaryLabel}>
-                  {previewStateMessage}
-                </Text>
+              <View style={styles.cardInset}>
+                <Card>
+                  <Text variant="body" color={systemColors.secondaryLabel}>
+                    {previewStateMessage}
+                  </Text>
+                </Card>
               </View>
             ) : null}
           </View>
@@ -217,19 +266,24 @@ export function PreSessionView() {
     ),
     [
       activeBoard,
+      handleOpenBoardSwitcher,
       previewStateMessage,
       selection,
       setSelection,
       showPreviewSection,
-      systemColors.secondaryBackground,
       systemColors.secondaryLabel,
       t,
     ],
   );
 
+  // Tab mode insets the list top by the measured floating-chrome height; the
+  // overlay host renders its own header strip above, so no inset there.
+  const listPaddingTop = showChrome ? chromeHeight : spacing[2];
+
   return (
     <View style={styles.container}>
       <FlashList
+        ref={listRef}
         style={styles.scroll}
         data={previewItems}
         renderItem={renderPreviewRow}
@@ -240,11 +294,30 @@ export function PreSessionView() {
         // gesture-handler scroll host so Android nested chip rails keep their
         // horizontal gestures while the preview rows stay virtualized.
         renderScrollComponent={GestureScrollView}
-        contentContainerStyle={{ paddingBottom: SESSION_FOOTER_CLEARANCE + footerBottomPadding }}
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
+        // The floating chrome owns the top inset (tab mode), so pad manually by
+        // the measured chrome height; never auto-inset under the (absent) header.
+        contentInsetAdjustmentBehavior="never"
+        contentContainerStyle={{
+          paddingTop: listPaddingTop,
+          paddingBottom: SESSION_FOOTER_CLEARANCE + footerBottomPadding,
+        }}
+        scrollIndicatorInsets={{ top: showChrome ? chromeHeight : 0 }}
         showsVerticalScrollIndicator={false}
         nestedScrollEnabled
         keyboardShouldPersistTaps="handled"
       />
+
+      {showChrome ? (
+        <RecordTopChrome
+          title={t('mobile.session.headerStart')}
+          onOpenBoardSwitcher={handleOpenBoardSwitcher}
+          onHeightChange={setChromeHeight}
+          scrollY={scrollY}
+          onPressTitle={handleScrollToTop}
+        />
+      ) : null}
 
       <View
         testID="pre-session-footer"
@@ -270,26 +343,20 @@ const styles = StyleSheet.create({
   scroll: {
     flex: 1,
   },
+  // No horizontal padding: the largeTitle and SectionHeaders bring their own
+  // 16px inset, and the cards self-inset via `cardInset`, so the chip rails
+  // inside the generator card can bleed to the card edges.
   header: {
+    gap: spacing[3],
+  },
+  screenTitle: {
     paddingHorizontal: spacing[4],
-    paddingTop: spacing[2],
-    gap: spacing[4],
+    paddingTop: 0,
+    paddingBottom: spacing[2],
   },
-  eyebrow: {
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  previewSection: {
-    gap: spacing[2],
-  },
-  sectionLabel: {
-    textTransform: 'uppercase',
-    fontWeight: '700',
-    letterSpacing: 0,
-  },
-  stateCard: {
-    borderRadius: borderRadius.lg,
-    padding: spacing[4],
+  // Matches the 16px screen gutter the SectionHeaders use, so cards line up.
+  cardInset: {
+    paddingHorizontal: spacing[4],
   },
   footer: {
     paddingHorizontal: spacing[4],

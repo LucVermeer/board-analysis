@@ -128,6 +128,8 @@ vi.mock('@boardsesh/playlist-generator', () => ({
     onlyWideClimbs: false,
   },
 }));
+vi.mock('../../../Card', () => ({ Card: ({ children }: { children?: ReactNode }) => createElement('div', null, children) }));
+vi.mock('../../../SectionHeader', () => ({ SectionHeader: ({ title }: { title: string }) => createElement('h2', null, title) }));
 vi.mock('../../../Icon', () => ({ Icon: () => null }));
 vi.mock('../../../StarRating', () => ({ StarRating: () => null }));
 vi.mock('../../../SwitchRow', () => ({ SwitchRow: () => null }));

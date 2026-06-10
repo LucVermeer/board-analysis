@@ -44,6 +44,10 @@ vi.mock('react-native-reanimated', () => ({
   withSpring: (value: number) => value,
 }));
 
+vi.mock('react-native-safe-area-context', () => ({
+  useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
+}));
+
 vi.mock('@shopify/flash-list', () => ({
   FlashList: ({
     ListHeaderComponent,
@@ -61,6 +65,13 @@ vi.mock('@tanstack/react-query', () => ({ useQueryClient: () => ({ invalidateQue
 vi.mock('@boardsesh/queue-runtime', () => ({ deriveIsDriver: () => true }));
 vi.mock('@boardsesh/play-view', () => ({ formatGrade: (grade: string) => grade, getGradeTextColor: () => '#fff' }));
 vi.mock('../../../Button', () => ({ Button: () => createElement('button') }));
+vi.mock('../../../Card', () => ({ Card: ({ children }: { children?: ReactNode }) => createElement('div', null, children) }));
+vi.mock('../../../ListRow', () => ({ ListRow: () => null }));
+vi.mock('../../../PressableSurface', () => ({
+  PressableSurface: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
+}));
+vi.mock('../../../SectionHeader', () => ({ SectionHeader: () => null }));
+vi.mock('../../RecordTopChrome', () => ({ RecordTopChrome: () => null }));
 vi.mock('../../../ClimbListItemContent', () => ({ ClimbListItemContent: () => null }));
 vi.mock('../../../EndSessionSheet', () => ({ EndSessionSheet: () => null }));
 vi.mock('../../../Icon', () => ({ Icon: () => null }));

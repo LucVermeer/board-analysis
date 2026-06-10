@@ -1,6 +1,12 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
-import { View, RefreshControl, StyleSheet } from 'react-native';
-import { FlashList } from '@shopify/flash-list';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  View,
+  RefreshControl,
+  StyleSheet,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
+} from 'react-native';
+import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import type BottomSheet from '@gorhom/bottom-sheet';
@@ -23,6 +29,18 @@ type FeedRow = { type: 'header'; bucket: FeedRecencyBucket } | { type: 'session'
 
 type TFunc = (key: string) => string;
 
+type SessionsTabProps = {
+  userId: string | undefined;
+  /** Plain-JS scroll handler from the screen, writing the shared scroll offset
+   *  that drives the floating chrome's title collapse. */
+  onScroll?: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
+  /** Measured chrome height — the list insets its top by this so the first row
+   *  rests below the floating chrome and the rest scroll under it. */
+  topInset?: number;
+  /** Register this tab's scroll-to-top so the screen's title capsule can reach it. */
+  registerScrollToTop?: (scrollToTop: (() => void) | null) => void;
+};
+
 // String-literal `t(...)` per call so the catalog keys stay statically greppable.
 function sectionLabel(bucket: FeedRecencyBucket, t: TFunc): string {
   if (bucket === 'today') return t('mobile.sessions.sectionToday');
@@ -30,12 +48,19 @@ function sectionLabel(bucket: FeedRecencyBucket, t: TFunc): string {
   return t('mobile.sessions.sectionEarlier');
 }
 
-export function SessionsTab({ userId }: { userId: string | undefined }) {
+export function SessionsTab({ userId, onScroll, topInset = 0, registerScrollToTop }: SessionsTabProps) {
   const { t } = useTranslation('you');
   const { systemColors, brandColors } = useTheme();
   const router = useRouter();
   const bottomChrome = useBottomChromeMetrics();
   const paddingBottom = bottomChrome.scrollBottomPadding + spacing[4];
+
+  const listRef = useRef<FlashListRef<FeedRow>>(null);
+  useEffect(() => {
+    if (!registerScrollToTop) return;
+    registerScrollToTop(() => listRef.current?.scrollToTop({ animated: true }));
+    return () => registerScrollToTop(null);
+  }, [registerScrollToTop]);
 
   const commentSheetRef = useRef<BottomSheet | null>(null);
   const [commentSessionId, setCommentSessionId] = useState<string | null>(null);
@@ -117,9 +142,26 @@ export function SessionsTab({ userId }: { userId: string | undefined }) {
     [handleOpenComments, handleOpenSession, summaryMap, t],
   );
 
+  // The screen's identity, in-body under the floating chrome, plus the feed
+  // rollup when there are sessions. Memoized so FlashList doesn't re-measure /
+  // re-render the header on every SessionsTab render — only when the rollup data
+  // (sessions/now) changes. The large title always renders so it sits above the
+  // empty state too.
+  const listHeader = useMemo(
+    () => (
+      <>
+        <Text variant="largeTitle" style={styles.screenTitle}>
+          {t('metadata.dashboard.title')}
+        </Text>
+        {sessions.length > 0 ? <SessionsFeedHeader sessions={sessions} now={now} /> : null}
+      </>
+    ),
+    [t, sessions, now],
+  );
+
   if (!userId || feed.isPending) {
     return (
-      <View style={styles.centered}>
+      <View style={[styles.centered, { paddingTop: topInset }]}>
         <ActivityIndicator size="large" />
       </View>
     );
@@ -128,16 +170,20 @@ export function SessionsTab({ userId }: { userId: string | undefined }) {
   return (
     <View style={styles.flex}>
       <FlashList
+        ref={listRef}
         data={rows}
         extraData={summaryMap}
         renderItem={renderItem}
         getItemType={(row) => row.type}
         keyExtractor={(row) => (row.type === 'header' ? `header-${row.bucket}` : row.item.sessionId)}
-        contentInsetAdjustmentBehavior="automatic"
+        onScroll={onScroll}
+        scrollEventThrottle={16}
+        contentInsetAdjustmentBehavior="never"
         onEndReached={handleEndReached}
         onEndReachedThreshold={0.5}
-        contentContainerStyle={{ paddingBottom }}
-        ListHeaderComponent={sessions.length > 0 ? <SessionsFeedHeader sessions={sessions} now={now} /> : null}
+        contentContainerStyle={{ paddingTop: topInset, paddingBottom }}
+        scrollIndicatorInsets={{ top: topInset }}
+        ListHeaderComponent={listHeader}
         refreshControl={
           <RefreshControl
             refreshing={feed.isRefetching}
@@ -181,6 +227,11 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   footer: { paddingVertical: spacing[5], alignItems: 'center' },
+  screenTitle: {
+    paddingHorizontal: spacing[4],
+    paddingTop: 0,
+    paddingBottom: spacing[2],
+  },
   empty: {
     alignItems: 'center',
     justifyContent: 'center',

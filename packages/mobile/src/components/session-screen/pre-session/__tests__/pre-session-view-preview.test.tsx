@@ -63,6 +63,16 @@ vi.mock('react-native-gesture-handler', () => ({
   ScrollView: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
 }));
 
+vi.mock('react-native-safe-area-context', () => ({
+  useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
+}));
+
+vi.mock('react-native-reanimated', () => ({
+  useSharedValue: (value: number) => ({ value }),
+}));
+
+vi.mock('expo-router', () => ({ useRouter: () => ({ push: vi.fn() }) }));
+
 vi.mock('@shopify/flash-list', () => ({
   FlashList: ({
     data,
@@ -101,6 +111,9 @@ vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => k
 vi.mock('@boardsesh/board-config', () => ({ toBoardName: (boardType: string) => boardType }));
 vi.mock('../../../../lib/analytics', () => ({ track: vi.fn() }));
 vi.mock('../../../Button', () => ({ Button: () => createElement('button') }));
+vi.mock('../../../Card', () => ({ Card: ({ children }: { children?: ReactNode }) => createElement('div', null, children) }));
+vi.mock('../../../SectionHeader', () => ({ SectionHeader: () => null }));
+vi.mock('../../RecordTopChrome', () => ({ RecordTopChrome: () => null }));
 vi.mock('../../../Text', () => ({
   Text: ({ children }: { children?: ReactNode }) => createElement('span', null, children),
 }));
