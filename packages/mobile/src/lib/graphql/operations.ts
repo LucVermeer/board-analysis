@@ -595,6 +595,30 @@ export type GetSessionQueryResponse = {
   session: SessionPreview | null;
 };
 
+// Presence-independent lifecycle check, read on cold start to decide whether a
+// persisted session id should be restored or dropped (#2683). Unlike GET_SESSION
+// (gated on live roster, so an ended session and a dormant-but-active solo
+// session both read as null), this hits the durable session row.
+export const SESSION_LIVENESS = gql`
+  query SessionLiveness($sessionId: ID!) {
+    sessionLiveness(sessionId: $sessionId) {
+      id
+      status
+      endedAt
+    }
+  }
+`;
+
+export type SessionLivenessResult = {
+  id: string;
+  status: string;
+  endedAt: string | null;
+};
+
+export type SessionLivenessQueryResponse = {
+  sessionLiveness: SessionLivenessResult | null;
+};
+
 // Authoritative queue snapshot for the active session, fetched after a queue
 // mutation fails so the local optimistic delta can't silently diverge from
 // peers until the next reconnect FullSync. The shape mirrors the FullSync

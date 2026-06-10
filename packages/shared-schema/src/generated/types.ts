@@ -3193,6 +3193,14 @@ export type Query = {
    */
   sessionGroupedFeed: SessionFeedResult;
   /**
+   * Lightweight, presence-independent lifecycle check for a session.
+   * Reads the durable session row (not live Redis presence), so it tells an
+   * ended session apart from one that is merely empty. Returns null when the
+   * session does not exist. Clients use this on cold start to decide whether
+   * to restore or drop a persisted session id.
+   */
+  sessionLiveness?: Maybe<SessionLiveness>;
+  /**
    * Get a session summary (stats, grade distribution, participants).
    * Available for ended sessions or active sessions with ticks.
    */
@@ -3615,6 +3623,11 @@ export type QuerySessionDetailArgs = {
 /** Root query type for all read operations. */
 export type QuerySessionGroupedFeedArgs = {
   input?: InputMaybe<ActivityFeedInput>;
+};
+
+/** Root query type for all read operations. */
+export type QuerySessionLivenessArgs = {
+  sessionId: Scalars['ID']['input'];
 };
 
 /** Root query type for all read operations. */
@@ -4264,6 +4277,21 @@ export type SessionHardestClimb = {
   climbUuid: Scalars['String']['output'];
   /** Grade name */
   grade: Scalars['String']['output'];
+};
+
+/**
+ * Durable lifecycle status of a session, independent of live presence.
+ * Backed by the persisted session row rather than Redis, so an ended session
+ * is reported as ended even when no participants are currently connected.
+ */
+export type SessionLiveness = {
+  __typename?: 'SessionLiveness';
+  /** When the session was ended (ISO 8601); null while still active */
+  endedAt?: Maybe<Scalars['String']['output']>;
+  /** Unique session identifier */
+  id: Scalars['ID']['output'];
+  /** Durable lifecycle status: 'active' or 'ended' */
+  status: Scalars['String']['output'];
 };
 
 /** Participant stats in a session summary. */
@@ -5518,6 +5546,7 @@ export type ResolversTypes = ResolversObject<{
   SessionGradeCount: ResolverTypeWrapper<SessionGradeCount>;
   SessionGradeDistributionItem: ResolverTypeWrapper<SessionGradeDistributionItem>;
   SessionHardestClimb: ResolverTypeWrapper<SessionHardestClimb>;
+  SessionLiveness: ResolverTypeWrapper<SessionLiveness>;
   SessionParticipant: ResolverTypeWrapper<SessionParticipant>;
   SessionStatsUpdated: ResolverTypeWrapper<SessionStatsUpdated>;
   SessionSummary: ResolverTypeWrapper<SessionSummary>;
@@ -5770,6 +5799,7 @@ export type ResolversParentTypes = ResolversObject<{
   SessionGradeCount: SessionGradeCount;
   SessionGradeDistributionItem: SessionGradeDistributionItem;
   SessionHardestClimb: SessionHardestClimb;
+  SessionLiveness: SessionLiveness;
   SessionParticipant: SessionParticipant;
   SessionStatsUpdated: SessionStatsUpdated;
   SessionSummary: SessionSummary;
@@ -7834,6 +7864,12 @@ export type QueryResolvers<
     ContextType,
     Partial<QuerySessionGroupedFeedArgs>
   >;
+  sessionLiveness?: Resolver<
+    Maybe<ResolversTypes['SessionLiveness']>,
+    ParentType,
+    ContextType,
+    RequireFields<QuerySessionLivenessArgs, 'sessionId'>
+  >;
   sessionSummary?: Resolver<
     Maybe<ResolversTypes['SessionSummary']>,
     ParentType,
@@ -8286,6 +8322,16 @@ export type SessionHardestClimbResolvers<
   climbName?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   climbUuid?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   grade?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
+}>;
+
+export type SessionLivenessResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['SessionLiveness'] = ResolversParentTypes['SessionLiveness'],
+> = ResolversObject<{
+  endedAt?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  id?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
+  status?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
@@ -8838,6 +8884,7 @@ export type Resolvers<ContextType = ConnectionContext> = ResolversObject<{
   SessionGradeCount?: SessionGradeCountResolvers<ContextType>;
   SessionGradeDistributionItem?: SessionGradeDistributionItemResolvers<ContextType>;
   SessionHardestClimb?: SessionHardestClimbResolvers<ContextType>;
+  SessionLiveness?: SessionLivenessResolvers<ContextType>;
   SessionParticipant?: SessionParticipantResolvers<ContextType>;
   SessionStatsUpdated?: SessionStatsUpdatedResolvers<ContextType>;
   SessionSummary?: SessionSummaryResolvers<ContextType>;

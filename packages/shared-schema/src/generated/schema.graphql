@@ -375,6 +375,20 @@ type Session {
 }
 
 """
+Durable lifecycle status of a session, independent of live presence.
+Backed by the persisted session row rather than Redis, so an ended session
+is reported as ended even when no participants are currently connected.
+"""
+type SessionLiveness {
+  "Unique session identifier"
+  id: ID!
+  "Durable lifecycle status: 'active' or 'ended'"
+  status: String!
+  "When the session was ended (ISO 8601); null while still active"
+  endedAt: String
+}
+
+"""
 A session that can be discovered by nearby users via GPS.
 """
 type DiscoverableSession {
@@ -3542,6 +3556,15 @@ type Query {
   Available for ended sessions or active sessions with ticks.
   """
   sessionSummary(sessionId: ID!): SessionSummary
+
+  """
+  Lightweight, presence-independent lifecycle check for a session.
+  Reads the durable session row (not live Redis presence), so it tells an
+  ended session apart from one that is merely empty. Returns null when the
+  session does not exist. Clients use this on cold start to decide whether
+  to restore or drop a persisted session id.
+  """
+  sessionLiveness(sessionId: ID!): SessionLiveness
 
   # ============================================
   # Board Configuration Queries

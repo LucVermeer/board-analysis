@@ -33,6 +33,15 @@ export const queriesTypeDefs = /* GraphQL */ `
     """
     sessionSummary(sessionId: ID!): SessionSummary
 
+    """
+    Lightweight, presence-independent lifecycle check for a session.
+    Reads the durable session row (not live Redis presence), so it tells an
+    ended session apart from one that is merely empty. Returns null when the
+    session does not exist. Clients use this on cold start to decide whether
+    to restore or drop a persisted session id.
+    """
+    sessionLiveness(sessionId: ID!): SessionLiveness
+
     # ============================================
     # Board Configuration Queries
     # ============================================

@@ -190,18 +190,10 @@ const user = (overrides: Partial<SessionUser> = {}): SessionUser => ({
   ...overrides,
 });
 
-// Shape returned by the GET_SESSION liveness check during cold-start restore.
-// endedAt: null means the session is still live and should be rejoined.
-const aliveSession = (id: string, endedAt: string | null = null) => ({
-  id,
-  name: null,
-  boardPath: '/kilter/1/10/1,2/40/list',
-  color: null,
-  goal: null,
-  startedAt: '2026-01-01T00:00:00.000Z',
-  endedAt,
-  driverParticipantId: null,
-  users: [],
+// Response shape for the cold-start SESSION_LIVENESS check. status 'active'
+// (endedAt null) means restore the session; 'ended' means drop the stored id.
+const livenessResponse = (id: string, status: 'active' | 'ended' = 'active', endedAt: string | null = null) => ({
+  sessionLiveness: { id, status, endedAt },
 });
 
 function makeQueueItem(uuid: string, climbUuid = uuid, options: { suggested?: boolean } = {}): ClimbQueueItem {
@@ -352,14 +344,12 @@ describe('QueueProvider session update subscription', () => {
     sessionStore.clearStoredSessionId.mockClear();
     graph.execute.mockReset();
     http.request.mockReset();
-    // The restore effect verifies session liveness via GET_SESSION before
-    // rejoining (#2683). Default to an alive session so existing tests still
+    // The restore effect verifies session liveness via SESSION_LIVENESS before
+    // rejoining (#2683). Default to an active session so existing tests still
     // auto-restore into session-1; END_SESSION keeps its endSession shape.
-    // GetSessionQueueState (resync) shares the GetSession prefix, so exclude it
-    // here — the resync tests route http.request themselves.
-    http.request.mockImplementation((query: string) =>
-      typeof query === 'string' && query.includes('GetSession') && !query.includes('GetSessionQueueState')
-        ? Promise.resolve({ session: aliveSession('session-1') })
+    http.request.mockImplementation((operation: string) =>
+      operation.includes('SessionLiveness')
+        ? Promise.resolve(livenessResponse('session-1'))
         : Promise.resolve({ endSession: { sessionId: 'session-1' } }),
     );
     graph.execute.mockResolvedValue({
@@ -841,9 +831,9 @@ describe('QueueProvider session update subscription', () => {
 
   it('drops a server-ended stored session on cold start without rejoining (#2683)', async () => {
     sessionStore.getStoredSessionId.mockResolvedValue('session-ended');
-    http.request.mockImplementation((query: string) =>
-      typeof query === 'string' && query.includes('GetSession')
-        ? Promise.resolve({ session: aliveSession('session-ended', '2026-06-10T12:00:00.000Z') })
+    http.request.mockImplementation((operation: string) =>
+      operation.includes('SessionLiveness')
+        ? Promise.resolve(livenessResponse('session-ended', 'ended', '2026-06-10T12:00:00.000Z'))
         : Promise.resolve({ endSession: { sessionId: 'session-ended' } }),
     );
 
@@ -861,8 +851,8 @@ describe('QueueProvider session update subscription', () => {
   });
 
   it('restores optimistically when the liveness check fails (offline cold start)', async () => {
-    http.request.mockImplementation((query: string) =>
-      typeof query === 'string' && query.includes('GetSession')
+    http.request.mockImplementation((operation: string) =>
+      operation.includes('SessionLiveness')
         ? Promise.reject(new Error('offline'))
         : Promise.resolve({ endSession: { sessionId: 'session-1' } }),
     );
@@ -1136,16 +1126,15 @@ describe('QueueProvider mutation-failure resync', () => {
   // authoritative snapshot while everything else keeps the default endSession
   // response.
   function routeHttpRequest(queueStateResponse: unknown, options: { onQueueStateCall?: () => void } = {}) {
-    http.request.mockImplementation(async (operation: unknown) => {
-      const operationText = typeof operation === 'string' ? operation : '';
-      if (operationText.includes('GetSessionQueueState')) {
+    http.request.mockImplementation(async (operation: string) => {
+      if (operation.includes('GetSessionQueueState')) {
         options.onQueueStateCall?.();
         return queueStateResponse;
       }
-      // Cold-start liveness check (#2683) — keep the session alive so restore
+      // Cold-start liveness check (#2683) — keep the session active so restore
       // lands in-session for these resync tests.
-      if (operationText.includes('GetSession')) {
-        return { session: aliveSession('session-1') };
+      if (operation.includes('SessionLiveness')) {
+        return livenessResponse('session-1');
       }
       return { endSession: { sessionId: 'session-1' } };
     });
@@ -1302,15 +1291,14 @@ describe('QueueProvider mutation-failure resync', () => {
   it('does not retry-loop when the resync fetch itself fails', async () => {
     const snapshots: Snapshot[] = [];
     let queueStateCalls = 0;
-    http.request.mockImplementation(async (operation: unknown) => {
-      const operationText = typeof operation === 'string' ? operation : '';
-      if (operationText.includes('GetSessionQueueState')) {
+    http.request.mockImplementation(async (operation: string) => {
+      if (operation.includes('GetSessionQueueState')) {
         queueStateCalls += 1;
         throw new Error('resync fetch failed');
       }
-      // Cold-start liveness check (#2683) — alive so restore lands in-session.
-      if (operationText.includes('GetSession')) {
-        return { session: aliveSession('session-1') };
+      // Cold-start liveness check (#2683) — active so restore lands in-session.
+      if (operation.includes('SessionLiveness')) {
+        return livenessResponse('session-1');
       }
       return { endSession: { sessionId: 'session-1' } };
     });

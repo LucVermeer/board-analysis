@@ -126,12 +126,14 @@ describe('QueueProvider clearSession notifyServer', () => {
     sessionStore.getStoredSessionId.mockResolvedValue('session-1');
     sessionStore.clearStoredSessionId.mockClear();
     http.request.mockReset();
-    // Cold-start restore verifies session liveness via GET_SESSION (#2683); keep
-    // the stored session alive so these tests land in-session before clearSession.
-    http.request.mockImplementation(async (operation: unknown) => {
-      const operationText = typeof operation === 'string' ? operation : '';
-      return operationText.includes('GetSession') ? { session: { id: 'session-1', endedAt: null } } : {};
-    });
+    // Cold-start restore verifies session liveness via SESSION_LIVENESS (#2683);
+    // keep the stored session active so these tests land in-session before
+    // clearSession.
+    http.request.mockImplementation(async (operation: string) =>
+      operation.includes('SessionLiveness')
+        ? { sessionLiveness: { id: 'session-1', status: 'active', endedAt: null } }
+        : {},
+    );
     graph.execute.mockReset();
     // joinSession resolves the active session; leaveSession resolves true.
     graph.execute.mockResolvedValue({

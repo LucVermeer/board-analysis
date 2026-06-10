@@ -43,3 +43,10 @@ export type SessionSummary = {
   durationMinutes?: number | null;
   goal?: string | null;
 };
+
+/** Durable lifecycle status of a session, independent of live presence. */
+export type SessionLiveness = {
+  id: string;
+  status: string;
+  endedAt?: string | null;
+};

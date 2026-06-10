@@ -55,14 +55,14 @@ import {
   CREATE_SESSION,
   END_SESSION,
   GET_CLIMB,
-  GET_SESSION,
+  SESSION_LIVENESS,
   GET_SESSION_QUEUE_STATE,
   type CreateSessionMutationResponse,
   type EndSessionMutationResponse,
   type SessionUpdateEvent,
   type SessionLiveStatsEvent,
   type GetClimbQueryResponse,
-  type GetSessionQueryResponse,
+  type SessionLivenessQueryResponse,
   type GetSessionQueueStateQueryResponse,
 } from '../lib/graphql/operations';
 import { getStoredActiveBoard } from '../lib/active-board-store';
@@ -528,12 +528,15 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       try {
         // Verify the stored session is still alive before rejoining. Without
         // this, JOIN_SESSION recreates a server-ended room as an empty zombie
-        // and we land in InSessionView with no peers (#2683).
-        const { session } = await getHttpClient().request<GetSessionQueryResponse>(GET_SESSION, {
+        // and we land in InSessionView with no peers (#2683). Liveness reads the
+        // durable session row (sessionLiveness), NOT the presence-gated `session`
+        // query — that one returns null for any empty session, so it can't tell
+        // an ended session apart from a dormant-but-active solo session.
+        const { sessionLiveness } = await getHttpClient().request<SessionLivenessQueryResponse>(SESSION_LIVENESS, {
           sessionId: storedId,
         });
         if (cancelled) return;
-        if (!session || session.endedAt != null) {
+        if (!sessionLiveness || sessionLiveness.status === 'ended' || sessionLiveness.endedAt != null) {
           if (__DEV__) {
             console.info(`[session] stored session ${storedId} ended/missing; clearing`);
           }
