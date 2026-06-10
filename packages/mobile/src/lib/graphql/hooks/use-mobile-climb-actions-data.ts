@@ -21,7 +21,7 @@
 // re-render — the toggle path here doesn't touch that store.
 
 import { useCallback, useRef } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { TOGGLE_FAVORITE, type ToggleFavoriteMutationResponse } from '@boardsesh/graphql/operations/favorites';
 import {
   GET_ALL_USER_PLAYLISTS,
@@ -38,6 +38,32 @@ import { useAuth } from '../../../providers/auth-provider';
 import { useActiveBoard } from '../use-active-board';
 
 const PLAYLISTS_QUERY_KEY = ['userPlaylists'] as const;
+
+// The play-drawer's Add-to-Playlist sheet adds/removes by playlist uuid (the
+// backend resolvers match playlists.uuid), so `playlistId` here is the uuid the
+// detail screen keys its caches by: the climb list lives under
+// ['playlistClimbs', uuid, ...] (use-playlist-climbs.ts) and the metadata/hero
+// count under ['playlist', uuid] ([playlist_uuid].tsx). Invalidating those
+// prefixes refreshes an open detail screen after a membership change.
+function invalidatePlaylistDetail(queryClient: QueryClient, playlistUuid: string): void {
+  void queryClient.invalidateQueries({ queryKey: ['playlistClimbs', playlistUuid] });
+  void queryClient.invalidateQueries({ queryKey: ['playlist', playlistUuid] });
+}
+
+// Optimistically nudge the picker's count subtitle (sourced from the cached
+// ['userPlaylists'] list) so it reflects the add/remove immediately rather than
+// waiting out the 5-minute staleTime. Mirrors web's optimistic +1/-1. Match on
+// uuid OR id so the bump lands regardless of which identifier the call site
+// passed.
+function bumpPlaylistClimbCount(queryClient: QueryClient, playlistUuid: string, delta: number): void {
+  queryClient.setQueryData<Playlist[]>(PLAYLISTS_QUERY_KEY, (prev) =>
+    prev?.map((playlist) =>
+      playlist.uuid === playlistUuid || playlist.id === playlistUuid
+        ? { ...playlist, climbCount: Math.max(0, playlist.climbCount + delta) }
+        : playlist,
+    ),
+  );
+}
 
 type MobileClimbActionsData = {
   favoritesProviderProps: {
@@ -112,6 +138,10 @@ export function useMobileClimbActionsData(): MobileClimbActionsData {
         input: { playlistId: vars.playlistId, climbUuid: vars.climbUuid, angle: vars.angle },
       });
     },
+    onSuccess: (_response, vars) => {
+      invalidatePlaylistDetail(mutationDepsRef.current.queryClient, vars.playlistId);
+      bumpPlaylistClimbCount(mutationDepsRef.current.queryClient, vars.playlistId, 1);
+    },
   });
 
   const removePlaylistMutation = useMutation({
@@ -119,6 +149,10 @@ export function useMobileClimbActionsData(): MobileClimbActionsData {
       return getHttpClient().request(REMOVE_CLIMB_FROM_PLAYLIST, {
         input: { playlistId: vars.playlistId, climbUuid: vars.climbUuid },
       });
+    },
+    onSuccess: (_response, vars) => {
+      invalidatePlaylistDetail(mutationDepsRef.current.queryClient, vars.playlistId);
+      bumpPlaylistClimbCount(mutationDepsRef.current.queryClient, vars.playlistId, -1);
     },
   });
 

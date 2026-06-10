@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, StyleSheet, Alert } from 'react-native';
+import { View, StyleSheet, Alert, Pressable } from 'react-native';
 import { useLocalSearchParams, useNavigation } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -53,7 +53,12 @@ export default function PlaylistDetail() {
 
   // Playlist metadata for the hero (name, climb count, colour, icon, ownership,
   // pin/follow state).
-  const { data: playlist, isLoading: metaLoading } = useQuery({
+  const {
+    data: playlist,
+    isLoading: metaLoading,
+    isError: metaError,
+    refetch: refetchMeta,
+  } = useQuery({
     queryKey: ['playlist', playlistUuid],
     queryFn: async () => {
       const response = await getHttpClient().request<GetPlaylistQueryResponse, GetPlaylistQueryVariables>(
@@ -342,6 +347,39 @@ export default function PlaylistDetail() {
     [playlist, allClimbs.length, followerCount, t],
   );
 
+  // Metadata fetch threw (network/server error): react-query leaves `playlist`
+  // undefined (never null), so the not-found guard below would be skipped and
+  // a blank fallback-titled hero would render as if it were a real empty
+  // playlist. Surface an explicit error + retry instead. Distinct from the
+  // resolved-null not-found case.
+  if (metaError && !playlist) {
+    return (
+      <View style={styles.stateContainer}>
+        <PlaylistBackFab />
+        <Icon name="error" size={48} color={iosSystemColors.systemGray4} />
+        <Text variant="headline" style={styles.stateTitle}>
+          {t('detail.errors.loadTitle')}
+        </Text>
+        <Text variant="subheadline" style={styles.stateSubtitle}>
+          {t('detail.errors.loadDescription')}
+        </Text>
+        <Pressable
+          onPress={() => {
+            void refetchMeta();
+            void query.refetch();
+          }}
+          accessibilityRole="button"
+          accessibilityLabel={t('detail.errors.tryAgain')}
+          hitSlop={8}
+        >
+          <Text variant="subheadline" color={brandColors.primary} style={styles.stateRetry}>
+            {t('detail.errors.tryAgain')}
+          </Text>
+        </Pressable>
+      </View>
+    );
+  }
+
   // Playlist not found (resolved, null) — distinct from still-loading.
   if (!metaLoading && playlist === null) {
     return (
@@ -425,5 +463,9 @@ const styles = StyleSheet.create({
   stateSubtitle: {
     opacity: 0.4,
     textAlign: 'center',
+  },
+  stateRetry: {
+    marginTop: 12,
+    fontWeight: '600',
   },
 });
