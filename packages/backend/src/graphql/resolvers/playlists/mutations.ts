@@ -1,4 +1,4 @@
-import { eq, and, asc, sql } from 'drizzle-orm';
+import { eq, and, asc, inArray, sql } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import type { ConnectionContext } from '@boardsesh/shared-schema';
 import { db } from '../../../db/client';
@@ -15,6 +15,7 @@ import {
 } from '../../../validation/schemas';
 import { getPlaylistFollowStats } from './queries';
 import { verifyPlaylistAccess } from './helpers/enrichment';
+import { computePlaylistReorderWrites } from './helpers/reorder';
 
 export const playlistMutations = {
   /**
@@ -381,27 +382,29 @@ export const playlistMutations = {
         .orderBy(asc(dbSchema.playlistClimbs.position), asc(dbSchema.playlistClimbs.addedAt))
         .for('update');
 
-      const oldIndex = rows.findIndex((row) => row.climbUuid === validatedInput.climbUuid);
-      if (oldIndex === -1) {
-        throw new Error('Climb not found in playlist');
-      }
+      // Throws if the climb isn't in the playlist; returns only the rows whose
+      // position actually shifts (dense 0..n-1 renumber).
+      const writes = computePlaylistReorderWrites(rows, validatedInput.climbUuid, validatedInput.newIndex);
 
-      // Clamp the target into range; a no-op move still falls through to the
-      // updatedAt bump below (cheap, and keeps the mutation idempotent-friendly).
-      const targetIndex = Math.min(Math.max(validatedInput.newIndex, 0), rows.length - 1);
-      const [moved] = rows.splice(oldIndex, 1);
-      rows.splice(targetIndex, 0, moved);
-
-      // Renumber to a dense 0..n-1, writing only the rows that actually shifted.
-      // The position column has no unique constraint, so transient equal
-      // positions mid-loop are fine.
-      for (let index = 0; index < rows.length; index++) {
-        if (rows[index].position !== index) {
-          await tx
-            .update(dbSchema.playlistClimbs)
-            .set({ position: index })
-            .where(eq(dbSchema.playlistClimbs.id, rows[index].id));
-        }
+      // Persist every shifted row in ONE statement — a `CASE id WHEN … THEN …`
+      // update — rather than a write per row. A move to the front of a 100-climb
+      // playlist is then a single round-trip, not ~99. The position column has no
+      // unique constraint, so the intermediate state never collides.
+      if (writes.length > 0) {
+        const idColumn = dbSchema.playlistClimbs.id;
+        const positionCase = sql`case ${idColumn} ${sql.join(
+          writes.map((write) => sql`when ${write.id} then ${write.position}`),
+          sql` `,
+        )} end`;
+        await tx
+          .update(dbSchema.playlistClimbs)
+          .set({ position: positionCase })
+          .where(
+            inArray(
+              idColumn,
+              writes.map((write) => write.id),
+            ),
+          );
       }
 
       await tx.update(dbSchema.playlists).set({ updatedAt: new Date() }).where(eq(dbSchema.playlists.id, playlistId));

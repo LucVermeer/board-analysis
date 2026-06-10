@@ -225,9 +225,10 @@ export default function PlaylistDetail() {
                 } else {
                   void queryClient.invalidateQueries({ queryKey: ['playlistClimbs', playlistUuid] });
                 }
-                queryClient.setQueryData<Playlist | null>(['playlist', playlistUuid], (prev) =>
-                  prev ? { ...prev, climbCount: prev.climbCount + 1 } : prev,
-                );
+                // Reconcile the climb count from the server rather than adding 1
+                // back — a manual +1 would overshoot if a concurrent add already
+                // bumped the count.
+                void queryClient.invalidateQueries({ queryKey: ['playlist', playlistUuid] });
                 showToast(t('editClimbs.removeFailed'), 'error');
               }
             },

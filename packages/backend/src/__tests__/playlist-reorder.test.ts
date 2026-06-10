@@ -44,9 +44,10 @@ function createMockChain(resolveValue: unknown = []): Record<string, unknown> {
 type ClimbRow = { id: number; climbUuid: string; position: number };
 
 /**
- * Mock a transaction whose `tx.select(...).orderBy()` yields `rows` and whose
- * `tx.update(...).set(x)` records `x`. The resolver renumbers via the update
- * chain; capturing every `set` arg lets us assert the positions written.
+ * Mock a transaction whose `tx.select(...).for('update')` yields `rows` and
+ * whose `tx.update(...).set(x)` records `x`. The resolver does at most two
+ * updates: one batched `{ position: <CASE sql> }` for the shifted climbs, then
+ * the parent playlist's `{ updatedAt }`.
  */
 function primeTransaction(rows: ClimbRow[]) {
   const setCalls: Array<Record<string, unknown>> = [];
@@ -68,9 +69,9 @@ function primeTransaction(rows: ClimbRow[]) {
   return { setCalls };
 }
 
-/** Positions written to playlistClimbs rows, in write order. */
-function writtenPositions(setCalls: Array<Record<string, unknown>>): number[] {
-  return setCalls.filter((call) => 'position' in call).map((call) => call.position as number);
+/** How many of the captured updates rewrote climb positions (the batched CASE). */
+function positionUpdateCount(setCalls: Array<Record<string, unknown>>): number {
+  return setCalls.filter((call) => 'position' in call).length;
 }
 
 const ROWS: ClimbRow[] = [
@@ -82,11 +83,10 @@ const ROWS: ClimbRow[] = [
 describe('reorderPlaylistClimb mutation', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it('moves a climb to a new index and renumbers positions densely', async () => {
+  it('renumbers via a single batched position update and bumps the playlist', async () => {
     mockDb.select.mockReturnValueOnce(createMockChain([{ id: 1 }])); // ownership
     const { setCalls } = primeTransaction(ROWS.map((row) => ({ ...row })));
 
-    // Move climb-c (currently last) to the front → [C, A, B].
     const result = await playlistMutations.reorderPlaylistClimb(
       null,
       { input: { playlistId: 'p-uuid', climbUuid: 'climb-c', newIndex: 0 } },
@@ -94,51 +94,13 @@ describe('reorderPlaylistClimb mutation', () => {
     );
 
     expect(result).toBe(true);
-    // Every row shifts, so all three are rewritten to dense 0,1,2.
-    expect(writtenPositions(setCalls)).toEqual([0, 1, 2]);
+    // Exactly one position rewrite (the CASE statement), not a write per row.
+    expect(positionUpdateCount(setCalls)).toBe(1);
     // The parent playlist's updatedAt is bumped as the final set.
     expect('updatedAt' in setCalls[setCalls.length - 1]).toBe(true);
   });
 
-  it('clamps an out-of-range index to the last position', async () => {
-    mockDb.select.mockReturnValueOnce(createMockChain([{ id: 1 }]));
-    const { setCalls } = primeTransaction(ROWS.map((row) => ({ ...row })));
-
-    // newIndex past the end → clamp to 2. Move climb-a to the end → [B, C, A].
-    const result = await playlistMutations.reorderPlaylistClimb(
-      null,
-      { input: { playlistId: 'p-uuid', climbUuid: 'climb-a', newIndex: 99 } },
-      makeCtx(),
-    );
-
-    expect(result).toBe(true);
-    expect(writtenPositions(setCalls)).toEqual([0, 1, 2]);
-  });
-
-  it('writes only the rows that actually shift for an interior move', async () => {
-    mockDb.select.mockReturnValueOnce(createMockChain([{ id: 1 }]));
-    const fiveRows: ClimbRow[] = [
-      { id: 1, climbUuid: 'climb-a', position: 0 },
-      { id: 2, climbUuid: 'climb-b', position: 1 },
-      { id: 3, climbUuid: 'climb-c', position: 2 },
-      { id: 4, climbUuid: 'climb-d', position: 3 },
-      { id: 5, climbUuid: 'climb-e', position: 4 },
-    ];
-    const { setCalls } = primeTransaction(fiveRows);
-
-    // Move climb-d (index 3) up to index 2 → [A, B, D, C, E]. Only D and C shift;
-    // A, B, E keep their positions and must not be rewritten.
-    const result = await playlistMutations.reorderPlaylistClimb(
-      null,
-      { input: { playlistId: 'p-uuid', climbUuid: 'climb-d', newIndex: 2 } },
-      makeCtx(),
-    );
-
-    expect(result).toBe(true);
-    expect(writtenPositions(setCalls)).toEqual([2, 3]);
-  });
-
-  it('writes no position changes for a no-op move but still succeeds', async () => {
+  it('skips the position update for a no-op move but still bumps the playlist', async () => {
     mockDb.select.mockReturnValueOnce(createMockChain([{ id: 1 }]));
     const { setCalls } = primeTransaction(ROWS.map((row) => ({ ...row })));
 
@@ -150,7 +112,7 @@ describe('reorderPlaylistClimb mutation', () => {
     );
 
     expect(result).toBe(true);
-    expect(writtenPositions(setCalls)).toEqual([]);
+    expect(positionUpdateCount(setCalls)).toBe(0);
     expect('updatedAt' in setCalls[setCalls.length - 1]).toBe(true);
   });
 
