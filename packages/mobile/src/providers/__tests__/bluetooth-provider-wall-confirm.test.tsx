@@ -43,6 +43,7 @@ const bluetooth = vi.hoisted(() => {
       sendFramesToBoard: vi.fn(async () => true as boolean | undefined),
       pickerState: null as PickerState | null,
       reconnectSerialForCurrentBoard: null,
+      connectInitialSendRef: { current: null as { frames: string; mirrored: boolean } | null },
     },
     useBoardBluetooth: vi.fn((options: BluetoothHookOptions) => {
       mock.options = options;
@@ -196,6 +197,7 @@ describe('BluetoothProvider wall-confirm integration', () => {
     bluetooth.state.reconnectSerialForCurrentBoard = null;
     bluetooth.state.sendFramesToBoard.mockReset();
     bluetooth.state.sendFramesToBoard.mockResolvedValue(true);
+    bluetooth.state.connectInitialSendRef.current = null;
     bluetooth.useBoardBluetooth.mockClear();
   });
 
@@ -212,6 +214,36 @@ describe('BluetoothProvider wall-confirm integration', () => {
 
     expect(wallConfirm.emitWallConfirm).toHaveBeenCalledWith('climb-1');
     expect(queue.confirmClimbOnWall).toHaveBeenCalledWith('climb-1');
+  });
+
+  it('skips the duplicate send when connect() already wrote the same frames, but still confirms', async () => {
+    // connect(initialFrames) wrote the current climb before the AutoSender
+    // mounted; the seed must suppress the byte-identical re-send (and its
+    // doubled haptic) while still confirming the wall state.
+    bluetooth.state.connectInitialSendRef.current = { frames: 'p1r12', mirrored: false };
+
+    renderProvider();
+
+    await waitFor(() => {
+      expect(wallConfirm.emitWallConfirm).toHaveBeenCalledWith('climb-1');
+    });
+
+    expect(bluetooth.state.sendFramesToBoard).not.toHaveBeenCalled();
+    // One-shot: the seed is consumed on first pickup.
+    expect(bluetooth.state.connectInitialSendRef.current).toBeNull();
+  });
+
+  it('still sends when connect() wrote different frames than the current climb', async () => {
+    // e.g. the create-climb editor connected with its in-progress frames; the
+    // queue's current climb differs, so the AutoSender must not be suppressed.
+    bluetooth.state.connectInitialSendRef.current = { frames: 'p9r15', mirrored: false };
+
+    renderProvider();
+
+    await waitFor(() => {
+      expect(bluetooth.state.sendFramesToBoard).toHaveBeenCalledWith('p1r12', false, expect.any(AbortSignal));
+    });
+    expect(bluetooth.state.connectInitialSendRef.current).toBeNull();
   });
 
   it('keeps the local wall confirm in solo mode without sending a session mutation', async () => {

@@ -40,6 +40,7 @@ const baseProps = {
   visible: true,
   onReassert: vi.fn(),
   onClearLights: vi.fn(),
+  supportsClearLights: true,
   onDisconnect: vi.fn(),
   onClose: vi.fn(),
 };
@@ -82,5 +83,13 @@ describe('BleControlSheet', () => {
     expect(baseProps.onDisconnect).toHaveBeenCalledTimes(1);
     expect(baseProps.onClearLights).not.toHaveBeenCalled();
     expect(baseProps.onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('hides the turn-off row when the board cannot encode a clear frame (MoonBoard)', () => {
+    const { queryByText, getByText } = render(<BleControlSheet {...baseProps} supportsClearLights={false} />);
+    expect(queryByText('lightControl.turnOffAll')).toBeNull();
+    // The other controls stay available.
+    expect(getByText('ble.relightBoard')).toBeDefined();
+    expect(getByText('lightControl.disconnect')).toBeDefined();
   });
 });

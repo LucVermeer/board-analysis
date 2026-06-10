@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, AppState } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
@@ -261,6 +261,20 @@ export function useBoardBluetooth({
   // config-switch effect tell a genuine board/layout/size change (tear down)
   // from an unrelated re-render (no-op), and is the key cleared on every drop.
   const connectedConfigKeyRef = useRef<string | null>(null);
+  // What connect() pushed as its initialFrames write, if any. The AutoSender
+  // (mounted right after isConnected flips true) reads this one-shot seed so a
+  // byte-identical current climb doesn't get re-sent immediately on connect —
+  // a redundant full-frame write plus a doubled success haptic.
+  const connectInitialSendRef = useRef<{ frames: string; mirrored: boolean } | null>(null);
+
+  // ledColorOverrides narrowed to string values, shared by the connect and
+  // adoption configureBoard calls so both push identical overrides natively.
+  const sanitizedColorOverrides = useMemo(() => {
+    if (!ledColorOverrides) return undefined;
+    return Object.fromEntries(
+      Object.entries(ledColorOverrides).filter(([, value]) => typeof value === 'string') as [string, string][],
+    );
+  }, [ledColorOverrides]);
 
   const [pickerState, setPickerState] = useState<PickerState | null>(null);
   const pickerRejectRef = useRef<((error: Error) => void) | null>(null);
@@ -583,14 +597,7 @@ export function useBoardBluetooth({
               sizeId,
               apiLevel: apiLevelRef.current,
               deviceName: connection.deviceName,
-              colorOverrides: ledColorOverrides
-                ? Object.fromEntries(
-                    Object.entries(ledColorOverrides).filter(([, value]) => typeof value === 'string') as [
-                      string,
-                      string,
-                    ][],
-                  )
-                : undefined,
+              colorOverrides: sanitizedColorOverrides,
             });
           } catch (error) {
             console.warn('[BLE] Failed to push board configuration to native side:', error);
@@ -625,9 +632,14 @@ export function useBoardBluetooth({
           setLastConnectedBoard({ serial: parsedSerial, configKey: boardConfigKey(boardName, layoutId, sizeId) });
         }
 
-        // Send initial frames if provided
+        // Send initial frames if provided; seed the AutoSender's dedup with
+        // what was written so it doesn't immediately repeat the identical
+        // frame (and its success haptic) when it mounts on isConnected.
         if (initialFrames) {
           await sendFramesToBoard(initialFrames, mirrored);
+          connectInitialSendRef.current = { frames: initialFrames, mirrored: !!mirrored };
+        } else {
+          connectInitialSendRef.current = null;
         }
 
         connectedConfigKeyRef.current =
@@ -714,6 +726,7 @@ export function useBoardBluetooth({
       onConnectionChange,
       onConnectSuccess,
       sendFramesToBoard,
+      sanitizedColorOverrides,
       devicePicker,
       t,
       tCommon,
@@ -812,7 +825,14 @@ export function useBoardBluetooth({
       unsubDisconnectRef.current = adapter.onDisconnect(handleDisconnection);
       adapterRef.current = adapter;
       void adapter
-        .configureBoard({ boardName, layoutId, sizeId, apiLevel: apiLevelRef.current, deviceName })
+        .configureBoard({
+          boardName,
+          layoutId,
+          sizeId,
+          apiLevel: apiLevelRef.current,
+          deviceName,
+          colorOverrides: sanitizedColorOverrides,
+        })
         .catch(() => {});
 
       const serial = deviceName ? (parseSerialNumber(deviceName) ?? null) : (rememberedBoard?.serial ?? null);
@@ -831,8 +851,14 @@ export function useBoardBluetooth({
     // null = platform/binary without the adoption surface — nothing to do.
     if (!connectedSubscription) return;
 
+    // The subscriptions are removed in the cleanup, but an in-flight
+    // getConnectedDevice promise can't be cancelled — without this flag it
+    // would adopt (create an adapter, setState) after the effect was torn
+    // down by an unmount or a config change.
+    let cancelled = false;
     const checkNativeConnection = () => {
       void getNativeBleConnectedDevice().then((device) => {
+        if (cancelled) return;
         if (device) adopt(device.deviceId, device.name);
       });
     };
@@ -843,10 +869,20 @@ export function useBoardBluetooth({
     });
 
     return () => {
+      cancelled = true;
       connectedSubscription.remove();
       appStateSubscription.remove();
     };
-  }, [boardName, layoutId, sizeId, devicePicker, handleDisconnection, onConnectionChange, onConnectSuccess]);
+  }, [
+    boardName,
+    layoutId,
+    sizeId,
+    devicePicker,
+    handleDisconnection,
+    onConnectionChange,
+    onConnectSuccess,
+    sanitizedColorOverrides,
+  ]);
 
   // Serial to silently reconnect to for the board currently in view, or null
   // when nothing is remembered or the user switched boards (in which case the
@@ -887,5 +923,6 @@ export function useBoardBluetooth({
     sendFramesToBoard,
     pickerState,
     reconnectSerialForCurrentBoard,
+    connectInitialSendRef,
   };
 }
