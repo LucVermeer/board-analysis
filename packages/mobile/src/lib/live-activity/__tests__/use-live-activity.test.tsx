@@ -41,7 +41,38 @@ const queueItem = {
   },
 } as unknown as ClimbQueueItem;
 
+const nextQueueItem = {
+  uuid: 'queue-item-2',
+  climb: {
+    uuid: 'climb-2',
+    name: 'Next Climb',
+    difficulty: 'V5',
+    angle: 45,
+    frames: 'p2r2',
+    setter_username: 'setter',
+    mirrored: false,
+  },
+} as unknown as ClimbQueueItem;
+
 type HookProps = Parameters<typeof useLiveActivity>[0];
+
+type DeferredStartPromise = {
+  promise: Promise<void>;
+  reject: (reason?: unknown) => void;
+  resolve: () => void;
+};
+
+function createDeferredStartPromise(): DeferredStartPromise {
+  let resolvePromise!: () => void;
+  let rejectPromise!: (reason?: unknown) => void;
+
+  const promise = new Promise<void>((resolve, reject) => {
+    resolvePromise = resolve;
+    rejectPromise = reject;
+  });
+
+  return { promise, reject: rejectPromise, resolve: resolvePromise };
+}
 
 function activeProps(overrides: Partial<HookProps> = {}): HookProps {
   return {
@@ -129,6 +160,41 @@ describe('useLiveActivity start-failure contract', () => {
     await waitFor(() =>
       expect(plugin.updateLiveActivity).toHaveBeenCalledWith(
         expect.objectContaining({ climbName: 'Test Climb', currentIndex: 0, totalClimbs: 1 }),
+      ),
+    );
+  });
+
+  it('keeps a newer session active when an older start rejects late', async () => {
+    const firstStart = createDeferredStartPromise();
+    plugin.startLiveActivitySession.mockReturnValueOnce(firstStart.promise).mockResolvedValueOnce(undefined);
+
+    const props = activeProps({
+      queue: [queueItem, nextQueueItem],
+      currentClimbQueueItem: queueItem,
+    });
+    const { rerender } = render(<Harness {...props} />);
+    await waitFor(() => expect(plugin.startLiveActivitySession).toHaveBeenCalledTimes(1));
+
+    rerender(<Harness {...props} isSessionActive={false} />);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    rerender(<Harness {...props} />);
+    await waitFor(() => expect(plugin.startLiveActivitySession).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(plugin.updateLiveActivity).toHaveBeenCalled());
+
+    plugin.updateLiveActivity.mockClear();
+    plugin.updateLiveActivityClimb.mockClear();
+
+    await act(async () => {
+      firstStart.reject(new Error('stale permission denied'));
+      await Promise.resolve();
+    });
+    rerender(<Harness {...props} currentClimbQueueItem={nextQueueItem} />);
+
+    await waitFor(() =>
+      expect(plugin.updateLiveActivityClimb).toHaveBeenCalledWith(
+        expect.objectContaining({ climbName: 'Next Climb', currentIndex: 1, totalClimbs: 2 }),
       ),
     );
   });

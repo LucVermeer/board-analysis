@@ -195,6 +195,7 @@ export function useLiveActivity({
           });
         })
         .catch((error) => {
+          if (!isActiveRef.current || generationRef.current !== startGeneration) return;
           console.warn('[LiveActivity] startSession failed:', error);
           isActiveRef.current = false;
           // Native startSession connects the WebSocket and writes the shared
