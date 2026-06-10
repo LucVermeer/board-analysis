@@ -132,7 +132,6 @@ function findGroupKey(project, groupName) {
 function ensureGroup(project, groupName) {
   const existingGroupKey = findGroupKey(project, groupName);
   if (existingGroupKey) {
-    delete project.hash.project.objects.PBXGroup[existingGroupKey].path;
     return existingGroupKey;
   }
 
@@ -347,30 +346,81 @@ function ensureTestTarget(project) {
   return targetUuid;
 }
 
-function updateScheme(testTargetUuid) {
-  const schemePath = join(projectDir, 'Boardsesh.xcodeproj/xcshareddata/xcschemes/Boardsesh.xcscheme');
-  if (!existsSync(schemePath)) {
-    throw new Error(`Missing Boardsesh scheme at ${schemePath}`);
-  }
+function testBuildableReference(testTargetUuid, indentation) {
+  return `${indentation}<BuildableReference
+${indentation}   BuildableIdentifier = "primary"
+${indentation}   BlueprintIdentifier = "${testTargetUuid}"
+${indentation}   BuildableName = "${TEST_TARGET_NAME}.xctest"
+${indentation}   BlueprintName = "${TEST_TARGET_NAME}"
+${indentation}   ReferencedContainer = "container:Boardsesh.xcodeproj">
+${indentation}</BuildableReference>`;
+}
 
-  let scheme = readFileSync(schemePath, 'utf8');
-  const testables = `      <Testables>
+function writeTestScheme(testTargetUuid) {
+  const schemeDirectory = join(projectDir, 'Boardsesh.xcodeproj/xcshareddata/xcschemes');
+  const schemePath = join(schemeDirectory, `${TEST_TARGET_NAME}.xcscheme`);
+  mkdirSync(schemeDirectory, { recursive: true });
+
+  const scheme = `<?xml version="1.0" encoding="UTF-8"?>
+<Scheme
+   LastUpgradeVersion = "1130"
+   version = "1.3">
+   <BuildAction
+      parallelizeBuildables = "YES"
+      buildImplicitDependencies = "YES">
+      <BuildActionEntries>
+         <BuildActionEntry
+            buildForTesting = "YES"
+            buildForRunning = "NO"
+            buildForProfiling = "NO"
+            buildForArchiving = "NO"
+            buildForAnalyzing = "YES">
+${testBuildableReference(testTargetUuid, '            ')}
+         </BuildActionEntry>
+      </BuildActionEntries>
+   </BuildAction>
+   <TestAction
+      buildConfiguration = "Debug"
+      selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB"
+      selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
+      shouldUseLaunchSchemeArgsEnv = "YES">
+      <Testables>
          <TestableReference
             skipped = "NO">
-            <BuildableReference
-               BuildableIdentifier = "primary"
-               BlueprintIdentifier = "${testTargetUuid}"
-               BuildableName = "${TEST_TARGET_NAME}.xctest"
-               BlueprintName = "${TEST_TARGET_NAME}"
-               ReferencedContainer = "container:Boardsesh.xcodeproj">
-            </BuildableReference>
+${testBuildableReference(testTargetUuid, '            ')}
          </TestableReference>
-      </Testables>`;
+      </Testables>
+   </TestAction>
+   <LaunchAction
+      buildConfiguration = "Debug"
+      selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB"
+      selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
+      launchStyle = "0"
+      useCustomWorkingDirectory = "NO"
+      ignoresPersistentStateOnLaunch = "NO"
+      debugDocumentVersioning = "YES"
+      debugServiceExtension = "internal"
+      allowLocationSimulation = "YES">
+   </LaunchAction>
+   <ProfileAction
+      buildConfiguration = "Release"
+      shouldUseLaunchSchemeArgsEnv = "YES"
+      savedToolIdentifier = ""
+      useCustomWorkingDirectory = "NO"
+      debugDocumentVersioning = "YES">
+   </ProfileAction>
+   <AnalyzeAction
+      buildConfiguration = "Debug">
+   </AnalyzeAction>
+   <ArchiveAction
+      buildConfiguration = "Release"
+      revealArchiveInOrganizer = "YES">
+   </ArchiveAction>
+</Scheme>
+`;
 
-  if (scheme.includes('<Testables>')) {
-    scheme = scheme.replace(/      <Testables>[\s\S]*?      <\/Testables>/, testables);
-  } else {
-    scheme = scheme.replace(/   <\/TestAction>/, `${testables}\n   </TestAction>`);
+  if (!scheme.includes(`BlueprintIdentifier = "${testTargetUuid}"`)) {
+    throw new Error(`Could not write ${TEST_TARGET_NAME} scheme at ${schemePath}`);
   }
 
   writeFileSync(schemePath, scheme);
@@ -391,6 +441,6 @@ if (!findNativeTarget(project, APP_TARGET_NAME)) {
 const testTargetUuid = ensureTestTarget(project);
 removeStaleSdkFrameworkSearchPaths(project);
 writeFileSync(projectFilePath, project.writeSync());
-updateScheme(testTargetUuid);
+writeTestScheme(testTargetUuid);
 
 console.log(`Prepared ${TEST_TARGET_NAME} (${testTargetUuid}) for RN iOS Swift tests.`);

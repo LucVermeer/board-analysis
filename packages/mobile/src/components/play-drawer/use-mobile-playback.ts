@@ -110,15 +110,15 @@ export function useMobilePlayback({
   });
 
   // --- Latest-wins BLE frame writer ---
-  // Mobile's sendFramesToBoard has NO internal write mutex (web's does), so this
-  // drain is the ONLY guard against overlapping GATT writes. A second write
-  // issued before the first resolves throws "GATT operation already in progress"
-  // on Android, so this stays a faithful port of web's use-drawer-playback drain:
-  // collapse bursts to the newest frame, never overlap a write.
+  // sendFramesToBoard serialises writes across all callers (its writeChainRef
+  // mutex, mirroring web's), so overlapping calls can no longer interleave at
+  // the GATT boundary. This drain still matters for a different reason: it
+  // collapses animation-frame bursts to the newest frame instead of queueing
+  // every intermediate frame behind the mutex, which would let the wall lag
+  // arbitrarily far behind the on-screen playback.
   const isWritingFrameRef = useRef(false);
   const pendingFrameRef = useRef<string | null>(null);
   const lastSentFrameRef = useRef<string | null>(null);
-  const lastSentMirroredRef = useRef(mirrored);
   const mirroredRef = useRef(mirrored);
   mirroredRef.current = mirrored;
 
@@ -128,18 +128,6 @@ export function useMobilePlayback({
     lastSentFrameRef.current = null;
     pendingFrameRef.current = null;
   }, [climbUuid]);
-
-  // A mirror toggle changes no frame string, so the writer effect's
-  // `currentFrameString === lastSentFrameRef.current` guard would skip the write
-  // and the wall would keep the old orientation while the on-screen board flips
-  // — visible whenever playback is paused (or sitting on a stable frame). Invalidate
-  // the last-sent frame so the current frame re-flushes with the new orientation.
-  // (During active playback this self-heals as frames tick; this covers the paused
-  // case web's bluetooth-context auto-sender covers there but mobile's does not.)
-  if (mirrored !== lastSentMirroredRef.current) {
-    lastSentMirroredRef.current = mirrored;
-    lastSentFrameRef.current = null;
-  }
 
   const { currentFrameString, isAnimatable } = playback;
   const bluetoothConnected = bluetooth?.isConnected ?? false;
@@ -181,10 +169,7 @@ export function useMobilePlayback({
       }
     };
     void drain();
-    // `mirrored` is a dep so a mirror-only toggle (which leaves currentFrameString
-    // unchanged) re-runs this effect; the invalidation above clears the last-sent
-    // frame so the current frame re-flushes with the new orientation.
-  }, [isOpen, isAnimatable, bluetoothConnected, bluetooth, currentFrameString, mirrored]);
+  }, [isOpen, isAnimatable, bluetoothConnected, bluetooth, currentFrameString]);
 
   const play = useCallback(() => {
     // Fire the analytics seam only on a deliberate user play of a route — peer

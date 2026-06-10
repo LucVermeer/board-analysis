@@ -38,6 +38,7 @@ import { useShareClimb } from '../../hooks/use-share-climb';
 import { getBoardRenderData } from '../../lib/board-details';
 import { hapticSuccess } from '../../lib/haptics';
 import { usePlayDrawerWakeLock } from './use-play-drawer-wake-lock';
+import { useDeferredSheetOpen } from './use-deferred-sheet-open';
 import {
   buildPlayDrawerBoardLayout,
   derivePlayDrawerLightbulbPressAction,
@@ -47,6 +48,7 @@ import {
   resolvePlayDrawerWallControlQueueItem,
   shouldRestoreFailedTakeControlPreview,
 } from './lightbulb-control';
+import { usePreviewOnlyExitCleanup } from './use-preview-only-exit-cleanup';
 import { useWallConfirmFallback } from './use-wall-confirm-fallback';
 import { track } from '../../lib/analytics';
 import { iosSystemColors } from '../../theme/ios-colors';
@@ -261,15 +263,10 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   // mode or mounting never clears a fresh preview. Safe for the lightbulb flow:
   // handleLightbulb reads drawerPreviewSuggestionSource synchronously at press
   // time and hands it to takeControl before the driver flip lands here.
-  const wasPartyPreviewOnlyRef = useRef(isPartyPreviewOnly);
-  useEffect(() => {
-    const wasPreviewOnly = wasPartyPreviewOnlyRef.current;
-    wasPartyPreviewOnlyRef.current = isPartyPreviewOnly;
-    if (wasPreviewOnly && !isPartyPreviewOnly) {
-      setDrawerPreviewItem(null);
-      setDrawerPreviewSuggestionSource(null);
-    }
-  }, [isPartyPreviewOnly]);
+  usePreviewOnlyExitCleanup(isPartyPreviewOnly, () => {
+    setDrawerPreviewItem(null);
+    setDrawerPreviewSuggestionSource(null);
+  });
 
   const { showToast } = useToast();
 
@@ -330,8 +327,8 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
     }
   }, [cancelPendingWallControlAttempt, lightbulbState.isPersistentSessionActive, pendingClimbUuid, sessionId]);
 
-  useImperativeHandle(ref, () => ({
-    open: (selectedClimb: Climb, options?: PlayDrawerOpenOptions) => {
+  const openDrawer = useCallback(
+    (selectedClimb: Climb, options?: PlayDrawerOpenOptions) => {
       cancelPendingWallControlAttempt();
       const previewPlaylistSuggestionSource = options?.previewPlaylistSuggestionSource ?? null;
       const shouldShowCurrentQueueItem =
@@ -359,10 +356,39 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
       }
       sheetRef.current?.present();
     },
-    close: () => {
-      sheetRef.current?.dismiss();
+    [cancelPendingWallControlAttempt, state.currentClimbQueueItem, isPartyPreviewOnly, setCurrentClimb],
+  );
+
+  // Serialize open() against the sheet's dismiss animation: presenting
+  // mid-dismiss races gorhom's onDismiss, which then fires AFTER the re-present
+  // and wipes isSheetOpen — leaving the sheet visibly open with the board gated
+  // off forever (the intermittent blank-board-on-reopen bug). The hook stashes
+  // an open requested mid-dismiss and replays it once the dismissal settles.
+  const openDrawerFromArgs = useCallback(
+    (args: { climb: Climb; options?: PlayDrawerOpenOptions }) => openDrawer(args.climb, args.options),
+    [openDrawer],
+  );
+  const { requestOpen, onAnimate: handleSheetAnimateIndex, flushOnDismiss } = useDeferredSheetOpen(openDrawerFromArgs);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      open: (selectedClimb: Climb, options?: PlayDrawerOpenOptions) => {
+        requestOpen({ climb: selectedClimb, options });
+      },
+      close: () => {
+        sheetRef.current?.dismiss();
+      },
+    }),
+    [requestOpen],
+  );
+
+  const handleSheetAnimate = useCallback(
+    (_fromIndex: number, toIndex: number) => {
+      handleSheetAnimateIndex(toIndex);
     },
-  }));
+    [handleSheetAnimateIndex],
+  );
 
   const handleClose = useCallback(() => {
     cancelPendingWallControlAttempt();
@@ -372,7 +398,10 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
     setIsTickBarActive(false);
     setIsSheetOpen(false);
     setActiveSubDrawer('none');
-  }, [cancelPendingWallControlAttempt]);
+    // Replay an open() that arrived while this dismissal was animating — the
+    // modal is now fully dismissed, so the re-present is clean.
+    flushOnDismiss();
+  }, [cancelPendingWallControlAttempt, flushOnDismiss]);
 
   const handlePrev = useCallback(() => {
     cancelPendingWallControlAttempt();
@@ -403,8 +432,17 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   }, [cancelPendingWallControlAttempt, isPartyPreviewOnly, navigationState.nextItem, nextClimb]);
 
   const handleMirror = useCallback(() => {
-    setIsMirrored((prev) => !prev);
-  }, []);
+    const nextMirrored = !isMirrored;
+    setIsMirrored(nextMirrored);
+    // The wall doesn't follow the toggle by itself: the AutoSender keys off
+    // the queue item's own `climb.mirrored`, not this drawer-local state, so
+    // without an explicit re-push the LEDs would keep showing the previous
+    // orientation. isConnected means this device holds the BLE link (and
+    // therefore drives the wall).
+    if (bluetooth?.isConnected && displayedClimb?.frames) {
+      void bluetooth.sendFramesToBoard(displayedClimb.frames, nextMirrored);
+    }
+  }, [isMirrored, bluetooth, displayedClimb]);
 
   const handleToggleFavorite = useCallback(() => {
     if (!displayedClimb) return;
@@ -695,6 +733,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
         backdropComponent={renderBackdrop}
         backgroundComponent={renderBackground}
         handleComponent={renderNoHandle}
+        onAnimate={handleSheetAnimate}
         onDismiss={handleClose}
       >
         <BottomSheetScrollView

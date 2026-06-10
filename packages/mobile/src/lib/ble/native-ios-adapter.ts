@@ -6,6 +6,17 @@ import {
 } from '../../../modules/live-activity/src/index';
 import type { BluetoothAdapter, BleConnection, DevicePickerFn, DiscoveredDevice } from './types';
 import { SCAN_TIMEOUT_MS, SERIAL_RECONNECT_GRACE_MS } from '@boardsesh/ble-protocol/scan-constants';
+import { isLikelyBoardDevice } from './board-device-filter';
+
+/**
+ * True when the running binary ships the newer BoardBle native surface
+ * (`getConnectedDevice`, the `connected` event, unfiltered scanning). JS rides
+ * OTA updates onto older binaries, so every new native capability is gated on
+ * this check.
+ */
+export function nativeBleSupportsConnectionAdoption(): boolean {
+  return typeof boardBleNative?.getConnectedDevice === 'function';
+}
 
 function uint8ArrayToHex(bytes: Uint8Array): string {
   let hex = '';
@@ -79,10 +90,27 @@ export class NativeIosBleAdapter implements BluetoothAdapter {
       openPicker();
     }
 
+    // Newer binaries scan unfiltered (a native service-UUID filter would hide
+    // MoonBoard controllers, which don't reliably advertise the UART UUID) and
+    // report advertised service UUIDs so JS can filter; older binaries keep
+    // the native UUID filter and the JS filter passes their results through
+    // (no serviceUuids field, and their names match the board patterns).
+    const scanUnfiltered = nativeBleSupportsConnectionAdoption();
+
     const scanSubscription = native.addListener('scanResult', (payload: NativeBleScanEvent) => {
+      const deviceName = payload.localName || payload.device.name || undefined;
+      if (scanUnfiltered && !isLikelyBoardDevice({ name: deviceName, serviceUuids: payload.serviceUuids })) {
+        return;
+      }
+      // Repeat advertisements of an unchanged device don't need a state
+      // update (or a picker re-render) — only a new device or a late-arriving
+      // name does.
+      const alreadyListed = devices.get(payload.device.deviceId);
+      if (alreadyListed && alreadyListed.name === deviceName) return;
+
       const device: DiscoveredDevice = {
         deviceId: payload.device.deviceId,
-        name: payload.localName || payload.device.name || undefined,
+        name: deviceName,
         rssi: payload.rssi,
       };
       devices.set(device.deviceId, device);
@@ -106,7 +134,9 @@ export class NativeIosBleAdapter implements BluetoothAdapter {
     let scanTimeoutId: ReturnType<typeof setTimeout> | undefined;
     let selectedDeviceId: string;
     try {
-      await native.startScan([AURORA_ADVERTISED_SERVICE_UUID, UART_SERVICE_UUID]);
+      // Empty list = unfiltered scan on newer binaries; older binaries get the
+      // explicit UUID filter they understand.
+      await native.startScan(scanUnfiltered ? [] : [AURORA_ADVERTISED_SERVICE_UUID, UART_SERVICE_UUID]);
 
       // Grace window: if the stored serial hasn't matched shortly, open the
       // picker (scan keeps running so it live-updates) instead of waiting out
@@ -139,7 +169,10 @@ export class NativeIosBleAdapter implements BluetoothAdapter {
       if (pickerFallbackId) clearTimeout(pickerFallbackId);
       if (scanTimeoutId) clearTimeout(scanTimeoutId);
       scanSubscription.remove();
-      await native.stopScan();
+      // Swallow stopScan rejections: a throw here (e.g. Bluetooth toggled off
+      // mid-flow) would mask the original error — turning a user-cancel into a
+      // spurious failure alert, or hiding the real scan/connect error.
+      await native.stopScan().catch(() => {});
     }
 
     let selectedDeviceName: string | undefined;
@@ -152,19 +185,36 @@ export class NativeIosBleAdapter implements BluetoothAdapter {
 
     await native.connect(selectedDeviceId);
 
-    this.connectedDeviceId = selectedDeviceId;
-    this.disconnectSubscription = native.addListener('disconnected', (payload) => {
-      if (payload.deviceId !== selectedDeviceId) return;
-      this.connectedDeviceId = null;
-      this.disconnectSubscription?.remove();
-      this.disconnectSubscription = null;
-      this.disconnectCallback?.();
-    });
+    this.trackConnectedDevice(selectedDeviceId);
 
     return {
       deviceId: selectedDeviceId,
       deviceName: selectedDeviceName,
     };
+  }
+
+  /**
+   * Adopt a connection the native BoardBleManager already holds (a widget
+   * intent reconnected in the background) without scanning or connecting:
+   * just start tracking the device so writes and the disconnect callback
+   * work. The caller is responsible for verifying the device actually is
+   * connected (via `getConnectedDevice`) and for hook-level state.
+   */
+  adoptConnection(deviceId: string): void {
+    this.trackConnectedDevice(deviceId);
+  }
+
+  private trackConnectedDevice(deviceId: string): void {
+    const native = this.requireNative();
+    this.disconnectSubscription?.remove();
+    this.connectedDeviceId = deviceId;
+    this.disconnectSubscription = native.addListener('disconnected', (payload) => {
+      if (payload.deviceId !== deviceId) return;
+      this.connectedDeviceId = null;
+      this.disconnectSubscription?.remove();
+      this.disconnectSubscription = null;
+      this.disconnectCallback?.();
+    });
   }
 
   async disconnect(): Promise<void> {
@@ -185,8 +235,29 @@ export class NativeIosBleAdapter implements BluetoothAdapter {
     }
     // Native side handles chunking (20-byte UART chunks with 5ms inter-chunk
     // delay) inside BoardBleManager, so we pass the full payload as a single
-    // hex string.
-    await native.write(uint8ArrayToHex(data));
+    // hex string. An abort while the chunks are still draining natively flushes
+    // the native queue too — without cancelWrites the stale climb would keep
+    // streaming to the wall after the caller gave up on it.
+    if (!signal) {
+      await native.write(uint8ArrayToHex(data));
+      return;
+    }
+    const onAbort = () => {
+      void native.cancelWrites().catch(() => {});
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+    try {
+      await native.write(uint8ArrayToHex(data));
+    } catch (error) {
+      // The native queue rejects cancelled writes with its own error shape;
+      // normalise to AbortError so callers classify it as a cancellation.
+      if (signal.aborted) {
+        throw new DOMException('Write aborted', 'AbortError');
+      }
+      throw error;
+    } finally {
+      signal.removeEventListener('abort', onAbort);
+    }
   }
 
   onDisconnect(callback: () => void): () => void {

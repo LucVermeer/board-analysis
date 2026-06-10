@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { Alert } from 'react-native';
 import type { HoldPlacement } from '../../../components/board-renderer/types';
@@ -19,6 +19,7 @@ vi.mock('react-native', async () => {
   const { reactNativePermissionHarness: harness } = await import('./react-native-permissions-test-harness');
   return {
     Alert: { alert: vi.fn() },
+    AppState: { addEventListener: vi.fn(() => ({ remove: vi.fn() })) },
     Platform: harness.platform,
     PermissionsAndroid: harness.permissionsAndroid,
   };
@@ -41,11 +42,13 @@ vi.mock('expo-keep-awake', () => ({
   deactivateKeepAwake: vi.fn().mockResolvedValue(undefined),
 }));
 
+const mockGetAuroraBluetoothPacket = vi.hoisted(() => vi.fn());
 const mockParseApiLevel = vi.hoisted(() => vi.fn());
 const mockParseSerialNumber = vi.hoisted(() => vi.fn());
 vi.mock('@boardsesh/ble-protocol/aurora', () => ({
-  getAuroraBluetoothPacket: vi.fn(),
+  getAuroraBluetoothPacket: mockGetAuroraBluetoothPacket,
   parseApiLevel: mockParseApiLevel,
+  parseBoardTypeFromDeviceName: vi.fn(),
   parseSerialNumber: mockParseSerialNumber,
 }));
 
@@ -54,17 +57,15 @@ vi.mock('../../analytics', () => ({
   track: mockTrack,
 }));
 
+const mockGetLedPlacements = vi.hoisted(() => vi.fn());
+vi.mock('@boardsesh/board-constants/led-placements', () => ({
+  getLedPlacements: mockGetLedPlacements,
+}));
+
 const mockGetMoonboardBluetoothPacket = vi.hoisted(() => vi.fn());
 vi.mock('@boardsesh/ble-protocol/moonboard', () => ({
   getMoonboardBluetoothPacket: mockGetMoonboardBluetoothPacket,
-}));
-
-// The Aurora send path lazily imports the LED placement map. Provide a
-// non-empty map so a happy-path mirrored write reaches getAuroraBluetoothPacket
-// instead of bailing on the empty-placement guard.
-const mockGetLedPlacements = vi.hoisted(() => vi.fn(() => ({ 1: 0, 99: 1 })));
-vi.mock('@boardsesh/board-constants/led-placements', () => ({
-  getLedPlacements: mockGetLedPlacements,
+  isMoonboardDeviceName: vi.fn((name?: string) => !!name && name.startsWith('MoonBoard')),
 }));
 
 vi.mock('react-i18next', () => ({
@@ -99,21 +100,37 @@ vi.mock('../adapter', () => ({
 vi.mock('../adapter-factory', () => ({
   createBluetoothAdapter: vi.fn(),
   isNativeIosBleAdapter: vi.fn().mockReturnValue(false),
+  // Adoption seam: null/absent = platform without native connection adoption.
+  subscribeNativeBleConnected: vi.fn(() => null),
+  getNativeBleConnectedDevice: vi.fn(async () => null),
 }));
 
-import { getAuroraBluetoothPacket } from '@boardsesh/ble-protocol/aurora';
-import { createBluetoothAdapter } from '../adapter-factory';
 import {
-  convertToMirroredFramesString,
-  dispatchMoonboardPacket,
-  mergeAbortSignals,
-  useBoardBluetooth,
-} from '../use-board-bluetooth';
+  createBluetoothAdapter,
+  getNativeBleConnectedDevice,
+  isNativeIosBleAdapter,
+  subscribeNativeBleConnected,
+} from '../adapter-factory';
+import { parseBoardTypeFromDeviceName } from '@boardsesh/ble-protocol/aurora';
+import { convertToMirroredFramesString, dispatchMoonboardPacket, useBoardBluetooth } from '../use-board-bluetooth';
 
-// ── Factory helper ─────────────────────────────────────────────────────────
+// ── Factory helpers ────────────────────────────────────────────────────────
 
 function makePlacement(id: number, mirroredHoldId: number | null): HoldPlacement {
   return { id, mirroredHoldId, cx: 0, cy: 0, r: 10 };
+}
+
+type FakeAdapterOverrides = Partial<Record<'isAvailable' | 'requestAndConnect' | 'disconnect' | 'write', unknown>>;
+
+function makeFakeAdapter(overrides: FakeAdapterOverrides = {}) {
+  return {
+    isAvailable: vi.fn().mockResolvedValue(true),
+    requestAndConnect: vi.fn().mockResolvedValue({ deviceId: 'device-1', deviceName: 'Kilter Board#123@3' }),
+    disconnect: vi.fn().mockResolvedValue(undefined),
+    write: vi.fn().mockResolvedValue(undefined),
+    onDisconnect: vi.fn(() => () => {}),
+    ...overrides,
+  };
 }
 
 // ── Tests ───────────────────────────────────────────────────────────────
@@ -148,152 +165,156 @@ describe('useBoardBluetooth', () => {
     expect(createBluetoothAdapter).not.toHaveBeenCalled();
   });
 
-  it('emits apiLevel and deviceNamePresent on the connection-success event', async () => {
-    reactNativePermissionHarness.permissionsAndroid.requestMultiple.mockResolvedValue({
-      BLUETOOTH_SCAN: 'granted',
-      BLUETOOTH_CONNECT: 'granted',
+  it('ignores a second connect while one is already in flight', async () => {
+    let resolveRequest!: (connection: { deviceId: string; deviceName?: string }) => void;
+    const fakeAdapter = makeFakeAdapter({
+      requestAndConnect: vi.fn(
+        () =>
+          new Promise<{ deviceId: string; deviceName?: string }>((resolve) => {
+            resolveRequest = resolve;
+          }),
+      ),
     });
-    const fakeAdapter = {
-      isAvailable: vi.fn().mockResolvedValue(true),
-      requestAndConnect: vi.fn().mockResolvedValue({ deviceId: 'dev-1', deviceName: 'Kilter A1#0042@3' }),
-      disconnect: vi.fn().mockResolvedValue(undefined),
-      write: vi.fn().mockResolvedValue(undefined),
-      onDisconnect: vi.fn().mockReturnValue(() => {}),
-    };
-    vi.mocked(createBluetoothAdapter).mockReturnValue(fakeAdapter);
-    mockParseApiLevel.mockReturnValue(3);
-    mockParseSerialNumber.mockReturnValue('0042');
-
-    const { result } = renderHook(() =>
-      useBoardBluetooth({
-        boardName: 'kilter',
-        layoutId: 1,
-        sizeId: 1,
-        setIds: '1',
-      }),
+    vi.mocked(createBluetoothAdapter).mockReturnValue(
+      fakeAdapter as unknown as ReturnType<typeof createBluetoothAdapter>,
     );
 
+    const { result } = renderHook(() => useBoardBluetooth({ boardName: 'moonboard', layoutId: 1, sizeId: 1 }));
+
+    let firstConnect!: Promise<boolean>;
+    let secondConnectResult = true;
     await act(async () => {
-      await result.current.connect();
+      firstConnect = result.current.connect();
+      // Let the first attempt get past permissions and adapter creation.
+      await Promise.resolve();
+      secondConnectResult = await result.current.connect();
     });
 
-    const successCall = mockTrack.mock.calls.find(([name]) => name === 'Bluetooth Connection Success');
-    expect(successCall).toBeDefined();
-    expect(successCall?.[1]).toMatchObject({ apiLevel: 3, deviceNamePresent: true });
-  });
-
-  it('reports deviceNamePresent=false and the v2 fallback level when no name is advertised', async () => {
-    reactNativePermissionHarness.permissionsAndroid.requestMultiple.mockResolvedValue({
-      BLUETOOTH_SCAN: 'granted',
-      BLUETOOTH_CONNECT: 'granted',
-    });
-    const fakeAdapter = {
-      isAvailable: vi.fn().mockResolvedValue(true),
-      requestAndConnect: vi.fn().mockResolvedValue({ deviceId: 'dev-2', deviceName: undefined }),
-      disconnect: vi.fn().mockResolvedValue(undefined),
-      write: vi.fn().mockResolvedValue(undefined),
-      onDisconnect: vi.fn().mockReturnValue(() => {}),
-    };
-    vi.mocked(createBluetoothAdapter).mockReturnValue(fakeAdapter);
-    // Mirrors parseApiLevel's real default for a missing/unparseable name.
-    mockParseApiLevel.mockReturnValue(2);
-    mockParseSerialNumber.mockReturnValue(undefined);
-
-    const { result } = renderHook(() =>
-      useBoardBluetooth({
-        boardName: 'kilter',
-        layoutId: 1,
-        sizeId: 1,
-        setIds: '1',
-      }),
-    );
-
-    await act(async () => {
-      await result.current.connect();
-    });
-
-    const successCall = mockTrack.mock.calls.find(([name]) => name === 'Bluetooth Connection Success');
-    expect(successCall).toBeDefined();
-    expect(successCall?.[1]).toMatchObject({ apiLevel: 2, deviceNamePresent: false });
-  });
-
-  it('ignores a second connect() while the first is still in flight (no concurrent scan)', async () => {
-    reactNativePermissionHarness.permissionsAndroid.requestMultiple.mockResolvedValue({
-      BLUETOOTH_SCAN: 'granted',
-      BLUETOOTH_CONNECT: 'granted',
-    });
-
-    // The in-flight latch is set synchronously at the top of connect() before
-    // any await, so firing two connects back-to-back (a lightbulb double-tap)
-    // must let only the first proceed. Without the latch, both run to
-    // completion and each creates an adapter + starts a scan on the shared
-    // BleManager singleton, with each flow's stopDeviceScan killing the other.
-    const requestAndConnect = vi.fn().mockResolvedValue({ deviceId: 'dev-1', deviceName: 'Kilter A1#0042@3' });
-    const fakeAdapter = {
-      isAvailable: vi.fn().mockResolvedValue(true),
-      requestAndConnect,
-      disconnect: vi.fn().mockResolvedValue(undefined),
-      write: vi.fn().mockResolvedValue(undefined),
-      onDisconnect: vi.fn().mockReturnValue(() => {}),
-    };
-    vi.mocked(createBluetoothAdapter).mockReturnValue(fakeAdapter);
-    mockParseApiLevel.mockReturnValue(3);
-    mockParseSerialNumber.mockReturnValue('0042');
-
-    const { result } = renderHook(() =>
-      useBoardBluetooth({
-        boardName: 'kilter',
-        layoutId: 1,
-        sizeId: 1,
-        setIds: '1',
-      }),
-    );
-
-    let firstConnectResult: boolean | undefined;
-    let secondConnectResult: boolean | undefined;
-    await act(async () => {
-      // Fire both back-to-back; the second must early-return false because the
-      // first already holds the in-flight latch.
-      const first = result.current.connect();
-      const second = result.current.connect();
-      [firstConnectResult, secondConnectResult] = await Promise.all([first, second]);
-    });
-
-    expect(firstConnectResult).toBe(true);
     expect(secondConnectResult).toBe(false);
-    // Exactly one adapter + one scan despite the double-tap.
     expect(createBluetoothAdapter).toHaveBeenCalledTimes(1);
-    expect(requestAndConnect).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      resolveRequest({ deviceId: 'device-1', deviceName: 'MoonBoard' });
+      await firstConnect;
+    });
+    expect(result.current.isConnected).toBe(true);
+  });
+
+  it('alerts on a "cancelled"-flavoured native failure instead of staying silent', async () => {
+    // CoreBluetooth/ble-plx reject with "Operation was cancelled" for real
+    // failures. The old bare /cancel/i regex treated this as a user cancel and
+    // showed nothing — the headline "tapped connect and nothing happened" bug.
+    const fakeAdapter = makeFakeAdapter({
+      requestAndConnect: vi.fn().mockRejectedValue(new Error('Operation was cancelled')),
+    });
+    vi.mocked(createBluetoothAdapter).mockReturnValue(
+      fakeAdapter as unknown as ReturnType<typeof createBluetoothAdapter>,
+    );
+
+    const { result } = renderHook(() => useBoardBluetooth({ boardName: 'kilter', layoutId: 1, sizeId: 1 }));
+
+    await act(async () => {
+      await result.current.connect();
+    });
+
+    expect(Alert.alert).toHaveBeenCalledWith('ble.connectionFailedTitle', 'bluetooth.unknownError');
+  });
+
+  it('stays silent when the user dismisses the device picker', async () => {
+    const fakeAdapter = makeFakeAdapter({
+      requestAndConnect: vi.fn().mockRejectedValue(new Error('Device selection cancelled')),
+    });
+    vi.mocked(createBluetoothAdapter).mockReturnValue(
+      fakeAdapter as unknown as ReturnType<typeof createBluetoothAdapter>,
+    );
+
+    const { result } = renderHook(() => useBoardBluetooth({ boardName: 'kilter', layoutId: 1, sizeId: 1 }));
+
+    await act(async () => {
+      await result.current.connect();
+    });
+
+    expect(Alert.alert).not.toHaveBeenCalled();
+  });
+
+  it('maps a connect timeout to the connect-failed copy', async () => {
+    const fakeAdapter = makeFakeAdapter({
+      requestAndConnect: vi.fn().mockRejectedValue(new Error('Connection timed out — board may be powered off')),
+    });
+    vi.mocked(createBluetoothAdapter).mockReturnValue(
+      fakeAdapter as unknown as ReturnType<typeof createBluetoothAdapter>,
+    );
+
+    const { result } = renderHook(() => useBoardBluetooth({ boardName: 'kilter', layoutId: 1, sizeId: 1 }));
+
+    await act(async () => {
+      await result.current.connect();
+    });
+
+    expect(Alert.alert).toHaveBeenCalledWith('ble.connectionFailedTitle', 'bluetooth.connectFailed');
+  });
+
+  it('serialises overlapping sendFramesToBoard calls so chunks never interleave', async () => {
+    const writeEvents: string[] = [];
+    let releaseFirstWrite!: () => void;
+    const write = vi.fn((packet: Uint8Array) => {
+      const label = String(packet[0]);
+      writeEvents.push(`start-${label}`);
+      if (writeEvents.length === 1) {
+        return new Promise<void>((resolve) => {
+          releaseFirstWrite = () => {
+            writeEvents.push(`end-${label}`);
+            resolve();
+          };
+        });
+      }
+      writeEvents.push(`end-${label}`);
+      return Promise.resolve();
+    });
+    const fakeAdapter = makeFakeAdapter({ write });
+    vi.mocked(createBluetoothAdapter).mockReturnValue(
+      fakeAdapter as unknown as ReturnType<typeof createBluetoothAdapter>,
+    );
+    mockGetMoonboardBluetoothPacket
+      .mockReturnValueOnce({ packet: new Uint8Array([1]) })
+      .mockReturnValueOnce({ packet: new Uint8Array([2]) });
+
+    const { result } = renderHook(() => useBoardBluetooth({ boardName: 'moonboard', layoutId: 1, sizeId: 1 }));
+
+    await act(async () => {
+      await result.current.connect();
+    });
+
+    let firstSend!: Promise<boolean | undefined>;
+    let secondSend!: Promise<boolean | undefined>;
+    await act(async () => {
+      firstSend = result.current.sendFramesToBoard('p1r12');
+      secondSend = result.current.sendFramesToBoard('p2r12');
+      // Give the second send every chance to start out of order.
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(writeEvents).toEqual(['start-1']);
+      releaseFirstWrite();
+      await Promise.all([firstSend, secondSend]);
+    });
+
+    expect(writeEvents).toEqual(['start-1', 'end-1', 'start-2', 'end-2']);
   });
 
   it('refuses a mirrored send on a mirroring board when holdsData is missing (never sends un-mirrored frames)', async () => {
-    reactNativePermissionHarness.permissionsAndroid.requestMultiple.mockResolvedValue({
-      BLUETOOTH_SCAN: 'granted',
-      BLUETOOTH_CONNECT: 'granted',
-    });
-    const write = vi.fn().mockResolvedValue(undefined);
-    const fakeAdapter = {
-      isAvailable: vi.fn().mockResolvedValue(true),
-      requestAndConnect: vi.fn().mockResolvedValue({ deviceId: 'dev-1', deviceName: 'Tension A1#0042@3' }),
-      disconnect: vi.fn().mockResolvedValue(undefined),
-      write,
-      onDisconnect: vi.fn().mockReturnValue(() => {}),
-    };
-    vi.mocked(createBluetoothAdapter).mockReturnValue(fakeAdapter);
-    mockParseApiLevel.mockReturnValue(3);
-    mockParseSerialNumber.mockReturnValue('0042');
-
     // Tension layout 1 supports mirroring. holdsData is intentionally omitted —
     // the provider must thread it in; without it we must NOT silently send the
     // un-mirrored frames (which would light the wrong holds on the wall).
-    const { result } = renderHook(() =>
-      useBoardBluetooth({
-        boardName: 'tension',
-        layoutId: 1,
-        sizeId: 1,
-        setIds: '1',
-      }),
+    const fakeAdapter = makeFakeAdapter({
+      requestAndConnect: vi.fn().mockResolvedValue({ deviceId: 'dev-1', deviceName: 'Tension A1#0042@3' }),
+    });
+    vi.mocked(createBluetoothAdapter).mockReturnValue(
+      fakeAdapter as unknown as ReturnType<typeof createBluetoothAdapter>,
     );
+    mockParseApiLevel.mockReturnValue(3);
+    mockParseSerialNumber.mockReturnValue('0042');
+
+    const { result } = renderHook(() => useBoardBluetooth({ boardName: 'tension', layoutId: 1, sizeId: 1 }));
 
     await act(async () => {
       await result.current.connect();
@@ -307,45 +328,31 @@ describe('useBoardBluetooth', () => {
     expect(sendResult).toBe(false);
     expect(Alert.alert).toHaveBeenCalledWith('ble.notAvailable', 'ble.errorIncompatible');
     // The board must never receive the original (un-mirrored) frames.
-    expect(write).not.toHaveBeenCalled();
+    expect(fakeAdapter.write).not.toHaveBeenCalled();
     const failureCall = mockTrack.mock.calls.find(([name]) => name === 'Climb Sent to Board Failure');
     expect(failureCall?.[1]).toMatchObject({ failureReason: 'missing_mirror_data', mirrored: true });
   });
 
   it('mirrors and sends when holdsData is present on a mirroring board', async () => {
-    reactNativePermissionHarness.permissionsAndroid.requestMultiple.mockResolvedValue({
-      BLUETOOTH_SCAN: 'granted',
-      BLUETOOTH_CONNECT: 'granted',
-    });
-    const write = vi.fn().mockResolvedValue(undefined);
-    const fakeAdapter = {
-      isAvailable: vi.fn().mockResolvedValue(true),
+    const fakeAdapter = makeFakeAdapter({
       requestAndConnect: vi.fn().mockResolvedValue({ deviceId: 'dev-1', deviceName: 'Tension A1#0042@3' }),
-      disconnect: vi.fn().mockResolvedValue(undefined),
-      write,
-      onDisconnect: vi.fn().mockReturnValue(() => {}),
-    };
-    vi.mocked(createBluetoothAdapter).mockReturnValue(fakeAdapter);
+    });
+    vi.mocked(createBluetoothAdapter).mockReturnValue(
+      fakeAdapter as unknown as ReturnType<typeof createBluetoothAdapter>,
+    );
     mockParseApiLevel.mockReturnValue(3);
     mockParseSerialNumber.mockReturnValue('0042');
-    // getAuroraBluetoothPacket is mocked at the module level (returns a stub
-    // packet) so a non-empty placement map lets the write proceed.
-    vi.mocked(getAuroraBluetoothPacket).mockReturnValue({
+    // A non-empty placement map lets the write proceed past the empty-placement guard.
+    mockGetLedPlacements.mockReturnValue({ 1: 0, 99: 1 });
+    mockGetAuroraBluetoothPacket.mockReturnValue({
       packet: new Uint8Array([0x01]),
       skippedPositionCount: 0,
       skippedRoleCount: 0,
       totalPlacements: 1,
     });
 
-    const { result } = renderHook(() =>
-      useBoardBluetooth({
-        boardName: 'tension',
-        layoutId: 1,
-        sizeId: 1,
-        setIds: '1',
-        holdsData: [makePlacement(1, 99)],
-      }),
-    );
+    const holdsData = [makePlacement(1, 99)];
+    const { result } = renderHook(() => useBoardBluetooth({ boardName: 'tension', layoutId: 1, sizeId: 1, holdsData }));
 
     await act(async () => {
       await result.current.connect();
@@ -357,9 +364,178 @@ describe('useBoardBluetooth', () => {
     });
 
     expect(sendResult).toBe(true);
-    expect(write).toHaveBeenCalledTimes(1);
+    expect(fakeAdapter.write).toHaveBeenCalledTimes(1);
     // The mirrored frame (hold 1 -> 99) must have been fed to the packet builder.
-    expect(getAuroraBluetoothPacket).toHaveBeenCalledWith('p99r12', expect.anything(), 'tension', 3, undefined);
+    expect(mockGetAuroraBluetoothPacket).toHaveBeenCalledWith('p99r12', expect.anything(), 'tension', 3, undefined);
+  });
+
+  it('aborts queued and in-flight writes on disconnect', async () => {
+    const write = vi.fn(
+      (_packet: Uint8Array, signal?: AbortSignal) =>
+        new Promise<void>((_resolve, reject) => {
+          signal?.addEventListener('abort', () => reject(new DOMException('Write aborted', 'AbortError')));
+        }),
+    );
+    const fakeAdapter = makeFakeAdapter({ write });
+    vi.mocked(createBluetoothAdapter).mockReturnValue(
+      fakeAdapter as unknown as ReturnType<typeof createBluetoothAdapter>,
+    );
+    mockGetMoonboardBluetoothPacket.mockReturnValue({ packet: new Uint8Array([1]) });
+
+    const { result } = renderHook(() => useBoardBluetooth({ boardName: 'moonboard', layoutId: 1, sizeId: 1 }));
+
+    await act(async () => {
+      await result.current.connect();
+    });
+
+    let pendingSend!: Promise<boolean | undefined>;
+    await act(async () => {
+      pendingSend = result.current.sendFramesToBoard('p1r12');
+      await Promise.resolve();
+      await result.current.disconnect();
+    });
+
+    // The aborted write resolves as a cancellation (undefined), not a failure.
+    await expect(pendingSend).resolves.toBeUndefined();
+    expect(fakeAdapter.disconnect).toHaveBeenCalled();
+  });
+
+  it('emits apiLevel and deviceNamePresent on the connection-success event', async () => {
+    const fakeAdapter = makeFakeAdapter({
+      requestAndConnect: vi.fn().mockResolvedValue({ deviceId: 'dev-1', deviceName: 'Kilter A1#0042@3' }),
+    });
+    vi.mocked(createBluetoothAdapter).mockReturnValue(
+      fakeAdapter as unknown as ReturnType<typeof createBluetoothAdapter>,
+    );
+    mockParseApiLevel.mockReturnValue(3);
+    mockParseSerialNumber.mockReturnValue('0042');
+
+    const { result } = renderHook(() => useBoardBluetooth({ boardName: 'kilter', layoutId: 1, sizeId: 1 }));
+
+    await act(async () => {
+      await result.current.connect();
+    });
+
+    const successCall = mockTrack.mock.calls.find(([name]) => name === 'Bluetooth Connection Success');
+    expect(successCall).toBeDefined();
+    expect(successCall?.[1]).toMatchObject({ apiLevel: 3, deviceNamePresent: true });
+  });
+
+  it('reports deviceNamePresent=false and the v2 fallback level when no name is advertised', async () => {
+    const fakeAdapter = makeFakeAdapter({
+      requestAndConnect: vi.fn().mockResolvedValue({ deviceId: 'dev-2', deviceName: undefined }),
+    });
+    vi.mocked(createBluetoothAdapter).mockReturnValue(
+      fakeAdapter as unknown as ReturnType<typeof createBluetoothAdapter>,
+    );
+    // Mirrors parseApiLevel's real default for a missing/unparseable name.
+    mockParseApiLevel.mockReturnValue(2);
+    mockParseSerialNumber.mockReturnValue(undefined);
+
+    const { result } = renderHook(() => useBoardBluetooth({ boardName: 'kilter', layoutId: 1, sizeId: 1 }));
+
+    await act(async () => {
+      await result.current.connect();
+    });
+
+    const successCall = mockTrack.mock.calls.find(([name]) => name === 'Bluetooth Connection Success');
+    expect(successCall).toBeDefined();
+    expect(successCall?.[1]).toMatchObject({ apiLevel: 2, deviceNamePresent: false });
+  });
+});
+
+// ── Native connection adoption (iOS) ───────────────────────────────────────
+
+describe('useBoardBluetooth native connection adoption', () => {
+  type ConnectedListener = (payload: { deviceId: string; deviceName?: string }) => void;
+  let connectedListener: ConnectedListener | null = null;
+
+  function makeAdoptableAdapter() {
+    return {
+      ...makeFakeAdapter(),
+      adoptConnection: vi.fn(),
+      configureBoard: vi.fn().mockResolvedValue(undefined),
+    };
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resetReactNativePermissionHarness();
+    connectedListener = null;
+    vi.mocked(subscribeNativeBleConnected).mockImplementation((listener) => {
+      connectedListener = listener;
+      return { remove: vi.fn() };
+    });
+    vi.mocked(isNativeIosBleAdapter).mockReturnValue(true);
+    vi.mocked(parseBoardTypeFromDeviceName).mockImplementation((name?: string) =>
+      name?.toLowerCase().startsWith('kilter') ? 'kilter' : undefined,
+    );
+  });
+
+  afterEach(() => {
+    vi.mocked(subscribeNativeBleConnected).mockImplementation(() => null);
+    vi.mocked(getNativeBleConnectedDevice).mockImplementation(async () => null);
+    vi.mocked(isNativeIosBleAdapter).mockReturnValue(false);
+    vi.mocked(parseBoardTypeFromDeviceName).mockReset();
+  });
+
+  it('adopts a natively-connected board matching the active config', async () => {
+    const adapter = makeAdoptableAdapter();
+    vi.mocked(createBluetoothAdapter).mockReturnValue(adapter as unknown as ReturnType<typeof createBluetoothAdapter>);
+
+    const { result } = renderHook(() => useBoardBluetooth({ boardName: 'kilter', layoutId: 1, sizeId: 1 }));
+
+    await act(async () => {
+      connectedListener?.({ deviceId: 'native-dev', deviceName: 'Kilter Board#9@3' });
+    });
+
+    expect(adapter.adoptConnection).toHaveBeenCalledWith('native-dev');
+    expect(result.current.isConnected).toBe(true);
+  });
+
+  it('refuses to adopt a device it cannot positively identify as the active board type', async () => {
+    const adapter = makeAdoptableAdapter();
+    vi.mocked(createBluetoothAdapter).mockReturnValue(adapter as unknown as ReturnType<typeof createBluetoothAdapter>);
+
+    const { result } = renderHook(() => useBoardBluetooth({ boardName: 'kilter', layoutId: 1, sizeId: 1 }));
+
+    await act(async () => {
+      // Unnamed device ('' from the bridge) — could be anything, e.g. a
+      // MoonBoard that would receive Aurora-format packets.
+      connectedListener?.({ deviceId: 'mystery-dev', deviceName: '' });
+      // Recognisable, but the wrong family for the active config.
+      connectedListener?.({ deviceId: 'moon-dev', deviceName: 'MoonBoard A1' });
+    });
+
+    expect(adapter.adoptConnection).not.toHaveBeenCalled();
+    expect(result.current.isConnected).toBe(false);
+  });
+
+  it('does not re-adopt after an explicit disconnect until the next deliberate connect', async () => {
+    const adapter = makeAdoptableAdapter();
+    vi.mocked(createBluetoothAdapter).mockReturnValue(adapter as unknown as ReturnType<typeof createBluetoothAdapter>);
+
+    const { result } = renderHook(() => useBoardBluetooth({ boardName: 'kilter', layoutId: 1, sizeId: 1 }));
+
+    await act(async () => {
+      connectedListener?.({ deviceId: 'native-dev', deviceName: 'Kilter Board#9@3' });
+    });
+    expect(result.current.isConnected).toBe(true);
+
+    await act(async () => {
+      await result.current.disconnect();
+    });
+    expect(result.current.isConnected).toBe(false);
+
+    // The native disconnect can still be in flight when the app foregrounds —
+    // a late connected event (or getConnectedDevice poll) must not resurrect
+    // the connection the user just closed.
+    await act(async () => {
+      connectedListener?.({ deviceId: 'native-dev', deviceName: 'Kilter Board#9@3' });
+    });
+
+    expect(adapter.adoptConnection).toHaveBeenCalledTimes(1);
+    expect(result.current.isConnected).toBe(false);
   });
 });
 
@@ -542,54 +718,5 @@ describe('dispatchMoonboardPacket', () => {
 
     expect(result).toBe(true);
     expect(write).toHaveBeenCalledTimes(1);
-  });
-});
-
-// ── mergeAbortSignals ───────────────────────────────────────────────────────
-
-describe('mergeAbortSignals', () => {
-  it('removes the abort listener from the long-lived signal once disposed (no leak per write)', () => {
-    // The AutoSender passes one lifetime-scoped signal to every send. Each send
-    // creates a fresh per-write controller and merges. Without dispose, every
-    // successful (non-aborted) write parked a permanent listener on the
-    // lifetime signal, leaking the per-write controller for the connection.
-    const lifetime = new AbortController();
-    const addSpy = vi.spyOn(lifetime.signal, 'addEventListener');
-    const removeSpy = vi.spyOn(lifetime.signal, 'removeEventListener');
-
-    // Simulate N consecutive successful sends: merge, then dispose without aborting.
-    for (let send = 0; send < 5; send++) {
-      const perWrite = new AbortController();
-      const { dispose } = mergeAbortSignals(lifetime.signal, perWrite.signal);
-      dispose();
-    }
-
-    // Every listener added to the lifetime signal must have been removed again.
-    const abortListenersAdded = addSpy.mock.calls.filter(([eventName]) => eventName === 'abort').length;
-    const abortListenersRemoved = removeSpy.mock.calls.filter(([eventName]) => eventName === 'abort').length;
-    expect(abortListenersAdded).toBe(5);
-    expect(abortListenersRemoved).toBe(5);
-  });
-
-  it('still aborts the merged signal when an input signal aborts', () => {
-    const lifetime = new AbortController();
-    const perWrite = new AbortController();
-    const { signal } = mergeAbortSignals(lifetime.signal, perWrite.signal);
-
-    expect(signal.aborted).toBe(false);
-    perWrite.abort();
-    expect(signal.aborted).toBe(true);
-  });
-
-  it('returns an already-aborted signal when an input is already aborted', () => {
-    const lifetime = new AbortController();
-    lifetime.abort();
-    const perWrite = new AbortController();
-
-    const { signal, dispose } = mergeAbortSignals(lifetime.signal, perWrite.signal);
-
-    expect(signal.aborted).toBe(true);
-    // dispose must be safe to call even on the early-aborted path.
-    expect(() => dispose()).not.toThrow();
   });
 });

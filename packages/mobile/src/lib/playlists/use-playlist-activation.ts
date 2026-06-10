@@ -171,6 +171,10 @@ export function usePlaylistActivation({
           previewQueueItem: previewItem,
           previewPlaylistSuggestionSource: previewSource,
         });
+        // A preview-only tap never reaches setCurrentClimb, so drop any item a
+        // prior solo tap pinned — otherwise a later same-uuid solo activation
+        // reuses the stale instance instead of building a fresh one.
+        pendingQueueItemRef.current = null;
         return Promise.resolve();
       }
       const item = climbToQueueItem(toSchemaClimb(climb));

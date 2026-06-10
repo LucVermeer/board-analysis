@@ -174,6 +174,7 @@ describe('RNBleAdapter', () => {
               localName: 'TestBoard',
               name: 'TestBoard',
               rssi: -50,
+              serviceUUIDs: ['uart-uuid'],
             });
           },
         );
@@ -232,7 +233,7 @@ describe('RNBleAdapter', () => {
 
       mockBleManager.startDeviceScan.mockImplementation(
         (_uuids: unknown, _opts: unknown, callback: (error: unknown, device: unknown) => void) => {
-          callback(null, { id: 'device-1', localName: 'Board', name: 'Board', rssi: -40 });
+          callback(null, { id: 'device-1', localName: 'Board', name: 'Board', rssi: -40, serviceUUIDs: ['uart-uuid'] });
         },
       );
 
@@ -268,7 +269,13 @@ describe('RNBleAdapter', () => {
       mockBleManager.onDeviceDisconnected.mockReturnValue({ remove: vi.fn() });
       mockBleManager.startDeviceScan.mockImplementation(
         (_uuids: unknown, _opts: unknown, callback: (error: unknown, device: unknown) => void) => {
-          callback(null, { id: 'write-device', localName: 'Board', name: 'Board', rssi: -40 });
+          callback(null, {
+            id: 'write-device',
+            localName: 'Board',
+            name: 'Board',
+            rssi: -40,
+            serviceUUIDs: ['uart-uuid'],
+          });
         },
       );
 
@@ -311,7 +318,13 @@ describe('RNBleAdapter', () => {
       mockBleManager.onDeviceDisconnected.mockReturnValue({ remove: vi.fn() });
       mockBleManager.startDeviceScan.mockImplementation(
         (_uuids: unknown, _opts: unknown, callback: (error: unknown, device: unknown) => void) => {
-          callback(null, { id: 'chunk-device', localName: 'Board', name: 'Board', rssi: -40 });
+          callback(null, {
+            id: 'chunk-device',
+            localName: 'Board',
+            name: 'Board',
+            rssi: -40,
+            serviceUUIDs: ['uart-uuid'],
+          });
         },
       );
 
@@ -359,7 +372,13 @@ describe('RNBleAdapter', () => {
       mockBleManager.onDeviceDisconnected.mockReturnValue({ remove: vi.fn() });
       mockBleManager.startDeviceScan.mockImplementation(
         (_uuids: unknown, _opts: unknown, callback: (error: unknown, device: unknown) => void) => {
-          callback(null, { id: 'abort-device', localName: 'Board', name: 'Board', rssi: -40 });
+          callback(null, {
+            id: 'abort-device',
+            localName: 'Board',
+            name: 'Board',
+            rssi: -40,
+            serviceUUIDs: ['uart-uuid'],
+          });
         },
       );
 
@@ -410,7 +429,13 @@ describe('RNBleAdapter', () => {
       mockBleManager.onDeviceDisconnected.mockReturnValue({ remove: vi.fn() });
       mockBleManager.startDeviceScan.mockImplementation(
         (_uuids: unknown, _opts: unknown, callback: (error: unknown, device: unknown) => void) => {
-          callback(null, { id: 'drop-device', localName: 'Board', name: 'Board', rssi: -40 });
+          callback(null, {
+            id: 'drop-device',
+            localName: 'Board',
+            name: 'Board',
+            rssi: -40,
+            serviceUUIDs: ['uart-uuid'],
+          });
         },
       );
 
@@ -449,7 +474,13 @@ describe('RNBleAdapter', () => {
       mockBleManager.onDeviceDisconnected.mockReturnValue({ remove: vi.fn() });
       mockBleManager.startDeviceScan.mockImplementation(
         (_uuids: unknown, _opts: unknown, callback: (error: unknown, device: unknown) => void) => {
-          callback(null, { id: 'live-device', localName: 'Board', name: 'Board', rssi: -40 });
+          callback(null, {
+            id: 'live-device',
+            localName: 'Board',
+            name: 'Board',
+            rssi: -40,
+            serviceUUIDs: ['uart-uuid'],
+          });
         },
       );
 
@@ -464,6 +495,49 @@ describe('RNBleAdapter', () => {
     });
   });
 
+  describe('requestAndConnect — scan filtering', () => {
+    it('scans unfiltered and filters results in JS so MoonBoards surface', async () => {
+      mockBleManager.onDeviceDisconnected.mockReturnValue({ remove: vi.fn() });
+      mockBleManager.startDeviceScan.mockImplementation(
+        (_uuids: unknown, _opts: unknown, callback: (error: unknown, device: unknown) => void) => {
+          // A MoonBoard advertising no service UUIDs (the case a UUID-filtered
+          // scan would never see), plus an unrelated speaker that must not
+          // reach the picker.
+          callback(null, { id: 'moon-device', localName: 'MoonBoard A1', name: 'MoonBoard A1', rssi: -42 });
+          callback(null, { id: 'speaker', localName: 'JBL Flip 6', name: 'JBL Flip 6', rssi: -30 });
+        },
+      );
+
+      const seenDevices: Array<{ deviceId: string }> = [];
+      const devicePicker: DevicePickerFn = (subscribe) => {
+        subscribe((devices) => {
+          seenDevices.splice(0, seenDevices.length, ...devices);
+        });
+        return Promise.resolve('moon-device');
+      };
+
+      const mockCharacteristic = { uuid: 'uart-write-uuid', writeWithoutResponse: vi.fn() };
+      const mockDeviceWithServices = {
+        id: 'moon-device',
+        characteristicsForService: vi.fn().mockResolvedValue([mockCharacteristic]),
+        requestMTU: vi.fn().mockResolvedValue(undefined),
+        discoverAllServicesAndCharacteristics: vi.fn().mockReturnThis(),
+      };
+      mockBleManager.connectToDevice.mockResolvedValue({
+        id: 'moon-device',
+        requestMTU: vi.fn().mockResolvedValue(undefined),
+        discoverAllServicesAndCharacteristics: vi.fn().mockReturnValue(mockDeviceWithServices),
+      });
+
+      const adapter = new RNBleAdapter(devicePicker);
+      await adapter.requestAndConnect();
+
+      // Unfiltered scan: UUID filter must be null (a service filter hides MoonBoards).
+      expect(mockBleManager.startDeviceScan).toHaveBeenCalledWith(null, null, expect.any(Function));
+      expect(seenDevices.map((device) => device.deviceId)).toEqual(['moon-device']);
+    });
+  });
+
   describe('requestAndConnect — failure modes', () => {
     it('times out and rejects if connectToDevice hangs past CONNECTION_TIMEOUT_MS', async () => {
       vi.useFakeTimers();
@@ -474,7 +548,13 @@ describe('RNBleAdapter', () => {
         mockBleManager.connectToDevice.mockImplementation(() => new Promise(() => {}));
         mockBleManager.startDeviceScan.mockImplementation(
           (_uuids: unknown, _opts: unknown, callback: (error: unknown, device: unknown) => void) => {
-            callback(null, { id: 'hang-device', localName: 'Board', name: 'Board', rssi: -40 });
+            callback(null, {
+              id: 'hang-device',
+              localName: 'Board',
+              name: 'Board',
+              rssi: -40,
+              serviceUUIDs: ['uart-uuid'],
+            });
           },
         );
 
@@ -569,7 +649,13 @@ describe('RNBleAdapter', () => {
         // picked" branch rather than the empty-result reject.
         mockBleManager.startDeviceScan.mockImplementation(
           (_uuids: unknown, _opts: unknown, callback: (error: unknown, device: unknown) => void) => {
-            callback(null, { id: 'seen-device', localName: 'Board', name: 'Board', rssi: -40 });
+            callback(null, {
+              id: 'seen-device',
+              localName: 'Board',
+              name: 'Board',
+              rssi: -40,
+              serviceUUIDs: ['uart-uuid'],
+            });
           },
         );
 

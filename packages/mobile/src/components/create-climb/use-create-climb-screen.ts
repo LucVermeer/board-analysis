@@ -390,6 +390,9 @@ export function useCreateClimbScreen({
   // the current holds; tapping again disconnects. ----
   const handleToggleBle = useCallback(() => {
     if (!bluetooth) return;
+    // Ignore taps while a connect is already running — a second concurrent
+    // connect tears down the first attempt's scan and strands the picker.
+    if (bluetooth.loading) return;
     if (bluetooth.isConnected) void bluetooth.disconnect();
     else void bluetooth.connect(generateFramesString());
   }, [bluetooth, generateFramesString]);

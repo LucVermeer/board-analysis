@@ -7,6 +7,10 @@ on:
       - 'packages/shared/**'
       - 'packages/board-constants/**'
       - 'packages/shared-schema/**'
+      - 'package.json'
+      - 'bun.lock'
+      - 'patches/**'
+      - 'vite.config.ts'
       - 'scripts/prepare-rn-ios-tests.mjs'
       - '.github/workflows/ios-rn-ci.yml'
   push:
@@ -16,6 +20,10 @@ on:
       - 'packages/shared/**'
       - 'packages/board-constants/**'
       - 'packages/shared-schema/**'
+      - 'package.json'
+      - 'bun.lock'
+      - 'patches/**'
+      - 'vite.config.ts'
       - 'scripts/prepare-rn-ios-tests.mjs'
       - '.github/workflows/ios-rn-ci.yml'
   workflow_dispatch:
@@ -29,12 +37,14 @@ permissions:
 
 jobs:
   build-and-test:
+    # macos-26 is GA on GitHub-hosted runners and matches the RN TestFlight
+    # workflow's Xcode line; the PR workflow has passed on this label.
     runs-on: macos-26
     timeout-minutes: 60
 
     env:
       WORKSPACE_PATH: packages/mobile/ios/Boardsesh.xcworkspace
-      SCHEME: Boardsesh
+      SCHEME: BoardseshTests
       EXPO_PUBLIC_BACKEND_URL: https://ws.boardsesh.com
       EXPO_PUBLIC_WS_URL: wss://ws.boardsesh.com/graphql
       EXPO_PUBLIC_WEB_URL: https://www.boardsesh.com
@@ -53,6 +63,9 @@ jobs:
 
       - name: Install Node.js dependencies
         run: bun install --frozen-lockfile
+
+      - name: Check widget Swift duplicate drift
+        run: vp test run packages/mobile/src/lib/live-activity/__tests__/widget-target-drift.test.ts --reporter=agent
 
       - name: Write .env for Expo build-time inlining
         working-directory: packages/mobile

@@ -195,4 +195,109 @@ describe('NativeIosBleAdapter connect flow', () => {
     expect(nativeMock.connect).toHaveBeenCalledWith('dev-9');
     expect(nativeMock.startScan).toHaveBeenCalledWith(['AURORA-UUID', 'UART-UUID']);
   });
+
+  it('does not mask the original failure when stopScan rejects in the cleanup path', async () => {
+    nativeMock.stopScan.mockRejectedValueOnce(new Error('bluetooth turned off'));
+    const adapter = new NativeIosBleAdapter(() => Promise.reject(new Error('Device selection cancelled')));
+
+    // Must surface the user-cancel, not the stopScan error — otherwise the
+    // hook misclassifies the cancel and pops a spurious failure alert.
+    await expect(adapter.requestAndConnect()).rejects.toThrow('Device selection cancelled');
+  });
+
+  it('flushes the native write queue when an in-flight write is aborted', async () => {
+    const adapter = new NativeIosBleAdapter(() => Promise.reject(new Error('picker should not open')));
+    const connectPromise = adapter.requestAndConnect('Kilter A1B2C3');
+    await Promise.resolve();
+    scanListeners[0]?.({
+      device: { deviceId: 'dev-9', name: 'Kilter A1B2C3' },
+      localName: 'Kilter A1B2C3',
+      rssi: -55,
+    });
+    await vi.runAllTimersAsync();
+    await connectPromise;
+
+    let rejectNativeWrite!: (error: Error) => void;
+    nativeMock.write.mockImplementationOnce(
+      () =>
+        new Promise<void>((_resolve, reject) => {
+          rejectNativeWrite = reject;
+        }),
+    );
+    const abortController = new AbortController();
+    const writePromise = adapter.write(new Uint8Array([0x01]), abortController.signal);
+    await Promise.resolve();
+
+    abortController.abort();
+    expect(nativeMock.cancelWrites).toHaveBeenCalled();
+
+    // The native queue rejects the cancelled write with its own error; the
+    // adapter normalises it to AbortError so callers treat it as cancellation.
+    rejectNativeWrite(new Error('BLE write cancelled'));
+    await expect(writePromise).rejects.toMatchObject({ name: 'AbortError' });
+  });
+
+  it('adoptConnection wires writes and the disconnect callback without scanning', async () => {
+    const adapter = new NativeIosBleAdapter(() => Promise.reject(new Error('picker should not open')));
+
+    adapter.adoptConnection('adopted-dev');
+    await adapter.write(new Uint8Array([0x01, 0x02]));
+    expect(nativeMock.write).toHaveBeenCalled();
+    expect(nativeMock.startScan).not.toHaveBeenCalled();
+
+    const onDisconnect = vi.fn();
+    adapter.onDisconnect(onDisconnect);
+    disconnectListeners[0]?.({ deviceId: 'adopted-dev' });
+    expect(onDisconnect).toHaveBeenCalled();
+  });
+});
+
+describe('NativeIosBleAdapter on newer binaries (adoption surface present)', () => {
+  beforeEach(() => {
+    (nativeMock as Record<string, unknown>).getConnectedDevice = vi.fn().mockResolvedValue(null);
+  });
+  afterEach(() => {
+    delete (nativeMock as Record<string, unknown>).getConnectedDevice;
+  });
+
+  it('scans unfiltered and filters scan results in JS so MoonBoards surface', async () => {
+    let manualPick: (deviceId: string) => void = () => {};
+    const seenDeviceIds: string[] = [];
+    const adapter = new NativeIosBleAdapter(
+      (subscribe) =>
+        new Promise<string>((resolve) => {
+          manualPick = resolve;
+          subscribe((devices) => {
+            seenDeviceIds.splice(0, seenDeviceIds.length, ...devices.map((device) => device.deviceId));
+          });
+        }),
+    );
+    const connectPromise = adapter.requestAndConnect();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    // Unfiltered scan on the newer surface — a native UUID filter would hide
+    // MoonBoards, which don't reliably advertise the UART UUID.
+    expect(nativeMock.startScan).toHaveBeenCalledWith([]);
+
+    // A MoonBoard with no advertised UUIDs must surface; a nameless device
+    // advertising nothing board-like must not.
+    scanListeners[0]?.({
+      device: { deviceId: 'moon-1', name: 'MoonBoard A1' },
+      localName: 'MoonBoard A1',
+      rssi: -40,
+    });
+    scanListeners[0]?.({
+      device: { deviceId: 'mystery', name: '' },
+      localName: '',
+      rssi: -30,
+    });
+
+    expect(seenDeviceIds).toEqual(['moon-1']);
+
+    manualPick('moon-1');
+    await vi.runAllTimersAsync();
+    await connectPromise;
+    expect(nativeMock.connect).toHaveBeenCalledWith('moon-1');
+  });
 });

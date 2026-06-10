@@ -17,9 +17,9 @@ import type { Grade } from '@boardsesh/shared-schema';
 import type { GradeBound } from '@boardsesh/climb-filters';
 import { useTheme } from '../../providers/theme-provider';
 import { useActiveBoard, useSetActiveBoard } from '../../lib/graphql/use-active-board';
-import { useOptionalBluetoothContext } from '../../providers/bluetooth-provider';
 import { spacing } from '../../theme/tokens';
 import { hapticLight } from '../../lib/haptics';
+import { useLightbulbToggle } from '../ble/use-lightbulb-toggle';
 import { SearchHeader, type SearchHeaderHandle } from '../SearchHeader';
 import { Text } from '../Text';
 import { iconMap } from '../icon-map';
@@ -322,15 +322,7 @@ function MaterialLightbulbAction() {
   const { systemColors, brandColors } = useTheme();
   const { t: tCommon } = useTranslation('common');
   const { t: tSettings } = useTranslation('settings');
-  const bluetooth = useOptionalBluetoothContext();
-  const connected = bluetooth?.isConnected ?? false;
-
-  const handlePress = useCallback(() => {
-    if (!bluetooth) return;
-    hapticLight();
-    if (bluetooth.isConnected) void bluetooth.disconnect();
-    else void bluetooth.connect();
-  }, [bluetooth]);
+  const { bluetooth, connected, handlePress } = useLightbulbToggle();
 
   if (!bluetooth) return null;
 

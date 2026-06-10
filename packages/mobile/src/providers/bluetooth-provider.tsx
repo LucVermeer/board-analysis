@@ -231,24 +231,21 @@ export function BluetoothProvider({
     [boardName, setSessionBoardSerial],
   );
 
-  // Hold map for the active board, needed to convert frames to their mirrored
-  // layout before a BLE write on mirroring boards (Tension/Decoy). Without it,
-  // useBoardBluetooth would refuse a mirrored send rather than light the wrong
-  // holds. getBoardRenderData is pure and memoized by board-config key, so this
-  // is effectively a cache lookup.
+  // Hold placements for the active board, required by the hook's
+  // mirrored-frames conversion (hold id → mirroredHoldId). Without this every
+  // `mirrored: true` send silently wrote the unmirrored frames to the wall.
+  // getBoardRenderData is pure + memoised by board-config key, so this is a
+  // cache lookup on re-render.
   const holdsData = useMemo(() => {
     if (!boardName || layoutId === undefined || sizeId === undefined || !setIds) return undefined;
     const parsedSetIds = setIds
       .split(',')
-      .map((token) => Number(token))
-      .filter((setId) => Number.isFinite(setId));
+      .map((setId) => Number(setId.trim()))
+      .filter((setId) => Number.isInteger(setId));
+    if (parsedSetIds.length === 0) return undefined;
     return (
-      getBoardRenderData({
-        boardName: boardName as BoardName,
-        layoutId,
-        sizeId,
-        setIds: parsedSetIds,
-      })?.holdsData ?? undefined
+      getBoardRenderData({ boardName: boardName as BoardName, layoutId, sizeId, setIds: parsedSetIds })?.holdsData ??
+      undefined
     );
   }, [boardName, layoutId, sizeId, setIds]);
 

@@ -5,9 +5,12 @@ import { BACKEND_URL, WEB_BASE_URL } from './env';
 
 export type AuthProvider = 'google' | 'apple';
 
-// Returns the WebBrowser result so the caller can distinguish a successful
-// redirect from a user-cancelled/dismissed OAuth sheet — the cancel path never
-// reaches the /auth/callback deep link, so it's only observable here.
+// Returns the WebBrowser result because it's the only reliable way to receive
+// the callback. On iOS the in-app auth session consumes the redirect to the
+// callback scheme and returns it as `{ type: 'success', url }` — the URL is
+// never delivered to the app as a deep link, so the caller must parse
+// `result.url` (see parseAuthCallbackParams) and route the transfer token to
+// /auth/callback itself. Cancel/dismiss is likewise only observable here.
 export async function startSignIn(provider: AuthProvider): Promise<WebBrowser.WebBrowserAuthSessionResult> {
   const callbackUrl = encodeURIComponent('/api/auth/native/callback?next=/');
   const url = `${WEB_BASE_URL}/auth/native-start?provider=${provider}&callbackUrl=${callbackUrl}`;

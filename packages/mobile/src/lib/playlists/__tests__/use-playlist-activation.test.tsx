@@ -169,6 +169,29 @@ describe('usePlaylistActivation (mobile wrapper)', () => {
     expect(item?.climb).toEqual(climbB);
   });
 
+  it('clears the pinned item when a preview-only tap intervenes', async () => {
+    const { result, rerender } = renderActivation();
+    const climb = makeClimb('a');
+
+    // Solo tap pins the ref. The mocked activation never reaches
+    // queueApi.setCurrentClimb, so the pinned item is left dangling.
+    await result.current(climb);
+    const soloPinnedItem = mocks.openPlayDrawer.mock.calls[0][1].previewQueueItem;
+
+    // A preview-only tap for the same uuid must drop the stale pin.
+    mocks.isPartyPreviewOnly = true;
+    rerender();
+    await result.current(climb);
+
+    // Back to solo: a later dispatch for the same uuid builds a fresh item
+    // rather than reusing the instance the first solo tap pinned.
+    mocks.isPartyPreviewOnly = false;
+    rerender();
+    const item = await captured().queueApi!.setCurrentClimb(climb, { playlistSuggestionSource: null });
+    expect(item).not.toBe(soloPinnedItem);
+    expect(item?.uuid).not.toBe(soloPinnedItem.uuid);
+  });
+
   describe('party preview-only mode', () => {
     beforeEach(() => {
       mocks.isPartyPreviewOnly = true;
