@@ -90,6 +90,25 @@ export async function findActiveBoardById(boardId: number): Promise<ActivePresen
   return board;
 }
 
+/**
+ * Canonical set-id string for equality checks: numeric tokens only, deduped,
+ * numerically sorted. Lets us compare a tick's target set against a board's
+ * stored set without caring about order or formatting.
+ */
+export function normalizeSetIds(setIds: string | null | undefined): string {
+  if (!setIds) return '';
+  return [
+    ...new Set(
+      setIds
+        .split(',')
+        .map((token) => token.trim())
+        .filter((token) => /^\d+$/.test(token)),
+    ),
+  ]
+    .sort((first, second) => Number(first) - Number(second))
+    .join(',');
+}
+
 export async function requireActiveBoardById(boardId: number): Promise<ActivePresenceBoard> {
   assertValidBoardId(boardId);
   const board = await findActiveBoardById(boardId);

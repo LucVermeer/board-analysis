@@ -9,7 +9,7 @@ import { applyRateLimit, requireAuthenticated, validateInput, isNoMatchClimb } f
 import { getConsensusDifficultyName } from '../shared/sql-expressions';
 import { SaveTickInputSchema, UpdateTickInputSchema, AttachBetaLinkInputSchema } from '../../../validation/schemas';
 import { resolveBoardFromPath } from '../social/boards';
-import { findActiveBoardById, isBoardPresenceEnabled } from '../board-presence/shared';
+import { findActiveBoardById, isBoardPresenceEnabled, normalizeSetIds } from '../board-presence/shared';
 import { publishSocialEvent } from '../../../events';
 import { publishDebouncedSessionStats } from '../sessions/debounced-stats-publisher';
 import { queueClimbStatsRecompute } from './debounced-climb-stats-publisher';
@@ -302,11 +302,22 @@ export const tickMutations = {
     let boardId: number | null = null;
     if (validatedInput.boardId != null && isBoardPresenceEnabled()) {
       const explicitBoard = await findActiveBoardById(validatedInput.boardId);
-      if (explicitBoard?.boardType === validatedInput.boardType) {
+      // Accept the explicit wall board only when its FULL config matches the
+      // tick's target (type + layout + size + set). A stale presence boardId
+      // from a different layout/size/set would otherwise stamp this tick onto
+      // the wrong wall and corrupt that board's presence stats. Set ids are
+      // compared normalized so order/format differences don't reject a match.
+      const configMatches =
+        explicitBoard != null &&
+        explicitBoard.boardType === validatedInput.boardType &&
+        explicitBoard.layoutId === validatedInput.layoutId &&
+        explicitBoard.sizeId === validatedInput.sizeId &&
+        normalizeSetIds(explicitBoard.setIds) === normalizeSetIds(validatedInput.setIds);
+      if (configMatches) {
         boardId = explicitBoard.id;
       } else {
         logger.warn(
-          `[board-presence] Ignoring invalid tick boardId ${validatedInput.boardId} for ${validatedInput.boardType}`,
+          `[board-presence] Ignoring tick boardId ${validatedInput.boardId} — config mismatch for ${validatedInput.boardType}`,
         );
       }
     }
