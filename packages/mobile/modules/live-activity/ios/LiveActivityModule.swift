@@ -52,6 +52,7 @@ public class LiveActivityModule: Module {
     private let bufferQueue = DispatchQueue(label: "com.boardsesh.LiveActivityModule.buffer")
     private var pendingEvents: [PendingEvent] = []
     private var hasListener = false
+    private var isDraining = false
 
     public func definition() -> ModuleDefinition {
         Name("LiveActivity")
@@ -68,12 +69,8 @@ public class LiveActivityModule: Module {
         OnStartObserving {
             self.bufferQueue.sync {
                 self.hasListener = true
-                let buffered = self.pendingEvents
-                self.pendingEvents = []
-                for event in buffered {
-                    self.sendEvent(event.name, event.body)
-                }
             }
+            self.drainPendingEvents()
         }
 
         OnStopObserving {
@@ -110,14 +107,33 @@ public class LiveActivityModule: Module {
 
     private func emitOrBuffer(name: String, body: [String: Any]) {
         bufferQueue.sync {
-            if hasListener {
-                sendEvent(name, body)
-            } else {
-                pendingEvents.append(PendingEvent(name: name, body: body))
-                if pendingEvents.count > 32 {
-                    pendingEvents.removeFirst(pendingEvents.count - 32)
-                }
+            pendingEvents.append(PendingEvent(name: name, body: body))
+            if pendingEvents.count > 32 {
+                pendingEvents.removeFirst(pendingEvents.count - 32)
             }
+        }
+        drainPendingEvents()
+    }
+
+    /// Sends buffered events FIFO while a listener is attached. `sendEvent`
+    /// runs OUTSIDE `bufferQueue` so a synchronously re-entrant emission can
+    /// never deadlock the serial queue; `isDraining` keeps the drain
+    /// single-flight so concurrent callers can't interleave events out of
+    /// order.
+    private func drainPendingEvents() {
+        while true {
+            let next: PendingEvent? = bufferQueue.sync {
+                guard hasListener, !isDraining, !pendingEvents.isEmpty else { return nil }
+                isDraining = true
+                return pendingEvents.removeFirst()
+            }
+            guard let next else { return }
+            sendEvent(next.name, next.body)
+            let hasMore: Bool = bufferQueue.sync {
+                isDraining = false
+                return hasListener && !pendingEvents.isEmpty
+            }
+            if !hasMore { return }
         }
     }
 
@@ -538,6 +554,7 @@ public class LiveActivityModule: Module {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
         request.httpBody = jsonData
+        request.timeoutInterval = 15
 
         URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
             if let error = error {

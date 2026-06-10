@@ -22,6 +22,8 @@ enum BoardBleError: LocalizedError {
     case notConnected
     case invalidHex
     case writeCancelled
+    case superseded
+    case writeTimedOut
 
     var errorDescription: String? {
         switch self {
@@ -41,6 +43,10 @@ enum BoardBleError: LocalizedError {
             return "Invalid hex payload"
         case .writeCancelled:
             return "BLE write cancelled"
+        case .superseded:
+            return "Bluetooth connection attempt was superseded by a newer one"
+        case .writeTimedOut:
+            return "BLE write timed out waiting for the board to accept data"
         }
     }
 }
@@ -64,6 +70,10 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
     private let chunkSize = 20
     private let chunkDelay: TimeInterval = 0.005
     private let connectTimeout: TimeInterval = 8
+    // How long a write parked on `canSendWriteWithoutResponse` may wait for
+    // peripheralIsReady before the queue is failed. Generous: a healthy link
+    // drains its transmit buffer in milliseconds.
+    private let writeResumeTimeout: TimeInterval = 5
 
     private lazy var centralManager = CBCentralManager(
         delegate: self,
@@ -97,6 +107,7 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
     private var writeGeneration: UInt64 = 0
     private var isWriting = false
     private var pendingWriteResume: (() -> Void)?
+    private var pendingWriteResumeWatchdog: DispatchWorkItem?
     private var configuration: BoardBleConfiguration?
     private lazy var readyWaiters = WaiterPool(queue: bleQueue)
     private lazy var drainWaiters = WaiterPool(queue: bleQueue)
@@ -342,6 +353,15 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
 
         stopScanOnBleQueue()
         failQueuedWrites(BoardBleError.writeCancelled)
+        // Settle any still-pending connect before starting this one. Silently
+        // overwriting pendingConnectCompletion would orphan the prior attempt's
+        // JS promise (it would never resolve), and its still-scheduled timeout
+        // work item could later misfire against THIS attempt: for a different
+        // target device the old peripheral's generation entry survives the
+        // bump below, so the stale timeout's guards both pass and it would
+        // call completePendingConnect against the new completion.
+        // completePendingConnect also cancels that stale timeout work item.
+        completePendingConnect(.failure(BoardBleError.superseded))
         connectionGeneration += 1
         let generation = connectionGeneration
         intentionalDisconnectGenerations.removeValue(forKey: peripheral.identifier)
@@ -608,14 +628,39 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
             return
         }
 
+        // More than one restored peripheral means a superseded connect attempt
+        // was still mid-flight at suspension. Keep only the first; cancel the
+        // rest so they don't linger as system-held connections — these boards
+        // are last-connection-wins, so a phantom link blocks the wall.
+        for extra in peripherals.dropFirst() {
+            logger.info("Cancelling extra restored BLE peripheral \(extra.identifier.uuidString, privacy: .public)")
+            central.cancelPeripheralConnection(extra)
+        }
+
         let deviceId = peripheral.identifier.uuidString
         connectionGeneration += 1
-        peripheralGenerations[peripheral.identifier] = connectionGeneration
         discoveredPeripherals[deviceId] = peripheral
-        connectedPeripheral = peripheral
         peripheral.delegate = self
-        logger.info("Restored BLE peripheral \(deviceId, privacy: .public)")
-        peripheral.discoverServices([uartServiceUuid])
+
+        switch peripheral.state {
+        case .connected:
+            peripheralGenerations[peripheral.identifier] = connectionGeneration
+            connectedPeripheral = peripheral
+            logger.info("Restored BLE peripheral \(deviceId, privacy: .public)")
+            peripheral.discoverServices([uartServiceUuid])
+        case .connecting:
+            // The restored connect request is still pending; didConnect will
+            // run service discovery when the link comes up (the generation set
+            // here keeps its guard satisfied).
+            peripheralGenerations[peripheral.identifier] = connectionGeneration
+            connectedPeripheral = peripheral
+            logger.info("Restored BLE peripheral \(deviceId, privacy: .public) still connecting")
+        default:
+            // Disconnected or disconnecting: nothing usable to restore, and
+            // adopting it would leave a half-open connectedPeripheral with no
+            // write characteristic.
+            logger.info("Restored BLE peripheral \(deviceId, privacy: .public) not connected (state=\(peripheral.state.rawValue, privacy: .public)); ignoring")
+        }
     }
 
     func centralManager(
@@ -713,29 +758,53 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
     // MARK: - CBPeripheralDelegate
 
     func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
-        guard connectedPeripheral?.identifier == peripheral.identifier else { return }
+        // Identity AND generation, mirroring didConnect: a stale discovery
+        // callback from a superseded connect attempt to the same device must
+        // not complete the newer attempt early.
+        guard connectedPeripheral?.identifier == peripheral.identifier,
+              peripheralGenerations[peripheral.identifier] == connectionGeneration
+        else { return }
         if let error {
-            completePendingConnect(.failure(error))
+            failConnectionSetup(peripheral, error: error)
             return
         }
 
         guard let service = peripheral.services?.first(where: { $0.uuid == uartServiceUuid }) else {
-            completePendingConnect(.failure(BoardBleError.uartServiceMissing))
+            failConnectionSetup(peripheral, error: BoardBleError.uartServiceMissing)
             return
         }
 
         peripheral.discoverCharacteristics([uartWriteCharacteristicUuid], for: service)
     }
 
+    /// A connection that reached service discovery but can't become
+    /// write-ready is useless — tear it down instead of leaving a half-open
+    /// peripheral (`connectedPeripheral` set, `writeCharacteristic` nil) that
+    /// blocks later reconnects. Settles the pending JS connect when one exists
+    /// (picker connect / widget reconnect); during state restoration there is
+    /// no pending completion and the teardown itself is the fix.
+    private func failConnectionSetup(_ peripheral: CBPeripheral, error: Error) {
+        logger.error("BLE connection setup failed for \(peripheral.identifier.uuidString, privacy: .public): \(error.localizedDescription, privacy: .public)")
+        peripheralGenerations.removeValue(forKey: peripheral.identifier)
+        if connectedPeripheral?.identifier == peripheral.identifier {
+            connectedPeripheral = nil
+            writeCharacteristic = nil
+        }
+        centralManager.cancelPeripheralConnection(peripheral)
+        completePendingConnect(.failure(error))
+    }
+
     func peripheral(_ peripheral: CBPeripheral, didDiscoverCharacteristicsFor service: CBService, error: Error?) {
-        guard connectedPeripheral?.identifier == peripheral.identifier else { return }
+        guard connectedPeripheral?.identifier == peripheral.identifier,
+              peripheralGenerations[peripheral.identifier] == connectionGeneration
+        else { return }
         if let error {
-            completePendingConnect(.failure(error))
+            failConnectionSetup(peripheral, error: error)
             return
         }
 
         guard let characteristic = service.characteristics?.first(where: { $0.uuid == uartWriteCharacteristicUuid }) else {
-            completePendingConnect(.failure(BoardBleError.writeCharacteristicMissing))
+            failConnectionSetup(peripheral, error: BoardBleError.writeCharacteristicMissing)
             return
         }
 
@@ -764,6 +833,8 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
     }
 
     func peripheralIsReady(toSendWriteWithoutResponse peripheral: CBPeripheral) {
+        pendingWriteResumeWatchdog?.cancel()
+        pendingWriteResumeWatchdog = nil
         let resume = pendingWriteResume
         pendingWriteResume = nil
         resume?()
@@ -911,6 +982,18 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
                     writeGeneration: writeGeneration
                 )
             }
+            // Watchdog: peripheralIsReady is the ONLY resume signal, and a
+            // marginal link can simply never deliver it (without ever
+            // disconnecting either). Unbounded, `isWriting` would stay true
+            // forever and the wall would freeze until a manual disconnect.
+            let watchdog = DispatchWorkItem { [weak self] in
+                guard let self, self.pendingWriteResume != nil else { return }
+                self.logger.error("BLE write stalled: peripheral never became ready for write-without-response; failing queued writes")
+                self.failQueuedWrites(BoardBleError.writeTimedOut)
+            }
+            pendingWriteResumeWatchdog?.cancel()
+            pendingWriteResumeWatchdog = watchdog
+            bleQueue.asyncAfter(deadline: .now() + writeResumeTimeout, execute: watchdog)
             return
         }
 
@@ -931,6 +1014,8 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
         writeQueue = []
         isWriting = false
         pendingWriteResume = nil
+        pendingWriteResumeWatchdog?.cancel()
+        pendingWriteResumeWatchdog = nil
         for request in queuedWrites {
             request.completion(error)
         }
