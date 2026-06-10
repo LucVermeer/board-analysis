@@ -63,6 +63,16 @@ vi.mock('react-native-gesture-handler', () => ({
   ScrollView: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
 }));
 
+vi.mock('react-native-safe-area-context', () => ({
+  useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
+}));
+
+vi.mock('react-native-reanimated', () => ({
+  useSharedValue: (value: number) => ({ value }),
+}));
+
+vi.mock('expo-router', () => ({ useRouter: () => ({ push: vi.fn() }) }));
+
 vi.mock('@shopify/flash-list', () => ({
   FlashList: ({
     data,
@@ -101,6 +111,12 @@ vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => k
 vi.mock('@boardsesh/board-config', () => ({ toBoardName: (boardType: string) => boardType }));
 vi.mock('../../../../lib/analytics', () => ({ track: vi.fn() }));
 vi.mock('../../../Button', () => ({ Button: () => createElement('button') }));
+vi.mock('../../../Card', () => ({
+  Card: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
+}));
+vi.mock('../../../GlassSurface', () => ({ GlassSurface: () => null }));
+vi.mock('../../../SectionHeader', () => ({ SectionHeader: () => null }));
+vi.mock('../../RecordTopChrome', () => ({ RecordTopChrome: () => null }));
 vi.mock('../../../Text', () => ({
   Text: ({ children }: { children?: ReactNode }) => createElement('span', null, children),
 }));
@@ -114,6 +130,7 @@ vi.mock('../../../../providers/queue-provider', () => ({
 }));
 vi.mock('../../../../providers/drawer-host-provider', () => ({ useDrawerHost: () => ({ openPlayDrawer: vi.fn() }) }));
 vi.mock('../../../../providers/toast-provider', () => ({ useToast: () => ({ showToast: vi.fn() }) }));
+vi.mock('../../../../hooks/use-native-glass', () => ({ useNativeGlass: () => false }));
 vi.mock('../../../../hooks/use-bottom-chrome-metrics', () => ({
   useBottomChromeMetrics: () => bottomChrome.metrics,
 }));
@@ -150,11 +167,11 @@ function makeRow(uuid: string) {
   };
 }
 
-function getPaddingBottom(styles: unknown[]): number | null {
+function getStyleNumber(styles: unknown[], key: string): number | null {
   for (const style of styles) {
     if (style == null || typeof style !== 'object' || Array.isArray(style)) continue;
-    const paddingBottom = (style as { paddingBottom?: unknown }).paddingBottom;
-    if (typeof paddingBottom === 'number') return paddingBottom;
+    const value = (style as Record<string, unknown>)[key];
+    if (typeof value === 'number') return value;
   }
   return null;
 }
@@ -232,25 +249,19 @@ describe('PreSessionView preview rows', () => {
     expect(rows.rendered).toEqual([]);
   });
 
-  it('uses the fixed footer bottom metric for footer padding', () => {
+  it('pins the Start bar above the bottom chrome via the fixed-footer metric', () => {
     render(createElement(PreSessionView));
 
-    expect(getPaddingBottom(footer.styles)).toBe(132);
+    // fixedFooterBottom is the tab-bar clearance when no queue accessory is
+    // present, so the bar sits flush rather than stranded mid-screen.
+    expect(getStyleNumber(footer.styles, 'bottom')).toBe(120);
   });
 
-  it('uses only local spacing when the fixed footer metric has no chrome reserve', () => {
-    bottomChrome.metrics = { ...bottomChrome.metrics, fixedFooterBottom: 0 };
+  it('lifts to clear the queue accessory when it reserves space', () => {
+    bottomChrome.metrics = { ...bottomChrome.metrics, fixedFooterBottom: 178 };
 
     render(createElement(PreSessionView));
 
-    expect(getPaddingBottom(footer.styles)).toBe(12);
-  });
-
-  it('uses safe-area footer padding outside the tabs group', () => {
-    bottomChrome.metrics = { ...bottomChrome.metrics, insideTabs: false, fixedFooterBottom: 34 };
-
-    render(createElement(PreSessionView));
-
-    expect(getPaddingBottom(footer.styles)).toBe(46);
+    expect(getStyleNumber(footer.styles, 'bottom')).toBe(178);
   });
 });

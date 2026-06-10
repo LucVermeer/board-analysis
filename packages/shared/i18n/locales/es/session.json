@@ -365,6 +365,7 @@
       "preGeneratorDecreaseOption": "Reducir {{label}}",
       "preGeneratorIncreaseOption": "Aumentar {{label}}",
       "preGeneratorOptionAccessibilityLabel": "{{group}}, {{value}}",
+      "preGeneratorTuning": "Ajustes",
       "preStart": "Empezar sesión",
       "preStarting": "Empezando…",
       "preNoBoard": "Elige una tabla para empezar",

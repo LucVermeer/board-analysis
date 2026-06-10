@@ -10,6 +10,7 @@ const footer = vi.hoisted(() => ({
 const bottomChrome = vi.hoisted(() => ({
   metrics: {
     fixedFooterBottom: 88,
+    tabBarBottom: 50,
   },
 }));
 
@@ -44,6 +45,10 @@ vi.mock('react-native-reanimated', () => ({
   withSpring: (value: number) => value,
 }));
 
+vi.mock('react-native-safe-area-context', () => ({
+  useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
+}));
+
 vi.mock('@shopify/flash-list', () => ({
   FlashList: ({
     ListHeaderComponent,
@@ -61,6 +66,16 @@ vi.mock('@tanstack/react-query', () => ({ useQueryClient: () => ({ invalidateQue
 vi.mock('@boardsesh/queue-runtime', () => ({ deriveIsDriver: () => true }));
 vi.mock('@boardsesh/play-view', () => ({ formatGrade: (grade: string) => grade, getGradeTextColor: () => '#fff' }));
 vi.mock('../../../Button', () => ({ Button: () => createElement('button') }));
+vi.mock('../../../Card', () => ({
+  Card: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
+}));
+vi.mock('../../../GlassSurface', () => ({ GlassSurface: () => null }));
+vi.mock('../../../ListRow', () => ({ ListRow: () => null }));
+vi.mock('../../../PressableSurface', () => ({
+  PressableSurface: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
+}));
+vi.mock('../../../SectionHeader', () => ({ SectionHeader: () => null }));
+vi.mock('../../RecordTopChrome', () => ({ RecordTopChrome: () => null }));
 vi.mock('../../../ClimbListItemContent', () => ({ ClimbListItemContent: () => null }));
 vi.mock('../../../EndSessionSheet', () => ({ EndSessionSheet: () => null }));
 vi.mock('../../../Icon', () => ({ Icon: () => null }));
@@ -104,6 +119,7 @@ vi.mock('../../../../hooks/use-grade-format', () => ({
 vi.mock('../../../../hooks/use-bottom-chrome-metrics', () => ({
   useBottomChromeMetrics: () => bottomChrome.metrics,
 }));
+vi.mock('../../../../hooks/use-native-glass', () => ({ useNativeGlass: () => false }));
 vi.mock('../../../../theme/colors', () => ({ withAlpha: (color: string) => color }));
 vi.mock('../../../../theme/ios-colors', () => ({ iosSystemColors: { systemGray: '#999' } }));
 vi.mock('../../../../theme/animations', () => ({ springs: { gentle: {} } }));
@@ -116,11 +132,11 @@ vi.mock('../SessionPresenceRow', () => ({ SessionPresenceRow: () => null }));
 
 import { InSessionView } from '../InSessionView';
 
-function getPaddingBottom(styles: unknown[]): number | null {
+function getStyleNumber(styles: unknown[], key: string): number | null {
   for (const style of styles) {
     if (style == null || typeof style !== 'object' || Array.isArray(style)) continue;
-    const paddingBottom = (style as { paddingBottom?: unknown }).paddingBottom;
-    if (typeof paddingBottom === 'number') return paddingBottom;
+    const value = (style as Record<string, unknown>)[key];
+    if (typeof value === 'number') return value;
   }
   return null;
 }
@@ -128,12 +144,14 @@ function getPaddingBottom(styles: unknown[]): number | null {
 describe('InSessionView footer', () => {
   beforeEach(() => {
     footer.styles = [];
-    bottomChrome.metrics = { fixedFooterBottom: 88 };
+    bottomChrome.metrics = { fixedFooterBottom: 88, tabBarBottom: 50 };
   });
 
-  it('uses the fixed footer bottom metric for footer padding', () => {
+  it('pins the End bar above the bottom chrome (matching the pre-session Start bar)', () => {
     render(createElement(InSessionView));
 
-    expect(getPaddingBottom(footer.styles)).toBe(100);
+    // fixedFooterBottom collapses to the tab-bar clearance when no accessory is
+    // present and lifts to clear it when there is one.
+    expect(getStyleNumber(footer.styles, 'bottom')).toBe(88);
   });
 });

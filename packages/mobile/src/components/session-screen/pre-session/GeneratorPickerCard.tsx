@@ -1,8 +1,8 @@
 import { useEffect, useMemo, type ReactNode } from 'react';
-import { StyleSheet, View } from 'react-native';
-import { ScrollView } from 'react-native-gesture-handler';
+import { Pressable, StyleSheet, View, type ViewStyle } from 'react-native';
+import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
-import type { BoardName } from '@boardsesh/shared-schema';
+import type { BoardName, Grade } from '@boardsesh/shared-schema';
 import { getGradesForBoard } from '@boardsesh/board-config';
 import {
   KILTER_HOMEWALL_LAYOUT_ID,
@@ -28,16 +28,22 @@ import {
 } from '@boardsesh/playlist-generator';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { track } from '../../../lib/analytics';
-import { Text } from '../../Text';
-import { useTheme } from '../../../providers/theme-provider';
-import { useGradeFormat } from '../../../hooks/use-grade-format';
-import { spacing, borderRadius } from '../../../theme/tokens';
-import { brandColors as staticBrandColors } from '../../../theme/colors';
-import { iosSystemColors } from '../../../theme/ios-colors';
-import { Icon } from '../../Icon';
-import { PressableSurface } from '../../PressableSurface';
+import { SectionHeader } from '../../SectionHeader';
+import { SegmentedControl } from '../../SegmentedControl';
+import { CollapsibleSection } from '../../CollapsibleSection';
 import { StarRating } from '../../StarRating';
 import { SwitchRow } from '../../SwitchRow';
+import { Stepper } from '../../Stepper';
+import { Text } from '../../Text';
+import { GradeSingleSelectRail } from '../../grade';
+import { useTheme } from '../../../providers/theme-provider';
+import { hapticSelection } from '../../../lib/haptics';
+import { spacing, borderRadius } from '../../../theme/tokens';
+import { springs } from '../../../theme/animations';
+// Aliased: the selected chip is a FILL with white text that must stay legible in
+// both schemes, so it reads the static brand set (mirrors ClimbFilterSheet).
+import { brandColors as staticBrandColors } from '../../../theme/colors';
+import { iosSystemColors } from '../../../theme/ios-colors';
 
 export type GeneratorSelection = { type: 'off' } | { type: 'on'; options: GeneratorOptions };
 
@@ -122,115 +128,82 @@ function getDefaultTargetGrade(boardName: BoardName | null): number {
   return grades[Math.floor(grades.length / 2)].difficulty_id;
 }
 
-function clampStepperValue(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
-}
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
-type NumberStepperProps = {
+// Filled-rest-state chip (no faint border), matching the ClimbFilterSheet
+// `Chip`: the selected chip is a static-brand FILL with white text; the rest
+// state is the system fill so unselected chips stay legible.
+function Chip({
+  label,
+  selected,
+  onPress,
+  accessibilityLabel,
+}: {
   label: string;
-  value: number;
-  min: number;
-  max: number;
-  onChange: (nextValue: number) => void;
-  decreaseLabel: string;
-  increaseLabel: string;
-};
-
-function NumberStepper({ label, value, min, max, onChange, decreaseLabel, increaseLabel }: NumberStepperProps) {
-  const { systemColors, brandColors, opacity: themeOpacity } = useTheme();
-  const decrementDisabled = value <= min;
-  const incrementDisabled = value >= max;
-
-  const updateValue = (nextValue: number) => onChange(clampStepperValue(nextValue, min, max));
-
+  selected: boolean;
+  onPress: () => void;
+  accessibilityLabel?: string;
+}) {
+  const { systemColors } = useTheme();
+  const scale = useSharedValue(1);
+  const animatedStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+  const chipStyle: ViewStyle = {
+    paddingHorizontal: spacing[3],
+    paddingVertical: spacing[2],
+    borderRadius: 20,
+    backgroundColor: selected ? staticBrandColors.primary : systemColors.fill,
+  };
   return (
-    <View style={styles.settingRow}>
-      <Text variant="footnote" color={systemColors.secondaryLabel} style={styles.settingLabel}>
+    <AnimatedPressable
+      onPress={() => {
+        hapticSelection();
+        onPress();
+      }}
+      onPressIn={() => {
+        scale.value = withSpring(0.95, springs.snappy);
+      }}
+      onPressOut={() => {
+        scale.value = withSpring(1, springs.snappy);
+      }}
+      accessibilityRole="button"
+      accessibilityState={{ selected }}
+      accessibilityLabel={accessibilityLabel ?? label}
+      style={[animatedStyle, chipStyle]}
+    >
+      <Text variant="footnote" color={selected ? iosSystemColors.white : undefined} style={styles.chipText}>
         {label}
       </Text>
-      <View
-        style={[
-          styles.stepperShell,
-          { borderColor: systemColors.separator, backgroundColor: systemColors.tertiaryBackground },
-        ]}
-      >
-        <Text variant="subheadline" color={systemColors.label} style={styles.stepperValue}>
-          {value}
-        </Text>
-        <View style={styles.stepperButtons}>
-          <PressableSurface
-            onPress={() => updateValue(value - 1)}
-            disabled={decrementDisabled}
-            feedback="scale"
-            hitSlop={2}
-            accessibilityRole="button"
-            accessibilityLabel={decreaseLabel}
-            style={[styles.stepperButton, decrementDisabled ? { opacity: themeOpacity.disabled } : null]}
-          >
-            <Icon name="minus" size={16} color={decrementDisabled ? systemColors.tertiaryLabel : brandColors.primary} />
-          </PressableSurface>
-          <PressableSurface
-            onPress={() => updateValue(value + 1)}
-            disabled={incrementDisabled}
-            feedback="scale"
-            hitSlop={2}
-            accessibilityRole="button"
-            accessibilityLabel={increaseLabel}
-            style={[styles.stepperButton, incrementDisabled ? { opacity: themeOpacity.disabled } : null]}
-          >
-            <Icon name="plus" size={16} color={incrementDisabled ? systemColors.tertiaryLabel : brandColors.primary} />
-          </PressableSurface>
+    </AnimatedPressable>
+  );
+}
+
+type StepperRow = { key: string; node: ReactNode };
+
+// A grouped iOS inset card of stepper rows (label left, value + −/+ trailing),
+// hairline-divided between rows, matching the ClimbFilterSheet groupedCard
+// pattern. Rows carry stable keys (the option field name), so no index keys.
+function GroupedSteppers({ rows }: { rows: StepperRow[] }) {
+  const { systemColors } = useTheme();
+  return (
+    <View style={styles.groupedCard}>
+      {rows.map((row, index) => (
+        <View key={row.key}>
+          {index > 0 ? <View style={[styles.groupDivider, { backgroundColor: systemColors.separator }]} /> : null}
+          {row.node}
         </View>
-      </View>
+      ))}
     </View>
   );
 }
 
-type OptionChipProps = {
-  label: string;
-  active: boolean;
-  onPress: () => void;
-  accessibilityLabel?: string;
-};
-
-function OptionChip({ label, active, onPress, accessibilityLabel }: OptionChipProps) {
-  const { systemColors, brandColors } = useTheme();
-
-  return (
-    <PressableSurface
-      onPress={onPress}
-      feedback="scale"
-      hitSlop={2}
-      style={[
-        styles.chip,
-        {
-          borderColor: active ? brandColors.primary : systemColors.separator,
-          backgroundColor: active ? staticBrandColors.primary : 'transparent',
-        },
-      ]}
-      accessibilityRole="button"
-      accessibilityState={{ selected: active }}
-      accessibilityLabel={accessibilityLabel ?? label}
-    >
-      <Text variant="footnote" color={active ? iosSystemColors.white : systemColors.label}>
-        {label}
-      </Text>
-    </PressableSurface>
-  );
-}
-
-function ChipRail({ children }: { children: ReactNode }) {
-  return (
-    <ScrollView
-      horizontal
-      nestedScrollEnabled
-      showsHorizontalScrollIndicator={false}
-      keyboardShouldPersistTaps="handled"
-      contentContainerStyle={styles.chipRow}
-    >
-      {children}
-    </ScrollView>
-  );
+// Map the board-config grade table (snake_case BoulderGrade) onto the GraphQL
+// Grade shape GradeSingleSelectRail consumes.
+function toRailGrades(boardName: BoardName | null): Grade[] {
+  if (!boardName) return [];
+  return getGradesForBoard(boardName).map((grade) => ({
+    difficultyId: grade.difficulty_id,
+    name: grade.difficulty_name,
+  }));
 }
 
 /**
@@ -238,6 +211,12 @@ function ChipRail({ children }: { children: ReactNode }) {
  * any other choice pre-populates the queue from the shared `@boardsesh/playlist-generator`
  * algorithm and the chosen target grade. Defaults come from the shared package
  * so web and mobile agree on the starting state for each workout type.
+ *
+ * Laid out as iOS grouped inset sections (mirroring ClimbFilterSheet): a
+ * filled-chip workout-type rail, a single-select grade rail, a grouped stepper
+ * card for the primary count(s), and a collapsed "Tuning" section for the long
+ * tail (warm-up, secondary steppers, min-ascents, min-rating, climb bias,
+ * tall/wide).
  */
 export function GeneratorPickerCard({
   boardName,
@@ -249,7 +228,6 @@ export function GeneratorPickerCard({
 }: GeneratorPickerCardProps) {
   const { t } = useTranslation('session');
   const { systemColors } = useTheme();
-  const { formatGrade } = useGradeFormat();
 
   const isKilterHomewall = boardName === 'kilter' && layoutId === KILTER_HOMEWALL_LAYOUT_ID;
   const showTallClimbsFilter = isKilterHomewall && sizeId != null && isKilterHomewallTallSizeId(sizeId);
@@ -270,7 +248,7 @@ export function GeneratorPickerCard({
     });
   }, [selection, showTallClimbsFilter, showWideClimbsFilter, onChange]);
 
-  const gradeChoices = boardName ? getGradesForBoard(boardName) : [];
+  const railGrades = useMemo(() => toRailGrades(boardName), [boardName]);
   const activeType = selection.type === 'on' ? selection.options.type : 'off';
 
   const minAscentsOptions = useMemo(() => {
@@ -301,186 +279,184 @@ export function GeneratorPickerCard({
     onChange({ type: 'on', options: { ...selection.options, ...patch } });
   };
 
-  const renderWorkoutShapeOptions = (options: GeneratorOptions) => {
+  // Recollapse the Tuning section on generator-type change so a freshly picked
+  // workout shows its defaults summarised rather than a stale expanded state.
+  const tuningResetKey = activeType === 'off' ? 0 : CHIP_VALUES.indexOf(activeType);
+
+  // Tuning summary, built like ClimbFilterSheet's refineSummary: warm-up · min
+  // ascents · stars · climb bias. Stars render as filled glyphs (a symbol, not
+  // translatable copy); "Any" rating shows nothing so the line stays short.
+  const tuningSummary = useMemo(() => {
+    if (selection.type !== 'on') return null;
+    const { options } = selection;
+    const parts: string[] = [warmUpLabel(options.warmUp, t)];
+    parts.push(
+      t('mobile.session.preGeneratorMinAscentsOption', { value: formatMinAscentsFilterCount(options.minAscents) }),
+    );
+    const ratingValue = getMinRatingPickerValue(options.minRating);
+    if (ratingValue != null && ratingValue > 0) parts.push('★'.repeat(ratingValue));
+    parts.push(climbBiasLabel(options.climbBias, t));
+    return parts.join(' · ');
+  }, [selection, t]);
+
+  // A stepper row keyed by a translation key for its label; resolves the decrease
+  // / increase accessibility labels off the same key.
+  const stepperRow = (
+    labelKey: string,
+    fieldKey: string,
+    value: number,
+    min: number,
+    max: number,
+    onValue: (next: number) => void,
+  ): StepperRow => ({
+    key: fieldKey,
+    node: (
+      <Stepper
+        label={t(labelKey)}
+        value={value}
+        min={min}
+        max={max}
+        onChange={onValue}
+        decreaseLabel={t('mobile.session.preGeneratorDecreaseOption', { label: t(labelKey) })}
+        increaseLabel={t('mobile.session.preGeneratorIncreaseOption', { label: t(labelKey) })}
+      />
+    ),
+  });
+
+  // Primary count stepper(s) shown directly under the workout type. Volume:
+  // main-set climbs; pyramid/ladder: number of steps; grade focus: climbs.
+  const primarySteppers = (options: GeneratorOptions): StepperRow[] => {
     switch (options.type) {
       case 'volume':
-        return (
-          <>
-            <NumberStepper
-              label={t('mobile.session.preGeneratorMainSetClimbs')}
-              value={options.mainSetClimbs}
-              min={1}
-              max={50}
-              onChange={(mainSetClimbs) => onChange({ type: 'on', options: { ...options, mainSetClimbs } })}
-              decreaseLabel={t('mobile.session.preGeneratorDecreaseOption', {
-                label: t('mobile.session.preGeneratorMainSetClimbs'),
-              })}
-              increaseLabel={t('mobile.session.preGeneratorIncreaseOption', {
-                label: t('mobile.session.preGeneratorMainSetClimbs'),
-              })}
-            />
-            <NumberStepper
-              label={t('mobile.session.preGeneratorMainSetVariability')}
-              value={options.mainSetVariability}
-              min={0}
-              max={5}
-              onChange={(mainSetVariability) => onChange({ type: 'on', options: { ...options, mainSetVariability } })}
-              decreaseLabel={t('mobile.session.preGeneratorDecreaseOption', {
-                label: t('mobile.session.preGeneratorMainSetVariability'),
-              })}
-              increaseLabel={t('mobile.session.preGeneratorIncreaseOption', {
-                label: t('mobile.session.preGeneratorMainSetVariability'),
-              })}
-            />
-          </>
-        );
+        return [
+          stepperRow(
+            'mobile.session.preGeneratorMainSetClimbs',
+            'mainSetClimbs',
+            options.mainSetClimbs,
+            1,
+            50,
+            (mainSetClimbs) => onChange({ type: 'on', options: { ...options, mainSetClimbs } }),
+          ),
+        ];
       case 'pyramid':
       case 'ladder':
-        return (
-          <>
-            <NumberStepper
-              label={t('mobile.session.preGeneratorNumberOfSteps')}
-              value={options.numberOfSteps}
-              min={3}
-              max={15}
-              onChange={(numberOfSteps) => onChange({ type: 'on', options: { ...options, numberOfSteps } })}
-              decreaseLabel={t('mobile.session.preGeneratorDecreaseOption', {
-                label: t('mobile.session.preGeneratorNumberOfSteps'),
-              })}
-              increaseLabel={t('mobile.session.preGeneratorIncreaseOption', {
-                label: t('mobile.session.preGeneratorNumberOfSteps'),
-              })}
-            />
-            <NumberStepper
-              label={t('mobile.session.preGeneratorClimbsPerStep')}
-              value={options.climbsPerStep}
-              min={1}
-              max={5}
-              onChange={(climbsPerStep) => onChange({ type: 'on', options: { ...options, climbsPerStep } })}
-              decreaseLabel={t('mobile.session.preGeneratorDecreaseOption', {
-                label: t('mobile.session.preGeneratorClimbsPerStep'),
-              })}
-              increaseLabel={t('mobile.session.preGeneratorIncreaseOption', {
-                label: t('mobile.session.preGeneratorClimbsPerStep'),
-              })}
-            />
-          </>
-        );
+        return [
+          stepperRow(
+            'mobile.session.preGeneratorNumberOfSteps',
+            'numberOfSteps',
+            options.numberOfSteps,
+            3,
+            15,
+            (numberOfSteps) => onChange({ type: 'on', options: { ...options, numberOfSteps } }),
+          ),
+        ];
       case 'gradeFocus':
-        return (
-          <NumberStepper
-            label={t('mobile.session.preGeneratorNumberOfClimbs')}
-            value={options.numberOfClimbs}
-            min={1}
-            max={50}
-            onChange={(numberOfClimbs) => onChange({ type: 'on', options: { ...options, numberOfClimbs } })}
-            decreaseLabel={t('mobile.session.preGeneratorDecreaseOption', {
-              label: t('mobile.session.preGeneratorNumberOfClimbs'),
-            })}
-            increaseLabel={t('mobile.session.preGeneratorIncreaseOption', {
-              label: t('mobile.session.preGeneratorNumberOfClimbs'),
-            })}
-          />
-        );
+        return [
+          stepperRow(
+            'mobile.session.preGeneratorNumberOfClimbs',
+            'numberOfClimbs',
+            options.numberOfClimbs,
+            1,
+            50,
+            (numberOfClimbs) => onChange({ type: 'on', options: { ...options, numberOfClimbs } }),
+          ),
+        ];
     }
   };
 
-  const renderGeneratorOptions = () => {
-    if (selection.type !== 'on') return null;
-    const { options } = selection;
+  // Secondary count stepper(s) that live inside Tuning. Volume's grade spread,
+  // and pyramid/ladder's climbs-per-step.
+  const secondarySteppers = (options: GeneratorOptions): StepperRow[] => {
+    switch (options.type) {
+      case 'volume':
+        return [
+          stepperRow(
+            'mobile.session.preGeneratorMainSetVariability',
+            'mainSetVariability',
+            options.mainSetVariability,
+            0,
+            5,
+            (mainSetVariability) => onChange({ type: 'on', options: { ...options, mainSetVariability } }),
+          ),
+        ];
+      case 'pyramid':
+      case 'ladder':
+        return [
+          stepperRow(
+            'mobile.session.preGeneratorClimbsPerStep',
+            'climbsPerStep',
+            options.climbsPerStep,
+            1,
+            5,
+            (climbsPerStep) => onChange({ type: 'on', options: { ...options, climbsPerStep } }),
+          ),
+        ];
+      case 'gradeFocus':
+        return [];
+    }
+  };
+
+  const warmUpOptions = useMemo(
+    () => WARM_UP_OPTIONS.map((warmUp) => ({ key: warmUp, label: warmUpLabel(warmUp, t) })),
+    [t],
+  );
+  const climbBiasOptions = useMemo(
+    () => CLIMB_BIAS_OPTIONS.map((climbBias) => ({ key: climbBias, label: climbBiasLabel(climbBias, t) })),
+    [t],
+  );
+
+  const renderTuning = (options: GeneratorOptions): ReactNode => {
     const minRatingPickerValue = getMinRatingPickerValue(options.minRating);
-    const targetGradeLabel = t('mobile.session.preGeneratorTargetGrade');
-    const warmUpGroupLabel = t('mobile.session.preGeneratorWarmUp');
-    const minAscentsGroupLabel = t('mobile.session.preGeneratorMinAscents');
-    const minRatingGroupLabel = t('mobile.session.preGeneratorMinRating');
-    const climbBiasGroupLabel = t('mobile.session.preGeneratorClimbBias');
-
+    const secondary = secondarySteppers(options);
     return (
-      <View style={styles.optionsSection}>
-        <View style={styles.settingBlock}>
-          <Text variant="footnote" color={systemColors.secondaryLabel} style={styles.settingLabel}>
-            {warmUpGroupLabel}
+      <View style={styles.tuningBody}>
+        <SegmentedControl
+          options={warmUpOptions}
+          selectedKey={options.warmUp}
+          onSelect={(warmUp) => updateCommonOptions({ warmUp })}
+          textVariant="footnote"
+          trackColor={systemColors.fill}
+          accessibilityLabel={t('mobile.session.preGeneratorWarmUp')}
+        />
+
+        {secondary.length > 0 ? <GroupedSteppers rows={secondary} /> : null}
+
+        <View>
+          <Text variant="footnote" style={styles.subsectionLabel}>
+            {t('mobile.session.preGeneratorMinAscents')}
           </Text>
-          <ChipRail>
-            {WARM_UP_OPTIONS.map((warmUp) => (
-              <OptionChip
-                key={warmUp}
-                label={warmUpLabel(warmUp, t)}
-                active={options.warmUp === warmUp}
-                onPress={() => updateCommonOptions({ warmUp })}
-                accessibilityLabel={t('mobile.session.preGeneratorOptionAccessibilityLabel', {
-                  group: warmUpGroupLabel,
-                  value: warmUpLabel(warmUp, t),
-                })}
-              />
-            ))}
-          </ChipRail>
-        </View>
-
-        {boardName != null ? (
-          <View style={styles.settingBlock}>
-            <Text variant="footnote" color={systemColors.secondaryLabel} style={styles.settingLabel}>
-              {targetGradeLabel}
-            </Text>
-            <ChipRail>
-              {gradeChoices.map((grade) => {
-                const isActive = grade.difficulty_id === options.targetGrade;
-                const gradeLabel = formatGrade(grade.difficulty_name) ?? grade.difficulty_name;
-                return (
-                  <OptionChip
-                    key={grade.difficulty_id}
-                    label={gradeLabel}
-                    active={isActive}
-                    onPress={() => updateCommonOptions({ targetGrade: grade.difficulty_id })}
-                    accessibilityLabel={t('mobile.session.preGeneratorOptionAccessibilityLabel', {
-                      group: targetGradeLabel,
-                      value: gradeLabel,
-                    })}
-                  />
-                );
-              })}
-            </ChipRail>
-          </View>
-        ) : null}
-
-        {renderWorkoutShapeOptions(options)}
-
-        <View style={styles.settingBlock}>
-          <Text variant="footnote" color={systemColors.secondaryLabel} style={styles.settingLabel}>
-            {minAscentsGroupLabel}
-          </Text>
-          <ChipRail>
+          <View style={styles.chipRow}>
             {minAscentsOptions.map((minAscents) => {
               const label = t('mobile.session.preGeneratorMinAscentsOption', {
                 value: formatMinAscentsFilterCount(minAscents),
               });
               return (
-                <OptionChip
+                <Chip
                   key={minAscents}
                   label={label}
-                  active={options.minAscents === minAscents}
+                  selected={options.minAscents === minAscents}
                   onPress={() => updateCommonOptions({ minAscents })}
                   accessibilityLabel={t('mobile.session.preGeneratorOptionAccessibilityLabel', {
-                    group: minAscentsGroupLabel,
+                    group: t('mobile.session.preGeneratorMinAscents'),
                     value: label,
                   })}
                 />
               );
             })}
-          </ChipRail>
+          </View>
         </View>
 
-        <View style={styles.settingBlock}>
-          <Text variant="footnote" color={systemColors.secondaryLabel} style={styles.settingLabel}>
-            {minRatingGroupLabel}
+        <View>
+          <Text variant="footnote" style={styles.subsectionLabel}>
+            {t('mobile.session.preGeneratorMinRating')}
           </Text>
           <View style={styles.ratingRow}>
-            <OptionChip
+            <Chip
               label={t('mobile.session.preGeneratorAny')}
-              active={minRatingPickerValue == null}
+              selected={minRatingPickerValue == null}
               onPress={() => updateCommonOptions({ minRating: 0 })}
               accessibilityLabel={t('mobile.session.preGeneratorOptionAccessibilityLabel', {
-                group: minRatingGroupLabel,
+                group: t('mobile.session.preGeneratorMinRating'),
                 value: t('mobile.session.preGeneratorAny'),
               })}
             />
@@ -500,28 +476,22 @@ export function GeneratorPickerCard({
           </View>
         </View>
 
-        <View style={styles.settingBlock}>
-          <Text variant="footnote" color={systemColors.secondaryLabel} style={styles.settingLabel}>
-            {climbBiasGroupLabel}
+        <View>
+          <Text variant="footnote" style={styles.subsectionLabel}>
+            {t('mobile.session.preGeneratorClimbBias')}
           </Text>
-          <ChipRail>
-            {CLIMB_BIAS_OPTIONS.map((climbBias) => (
-              <OptionChip
-                key={climbBias}
-                label={climbBiasLabel(climbBias, t)}
-                active={options.climbBias === climbBias}
-                onPress={() => updateCommonOptions({ climbBias })}
-                accessibilityLabel={t('mobile.session.preGeneratorOptionAccessibilityLabel', {
-                  group: climbBiasGroupLabel,
-                  value: climbBiasLabel(climbBias, t),
-                })}
-              />
-            ))}
-          </ChipRail>
+          <SegmentedControl
+            options={climbBiasOptions}
+            selectedKey={options.climbBias}
+            onSelect={(climbBias) => updateCommonOptions({ climbBias })}
+            textVariant="footnote"
+            trackColor={systemColors.fill}
+            accessibilityLabel={t('mobile.session.preGeneratorClimbBias')}
+          />
         </View>
 
         {showTallClimbsFilter || showWideClimbsFilter ? (
-          <View style={[styles.switchGroup, { borderColor: systemColors.separator }]}>
+          <View style={styles.groupedCard}>
             {showTallClimbsFilter ? (
               <SwitchRow
                 label={t('mobile.session.preGeneratorTallClimbsLabel')}
@@ -529,6 +499,9 @@ export function GeneratorPickerCard({
                 value={options.onlyTallClimbs}
                 onValueChange={(onlyTallClimbs) => updateCommonOptions({ onlyTallClimbs })}
               />
+            ) : null}
+            {showTallClimbsFilter && showWideClimbsFilter ? (
+              <View style={[styles.groupDivider, { backgroundColor: systemColors.separator }]} />
             ) : null}
             {showWideClimbsFilter ? (
               <SwitchRow
@@ -545,107 +518,103 @@ export function GeneratorPickerCard({
   };
 
   return (
-    <View
-      style={[styles.card, { backgroundColor: systemColors.secondaryBackground, borderColor: systemColors.separator }]}
-    >
-      <Text variant="footnote" color={systemColors.secondaryLabel} style={styles.label}>
-        {t('mobile.session.preGeneratorLabel')}
-      </Text>
+    <View>
+      <SectionHeader title={t('mobile.session.preGeneratorLabel')} />
+      <View style={styles.inset}>
+        <View style={styles.chipRow}>
+          {CHIP_VALUES.map((value) => {
+            const label = chipLabel(value, t);
+            return (
+              <Chip
+                key={value}
+                label={label}
+                selected={value === activeType}
+                onPress={() => handleSelectType(value)}
+                accessibilityLabel={t('mobile.session.preGeneratorOptionAccessibilityLabel', {
+                  group: t('mobile.session.preGeneratorLabel'),
+                  value: label,
+                })}
+              />
+            );
+          })}
+        </View>
+      </View>
 
-      <ChipRail>
-        {CHIP_VALUES.map((value) => {
-          const isActive = value === activeType;
-          const label = chipLabel(value, t);
-          return (
-            <OptionChip
-              key={value}
-              label={label}
-              active={isActive}
-              onPress={() => handleSelectType(value)}
-              accessibilityLabel={t('mobile.session.preGeneratorOptionAccessibilityLabel', {
-                group: t('mobile.session.preGeneratorLabel'),
-                value: label,
-              })}
-            />
-          );
-        })}
-      </ChipRail>
+      {selection.type === 'on' ? (
+        <>
+          {boardName != null ? (
+            <>
+              <SectionHeader title={t('mobile.session.preGeneratorTargetGrade')} />
+              <GradeSingleSelectRail
+                grades={railGrades}
+                selectedDifficultyId={selection.options.targetGrade}
+                onSelect={(difficultyId) =>
+                  updateCommonOptions({ targetGrade: difficultyId ?? selection.options.targetGrade })
+                }
+                allowClear={false}
+              />
+            </>
+          ) : null}
 
-      {renderGeneratorOptions()}
+          <View style={[styles.inset, styles.steppersInset]}>
+            <GroupedSteppers rows={primarySteppers(selection.options)} />
+          </View>
+
+          <View style={[styles.inset, styles.tuningInset]}>
+            <CollapsibleSection
+              title={t('mobile.session.preGeneratorTuning')}
+              summary={tuningSummary}
+              resetKey={tuningResetKey}
+            >
+              {renderTuning(selection.options)}
+            </CollapsibleSection>
+          </View>
+        </>
+      ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  card: {
-    borderRadius: borderRadius.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    paddingVertical: spacing[3],
-    gap: spacing[3],
-  },
-  label: {
+  // SectionHeader brings its own 16px inset; matching horizontal padding lines
+  // the grouped content up with the screen's other cards and section headers.
+  inset: {
     paddingHorizontal: spacing[4],
+  },
+  // The grade rail self-insets, so the stepper card sits a little below it.
+  steppersInset: {
+    marginTop: spacing[2],
+  },
+  tuningInset: {
+    marginTop: spacing[3],
   },
   chipRow: {
-    paddingHorizontal: spacing[4],
-    gap: spacing[2],
-  },
-  chip: {
-    paddingHorizontal: spacing[3],
-    paddingVertical: spacing[1],
-    borderRadius: borderRadius.full,
-    borderWidth: 1,
-    minHeight: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  optionsSection: {
-    gap: spacing[4],
-  },
-  settingBlock: {
-    gap: spacing[2],
-  },
-  settingRow: {
-    paddingHorizontal: spacing[4],
-    gap: spacing[2],
-  },
-  settingLabel: {
-    fontWeight: '700',
-    letterSpacing: 0,
-    textTransform: 'uppercase',
-  },
-  stepperShell: {
-    minHeight: 40,
-    borderRadius: borderRadius.md,
-    borderWidth: StyleSheet.hairlineWidth,
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: spacing[2],
+  },
+  chipText: {
+    fontWeight: '500',
+  },
+  groupedCard: {
+    borderRadius: borderRadius.lg,
+    backgroundColor: `${iosSystemColors.systemGray}14`,
     overflow: 'hidden',
   },
-  stepperValue: {
-    minWidth: 48,
-    paddingHorizontal: spacing[3],
-    fontWeight: '700',
+  groupDivider: {
+    height: StyleSheet.hairlineWidth,
+    marginLeft: spacing[4],
   },
-  stepperButtons: {
-    flexDirection: 'row',
+  tuningBody: {
+    gap: spacing[4],
   },
-  stepperButton: {
-    width: 44,
-    height: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
+  subsectionLabel: {
+    opacity: 0.55,
+    marginBottom: spacing[2],
   },
   ratingRow: {
-    paddingHorizontal: spacing[4],
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing[3],
-    flexWrap: 'wrap',
-  },
-  switchGroup: {
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    gap: spacing[4],
   },
 });

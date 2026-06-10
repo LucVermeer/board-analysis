@@ -365,6 +365,7 @@
       "preGeneratorDecreaseOption": "Diminuer {{label}}",
       "preGeneratorIncreaseOption": "Augmenter {{label}}",
       "preGeneratorOptionAccessibilityLabel": "{{group}}, {{value}}",
+      "preGeneratorTuning": "Réglages",
       "preStart": "Démarrer la session",
       "preStarting": "Démarrage…",
       "preNoBoard": "Choisis un mur pour démarrer",

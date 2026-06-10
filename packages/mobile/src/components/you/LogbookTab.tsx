@@ -1,6 +1,13 @@
-import { useCallback, useRef, useState } from 'react';
-import { View, RefreshControl, Pressable, StyleSheet } from 'react-native';
-import { FlashList } from '@shopify/flash-list';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  View,
+  RefreshControl,
+  Pressable,
+  StyleSheet,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
+} from 'react-native';
+import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import { useTranslation } from 'react-i18next';
 import type BottomSheet from '@gorhom/bottom-sheet';
 import type { AscentFeedItem } from '@boardsesh/graphql/operations';
@@ -16,17 +23,37 @@ import { useBottomChromeMetrics } from '../../hooks/use-bottom-chrome-metrics';
 import { spacing, borderRadius } from '../../theme/tokens';
 import { useTheme } from '../../providers/theme-provider';
 
-export function LogbookTab({ userId }: { userId: string | undefined }) {
+type LogbookTabProps = {
+  userId: string | undefined;
+  /** Plain-JS scroll handler from the screen, writing the shared scroll offset
+   *  that drives the floating chrome's title collapse. */
+  onScroll?: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
+  /** Measured chrome height — the list insets its top by this so the first row
+   *  rests below the floating chrome and the rest scroll under it. */
+  topInset?: number;
+  /** Register this tab's scroll-to-top so the screen's title capsule can reach it. */
+  registerScrollToTop?: (scrollToTop: (() => void) | null) => void;
+};
+
+export function LogbookTab({ userId, onScroll, topInset = 0, registerScrollToTop }: LogbookTabProps) {
   const { t } = useTranslation('you');
   const { systemColors, brandColors } = useTheme();
   const bottomChrome = useBottomChromeMetrics();
   const paddingBottom = bottomChrome.scrollBottomPadding + spacing[4];
 
+  const listRef = useRef<FlashListRef<AscentFeedItem>>(null);
+  useEffect(() => {
+    if (!registerScrollToTop) return;
+    registerScrollToTop(() => listRef.current?.scrollToTop({ animated: true }));
+    return () => registerScrollToTop(null);
+  }, [registerScrollToTop]);
+
   const editSheetRef = useRef<BottomSheet | null>(null);
   const [editAscent, setEditAscent] = useState<AscentFeedItem | null>(null);
 
   const feed = useUserAscentsFeed(userId);
-  const items = feed.data?.pages.flatMap((page) => page.userAscentsFeed.items) ?? [];
+  // Stabilise the FlashList `data` identity so it doesn't re-diff every render.
+  const items = useMemo(() => feed.data?.pages.flatMap((page) => page.userAscentsFeed.items) ?? [], [feed.data]);
 
   const handlePress = useCallback((ascent: AscentFeedItem) => {
     track(SHARED_EVENTS.LogbookRowClicked, { climbUuid: ascent.climbUuid });
@@ -47,9 +74,21 @@ export function LogbookTab({ userId }: { userId: string | undefined }) {
     [handlePress],
   );
 
+  // The screen's identity, in-body under the floating chrome. Memoized so
+  // FlashList doesn't re-render the header on every LogbookTab render. Always
+  // present so it sits above the empty state too.
+  const listHeader = useMemo(
+    () => (
+      <Text variant="largeTitle" style={styles.screenTitle}>
+        {t('metadata.dashboard.title')}
+      </Text>
+    ),
+    [t],
+  );
+
   if (!userId || feed.isPending) {
     return (
-      <View style={styles.centered}>
+      <View style={[styles.centered, { paddingTop: topInset }]}>
         <ActivityIndicator size="large" />
       </View>
     );
@@ -57,7 +96,7 @@ export function LogbookTab({ userId }: { userId: string | undefined }) {
 
   if (feed.isError) {
     return (
-      <View style={styles.errorContainer}>
+      <View style={[styles.errorContainer, { paddingTop: topInset }]}>
         <Icon name="error" size={48} color={systemColors.tertiaryLabel} />
         <Text variant="headline" style={styles.errorTitle}>
           {t('mobile.logbook.errorTitle')}
@@ -88,13 +127,18 @@ export function LogbookTab({ userId }: { userId: string | undefined }) {
   return (
     <View style={styles.flex}>
       <FlashList
+        ref={listRef}
         data={items}
         renderItem={renderItem}
-        keyExtractor={(item) => item.uuid}
-        contentInsetAdjustmentBehavior="automatic"
+        keyExtractor={keyExtractor}
+        onScroll={onScroll}
+        scrollEventThrottle={16}
+        contentInsetAdjustmentBehavior="never"
         onEndReached={handleEndReached}
         onEndReachedThreshold={0.5}
-        contentContainerStyle={{ paddingBottom }}
+        contentContainerStyle={{ paddingTop: topInset, paddingBottom }}
+        scrollIndicatorInsets={{ top: topInset }}
+        ListHeaderComponent={listHeader}
         refreshControl={
           <RefreshControl
             refreshing={feed.isRefetching}
@@ -123,10 +167,19 @@ export function LogbookTab({ userId }: { userId: string | undefined }) {
   );
 }
 
+function keyExtractor(item: AscentFeedItem) {
+  return item.uuid;
+}
+
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   footer: { paddingVertical: spacing[5], alignItems: 'center' },
+  screenTitle: {
+    paddingHorizontal: spacing[4],
+    paddingTop: 0,
+    paddingBottom: spacing[2],
+  },
   empty: {
     alignItems: 'center',
     justifyContent: 'center',

@@ -1,102 +1,116 @@
-import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
-import { View, Pressable, StyleSheet } from 'react-native';
-import { useSharedValue, withTiming } from 'react-native-reanimated';
-import { router, useNavigation } from 'expo-router';
-import { useTranslation } from 'react-i18next';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { View, StyleSheet, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
+import { useSharedValue } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type BottomSheet from '@gorhom/bottom-sheet';
 import { useProfile, useYouProfileData } from '../../../src/lib/graphql/hooks';
 import { useTheme } from '../../../src/providers/theme-provider';
-import { YouTabBar, type YouTab } from '../../../src/components/you/YouTabBar';
+import { ProfileTopChrome, type ProfileTabKey } from '../../../src/components/you/ProfileTopChrome';
 import { YouFilterSheet } from '../../../src/components/you/YouFilterSheet';
 import { ProgressTab } from '../../../src/components/you/ProgressTab';
 import { SessionsTab } from '../../../src/components/you/SessionsTab';
 import { LogbookTab } from '../../../src/components/you/LogbookTab';
-import { Icon } from '../../../src/components/Icon';
-import { iosSystemColors } from '../../../src/theme/ios-colors';
-
-type TabKey = 'progress' | 'sessions' | 'logbook';
 
 export default function YouScreen() {
-  const navigation = useNavigation();
-  const { t } = useTranslation('you');
-  const { systemColors, brandColors } = useTheme();
+  const { systemColors } = useTheme();
+  const insets = useSafeAreaInsets();
 
   const { data: profile } = useProfile();
   const userId = profile?.id;
   const youData = useYouProfileData(userId);
 
   const filterSheetRef = useRef<BottomSheet | null>(null);
-  const scrollPosition = useSharedValue(0);
-  const [activeIndex, setActiveIndex] = useState(0);
+  const [activeTab, setActiveTab] = useState<ProfileTabKey>('progress');
 
-  const tabs = useMemo<YouTab<TabKey>[]>(
-    () => [
-      { key: 'progress', label: t('tabs.progress') },
-      { key: 'sessions', label: t('tabs.sessions') },
-      { key: 'logbook', label: t('tabs.logbook') },
-    ],
-    [t],
-  );
+  // One scroll offset, owned here and handed to whichever sub-tab is mounted, so
+  // the floating chrome's title collapse reads from the active list only. The
+  // measured chrome height insets each sub-tab's scroll content; seed it to the
+  // safe-area top plus the islands row + segmented control so the first paint
+  // already clears the chrome before onLayout reports the real height.
+  const scrollY = useSharedValue(0);
+  const [chromeHeight, setChromeHeight] = useState(() => insets.top + 96);
 
-  const handleTabPress = useCallback(
-    (index: number) => {
-      setActiveIndex(index);
-      scrollPosition.value = withTiming(index, { duration: 180 });
+  const handleScroll = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      scrollY.value = event.nativeEvent.contentOffset.y;
     },
-    [scrollPosition],
+    [scrollY],
   );
+
+  // Each mounted sub-tab registers its scroll-to-top here; tapping the collapsed
+  // title capsule dispatches to whichever is active. A ref (not state) so the
+  // re-pointing on sub-tab switch doesn't re-render the chrome.
+  const scrollToTopRef = useRef<(() => void) | null>(null);
+  const registerScrollToTop = useCallback((scrollToTop: (() => void) | null) => {
+    scrollToTopRef.current = scrollToTop;
+  }, []);
+  const handleScrollToTop = useCallback(() => {
+    scrollToTopRef.current?.();
+  }, []);
+
+  const handleSelectTab = useCallback(
+    (key: ProfileTabKey) => {
+      // Re-tapping the active segment scrolls it to the top (the iOS convention),
+      // not a no-op that would still snap the chrome open over a mid-scrolled list.
+      if (key === activeTab) {
+        scrollToTopRef.current?.();
+        return;
+      }
+      setActiveTab(key);
+    },
+    [activeTab],
+  );
+
+  // Reset the shared scroll offset after the sub-tab has actually switched
+  // (post-commit, once the outgoing list is unmounted) so its in-flight momentum
+  // scroll events can't rewrite scrollY after the reset. The incoming list mounts
+  // at offset 0, so the chrome shows the large title rather than a stale capsule.
+  useEffect(() => {
+    scrollY.value = 0;
+  }, [activeTab, scrollY]);
 
   const openFilters = useCallback(() => {
     filterSheetRef.current?.snapToIndex(0);
   }, []);
 
-  // Opaque header (overrides the stack's transparent/blur default for this
-  // screen) so the fixed profile header + tab bar sit cleanly below it. A
-  // settings gear (left) reaches More; the filter button (right) shows only on
-  // the Progress tab.
-  useEffect(() => {
-    navigation.setOptions({
-      title: t('metadata.dashboard.title'),
-      headerTransparent: false,
-      headerLeft: () => (
-        <Pressable
-          onPress={() => router.push('/(tabs)/profile/more')}
-          hitSlop={8}
-          accessibilityRole="button"
-          accessibilityLabel={t('mobile.settings')}
-        >
-          <Icon name="settings" size={22} color={iosSystemColors.systemGray} />
-        </Pressable>
-      ),
-      headerRight:
-        activeIndex === 0
-          ? () => (
-              <Pressable
-                onPress={openFilters}
-                hitSlop={8}
-                accessibilityRole="button"
-                accessibilityLabel={t('mobile.filter.title')}
-              >
-                <Icon
-                  name="filter"
-                  size={22}
-                  color={youData.hasActiveFilters ? brandColors.primary : iosSystemColors.systemGray}
-                />
-              </Pressable>
-            )
-          : undefined,
-    });
-  }, [navigation, t, activeIndex, openFilters, youData.hasActiveFilters, brandColors]);
-
   return (
     <View style={[styles.container, { backgroundColor: systemColors.background }]}>
-      <YouTabBar tabs={tabs} activeIndex={activeIndex} scrollPosition={scrollPosition} onTabPress={handleTabPress} />
-
       <View style={styles.page}>
-        {activeIndex === 0 ? <ProgressTab data={youData} /> : null}
-        {activeIndex === 1 ? <SessionsTab userId={userId} /> : null}
-        {activeIndex === 2 ? <LogbookTab userId={userId} /> : null}
+        {activeTab === 'progress' ? (
+          <ProgressTab
+            data={youData}
+            onScroll={handleScroll}
+            topInset={chromeHeight}
+            registerScrollToTop={registerScrollToTop}
+          />
+        ) : null}
+        {activeTab === 'sessions' ? (
+          <SessionsTab
+            userId={userId}
+            onScroll={handleScroll}
+            topInset={chromeHeight}
+            registerScrollToTop={registerScrollToTop}
+          />
+        ) : null}
+        {activeTab === 'logbook' ? (
+          <LogbookTab
+            userId={userId}
+            onScroll={handleScroll}
+            topInset={chromeHeight}
+            registerScrollToTop={registerScrollToTop}
+          />
+        ) : null}
       </View>
+
+      <ProfileTopChrome
+        activeTab={activeTab}
+        onSelectTab={handleSelectTab}
+        hasActiveFilters={youData.hasActiveFilters}
+        onOpenFilters={openFilters}
+        scrollY={scrollY}
+        onPressTitle={handleScrollToTop}
+        onHeightChange={setChromeHeight}
+      />
 
       <YouFilterSheet
         sheetRef={filterSheetRef}

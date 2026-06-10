@@ -3,6 +3,7 @@ import { View, StyleSheet, Platform, type ViewStyle } from 'react-native';
 import { Card as PaperCard } from 'react-native-paper';
 import { PressableSurface } from './PressableSurface';
 import { hapticLight } from '../lib/haptics';
+import { borderRadius } from '../theme/tokens';
 import { useTheme } from '../providers/theme-provider';
 
 type CardProps = {
@@ -74,7 +75,7 @@ function CardGlass({ children, onPress, haptic = true, style }: CardProps) {
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: 12,
+    borderRadius: borderRadius.lg,
     padding: 16,
     ...Platform.select({
       ios: {

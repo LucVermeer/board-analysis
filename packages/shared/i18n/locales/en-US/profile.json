@@ -54,6 +54,7 @@
     "percentile": "Percentile",
     "topPercent": "Top {{value}}%",
     "moreSentThan": "More problems sent than {{value}}% of climbers",
+    "summary": "Summary",
     "activity": "Activity",
     "gradeDistribution": "Grade Distribution",
     "flashVsRedpoint": "Flash vs Redpoint",

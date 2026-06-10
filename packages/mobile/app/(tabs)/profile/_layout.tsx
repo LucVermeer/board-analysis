@@ -17,7 +17,10 @@ export default function ProfileLayout() {
         contentStyle: { backgroundColor: 'transparent' },
       }}
     >
-      <Stack.Screen name="index" options={{ title: t('mobile.nav.profile') }} />
+      {/* The You screen owns its top via the floating ProfileTopChrome (large
+          title collapsing into a glass capsule), like the Discover/Climbs tabs —
+          so the stack header is hidden here. */}
+      <Stack.Screen name="index" options={{ headerShown: false, title: t('mobile.nav.profile') }} />
       <Stack.Screen name="more" options={{ title: t('mobile.more.title') }} />
       {/* i18n-ignore-next-line — preview-only screen */}
       <Stack.Screen name="branch-switcher" options={{ title: 'Branch Switcher' }} />

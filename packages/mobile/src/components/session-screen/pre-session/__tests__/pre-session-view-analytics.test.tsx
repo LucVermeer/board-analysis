@@ -67,6 +67,16 @@ vi.mock('react-native-gesture-handler', () => ({
   ScrollView: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
 }));
 
+vi.mock('react-native-safe-area-context', () => ({
+  useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
+}));
+
+vi.mock('react-native-reanimated', () => ({
+  useSharedValue: (value: number) => ({ value }),
+}));
+
+vi.mock('expo-router', () => ({ useRouter: () => ({ push: vi.fn() }) }));
+
 vi.mock('@shopify/flash-list', () => ({
   FlashList: ({
     data,
@@ -98,6 +108,12 @@ vi.mock('../../../Button', () => ({
 vi.mock('../../../Text', () => ({
   Text: ({ children }: { children?: ReactNode }) => createElement('span', null, children),
 }));
+vi.mock('../../../Card', () => ({
+  Card: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
+}));
+vi.mock('../../../GlassSurface', () => ({ GlassSurface: () => null }));
+vi.mock('../../../SectionHeader', () => ({ SectionHeader: () => null }));
+vi.mock('../../RecordTopChrome', () => ({ RecordTopChrome: () => null }));
 vi.mock('../../../../providers/theme-provider', () => ({ useTheme: () => ({ systemColors: {} }) }));
 vi.mock('../../../../lib/graphql/use-active-board', () => ({ useActiveBoard: () => activeBoard }));
 vi.mock('../../../../providers/auth-provider', () => ({ useAuth: () => ({ isAuthenticated: true }) }));
@@ -117,6 +133,7 @@ vi.mock('../../../../hooks/use-bottom-chrome-metrics', () => ({
     fixedFooterBottom: 0,
   }),
 }));
+vi.mock('../../../../hooks/use-native-glass', () => ({ useNativeGlass: () => false }));
 vi.mock('../../../../theme/tokens', () => ({ spacing: { 2: 8, 3: 12, 4: 16 }, borderRadius: { lg: 16 } }));
 vi.mock('../BoardSummaryCard', () => ({ BoardSummaryCard: () => null }));
 vi.mock('../WorkoutPreviewRow', () => ({ WorkoutPreviewRow: () => null }));
