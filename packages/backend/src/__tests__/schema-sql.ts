@@ -378,7 +378,7 @@ export const schemaSQL = `
   -- Board presence: a BLE serial maps to exactly one active board.
   CREATE UNIQUE INDEX IF NOT EXISTS "user_boards_unique_serial"
     ON "user_boards" ("serial_number")
-    WHERE "serial_number" IS NOT NULL AND "deleted_at" IS NULL;
+    WHERE "serial_number" IS NOT NULL AND "serial_number" <> '' AND "deleted_at" IS NULL;
   -- One active board per owner per config (mirrors the prod partial unique index).
   CREATE UNIQUE INDEX IF NOT EXISTS "user_boards_unique_owner_config"
     ON "user_boards" ("owner_id", "board_type", "layout_id", "size_id", "set_ids")

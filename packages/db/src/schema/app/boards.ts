@@ -73,11 +73,11 @@ export const userBoards = pgTable(
     // Board presence: a BLE serial maps to exactly one active board (the
     // shared physical wall). `resolveBoardForSerial` find-or-creates against
     // this; the unique partial index makes the create race fail-safe (the
-    // loser re-reads the winner). Partial so the many serial-less boards
-    // (manually created configs) and soft-deleted rows don't collide.
+    // loser re-reads the winner). Partial so the many serial-less or blank
+    // boards (manually created configs) and soft-deleted rows don't collide.
     uniqueSerialIdx: uniqueIndex('user_boards_unique_serial')
       .on(table.serialNumber)
-      .where(sql`${table.serialNumber} IS NOT NULL AND ${table.deletedAt} IS NULL`),
+      .where(sql`${table.serialNumber} IS NOT NULL AND ${table.serialNumber} <> '' AND ${table.deletedAt} IS NULL`),
   }),
 );
 

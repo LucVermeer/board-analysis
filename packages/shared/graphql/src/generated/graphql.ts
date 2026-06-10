@@ -2018,6 +2018,12 @@ export type Mutation = {
    */
   reportBoardClimb: Scalars['Boolean']['output'];
   /**
+   * Resolve the shared board feed for boards without a BLE serial. This is a
+   * per-config fallback in v1: every caller with the same board type, layout,
+   * size, and set IDs gets the same shared board id.
+   */
+  resolveBoardForConfig: ResolvedBoard;
+  /**
    * Resolve (and bind) the shared board for a BLE serial. Returns the one board
    * everyone at this physical wall shares; find-or-creates on first sighting
    * (owned by the first connector) and enforces serial → exactly one board.
@@ -2418,6 +2424,14 @@ export type MutationReportBoardClimbArgs = {
   angle?: InputMaybe<Scalars['Int']['input']>;
   boardId: Scalars['Int']['input'];
   climb: ClimbQueueItemInput;
+};
+
+/** Root mutation type for all write operations. */
+export type MutationResolveBoardForConfigArgs = {
+  boardType: Scalars['String']['input'];
+  layoutId: Scalars['Int']['input'];
+  setIds: Scalars['String']['input'];
+  sizeId: Scalars['Int']['input'];
 };
 
 /** Root mutation type for all write operations. */

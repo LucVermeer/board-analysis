@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import { eq, and, count, isNull, sql, ilike, or, desc, inArray, like } from 'drizzle-orm';
+import { GraphQLError } from 'graphql';
 import type { ConnectionContext } from '@boardsesh/shared-schema';
 import { normaliseSetIds } from '@boardsesh/board-config';
 import { rowsFromResult } from '@boardsesh/db/client';
@@ -22,10 +23,19 @@ import {
 import { generateUniqueGymSlug } from './gyms';
 import { logger } from '../../../utils/logger';
 import { redisClientManager } from '../../../redis/client';
+import { isUniqueViolation } from '../../../utils/postgres-errors';
 
 // ============================================
 // Helpers
 // ============================================
+
+function throwIfBoardSerialConflict(error: unknown): void {
+  if (isUniqueViolation(error, 'user_boards_unique_serial')) {
+    throw new GraphQLError('That serial is already linked to another board', {
+      extensions: { code: 'BOARD_SERIAL_ALREADY_LINKED' },
+    });
+  }
+}
 
 /**
  * Generate a unique slug from a board name.
@@ -1446,37 +1456,44 @@ export const socialBoardMutations = {
 
           return await enrichBoard(board, userId);
         } catch (error) {
+          throwIfBoardSerialConflict(error);
           // Auto-gym creation failed; continue to create the board without a gym
           logger.error('Auto-gym creation failed, creating board without gym:', error);
         }
       }
     }
 
-    const [board] = await db
-      .insert(dbSchema.userBoards)
-      .values({
-        uuid,
-        slug,
-        ownerId: userId,
-        boardType: validatedInput.boardType,
-        layoutId: validatedInput.layoutId,
-        sizeId: validatedInput.sizeId,
-        setIds: validatedInput.setIds,
-        name: validatedInput.name,
-        description: validatedInput.description ?? null,
-        locationName: validatedInput.locationName ?? null,
-        latitude: validatedInput.latitude ?? null,
-        longitude: validatedInput.longitude ?? null,
-        isPublic: validatedInput.isPublic ?? true,
-        isUnlisted: validatedInput.isUnlisted ?? false,
-        hideLocation: validatedInput.hideLocation ?? false,
-        isOwned: validatedInput.isOwned ?? true,
-        angle: validatedInput.angle ?? 40,
-        isAngleAdjustable: validatedInput.isAngleAdjustable ?? true,
-        serialNumber: validatedInput.serialNumber ?? null,
-        gymId,
-      })
-      .returning();
+    let board: typeof dbSchema.userBoards.$inferSelect;
+    try {
+      [board] = await db
+        .insert(dbSchema.userBoards)
+        .values({
+          uuid,
+          slug,
+          ownerId: userId,
+          boardType: validatedInput.boardType,
+          layoutId: validatedInput.layoutId,
+          sizeId: validatedInput.sizeId,
+          setIds: validatedInput.setIds,
+          name: validatedInput.name,
+          description: validatedInput.description ?? null,
+          locationName: validatedInput.locationName ?? null,
+          latitude: validatedInput.latitude ?? null,
+          longitude: validatedInput.longitude ?? null,
+          isPublic: validatedInput.isPublic ?? true,
+          isUnlisted: validatedInput.isUnlisted ?? false,
+          hideLocation: validatedInput.hideLocation ?? false,
+          isOwned: validatedInput.isOwned ?? true,
+          angle: validatedInput.angle ?? 40,
+          isAngleAdjustable: validatedInput.isAngleAdjustable ?? true,
+          serialNumber: validatedInput.serialNumber ?? null,
+          gymId,
+        })
+        .returning();
+    } catch (error) {
+      throwIfBoardSerialConflict(error);
+      throw error;
+    }
 
     // Populate PostGIS location column if lat/lon provided
     if (validatedInput.latitude != null && validatedInput.longitude != null) {
@@ -1606,11 +1623,17 @@ export const socialBoardMutations = {
       updateValues.deletedAt = null;
     }
 
-    const [updated] = await db
-      .update(dbSchema.userBoards)
-      .set(updateValues)
-      .where(eq(dbSchema.userBoards.id, board.id))
-      .returning();
+    let updated: typeof dbSchema.userBoards.$inferSelect;
+    try {
+      [updated] = await db
+        .update(dbSchema.userBoards)
+        .set(updateValues)
+        .where(eq(dbSchema.userBoards.id, board.id))
+        .returning();
+    } catch (error) {
+      throwIfBoardSerialConflict(error);
+      throw error;
+    }
 
     // Update PostGIS location column
     if (validatedInput.latitude !== undefined || validatedInput.longitude !== undefined) {

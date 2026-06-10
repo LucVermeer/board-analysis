@@ -9,6 +9,7 @@ import { applyRateLimit, requireAuthenticated, validateInput, isNoMatchClimb } f
 import { getConsensusDifficultyName } from '../shared/sql-expressions';
 import { SaveTickInputSchema, UpdateTickInputSchema, AttachBetaLinkInputSchema } from '../../../validation/schemas';
 import { resolveBoardFromPath } from '../social/boards';
+import { findActiveBoardById, isBoardPresenceEnabled } from '../board-presence/shared';
 import { publishSocialEvent } from '../../../events';
 import { publishDebouncedSessionStats } from '../sessions/debounced-stats-publisher';
 import { queueClimbStatsRecompute } from './debounced-climb-stats-publisher';
@@ -293,16 +294,24 @@ export const tickMutations = {
     const now = new Date().toISOString();
     const climbedAt = new Date(validatedInput.climbedAt).toISOString();
 
-    // Resolve the tick's board_id. When the client passes an explicit
-    // `boardId` (the shared connected-wall board, resolved via
-    // resolveBoardForSerial on BLE connect), use it directly — that's the
-    // board everyone at the physical wall is logging to, which may not be the
-    // caller's own config-derived board. Otherwise fall back to resolving from
-    // the board config (today's behaviour).
+    // Resolve the tick's board_id. When board presence is enabled and the
+    // client passes a valid explicit `boardId` (the connected-wall board), use
+    // it over the caller's own config-derived board. If the id is missing,
+    // deleted, or for another board type, ignore it and fall back to today's
+    // config resolution rather than surfacing a raw FK/type mismatch.
     let boardId: number | null = null;
-    if (validatedInput.boardId != null) {
-      boardId = validatedInput.boardId;
-    } else if (validatedInput.layoutId && validatedInput.sizeId && validatedInput.setIds) {
+    if (validatedInput.boardId != null && isBoardPresenceEnabled()) {
+      const explicitBoard = await findActiveBoardById(validatedInput.boardId);
+      if (explicitBoard?.boardType === validatedInput.boardType) {
+        boardId = explicitBoard.id;
+      } else {
+        logger.warn(
+          `[board-presence] Ignoring invalid tick boardId ${validatedInput.boardId} for ${validatedInput.boardType}`,
+        );
+      }
+    }
+
+    if (boardId == null && validatedInput.layoutId && validatedInput.sizeId && validatedInput.setIds) {
       boardId = await resolveBoardFromPath(
         userId,
         validatedInput.boardType,

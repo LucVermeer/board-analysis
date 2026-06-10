@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 import { GraphQLError } from 'graphql';
 import type {
   ConnectionContext,
@@ -10,48 +10,27 @@ import type {
 import { db } from '../../../db/client';
 import * as dbSchema from '@boardsesh/db/schema';
 import { requireAuthenticated, applyRateLimit, validateInput } from '../shared/helpers';
-import { BoardNameSchema, BoardSerialSchema } from '../../../validation/schemas/primitives';
-import { resolveBoardFromPath, generateUniqueSlug } from '../social/boards';
+import { BoardSerialSchema } from '../../../validation/schemas/primitives';
+import {
+  BoardPresenceAngleSchema,
+  BoardPresenceConfigInputSchema,
+  ReportBoardClimbInputSchema,
+} from '../../../validation/schemas';
+import { generateUniqueSlug } from '../social/boards';
 import { logger } from '../../../utils/logger';
 import { pubsub } from '../../../pubsub/index';
-import { requireBoardPresenceEnabled, assertValidBoardId } from './shared';
-
-// Human-friendly default names for an auto-created board. Falls back to the
-// raw board type when we don't recognise it.
-const BOARD_TYPE_LABELS: Record<string, string> = {
-  kilter: 'Kilter',
-  tension: 'Tension',
-  moonboard: 'MoonBoard',
-  decoy: 'Decoy',
-  touchstone: 'Touchstone',
-  grasshopper: 'Grasshopper',
-  soill: 'So iLL',
-};
-
-function defaultBoardName(boardType: string): string {
-  return `${BOARD_TYPE_LABELS[boardType] ?? boardType} Board`;
-}
-
-/** Look up an active board sharing this serial (the shared physical wall). */
-async function findActiveBoardBySerial(serial: string): Promise<typeof dbSchema.userBoards.$inferSelect | undefined> {
-  const [board] = await db
-    .select()
-    .from(dbSchema.userBoards)
-    .where(and(eq(dbSchema.userBoards.serialNumber, serial), isNull(dbSchema.userBoards.deletedAt)))
-    .limit(1);
-  return board;
-}
-
-function toResolvedBoard(board: typeof dbSchema.userBoards.$inferSelect): ResolvedBoard {
-  return {
-    boardId: Number(board.id),
-    boardName: board.name,
-    boardType: board.boardType,
-    layoutId: Number(board.layoutId),
-    sizeId: Number(board.sizeId),
-    setIds: board.setIds,
-  };
-}
+import {
+  defaultBoardName,
+  findActiveBoardBySerial,
+  findOwnActiveBoardByConfig,
+  isDuplicateBoardSerialError,
+  requireActiveBoardById,
+  requireBoardPresenceEnabled,
+  resolveSharedBoardForConfig,
+  serialAlreadyBoundError,
+  throwIfDuplicateBoardSerial,
+  toResolvedBoard,
+} from './shared';
 
 export const boardPresenceMutations = {
   /**
@@ -79,16 +58,7 @@ export const boardPresenceMutations = {
     await applyRateLimit(ctx, 30, 'resolveBoardForSerial');
 
     const validSerial = validateInput(BoardSerialSchema, serial, 'serial');
-    const validBoardType = validateInput(BoardNameSchema, boardType, 'boardType');
-    if (!Number.isInteger(layoutId) || layoutId <= 0) {
-      throw new GraphQLError('layoutId must be a positive integer');
-    }
-    if (!Number.isInteger(sizeId) || sizeId <= 0) {
-      throw new GraphQLError('sizeId must be a positive integer');
-    }
-    if (!setIds || setIds.length === 0) {
-      throw new GraphQLError('setIds is required');
-    }
+    const config = validateInput(BoardPresenceConfigInputSchema, { boardType, layoutId, sizeId, setIds }, 'input');
 
     const userId = ctx.userId!;
 
@@ -99,14 +69,25 @@ export const boardPresenceMutations = {
     }
 
     // (b) The caller already has a board for this exact config — bind the
-    // serial onto it instead of creating a duplicate.
-    const ownBoardId = await resolveBoardFromPath(userId, validBoardType, layoutId, sizeId, setIds);
-    if (ownBoardId) {
+    // serial onto it instead of creating a duplicate, but only if it is not
+    // already bound to a different physical wall.
+    const ownBoard = await findOwnActiveBoardByConfig(
+      userId,
+      config.boardType,
+      config.layoutId,
+      config.sizeId,
+      config.setIds,
+    );
+    if (ownBoard) {
+      if (ownBoard.serialNumber && ownBoard.serialNumber !== validSerial) {
+        throw serialAlreadyBoundError();
+      }
+
       try {
         const [updated] = await db
           .update(dbSchema.userBoards)
           .set({ serialNumber: validSerial, updatedAt: new Date() })
-          .where(eq(dbSchema.userBoards.id, ownBoardId))
+          .where(and(eq(dbSchema.userBoards.id, ownBoard.id), isNull(dbSchema.userBoards.serialNumber)))
           .returning();
         if (updated) {
           return toResolvedBoard(updated);
@@ -114,18 +95,34 @@ export const boardPresenceMutations = {
       } catch (error) {
         // Unique-serial race: another connector bound this serial between our
         // SELECT and UPDATE. Re-read the winner.
-        logger.warn(`[board-presence] resolveBoardForSerial bind race on own board: ${String(error)}`);
-        const winner = await findActiveBoardBySerial(validSerial);
-        if (winner) {
-          return toResolvedBoard(winner);
+        if (isDuplicateBoardSerialError(error)) {
+          logger.warn(`[board-presence] resolveBoardForSerial bind race on own board: ${String(error)}`);
+          const winner = await findActiveBoardBySerial(validSerial);
+          if (winner) {
+            return toResolvedBoard(winner);
+          }
         }
         throw error;
+      }
+
+      const refreshedOwnBoard = await findOwnActiveBoardByConfig(
+        userId,
+        config.boardType,
+        config.layoutId,
+        config.sizeId,
+        config.setIds,
+      );
+      if (refreshedOwnBoard?.serialNumber === validSerial) {
+        return toResolvedBoard(refreshedOwnBoard);
+      }
+      if (refreshedOwnBoard?.serialNumber) {
+        throw serialAlreadyBoundError();
       }
     }
 
     // (c) Create a fresh board owned by the caller, bound to the serial.
     const uuid = uuidv4();
-    const name = defaultBoardName(validBoardType);
+    const name = defaultBoardName(config.boardType);
     const slug = await generateUniqueSlug(name);
     try {
       const [created] = await db
@@ -134,10 +131,10 @@ export const boardPresenceMutations = {
           uuid,
           slug,
           ownerId: userId,
-          boardType: validBoardType,
-          layoutId,
-          sizeId,
-          setIds,
+          boardType: config.boardType,
+          layoutId: config.layoutId,
+          sizeId: config.sizeId,
+          setIds: config.setIds,
           name,
           serialNumber: validSerial,
         })
@@ -145,13 +142,36 @@ export const boardPresenceMutations = {
       return toResolvedBoard(created);
     } catch (error) {
       // Unique-serial race: someone else created the shared board first.
-      logger.warn(`[board-presence] resolveBoardForSerial create race: ${String(error)}`);
-      const winner = await findActiveBoardBySerial(validSerial);
-      if (winner) {
-        return toResolvedBoard(winner);
+      if (isDuplicateBoardSerialError(error)) {
+        logger.warn(`[board-presence] resolveBoardForSerial create race: ${String(error)}`);
+        const winner = await findActiveBoardBySerial(validSerial);
+        if (winner) {
+          return toResolvedBoard(winner);
+        }
       }
+      throwIfDuplicateBoardSerial(error);
       throw error;
     }
+  },
+
+  /**
+   * Resolve the shared board feed for boards that do not expose a BLE serial
+   * (MoonBoard and any future serial-less hardware). This is per-config in v1:
+   * every caller with the same board config converges on the same hidden,
+   * system-owned board_id. Aurora callers should continue using the serial
+   * resolver above.
+   */
+  resolveBoardForConfig: async (
+    _: unknown,
+    { boardType, layoutId, sizeId, setIds }: { boardType: string; layoutId: number; sizeId: number; setIds: string },
+    ctx: ConnectionContext,
+  ): Promise<ResolvedBoard> => {
+    requireBoardPresenceEnabled();
+    requireAuthenticated(ctx);
+    await applyRateLimit(ctx, 30, 'resolveBoardForConfig');
+
+    const config = validateInput(BoardPresenceConfigInputSchema, { boardType, layoutId, sizeId, setIds }, 'input');
+    return resolveSharedBoardForConfig(config.boardType, config.layoutId, config.sizeId, config.setIds);
   },
 
   /**
@@ -171,53 +191,76 @@ export const boardPresenceMutations = {
     requireBoardPresenceEnabled();
     requireAuthenticated(ctx);
     await applyRateLimit(ctx, 60, 'reportBoardClimb');
-    assertValidBoardId(boardId);
+    const board = await requireActiveBoardById(boardId);
+    const validatedClimb = validateInput(ReportBoardClimbInputSchema, climb, 'climb');
+    const validatedAngle = validateInput(BoardPresenceAngleSchema, angle, 'angle');
+    const effectiveAngle = validatedAngle ?? validatedClimb.climb.angle ?? Number(board.angle);
+    const climbUuid = validatedClimb.climb.uuid;
 
-    const climbUuid = climb?.climb?.uuid;
-    if (!climbUuid || typeof climbUuid !== 'string') {
-      throw new GraphQLError('climb.climb.uuid is required');
-    }
+    const [catalogClimbRows, sender] = await Promise.all([
+      db
+        .select({
+          uuid: dbSchema.boardClimbs.uuid,
+          name: dbSchema.boardClimbs.name,
+          frames: dbSchema.boardClimbs.frames,
+          setterUsername: dbSchema.boardClimbs.setterUsername,
+          grade: dbSchema.boardDifficultyGrades.boulderName,
+        })
+        .from(dbSchema.boardClimbs)
+        .leftJoin(
+          dbSchema.boardClimbStats,
+          and(
+            eq(dbSchema.boardClimbStats.boardType, dbSchema.boardClimbs.boardType),
+            eq(dbSchema.boardClimbStats.climbUuid, dbSchema.boardClimbs.uuid),
+            eq(dbSchema.boardClimbStats.angle, effectiveAngle),
+          ),
+        )
+        .leftJoin(
+          dbSchema.boardDifficultyGrades,
+          and(
+            eq(dbSchema.boardDifficultyGrades.boardType, dbSchema.boardClimbStats.boardType),
+            eq(dbSchema.boardDifficultyGrades.difficulty, sql`ROUND(${dbSchema.boardClimbStats.displayDifficulty})`),
+          ),
+        )
+        .where(
+          and(
+            eq(dbSchema.boardClimbs.uuid, climbUuid),
+            eq(dbSchema.boardClimbs.boardType, board.boardType),
+            eq(dbSchema.boardClimbs.layoutId, Number(board.layoutId)),
+          ),
+        )
+        .limit(1),
+      db
+        .select({
+          name: dbSchema.users.name,
+          image: dbSchema.users.image,
+          displayName: dbSchema.userProfiles.displayName,
+          avatarUrl: dbSchema.userProfiles.avatarUrl,
+        })
+        .from(dbSchema.users)
+        .leftJoin(dbSchema.userProfiles, eq(dbSchema.users.id, dbSchema.userProfiles.userId))
+        .where(eq(dbSchema.users.id, ctx.userId!))
+        .limit(1)
+        .then((rows) => rows[0]),
+    ]);
 
-    // Validate the climb is a real catalog climb. A bogus uuid would put a
-    // phantom entry on the wall feed.
-    const [catalogClimb] = await db
-      .select({ uuid: dbSchema.boardClimbs.uuid })
-      .from(dbSchema.boardClimbs)
-      .where(eq(dbSchema.boardClimbs.uuid, climbUuid))
-      .limit(1);
+    const catalogClimb = catalogClimbRows[0];
     if (!catalogClimb) {
-      throw new GraphQLError('Unknown climb');
+      throw new GraphQLError('Unknown climb for this board');
     }
-
-    // Derive the sender's display identity server-side from ctx.userId —
-    // same source SessionUser / the social feeds use. NEVER trust the input.
-    const [sender] = await db
-      .select({
-        name: dbSchema.users.name,
-        image: dbSchema.users.image,
-        displayName: dbSchema.userProfiles.displayName,
-        avatarUrl: dbSchema.userProfiles.avatarUrl,
-      })
-      .from(dbSchema.users)
-      .leftJoin(dbSchema.userProfiles, eq(dbSchema.users.id, dbSchema.userProfiles.userId))
-      .where(eq(dbSchema.users.id, ctx.userId!))
-      .limit(1);
 
     const seq = await pubsub.nextBoardSeq(String(boardId));
     const sentAt = new Date().toISOString();
 
     const presenceClimb: BoardPresenceClimb = {
       climbUuid,
-      queueItemUuid: climb.uuid ?? null,
-      name: climb.climb.name ?? null,
-      // ClimbInput carries the consensus grade as `difficulty`; there's no
-      // gradeColor on the wire, so it stays null (the client renders colour
-      // from the grade locally).
-      grade: climb.climb.difficulty ?? null,
+      queueItemUuid: validatedClimb.uuid,
+      name: catalogClimb.name ?? null,
+      grade: catalogClimb.grade ?? null,
       gradeColor: null,
-      frames: climb.climb.frames ?? null,
-      angle: angle ?? null,
-      setter: climb.climb.setter_username ?? null,
+      frames: catalogClimb.frames ?? null,
+      angle: effectiveAngle,
+      setter: catalogClimb.setterUsername ?? null,
       sentByDisplayName: sender?.displayName ?? sender?.name ?? null,
       sentByAvatarUrl: sender?.avatarUrl ?? sender?.image ?? null,
       sentAt,

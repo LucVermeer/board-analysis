@@ -722,6 +722,10 @@ class PubSub {
         await publisher.expire(key, BOARD_SEQ_TTL);
         return next;
       } catch (error) {
+        if (this.redisRequired) {
+          logger.error('[PubSub] Failed to allocate board seq from required Redis:', error);
+          throw error;
+        }
         logger.error('[PubSub] Failed to allocate board seq from Redis, falling back to local:', error);
       }
     }

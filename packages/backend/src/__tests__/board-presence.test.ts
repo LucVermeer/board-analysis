@@ -13,6 +13,7 @@ import { pubsub } from '../pubsub';
 import { boardPresenceMutations } from '../graphql/resolvers/board-presence/mutations';
 import { boardPresenceQueries } from '../graphql/resolvers/board-presence/queries';
 import { boardPresenceSubscriptions } from '../graphql/resolvers/board-presence/subscription';
+import { tickMutations } from '../graphql/resolvers/ticks/mutations';
 
 // Board presence is env-gated. Every test in this file exercises the enabled
 // path, so flip it on for the suite.
@@ -29,9 +30,11 @@ afterAll(() => {
 });
 
 const TEST_USER_ID = 'board-presence-test-user';
+const SECOND_USER_ID = 'board-presence-second-user';
 const SENDER_DISPLAY_NAME = 'Crusher Carla';
 const SENDER_AVATAR_URL = 'https://example.com/carla.jpg';
 const TEST_CLIMB_UUID = 'board-presence-test-climb-uuid';
+const OTHER_TEST_CLIMB_UUID = 'board-presence-other-climb-uuid';
 
 function authCtx(overrides: Partial<ConnectionContext> = {}): ConnectionContext {
   return {
@@ -68,6 +71,11 @@ async function seedUser(): Promise<void> {
     ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name
   `);
   await db.execute(sql`
+    INSERT INTO users (id, email, name, image, created_at, updated_at)
+    VALUES (${SECOND_USER_ID}, 'second@board-presence.test', 'Second Sender', null, now(), now())
+    ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name
+  `);
+  await db.execute(sql`
     INSERT INTO user_profiles (user_id, display_name, avatar_url)
     VALUES (${TEST_USER_ID}, ${SENDER_DISPLAY_NAME}, ${SENDER_AVATAR_URL})
     ON CONFLICT (user_id) DO UPDATE SET display_name = EXCLUDED.display_name, avatar_url = EXCLUDED.avatar_url
@@ -80,14 +88,39 @@ async function seedCatalogClimb(): Promise<void> {
     VALUES (${TEST_CLIMB_UUID}, 'kilter', 1, 'Real Catalog Climb', 'p1145r12', 40, true, false)
     ON CONFLICT (uuid) DO NOTHING
   `);
+  await db.execute(sql`
+    INSERT INTO board_climbs (uuid, board_type, layout_id, name, frames, angle, is_listed, is_draft)
+    VALUES (${OTHER_TEST_CLIMB_UUID}, 'kilter', 1, 'Other Catalog Climb', 'p9999r12', 40, true, false)
+    ON CONFLICT (uuid) DO NOTHING
+  `);
+  await db.execute(sql`
+    INSERT INTO board_difficulty_grades (board_type, difficulty, boulder_name, is_listed)
+    VALUES ('kilter', 17, 'V5', true), ('kilter', 18, 'V6', true)
+    ON CONFLICT (board_type, difficulty) DO UPDATE SET boulder_name = EXCLUDED.boulder_name
+  `);
+  await db.execute(sql`
+    INSERT INTO board_climb_stats (board_type, climb_uuid, angle, display_difficulty, ascensionist_count, difficulty_average, quality_average)
+    VALUES
+      ('kilter', ${TEST_CLIMB_UUID}, 40, 17, 10, 17, 4),
+      ('kilter', ${TEST_CLIMB_UUID}, 45, 18, 10, 18, 4),
+      ('kilter', ${OTHER_TEST_CLIMB_UUID}, 40, 18, 5, 18, 3)
+    ON CONFLICT (board_type, climb_uuid, angle) DO UPDATE SET display_difficulty = EXCLUDED.display_difficulty
+  `);
 }
 
 async function cleanup(): Promise<void> {
-  await db.execute(sql`DELETE FROM boardsesh_ticks WHERE user_id = ${TEST_USER_ID}`);
-  await db.execute(sql`DELETE FROM user_boards WHERE owner_id = ${TEST_USER_ID}`);
-  await db.execute(sql`DELETE FROM board_climbs WHERE uuid = ${TEST_CLIMB_UUID}`);
+  await db.execute(sql`DELETE FROM boardsesh_ticks WHERE user_id IN (${TEST_USER_ID}, ${SECOND_USER_ID})`);
+  await db.execute(sql`
+    DELETE FROM user_boards
+    WHERE owner_id IN (${TEST_USER_ID}, ${SECOND_USER_ID})
+       OR (owner_id = '00000000-0000-0000-0000-000000000000' AND slug LIKE 'presence-%')
+  `);
+  await db.execute(
+    sql`DELETE FROM board_climb_stats WHERE climb_uuid IN (${TEST_CLIMB_UUID}, ${OTHER_TEST_CLIMB_UUID})`,
+  );
+  await db.execute(sql`DELETE FROM board_climbs WHERE uuid IN (${TEST_CLIMB_UUID}, ${OTHER_TEST_CLIMB_UUID})`);
   await db.execute(sql`DELETE FROM user_profiles WHERE user_id = ${TEST_USER_ID}`);
-  await db.execute(sql`DELETE FROM users WHERE id = ${TEST_USER_ID}`);
+  await db.execute(sql`DELETE FROM users WHERE id IN (${TEST_USER_ID}, ${SECOND_USER_ID})`);
 }
 
 // ============================================================
@@ -250,6 +283,80 @@ describe('board-presence resolvers', () => {
       expect((row as { serial_number: string }).serial_number).toBe(serial);
     });
 
+    it('rejects rebinding an own config board that already has a different serial', async () => {
+      const existingSerial = `BOUND-${Date.now()}`;
+      await db.execute(sql`
+        INSERT INTO user_boards (uuid, slug, owner_id, board_type, layout_id, size_id, set_ids, name, serial_number)
+        VALUES (${`uuid-bound-${Date.now()}`}, ${`slug-bound-${Date.now()}`}, ${TEST_USER_ID}, 'kilter', 8, 12, '5,6', 'My Garage', ${existingSerial})
+      `);
+
+      await expect(
+        boardPresenceMutations.resolveBoardForSerial(
+          undefined,
+          { serial: `NEW-${Date.now()}`, boardType: 'kilter', layoutId: 8, sizeId: 12, setIds: '5,6' },
+          authCtx(),
+        ),
+      ).rejects.toMatchObject({
+        extensions: { code: 'BOARD_SERIAL_ALREADY_BOUND' },
+      });
+
+      const [row] = await db.execute(sql`
+        SELECT serial_number FROM user_boards
+        WHERE owner_id = ${TEST_USER_ID} AND layout_id = 8 AND size_id = 12
+      `);
+      expect((row as { serial_number: string }).serial_number).toBe(existingSerial);
+    });
+
+    it('returns the first serial-bound board across callers instead of binding a second user board', async () => {
+      const serial = `XCALL-${Date.now()}`;
+      const first = await boardPresenceMutations.resolveBoardForSerial(
+        undefined,
+        { serial, boardType: 'kilter', layoutId: 1, sizeId: 10, setIds: '1,2' },
+        authCtx(),
+      );
+      await db.execute(sql`
+        INSERT INTO user_boards (uuid, slug, owner_id, board_type, layout_id, size_id, set_ids, name, serial_number)
+        VALUES (${`uuid-second-${Date.now()}`}, ${`slug-second-${Date.now()}`}, ${SECOND_USER_ID}, 'kilter', 1, 10, '1,2', 'Own Config', null)
+      `);
+
+      const second = await boardPresenceMutations.resolveBoardForSerial(
+        undefined,
+        { serial, boardType: 'kilter', layoutId: 1, sizeId: 10, setIds: '1,2' },
+        authCtx({ userId: SECOND_USER_ID }),
+      );
+
+      expect(second.boardId).toBe(first.boardId);
+      const [secondOwnBoard] = await db.execute(sql`
+        SELECT serial_number FROM user_boards
+        WHERE owner_id = ${SECOND_USER_ID} AND name = 'Own Config'
+      `);
+      expect((secondOwnBoard as { serial_number: string | null }).serial_number).toBeNull();
+    });
+
+    it('resolves serial-less boards to a stable shared per-config board', async () => {
+      const first = await boardPresenceMutations.resolveBoardForConfig(
+        undefined,
+        { boardType: 'moonboard', layoutId: 99, sizeId: 1, setIds: '1' },
+        authCtx(),
+      );
+      const second = await boardPresenceMutations.resolveBoardForConfig(
+        undefined,
+        { boardType: 'moonboard', layoutId: 99, sizeId: 1, setIds: '1' },
+        authCtx({ userId: SECOND_USER_ID }),
+      );
+
+      expect(second.boardId).toBe(first.boardId);
+      expect(first.boardType).toBe('moonboard');
+      const [row] = await db.execute(sql`
+        SELECT owner_id, serial_number, is_unlisted
+        FROM user_boards
+        WHERE id = ${first.boardId}
+      `);
+      expect((row as { owner_id: string }).owner_id).toBe('00000000-0000-0000-0000-000000000000');
+      expect((row as { serial_number: string | null }).serial_number).toBeNull();
+      expect((row as { is_unlisted: boolean }).is_unlisted).toBe(true);
+    });
+
     it('rejects binding a second serial onto an already-bound board via the unique index', async () => {
       const serialA = `UNIQ-A-${Date.now()}`;
       const resolved = await boardPresenceMutations.resolveBoardForSerial(
@@ -293,17 +400,22 @@ describe('board-presence resolvers', () => {
       return resolved.boardId;
     }
 
-    it('ignores a client-supplied sender identity and stamps the server-derived display name + avatar', async () => {
+    it('derives display metadata and sender identity server-side without leaking the raw serial', async () => {
       const boardId = await makeBoard();
       const received: BoardPresenceEvent[] = [];
       const unsubscribe = await pubsub.subscribeBoardPresence(String(boardId), (event) => received.push(event));
 
-      // The input has NO identity fields (the type has none), but a malicious
-      // client could try to spoof via the climb. We assert the published event
-      // uses the server profile regardless.
+      // A malicious client can send plausible but fake display fields. The
+      // published payload must use catalog fields + server profile instead.
+      const spoofedClimb = makeQueueItemInput({
+        name: 'Fake Client Name',
+        frames: 'fake-client-frames',
+        setter_username: 'fake-setter',
+        difficulty: 'V900',
+      });
       const ok = await boardPresenceMutations.reportBoardClimb(
         undefined,
-        { boardId, climb: makeQueueItemInput(), angle: 45 },
+        { boardId, climb: spoofedClimb, angle: 45 },
         authCtx(),
       );
       expect(ok).toBe(true);
@@ -314,9 +426,36 @@ describe('board-presence resolvers', () => {
       expect(event.climb.sentByDisplayName).toBe(SENDER_DISPLAY_NAME);
       expect(event.climb.sentByAvatarUrl).toBe(SENDER_AVATAR_URL);
       expect(event.climb.climbUuid).toBe(TEST_CLIMB_UUID);
+      expect(event.climb.name).toBe('Real Catalog Climb');
+      expect(event.climb.frames).toBe('p1145r12');
+      expect(event.climb.setter).toBeNull();
+      expect(event.climb.grade).toBe('V6');
       expect(event.climb.angle).toBe(45);
       expect(event.climb.seq).toBeGreaterThan(0);
-      // Server never lets the client name the sender — there is no name input.
+      expect(JSON.stringify(received)).not.toContain('Fake Client Name');
+      unsubscribe();
+    });
+
+    it('keeps the raw serial out of resolved-board and board-presence payloads', async () => {
+      const serial = `PRIV-${Date.now()}`;
+      const resolved = await boardPresenceMutations.resolveBoardForSerial(
+        undefined,
+        { serial, boardType: 'kilter', layoutId: 1, sizeId: 10, setIds: '1,2' },
+        authCtx(),
+      );
+      const received: BoardPresenceEvent[] = [];
+      const unsubscribe = await pubsub.subscribeBoardPresence(String(resolved.boardId), (event) =>
+        received.push(event),
+      );
+
+      await boardPresenceMutations.reportBoardClimb(
+        undefined,
+        { boardId: resolved.boardId, climb: makeQueueItemInput(), angle: 40 },
+        authCtx(),
+      );
+
+      expect(JSON.stringify(resolved)).not.toContain(serial);
+      expect(JSON.stringify(received)).not.toContain(serial);
       unsubscribe();
     });
 
@@ -378,8 +517,99 @@ describe('board-presence resolvers', () => {
     });
   });
 
+  describe('saveTick board stamping', () => {
+    function baseTickInput(overrides: Record<string, unknown> = {}) {
+      return {
+        boardType: 'kilter',
+        climbUuid: TEST_CLIMB_UUID,
+        angle: 40,
+        isMirror: false,
+        status: 'send',
+        attemptCount: 1,
+        quality: null,
+        difficulty: 17,
+        isBenchmark: false,
+        comment: '',
+        climbedAt: new Date().toISOString(),
+        layoutId: 1,
+        sizeId: 10,
+        setIds: '1,2',
+        ...overrides,
+      };
+    }
+
+    async function createSecondUserSharedBoard(): Promise<number> {
+      const resolved = await boardPresenceMutations.resolveBoardForSerial(
+        undefined,
+        { serial: `TICK-${Date.now()}`, boardType: 'kilter', layoutId: 1, sizeId: 10, setIds: '1,2' },
+        authCtx({ userId: SECOND_USER_ID }),
+      );
+      return resolved.boardId;
+    }
+
+    async function createOwnConfigBoard(): Promise<number> {
+      const slug = `own-config-${Date.now()}`;
+      const [row] = await db.execute(sql`
+        INSERT INTO user_boards (uuid, slug, owner_id, board_type, layout_id, size_id, set_ids, name, serial_number)
+        VALUES (${`uuid-${slug}`}, ${slug}, ${TEST_USER_ID}, 'kilter', 1, 10, '1,2', 'Own Config', null)
+        RETURNING id
+      `);
+      return Number((row as { id: number }).id);
+    }
+
+    async function latestTickBoardId(): Promise<number | null> {
+      const [row] = await db.execute(sql`
+        SELECT board_id
+        FROM boardsesh_ticks
+        WHERE user_id = ${TEST_USER_ID}
+        ORDER BY created_at DESC
+        LIMIT 1
+      `);
+      return row ? Number((row as { board_id: number | null }).board_id) : null;
+    }
+
+    it('stamps a valid explicit presence boardId over the caller config board', async () => {
+      const sharedBoardId = await createSecondUserSharedBoard();
+      const ownBoardId = await createOwnConfigBoard();
+
+      await tickMutations.saveTick(undefined, { input: baseTickInput({ boardId: sharedBoardId }) }, authCtx());
+
+      expect(await latestTickBoardId()).toBe(sharedBoardId);
+      expect(await latestTickBoardId()).not.toBe(ownBoardId);
+    });
+
+    it('falls back to config resolution for nonexistent or mismatched explicit boardIds', async () => {
+      const ownBoardId = await createOwnConfigBoard();
+      const tensionBoard = await boardPresenceMutations.resolveBoardForConfig(
+        undefined,
+        { boardType: 'tension', layoutId: 1, sizeId: 10, setIds: '1,2' },
+        authCtx(),
+      );
+
+      await tickMutations.saveTick(undefined, { input: baseTickInput({ boardId: 999_999_999 }) }, authCtx());
+      expect(await latestTickBoardId()).toBe(ownBoardId);
+
+      await db.execute(sql`DELETE FROM boardsesh_ticks WHERE user_id = ${TEST_USER_ID}`);
+      await tickMutations.saveTick(undefined, { input: baseTickInput({ boardId: tensionBoard.boardId }) }, authCtx());
+      expect(await latestTickBoardId()).toBe(ownBoardId);
+    });
+
+    it('ignores explicit boardId while board presence is disabled', async () => {
+      const sharedBoardId = await createSecondUserSharedBoard();
+      const ownBoardId = await createOwnConfigBoard();
+      process.env.BOARD_PRESENCE_ENABLED = 'false';
+      try {
+        await tickMutations.saveTick(undefined, { input: baseTickInput({ boardId: sharedBoardId }) }, authCtx());
+      } finally {
+        process.env.BOARD_PRESENCE_ENABLED = 'true';
+      }
+
+      expect(await latestTickBoardId()).toBe(ownBoardId);
+    });
+  });
+
   describe('boardPresenceStats', () => {
-    it('counts distinct climbs and climbers from boardsesh_ticks for the board', async () => {
+    it('counts durable sends and climbers for only the requested board', async () => {
       const boardId = await (async () => {
         const resolved = await boardPresenceMutations.resolveBoardForSerial(
           undefined,
@@ -388,31 +618,51 @@ describe('board-presence resolvers', () => {
         );
         return resolved.boardId;
       })();
+      const otherBoard = await boardPresenceMutations.resolveBoardForConfig(
+        undefined,
+        { boardType: 'kilter', layoutId: 2, sizeId: 20, setIds: '5,6' },
+        authCtx(),
+      );
 
-      // Two ticks, same climb + same user → distinct climbs = 1, climbers = 1.
-      const climbedAt = new Date().toISOString();
-      for (let i = 0; i < 2; i++) {
-        await db.execute(sql`
-          INSERT INTO boardsesh_ticks
-            (uuid, user_id, board_type, climb_uuid, angle, is_mirror, status, attempt_count, is_benchmark, comment, climbed_at, created_at, updated_at, board_id)
-          VALUES
-            (${`tick-${Date.now()}-${i}`}, ${TEST_USER_ID}, 'kilter', ${TEST_CLIMB_UUID}, 40, false, 'send', 1, false, '', ${climbedAt}, now(), now(), ${boardId})
-        `);
-      }
+      const oldClimbedAt = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
+      const recentClimbedAt = new Date().toISOString();
+      await db.execute(sql`
+        INSERT INTO boardsesh_ticks
+          (uuid, user_id, board_type, climb_uuid, angle, is_mirror, status, attempt_count, difficulty, is_benchmark, comment, climbed_at, created_at, updated_at, board_id)
+        VALUES
+          (${`tick-old-${Date.now()}`}, ${TEST_USER_ID}, 'kilter', ${TEST_CLIMB_UUID}, 40, false, 'send', 1, 17, false, '', ${oldClimbedAt}, now(), now(), ${boardId}),
+          (${`tick-attempt-${Date.now()}`}, ${SECOND_USER_ID}, 'kilter', ${OTHER_TEST_CLIMB_UUID}, 40, false, 'attempt', 2, 18, false, '', ${recentClimbedAt}, now(), now(), ${boardId}),
+          (${`tick-other-board-${Date.now()}`}, ${TEST_USER_ID}, 'kilter', ${OTHER_TEST_CLIMB_UUID}, 40, false, 'send', 1, 18, false, '', ${recentClimbedAt}, now(), now(), ${otherBoard.boardId})
+      `);
 
       const stats = await boardPresenceQueries.boardPresenceStats(undefined, { boardId }, authCtx());
       expect(stats.climbsSentCount).toBe(1);
-      expect(stats.distinctClimbersCount).toBe(1);
+      expect(stats.distinctClimbersCount).toBe(2);
+      expect(stats.hardestGrade).toBe('V5');
+      expect(stats.topGrade).toBe('V5');
       expect(stats.lastSentAt).not.toBeNull();
       // ISO 8601 normalised.
       expect(stats.lastSentAt).toMatch(/T.*Z$/);
     });
 
     it('returns zeroes for a board with no ticks', async () => {
-      const stats = await boardPresenceQueries.boardPresenceStats(undefined, { boardId: 999_999 }, authCtx());
+      const resolved = await boardPresenceMutations.resolveBoardForConfig(
+        undefined,
+        { boardType: 'kilter', layoutId: 3, sizeId: 30, setIds: '7,8' },
+        authCtx(),
+      );
+      const stats = await boardPresenceQueries.boardPresenceStats(undefined, { boardId: resolved.boardId }, authCtx());
       expect(stats.climbsSentCount).toBe(0);
       expect(stats.distinctClimbersCount).toBe(0);
+      expect(stats.hardestGrade).toBeNull();
+      expect(stats.topGrade).toBeNull();
       expect(stats.lastSentAt).toBeNull();
+    });
+
+    it('rejects stats for a missing board instead of querying arbitrary ids', async () => {
+      await expect(boardPresenceQueries.boardPresenceStats(undefined, { boardId: 999_999 }, authCtx())).rejects.toThrow(
+        'Board not found',
+      );
     });
   });
 });

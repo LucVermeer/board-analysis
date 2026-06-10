@@ -4296,6 +4296,13 @@ type Mutation {
   ): ResolvedBoard!
 
   """
+  Resolve the shared board feed for boards without a BLE serial. This is a
+  per-config fallback in v1: every caller with the same board type, layout,
+  size, and set IDs gets the same shared board id.
+  """
+  resolveBoardForConfig(boardType: String!, layoutId: Int!, sizeId: Int!, setIds: String!): ResolvedBoard!
+
+  """
   Report the climb a connected phone just lit on the wall to the board's live
   "now on the wall" feed. Requires auth; the sender's identity is derived
   server-side (never client-supplied). Fire-and-forget after the BLE write

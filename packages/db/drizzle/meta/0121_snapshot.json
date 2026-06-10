@@ -4308,7 +4308,7 @@
             }
           ],
           "isUnique": true,
-          "where": "\"user_boards\".\"serial_number\" IS NOT NULL AND \"user_boards\".\"deleted_at\" IS NULL",
+          "where": "\"user_boards\".\"serial_number\" IS NOT NULL AND \"user_boards\".\"serial_number\" <> '' AND \"user_boards\".\"deleted_at\" IS NULL",
           "concurrently": false,
           "method": "btree",
           "with": {}

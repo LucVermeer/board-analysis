@@ -21,12 +21,12 @@ export type BoardPresenceClimb = {
 };
 
 export type BoardClimbSet = {
-  __typename?: 'BoardClimbSet';
+  __typename: 'BoardClimbSet';
   climb: BoardPresenceClimb;
 };
 
 export type BoardClimbCleared = {
-  __typename?: 'BoardClimbCleared';
+  __typename: 'BoardClimbCleared';
   clearedAt: string;
   seq: number;
 };
