@@ -27,6 +27,7 @@ import { computeFirstScreenHeight } from './play-drawer-layout';
 import { AngleSelectorSheet } from './AngleSelectorSheet';
 import { ClimbActionsSheet } from '../ClimbActionsSheet';
 import { BleControlSheet } from '../ble/BleControlSheet';
+import { disconnectAllBluetooth } from '../../lib/ble/bluetooth-status-store';
 import { GlassSheetBackground } from '../GlassSheetBackground';
 import { Icon } from '../Icon';
 import { usePlaylistSuggestionSource, useQueue } from '../../providers/queue-provider';
@@ -954,7 +955,8 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
         <BleControlSheet
           visible={bleControlOpen}
           onReassert={bluetooth.reassertWall}
-          onDisconnect={() => void bluetooth.disconnect()}
+          onClearLights={() => void bluetooth.clearBoard()}
+          onDisconnect={disconnectAllBluetooth}
           onClose={() => setBleControlOpen(false)}
         />
       )}

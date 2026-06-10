@@ -13,17 +13,20 @@ type BleControlSheetProps = {
   visible: boolean;
   /** Re-push the current climb to the wall (same as a lightbulb tap). */
   onReassert: () => void;
+  /** Clear every LED on the wall, keeping the connection alive. */
+  onClearLights: () => void;
   /** Drop the BLE connection. */
   onDisconnect: () => void;
   onClose: () => void;
 };
 
-// Secondary BLE controls (Re-light / Disconnect) revealed by long-pressing the
-// lightbulb — keeps the destructive Disconnect behind a labelled menu.
-function BleControlSheet({ visible, onReassert, onDisconnect, onClose }: BleControlSheetProps) {
+// Secondary BLE controls (Re-light / Turn off all lights / Disconnect) revealed
+// by long-pressing the lightbulb — keeps the destructive Disconnect behind a
+// labelled menu.
+function BleControlSheet({ visible, onReassert, onClearLights, onDisconnect, onClose }: BleControlSheetProps) {
   const { t: tSettings } = useTranslation('settings');
   const { t: tCommon } = useTranslation('common');
-  const { brandColors } = useTheme();
+  const { brandColors, systemColors } = useTheme();
   const sheetRef = useRef<BottomSheet>(null);
 
   useEffect(() => {
@@ -39,12 +42,17 @@ function BleControlSheet({ visible, onReassert, onDisconnect, onClose }: BleCont
     onClose();
   }, [onReassert, onClose]);
 
+  const handleClearLights = useCallback(() => {
+    onClearLights();
+    onClose();
+  }, [onClearLights, onClose]);
+
   const handleDisconnect = useCallback(() => {
     onDisconnect();
     onClose();
   }, [onDisconnect, onClose]);
 
-  const snapPoints = useMemo(() => ['25%'], []);
+  const snapPoints = useMemo(() => ['32%'], []);
 
   return (
     <Sheet ref={sheetRef} snapPoints={snapPoints} onClose={onClose} enablePanDownToClose>
@@ -53,6 +61,12 @@ function BleControlSheet({ visible, onReassert, onDisconnect, onClose }: BleCont
           title={tSettings('ble.relightBoard')}
           leading={<Icon name="lightbulb.fill" size={22} color={brandColors.warning} />}
           onPress={handleReassert}
+          showSeparator
+        />
+        <ListRow
+          title={tCommon('lightControl.turnOffAll')}
+          leading={<Icon name="lightbulb.slash" size={22} color={systemColors.secondaryLabel} />}
+          onPress={handleClearLights}
           showSeparator
         />
         <ListRow

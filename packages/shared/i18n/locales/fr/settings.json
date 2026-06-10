@@ -366,8 +366,6 @@
     "noDevicesFound": "Aucun panneau trouvé à proximité",
     "cancel": "Annuler",
     "unknownBoard": "Panneau inconnu",
-    "disconnected": "Panneau déconnecté",
-    "reconnect": "Reconnecter",
     "connectBoard": "Connecter le panneau",
     "relightBoard": "Rallumer le panneau",
     "holdForControls": "Maintenir pour les commandes",
