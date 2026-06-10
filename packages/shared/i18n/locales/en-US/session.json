@@ -422,6 +422,7 @@
     "triesCount_other": "{{count}} tries",
     "tickError": "Couldn't save your tick — it's saved as a draft",
     "shareError": "Couldn't share — try again",
+    "favoriteError": "Couldn't update your favorites — try again",
     "closeAria": "Close",
     "actionBar": {
       "previousAria": "Previous climb",

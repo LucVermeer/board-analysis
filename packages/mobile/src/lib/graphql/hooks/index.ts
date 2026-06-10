@@ -22,6 +22,11 @@ import {
   type ClimbStatsHistoryResponse,
 } from '@boardsesh/graphql/operations';
 import {
+  GET_FAVORITES,
+  type FavoritesQueryVariables,
+  type FavoritesQueryResponse,
+} from '@boardsesh/graphql/operations/favorites';
+import {
   DELETE_DRAFT_CLIMB_MUTATION,
   type DeleteDraftClimbMutationVariables,
   type DeleteDraftClimbMutationResponse,
@@ -295,9 +300,41 @@ export function useToggleFavorite() {
   return useMutation({
     mutationFn: (variables: ToggleFavoriteMutationVariables) =>
       getHttpClient().request<ToggleFavoriteMutationResponse>(TOGGLE_FAVORITE, variables),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['searchClimbs'] });
+    onSuccess: (_data, variables) => {
+      void queryClient.invalidateQueries({ queryKey: ['searchClimbs'] });
+      // Bust the per-climb favorite-status cache so a re-open reflects the new
+      // state from the server, not a stale 5-min-cached value.
+      void queryClient.invalidateQueries({
+        queryKey: ['favoriteStatus', variables.input.boardName, variables.input.climbUuid, variables.input.angle],
+      });
     },
+  });
+}
+
+/**
+ * Server-side favorite status for a single climb at the given angle. The
+ * favorite key is (userId, boardName, climbUuid, angle) on the backend, so the
+ * angle matters — favoriting at 40° is distinct from 25°. Disabled until a
+ * `climbUuid` is supplied (and via `enabled`, so callers can gate it on a sheet
+ * being open). Returns `true` when the climb is favorited at this angle.
+ */
+export function useFavoriteStatus(
+  boardName: string,
+  climbUuid: string | null,
+  angle: number,
+  options?: { enabled?: boolean },
+) {
+  return useQuery({
+    queryKey: ['favoriteStatus', boardName, climbUuid, angle],
+    queryFn: () =>
+      getHttpClient().request<FavoritesQueryResponse, FavoritesQueryVariables>(GET_FAVORITES, {
+        boardName,
+        climbUuids: [climbUuid!],
+        angle,
+      }),
+    select: (data) => data.favorites.includes(climbUuid!),
+    enabled: (options?.enabled ?? true) && !!climbUuid,
+    staleTime: 5 * 60 * 1000,
   });
 }
 

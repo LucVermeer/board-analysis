@@ -422,6 +422,7 @@
     "triesCount_other": "{{count}} essais",
     "tickError": "Impossible d'enregistrer ton tick. Sauvegardé en brouillon.",
     "shareError": "Impossible de partager — réessaie",
+    "favoriteError": "Impossible de mettre à jour tes favoris — réessaie",
     "closeAria": "Fermer",
     "actionBar": {
       "previousAria": "Bloc précédent",
