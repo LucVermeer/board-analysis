@@ -608,12 +608,15 @@ function getGoogleAudiences(): string[] {
 }
 
 /**
- * Best-effort nonce check. expo-apple-authentication forwards the raw nonce we
- * generated; Apple embeds SHA-256(nonce) (hex) in the token's `nonce` claim.
- * Only enforced when the client supplied a nonce. We also accept a verbatim
- * match because some runtimes/providers echo the raw nonce unhashed. The JWT
- * signature is the real authentication boundary; the nonce only ties a token
- * to this specific sign-in attempt.
+ * Best-effort nonce check, enforced only when the client supplies a `nonce`.
+ * Apple echoes the request nonce into the token's `nonce` claim verbatim
+ * (expo-apple-authentication passes it unmodified), so the client SHA-256-hashes
+ * the nonce before handing it to Apple and sends us the raw value: the token
+ * carries `SHA-256(raw)` and we re-hash to compare, so the raw nonce never lives
+ * in the token. We also accept a verbatim match as a fallback for a client that
+ * forwards the nonce unhashed. The JWT signature/audience is the real
+ * authentication boundary; the nonce only ties a token to this sign-in attempt
+ * (and is unenforced when omitted, e.g. Google's native SDK sends none).
  */
 function verifyNonce(rawNonce: string | undefined, payloadNonce: unknown): boolean {
   if (!rawNonce) return true;
@@ -628,7 +631,7 @@ function verifyNonce(rawNonce: string | undefined, payloadNonce: unknown): boole
  * wrong issuer/audience, expired, nonce mismatch). Network-free in tests when
  * `jose.jwtVerify` is mocked.
  */
-export async function verifyProviderIdentityToken(
+async function verifyProviderIdentityToken(
   provider: OAuthProvider,
   identityToken: string,
   nonce?: string,
@@ -638,6 +641,9 @@ export async function verifyProviderIdentityToken(
       const { payload } = await jwtVerify(identityToken, appleJwks, {
         issuer: APPLE_ISSUER,
         audience: APPLE_BUNDLE_ID,
+        // Both providers sign id tokens with RS256; pin it so a future JWKS that
+        // also advertises a weaker/asymmetric-confusable alg can't be selected.
+        algorithms: ['RS256'],
         clockTolerance: 60,
       });
       if (!payload.sub || !verifyNonce(nonce, payload.nonce)) return null;
@@ -659,6 +665,7 @@ export async function verifyProviderIdentityToken(
     const { payload } = await jwtVerify(identityToken, googleJwks, {
       issuer: GOOGLE_ISSUERS,
       audience: audiences,
+      algorithms: ['RS256'],
       clockTolerance: 60,
     });
     if (!payload.sub || !verifyNonce(nonce, payload.nonce)) return null;
@@ -728,8 +735,14 @@ async function findOrCreateOAuthUser(
 
     const normalizedEmail = identity.email ? identity.email.trim().toLowerCase() : null;
 
-    // 2. Link by email (mirrors web's allowDangerousEmailAccountLinking).
-    if (normalizedEmail) {
+    // 2. Link by email — ONLY when the provider asserts the email is verified.
+    // This is the security boundary NextAuth's allowDangerousEmailAccountLinking
+    // leaves to the provider: auto-linking an *unverified* provider email to an
+    // existing account would let anyone able to mint a token for an arbitrary
+    // email claim take over that account. Apple always verifies (real or relay);
+    // Google's email_verified is almost always true. An unverified email falls
+    // through to creation, which anchors on the provider sub instead.
+    if (normalizedEmail && identity.emailVerified) {
       const matchedRows = await tx
         .select({ id: users.id, emailVerified: users.emailVerified })
         .from(users)
@@ -741,7 +754,7 @@ async function findOrCreateOAuthUser(
           .insert(accounts)
           .values({ userId: matched.id, type: 'oauth', provider, providerAccountId: identity.sub })
           .onConflictDoNothing();
-        if (identity.emailVerified && !matched.emailVerified) {
+        if (!matched.emailVerified) {
           await tx.update(users).set({ emailVerified: new Date() }).where(eq(users.id, matched.id));
         }
         const tokenPair = await generateTokenPair(matched.id, tx);

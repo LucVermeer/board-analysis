@@ -1,6 +1,6 @@
 import { Platform } from 'react-native';
 import * as AppleAuthentication from 'expo-apple-authentication';
-import { getRandomBytes } from 'expo-crypto';
+import { getRandomBytes, digestStringAsync, CryptoDigestAlgorithm, CryptoEncoding } from 'expo-crypto';
 import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 import { createTimeoutSignal } from './abort-timeout';
 import { storeTokens, clearTokens, getRefreshToken } from './auth-store';
@@ -18,9 +18,13 @@ export type AuthProvider = 'google' | 'apple';
  */
 export function isGoogleSignInConfigured(): boolean {
   if (!process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID) return false;
-  if (Platform.OS === 'ios') {
-    return Boolean(process.env.EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME || process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID);
-  }
+  // iOS additionally needs the iOS client ID: GoogleSignin.configure reads it
+  // for the native flow, and app.config.ts derives the required URL scheme from
+  // it. The scheme-only override isn't enough — configure would have no client
+  // ID and signIn() would throw. (EXPO_PUBLIC_* are inlined at JS-bundle build
+  // time, so an OTA update must be built with the same Google config as the
+  // binary it lands on.)
+  if (Platform.OS === 'ios') return Boolean(process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID);
   return true;
 }
 
@@ -74,8 +78,10 @@ export async function oauthNativeSignIn(
   return { success: true };
 }
 
-// CSPRNG nonce. Apple embeds SHA-256(nonce) in the identity token's `nonce`
-// claim; the backend recomputes the hash to bind the token to this attempt.
+// CSPRNG nonce, as lowercase hex. We hand Apple SHA-256(nonce) and send the raw
+// value to the backend, which re-hashes to bind the token to this attempt — so
+// the raw nonce never lives in the identity token (Apple echoes the request
+// nonce verbatim).
 function generateNonce(): string {
   const bytes = getRandomBytes(16);
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
@@ -88,7 +94,12 @@ function isAppleCancellation(error: unknown): boolean {
 }
 
 export async function signInWithApple(): Promise<OAuthSignInResult> {
-  const nonce = generateNonce();
+  const rawNonce = generateNonce();
+  // Hand Apple the hash; the token's `nonce` claim will be this value (Apple
+  // echoes it unmodified). The backend re-hashes the raw nonce we send below.
+  const hashedNonce = await digestStringAsync(CryptoDigestAlgorithm.SHA256, rawNonce, {
+    encoding: CryptoEncoding.HEX,
+  });
   let credential: AppleAuthentication.AppleAuthenticationCredential;
   try {
     credential = await AppleAuthentication.signInAsync({
@@ -96,7 +107,7 @@ export async function signInWithApple(): Promise<OAuthSignInResult> {
         AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
         AppleAuthentication.AppleAuthenticationScope.EMAIL,
       ],
-      nonce,
+      nonce: hashedNonce,
     });
   } catch (error) {
     if (isAppleCancellation(error)) return { success: false, cancelled: true };
@@ -115,7 +126,7 @@ export async function signInWithApple(): Promise<OAuthSignInResult> {
       ? { firstName: fullName.givenName ?? undefined, lastName: fullName.familyName ?? undefined }
       : undefined;
 
-  return oauthNativeSignIn('apple', credential.identityToken, { nonce, name });
+  return oauthNativeSignIn('apple', credential.identityToken, { nonce: rawNonce, name });
 }
 
 let googleConfigured = false;

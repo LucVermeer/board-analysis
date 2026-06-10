@@ -294,6 +294,29 @@ describe('handleNativeAuthOAuth', () => {
     expect(updateCalls.filter((call) => call.table === users)).toHaveLength(0);
   });
 
+  it('does NOT link to an existing account when the provider email is unverified', async () => {
+    // Security: auto-linking an unverified provider email would let an attacker
+    // who can mint a token for a victim's email claim take over that account.
+    // The unverified identity must create its own user, anchored on its sub.
+    jwtVerify.mockResolvedValueOnce({
+      payload: { sub: 'google-sub-unverified', email: 'victim@example.com', email_verified: false },
+    });
+    queueSelect([]); // no account link by sub; the email-link path is skipped (unverified)
+
+    const req = makeRequest({ method: 'POST', body: { provider: 'google', identityToken: 'tok' } });
+    const res = makeResponse();
+    await callHandler(req, res);
+
+    expect(res.statusCode).toBe(200);
+    // A fresh user is created (not linked) and owns the new account row.
+    expect(insertsFor(users)).toHaveLength(1);
+    expect(insertsFor(accounts)).toHaveLength(1);
+    const newUserId = (insertsFor(users)[0].values as Record<string, unknown>).id;
+    expect((insertsFor(accounts)[0].values as Record<string, unknown>).userId).toBe(newUserId);
+    // No existing user's email was promoted to verified.
+    expect(updateCalls.filter((call) => call.table === users)).toHaveLength(0);
+  });
+
   it('resolves an Apple resubmission with no email via the stored sub', async () => {
     // Apple only returns the email on first authorization; later tokens omit it.
     jwtVerify.mockResolvedValueOnce({ payload: { sub: 'apple-sub-2' } });
