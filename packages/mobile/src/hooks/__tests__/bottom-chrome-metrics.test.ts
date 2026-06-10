@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { computeBottomChromeMetrics } from '../bottom-chrome-metrics';
 import {
   MATERIAL_ACTIVE_CONTEXT_BAR_HEIGHT,
+  MATERIAL_TAB_BAR_HEIGHT,
   TAB_BAR_HEIGHT,
   TOOLBAR_GAP_ABOVE_TABBAR,
   TOOLBAR_RESERVE,
@@ -55,8 +56,9 @@ describe('computeBottomChromeMetrics', () => {
     });
     expect(metrics.jsQueueToolbarVisible).toBe(true);
     expect(metrics.jsQueueReserve).toBe(MATERIAL_ACTIVE_CONTEXT_BAR_HEIGHT);
-    expect(metrics.scrollBottomPadding).toBe(TAB_BAR_HEIGHT + MATERIAL_ACTIVE_CONTEXT_BAR_HEIGHT);
-    expect(metrics.floatingControlBottom).toBe(TAB_BAR_HEIGHT + MATERIAL_ACTIVE_CONTEXT_BAR_HEIGHT);
+    // Material clears its taller M3 nav bar (80) — not the iOS 49.
+    expect(metrics.scrollBottomPadding).toBe(MATERIAL_TAB_BAR_HEIGHT + MATERIAL_ACTIVE_CONTEXT_BAR_HEIGHT);
+    expect(metrics.floatingControlBottom).toBe(MATERIAL_TAB_BAR_HEIGHT + MATERIAL_ACTIVE_CONTEXT_BAR_HEIGHT);
     expect(metrics.fixedFooterBottom).toBe(MATERIAL_ACTIVE_CONTEXT_BAR_HEIGHT);
   });
 
@@ -117,8 +119,8 @@ describe('computeBottomChromeMetrics', () => {
       nativeAccessoryMounted: false,
     });
 
-    expect(metrics.tabBarBottom).toBe(24 + TAB_BAR_HEIGHT);
-    expect(metrics.scrollBottomPadding).toBe(24 + TAB_BAR_HEIGHT);
+    expect(metrics.tabBarBottom).toBe(24 + MATERIAL_TAB_BAR_HEIGHT);
+    expect(metrics.scrollBottomPadding).toBe(24 + MATERIAL_TAB_BAR_HEIGHT);
     expect(metrics.fixedFooterBottom).toBe(0);
   });
 

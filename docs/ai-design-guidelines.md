@@ -944,7 +944,7 @@ The public prop API must stay identical across both branches so call sites never
 
 - **Icons:** Paper resolves icons through the app's `@expo/vector-icons` MaterialCommunityIcons (wired via `PaperProvider settings.icon`), so pass the **MDI** name — bridge our semantic `IconName` with `iconMap[name].android` (`src/components/icon-map.ts`).
 - **Paper-backed today:** Button, SegmentedControl→`SegmentedButtons`, SwitchRow→`Switch`, Badge, GlassIconButton→`IconButton`, Card, Toast/QueueAddedSnackbar→`Snackbar`, SearchHeader→`Searchbar`.
-- **Token-skinned but palette-consistent** (they read the same `materialSurfaces` that feeds the Paper theme): `ListRow`, `GradeChip`, `MaterialTabBar`, gorhom sheets, `AccessoryBarSurface`.
+- **Token-skinned but palette-consistent** (they read the same `materialSurfaces` / `theme.m3` roles that feed the Paper theme): `ListRow`, `GradeChip`, `MaterialTabBar` (the bottom navigation bar), `MaterialTabs` (the Profile app bar's M3 primary tabs — equal-width labels + a sliding `m3.primary` underline, distinct from the bottom-nav `MaterialTabBar`), gorhom sheets, `AccessoryBarSurface`.
 - **Tests:** `react-native-paper` is aliased to a jsdom-safe stub (`test/react-native-paper-stub.tsx`) in `packages/mobile/vite.config.ts` — the same pattern as the posthog stub — so any suite can import a Paper-backed primitive. Component tests that assert Paper props register their own `vi.mock('react-native-paper', …)`, which takes precedence.
 
 ---
