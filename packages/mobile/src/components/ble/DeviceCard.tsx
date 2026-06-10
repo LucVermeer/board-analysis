@@ -88,7 +88,8 @@ function parseSetIds(setIds: string): number[] {
     .filter((setId) => Number.isInteger(setId) && setId > 0);
 }
 
-function describeSavedBoard(entry: Extract<ResolvedBoardEntry, { kind: 'saved' }>): string | undefined {
+// Exported for testing.
+export function describeSavedBoard(entry: Extract<ResolvedBoardEntry, { kind: 'saved' }>): string | undefined {
   const location = entry.board.gymName ?? entry.board.locationName ?? undefined;
   const boardSpecs = [entry.board.layoutName, entry.board.sizeName, entry.board.setNames?.join(', ')]
     .filter((part) => part && part.length > 0)
@@ -101,7 +102,13 @@ type PreviewImageStyle = {
   height: number;
 };
 
-function getPreviewImageStyle(boardWidth: number, boardHeight: number): PreviewImageStyle {
+// Exported for testing.
+export function getPreviewImageStyle(boardWidth: number, boardHeight: number): PreviewImageStyle {
+  // A corrupt config (zero/negative/non-finite dimension) would otherwise
+  // produce an invisible zero-height strip — fall back to a square thumbnail.
+  if (!Number.isFinite(boardWidth) || !Number.isFinite(boardHeight) || boardWidth <= 0 || boardHeight <= 0) {
+    return { width: PREVIEW_IMAGE_MAX_SIZE, height: PREVIEW_IMAGE_MAX_SIZE };
+  }
   const aspectRatio = boardWidth / boardHeight;
   if (aspectRatio >= 1) {
     return {

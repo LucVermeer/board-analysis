@@ -72,7 +72,18 @@ export async function resolveBleSerialNumbers(
 }
 
 export function useResolvedBleDeviceBoards(devices: ReadonlyArray<DiscoveredDevice>): Map<string, ResolvedBoardEntry> {
-  const serialNumbers = useMemo(() => serialsFromDiscoveredDevices(devices), [devices]);
+  // The devices array gets a fresh identity on every material scan update
+  // (new device, late-arriving name), most of which add no new serial. Key the
+  // serials memo on their joined string so the array reference — and with it
+  // the query key — only changes when the serial set actually does. (TanStack
+  // hashes keys structurally, so this is render/memo hygiene rather than a
+  // network-request fix.) '@' is a safe delimiter: parseSerialNumber matches
+  // `/#([^@]+)/`, so a serial can never contain it.
+  const serialNumbersKey = useMemo(() => serialsFromDiscoveredDevices(devices).join('@'), [devices]);
+  const serialNumbers = useMemo(
+    () => (serialNumbersKey.length > 0 ? serialNumbersKey.split('@') : []),
+    [serialNumbersKey],
+  );
   const authTokenQuery = useAuthToken();
   const authToken = authTokenQuery.data;
   const { data } = useQuery({

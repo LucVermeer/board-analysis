@@ -83,7 +83,7 @@ vi.mock('../../../lib/board-details', () => ({
   })),
 }));
 
-import { DeviceCard } from '../DeviceCard';
+import { DeviceCard, describeSavedBoard, getPreviewImageStyle } from '../DeviceCard';
 
 function makeBoard(overrides: Partial<UserBoard> = {}): UserBoard {
   return {
@@ -206,5 +206,45 @@ describe('DeviceCard', () => {
     );
 
     expect(vi.mocked(getBoardRenderData)).toHaveBeenCalledWith(expect.objectContaining({ setIds: [1, 20] }));
+  });
+});
+
+describe('getPreviewImageStyle', () => {
+  it('fits a portrait board to the max height', () => {
+    expect(getPreviewImageStyle(100, 200)).toEqual({ width: 29, height: 58 });
+  });
+
+  it('fits a landscape board to the max width', () => {
+    expect(getPreviewImageStyle(200, 100)).toEqual({ width: 58, height: 29 });
+  });
+
+  it('keeps a square board at the full thumbnail size', () => {
+    expect(getPreviewImageStyle(100, 100)).toEqual({ width: 58, height: 58 });
+  });
+
+  it('falls back to a square for corrupt dimensions instead of an invisible strip', () => {
+    expect(getPreviewImageStyle(100, 0)).toEqual({ width: 58, height: 58 });
+    expect(getPreviewImageStyle(0, 200)).toEqual({ width: 58, height: 58 });
+    expect(getPreviewImageStyle(Number.NaN, 200)).toEqual({ width: 58, height: 58 });
+    expect(getPreviewImageStyle(-100, 200)).toEqual({ width: 58, height: 58 });
+  });
+});
+
+describe('describeSavedBoard', () => {
+  it('joins location and board specs', () => {
+    expect(describeSavedBoard({ kind: 'saved', board: makeBoard({ gymName: 'Beta Cave' }) })).toBe(
+      'Beta Cave, Homewall, 12x12, Original, Aux',
+    );
+  });
+
+  it('returns undefined when every optional descriptor is missing', () => {
+    const bareBoard = makeBoard({
+      gymName: undefined,
+      locationName: undefined,
+      layoutName: undefined,
+      sizeName: undefined,
+      setNames: undefined,
+    });
+    expect(describeSavedBoard({ kind: 'saved', board: bareBoard })).toBeUndefined();
   });
 });

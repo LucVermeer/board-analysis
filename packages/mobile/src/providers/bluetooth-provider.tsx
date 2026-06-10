@@ -268,7 +268,10 @@ export function BluetoothProvider({
     const parsedSetIds = setIds
       .split(',')
       .map((setId) => Number(setId.trim()))
-      .filter((setId) => Number.isInteger(setId));
+      // `Number('')` is 0, so a trailing comma would smuggle a bogus set ID 0
+      // into the render-data lookup — real set IDs are positive. Keep in
+      // lockstep with DeviceCard's parseSetIds.
+      .filter((setId) => Number.isInteger(setId) && setId > 0);
     if (parsedSetIds.length === 0) return undefined;
     return (
       getBoardRenderData({ boardName: boardName as BoardName, layoutId, sizeId, setIds: parsedSetIds })?.holdsData ??
@@ -338,7 +341,10 @@ export function BluetoothProvider({
 
   // One-shot request to silently reconnect to `serial` once the active board
   // config has actually switched to `configKey`. Set by the switch flow, cleared
-  // by the effect below the moment it fires the reconnect.
+  // by the effect below the moment it fires the reconnect. A single slot is
+  // deliberate (last writer wins): each successful switch cancels the picker
+  // that produced it, so a second request can only come from a newer flow whose
+  // intent supersedes the first.
   const [pendingAutoConnect, setPendingAutoConnect] = useState<{ serial: string; configKey: string } | null>(null);
 
   // The switched config normally propagates within one re-render, so a request
