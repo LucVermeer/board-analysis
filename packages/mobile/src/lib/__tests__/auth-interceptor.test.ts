@@ -232,6 +232,39 @@ describe('authenticatedFetch', () => {
     expect(onForcedSignOut).toHaveBeenCalledTimes(1);
   });
 
+  it('still runs the captured cleanup when the hook is cleared mid sign-out (provider unmount race)', async () => {
+    // signOut() awaits a network revoke. If AuthProvider unmounts during that
+    // window it nulls the hook — but the cleanup it registered must still fire,
+    // or the forced sign-out silently drops in exactly the case this guards.
+    mockIsTokenExpiringSoon.mockResolvedValue(false);
+    mockGetAuthToken.mockResolvedValue('old-jwt');
+    const onForcedSignOut = vi.fn();
+    setOnForcedSignOut(onForcedSignOut);
+
+    // Hold signOut open so we can clear the hook (simulating unmount) before it
+    // resolves and the callback is invoked.
+    let releaseSignOut!: () => void;
+    mockSignOut.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        releaseSignOut = resolve;
+      }),
+    );
+
+    mockFetch
+      .mockResolvedValueOnce({ status: 401, ok: false }) // initial 401
+      .mockResolvedValueOnce({ ok: false, status: 403 }); // refresh fails
+
+    const fetchPromise = authenticatedFetch('https://api.example.com/data');
+    await vi.waitFor(() => expect(mockSignOut).toHaveBeenCalledTimes(1));
+
+    // Provider unmounts mid sign-out, then the revoke resolves.
+    setOnForcedSignOut(null);
+    releaseSignOut();
+    await fetchPromise;
+
+    expect(onForcedSignOut).toHaveBeenCalledTimes(1);
+  });
+
   it('handles a failed-refresh 401 without throwing when no forced-sign-out hook is registered', async () => {
     // The interceptor can fire before the provider mounts (or after it unmounts),
     // leaving onForcedSignOut null. The optional-chain call must be a no-op.

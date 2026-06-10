@@ -65,9 +65,15 @@ let forcedSignOutPromise: Promise<void> | null = null;
 // out. signOut() must complete (revoke + clearTokens) before onForcedSignOut runs.
 function forceSignOut(): Promise<void> {
   if (!forcedSignOutPromise) {
+    // Capture the hook now. signOut() awaits a network revoke; if the provider
+    // unmounts during that window its effect nulls the module ref, but the
+    // cleanup it registered must still run (dispose the WS, reset the http
+    // client, clear caches) or the forced sign-out silently drops — the exact
+    // failure this path exists to prevent.
+    const notifyProvider = onForcedSignOut;
     forcedSignOutPromise = (async () => {
       await signOut();
-      onForcedSignOut?.();
+      notifyProvider?.();
     })().finally(() => {
       forcedSignOutPromise = null;
     });
