@@ -422,6 +422,7 @@
     "triesCount_other": "{{count}} intentos",
     "tickError": "No se pudo guardar tu marca — guardada como borrador",
     "shareError": "No se pudo compartir — inténtalo otra vez",
+    "favoriteError": "No se pudieron actualizar tus favoritos — inténtalo otra vez",
     "closeAria": "Cerrar",
     "actionBar": {
       "previousAria": "Bloque anterior",
