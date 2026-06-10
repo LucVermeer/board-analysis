@@ -46,6 +46,7 @@ vi.mock('../NativeAccessoryClimbRow', () => ({
 // the accessory render-gate keys on the local queue head exactly as today.
 vi.mock('../use-wall-or-queue-climb', () => ({
   useWallOrQueueCurrentClimb: (localClimb: unknown) => localClimb,
+  useIsWallPinned: () => false,
 }));
 
 import { QueueBottomAccessory } from '../QueueBottomAccessory';

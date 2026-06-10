@@ -57,3 +57,16 @@ export function useWallOrQueueCurrentClimb(localClimb: Climb | null): Climb | nu
     // recomputing when its identity changes keeps the read O(1) on the hot path.
   }, [useWall, wallClimb, localClimb]);
 }
+
+/**
+ * True when the accessory is pinned to a live wall feed — i.e. the leading slot
+ * is showing the wall's lit climb rather than the local queue head. The carousel
+ * uses this to (a) open the wall climb on tap and (b) suppress the horizontal
+ * prev/next swipe, which would otherwise step the invisible local queue while
+ * the pinned label never moves (so the swipe looks dead). O(1) read.
+ */
+export function useIsWallPinned(): boolean {
+  const { enabled, boardId } = useBoardPresenceControls();
+  const { currentClimb: wallClimb, isLive } = useBoardPresenceCurrent();
+  return enabled && boardId !== null && isLive && wallClimb !== null;
+}

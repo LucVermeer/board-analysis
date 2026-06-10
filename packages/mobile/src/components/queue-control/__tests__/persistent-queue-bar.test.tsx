@@ -98,6 +98,7 @@ vi.mock('../ClimbCapsule', () => ({
 }));
 vi.mock('../use-wall-or-queue-climb', () => ({
   useWallOrQueueCurrentClimb: (localClimb: { uuid: string; angle: number } | null) => cfg.wallClimb ?? localClimb,
+  useIsWallPinned: () => cfg.wallClimb != null,
 }));
 vi.mock('../LogAscentFab', () => ({
   LogAscentFab: ({ climb }: { climb: { uuid: string } }) =>

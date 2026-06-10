@@ -286,6 +286,7 @@ vi.mock('../LogAscentToolbarButton', () => ({
 // the row renders the local queue head exactly as today.
 vi.mock('../use-wall-or-queue-climb', () => ({
   useWallOrQueueCurrentClimb: (localClimb: unknown) => localClimb,
+  useIsWallPinned: () => false,
 }));
 
 import { NativeAccessoryClimbRow } from '../NativeAccessoryClimbRow';

@@ -183,6 +183,7 @@ vi.mock('../../play-drawer/use-carousel-gesture', () => ({
 // feed) so the capsule renders the local queue head exactly as today.
 vi.mock('../use-wall-or-queue-climb', () => ({
   useWallOrQueueCurrentClimb: (localClimb: unknown) => localClimb,
+  useIsWallPinned: () => false,
 }));
 
 import { ClimbCapsule } from '../ClimbCapsule';
