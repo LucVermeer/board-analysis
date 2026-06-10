@@ -9,7 +9,6 @@ import {
   useDiscoverPlaylists,
   useUserPlaylists,
   usePinnedPlaylists,
-  useSmartPlaylistCounts,
   usePlaylistMutations,
 } from '@boardsesh/playlists-react';
 import type { DiscoverablePlaylist, Playlist } from '@boardsesh/graphql/operations/playlists';
@@ -24,7 +23,6 @@ import {
   type PlaylistFormValues,
 } from '../../../src/components/playlist';
 import { DiscoverTopChrome } from '../../../src/components/chrome';
-import { DEFAULT_PINNED_SMART_PLAYLIST_TYPES, SMART_PLAYLISTS } from '../../../src/lib/smart-playlists';
 import { useAuth } from '../../../src/providers/auth-provider';
 import { useTheme } from '../../../src/providers/theme-provider';
 import { useToast } from '../../../src/providers/toast-provider';
@@ -73,21 +71,14 @@ export default function DiscoverLibrary() {
     listRef.current?.scrollTo({ y: 0, animated: true });
   }, [listRef]);
 
-  // Smart-playlist counts supply the badge counts for the built-in "Your Picks"
-  // defaults. The default cards still render at zero.
-  const { data: smartCounts, isLoading: smartCountsLoading } = useSmartPlaylistCounts({
-    token: effectiveToken,
-    tokenLoading,
-    isAuthenticated,
-  });
-
   // Owned playlists (paginated). Feeds the "See all" affordance and receives
-  // refreshes after creates/pin changes; the visible Your Picks section only
-  // renders defaults + real pins.
+  // refreshes after creates/pin changes.
   const {
     playlists: userPlaylists,
     isLoading: userLoading,
+    isLoadingMore: userLoadingMore,
     hasError: userError,
+    loadMore: loadMoreUser,
     refetch: refetchUser,
   } = useUserPlaylists({
     token: effectiveToken,
@@ -164,26 +155,18 @@ export default function DiscoverLibrary() {
     return merged;
   }, [communityPopular, communityRecent, userId]);
 
-  const smartCountsByType = useMemo(
-    () => new Map((smartCounts ?? []).map((smartCount) => [smartCount.type, smartCount.count])),
-    [smartCounts],
+  const pinnedPlaylistUuids = useMemo(
+    () => new Set(pinnedPlaylists.map((playlist) => playlist.uuid)),
+    [pinnedPlaylists],
   );
+  const visiblePinnedPlaylists = useMemo(() => pinnedPlaylists.slice(0, 8), [pinnedPlaylists]);
 
-  const defaultSmartCards = useMemo(() => {
-    if (!userId) return [];
-    return DEFAULT_PINNED_SMART_PLAYLIST_TYPES.map((smartPlaylistType) => {
-      const preset = SMART_PLAYLISTS.find((smartPlaylist) => smartPlaylist.type === smartPlaylistType);
-      if (!preset) return null;
-      return { preset, count: smartCountsByType.get(smartPlaylistType) ?? 0 };
-    }).filter((entry): entry is { preset: (typeof SMART_PLAYLISTS)[number]; count: number } => entry !== null);
-  }, [userId, smartCountsByType]);
+  const unpinnedUserPlaylists = useMemo(() => {
+    return userPlaylists.filter((playlist) => !pinnedPlaylistUuids.has(playlist.uuid));
+  }, [pinnedPlaylistUuids, userPlaylists]);
 
   const goToPlaylist = useCallback((uuid: string) => {
     router.push(`/(tabs)/discover/${uuid}`);
-  }, []);
-
-  const goToSmart = useCallback((type: string) => {
-    router.push(`/(tabs)/discover/smart/${type}`);
   }, []);
 
   const { showToast } = useToast();
@@ -243,22 +226,35 @@ export default function DiscoverLibrary() {
     [createBoard, createPlaylist, queryClient, showToast, t, refetchUser],
   );
 
-  // Pin / unpin straight from a "Your Picks" card. The shared-hook arrays
-  // aren't ours to mutate optimistically, so refetch both lists once the
-  // mutation lands and let the pinned ordering + icon re-derive.
-  const handleToggleCardPin = useCallback(
-    async (playlist: Playlist) => {
+  const togglePlaylistPin = useCallback(
+    async (playlistUuid: string, isPinned: boolean) => {
       try {
-        if (playlist.isPinnedByMe) await unpinPlaylist(playlist.uuid);
-        else await pinPlaylist(playlist.uuid);
+        if (isPinned) await unpinPlaylist(playlistUuid);
+        else await pinPlaylist(playlistUuid);
         refetchUser();
         refetchPinned();
-      } catch (err) {
-        console.error('Failed to toggle pin:', err);
-        showToast(t(playlist.isPinnedByMe ? 'library.pin.unpinFailed' : 'library.pin.pinFailed'), 'error');
+      } catch {
+        showToast(t(isPinned ? 'library.pin.unpinFailed' : 'library.pin.pinFailed'), 'error');
       }
     },
-    [pinPlaylist, unpinPlaylist, refetchUser, refetchPinned, showToast, t],
+    [pinPlaylist, refetchPinned, refetchUser, showToast, t, unpinPlaylist],
+  );
+
+  // Pin / unpin straight from a playlist card. The shared-hook arrays aren't
+  // ours to mutate optimistically, so refetch both lists once the mutation lands
+  // and let the pinned ordering + icon re-derive.
+  const handleToggleCardPin = useCallback(
+    (playlist: Playlist) => {
+      void togglePlaylistPin(playlist.uuid, playlist.isPinnedByMe);
+    },
+    [togglePlaylistPin],
+  );
+
+  const handleToggleDiscoverPin = useCallback(
+    (playlistUuid: string) => {
+      void togglePlaylistPin(playlistUuid, pinnedPlaylistUuids.has(playlistUuid));
+    },
+    [pinnedPlaylistUuids, togglePlaylistPin],
   );
 
   // Refresh owned + pinned when returning to the tab (e.g. after editing,
@@ -290,7 +286,7 @@ export default function DiscoverLibrary() {
     pinnedPlaylists.length === 0 &&
     forYouItems.length === 0 &&
     communityItems.length === 0 &&
-    !smartCountsLoading;
+    !userLoading;
 
   const handleRetryLoad = useCallback(() => {
     if (userError) refetchUser();
@@ -337,29 +333,12 @@ export default function DiscoverLibrary() {
           </Pressable>
         ) : null}
 
-        {/* Your Picks — built-in smart defaults + real pinned playlists only. */}
-        {isAuthenticated && (defaultSmartCards.length > 0 || pinnedPlaylists.length > 0) ? (
+        {/* Pinned — dense grid capped at four rows of two. */}
+        {isAuthenticated && visiblePinnedPlaylists.length > 0 ? (
           <View style={styles.section}>
-            <SectionHeader
-              title={t('library.sections.smart')}
-              actionLabel={userPlaylists.length > 0 ? t('library.allPlaylists.seeAll') : undefined}
-              onActionPress={userPlaylists.length > 0 ? () => router.push('/(tabs)/discover/all') : undefined}
-            />
+            <SectionHeader title={t('library.sections.pinned')} />
             <View style={styles.grid}>
-              {defaultSmartCards.map(({ preset, count }, index) => (
-                <View key={preset.slug} style={styles.gridItem}>
-                  <PlaylistCard
-                    name={t(preset.titleI18nKey)}
-                    climbCount={count}
-                    color={preset.color}
-                    icon={preset.icon}
-                    variant="grid"
-                    index={index}
-                    onPress={() => goToSmart(preset.type)}
-                  />
-                </View>
-              ))}
-              {pinnedPlaylists.map((playlist, index) => (
+              {visiblePinnedPlaylists.map((playlist, index) => (
                 <View key={playlist.uuid} style={styles.gridItem}>
                   <PlaylistCard
                     name={playlist.name}
@@ -367,7 +346,7 @@ export default function DiscoverLibrary() {
                     color={playlist.color}
                     icon={playlist.icon}
                     variant="grid"
-                    index={defaultSmartCards.length + index}
+                    index={index}
                     onPress={() => goToPlaylist(playlist.uuid)}
                     isPinned={playlist.isPinnedByMe}
                     onTogglePin={() => handleToggleCardPin(playlist)}
@@ -376,6 +355,33 @@ export default function DiscoverLibrary() {
               ))}
             </View>
           </View>
+        ) : null}
+
+        {/* My Playlists — user's own playlists, excluding the pinned grid above. */}
+        {isAuthenticated && (userLoading || unpinnedUserPlaylists.length > 0) ? (
+          <PlaylistScrollSection
+            title={t('library.allPlaylists.title')}
+            actionLabel={userPlaylists.length > 0 ? t('library.allPlaylists.seeAll') : undefined}
+            onActionPress={userPlaylists.length > 0 ? () => router.push('/(tabs)/discover/all') : undefined}
+            loading={userLoading && unpinnedUserPlaylists.length === 0}
+            isLoadingMore={userLoadingMore}
+            onEndReached={loadMoreUser}
+          >
+            {unpinnedUserPlaylists.map((playlist, index) => (
+              <PlaylistCard
+                key={playlist.uuid}
+                name={playlist.name}
+                climbCount={playlist.climbCount}
+                color={playlist.color}
+                icon={playlist.icon}
+                variant="scroll"
+                index={index}
+                onPress={() => goToPlaylist(playlist.uuid)}
+                isPinned={playlist.isPinnedByMe}
+                onTogglePin={() => handleToggleCardPin(playlist)}
+              />
+            ))}
+          </PlaylistScrollSection>
         ) : null}
 
         {/* For You — generated recommendation playlists. */}
@@ -396,6 +402,8 @@ export default function DiscoverLibrary() {
                 variant="scroll"
                 index={index}
                 onPress={() => goToPlaylist(playlist.uuid)}
+                isPinned={isAuthenticated && pinnedPlaylistUuids.has(playlist.uuid)}
+                onTogglePin={isAuthenticated ? () => handleToggleDiscoverPin(playlist.uuid) : undefined}
               />
             ))}
           </PlaylistScrollSection>
@@ -423,6 +431,8 @@ export default function DiscoverLibrary() {
                 })}
                 index={index}
                 onPress={() => goToPlaylist(playlist.uuid)}
+                isPinned={isAuthenticated && pinnedPlaylistUuids.has(playlist.uuid)}
+                onTogglePin={isAuthenticated ? () => handleToggleDiscoverPin(playlist.uuid) : undefined}
               />
             ))}
           </PlaylistScrollSection>
@@ -458,10 +468,9 @@ export default function DiscoverLibrary() {
         !forYouLoading &&
         !communityLoading &&
         !profileLoading &&
-        !smartCountsLoading &&
         !showLoadError &&
-        defaultSmartCards.length === 0 &&
         pinnedPlaylists.length === 0 &&
+        userPlaylists.length === 0 &&
         forYouItems.length === 0 &&
         communityItems.length === 0 ? (
           <View style={styles.emptyContainer}>
@@ -477,7 +486,8 @@ export default function DiscoverLibrary() {
 
         {/* Initial spinner before any section has resolved. */}
         {(authLoading || tokenLoading) &&
-        defaultSmartCards.length === 0 &&
+        pinnedPlaylists.length === 0 &&
+        userPlaylists.length === 0 &&
         forYouItems.length === 0 &&
         communityItems.length === 0 ? (
           <View style={styles.loadingContainer}>
