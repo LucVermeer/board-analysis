@@ -54,6 +54,7 @@ export const iconMap = {
   mirror: { ios: 'arrow.triangle.2.circlepath', android: 'sync' },
   lightbulb: { ios: 'lightbulb', android: 'lightbulb-on-outline' },
   'lightbulb.fill': { ios: 'lightbulb.fill', android: 'lightbulb-on' },
+  'lightbulb.slash': { ios: 'lightbulb.slash', android: 'lightbulb-off' },
   angle: { ios: 'angle', android: 'angle-acute' },
   tick: { ios: 'checkmark.circle.fill', android: 'check-circle' },
   'tick.outline': { ios: 'checkmark.circle', android: 'check-circle-outline' },
