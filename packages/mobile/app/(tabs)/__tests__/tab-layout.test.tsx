@@ -6,6 +6,18 @@ import { createElement, type ReactNode } from 'react';
 const cfg = vi.hoisted(() => ({
   bluetoothConnected: false,
   sessionId: null as string | null,
+  nativeAccessoryActive: true,
+  variant: 'liquidGlass' as 'liquidGlass' | 'material',
+  platformOS: 'ios' as 'ios' | 'android',
+  materialScreens: [] as Array<{ name: string; options?: { lazy?: boolean } }>,
+}));
+
+vi.mock('react-native', () => ({
+  Platform: {
+    get OS() {
+      return cfg.platformOS;
+    },
+  },
 }));
 
 vi.mock('react-i18next', () => ({
@@ -29,13 +41,30 @@ vi.mock('../../../src/theme/colors', () => ({
 }));
 
 vi.mock('../../../src/providers/theme-provider', () => ({
-  useTheme: () => ({ variant: 'liquidGlass' }),
+  useTheme: () => ({ variant: cfg.variant }),
+}));
+
+vi.mock('../../../src/hooks/use-bottom-accessory', () => ({
+  useNativeAccessoryActive: () => cfg.nativeAccessoryActive,
 }));
 
 // Stub the Material-variant path so it doesn't pull in native modules.
-vi.mock('expo-router', () => ({
-  Tabs: ({ children }: { children?: ReactNode }) => createElement('nav', { 'data-tabs-material': 'true' }, children),
-}));
+vi.mock('expo-router', () => {
+  const Tabs = Object.assign(
+    ({ children }: { children?: ReactNode }) => createElement('nav', { 'data-tabs-material': 'true' }, children),
+    {
+      Screen: ({ name, options }: { name: string; options?: { lazy?: boolean } }) => {
+        const screen = { name, options };
+        const existingIndex = cfg.materialScreens.findIndex((entry) => entry.name === name);
+        if (existingIndex === -1) cfg.materialScreens.push(screen);
+        else cfg.materialScreens[existingIndex] = screen;
+        return null;
+      },
+    },
+  );
+
+  return { Tabs };
+});
 
 vi.mock('../../../src/components/navigation/MaterialTabBar', () => ({
   MaterialTabBar: () => createElement('nav', { 'data-material-tab-bar': 'true' }),
@@ -75,6 +104,10 @@ describe('TabLayout', () => {
   beforeEach(() => {
     cfg.bluetoothConnected = false;
     cfg.sessionId = null;
+    cfg.nativeAccessoryActive = true;
+    cfg.variant = 'liquidGlass';
+    cfg.platformOS = 'ios';
+    cfg.materialScreens = [];
   });
 
   it('lands on the climbs tab by default', () => {
@@ -92,6 +125,31 @@ describe('TabLayout', () => {
     const { container } = render(<TabLayout />);
 
     expect(container.querySelector('[data-tabs="true"]')?.getAttribute('data-minimize-behavior')).toBe('onScrollDown');
+  });
+
+  it('only mounts the native bottom accessory when that path is active', () => {
+    cfg.nativeAccessoryActive = false;
+
+    const { container } = render(<TabLayout />);
+
+    expect(container.querySelector('[data-bottom-accessory="true"]')).toBeNull();
+  });
+
+  it('keeps the Record tab lazy outside Android dev builds', () => {
+    cfg.variant = 'material';
+
+    render(<TabLayout />);
+
+    expect(cfg.materialScreens.find((screen) => screen.name === 'record')?.options?.lazy).not.toBe(false);
+  });
+
+  it('eager-mounts the Record tab on Android dev builds', () => {
+    cfg.variant = 'material';
+    cfg.platformOS = 'android';
+
+    render(<TabLayout />);
+
+    expect(cfg.materialScreens.find((screen) => screen.name === 'record')?.options).toMatchObject({ lazy: false });
   });
 
   it('renders the Record badge when a session is active', () => {

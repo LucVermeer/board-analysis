@@ -1,5 +1,5 @@
 import type { ComponentProps } from 'react';
-import type { ColorValue } from 'react-native';
+import { Platform, type ColorValue } from 'react-native';
 import { NativeTabs } from 'expo-router/unstable-native-tabs';
 import { Tabs } from 'expo-router';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
@@ -10,6 +10,7 @@ import { QueueBottomAccessory } from '../../src/components/queue-control/QueueBo
 import { MaterialTabBar } from '../../src/components/navigation/MaterialTabBar';
 import { useTheme } from '../../src/providers/theme-provider';
 import { brandColors } from '../../src/theme/colors';
+import { useNativeAccessoryActive } from '../../src/hooks/use-bottom-accessory';
 
 // Cold-start on the climbs list (our search surface), not the boards tab — board
 // switching is rare, so the filtered climb list is the home base. Drives the
@@ -40,6 +41,7 @@ export default function TabLayout() {
   const { t: tPlaylists } = useTranslation('playlists');
   const { t: tSession } = useTranslation('session');
   const { variant } = useTheme();
+  const nativeAccessoryActive = useNativeAccessoryActive();
 
   // Record-tab status cue: a badge when a board is connected over Bluetooth or a
   // session is live.
@@ -49,6 +51,7 @@ export default function TabLayout() {
   // on every queue mutation. useQueueSessionId only changes on session start/end.
   const { sessionId } = useQueueSessionId();
   const showRecordBadge = isBluetoothConnected || sessionId !== null;
+  const eagerMountRecord = __DEV__ && Platform.OS === 'android';
 
   if (variant === 'material') {
     return (
@@ -63,6 +66,9 @@ export default function TabLayout() {
             title: tSession('mobile.session.recordTab'),
             tabBarIcon: materialTabIcon('record-circle', 'record-circle-outline'),
             tabBarBadge: showRecordBadge ? '' : undefined,
+            // Android Fast Refresh can stall the first lazy mount of this nested
+            // stack in Metro. Keep production cold start lazy.
+            lazy: eagerMountRecord ? false : undefined,
           }}
         />
         <Tabs.Screen
@@ -89,9 +95,11 @@ export default function TabLayout() {
     // lives in patches/react-native-screens@4.25.2.patch. `vp run check:mobile-patches`
     // (CI) fails the build if that patch ever stops applying after a dep bump.
     <NativeTabs minimizeBehavior="onScrollDown">
-      <NativeTabs.BottomAccessory>
-        <QueueBottomAccessory />
-      </NativeTabs.BottomAccessory>
+      {nativeAccessoryActive ? (
+        <NativeTabs.BottomAccessory>
+          <QueueBottomAccessory />
+        </NativeTabs.BottomAccessory>
+      ) : null}
 
       <NativeTabs.Trigger name="climbs" role="search">
         <NativeTabs.Trigger.Icon sf="magnifyingglass" md="search" />

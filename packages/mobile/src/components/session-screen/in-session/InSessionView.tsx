@@ -429,7 +429,7 @@ export function InSessionView({ translateY, screenHeight }: InSessionViewProps) 
 
   const [showEndSession, setShowEndSession] = useState(false);
   const [isEnding, setIsEnding] = useState(false);
-  const footerBottomPadding = bottomChrome.scrollBottomPadding + spacing[3];
+  const footerBottomPadding = bottomChrome.fixedFooterBottom + spacing[3];
 
   const handleConfirmEnd = useCallback(async () => {
     setIsEnding(true);
@@ -530,7 +530,10 @@ export function InSessionView({ translateY, screenHeight }: InSessionViewProps) 
     <View style={styles.container}>
       {scrollView}
 
-      <View style={[styles.footer, { backgroundColor: systemColors.background, paddingBottom: footerBottomPadding }]}>
+      <View
+        testID="in-session-footer"
+        style={[styles.footer, { backgroundColor: systemColors.background, paddingBottom: footerBottomPadding }]}
+      >
         <Button
           title={t('mobile.session.inEndSession')}
           onPress={() => setShowEndSession(true)}
