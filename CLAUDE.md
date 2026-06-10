@@ -262,3 +262,7 @@ Four preview channels (`preview-1` ... `preview-4`), one per test device. Publis
 CI: `mobile-eas-update.yml` auto-publishes on every push to a non-main branch touching `packages/mobile/` or shared packages, and comments on the PR. `EXPO_TOKEN` secret required.
 
 A new preview build is only needed when native deps change (new Expo plugin, new native module, SDK bump). JS/TS changes ride OTA.
+
+### OTA production distribution (self-hosted expo-open-ota)
+
+Production/TestFlight builds use **self-hosted** OTA, not EAS hosting — see `docs/mobile-ota-updates.md`. TestFlight/Play builds (bare `expo prebuild`) bake in `EXPO_UPDATES_CHANNEL: production` and point `updates.url` at our expo-open-ota server (`EXPO_UPDATES_URL`). Publish a production update from `main` with `vp run mobile:publish -- --channel production` (runs `eoas publish`; needs `EXPO_UPDATES_URL` + `EXPO_TOKEN`). Preview builds stay on the EAS free tier (above). runtimeVersion uses the `appVersion` policy, so bumping `version` in `app.config.ts` requires a fresh native build before OTAs for that version flow.

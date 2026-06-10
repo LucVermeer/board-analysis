@@ -47,6 +47,13 @@ jobs:
       EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID: 401523882502-0f6d7te1vekvkpmg18t8di6l0ig560q7.apps.googleusercontent.com
       EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID: 401523882502-h92kdkck1qhmdbgq7ltek87g4rg8rg3h.apps.googleusercontent.com
       EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID: 401523882502-hvfhh79p4q1qq0md7lk646c6sgmsi9q0.apps.googleusercontent.com
+      # Self-hosted OTA (expo-open-ota). EXPO_UPDATES_URL is the server's manifest
+      # endpoint (e.g. https://ota.boardsesh.com/manifest), set as a repo variable
+      # so the domain isn't hardcoded; until it's set, app.config.ts falls back to
+      # the EAS URL and OTA stays inert (harmless). The channel is baked into the
+      # binary via Expo.plist by `expo prebuild`. See docs/mobile-ota-updates.md.
+      EXPO_UPDATES_CHANNEL: production
+      EXPO_UPDATES_URL: ${{ vars.EXPO_UPDATES_URL }}
       # NOTE: currently inert at runtime — the mobile app has no
       # @sentry/react-native wiring (no Sentry.init, no src/lib/sentry.ts), so this
       # DSN is not read by the running app; client-side errors go to PostHog only
