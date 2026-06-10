@@ -1,1 +1,0 @@
-/Users/marcodejongh/Projects/github/boardsesh/hightabs/packages/mobile/modules/board-renderer/android/build/intermediates/cxx/Debug/184k181l/obj/x86_64

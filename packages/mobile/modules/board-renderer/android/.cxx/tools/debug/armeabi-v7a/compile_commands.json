@@ -1,7 +1,0 @@
-[
-{
-  "directory": "/Users/marcodejongh/Projects/github/boardsesh/hightabs/packages/mobile/modules/board-renderer/android/.cxx/Debug/184k181l/armeabi-v7a",
-  "command": "/Users/marcodejongh/Library/Android/sdk/ndk/27.0.12077973/toolchains/llvm/prebuilt/darwin-x86_64/bin/clang++ --target=armv7-none-linux-androideabi24 --sysroot=/Users/marcodejongh/Library/Android/sdk/ndk/27.0.12077973/toolchains/llvm/prebuilt/darwin-x86_64/sysroot -Dboard_renderer_jni_EXPORTS -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -march=armv7-a -mthumb -Wformat -Werror=format-security   -fno-limit-debug-info  -fPIC -o CMakeFiles/board_renderer_jni.dir/jni_bridge.cpp.o -c /Users/marcodejongh/Projects/github/boardsesh/hightabs/packages/mobile/modules/board-renderer/android/src/main/cpp/jni_bridge.cpp",
-  "file": "/Users/marcodejongh/Projects/github/boardsesh/hightabs/packages/mobile/modules/board-renderer/android/src/main/cpp/jni_bridge.cpp"
-}
-]

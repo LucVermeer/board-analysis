@@ -1,1 +1,0 @@
-/Users/marcodejongh/Projects/github/boardsesh/hightabs/packages/mobile/modules/board-renderer/android/src/main/cpp/CMakeLists.txt
