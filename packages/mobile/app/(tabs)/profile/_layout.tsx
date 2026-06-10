@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 
 export default function ProfileLayout() {
   const { t } = useTranslation('common');
+  const { t: tSettings } = useTranslation('settings');
 
   return (
     <Stack
@@ -21,6 +22,7 @@ export default function ProfileLayout() {
       {/* i18n-ignore-next-line — preview-only screen */}
       <Stack.Screen name="branch-switcher" options={{ title: 'Branch Switcher' }} />
       <Stack.Screen name="dev-servers" options={{ title: t('mobile.more.metroServersTitle') }} />
+      <Stack.Screen name="delete-account" options={{ title: tSettings('deleteAccount.title') }} />
     </Stack>
   );
 }
