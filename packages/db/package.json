@@ -41,6 +41,11 @@
       "import": "./src/client/index.ts",
       "default": "./src/client/index.ts"
     },
+    "./migration-journal": {
+      "types": "./drizzle/meta/_journal.json",
+      "import": "./drizzle/meta/_journal.json",
+      "default": "./drizzle/meta/_journal.json"
+    },
     "./queries": {
       "types": "./src/queries/index.ts",
       "import": "./src/queries/index.ts",

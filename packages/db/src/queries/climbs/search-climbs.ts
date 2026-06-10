@@ -50,6 +50,28 @@ function mapResultToClimbRow(result: RawSelectResult, params: BoardRouteParams):
   };
 }
 
+type TransactionDb = Parameters<Parameters<DbInstance['transaction']>[0]>[0];
+type SearchDb = DbInstance | TransactionDb;
+type SearchDbTransaction = DbInstance['transaction'];
+type SearchDbExecute = (query: unknown) => Promise<unknown>;
+export type StatsDrivenSort = 'ascents' | 'quality';
+
+export function getStatsDrivenSort(sortBy: string, sortOrder: 'asc' | 'desc'): StatsDrivenSort | null {
+  if (sortOrder !== 'desc') return null;
+  if (sortBy === 'ascents' || sortBy === 'quality') return sortBy;
+  return null;
+}
+
+function getTransaction(db: SearchDb): SearchDbTransaction | null {
+  const candidate = db as SearchDb & { transaction?: unknown };
+  return typeof candidate.transaction === 'function' ? (candidate.transaction.bind(db) as SearchDbTransaction) : null;
+}
+
+function getExecute(db: SearchDb): SearchDbExecute | null {
+  const candidate = db as SearchDb & { execute?: unknown };
+  return typeof candidate.execute === 'function' ? (candidate.execute.bind(db) as SearchDbExecute) : null;
+}
+
 /**
  * Search for climbs with various filters.
  * Shared between the GraphQL backend resolver and Next.js SSR.
@@ -73,12 +95,16 @@ export const searchClimbs = async (
   // Drafts never have stats, so force creation sort (stats-based sorts would be meaningless)
   const sortBy = searchParams.onlyDrafts ? 'creation' : searchParams.sortBy || 'ascents';
   const sortOrder = searchParams.sortOrder === 'asc' ? 'asc' : 'desc';
+  const statsDrivenSort = getStatsDrivenSort(sortBy, sortOrder);
   const isDraftsQuery = !!searchParams.onlyDrafts;
 
   const hasStatsFilters = filters.getClimbStatsConditions().length > 0;
+  if (!statsDrivenSort) {
+    return standardSearch(db, params, searchParams, filters, sortBy, sortOrder, isDraftsQuery, page, pageSize);
+  }
+
   const path = chooseSearchPath({
-    sortBy,
-    sortOrder,
+    statsDrivenSort,
     isDraftsQuery,
     projectsOnly: !!searchParams.projectsOnly,
     // Routes-only (frames_count > 1, boulders off) — see chooseSearchPath.
@@ -92,7 +118,7 @@ export const searchClimbs = async (
   }
 
   // Both 'stats-driven-only' and 'stats-driven-with-fallback' start with statsDriven.
-  const statsResult = await statsDrivenSearch(db, params, filters, page, pageSize);
+  const statsResult = await statsDrivenSearch(db, params, filters, statsDrivenSort, page, pageSize);
   if (statsResult.hasMore) {
     return statsResult;
   }
@@ -101,6 +127,11 @@ export const searchClimbs = async (
   // without stats filters, where stats-less climbs (projects) need to fill out
   // narrow-filter results. The fallback's dataset is small enough that the planner
   // picks a serial plan and doesn't allocate parallel-sort DSM segments.
+  //
+  // KNOWN TRADE-OFF: sparse first-page ascents/quality sorts can pay for two
+  // queries: the stats-driven index probe and then the LEFT JOIN fallback. That
+  // is intentional so stats-less climbs still appear at the bottom of the first
+  // page instead of disappearing from narrow result sets.
   //
   // KNOWN TRADE-OFF (search-climbs.ts:80-91 review feedback): when the page-0
   // fallback returns hasMore=true but the user navigates to page 1, statsDriven on
@@ -135,7 +166,7 @@ export type SearchPath = 'standard-only' | 'stats-driven-only' | 'stats-driven-w
  * compared to direct assertions on the routing logic.
  *
  * Decision tree:
- *   - non-ascents-DESC sort → standard-only (only ascents-DESC has the index-driven plan)
+ *   - non-indexed sort      → standard-only
  *   - drafts query          → standard-only (drafts have no stats rows)
  *   - projectsOnly          → standard-only (the user explicitly wants stats-less climbs)
  *   - routesOnly            → standard-only (routes are few + often unclimbed; the stats path drops them)
@@ -143,15 +174,14 @@ export type SearchPath = 'standard-only' | 'stats-driven-only' | 'stats-driven-w
  *   - otherwise             → stats-driven-only
  */
 export function chooseSearchPath(input: {
-  sortBy: string;
-  sortOrder: 'asc' | 'desc';
+  statsDrivenSort: StatsDrivenSort | null;
   isDraftsQuery: boolean;
   projectsOnly: boolean;
   routesOnly: boolean;
   page: number;
   hasStatsFilters: boolean;
 }): SearchPath {
-  if (input.sortBy !== 'ascents' || input.sortOrder !== 'desc') return 'standard-only';
+  if (!input.statsDrivenSort) return 'standard-only';
   if (input.isDraftsQuery) return 'standard-only';
   if (input.projectsOnly) return 'standard-only';
   // Routes (frames_count > 1) are a small, frequently-unclimbed set. The
@@ -166,8 +196,8 @@ export function chooseSearchPath(input: {
 
 /**
  * Stats-driven search: FROM board_climb_stats INNER JOIN board_climbs.
- * PostgreSQL reads the stats covering index in ascensionist_count DESC order
- * and stops after pageSize+1 qualifying rows.
+ * PostgreSQL reads the relevant stats covering index in sort order and stops
+ * after pageSize+1 qualifying rows.
  *
  * The INNER JOIN excludes climbs without a stats row at this angle. The caller
  * (`searchClimbs`) compensates only on page 0 without stats filters, where
@@ -178,12 +208,18 @@ export function chooseSearchPath(input: {
  * the WHERE clause — not the JOIN ON — so they apply correctly to the result set.
  */
 async function statsDrivenSearch(
-  db: DbInstance,
+  db: SearchDb,
   params: BoardRouteParams,
   filters: ReturnType<typeof createClimbFilters>,
+  sortBy: StatsDrivenSort,
   page: number,
   pageSize: number,
 ): Promise<ClimbSearchResult> {
+  const orderByClause =
+    sortBy === 'quality'
+      ? sql`${boardClimbStats.qualityAverage} DESC NULLS LAST`
+      : sql`${boardClimbStats.ascensionistCount} DESC NULLS LAST`;
+
   const selectFields = {
     uuid: boardClimbs.uuid,
     setter_username: boardClimbs.setterUsername,
@@ -223,7 +259,7 @@ async function statsDrivenSearch(
         ...filters.getClimbStatsConditions(),
       ),
     )
-    .orderBy(sql`${boardClimbStats.ascensionistCount} DESC NULLS LAST`, desc(boardClimbs.uuid))
+    .orderBy(orderByClause, desc(boardClimbs.uuid))
     .limit(pageSize + 1)
     .offset(page * pageSize)) as unknown as RawSelectResult[];
 
@@ -235,11 +271,51 @@ async function statsDrivenSearch(
 
 /**
  * Standard search: FROM board_climbs LEFT JOIN board_climb_stats.
- * Used for non-default sorts (difficulty, name, quality, creation, popular)
- * and for draft queries.
+ * Used for non-default sorts (difficulty, name, creation, popular) and for
+ * draft queries.
  */
 async function standardSearch(
-  db: DbInstance,
+  db: SearchDb,
+  params: BoardRouteParams,
+  searchParams: ClimbSearchParams,
+  filters: ReturnType<typeof createClimbFilters>,
+  sortBy: string,
+  sortOrder: string,
+  isDraftsQuery: boolean,
+  page: number,
+  pageSize: number,
+): Promise<ClimbSearchResult> {
+  const transaction = getTransaction(db);
+  if (transaction) {
+    return transaction(async (transactionDb) => {
+      await transactionDb.execute(sql`SET LOCAL max_parallel_workers_per_gather = 0`);
+      return runStandardSearch(
+        transactionDb,
+        params,
+        searchParams,
+        filters,
+        sortBy,
+        sortOrder,
+        isDraftsQuery,
+        page,
+        pageSize,
+      );
+    });
+  }
+
+  // Transaction handles cannot start nested transactions, but SET LOCAL still
+  // applies to their outer transaction. Lightweight query test doubles omit
+  // execute(), so they skip only this production planner guard.
+  const execute = getExecute(db);
+  if (execute) {
+    await execute(sql`SET LOCAL max_parallel_workers_per_gather = 0`);
+  }
+
+  return runStandardSearch(db, params, searchParams, filters, sortBy, sortOrder, isDraftsQuery, page, pageSize);
+}
+
+async function runStandardSearch(
+  db: SearchDb,
   params: BoardRouteParams,
   searchParams: ClimbSearchParams,
   filters: ReturnType<typeof createClimbFilters>,

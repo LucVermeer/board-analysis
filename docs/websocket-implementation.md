@@ -192,22 +192,31 @@ sequenceDiagram
     RM-->>WS: {clientId, users, queueState, isLeader}
     WS-->>C: joinSession response
 
-    C->>WS: Subscribe queueUpdates
-    WS->>WS: Subscribe FIRST (eager)
-    WS->>R: Subscribe to Redis channel
-    WS->>RM: getQueueState()
-    WS->>C: FullSync event
-    WS->>C: Stream incremental events
+    alt Web client
+        C->>WS: Subscribe queueUpdates
+        WS->>WS: Subscribe FIRST (eager)
+        WS->>R: Subscribe to Redis channel
+        WS->>RM: getQueueState()
+        WS->>C: FullSync event
+        WS->>C: Stream incremental events
 
-    C->>WS: Subscribe sessionUpdates
-    WS->>C: Stream session events
+        C->>WS: Subscribe sessionUpdates
+        WS->>C: Stream session events
+    else Mobile client
+        Note over C: startJoinedSubscriptions waits for JOIN_SESSION
+        C->>WS: Subscribe queueUpdates
+        WS->>R: Subscribe to Redis channel
+        WS->>C: Stream queue events
+        C->>WS: Subscribe sessionUpdates
+        WS->>C: Stream session events
+    end
 ```
 
 ### Key Points
 
 1. **Origin Validation**: WebSocket upgrades are validated against the allowed-origins list (`BOARDSESH_URL` + `www.` variant, Vercel/homelab preview patterns, dev origins). Two additional paths are accepted: connections with **no** `Origin` header (native/direct clients), and genuine **same-origin** upgrades where the `Origin`'s hostname equals the request's `Host` header (`isSameOriginUpgrade` in `handlers/cors.ts`). The same-origin path is why the React Native **Android** app connects — RN derives `Origin` from the `wss://` URL (`https://ws.boardsesh.com`, the backend's own host, never on the website allow-list) — and why preview WS hosts (`{N}.ws.preview.boardsesh.com`) work without per-PR config. It's safe against cross-site WebSocket hijacking because a cross-site attacker's `Origin` is its own domain, and WS auth is token-based (`connectionParams`), not cookie-based. Rejected upgrades log `{ origin, host, userAgent, forwardedFor, remoteAddress }` for attribution.
 2. **Authentication**: Auth token passed in `connectionParams` — web supplies a static `authToken` string; mobile supplies an async `connectionParams` provider (re-reads the token from secure storage on every reconnect). Both paths and the `shouldRetry` predicate (mobile rejects 4401 auth-error close codes) are handled by the shared `createGraphQLClient` factory in `@boardsesh/graphql-client`.
-3. **Eager Subscription**: Queue subscription starts BEFORE fetching state to prevent race conditions
+3. **Joined Subscription Gate**: Mobile waits for `JOIN_SESSION` to resolve before opening queue/session subscriptions. On socket close it tears down subscription refs, bumps the join epoch, and requires the next connection to rejoin before `startJoinedSubscriptions` subscribes again. Web still uses the eager queue subscription flow documented in the sequence above.
 4. **Session Restoration**: Sessions can be restored from Redis (warm cache) or PostgreSQL (dormant durable state)
 5. **Stable Participant Identity (authenticated only)**: Authenticated clients bind `participantId` to their verified `userId`, so reconnects across socket drops update the same participant row (peers see `UserPresenceChanged`, not `UserLeft` + `UserJoined`). Anonymous clients bind `participantId` to their `connectionId` instead — a client-supplied participantId is intentionally rejected on the server (it would let any session member impersonate any other participant, since `SessionUser.id` is broadcast to peers). Each anonymous WebSocket drop therefore appears as a fresh participant.
 6. **Initial Queue Seeding**: When creating a new session, clients can provide `initialQueue` and `initialCurrentClimb` to seed the session with an existing local queue (e.g., when starting party mode with climbs already queued)
@@ -822,9 +831,9 @@ sequenceDiagram
 - Exponential backoff: 1s, 2s, 4s, 8s, 16s, 30s (max)
 - Up to 10 retry attempts
 - On reconnection: re-join session with the same `participantId` and sync state
+- Queue and session subscription `error`/`complete` callbacks schedule a reconnect/resubscribe pass, so a completed subscription does not leave the client silently joined but deaf to future events. Mobile clears subscription refs and reopens them only after the rejoin promise resolves.
 - Delta sync attempted if gap ≤ 100 events and the replay buffer has contiguous coverage
 - Falls back to full sync if the gap is too large, replay is incomplete, or the local hash disagrees despite no sequence gap
-- Queue and session subscription `error`/`complete` callbacks schedule a reconnect/resubscribe pass, so a completed subscription does not leave the client silently joined but deaf to future events
 - Client-side supervisor detects stale connections and triggers reconnect (see [Client-Side Connection Supervisor](#client-side-connection-supervisor))
 
 **Offline queue support:**
