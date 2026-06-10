@@ -60,6 +60,23 @@ describe('bucketSessionsByRecency', () => {
   it('returns an empty array for no sessions', () => {
     expect(bucketSessionsByRecency([], NOW)).toEqual([]);
   });
+
+  // The A5-you-profile-005 fix relies on the bucketing being driven entirely by
+  // the injected `now`: SessionsTab keeps `now` in state and re-evaluates it on
+  // focus / pull-to-refresh so a session labelled "Today" before midnight gets
+  // re-bucketed as the clock advances past the day boundary. This pins that
+  // property — a stale `now` keeps "Today"; a fresh `now` corrects it.
+  it('re-buckets a session from Today to Earlier when `now` advances past the day boundary', () => {
+    const sessionAt = '2026-06-04T23:30:00.000Z';
+    const beforeMidnight = Date.parse('2026-06-04T23:45:00.000Z');
+    const afterTwoDays = Date.parse('2026-06-06T12:00:00.000Z');
+
+    const staleClock = bucketSessionsByRecency([session('late', sessionAt)], beforeMidnight);
+    expect(staleClock[0].bucket).toBe('today');
+
+    const freshClock = bucketSessionsByRecency([session('late', sessionAt)], afterTwoDays);
+    expect(freshClock[0].bucket).not.toBe('today');
+  });
 });
 
 describe('dedupeSessionsById', () => {
