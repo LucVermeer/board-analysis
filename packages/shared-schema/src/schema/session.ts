@@ -64,6 +64,20 @@ export const sessionTypeDefs = /* GraphQL */ `
   }
 
   """
+  Durable lifecycle status of a session, independent of live presence.
+  Backed by the persisted session row rather than Redis, so an ended session
+  is reported as ended even when no participants are currently connected.
+  """
+  type SessionLiveness {
+    "Unique session identifier"
+    id: ID!
+    "Durable lifecycle status: 'active' or 'ended'"
+    status: String!
+    "When the session was ended (ISO 8601); null while still active"
+    endedAt: String
+  }
+
+  """
   A session that can be discovered by nearby users via GPS.
   """
   type DiscoverableSession {

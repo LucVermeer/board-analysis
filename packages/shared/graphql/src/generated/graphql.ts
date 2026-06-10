@@ -3190,6 +3190,14 @@ export type Query = {
    */
   sessionGroupedFeed: SessionFeedResult;
   /**
+   * Lightweight, presence-independent lifecycle check for a session.
+   * Reads the durable session row (not live Redis presence), so it tells an
+   * ended session apart from one that is merely empty. Returns null when the
+   * session does not exist. Clients use this on cold start to decide whether
+   * to restore or drop a persisted session id.
+   */
+  sessionLiveness?: Maybe<SessionLiveness>;
+  /**
    * Get a session summary (stats, grade distribution, participants).
    * Available for ended sessions or active sessions with ticks.
    */
@@ -3612,6 +3620,11 @@ export type QuerySessionDetailArgs = {
 /** Root query type for all read operations. */
 export type QuerySessionGroupedFeedArgs = {
   input?: InputMaybe<ActivityFeedInput>;
+};
+
+/** Root query type for all read operations. */
+export type QuerySessionLivenessArgs = {
+  sessionId: Scalars['ID']['input'];
 };
 
 /** Root query type for all read operations. */
@@ -4261,6 +4274,21 @@ export type SessionHardestClimb = {
   climbUuid: Scalars['String']['output'];
   /** Grade name */
   grade: Scalars['String']['output'];
+};
+
+/**
+ * Durable lifecycle status of a session, independent of live presence.
+ * Backed by the persisted session row rather than Redis, so an ended session
+ * is reported as ended even when no participants are currently connected.
+ */
+export type SessionLiveness = {
+  __typename?: 'SessionLiveness';
+  /** When the session was ended (ISO 8601); null while still active */
+  endedAt?: Maybe<Scalars['String']['output']>;
+  /** Unique session identifier */
+  id: Scalars['ID']['output'];
+  /** Durable lifecycle status: 'active' or 'ended' */
+  status: Scalars['String']['output'];
 };
 
 /** Participant stats in a session summary. */
