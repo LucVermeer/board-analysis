@@ -150,6 +150,9 @@
     "savingToAppleHealth": "Guardando en Apple Health…",
     "savedToAppleHealth": "Guardado en Apple Health",
     "saveToAppleHealthRetry": "Guardar en Apple Health (reintentar)",
+    "loadErrorTitle": "No se pudo cargar tu sesión",
+    "loadErrorMessage": "Tus vías están guardadas, solo falló el resumen. Inténtalo de nuevo o vuelve atrás.",
+    "retry": "Reintentar",
     "minutes": "{{count}}min",
     "hours": "{{count}}h",
     "hoursAndMinutes": "{{hours}}h {{mins}}min"
@@ -292,6 +295,7 @@
       "removeClimb": "Eliminar bloque",
       "positionLabel": "posición {{position}}",
       "syncError": "Error de sincronización de cola",
+      "outOfSyncRefreshed": "La cola estaba desincronizada. Se actualizó con tu grupo.",
       "sessionCreateError": "No se pudo crear la sesión",
       "noBoardSelected": "Selecciona un board primero",
       "actionFailed": "Acción fallida. Inténtalo de nuevo.",
@@ -421,6 +425,7 @@
     "triesCount_other": "{{count}} intentos",
     "tickError": "No se pudo guardar tu marca — guardada como borrador",
     "shareError": "No se pudo compartir — inténtalo otra vez",
+    "favoriteError": "No se pudieron actualizar tus favoritos — inténtalo otra vez",
     "closeAria": "Cerrar",
     "actionBar": {
       "previousAria": "Bloque anterior",

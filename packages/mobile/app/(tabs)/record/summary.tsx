@@ -48,17 +48,40 @@ function getGradeColor(index: number): string {
 
 export default function SessionSummaryScreen() {
   const { sessionId } = useLocalSearchParams<{ sessionId: string }>();
-  const { data: summary, isLoading } = useSessionSummary(sessionId ?? null);
+  const { data: summary, isPending, isFetching, isError, refetch } = useSessionSummary(sessionId ?? null);
   const { t } = useTranslation('session');
   const { systemColors, brandColors: brand } = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { formatGrade } = useGradeFormat();
 
-  if (isLoading || !summary) {
+  // Still loading: query hasn't settled yet (first fetch in flight or refetching
+  // after a retry). isPending covers the disabled (no sessionId) case too.
+  if ((isPending || isFetching) && !summary) {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color={brand.primary} />
+      </View>
+    );
+  }
+
+  // Settled but unusable: the query errored or resolved to no summary. Without
+  // this branch the screen would spin forever with no way out but the back
+  // gesture, right at the post-session payoff moment.
+  if (isError || !summary) {
+    return (
+      <View style={[styles.centered, styles.errorContent]}>
+        <Icon name="warning" size={40} color={systemColors.secondaryLabel} />
+        <Text variant="title3" style={styles.errorTitle}>
+          {t('summary.loadErrorTitle')}
+        </Text>
+        <Text variant="body" color={systemColors.secondaryLabel} style={styles.errorMessage}>
+          {t('summary.loadErrorMessage')}
+        </Text>
+        <View style={styles.errorActions}>
+          <Button title={t('summary.retry')} variant="text" onPress={() => void refetch()} />
+          <Button title={t('summary.done')} variant="filled" onPress={() => router.back()} />
+        </View>
       </View>
     );
   }
@@ -200,6 +223,22 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  errorContent: {
+    paddingHorizontal: spacing[6],
+    gap: spacing[3],
+  },
+  errorTitle: {
+    textAlign: 'center',
+  },
+  errorMessage: {
+    textAlign: 'center',
+  },
+  errorActions: {
+    marginTop: spacing[2],
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[3],
   },
   durationRow: {
     flexDirection: 'row',

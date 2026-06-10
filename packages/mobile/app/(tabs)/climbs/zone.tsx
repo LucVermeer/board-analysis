@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
 import {
   buildDefaultZone,
+  parseHoldsFilter,
   pruneHoldsToZone,
   type BoardDimensions,
   type HoldPositionLookup,
@@ -73,19 +74,6 @@ function parseZoneBox(raw: string | undefined): ZoneBoxInput | null {
     // Malformed param → start with no zone rather than crash.
   }
   return null;
-}
-
-function parseHoldsFilter(raw: string | undefined): HoldsFilter {
-  if (!raw) return {};
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-      return parsed as HoldsFilter;
-    }
-  } catch {
-    // Malformed param → start empty.
-  }
-  return {};
 }
 
 function parseZoneMode(raw: string | undefined): ZoneMatchMode {

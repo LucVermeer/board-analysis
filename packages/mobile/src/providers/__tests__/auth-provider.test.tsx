@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { renderHook, waitFor, act } from '@testing-library/react';
+import { renderHook, render, waitFor, act } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
@@ -26,6 +26,13 @@ const isTokenExpiringSoonMock = vi.fn();
 vi.mock('../../lib/auth-store', () => ({
   getAuthToken: () => getAuthTokenMock(),
   isTokenExpiringSoon: () => isTokenExpiringSoonMock(),
+}));
+
+// checkAuth reports keychain read failures to Sentry; record the calls so the
+// rejection test can assert the failure was surfaced (and is a no-op otherwise).
+const reportErrorMock = vi.fn();
+vi.mock('../../lib/sentry', () => ({
+  reportError: (...args: unknown[]) => reportErrorMock(...args),
 }));
 
 const authSignOutMock = vi.fn();
@@ -70,6 +77,7 @@ describe('AuthProvider.signOut', () => {
     clearStoredActiveBoardMock.mockReset();
     resetHttpClientMock.mockReset();
     disposeWsClientMock.mockReset();
+    reportErrorMock.mockReset();
     // Default: a signed-in session whose token is fresh, so checkAuth flips
     // isAuthenticated to true without taking the refresh branch.
     getAuthTokenMock.mockResolvedValue('jwt-token');
@@ -137,5 +145,38 @@ describe('AuthProvider.signOut', () => {
     // Active board cache was wiped — both the targeted removeQueries and the
     // subsequent clear() do this; verifying the end state is enough.
     expect(queryClient.getQueryData(['activeBoard'])).toBeUndefined();
+  });
+});
+
+describe('AuthProvider.checkAuth keychain read failure', () => {
+  beforeEach(() => {
+    getAuthTokenMock.mockReset();
+    isTokenExpiringSoonMock.mockReset();
+    reportErrorMock.mockReset();
+    isTokenExpiringSoonMock.mockResolvedValue(false);
+  });
+
+  // Repro for A11-auth-onboarding-001: a locked-keychain launch makes
+  // SecureStore.getItemAsync REJECT (not return null). Without a try/catch in
+  // checkAuth the rejection escapes, isLoading never flips to false, onReady
+  // never fires, and the splash screen hangs forever. The fix treats a read
+  // failure as logged-out so the loading gate always resolves.
+  it('still resolves the loading gate (onReady fires) when the token read rejects', async () => {
+    getAuthTokenMock.mockRejectedValue(new Error('keychain locked'));
+    const onReady = vi.fn();
+
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider onReady={onReady}>{children}</AuthProvider>
+      </QueryClientProvider>
+    );
+
+    render(wrapper({ children: null }));
+
+    // The whole point: the splash gate must release even though the read threw.
+    await waitFor(() => expect(onReady).toHaveBeenCalled());
+    // The failure is surfaced to Sentry rather than swallowed silently.
+    expect(reportErrorMock).toHaveBeenCalledTimes(1);
   });
 });

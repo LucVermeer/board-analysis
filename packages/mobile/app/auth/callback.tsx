@@ -20,10 +20,12 @@ const exchangedTokens = new Set<string>();
 
 export default function AuthCallback() {
   const { transferToken } = useLocalSearchParams<{ transferToken: string }>();
+  const { t } = useTranslation('auth');
+  // Holds a translated, user-facing failure message — never raw server text,
+  // which the backend returns in English only.
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
   const { refreshAuthState } = useAuth();
-  const { t } = useTranslation('auth');
   const theme = useTheme();
 
   useEffect(() => {
@@ -31,7 +33,7 @@ export default function AuthCallback() {
       // auth_method is unknown here — the OAuth provider isn't echoed back on the
       // transfer-token exchange (same reason Login Succeeded omits it).
       track(SHARED_EVENTS.LoginFailed, { flow: 'native', failure_reason: 'no_transfer_token' });
-      setError(t('nativeStart.noTransferToken'));
+      setError(t('callback.noTransferToken'));
       return;
     }
 
@@ -46,21 +48,21 @@ export default function AuthCallback() {
           router.replace('/(tabs)/climbs');
         } else {
           track(SHARED_EVENTS.LoginFailed, { flow: 'native', failure_reason: classifyNativeAuthFailureReason(result) });
-          setError(result.error);
+          // result.error is a raw English/server string; show a translated
+          // generic message instead (mirrors login.tsx's networkError pattern).
+          setError(t('callback.failed'));
         }
       })
-      .catch((exchangeError: unknown) => {
+      .catch(() => {
         track(SHARED_EVENTS.LoginFailed, { flow: 'native', failure_reason: 'exception' });
-        setError(exchangeError instanceof Error ? exchangeError.message : t('nativeStart.unexpectedError'));
+        setError(t('callback.unexpectedError'));
       });
   }, [transferToken, router, refreshAuthState, t]);
 
   if (error) {
     return (
       <View style={styles.container}>
-        <Text style={[styles.errorText, { color: theme.brandColors.error }]}>
-          {t('nativeStart.signInFailed', { reason: error })}
-        </Text>
+        <Text style={[styles.errorText, { color: theme.brandColors.error }]}>{error}</Text>
       </View>
     );
   }

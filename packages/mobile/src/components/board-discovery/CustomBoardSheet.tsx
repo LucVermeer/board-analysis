@@ -3,7 +3,7 @@ import { View, ScrollView, Pressable, StyleSheet } from 'react-native';
 import type BottomSheet from '@gorhom/bottom-sheet';
 import { useTranslation } from 'react-i18next';
 import type { BoardName, UserBoard } from '@boardsesh/shared-schema';
-import { SUPPORTED_BOARDS, ANGLES } from '@boardsesh/board-config';
+import { SUPPORTED_BOARDS, ANGLES, normaliseSetIds } from '@boardsesh/board-config';
 import { useCreateBoard } from '../../lib/graphql/hooks';
 import {
   getBoardLayouts,
@@ -125,7 +125,10 @@ export const CustomBoardSheet = forwardRef<BottomSheet, CustomBoardSheetProps>(f
 
   const handleCreate = async () => {
     if (layoutId == null || sizeId == null || setIds.length === 0) return;
-    const wireSetIds = setIds.join(',');
+    // Store sets in canonical (deduped, numerically sorted) order so a board
+    // built by re-ticking sets (which re-appends at the end) matches an existing
+    // owned board instead of inserting a near-duplicate.
+    const wireSetIds = normaliseSetIds(setIds.join(','));
 
     // If the user already owns this exact config, the server would reject the
     // create as a duplicate — activate the existing board instead of erroring.

@@ -13,6 +13,7 @@ import { formatTickRelativeTime } from '@boardsesh/profile-stats';
 import { hapticLight } from '../../lib/haptics';
 import { spacing, borderRadius } from '../../theme/tokens';
 import { useTheme } from '../../providers/theme-provider';
+import { useToast } from '../../providers/toast-provider';
 
 type CommentSheetProps = {
   sheetRef: RefObject<BottomSheet | null>;
@@ -27,6 +28,7 @@ type CommentSheetProps = {
 export function CommentSheet({ sheetRef, entityId, entityType = 'session', onClose }: CommentSheetProps) {
   const { t } = useTranslation('you');
   const { systemColors, brandColors } = useTheme();
+  const { showToast } = useToast();
   const [draft, setDraft] = useState('');
 
   const commentsQuery = useComments(entityType, entityId ?? undefined, !!entityId);
@@ -37,8 +39,16 @@ export function CommentSheet({ sheetRef, entityId, entityType = 'session', onClo
     const body = draft.trim();
     if (!body || !entityId) return;
     hapticLight();
-    addComment.mutate({ entityType, entityId, body });
-    setDraft('');
+    // Clear the draft only once the comment lands. On failure keep the text in
+    // the composer and surface a toast so it isn't silently lost. The send
+    // button is disabled while the mutation is pending, so no double-send.
+    addComment.mutate(
+      { entityType, entityId, body },
+      {
+        onSuccess: () => setDraft(''),
+        onError: () => showToast(t('mobile.comments.sendError'), 'error'),
+      },
+    );
   };
 
   return (

@@ -187,6 +187,9 @@ vi.mock('../../../providers/queue-provider', () => ({
     previousClimb: queue.previousClimb,
   }),
   usePlaylistSuggestionSource: () => null,
+  // Default to driver (not preview-only); these tests encode the bar's wiring,
+  // not party gating — that is covered in use-queue-carousel.test.tsx.
+  useIsPartyPreviewOnly: () => false,
 }));
 
 vi.mock('../../../providers/drawer-host-provider', () => ({

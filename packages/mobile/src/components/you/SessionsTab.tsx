@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { View, RefreshControl, StyleSheet } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import type BottomSheet from '@gorhom/bottom-sheet';
 import type { SessionFeedItem } from '@boardsesh/shared-schema';
@@ -13,7 +13,7 @@ import { SessionFeedCard } from './SessionFeedCard';
 import { SessionsFeedHeader } from './SessionsFeedHeader';
 import { FeedSectionLabel } from './FeedSectionLabel';
 import { CommentSheet } from './CommentSheet';
-import { bucketSessionsByRecency, type FeedRecencyBucket } from '../../lib/feed-time-buckets';
+import { bucketSessionsByRecency, dedupeSessionsById, type FeedRecencyBucket } from '../../lib/feed-time-buckets';
 import { useSessionGroupedFeed, useBulkVoteSummaries } from '../../lib/graphql/hooks';
 import { useBottomChromeMetrics } from '../../hooks/use-bottom-chrome-metrics';
 import { spacing } from '../../theme/tokens';
@@ -41,14 +41,24 @@ export function SessionsTab({ userId }: { userId: string | undefined }) {
   const [commentSessionId, setCommentSessionId] = useState<string | null>(null);
 
   const feed = useSessionGroupedFeed({ userId }, !!userId);
+  // De-dupe across pages: the OFFSET-paginated feed can return the same session
+  // on two adjacent pages when its rank shifts mid-refetch, which would
+  // otherwise produce duplicate FlashList keys (keyExtractor returns sessionId).
   const sessions = useMemo(
-    () => feed.data?.pages.flatMap((page) => page.sessionGroupedFeed.sessions) ?? [],
+    () => dedupeSessionsById(feed.data?.pages.flatMap((page) => page.sessionGroupedFeed.sessions) ?? []),
     [feed.data],
   );
 
-  // One clock captured per mount (stable across renders) so the rollup header
-  // and the section bucketing agree and neither rebuckets on every render.
-  const [now] = useState(() => Date.now());
+  // A single `now` shared by the rollup header and the section bucketing so the
+  // two agree and neither rebuckets on every render. It re-evaluates on focus
+  // and on pull-to-refresh (not per frame), so a screen left mounted across
+  // midnight stops mislabelling yesterday's session as "Today".
+  const [now, setNow] = useState(() => Date.now());
+  useFocusEffect(
+    useCallback(() => {
+      setNow(Date.now());
+    }, []),
+  );
 
   // Flatten the recency groups into header + session rows for a single
   // virtualized list (FlashList has no built-in section support).
@@ -131,7 +141,10 @@ export function SessionsTab({ userId }: { userId: string | undefined }) {
         refreshControl={
           <RefreshControl
             refreshing={feed.isRefetching}
-            onRefresh={() => void feed.refetch()}
+            onRefresh={() => {
+              setNow(Date.now());
+              void feed.refetch();
+            }}
             tintColor={brandColors.primary}
           />
         }

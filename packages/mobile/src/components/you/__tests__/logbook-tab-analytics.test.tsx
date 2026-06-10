@@ -32,7 +32,8 @@ vi.mock('../../../lib/analytics', () => ({ track: analytics.track }));
 vi.mock('react-native', () => ({
   View: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
   RefreshControl: () => null,
-  StyleSheet: { create: (styles: unknown) => styles },
+  Pressable: () => null,
+  StyleSheet: { create: (styles: unknown) => styles, hairlineWidth: 1 },
 }));
 
 // Render every data row through renderItem so the mocked LogbookRow mounts and
@@ -68,7 +69,7 @@ vi.mock('../../../lib/graphql/hooks', () => ({ useUserAscentsFeed: () => feed })
 vi.mock('../../../hooks/use-bottom-chrome-metrics', () => ({
   useBottomChromeMetrics: () => ({ scrollBottomPadding: 0 }),
 }));
-vi.mock('../../../theme/tokens', () => ({ spacing: {} }));
+vi.mock('../../../theme/tokens', () => ({ spacing: {}, borderRadius: {} }));
 vi.mock('../../../providers/theme-provider', () => ({
   useTheme: () => ({ systemColors: {}, brandColors: {} }),
 }));

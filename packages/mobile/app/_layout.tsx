@@ -19,7 +19,7 @@ import { ThemeProvider, useTheme } from '../src/providers/theme-provider';
 import { MaterialThemeProvider } from '../src/providers/material-theme-provider';
 import { AuthProvider } from '../src/providers/auth-provider';
 import { I18nProvider } from '../src/providers/i18n-provider';
-import { BluetoothProvider } from '../src/providers/bluetooth-provider';
+import { BluetoothProviderWrapper } from '../src/providers/bluetooth-provider-wrapper';
 import { ToastProvider } from '../src/providers/toast-provider';
 import { QueueProvider } from '../src/providers/queue-provider';
 import { QueueSnackbarProvider } from '../src/providers/queue-snackbar-provider';
@@ -39,7 +39,6 @@ import { toBoardName } from '@boardsesh/board-config';
 import { PersistentQueueBar } from '../src/components/queue-control/persistent-queue-bar';
 import { useMobileClimbActionsData } from '../src/lib/graphql/hooks';
 import { useActiveBoard } from '../src/lib/graphql/use-active-board';
-import { LiveActivityBridge } from '../src/lib/live-activity/live-activity-bridge';
 import { Text } from '../src/components/Text';
 import { Button } from '../src/components/Button';
 import { Icon } from '../src/components/Icon';
@@ -138,32 +137,6 @@ function ClimbActionsDataWrapper({ children }: { children: ReactNode }) {
     <FavoritesProvider {...favoritesProviderProps}>
       <PlaylistsProvider {...playlistsProviderProps}>{children}</PlaylistsProvider>
     </FavoritesProvider>
-  );
-}
-
-function BluetoothProviderWrapper({ children }: { children: ReactNode }) {
-  const { data: activeBoard } = useActiveBoard();
-
-  if (!activeBoard) {
-    return <>{children}</>;
-  }
-
-  return (
-    <BluetoothProvider
-      boardName={activeBoard.boardType}
-      layoutId={activeBoard.layoutId}
-      sizeId={activeBoard.sizeId}
-      setIds={activeBoard.setIds}
-      boardUuid={activeBoard.uuid}
-    >
-      <LiveActivityBridge
-        boardName={activeBoard.boardType}
-        layoutId={activeBoard.layoutId}
-        sizeId={activeBoard.sizeId}
-        setIds={activeBoard.setIds}
-      />
-      {children}
-    </BluetoothProvider>
   );
 }
 

@@ -11,6 +11,7 @@ import {
 } from '@boardsesh/ble-protocol/aurora';
 import { getMoonboardBluetoothPacket, isMoonboardDeviceName } from '@boardsesh/ble-protocol/moonboard';
 import { classifyBleFailure, isDisconnectionError } from '@boardsesh/ble-protocol/connection-error';
+import { boardSupportsMirroring } from '@boardsesh/play-view';
 import type { AuroraBoardName } from '@boardsesh/shared-schema';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { RECORD_BOARD_SERIAL } from '@boardsesh/graphql/operations';
@@ -28,13 +29,25 @@ import type { HoldPlacement } from '../../components/board-renderer/types';
 import { track } from '../analytics';
 
 // Exported for testing — isolates the .packet extraction so regressions are caught.
+//
+// Returns:
+//  - undefined when there are no frames (nothing to send)
+//  - false when every placement was skipped (the packet builder still emits the
+//    "clear all" packet `l##`, so writing it would silently dark the board while
+//    the caller reported success). The caller surfaces the incompatible-climb
+//    error instead of writing — web parity (use-board-bluetooth.ts:348-363).
+//  - true after a successful write.
 export async function dispatchMoonboardPacket(
   frames: string,
   write: BluetoothAdapter['write'],
   signal?: AbortSignal,
-): Promise<true | undefined> {
+): Promise<boolean | undefined> {
   if (!frames) return undefined;
-  const { packet } = getMoonboardBluetoothPacket(frames);
+  const { packet, skippedRoleCount, skippedPositionCount, totalPlacements } = getMoonboardBluetoothPacket(frames);
+  const skippedCount = skippedRoleCount + skippedPositionCount;
+  if (totalPlacements > 0 && skippedCount === totalPlacements) {
+    return false;
+  }
   await write(packet, signal);
   return true;
 }
@@ -322,6 +335,20 @@ export function useBoardBluetooth({
               adapterRef.current.write.bind(adapterRef.current),
               combinedSignal,
             );
+            // false = every placement was skipped (unrecognised/corrupt hold
+            // data). The packet builder would emit a "clear all" packet, darking
+            // the board, so dispatchMoonboardPacket refuses to write. Surface the
+            // same incompatible-climb error the Aurora branch uses instead of
+            // letting the AutoSender buzz success on a dark board.
+            if (sent === false) {
+              console.warn('[BLE] All MoonBoard placements skipped — climb has unrecognised hold data');
+              Alert.alert(t('ble.notAvailable'), t('ble.errorIncompatible'));
+              track(SHARED_EVENTS.ClimbSentToBoardFailure, {
+                ...boardAnalyticsProperties,
+                failureReason: 'incompatible_climb',
+              });
+              return false;
+            }
             if (sent) track(SHARED_EVENTS.ClimbSentToBoardSuccess, boardAnalyticsProperties);
             return sent;
           }
@@ -335,7 +362,23 @@ export function useBoardBluetooth({
 
           let framesToSend = frames;
 
-          if (mirrored && holdsData && holdsData.length > 0) {
+          if (mirrored && boardSupportsMirroring(boardName, layoutId)) {
+            // On a board that supports mirroring, a mirrored send REQUIRES the
+            // hold map to produce mirrored frames. If it's missing/empty we must
+            // refuse rather than send the original (un-mirrored) frames — that
+            // would light the wrong holds on the wall while the AutoSender buzzed
+            // success. Web parity (use-board-bluetooth.ts:397-403).
+            if (!holdsData || holdsData.length === 0) {
+              console.error(
+                `[BLE] Cannot mirror frames: holdsData is missing or empty for ${boardName} layout=${layoutId}`,
+              );
+              Alert.alert(t('ble.notAvailable'), t('ble.errorIncompatible'));
+              track(SHARED_EVENTS.ClimbSentToBoardFailure, {
+                ...boardAnalyticsProperties,
+                failureReason: 'missing_mirror_data',
+              });
+              return false;
+            }
             framesToSend = convertToMirroredFramesString(frames, holdsData);
           }
 
@@ -562,7 +605,19 @@ export function useBoardBluetooth({
         setIsConnected(true);
         onConnectionChange?.(true);
         onConnectSuccess?.(parsedSerial);
-        track(SHARED_EVENTS.BluetoothConnectionSuccess, { boardName, layoutId, sizeId });
+        // apiLevel is the level parseApiLevel actually picked; deviceNamePresent
+        // records whether an advertised name was even available. parseApiLevel
+        // silently defaults to v2 when the name is missing/unparseable, and v2
+        // encoding drops LED positions > 1023 — so a v3 board connecting with no
+        // advertised name would light only part of the wall. These two props let
+        // us see in PostHog whether that fallback ever fires in the wild.
+        track(SHARED_EVENTS.BluetoothConnectionSuccess, {
+          boardName,
+          layoutId,
+          sizeId,
+          apiLevel: apiLevelRef.current,
+          deviceNamePresent: !!connection.deviceName,
+        });
         return true;
       } catch (error) {
         console.error('Error connecting to Bluetooth:', error);

@@ -24,6 +24,13 @@ export type SubscriptionClimb = {
   stars: number;
   difficulty_error: string;
   benchmark_difficulty: string | null;
+  // mirrored survives a reconnect FullSync so a peer-set mirror flag isn't
+  // dropped (the Bluetooth auto-sender repaints unmirrored otherwise).
+  // framesCount/framesPace drive multi-frame playback at the setter's pace.
+  mirrored?: boolean | null;
+  is_no_match?: boolean | null;
+  framesCount?: number | null;
+  framesPace?: number | null;
 };
 
 export type SubscriptionQueueItem = {
@@ -52,6 +59,10 @@ export function toClimbQueueItem(subscriptionItem: SubscriptionQueueItem): Climb
       stars: subscriptionItem.climb.stars,
       difficulty_error: subscriptionItem.climb.difficulty_error,
       benchmark_difficulty: subscriptionItem.climb.benchmark_difficulty,
+      mirrored: subscriptionItem.climb.mirrored,
+      is_no_match: subscriptionItem.climb.is_no_match,
+      framesCount: subscriptionItem.climb.framesCount,
+      framesPace: subscriptionItem.climb.framesPace,
     },
   };
 }

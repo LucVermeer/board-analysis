@@ -41,6 +41,11 @@ export type Climb = {
   userAttempts?: number | null;
   created_at?: string | null;
   published_at?: string | null;
+  // Multi-frame playback metadata: how many snapshots the climb has and the
+  // setter-chosen per-frame pace (ms). Carried through queue conversion so
+  // multi-frame playback uses the setter's pace instead of DEFAULT_PACE_MS.
+  framesCount?: number | null;
+  framesPace?: number | null;
 };
 
 export type ClimbQueueItem = {
