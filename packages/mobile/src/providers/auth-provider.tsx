@@ -14,6 +14,7 @@ import {
 } from '../lib/auth';
 import { reset as resetAnalytics, track } from '../lib/analytics';
 import { reportError } from '../lib/sentry';
+import { setOnForcedSignOut } from '../lib/auth-interceptor';
 import { resetHttpClient } from '../lib/graphql/client';
 import { disposeWsClient } from '../lib/graphql/ws-client';
 import { clearStoredSessionId } from '../lib/session-store';
@@ -119,9 +120,12 @@ export function AuthProvider({ children, onReady }: AuthProviderProps) {
     [checkAuth],
   );
 
-  const signOut = useCallback(async () => {
-    track(SHARED_EVENTS.Logout, { method: 'manual' });
-    await authSignOut();
+  // The shared signed-out cleanup, used by both the manual `signOut` below and
+  // the interceptor's forced sign-out (failed-refresh 401). It deliberately
+  // omits the two caller-specific steps: the manual `Logout` analytics event,
+  // and `authSignOut()` (the token revoke + clear) — the forced path's caller
+  // already revoked, so running it here would double-revoke.
+  const runSignedOutCleanup = useCallback(async () => {
     resetAnalytics();
     await Promise.all([clearStoredSessionId(), clearStoredActiveBoard()]);
     // Drop the in-memory active-board cache too. It's `staleTime: Infinity`, so
@@ -138,6 +142,24 @@ export function AuthProvider({ children, onReady }: AuthProviderProps) {
     queryClient.clear();
     setIsAuthenticated(false);
   }, [queryClient]);
+
+  const signOut = useCallback(async () => {
+    track(SHARED_EVENTS.Logout, { method: 'manual' });
+    await authSignOut();
+    await runSignedOutCleanup();
+  }, [runSignedOutCleanup]);
+
+  // Let the lib-layer 401 interceptor drive the same cleanup. On a failed-refresh
+  // 401 it has already revoked + cleared tokens; this flips the provider out of
+  // the authenticated UI right away instead of waiting for the next foreground
+  // checkAuth. `setOnForcedSignOut` is our own module setter (not React state),
+  // so the function value is stored verbatim.
+  useEffect(() => {
+    setOnForcedSignOut(() => {
+      void runSignedOutCleanup();
+    });
+    return () => setOnForcedSignOut(null);
+  }, [runSignedOutCleanup]);
 
   const onReadyRef = useRef(onReady);
   onReadyRef.current = onReady;

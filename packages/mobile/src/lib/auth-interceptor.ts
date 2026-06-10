@@ -4,6 +4,17 @@ import { BACKEND_URL } from './env';
 
 let refreshPromise: Promise<boolean> | null = null;
 
+// The interceptor lives in the lib layer and can't import the AuthProvider, but
+// a failed-refresh 401 means the session is dead and the provider must run its
+// full signed-out cleanup (flip isAuthenticated → redirect to login, dispose the
+// WS client, reset analytics, clear caches). The provider registers that cleanup
+// here in a useEffect; we invoke it from the 401 branch below.
+let onForcedSignOut: (() => void) | null = null;
+
+export function setOnForcedSignOut(callback: (() => void) | null): void {
+  onForcedSignOut = callback;
+}
+
 async function refreshTokens(): Promise<boolean> {
   const currentRefreshToken = await getRefreshToken();
   if (!currentRefreshToken) return false;
@@ -68,6 +79,10 @@ export async function authenticatedFetch(url: string | URL | Request, options: R
       }
     }
     await signOut();
+    // signOut() only revoked + cleared tokens. Tell the provider to run the rest
+    // of the cleanup so the UI leaves the authenticated screens immediately,
+    // instead of waiting for the next background→foreground checkAuth.
+    onForcedSignOut?.();
   }
 
   return response;
