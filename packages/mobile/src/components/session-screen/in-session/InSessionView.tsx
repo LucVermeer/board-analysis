@@ -15,7 +15,7 @@ import { getGradeTextColor } from '@boardsesh/play-view';
 import { formatTickRelativeTime, tickTimeMs } from '@boardsesh/profile-stats';
 import { Button } from '../../Button';
 import { Card } from '../../Card';
-import { GlassSurface } from '../../GlassSurface';
+import { PinnedActionBar } from '../../PinnedActionBar';
 import { ClimbListItemContent } from '../../ClimbListItemContent';
 import { EndSessionSheet } from '../../EndSessionSheet';
 import { Icon } from '../../Icon';
@@ -31,16 +31,15 @@ import { climbToQueueItem } from '../../../lib/climb-to-queue-item';
 import { getBoardConfigForPlaylist } from '../../../lib/playlists/board-details-for-playlist';
 import { navigateToSessionClimb } from '../../../lib/session-tick-mapping';
 import { useGradeFormat } from '../../../hooks/use-grade-format';
-import { useNativeGlass } from '../../../hooks/use-native-glass';
 import { useBottomChromeMetrics } from '../../../hooks/use-bottom-chrome-metrics';
 import { withAlpha } from '../../../theme/colors';
 import { iosSystemColors } from '../../../theme/ios-colors';
 import { springs } from '../../../theme/animations';
 import { borderRadius, spacing } from '../../../theme/tokens';
+import { glassSize } from '../../../theme/layout';
 import { gradeBadgeColor } from '../../you/profile-chart-colors';
 import { hapticSelection } from '../../../lib/haptics';
 import { RecordTopChrome } from '../RecordTopChrome';
-import { SESSION_FOOTER_CLEARANCE } from '../session-footer-clearance';
 import { SessionAnalytics } from './SessionAnalytics';
 import { SessionLeaderboard } from './SessionLeaderboard';
 import { SessionPresenceRow } from './SessionPresenceRow';
@@ -238,7 +237,6 @@ const SessionHistoryRow = memo(function SessionHistoryRow({
 export function InSessionView({ showChrome = false, onShare, translateY, screenHeight }: InSessionViewProps) {
   const { t } = useTranslation('session');
   const { systemColors, brandColors } = useTheme();
-  const nativeGlass = useNativeGlass();
   const insets = useSafeAreaInsets();
   const bottomChrome = useBottomChromeMetrics();
   const router = useRouter();
@@ -461,10 +459,13 @@ export function InSessionView({ showChrome = false, onShare, translateY, screenH
 
   const [showEndSession, setShowEndSession] = useState(false);
   const [isEnding, setIsEnding] = useState(false);
-  // The End bar matches the pre-session Start bar: a glass toolbar above the
-  // bottom chrome — flush over the tab bar when the queue accessory is absent,
-  // lifted to clear it when present. The list pads its bottom to match.
+  // The End bar matches the pre-session Start bar: a PinnedActionBar glass
+  // toolbar above the bottom chrome that reports its measured height. The list
+  // reserves that height plus the same bottom-chrome offset. Seed near the
+  // rendered size (large button + the bar's vertical padding) so the first paint
+  // is close before onLayout settles.
   const footerBottom = bottomChrome.fixedFooterBottom;
+  const [footerHeight, setFooterHeight] = useState(glassSize.hero + spacing[3] * 2);
 
   const handleConfirmEnd = useCallback(async () => {
     setIsEnding(true);
@@ -593,7 +594,7 @@ export function InSessionView({ showChrome = false, onShare, translateY, screenH
       contentContainerStyle={{
         paddingHorizontal: spacing[4],
         paddingTop: listPaddingTop,
-        paddingBottom: SESSION_FOOTER_CLEARANCE + footerBottom,
+        paddingBottom: footerHeight + footerBottom,
       }}
       scrollIndicatorInsets={{ top: showChrome ? chromeHeight : 0 }}
       showsVerticalScrollIndicator={false}
@@ -618,27 +619,14 @@ export function InSessionView({ showChrome = false, onShare, translateY, screenH
         />
       ) : null}
 
-      <View
-        testID="in-session-footer"
-        style={[
-          styles.footer,
-          { bottom: footerBottom },
-          !nativeGlass && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: systemColors.separator },
-        ]}
-      >
-        <GlassSurface
-          glassEffectStyle="regular"
-          fallbackColor={systemColors.background}
-          style={StyleSheet.absoluteFill}
-          pointerEvents="none"
-        />
+      <PinnedActionBar testID="in-session-footer" onHeightChange={setFooterHeight}>
         <Button
           title={t('mobile.session.inEndSession')}
           onPress={() => setShowEndSession(true)}
           variant="outlined"
           size="large"
         />
-      </View>
+      </PinnedActionBar>
 
       <EndSessionSheet
         visible={showEndSession}
@@ -749,15 +737,5 @@ const styles = StyleSheet.create({
   },
   inviteTitle: {
     fontWeight: '600',
-  },
-  // A glass toolbar pinned flush above the tab bar; the list scrolls under it.
-  footer: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    paddingHorizontal: spacing[4],
-    paddingTop: spacing[3],
-    paddingBottom: spacing[3],
-    overflow: 'hidden',
   },
 });

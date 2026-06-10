@@ -18,13 +18,13 @@ import type { ClimbQueueItem } from '@boardsesh/queue';
 import { track } from '../../../lib/analytics';
 import { Button } from '../../Button';
 import { Card } from '../../Card';
-import { GlassSurface } from '../../GlassSurface';
+import { PinnedActionBar } from '../../PinnedActionBar';
 import { SectionHeader } from '../../SectionHeader';
 import { Text } from '../../Text';
 import type { QueueItemRowBoard } from '../../QueueItemRow';
 import { useTheme } from '../../../providers/theme-provider';
-import { useNativeGlass } from '../../../hooks/use-native-glass';
 import { spacing } from '../../../theme/tokens';
+import { glassSize } from '../../../theme/layout';
 import { useActiveBoard } from '../../../lib/graphql/use-active-board';
 import { useAuth } from '../../../providers/auth-provider';
 import { useQueueActions } from '../../../providers/queue-provider';
@@ -33,7 +33,6 @@ import { useDrawerHost } from '../../../providers/drawer-host-provider';
 import { useBottomChromeMetrics } from '../../../hooks/use-bottom-chrome-metrics';
 import { reportError } from '../../../lib/sentry';
 import { RecordTopChrome } from '../RecordTopChrome';
-import { SESSION_FOOTER_CLEARANCE } from '../session-footer-clearance';
 import { BoardSummaryCard } from './BoardSummaryCard';
 import { GeneratorPickerCard, type GeneratorSelection } from './GeneratorPickerCard';
 import { WorkoutPreviewRow } from './WorkoutPreviewRow';
@@ -60,7 +59,6 @@ function previewKeyExtractor(previewItem: PreviewItem): string {
 export function PreSessionView({ showChrome = false }: PreSessionViewProps) {
   const { t } = useTranslation('session');
   const { systemColors } = useTheme();
-  const nativeGlass = useNativeGlass();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const bottomChrome = useBottomChromeMetrics();
@@ -95,6 +93,11 @@ export function PreSessionView({ showChrome = false }: PreSessionViewProps) {
   const [selection, setSelection] = useState<GeneratorSelection>({ type: 'off' });
   const [isStarting, setIsStarting] = useState(false);
   const [activePreviewUuid, setActivePreviewUuid] = useState<string | null>(null);
+  // Measured height of the pinned Start bar, so the list reserves exactly the
+  // bar's real height (+ bottom-chrome offset) instead of a hardcoded clearance.
+  // Seeded near the rendered size (large button + the bar's vertical padding) so
+  // the first paint is close before onLayout settles.
+  const [footerHeight, setFooterHeight] = useState(glassSize.hero + spacing[3] * 2);
 
   const preview = useWorkoutPreview(selection, activeBoard ?? null, { isAuthenticated });
   const { items: previewItems, status, refreshingUuids, plannedCount, refreshSlot, toQueueItems } = preview;
@@ -208,9 +211,9 @@ export function PreSessionView({ showChrome = false }: PreSessionViewProps) {
   const generatorPreviewReady =
     selection.type !== 'on' || (status === 'ready' && previewItems.length > 0 && refreshingUuids.size === 0);
   const canStart = activeBoard != null && !isStarting && generatorPreviewReady;
-  // The Start bar is a glass toolbar pinned above the bottom chrome: flush over
-  // the tab bar when the queue accessory is absent (no current climb), and lifted
-  // to clear the accessory when it's present. The list pads its bottom to match.
+  // The Start bar (PinnedActionBar) is a glass toolbar pinned above the bottom
+  // chrome and reports its measured height; the list reserves that height plus
+  // the same bottom-chrome offset so its last row clears the bar.
   const footerBottom = bottomChrome.fixedFooterBottom;
 
   // Inline status copy shown above an empty preview (loading / no results /
@@ -307,7 +310,7 @@ export function PreSessionView({ showChrome = false }: PreSessionViewProps) {
         contentInsetAdjustmentBehavior="never"
         contentContainerStyle={{
           paddingTop: listPaddingTop,
-          paddingBottom: SESSION_FOOTER_CLEARANCE + footerBottom,
+          paddingBottom: footerHeight + footerBottom,
         }}
         scrollIndicatorInsets={{ top: showChrome ? chromeHeight : 0 }}
         showsVerticalScrollIndicator={false}
@@ -325,20 +328,7 @@ export function PreSessionView({ showChrome = false }: PreSessionViewProps) {
         />
       ) : null}
 
-      <View
-        testID="pre-session-footer"
-        style={[
-          styles.footer,
-          { bottom: footerBottom },
-          !nativeGlass && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: systemColors.separator },
-        ]}
-      >
-        <GlassSurface
-          glassEffectStyle="regular"
-          fallbackColor={systemColors.background}
-          style={StyleSheet.absoluteFill}
-          pointerEvents="none"
-        />
+      <PinnedActionBar testID="pre-session-footer" onHeightChange={setFooterHeight}>
         <Button
           title={isStarting ? t('mobile.session.preStarting') : t('mobile.session.preStart')}
           onPress={() => void handleStart()}
@@ -347,7 +337,7 @@ export function PreSessionView({ showChrome = false }: PreSessionViewProps) {
           disabled={!canStart}
           loading={isStarting}
         />
-      </View>
+      </PinnedActionBar>
     </View>
   );
 }
@@ -373,15 +363,5 @@ const styles = StyleSheet.create({
   // Matches the 16px screen gutter the SectionHeaders use, so cards line up.
   cardInset: {
     paddingHorizontal: spacing[4],
-  },
-  // A glass toolbar pinned flush above the tab bar; the list scrolls under it.
-  footer: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    paddingHorizontal: spacing[4],
-    paddingTop: spacing[3],
-    paddingBottom: spacing[3],
-    overflow: 'hidden',
   },
 });

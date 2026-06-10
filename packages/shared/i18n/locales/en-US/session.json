@@ -365,6 +365,7 @@
       "preGeneratorDecreaseOption": "Decrease {{label}}",
       "preGeneratorIncreaseOption": "Increase {{label}}",
       "preGeneratorOptionAccessibilityLabel": "{{group}}, {{value}}",
+      "preGeneratorTuning": "Tuning",
       "preStart": "Start session",
       "preStarting": "Starting…",
       "preNoBoard": "Pick a board to start",
