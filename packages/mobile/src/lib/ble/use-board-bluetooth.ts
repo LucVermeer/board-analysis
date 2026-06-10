@@ -153,6 +153,7 @@ type UseBoardBluetoothOptions = {
   boardUuid?: string;
   holdsData?: HoldPlacement[];
   ledColorOverrides?: LedColorOverrides;
+  analyticsBoardId?: number | null;
   onConnectionChange?: (connected: boolean) => void;
   onConnectSuccess?: (serial: string | null) => void;
 };
@@ -206,6 +207,7 @@ export function useBoardBluetooth({
   boardUuid,
   holdsData,
   ledColorOverrides,
+  analyticsBoardId,
   onConnectionChange,
   onConnectSuccess,
 }: UseBoardBluetoothOptions) {
@@ -309,7 +311,13 @@ export function useBoardBluetooth({
   const sendFramesToBoard = useCallback(
     async (frames: string, mirrored: boolean = false, signal?: AbortSignal) => {
       if (!adapterRef.current || !boardName || layoutId === undefined || sizeId === undefined) return;
-      const boardAnalyticsProperties = { boardName, layoutId, sizeId, mirrored };
+      const boardAnalyticsProperties = {
+        boardName,
+        layoutId,
+        sizeId,
+        mirrored,
+        boardId: analyticsBoardId ?? undefined,
+      };
 
       // Lazily create the per-connection-generation controller so connect()
       // can cancel every write of the old generation at once.
@@ -473,7 +481,7 @@ export function useBoardBluetooth({
       );
       return queuedSend;
     },
-    [boardName, layoutId, sizeId, holdsData, ledColorOverrides, handleDisconnection, t],
+    [boardName, layoutId, sizeId, holdsData, ledColorOverrides, analyticsBoardId, handleDisconnection, t],
   );
 
   const connect = useCallback(
@@ -617,6 +625,7 @@ export function useBoardBluetooth({
           sizeId,
           apiLevel: apiLevelRef.current,
           deviceNamePresent: !!connection.deviceName,
+          boardId: analyticsBoardId ?? undefined,
         });
         return true;
       } catch (error) {
@@ -681,6 +690,7 @@ export function useBoardBluetooth({
       sizeId,
       setIds,
       boardUuid,
+      analyticsBoardId,
       onConnectionChange,
       onConnectSuccess,
       sendFramesToBoard,

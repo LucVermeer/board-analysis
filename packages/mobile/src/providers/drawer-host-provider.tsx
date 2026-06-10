@@ -18,7 +18,7 @@ import type { BoardName, Climb } from '@boardsesh/shared-schema';
 import { buildBoardPath } from '@boardsesh/board-config';
 import type { Climb as QueueClimb, ClimbQueueItem, PlaylistSuggestionSource } from '@boardsesh/queue';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
-import { useBoardPresenceContext } from '@boardsesh/board-presence-react';
+import { useBoardPresenceCurrent, useBoardPresenceFeed } from '@boardsesh/board-presence-react';
 import { PlayDrawer, type PlayDrawerHandle, type PlayDrawerOpenOptions } from '../components/play-drawer';
 import { LogAscentSheet } from '../components/LogAscentSheet';
 import { QueueSheet, type QueueSheetHandle } from '../components/play-drawer/QueueSheet';
@@ -37,6 +37,7 @@ import { climbToQueueItem } from '../lib/climb-to-queue-item';
 import { useIsPartyPreviewOnly, useQueueActions, useQueueSessionControls } from './queue-provider';
 import { useQueueSnackbar } from './queue-snackbar-provider';
 import { useBoardPresenceControls } from './board-presence-provider';
+import { useOptionalBluetoothContext } from './bluetooth-provider';
 
 export type BoardConfig = {
   boardName: string;
@@ -126,10 +127,14 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
     undoWallChangeNonce,
     dismissUndoWallChangeSnackbar,
   } = useQueueSnackbar();
-  const { undo: undoWallChange, currentClimb: wallCurrentClimb } = useBoardPresenceContext();
+  const { currentClimb: wallCurrentClimb } = useBoardPresenceCurrent();
+  const { history: wallHistory } = useBoardPresenceFeed();
+  const bluetooth = useOptionalBluetoothContext();
   const { boardId: boardPresenceBoardId } = useBoardPresenceControls();
   const boardPresenceBoardIdRef = useRef(boardPresenceBoardId);
   boardPresenceBoardIdRef.current = boardPresenceBoardId;
+  const wallHistoryCountRef = useRef(wallHistory.length);
+  wallHistoryCountRef.current = wallHistory.length;
 
   // Instrument the "viewed the wall" signal that's invisible today: fire once
   // per distinct wall climb received from the live feed.
@@ -335,6 +340,12 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
       boardId: boardPresenceBoardIdRef.current ?? undefined,
       source: 'board_pill',
     });
+    if (wallHistoryCountRef.current > 0) {
+      track(SHARED_EVENTS.BoardHistoryViewed, {
+        boardId: boardPresenceBoardIdRef.current ?? undefined,
+        itemCount: wallHistoryCountRef.current,
+      });
+    }
     boardSheetRef.current?.present();
   }, []);
   const requestCloseBoardSheet = useCallback(() => boardSheetRef.current?.dismiss(), []);
@@ -421,18 +432,23 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
   // Switch-board control inside the board sheet: dismiss the sheet, then open
   // the existing board switcher (today's BoardPill destination).
   const handleSwitchBoardFromSheet = useCallback(() => {
-    track(SHARED_EVENTS.BoardSwapInvokedFromSheet, { boardName: activeBoardConfigRef.current?.boardName });
+    track(SHARED_EVENTS.BoardSwapInvokedFromSheet, { boardId: boardPresenceBoardIdRef.current ?? undefined });
     requestCloseBoardSheet();
     router.push('/boards');
   }, [requestCloseBoardSheet]);
 
-  // Undo a wall change YOU just caused: re-light the previous wall climb. The
-  // re-send + re-report happen inside the board-presence context's undo(); this
-  // just fires it and dismisses the snackbar. Queue navigation is untouched.
+  // Undo a wall change YOU just caused. Queue navigation is untouched; the
+  // Bluetooth provider re-lights the captured target over BLE first, then
+  // re-reports it to board presence.
   const handleUndoWallChange = useCallback(() => {
-    void undoWallChange();
-    dismissUndoWallChangeSnackbar();
-  }, [undoWallChange, dismissUndoWallChangeSnackbar]);
+    if (!bluetooth) {
+      dismissUndoWallChangeSnackbar();
+      return;
+    }
+    void bluetooth.undoWallChange().finally(() => {
+      dismissUndoWallChangeSnackbar();
+    });
+  }, [bluetooth, dismissUndoWallChangeSnackbar]);
 
   const boardSheetLabel = useMemo(() => formatActiveBoardLabel(activeBoard), [activeBoard]);
 

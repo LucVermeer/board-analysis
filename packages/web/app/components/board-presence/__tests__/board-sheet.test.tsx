@@ -19,11 +19,13 @@ vi.mock('react-i18next', () => ({
 }));
 
 vi.mock('@boardsesh/board-presence-react', () => ({
-  useBoardPresenceContext: () => ({
+  useBoardPresenceCurrent: () => ({
     currentClimb: presence.currentClimb,
-    history: presence.history,
-    stats: presence.stats,
+    previousClimb: null,
+    undoTarget: null,
+    isLive: true,
   }),
+  useBoardPresenceFeed: () => ({ history: presence.history, stats: presence.stats }),
 }));
 
 vi.mock('@/app/hooks/use-grade-format', () => ({

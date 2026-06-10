@@ -22,7 +22,7 @@ type QueueSnackbarContextValue = {
   /**
    * Show the "you changed the wall · Undo" snackbar after this device reports a
    * wall change. The Undo action is wired by the host (DrawerHostProvider) to the
-   * board-presence context's `undo()`.
+   * Bluetooth provider so it can re-light the prior climb before re-reporting.
    */
   showUndoWallChangeSnackbar: () => void;
   undoWallChangeVisible: boolean;

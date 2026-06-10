@@ -18,6 +18,7 @@ export type SaveTickOptions = {
   layoutId?: number;
   sizeId?: number;
   setIds?: string;
+  boardId?: number | null;
   videoUrl?: string;
 };
 

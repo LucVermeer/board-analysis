@@ -2,11 +2,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, act, waitFor } from '@testing-library/react';
 import { createElement, useEffect, type ReactNode } from 'react';
-import type { ResolvedBoard } from '@boardsesh/shared-schema';
+import type { ClimbQueueItemInput, ResolvedBoard } from '@boardsesh/shared-schema';
 
 const flags = vi.hoisted(() => ({ value: false as boolean }));
 const transport = vi.hoisted(() => ({
   resolveBoardForSerial: vi.fn(async () => ({ boardId: 42, boardName: 'Garage Wall' }) as unknown as ResolvedBoard),
+  resolveBoardForConfig: vi.fn(async () => ({ boardId: 43, boardName: 'MoonBoard 40' }) as unknown as ResolvedBoard),
+  reportClimb: vi.fn(async () => true),
 }));
 const sharedProvider = vi.hoisted(() => ({ lastBoardId: undefined as number | null | undefined }));
 
@@ -17,10 +19,11 @@ vi.mock('../feature-flags-provider', () => ({
 vi.mock('../../lib/board-presence/board-presence-client', () => ({
   createMobileBoardPresenceClient: () => ({
     resolveBoardForSerial: transport.resolveBoardForSerial,
+    resolveBoardForConfig: transport.resolveBoardForConfig,
     subscribeNowPlaying: () => () => {},
     fetchRecentClimbs: async () => [],
     fetchStats: async () => null,
-    reportClimb: async () => true,
+    reportClimb: transport.reportClimb,
   }),
 }));
 
@@ -54,6 +57,17 @@ describe('MobileBoardPresenceProvider', () => {
   beforeEach(() => {
     flags.value = false;
     transport.resolveBoardForSerial.mockClear();
+    transport.resolveBoardForSerial.mockResolvedValue({
+      boardId: 42,
+      boardName: 'Garage Wall',
+    } as unknown as ResolvedBoard);
+    transport.resolveBoardForConfig.mockClear();
+    transport.resolveBoardForConfig.mockResolvedValue({
+      boardId: 43,
+      boardName: 'MoonBoard 40',
+    } as unknown as ResolvedBoard);
+    transport.reportClimb.mockClear();
+    transport.reportClimb.mockResolvedValue(true);
     sharedProvider.lastBoardId = undefined;
     capturedControls = null;
   });
@@ -117,5 +131,65 @@ describe('MobileBoardPresenceProvider', () => {
       await capturedControls?.resolveAndBindBoard(args);
     });
     expect(transport.resolveBoardForSerial).toHaveBeenCalledTimes(1);
+  });
+
+  it('resolves+binds by config when no serial is available', async () => {
+    flags.value = true;
+    renderProvider();
+
+    await act(async () => {
+      const resolved = await capturedControls?.resolveAndBindBoardByConfig({
+        boardType: 'moonboard',
+        layoutId: 1,
+        sizeId: 1,
+        setIds: '2019',
+      });
+      expect(resolved?.boardId).toBe(43);
+    });
+
+    expect(transport.resolveBoardForConfig).toHaveBeenCalledWith({
+      boardType: 'moonboard',
+      layoutId: 1,
+      sizeId: 1,
+      setIds: '2019',
+    });
+    await waitFor(() => {
+      expect(sharedProvider.lastBoardId).toBe(43);
+    });
+  });
+
+  it('returns null instead of leaking a rejected serial resolve', async () => {
+    flags.value = true;
+    transport.resolveBoardForSerial.mockRejectedValue(new Error('backend disabled'));
+    renderProvider();
+
+    await act(async () => {
+      const resolved = await capturedControls?.resolveAndBindBoard({
+        serial: 'SERIAL-1',
+        boardType: 'kilter',
+        layoutId: 1,
+        sizeId: 10,
+        setIds: '1,2',
+      });
+      expect(resolved).toBeNull();
+    });
+
+    expect(sharedProvider.lastBoardId).toBeNull();
+  });
+
+  it('reports directly to a resolved board id', async () => {
+    flags.value = true;
+    renderProvider();
+
+    await act(async () => {
+      const accepted = await capturedControls?.reportClimbForBoard(
+        42,
+        { uuid: 'queue-1', climb: { uuid: 'climb-1' } } as ClimbQueueItemInput,
+        40,
+      );
+      expect(accepted).toBe(true);
+    });
+
+    expect(transport.reportClimb).toHaveBeenCalledWith(42, { uuid: 'queue-1', climb: { uuid: 'climb-1' } }, 40);
   });
 });

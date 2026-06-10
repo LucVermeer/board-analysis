@@ -7,11 +7,11 @@
 // (BottomSheetFlatList — never .map), light stat tiles, and a SEPARATE
 // "Switch board" footer row that opens the existing board switcher.
 //
-// State comes from `@boardsesh/board-presence-react`'s context (currentClimb +
-// history + stats), which is inert when the `board-presence` flag is off — so
-// this sheet is only ever opened from the BoardPill when the flag is on.
+// State comes from `@boardsesh/board-presence-react`'s split current/feed
+// contexts, which are inert when the `board-presence` flag is off — so this
+// sheet is only ever opened from the BoardPill when the flag is on.
 
-import { forwardRef, useCallback, useImperativeHandle, useMemo, useRef, type ReactNode } from 'react';
+import { forwardRef, memo, useCallback, useImperativeHandle, useMemo, useRef, type ReactNode } from 'react';
 import { Platform, Pressable, StyleSheet, View, type ColorValue } from 'react-native';
 import {
   BottomSheetModal,
@@ -22,7 +22,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { getGradeColor, DEFAULT_GRADE_COLOR } from '@boardsesh/board-constants/grade-colors';
-import { useBoardPresenceContext } from '@boardsesh/board-presence-react';
+import { useBoardPresenceCurrent, useBoardPresenceFeed } from '@boardsesh/board-presence-react';
 import type { BoardPresenceClimb } from '@boardsesh/shared-schema';
 import type { Climb } from '@boardsesh/queue';
 import { GlassSheetBackground } from '../GlassSheetBackground';
@@ -49,6 +49,10 @@ function presenceClimbToThumbnailClimb(presenceClimb: BoardPresenceClimb): Climb
     difficulty_error: '',
     benchmark_difficulty: null,
   };
+}
+
+function boardPresenceHistoryKeyExtractor(item: BoardPresenceClimb): string {
+  return `${item.climbUuid}-${item.seq}`;
 }
 
 /**
@@ -89,7 +93,8 @@ export const BoardSheet = forwardRef<BoardSheetHandle, BoardSheetProps>(function
   const { formatGrade } = useGradeFormat();
   const sheetRef = useRef<BottomSheetModal>(null);
 
-  const { currentClimb, history, stats } = useBoardPresenceContext();
+  const { currentClimb } = useBoardPresenceCurrent();
+  const { history, stats } = useBoardPresenceFeed();
 
   const snapPoints = useMemo(() => ['55%', '92%'], []);
 
@@ -114,8 +119,6 @@ export const BoardSheet = forwardRef<BoardSheetHandle, BoardSheetProps>(function
     ),
     [sheet.scrimOpacity],
   );
-
-  const keyExtractor = useCallback((item: BoardPresenceClimb) => `${item.climbUuid}-${item.seq}`, []);
 
   const renderHistoryItem = useCallback(
     ({ item }: { item: BoardPresenceClimb }) => (
@@ -152,7 +155,7 @@ export const BoardSheet = forwardRef<BoardSheetHandle, BoardSheetProps>(function
             <View style={styles.statTiles}>
               <StatTile
                 value={String(stats.climbsSentCount)}
-                label={t('mobile.boardPresence.statSentToday')}
+                label={t('mobile.boardPresence.statSent')}
                 surfaceColor={systemColors.secondaryBackground}
                 labelColor={systemColors.secondaryLabel}
                 valueColor={systemColors.label}
@@ -240,7 +243,7 @@ export const BoardSheet = forwardRef<BoardSheetHandle, BoardSheetProps>(function
 
       <BottomSheetFlatList
         data={history}
-        keyExtractor={keyExtractor}
+        keyExtractor={boardPresenceHistoryKeyExtractor}
         renderItem={renderHistoryItem}
         ListHeaderComponent={listHeader}
         ListEmptyComponent={listEmpty}
@@ -334,7 +337,7 @@ type HistoryRowProps = {
   gradeColor: string;
 };
 
-const HistoryRow = function HistoryRowInner({
+const HistoryRow = memo(function HistoryRowInner({
   climb,
   boardConfig,
   labelColor,
@@ -344,10 +347,11 @@ const HistoryRow = function HistoryRowInner({
 }: HistoryRowProps) {
   const { t } = useTranslation('session');
   const litBy = climb.sentByDisplayName?.trim();
+  const thumbnailClimb = useMemo(() => presenceClimbToThumbnailClimb(climb), [climb]);
 
   return (
     <View style={styles.historyRow}>
-      <AccessoryClimbThumbnail climb={presenceClimbToThumbnailClimb(climb)} boardConfig={boardConfig} />
+      <AccessoryClimbThumbnail climb={thumbnailClimb} boardConfig={boardConfig} />
       <View style={styles.historyBody}>
         <Text variant="subheadline" color={labelColor} numberOfLines={1} style={styles.historyName}>
           {climb.name ?? ''}
@@ -365,7 +369,7 @@ const HistoryRow = function HistoryRowInner({
       ) : null}
     </View>
   );
-};
+});
 
 type StatTileProps = {
   value: string;

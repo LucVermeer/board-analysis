@@ -24,6 +24,7 @@ export interface BoardPresenceClient {
     boardId: number,
     onEvent: (event: BoardPresenceEvent) => void,
     onError?: (err: unknown) => void,
+    onComplete?: () => void,
   ): () => void;
 
   /** Newest-first recent climbs, used to backfill history for a late joiner. */
@@ -41,6 +42,18 @@ export interface BoardPresenceClient {
   /** Resolve (and bind) the shared board for a BLE serial. */
   resolveBoardForSerial(args: {
     serial: string;
+    boardType: string;
+    layoutId: number;
+    sizeId: number;
+    setIds: string;
+  }): Promise<ResolvedBoard>;
+
+  /**
+   * Resolve the shared board by configuration when the BLE controller exposes no
+   * serial. Aurora boards should use `resolveBoardForSerial`; serial-less boards
+   * like MoonBoard use this per-config fallback when the backend supports it.
+   */
+  resolveBoardForConfig?(args: {
     boardType: string;
     layoutId: number;
     sizeId: number;

@@ -46,17 +46,64 @@ function presenceClimbToClimbInput(presenceClimb: BoardPresenceClimb): ClimbInpu
 }
 
 export type UseBoardPresenceResult = {
+  currentClimb: BoardPresenceCurrentState['currentClimb'];
+  previousClimb: BoardPresenceCurrentState['previousClimb'];
+  undoTarget: BoardPresenceCurrentState['undoTarget'];
+  history: BoardPresenceFeedState['history'];
+  stats: BoardPresenceFeedState['stats'];
+  isLive: BoardPresenceCurrentState['isLive'];
+  reportClimb: BoardPresenceActions['reportClimb'];
+  reportClimbWithUndoTarget: BoardPresenceActions['reportClimbWithUndoTarget'];
+  getUndoTarget: BoardPresenceActions['getUndoTarget'];
+  reportUndoClimb: BoardPresenceActions['reportUndoClimb'];
+  undo: BoardPresenceActions['undo'];
+};
+
+export type BoardPresenceReportResult = {
+  accepted: boolean;
+  undoTarget: BoardPresenceClimb | null;
+};
+
+export type BoardPresenceCurrentState = {
   currentClimb: BoardPresenceState['currentClimb'];
   previousClimb: BoardPresenceState['previousClimb'];
-  history: BoardPresenceState['history'];
-  stats: BoardPresenceStats | null;
+  /**
+   * The wall climb that should be restored for this device's latest accepted
+   * report. Platforms should relight this over BLE, then call
+   * `reportUndoClimb` after the BLE write succeeds.
+   */
+  undoTarget: BoardPresenceClimb | null;
   /** True while a live subscription is attached for the active board. */
   isLive: boolean;
+};
+
+export type BoardPresenceFeedState = {
+  history: BoardPresenceState['history'];
+  stats: BoardPresenceStats | null;
+};
+
+export type BoardPresenceActions = {
   /** Report a freshly-lit climb to the active board. Resolves to the accepted flag. */
   reportClimb: (climb: ClimbQueueItemInput, angle: number | null) => Promise<boolean>;
   /**
-   * Re-report the previous climb — the accidental-takeover Undo. No-op (resolves
-   * `false`) when there is no previous climb.
+   * Report a freshly-lit climb and return the locally captured undo target for
+   * this report. Use this in platform snackbar flows so the button restores the
+   * exact climb that was current before the report, even if the live echo has
+   * not round-tripped yet.
+   */
+  reportClimbWithUndoTarget: (climb: ClimbQueueItemInput, angle: number | null) => Promise<BoardPresenceReportResult>;
+  /** Latest captured undo target for action-only consumers that need a ref-like read. */
+  getUndoTarget: () => BoardPresenceClimb | null;
+  /**
+   * Re-report a climb after the platform has successfully relit it over BLE.
+   * When omitted, falls back to the latest captured undo target, then the
+   * reducer's previous climb for compatibility.
+   */
+  reportUndoClimb: (target?: BoardPresenceClimb | null) => Promise<boolean>;
+  /**
+   * Compatibility alias for `reportUndoClimb()`. It does not write to BLE; the
+   * host platform owns the relight step and should call `reportUndoClimb`
+   * after that write succeeds.
    */
   undo: () => Promise<boolean>;
 };
@@ -65,15 +112,20 @@ export function useBoardPresence(boardId: number | null, client: BoardPresenceCl
   const [state, dispatch] = useReducer(boardPresenceReducer, initialBoardPresenceState);
   const [stats, setStats] = useState<BoardPresenceStats | null>(null);
   const [isLive, setIsLive] = useState(false);
+  const [undoTarget, setUndoTarget] = useState<BoardPresenceClimb | null>(null);
 
-  // Live refs so the report/undo callbacks stay identity-stable while still
-  // reading the current board, client, and previous climb.
+  // Live refs so the action callbacks stay identity-stable while still reading
+  // the current board, client, and restore target.
   const boardIdRef = useRef(boardId);
   boardIdRef.current = boardId;
   const clientRef = useRef(client);
   clientRef.current = client;
+  const currentClimbRef = useRef<BoardPresenceClimb | null>(state.currentClimb);
+  currentClimbRef.current = state.currentClimb;
   const previousClimbRef = useRef<BoardPresenceClimb | null>(state.previousClimb);
   previousClimbRef.current = state.previousClimb;
+  const undoTargetRef = useRef<BoardPresenceClimb | null>(undoTarget);
+  undoTargetRef.current = undoTarget;
 
   useEffect(() => {
     // No board or no transport: collapse to the initial state and stay inert.
@@ -81,6 +133,7 @@ export function useBoardPresence(boardId: number | null, client: BoardPresenceCl
       dispatch({ type: 'RESET' });
       setStats(null);
       setIsLive(false);
+      setUndoTarget(null);
       return;
     }
 
@@ -88,6 +141,7 @@ export function useBoardPresence(boardId: number | null, client: BoardPresenceCl
     // history/current never bleeds into this one.
     dispatch({ type: 'RESET' });
     setStats(null);
+    setUndoTarget(null);
 
     let isActive = true;
     // Identifies this effect run; late async results for a superseded board are
@@ -106,6 +160,11 @@ export function useBoardPresence(boardId: number | null, client: BoardPresenceCl
         const action = mapBoardPresenceEnvelopeToAction(event);
         if (action) {
           dispatch(action);
+        }
+      },
+      () => {
+        if (isActive) {
+          setIsLive(false);
         }
       },
       () => {
@@ -148,44 +207,82 @@ export function useBoardPresence(boardId: number | null, client: BoardPresenceCl
     };
   }, [boardId, client]);
 
-  const reportClimb = useCallback(async (climb: ClimbQueueItemInput, angle: number | null): Promise<boolean> => {
+  const reportClimbWithUndoTarget = useCallback(
+    async (climb: ClimbQueueItemInput, angle: number | null): Promise<BoardPresenceReportResult> => {
+      const activeBoardId = boardIdRef.current;
+      const activeClient = clientRef.current;
+      if (activeBoardId === null || activeClient === null) {
+        return { accepted: false, undoTarget: null };
+      }
+
+      const capturedUndoTarget = currentClimbRef.current;
+      const accepted = await activeClient.reportClimb(activeBoardId, climb, angle);
+      if (!accepted) {
+        return { accepted: false, undoTarget: null };
+      }
+
+      undoTargetRef.current = capturedUndoTarget;
+      setUndoTarget(capturedUndoTarget);
+      return { accepted: true, undoTarget: capturedUndoTarget };
+    },
+    [],
+  );
+
+  const reportClimb = useCallback(
+    async (climb: ClimbQueueItemInput, angle: number | null): Promise<boolean> => {
+      const result = await reportClimbWithUndoTarget(climb, angle);
+      return result.accepted;
+    },
+    [reportClimbWithUndoTarget],
+  );
+
+  const getUndoTarget = useCallback((): BoardPresenceClimb | null => undoTargetRef.current, []);
+
+  const reportUndoClimb = useCallback(async (target?: BoardPresenceClimb | null): Promise<boolean> => {
     const activeBoardId = boardIdRef.current;
     const activeClient = clientRef.current;
-    if (activeBoardId === null || activeClient === null) {
+    const climbToRestore = target === undefined ? (undoTargetRef.current ?? previousClimbRef.current) : target;
+    if (activeBoardId === null || activeClient === null || climbToRestore === null) {
       return false;
     }
-    return activeClient.reportClimb(activeBoardId, climb, angle);
+    // Re-report the climb after the host platform has relit it over BLE. We
+    // forward the angle the climb was sent at; the server re-derives canonical
+    // metadata from the climb uuid and caller identity.
+    const climb: ClimbQueueItemInput = {
+      uuid: climbToRestore.queueItemUuid ?? `undo:${climbToRestore.climbUuid}:${climbToRestore.seq}`,
+      climb: presenceClimbToClimbInput(climbToRestore),
+    };
+    return activeClient.reportClimb(activeBoardId, climb, climbToRestore.angle ?? null);
   }, []);
 
-  const undo = useCallback(async (): Promise<boolean> => {
-    const activeBoardId = boardIdRef.current;
-    const activeClient = clientRef.current;
-    const previousClimb = previousClimbRef.current;
-    if (activeBoardId === null || activeClient === null || previousClimb === null) {
-      return false;
-    }
-    // Re-light the climb that was on the wall before the (accidental) takeover.
-    // We forward the angle the previous climb was sent at; everything the
-    // BoardPresenceClimb doesn't carry, the server re-derives from the climb
-    // uuid + caller identity (only the uuid + angle are load-bearing for a
-    // report).
-    const climb: ClimbQueueItemInput = {
-      uuid: previousClimb.queueItemUuid ?? previousClimb.climbUuid,
-      climb: presenceClimbToClimbInput(previousClimb),
-    };
-    return activeClient.reportClimb(activeBoardId, climb, previousClimb.angle ?? null);
-  }, []);
+  const undo = useCallback(async (): Promise<boolean> => reportUndoClimb(), [reportUndoClimb]);
 
   return useMemo<UseBoardPresenceResult>(
     () => ({
       currentClimb: state.currentClimb,
       previousClimb: state.previousClimb,
+      undoTarget,
       history: state.history,
       stats,
       isLive,
       reportClimb,
+      reportClimbWithUndoTarget,
+      getUndoTarget,
+      reportUndoClimb,
       undo,
     }),
-    [state.currentClimb, state.previousClimb, state.history, stats, isLive, reportClimb, undo],
+    [
+      state.currentClimb,
+      state.previousClimb,
+      undoTarget,
+      state.history,
+      stats,
+      isLive,
+      reportClimb,
+      reportClimbWithUndoTarget,
+      getUndoTarget,
+      reportUndoClimb,
+      undo,
+    ],
   );
 }

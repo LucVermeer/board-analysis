@@ -58,6 +58,11 @@ describe('createWebBoardPresenceClient', () => {
     sink.error(new Error('socket dropped'));
     expect(onError).toHaveBeenCalledWith(new Error('socket dropped'));
 
+    sink.complete();
+    expect(onError).toHaveBeenCalledWith(
+      expect.objectContaining({ message: 'boardNowPlaying subscription completed' }),
+    );
+
     expect(typeof unsubscribe).toBe('function');
   });
 
@@ -156,5 +161,34 @@ describe('createWebBoardPresenceClient', () => {
       setIds: '1,2',
     });
     expect(operation.query).toContain('resolveBoardForSerial');
+  });
+
+  it('resolves a board for serial-less config fallback', async () => {
+    const resolved = {
+      boardId: 12,
+      boardName: 'MoonBoard 2019',
+      boardType: 'moonboard',
+      layoutId: 2019,
+      sizeId: 1,
+      setIds: '1',
+    };
+    transport.execute.mockResolvedValue({ resolveBoardForConfig: resolved });
+
+    const result = await createWebBoardPresenceClient(getClient).resolveBoardForConfig({
+      boardType: 'moonboard',
+      layoutId: 2019,
+      sizeId: 1,
+      setIds: '1',
+    });
+
+    expect(result).toEqual(resolved);
+    const [, operation] = transport.execute.mock.calls[0];
+    expect(operation.variables).toEqual({
+      boardType: 'moonboard',
+      layoutId: 2019,
+      sizeId: 1,
+      setIds: '1',
+    });
+    expect(operation.query).toContain('resolveBoardForConfig');
   });
 });

@@ -17,7 +17,7 @@ type UndoWallChangeSnackbarProps = {
   /** Changes on each show so the timer resets + the entrance replays. */
   nonce: number;
   onDismiss: () => void;
-  /** Re-light the previous wall climb (calls the board-presence context's undo). */
+  /** Re-light the previous wall climb and re-report it to the wall feed. */
   onUndo: () => void;
   duration?: number;
 };

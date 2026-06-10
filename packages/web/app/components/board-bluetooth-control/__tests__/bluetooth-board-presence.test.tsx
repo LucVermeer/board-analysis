@@ -8,8 +8,10 @@ import { render, waitFor } from '@testing-library/react';
 import React from 'react';
 import type { BoardDetails } from '@/app/lib/types';
 import type { ClimbQueueItem } from '../../queue-control/types';
+import type { BoardPresenceClimb } from '@boardsesh/shared-schema';
 import { tFromCatalog } from '@/app/__test-helpers__/i18n-mock';
 
+const mockTrack = vi.hoisted(() => vi.fn());
 vi.mock('react-i18next', () => ({
   useTranslation: (ns?: string) => ({
     t: (key: string, options?: Record<string, unknown>) => tFromCatalog(ns, key, options),
@@ -18,7 +20,7 @@ vi.mock('react-i18next', () => ({
   Trans: ({ children }: { children?: React.ReactNode }) => children ?? null,
 }));
 
-vi.mock('@/app/lib/analytics', () => ({ track: vi.fn() }));
+vi.mock('@/app/lib/analytics', () => ({ track: mockTrack }));
 
 // Mutable BLE state + captured callbacks so the test can drive connect and the
 // AutoSender without a real adapter.
@@ -90,6 +92,7 @@ vi.mock('@boardsesh/play-view', () => ({ emitWallConfirm: vi.fn() }));
 const presence = vi.hoisted(() => ({
   enabled: false as boolean,
   boardId: null as number | null,
+  currentClimb: null as BoardPresenceClimb | null,
   resolveAndBindBoard: vi.fn().mockResolvedValue(null),
   reportClimb: vi.fn().mockResolvedValue(true),
   undo: vi.fn().mockResolvedValue(true),
@@ -100,12 +103,17 @@ vi.mock('../../board-presence/board-presence-context', () => ({
     boardId: presence.boardId,
     resolveAndBindBoard: presence.resolveAndBindBoard,
   }),
-  useOptionalWallReport: () => ({ reportClimb: presence.reportClimb, undo: presence.undo }),
+  useOptionalWallReport: () => ({
+    currentClimb: presence.currentClimb,
+    previousClimb: null,
+    reportClimb: presence.reportClimb,
+    undo: presence.undo,
+  }),
 }));
 
 import { BluetoothProvider } from '../bluetooth-context';
 
-function makeBoardDetails(): BoardDetails {
+function makeBoardDetails(overrides: Partial<BoardDetails> = {}): BoardDetails {
   return {
     board_name: 'kilter',
     layout_id: 1,
@@ -120,10 +128,11 @@ function makeBoardDetails(): BoardDetails {
     boardHeight: 100,
     boardWidth: 100,
     layout_name: 'Original',
+    ...overrides,
   } as unknown as BoardDetails;
 }
 
-function makeItem(uuid: string): ClimbQueueItem {
+function makeItem(uuid: string, overrides: Partial<ClimbQueueItem['climb']> = {}): ClimbQueueItem {
   return {
     uuid: `q-${uuid}`,
     climb: {
@@ -139,9 +148,25 @@ function makeItem(uuid: string): ClimbQueueItem {
       quality_average: '4',
       stars: 4,
       difficulty_error: '',
+      ...overrides,
     },
     addedBy: 'me',
   } as unknown as ClimbQueueItem;
+}
+
+function makePresenceClimb(climbUuid: string, overrides: Partial<BoardPresenceClimb> = {}): BoardPresenceClimb {
+  return {
+    climbUuid,
+    queueItemUuid: `q-${climbUuid}`,
+    name: `Wall ${climbUuid}`,
+    grade: 'V4',
+    frames: 'p9r1',
+    angle: 40,
+    setter: 'setter',
+    sentAt: '2026-06-10T00:00:00.000Z',
+    seq: 1,
+    ...overrides,
+  };
 }
 
 describe('Bluetooth board-presence: connect → resolve', () => {
@@ -151,6 +176,7 @@ describe('Bluetooth board-presence: connect → resolve', () => {
     queue.current = null;
     presence.enabled = false;
     presence.boardId = null;
+    presence.currentClimb = null;
     presence.resolveAndBindBoard.mockResolvedValue(null);
     lastConnectSuccess = null;
   });
@@ -181,6 +207,43 @@ describe('Bluetooth board-presence: connect → resolve', () => {
       setIds: '1,2',
     });
   });
+
+  it('resolves serial-less boards through the route config fallback', () => {
+    presence.enabled = true;
+    render(
+      <BluetoothProvider boardDetails={makeBoardDetails({ board_name: 'moonboard' })}>
+        <div />
+      </BluetoothProvider>,
+    );
+    lastConnectSuccess?.(null);
+    expect(presence.resolveAndBindBoard).toHaveBeenCalledWith({
+      serial: null,
+      boardType: 'moonboard',
+      layoutId: 1,
+      sizeId: 10,
+      setIds: '1,2',
+    });
+  });
+
+  it('catches board resolution rejection on connect', async () => {
+    presence.enabled = true;
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    presence.resolveAndBindBoard.mockRejectedValueOnce(new Error('resolve failed'));
+    render(
+      <BluetoothProvider boardDetails={makeBoardDetails()}>
+        <div />
+      </BluetoothProvider>,
+    );
+    lastConnectSuccess?.('SERIAL-123');
+
+    await waitFor(() => {
+      expect(warnSpy).toHaveBeenCalledWith(
+        '[board-presence] failed to resolve board on BLE connect',
+        expect.any(Error),
+      );
+    });
+    warnSpy.mockRestore();
+  });
 });
 
 describe('Bluetooth board-presence: wall-confirm → report + Undo', () => {
@@ -191,11 +254,12 @@ describe('Bluetooth board-presence: wall-confirm → report + Undo', () => {
     mockSendFrames.mockResolvedValue(true);
     presence.enabled = true;
     presence.boardId = 77;
+    presence.currentClimb = makePresenceClimb('previous');
     presence.reportClimb.mockResolvedValue(true);
     presence.undo.mockResolvedValue(true);
   });
 
-  it('reports the lit climb to the wall feed and shows an Undo snackbar', async () => {
+  it('reports the lit climb and Undo re-lights the captured previous wall climb before re-reporting', async () => {
     render(
       <BluetoothProvider boardDetails={makeBoardDetails()}>
         <div />
@@ -222,9 +286,17 @@ describe('Bluetooth board-presence: wall-confirm → report + Undo', () => {
     expect(action.label).toBe(tFromCatalog('session', 'boardPresence.undo'));
     expect(duration).toBe(8000);
 
-    // The Undo action re-lights the previous climb via the wall context's undo.
     action.onClick();
-    expect(presence.undo).toHaveBeenCalledTimes(1);
+    await waitFor(() => {
+      expect(mockSendFrames).toHaveBeenCalledTimes(2);
+      expect(presence.reportClimb).toHaveBeenCalledTimes(2);
+    });
+    expect(mockSendFrames.mock.calls[1][0]).toBe('p9r1');
+    expect(mockSendFrames.mock.calls[1][1]).toBe(false);
+    const [restoredInput, restoredAngle] = presence.reportClimb.mock.calls[1];
+    expect(restoredInput.climb.uuid).toBe('previous');
+    expect(restoredAngle).toBe(40);
+    expect(mockSendFrames.mock.invocationCallOrder[1]).toBeLessThan(presence.reportClimb.mock.invocationCallOrder[1]);
   });
 
   it('does NOT report when the board-presence flag is off', async () => {
@@ -252,5 +324,134 @@ describe('Bluetooth board-presence: wall-confirm → report + Undo', () => {
       expect(mockSendFrames).toHaveBeenCalled();
     });
     expect(presence.reportClimb).not.toHaveBeenCalled();
+  });
+
+  it('does not commit report dedup when the server returns false, so the same send can retry', async () => {
+    presence.reportClimb.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+    const rendered = render(
+      <BluetoothProvider boardDetails={makeBoardDetails()}>
+        <div />
+      </BluetoothProvider>,
+    );
+
+    await waitFor(() => {
+      expect(presence.reportClimb).toHaveBeenCalledTimes(1);
+    });
+    expect(mockShowMessage).not.toHaveBeenCalled();
+
+    queue.current = makeItem('c1');
+    rendered.rerender(
+      <BluetoothProvider boardDetails={makeBoardDetails()}>
+        <div />
+      </BluetoothProvider>,
+    );
+
+    await waitFor(() => {
+      expect(presence.reportClimb).toHaveBeenCalledTimes(2);
+      expect(mockShowMessage).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it('catches rejected reports and allows the same send to retry', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    presence.reportClimb.mockRejectedValueOnce(new Error('report failed')).mockResolvedValueOnce(true);
+    const rendered = render(
+      <BluetoothProvider boardDetails={makeBoardDetails()}>
+        <div />
+      </BluetoothProvider>,
+    );
+
+    await waitFor(() => {
+      expect(warnSpy).toHaveBeenCalledWith('[board-presence] failed to report lit climb', expect.any(Error));
+    });
+
+    queue.current = makeItem('c1');
+    rendered.rerender(
+      <BluetoothProvider boardDetails={makeBoardDetails()}>
+        <div />
+      </BluetoothProvider>,
+    );
+
+    await waitFor(() => {
+      expect(presence.reportClimb).toHaveBeenCalledTimes(2);
+    });
+    warnSpy.mockRestore();
+  });
+
+  it('reports same-uuid re-lights when the rendered frame signature changes', async () => {
+    const rendered = render(
+      <BluetoothProvider boardDetails={makeBoardDetails()}>
+        <div />
+      </BluetoothProvider>,
+    );
+
+    await waitFor(() => {
+      expect(presence.reportClimb).toHaveBeenCalledTimes(1);
+    });
+
+    queue.current = makeItem('c1', { frames: 'p2r1' });
+    rendered.rerender(
+      <BluetoothProvider boardDetails={makeBoardDetails()}>
+        <div />
+      </BluetoothProvider>,
+    );
+
+    await waitFor(() => {
+      expect(presence.reportClimb).toHaveBeenCalledTimes(2);
+    });
+    expect(presence.reportClimb.mock.calls[1][0].climb.frames).toBe('p2r1');
+  });
+
+  it('resets report dedup after a board change', async () => {
+    const rendered = render(
+      <BluetoothProvider boardDetails={makeBoardDetails()}>
+        <div />
+      </BluetoothProvider>,
+    );
+
+    await waitFor(() => {
+      expect(presence.reportClimb).toHaveBeenCalledTimes(1);
+    });
+
+    presence.boardId = 88;
+    queue.current = null;
+    rendered.rerender(
+      <BluetoothProvider boardDetails={makeBoardDetails()}>
+        <div />
+      </BluetoothProvider>,
+    );
+
+    await waitFor(() => {
+      expect(mockSendFrames).toHaveBeenCalledTimes(1);
+    });
+
+    queue.current = makeItem('c1');
+    rendered.rerender(
+      <BluetoothProvider boardDetails={makeBoardDetails()}>
+        <div />
+      </BluetoothProvider>,
+    );
+
+    await waitFor(() => {
+      expect(presence.reportClimb).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it('never sends the raw BLE serial to analytics from presence reporting', async () => {
+    render(
+      <BluetoothProvider boardDetails={makeBoardDetails()}>
+        <div />
+      </BluetoothProvider>,
+    );
+
+    lastConnectSuccess?.('SERIAL-SECRET');
+    await waitFor(() => {
+      expect(presence.reportClimb).toHaveBeenCalledTimes(1);
+      expect(mockTrack).toHaveBeenCalled();
+    });
+
+    for (const trackCall of mockTrack.mock.calls) {
+      expect(JSON.stringify(trackCall)).not.toContain('SERIAL-SECRET');
+    }
   });
 });

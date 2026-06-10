@@ -71,11 +71,13 @@ vi.mock('@boardsesh/board-constants/grade-colors', () => ({
 }));
 
 vi.mock('@boardsesh/board-presence-react', () => ({
-  useBoardPresenceContext: () => ({
+  useBoardPresenceCurrent: () => ({
     currentClimb: presence.currentClimb,
-    history: presence.history,
-    stats: presence.stats,
+    previousClimb: null,
+    undoTarget: null,
+    isLive: true,
   }),
+  useBoardPresenceFeed: () => ({ history: presence.history, stats: presence.stats }),
 }));
 
 vi.mock('../../GlassSheetBackground', () => ({ GlassSheetBackground: () => createElement('div', null) }));

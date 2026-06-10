@@ -1,7 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { act, renderHook, waitFor } from '@testing-library/react';
+import { act, render, renderHook, waitFor } from '@testing-library/react';
 import type { BoardPresenceClimb, BoardPresenceEvent, BoardPresenceStats } from '@boardsesh/shared-schema';
 import { useBoardPresence } from '../use-board-presence';
+import {
+  BoardPresenceProvider,
+  useBoardPresenceActions,
+  useBoardPresenceCurrent,
+  useBoardPresenceFeed,
+} from '../board-presence-provider';
 import type { BoardPresenceClient } from '../types';
 
 // Build a BoardPresenceClimb with only the fields the reducer/hook care about.
@@ -17,6 +23,12 @@ const climb = (climbUuid: string, seq: number, overrides: Partial<BoardPresenceC
 const setEvent = (presenceClimb: BoardPresenceClimb): BoardPresenceEvent => ({
   __typename: 'BoardClimbSet',
   climb: presenceClimb,
+});
+
+const clearEvent = (seq: number): BoardPresenceEvent => ({
+  __typename: 'BoardClimbCleared',
+  clearedAt: new Date(seq * 1000).toISOString(),
+  seq,
 });
 
 const emptyStats: BoardPresenceStats = {
@@ -43,6 +55,7 @@ function deferred<T>(): Deferred<T> {
 function makeClient() {
   let onEvent: ((event: BoardPresenceEvent) => void) | null = null;
   let onError: ((err: unknown) => void) | null = null;
+  let onComplete: (() => void) | null = null;
   const unsubscribe = vi.fn();
   let subscribedBoardId: number | null = null;
 
@@ -77,10 +90,12 @@ function makeClient() {
       boardId: number,
       handler: (event: BoardPresenceEvent) => void,
       errorHandler?: (err: unknown) => void,
+      completeHandler?: () => void,
     ): (() => void) => {
       subscribedBoardId = boardId;
       onEvent = handler;
       onError = errorHandler ?? null;
+      onComplete = completeHandler ?? null;
       return unsubscribe;
     },
   );
@@ -99,8 +114,10 @@ function makeClient() {
     reportClimb,
     fetchRecentClimbs,
     fetchStats,
+    subscribeNowPlaying,
     emit: (event: BoardPresenceEvent) => onEvent?.(event),
     emitError: (err: unknown) => onError?.(err),
+    emitComplete: () => onComplete?.(),
     getSubscribedBoardId: () => subscribedBoardId,
     resolveRecent: (boardId: number, climbs: BoardPresenceClimb[]) => {
       const target = recentFor(boardId);
@@ -152,6 +169,9 @@ describe('useBoardPresence — subscribe before backfill', () => {
     expect(harness.getSubscribedBoardId()).toBe(1);
     expect(harness.fetchRecentClimbs).toHaveBeenCalledWith(1);
     expect(harness.fetchStats).toHaveBeenCalledWith(1);
+    expect(harness.subscribeNowPlaying.mock.invocationCallOrder[0]).toBeLessThan(
+      harness.fetchRecentClimbs.mock.invocationCallOrder[0],
+    );
   });
 
   it('keeps a live event that lands before the backfill, and a stale backfill does not clobber it', async () => {
@@ -174,6 +194,23 @@ describe('useBoardPresence — subscribe before backfill', () => {
     expect(result.current.currentClimb?.seq).toBe(5);
     // History contains both the live climb and the backfilled ones, newest-first.
     expect(result.current.history.map((entry) => entry.climbUuid)).toEqual(['live', 'old3', 'old2', 'old1']);
+  });
+
+  it('keeps a live clear that lands before backfill from being resurrected by older history', async () => {
+    const harness = makeClient();
+    const { result } = renderHook(() => useBoardPresence(1, harness.client));
+
+    act(() => {
+      harness.emit(clearEvent(10));
+    });
+    expect(result.current.currentClimb).toBeNull();
+
+    await act(async () => {
+      await harness.resolveRecent(1, [climb('cleared-before-backfill', 9)]);
+    });
+
+    expect(result.current.currentClimb).toBeNull();
+    expect(result.current.history.map((entry) => entry.climbUuid)).toEqual(['cleared-before-backfill']);
   });
 
   it('adopts the newest backfilled climb as current when no live event has arrived', async () => {
@@ -206,6 +243,16 @@ describe('useBoardPresence — subscribe before backfill', () => {
     expect(result.current.isLive).toBe(true);
     act(() => {
       harness.emitError(new Error('socket dropped'));
+    });
+    await waitFor(() => expect(result.current.isLive).toBe(false));
+  });
+
+  it('flips isLive false when the subscription completes', async () => {
+    const harness = makeClient();
+    const { result } = renderHook(() => useBoardPresence(1, harness.client));
+    expect(result.current.isLive).toBe(true);
+    act(() => {
+      harness.emitComplete();
     });
     await waitFor(() => expect(result.current.isLive).toBe(false));
   });
@@ -269,7 +316,28 @@ describe('useBoardPresence — actions', () => {
     expect(harness.reportClimb).toHaveBeenCalledWith(3, input, 25);
   });
 
-  it('undo re-reports the previous climb when one exists', async () => {
+  it('reportClimbWithUndoTarget captures the current climb before the report resolves', async () => {
+    const harness = makeClient();
+    const { result } = renderHook(() => useBoardPresence(3, harness.client));
+    act(() => {
+      harness.emit(setEvent(climb('restore-me', 1, { angle: 30, queueItemUuid: 'qi-restore' })));
+    });
+
+    let reportResult = { accepted: false, undoTarget: null as BoardPresenceClimb | null };
+    await act(async () => {
+      reportResult = await result.current.reportClimbWithUndoTarget(
+        { uuid: 'q2', climb: { uuid: 'takeover' } } as never,
+        40,
+      );
+    });
+
+    expect(reportResult.accepted).toBe(true);
+    expect(reportResult.undoTarget?.climbUuid).toBe('restore-me');
+    expect(result.current.undoTarget?.climbUuid).toBe('restore-me');
+    expect(result.current.getUndoTarget()?.climbUuid).toBe('restore-me');
+  });
+
+  it('reportUndoClimb re-reports the provided undo target after the platform relights it', async () => {
     const harness = makeClient();
     const { result } = renderHook(() => useBoardPresence(3, harness.client));
 
@@ -284,7 +352,7 @@ describe('useBoardPresence — actions', () => {
     expect(result.current.previousClimb?.climbUuid).toBe('first');
 
     await act(async () => {
-      await result.current.undo();
+      await result.current.reportUndoClimb(result.current.previousClimb);
     });
 
     expect(harness.reportClimb).toHaveBeenCalledTimes(1);
@@ -297,10 +365,81 @@ describe('useBoardPresence — actions', () => {
     );
   });
 
-  it('undo is a no-op (resolves false) when there is no previous climb', async () => {
+  it('undo compatibility alias is a no-op (resolves false) when there is no target', async () => {
     const harness = makeClient();
     const { result } = renderHook(() => useBoardPresence(3, harness.client));
     await expect(result.current.undo()).resolves.toBe(false);
     expect(harness.reportClimb).not.toHaveBeenCalled();
+  });
+
+  it('reportUndoClimb no-ops for an explicit null target instead of falling back', async () => {
+    const harness = makeClient();
+    const { result } = renderHook(() => useBoardPresence(3, harness.client));
+
+    act(() => {
+      harness.emit(setEvent(climb('first', 1)));
+    });
+    act(() => {
+      harness.emit(setEvent(climb('second', 2)));
+    });
+
+    await expect(result.current.reportUndoClimb(null)).resolves.toBe(false);
+    expect(harness.reportClimb).not.toHaveBeenCalled();
+  });
+});
+
+describe('BoardPresenceProvider — split contexts', () => {
+  it('keeps action-only consumers stable when current/feed state changes', async () => {
+    const harness = makeClient();
+    const renderCounts = { actions: 0, current: 0, feed: 0 };
+    const currentSnapshots: Array<ReturnType<typeof useBoardPresenceCurrent>> = [];
+    const feedSnapshots: Array<ReturnType<typeof useBoardPresenceFeed>> = [];
+
+    function ActionConsumer() {
+      renderCounts.actions += 1;
+      useBoardPresenceActions();
+      return null;
+    }
+
+    function CurrentConsumer() {
+      renderCounts.current += 1;
+      currentSnapshots.push(useBoardPresenceCurrent());
+      return null;
+    }
+
+    function FeedConsumer() {
+      renderCounts.feed += 1;
+      feedSnapshots.push(useBoardPresenceFeed());
+      return null;
+    }
+
+    function Consumers() {
+      return (
+        <>
+          <ActionConsumer />
+          <CurrentConsumer />
+          <FeedConsumer />
+        </>
+      );
+    }
+
+    render(
+      <BoardPresenceProvider boardId={1} client={harness.client}>
+        <Consumers />
+      </BoardPresenceProvider>,
+    );
+
+    await waitFor(() => expect(currentSnapshots.at(-1)?.isLive).toBe(true));
+    const actionRenderCountAfterAttach = renderCounts.actions;
+
+    act(() => {
+      harness.emit(setEvent(climb('live-context', 4)));
+    });
+
+    await waitFor(() => expect(currentSnapshots.at(-1)?.currentClimb?.climbUuid).toBe('live-context'));
+    expect(feedSnapshots.at(-1)?.history.map((entry) => entry.climbUuid)).toEqual(['live-context']);
+    expect(renderCounts.actions).toBe(actionRenderCountAfterAttach);
+    expect(renderCounts.current).toBeGreaterThan(1);
+    expect(renderCounts.feed).toBeGreaterThan(1);
   });
 });

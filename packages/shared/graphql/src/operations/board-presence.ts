@@ -82,6 +82,31 @@ export const RESOLVE_BOARD_FOR_SERIAL = `
   }
 `;
 
+// Mutation — resolve a shared board by configuration when a BLE controller
+// exposes no serial. This gives serial-less boards a per-config wall feed.
+export const RESOLVE_BOARD_FOR_CONFIG = `
+  mutation ResolveBoardForConfig(
+    $boardType: String!
+    $layoutId: Int!
+    $sizeId: Int!
+    $setIds: String!
+  ) {
+    resolveBoardForConfig(
+      boardType: $boardType
+      layoutId: $layoutId
+      sizeId: $sizeId
+      setIds: $setIds
+    ) {
+      boardId
+      boardName
+      boardType
+      layoutId
+      sizeId
+      setIds
+    }
+  }
+`;
+
 // Query — newest-first recent climbs for a board, used by a late joiner to
 // backfill history before following the live subscription.
 export const BOARD_RECENT_CLIMBS = `

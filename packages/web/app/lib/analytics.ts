@@ -79,6 +79,12 @@ function getPosthog(): PostHog | null {
 }
 
 type PosthogProperties = Record<string, string | number | boolean | null>;
+type PosthogFeatureFlagClient = {
+  getFeatureFlag?: (key: string) => unknown;
+  isFeatureEnabled?: (key: string) => unknown;
+  reloadFeatureFlags?: () => unknown;
+  onFeatureFlags?: (callback: () => void) => unknown;
+};
 
 function isCurrentAdminAnalyticsPage(): boolean {
   return typeof window !== 'undefined' && isAdminAnalyticsUrl(window.location.pathname, window.location.origin);
@@ -137,6 +143,69 @@ export function pageview(url: string): void {
   const posthog = getPosthog();
   if (!posthog) return;
   posthog.capture('$pageview', { $current_url: analyticsPathname(url) });
+}
+
+function coerceFeatureFlagBoolean(value: unknown): boolean | undefined {
+  if (typeof value === 'boolean') return value;
+  if (value === 'true') return true;
+  if (value === 'false') return false;
+  return undefined;
+}
+
+function asFeatureFlagClient(posthog: PostHog): PosthogFeatureFlagClient {
+  return posthog as unknown as PosthogFeatureFlagClient;
+}
+
+function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
+  if (typeof value !== 'object' || value === null) return false;
+  const thenValue = (value as { then?: unknown }).then;
+  return typeof thenValue === 'function';
+}
+
+export function readPosthogFeatureFlags(keys: readonly string[]): Record<string, boolean> {
+  const posthog = getPosthog();
+  if (!posthog) return {};
+  const featureFlagClient = asFeatureFlagClient(posthog);
+  const flags: Record<string, boolean> = {};
+
+  for (const key of keys) {
+    let rawFlagValue: unknown;
+    if (typeof featureFlagClient.getFeatureFlag === 'function') {
+      rawFlagValue = featureFlagClient.getFeatureFlag(key);
+    } else if (typeof featureFlagClient.isFeatureEnabled === 'function') {
+      rawFlagValue = featureFlagClient.isFeatureEnabled(key);
+    }
+    const flagValue = coerceFeatureFlagBoolean(rawFlagValue);
+    if (flagValue !== undefined) {
+      flags[key] = flagValue;
+    }
+  }
+
+  return flags;
+}
+
+export function subscribePosthogFeatureFlags(onChange: () => void): () => void {
+  const posthog = getPosthog();
+  if (!posthog) return () => {};
+  const featureFlagClient = asFeatureFlagClient(posthog);
+
+  const reloadResult =
+    typeof featureFlagClient.reloadFeatureFlags === 'function' ? featureFlagClient.reloadFeatureFlags() : undefined;
+  if (isPromiseLike(reloadResult)) {
+    void Promise.resolve(reloadResult)
+      .then(onChange)
+      .catch(() => {});
+  }
+
+  if (typeof featureFlagClient.onFeatureFlags !== 'function') {
+    return () => {};
+  }
+
+  const unsubscribe = featureFlagClient.onFeatureFlags(onChange);
+  if (typeof unsubscribe === 'function') {
+    return unsubscribe as () => void;
+  }
+  return () => {};
 }
 
 export type { AllowedPropertyValues };

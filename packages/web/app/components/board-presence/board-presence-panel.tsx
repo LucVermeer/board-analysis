@@ -11,14 +11,14 @@
 // Mounted as a child of WebBoardPresenceProvider (so it can read the wall
 // context) and of the queue bridge (so it can label the active board).
 
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import ButtonBase from '@mui/material/ButtonBase';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import LightbulbOutlined from '@mui/icons-material/LightbulbOutlined';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
-import { useBoardPresenceContext } from '@boardsesh/board-presence-react';
+import { useBoardPresenceCurrent, useBoardPresenceFeed } from '@boardsesh/board-presence-react';
 import { themeTokens } from '@/app/theme/theme-config';
 import { track } from '@/app/lib/analytics';
 import { useQueueBridgeBoardInfo } from '../queue-control/queue-bridge-context';
@@ -30,8 +30,10 @@ export function BoardPresencePanel() {
   const { t } = useTranslation('session');
   const { enabled, boardId } = useBoardPresenceControls();
   const { boardDetails, angle } = useQueueBridgeBoardInfo();
-  const { currentClimb } = useBoardPresenceContext();
+  const { currentClimb } = useBoardPresenceCurrent();
+  const { history } = useBoardPresenceFeed();
   const [open, setOpen] = useState(false);
+  const historyViewedForOpenRef = useRef(false);
 
   const boardLabel = boardDetails
     ? [boardDetails.layout_name, Number.isFinite(angle) ? `${angle}°` : null].filter(Boolean).join(' • ') || null
@@ -53,6 +55,19 @@ export function BoardPresencePanel() {
     window.dispatchEvent(new CustomEvent(BOARD_PRESENCE_SWITCH_BOARD_EVENT));
   }, [boardId]);
 
+  useEffect(() => {
+    if (!open) {
+      historyViewedForOpenRef.current = false;
+      return;
+    }
+    if (historyViewedForOpenRef.current || history.length === 0) return;
+    historyViewedForOpenRef.current = true;
+    track(SHARED_EVENTS.BoardHistoryViewed, {
+      boardId: boardId ?? undefined,
+      itemCount: history.length,
+    });
+  }, [open, history.length, boardId]);
+
   // Flag off or no board bound: render nothing. The shared wall context is inert
   // in this state, so there's nothing meaningful to show anyway.
   if (!enabled || boardId === null) return null;
@@ -61,7 +76,11 @@ export function BoardPresencePanel() {
     <>
       <ButtonBase
         onClick={handleOpen}
-        aria-label={t('boardPresence.openAria')}
+        aria-label={
+          currentClimb?.name
+            ? t('boardPresence.openAriaWithClimb', { name: currentClimb.name })
+            : t('boardPresence.openAria')
+        }
         sx={{
           position: 'fixed',
           left: '50%',
@@ -73,6 +92,7 @@ export function BoardPresencePanel() {
           gap: 0.75,
           px: 1.5,
           py: 0.75,
+          minHeight: 44,
           borderRadius: `${themeTokens.borderRadius.full}px`,
           bgcolor: 'background.paper',
           boxShadow: 3,
@@ -91,7 +111,22 @@ export function BoardPresencePanel() {
           ) : null}
         </Box>
       </ButtonBase>
+      <Box component="span" aria-live="polite" aria-atomic="true" sx={visuallyHiddenSx}>
+        {currentClimb?.name ? t('boardPresence.nowOnWallAnnouncement', { name: currentClimb.name }) : ''}
+      </Box>
       <BoardSheet open={open} boardLabel={boardLabel} onClose={handleClose} onSwitchBoard={handleSwitchBoard} />
     </>
   );
 }
+
+const visuallyHiddenSx = {
+  border: 0,
+  clip: 'rect(0 0 0 0)',
+  height: 1,
+  margin: -1,
+  overflow: 'hidden',
+  padding: 0,
+  position: 'absolute',
+  whiteSpace: 'nowrap',
+  width: 1,
+} as const;

@@ -7,7 +7,7 @@
 //   2. A mobile `BoardPresenceClient` (graphql-ws transport) handed to the
 //      shared `BoardPresenceProvider`, which runs `useBoardPresence(boardId)`
 //      (subscribe + backfill + reducer) and exposes the wall's now-playing
-//      state via `useBoardPresenceContext`.
+//      state via the split board-presence contexts.
 //
 // Everything is gated behind the `board-presence` PostHog flag. When the flag is
 // off the provider is inert: `boardId` stays null (so the shared hook collapses
@@ -17,12 +17,12 @@
 // The bluetooth provider (mounted inside this one) calls
 // `useBoardPresenceControls()` to (a) resolve+store the boardId on connect and
 // (b) report a freshly-lit climb on wall-confirm. Reads of the wall's current
-// climb go through `@boardsesh/board-presence-react`'s `useBoardPresenceContext`.
+// climb go through `@boardsesh/board-presence-react`'s split contexts.
 
-import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { BoardPresenceProvider } from '@boardsesh/board-presence-react';
 import type { BoardPresenceClient } from '@boardsesh/board-presence-react';
-import type { ResolvedBoard } from '@boardsesh/shared-schema';
+import type { ClimbQueueItemInput, ResolvedBoard } from '@boardsesh/shared-schema';
 import { createMobileBoardPresenceClient } from '../lib/board-presence/board-presence-client';
 import { getWsClient } from '../lib/graphql/ws-client';
 import { useFeatureFlag } from './feature-flags-provider';
@@ -36,6 +36,8 @@ export type ResolveBoardArgs = {
   setIds: string;
 };
 
+export type ResolveBoardConfigArgs = Omit<ResolveBoardArgs, 'serial'>;
+
 type BoardPresenceControlsValue = {
   /** True when the `board-presence` flag is on. All wall surfaces gate on this. */
   enabled: boolean;
@@ -47,6 +49,18 @@ type BoardPresenceControlsValue = {
    * is off or no client is available. Idempotent for an unchanged serial.
    */
   resolveAndBindBoard: (args: ResolveBoardArgs) => Promise<ResolvedBoard | null>;
+  /**
+   * Resolve a board by config when no serial is available, then store its
+   * boardId. No-op when the active transport does not support config fallback.
+   */
+  resolveAndBindBoardByConfig: (args: ResolveBoardConfigArgs) => Promise<ResolvedBoard | null>;
+  /**
+   * Report directly to a specific board id. Used immediately after a connect
+   * resolve when the React boardId context has not re-rendered yet.
+   */
+  reportClimbForBoard: (boardId: number, climb: ClimbQueueItemInput, angle: number | null) => Promise<boolean>;
+  /** Clear the current board binding and force the shared presence hook inert. */
+  resetPresence: () => void;
 };
 
 const BoardPresenceControlsContext = createContext<BoardPresenceControlsValue | null>(null);
@@ -73,6 +87,17 @@ export function MobileBoardPresenceProvider({ children }: { children: ReactNode 
   const boardIdRef = useRef(boardId);
   boardIdRef.current = boardId;
 
+  const resetPresence = useCallback(() => {
+    lastResolvedSerialRef.current = null;
+    setBoardId(null);
+  }, []);
+
+  useEffect(() => {
+    if (!enabled) {
+      resetPresence();
+    }
+  }, [enabled, resetPresence]);
+
   const resolveAndBindBoard = useCallback(async (args: ResolveBoardArgs): Promise<ResolvedBoard | null> => {
     const activeClient = clientRef.current;
     if (!enabledRef.current || activeClient === null) {
@@ -81,15 +106,62 @@ export function MobileBoardPresenceProvider({ children }: { children: ReactNode 
     if (lastResolvedSerialRef.current === args.serial && boardIdRef.current !== null) {
       return null;
     }
-    const resolved = await activeClient.resolveBoardForSerial(args);
     lastResolvedSerialRef.current = args.serial;
-    setBoardId(resolved.boardId);
-    return resolved;
+    try {
+      const resolved = await activeClient.resolveBoardForSerial(args);
+      setBoardId(resolved.boardId);
+      return resolved;
+    } catch (error) {
+      lastResolvedSerialRef.current = null;
+      console.warn('[board-presence] resolveBoardForSerial failed', error);
+      return null;
+    }
   }, []);
 
+  const resolveAndBindBoardByConfig = useCallback(
+    async (args: ResolveBoardConfigArgs): Promise<ResolvedBoard | null> => {
+      const activeClient = clientRef.current;
+      if (!enabledRef.current || activeClient === null || !activeClient.resolveBoardForConfig) {
+        return null;
+      }
+      try {
+        const resolved = await activeClient.resolveBoardForConfig(args);
+        setBoardId(resolved.boardId);
+        return resolved;
+      } catch (error) {
+        console.warn('[board-presence] resolveBoardForConfig failed', error);
+        return null;
+      }
+    },
+    [],
+  );
+
+  const reportClimbForBoard = useCallback(
+    async (targetBoardId: number, climb: ClimbQueueItemInput, angle: number | null): Promise<boolean> => {
+      const activeClient = clientRef.current;
+      if (!enabledRef.current || activeClient === null) {
+        return false;
+      }
+      try {
+        return await activeClient.reportClimb(targetBoardId, climb, angle);
+      } catch (error) {
+        console.warn('[board-presence] reportBoardClimb failed', error);
+        return false;
+      }
+    },
+    [],
+  );
+
   const controls = useMemo<BoardPresenceControlsValue>(
-    () => ({ enabled, boardId, resolveAndBindBoard }),
-    [enabled, boardId, resolveAndBindBoard],
+    () => ({
+      enabled,
+      boardId,
+      resolveAndBindBoard,
+      resolveAndBindBoardByConfig,
+      reportClimbForBoard,
+      resetPresence,
+    }),
+    [enabled, boardId, resolveAndBindBoard, resolveAndBindBoardByConfig, reportClimbForBoard, resetPresence],
   );
 
   return (
@@ -116,6 +188,9 @@ const DISABLED_CONTROLS: BoardPresenceControlsValue = {
   enabled: false,
   boardId: null,
   resolveAndBindBoard: async () => null,
+  resolveAndBindBoardByConfig: async () => null,
+  reportClimbForBoard: async () => false,
+  resetPresence: () => {},
 };
 
 export { BoardPresenceControlsContext };

@@ -62,14 +62,17 @@ describe('APPLY_CLIMB_SET', () => {
     expect(afterSecond.lastSeq).toBe(2);
   });
 
-  it('ignores a seq <= lastSeq (out-of-order Redis message does not regress the wall)', () => {
+  it('merges an older out-of-order live set into history without regressing the wall', () => {
     const current = makeClimb({ seq: 5 });
     const state = makeState({ currentClimb: current, history: [current], lastSeq: 5 });
 
     const stale = makeClimb({ seq: 3 });
     const result = boardPresenceReducer(state, { type: 'APPLY_CLIMB_SET', payload: stale });
 
-    expect(result).toBe(state);
+    expect(result.currentClimb).toEqual(current);
+    expect(result.previousClimb).toBeNull();
+    expect(result.lastSeq).toBe(5);
+    expect(result.history.map((climb) => climb.seq)).toEqual([5, 3]);
   });
 
   it('ignores an exact duplicate (climbUuid, seq) so backfill + live stream do not double-apply', () => {
@@ -79,6 +82,23 @@ describe('APPLY_CLIMB_SET', () => {
 
     const result = boardPresenceReducer(state, { type: 'APPLY_CLIMB_SET', payload: climb });
     expect(result).toBe(state);
+  });
+
+  it('applies a re-send of the same climbUuid when the server assigns a new seq', () => {
+    const firstSend = makeClimb({ climbUuid: 'project', seq: 4 });
+    const afterFirst = boardPresenceReducer(initialBoardPresenceState, {
+      type: 'APPLY_CLIMB_SET',
+      payload: firstSend,
+    });
+    const secondSend = makeClimb({ climbUuid: 'project', seq: 5 });
+    const afterSecond = boardPresenceReducer(afterFirst, {
+      type: 'APPLY_CLIMB_SET',
+      payload: secondSend,
+    });
+
+    expect(afterSecond.currentClimb).toEqual(secondSend);
+    expect(afterSecond.previousClimb).toEqual(firstSend);
+    expect(afterSecond.history.map((entry) => entry.seq)).toEqual([5, 4]);
   });
 
   it('caps history at HISTORY_CAP newest-first', () => {
@@ -136,6 +156,7 @@ describe('BACKFILL_HISTORY', () => {
     expect(result.lastSeq).toBe(3);
     // Newest backfilled climb (seq 3) is adopted as current since it's newer.
     expect(result.currentClimb?.seq).toBe(3);
+    expect(result.previousClimb).toEqual(existing);
   });
 
   it('is idempotent — replaying the same backfill twice yields the same state', () => {
@@ -171,6 +192,28 @@ describe('BACKFILL_HISTORY', () => {
     });
 
     expect(result.currentClimb?.seq).toBe(12);
+  });
+
+  it('does not resurrect a cleared wall from an older backfill', () => {
+    const litThenCleared = makeClimb({ seq: 9 });
+    let state = boardPresenceReducer(initialBoardPresenceState, {
+      type: 'APPLY_CLIMB_SET',
+      payload: litThenCleared,
+    });
+    state = boardPresenceReducer(state, {
+      type: 'APPLY_CLIMB_CLEARED',
+      payload: { clearedAt: '2026-06-09T01:00:00.000Z', seq: 10 },
+    });
+
+    const result = boardPresenceReducer(state, {
+      type: 'BACKFILL_HISTORY',
+      payload: [litThenCleared],
+    });
+
+    expect(result.currentClimb).toBeNull();
+    expect(result.previousClimb).toEqual(litThenCleared);
+    expect(result.lastSeq).toBe(10);
+    expect(result.history).toEqual([litThenCleared]);
   });
 
   it('no-ops on an empty backfill', () => {

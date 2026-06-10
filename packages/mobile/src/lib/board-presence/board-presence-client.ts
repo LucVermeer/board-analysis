@@ -20,6 +20,7 @@ import {
   BOARD_PRESENCE_STATS,
   BOARD_RECENT_CLIMBS,
   REPORT_BOARD_CLIMB,
+  RESOLVE_BOARD_FOR_CONFIG,
   RESOLVE_BOARD_FOR_SERIAL,
 } from '@boardsesh/graphql/operations/board-presence';
 import type { BoardPresenceClient } from '@boardsesh/board-presence-react';
@@ -36,6 +37,7 @@ type BoardRecentClimbsData = { boardRecentClimbs: BoardPresenceClimb[] };
 type BoardPresenceStatsData = { boardPresenceStats: BoardPresenceStats };
 type ReportBoardClimbData = { reportBoardClimb: boolean };
 type ResolveBoardForSerialData = { resolveBoardForSerial: ResolvedBoard };
+type ResolveBoardForConfigData = { resolveBoardForConfig: ResolvedBoard };
 
 /**
  * Build a `BoardPresenceClient` over a mobile graphql-ws client. Pass a getter
@@ -45,7 +47,7 @@ type ResolveBoardForSerialData = { resolveBoardForSerial: ResolvedBoard };
  */
 export function createMobileBoardPresenceClient(getClient: () => Client): BoardPresenceClient {
   return {
-    subscribeNowPlaying(boardId, onEvent, onError) {
+    subscribeNowPlaying(boardId, onEvent, onError, onComplete) {
       return subscribe<BoardNowPlayingData>(
         getClient(),
         { query: BOARD_NOW_PLAYING, variables: { boardId } },
@@ -58,7 +60,9 @@ export function createMobileBoardPresenceClient(getClient: () => Client): BoardP
           error: (err) => {
             onError?.(err);
           },
-          complete: () => {},
+          complete: () => {
+            onComplete?.();
+          },
         },
       );
     },
@@ -93,6 +97,14 @@ export function createMobileBoardPresenceClient(getClient: () => Client): BoardP
         variables: args,
       });
       return data.resolveBoardForSerial;
+    },
+
+    async resolveBoardForConfig(args) {
+      const data = await execute<ResolveBoardForConfigData>(getClient(), {
+        query: RESOLVE_BOARD_FOR_CONFIG,
+        variables: args,
+      });
+      return data.resolveBoardForConfig;
     },
   };
 }

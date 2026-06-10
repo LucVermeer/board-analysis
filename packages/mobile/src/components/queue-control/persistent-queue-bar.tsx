@@ -24,6 +24,7 @@ import { ActiveContextBar } from './ActiveContextBar';
 import { ClimbCapsule } from './ClimbCapsule';
 import { LogAscentFab } from './LogAscentFab';
 import { LogAscentToolbarButton } from './LogAscentToolbarButton';
+import { useWallOrQueueCurrentClimb } from './use-wall-or-queue-climb';
 
 // Re-export so layout consumers that already import toolbar metrics from this
 // module don't need to know which file owns them. Source of truth: theme/layout.
@@ -34,10 +35,10 @@ export function PersistentQueueBar() {
   const { variant } = useTheme();
   const bottomChrome = useBottomChromeMetrics();
 
-  const currentClimb = state.currentClimbQueueItem?.climb;
+  const currentClimb = useWallOrQueueCurrentClimb(state.currentClimbQueueItem?.climb ?? null);
 
-  if (!bottomChrome.jsQueueToolbarVisible) return null;
   if (!currentClimb) return null;
+  if (!bottomChrome.jsQueueToolbarVisible && bottomChrome.nativeAccessoryMounted) return null;
 
   if (variant === 'material') {
     return (

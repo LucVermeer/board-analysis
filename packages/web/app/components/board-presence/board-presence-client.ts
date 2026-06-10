@@ -22,6 +22,7 @@ import {
   BOARD_PRESENCE_STATS,
   BOARD_RECENT_CLIMBS,
   REPORT_BOARD_CLIMB,
+  RESOLVE_BOARD_FOR_CONFIG,
   RESOLVE_BOARD_FOR_SERIAL,
 } from '@boardsesh/graphql/operations/board-presence';
 import type { BoardPresenceClient } from '@boardsesh/board-presence-react';
@@ -38,6 +39,18 @@ type BoardRecentClimbsData = { boardRecentClimbs: BoardPresenceClimb[] };
 type BoardPresenceStatsData = { boardPresenceStats: BoardPresenceStats };
 type ReportBoardClimbData = { reportBoardClimb: boolean };
 type ResolveBoardForSerialData = { resolveBoardForSerial: ResolvedBoard };
+type ResolveBoardForConfigData = { resolveBoardForConfig: ResolvedBoard };
+
+export type BoardConfigResolveArgs = {
+  boardType: string;
+  layoutId: number;
+  sizeId: number;
+  setIds: string;
+};
+
+export type WebBoardPresenceClient = BoardPresenceClient & {
+  resolveBoardForConfig(args: BoardConfigResolveArgs): Promise<ResolvedBoard>;
+};
 
 /**
  * Build a `BoardPresenceClient` over a web graphql-ws client. Pass a getter
@@ -45,7 +58,7 @@ type ResolveBoardForSerialData = { resolveBoardForSerial: ResolvedBoard };
  * recreate, and which the provider builds lazily on first use — is read at call
  * time, matching how the queue provider passes `getClient: () => getWsClient()`.
  */
-export function createWebBoardPresenceClient(getClient: () => Client): BoardPresenceClient {
+export function createWebBoardPresenceClient(getClient: () => Client): WebBoardPresenceClient {
   return {
     subscribeNowPlaying(boardId, onEvent, onError) {
       return subscribe<BoardNowPlayingData>(
@@ -60,7 +73,9 @@ export function createWebBoardPresenceClient(getClient: () => Client): BoardPres
           error: (err) => {
             onError?.(err);
           },
-          complete: () => {},
+          complete: () => {
+            onError?.(new Error('boardNowPlaying subscription completed'));
+          },
         },
       );
     },
@@ -95,6 +110,14 @@ export function createWebBoardPresenceClient(getClient: () => Client): BoardPres
         variables: args,
       });
       return data.resolveBoardForSerial;
+    },
+
+    async resolveBoardForConfig(args) {
+      const data = await execute<ResolveBoardForConfigData>(getClient(), {
+        query: RESOLVE_BOARD_FOR_CONFIG,
+        variables: args,
+      });
+      return data.resolveBoardForConfig;
     },
   };
 }

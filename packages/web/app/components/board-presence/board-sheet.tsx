@@ -7,9 +7,9 @@
 // "Switch board" footer row that opens the existing board switcher (via a
 // window event the bottom tab bar listens for).
 //
-// State comes from `@boardsesh/board-presence-react`'s context (currentClimb +
-// history + stats), which is inert when the `board-presence` flag is off — so
-// this sheet is only ever opened from the entry pill when the flag is on.
+// State comes from `@boardsesh/board-presence-react`'s split current/feed
+// contexts, which are inert when the `board-presence` flag is off — so this
+// sheet is only ever opened from the entry pill when the flag is on.
 
 import React, { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -27,10 +27,10 @@ import CloseOutlined from '@mui/icons-material/CloseOutlined';
 import LightbulbOutlined from '@mui/icons-material/LightbulbOutlined';
 import ChevronRightOutlined from '@mui/icons-material/ChevronRightOutlined';
 import type { BoardPresenceClimb } from '@boardsesh/shared-schema';
-import { useBoardPresenceContext } from '@boardsesh/board-presence-react';
+import { useBoardPresenceCurrent, useBoardPresenceFeed } from '@boardsesh/board-presence-react';
 import { themeTokens } from '@/app/theme/theme-config';
 import { useGradeFormat } from '@/app/hooks/use-grade-format';
-import { DEFAULT_GRADE_COLOR } from '@/app/lib/grade-colors';
+import { DEFAULT_GRADE_COLOR, getGradeTextColor } from '@/app/lib/grade-colors';
 
 type BoardSheetProps = {
   open: boolean;
@@ -44,12 +44,13 @@ type BoardSheetProps = {
 export function BoardSheet({ open, boardLabel, onClose, onSwitchBoard }: BoardSheetProps) {
   const { t } = useTranslation('session');
   const { formatGrade, getGradeColor } = useGradeFormat();
-  const { currentClimb, history, stats } = useBoardPresenceContext();
+  const { currentClimb } = useBoardPresenceCurrent();
+  const { history, stats } = useBoardPresenceFeed();
 
   const statTiles = useMemo(() => {
     if (!stats) return [];
     return [
-      { key: 'sent', value: String(stats.climbsSentCount), label: t('boardPresence.statSentToday') },
+      { key: 'sent', value: String(stats.climbsSentCount), label: t('boardPresence.statSent') },
       { key: 'climbers', value: String(stats.distinctClimbersCount), label: t('boardPresence.statClimbers') },
       {
         key: 'hardest',
@@ -101,7 +102,7 @@ export function BoardSheet({ open, boardLabel, onClose, onSwitchBoard }: BoardSh
             </Typography>
           ) : null}
         </Box>
-        <IconButton onClick={onClose} aria-label={t('boardPresence.close')} edge="end">
+        <IconButton onClick={onClose} aria-label={t('boardPresence.close')} edge="end" size="large">
           <CloseOutlined />
         </IconButton>
       </Box>
@@ -239,7 +240,12 @@ function NowOnTheWallHero({ climb, formattedGrade, gradeColor, setByLine, litByL
           <Chip
             label={formattedGrade}
             size="small"
-            sx={{ bgcolor: gradeColor, color: '#fff', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}
+            sx={{
+              bgcolor: gradeColor,
+              color: getGradeTextColor(gradeColor),
+              fontWeight: 700,
+              fontVariantNumeric: 'tabular-nums',
+            }}
           />
         ) : null}
       </Box>
@@ -274,7 +280,12 @@ function HistoryRow({ climb, formattedGrade, gradeColor, litByLine }: HistoryRow
           <Chip
             label={formattedGrade}
             size="small"
-            sx={{ bgcolor: gradeColor, color: '#fff', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}
+            sx={{
+              bgcolor: gradeColor,
+              color: getGradeTextColor(gradeColor),
+              fontWeight: 700,
+              fontVariantNumeric: 'tabular-nums',
+            }}
           />
         ) : undefined
       }

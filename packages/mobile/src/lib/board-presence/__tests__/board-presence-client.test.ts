@@ -42,8 +42,9 @@ describe('createMobileBoardPresenceClient', () => {
     const client = createMobileBoardPresenceClient(getClient);
     const onEvent = vi.fn();
     const onError = vi.fn();
+    const onComplete = vi.fn();
 
-    const unsubscribe = client.subscribeNowPlaying(42, onEvent, onError);
+    const unsubscribe = client.subscribeNowPlaying(42, onEvent, onError, onComplete);
 
     expect(transport.subscribe).toHaveBeenCalledTimes(1);
     const [passedClient, operation, sink] = transport.subscribe.mock.calls[0];
@@ -57,6 +58,9 @@ describe('createMobileBoardPresenceClient', () => {
 
     sink.error(new Error('socket dropped'));
     expect(onError).toHaveBeenCalledWith(new Error('socket dropped'));
+
+    sink.complete();
+    expect(onComplete).toHaveBeenCalledTimes(1);
 
     expect(typeof unsubscribe).toBe('function');
   });
@@ -156,5 +160,34 @@ describe('createMobileBoardPresenceClient', () => {
       setIds: '1,2',
     });
     expect(operation.query).toContain('resolveBoardForSerial');
+  });
+
+  it('resolves a board by config for serial-less boards', async () => {
+    const resolved = {
+      boardId: 12,
+      boardName: 'MoonBoard 40',
+      boardType: 'moonboard',
+      layoutId: 1,
+      sizeId: 1,
+      setIds: '2019',
+    };
+    transport.execute.mockResolvedValue({ resolveBoardForConfig: resolved });
+
+    const result = await createMobileBoardPresenceClient(getClient).resolveBoardForConfig?.({
+      boardType: 'moonboard',
+      layoutId: 1,
+      sizeId: 1,
+      setIds: '2019',
+    });
+
+    expect(result).toEqual(resolved);
+    const [, operation] = transport.execute.mock.calls[0];
+    expect(operation.variables).toEqual({
+      boardType: 'moonboard',
+      layoutId: 1,
+      sizeId: 1,
+      setIds: '2019',
+    });
+    expect(operation.query).toContain('resolveBoardForConfig');
   });
 });

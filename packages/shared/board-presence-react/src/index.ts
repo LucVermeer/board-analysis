@@ -7,8 +7,24 @@
 // `BoardPresenceClient`. `react` is a peerDependency.
 
 export { useBoardPresence } from './use-board-presence';
-export type { UseBoardPresenceResult } from './use-board-presence';
+export type {
+  BoardPresenceActions,
+  BoardPresenceCurrentState,
+  BoardPresenceFeedState,
+  BoardPresenceReportResult,
+  UseBoardPresenceResult,
+} from './use-board-presence';
 
-export { BoardPresenceProvider, useBoardPresenceContext, BoardPresenceContext } from './board-presence-provider';
+export {
+  BoardPresenceProvider,
+  useBoardPresenceActions,
+  useBoardPresenceContext,
+  useBoardPresenceCurrent,
+  useBoardPresenceFeed,
+  BoardPresenceActionsContext,
+  BoardPresenceContext,
+  BoardPresenceCurrentContext,
+  BoardPresenceFeedContext,
+} from './board-presence-provider';
 
 export type { BoardPresenceClient } from './types';

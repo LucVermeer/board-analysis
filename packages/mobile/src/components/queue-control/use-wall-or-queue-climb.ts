@@ -5,18 +5,13 @@
 // local queue head. Otherwise it stays on the local queue head (today's
 // behaviour).
 //
-// PERF (RN hot-path checklist): this read is O(1) — it touches a SINGLE current
-// value (`currentClimb`) from the board-presence context, never the volatile
-// `history` array, and never a per-row scan. It is memoized so the accessory row
-// only re-renders when the *displayed* climb actually changes. The board-presence
-// context value is split (current vs history) upstream in
-// `@boardsesh/board-presence-react`, so reading `currentClimb` here does not
-// subscribe the accessory to history churn.
+// PERF (RN hot-path checklist): this read is O(1) — it uses only the current
+// wall climb from the split presence context and never scans history.
 
 import { useMemo } from 'react';
 import type { Climb } from '@boardsesh/queue';
 import type { BoardPresenceClimb } from '@boardsesh/shared-schema';
-import { useBoardPresenceContext } from '@boardsesh/board-presence-react';
+import { useBoardPresenceCurrent } from '@boardsesh/board-presence-react';
 import { useBoardPresenceControls } from '../../providers/board-presence-provider';
 
 /** Map a wall presence climb to the minimal `Climb` the accessory row renders. */
@@ -46,12 +41,15 @@ function presenceClimbToClimb(presenceClimb: BoardPresenceClimb): Climb {
  */
 export function useWallOrQueueCurrentClimb(localClimb: Climb | null): Climb | null {
   const { enabled, boardId } = useBoardPresenceControls();
-  const { currentClimb: wallClimb, isLive } = useBoardPresenceContext();
+  const { currentClimb: wallClimb, isLive } = useBoardPresenceCurrent();
 
   const useWall = enabled && boardId !== null && isLive && wallClimb !== null;
 
   return useMemo(() => {
     if (useWall && wallClimb) {
+      if (localClimb?.uuid === wallClimb.climbUuid) {
+        return localClimb;
+      }
       return presenceClimbToClimb(wallClimb);
     }
     return localClimb;

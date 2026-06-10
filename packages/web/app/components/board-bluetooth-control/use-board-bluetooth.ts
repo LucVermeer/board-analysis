@@ -65,6 +65,7 @@ type UseBoardBluetoothOptions = {
    * this re-creates `sendFramesToBoard` so the auto-sender repaints the
    * current climb with the new colours. */
   ledColorOverrides?: LedColorOverrides;
+  analyticsBoardId?: number | null;
   /** Fires once per successful connect with the parsed BLE serial (null when
    * the device name didn't carry one — e.g., moonboard). Used by
    * BluetoothProvider to broadcast SessionBoardSerialChanged into the party
@@ -156,6 +157,7 @@ export function useBoardBluetooth({
   boardUuid,
   onConnectionChange,
   ledColorOverrides,
+  analyticsBoardId,
   onConnectSuccess,
 }: UseBoardBluetoothOptions) {
   const { showMessage } = useSnackbar();
@@ -588,6 +590,7 @@ export function useBoardBluetooth({
         connectedAtRef.current = Date.now();
         track('Bluetooth Connection Success', {
           boardLayout: `${boardDetails.layout_name}`,
+          boardId: analyticsBoardId ?? undefined,
         });
 
         // Auto-record the (serial, current config) mapping for serial→config lookups.
@@ -674,6 +677,7 @@ export function useBoardBluetooth({
       handleDisconnection,
       boardDetails,
       boardUuid,
+      analyticsBoardId,
       onConnectionChange,
       onConnectSuccess,
       sendFramesToBoard,

@@ -144,14 +144,16 @@ vi.mock('expo-router', () => ({
 }));
 
 vi.mock('@boardsesh/board-presence-react', () => ({
-  useBoardPresenceContext: () => ({
-    undo: vi.fn(async () => false),
-    currentClimb: null,
-  }),
+  useBoardPresenceCurrent: () => ({ currentClimb: null, previousClimb: null, undoTarget: null, isLive: false }),
+  useBoardPresenceFeed: () => ({ history: [], stats: null }),
 }));
 
 vi.mock('../board-presence-provider', () => ({
   useBoardPresenceControls: () => ({ enabled: false, boardId: null, resolveAndBindBoard: vi.fn(async () => null) }),
+}));
+
+vi.mock('../bluetooth-provider', () => ({
+  useOptionalBluetoothContext: () => ({ undoWallChange: vi.fn(async () => true) }),
 }));
 
 vi.mock('../queue-provider', async () => {

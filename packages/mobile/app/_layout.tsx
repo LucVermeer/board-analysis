@@ -27,7 +27,7 @@ import { DrawerHostProvider } from '../src/providers/drawer-host-provider';
 import { DeepLinkProvider } from '../src/providers/deep-link-provider';
 import { ShareTargetProvider } from '../src/providers/share-target-provider';
 import { TabBarHeightProvider } from '../src/providers/tab-bar-height-provider';
-import { FeatureFlagsProvider } from '../src/providers/feature-flags-provider';
+import { FeatureFlagsProvider, type FeatureFlags } from '../src/providers/feature-flags-provider';
 import { MobileBoardPresenceProvider } from '../src/providers/board-presence-provider';
 import { PartyProfileProvider } from '../src/providers/party-profile-provider';
 import { ConnectionSettingsProvider } from '../src/providers/connection-settings-provider';
@@ -57,6 +57,9 @@ void SplashScreen.preventAutoHideAsync();
 const layoutStyles = StyleSheet.create({
   root: { flex: 1 },
 });
+
+const STATIC_FEATURE_FLAGS: FeatureFlags | undefined =
+  process.env.EXPO_PUBLIC_BOARD_PRESENCE === 'true' ? { 'board-presence': true } : undefined;
 
 const errorStyles = StyleSheet.create({
   container: {
@@ -224,9 +227,7 @@ function RootLayout() {
           <QueryProvider>
             <ThemeProvider>
               <MaterialThemeProvider>
-                <FeatureFlagsProvider
-                  flags={process.env.EXPO_PUBLIC_BOARD_PRESENCE === 'true' ? { 'board-presence': true } : undefined}
-                >
+                <FeatureFlagsProvider flags={STATIC_FEATURE_FLAGS}>
                   <AuthProvider onReady={onAuthReady}>
                     <PartyProfileProvider>
                       <ConnectionSettingsProvider>

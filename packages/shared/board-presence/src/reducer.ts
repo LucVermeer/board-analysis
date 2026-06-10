@@ -6,9 +6,9 @@
  * Ordering & dedup model: every presence event carries a monotonic per-board
  * `seq`. A late joiner backfills history (one batch) and then follows the live
  * stream, so the same `(climbUuid, seq)` can arrive twice; Redis fan-out can
- * also deliver messages out of order. The reducer is therefore idempotent and
- * ignores anything at or below the highest `seq` it has already applied so the
- * wall never regresses or double-applies.
+ * also deliver messages out of order. The reducer is therefore idempotent:
+ * stale sets never regress the wall, but they can still be merged into history
+ * when they represent a real older wall state that has not been recorded yet.
  */
 
 import type { BoardPresenceClimb } from '@boardsesh/shared-schema';
@@ -45,11 +45,19 @@ export function boardPresenceReducer(state: BoardPresenceState, action: BoardPre
     case 'APPLY_CLIMB_SET': {
       const incomingClimb = action.payload;
 
-      // Dedup + ordering: ignore anything we've already advanced past, and any
-      // exact `(climbUuid, seq)` we've already recorded. This makes the
-      // late-joiner backfill + live stream safe to interleave and rejects
-      // out-of-order Redis messages that would otherwise regress the wall.
-      if (incomingClimb.seq <= state.lastSeq || historyHasEntry(state.history, incomingClimb)) {
+      // Dedup + ordering: a stale live event must not regress the wall, but if
+      // Redis delivers a real older set after a newer one, keep it in history.
+      if (incomingClimb.seq <= state.lastSeq) {
+        if (historyHasEntry(state.history, incomingClimb)) {
+          return state;
+        }
+        return {
+          ...state,
+          history: mergeHistory(state.history, [incomingClimb]),
+        };
+      }
+
+      if (historyHasEntry(state.history, incomingClimb)) {
         return state;
       }
 
@@ -86,16 +94,17 @@ export function boardPresenceReducer(state: BoardPresenceState, action: BoardPre
       const highestSeq = backfill.reduce((highest, climb) => Math.max(highest, climb.seq), state.lastSeq);
 
       // The newest-by-seq item across the merged history is the candidate for
-      // "current". Only adopt it when we have no live current yet, or the live
-      // current is older — never clobber a newer climb already applied from the
-      // live stream.
+      // "current". Adopt only when it is newer than every sequence already
+      // applied, because `lastSeq` also tracks clears. This prevents an older
+      // backfill from resurrecting a wall that was cleared while catch-up was
+      // in flight.
       const newestHistoryClimb = mergedHistory[0] ?? null;
-      const shouldAdoptHistoryClimb =
-        newestHistoryClimb !== null && (state.currentClimb === null || newestHistoryClimb.seq > state.currentClimb.seq);
+      const shouldAdoptHistoryClimb = newestHistoryClimb !== null && newestHistoryClimb.seq > state.lastSeq;
 
       return {
         ...state,
         currentClimb: shouldAdoptHistoryClimb ? newestHistoryClimb : state.currentClimb,
+        previousClimb: shouldAdoptHistoryClimb ? state.currentClimb : state.previousClimb,
         history: mergedHistory,
         lastSeq: highestSeq,
       };
