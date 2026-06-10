@@ -307,6 +307,10 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
   },
+  // Deliberately subordinate to Sign Out: a borderless red text link, not the
+  // bordered button above. Sign Out is the routine action; account deletion is
+  // rare and irreversible, so it reads as a quieter, secondary affordance rather
+  // than competing for equal visual weight.
   deleteAccount: {
     alignItems: 'center',
     paddingVertical: spacing[3],

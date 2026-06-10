@@ -70,7 +70,11 @@ export function DeleteAccountScreen() {
   const isConfirmed = confirmText === CONFIRM_PHRASE;
 
   const handleDelete = async () => {
-    if (!isConfirmed || isDeleting) return;
+    // Block until the climb-info fetch settles: while it's loading,
+    // publishedClimbCount reads as 0, so the setter-name option is hidden. Letting
+    // the delete through here would submit removeSetterName:false and leave the
+    // setter name on preserved climbs without the user ever seeing the choice.
+    if (!isConfirmed || isDeleting || infoQuery.isLoading) return;
     try {
       setIsDeleting(true);
       await deleteAccount.mutateAsync({ input: { removeSetterName } });
@@ -160,7 +164,7 @@ export function DeleteAccountScreen() {
           onPress={() => {
             void handleDelete();
           }}
-          disabled={!isConfirmed || isDeleting}
+          disabled={!isConfirmed || isDeleting || infoQuery.isLoading}
           loading={isDeleting}
         />
         <Button

@@ -48,9 +48,11 @@ describe('useDeleteAccountInfo', () => {
     requestMock.mockResolvedValue({ deleteAccountInfo: { publishedClimbCount: 0 } });
     const { Wrapper } = makeWrapper();
 
-    renderHook(() => useDeleteAccountInfo({ enabled: false }), { wrapper: Wrapper });
+    const { result } = renderHook(() => useDeleteAccountInfo({ enabled: false }), { wrapper: Wrapper });
 
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    // A disabled query reports fetchStatus 'idle' and never fires its queryFn —
+    // assert on that state rather than racing a real timer.
+    await waitFor(() => expect(result.current.fetchStatus).toBe('idle'));
     expect(requestMock).not.toHaveBeenCalled();
   });
 });
