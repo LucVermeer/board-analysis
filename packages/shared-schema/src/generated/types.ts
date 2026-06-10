@@ -4290,8 +4290,8 @@ export type SessionLiveness = {
   endedAt?: Maybe<Scalars['String']['output']>;
   /** Unique session identifier */
   id: Scalars['ID']['output'];
-  /** Durable lifecycle status: 'active' or 'ended' */
-  status: Scalars['String']['output'];
+  /** Durable lifecycle status */
+  status: SessionStatus;
 };
 
 /** Participant stats in a session summary. */
@@ -4337,6 +4337,17 @@ export type SessionStatsUpdated = {
   /** Total sends (flash + send) */
   totalSends: Scalars['Int']['output'];
 };
+
+/**
+ * Durable session lifecycle status. Lowercase values match the strings stored
+ * in board_sessions.status so resolvers and clients pass them through without
+ * mapping (same convention as TickStatus).
+ */
+export type SessionStatus =
+  /** Live or dormant; safe for a client to restore on cold start */
+  | 'active'
+  /** Explicitly ended, or auto-finished by the inactivity sweep */
+  | 'ended';
 
 /** Summary of a completed session including stats, grade distribution, and participants. */
 export type SessionSummary = {
@@ -5549,6 +5560,7 @@ export type ResolversTypes = ResolversObject<{
   SessionLiveness: ResolverTypeWrapper<SessionLiveness>;
   SessionParticipant: ResolverTypeWrapper<SessionParticipant>;
   SessionStatsUpdated: ResolverTypeWrapper<SessionStatsUpdated>;
+  SessionStatus: SessionStatus;
   SessionSummary: ResolverTypeWrapper<SessionSummary>;
   SessionUser: ResolverTypeWrapper<SessionUser>;
   SetCommunitySettingInput: SetCommunitySettingInput;
@@ -8331,7 +8343,7 @@ export type SessionLivenessResolvers<
 > = ResolversObject<{
   endedAt?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   id?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
-  status?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  status?: Resolver<ResolversTypes['SessionStatus'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 

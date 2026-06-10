@@ -226,7 +226,13 @@ describe('QueueProvider clearSession notifyServer', () => {
         if (hangNextQueueState) return new Promise<never>(() => {});
         return Promise.resolve({ session: { queueState: { queue: [], currentClimbQueueItem: null } } });
       }
-      // Cold-start liveness check keeps the stored session alive (#2683).
+      // Cold-start liveness check keeps the stored session alive (#2683). This
+      // replaces the beforeEach mock wholesale, so it must answer SessionLiveness
+      // itself — otherwise the restore guard sees no liveness row and clears the
+      // stored session before the test gets in-session.
+      if (operationText.includes('SessionLiveness')) {
+        return Promise.resolve({ sessionLiveness: { id: 'session-1', status: 'active', endedAt: null } });
+      }
       if (operationText.includes('GetSession')) {
         return Promise.resolve({ session: { id: 'session-1', endedAt: null } });
       }
