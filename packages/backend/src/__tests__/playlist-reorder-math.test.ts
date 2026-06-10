@@ -50,6 +50,17 @@ describe('computePlaylistReorderWrites', () => {
     expect(computePlaylistReorderWrites(denseRows(), 'a', 0)).toEqual([]);
   });
 
+  it('returns no writes for a no-op move even on a gappy list (no needless compaction)', () => {
+    const gappy: ReorderRow<number>[] = [
+      { id: 1, climbUuid: 'a', position: 0 },
+      { id: 2, climbUuid: 'b', position: 5 },
+      { id: 3, climbUuid: 'c', position: 10 },
+    ];
+    // Ask to move 'b' to its own rank (1) — a true no-op must not renumber the
+    // gaps away.
+    expect(computePlaylistReorderWrites(gappy, 'b', 1)).toEqual([]);
+  });
+
   it('handles gappy positions (left by deletions) by renumbering to dense', () => {
     // Positions 0,5,10 (gaps) — move the last (rank 2) to the front.
     const gappy: ReorderRow<number>[] = [

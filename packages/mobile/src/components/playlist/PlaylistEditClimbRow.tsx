@@ -1,5 +1,12 @@
 import { memo, useCallback, useMemo } from 'react';
-import { Pressable, View, StyleSheet, type LayoutChangeEvent } from 'react-native';
+import {
+  Pressable,
+  View,
+  StyleSheet,
+  type AccessibilityActionEvent,
+  type AccessibilityActionInfo,
+  type LayoutChangeEvent,
+} from 'react-native';
 import Animated, { useAnimatedStyle, withSpring } from 'react-native-reanimated';
 import { GestureDetector } from 'react-native-gesture-handler';
 import { useTranslation } from 'react-i18next';
@@ -22,6 +29,11 @@ import type { PlaylistDragControls } from './use-playlist-drag';
 const CONTROL_SLOT_WIDTH = 36;
 const SEPARATOR_INSET = spacing[3] + CONTROL_SLOT_WIDTH + spacing[3] + THUMBNAIL_WIDTH + spacing[3];
 
+// VoiceOver / TalkBack adjustable actions on the drag handle: swipe up/down (iOS)
+// or the increment/decrement gestures (Android) move the climb one slot, so
+// screen-reader users can reorder without performing the pan gesture.
+const REORDER_A11Y_ACTIONS: readonly AccessibilityActionInfo[] = [{ name: 'increment' }, { name: 'decrement' }];
+
 export type PlaylistEditRowBoard = {
   boardName: BoardName;
   layoutId: number;
@@ -37,9 +49,19 @@ type PlaylistEditClimbRowProps = {
   rowIndex: number;
   drag: PlaylistDragControls;
   onRemove: (climbUuid: string) => void;
+  /** Move this climb to a new index — used by the screen-reader adjustable
+   *  actions (the pan gesture commits through `drag`). */
+  onReorder: (climbUuid: string, newIndex: number) => void;
 };
 
-function PlaylistEditClimbRowComponent({ climb, board, rowIndex, drag, onRemove }: PlaylistEditClimbRowProps) {
+function PlaylistEditClimbRowComponent({
+  climb,
+  board,
+  rowIndex,
+  drag,
+  onRemove,
+  onReorder,
+}: PlaylistEditClimbRowProps) {
   const { systemColors } = useTheme();
   const { t } = useTranslation('playlists');
 
@@ -47,6 +69,17 @@ function PlaylistEditClimbRowComponent({ climb, board, rowIndex, drag, onRemove 
     hapticMedium();
     onRemove(climb.uuid);
   }, [climb.uuid, onRemove]);
+
+  // Screen-reader reorder: increment moves the climb one slot down the list,
+  // decrement one slot up. The host clamps to the list bounds and no-ops at the
+  // edges, so an out-of-range target here is harmless.
+  const handleAccessibilityAction = useCallback(
+    (event: AccessibilityActionEvent) => {
+      const delta = event.nativeEvent.actionName === 'increment' ? 1 : -1;
+      onReorder(climb.uuid, rowIndex + delta);
+    },
+    [onReorder, climb.uuid, rowIndex],
+  );
 
   // Long-press drag gesture for this row's handle. Memoized on the row's
   // identity so it doesn't churn as the list re-renders.
@@ -114,6 +147,8 @@ function PlaylistEditClimbRowComponent({ climb, board, rowIndex, drag, onRemove 
             style={styles.controlSlot}
             accessibilityRole="adjustable"
             accessibilityLabel={t('editClimbs.dragHandleAria', { name: climb.name })}
+            accessibilityActions={REORDER_A11Y_ACTIONS}
+            onAccessibilityAction={handleAccessibilityAction}
           >
             <Icon name="drag.handle" size={22} color={iosSystemColors.systemGray} />
           </View>

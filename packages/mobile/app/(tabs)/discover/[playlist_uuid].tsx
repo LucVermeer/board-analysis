@@ -149,6 +149,11 @@ export default function PlaylistDetail() {
   const [editClimbs, setEditClimbs] = useState<Climb[]>([]);
   const editClimbsRef = useRef<Climb[]>([]);
   const pendingEditClimbsRef = useRef(false);
+  // Always-current view of the loaded climbs so enterEditMode — which runs
+  // asynchronously after the actions sheet finishes dismissing — seeds from the
+  // latest data, not the snapshot captured when the menu opened.
+  const allClimbsRef = useRef(allClimbs);
+  allClimbsRef.current = allClimbs;
 
   const setEditList = useCallback((list: Climb[]) => {
     editClimbsRef.current = list;
@@ -156,9 +161,9 @@ export default function PlaylistDetail() {
   }, []);
 
   const enterEditMode = useCallback(() => {
-    setEditList(allClimbs);
+    setEditList(allClimbsRef.current);
     setEditMode(true);
-  }, [allClimbs, setEditList]);
+  }, [setEditList]);
 
   const exitEditMode = useCallback(() => {
     setEditMode(false);
@@ -171,13 +176,16 @@ export default function PlaylistDetail() {
     async (climbUuid: string, newIndex: number) => {
       const current = editClimbsRef.current;
       const oldIndex = current.findIndex((climb) => climb.uuid === climbUuid);
-      if (oldIndex === -1 || oldIndex === newIndex) return;
+      if (oldIndex === -1) return;
+      // Clamp — the screen-reader actions can ask for an index past either edge.
+      const target = Math.max(0, Math.min(newIndex, current.length - 1));
+      if (oldIndex === target) return;
       const next = [...current];
       const [moved] = next.splice(oldIndex, 1);
-      next.splice(newIndex, 0, moved);
+      next.splice(target, 0, moved);
       setEditList(next);
       try {
-        await reorderPlaylistClimb({ playlistId: playlistUuid, climbUuid, newIndex });
+        await reorderPlaylistClimb({ playlistId: playlistUuid, climbUuid, newIndex: target });
       } catch (err) {
         console.error('Failed to reorder playlist climb:', err);
         // Only wholesale-restore the pre-move snapshot if no other edit landed in

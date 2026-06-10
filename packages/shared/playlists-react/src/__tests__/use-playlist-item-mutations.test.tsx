@@ -35,6 +35,20 @@ describe('usePlaylistItemMutations (shared)', () => {
     expect(executeGraphQL).toHaveBeenCalledWith(REMOVE_CLIMB_FROM_PLAYLIST, { input });
   });
 
+  it('propagates a rejected executeGraphQL (no error swallowing)', async () => {
+    const boom = new Error('network down');
+    const executeGraphQL = vi.fn(async () => {
+      throw boom;
+    }) as unknown as ExecutePlaylistsGraphQL;
+    const { wrapper } = buildWrapper(executeGraphQL);
+    const { result } = renderHook(() => usePlaylistItemMutations(), { wrapper });
+
+    await expect(result.current.reorderPlaylistClimb({ playlistId: 'p1', climbUuid: 'c1', newIndex: 0 })).rejects.toBe(
+      boom,
+    );
+    await expect(result.current.removeClimbFromPlaylist({ playlistId: 'p1', climbUuid: 'c1' })).rejects.toBe(boom);
+  });
+
   it('prefers the explicit executeGraphQL option over the adapter', async () => {
     const adapterExec = vi.fn(async () => ({ reorderPlaylistClimb: false })) as unknown as ExecutePlaylistsGraphQL;
     const override = vi.fn(async () => ({ reorderPlaylistClimb: true })) as unknown as ExecutePlaylistsGraphQL;

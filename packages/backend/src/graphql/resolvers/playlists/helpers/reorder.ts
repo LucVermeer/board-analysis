@@ -32,8 +32,13 @@ export function computePlaylistReorderWrites<Id>(
     throw new Error('Climb not found in playlist');
   }
 
-  // Clamp the target into range; a no-op move yields an empty write set.
+  // Clamp the target into range; a true no-op move yields an empty write set —
+  // short-circuit so a misbehaving client sending the current index can't make
+  // us renumber (and rewrite) a gappy list for no reason.
   const targetIndex = Math.min(Math.max(newIndex, 0), rows.length - 1);
+  if (targetIndex === oldIndex) {
+    return [];
+  }
 
   const reordered = [...rows];
   const [moved] = reordered.splice(oldIndex, 1);

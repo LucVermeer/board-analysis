@@ -284,6 +284,7 @@ export function PlaylistDetailView({
             rowIndex={index}
             drag={dragControls}
             onRemove={onRemoveClimb ?? noopRemove}
+            onReorder={onReorderClimb ?? noopReorder}
           />
         );
       }
@@ -301,7 +302,17 @@ export function PlaylistDetailView({
         />
       );
     },
-    [renderBoard, editMode, editBoard, dragControls, onRemoveClimb, readOnly, handleActivate, handleSwitchBoard],
+    [
+      renderBoard,
+      editMode,
+      editBoard,
+      dragControls,
+      onRemoveClimb,
+      onReorderClimb,
+      readOnly,
+      handleActivate,
+      handleSwitchBoard,
+    ],
   );
 
   // Cog shown beside the playlist name only in edit mode — opens the
