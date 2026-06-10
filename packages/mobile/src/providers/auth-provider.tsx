@@ -26,7 +26,7 @@ type AuthState = {
   isLoading: boolean;
   signIn: (provider: AuthProviderType) => Promise<WebBrowserAuthSessionResult>;
   signInWithCredentials: (email: string, password: string) => Promise<CredentialsSignInResult>;
-  signOut: () => Promise<void>;
+  signOut: (method?: 'manual' | 'account_deleted') => Promise<void>;
   refreshAuthState: () => Promise<void>;
 };
 
@@ -171,11 +171,18 @@ export function AuthProvider({ children, onReady }: AuthProviderProps) {
     [checkAuth],
   );
 
-  const signOut = useCallback(async () => {
-    track(SHARED_EVENTS.Logout, { method: 'manual' });
-    await authSignOut();
-    await runSignedOutCleanup();
-  }, [runSignedOutCleanup]);
+  // `method` distinguishes a plain Sign Out ('manual') from an account deletion
+  // ('account_deleted') in analytics, matching web. The cleanup is identical:
+  // authSignOut()'s revoke is best-effort (src/lib/auth.ts), so revoking a token
+  // whose session was just deleted server-side won't block local cleanup.
+  const signOut = useCallback(
+    async (method: 'manual' | 'account_deleted' = 'manual') => {
+      track(SHARED_EVENTS.Logout, { method });
+      await authSignOut();
+      await runSignedOutCleanup();
+    },
+    [runSignedOutCleanup],
+  );
 
   // Let the lib-layer 401 interceptor drive the same cleanup. On a failed-refresh
   // 401 it has already revoked + cleared tokens; this flips the provider out of
