@@ -61,7 +61,7 @@ import {
 import { getLastSearch, saveLastSearch, boardConfigKey } from '../../../src/lib/last-search-store';
 import { getFilterSummary, buildClimbFilterSummary } from '../../../src/lib/filter-summary';
 import { getActiveFilterTokens } from '../../../src/lib/filter-tokens';
-import { normalizeSearchName } from '../../../src/lib/search-name';
+import { normalizeSearchName, visibleSearchTextNeedsSync } from '../../../src/lib/search-name';
 import { track } from '../../../src/lib/analytics';
 import { iosSystemColors } from '../../../src/theme/ios-colors';
 import { spacing } from '../../../src/theme/tokens';
@@ -353,12 +353,16 @@ function ClimbListInner() {
   const searchReady = hasBoardConfig && restoredKey === boardKey;
 
   useEffect(() => {
-    if (!searchReady || visibleSearchTextRef.current === name) return;
+    // Compare NORMALIZED so an in-progress trim-only difference (e.g. the user
+    // typed "crimp " before the next word) isn't treated as a desync and the
+    // field's trailing/leading whitespace isn't yanked out mid-typing. Genuine
+    // external changes (board restore, recent pill, cancel) still sync.
+    if (!searchReady || !visibleSearchTextNeedsSync(visibleSearchTextRef.current, name)) return;
     let cancelled = false;
     let syncAttempts = 0;
 
     const syncVisibleSearchText = () => {
-      if (cancelled || visibleSearchTextRef.current === name) return;
+      if (cancelled || !visibleSearchTextNeedsSync(visibleSearchTextRef.current, name)) return;
       const applied = applyVisibleSearchText(name);
       if (applied) {
         visibleSearchTextRef.current = name;
