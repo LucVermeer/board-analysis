@@ -1,21 +1,31 @@
-// Top chrome for the Profile ("You") tab. Composes the board-agnostic
-// CollapsingLargeTitleHeader (no board pill — unlike Climbs/Discover) with a
-// settings-gear island on the left, an optional filter island on the right (the
-// Progress sub-tab only), and the Progress/Sessions/Logbook segmented control as
-// its below-row content. The collapsing large title + glass islands degrade for
-// free on the Material variant via GlassSurface / SegmentedControl.
+// Top chrome for the Profile ("You") tab, routed by UI variant.
+//
+// Liquid Glass: the board-agnostic CollapsingLargeTitleHeader (no board pill —
+// unlike Climbs/Discover) with a settings-gear island on the left, an optional
+// filter island on the right (the Progress sub-tab only), and the
+// Progress/Sessions/Logbook segmented control (glass-track-wrapped) as its
+// below-row content.
+//
+// Material: an absolutely-positioned, onHeightChange-measured M3 small app bar
+// (mirroring ClimbTopChrome) — the dashboard title via Appbar.Content, settings
+// + (Progress-only) filter Appbar.Actions, and the MaterialTabs primary tabs as
+// the app bar's bottom row.
 
 import { useCallback, useMemo } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { type LayoutChangeEvent, StyleSheet, View } from 'react-native';
 import { type SharedValue } from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
+import { Appbar } from 'react-native-paper';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../providers/theme-provider';
 import { useNativeGlass } from '../../hooks/use-native-glass';
 import { spacing, shadows } from '../../theme/tokens';
 import { Icon } from '../Icon';
+import { iconMap } from '../icon-map';
 import { GlassSurface } from '../GlassSurface';
 import { SegmentedControl } from '../SegmentedControl';
+import { MaterialTabs } from '../navigation/MaterialTabs';
 import { CollapsingLargeTitleHeader, GlassActionToolbar, GlassToolbarAction } from '../chrome';
 
 // The segmented control floats over the chrome's faded scrim with scrolling
@@ -27,22 +37,116 @@ const SEGMENT_TRACK_RADIUS = 10;
 export type ProfileTabKey = 'progress' | 'sessions' | 'logbook';
 
 type ProfileTopChromeProps = {
-  /** Selected sub-tab; drives the segmented control's pill. */
+  /** Selected sub-tab; drives the segmented control's pill / the active tab. */
   activeTab: ProfileTabKey;
   onSelectTab: (key: ProfileTabKey) => void;
   /** Tints the filter island accent when the Progress filters are narrowed. */
   hasActiveFilters: boolean;
   /** Open the Progress filter sheet (only reachable from the Progress sub-tab). */
   onOpenFilters: () => void;
-  /** Active sub-tab's scroll offset, driving the large title collapse. */
+  /** Active sub-tab's scroll offset, driving the large title collapse (glass only). */
   scrollY: SharedValue<number>;
-  /** Tapping the collapsed title capsule scrolls the active sub-tab to the top. */
+  /** Tapping the collapsed title capsule scrolls the active sub-tab to the top
+   *  (glass only). */
   onPressTitle: () => void;
   /** Report the measured chrome height so each sub-tab can inset its top padding. */
   onHeightChange: (height: number) => void;
 };
 
-export function ProfileTopChrome({
+export function ProfileTopChrome(props: ProfileTopChromeProps) {
+  const { variant } = useTheme();
+  return variant === 'material' ? <ProfileTopChromeMaterial {...props} /> : <ProfileTopChromeGlass {...props} />;
+}
+
+function useSegmentOptions() {
+  const { t } = useTranslation('you');
+  return useMemo(
+    () => [
+      { key: 'progress' as const, label: t('tabs.progress') },
+      { key: 'sessions' as const, label: t('tabs.sessions') },
+      { key: 'logbook' as const, label: t('tabs.logbook') },
+    ],
+    [t],
+  );
+}
+
+function ProfileTopChromeMaterial({
+  activeTab,
+  onSelectTab,
+  hasActiveFilters,
+  onOpenFilters,
+  onHeightChange,
+}: ProfileTopChromeProps) {
+  const { t } = useTranslation('you');
+  const router = useRouter();
+  const { systemColors, brandColors, m3 } = useTheme();
+  const insets = useSafeAreaInsets();
+
+  const dashboardTitle = t('metadata.dashboard.title');
+  const tabOptions = useSegmentOptions();
+
+  const handleOpenSettings = useCallback(() => {
+    router.push('/(tabs)/profile/more');
+  }, [router]);
+
+  const handleLayout = useCallback(
+    (event: LayoutChangeEvent) => onHeightChange(event.nativeEvent.layout.height),
+    [onHeightChange],
+  );
+
+  // The filter action only makes sense on Progress (the only sub-tab the filter
+  // sheet narrows); Sessions/Logbook show none.
+  const filterColor = hasActiveFilters ? (brandColors.primary as string) : (systemColors.label as string);
+
+  return (
+    <View
+      pointerEvents="box-none"
+      style={[
+        styles.materialContainer,
+        {
+          paddingTop: insets.top,
+          backgroundColor: systemColors.secondaryBackground,
+          borderBottomColor: systemColors.separator,
+        },
+      ]}
+      onLayout={handleLayout}
+    >
+      <Appbar.Header
+        statusBarHeight={0}
+        mode="small"
+        elevated
+        style={[styles.materialAppbar, { backgroundColor: systemColors.secondaryBackground }]}
+      >
+        <Appbar.Content title={dashboardTitle} color={systemColors.label as string} />
+        <Appbar.Action
+          icon={iconMap.settings.android}
+          color={systemColors.label as string}
+          onPress={handleOpenSettings}
+          accessibilityLabel={t('mobile.settings')}
+        />
+        {activeTab === 'progress' ? (
+          <Appbar.Action
+            icon={iconMap.filter.android}
+            color={filterColor}
+            onPress={onOpenFilters}
+            accessibilityLabel={t('mobile.filter.title')}
+          />
+        ) : null}
+      </Appbar.Header>
+
+      <View pointerEvents="box-none" style={[styles.materialTabsRow, { borderTopColor: m3.outlineVariant }]}>
+        <MaterialTabs
+          options={tabOptions}
+          selectedKey={activeTab}
+          onSelect={onSelectTab}
+          accessibilityLabel={dashboardTitle}
+        />
+      </View>
+    </View>
+  );
+}
+
+function ProfileTopChromeGlass({
   activeTab,
   onSelectTab,
   hasActiveFilters,
@@ -53,27 +157,15 @@ export function ProfileTopChrome({
 }: ProfileTopChromeProps) {
   const { t } = useTranslation('you');
   const router = useRouter();
-  const { systemColors, brandColors, variant } = useTheme();
+  const { systemColors, brandColors } = useTheme();
   const nativeGlass = useNativeGlass();
-  // On Material the segmented control is Paper's SegmentedButtons, which draws its
-  // own outlined container — a glass "track" behind it would double up (mismatched
-  // radii, double borders, violet-on-violet). So the track is glass-variant only.
-  const isMaterial = variant === 'material';
 
   const dashboardTitle = t('metadata.dashboard.title');
+  const segmentOptions = useSegmentOptions();
 
   const handleOpenSettings = useCallback(() => {
     router.push('/(tabs)/profile/more');
   }, [router]);
-
-  const segmentOptions = useMemo(
-    () => [
-      { key: 'progress' as const, label: t('tabs.progress') },
-      { key: 'sessions' as const, label: t('tabs.sessions') },
-      { key: 'logbook' as const, label: t('tabs.logbook') },
-    ],
-    [t],
-  );
 
   const leftActions = (
     <GlassActionToolbar actionCount={1}>
@@ -104,41 +196,29 @@ export function ProfileTopChrome({
       rightActions={rightActions}
     >
       <View pointerEvents="box-none" style={styles.segmentStack}>
-        {isMaterial ? (
-          // Paper SegmentedButtons owns its surface — render it bare on the scrim.
+        <View
+          style={[
+            styles.segmentTrack,
+            !nativeGlass && shadows.sm,
+            !nativeGlass && { borderWidth: StyleSheet.hairlineWidth, borderColor: systemColors.separator },
+          ]}
+        >
+          <GlassSurface
+            glassEffectStyle="regular"
+            fallbackColor={systemColors.fill}
+            borderRadius={SEGMENT_TRACK_RADIUS}
+            style={StyleSheet.absoluteFill}
+            pointerEvents="none"
+          />
           <SegmentedControl
             options={segmentOptions}
             selectedKey={activeTab}
             onSelect={onSelectTab}
-            trackColor={systemColors.fill}
+            trackColor="transparent"
             textVariant="subheadline"
             accessibilityLabel={dashboardTitle}
           />
-        ) : (
-          <View
-            style={[
-              styles.segmentTrack,
-              !nativeGlass && shadows.sm,
-              !nativeGlass && { borderWidth: StyleSheet.hairlineWidth, borderColor: systemColors.separator },
-            ]}
-          >
-            <GlassSurface
-              glassEffectStyle="regular"
-              fallbackColor={systemColors.fill}
-              borderRadius={SEGMENT_TRACK_RADIUS}
-              style={StyleSheet.absoluteFill}
-              pointerEvents="none"
-            />
-            <SegmentedControl
-              options={segmentOptions}
-              selectedKey={activeTab}
-              onSelect={onSelectTab}
-              trackColor="transparent"
-              textVariant="subheadline"
-              accessibilityLabel={dashboardTitle}
-            />
-          </View>
-        )}
+        </View>
       </View>
     </CollapsingLargeTitleHeader>
   );
@@ -153,5 +233,20 @@ const styles = StyleSheet.create({
     borderRadius: SEGMENT_TRACK_RADIUS,
     // Clip the absolutely-filled GlassSurface to the rounded corners on Android.
     overflow: 'hidden',
+  },
+  materialContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 20,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  materialAppbar: {
+    elevation: 0,
+    shadowOpacity: 0,
+  },
+  materialTabsRow: {
+    borderTopWidth: StyleSheet.hairlineWidth,
   },
 });

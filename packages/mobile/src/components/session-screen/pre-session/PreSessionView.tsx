@@ -11,9 +11,7 @@ import { SHARED_EVENTS } from '@boardsesh/analytics';
 import type { BoardName, Climb } from '@boardsesh/shared-schema';
 import type { ClimbQueueItem } from '@boardsesh/queue';
 import { track } from '../../../lib/analytics';
-import { Button } from '../../Button';
 import { Card } from '../../Card';
-import { PinnedActionBar } from '../../PinnedActionBar';
 import { SectionHeader } from '../../SectionHeader';
 import { Text } from '../../Text';
 import type { QueueItemRowBoard } from '../../QueueItemRow';
@@ -28,6 +26,7 @@ import { useDrawerHost } from '../../../providers/drawer-host-provider';
 import { useBottomChromeMetrics } from '../../../hooks/use-bottom-chrome-metrics';
 import { reportError } from '../../../lib/sentry';
 import { RecordTopChrome } from '../RecordTopChrome';
+import { SessionActionFooter } from '../SessionActionFooter';
 import { BoardSummaryCard } from './BoardSummaryCard';
 import { GeneratorPickerCard, type GeneratorSelection } from './GeneratorPickerCard';
 import { WorkoutPreviewRow } from './WorkoutPreviewRow';
@@ -54,7 +53,7 @@ function previewKeyExtractor(previewItem: PreviewItem): string {
 
 export function PreSessionView({ showChrome = false }: PreSessionViewProps) {
   const { t } = useTranslation('session');
-  const { systemColors } = useTheme();
+  const { systemColors, variant } = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const bottomChrome = useBottomChromeMetrics();
@@ -231,10 +230,13 @@ export function PreSessionView({ showChrome = false }: PreSessionViewProps) {
     () => (
       <View style={styles.header}>
         {/* The screen's identity in-body under the floating chrome, collapsing
-            into the centred header capsule as it scrolls up. */}
-        <Text variant="largeTitle" style={styles.screenTitle}>
-          {t('mobile.session.headerStart')}
-        </Text>
+            into the centred header capsule as it scrolls up. On Material the
+            app bar owns the title, so the in-body large title is gated off. */}
+        {variant === 'material' ? null : (
+          <Text variant="largeTitle" style={styles.screenTitle}>
+            {t('mobile.session.headerStart')}
+          </Text>
+        )}
 
         {/* The chrome pill owns board identity but collapses on scroll, so this
             keeps the full config (name · size · angle) persistently visible when a
@@ -277,6 +279,7 @@ export function PreSessionView({ showChrome = false }: PreSessionViewProps) {
       showPreviewSection,
       systemColors.secondaryLabel,
       t,
+      variant,
     ],
   );
 
@@ -323,16 +326,17 @@ export function PreSessionView({ showChrome = false }: PreSessionViewProps) {
         />
       ) : null}
 
-      <PinnedActionBar testID="pre-session-footer" onHeightChange={setFooterHeight}>
-        <Button
-          title={isStarting ? t('mobile.session.preStarting') : t('mobile.session.preStart')}
-          onPress={() => void handleStart()}
-          variant="filled"
-          size="large"
-          disabled={!canStart}
-          loading={isStarting}
-        />
-      </PinnedActionBar>
+      <SessionActionFooter
+        testID="pre-session-footer"
+        onHeightChange={setFooterHeight}
+        label={isStarting ? t('mobile.session.preStarting') : t('mobile.session.preStart')}
+        materialIcon="play.fill"
+        emphasis="primary"
+        glassButtonVariant="filled"
+        onPress={() => void handleStart()}
+        disabled={!canStart}
+        loading={isStarting}
+      />
     </View>
   );
 }

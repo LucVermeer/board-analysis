@@ -20,8 +20,17 @@ type ChromeProps = {
 // gating contract can be asserted directly.
 const chrome = vi.hoisted(() => ({ props: null as ChromeProps | null }));
 
+vi.mock('react-native', () => ({
+  StyleSheet: { create: (styles: unknown) => styles, hairlineWidth: 1 },
+  View: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
+}));
 vi.mock('react-native-reanimated', () => ({}));
+vi.mock('react-native-safe-area-context', () => ({
+  useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
+}));
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
+// No `variant` → the glass branch runs, exercising the CollapsingTopChrome
+// forwarding contract below.
 vi.mock('../../../providers/theme-provider', () => ({
   useTheme: () => ({ brandColors: { primary: '#6D28D9' } }),
 }));
