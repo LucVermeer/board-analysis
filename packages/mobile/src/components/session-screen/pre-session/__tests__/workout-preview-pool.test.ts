@@ -160,6 +160,35 @@ describe('refreshSlotInState', () => {
     }
   });
 
+  it('refreshes within the slot grade and never crosses into another grade', async () => {
+    // Pyramid/ladder workouts put different grades in different slots. Refreshing
+    // a grade-18 row must always land on another grade-18 climb, never the
+    // grade-17 slot's climbs — the pool is keyed by slot.grade.
+    let state = buildState(
+      { 17: ['g17-a', 'g17-b', 'g17-c'], 18: ['g18-a', 'g18-b', 'g18-c'] },
+      [
+        [17, 0],
+        [18, 1],
+      ],
+    );
+    const grade18Uuid = state.items[1].item.uuid; // queue-item uuid is preserved across refreshes
+    const fetchPool = vi.fn();
+
+    const seen = new Set<string>([state.items[1].item.climb.uuid]);
+    for (let refresh = 0; refresh < 8; refresh++) {
+      const result = await refreshSlotInState(state, grade18Uuid, ctx, fetchPool);
+      expect(result.changed).toBe(true);
+      state = result.state;
+      const refreshedUuid = state.items[1].item.climb.uuid;
+      expect(refreshedUuid.startsWith('g18-')).toBe(true); // stayed on grade 18
+      seen.add(refreshedUuid);
+      expect(state.items[0].item.climb.uuid.startsWith('g17-')).toBe(true); // grade-17 row untouched
+    }
+    expect(seen.size).toBeGreaterThan(1); // re-rolled within grade 18 rather than sticking
+    expect([...seen].every((uuid) => uuid.startsWith('g18-'))).toBe(true); // every pick stayed on grade
+    expect(fetchPool).not.toHaveBeenCalled(); // cache always had an unused grade-18 climb
+  });
+
   it('never re-picks a climb already shown in another row (cache miss → refetch)', async () => {
     // Two slots at grade 10, pool exactly [a, b] → rows show a and b (both used).
     const state = buildState({ 10: ['a', 'b'] }, [
