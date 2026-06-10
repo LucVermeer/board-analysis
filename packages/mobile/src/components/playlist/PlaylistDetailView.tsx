@@ -1,4 +1,4 @@
-import { type ReactNode, useCallback, useState } from 'react';
+import { type ReactNode, useCallback, useRef, useState } from 'react';
 import {
   type ColorValue,
   type LayoutChangeEvent,
@@ -209,23 +209,30 @@ export function PlaylistDetailView({
   const handleActivate = useCallback((tapped: SchemaClimb) => onActivateClimb(toQueueClimb(tapped)), [onActivateClimb]);
 
   // Read-only mode (board mismatch): tapping a climb routes to the board
-  // switcher — the one action that lets the user actually climb it. The hook
-  // memoizes `boardBanner`, so this stays stable and doesn't churn the rows.
-  const handleSwitchBoard = useCallback(() => boardBanner?.onPress(), [boardBanner]);
+  // switcher — the one action that lets the user actually climb it. Read the
+  // banner through a ref so this callback (and thus `renderItem`) stays stable
+  // even if `boardBanner`'s identity churns — otherwise every FlashList row
+  // would re-render on a banner recreation.
+  const boardBannerRef = useRef(boardBanner);
+  boardBannerRef.current = boardBanner;
+  const handleSwitchBoard = useCallback(() => boardBannerRef.current?.onPress(), []);
+
+  // `renderItem` depends on this boolean, not the `boardBanner` object, so a
+  // banner identity change doesn't invalidate the memoized rows.
+  const readOnly = !!boardBanner;
 
   // Activate-all: queue the playlist from the top. Reuses the same row-tap path
   // (which seeds the suggestion source from the whole list), so swiping the play
   // drawer walks the playlist. No-op on an empty list or in read-only mode.
   const handleActivateAll = useCallback(() => {
-    if (boardBanner) return;
+    if (readOnly) return;
     const first = climbs[0];
     if (first) onActivateClimb(first);
-  }, [boardBanner, climbs, onActivateClimb]);
+  }, [readOnly, climbs, onActivateClimb]);
 
   const renderItem = useCallback(
     ({ item }: { item: Climb }) => {
       if (!renderBoard) return null;
-      const readOnly = !!boardBanner;
       return (
         <ClimbListRow
           climb={toSchemaClimb(item)}
@@ -240,7 +247,7 @@ export function PlaylistDetailView({
         />
       );
     },
-    [renderBoard, boardBanner, handleActivate, handleSwitchBoard],
+    [renderBoard, readOnly, handleActivate, handleSwitchBoard],
   );
 
   const baseColor = hero.color && isValidHexColor(hero.color) ? hero.color : PLAYLIST_COLORS[0];

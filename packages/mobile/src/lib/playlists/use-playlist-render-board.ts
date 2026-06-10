@@ -51,40 +51,27 @@ export function usePlaylistRenderBoard(
   const router = useRouter();
   const { t } = useTranslation('playlists');
 
-  // Read the primitives up front so the memo stays stable across the fresh
+  // Read the primitives up front so the memos stay stable across the fresh
   // `playlistBoard` object callers pass inline each render.
   const boardType = playlistBoard?.boardType ?? null;
   const layoutId = playlistBoard?.layoutId ?? null;
 
-  return useMemo(() => {
+  // Resolve the render board + read-only flag from the real board state only (no
+  // `t`/`router`), so `renderBoard`'s identity is stable across unrelated
+  // re-renders and never churns the FlashList rows that depend on it.
+  const { renderBoard, mismatch } = useMemo<{ renderBoard: PlaylistRenderBoard | null; mismatch: boolean }>(() => {
     // Smart playlists (no board): always the active board, no mismatch concept.
-    if (boardType == null) {
-      return { renderBoard: activeBoard, banner: null };
-    }
+    if (boardType == null) return { renderBoard: activeBoard, mismatch: false };
 
     const matchesActive =
       !!activeBoard && activeBoard.boardName === boardType && (layoutId == null || activeBoard.layoutId === layoutId);
+    if (matchesActive) return { renderBoard: activeBoard, mismatch: false };
 
-    if (matchesActive) {
-      return { renderBoard: activeBoard, banner: null };
-    }
-
-    // Mismatch or no active board → read-only against the playlist's own board.
-    const boardLabel = formatBoardDisplayName(boardType);
-    const banner: PlaylistBoardBanner = {
-      title: t('detail.boardMismatch.title', { board: boardLabel }),
-      subtitle: t('detail.boardMismatch.subtitle', { board: boardLabel }),
-      cta: t('detail.boardMismatch.cta'),
-      onPress: () => router.push({ pathname: '/boards', params: { returnTo: '/(tabs)/discover' } }),
-    };
-
+    // Mismatch or no active board → read-only against the playlist's own board
+    // (largest size + all sets). `null` when it can't resolve (e.g. MoonBoard),
+    // in which case the banner shows alone rather than a half-broken list.
     const resolved = getBoardConfigForPlaylist(boardType, layoutId);
-    if (!resolved) {
-      // Unbundled board (e.g. MoonBoard) — can't render the holds, so show the
-      // banner alone rather than a half-broken list.
-      return { renderBoard: null, banner };
-    }
-
+    if (!resolved) return { renderBoard: null, mismatch: true };
     return {
       renderBoard: {
         boardName: resolved.boardName,
@@ -95,7 +82,22 @@ export function usePlaylistRenderBoard(
         // at its own climb's angle (the angle its grade was baked at).
         angle: activeBoard?.angle ?? 0,
       },
-      banner,
+      mismatch: true,
     };
-  }, [activeBoard, boardType, layoutId, router, t]);
+  }, [activeBoard, boardType, layoutId]);
+
+  // Banner copy + navigation depend on `t`/`router`; kept in a separate memo so
+  // their (possible) identity churn can't recreate `renderBoard`.
+  const banner = useMemo<PlaylistBoardBanner | null>(() => {
+    if (!mismatch || boardType == null) return null;
+    const boardLabel = formatBoardDisplayName(boardType);
+    return {
+      title: t('detail.boardMismatch.title', { board: boardLabel }),
+      subtitle: t('detail.boardMismatch.subtitle', { board: boardLabel }),
+      cta: t('detail.boardMismatch.cta'),
+      onPress: () => router.push({ pathname: '/boards', params: { returnTo: '/(tabs)/discover' } }),
+    };
+  }, [mismatch, boardType, t, router]);
+
+  return { renderBoard, banner };
 }
