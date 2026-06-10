@@ -24,6 +24,7 @@
       "forYou": "For You",
       "community": "Community Playlists"
     },
+    "communityByline": "{{creatorName}} - {{climbCount}}",
     "allPlaylists": {
       "title": "My Playlists",
       "seeAll": "See all",

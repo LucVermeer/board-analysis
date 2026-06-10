@@ -43,7 +43,7 @@ export default function DiscoverLibrary() {
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   const { data: token = null, isLoading: tokenLoading } = useAuthToken();
   const { data: profile, isLoading: profileLoading } = useProfile();
-  const { data: activeBoard } = useActiveBoard();
+  const { data: activeBoard, isLoading: activeBoardLoading } = useActiveBoard();
   const queryClient = useQueryClient();
 
   const userId = profile?.id ?? null;
@@ -119,6 +119,7 @@ export default function DiscoverLibrary() {
     angle: filterAngle,
     pageSize: 10,
     generatedRecommendation: true,
+    enabled: !activeBoardLoading,
   });
 
   // Community playlists (popular + recent streams, merged).
@@ -135,6 +136,7 @@ export default function DiscoverLibrary() {
     layoutId: filterLayoutId,
     pageSize: 10,
     generatedRecommendation: false,
+    enabled: !activeBoardLoading,
   });
 
   // Merge generated popular + recent, de-duped.
@@ -284,7 +286,7 @@ export default function DiscoverLibrary() {
   // mislead a user who actually has playlists into thinking they have none.
   const showLoadError =
     (userError || forYouError || communityError) &&
-    defaultSmartCards.length === 0 &&
+    userPlaylists.length === 0 &&
     pinnedPlaylists.length === 0 &&
     forYouItems.length === 0 &&
     communityItems.length === 0 &&
@@ -415,7 +417,10 @@ export default function DiscoverLibrary() {
                 color={playlist.color}
                 icon={playlist.icon}
                 variant="scroll"
-                metaLabel={`${playlist.creatorName} - ${t('detail.climbCount', { count: playlist.climbCount })}`}
+                metaLabel={t('library.communityByline', {
+                  creatorName: playlist.creatorName,
+                  climbCount: t('detail.climbCount', { count: playlist.climbCount }),
+                })}
                 index={index}
                 onPress={() => goToPlaylist(playlist.uuid)}
               />
