@@ -98,6 +98,11 @@
     "share": "Partager la playlist",
     "actions": "Actions de la playlist",
     "activateAll": "Mettre toutes les voies en file",
+    "boardMismatch": {
+      "title": "Passez à {{board}} pour grimper cette playlist",
+      "subtitle": "Ce sont des voies {{board}}. Changez de planche pour les mettre en file.",
+      "cta": "Changer de planche"
+    },
     "menu": {
       "generate": "Générer",
       "edit": "Modifier",

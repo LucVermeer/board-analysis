@@ -66,6 +66,9 @@ vi.mock('../../../../src/providers/theme-provider', () => ({
 vi.mock('../../../../src/providers/auth-provider', () => ({ useAuth: () => ({ isAuthenticated: true }) }));
 vi.mock('../../../../src/providers/toast-provider', () => ({ useToast: () => ({ showToast: vi.fn() }) }));
 vi.mock('../../../../src/lib/playlists/use-playlist-activation', () => ({ usePlaylistActivation: () => vi.fn() }));
+vi.mock('../../../../src/lib/playlists/use-playlist-render-board', () => ({
+  usePlaylistRenderBoard: () => ({ renderBoard: null, banner: null }),
+}));
 vi.mock('../../../../src/lib/playlists/recents-store', () => ({ recordPlaylistOpen: vi.fn() }));
 vi.mock('../../../../src/lib/climb-types', () => ({ toQueueClimbs: (climbs: unknown) => climbs }));
 vi.mock('../../../../src/lib/haptics', () => ({ hapticSelection: vi.fn() }));

@@ -28,6 +28,7 @@ import {
 import { GlassIconButton } from '../../../src/components/GlassIconButton';
 import { getHttpClient } from '../../../src/lib/graphql/client';
 import { usePlaylistActivation } from '../../../src/lib/playlists/use-playlist-activation';
+import { usePlaylistRenderBoard } from '../../../src/lib/playlists/use-playlist-render-board';
 import { recordPlaylistOpen } from '../../../src/lib/playlists/recents-store';
 import { toQueueClimbs } from '../../../src/lib/climb-types';
 import { hapticSelection } from '../../../src/lib/haptics';
@@ -114,6 +115,14 @@ export default function PlaylistDetail() {
     fetchPage,
     refreshErrorMessage: 'Failed to refresh playlist suggestions:',
   });
+
+  // Render the climbs against the playlist's own board. When it matches the
+  // active board this is the active board (tapping queues normally); when it
+  // differs (or there's no active board) rows render read-only against the
+  // playlist's board and `boardBanner` prompts a switch.
+  const { renderBoard, banner: boardBanner } = usePlaylistRenderBoard(
+    playlist ? { boardType: playlist.boardType, layoutId: playlist.layoutId } : null,
+  );
 
   const isOwner = playlist?.userRole === 'owner';
   const isFollowable = !!playlist?.isPublic && !isOwner;
@@ -414,6 +423,8 @@ export default function PlaylistDetail() {
       <PlaylistDetailView
         hero={hero}
         climbs={allClimbs}
+        renderBoard={renderBoard}
+        boardBanner={boardBanner}
         isLoading={query.isLoading}
         isFetchingNextPage={query.isFetchingNextPage}
         hasNextPage={query.hasNextPage ?? false}

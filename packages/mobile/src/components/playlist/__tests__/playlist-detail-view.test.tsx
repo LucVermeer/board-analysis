@@ -114,8 +114,8 @@ vi.mock('../../../hooks/use-bottom-chrome-metrics', () => ({
 
 vi.mock('../../../theme/layout', () => ({ glassSize: { standard: 48, capsule: 36, hero: 56 } }));
 vi.mock('../../../theme/tokens', () => ({
-  spacing: { 1: 4, 2: 8, 4: 16, 5: 20, 12: 48 },
-  borderRadius: { xl: 24 },
+  spacing: { 1: 4, 2: 8, 3: 12, 4: 16, 5: 20, 12: 48 },
+  borderRadius: { lg: 12, xl: 24 },
 }));
 vi.mock('../../../theme/colors', () => ({
   withAlpha: (color: string, alpha: number) => `${color}|${alpha}`,
@@ -140,6 +140,13 @@ vi.mock('../../ActivityIndicator', () => ({
 }));
 
 vi.mock('../../ClimbListRow', () => ({ ClimbListRow: () => null }));
+
+// Button pulls in react-native-paper + expo-modules-core; stub it to a plain
+// button so the board-mismatch banner can render in jsdom.
+vi.mock('../../Button', () => ({
+  Button: ({ title, onPress }: { title: string; onPress?: () => void }) =>
+    createElement('button', { 'data-button': 'true', onClick: onPress }, title),
+}));
 
 vi.mock('../../ClimbListRowSkeleton', () => ({
   ClimbListRowSkeleton: () => createElement('div', { 'data-skeleton-row': 'true' }),
@@ -212,6 +219,7 @@ function makeProps(overrides: Partial<PlaylistDetailViewProps> = {}): PlaylistDe
       color: '#8C4A52',
     },
     climbs: [],
+    renderBoard: { boardName: 'kilter', layoutId: 1, sizeId: 10, setIds: '1,2', angle: 40 },
     isLoading: false,
     isFetchingNextPage: false,
     hasNextPage: false,
@@ -441,6 +449,46 @@ describe('PlaylistDetailView', () => {
       // (collapsed) icon form rather than the scroll-driven pill.
       expect(actions).toHaveBeenCalledWith(true);
       expect(container.querySelector('[data-action-collapsed="true"]')).not.toBeNull();
+    });
+  });
+
+  // ── Board-mismatch banner (read-only) ───────────────────────────────────────
+  describe('board mismatch banner', () => {
+    const banner = {
+      title: 'Switch to Kilter to climb this playlist',
+      subtitle: 'These are Kilter climbs. Switch boards to queue them.',
+      cta: 'Switch board',
+      onPress: vi.fn(),
+    };
+
+    beforeEach(() => {
+      banner.onPress.mockClear();
+    });
+
+    it('renders the banner title, subtitle and CTA when boardBanner is set', () => {
+      const { getByText } = render(<PlaylistDetailView {...makeProps({ climbs: [CLIMB], boardBanner: banner })} />);
+      expect(getByText(banner.title)).not.toBeNull();
+      expect(getByText(banner.subtitle)).not.toBeNull();
+      expect(getByText(banner.cta)).not.toBeNull();
+    });
+
+    it('clicking the banner CTA calls boardBanner.onPress', () => {
+      const { getByText } = render(<PlaylistDetailView {...makeProps({ climbs: [CLIMB], boardBanner: banner })} />);
+      fireEvent.click(getByText(banner.cta));
+      expect(banner.onPress).toHaveBeenCalledTimes(1);
+    });
+
+    it('renders no banner when boardBanner is absent', () => {
+      const { container } = render(<PlaylistDetailView {...makeProps({ climbs: [CLIMB] })} />);
+      expect(container.querySelector('[data-button]')).toBeNull();
+    });
+
+    it('hides the Material activate-all action while the banner is shown', () => {
+      ctrl.variant = 'material';
+      const { container } = render(<PlaylistDetailView {...makeProps({ climbs: [CLIMB], boardBanner: banner })} />);
+      // Queueing is blocked on a board mismatch, so the play-all action is gone
+      // even though the list has climbs.
+      expect(container.querySelector('[data-appbar-action="play"]')).toBeNull();
     });
   });
 });
