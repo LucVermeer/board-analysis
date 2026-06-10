@@ -98,6 +98,11 @@
     "share": "Share playlist",
     "actions": "Playlist actions",
     "activateAll": "Queue every climb",
+    "boardMismatch": {
+      "title": "Switch to {{board}} to climb this playlist",
+      "subtitle": "These are {{board}} climbs. Switch boards to queue them.",
+      "cta": "Switch board"
+    },
     "menu": {
       "generate": "Generate",
       "edit": "Edit",

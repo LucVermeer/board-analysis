@@ -30,12 +30,13 @@ import { ActivityIndicator } from '../ActivityIndicator';
 import { ClimbListRow } from '../ClimbListRow';
 import { ClimbListRowSkeleton } from '../ClimbListRowSkeleton';
 import { GlassIconButton } from '../GlassIconButton';
+import { Button } from '../Button';
 import { PlaylistBoardBackdrop } from './PlaylistBoardBackdrop';
 import { buildHeroGradient, shiftLightness } from './playlist-gradient';
 import { PLAYLIST_COLORS, isValidHexColor } from './playlist-colors';
 import { withAlpha } from '../../theme/colors';
 import { toQueueClimb, toSchemaClimb } from '../../lib/climb-types';
-import { useDrawerHost } from '../../providers/drawer-host-provider';
+import type { PlaylistRenderBoard, PlaylistBoardBanner } from '../../lib/playlists/use-playlist-render-board';
 import { useTheme } from '../../providers/theme-provider';
 import { useBottomChromeMetrics } from '../../hooks/use-bottom-chrome-metrics';
 import { glassSize } from '../../theme/layout';
@@ -87,6 +88,15 @@ export type PlaylistDetailHero = {
 export type PlaylistDetailViewProps = {
   hero: PlaylistDetailHero;
   climbs: Climb[];
+  /** Board the climb rows render against (resolved by `usePlaylistRenderBoard`).
+   *  Null while the active board is still loading, or when the playlist's board
+   *  can't be resolved — every row renders null in that case. */
+  renderBoard: PlaylistRenderBoard | null;
+  /** Set when the playlist belongs to a board other than the active one (or
+   *  there is no active board). Rows render read-only against the playlist's own
+   *  board, a switch-board banner shows above the list, and queueing (row tap +
+   *  activate-all) is disabled. */
+  boardBanner?: PlaylistBoardBanner | null;
   /** True while the first page loads (hero still renders; list shows a spinner). */
   isLoading: boolean;
   /** True while a subsequent page loads (trailing spinner). */
@@ -110,8 +120,14 @@ export type PlaylistDetailViewProps = {
 /**
  * Shared hero + paginated climb list for the playlist-detail and
  * smart-playlist-detail screens. Renders the colour/emoji hero, then a FlashList
- * of `ClimbListRow`s bound to the user's active board, paginating via
+ * of `ClimbListRow`s rendered against `renderBoard`, paginating via
  * `fetchNextPage` as the list nears its end.
+ *
+ * `renderBoard` is the user's active board for the common case. When a playlist
+ * belongs to a different board, the caller passes the playlist's own board plus
+ * a `boardBanner`: rows then render read-only against that board, a switch-board
+ * banner shows above the list, and queueing is disabled (the queue / play drawer
+ * / BLE LEDs follow the single active board).
  *
  * Two presentations: the Liquid Glass variant keeps the full-bleed gradient hero
  * with white text and floating FABs; the Material 3 variant swaps in a Paper
@@ -121,6 +137,8 @@ export type PlaylistDetailViewProps = {
 export function PlaylistDetailView({
   hero,
   climbs,
+  renderBoard,
+  boardBanner,
   isLoading,
   isFetchingNextPage,
   hasNextPage,
@@ -133,7 +151,6 @@ export function PlaylistDetailView({
   const { t } = useTranslation('playlists');
   const { t: tCommon } = useTranslation('common');
   const { systemColors, brandColors, variant } = useTheme();
-  const { boardConfig } = useDrawerHost();
   const bottomChrome = useBottomChromeMetrics();
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -191,30 +208,39 @@ export function PlaylistDetailView({
   // header `collapsed` flips during scroll) would otherwise re-render every row.
   const handleActivate = useCallback((tapped: SchemaClimb) => onActivateClimb(toQueueClimb(tapped)), [onActivateClimb]);
 
+  // Read-only mode (board mismatch): tapping a climb routes to the board
+  // switcher — the one action that lets the user actually climb it. The hook
+  // memoizes `boardBanner`, so this stays stable and doesn't churn the rows.
+  const handleSwitchBoard = useCallback(() => boardBanner?.onPress(), [boardBanner]);
+
   // Activate-all: queue the playlist from the top. Reuses the same row-tap path
   // (which seeds the suggestion source from the whole list), so swiping the play
-  // drawer walks the playlist. No-op on an empty list.
+  // drawer walks the playlist. No-op on an empty list or in read-only mode.
   const handleActivateAll = useCallback(() => {
+    if (boardBanner) return;
     const first = climbs[0];
     if (first) onActivateClimb(first);
-  }, [climbs, onActivateClimb]);
+  }, [boardBanner, climbs, onActivateClimb]);
 
   const renderItem = useCallback(
     ({ item }: { item: Climb }) => {
-      if (!boardConfig) return null;
+      if (!renderBoard) return null;
+      const readOnly = !!boardBanner;
       return (
         <ClimbListRow
           climb={toSchemaClimb(item)}
-          boardName={boardConfig.boardName as BoardName}
-          layoutId={boardConfig.layoutId}
-          sizeId={boardConfig.sizeId}
-          setIds={boardConfig.setIds}
-          angle={boardConfig.angle}
-          onPress={handleActivate}
+          boardName={renderBoard.boardName as BoardName}
+          layoutId={renderBoard.layoutId}
+          sizeId={renderBoard.sizeId}
+          setIds={renderBoard.setIds}
+          // Read-only rows render at each climb's own angle (the angle its grade
+          // was baked at); the matching case uses the active board's angle.
+          angle={readOnly ? item.angle : renderBoard.angle}
+          onPress={readOnly ? handleSwitchBoard : handleActivate}
         />
       );
     },
-    [boardConfig, handleActivate],
+    [renderBoard, boardBanner, handleActivate, handleSwitchBoard],
   );
 
   const baseColor = hero.color && isValidHexColor(hero.color) ? hero.color : PLAYLIST_COLORS[0];
@@ -251,6 +277,11 @@ export function PlaylistDetailView({
     </View>
   ) : null;
 
+  // Switch-board banner shown above the read-only list when the playlist's board
+  // differs from the active one. Sits inside the list header so it scrolls with
+  // the hero in both variants.
+  const bannerNode = boardBanner ? <BoardMismatchBanner banner={boardBanner} systemColors={systemColors} /> : null;
+
   // ── Material 3 branch ───────────────────────────────────────────────────────
   if (isMaterial) {
     const accent = brandColors.primary;
@@ -266,49 +297,52 @@ export function PlaylistDetailView({
           scrollEventThrottle={16}
           contentContainerStyle={{ paddingBottom: listPaddingBottom }}
           ListHeaderComponent={
-            <View onLayout={handleHeroLayout} style={styles.materialHero}>
-              <View
-                style={[
-                  styles.materialHeroBand,
-                  { paddingTop: headerBarHeight + spacing[4], backgroundColor: systemColors.secondaryBackground },
-                ]}
-              >
-                <View style={[styles.materialHeroEmojiCircle, { backgroundColor: systemColors.tertiaryBackground }]}>
-                  {hero.icon ? (
-                    <Text style={styles.materialHeroEmoji} allowFontScaling={false}>
-                      {hero.icon}
-                    </Text>
-                  ) : (
-                    <Icon name="tag" size={36} color={systemColors.secondaryLabel} />
-                  )}
-                </View>
-                <Text variant="title2" numberOfLines={2} color={systemColors.label} style={styles.materialHeroName}>
-                  {hero.name}
-                </Text>
-                <Text variant="subheadline" color={systemColors.secondaryLabel} style={styles.materialHeroMeta}>
-                  {t('detail.climbCount', { count: hero.climbCount })}
-                </Text>
-                {hero.followerLabel ? (
-                  <Text variant="footnote" color={systemColors.secondaryLabel} style={styles.materialHeroMeta}>
-                    {hero.followerLabel}
+            <>
+              <View onLayout={handleHeroLayout} style={styles.materialHero}>
+                <View
+                  style={[
+                    styles.materialHeroBand,
+                    { paddingTop: headerBarHeight + spacing[4], backgroundColor: systemColors.secondaryBackground },
+                  ]}
+                >
+                  <View style={[styles.materialHeroEmojiCircle, { backgroundColor: systemColors.tertiaryBackground }]}>
+                    {hero.icon ? (
+                      <Text style={styles.materialHeroEmoji} allowFontScaling={false}>
+                        {hero.icon}
+                      </Text>
+                    ) : (
+                      <Icon name="tag" size={36} color={systemColors.secondaryLabel} />
+                    )}
+                  </View>
+                  <Text variant="title2" numberOfLines={2} color={systemColors.label} style={styles.materialHeroName}>
+                    {hero.name}
                   </Text>
+                  <Text variant="subheadline" color={systemColors.secondaryLabel} style={styles.materialHeroMeta}>
+                    {t('detail.climbCount', { count: hero.climbCount })}
+                  </Text>
+                  {hero.followerLabel ? (
+                    <Text variant="footnote" color={systemColors.secondaryLabel} style={styles.materialHeroMeta}>
+                      {hero.followerLabel}
+                    </Text>
+                  ) : null}
+                </View>
+                {hero.description || hero.subtitle ? (
+                  <View style={styles.heroBelow}>
+                    {hero.description ? (
+                      <Text variant="footnote" numberOfLines={3} color={systemColors.secondaryLabel}>
+                        {hero.description}
+                      </Text>
+                    ) : null}
+                    {hero.subtitle ? (
+                      <Text variant="footnote" numberOfLines={1} color={systemColors.tertiaryLabel}>
+                        {hero.subtitle}
+                      </Text>
+                    ) : null}
+                  </View>
                 ) : null}
               </View>
-              {hero.description || hero.subtitle ? (
-                <View style={styles.heroBelow}>
-                  {hero.description ? (
-                    <Text variant="footnote" numberOfLines={3} color={systemColors.secondaryLabel}>
-                      {hero.description}
-                    </Text>
-                  ) : null}
-                  {hero.subtitle ? (
-                    <Text variant="footnote" numberOfLines={1} color={systemColors.tertiaryLabel}>
-                      {hero.subtitle}
-                    </Text>
-                  ) : null}
-                </View>
-              ) : null}
-            </View>
+              {bannerNode}
+            </>
           }
           ListFooterComponent={listFooterComponent}
           ListEmptyComponent={listEmptyComponent}
@@ -334,7 +368,7 @@ export function PlaylistDetailView({
               so we ask for the compact icon form (`actions(true)`) — `GlassIconButton`
               routes to a Paper `IconButton` here, fitting the bar. */}
           {actions?.(true)}
-          {climbs.length > 0 ? (
+          {climbs.length > 0 && !boardBanner ? (
             <Appbar.Action
               icon="play"
               color={accent as string}
@@ -451,7 +485,12 @@ export function PlaylistDetailView({
         contentInsetAdjustmentBehavior="never"
         automaticallyAdjustContentInsets={false}
         contentContainerStyle={{ paddingBottom: listPaddingBottom }}
-        ListHeaderComponent={header}
+        ListHeaderComponent={
+          <>
+            {header}
+            {bannerNode}
+          </>
+        }
         ListFooterComponent={listFooterComponent}
         ListEmptyComponent={listEmptyComponent}
       />
@@ -520,6 +559,44 @@ function MaterialEmptyState({
           {supporting}
         </Text>
       ) : null}
+    </View>
+  );
+}
+
+/** Switch-board banner for a read-only playlist whose board differs from the
+ *  active one: a board glyph + the prompt, then a filled CTA into `/boards`.
+ *  Lives above the (read-only) climb list in both variants. */
+function BoardMismatchBanner({
+  banner,
+  systemColors,
+}: {
+  banner: PlaylistBoardBanner;
+  systemColors: {
+    secondaryBackground: ColorValue;
+    label: ColorValue;
+    secondaryLabel: ColorValue;
+    separator: ColorValue;
+  };
+}) {
+  return (
+    <View
+      style={[
+        styles.banner,
+        { backgroundColor: systemColors.secondaryBackground, borderColor: systemColors.separator },
+      ]}
+    >
+      <View style={styles.bannerRow}>
+        <Icon name="boards.fill" size={22} color={systemColors.secondaryLabel} />
+        <View style={styles.bannerText}>
+          <Text variant="subheadline" color={systemColors.label} style={styles.bannerTitle}>
+            {banner.title}
+          </Text>
+          <Text variant="footnote" color={systemColors.secondaryLabel}>
+            {banner.subtitle}
+          </Text>
+        </View>
+      </View>
+      <Button title={banner.cta} onPress={banner.onPress} size="medium" style={styles.bannerButton} />
     </View>
   );
 }
@@ -672,6 +749,31 @@ const styles = StyleSheet.create({
   },
   materialEmptySupporting: {
     textAlign: 'center',
+  },
+  banner: {
+    marginHorizontal: spacing[4],
+    marginTop: spacing[2],
+    marginBottom: spacing[2],
+    padding: spacing[4],
+    borderRadius: borderRadius.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    gap: spacing[3],
+  },
+  bannerRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing[3],
+  },
+  bannerText: {
+    flex: 1,
+    gap: 2,
+  },
+  bannerTitle: {
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  bannerButton: {
+    alignSelf: 'flex-start',
   },
   footer: {
     paddingVertical: 20,

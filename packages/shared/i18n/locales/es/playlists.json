@@ -98,6 +98,11 @@
     "share": "Compartir playlist",
     "actions": "Acciones de la playlist",
     "activateAll": "Poner en cola todos los bloques",
+    "boardMismatch": {
+      "title": "Cambia a {{board}} para escalar esta playlist",
+      "subtitle": "Estos son bloques de {{board}}. Cambia de tablero para ponerlos en cola.",
+      "cta": "Cambiar de tablero"
+    },
     "menu": {
       "generate": "Generar",
       "edit": "Editar",

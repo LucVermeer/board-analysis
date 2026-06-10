@@ -20,6 +20,7 @@ import {
 } from '../../../../src/components/playlist';
 import { getHttpClient } from '../../../../src/lib/graphql/client';
 import { usePlaylistActivation } from '../../../../src/lib/playlists/use-playlist-activation';
+import { usePlaylistRenderBoard } from '../../../../src/lib/playlists/use-playlist-render-board';
 import { toQueueClimbs } from '../../../../src/lib/climb-types';
 import { smartPlaylistByType } from '../../../../src/lib/smart-playlists';
 import { useProfile } from '../../../../src/lib/graphql/hooks';
@@ -75,6 +76,10 @@ export default function SmartPlaylistDetail() {
     fetchPage,
     refreshErrorMessage: 'Failed to refresh smart playlist suggestions:',
   });
+
+  // Smart playlists are computed relative to the active board, so they always
+  // render against it (no mismatch banner).
+  const { renderBoard } = usePlaylistRenderBoard(null);
 
   const hero = useMemo(
     () => ({
@@ -133,6 +138,7 @@ export default function SmartPlaylistDetail() {
     <PlaylistDetailView
       hero={hero}
       climbs={allClimbs}
+      renderBoard={renderBoard}
       isLoading={query.isLoading}
       isFetchingNextPage={query.isFetchingNextPage}
       hasNextPage={query.hasNextPage ?? false}
