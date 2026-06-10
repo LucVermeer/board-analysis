@@ -65,14 +65,19 @@ function AddToPlaylistSheet({
     async (playlist: Playlist) => {
       if (!climb) return;
       try {
-        await addToPlaylist(playlist.id, climb.uuid, angle);
+        // The backend addClimbToPlaylist resolver matches playlists.uuid, so
+        // the playlist *uuid* (not the bigserial id) must go on the wire — the
+        // id round-trips a "Playlist not found" error. It also keys the
+        // post-add cache invalidation onto the detail screen's ['playlist', uuid]
+        // / ['playlistClimbs', uuid] entries.
+        await addToPlaylist(playlist.uuid, climb.uuid, angle);
         showToast(t('actions.playlist.toast.added'), 'success');
       } catch (error) {
         // The toast is intentionally generic, but a swallowed error makes
         // "failed to add" impossible to diagnose. Log the real reason in dev.
         if (__DEV__) {
           console.warn('[playlist] add to playlist failed', {
-            playlistId: playlist.id,
+            playlistUuid: playlist.uuid,
             climbUuid: climb.uuid,
             angle,
             error,

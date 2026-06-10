@@ -218,6 +218,67 @@ describe('useMobileClimbActionsData', () => {
         input: { playlistId: 'p-1', climbUuid: 'climb-x' },
       });
     });
+
+    it('invalidates the playlist detail caches and bumps climbCount after addToPlaylist resolves', async () => {
+      // Seed the picker cache so the optimistic climbCount bump is observable.
+      requestMock.mockResolvedValueOnce({
+        allUserPlaylists: { playlists: [mkPlaylist('p-1', 'Hard sends')] },
+      });
+      requestMock.mockResolvedValueOnce({ addClimbToPlaylist: {} });
+
+      const { queryClient, Wrapper } = makeWrapper();
+      const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+      const { result } = renderHook(() => useMobileClimbActionsData(), { wrapper: Wrapper });
+      await waitFor(() => expect(result.current.playlistsProviderProps.playlists.length).toBe(1));
+
+      await act(async () => {
+        await result.current.playlistsProviderProps.addToPlaylist('p-1', 'climb-x', 50);
+      });
+
+      // The detail screen keys its climb list + metadata by playlist uuid; a
+      // prefix invalidation refreshes them after the add lands.
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['playlistClimbs', 'p-1'] });
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['playlist', 'p-1'] });
+      // The picker's count subtitle reflects the add immediately.
+      expect(queryClient.getQueryData<Playlist[]>(['userPlaylists'])?.[0].climbCount).toBe(1);
+    });
+
+    it('invalidates the playlist detail caches and decrements climbCount after removeFromPlaylist resolves', async () => {
+      requestMock.mockResolvedValueOnce({
+        allUserPlaylists: { playlists: [{ ...mkPlaylist('p-1', 'Hard sends'), climbCount: 3 }] },
+      });
+      requestMock.mockResolvedValueOnce({ removeClimbFromPlaylist: true });
+
+      const { queryClient, Wrapper } = makeWrapper();
+      const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+      const { result } = renderHook(() => useMobileClimbActionsData(), { wrapper: Wrapper });
+      await waitFor(() => expect(result.current.playlistsProviderProps.playlists.length).toBe(1));
+
+      await act(async () => {
+        await result.current.playlistsProviderProps.removeFromPlaylist('p-1', 'climb-x');
+      });
+
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['playlistClimbs', 'p-1'] });
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['playlist', 'p-1'] });
+      expect(queryClient.getQueryData<Playlist[]>(['userPlaylists'])?.[0].climbCount).toBe(2);
+    });
+
+    it('does not drop climbCount below zero on removeFromPlaylist', async () => {
+      requestMock.mockResolvedValueOnce({
+        allUserPlaylists: { playlists: [{ ...mkPlaylist('p-1', 'Empty'), climbCount: 0 }] },
+      });
+      requestMock.mockResolvedValueOnce({ removeClimbFromPlaylist: true });
+
+      const { queryClient, Wrapper } = makeWrapper();
+      const { result } = renderHook(() => useMobileClimbActionsData(), { wrapper: Wrapper });
+      await waitFor(() => expect(result.current.playlistsProviderProps.playlists.length).toBe(1));
+
+      await act(async () => {
+        await result.current.playlistsProviderProps.removeFromPlaylist('p-1', 'climb-x');
+      });
+
+      expect(queryClient.getQueryData<Playlist[]>(['userPlaylists'])?.[0].climbCount).toBe(0);
+    });
   });
 
   describe('createPlaylist', () => {
