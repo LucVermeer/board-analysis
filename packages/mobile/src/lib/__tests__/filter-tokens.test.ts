@@ -27,6 +27,8 @@ const mockT = ((key: string, options?: Record<string, unknown>) => {
   if (key === 'mobile.filter.benchmark') return 'Benchmarks only';
   if (key === 'mobile.filter.status.drafts') return 'Drafts';
   if (key === 'mobile.filter.tallClimbs') return 'Tall climbs';
+  if (key === 'mobile.holdFilter.summaryCount') return `${options?.count} holds`;
+  if (key === 'mobile.zoneFilter.title') return 'Board region';
   return key;
 }) as unknown as Parameters<typeof getActiveFilterTokens>[0]['t'];
 
@@ -112,6 +114,31 @@ describe('getActiveFilterTokens', () => {
     expect(benchmark?.label).toBe('Benchmarks only');
     benchmark?.clear();
     expect(patchBoardFilters).toHaveBeenCalledWith({ onlyBenchmarks: false });
+  });
+
+  it('builds a holds token labelled by hold count and clears the holds filter', () => {
+    const { tokens, patchBoardFilters } = build(DEFAULT_FILTERS, {
+      holdsFilter: { '5': { HAND: 'include' }, '6': { FINISH: 'exclude' } },
+    });
+    const holds = tokens.find((token) => token.key === 'holds');
+    expect(holds?.label).toBe('2 holds');
+    holds?.clear();
+    expect(patchBoardFilters).toHaveBeenCalledWith({ holdsFilter: undefined });
+  });
+
+  it('omits the holds token when the holds filter has no entries', () => {
+    expect(keys(build(DEFAULT_FILTERS, { holdsFilter: {} }).tokens)).not.toContain('holds');
+  });
+
+  it('builds a zone token and clears the zone box and mode', () => {
+    const { tokens, patchBoardFilters } = build(DEFAULT_FILTERS, {
+      zoneBox: { edgeLeft: 0, edgeRight: 10, edgeBottom: 0, edgeTop: 10 },
+      zoneMode: 'allHolds',
+    });
+    const zone = tokens.find((token) => token.key === 'zone');
+    expect(zone?.label).toBe('Board region');
+    zone?.clear();
+    expect(patchBoardFilters).toHaveBeenCalledWith({ zoneBox: null, zoneMode: undefined });
   });
 
   it('orders grade first, then refinements in summary order', () => {

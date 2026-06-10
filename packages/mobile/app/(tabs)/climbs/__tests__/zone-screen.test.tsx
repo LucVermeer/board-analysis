@@ -288,5 +288,20 @@ describe('ZoneFilterScreen', () => {
       const selection = emitZoneFilterSelection.mock.calls.at(-1)?.[0] as { holdsFilter?: HoldsFilter };
       expect(selection.holdsFilter).toEqual({});
     });
+
+    it('strips an invalid leaf mode from holdsFilter, matching the holds screen', () => {
+      // Hold 1 sits inside the default zone; carry a valid leaf plus a bogus one.
+      // anyHold keeps the filter (no prune), so the emitted value reflects parse.
+      routeParams.current = baseParams({
+        zoneBox: JSON.stringify({ edgeLeft: 20, edgeRight: 80, edgeBottom: 20, edgeTop: 80 }),
+        zoneMode: 'anyHold',
+        holdsFilter: JSON.stringify({ '1': { HAND: 'include', FINISH: 'bogus' } }),
+      });
+      const { unmount } = render(<ZoneFilterScreen />);
+      unmount();
+      const selection = emitZoneFilterSelection.mock.calls.at(-1)?.[0] as { holdsFilter?: HoldsFilter };
+      // The bogus FINISH leaf is dropped; the valid HAND leaf survives.
+      expect(selection.holdsFilter).toEqual({ '1': { HAND: 'include' } });
+    });
   });
 });
