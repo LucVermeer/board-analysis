@@ -467,6 +467,20 @@ describe('board-presence resolvers', () => {
       ).rejects.toThrow('Unknown climb');
     });
 
+    it('rejects a report from a user who never connected to the board (proof-of-presence)', async () => {
+      // makeBoard() resolves as TEST_USER_ID, stamping that user's membership.
+      // A different authenticated user who never connected must not be able to
+      // inject onto this board's feed even if they guess the boardId.
+      const boardId = await makeBoard();
+      await expect(
+        boardPresenceMutations.reportBoardClimb(
+          undefined,
+          { boardId, climb: makeQueueItemInput(), angle: 40 },
+          authCtx({ userId: SECOND_USER_ID }),
+        ),
+      ).rejects.toThrow('Not connected to this board');
+    });
+
     it('requires authentication', async () => {
       await expect(
         boardPresenceMutations.reportBoardClimb(

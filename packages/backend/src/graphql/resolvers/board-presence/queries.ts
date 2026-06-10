@@ -3,7 +3,7 @@ import type { ConnectionContext, BoardPresenceClimb, BoardPresenceStats } from '
 import { db } from '../../../db/client';
 import * as dbSchema from '@boardsesh/db/schema';
 import { pubsub } from '../../../pubsub/index';
-import { applyRateLimit } from '../shared/helpers';
+import { applyRateLimit, requireAuthenticated } from '../shared/helpers';
 import { requireActiveBoardById, requireBoardPresenceEnabled } from './shared';
 
 type DifficultyRow = {
@@ -59,6 +59,7 @@ export const boardPresenceQueries = {
     ctx: ConnectionContext,
   ): Promise<BoardPresenceClimb[]> => {
     requireBoardPresenceEnabled();
+    requireAuthenticated(ctx);
     await applyRateLimit(ctx, 60, 'boardRecentClimbs');
     await requireActiveBoardById(boardId);
     return pubsub.getRecentBoardClimbs(String(boardId));
@@ -80,6 +81,7 @@ export const boardPresenceQueries = {
     ctx: ConnectionContext,
   ): Promise<BoardPresenceStats> => {
     requireBoardPresenceEnabled();
+    requireAuthenticated(ctx);
     await applyRateLimit(ctx, 30, 'boardPresenceStats');
     const board = await requireActiveBoardById(boardId);
 

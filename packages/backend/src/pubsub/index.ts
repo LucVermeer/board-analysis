@@ -24,6 +24,10 @@ type BoardPresenceSubscriber = (event: BoardPresenceEvent) => void;
 const BOARD_HISTORY_SIZE = 50; // Keep the last 50 climbs per board
 const BOARD_HISTORY_TTL = 86_400; // 24 hours
 const BOARD_SEQ_TTL = 86_400; // 24 hours
+// Proof-of-presence window: how long after connecting (resolveBoardForSerial /
+// resolveBoardForConfig) a user may report climbs to that board's feed. Long
+// enough for a climbing session; a reconnect re-stamps it.
+const BOARD_MEMBERSHIP_TTL = 43_200; // 12 hours
 
 /** External hook called after every queue event publish. Fire-and-forget. */
 type QueueEventHook = (sessionId: string, event: QueueEvent) => void;
@@ -55,6 +59,8 @@ class PubSub {
   // mode the authoritative counter is `board:${boardId}:seq` (INCR); this map
   // only ever serves single-instance deployments that have no Redis.
   private localBoardSeq = new Map<string, number>();
+  // Local-only proof-of-presence: `${boardId}:${userId}` → expiry epoch ms.
+  private localBoardMembership = new Map<string, number>();
   private redisAdapter: RedisPubSubAdapter | null = null;
   private initialized = false;
   private redisRequired = false;
@@ -788,6 +794,55 @@ class PubSub {
       logger.error('[PubSub] Failed to read board history:', error);
       return [];
     }
+  }
+
+  /**
+   * Record that a user is connected to a board (proof-of-presence), stamped on
+   * resolveBoardForSerial / resolveBoardForConfig. `reportBoardClimb` requires
+   * this so a logged-in user can't inject onto a board they never connected to.
+   * TTL'd; a reconnect re-stamps. Best-effort without Redis (local map).
+   */
+  async stampBoardMembership(boardId: string, userId: string): Promise<void> {
+    const key = `presence:board:${boardId}:user:${userId}`;
+    if (this.redisAdapter && this.isRedisConnected()) {
+      try {
+        const { publisher } = redisClientManager.getClients();
+        await publisher.set(key, '1', 'EX', BOARD_MEMBERSHIP_TTL);
+        return;
+      } catch (error) {
+        if (this.redisRequired) {
+          logger.error('[PubSub] Failed to stamp board membership in required Redis:', error);
+          throw error;
+        }
+        logger.error('[PubSub] Failed to stamp board membership, falling back to local:', error);
+      }
+    }
+    this.localBoardMembership.set(`${boardId}:${userId}`, Date.now() + BOARD_MEMBERSHIP_TTL * 1000);
+  }
+
+  /** True if the user has a live proof-of-presence stamp for the board. */
+  async hasBoardMembership(boardId: string, userId: string): Promise<boolean> {
+    const key = `presence:board:${boardId}:user:${userId}`;
+    if (this.redisAdapter && this.isRedisConnected()) {
+      try {
+        const { publisher } = redisClientManager.getClients();
+        return (await publisher.exists(key)) === 1;
+      } catch (error) {
+        if (this.redisRequired) {
+          logger.error('[PubSub] Failed to check board membership in required Redis:', error);
+          throw error;
+        }
+        logger.error('[PubSub] Failed to check board membership, falling back to local:', error);
+      }
+    }
+    const localKey = `${boardId}:${userId}`;
+    const expiry = this.localBoardMembership.get(localKey);
+    if (expiry === undefined) return false;
+    if (expiry <= Date.now()) {
+      this.localBoardMembership.delete(localKey);
+      return false;
+    }
+    return true;
   }
 
   /**

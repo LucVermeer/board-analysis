@@ -62,10 +62,18 @@ export const boardPresenceMutations = {
 
     const userId = ctx.userId!;
 
+    // Stamp proof-of-presence on whichever board we resolve to: the user is
+    // connected to this physical wall (they had its serial), which is what
+    // reportBoardClimb later requires before accepting a report.
+    const stampAndReturn = async (resolved: ResolvedBoard): Promise<ResolvedBoard> => {
+      await pubsub.stampBoardMembership(String(resolved.boardId), userId);
+      return resolved;
+    };
+
     // (a) An existing board already owns this serial — that's the shared board.
     const existingBySerial = await findActiveBoardBySerial(validSerial);
     if (existingBySerial) {
-      return toResolvedBoard(existingBySerial);
+      return stampAndReturn(toResolvedBoard(existingBySerial));
     }
 
     // (b) The caller already has a board for this exact config — bind the
@@ -90,7 +98,7 @@ export const boardPresenceMutations = {
           .where(and(eq(dbSchema.userBoards.id, ownBoard.id), isNull(dbSchema.userBoards.serialNumber)))
           .returning();
         if (updated) {
-          return toResolvedBoard(updated);
+          return stampAndReturn(toResolvedBoard(updated));
         }
       } catch (error) {
         // Unique-serial race: another connector bound this serial between our
@@ -99,7 +107,7 @@ export const boardPresenceMutations = {
           logger.warn(`[board-presence] resolveBoardForSerial bind race on own board: ${String(error)}`);
           const winner = await findActiveBoardBySerial(validSerial);
           if (winner) {
-            return toResolvedBoard(winner);
+            return stampAndReturn(toResolvedBoard(winner));
           }
         }
         throw error;
@@ -113,7 +121,7 @@ export const boardPresenceMutations = {
         config.setIds,
       );
       if (refreshedOwnBoard?.serialNumber === validSerial) {
-        return toResolvedBoard(refreshedOwnBoard);
+        return stampAndReturn(toResolvedBoard(refreshedOwnBoard));
       }
       if (refreshedOwnBoard?.serialNumber) {
         throw serialAlreadyBoundError();
@@ -139,14 +147,14 @@ export const boardPresenceMutations = {
           serialNumber: validSerial,
         })
         .returning();
-      return toResolvedBoard(created);
+      return stampAndReturn(toResolvedBoard(created));
     } catch (error) {
       // Unique-serial race: someone else created the shared board first.
       if (isDuplicateBoardSerialError(error)) {
         logger.warn(`[board-presence] resolveBoardForSerial create race: ${String(error)}`);
         const winner = await findActiveBoardBySerial(validSerial);
         if (winner) {
-          return toResolvedBoard(winner);
+          return stampAndReturn(toResolvedBoard(winner));
         }
       }
       throwIfDuplicateBoardSerial(error);
@@ -171,7 +179,9 @@ export const boardPresenceMutations = {
     await applyRateLimit(ctx, 30, 'resolveBoardForConfig');
 
     const config = validateInput(BoardPresenceConfigInputSchema, { boardType, layoutId, sizeId, setIds }, 'input');
-    return resolveSharedBoardForConfig(config.boardType, config.layoutId, config.sizeId, config.setIds);
+    const resolved = await resolveSharedBoardForConfig(config.boardType, config.layoutId, config.sizeId, config.setIds);
+    await pubsub.stampBoardMembership(String(resolved.boardId), ctx.userId!);
+    return resolved;
   },
 
   /**
@@ -192,6 +202,15 @@ export const boardPresenceMutations = {
     requireAuthenticated(ctx);
     await applyRateLimit(ctx, 60, 'reportBoardClimb');
     const board = await requireActiveBoardById(boardId);
+
+    // Proof-of-presence: only a user who connected to this board (stamped in
+    // resolveBoardForSerial / resolveBoardForConfig) may post to its feed. This
+    // stops a logged-in user from injecting climbs onto any board id they guess.
+    const isConnected = await pubsub.hasBoardMembership(String(boardId), ctx.userId!);
+    if (!isConnected) {
+      throw new GraphQLError('Not connected to this board');
+    }
+
     const validatedClimb = validateInput(ReportBoardClimbInputSchema, climb, 'climb');
     const validatedAngle = validateInput(BoardPresenceAngleSchema, angle, 'angle');
     const effectiveAngle = validatedAngle ?? validatedClimb.climb.angle ?? Number(board.angle);
