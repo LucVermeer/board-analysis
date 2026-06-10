@@ -338,6 +338,11 @@
     "intro": "D'après nos enregistrements, ce board est configuré différemment de votre réglage actuel.",
     "currentLabel": "<strong>Votre configuration :</strong>",
     "recordedLabel": "<strong>Enregistré pour ce contrôleur :</strong>",
+    "mobileCurrentLabel": "Votre configuration : {{config}}",
+    "mobileRecordedLabel": "Enregistré pour ce contrôleur : {{config}}",
+    "mobileConfigValue": "{{board}} layout {{layoutId}}, taille {{sizeId}}, sets {{setIds}}",
+    "mobileUnknownConfig": "Configuration du board inconnue",
+    "mobileSwitchFailed": "Impossible de passer à la configuration de ce board. Essayez Connecter quand même.",
     "cancel": "Annuler",
     "connectAnyway": "Connecter quand même",
     "switchToCorrect": "Passer à la bonne configuration"

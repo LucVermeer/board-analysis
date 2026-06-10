@@ -10,8 +10,10 @@ import {
 import { FullWindowOverlay } from 'react-native-screens';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
-import { parseBoardTypeFromDeviceName } from '@boardsesh/ble-protocol';
+import { parseSerialNumber } from '@boardsesh/ble-protocol';
 import type { DiscoveredDevice } from '../../lib/ble/types';
+import type { ResolvedBoardEntry } from '../../lib/ble/resolve-serials';
+import type { BleBoardConfig } from '../../lib/ble/board-config-match';
 import { Text } from '../Text';
 import { Button } from '../Button';
 import { DeviceCard } from './DeviceCard';
@@ -25,6 +27,8 @@ type DevicePickerSheetProps = {
   onSelect: (deviceId: string) => void;
   onDismiss: () => void;
   isScanning: boolean;
+  resolvedBoards: ReadonlyMap<string, ResolvedBoardEntry>;
+  currentBoardConfig?: BleBoardConfig;
 };
 
 function DevicePickerModalContainer({ children }: PropsWithChildren) {
@@ -33,7 +37,14 @@ function DevicePickerModalContainer({ children }: PropsWithChildren) {
 
 const modalContainerComponent = Platform.OS === 'ios' ? DevicePickerModalContainer : undefined;
 
-export function DevicePickerSheet({ devices, onSelect, onDismiss, isScanning }: DevicePickerSheetProps) {
+export function DevicePickerSheet({
+  devices,
+  onSelect,
+  onDismiss,
+  isScanning,
+  resolvedBoards,
+  currentBoardConfig,
+}: DevicePickerSheetProps) {
   const { t } = useTranslation('settings');
   const theme = useTheme();
   const insets = useSafeAreaInsets();
@@ -55,13 +66,24 @@ export function DevicePickerSheet({ devices, onSelect, onDismiss, isScanning }: 
   );
 
   const renderDeviceItem = useCallback(
-    ({ item }: { item: DiscoveredDevice }) => {
-      const boardType = parseBoardTypeFromDeviceName(item.name);
-      const boardLabel = boardType ? boardType.charAt(0).toUpperCase() + boardType.slice(1) : undefined;
-
-      return <DeviceCard device={item} onSelect={onSelect} boardType={boardLabel} />;
+    ({ item: discoveredDevice }: { item: DiscoveredDevice }) => {
+      // Look the row's entry up here so each DeviceCard receives only its own
+      // resolution result: rows whose entry is unchanged (most of them when a
+      // new serial resolves) keep referentially identical props and their
+      // React.memo skips the re-render. renderItem itself legitimately changes
+      // identity with the map — that's what propagates new resolutions.
+      const serialNumber = parseSerialNumber(discoveredDevice.name);
+      const resolvedEntry = serialNumber ? resolvedBoards.get(serialNumber) : undefined;
+      return (
+        <DeviceCard
+          device={discoveredDevice}
+          onSelect={onSelect}
+          resolvedEntry={resolvedEntry}
+          currentBoardConfig={currentBoardConfig}
+        />
+      );
     },
-    [onSelect],
+    [currentBoardConfig, onSelect, resolvedBoards],
   );
 
   const keyExtractor = useCallback((item: DiscoveredDevice) => item.deviceId, []);

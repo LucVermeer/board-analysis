@@ -1,34 +1,46 @@
 import { AURORA_ADVERTISED_SERVICE_UUID, UART_SERVICE_UUID, parseSerialNumber } from '@boardsesh/ble-protocol';
 import { parseBoardTypeFromDeviceName } from '@boardsesh/ble-protocol/aurora';
 import { isMoonboardDeviceName } from '@boardsesh/ble-protocol/moonboard';
+import type { BoardScanFamily } from './types';
 
-const BOARD_SERVICE_UUIDS = new Set([AURORA_ADVERTISED_SERVICE_UUID.toLowerCase(), UART_SERVICE_UUID.toLowerCase()]);
+const AURORA_SERVICE_UUID = AURORA_ADVERTISED_SERVICE_UUID.toLowerCase();
+const UART_SERVICE_UUID_LOWER = UART_SERVICE_UUID.toLowerCase();
+const STRICT_AURORA_SERIAL_SUFFIX = /#[A-Za-z0-9-]+@\d+$/;
 
 /**
  * Decides whether a scan result looks like a climbing board. The adapters scan
- * unfiltered (where supported) because MoonBoard controllers don't reliably
- * include the UART service UUID in their advertisements — a service-UUID scan
- * filter never surfaces them (web works around the same problem with
- * `namePrefix` filters in MOONBOARD_REQUEST_DEVICE_OPTIONS). So the filtering
- * moves here: accept anything advertising a known board service, any
- * MoonBoard-prefixed name, any Aurora product name, and any name carrying the
- * Aurora `#serial@api` suffix (covers renamed Aurora boards). When a platform
- * still scans with a native UUID filter (older iOS binaries), pass
- * `serviceUuids: undefined` and a known-service name match is not required —
- * the native filter already vouched for the device.
+ * according to the current board family: Aurora routes should not surface
+ * generic UART peripherals, while MoonBoard routes still need name-based
+ * matching because those controllers do not reliably advertise UART.
  */
 export function isLikelyBoardDevice({
   name,
   serviceUuids,
+  scanFamily,
 }: {
   name?: string;
   serviceUuids?: string[] | null;
+  scanFamily: BoardScanFamily;
 }): boolean {
-  if (serviceUuids?.some((serviceUuid) => BOARD_SERVICE_UUIDS.has(serviceUuid.toLowerCase()))) {
+  if (scanFamily === 'aurora') {
+    // `undefined` serviceUuids only occur on old iOS binaries whose native scan
+    // already filtered by the Aurora service UUID — the native side vouched for
+    // the device, so trust it. RNBleAdapter always passes an array (possibly
+    // empty), so this never loosens Android / new-binary filtering. `null` is
+    // NOT vouched and falls through to the name checks below.
+    if (serviceUuids === undefined) return true;
+    if (serviceUuids?.some((serviceUuid) => serviceUuid.toLowerCase() === AURORA_SERVICE_UUID)) {
+      return true;
+    }
+    if (!name) return false;
+    if (parseBoardTypeFromDeviceName(name) !== undefined) return true;
+    return STRICT_AURORA_SERIAL_SUFFIX.test(name.trim()) && parseSerialNumber(name) !== undefined;
+  }
+
+  if (serviceUuids?.some((serviceUuid) => serviceUuid.toLowerCase() === UART_SERVICE_UUID_LOWER)) {
     return true;
   }
+
   if (!name) return false;
-  if (isMoonboardDeviceName(name)) return true;
-  if (parseBoardTypeFromDeviceName(name) !== undefined) return true;
-  return parseSerialNumber(name) !== undefined;
+  return isMoonboardDeviceName(name);
 }

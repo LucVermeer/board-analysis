@@ -338,6 +338,11 @@
     "intro": "Our records show this board has a different config than you have configured.",
     "currentLabel": "<strong>You're configured for:</strong>",
     "recordedLabel": "<strong>Recorded for this controller:</strong>",
+    "mobileCurrentLabel": "You're configured for: {{config}}",
+    "mobileRecordedLabel": "Recorded for this controller: {{config}}",
+    "mobileConfigValue": "{{board}} layout {{layoutId}}, size {{sizeId}}, sets {{setIds}}",
+    "mobileUnknownConfig": "Unknown board config",
+    "mobileSwitchFailed": "Couldn't switch to that board's config. Try Connect anyway.",
     "cancel": "Cancel",
     "connectAnyway": "Connect anyway",
     "switchToCorrect": "Switch to correct config"
