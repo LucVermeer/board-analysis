@@ -8,10 +8,15 @@ import { BoardImageNative } from '../BoardImageNative';
 import { Text } from '../Text';
 import { useZoomPanGesture } from '../play-drawer/use-zoom-pan-gesture';
 import { HoldTargetLayer } from '../create-climb/HoldTargetLayer';
-import { holdGeometry } from '../create-climb/holdLayout';
+import { holdGeometry, buildHoldHitTargets } from '../create-climb/holdLayout';
+import { useZoomedHoldTapGesture } from '../create-climb/use-zoomed-hold-tap-gesture';
 import { overlays } from '../../theme/tokens';
 import type { BoardHoldTarget } from '../../lib/create-board-holds';
 import { SearchHoldFilterRings } from './SearchHoldFilterRings';
+
+/** Drag distance (px) before the zoom-pan activates, so a stationary hold tap
+ *  while zoomed isn't stolen by the pan. */
+const PAN_ACTIVATION_OFFSET = 8;
 
 /** Context handed to an overlay rendered inside the board's zoom transform. */
 export type FilterBoardTransformContext = {
@@ -76,10 +81,22 @@ export const InteractiveFilterBoard = React.memo(function InteractiveFilterBoard
   renderInTransform,
 }: InteractiveFilterBoardProps) {
   const { t } = useTranslation('common');
-  const { pinchGesture, zoomPanGesture, isZoomed, scaleSV, resetZoom, animatedZoomStyle } = useZoomPanGesture({
+  const {
+    pinchGesture,
+    zoomPanGesture,
+    isZoomed,
+    scaleSV,
+    translateXSV,
+    translateYSV,
+    containerWidthSV,
+    containerHeightSV,
+    resetZoom,
+    animatedZoomStyle,
+  } = useZoomPanGesture({
     enabled: true,
     containerWidth: renderWidth,
     containerHeight: renderHeight,
+    panActivationOffset: PAN_ACTIVATION_OFFSET,
   });
 
   // The picker uses a long-press-style commit, but holds here only need a single
@@ -90,6 +107,26 @@ export const InteractiveFilterBoard = React.memo(function InteractiveFilterBoard
     () => ({ pinchGesture, scaleSV, renderWidth, renderHeight }),
     [pinchGesture, scaleSV, renderWidth, renderHeight],
   );
+
+  // Hit circles so the zoomed pan overlay can resolve a tap to a hold itself
+  // (it sits above the per-hold detectors — see #2687). Zone mode passes no
+  // onHoldTap, so the hook returns the bare pan and this is unused.
+  const hitTargets = useMemo(
+    () => buildHoldHitTargets(holdTargets, boardWidth, boardHeight, renderWidth, renderHeight, mirrored),
+    [holdTargets, boardWidth, boardHeight, renderWidth, renderHeight, mirrored],
+  );
+
+  const overlayGesture = useZoomedHoldTapGesture({
+    zoomPanGesture,
+    scaleSV,
+    translateXSV,
+    translateYSV,
+    containerWidthSV,
+    containerHeightSV,
+    hitTargets,
+    onTap: onHoldTap,
+    onLongPress: onHoldTap,
+  });
 
   const holdById = useMemo(() => {
     const map = new Map<number, BoardHoldTarget>();
@@ -168,9 +205,12 @@ export const InteractiveFilterBoard = React.memo(function InteractiveFilterBoard
           {/* 1-finger pan-to-reposition the zoomed board. Sits ABOVE the board
               layer (so a drag over the bare board pans it) but BELOW the
               `renderInTransform` overlay layer (so the zone rectangle + corner
-              handles still win their touches while zoomed). */}
+              handles still win their touches while zoomed). In hold mode the
+              gesture also resolves taps/long-presses to holds (Race with the
+              pan) so the picker opens while zoomed (#2687); in zone mode
+              `overlayGesture` is the bare pan (no onHoldTap). */}
           {isZoomed ? (
-            <GestureDetector gesture={zoomPanGesture}>
+            <GestureDetector gesture={overlayGesture}>
               <View style={StyleSheet.absoluteFill} />
             </GestureDetector>
           ) : null}

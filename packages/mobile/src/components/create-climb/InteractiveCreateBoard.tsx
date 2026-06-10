@@ -11,6 +11,12 @@ import { overlays } from '../../theme/tokens';
 import type { BoardHoldTarget } from '../../lib/create-board-holds';
 import { HoldTargetLayer } from './HoldTargetLayer';
 import { PaintedHoldsLayer } from './PaintedHoldsLayer';
+import { buildHoldHitTargets } from './holdLayout';
+import { useZoomedHoldTapGesture } from './use-zoomed-hold-tap-gesture';
+
+/** Drag distance (px) before the zoom-pan activates, so a stationary paint tap
+ *  while zoomed isn't stolen by the pan. Matches the original editor's value. */
+const PAN_ACTIVATION_OFFSET = 8;
 
 type InteractiveCreateBoardProps = {
   boardName: BoardName;
@@ -64,10 +70,22 @@ export const InteractiveCreateBoard = React.memo(function InteractiveCreateBoard
   overlay,
 }: InteractiveCreateBoardProps) {
   const { t } = useTranslation('common');
-  const { pinchGesture, zoomPanGesture, isZoomed, resetZoom, animatedZoomStyle } = useZoomPanGesture({
+  const {
+    pinchGesture,
+    zoomPanGesture,
+    isZoomed,
+    scaleSV,
+    translateXSV,
+    translateYSV,
+    containerWidthSV,
+    containerHeightSV,
+    resetZoom,
+    animatedZoomStyle,
+  } = useZoomPanGesture({
     enabled: true,
     containerWidth: renderWidth,
     containerHeight: renderHeight,
+    panActivationOffset: PAN_ACTIVATION_OFFSET,
   });
 
   const holdById = useMemo(() => {
@@ -75,6 +93,25 @@ export const InteractiveCreateBoard = React.memo(function InteractiveCreateBoard
     for (const hold of holdTargets) map.set(hold.id, hold);
     return map;
   }, [holdTargets]);
+
+  // Hit circles for resolving a tap to a hold while zoomed (the pan overlay sits
+  // above the per-hold detectors, so it resolves taps itself — see #2687).
+  const hitTargets = useMemo(
+    () => buildHoldHitTargets(holdTargets, boardWidth, boardHeight, renderWidth, renderHeight, mirrored),
+    [holdTargets, boardWidth, boardHeight, renderWidth, renderHeight, mirrored],
+  );
+
+  const overlayGesture = useZoomedHoldTapGesture({
+    zoomPanGesture,
+    scaleSV,
+    translateXSV,
+    translateYSV,
+    containerWidthSV,
+    containerHeightSV,
+    hitTargets,
+    onTap: onPaint,
+    onLongPress: onLongPressHold,
+  });
 
   return (
     <View style={styles.root}>
@@ -119,9 +156,11 @@ export const InteractiveCreateBoard = React.memo(function InteractiveCreateBoard
           {/* Pan-while-zoomed overlay: only mounted when zoomed so it doesn't
               claim 1-finger touches at rest (which would block the drawer's
               scroll/close). 2-finger pinches fall through via maxPointers(1).
-              While zoomed, reset to paint precise holds. */}
+              The overlay sits above the per-hold detectors, so its gesture also
+              resolves taps/long-presses to holds (Race with the pan) — without
+              that, painting and the role sheet are dead while zoomed (#2687). */}
           {isZoomed ? (
-            <GestureDetector gesture={zoomPanGesture}>
+            <GestureDetector gesture={overlayGesture}>
               <View style={StyleSheet.absoluteFill} />
             </GestureDetector>
           ) : null}
