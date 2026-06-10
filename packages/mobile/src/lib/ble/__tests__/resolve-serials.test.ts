@@ -187,10 +187,9 @@ describe('useResolvedBleDeviceBoards', () => {
       return Promise.reject(new Error('Unexpected operation'));
     });
 
-    const { result } = renderHook(
-      () => useResolvedBleDeviceBoards(makeDevices(['SN-A'])),
-      { wrapper: makeQueryWrapper() },
-    );
+    const { result } = renderHook(() => useResolvedBleDeviceBoards(makeDevices(['SN-A'])), {
+      wrapper: makeQueryWrapper(),
+    });
 
     await waitFor(() => expect(result.current.size).toBeGreaterThan(0));
 
@@ -207,10 +206,9 @@ describe('useResolvedBleDeviceBoards', () => {
     // hook should return the empty map without making any requests.
     vi.mocked(useAuthToken).mockReturnValue({ data: undefined } as ReturnType<typeof useAuthToken>);
 
-    const { result } = renderHook(
-      () => useResolvedBleDeviceBoards(makeDevices(['SN-B'])),
-      { wrapper: makeQueryWrapper() },
-    );
+    const { result } = renderHook(() => useResolvedBleDeviceBoards(makeDevices(['SN-B'])), {
+      wrapper: makeQueryWrapper(),
+    });
 
     // Give TanStack Query a tick to evaluate the enabled guard.
     await new Promise((resolve) => setTimeout(resolve, 0));
