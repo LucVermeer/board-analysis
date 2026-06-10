@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { exchangeTransferToken } from '../../src/lib/auth';
 import { classifyNativeAuthFailureReason } from '../../src/lib/native-auth-analytics';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
@@ -10,6 +11,9 @@ import { useTheme } from '../../src/providers/theme-provider';
 
 export default function AuthCallback() {
   const { transferToken } = useLocalSearchParams<{ transferToken: string }>();
+  const { t } = useTranslation('auth');
+  // Each entry holds a translated, user-facing failure message — never raw
+  // server text, which the backend returns in English only.
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
   const { refreshAuthState } = useAuth();
@@ -21,7 +25,7 @@ export default function AuthCallback() {
       // auth_method is unknown here — the OAuth provider isn't echoed back on the
       // transfer-token exchange (same reason Login Succeeded omits it).
       track(SHARED_EVENTS.LoginFailed, { flow: 'native', failure_reason: 'no_transfer_token' });
-      setError('No transfer token received');
+      setError(t('callback.noTransferToken'));
       return;
     }
 
@@ -36,19 +40,21 @@ export default function AuthCallback() {
           router.replace('/(tabs)/climbs');
         } else {
           track(SHARED_EVENTS.LoginFailed, { flow: 'native', failure_reason: classifyNativeAuthFailureReason(result) });
-          setError(result.error);
+          // result.error is a raw English/server string; show a translated
+          // generic message instead (mirrors login.tsx's networkError pattern).
+          setError(t('callback.failed'));
         }
       })
-      .catch((exchangeError: unknown) => {
+      .catch(() => {
         track(SHARED_EVENTS.LoginFailed, { flow: 'native', failure_reason: 'exception' });
-        setError(exchangeError instanceof Error ? exchangeError.message : 'Unexpected error');
+        setError(t('callback.unexpectedError'));
       });
-  }, [transferToken, router, refreshAuthState]);
+  }, [transferToken, router, refreshAuthState, t]);
 
   if (error) {
     return (
       <View style={styles.container}>
-        <Text style={[styles.errorText, { color: theme.brandColors.error }]}>Sign in failed: {error}</Text>
+        <Text style={[styles.errorText, { color: theme.brandColors.error }]}>{error}</Text>
       </View>
     );
   }
@@ -56,7 +62,7 @@ export default function AuthCallback() {
   return (
     <View style={styles.container}>
       <ActivityIndicator size="large" />
-      <Text style={styles.text}>Signing in...</Text>
+      <Text style={styles.text}>{t('nativeStart.signingIn')}</Text>
     </View>
   );
 }
