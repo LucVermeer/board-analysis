@@ -189,6 +189,24 @@ const gesture = useMemo(
 ); // rebuild mid-gesture → RNGH stuck on iOS
 ```
 
+**Composing a pan overlay with per-element taps —
+`packages/mobile/src/components/create-climb/use-zoomed-hold-tap-gesture.ts`:**
+When a zoomed board mounts an `absoluteFill` pan overlay above tappable elements, the overlay
+swallows their touches (RNGH only offers a touch to the hit view + ancestors), so the overlay's
+gesture must resolve taps itself. Two non-obvious choices there:
+
+- **`Gesture.Race(pan, longPress, tap)`, not `Exclusive`.** `Exclusive` puts later gestures in a
+  `waitFor` on the pan, and a `Pan` only _fails_ on touch-up — so a `LongPress` could never activate
+  mid-hold (the role sheet would never open while held). With `Race`, the first gesture to activate
+  wins; gate the pan behind an `activeOffset` (8px here) so a stationary touch goes to tap/long-press
+  and only a real drag activates the pan. `activeOffsetX`/`activeOffsetY` are **OR'd** (crossing
+  either axis activates), so single-axis drags pan fine.
+- **Built once, reads everything live.** The composed gesture's `useMemo` deps are only stable
+  shared values + the pan; render-scoped values (the hit-target list, the JS callbacks) are read
+  through a `useRef` (same `callbacksRef` pattern as rule 5), so it never recomposes mid-session.
+  The screen→board inverse transform runs in the worklet off `scaleSV`/`translateXSV`/`translateYSV`
+  (mirrored container size for the center origin), then `runOnJS` resolves the nearest element once.
+
 ---
 
 ## 6. Warm board-art surfaces use the rasterized native-PNG path, not remote SVG
