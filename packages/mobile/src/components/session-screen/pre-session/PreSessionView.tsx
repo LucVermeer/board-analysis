@@ -18,10 +18,12 @@ import type { ClimbQueueItem } from '@boardsesh/queue';
 import { track } from '../../../lib/analytics';
 import { Button } from '../../Button';
 import { Card } from '../../Card';
+import { GlassSurface } from '../../GlassSurface';
 import { SectionHeader } from '../../SectionHeader';
 import { Text } from '../../Text';
 import type { QueueItemRowBoard } from '../../QueueItemRow';
 import { useTheme } from '../../../providers/theme-provider';
+import { useNativeGlass } from '../../../hooks/use-native-glass';
 import { spacing } from '../../../theme/tokens';
 import { useActiveBoard } from '../../../lib/graphql/use-active-board';
 import { useAuth } from '../../../providers/auth-provider';
@@ -58,6 +60,7 @@ function previewKeyExtractor(previewItem: PreviewItem): string {
 export function PreSessionView({ showChrome = false }: PreSessionViewProps) {
   const { t } = useTranslation('session');
   const { systemColors } = useTheme();
+  const nativeGlass = useNativeGlass();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const bottomChrome = useBottomChromeMetrics();
@@ -205,7 +208,10 @@ export function PreSessionView({ showChrome = false }: PreSessionViewProps) {
   const generatorPreviewReady =
     selection.type !== 'on' || (status === 'ready' && previewItems.length > 0 && refreshingUuids.size === 0);
   const canStart = activeBoard != null && !isStarting && generatorPreviewReady;
-  const footerBottomPadding = spacing[3] + bottomChrome.fixedFooterBottom;
+  // The Start bar is a glass toolbar pinned flush above the tab bar (clearing the
+  // tab bar + safe area only — not the floating queue reserve, which previously
+  // stranded it mid-screen). The list pads its bottom to scroll clear of it.
+  const footerBottom = bottomChrome.tabBarBottom;
 
   // Inline status copy shown above an empty preview (loading / no results /
   // error). When rows are already present a rebuild keeps them mounted, so these
@@ -301,7 +307,7 @@ export function PreSessionView({ showChrome = false }: PreSessionViewProps) {
         contentInsetAdjustmentBehavior="never"
         contentContainerStyle={{
           paddingTop: listPaddingTop,
-          paddingBottom: SESSION_FOOTER_CLEARANCE + footerBottomPadding,
+          paddingBottom: SESSION_FOOTER_CLEARANCE + footerBottom,
         }}
         scrollIndicatorInsets={{ top: showChrome ? chromeHeight : 0 }}
         showsVerticalScrollIndicator={false}
@@ -321,8 +327,18 @@ export function PreSessionView({ showChrome = false }: PreSessionViewProps) {
 
       <View
         testID="pre-session-footer"
-        style={[styles.footer, { backgroundColor: systemColors.background, paddingBottom: footerBottomPadding }]}
+        style={[
+          styles.footer,
+          { bottom: footerBottom },
+          !nativeGlass && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: systemColors.separator },
+        ]}
       >
+        <GlassSurface
+          glassEffectStyle="regular"
+          fallbackColor={systemColors.background}
+          style={StyleSheet.absoluteFill}
+          pointerEvents="none"
+        />
         <Button
           title={isStarting ? t('mobile.session.preStarting') : t('mobile.session.preStart')}
           onPress={() => void handleStart()}
@@ -358,8 +374,14 @@ const styles = StyleSheet.create({
   cardInset: {
     paddingHorizontal: spacing[4],
   },
+  // A glass toolbar pinned flush above the tab bar; the list scrolls under it.
   footer: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
     paddingHorizontal: spacing[4],
     paddingTop: spacing[3],
+    paddingBottom: spacing[3],
+    overflow: 'hidden',
   },
 });

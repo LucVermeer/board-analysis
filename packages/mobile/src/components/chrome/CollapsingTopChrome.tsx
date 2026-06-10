@@ -1,4 +1,4 @@
-import { type ReactNode } from 'react';
+import { type ReactNode, isValidElement } from 'react';
 import { StyleSheet } from 'react-native';
 import Animated, { type SharedValue, Extrapolation, interpolate, useAnimatedStyle } from 'react-native-reanimated';
 import { useTheme } from '../../providers/theme-provider';
@@ -88,7 +88,9 @@ export function CollapsingTopChrome({
   // at rest, and grows to also hold a compact board glyph once collapsed (board
   // sits left of the light). The trailing action stays visible throughout.
   const lightActions = bluetooth ? 1 : 0;
-  const trailingActions = trailingAction != null ? 1 : 0;
+  // Reserve a slot only for a real element — a `false`/`null` from a `cond && <…>`
+  // caller must not widen the toolbar by a phantom 48px.
+  const trailingActions = isValidElement(trailingAction) ? 1 : 0;
   const expandedRightActions = lightActions + trailingActions;
   const collapsedRightActions = (activeBoard ? 1 : 0) + lightActions + trailingActions;
   const expandedRightWidth = expandedRightActions * TOP_ACTION_SIZE;

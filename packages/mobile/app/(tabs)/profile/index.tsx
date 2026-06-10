@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { View, StyleSheet, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
 import { useSharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -50,13 +50,24 @@ export default function YouScreen() {
 
   const handleSelectTab = useCallback(
     (key: ProfileTabKey) => {
+      // Re-tapping the active segment scrolls it to the top (the iOS convention),
+      // not a no-op that would still snap the chrome open over a mid-scrolled list.
+      if (key === activeTab) {
+        scrollToTopRef.current?.();
+        return;
+      }
       setActiveTab(key);
-      // The incoming sub-tab mounts at offset 0; reset so the chrome shows the
-      // large title rather than the previous tab's collapsed capsule.
-      scrollY.value = 0;
     },
-    [scrollY],
+    [activeTab],
   );
+
+  // Reset the shared scroll offset after the sub-tab has actually switched
+  // (post-commit, once the outgoing list is unmounted) so its in-flight momentum
+  // scroll events can't rewrite scrollY after the reset. The incoming list mounts
+  // at offset 0, so the chrome shows the large title rather than a stale capsule.
+  useEffect(() => {
+    scrollY.value = 0;
+  }, [activeTab, scrollY]);
 
   const openFilters = useCallback(() => {
     filterSheetRef.current?.snapToIndex(0);

@@ -5,7 +5,7 @@
 // its below-row content. The collapsing large title + glass islands degrade for
 // free on the Material variant via GlassSurface / SegmentedControl.
 
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { type SharedValue } from 'react-native-reanimated';
 import { router } from 'expo-router';
@@ -61,11 +61,14 @@ export function ProfileTopChrome({
     router.push('/(tabs)/profile/more');
   }, []);
 
-  const segmentOptions = [
-    { key: 'progress' as const, label: t('tabs.progress') },
-    { key: 'sessions' as const, label: t('tabs.sessions') },
-    { key: 'logbook' as const, label: t('tabs.logbook') },
-  ];
+  const segmentOptions = useMemo(
+    () => [
+      { key: 'progress' as const, label: t('tabs.progress') },
+      { key: 'sessions' as const, label: t('tabs.sessions') },
+      { key: 'logbook' as const, label: t('tabs.logbook') },
+    ],
+    [t],
+  );
 
   const leftActions = (
     <GlassActionToolbar actionCount={1}>

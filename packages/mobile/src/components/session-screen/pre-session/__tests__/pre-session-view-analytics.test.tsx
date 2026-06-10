@@ -109,6 +109,7 @@ vi.mock('../../../Text', () => ({
   Text: ({ children }: { children?: ReactNode }) => createElement('span', null, children),
 }));
 vi.mock('../../../Card', () => ({ Card: ({ children }: { children?: ReactNode }) => createElement('div', null, children) }));
+vi.mock('../../../GlassSurface', () => ({ GlassSurface: () => null }));
 vi.mock('../../../SectionHeader', () => ({ SectionHeader: () => null }));
 vi.mock('../../RecordTopChrome', () => ({ RecordTopChrome: () => null }));
 vi.mock('../../../../providers/theme-provider', () => ({ useTheme: () => ({ systemColors: {} }) }));
@@ -130,6 +131,7 @@ vi.mock('../../../../hooks/use-bottom-chrome-metrics', () => ({
     fixedFooterBottom: 0,
   }),
 }));
+vi.mock('../../../../hooks/use-native-glass', () => ({ useNativeGlass: () => false }));
 vi.mock('../../../../theme/tokens', () => ({ spacing: { 2: 8, 3: 12, 4: 16 }, borderRadius: { lg: 16 } }));
 vi.mock('../BoardSummaryCard', () => ({ BoardSummaryCard: () => null }));
 vi.mock('../WorkoutPreviewRow', () => ({ WorkoutPreviewRow: () => null }));
