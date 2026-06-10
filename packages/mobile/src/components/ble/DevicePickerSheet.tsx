@@ -10,6 +10,7 @@ import {
 import { FullWindowOverlay } from 'react-native-screens';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
+import { parseSerialNumber } from '@boardsesh/ble-protocol';
 import type { DiscoveredDevice } from '../../lib/ble/types';
 import type { ResolvedBoardEntry } from '../../lib/ble/resolve-serials';
 import type { BleBoardConfig } from '../../lib/ble/board-config-match';
@@ -66,11 +67,18 @@ export function DevicePickerSheet({
 
   const renderDeviceItem = useCallback(
     ({ item: discoveredDevice }: { item: DiscoveredDevice }) => {
+      // Look the row's entry up here so each DeviceCard receives only its own
+      // resolution result: rows whose entry is unchanged (most of them when a
+      // new serial resolves) keep referentially identical props and their
+      // React.memo skips the re-render. renderItem itself legitimately changes
+      // identity with the map — that's what propagates new resolutions.
+      const serialNumber = parseSerialNumber(discoveredDevice.name);
+      const resolvedEntry = serialNumber ? resolvedBoards.get(serialNumber) : undefined;
       return (
         <DeviceCard
           device={discoveredDevice}
           onSelect={onSelect}
-          resolvedBoards={resolvedBoards}
+          resolvedEntry={resolvedEntry}
           currentBoardConfig={currentBoardConfig}
         />
       );

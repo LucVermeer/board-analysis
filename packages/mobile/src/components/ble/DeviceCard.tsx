@@ -63,7 +63,12 @@ function RssiIndicator({ rssi }: { rssi: number }) {
 type DeviceCardProps = {
   device: DiscoveredDevice;
   onSelect: (deviceId: string) => void;
-  resolvedBoards: ReadonlyMap<string, ResolvedBoardEntry>;
+  /**
+   * The serial-resolution result for THIS device (not the whole map): rows
+   * whose entry didn't change keep referentially identical props, so the
+   * React.memo wrapper skips them when another row's resolution arrives.
+   */
+  resolvedEntry?: ResolvedBoardEntry;
   currentBoardConfig?: BleBoardConfig;
 };
 
@@ -78,7 +83,9 @@ function parseSetIds(setIds: string): number[] {
   return setIds
     .split(',')
     .map((setId) => Number(setId.trim()))
-    .filter((setId) => Number.isInteger(setId));
+    // `Number('')` is 0, so a malformed "1,,20" would otherwise yield a bogus
+    // set ID 0 — real set IDs are positive.
+    .filter((setId) => Number.isInteger(setId) && setId > 0);
 }
 
 function describeSavedBoard(entry: Extract<ResolvedBoardEntry, { kind: 'saved' }>): string | undefined {
@@ -111,31 +118,34 @@ function getPreviewImageStyle(boardWidth: number, boardHeight: number): PreviewI
 function BoardPreview({ previewConfig, isUnknown }: { previewConfig?: BleBoardConfig; isUnknown: boolean }) {
   const { systemColors } = useTheme();
   const setIds = useMemo(() => (previewConfig ? parseSetIds(previewConfig.setIds) : []), [previewConfig]);
-  const renderData = useMemo(() => {
+  const preview = useMemo(() => {
     if (!previewConfig || setIds.length === 0) return null;
-    return getBoardRenderData({
+    const renderData = getBoardRenderData({
       boardName: previewConfig.boardName,
       layoutId: previewConfig.layoutId,
       sizeId: previewConfig.sizeId,
       setIds,
     });
+    if (!renderData) return null;
+    return {
+      renderData,
+      imageStyle: getPreviewImageStyle(renderData.boardWidth, renderData.boardHeight),
+    };
   }, [previewConfig, setIds]);
-
-  const previewImageStyle = renderData ? getPreviewImageStyle(renderData.boardWidth, renderData.boardHeight) : null;
 
   return (
     <View style={[styles.preview, { backgroundColor: systemColors.tertiaryBackground }]}>
-      {previewConfig && renderData && previewImageStyle ? (
+      {previewConfig && preview ? (
         <BoardImageNative
           frames=""
           boardName={previewConfig.boardName}
           layoutId={previewConfig.layoutId}
           sizeId={previewConfig.sizeId}
           setIds={previewConfig.setIds}
-          boardWidth={renderData.boardWidth}
-          boardHeight={renderData.boardHeight}
-          renderWidth={Math.round(previewImageStyle.width)}
-          style={previewImageStyle}
+          boardWidth={preview.renderData.boardWidth}
+          boardHeight={preview.renderData.boardHeight}
+          renderWidth={Math.round(preview.imageStyle.width)}
+          style={preview.imageStyle}
         />
       ) : (
         <Icon name="boards" size={30} color={systemColors.tertiaryLabel} />
@@ -152,13 +162,12 @@ function BoardPreview({ previewConfig, isUnknown }: { previewConfig?: BleBoardCo
 export const DeviceCard = memo(function DeviceCard({
   device,
   onSelect,
-  resolvedBoards,
+  resolvedEntry,
   currentBoardConfig,
 }: DeviceCardProps) {
   const { t } = useTranslation('settings');
   const { systemColors } = useTheme();
   const serialNumber = parseSerialNumber(device.name);
-  const resolvedEntry = serialNumber ? resolvedBoards.get(serialNumber) : undefined;
   const inferredBoardType = parseBoardTypeFromDeviceName(device.name);
 
   const handlePress = useCallback(() => {

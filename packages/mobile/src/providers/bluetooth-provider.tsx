@@ -337,10 +337,6 @@ export function BluetoothProvider({
 
   const handleMismatchSwitch = useCallback(
     async (decision: Extract<PickerSelectionDecision, { kind: 'mismatch' }>) => {
-      // Reject the old connect's picker promise with the silent user-cancel
-      // signature so it doesn't pop a "connection failed" alert; the switch will
-      // re-open a fresh connect against the correct config.
-      pickerStateRef.current?.handleCancel();
       try {
         let board: UserBoard;
         if (decision.entry.kind === 'saved') {
@@ -366,6 +362,13 @@ export function BluetoothProvider({
           board = response.board;
         }
         await setActiveBoard(board);
+        // Only cancel the picker once the switch actually went through: a failed
+        // board fetch above leaves the picker open so the user can still pick a
+        // device or use Connect anyway. The cancel rejects the old connect's
+        // picker promise with the silent user-cancel signature (no "connection
+        // failed" alert), which clears `loading` and lets the auto-connect
+        // effect fire against the switched config.
+        pickerStateRef.current?.handleCancel();
         setPendingAutoConnect({
           serial: decision.serial,
           configKey: boardConfigKey(decision.config.boardName, decision.config.layoutId, decision.config.sizeId),

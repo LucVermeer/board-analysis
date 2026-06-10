@@ -310,8 +310,9 @@ describe('BluetoothProvider mismatch switch', () => {
     expect(lastAlertButtons()).toHaveLength(2);
   });
 
-  it('surfaces the switch-failed alert when setActiveBoard rejects', async () => {
-    bluetooth.state.pickerState = makeMismatchingPickerState();
+  it('surfaces the switch-failed alert and keeps the picker open when setActiveBoard rejects', async () => {
+    const pickerState = makeMismatchingPickerState();
+    bluetooth.state.pickerState = pickerState;
     resolvedBoards.value = new Map([['SN-2', { kind: 'saved', board: makeBoard() }]]);
     activeBoard.setActiveBoard.mockRejectedValue(new Error('storage failed'));
 
@@ -328,5 +329,8 @@ describe('BluetoothProvider mismatch switch', () => {
     expect(failureCall?.[0]).toBe('boardConfigMismatch.title');
     expect(failureCall?.[1]).toBe('boardConfigMismatch.mobileSwitchFailed');
     expect(bluetooth.state.connect).not.toHaveBeenCalled();
+    // The picker is only cancelled once the switch goes through — on failure it
+    // stays open so the user can still pick a device or use Connect anyway.
+    expect(pickerState.handleCancel).not.toHaveBeenCalled();
   });
 });

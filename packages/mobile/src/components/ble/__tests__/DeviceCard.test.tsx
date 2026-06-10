@@ -132,13 +132,13 @@ function makeConfig(overrides: Partial<BoardSerialConfig> = {}): BoardSerialConf
 
 describe('DeviceCard', () => {
   it('uses the saved board name and preview when a serial resolves to a UserBoard', () => {
-    const resolvedBoards = new Map<string, ResolvedBoardEntry>([['SN-1', { kind: 'saved', board: makeBoard() }]]);
+    const resolvedEntry: ResolvedBoardEntry = { kind: 'saved', board: makeBoard() };
 
     const { container, getByText } = render(
       <DeviceCard
         device={{ deviceId: 'device-1', name: 'Kilter Board#SN-1@3', rssi: -45 }}
         onSelect={vi.fn()}
-        resolvedBoards={resolvedBoards}
+        resolvedEntry={resolvedEntry}
       />,
     );
 
@@ -148,13 +148,13 @@ describe('DeviceCard', () => {
   });
 
   it('uses recorded config previews for previously connected controllers', () => {
-    const resolvedBoards = new Map<string, ResolvedBoardEntry>([['SN-2', { kind: 'recorded', config: makeConfig() }]]);
+    const resolvedEntry: ResolvedBoardEntry = { kind: 'recorded', config: makeConfig() };
 
     const { container, getByText } = render(
       <DeviceCard
         device={{ deviceId: 'device-2', name: 'Tension Board#SN-2@2', rssi: -55 }}
         onSelect={vi.fn()}
-        resolvedBoards={resolvedBoards}
+        resolvedEntry={resolvedEntry}
       />,
     );
 
@@ -168,7 +168,6 @@ describe('DeviceCard', () => {
       <DeviceCard
         device={{ deviceId: 'device-3', name: 'Kilter Board#SN-3@3', rssi: -70 }}
         onSelect={vi.fn()}
-        resolvedBoards={new Map()}
         currentBoardConfig={{ boardName: 'kilter', layoutId: 1, sizeId: 10, setIds: '1,20' }}
       />,
     );
@@ -183,7 +182,6 @@ describe('DeviceCard', () => {
       <DeviceCard
         device={{ deviceId: 'device-4', name: 'Tension Board#SN-4@2', rssi: -70 }}
         onSelect={vi.fn()}
-        resolvedBoards={new Map()}
         currentBoardConfig={{ boardName: 'kilter', layoutId: 1, sizeId: 10, setIds: '1,20' }}
       />,
     );
@@ -191,5 +189,22 @@ describe('DeviceCard', () => {
     expect(getByText('Tension')).not.toBeNull();
     expect(container.querySelector('[data-board-image="kilter"]')).toBeNull();
     expect(container.querySelector('[data-icon="boards"]')).not.toBeNull();
+  });
+
+  it('drops empty set-ID segments instead of rendering with a bogus set 0', async () => {
+    // `Number('')` is 0, so a malformed "1,,20" must parse to [1, 20] — not
+    // [1, 0, 20], which would feed a nonexistent set to the board renderer.
+    const { getBoardRenderData } = await import('../../../lib/board-details');
+    vi.mocked(getBoardRenderData).mockClear();
+
+    render(
+      <DeviceCard
+        device={{ deviceId: 'device-5', name: 'Kilter Board#SN-5@3', rssi: -50 }}
+        onSelect={vi.fn()}
+        currentBoardConfig={{ boardName: 'kilter', layoutId: 1, sizeId: 10, setIds: '1,,20' }}
+      />,
+    );
+
+    expect(vi.mocked(getBoardRenderData)).toHaveBeenCalledWith(expect.objectContaining({ setIds: [1, 20] }));
   });
 });
