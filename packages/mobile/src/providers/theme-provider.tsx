@@ -15,7 +15,9 @@ import {
   androidFallbackColors,
   materialSurfaces,
 } from '../theme/colors';
-import { textStyles, type TextVariant } from '../theme/typography';
+import { textStylesByVariant, type TextVariant, type TypeStyle } from '../theme/typography';
+import { buildPaperTheme } from '../theme/paper-theme';
+import type { MD3Theme } from 'react-native-paper';
 import {
   spacing,
   borderRadius,
@@ -69,7 +71,12 @@ type Theme = {
   colorScheme: ColorScheme;
   systemColors: ResolvedSystemColors;
   brandColors: ResolvedBrandColors;
-  textStyles: typeof textStyles;
+  /**
+   * Type scale resolved for the current UI variant (Apple HIG on Liquid Glass, M3
+   * on Material). Same keys/shape in both variants — only the sizes/weights
+   * differ — so it's typed structurally rather than to one variant's literals.
+   */
+  textStyles: Record<TextVariant, TypeStyle>;
   spacing: typeof spacing;
   borderRadius: typeof borderRadius;
   shadows: typeof shadows;
@@ -87,6 +94,16 @@ type Theme = {
   radii: Radii;
   /** Bottom-sheet chrome (scrim/handle/corners) for the current variant. */
   sheet: SheetChrome;
+  /**
+   * MD3 colour roles (the full Paper palette: primaryContainer, secondaryContainer,
+   * tertiaryContainer, onSurfaceVariant, outlineVariant, and the `elevation`
+   * level0–5 surface-tint ladder) for the current colour scheme. Only meaningful
+   * on the Material variant — Material-branch app components read these so they
+   * match the Paper components without re-deriving roles; Liquid Glass never reads
+   * it. Note: react-native-paper 5.15 predates MD3's `surfaceContainer*` tone
+   * roles, so use the `elevation.levelN` ladder for surface-container surfaces.
+   */
+  m3: MD3Theme['colors'];
 };
 
 const ThemeContext = createContext<Theme | null>(null);
@@ -237,6 +254,13 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
     [uiVariantPreference, glassCapable],
   );
 
+  // MD3 colour roles for the current scheme, memoized so the Paper theme is built
+  // once per light/dark flip — not on every render — and shared with the rest of
+  // the Material chrome. `MaterialThemeProvider` builds the full MD3Theme from the
+  // same `buildPaperTheme(colorScheme)`; here we keep just the `.colors` palette
+  // for app components that aren't Paper consumers.
+  const m3Colors = useMemo<MD3Theme['colors']>(() => buildPaperTheme(colorScheme).colors, [colorScheme]);
+
   const theme = useMemo<Theme>(() => {
     const resolvedSystemColors = resolveSystemColors(colorScheme, variant);
 
@@ -244,7 +268,7 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
       colorScheme,
       systemColors: resolvedSystemColors,
       brandColors: resolveBrandColors(colorScheme),
-      textStyles,
+      textStyles: textStylesByVariant[variant],
       spacing,
       borderRadius,
       shadows,
@@ -258,8 +282,9 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
       setUiVariant,
       radii: radiiByVariant[variant],
       sheet: sheetChromeByVariant[variant],
+      m3: m3Colors,
     };
-  }, [colorScheme, variant, themeOverride, setThemeOverride, uiVariantPreference, setUiVariant]);
+  }, [colorScheme, variant, themeOverride, setThemeOverride, uiVariantPreference, setUiVariant, m3Colors]);
 
   // React 19 context provider syntax (Expo SDK 53+ / React 19)
   return <ThemeContext value={theme}>{children}</ThemeContext>;
