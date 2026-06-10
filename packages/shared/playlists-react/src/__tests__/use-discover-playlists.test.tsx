@@ -19,6 +19,7 @@ function makeDiscoverable(uuid: string): DiscoverablePlaylist {
     climbCount: 3,
     creatorId: 'creator-1',
     creatorName: 'Creator One',
+    isGeneratedRecommendation: false,
   };
 }
 
@@ -54,6 +55,82 @@ describe('useDiscoverPlaylists (shared)', () => {
     expect(result.current.recent).toHaveLength(1);
     expect(result.current.hasMore).toBe(false);
     expect(result.current.hasError).toBe(false);
+  });
+
+  it('forwards the generated recommendation filter to both streams', async () => {
+    const executeGraphQL = vi.fn(async () => ({
+      discoverPlaylists: { playlists: [makeDiscoverable('generated')], totalCount: 1, hasMore: false },
+    })) as unknown as ExecutePlaylistsGraphQL;
+    const { wrapper } = buildWrapper({ executeGraphQL });
+
+    const { result } = renderHook(
+      () =>
+        useDiscoverPlaylists({
+          boardType: 'kilter',
+          layoutId: 8,
+          sizeId: 25,
+          angle: 40,
+          generatedRecommendation: true,
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(executeGraphQL).toHaveBeenCalledTimes(2);
+    expect(executeGraphQL).toHaveBeenNthCalledWith(
+      1,
+      expect.any(String),
+      expect.objectContaining({
+        input: expect.objectContaining({
+          boardType: 'kilter',
+          layoutId: 8,
+          sizeId: 25,
+          angle: 40,
+          generatedRecommendation: true,
+          sortBy: 'popular',
+        }),
+      }),
+    );
+    expect(executeGraphQL).toHaveBeenNthCalledWith(
+      2,
+      expect.any(String),
+      expect.objectContaining({
+        input: expect.objectContaining({
+          boardType: 'kilter',
+          layoutId: 8,
+          sizeId: 25,
+          angle: 40,
+          generatedRecommendation: true,
+          sortBy: 'recent',
+        }),
+      }),
+    );
+  });
+
+  it('forwards the community playlist filter to both streams', async () => {
+    const executeGraphQL = vi.fn(async () => ({
+      discoverPlaylists: { playlists: [makeDiscoverable('community')], totalCount: 1, hasMore: false },
+    })) as unknown as ExecutePlaylistsGraphQL;
+    const { wrapper } = buildWrapper({ executeGraphQL });
+
+    const { result } = renderHook(() => useDiscoverPlaylists({ generatedRecommendation: false }), { wrapper });
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(executeGraphQL).toHaveBeenCalledTimes(2);
+    expect(executeGraphQL).toHaveBeenNthCalledWith(
+      1,
+      expect.any(String),
+      expect.objectContaining({
+        input: expect.objectContaining({ generatedRecommendation: false, sortBy: 'popular' }),
+      }),
+    );
+    expect(executeGraphQL).toHaveBeenNthCalledWith(
+      2,
+      expect.any(String),
+      expect.objectContaining({
+        input: expect.objectContaining({ generatedRecommendation: false, sortBy: 'recent' }),
+      }),
+    );
   });
 
   it('sets hasError when the initial fetch rejects', async () => {

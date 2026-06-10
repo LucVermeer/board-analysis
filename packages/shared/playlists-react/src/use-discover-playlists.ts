@@ -12,8 +12,14 @@ export type UseDiscoverPlaylistsOptions = {
   boardType?: string;
   /** Optional layout filter. Changing it resets pagination for both streams. */
   layoutId?: number;
+  /** Optional size filter for generated recommendations. */
+  sizeId?: number;
+  /** Optional angle filter for generated recommendations. */
+  angle?: number;
   /** Page size per stream per request. Defaults to 10 (matches the existing UX). */
   pageSize?: number;
+  /** Optional generated recommendation filter. */
+  generatedRecommendation?: boolean;
   /** SSR-provided initial data. When supplied, the first page fetch is skipped. */
   initialData?: { popular: DiscoverablePlaylist[]; recent: DiscoverablePlaylist[] };
   /** Whether the SSR popular slice has more pages. Pass through the server's
@@ -51,7 +57,10 @@ export type UseDiscoverPlaylistsResult = {
 export function useDiscoverPlaylists({
   boardType,
   layoutId,
+  sizeId,
+  angle,
   pageSize = 10,
+  generatedRecommendation,
   initialData,
   initialPopularHasMore,
   initialRecentHasMore,
@@ -98,6 +107,9 @@ export function useDiscoverPlaylists({
         pageSize,
         ...(boardType !== undefined && { boardType }),
         ...(layoutId !== undefined && { layoutId }),
+        ...(sizeId !== undefined && { sizeId }),
+        ...(angle !== undefined && { angle }),
+        ...(generatedRecommendation !== undefined && { generatedRecommendation }),
       };
 
       try {
@@ -152,7 +164,7 @@ export function useDiscoverPlaylists({
         isFetchingRef.current = false;
       }
     },
-    [boardType, layoutId, pageSize, executeGraphQL],
+    [boardType, layoutId, sizeId, angle, pageSize, generatedRecommendation, executeGraphQL],
   );
 
   // Reset + re-fetch when filters change. Skip the very first run if SSR

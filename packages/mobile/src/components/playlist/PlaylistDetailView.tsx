@@ -33,6 +33,7 @@ import { GlassIconButton } from '../GlassIconButton';
 import { Button } from '../Button';
 import { PlaylistBoardBackdrop } from './PlaylistBoardBackdrop';
 import { buildHeroGradient, shiftLightness } from './playlist-gradient';
+import { resolvePlaylistEmojiIcon } from './playlist-icon';
 import { PLAYLIST_COLORS, isValidHexColor } from './playlist-colors';
 import { withAlpha } from '../../theme/colors';
 import { toQueueClimb, toSchemaClimb } from '../../lib/climb-types';
@@ -156,6 +157,7 @@ export function PlaylistDetailView({
   const router = useRouter();
   const listPaddingBottom = bottomChrome.scrollBottomPadding;
   const isMaterial = variant === 'material';
+  const heroEmojiIcon = resolvePlaylistEmojiIcon(hero.icon);
 
   // Scroll offset + measured hero-banner height drive the collapsed colour header
   // bar (the playlist colour + centered name) that fades in once the hero scrolls
@@ -313,9 +315,9 @@ export function PlaylistDetailView({
                   ]}
                 >
                   <View style={[styles.materialHeroEmojiCircle, { backgroundColor: systemColors.tertiaryBackground }]}>
-                    {hero.icon ? (
+                    {heroEmojiIcon ? (
                       <Text style={styles.materialHeroEmoji} allowFontScaling={false}>
-                        {hero.icon}
+                        {heroEmojiIcon}
                       </Text>
                     ) : (
                       <Icon name="tag" size={36} color={systemColors.secondaryLabel} />
@@ -434,9 +436,9 @@ export function PlaylistDetailView({
           style={StyleSheet.absoluteFill}
         />
         <View style={styles.heroBannerContent}>
-          {hero.icon ? (
+          {heroEmojiIcon ? (
             <Text style={styles.heroEmoji} allowFontScaling={false}>
-              {hero.icon}
+              {heroEmojiIcon}
             </Text>
           ) : (
             <Icon name="tag" size={40} color={iosSystemColors.white} />

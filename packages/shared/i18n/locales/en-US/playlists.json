@@ -20,7 +20,9 @@
     "sections": {
       "jumpBackIn": "Jump Back In",
       "smart": "Your Picks",
-      "discover": "Discover"
+      "discover": "Discover",
+      "forYou": "For You",
+      "community": "Community Playlists"
     },
     "allPlaylists": {
       "title": "My Playlists",

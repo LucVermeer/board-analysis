@@ -448,13 +448,17 @@ export type DiscoverablePlaylist = {
   climbCount: number;
   creatorId: string;
   creatorName: string;
+  isGeneratedRecommendation: boolean;
 };
 
 export type DiscoverPlaylistsInput = {
   boardType?: string;
   layoutId?: number;
+  sizeId?: number | null;
+  angle?: number | null;
   name?: string;
   creatorIds?: string[];
+  generatedRecommendation?: boolean | null;
   sortBy?: 'recent' | 'popular';
   page?: number;
   pageSize?: number;
@@ -506,6 +510,7 @@ export const DISCOVER_PLAYLISTS = gql`
         climbCount
         creatorId
         creatorName
+        isGeneratedRecommendation
       }
       totalCount
       hasMore
@@ -558,6 +563,7 @@ export const SEARCH_PLAYLISTS = gql`
         climbCount
         creatorId
         creatorName
+        isGeneratedRecommendation
         createdAt
         updatedAt
       }
