@@ -58,6 +58,13 @@ export function DevicePickerSheet({
 
   const sortedDevices = useMemo(() => [...devices].sort((deviceA, deviceB) => deviceB.rssi - deviceA.rssi), [devices]);
 
+  // Pre-compute once per devices update; name is stable for a given device
+  // throughout a scan session so parsing per renderItem invocation is wasteful.
+  const deviceSerials = useMemo(
+    () => new Map(devices.map((device) => [device.deviceId, parseSerialNumber(device.name)])),
+    [devices],
+  );
+
   const renderBackdrop = useCallback(
     (backdropProps: BottomSheetBackdropProps) => (
       <BottomSheetBackdrop {...backdropProps} disappearsOnIndex={-1} appearsOnIndex={0} opacity={0.4} />
@@ -72,7 +79,7 @@ export function DevicePickerSheet({
       // new serial resolves) keep referentially identical props and their
       // React.memo skips the re-render. renderItem itself legitimately changes
       // identity with the map — that's what propagates new resolutions.
-      const serialNumber = parseSerialNumber(discoveredDevice.name);
+      const serialNumber = deviceSerials.get(discoveredDevice.deviceId);
       const resolvedEntry = serialNumber ? resolvedBoards.get(serialNumber) : undefined;
       return (
         <DeviceCard
@@ -83,7 +90,7 @@ export function DevicePickerSheet({
         />
       );
     },
-    [currentBoardConfig, onSelect, resolvedBoards],
+    [currentBoardConfig, deviceSerials, onSelect, resolvedBoards],
   );
 
   const keyExtractor = useCallback((item: DiscoveredDevice) => item.deviceId, []);

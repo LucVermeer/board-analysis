@@ -12,6 +12,14 @@ const STRICT_AURORA_SERIAL_SUFFIX = /#[A-Za-z0-9-]+@\d+$/;
  * according to the current board family: Aurora routes should not surface
  * generic UART peripherals, while MoonBoard routes still need name-based
  * matching because those controllers do not reliably advertise UART.
+ *
+ * Known limitation: on old iOS binaries the native scan already filters by the
+ * Aurora service UUID before delivering results to JS, so those scan results
+ * arrive with `serviceUuids === undefined`. When that happens this function
+ * returns `true` unconditionally — device name is not checked — because the
+ * native side has already vouched for the peripheral. This does not widen
+ * Android or new-binary filtering; `RNBleAdapter` always passes an array
+ * (possibly empty), never `undefined`.
  */
 export function isLikelyBoardDevice({
   name,

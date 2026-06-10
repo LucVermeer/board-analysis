@@ -781,6 +781,9 @@ export function useBoardBluetooth({
     // isConnected is a dep so a config switch that lands while a connect is
     // still in flight (adapterRef not yet set when this effect last ran) is
     // re-checked the moment the connect completes and flips isConnected.
+    // clearConnectionAfterDrop can also race here: if a native drop already
+    // nulled adapterRef.current the early-return above prevents a double
+    // teardown, which is intentional.
   }, [boardName, layoutId, sizeId, isConnected, teardownConnection]);
 
   // iOS-only: adopt a connection the native BoardBleManager established

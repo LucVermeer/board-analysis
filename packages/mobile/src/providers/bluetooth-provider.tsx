@@ -16,6 +16,8 @@ import {
 } from '../lib/ble/board-config-match';
 import { summarizePickerResolution, type PickerResolutionStats } from '../lib/ble/picker-resolution-stats';
 import { useSetActiveBoard } from '../lib/graphql/use-active-board';
+import { getHttpClient } from '../lib/graphql/client';
+import { GET_BOARD } from '../lib/graphql/operations';
 import type { GetBoardQueryResponse } from '../lib/graphql/operations';
 import { getBoardRenderData } from '../lib/board-details';
 import { registerBluetoothConnection } from '../lib/ble/bluetooth-status-store';
@@ -382,11 +384,19 @@ export function BluetoothProvider({
   // board switch was reverted before the props arrived). Drop it rather than
   // leave a stale one-shot armed that would fire on a much-later, unrelated
   // switch to the same config.
+  //
+  // Depend on the configKey rather than the whole `pendingAutoConnect` object so
+  // re-arming with the same configKey (a race) doesn't reset the timer and
+  // silently extend the TTL. Reading it into a local also keeps the dep array
+  // exhaustive — configKey is always a string on a live request (never null
+  // while the object is set), so the falsy guard only short-circuits the cleared
+  // (null) state.
+  const pendingConfigKey = pendingAutoConnect?.configKey;
   useEffect(() => {
-    if (!pendingAutoConnect) return;
+    if (!pendingConfigKey) return;
     const expiryTimeoutId = setTimeout(() => setPendingAutoConnect(null), PENDING_AUTO_CONNECT_TTL_MS);
     return () => clearTimeout(expiryTimeoutId);
-  }, [pendingAutoConnect]);
+  }, [pendingConfigKey]);
 
   useEffect(() => {
     if (!pendingAutoConnect) return;
@@ -417,13 +427,6 @@ export function BluetoothProvider({
           if (!recordedBoardUuid) {
             throw new Error('Recorded board config has no saved board to switch to');
           }
-          // Lazy-import the GraphQL client + document so the static module graph
-          // (and the expo-secure-store auth chain it drags in) only loads when a
-          // recorded-config switch actually runs.
-          const [{ getHttpClient }, { GET_BOARD }] = await Promise.all([
-            import('../lib/graphql/client'),
-            import('../lib/graphql/operations'),
-          ]);
           const response = await getHttpClient().request<GetBoardQueryResponse>(GET_BOARD, {
             boardUuid: recordedBoardUuid,
           });
