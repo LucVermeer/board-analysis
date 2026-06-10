@@ -1,9 +1,10 @@
-import { type ReactNode, useCallback, useRef, useState } from 'react';
+import { type ReactNode, useCallback, useMemo, useRef, useState } from 'react';
 import {
   type ColorValue,
   type LayoutChangeEvent,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
+  Pressable,
   View,
   StyleSheet,
 } from 'react-native';
@@ -31,6 +32,8 @@ import { ClimbListRow } from '../ClimbListRow';
 import { ClimbListRowSkeleton } from '../ClimbListRowSkeleton';
 import { GlassIconButton } from '../GlassIconButton';
 import { Button } from '../Button';
+import { PlaylistEditClimbRow } from './PlaylistEditClimbRow';
+import { usePlaylistDrag } from './use-playlist-drag';
 import { PlaylistBoardBackdrop } from './PlaylistBoardBackdrop';
 import { buildHeroGradient, shiftLightness } from './playlist-gradient';
 import { resolvePlaylistEmojiIcon } from './playlist-icon';
@@ -116,7 +119,19 @@ export type PlaylistDetailViewProps = {
    *  the colour header bar takes over. The back FAB on the left is always
    *  rendered; absent here = a back-only top bar. */
   actions?: (collapsed: boolean) => ReactNode;
+  /** Owner edit mode: rows swap to the reorder/remove treatment, tap-to-activate
+   *  is disabled, and pagination is paused (the host passes a frozen list). */
+  editMode?: boolean;
+  /** Move a climb to a new 0-based index in the (loaded) list. */
+  onReorderClimb?: (climbUuid: string, newIndex: number) => void;
+  /** Remove a climb from the playlist (the host confirms + mutates). */
+  onRemoveClimb?: (climbUuid: string) => void;
+  /** In edit mode, a cog next to the playlist name opens the edit-details sheet. */
+  onEditDetails?: () => void;
 };
+
+const noopReorder = (_climbUuid: string, _newIndex: number) => {};
+const noopRemove = (_climbUuid: string) => {};
 
 /**
  * Shared hero + paginated climb list for the playlist-detail and
@@ -148,6 +163,10 @@ export function PlaylistDetailView({
   emptyMessage,
   emptyState,
   actions,
+  editMode = false,
+  onReorderClimb,
+  onRemoveClimb,
+  onEditDetails,
 }: PlaylistDetailViewProps) {
   const { t } = useTranslation('playlists');
   const { t: tCommon } = useTranslation('common');
@@ -232,9 +251,45 @@ export function PlaylistDetailView({
     if (first) onActivateClimb(first);
   }, [readOnly, climbs, onActivateClimb]);
 
+  // List-level drag-to-reorder for edit mode. Always instantiated (hooks can't be
+  // conditional); only the edit rows wire up its handles. `isDragging` locks the
+  // list scroll while a row is lifted so scroll never fights the drag.
+  const { isDragging, controls: dragControls } = usePlaylistDrag({
+    reorder: onReorderClimb ?? noopReorder,
+    itemCount: climbs.length,
+  });
+
+  // Stable board object for the memoized edit rows (a fresh inline object each
+  // render would defeat their memoization).
+  const editBoard = useMemo(
+    () =>
+      renderBoard
+        ? {
+            boardName: renderBoard.boardName as BoardName,
+            layoutId: renderBoard.layoutId,
+            sizeId: renderBoard.sizeId,
+            setIds: renderBoard.setIds,
+            angle: renderBoard.angle,
+          }
+        : null,
+    [renderBoard],
+  );
+
   const renderItem = useCallback(
-    ({ item }: { item: Climb }) => {
+    ({ item, index }: { item: Climb; index: number }) => {
       if (!renderBoard) return null;
+      if (editMode && editBoard) {
+        return (
+          <PlaylistEditClimbRow
+            climb={item}
+            board={editBoard}
+            rowIndex={index}
+            drag={dragControls}
+            onRemove={onRemoveClimb ?? noopRemove}
+            onReorder={onReorderClimb ?? noopReorder}
+          />
+        );
+      }
       return (
         <ClimbListRow
           climb={toSchemaClimb(item)}
@@ -249,8 +304,34 @@ export function PlaylistDetailView({
         />
       );
     },
-    [renderBoard, readOnly, handleActivate, handleSwitchBoard],
+    [
+      renderBoard,
+      editMode,
+      editBoard,
+      dragControls,
+      onRemoveClimb,
+      onReorderClimb,
+      readOnly,
+      handleActivate,
+      handleSwitchBoard,
+    ],
   );
+
+  // Cog shown beside the playlist name only in edit mode — opens the
+  // edit-details sheet (name / colour / icon / visibility). Tinted to match the
+  // hero text of the current variant (white on glass, label on Material).
+  const renderEditDetailsCog = (color: ColorValue) =>
+    editMode && onEditDetails ? (
+      <Pressable
+        onPress={onEditDetails}
+        hitSlop={8}
+        accessibilityRole="button"
+        accessibilityLabel={t('editClimbs.editDetailsAria')}
+        style={styles.heroCog}
+      >
+        <Icon name="settings" size={22} color={color} />
+      </Pressable>
+    ) : null;
 
   const baseColor = hero.color && isValidHexColor(hero.color) ? hero.color : PLAYLIST_COLORS[0];
 
@@ -300,6 +381,8 @@ export function PlaylistDetailView({
           data={climbs}
           renderItem={renderItem}
           keyExtractor={keyExtractor}
+          extraData={editMode}
+          scrollEnabled={!isDragging}
           onEndReached={handleEndReached}
           onEndReachedThreshold={0.5}
           onScroll={handleScroll}
@@ -323,9 +406,12 @@ export function PlaylistDetailView({
                       <Icon name="tag" size={36} color={systemColors.secondaryLabel} />
                     )}
                   </View>
-                  <Text variant="title2" numberOfLines={2} color={systemColors.label} style={styles.materialHeroName}>
-                    {hero.name}
-                  </Text>
+                  <View style={styles.materialHeroNameRow}>
+                    <Text variant="title2" numberOfLines={2} color={systemColors.label} style={styles.materialHeroName}>
+                      {hero.name}
+                    </Text>
+                    {renderEditDetailsCog(systemColors.label)}
+                  </View>
                   <Text variant="subheadline" color={systemColors.secondaryLabel} style={styles.materialHeroMeta}>
                     {t('detail.climbCount', { count: hero.climbCount })}
                   </Text>
@@ -377,7 +463,7 @@ export function PlaylistDetailView({
               so we ask for the compact icon form (`actions(true)`) — `GlassIconButton`
               routes to a Paper `IconButton` here, fitting the bar. */}
           {actions?.(true)}
-          {climbs.length > 0 && !boardBanner ? (
+          {climbs.length > 0 && !boardBanner && !editMode ? (
             <Appbar.Action
               icon="play"
               color={accent as string}
@@ -443,9 +529,17 @@ export function PlaylistDetailView({
           ) : (
             <Icon name="tag" size={40} color={iosSystemColors.white} />
           )}
-          <Text variant="title2" numberOfLines={2} color={iosSystemColors.white} style={styles.heroName}>
-            {hero.name}
-          </Text>
+          <View style={styles.heroNameRow}>
+            <Text
+              variant="title2"
+              numberOfLines={2}
+              color={iosSystemColors.white}
+              style={[styles.heroName, styles.heroNameFlex]}
+            >
+              {hero.name}
+            </Text>
+            {renderEditDetailsCog(iosSystemColors.white)}
+          </View>
           <Text variant="subheadline" color={iosSystemColors.white} style={styles.heroBannerMeta}>
             {t('detail.climbCount', { count: hero.climbCount })}
           </Text>
@@ -483,6 +577,8 @@ export function PlaylistDetailView({
         data={climbs}
         renderItem={renderItem}
         keyExtractor={keyExtractor}
+        extraData={editMode}
+        scrollEnabled={!isDragging}
         onEndReached={handleEndReached}
         onEndReachedThreshold={0.5}
         onScroll={handleScroll}
@@ -690,6 +786,21 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 3,
   },
+  heroNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[2],
+  },
+  heroNameFlex: {
+    flexShrink: 1,
+  },
+  heroCog: {
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
   heroBannerMeta: {
     marginTop: 2,
     opacity: 0.85,
@@ -746,8 +857,15 @@ const styles = StyleSheet.create({
     fontSize: 36,
     lineHeight: 44,
   },
+  materialHeroNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing[2],
+  },
   materialHeroName: {
     textAlign: 'center',
+    flexShrink: 1,
   },
   materialHeroMeta: {
     marginTop: 2,

@@ -68,6 +68,7 @@ type Documents = {
   '\n  mutation DeletePlaylist($playlistId: ID!) {\n    deletePlaylist(playlistId: $playlistId)\n  }\n': typeof types.DeletePlaylistDocument;
   '\n  mutation AddClimbToPlaylist($input: AddClimbToPlaylistInput!) {\n    addClimbToPlaylist(input: $input) {\n      id\n      playlistId\n      climbUuid\n      angle\n      position\n      addedAt\n    }\n  }\n': typeof types.AddClimbToPlaylistDocument;
   '\n  mutation RemoveClimbFromPlaylist($input: RemoveClimbFromPlaylistInput!) {\n    removeClimbFromPlaylist(input: $input)\n  }\n': typeof types.RemoveClimbFromPlaylistDocument;
+  '\n  mutation ReorderPlaylistClimb($input: ReorderPlaylistClimbInput!) {\n    reorderPlaylistClimb(input: $input)\n  }\n': typeof types.ReorderPlaylistClimbDocument;
   '\n  query GetPlaylistClimbs($input: GetPlaylistClimbsInput!) {\n    playlistClimbs(input: $input) {\n      climbs {\n        uuid\n        layoutId\n        boardType\n        setter_username\n        name\n        description\n        frames\n        framesCount\n        framesPace\n        angle\n        ascensionist_count\n        difficulty\n        quality_average\n        stars\n        difficulty_error\n        benchmark_difficulty\n      }\n      totalCount\n      hasMore\n    }\n  }\n': typeof types.GetPlaylistClimbsDocument;
   '\n  query DiscoverPlaylists($input: DiscoverPlaylistsInput!) {\n    discoverPlaylists(input: $input) {\n      playlists {\n        id\n        uuid\n        boardType\n        layoutId\n        name\n        description\n        color\n        icon\n        createdAt\n        updatedAt\n        climbCount\n        creatorId\n        creatorName\n        isGeneratedRecommendation\n      }\n      totalCount\n      hasMore\n    }\n  }\n': typeof types.DiscoverPlaylistsDocument;
   '\n  query GetPlaylistCreators($input: GetPlaylistCreatorsInput!) {\n    playlistCreators(input: $input) {\n      userId\n      displayName\n      playlistCount\n    }\n  }\n': typeof types.GetPlaylistCreatorsDocument;
@@ -231,6 +232,8 @@ const documents: Documents = {
     types.AddClimbToPlaylistDocument,
   '\n  mutation RemoveClimbFromPlaylist($input: RemoveClimbFromPlaylistInput!) {\n    removeClimbFromPlaylist(input: $input)\n  }\n':
     types.RemoveClimbFromPlaylistDocument,
+  '\n  mutation ReorderPlaylistClimb($input: ReorderPlaylistClimbInput!) {\n    reorderPlaylistClimb(input: $input)\n  }\n':
+    types.ReorderPlaylistClimbDocument,
   '\n  query GetPlaylistClimbs($input: GetPlaylistClimbsInput!) {\n    playlistClimbs(input: $input) {\n      climbs {\n        uuid\n        layoutId\n        boardType\n        setter_username\n        name\n        description\n        frames\n        framesCount\n        framesPace\n        angle\n        ascensionist_count\n        difficulty\n        quality_average\n        stars\n        difficulty_error\n        benchmark_difficulty\n      }\n      totalCount\n      hasMore\n    }\n  }\n':
     types.GetPlaylistClimbsDocument,
   '\n  query DiscoverPlaylists($input: DiscoverPlaylistsInput!) {\n    discoverPlaylists(input: $input) {\n      playlists {\n        id\n        uuid\n        boardType\n        layoutId\n        name\n        description\n        color\n        icon\n        createdAt\n        updatedAt\n        climbCount\n        creatorId\n        creatorName\n        isGeneratedRecommendation\n      }\n      totalCount\n      hasMore\n    }\n  }\n':
@@ -675,6 +678,12 @@ export function graphql(
 export function graphql(
   source: '\n  mutation RemoveClimbFromPlaylist($input: RemoveClimbFromPlaylistInput!) {\n    removeClimbFromPlaylist(input: $input)\n  }\n',
 ): (typeof documents)['\n  mutation RemoveClimbFromPlaylist($input: RemoveClimbFromPlaylistInput!) {\n    removeClimbFromPlaylist(input: $input)\n  }\n'];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(
+  source: '\n  mutation ReorderPlaylistClimb($input: ReorderPlaylistClimbInput!) {\n    reorderPlaylistClimb(input: $input)\n  }\n',
+): (typeof documents)['\n  mutation ReorderPlaylistClimb($input: ReorderPlaylistClimbInput!) {\n    reorderPlaylistClimb(input: $input)\n  }\n'];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
