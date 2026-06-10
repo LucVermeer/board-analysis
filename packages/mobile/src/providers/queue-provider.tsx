@@ -55,12 +55,14 @@ import {
   CREATE_SESSION,
   END_SESSION,
   GET_CLIMB,
+  GET_SESSION,
   GET_SESSION_QUEUE_STATE,
   type CreateSessionMutationResponse,
   type EndSessionMutationResponse,
   type SessionUpdateEvent,
   type SessionLiveStatsEvent,
   type GetClimbQueryResponse,
+  type GetSessionQueryResponse,
   type GetSessionQueueStateQueryResponse,
 } from '../lib/graphql/operations';
 import { getStoredActiveBoard } from '../lib/active-board-store';
@@ -517,12 +519,41 @@ export function QueueProvider({ children }: { children: ReactNode }) {
   }, [sessionId]);
 
   useEffect(() => {
-    void getStoredSessionId().then((storedId) => {
+    let cancelled = false;
+    void getStoredSessionId().then(async (storedId) => {
       if (__DEV__) {
         console.info(`[session] restored from store: ${storedId ?? '(none)'}`);
       }
-      if (storedId) setSessionId(storedId);
+      if (!storedId) return;
+      try {
+        // Verify the stored session is still alive before rejoining. Without
+        // this, JOIN_SESSION recreates a server-ended room as an empty zombie
+        // and we land in InSessionView with no peers (#2683).
+        const { session } = await getHttpClient().request<GetSessionQueryResponse>(GET_SESSION, {
+          sessionId: storedId,
+        });
+        if (cancelled) return;
+        if (!session || session.endedAt != null) {
+          if (__DEV__) {
+            console.info(`[session] stored session ${storedId} ended/missing; clearing`);
+          }
+          await clearStoredSessionId();
+          return;
+        }
+        setSessionId(storedId);
+      } catch (err) {
+        // Offline cold start: can't verify liveness, so restore optimistically
+        // so the queue still comes back. A genuinely-dead session stays
+        // escapable via End Session.
+        if (__DEV__) {
+          console.warn('[session] liveness check failed; restoring optimistically', err);
+        }
+        if (!cancelled) setSessionId(storedId);
+      }
     });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // showToast and t aren't stable callbacks — capture via refs so the WS

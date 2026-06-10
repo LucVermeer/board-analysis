@@ -32,6 +32,12 @@ const http = vi.hoisted(() => ({
   request: vi.fn(),
 }));
 
+const sessionStore = vi.hoisted(() => ({
+  getStoredSessionId: vi.fn(async () => 'session-1' as string | null),
+  setStoredSessionId: vi.fn(async () => {}),
+  clearStoredSessionId: vi.fn(async () => {}),
+}));
+
 const activeBoard = vi.hoisted(() => ({
   stored: {
     uuid: 'board-1',
@@ -113,11 +119,7 @@ vi.mock('../../lib/graphql/ws-client', () => ({
   getWsClient: () => ws.client,
 }));
 
-vi.mock('../../lib/session-store', () => ({
-  getStoredSessionId: vi.fn(async () => 'session-1'),
-  setStoredSessionId: vi.fn(async () => {}),
-  clearStoredSessionId: vi.fn(async () => {}),
-}));
+vi.mock('../../lib/session-store', () => sessionStore);
 
 vi.mock('../../lib/active-board-store', () => ({
   getStoredActiveBoard: activeBoard.getStoredActiveBoard,
@@ -186,6 +188,20 @@ const user = (overrides: Partial<SessionUser> = {}): SessionUser => ({
   userId: 'db-user-1',
   connectionState: 'CONNECTED',
   ...overrides,
+});
+
+// Shape returned by the GET_SESSION liveness check during cold-start restore.
+// endedAt: null means the session is still live and should be rejoined.
+const aliveSession = (id: string, endedAt: string | null = null) => ({
+  id,
+  name: null,
+  boardPath: '/kilter/1/10/1,2/40/list',
+  color: null,
+  goal: null,
+  startedAt: '2026-01-01T00:00:00.000Z',
+  endedAt,
+  driverParticipantId: null,
+  users: [],
 });
 
 function makeQueueItem(uuid: string, climbUuid = uuid, options: { suggested?: boolean } = {}): ClimbQueueItem {
@@ -330,13 +346,22 @@ describe('QueueProvider session update subscription', () => {
       mutation.mockResolvedValue(undefined);
     }
     wallConfirm.emitWallConfirm.mockClear();
+    sessionStore.getStoredSessionId.mockReset();
+    sessionStore.getStoredSessionId.mockResolvedValue('session-1');
+    sessionStore.setStoredSessionId.mockClear();
+    sessionStore.clearStoredSessionId.mockClear();
     graph.execute.mockReset();
     http.request.mockReset();
-    http.request.mockResolvedValue({
-      endSession: {
-        sessionId: 'session-1',
-      },
-    });
+    // The restore effect verifies session liveness via GET_SESSION before
+    // rejoining (#2683). Default to an alive session so existing tests still
+    // auto-restore into session-1; END_SESSION keeps its endSession shape.
+    // GetSessionQueueState (resync) shares the GetSession prefix, so exclude it
+    // here — the resync tests route http.request themselves.
+    http.request.mockImplementation((query: string) =>
+      typeof query === 'string' && query.includes('GetSession') && !query.includes('GetSessionQueueState')
+        ? Promise.resolve({ session: aliveSession('session-1') })
+        : Promise.resolve({ endSession: { sessionId: 'session-1' } }),
+    );
     graph.execute.mockResolvedValue({
       joinSession: {
         participantId: 'participant-self',
@@ -814,6 +839,48 @@ describe('QueueProvider session update subscription', () => {
     });
   });
 
+  it('drops a server-ended stored session on cold start without rejoining (#2683)', async () => {
+    sessionStore.getStoredSessionId.mockResolvedValue('session-ended');
+    http.request.mockImplementation((query: string) =>
+      typeof query === 'string' && query.includes('GetSession')
+        ? Promise.resolve({ session: aliveSession('session-ended', '2026-06-10T12:00:00.000Z') })
+        : Promise.resolve({ endSession: { sessionId: 'session-ended' } }),
+    );
+
+    const snapshots: Snapshot[] = [];
+    renderProvider((snapshot) => snapshots.push(snapshot));
+
+    await waitFor(() => {
+      expect(sessionStore.clearStoredSessionId).toHaveBeenCalled();
+    });
+
+    // The dead session is never restored: no sessionId, no join, no subscription.
+    expect(snapshots.at(-1)?.sessionId).toBeNull();
+    expect(graph.execute).not.toHaveBeenCalled();
+    expect(ws.getSessionUpdatesSink()).toBeNull();
+  });
+
+  it('restores optimistically when the liveness check fails (offline cold start)', async () => {
+    http.request.mockImplementation((query: string) =>
+      typeof query === 'string' && query.includes('GetSession')
+        ? Promise.reject(new Error('offline'))
+        : Promise.resolve({ endSession: { sessionId: 'session-1' } }),
+    );
+
+    const snapshots: Snapshot[] = [];
+    renderProvider((snapshot) => snapshots.push(snapshot));
+
+    // Can't verify liveness offline, so the stored id is still applied...
+    await waitFor(() => {
+      expect(snapshots.at(-1)?.sessionId).toBe('session-1');
+    });
+    // ...and the session is joined as before, without clearing the stored id.
+    await waitFor(() => {
+      expect(graph.execute).toHaveBeenCalled();
+    });
+    expect(sessionStore.clearStoredSessionId).not.toHaveBeenCalled();
+  });
+
   it('applies board serial and follows same-board angle changes', async () => {
     const snapshots: Snapshot[] = [];
     renderProvider((snapshot) => snapshots.push(snapshot));
@@ -1075,6 +1142,11 @@ describe('QueueProvider mutation-failure resync', () => {
         options.onQueueStateCall?.();
         return queueStateResponse;
       }
+      // Cold-start liveness check (#2683) — keep the session alive so restore
+      // lands in-session for these resync tests.
+      if (operationText.includes('GetSession')) {
+        return { session: aliveSession('session-1') };
+      }
       return { endSession: { sessionId: 'session-1' } };
     });
   }
@@ -1235,6 +1307,10 @@ describe('QueueProvider mutation-failure resync', () => {
       if (operationText.includes('GetSessionQueueState')) {
         queueStateCalls += 1;
         throw new Error('resync fetch failed');
+      }
+      // Cold-start liveness check (#2683) — alive so restore lands in-session.
+      if (operationText.includes('GetSession')) {
+        return { session: aliveSession('session-1') };
       }
       return { endSession: { sessionId: 'session-1' } };
     });
