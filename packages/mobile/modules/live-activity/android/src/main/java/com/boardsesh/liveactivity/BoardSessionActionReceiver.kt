@@ -20,6 +20,6 @@ class BoardSessionActionReceiver : BroadcastReceiver() {
         }
         val currentIndex = intent.getIntExtra(BoardSessionService.EXTRA_CURRENT_INDEX, 0)
         val correlationId = intent.getStringExtra(BoardSessionService.EXTRA_CORRELATION_ID) ?: ""
-        SessionPresenceModule.dispatchQueueNavigate(context.applicationContext, action, currentIndex, correlationId)
+        SessionPresenceModule.dispatchQueueNavigate(action, currentIndex, correlationId)
     }
 }

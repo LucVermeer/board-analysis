@@ -370,7 +370,6 @@
     "devicesFound_other": "{{count}} panneaux trouvés",
     "noDevicesFound": "Aucun panneau trouvé à proximité",
     "cancel": "Annuler",
-    "unknownBoard": "Panneau inconnu",
     "connectBoard": "Connecter le panneau",
     "relightBoard": "Rallumer le panneau",
     "holdForControls": "Maintenir pour les commandes",

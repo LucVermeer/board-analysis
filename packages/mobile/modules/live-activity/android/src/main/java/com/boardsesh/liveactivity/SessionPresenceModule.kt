@@ -1,7 +1,5 @@
 package com.boardsesh.liveactivity
 
-import android.content.Context
-import android.content.Intent
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import expo.modules.kotlin.records.Field
@@ -46,8 +44,6 @@ class SessionUpdateOptions : Record {
  */
 class SessionPresenceModule : Module() {
 
-    private val pendingEvents = ConcurrentLinkedQueue<Map<String, Any?>>()
-
     @Volatile
     private var hasListeners = false
 
@@ -78,8 +74,13 @@ class SessionPresenceModule : Module() {
 
         OnCreate { instance = WeakReference(this@SessionPresenceModule) }
         OnDestroy {
-            instance = null
-            pendingEvents.clear()
+            // Guard against a reload race where the replacement module's
+            // OnCreate ran before this instance's OnDestroy. pendingEvents is
+            // deliberately NOT cleared: it is process-static so a navigate
+            // tapped during the React-host gap replays once JS reattaches.
+            if (instance?.get() === this@SessionPresenceModule) {
+                instance = null
+            }
         }
 
         // Buffer navigate events that arrive before JS attaches a listener (e.g.
@@ -114,8 +115,7 @@ class SessionPresenceModule : Module() {
         if (hasListeners) {
             sendEvent("queueNavigate", event)
         } else {
-            if (pendingEvents.size >= MAX_BUFFERED_EVENTS) pendingEvents.poll()
-            pendingEvents.add(event)
+            buffer(event)
         }
     }
 
@@ -129,29 +129,38 @@ class SessionPresenceModule : Module() {
     companion object {
         private const val MAX_BUFFERED_EVENTS = 32
 
+        // Process-static (not per-instance) so a navigate tapped while the
+        // React host is being torn down or recreated survives the module
+        // instance and replays once the next instance's JS listener attaches.
+        private val pendingEvents = ConcurrentLinkedQueue<Map<String, Any?>>()
+
         @Volatile
         private var instance: WeakReference<SessionPresenceModule>? = null
+
+        private fun buffer(event: Map<String, Any?>) {
+            if (pendingEvents.size >= MAX_BUFFERED_EVENTS) pendingEvents.poll()
+            pendingEvents.add(event)
+        }
 
         /**
          * Called by BoardSessionActionReceiver when a Previous/Next notification
          * action is tapped. Routes to the live module (buffering if JS isn't
-         * listening yet); if the JS process is gone, brings the app to the
-         * foreground so the user can act.
+         * listening yet); with no live module the event is buffered for replay
+         * on reattach. The old fallback — startActivity from the receiver — was
+         * a notification trampoline, which Android 12+ blocks for targetSdk
+         * 31+: the launch silently no-oped and the tap was lost entirely.
          */
-        fun dispatchQueueNavigate(context: Context, action: String, currentIndex: Int, correlationId: String) {
-            val module = instance?.get()
+        fun dispatchQueueNavigate(action: String, currentIndex: Int, correlationId: String) {
             val event = mapOf(
                 "action" to action,
                 "currentIndex" to currentIndex,
                 "correlationId" to correlationId,
             )
+            val module = instance?.get()
             if (module != null) {
                 module.emit(event)
             } else {
-                context.packageManager.getLaunchIntentForPackage(context.packageName)?.let { launch ->
-                    launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    context.startActivity(launch)
-                }
+                buffer(event)
             }
         }
     }

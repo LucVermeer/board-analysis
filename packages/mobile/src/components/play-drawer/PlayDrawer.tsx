@@ -958,6 +958,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
           visible={bleControlOpen}
           onReassert={bluetooth.reassertWall}
           onClearLights={() => void bluetooth.clearBoard()}
+          supportsClearLights={boardName !== 'moonboard'}
           onDisconnect={disconnectAllBluetooth}
           onClose={() => setBleControlOpen(false)}
         />

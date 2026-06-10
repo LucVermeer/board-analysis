@@ -98,8 +98,34 @@ internal class SessionPresenceController(
     }
 
     fun endSession() {
+        val hadActiveSession = sessionActive
         sessionActive = false
-        context.stopService(Intent(context, BoardSessionService::class.java))
+        val stopIntent = Intent(context, BoardSessionService::class.java).apply {
+            action = BoardSessionService.ACTION_STOP
+        }
+        if (!hadActiveSession) {
+            // No session window, so no startForegroundService() token can be
+            // outstanding; a plain stopService is a safe no-op teardown.
+            context.stopService(stopIntent)
+            return
+        }
+        // Tear down through the service's own ACTION_STOP path rather than
+        // stopService(): if the start token from startSession() is still
+        // pending (onStartCommand hasn't run yet), stopService() bypasses
+        // onStartCommand and leaves that token dangling — Android 12-14 can
+        // then kill the process with ForegroundServiceDidNotStartInTimeException.
+        // ACTION_STOP promotes first, satisfying every outstanding token, then
+        // stops itself (BoardSessionService.onStartCommand).
+        try {
+            startForegroundService(context, stopIntent)
+        } catch (error: Exception) {
+            // Nothing promotable (service already gone and app backgrounded):
+            // there is no dangling token in that state either, so falling back
+            // to a plain stopService is safe.
+            val errorName = error.javaClass.simpleName.ifBlank { error.javaClass.name }
+            Log.w(TAG, "ACTION_STOP startForegroundService failed ($errorName), falling back to stopService: ${error.message}")
+            context.stopService(stopIntent)
+        }
     }
 
     // startForegroundService() throws ForegroundServiceStartNotAllowedException on

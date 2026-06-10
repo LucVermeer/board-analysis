@@ -24,6 +24,10 @@ class BoardSessionService : Service() {
 
     private var channelName: String = "Active climbing session"
     private var channelDescription: String = ""
+    // True once ACTION_START delivered a localized channel name. Other entries
+    // (UPDATE/STOP/null-intent restart on a cold process) still carry the
+    // English defaults above and must never rename an existing channel.
+    private var channelNameLocalized: Boolean = false
     private var contentTitleFallback: String = "Climbing session"
     private var previousLabel: String = "Previous"
     private var nextLabel: String = "Next"
@@ -41,7 +45,10 @@ class BoardSessionService : Service() {
         // 5 s startForeground() deadline.
         when (intent?.action) {
             ACTION_START -> {
-                channelName = intent.getStringExtra(EXTRA_CHANNEL_NAME) ?: channelName
+                intent.getStringExtra(EXTRA_CHANNEL_NAME)?.let {
+                    channelName = it
+                    channelNameLocalized = true
+                }
                 channelDescription = intent.getStringExtra(EXTRA_CHANNEL_DESC) ?: channelDescription
                 contentTitleFallback = intent.getStringExtra(EXTRA_TITLE_FALLBACK) ?: contentTitleFallback
                 previousLabel = intent.getStringExtra(EXTRA_PREV_LABEL) ?: previousLabel
@@ -122,7 +129,14 @@ class BoardSessionService : Service() {
     private fun ensureChannel() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val manager = getSystemService(NotificationManager::class.java) ?: return
-        if (manager.getNotificationChannel(CHANNEL_ID) != null) return
+        val existing = manager.getNotificationChannel(CHANNEL_ID)
+        if (existing != null) {
+            // Re-create only when ACTION_START delivered a fresh localized name
+            // that differs — createNotificationChannel on an existing id updates
+            // name/description, so a device-locale change doesn't leave the old
+            // language in system Settings forever.
+            if (!channelNameLocalized || existing.name?.toString() == channelName) return
+        }
         val channel = NotificationChannel(CHANNEL_ID, channelName, NotificationManager.IMPORTANCE_LOW).apply {
             description = channelDescription
             setShowBadge(false)

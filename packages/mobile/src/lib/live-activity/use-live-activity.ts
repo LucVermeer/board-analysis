@@ -54,7 +54,9 @@ function getGraphqlWsUrl(): string {
 //
 // Lifecycle: starts a session presence when (iOS or Android) + (session active)
 // + (board selected) + (queue has content) + (the native surface is available —
-// Live Activities authorized on iOS, POST_NOTIFICATIONS granted on Android).
+// Live Activities authorized on iOS; always true on Android, where the
+// foreground service runs regardless of POST_NOTIFICATIONS and notification
+// visibility is the OS's separate concern).
 // Pushes initial state, then watches the serialized queue (full update) and
 // current climb (lightweight update). On iOS this drives ActivityKit; on Android
 // it drives the foreground service + ongoing notification (the SessionPresence

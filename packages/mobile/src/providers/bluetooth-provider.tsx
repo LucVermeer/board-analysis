@@ -82,10 +82,14 @@ function BluetoothAutoSender({
   sendFramesToBoard,
   onWallConfirmed,
   reassertNonce,
+  connectInitialSendRef,
 }: {
   sendFramesToBoard: (frames: string, mirrored?: boolean, signal?: AbortSignal) => Promise<boolean | undefined>;
   onWallConfirmed: (climbUuid: string) => void;
   reassertNonce: number;
+  // One-shot seed: what connect() already wrote as initialFrames, so the
+  // freshly mounted AutoSender doesn't repeat a byte-identical first send.
+  connectInitialSendRef: React.MutableRefObject<{ frames: string; mirrored: boolean } | null>;
 }) {
   const { state } = useQueue();
   const { currentClimbQueueItem } = state;
@@ -151,6 +155,24 @@ function BluetoothAutoSender({
         while (toSend) {
           if (signal?.aborted) return;
           const item = toSend;
+
+          // connect() may have just written these exact frames as its
+          // initialFrames (connect-and-light flows like the play drawer).
+          // Seed the dedup signature so this freshly mounted AutoSender
+          // doesn't immediately repeat the byte-identical write and
+          // double-fire the success haptic. One-shot — and a pending
+          // reassert below still wins and forces a re-push.
+          const connectSend = connectInitialSendRef.current;
+          if (connectSend) {
+            connectInitialSendRef.current = null;
+            if (
+              lastSentSignatureRef.current === null &&
+              connectSend.frames === item.climb.frames &&
+              connectSend.mirrored === !!item.climb.mirrored
+            ) {
+              lastSentSignatureRef.current = `${item.climb.uuid}::${item.climb.frames}::${item.climb.mirrored ? 1 : 0}`;
+            }
+          }
 
           // Honour a pending reassert exactly when the climb is picked up —
           // clearing the signature here (rather than in the effect) survives an
@@ -279,16 +301,24 @@ export function BluetoothProvider({
     );
   }, [boardName, layoutId, sizeId, setIds]);
 
-  const { isConnected, loading, connect, disconnect, sendFramesToBoard, pickerState, reconnectSerialForCurrentBoard } =
-    useBoardBluetooth({
-      boardName,
-      layoutId,
-      sizeId,
-      setIds,
-      boardUuid,
-      holdsData,
-      onConnectSuccess: handleConnectSuccess,
-    });
+  const {
+    isConnected,
+    loading,
+    connect,
+    disconnect,
+    sendFramesToBoard,
+    pickerState,
+    reconnectSerialForCurrentBoard,
+    connectInitialSendRef,
+  } = useBoardBluetooth({
+    boardName,
+    layoutId,
+    sizeId,
+    setIds,
+    boardUuid,
+    holdsData,
+    onConnectSuccess: handleConnectSuccess,
+  });
 
   const resolvedPickerBoards = useResolvedBleDeviceBoards(pickerState?.devices ?? EMPTY_PICKER_DEVICES);
   const currentBoardConfig = useMemo(() => {
@@ -562,6 +592,7 @@ export function BluetoothProvider({
           sendFramesToBoard={sendFramesToBoard}
           onWallConfirmed={handleWallConfirmed}
           reassertNonce={reassertNonce}
+          connectInitialSendRef={connectInitialSendRef}
         />
       )}
       {children}

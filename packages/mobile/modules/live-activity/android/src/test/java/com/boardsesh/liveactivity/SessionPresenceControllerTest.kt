@@ -163,12 +163,48 @@ class SessionPresenceControllerTest {
 
     @Test
     @Config(sdk = [30])
-    fun `endSession deactivates the session`() {
-        val (controller, _) = recordingController()
+    fun `endSession deactivates and tears down via ACTION_STOP`() {
+        val (controller, launchedIntents) = recordingController()
         controller.startSession(null)
 
         controller.endSession()
 
+        // Teardown must go through the service's promote-then-stop ACTION_STOP
+        // path (not stopService): a start token from startSession may still be
+        // pending, and bypassing onStartCommand leaves it dangling — the
+        // ForegroundServiceDidNotStartInTimeException kill on Android 12-14.
         assertFalse(controller.sessionActive)
+        assertEquals(BoardSessionService.ACTION_STOP, launchedIntents.last().action)
+    }
+
+    @Test
+    @Config(sdk = [31])
+    fun `endSession falls back to stopService when ACTION_STOP delivery throws`() {
+        var failNextLaunch = false
+        val controller = SessionPresenceController(application) { _, _ ->
+            if (failNextLaunch) throw fgsNotAllowed()
+        }
+        controller.startSession(null)
+
+        // Service already gone and app backgrounded: the ACTION_STOP delivery
+        // throws, but the session must still end locally without rethrowing.
+        failNextLaunch = true
+        controller.endSession()
+
+        assertFalse(controller.sessionActive)
+    }
+
+    @Test
+    @Config(sdk = [30])
+    fun `endSession without an active session skips the foreground start`() {
+        val (controller, launchedIntents) = recordingController()
+
+        // No session window means no pending start token; ACTION_STOP via
+        // startForegroundService would briefly promote a fresh service just to
+        // stop it (a notification flash), so this path must stay stopService.
+        controller.endSession()
+
+        assertFalse(controller.sessionActive)
+        assertTrue(launchedIntents.isEmpty())
     }
 }
