@@ -167,6 +167,10 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   const { boardName, layoutId, sizeId, setIds, angle } = boardConfig;
   const bluetoothConnected = bluetooth?.isConnected ?? false;
   const bluetoothLoading = bluetooth?.loading ?? false;
+  // Single source for "is a board's BLE available at all" so the lightbulb's
+  // accessibility label and its press action stay in lockstep — both read this
+  // instead of one checking `bluetooth` and the other `bluetooth !== null`.
+  const hasBluetooth = bluetooth !== null;
 
   usePlayDrawerWakeLock(isSheetOpen);
 
@@ -488,7 +492,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
 
   const handleLightbulb = useCallback(() => {
     const pressAction = derivePlayDrawerLightbulbPressAction({
-      hasBluetooth: bluetooth !== null,
+      hasBluetooth,
       hasDisplayedClimb: displayedClimb !== null,
       isPersistentSessionActive: lightbulbState.isPersistentSessionActive,
       isDriver: lightbulbState.isDriver,
@@ -518,6 +522,10 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
 
     if (pressAction === 'reconnect_ble') {
       if (!bluetooth) return;
+      // Ignore taps while a connect is already in flight, matching the climbs-list
+      // lightbulb (use-lightbulb-toggle.ts). The connect() in-flight ref also guards,
+      // but bailing here avoids a misleading haptic and a dead tap.
+      if (bluetoothLoading) return;
       // Party driver whose BLE link was stolen — reconnect to the remembered board
       // without releasing wall control, so it relights in one tap. No control
       // changes hands here, and connect() already emits BluetoothConnectionSuccess,
@@ -616,6 +624,8 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
     });
   }, [
     bluetooth,
+    hasBluetooth,
+    bluetoothLoading,
     driverParticipantId,
     participantId,
     lightbulbState.isPersistentSessionActive,
@@ -728,8 +738,9 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
     if (!lightbulbState.isPersistentSessionActive) return undefined;
     if (lightbulbState.isDriver) {
       // Still the driver but the board link dropped — the tap reconnects, not
-      // releases, so the label must match (see derivePlayDrawerLightbulbPressAction).
-      if (bluetooth && !bluetoothConnected) return t('playView.actionBar.lightbulb.reconnect');
+      // releases, so the label must match (see derivePlayDrawerLightbulbPressAction,
+      // which keys the reconnect action off this same hasBluetooth condition).
+      if (hasBluetooth && !bluetoothConnected) return t('playView.actionBar.lightbulb.reconnect');
       if (!displayedClimb) return t('playView.actionBar.lightbulb.driving');
       return t('playView.actionBar.lightbulb.drivingNamed', { name: displayedClimb.name });
     }
@@ -739,7 +750,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
     displayedClimb,
     lightbulbState.isDriver,
     lightbulbState.isPersistentSessionActive,
-    bluetooth,
+    hasBluetooth,
     bluetoothConnected,
     t,
   ]);
