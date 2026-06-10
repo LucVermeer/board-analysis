@@ -517,7 +517,12 @@ export function PlaylistDetailView({
             <Icon name="tag" size={40} color={iosSystemColors.white} />
           )}
           <View style={styles.heroNameRow}>
-            <Text variant="title2" numberOfLines={2} color={iosSystemColors.white} style={[styles.heroName, styles.heroNameFlex]}>
+            <Text
+              variant="title2"
+              numberOfLines={2}
+              color={iosSystemColors.white}
+              style={[styles.heroName, styles.heroNameFlex]}
+            >
               {hero.name}
             </Text>
             {renderEditDetailsCog(iosSystemColors.white)}

@@ -25,7 +25,14 @@ type PlaylistActionsMenuProps = {
  * wires Pin → toggle pin, Edit → enter the climbs reorder/remove mode, and
  * Delete → the confirm Alert.
  */
-export function PlaylistActionsMenu({ visible, isPinned, onTogglePin, onEdit, onDelete, onClose }: PlaylistActionsMenuProps) {
+export function PlaylistActionsMenu({
+  visible,
+  isPinned,
+  onTogglePin,
+  onEdit,
+  onDelete,
+  onClose,
+}: PlaylistActionsMenuProps) {
   const { t } = useTranslation('playlists');
   const { systemColors, brandColors } = useTheme();
   const sheetRef = useRef<BottomSheetModal>(null);
@@ -57,7 +64,11 @@ export function PlaylistActionsMenu({ visible, isPinned, onTogglePin, onEdit, on
         <ListRow
           title={isPinned ? t('library.pin.unpin') : t('library.pin.pin')}
           leading={
-            <Icon name={isPinned ? 'pin.fill' : 'pin'} size={22} color={isPinned ? brandColors.primary : systemColors.accent} />
+            <Icon
+              name={isPinned ? 'pin.fill' : 'pin'}
+              size={22}
+              color={isPinned ? brandColors.primary : systemColors.accent}
+            />
           }
           onPress={onTogglePin}
           showSeparator
