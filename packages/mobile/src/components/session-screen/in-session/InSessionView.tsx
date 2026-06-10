@@ -461,9 +461,10 @@ export function InSessionView({ showChrome = false, onShare, translateY, screenH
 
   const [showEndSession, setShowEndSession] = useState(false);
   const [isEnding, setIsEnding] = useState(false);
-  // The End bar matches the pre-session Start bar: a glass toolbar pinned flush
-  // above the tab bar. The list pads its bottom to scroll clear of it.
-  const footerBottom = bottomChrome.tabBarBottom;
+  // The End bar matches the pre-session Start bar: a glass toolbar above the
+  // bottom chrome — flush over the tab bar when the queue accessory is absent,
+  // lifted to clear it when present. The list pads its bottom to match.
+  const footerBottom = bottomChrome.fixedFooterBottom;
 
   const handleConfirmEnd = useCallback(async () => {
     setIsEnding(true);

@@ -5,7 +5,7 @@ import { Tabs } from 'expo-router';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { useTranslation } from 'react-i18next';
 import { useBluetoothConnectedStatus } from '../../src/lib/ble/bluetooth-status-store';
-import { useQueueSessionId } from '../../src/providers/queue-provider';
+import { useHasActiveClimb, useQueueSessionId } from '../../src/providers/queue-provider';
 import { QueueBottomAccessory } from '../../src/components/queue-control/QueueBottomAccessory';
 import { MaterialTabBar } from '../../src/components/navigation/MaterialTabBar';
 import { useTheme } from '../../src/providers/theme-provider';
@@ -50,6 +50,10 @@ export default function TabLayout() {
   // tree inline, so reading the volatile useQueue() here re-rendered every tab
   // on every queue mutation. useQueueSessionId only changes on session start/end.
   const { sessionId } = useQueueSessionId();
+  // Presence-only selector (flips just when a climb appears/disappears, not on
+  // queue mutations or climb-to-climb nav), so gating the accessory mount on it
+  // doesn't re-render the tab tree on every queue change.
+  const hasCurrentClimb = useHasActiveClimb();
   const showRecordBadge = isBluetoothConnected || sessionId !== null;
   const eagerMountRecord = __DEV__ && Platform.OS === 'android';
 
@@ -95,7 +99,7 @@ export default function TabLayout() {
     // lives in patches/react-native-screens@4.25.2.patch. `vp run check:mobile-patches`
     // (CI) fails the build if that patch ever stops applying after a dep bump.
     <NativeTabs minimizeBehavior="onScrollDown">
-      {nativeAccessoryActive ? (
+      {nativeAccessoryActive && hasCurrentClimb ? (
         <NativeTabs.BottomAccessory>
           <QueueBottomAccessory />
         </NativeTabs.BottomAccessory>

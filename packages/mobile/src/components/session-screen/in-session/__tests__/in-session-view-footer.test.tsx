@@ -144,9 +144,11 @@ describe('InSessionView footer', () => {
     bottomChrome.metrics = { fixedFooterBottom: 88, tabBarBottom: 50 };
   });
 
-  it('pins the End bar flush above the tab bar (matching the pre-session Start bar)', () => {
+  it('pins the End bar above the bottom chrome (matching the pre-session Start bar)', () => {
     render(createElement(InSessionView));
 
-    expect(getStyleNumber(footer.styles, 'bottom')).toBe(50);
+    // fixedFooterBottom collapses to the tab-bar clearance when no accessory is
+    // present and lifts to clear it when there is one.
+    expect(getStyleNumber(footer.styles, 'bottom')).toBe(88);
   });
 });

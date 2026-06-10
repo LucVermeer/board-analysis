@@ -208,10 +208,10 @@ export function PreSessionView({ showChrome = false }: PreSessionViewProps) {
   const generatorPreviewReady =
     selection.type !== 'on' || (status === 'ready' && previewItems.length > 0 && refreshingUuids.size === 0);
   const canStart = activeBoard != null && !isStarting && generatorPreviewReady;
-  // The Start bar is a glass toolbar pinned flush above the tab bar (clearing the
-  // tab bar + safe area only — not the floating queue reserve, which previously
-  // stranded it mid-screen). The list pads its bottom to scroll clear of it.
-  const footerBottom = bottomChrome.tabBarBottom;
+  // The Start bar is a glass toolbar pinned above the bottom chrome: flush over
+  // the tab bar when the queue accessory is absent (no current climb), and lifted
+  // to clear the accessory when it's present. The list pads its bottom to match.
+  const footerBottom = bottomChrome.fixedFooterBottom;
 
   // Inline status copy shown above an empty preview (loading / no results /
   // error). When rows are already present a rebuild keeps them mounted, so these

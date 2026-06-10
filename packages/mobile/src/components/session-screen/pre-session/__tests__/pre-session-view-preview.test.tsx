@@ -247,19 +247,19 @@ describe('PreSessionView preview rows', () => {
     expect(rows.rendered).toEqual([]);
   });
 
-  it('pins the Start bar flush above the tab bar', () => {
+  it('pins the Start bar above the bottom chrome via the fixed-footer metric', () => {
     render(createElement(PreSessionView));
 
-    // The glass footer clears the tab bar via `bottom` (not the floating queue
-    // reserve), so it sits flush rather than stranded mid-screen.
+    // fixedFooterBottom is the tab-bar clearance when no queue accessory is
+    // present, so the bar sits flush rather than stranded mid-screen.
     expect(getStyleNumber(footer.styles, 'bottom')).toBe(120);
   });
 
-  it('tracks the tab-bar clearance when the safe area changes', () => {
-    bottomChrome.metrics = { ...bottomChrome.metrics, tabBarBottom: 34 };
+  it('lifts to clear the queue accessory when it reserves space', () => {
+    bottomChrome.metrics = { ...bottomChrome.metrics, fixedFooterBottom: 178 };
 
     render(createElement(PreSessionView));
 
-    expect(getStyleNumber(footer.styles, 'bottom')).toBe(34);
+    expect(getStyleNumber(footer.styles, 'bottom')).toBe(178);
   });
 });

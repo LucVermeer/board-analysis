@@ -7,6 +7,7 @@ const cfg = vi.hoisted(() => ({
   bluetoothConnected: false,
   sessionId: null as string | null,
   nativeAccessoryActive: true,
+  hasCurrentClimb: false,
   variant: 'liquidGlass' as 'liquidGlass' | 'material',
   platformOS: 'ios' as 'ios' | 'android',
   materialScreens: [] as Array<{ name: string; options?: { lazy?: boolean } }>,
@@ -30,6 +31,7 @@ vi.mock('../../../src/lib/ble/bluetooth-status-store', () => ({
 
 vi.mock('../../../src/providers/queue-provider', () => ({
   useQueueSessionId: () => ({ sessionId: cfg.sessionId }),
+  useHasActiveClimb: () => cfg.hasCurrentClimb,
 }));
 
 vi.mock('../../../src/components/queue-control/QueueBottomAccessory', () => ({
@@ -105,6 +107,7 @@ describe('TabLayout', () => {
     cfg.bluetoothConnected = false;
     cfg.sessionId = null;
     cfg.nativeAccessoryActive = true;
+    cfg.hasCurrentClimb = false;
     cfg.variant = 'liquidGlass';
     cfg.platformOS = 'ios';
     cfg.materialScreens = [];
@@ -127,7 +130,8 @@ describe('TabLayout', () => {
     expect(container.querySelector('[data-tabs="true"]')?.getAttribute('data-minimize-behavior')).toBe('onScrollDown');
   });
 
-  it('mounts the native bottom accessory when that path is active', () => {
+  it('mounts the native bottom accessory when active and a climb is current', () => {
+    cfg.hasCurrentClimb = true;
     const { container } = render(<TabLayout />);
 
     const accessorySlot = container.querySelector('[data-bottom-accessory="true"]');
@@ -137,6 +141,16 @@ describe('TabLayout', () => {
 
   it('skips the native bottom accessory when that path is inactive', () => {
     cfg.nativeAccessoryActive = false;
+    cfg.hasCurrentClimb = true;
+
+    const { container } = render(<TabLayout />);
+
+    expect(container.querySelector('[data-bottom-accessory="true"]')).toBeNull();
+  });
+
+  it('skips the empty native bottom accessory when no climb is current', () => {
+    cfg.nativeAccessoryActive = true;
+    cfg.hasCurrentClimb = false;
 
     const { container } = render(<TabLayout />);
 
