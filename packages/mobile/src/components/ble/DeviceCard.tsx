@@ -1,14 +1,20 @@
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import { View, Pressable, StyleSheet } from 'react-native';
 import { useTranslation } from 'react-i18next';
+import { formatBoardDisplayName, toBoardName } from '@boardsesh/board-config';
+import { parseBoardTypeFromDeviceName, parseSerialNumber } from '@boardsesh/ble-protocol';
 import type { DiscoveredDevice } from '../../lib/ble/types';
+import type { ResolvedBoardEntry } from '../../lib/ble/resolve-serials';
+import { getBoardRenderData } from '../../lib/board-details';
 import { Text } from '../Text';
 import { Icon } from '../Icon';
+import { BoardImageNative } from '../BoardImageNative';
 import { useTheme } from '../../providers/theme-provider';
 import { hapticLight } from '../../lib/haptics';
 import { spacing, borderRadius } from '../../theme/tokens';
 import { iosSystemColors } from '../../theme/ios-colors';
-import { parseSerialNumber } from '@boardsesh/ble-protocol';
+import { formatRelativeTime } from '../create-climb/draft-format';
+import type { DevicePickerBoardConfig } from './DevicePickerSheet';
 
 type RssiStrength = 'strong' | 'good' | 'weak';
 
@@ -23,6 +29,9 @@ const rssiBarColor: Record<RssiStrength, string> = {
   good: iosSystemColors.systemYellow,
   weak: iosSystemColors.systemRed,
 };
+
+const PREVIEW_SIZE = 64;
+const PREVIEW_IMAGE_MAX_SIZE = 58;
 
 function RssiIndicator({ rssi }: { rssi: number }) {
   const { systemColors } = useTheme();
@@ -54,47 +63,184 @@ function RssiIndicator({ rssi }: { rssi: number }) {
 type DeviceCardProps = {
   device: DiscoveredDevice;
   onSelect: (deviceId: string) => void;
-  boardType?: string;
+  resolvedBoards: ReadonlyMap<string, ResolvedBoardEntry>;
+  currentBoardConfig?: DevicePickerBoardConfig;
 };
 
-export function DeviceCard({ device, onSelect, boardType }: DeviceCardProps) {
+type DevicePresentation = {
+  title: string;
+  subtitle?: string;
+  previewConfig?: DevicePickerBoardConfig;
+  isUnknown: boolean;
+};
+
+function parseSetIds(setIds: string): number[] {
+  return setIds
+    .split(',')
+    .map((setId) => Number(setId.trim()))
+    .filter((setId) => Number.isInteger(setId));
+}
+
+function configFromResolvedEntry(entry: ResolvedBoardEntry): DevicePickerBoardConfig | undefined {
+  if (entry.kind === 'saved') {
+    const boardName = toBoardName(entry.board.boardType);
+    if (!boardName) return undefined;
+    return {
+      boardName,
+      layoutId: entry.board.layoutId,
+      sizeId: entry.board.sizeId,
+      setIds: entry.board.setIds,
+    };
+  }
+
+  const boardName = toBoardName(entry.config.boardName);
+  if (!boardName) return undefined;
+  return {
+    boardName,
+    layoutId: entry.config.layoutId,
+    sizeId: entry.config.sizeId,
+    setIds: entry.config.setIds,
+  };
+}
+
+function describeSavedBoard(entry: Extract<ResolvedBoardEntry, { kind: 'saved' }>): string | undefined {
+  const location = entry.board.gymName ?? entry.board.locationName ?? undefined;
+  const boardSpecs = [entry.board.layoutName, entry.board.sizeName, entry.board.setNames?.join(', ')]
+    .filter((part) => part && part.length > 0)
+    .join(', ');
+  return [location, boardSpecs].filter((part) => part && part.length > 0).join(', ') || undefined;
+}
+
+type PreviewImageStyle = {
+  width: number;
+  height: number;
+};
+
+function getPreviewImageStyle(boardWidth: number, boardHeight: number): PreviewImageStyle {
+  const aspectRatio = boardWidth / boardHeight;
+  if (aspectRatio >= 1) {
+    return {
+      width: PREVIEW_IMAGE_MAX_SIZE,
+      height: PREVIEW_IMAGE_MAX_SIZE / aspectRatio,
+    };
+  }
+  return {
+    width: PREVIEW_IMAGE_MAX_SIZE * aspectRatio,
+    height: PREVIEW_IMAGE_MAX_SIZE,
+  };
+}
+
+function BoardPreview({ previewConfig, isUnknown }: { previewConfig?: DevicePickerBoardConfig; isUnknown: boolean }) {
+  const { systemColors } = useTheme();
+  const setIds = useMemo(() => (previewConfig ? parseSetIds(previewConfig.setIds) : []), [previewConfig]);
+  const renderData = useMemo(() => {
+    if (!previewConfig || setIds.length === 0) return null;
+    return getBoardRenderData({
+      boardName: previewConfig.boardName,
+      layoutId: previewConfig.layoutId,
+      sizeId: previewConfig.sizeId,
+      setIds,
+    });
+  }, [previewConfig, setIds]);
+
+  const previewImageStyle = renderData ? getPreviewImageStyle(renderData.boardWidth, renderData.boardHeight) : null;
+
+  return (
+    <View style={[styles.preview, { backgroundColor: systemColors.tertiaryBackground }]}>
+      {previewConfig && renderData && previewImageStyle ? (
+        <BoardImageNative
+          frames=""
+          boardName={previewConfig.boardName}
+          layoutId={previewConfig.layoutId}
+          sizeId={previewConfig.sizeId}
+          setIds={previewConfig.setIds}
+          boardWidth={renderData.boardWidth}
+          boardHeight={renderData.boardHeight}
+          renderWidth={Math.round(previewImageStyle.width)}
+          style={previewImageStyle}
+        />
+      ) : (
+        <Icon name="boards" size={30} color={systemColors.tertiaryLabel} />
+      )}
+      {isUnknown ? (
+        <View style={[styles.unknownBadge, { backgroundColor: systemColors.background }]}>
+          <Icon name="info" size={14} color={systemColors.tertiaryLabel} />
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+export function DeviceCard({ device, onSelect, resolvedBoards, currentBoardConfig }: DeviceCardProps) {
   const { t } = useTranslation('settings');
-  const { systemColors, brandColors: themeBrandColors } = useTheme();
+  const { systemColors } = useTheme();
   const serialNumber = parseSerialNumber(device.name);
+  const resolvedEntry = serialNumber ? resolvedBoards.get(serialNumber) : undefined;
 
   const handlePress = useCallback(() => {
     hapticLight();
     onSelect(device.deviceId);
   }, [device.deviceId, onSelect]);
 
-  const displayName = device.name ?? t('ble.unknownBoard');
+  const presentation = useMemo<DevicePresentation>(() => {
+    if (resolvedEntry?.kind === 'saved') {
+      return {
+        title: resolvedEntry.board.name,
+        subtitle: describeSavedBoard(resolvedEntry),
+        previewConfig: configFromResolvedEntry(resolvedEntry),
+        isUnknown: false,
+      };
+    }
+
+    if (resolvedEntry?.kind === 'recorded') {
+      return {
+        title: device.name ?? t('devicePicker.lastConnected'),
+        subtitle: t('devicePicker.lastConnectedAt', { time: formatRelativeTime(resolvedEntry.config.updatedAt) }),
+        previewConfig: configFromResolvedEntry(resolvedEntry),
+        isUnknown: false,
+      };
+    }
+
+    return {
+      title: device.name ?? t('devicePicker.unknownDevice'),
+      previewConfig: currentBoardConfig,
+      isUnknown: true,
+    };
+  }, [currentBoardConfig, device.name, resolvedEntry, t]);
+
+  const boardType = presentation.previewConfig?.boardName ?? parseBoardTypeFromDeviceName(device.name);
+  const boardLabel = boardType ? formatBoardDisplayName(boardType) : undefined;
 
   return (
     <Pressable
       onPress={handlePress}
       accessibilityRole="button"
-      accessibilityLabel={displayName}
+      accessibilityLabel={presentation.title}
       style={({ pressed }) => [
         styles.container,
         {
-          backgroundColor: (pressed ? systemColors.fill : systemColors.secondaryBackground),
+          backgroundColor: pressed ? systemColors.fill : systemColors.secondaryBackground,
         },
       ]}
     >
-      <View style={styles.leftSection}>
-        <Icon name="bluetooth" size={22} color={themeBrandColors.primary} />
-      </View>
+      <BoardPreview previewConfig={presentation.previewConfig} isUnknown={presentation.isUnknown} />
 
       <View style={styles.centerSection}>
         <Text variant="body" color={systemColors.label} numberOfLines={1}>
-          {displayName}
+          {presentation.title}
         </Text>
 
+        {presentation.subtitle ? (
+          <Text variant="caption1" color={systemColors.secondaryLabel} numberOfLines={1}>
+            {presentation.subtitle}
+          </Text>
+        ) : null}
+
         <View style={styles.metaRow}>
-          {boardType && (
+          {boardLabel && (
             <View style={[styles.badge, { backgroundColor: systemColors.fill }]}>
               <Text variant="caption2" color={systemColors.secondaryLabel}>
-                {boardType}
+                {boardLabel}
               </Text>
             </View>
           )}
@@ -118,14 +264,25 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: spacing[4],
-    paddingVertical: spacing[3],
+    paddingVertical: spacing[2],
     borderRadius: borderRadius.lg,
     gap: spacing[3],
   },
-  leftSection: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+  preview: {
+    width: PREVIEW_SIZE,
+    height: PREVIEW_SIZE,
+    borderRadius: borderRadius.md,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  unknownBadge: {
+    position: 'absolute',
+    right: 4,
+    bottom: 4,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },

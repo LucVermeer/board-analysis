@@ -64,6 +64,10 @@ function parseAnyBoardTypeFromDeviceName(deviceName?: string): string | undefine
   return parseBoardTypeFromDeviceName(deviceName);
 }
 
+function scanFamilyForBoard(boardName: string): 'aurora' | 'moonboard' {
+  return boardName === 'moonboard' ? 'moonboard' : 'aurora';
+}
+
 /**
  * Fire-and-forget GraphQL mutation recording the (serial, board config, API
  * level) seen on connect for the authenticated user. Mirrors the web app's
@@ -460,7 +464,7 @@ export function useBoardBluetooth({
           return false;
         }
 
-        const adapter = createBluetoothAdapter(devicePicker);
+        const adapter = createBluetoothAdapter(devicePicker, scanFamilyForBoard(boardName));
 
         const available = await adapter.isAvailable();
         if (!available) {
@@ -687,7 +691,7 @@ export function useBoardBluetooth({
       const adoptedBoardType = parseAnyBoardTypeFromDeviceName(deviceName);
       if (!adoptedBoardType || adoptedBoardType !== boardName) return;
 
-      const adapter = createBluetoothAdapter(devicePicker);
+      const adapter = createBluetoothAdapter(devicePicker, scanFamilyForBoard(boardName));
       if (!isNativeIosBleAdapter(adapter)) return;
       adapter.adoptConnection(deviceId);
       apiLevelRef.current = parseApiLevel(deviceName);

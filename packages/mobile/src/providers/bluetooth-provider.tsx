@@ -1,9 +1,11 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { ClimbQueueItem } from '@boardsesh/queue';
 import type { BoardName } from '@boardsesh/shared-schema';
+import { toBoardName } from '@boardsesh/board-config';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { emitWallConfirm } from '@boardsesh/play-view';
 import { useBoardBluetooth } from '../lib/ble/use-board-bluetooth';
+import { useResolvedBleDeviceBoards } from '../lib/ble/resolve-serials';
 import { getBoardRenderData } from '../lib/board-details';
 import { registerBluetoothConnection } from '../lib/ble/bluetooth-status-store';
 import { useQueue, useQueueSessionControls } from './queue-provider';
@@ -35,6 +37,7 @@ type BluetoothContextValue = {
 };
 
 const BluetoothContext = createContext<BluetoothContextValue | null>(null);
+const EMPTY_PICKER_DEVICES: [] = [];
 
 /**
  * Isolated child component that subscribes to the queue's currentClimbQueueItem
@@ -260,6 +263,19 @@ export function BluetoothProvider({
       onConnectSuccess: handleConnectSuccess,
     });
 
+  const resolvedPickerBoards = useResolvedBleDeviceBoards(pickerState?.devices ?? EMPTY_PICKER_DEVICES);
+  const currentBoardConfig = useMemo(() => {
+    if (!boardName || layoutId === undefined || sizeId === undefined || !setIds) return undefined;
+    const typedBoardName = toBoardName(boardName);
+    if (!typedBoardName) return undefined;
+    return {
+      boardName: typedBoardName,
+      layoutId,
+      sizeId,
+      setIds,
+    };
+  }, [boardName, layoutId, sizeId, setIds]);
+
   const clearBoard = useCallback(() => sendFramesToBoard(''), [sendFramesToBoard]);
 
   // Bumped by `reassertWall()` to force the auto-sender to re-push the current
@@ -350,6 +366,8 @@ export function BluetoothProvider({
           onSelect={pickerState.handleSelect}
           onDismiss={pickerState.handleCancel}
           isScanning={pickerState.isScanning}
+          resolvedBoards={resolvedPickerBoards}
+          currentBoardConfig={currentBoardConfig}
         />
       )}
     </BluetoothContext.Provider>

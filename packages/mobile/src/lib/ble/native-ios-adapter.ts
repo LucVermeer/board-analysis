@@ -4,7 +4,7 @@ import {
   type NativeBleConfigureBoardOptions,
   type NativeBleScanEvent,
 } from '../../../modules/live-activity/src/index';
-import type { BluetoothAdapter, BleConnection, DevicePickerFn, DiscoveredDevice } from './types';
+import type { BluetoothAdapter, BleConnection, BoardScanFamily, DevicePickerFn, DiscoveredDevice } from './types';
 import { SCAN_TIMEOUT_MS, SERIAL_RECONNECT_GRACE_MS } from '@boardsesh/ble-protocol/scan-constants';
 import { isLikelyBoardDevice } from './board-device-filter';
 
@@ -39,7 +39,10 @@ export class NativeIosBleAdapter implements BluetoothAdapter {
   private disconnectCallback: (() => void) | null = null;
   private disconnectSubscription: { remove: () => void } | null = null;
 
-  constructor(private readonly devicePicker: DevicePickerFn) {
+  constructor(
+    private readonly devicePicker: DevicePickerFn,
+    private readonly scanFamily: BoardScanFamily = 'aurora',
+  ) {
     if (!boardBleNative) {
       throw new Error('BoardBle native module not linked — rebuild the preview client');
     }
@@ -90,16 +93,20 @@ export class NativeIosBleAdapter implements BluetoothAdapter {
       openPicker();
     }
 
-    // Newer binaries scan unfiltered (a native service-UUID filter would hide
-    // MoonBoard controllers, which don't reliably advertise the UART UUID) and
-    // report advertised service UUIDs so JS can filter; older binaries keep
-    // the native UUID filter and the JS filter passes their results through
-    // (no serviceUuids field, and their names match the board patterns).
-    const scanUnfiltered = nativeBleSupportsConnectionAdoption();
+    // MoonBoard scans are unfiltered on newer binaries (a native service-UUID
+    // filter would hide controllers that only surface via name). Aurora scans
+    // stay filtered to avoid unrelated peripherals reaching the picker.
+    const supportsUnfilteredScan = nativeBleSupportsConnectionAdoption();
 
     const scanSubscription = native.addListener('scanResult', (payload: NativeBleScanEvent) => {
       const deviceName = payload.localName || payload.device.name || undefined;
-      if (scanUnfiltered && !isLikelyBoardDevice({ name: deviceName, serviceUuids: payload.serviceUuids })) {
+      if (
+        !isLikelyBoardDevice({
+          name: deviceName,
+          serviceUuids: payload.serviceUuids,
+          scanFamily: this.scanFamily,
+        })
+      ) {
         return;
       }
       // Repeat advertisements of an unchanged device don't need a state
@@ -134,9 +141,13 @@ export class NativeIosBleAdapter implements BluetoothAdapter {
     let scanTimeoutId: ReturnType<typeof setTimeout> | undefined;
     let selectedDeviceId: string;
     try {
-      // Empty list = unfiltered scan on newer binaries; older binaries get the
-      // explicit UUID filter they understand.
-      await native.startScan(scanUnfiltered ? [] : [AURORA_ADVERTISED_SERVICE_UUID, UART_SERVICE_UUID]);
+      const scanServiceUuids =
+        this.scanFamily === 'aurora'
+          ? [AURORA_ADVERTISED_SERVICE_UUID]
+          : supportsUnfilteredScan
+            ? []
+            : [UART_SERVICE_UUID];
+      await native.startScan(scanServiceUuids);
 
       // Grace window: if the stored serial hasn't matched shortly, open the
       // picker (scan keeps running so it live-updates) instead of waiting out

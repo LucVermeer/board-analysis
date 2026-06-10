@@ -10,8 +10,9 @@ import {
 import { FullWindowOverlay } from 'react-native-screens';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
-import { parseBoardTypeFromDeviceName } from '@boardsesh/ble-protocol';
+import type { BoardName } from '@boardsesh/shared-schema';
 import type { DiscoveredDevice } from '../../lib/ble/types';
+import type { ResolvedBoardEntry } from '../../lib/ble/resolve-serials';
 import { Text } from '../Text';
 import { Button } from '../Button';
 import { DeviceCard } from './DeviceCard';
@@ -25,6 +26,15 @@ type DevicePickerSheetProps = {
   onSelect: (deviceId: string) => void;
   onDismiss: () => void;
   isScanning: boolean;
+  resolvedBoards: ReadonlyMap<string, ResolvedBoardEntry>;
+  currentBoardConfig?: DevicePickerBoardConfig;
+};
+
+export type DevicePickerBoardConfig = {
+  boardName: BoardName;
+  layoutId: number;
+  sizeId: number;
+  setIds: string;
 };
 
 function DevicePickerModalContainer({ children }: PropsWithChildren) {
@@ -33,7 +43,14 @@ function DevicePickerModalContainer({ children }: PropsWithChildren) {
 
 const modalContainerComponent = Platform.OS === 'ios' ? DevicePickerModalContainer : undefined;
 
-export function DevicePickerSheet({ devices, onSelect, onDismiss, isScanning }: DevicePickerSheetProps) {
+export function DevicePickerSheet({
+  devices,
+  onSelect,
+  onDismiss,
+  isScanning,
+  resolvedBoards,
+  currentBoardConfig,
+}: DevicePickerSheetProps) {
   const { t } = useTranslation('settings');
   const theme = useTheme();
   const insets = useSafeAreaInsets();
@@ -55,13 +72,17 @@ export function DevicePickerSheet({ devices, onSelect, onDismiss, isScanning }: 
   );
 
   const renderDeviceItem = useCallback(
-    ({ item }: { item: DiscoveredDevice }) => {
-      const boardType = parseBoardTypeFromDeviceName(item.name);
-      const boardLabel = boardType ? boardType.charAt(0).toUpperCase() + boardType.slice(1) : undefined;
-
-      return <DeviceCard device={item} onSelect={onSelect} boardType={boardLabel} />;
+    ({ item: discoveredDevice }: { item: DiscoveredDevice }) => {
+      return (
+        <DeviceCard
+          device={discoveredDevice}
+          onSelect={onSelect}
+          resolvedBoards={resolvedBoards}
+          currentBoardConfig={currentBoardConfig}
+        />
+      );
     },
-    [onSelect],
+    [currentBoardConfig, onSelect, resolvedBoards],
   );
 
   const keyExtractor = useCallback((item: DiscoveredDevice) => item.deviceId, []);

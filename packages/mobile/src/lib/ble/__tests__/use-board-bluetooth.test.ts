@@ -185,6 +185,7 @@ describe('useBoardBluetooth', () => {
 
     expect(secondConnectResult).toBe(false);
     expect(createBluetoothAdapter).toHaveBeenCalledTimes(1);
+    expect(createBluetoothAdapter).toHaveBeenCalledWith(expect.any(Function), 'moonboard');
 
     await act(async () => {
       resolveRequest({ deviceId: 'device-1', deviceName: 'MoonBoard' });
@@ -210,6 +211,7 @@ describe('useBoardBluetooth', () => {
       await result.current.connect();
     });
 
+    expect(createBluetoothAdapter).toHaveBeenCalledWith(expect.any(Function), 'aurora');
     expect(Alert.alert).toHaveBeenCalledWith('ble.connectionFailedTitle', 'bluetooth.unknownError');
   });
 
