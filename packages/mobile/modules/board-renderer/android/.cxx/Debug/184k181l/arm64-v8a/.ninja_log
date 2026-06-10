@@ -1,0 +1,3 @@
+# ninja log v5
+0	71	1781124773561374987	CMakeFiles/board_renderer_jni.dir/jni_bridge.cpp.o	3fa0630983e6c658
+71	124	1781124773613991148	/Users/marcodejongh/Projects/github/boardsesh/hightabs/packages/mobile/modules/board-renderer/android/build/intermediates/cxx/Debug/184k181l/obj/arm64-v8a/libboard_renderer_jni.so	ab6c49a4b98aa625

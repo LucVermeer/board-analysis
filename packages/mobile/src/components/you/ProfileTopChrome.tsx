@@ -52,8 +52,12 @@ export function ProfileTopChrome({
   onHeightChange,
 }: ProfileTopChromeProps) {
   const { t } = useTranslation('you');
-  const { systemColors, brandColors } = useTheme();
+  const { systemColors, brandColors, variant } = useTheme();
   const nativeGlass = useNativeGlass();
+  // On Material the segmented control is Paper's SegmentedButtons, which draws its
+  // own outlined container — a glass "track" behind it would double up (mismatched
+  // radii, double borders, violet-on-violet). So the track is glass-variant only.
+  const isMaterial = variant === 'material';
 
   const dashboardTitle = t('metadata.dashboard.title');
 
@@ -99,29 +103,41 @@ export function ProfileTopChrome({
       rightActions={rightActions}
     >
       <View pointerEvents="box-none" style={styles.segmentStack}>
-        <View
-          style={[
-            styles.segmentTrack,
-            !nativeGlass && shadows.sm,
-            !nativeGlass && { borderWidth: StyleSheet.hairlineWidth, borderColor: systemColors.separator },
-          ]}
-        >
-          <GlassSurface
-            glassEffectStyle="regular"
-            fallbackColor={systemColors.fill}
-            borderRadius={SEGMENT_TRACK_RADIUS}
-            style={StyleSheet.absoluteFill}
-            pointerEvents="none"
-          />
+        {isMaterial ? (
+          // Paper SegmentedButtons owns its surface — render it bare on the scrim.
           <SegmentedControl
             options={segmentOptions}
             selectedKey={activeTab}
             onSelect={onSelectTab}
-            trackColor="transparent"
+            trackColor={systemColors.fill}
             textVariant="subheadline"
             accessibilityLabel={dashboardTitle}
           />
-        </View>
+        ) : (
+          <View
+            style={[
+              styles.segmentTrack,
+              !nativeGlass && shadows.sm,
+              !nativeGlass && { borderWidth: StyleSheet.hairlineWidth, borderColor: systemColors.separator },
+            ]}
+          >
+            <GlassSurface
+              glassEffectStyle="regular"
+              fallbackColor={systemColors.fill}
+              borderRadius={SEGMENT_TRACK_RADIUS}
+              style={StyleSheet.absoluteFill}
+              pointerEvents="none"
+            />
+            <SegmentedControl
+              options={segmentOptions}
+              selectedKey={activeTab}
+              onSelect={onSelectTab}
+              trackColor="transparent"
+              textVariant="subheadline"
+              accessibilityLabel={dashboardTitle}
+            />
+          </View>
+        )}
       </View>
     </CollapsingLargeTitleHeader>
   );

@@ -1,0 +1,3 @@
+/Users/marcodejongh/Projects/github/boardsesh/hightabs/packages/mobile/modules/board-renderer/android/.cxx/Debug/184k181l/arm64-v8a/CMakeFiles/board_renderer_jni.dir
+/Users/marcodejongh/Projects/github/boardsesh/hightabs/packages/mobile/modules/board-renderer/android/.cxx/Debug/184k181l/arm64-v8a/CMakeFiles/edit_cache.dir
+/Users/marcodejongh/Projects/github/boardsesh/hightabs/packages/mobile/modules/board-renderer/android/.cxx/Debug/184k181l/arm64-v8a/CMakeFiles/rebuild_cache.dir

@@ -1,0 +1,27 @@
+{
+  "buildFiles": [
+    "/Users/marcodejongh/Projects/github/boardsesh/hightabs/packages/mobile/modules/board-renderer/android/src/main/cpp/CMakeLists.txt"
+  ],
+  "cleanCommandsComponents": [
+    [
+      "/Users/marcodejongh/Library/Android/sdk/cmake/3.22.1/bin/ninja",
+      "-C",
+      "/Users/marcodejongh/Projects/github/boardsesh/hightabs/packages/mobile/modules/board-renderer/android/.cxx/Debug/184k181l/x86",
+      "clean"
+    ]
+  ],
+  "buildTargetsCommandComponents": [
+    "/Users/marcodejongh/Library/Android/sdk/cmake/3.22.1/bin/ninja",
+    "-C",
+    "/Users/marcodejongh/Projects/github/boardsesh/hightabs/packages/mobile/modules/board-renderer/android/.cxx/Debug/184k181l/x86",
+    "{LIST_OF_TARGETS_TO_BUILD}"
+  ],
+  "libraries": {
+    "board_renderer_jni::@6890427a1f51a3e7e1df": {
+      "artifactName": "board_renderer_jni",
+      "abi": "x86",
+      "output": "/Users/marcodejongh/Projects/github/boardsesh/hightabs/packages/mobile/modules/board-renderer/android/build/intermediates/cxx/Debug/184k181l/obj/x86/libboard_renderer_jni.so",
+      "runtimeFiles": []
+    }
+  }
+}
