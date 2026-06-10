@@ -25,13 +25,12 @@ vi.mock('../auth', () => ({
 }));
 
 import { ensureFreshToken, authenticatedFetch, setOnForcedSignOut } from '../auth-interceptor';
-import { getAuthToken, getRefreshToken, storeTokens, clearTokens, isTokenExpiringSoon } from '../auth-store';
+import { getAuthToken, getRefreshToken, storeTokens, isTokenExpiringSoon } from '../auth-store';
 
 const mockIsTokenExpiringSoon = isTokenExpiringSoon as Mock;
 const mockGetAuthToken = getAuthToken as Mock;
 const mockGetRefreshToken = getRefreshToken as Mock;
 const mockStoreTokens = storeTokens as Mock;
-const mockClearTokens = clearTokens as Mock;
 
 // ── Global fetch mock ────────────────────────────────────────────────────
 const mockFetch = vi.fn();
@@ -205,6 +204,22 @@ describe('authenticatedFetch', () => {
     // screens immediately, and only after the token revoke/clear.
     expect(onForcedSignOut).toHaveBeenCalledTimes(1);
     expect(mockSignOut.mock.invocationCallOrder[0]).toBeLessThan(onForcedSignOut.mock.invocationCallOrder[0]);
+  });
+
+  it('handles a failed-refresh 401 without throwing when no forced-sign-out hook is registered', async () => {
+    // The interceptor can fire before the provider mounts (or after it unmounts),
+    // leaving onForcedSignOut null. The optional-chain call must be a no-op.
+    mockIsTokenExpiringSoon.mockResolvedValue(false);
+    mockGetAuthToken.mockResolvedValue('old-jwt');
+    setOnForcedSignOut(null);
+
+    mockFetch.mockResolvedValueOnce({ status: 401, ok: false }); // initial 401
+    mockFetch.mockResolvedValueOnce({ ok: false, status: 403 }); // refresh fails
+
+    const response = await authenticatedFetch('https://api.example.com/data');
+
+    expect(response.status).toBe(401);
+    expect(mockSignOut).toHaveBeenCalledTimes(1);
   });
 
   it('does not fire the forced-sign-out hook when the 401 retry succeeds', async () => {
