@@ -3199,7 +3199,7 @@ export type Query = {
    * session does not exist. Clients use this on cold start to decide whether
    * to restore or drop a persisted session id.
    */
-  sessionLiveness?: Maybe<SessionLiveness>;
+  sessionStatus?: Maybe<SessionStatus>;
   /**
    * Get a session summary (stats, grade distribution, participants).
    * Available for ended sessions or active sessions with ticks.
@@ -3626,7 +3626,7 @@ export type QuerySessionGroupedFeedArgs = {
 };
 
 /** Root query type for all read operations. */
-export type QuerySessionLivenessArgs = {
+export type QuerySessionStatusArgs = {
   sessionId: Scalars['ID']['input'];
 };
 
@@ -4279,21 +4279,6 @@ export type SessionHardestClimb = {
   grade: Scalars['String']['output'];
 };
 
-/**
- * Durable lifecycle status of a session, independent of live presence.
- * Backed by the persisted session row rather than Redis, so an ended session
- * is reported as ended even when no participants are currently connected.
- */
-export type SessionLiveness = {
-  __typename?: 'SessionLiveness';
-  /** When the session was ended (ISO 8601); null while still active */
-  endedAt?: Maybe<Scalars['String']['output']>;
-  /** Unique session identifier */
-  id: Scalars['ID']['output'];
-  /** Durable lifecycle status */
-  status: SessionStatus;
-};
-
 /** Participant stats in a session summary. */
 export type SessionParticipant = {
   __typename?: 'SessionParticipant';
@@ -4339,9 +4324,11 @@ export type SessionStatsUpdated = {
 };
 
 /**
- * Durable session lifecycle status. Lowercase values match the strings stored
- * in board_sessions.status so resolvers and clients pass them through without
- * mapping (same convention as TickStatus).
+ * Durable session lifecycle status, independent of live presence. Backed by
+ * the persisted session row rather than Redis, so an ended session reads as
+ * ended even when no participants are currently connected. Lowercase values
+ * match the strings stored in board_sessions.status so resolvers and clients
+ * pass them through without mapping (same convention as TickStatus).
  */
 export type SessionStatus =
   /** Live or dormant; safe for a client to restore on cold start */
@@ -5557,7 +5544,6 @@ export type ResolversTypes = ResolversObject<{
   SessionGradeCount: ResolverTypeWrapper<SessionGradeCount>;
   SessionGradeDistributionItem: ResolverTypeWrapper<SessionGradeDistributionItem>;
   SessionHardestClimb: ResolverTypeWrapper<SessionHardestClimb>;
-  SessionLiveness: ResolverTypeWrapper<SessionLiveness>;
   SessionParticipant: ResolverTypeWrapper<SessionParticipant>;
   SessionStatsUpdated: ResolverTypeWrapper<SessionStatsUpdated>;
   SessionStatus: SessionStatus;
@@ -5811,7 +5797,6 @@ export type ResolversParentTypes = ResolversObject<{
   SessionGradeCount: SessionGradeCount;
   SessionGradeDistributionItem: SessionGradeDistributionItem;
   SessionHardestClimb: SessionHardestClimb;
-  SessionLiveness: SessionLiveness;
   SessionParticipant: SessionParticipant;
   SessionStatsUpdated: SessionStatsUpdated;
   SessionSummary: SessionSummary;
@@ -7876,11 +7861,11 @@ export type QueryResolvers<
     ContextType,
     Partial<QuerySessionGroupedFeedArgs>
   >;
-  sessionLiveness?: Resolver<
-    Maybe<ResolversTypes['SessionLiveness']>,
+  sessionStatus?: Resolver<
+    Maybe<ResolversTypes['SessionStatus']>,
     ParentType,
     ContextType,
-    RequireFields<QuerySessionLivenessArgs, 'sessionId'>
+    RequireFields<QuerySessionStatusArgs, 'sessionId'>
   >;
   sessionSummary?: Resolver<
     Maybe<ResolversTypes['SessionSummary']>,
@@ -8334,16 +8319,6 @@ export type SessionHardestClimbResolvers<
   climbName?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   climbUuid?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   grade?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
-  __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
-}>;
-
-export type SessionLivenessResolvers<
-  ContextType = ConnectionContext,
-  ParentType extends ResolversParentTypes['SessionLiveness'] = ResolversParentTypes['SessionLiveness'],
-> = ResolversObject<{
-  endedAt?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
-  id?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
-  status?: Resolver<ResolversTypes['SessionStatus'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
@@ -8896,7 +8871,6 @@ export type Resolvers<ContextType = ConnectionContext> = ResolversObject<{
   SessionGradeCount?: SessionGradeCountResolvers<ContextType>;
   SessionGradeDistributionItem?: SessionGradeDistributionItemResolvers<ContextType>;
   SessionHardestClimb?: SessionHardestClimbResolvers<ContextType>;
-  SessionLiveness?: SessionLivenessResolvers<ContextType>;
   SessionParticipant?: SessionParticipantResolvers<ContextType>;
   SessionStatsUpdated?: SessionStatsUpdatedResolvers<ContextType>;
   SessionSummary?: SessionSummaryResolvers<ContextType>;

@@ -40,7 +40,7 @@ export const queriesTypeDefs = /* GraphQL */ `
     session does not exist. Clients use this on cold start to decide whether
     to restore or drop a persisted session id.
     """
-    sessionLiveness(sessionId: ID!): SessionLiveness
+    sessionStatus(sessionId: ID!): SessionStatus
 
     # ============================================
     # Board Configuration Queries

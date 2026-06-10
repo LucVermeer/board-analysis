@@ -190,10 +190,10 @@ const user = (overrides: Partial<SessionUser> = {}): SessionUser => ({
   ...overrides,
 });
 
-// Response shape for the cold-start SESSION_LIVENESS check. status 'active'
-// (endedAt null) means restore the session; 'ended' means drop the stored id.
-const livenessResponse = (id: string, status: SessionStatus = 'active', endedAt: string | null = null) => ({
-  sessionLiveness: { id, status, endedAt },
+// Response for the cold-start SESSION_STATUS probe. 'active' means restore the
+// session; 'ended' or null (no such session row) means drop the stored id.
+const statusResponse = (status: SessionStatus | null = 'active') => ({
+  sessionStatus: status,
 });
 
 function makeQueueItem(uuid: string, climbUuid = uuid, options: { suggested?: boolean } = {}): ClimbQueueItem {
@@ -344,12 +344,12 @@ describe('QueueProvider session update subscription', () => {
     sessionStore.clearStoredSessionId.mockClear();
     graph.execute.mockReset();
     http.request.mockReset();
-    // The restore effect verifies session liveness via SESSION_LIVENESS before
+    // The restore effect verifies the session via SESSION_STATUS before
     // rejoining (#2683). Default to an active session so existing tests still
     // auto-restore into session-1; END_SESSION keeps its endSession shape.
     http.request.mockImplementation((operation: string) =>
-      operation.includes('SessionLiveness')
-        ? Promise.resolve(livenessResponse('session-1'))
+      operation.includes('SessionStatus')
+        ? Promise.resolve(statusResponse())
         : Promise.resolve({ endSession: { sessionId: 'session-1' } }),
     );
     graph.execute.mockResolvedValue({
@@ -832,8 +832,8 @@ describe('QueueProvider session update subscription', () => {
   it('drops a server-ended stored session on cold start without rejoining (#2683)', async () => {
     sessionStore.getStoredSessionId.mockResolvedValue('session-ended');
     http.request.mockImplementation((operation: string) =>
-      operation.includes('SessionLiveness')
-        ? Promise.resolve(livenessResponse('session-ended', 'ended', '2026-06-10T12:00:00.000Z'))
+      operation.includes('SessionStatus')
+        ? Promise.resolve(statusResponse('ended'))
         : Promise.resolve({ endSession: { sessionId: 'session-ended' } }),
     );
 
@@ -850,13 +850,13 @@ describe('QueueProvider session update subscription', () => {
     expect(ws.getSessionUpdatesSink()).toBeNull();
   });
 
-  it('drops a stored session whose status is ended even if endedAt is null (#2683)', async () => {
-    // A partial-ended row (status flipped, timestamp not yet set) must still be
-    // treated as ended — the status check, not just endedAt, gates the clear.
+  it('drops a stored session whose row no longer exists (#2683)', async () => {
+    // sessionStatus returns null for an unknown session id — same outcome as
+    // ended: clear the stored id instead of recreating a zombie room.
     sessionStore.getStoredSessionId.mockResolvedValue('session-ended');
     http.request.mockImplementation((operation: string) =>
-      operation.includes('SessionLiveness')
-        ? Promise.resolve(livenessResponse('session-ended', 'ended', null))
+      operation.includes('SessionStatus')
+        ? Promise.resolve(statusResponse(null))
         : Promise.resolve({ endSession: { sessionId: 'session-ended' } }),
     );
 
@@ -870,9 +870,9 @@ describe('QueueProvider session update subscription', () => {
     expect(graph.execute).not.toHaveBeenCalled();
   });
 
-  it('restores optimistically when the liveness check fails (offline cold start)', async () => {
+  it('restores optimistically when the status check fails (offline cold start)', async () => {
     http.request.mockImplementation((operation: string) =>
-      operation.includes('SessionLiveness')
+      operation.includes('SessionStatus')
         ? Promise.reject(new Error('offline'))
         : Promise.resolve({ endSession: { sessionId: 'session-1' } }),
     );
@@ -880,7 +880,7 @@ describe('QueueProvider session update subscription', () => {
     const snapshots: Snapshot[] = [];
     renderProvider((snapshot) => snapshots.push(snapshot));
 
-    // Can't verify liveness offline, so the stored id is still applied...
+    // Can't verify the session offline, so the stored id is still applied...
     await waitFor(() => {
       expect(snapshots.at(-1)?.sessionId).toBe('session-1');
     });
@@ -1151,10 +1151,10 @@ describe('QueueProvider mutation-failure resync', () => {
         options.onQueueStateCall?.();
         return queueStateResponse;
       }
-      // Cold-start liveness check (#2683) — keep the session active so restore
+      // Cold-start status check (#2683) — keep the session active so restore
       // lands in-session for these resync tests.
-      if (operation.includes('SessionLiveness')) {
-        return livenessResponse('session-1');
+      if (operation.includes('SessionStatus')) {
+        return statusResponse();
       }
       return { endSession: { sessionId: 'session-1' } };
     });
@@ -1316,9 +1316,9 @@ describe('QueueProvider mutation-failure resync', () => {
         queueStateCalls += 1;
         throw new Error('resync fetch failed');
       }
-      // Cold-start liveness check (#2683) — active so restore lands in-session.
-      if (operation.includes('SessionLiveness')) {
-        return livenessResponse('session-1');
+      // Cold-start status check (#2683) — active so restore lands in-session.
+      if (operation.includes('SessionStatus')) {
+        return statusResponse();
       }
       return { endSession: { sessionId: 'session-1' } };
     });

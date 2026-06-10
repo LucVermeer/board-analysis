@@ -3196,7 +3196,7 @@ export type Query = {
    * session does not exist. Clients use this on cold start to decide whether
    * to restore or drop a persisted session id.
    */
-  sessionLiveness?: Maybe<SessionLiveness>;
+  sessionStatus?: Maybe<SessionStatus>;
   /**
    * Get a session summary (stats, grade distribution, participants).
    * Available for ended sessions or active sessions with ticks.
@@ -3623,7 +3623,7 @@ export type QuerySessionGroupedFeedArgs = {
 };
 
 /** Root query type for all read operations. */
-export type QuerySessionLivenessArgs = {
+export type QuerySessionStatusArgs = {
   sessionId: Scalars['ID']['input'];
 };
 
@@ -4276,21 +4276,6 @@ export type SessionHardestClimb = {
   grade: Scalars['String']['output'];
 };
 
-/**
- * Durable lifecycle status of a session, independent of live presence.
- * Backed by the persisted session row rather than Redis, so an ended session
- * is reported as ended even when no participants are currently connected.
- */
-export type SessionLiveness = {
-  __typename?: 'SessionLiveness';
-  /** When the session was ended (ISO 8601); null while still active */
-  endedAt?: Maybe<Scalars['String']['output']>;
-  /** Unique session identifier */
-  id: Scalars['ID']['output'];
-  /** Durable lifecycle status */
-  status: SessionStatus;
-};
-
 /** Participant stats in a session summary. */
 export type SessionParticipant = {
   __typename?: 'SessionParticipant';
@@ -4336,9 +4321,11 @@ export type SessionStatsUpdated = {
 };
 
 /**
- * Durable session lifecycle status. Lowercase values match the strings stored
- * in board_sessions.status so resolvers and clients pass them through without
- * mapping (same convention as TickStatus).
+ * Durable session lifecycle status, independent of live presence. Backed by
+ * the persisted session row rather than Redis, so an ended session reads as
+ * ended even when no participants are currently connected. Lowercase values
+ * match the strings stored in board_sessions.status so resolvers and clients
+ * pass them through without mapping (same convention as TickStatus).
  */
 export type SessionStatus =
   /** Live or dormant; safe for a client to restore on cold start */

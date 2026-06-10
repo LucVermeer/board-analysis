@@ -19,7 +19,7 @@ import type {
   FollowConnection,
   TickStatus,
   SessionUser,
-  SessionLiveness,
+  SessionStatus,
   SessionFeedParticipant,
   SessionGradeDistributionItem,
 } from '@boardsesh/shared-schema';
@@ -599,19 +599,16 @@ export type GetSessionQueryResponse = {
 // Presence-independent lifecycle check, read on cold start to decide whether a
 // persisted session id should be restored or dropped (#2683). Unlike GET_SESSION
 // (gated on live roster, so an ended session and a dormant-but-active solo
-// session both read as null), this hits the durable session row.
-export const SESSION_LIVENESS = gql`
-  query SessionLiveness($sessionId: ID!) {
-    sessionLiveness(sessionId: $sessionId) {
-      id
-      status
-      endedAt
-    }
+// session both read as null), this hits the durable session row. Returns the
+// SessionStatus enum directly; null means the session does not exist.
+export const SESSION_STATUS = gql`
+  query SessionStatus($sessionId: ID!) {
+    sessionStatus(sessionId: $sessionId)
   }
 `;
 
-export type SessionLivenessQueryResponse = {
-  sessionLiveness: SessionLiveness | null;
+export type SessionStatusQueryResponse = {
+  sessionStatus: SessionStatus | null;
 };
 
 // Authoritative queue snapshot for the active session, fetched after a queue

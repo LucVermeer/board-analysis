@@ -55,14 +55,14 @@ import {
   CREATE_SESSION,
   END_SESSION,
   GET_CLIMB,
-  SESSION_LIVENESS,
+  SESSION_STATUS,
   GET_SESSION_QUEUE_STATE,
   type CreateSessionMutationResponse,
   type EndSessionMutationResponse,
   type SessionUpdateEvent,
   type SessionLiveStatsEvent,
   type GetClimbQueryResponse,
-  type SessionLivenessQueryResponse,
+  type SessionStatusQueryResponse,
   type GetSessionQueueStateQueryResponse,
 } from '../lib/graphql/operations';
 import { getStoredActiveBoard } from '../lib/active-board-store';
@@ -528,18 +528,17 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       try {
         // Verify the stored session is still alive before rejoining. Without
         // this, JOIN_SESSION recreates a server-ended room as an empty zombie
-        // and we land in InSessionView with no peers (#2683). Liveness reads the
-        // durable session row (sessionLiveness), NOT the presence-gated `session`
-        // query — that one returns null for any empty session, so it can't tell
-        // an ended session apart from a dormant-but-active solo session.
-        // SessionStatus is two-valued ('active' | 'ended'), so the 'ended'
-        // check is exhaustive; the endedAt OR is belt-and-braces against a
-        // skewed row (both writers set status and endedAt together).
-        const { sessionLiveness } = await getHttpClient().request<SessionLivenessQueryResponse>(SESSION_LIVENESS, {
+        // and we land in InSessionView with no peers (#2683). sessionStatus
+        // reads the durable session row, NOT the presence-gated `session`
+        // query — that one returns null for any empty session, so it can't
+        // tell an ended session apart from a dormant-but-active solo session.
+        // null means the session row no longer exists; anything but 'active'
+        // means drop the stored id.
+        const { sessionStatus } = await getHttpClient().request<SessionStatusQueryResponse>(SESSION_STATUS, {
           sessionId: storedId,
         });
         if (cancelled) return;
-        if (!sessionLiveness || sessionLiveness.status === 'ended' || sessionLiveness.endedAt != null) {
+        if (sessionStatus !== 'active') {
           if (__DEV__) {
             console.info(`[session] stored session ${storedId} ended/missing; clearing`);
           }
@@ -548,11 +547,11 @@ export function QueueProvider({ children }: { children: ReactNode }) {
         }
         setSessionId(storedId);
       } catch (err) {
-        // Offline cold start: can't verify liveness, so restore optimistically
-        // so the queue still comes back. A genuinely-dead session stays
-        // escapable via End Session.
+        // Offline cold start: can't verify the session status, so restore
+        // optimistically so the queue still comes back. A genuinely-dead
+        // session stays escapable via End Session.
         if (__DEV__) {
-          console.warn('[session] liveness check failed; restoring optimistically', err);
+          console.warn('[session] status check failed; restoring optimistically', err);
         }
         if (!cancelled) setSessionId(storedId);
       }

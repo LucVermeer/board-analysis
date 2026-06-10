@@ -143,13 +143,11 @@ describe('QueueProvider clearSession notifyServer', () => {
     sessionStore.getStoredSessionId.mockResolvedValue('session-1');
     sessionStore.clearStoredSessionId.mockClear();
     http.request.mockReset();
-    // Cold-start restore verifies session liveness via SESSION_LIVENESS (#2683);
+    // Cold-start restore verifies the session via SESSION_STATUS (#2683);
     // keep the stored session active so these tests land in-session before
     // clearSession.
     http.request.mockImplementation(async (operation: string) =>
-      operation.includes('SessionLiveness')
-        ? { sessionLiveness: { id: 'session-1', status: 'active', endedAt: null } }
-        : {},
+      operation.includes('SessionStatus') ? { sessionStatus: 'active' } : {},
     );
     graph.execute.mockReset();
     // joinSession resolves the active session; leaveSession resolves true.
@@ -226,12 +224,12 @@ describe('QueueProvider clearSession notifyServer', () => {
         if (hangNextQueueState) return new Promise<never>(() => {});
         return Promise.resolve({ session: { queueState: { queue: [], currentClimbQueueItem: null } } });
       }
-      // Cold-start liveness check keeps the stored session alive (#2683). This
-      // replaces the beforeEach mock wholesale, so it must answer SessionLiveness
-      // itself — otherwise the restore guard sees no liveness row and clears the
+      // Cold-start status check keeps the stored session alive (#2683). This
+      // replaces the beforeEach mock wholesale, so it must answer SessionStatus
+      // itself — otherwise the restore guard sees no status and clears the
       // stored session before the test gets in-session.
-      if (operationText.includes('SessionLiveness')) {
-        return Promise.resolve({ sessionLiveness: { id: 'session-1', status: 'active', endedAt: null } });
+      if (operationText.includes('SessionStatus')) {
+        return Promise.resolve({ sessionStatus: 'active' });
       }
       if (operationText.includes('GetSession')) {
         return Promise.resolve({ session: { id: 'session-1', endedAt: null } });
