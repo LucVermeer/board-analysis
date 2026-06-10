@@ -150,9 +150,23 @@ export function buildWeeklyBars(
 
   const DEFAULT_MAX_WEEKS = 52;
   const allWeekKeys: string[] = [];
-  // Safe to drop the optional chain: `entries.length === 0` is handled above.
-  const first = parseTickTime(entries[entries.length - 1].climbed_at).startOf('isoWeek');
-  const last = parseTickTime(entries[0].climbed_at).endOf('isoWeek');
+  // `entries` is per-board tick arrays concatenated in BOARD_TYPES order
+  // (derive-view-model `Object.values(...).flat()`), each newest-first, so the
+  // combined array is NOT globally sorted. Derive the range from the true
+  // min/max timestamps rather than the array endpoints — otherwise multi-board
+  // logbooks can yield first > last (empty week loop → null chart). A single
+  // reduce pass avoids spread limits on huge logbooks.
+  let oldestMs = tickTimeMs(entries[0].climbed_at);
+  let newestMs = oldestMs;
+  for (const entry of entries) {
+    const ms = tickTimeMs(entry.climbed_at);
+    if (ms < oldestMs) oldestMs = ms;
+    if (ms > newestMs) newestMs = ms;
+  }
+  // `dayjs(ms)` is in local time (matching `parseTickTime`), so the isoWeek
+  // bounds line up with the per-entry week keys computed below.
+  const first = dayjs(oldestMs).startOf('isoWeek');
+  const last = dayjs(newestMs).endOf('isoWeek');
   let current = first;
   while (current.isBefore(last) || current.isSame(last)) {
     allWeekKeys.push(`${current.isoWeekYear()}-W${current.isoWeek()}`);
