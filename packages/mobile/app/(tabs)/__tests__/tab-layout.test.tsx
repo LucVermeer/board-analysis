@@ -127,7 +127,15 @@ describe('TabLayout', () => {
     expect(container.querySelector('[data-tabs="true"]')?.getAttribute('data-minimize-behavior')).toBe('onScrollDown');
   });
 
-  it('only mounts the native bottom accessory when that path is active', () => {
+  it('mounts the native bottom accessory when that path is active', () => {
+    const { container } = render(<TabLayout />);
+
+    const accessorySlot = container.querySelector('[data-bottom-accessory="true"]');
+    expect(accessorySlot).not.toBeNull();
+    expect(accessorySlot?.querySelector('[data-accessory="true"]')).not.toBeNull();
+  });
+
+  it('skips the native bottom accessory when that path is inactive', () => {
     cfg.nativeAccessoryActive = false;
 
     const { container } = render(<TabLayout />);

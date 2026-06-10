@@ -20,6 +20,7 @@ import { useToast } from '../../../providers/toast-provider';
 import { useDrawerHost } from '../../../providers/drawer-host-provider';
 import { useBottomChromeMetrics } from '../../../hooks/use-bottom-chrome-metrics';
 import { reportError } from '../../../lib/sentry';
+import { SESSION_FOOTER_CLEARANCE } from '../session-footer-clearance';
 import { BoardSummaryCard } from './BoardSummaryCard';
 import { GeneratorPickerCard, type GeneratorSelection } from './GeneratorPickerCard';
 import { WorkoutPreviewRow } from './WorkoutPreviewRow';
@@ -234,11 +235,12 @@ export function PreSessionView() {
         renderItem={renderPreviewRow}
         keyExtractor={previewKeyExtractor}
         ListHeaderComponent={listHeader}
-        // FlashList exposes this prop in its public TS surface. Use a
+        // Supported in FlashList 2.3.1: typed in FlashListProps and consumed at
+        // runtime (useSecondaryProps wraps it via createAnimatedComponent). Use a
         // gesture-handler scroll host so Android nested chip rails keep their
         // horizontal gestures while the preview rows stay virtualized.
         renderScrollComponent={GestureScrollView}
-        contentContainerStyle={{ paddingBottom: 100 + footerBottomPadding }}
+        contentContainerStyle={{ paddingBottom: SESSION_FOOTER_CLEARANCE + footerBottomPadding }}
         showsVerticalScrollIndicator={false}
         nestedScrollEnabled
         keyboardShouldPersistTaps="handled"
