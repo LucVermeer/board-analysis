@@ -4,7 +4,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createElement, type ReactNode } from 'react';
 import type { ClimbQueueItem } from '@boardsesh/queue';
 
+type HoldPlacementStub = { id: number; mirroredHoldId: number | null; cx: number; cy: number; r: number };
+
 type BluetoothHookOptions = {
+  holdsData?: HoldPlacementStub[];
   onConnectSuccess?: (serial: string | null) => void;
 };
 
@@ -50,6 +53,17 @@ vi.mock('@boardsesh/play-view', () => ({
 
 vi.mock('../../lib/ble/use-board-bluetooth', () => ({
   useBoardBluetooth: bluetooth.useBoardBluetooth,
+}));
+
+// getBoardRenderData is the source the provider must thread `holdsData` from.
+// Stub it so the provider's holdsData wiring is observable without loading the
+// real board-placement tables in jsdom.
+const boardDetails = vi.hoisted(() => ({
+  holdsData: [{ id: 1, mirroredHoldId: 99, cx: 0, cy: 0, r: 10 }] as HoldPlacementStub[],
+  getBoardRenderData: vi.fn(),
+}));
+vi.mock('../../lib/board-details', () => ({
+  getBoardRenderData: boardDetails.getBoardRenderData,
 }));
 
 vi.mock('../../lib/ble/bluetooth-status-store', () => ({
@@ -131,6 +145,8 @@ describe('BluetoothProvider wall-confirm integration', () => {
     bluetooth.state.sendFramesToBoard.mockReset();
     bluetooth.state.sendFramesToBoard.mockResolvedValue(true);
     bluetooth.useBoardBluetooth.mockClear();
+    boardDetails.getBoardRenderData.mockReset();
+    boardDetails.getBoardRenderData.mockReturnValue({ holdsData: boardDetails.holdsData });
   });
 
   afterEach(() => {
@@ -211,6 +227,26 @@ describe('BluetoothProvider wall-confirm integration', () => {
       previousSerialKnown: false,
       boardLayout: 'kilter',
     });
+  });
+
+  it('threads the active board holdsData into useBoardBluetooth (so mirrored sends can be mirrored)', () => {
+    render(
+      createElement(BluetoothProvider, {
+        boardName: 'tension',
+        layoutId: 1,
+        sizeId: 10,
+        setIds: '1,2',
+        children: createElement('div', null),
+      }),
+    );
+
+    expect(boardDetails.getBoardRenderData).toHaveBeenCalledWith({
+      boardName: 'tension',
+      layoutId: 1,
+      sizeId: 10,
+      setIds: [1, 2],
+    });
+    expect(bluetooth.options?.holdsData).toBe(boardDetails.holdsData);
   });
 
   it('suppresses board serial writes outside sessions or when the serial is unchanged', () => {

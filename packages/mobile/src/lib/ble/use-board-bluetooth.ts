@@ -10,6 +10,7 @@ import {
 } from '@boardsesh/ble-protocol/aurora';
 import { getMoonboardBluetoothPacket } from '@boardsesh/ble-protocol/moonboard';
 import { isDisconnectionError } from '@boardsesh/ble-protocol/connection-error';
+import { boardSupportsMirroring } from '@boardsesh/play-view';
 import type { AuroraBoardName } from '@boardsesh/shared-schema';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { RECORD_BOARD_SERIAL } from '@boardsesh/graphql/operations';
@@ -326,7 +327,23 @@ export function useBoardBluetooth({
 
         let framesToSend = frames;
 
-        if (mirrored && holdsData && holdsData.length > 0) {
+        if (mirrored && boardSupportsMirroring(boardName, layoutId)) {
+          // On a board that supports mirroring, a mirrored send REQUIRES the
+          // hold map to produce mirrored frames. If it's missing/empty we must
+          // refuse rather than send the original (un-mirrored) frames — that
+          // would light the wrong holds on the wall while the AutoSender buzzed
+          // success. Web parity (use-board-bluetooth.ts:397-403).
+          if (!holdsData || holdsData.length === 0) {
+            console.error(
+              `[BLE] Cannot mirror frames: holdsData is missing or empty for ${boardName} layout=${layoutId}`,
+            );
+            Alert.alert(t('ble.notAvailable'), t('ble.errorIncompatible'));
+            track(SHARED_EVENTS.ClimbSentToBoardFailure, {
+              ...boardAnalyticsProperties,
+              failureReason: 'missing_mirror_data',
+            });
+            return false;
+          }
           framesToSend = convertToMirroredFramesString(frames, holdsData);
         }
 

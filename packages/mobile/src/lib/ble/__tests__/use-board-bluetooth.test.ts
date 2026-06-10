@@ -59,6 +59,14 @@ vi.mock('@boardsesh/ble-protocol/moonboard', () => ({
   getMoonboardBluetoothPacket: mockGetMoonboardBluetoothPacket,
 }));
 
+// The Aurora send path lazily imports the LED placement map. Provide a
+// non-empty map so a happy-path mirrored write reaches getAuroraBluetoothPacket
+// instead of bailing on the empty-placement guard.
+const mockGetLedPlacements = vi.hoisted(() => vi.fn(() => ({ 1: 0, 99: 1 })));
+vi.mock('@boardsesh/board-constants/led-placements', () => ({
+  getLedPlacements: mockGetLedPlacements,
+}));
+
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
     t: (key: string) => key,
@@ -93,6 +101,7 @@ vi.mock('../adapter-factory', () => ({
   isNativeIosBleAdapter: vi.fn().mockReturnValue(false),
 }));
 
+import { getAuroraBluetoothPacket } from '@boardsesh/ble-protocol/aurora';
 import { createBluetoothAdapter } from '../adapter-factory';
 import {
   convertToMirroredFramesString,
@@ -255,6 +264,102 @@ describe('useBoardBluetooth', () => {
     // Exactly one adapter + one scan despite the double-tap.
     expect(createBluetoothAdapter).toHaveBeenCalledTimes(1);
     expect(requestAndConnect).toHaveBeenCalledTimes(1);
+  });
+
+  it('refuses a mirrored send on a mirroring board when holdsData is missing (never sends un-mirrored frames)', async () => {
+    reactNativePermissionHarness.permissionsAndroid.requestMultiple.mockResolvedValue({
+      BLUETOOTH_SCAN: 'granted',
+      BLUETOOTH_CONNECT: 'granted',
+    });
+    const write = vi.fn().mockResolvedValue(undefined);
+    const fakeAdapter = {
+      isAvailable: vi.fn().mockResolvedValue(true),
+      requestAndConnect: vi.fn().mockResolvedValue({ deviceId: 'dev-1', deviceName: 'Tension A1#0042@3' }),
+      disconnect: vi.fn().mockResolvedValue(undefined),
+      write,
+      onDisconnect: vi.fn().mockReturnValue(() => {}),
+    };
+    vi.mocked(createBluetoothAdapter).mockReturnValue(fakeAdapter);
+    mockParseApiLevel.mockReturnValue(3);
+    mockParseSerialNumber.mockReturnValue('0042');
+
+    // Tension layout 1 supports mirroring. holdsData is intentionally omitted —
+    // the provider must thread it in; without it we must NOT silently send the
+    // un-mirrored frames (which would light the wrong holds on the wall).
+    const { result } = renderHook(() =>
+      useBoardBluetooth({
+        boardName: 'tension',
+        layoutId: 1,
+        sizeId: 1,
+        setIds: '1',
+      }),
+    );
+
+    await act(async () => {
+      await result.current.connect();
+    });
+
+    let sendResult: boolean | undefined;
+    await act(async () => {
+      sendResult = await result.current.sendFramesToBoard('p1r12', true);
+    });
+
+    expect(sendResult).toBe(false);
+    expect(Alert.alert).toHaveBeenCalledWith('ble.notAvailable', 'ble.errorIncompatible');
+    // The board must never receive the original (un-mirrored) frames.
+    expect(write).not.toHaveBeenCalled();
+    const failureCall = mockTrack.mock.calls.find(([name]) => name === 'Climb Sent to Board Failure');
+    expect(failureCall?.[1]).toMatchObject({ failureReason: 'missing_mirror_data', mirrored: true });
+  });
+
+  it('mirrors and sends when holdsData is present on a mirroring board', async () => {
+    reactNativePermissionHarness.permissionsAndroid.requestMultiple.mockResolvedValue({
+      BLUETOOTH_SCAN: 'granted',
+      BLUETOOTH_CONNECT: 'granted',
+    });
+    const write = vi.fn().mockResolvedValue(undefined);
+    const fakeAdapter = {
+      isAvailable: vi.fn().mockResolvedValue(true),
+      requestAndConnect: vi.fn().mockResolvedValue({ deviceId: 'dev-1', deviceName: 'Tension A1#0042@3' }),
+      disconnect: vi.fn().mockResolvedValue(undefined),
+      write,
+      onDisconnect: vi.fn().mockReturnValue(() => {}),
+    };
+    vi.mocked(createBluetoothAdapter).mockReturnValue(fakeAdapter);
+    mockParseApiLevel.mockReturnValue(3);
+    mockParseSerialNumber.mockReturnValue('0042');
+    // getAuroraBluetoothPacket is mocked at the module level (returns a stub
+    // packet) so a non-empty placement map lets the write proceed.
+    vi.mocked(getAuroraBluetoothPacket).mockReturnValue({
+      packet: new Uint8Array([0x01]),
+      skippedPositionCount: 0,
+      skippedRoleCount: 0,
+      totalPlacements: 1,
+    });
+
+    const { result } = renderHook(() =>
+      useBoardBluetooth({
+        boardName: 'tension',
+        layoutId: 1,
+        sizeId: 1,
+        setIds: '1',
+        holdsData: [makePlacement(1, 99)],
+      }),
+    );
+
+    await act(async () => {
+      await result.current.connect();
+    });
+
+    let sendResult: boolean | undefined;
+    await act(async () => {
+      sendResult = await result.current.sendFramesToBoard('p1r12', true);
+    });
+
+    expect(sendResult).toBe(true);
+    expect(write).toHaveBeenCalledTimes(1);
+    // The mirrored frame (hold 1 -> 99) must have been fed to the packet builder.
+    expect(getAuroraBluetoothPacket).toHaveBeenCalledWith('p99r12', expect.anything(), 'tension', 3, undefined);
   });
 });
 
