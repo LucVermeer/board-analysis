@@ -181,7 +181,12 @@ export default function LoginScreen() {
         keyboardDismissMode="interactive"
       >
         <View style={styles.header}>
-          <Image source={require('../../assets/splash-icon.png')} style={styles.logo} contentFit="contain" />
+          <Image
+            source={require('../../assets/splash-icon.png')}
+            style={styles.logo}
+            contentFit="contain"
+            accessible={false}
+          />
           <Text style={[styles.title, { color: theme.brandColors.primary }]}>Boardsesh</Text>
           <Text style={styles.subtitle}>{t('nativeStart.tagline')}</Text>
         </View>
