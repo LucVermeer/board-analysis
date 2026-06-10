@@ -1,11 +1,23 @@
-// Signed OAuth `state` parameter for the integration handshake. Carries the
-// initiating userId + provider through the redirect to the provider and back,
-// so the callback can attribute tokens without a server-side session.
+// Signed, purpose-bound tokens for the integration OAuth handshake.
+//
+// Two token kinds share the same HMAC envelope but are never interchangeable
+// (the embedded `purpose` is checked on verification):
+//
+// - 'oauth-state': the OAuth `state` parameter. Carries the initiating
+//   userId + provider through the redirect to the provider and back, so the
+//   callback can attribute tokens without a server-side session. 10-minute
+//   lifetime (the user completes the provider consent screen).
+// - 'oauth-handoff': a short-lived, single-use code minted over an
+//   authenticated GraphQL call and passed to GET /integrations/:provider/start
+//   as a query parameter. The session JWT itself never enters a URL — query
+//   strings end up in access logs, proxy logs, and browser history, so the
+//   only thing allowed there is this 60-second purpose-bound code (the same
+//   exposure class as an OAuth authorization code). Single-use enforcement is
+//   Redis-backed in the start handler.
 //
 // Format mirrors verifyTransferToken in handlers/native-auth.ts: base64url JSON
 // payload + '.' + base64url HMAC-SHA256 keyed by NEXTAUTH_SECRET, constant-time
-// compare, iat/exp checks, 10-minute lifetime, random nonce to defeat
-// guessability.
+// compare, iat/exp checks, lifetime cap, random nonce to defeat guessability.
 
 import crypto from 'crypto';
 import type { ProviderName } from './registry';
@@ -15,10 +27,16 @@ import { logger } from '../utils/logger';
 /** State lifetime: a user has 10 minutes to complete the provider handshake. */
 const STATE_LIFETIME_SECONDS = 10 * 60;
 
+/** Handoff lifetime: the in-app browser opens the start URL immediately. */
+const HANDOFF_LIFETIME_SECONDS = 60;
+
 /** Clock skew tolerance for iat/exp checks (seconds). */
 const CLOCK_SKEW_TOLERANCE_SECONDS = 5;
 
-type StatePayload = {
+type TokenPurpose = 'oauth-state' | 'oauth-handoff';
+
+type SignedPayload = {
+  purpose: TokenPurpose;
   userId: string;
   provider: ProviderName;
   nonce: string;
@@ -26,19 +44,30 @@ type StatePayload = {
   exp: number;
 };
 
-export function signIntegrationState(input: { userId: string; provider: ProviderName }): string {
+export type VerifiedIntegrationToken = {
+  userId: string;
+  provider: ProviderName;
+  nonce: string;
+};
+
+function signPayload(
+  input: { userId: string; provider: ProviderName },
+  purpose: TokenPurpose,
+  lifetimeSeconds: number,
+): string {
   const secret = process.env.NEXTAUTH_SECRET;
   if (!secret) {
     throw new Error('NEXTAUTH_SECRET is not configured');
   }
 
   const now = Math.floor(Date.now() / 1000);
-  const payload: StatePayload = {
+  const payload: SignedPayload = {
+    purpose,
     userId: input.userId,
     provider: input.provider,
     nonce: crypto.randomBytes(16).toString('base64url'),
     iat: now,
-    exp: now + STATE_LIFETIME_SECONDS,
+    exp: now + lifetimeSeconds,
   };
 
   const encodedPayload = Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');
@@ -46,14 +75,18 @@ export function signIntegrationState(input: { userId: string; provider: Provider
   return `${encodedPayload}.${signature}`;
 }
 
-export function verifyIntegrationState(state: string): { userId: string; provider: ProviderName } | null {
+function verifySignedPayload(
+  token: string,
+  expectedPurpose: TokenPurpose,
+  lifetimeSeconds: number,
+): VerifiedIntegrationToken | null {
   const secret = process.env.NEXTAUTH_SECRET;
   if (!secret) {
     logger.warn('[Integrations] NEXTAUTH_SECRET not configured');
     return null;
   }
 
-  const parts = state.split('.');
+  const parts = token.split('.');
   if (parts.length !== 2 || !parts[0] || !parts[1]) {
     return null;
   }
@@ -76,10 +109,16 @@ export function verifyIntegrationState(state: string): { userId: string; provide
     return null;
   }
 
-  let payload: StatePayload;
+  let payload: SignedPayload;
   try {
-    payload = JSON.parse(Buffer.from(encodedPayload, 'base64url').toString('utf8')) as StatePayload;
+    payload = JSON.parse(Buffer.from(encodedPayload, 'base64url').toString('utf8')) as SignedPayload;
   } catch {
+    return null;
+  }
+
+  // Purpose binding: a handoff code must never be replayable as an OAuth
+  // state (or vice versa) — they have different lifetimes and trust levels.
+  if (payload.purpose !== expectedPurpose) {
     return null;
   }
 
@@ -87,6 +126,7 @@ export function verifyIntegrationState(state: string): { userId: string; provide
   if (
     !payload.userId ||
     !payload.provider ||
+    !payload.nonce ||
     !payload.exp ||
     !payload.iat ||
     payload.exp < now - CLOCK_SKEW_TOLERANCE_SECONDS ||
@@ -97,7 +137,7 @@ export function verifyIntegrationState(state: string): { userId: string; provide
 
   // Reject tokens whose embedded lifetime exceeds the contract — a tampered or
   // forged payload could otherwise claim a far-future exp.
-  if (payload.exp - payload.iat > STATE_LIFETIME_SECONDS + CLOCK_SKEW_TOLERANCE_SECONDS) {
+  if (payload.exp - payload.iat > lifetimeSeconds + CLOCK_SKEW_TOLERANCE_SECONDS) {
     return null;
   }
 
@@ -105,5 +145,21 @@ export function verifyIntegrationState(state: string): { userId: string; provide
     return null;
   }
 
-  return { userId: payload.userId, provider: payload.provider };
+  return { userId: payload.userId, provider: payload.provider, nonce: payload.nonce };
+}
+
+export function signIntegrationState(input: { userId: string; provider: ProviderName }): string {
+  return signPayload(input, 'oauth-state', STATE_LIFETIME_SECONDS);
+}
+
+export function verifyIntegrationState(state: string): VerifiedIntegrationToken | null {
+  return verifySignedPayload(state, 'oauth-state', STATE_LIFETIME_SECONDS);
+}
+
+export function signIntegrationHandoff(input: { userId: string; provider: ProviderName }): string {
+  return signPayload(input, 'oauth-handoff', HANDOFF_LIFETIME_SECONDS);
+}
+
+export function verifyIntegrationHandoff(handoff: string): VerifiedIntegrationToken | null {
+  return verifySignedPayload(handoff, 'oauth-handoff', HANDOFF_LIFETIME_SECONDS);
 }

@@ -5,11 +5,13 @@ import * as dbSchema from '@boardsesh/db/schema';
 import { applyRateLimit, requireAuthenticated, validateInput } from '../shared/helpers';
 import {
   DisconnectIntegrationSchema,
+  IntegrationProviderArgsSchema,
   SetIntegrationAutoSyncSchema,
   SyncSessionToIntegrationSchema,
 } from '../../../validation/schemas';
 import { providerEnumToDb, providerDbToEnum, type ProviderName } from '../../../integrations/registry';
 import { disconnect, setAutoSync, type IntegrationCredentialRow } from '../../../integrations/credentials';
+import { signIntegrationHandoff } from '../../../integrations/state';
 import { syncPartySessionForUser } from '../../../integrations/export-service';
 import { generateSessionSummary } from '../sessions/session-summary';
 
@@ -26,6 +28,23 @@ function credentialRowToStatus(provider: ProviderName, row: IntegrationCredentia
 }
 
 export const integrationMutations = {
+  /**
+   * Mint the short-lived, single-use handoff code that authenticates the
+   * browser navigation to GET /integrations/:provider/start. The session JWT
+   * stays in this authenticated GraphQL call's headers; only the 60-second
+   * purpose-bound code ever appears in a URL.
+   */
+  createIntegrationOAuthHandoff: async (
+    _: unknown,
+    args: { provider: IntegrationStatus['provider'] },
+    ctx: ConnectionContext,
+  ): Promise<string> => {
+    requireAuthenticated(ctx);
+    await applyRateLimit(ctx, 10, 'createIntegrationOAuthHandoff');
+    const { provider } = validateInput(IntegrationProviderArgsSchema, args, 'args');
+    return signIntegrationHandoff({ userId: ctx.userId!, provider: providerEnumToDb(provider) });
+  },
+
   /** Revoke + delete the user's credential for a provider. */
   disconnectIntegration: async (
     _: unknown,

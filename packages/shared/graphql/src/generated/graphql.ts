@@ -1873,6 +1873,13 @@ export type Mutation = {
   createBoard: UserBoard;
   /** Create a new gym. */
   createGym: Gym;
+  /**
+   * Mint a short-lived, single-use handoff code for starting the provider's
+   * browser OAuth flow (GET /integrations/:provider/start?handoff=...). Keeps
+   * the session token out of URLs, where it would persist in logs and browser
+   * history. Requires authentication.
+   */
+  createIntegrationOAuthHandoff: Scalars['String']['output'];
   /** Create a new playlist. */
   createPlaylist: Playlist;
   /** Create a proposal for a climb grade/classic/benchmark change. */
@@ -2187,6 +2194,11 @@ export type MutationCreateBoardArgs = {
 /** Root mutation type for all write operations. */
 export type MutationCreateGymArgs = {
   input: CreateGymInput;
+};
+
+/** Root mutation type for all write operations. */
+export type MutationCreateIntegrationOAuthHandoffArgs = {
+  provider: IntegrationProvider;
 };
 
 /** Root mutation type for all write operations. */

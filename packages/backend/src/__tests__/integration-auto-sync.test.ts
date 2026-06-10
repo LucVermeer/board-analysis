@@ -80,6 +80,7 @@ vi.mock('../integrations/registry', async () => {
     getProvider: vi.fn(() => ({
       provider: 'strava',
       uploadSessionActivity: (...args) => uploadSessionActivity(...args),
+      activityUrl: (externalActivityId) => `https://www.strava.com/activities/${externalActivityId}`,
     })),
   };
 });

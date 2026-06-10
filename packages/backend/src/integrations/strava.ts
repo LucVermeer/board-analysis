@@ -8,6 +8,10 @@ const STRAVA_TOKEN_URL = 'https://www.strava.com/oauth/token';
 const STRAVA_DEAUTHORIZE_URL = 'https://www.strava.com/oauth/deauthorize';
 const STRAVA_ACTIVITIES_URL = 'https://www.strava.com/api/v3/activities';
 
+function stravaActivityUrl(externalActivityId: string): string {
+  return `https://www.strava.com/activities/${externalActivityId}`;
+}
+
 /** Scopes we request: read profile + write activities. */
 const STRAVA_SCOPE = 'read,activity:write';
 
@@ -207,9 +211,11 @@ export const stravaProvider: IntegrationProviderImpl = {
     const externalActivityId = String(activityId);
     return {
       externalActivityId,
-      url: `https://www.strava.com/activities/${externalActivityId}`,
+      url: stravaActivityUrl(externalActivityId),
     };
   },
+
+  activityUrl: stravaActivityUrl,
 
   async revoke(accessToken: string): Promise<void> {
     // Best-effort: a failed deauthorize must not block disconnecting locally.

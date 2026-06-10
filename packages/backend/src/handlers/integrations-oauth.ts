@@ -1,18 +1,22 @@
 // Browser-navigation OAuth endpoints for external-platform integrations.
 //
-//   GET /integrations/:provider/start?token=<jwt>  → 302 to the provider
-//   GET /integrations/:provider/callback           → 302 back into the app
+//   GET /integrations/:provider/start?handoff=<code>  → 302 to the provider
+//   GET /integrations/:provider/callback              → 302 back into the app
 //
 // Both are top-level browser navigations from the mobile in-app browser, so
-// there is no CORS to apply. The callback always lands the user back in the
-// app via a deep link; failures carry a constrained `reason` enum so nothing
-// attacker-controllable is reflected verbatim.
+// there is no CORS to apply. The caller is identified by a short-lived,
+// single-use handoff code minted over an authenticated GraphQL call
+// (createIntegrationOAuthHandoff) — the session JWT itself never enters a URL,
+// where it would persist in access logs, proxies, and browser history. The
+// callback always lands the user back in the app via a deep link; failures
+// carry a constrained `reason` enum so nothing attacker-controllable is
+// reflected verbatim.
 
 import type { IncomingMessage, ServerResponse } from 'http';
-import { validateToken } from '../middleware/auth';
 import { getProvider, isSupportedProvider, type ProviderName } from '../integrations/registry';
-import { signIntegrationState, verifyIntegrationState } from '../integrations/state';
+import { signIntegrationState, verifyIntegrationHandoff, verifyIntegrationState } from '../integrations/state';
 import { upsertCredential } from '../integrations/credentials';
+import { redisClientManager } from '../redis/client';
 import { logger } from '../utils/logger';
 
 /**
@@ -72,15 +76,30 @@ function getBackendPublicUrl(): string | null {
   return raw.replace(/\/+$/, '');
 }
 
-function extractBearerToken(url: URL): string | null {
-  const token = url.searchParams.get('token');
-  return token && token.length > 0 ? token : null;
+/**
+ * Best-effort single-use enforcement for handoff codes. Redis remembers each
+ * consumed nonce for the handoff lifetime; a second consumption is rejected.
+ * Without Redis the HMAC + 60-second expiry still bound the exposure, so the
+ * flow degrades gracefully rather than failing closed.
+ */
+async function consumeHandoffNonce(nonce: string): Promise<boolean> {
+  if (!redisClientManager.isRedisConnected()) {
+    return true;
+  }
+  try {
+    const { publisher } = redisClientManager.getClients();
+    const setResult = await publisher.set(`integrations:handoff:${nonce}`, '1', 'EX', 120, 'NX');
+    return setResult === 'OK';
+  } catch (error) {
+    logger.warn('[Integrations] Redis handoff-nonce check failed, allowing:', error);
+    return true;
+  }
 }
 
 /**
- * GET /integrations/:provider/start?token=<jwt>
- * Authenticates the caller, signs a state carrying their userId, and redirects
- * to the provider's authorize URL.
+ * GET /integrations/:provider/start?handoff=<code>
+ * Verifies the single-use handoff code (which carries the userId), signs an
+ * OAuth state, and redirects to the provider's authorize URL.
  */
 export async function handleIntegrationOAuthStart(
   req: IncomingMessage,
@@ -98,15 +117,19 @@ export async function handleIntegrationOAuthStart(
     return;
   }
 
-  // Never log the token or the full URL — both carry the auth credential.
-  const token = extractBearerToken(url);
-  if (!token) {
+  // Never log the handoff or the full URL.
+  const handoff = url.searchParams.get('handoff');
+  if (!handoff) {
     sendText(res, 401, 'Authentication required');
     return;
   }
-  const authResult = await validateToken(token);
-  if (!authResult) {
-    sendText(res, 401, 'Invalid or expired token');
+  const verifiedHandoff = verifyIntegrationHandoff(handoff);
+  if (!verifiedHandoff || verifiedHandoff.provider !== providerName) {
+    sendText(res, 401, 'Invalid or expired handoff code');
+    return;
+  }
+  if (!(await consumeHandoffNonce(verifiedHandoff.nonce))) {
+    sendText(res, 401, 'Handoff code already used');
     return;
   }
 
@@ -120,7 +143,7 @@ export async function handleIntegrationOAuthStart(
   let authorizeUrl: string;
   try {
     const redirectUri = `${backendPublicUrl}/integrations/${providerName}/callback`;
-    const state = signIntegrationState({ userId: authResult.userId, provider: providerName });
+    const state = signIntegrationState({ userId: verifiedHandoff.userId, provider: providerName });
     authorizeUrl = provider.buildAuthorizeUrl(state, redirectUri);
   } catch (error) {
     logger.error('[Integrations] Failed to build authorize URL:', error);

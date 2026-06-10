@@ -4,9 +4,12 @@ import { SessionIdSchema } from './primitives';
 /** GraphQL IntegrationProvider enum values. */
 export const IntegrationProviderSchema = z.enum(['STRAVA']);
 
-export const DisconnectIntegrationSchema = z.object({
+/** Mutations whose only argument is the provider (disconnect, OAuth handoff). */
+export const IntegrationProviderArgsSchema = z.object({
   provider: IntegrationProviderSchema,
 });
+
+export const DisconnectIntegrationSchema = IntegrationProviderArgsSchema;
 
 export const SetIntegrationAutoSyncSchema = z.object({
   provider: IntegrationProviderSchema,

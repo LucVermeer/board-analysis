@@ -1,20 +1,25 @@
 import * as WebBrowser from 'expo-web-browser';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
+import {
+  CREATE_INTEGRATION_OAUTH_HANDOFF,
+  type CreateIntegrationOAuthHandoffResponse,
+} from '@boardsesh/graphql/operations/integrations';
 import { track } from '../analytics';
-import { getAuthToken } from '../auth-store';
 import { parseDeepLinkQueryParams } from '../auth-callback-url';
 import { BACKEND_URL } from '../env';
+import { getHttpClient } from '../graphql/client';
 
 export type StravaConnectResult = 'connected' | 'error' | 'cancelled';
 
 const STRAVA_REDIRECT_URL = 'com.boardsesh.app://integrations/strava';
 
 /**
- * Connect the signed-in user's Strava account. Opens the backend OAuth start URL
- * (which redirects through Strava and back to the deep link above) in an auth
+ * Connect the signed-in user's Strava account. Mints a short-lived single-use
+ * handoff code over the authenticated GraphQL client (so the session token
+ * never appears in a URL), opens the backend OAuth start URL in an auth
  * session browser, then reads the `status` query param off the final redirect.
  *
- * - No auth token → 'error' (can't start an authenticated OAuth flow).
+ * - Handoff mint fails (signed out, offline) → 'error'.
  * - Browser dismissed / cancelled → 'cancelled'.
  * - status=connected → tracks the connection and returns 'connected'.
  * - any other status (including status=error) → 'error'.
@@ -22,10 +27,19 @@ const STRAVA_REDIRECT_URL = 'com.boardsesh.app://integrations/strava';
  * Never throws — every failure maps to a result the caller can render.
  */
 export async function connectStrava(): Promise<StravaConnectResult> {
-  const token = await getAuthToken();
-  if (!token) return 'error';
+  let handoff: string;
+  try {
+    const response = await getHttpClient().request<CreateIntegrationOAuthHandoffResponse>(
+      CREATE_INTEGRATION_OAUTH_HANDOFF,
+      { provider: 'STRAVA' },
+    );
+    handoff = response.createIntegrationOAuthHandoff;
+  } catch {
+    return 'error';
+  }
+  if (!handoff) return 'error';
 
-  const startUrl = `${BACKEND_URL}/integrations/strava/start?token=${encodeURIComponent(token)}`;
+  const startUrl = `${BACKEND_URL}/integrations/strava/start?handoff=${encodeURIComponent(handoff)}`;
 
   let result: WebBrowser.WebBrowserAuthSessionResult;
   try {

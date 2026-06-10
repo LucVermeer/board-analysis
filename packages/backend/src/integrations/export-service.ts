@@ -88,11 +88,14 @@ function mapExportRowToResult(
   row: Pick<typeof integrationExports.$inferSelect, 'externalActivityId' | 'syncedAt' | 'error' | 'status'>,
 ): IntegrationExportResult {
   const externalActivityId = row.externalActivityId ?? null;
+  // URL shape is provider-specific — never hardcode one platform's pattern
+  // here or a second provider would silently emit wrong links.
+  const providerImpl = getProvider(provider);
   return {
     provider: providerDbToEnum(provider),
     sessionId,
     externalActivityId,
-    externalActivityUrl: externalActivityId ? `https://www.strava.com/activities/${externalActivityId}` : null,
+    externalActivityUrl: externalActivityId && providerImpl ? providerImpl.activityUrl(externalActivityId) : null,
     syncedAt: row.syncedAt ? row.syncedAt.toISOString() : null,
     error: row.status === 'error' ? (row.error ?? 'Export failed') : null,
   };

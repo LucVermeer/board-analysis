@@ -7,7 +7,12 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vite-plus/test'
 const TEST_SECRET = 'test-secret-for-integration-state';
 process.env.NEXTAUTH_SECRET = TEST_SECRET;
 
-import { signIntegrationState, verifyIntegrationState } from '../integrations/state';
+import {
+  signIntegrationState,
+  verifyIntegrationState,
+  signIntegrationHandoff,
+  verifyIntegrationHandoff,
+} from '../integrations/state';
 
 describe('integration state token', () => {
   beforeEach(() => {
@@ -21,7 +26,9 @@ describe('integration state token', () => {
   it('roundtrips a userId + provider', () => {
     const state = signIntegrationState({ userId: 'user-42', provider: 'strava' });
     const verified = verifyIntegrationState(state);
-    expect(verified).toEqual({ userId: 'user-42', provider: 'strava' });
+    expect(verified).toMatchObject({ userId: 'user-42', provider: 'strava' });
+    expect(typeof verified?.nonce).toBe('string');
+    expect(verified?.nonce.length).toBeGreaterThan(0);
   });
 
   it('rejects a tampered signature', () => {
@@ -38,6 +45,7 @@ describe('integration state token', () => {
     const [, signature] = state.split('.');
     const forgedPayload = Buffer.from(
       JSON.stringify({
+        purpose: 'oauth-state',
         userId: 'attacker',
         provider: 'strava',
         nonce: 'x',
@@ -71,7 +79,14 @@ describe('integration state token', () => {
     // but verification must still reject the unsupported provider.
     const now = Math.floor(Date.now() / 1000);
     const payload = Buffer.from(
-      JSON.stringify({ userId: 'user-42', provider: 'garmin', nonce: 'n', iat: now, exp: now + 600 }),
+      JSON.stringify({
+        purpose: 'oauth-state',
+        userId: 'user-42',
+        provider: 'garmin',
+        nonce: 'n',
+        iat: now,
+        exp: now + 600,
+      }),
     ).toString('base64url');
     const signature = crypto.createHmac('sha256', TEST_SECRET).update(payload).digest('base64url');
     expect(verifyIntegrationState(`${payload}.${signature}`)).toBeNull();
@@ -84,5 +99,38 @@ describe('integration state token', () => {
     const state = signIntegrationState({ userId: 'user-1', provider: 'strava' });
     const verified = verifyIntegrationState(state);
     expect(verified?.provider).toBe('strava');
+  });
+});
+
+describe('integration OAuth handoff token', () => {
+  beforeEach(() => {
+    vi.useRealTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('roundtrips a userId + provider with a nonce', () => {
+    const handoff = signIntegrationHandoff({ userId: 'user-7', provider: 'strava' });
+    const verified = verifyIntegrationHandoff(handoff);
+    expect(verified).toMatchObject({ userId: 'user-7', provider: 'strava' });
+    expect(typeof verified?.nonce).toBe('string');
+  });
+
+  it('is purpose-bound: a handoff never verifies as an OAuth state and vice versa', () => {
+    const handoff = signIntegrationHandoff({ userId: 'user-7', provider: 'strava' });
+    const state = signIntegrationState({ userId: 'user-7', provider: 'strava' });
+    expect(verifyIntegrationState(handoff)).toBeNull();
+    expect(verifyIntegrationHandoff(state)).toBeNull();
+  });
+
+  it('expires after its 60-second lifetime', () => {
+    const now = Date.now();
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+    const handoff = signIntegrationHandoff({ userId: 'user-7', provider: 'strava' });
+    vi.setSystemTime(now + 2 * 60 * 1000);
+    expect(verifyIntegrationHandoff(handoff)).toBeNull();
   });
 });

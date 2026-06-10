@@ -39,6 +39,8 @@ export type IntegrationProviderImpl = {
     accessToken: string,
     activity: SessionActivityInput,
   ): Promise<{ externalActivityId: string; url: string }>;
+  /** Web URL of an activity on the provider, from its external id. */
+  activityUrl(externalActivityId: string): string;
   /** Best-effort token revocation. Implementations should not throw on failure. */
   revoke(accessToken: string): Promise<void>;
 };

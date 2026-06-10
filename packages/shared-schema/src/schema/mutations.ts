@@ -569,6 +569,14 @@ export const mutationsTypeDefs = /* GraphQL */ `
     # ============================================
 
     """
+    Mint a short-lived, single-use handoff code for starting the provider's
+    browser OAuth flow (GET /integrations/:provider/start?handoff=...). Keeps
+    the session token out of URLs, where it would persist in logs and browser
+    history. Requires authentication.
+    """
+    createIntegrationOAuthHandoff(provider: IntegrationProvider!): String!
+
+    """
     Unlink an external platform integration. Revokes the token on the
     provider's side (best-effort) and deletes the stored credentials.
     Requires authentication.

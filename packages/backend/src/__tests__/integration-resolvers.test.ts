@@ -26,12 +26,15 @@ vi.mock('../integrations/export-service', () => ({
 
 // Rate limiting short-circuits in development; force it off explicitly.
 process.env.NODE_ENV = 'development';
+// Handoff minting signs with NEXTAUTH_SECRET.
+process.env.NEXTAUTH_SECRET = 'test-secret-for-integration-resolvers';
 
 import { db } from '../db/client';
 import { integrationQueries } from '../graphql/resolvers/integrations/queries';
 import { integrationMutations } from '../graphql/resolvers/integrations/mutations';
 import { generateSessionSummary } from '../graphql/resolvers/sessions/session-summary';
 import { syncPartySessionForUser } from '../integrations/export-service';
+import { verifyIntegrationHandoff } from '../integrations/state';
 
 function makeCtx(userId = 'user-1') {
   return { isAuthenticated: true, userId, connectionId: 'conn-1' };
@@ -95,6 +98,24 @@ describe('integration query/mutation resolvers', () => {
           makeUnauthCtx(),
         ),
       ).rejects.toThrow('Authentication required');
+    });
+
+    it('createIntegrationOAuthHandoff rejects unauthenticated callers', async () => {
+      await expect(
+        integrationMutations.createIntegrationOAuthHandoff(null, { provider: 'STRAVA' }, makeUnauthCtx()),
+      ).rejects.toThrow('Authentication required');
+    });
+  });
+
+  describe('createIntegrationOAuthHandoff', () => {
+    it('returns a verifiable purpose-bound handoff carrying the caller userId', async () => {
+      const handoff = await integrationMutations.createIntegrationOAuthHandoff(
+        null,
+        { provider: 'STRAVA' },
+        makeCtx('user-9'),
+      );
+      const verified = verifyIntegrationHandoff(handoff);
+      expect(verified).toMatchObject({ userId: 'user-9', provider: 'strava' });
     });
   });
 

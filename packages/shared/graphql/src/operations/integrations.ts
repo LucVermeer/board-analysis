@@ -27,6 +27,20 @@ export type GetIntegrationsResponse = {
   integrations: IntegrationStatus[];
 };
 
+export const CREATE_INTEGRATION_OAUTH_HANDOFF = gql`
+  mutation CreateIntegrationOAuthHandoff($provider: IntegrationProvider!) {
+    createIntegrationOAuthHandoff(provider: $provider)
+  }
+`;
+
+export type CreateIntegrationOAuthHandoffVariables = {
+  provider: IntegrationProvider;
+};
+
+export type CreateIntegrationOAuthHandoffResponse = {
+  createIntegrationOAuthHandoff: string;
+};
+
 export const DISCONNECT_INTEGRATION = gql`
   mutation DisconnectIntegration($provider: IntegrationProvider!) {
     disconnectIntegration(provider: $provider)
