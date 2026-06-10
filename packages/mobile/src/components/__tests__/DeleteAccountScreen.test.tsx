@@ -153,6 +153,22 @@ describe('DeleteAccountScreen', () => {
     expect(ctrl.mutateAsync).toHaveBeenCalledWith({ input: { removeSetterName: true } });
   });
 
+  it('does not show a deletion-failed toast when only the post-delete signOut fails', async () => {
+    // Deletion succeeded server-side; only local cleanup threw. Re-labelling that
+    // as "deletion failed" (and re-enabling the form) would be misleading.
+    ctrl.signOut.mockRejectedValue(new Error('keychain locked'));
+    const { getByTestId, getByPlaceholderText } = render(<DeleteAccountScreen />);
+
+    typeConfirm(getByPlaceholderText, 'DELETE');
+    fireEvent.click(getByTestId(CONFIRM_BTN));
+
+    await waitFor(() => expect(ctrl.reportError).toHaveBeenCalled());
+    expect(ctrl.mutateAsync).toHaveBeenCalled();
+    expect(ctrl.showToast).not.toHaveBeenCalled();
+    // Form stays in its deleting state — the account is gone, no retry.
+    expect((getByTestId(CONFIRM_BTN) as HTMLButtonElement).disabled).toBe(true);
+  });
+
   it('surfaces a deletion failure as an error toast and stays signed in', async () => {
     ctrl.mutateAsync.mockRejectedValue(new Error('server exploded'));
     const { getByTestId, getByPlaceholderText } = render(<DeleteAccountScreen />);

@@ -75,17 +75,24 @@ export function DeleteAccountScreen() {
     // the delete through here would submit removeSetterName:false and leave the
     // setter name on preserved climbs without the user ever seeing the choice.
     if (!isConfirmed || isDeleting || infoQuery.isLoading) return;
+    let accountDeleted = false;
     try {
       setIsDeleting(true);
       await deleteAccount.mutateAsync({ input: { removeSetterName } });
+      accountDeleted = true;
       // Account gone — sign out. The auth provider clears local state and flips
       // isAuthenticated → false, which redirects to /auth/login (no manual nav).
-      // Track AFTER signOut settles so a revoke hiccup can't log a logout that
-      // didn't clear the session. signOut's revoke is best-effort, so this
-      // resolves even though the session was just deleted server-side.
+      // signOut's revoke is best-effort, so this resolves even though the
+      // session was just deleted server-side.
       await signOut('account_deleted');
     } catch (error) {
       reportError(error);
+      // The account is already gone; only the local sign-out cleanup failed.
+      // Showing a "deletion failed" toast or re-enabling the form would be
+      // misleading — a now-stale token will 401 and the interceptor's forced
+      // sign-out redirects to login. Distinguish this from a real (pre-mutation)
+      // deletion failure, which should surface the error and let the user retry.
+      if (accountDeleted) return;
       let message = t('deleteAccount.error');
       if (error instanceof ClientError) {
         const serverMessage = error.response?.errors?.[0]?.message;
