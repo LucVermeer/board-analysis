@@ -32,7 +32,7 @@ index 2434c612951a40bd1ecfcc476acebb9a9a6b500e..6d23e2e466cc602560aa101b91bb7c76
  
  @implementation RNSScrollViewFinder
  
-@@ -41,4 +43,116 @@
+@@ -41,4 +43,119 @@
    return nil;
  }
  
