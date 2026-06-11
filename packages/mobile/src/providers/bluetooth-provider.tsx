@@ -21,7 +21,7 @@ import { GET_BOARD } from '../lib/graphql/operations';
 import type { GetBoardQueryResponse } from '../lib/graphql/operations';
 import { getBoardRenderData } from '../lib/board-details';
 import { registerBluetoothConnection } from '../lib/ble/bluetooth-status-store';
-import { useQueue, useQueueSessionControls } from './queue-provider';
+import { useIsPartyPreviewOnly, useQueue, useQueueSessionControls } from './queue-provider';
 import { hapticSuccess } from '../lib/haptics';
 import { DevicePickerSheet } from '../components/ble/DevicePickerSheet';
 import { track } from '../lib/analytics';
@@ -245,6 +245,7 @@ export function BluetoothProvider({
   children,
 }: BluetoothProviderProps) {
   const { sessionId, confirmClimbOnWall, setSessionBoardSerial, lastConnectedBoardSerial } = useQueueSessionControls();
+  const isPartyPreviewOnly = useIsPartyPreviewOnly();
   const { t } = useTranslation('settings');
   const sessionIdRef = useRef(sessionId);
   useEffect(() => {
@@ -590,7 +591,7 @@ export function BluetoothProvider({
 
   return (
     <BluetoothContext.Provider value={value}>
-      {isConnected && (
+      {isConnected && !isPartyPreviewOnly && (
         <BluetoothAutoSender
           sendFramesToBoard={sendFramesToBoard}
           onWallConfirmed={handleWallConfirmed}
