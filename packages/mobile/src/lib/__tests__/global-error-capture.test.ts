@@ -68,6 +68,29 @@ describe('installGlobalErrorCapture', () => {
     expect(previousHandler).not.toHaveBeenCalled();
   });
 
+  it('does not swallow a bare "UI thread" fatal without a serialization token', () => {
+    const { previousHandler, dispatch } = installFakeErrorUtils();
+    installGlobalErrorCapture({ report, flush, isDev: false });
+
+    // A native threading error, not a worklet serialization failure.
+    const error = new Error('Attempted to call a method on the UI thread from a background thread');
+    dispatch(error, true);
+
+    expect(previousHandler).toHaveBeenCalledWith(error, true);
+    expect(report).not.toHaveBeenCalled();
+  });
+
+  it('swallows "UI runtime" only when paired with a serialization token', () => {
+    const { previousHandler, dispatch } = installFakeErrorUtils();
+    installGlobalErrorCapture({ report, flush, isDev: false });
+
+    const error = new Error('Value passed to the UI runtime could not be serialized');
+    dispatch(error, true);
+
+    expect(report).toHaveBeenCalledOnce();
+    expect(previousHandler).not.toHaveBeenCalled();
+  });
+
   it('passes ordinary fatals through to the previous handler', () => {
     const { previousHandler, dispatch } = installFakeErrorUtils();
     installGlobalErrorCapture({ report, flush, isDev: false });

@@ -27,13 +27,23 @@ export type GlobalErrorCaptureDeps = {
   isDev: boolean;
 };
 
-// react-native-worklets / Reanimated serialization failures. The thrown message
-// varies by version ("…cannot be sent to the UI runtime/thread", references to
-// the (de)serialization helpers), so match generously across message + stack —
-// but only on signatures specific to the serialization path, never a bare
-// "worklet" mention (that would swallow unrelated fatals).
-const WORKLET_SERIALIZATION_PATTERN =
-  /cannot be (sent|serialized|cloned|copied)|UI (runtime|thread)|extractSerializable|makeShareable|makeSerializable|ValueUnpacker/i;
+// Self-sufficient serialization signatures from react-native-worklets /
+// Reanimated's clone path. The thrown message varies by version, so match
+// generously across message + stack — but only on tokens specific to the
+// serialization path.
+const SERIALIZATION_SIGNATURE =
+  /cannot be (sent|serialized|cloned|copied)|extractSerializable|makeShareable|makeSerializable|ValueUnpacker/i;
+
+// "UI runtime"/"UI thread" shows up in unrelated native threading errors too, so
+// it must NOT classify a fatal on its own — only when paired with a
+// serialization token. (A bare "worklet" mention is likewise excluded: it would
+// swallow unrelated crashes in *-worklet.ts files.)
+const UI_RUNTIME_HINT = /UI (runtime|thread)/i;
+const SERIALIZATION_HINT = /serializ|shareable|unpack|\bclone/i;
+
+function isWorkletSerializationError(text: string): boolean {
+  return SERIALIZATION_SIGNATURE.test(text) || (UI_RUNTIME_HINT.test(text) && SERIALIZATION_HINT.test(text));
+}
 
 function toError(value: unknown): Error {
   if (value instanceof Error) return value;
@@ -64,7 +74,7 @@ export function installGlobalErrorCapture(deps: GlobalErrorCaptureDeps): void {
   errorUtils.setGlobalHandler((error: unknown, isFatal?: boolean) => {
     const normalized = toError(error);
     const haystack = `${normalized.message ?? ''}\n${normalized.stack ?? ''}`;
-    const isWorkletSerialization = WORKLET_SERIALIZATION_PATTERN.test(haystack);
+    const isWorkletSerialization = isWorkletSerializationError(haystack);
 
     // Always surface the full error to the device log.
     console.error(
@@ -82,7 +92,9 @@ export function installGlobalErrorCapture(deps: GlobalErrorCaptureDeps): void {
           level: 'error',
           tags: { mechanism: 'global-error-capture', kind: 'worklet-serialization' },
         });
-        void deps.flush?.();
+        // Swallow any flush rejection here: an unhandled rejection would loop
+        // back through this same global handler as re-entrant noise.
+        void deps.flush?.().catch(() => {});
       } catch {
         // Reporting must never become a secondary crash.
       } finally {
