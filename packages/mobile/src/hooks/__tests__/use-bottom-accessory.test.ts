@@ -111,4 +111,12 @@ describe('use-bottom-accessory', () => {
 
     expect(result.current).toBe(false);
   });
+
+  it('does not report the native accessory active when the capability is unavailable', () => {
+    cfg.platformOS = 'android';
+
+    const { result } = renderHook(() => useNativeAccessoryActive());
+
+    expect(result.current).toBe(false);
+  });
 });
