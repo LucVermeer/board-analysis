@@ -173,9 +173,12 @@ export const createClimbFilters = (params: BoardRouteParams, searchParams: Climb
 
   // Size filter: check if this climb fits on the selected board size.
   // Uses denormalized compatible_size_ids array (pre-computed from edge comparison).
+  // Use array containment so PostgreSQL can use board_climbs_compatible_size_ids_idx.
+  // PostgreSQL's built-in GIN array_ops supports @> for integer[]; no intarray
+  // extension or custom operator class is required for this index.
   // MoonBoard has a single fixed size, so skip.
   const sizeConditions: SQL[] =
-    params.board_name === 'moonboard' ? [] : [sql`${params.size_id} = ANY(${boardClimbs.compatibleSizeIds})`];
+    params.board_name === 'moonboard' ? [] : [sql`${boardClimbs.compatibleSizeIds} @> ARRAY[${params.size_id}]::int[]`];
 
   // Projects-only: match climbs with 0 ascents OR no stats row at all.
   // Must live outside climbStatsConditions so it doesn't trigger the stats-driven

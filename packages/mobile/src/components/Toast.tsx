@@ -9,7 +9,12 @@ import { Icon } from './Icon';
 import type { IconName } from './icon-map';
 import { blendOpaque, withAlpha } from '../theme/colors';
 import { borderRadius, spacing } from '../theme/tokens';
-import { MATERIAL_ACTIVE_CONTEXT_BAR_HEIGHT, TAB_BAR_HEIGHT, TOOLBAR_RESERVE } from '../theme/layout';
+import {
+  MATERIAL_ACTIVE_CONTEXT_BAR_HEIGHT,
+  MATERIAL_TAB_BAR_HEIGHT,
+  TAB_BAR_HEIGHT,
+  TOOLBAR_RESERVE,
+} from '../theme/layout';
 import type { UiVariant } from '../theme/resolve-ui-variant';
 import { isTabsRoute } from '../lib/route-segments';
 import { useTheme } from '../providers/theme-provider';
@@ -63,8 +68,13 @@ function useToastBottomOffset(uiVariant: UiVariant) {
   const insets = useSafeAreaInsets();
   const segments = useSegments();
   const toolbarReserve = uiVariant === 'material' ? MATERIAL_ACTIVE_CONTEXT_BAR_HEIGHT : TOOLBAR_RESERVE;
+  // The Material variant's JS nav bar is the taller M3 80dp bar; Liquid Glass uses
+  // the 49pt iOS tab bar. This is an independent recomputation (it sits above
+  // QueueProvider, so it can't use computeBottomChromeMetrics) — keep the tab-bar
+  // term variant-aware to match, or the Material snackbar tucks under the nav bar.
+  const tabBarHeight = uiVariant === 'material' ? MATERIAL_TAB_BAR_HEIGHT : TAB_BAR_HEIGHT;
   return isTabsRoute(segments)
-    ? insets.bottom + TAB_BAR_HEIGHT + toolbarReserve + spacing[2]
+    ? insets.bottom + tabBarHeight + toolbarReserve + spacing[2]
     : insets.bottom + spacing[3];
 }
 

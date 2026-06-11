@@ -3,6 +3,7 @@ import { Text } from './Text';
 import { Icon } from './Icon';
 import { PressableSurface } from './PressableSurface';
 import { useTheme } from '../providers/theme-provider';
+import { spacing } from '../theme/tokens';
 
 type SectionHeaderProps = {
   title: string;
@@ -13,13 +14,21 @@ type SectionHeaderProps = {
 };
 
 export function SectionHeader({ title, actionLabel, onActionPress }: SectionHeaderProps) {
-  const { brandColors } = useTheme();
-  const displayTitle = Platform.OS === 'ios' ? title.toUpperCase() : title;
+  const { brandColors, variant, m3 } = useTheme();
+  const isMaterial = variant === 'material';
+  // M3 list/section headers are sentence-case titleSmall in onSurfaceVariant — not
+  // the iOS group-caption (uppercased, dimmed, tracked-out footnote). So Material
+  // drops the uppercasing + 0.6 opacity + letter-spacing and lifts to titleSmall.
+  const displayTitle = isMaterial ? title : Platform.OS === 'ios' ? title.toUpperCase() : title;
   const showAction = !!actionLabel && !!onActionPress;
 
   return (
     <View style={[styles.container, showAction && styles.containerWithAction]}>
-      <Text variant="footnote" style={styles.text}>
+      <Text
+        variant={isMaterial ? 'subheadline' : 'footnote'}
+        color={isMaterial ? m3.onSurfaceVariant : undefined}
+        style={isMaterial ? styles.materialText : styles.text}
+      >
         {displayTitle}
       </Text>
       {showAction ? (
@@ -43,9 +52,9 @@ export function SectionHeader({ title, actionLabel, onActionPress }: SectionHead
 
 const styles = StyleSheet.create({
   container: {
-    paddingHorizontal: 16,
-    paddingTop: 24,
-    paddingBottom: 8,
+    paddingHorizontal: spacing[4],
+    paddingTop: spacing[6],
+    paddingBottom: spacing[2],
   },
   containerWithAction: {
     flexDirection: 'row',
@@ -55,6 +64,11 @@ const styles = StyleSheet.create({
   text: {
     opacity: 0.6,
     letterSpacing: 0.5,
+  },
+  // M3 titleSmall weight (the `subheadline` material scale is 14/400; titleSmall
+  // is 14/500). No opacity/letter-spacing — onSurfaceVariant carries the hierarchy.
+  materialText: {
+    fontWeight: '500',
   },
   action: {
     flexDirection: 'row',

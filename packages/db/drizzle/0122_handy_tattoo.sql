@@ -23,15 +23,15 @@ CREATE TABLE "integration_exports" (
 	"session_type" text NOT NULL,
 	"session_id" text NOT NULL,
 	"external_activity_id" text,
-	"status" text DEFAULT 'success' NOT NULL,
+	"status" text NOT NULL,
 	"error" text,
 	"synced_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
+ALTER TABLE "board_sessions" ADD COLUMN "timezone" text;--> statement-breakpoint
 ALTER TABLE "integration_credentials" ADD CONSTRAINT "integration_credentials_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "integration_exports" ADD CONSTRAINT "integration_exports_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX "unique_user_integration" ON "integration_credentials" USING btree ("user_id","provider");--> statement-breakpoint
-CREATE INDEX "integration_credentials_user_idx" ON "integration_credentials" USING btree ("user_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "unique_integration_export" ON "integration_exports" USING btree ("provider","user_id","session_type","session_id");--> statement-breakpoint
 CREATE INDEX "integration_exports_user_provider_idx" ON "integration_exports" USING btree ("user_id","provider");--> statement-breakpoint
 CREATE INDEX "integration_exports_session_idx" ON "integration_exports" USING btree ("session_id");

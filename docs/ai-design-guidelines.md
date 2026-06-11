@@ -912,6 +912,13 @@ Glass is for **floating chrome only** — never for content canvases or text-hea
 - **Glass:** the bottom tab bar (`BlurTabBar`), the persistent floating toolbar — the climb-name capsule (`ClimbCapsule`), log-ascent FAB (`LogAscentFab`), and search FAB (`SearchFab`) — the `QuickTickBar`, the create-playlist FAB, the top board-name chrome (`ClimbTopChrome`), the session overlay (`SessionScreenHost`), and the `PlayDrawer` background. All use `'regular'` glass.
 - **Opaque:** the remaining bottom sheets (`Sheet`, `QueueSheet`, `AngleSelectorSheet`, etc.) use themed `secondaryBackground`.
 
+### Chrome primitives
+
+Two shared primitives compose the floating top/bottom chrome (both `'regular'` glass via `GlassSurface`, with `!nativeGlass` hairline/shadow fallbacks so they stay legible on Android):
+
+- **`CollapsingLargeTitleHeader`** (`src/components/chrome/CollapsingLargeTitleHeader.tsx`) — the board-agnostic kernel: a fade scrim, left/right glass-island slots + an optional centred control, and the screen's large in-body title collapsing into a centred glass capsule on scroll (transform-only, so the live glass never flattens). The board-aware `CollapsingTopChrome` (the Discover/Climbs/Record board pill + board-glyph dock) **composes** it; the Profile/Record/Discover top chromes are thin wrappers. Reports its measured height via `onHeightChange` so the list insets its top.
+- **`PinnedActionBar`** (`src/components/PinnedActionBar.tsx`) — the measured glass bottom-action toolbar shared by the session Start/End footers. Anchors at `useBottomChromeMetrics().fixedFooterBottom` (flush above the tab bar, lifted to clear the queue accessory) and reports its own height via `onHeightChange`, so the host list reserves exactly `height + fixedFooterBottom` and content never scrolls under the button.
+
 ### Dark mode & appearance
 
 - iOS resolves system colors via `PlatformColor` (auto-adapting); Android uses the `androidFallbackColors.{light,dark}` maps in `theme/colors.ts`. Components read everything through `useTheme().systemColors`.
@@ -937,7 +944,7 @@ The public prop API must stay identical across both branches so call sites never
 
 - **Icons:** Paper resolves icons through the app's `@expo/vector-icons` MaterialCommunityIcons (wired via `PaperProvider settings.icon`), so pass the **MDI** name — bridge our semantic `IconName` with `iconMap[name].android` (`src/components/icon-map.ts`).
 - **Paper-backed today:** Button, SegmentedControl→`SegmentedButtons`, SwitchRow→`Switch`, Badge, GlassIconButton→`IconButton`, Card, Toast/QueueAddedSnackbar→`Snackbar`, SearchHeader→`Searchbar`.
-- **Token-skinned but palette-consistent** (they read the same `materialSurfaces` that feeds the Paper theme): `ListRow`, `GradeChip`, `MaterialTabBar`, gorhom sheets, `AccessoryBarSurface`.
+- **Token-skinned but palette-consistent** (they read the same `materialSurfaces` / `theme.m3` roles that feed the Paper theme): `ListRow`, `GradeChip`, `MaterialTabBar` (the bottom navigation bar), `MaterialTabs` (the Profile app bar's M3 primary tabs — equal-width labels + a sliding `m3.primary` underline, distinct from the bottom-nav `MaterialTabBar`), gorhom sheets, `AccessoryBarSurface`.
 - **Tests:** `react-native-paper` is aliased to a jsdom-safe stub (`test/react-native-paper-stub.tsx`) in `packages/mobile/vite.config.ts` — the same pattern as the posthog stub — so any suite can import a Paper-backed primitive. Component tests that assert Paper props register their own `vi.mock('react-native-paper', …)`, which takes precedence.
 
 ---

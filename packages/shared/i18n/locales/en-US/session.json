@@ -380,7 +380,6 @@
       "preWorkoutPreviewError": "Couldn't build the preview. Try again.",
       "preRegenerateClimbForClimb": "Regenerate {{name}}",
       "inStatsSends": "Sends",
-      "inStatsAttempts": "Attempts",
       "inStatsDuration": "Duration",
       "inStatsHardest": "Hardest send",
       "inStatsGrades": "Grade distribution",

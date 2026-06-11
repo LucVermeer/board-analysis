@@ -28,6 +28,7 @@ export const Appbar = {
   Action: stub('appbar-action'),
 };
 export const SegmentedButtons = stub('segmented-buttons');
+export const FAB = stub('fab');
 export const ActivityIndicator = stub('activity-indicator');
 export const TouchableRipple = stub('touchable-ripple');
 

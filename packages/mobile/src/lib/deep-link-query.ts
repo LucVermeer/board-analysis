@@ -1,7 +1,7 @@
-// Parses OAuth callback deep links (com.boardsesh.app://...?...) that
-// openAuthSessionAsync hands back when the in-app browser redirects.
-// Deliberately avoids `new URL().searchParams` (incomplete under Hermes) and
-// expo-linking (native imports break node-env unit tests).
+// Parses query params off deep links (com.boardsesh.app://...?...) such as
+// the OAuth redirects openAuthSessionAsync hands back. Deliberately avoids
+// `new URL().searchParams` (incomplete under Hermes) and expo-linking (native
+// imports break node-env unit tests).
 export function parseDeepLinkQueryParams(url: string): Map<string, string> {
   const params = new Map<string, string>();
   const queryIndex = url.indexOf('?');
@@ -25,12 +25,4 @@ export function parseDeepLinkQueryParams(url: string): Map<string, string> {
   }
 
   return params;
-}
-
-export function parseAuthCallbackParams(url: string): { transferToken: string | null; error: string | null } {
-  const params = parseDeepLinkQueryParams(url);
-  return {
-    transferToken: params.get('transferToken') ?? null,
-    error: params.get('error') ?? null,
-  };
 }

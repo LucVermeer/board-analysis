@@ -20,6 +20,11 @@ describe('buildPaperTheme', () => {
     expect(theme.colors.surface).toBe('#FFFFFF'); // secondaryBackground
     expect(theme.colors.error).toBe('#C81E1E');
     expect(theme.colors.elevation.level2).toBe('#FFFFFF'); // elevatedSurface (light)
+    // The two grade stat tiles use the brand-violet primary/secondary containers
+    // (not the vestigial amber tertiary), so they read as one tonal family.
+    expect(theme.colors.primaryContainer).toContain('109, 40, 217'); // brand violet #6D28D9
+    expect(theme.colors.secondaryContainer).toContain('109, 40, 217');
+    expect(theme.colors.onSecondaryContainer).toBe(theme.colors.onSurface);
   });
 
   it('uses the dark tonal surfaces for the dark scheme', () => {

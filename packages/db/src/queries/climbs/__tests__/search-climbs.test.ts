@@ -1,16 +1,25 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { chooseSearchPath } from '../search-climbs';
+import { chooseSearchPath, getStatsDrivenSort } from '../search-climbs';
 
 const baseInput = {
-  sortBy: 'ascents',
-  sortOrder: 'desc' as const,
+  statsDrivenSort: 'ascents' as const,
   isDraftsQuery: false,
   projectsOnly: false,
   routesOnly: false,
   page: 0,
   hasStatsFilters: false,
 };
+
+void describe('getStatsDrivenSort', () => {
+  void it('returns ascents and quality only for descending stats-driven sorts', () => {
+    assert.equal(getStatsDrivenSort('ascents', 'desc'), 'ascents');
+    assert.equal(getStatsDrivenSort('quality', 'desc'), 'quality');
+    assert.equal(getStatsDrivenSort('ascents', 'asc'), null);
+    assert.equal(getStatsDrivenSort('quality', 'asc'), null);
+    assert.equal(getStatsDrivenSort('creation', 'desc'), null);
+  });
+});
 
 void describe('chooseSearchPath', () => {
   void describe('the hot path: ascents DESC, page 0, no stats filters', () => {
@@ -54,16 +63,16 @@ void describe('chooseSearchPath', () => {
       assert.equal(chooseSearchPath({ ...baseInput, isDraftsQuery: true }), 'standard-only');
     });
 
-    void it('uses standard-only for non-ascents sort orders', () => {
-      assert.equal(chooseSearchPath({ ...baseInput, sortBy: 'difficulty' }), 'standard-only');
-      assert.equal(chooseSearchPath({ ...baseInput, sortBy: 'name' }), 'standard-only');
-      assert.equal(chooseSearchPath({ ...baseInput, sortBy: 'creation' }), 'standard-only');
-      assert.equal(chooseSearchPath({ ...baseInput, sortBy: 'quality' }), 'standard-only');
-      assert.equal(chooseSearchPath({ ...baseInput, sortBy: 'popular' }), 'standard-only');
+    void it('uses standard-only for sorts without a stats-driven index path', () => {
+      assert.equal(chooseSearchPath({ ...baseInput, statsDrivenSort: null }), 'standard-only');
     });
 
-    void it('uses standard-only for ascending sort (only DESC has the index-driven plan)', () => {
-      assert.equal(chooseSearchPath({ ...baseInput, sortOrder: 'asc' }), 'standard-only');
+    void it('uses stats-driven-with-fallback for quality DESC page 0', () => {
+      assert.equal(chooseSearchPath({ ...baseInput, statsDrivenSort: 'quality' }), 'stats-driven-with-fallback');
+    });
+
+    void it('uses stats-driven-only for quality DESC after page 0', () => {
+      assert.equal(chooseSearchPath({ ...baseInput, statsDrivenSort: 'quality', page: 1 }), 'stats-driven-only');
     });
   });
 
@@ -83,7 +92,7 @@ void describe('chooseSearchPath', () => {
       assert.equal(
         chooseSearchPath({
           ...baseInput,
-          sortBy: 'difficulty',
+          statsDrivenSort: null,
           page: 0,
           hasStatsFilters: false,
         }),

@@ -12,8 +12,16 @@
  * those components' internals.
  */
 
-/** Bottom tab bar height (excludes the safe-area inset). */
+/** Bottom tab bar height (excludes the safe-area inset). The Liquid Glass / native
+ *  iOS tab bar value; the Material JS nav bar uses {@link MATERIAL_TAB_BAR_HEIGHT}. */
 export const TAB_BAR_HEIGHT = 49;
+
+/** M3 navigation-bar content height (excludes the safe-area inset). The Material
+ *  variant's JS tab bar is taller than the iOS 49 — M3 spec is an 80dp bar that
+ *  fits the active-indicator pill, icon and label with room to breathe. Only the
+ *  Material variant reads this (in MaterialTabBar and the bottom-chrome metrics);
+ *  Liquid Glass stays on TAB_BAR_HEIGHT. */
+export const MATERIAL_TAB_BAR_HEIGHT = 80;
 
 /**
  * One height ladder for every glass FAB / capsule / pill, so the floating chrome

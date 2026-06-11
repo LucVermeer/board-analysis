@@ -5,7 +5,7 @@ import {
   type CreateIntegrationOAuthHandoffResponse,
 } from '@boardsesh/graphql/operations/integrations';
 import { track } from '../analytics';
-import { parseDeepLinkQueryParams } from '../auth-callback-url';
+import { parseDeepLinkQueryParams } from '../deep-link-query';
 import { BACKEND_URL } from '../env';
 import { getHttpClient } from '../graphql/client';
 

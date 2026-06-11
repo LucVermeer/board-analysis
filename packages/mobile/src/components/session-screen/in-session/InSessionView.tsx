@@ -13,9 +13,7 @@ import { deriveIsDriver } from '@boardsesh/queue-runtime';
 import type { Climb, SessionDetailTick, SessionFeedParticipant } from '@boardsesh/shared-schema';
 import { getGradeTextColor } from '@boardsesh/play-view';
 import { formatTickRelativeTime, tickTimeMs } from '@boardsesh/profile-stats';
-import { Button } from '../../Button';
 import { Card } from '../../Card';
-import { PinnedActionBar } from '../../PinnedActionBar';
 import { ClimbListItemContent } from '../../ClimbListItemContent';
 import { EndSessionSheet } from '../../EndSessionSheet';
 import { Icon } from '../../Icon';
@@ -47,6 +45,7 @@ import { glassSize } from '../../../theme/layout';
 import { gradeBadgeColor } from '../../you/profile-chart-colors';
 import { hapticSelection } from '../../../lib/haptics';
 import { RecordTopChrome } from '../RecordTopChrome';
+import { SessionActionFooter } from '../SessionActionFooter';
 import { SessionAnalytics } from './SessionAnalytics';
 import { SessionLeaderboard } from './SessionLeaderboard';
 import { SessionPresenceRow } from './SessionPresenceRow';
@@ -243,7 +242,7 @@ const SessionHistoryRow = memo(function SessionHistoryRow({
 
 export function InSessionView({ showChrome = false, onShare, translateY, screenHeight }: InSessionViewProps) {
   const { t } = useTranslation('session');
-  const { systemColors, brandColors } = useTheme();
+  const { systemColors, brandColors, variant } = useTheme();
   const insets = useSafeAreaInsets();
   const bottomChrome = useBottomChromeMetrics();
   const router = useRouter();
@@ -539,8 +538,10 @@ export function InSessionView({ showChrome = false, onShare, translateY, screenH
     <View style={styles.headerContent}>
       {/* The screen's identity in-body under the floating chrome, collapsing into
           the centred header capsule on scroll. Only meaningful in tab mode; the
-          overlay header strip already names the screen, so it's hidden there. */}
-      {showChrome ? (
+          overlay header strip already names the screen, so it's hidden there. On
+          Material the app bar owns the title, so the in-body large title is gated
+          off there too. */}
+      {showChrome && variant !== 'material' ? (
         <Text variant="largeTitle" style={styles.screenTitle}>
           {t('mobile.session.headerActive')}
         </Text>
@@ -650,14 +651,15 @@ export function InSessionView({ showChrome = false, onShare, translateY, screenH
         />
       ) : null}
 
-      <PinnedActionBar testID="in-session-footer" onHeightChange={setFooterHeight}>
-        <Button
-          title={t('mobile.session.inEndSession')}
-          onPress={() => setShowEndSession(true)}
-          variant="outlined"
-          size="large"
-        />
-      </PinnedActionBar>
+      <SessionActionFooter
+        testID="in-session-footer"
+        onHeightChange={setFooterHeight}
+        label={t('mobile.session.inEndSession')}
+        materialIcon="flag"
+        emphasis="secondary"
+        glassButtonVariant="outlined"
+        onPress={() => setShowEndSession(true)}
+      />
 
       <EndSessionSheet
         visible={showEndSession}

@@ -1,6 +1,6 @@
 {
-  "id": "5b79f7f2-28b2-440b-be56-1778db1f884c",
-  "prevId": "bb81a580-1373-4de2-94ee-e4005d3a4a08",
+  "id": "f4dab318-2b3f-4644-876d-c1cca9a9d942",
+  "prevId": "3ff26bc6-cccd-49bc-bfa7-0d206a3606f1",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -3365,21 +3365,6 @@
             }
           ],
           "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "integration_credentials_user_idx": {
-          "name": "integration_credentials_user_idx",
-          "columns": [
-            {
-              "expression": "user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -9014,8 +8999,7 @@
           "name": "status",
           "type": "text",
           "primaryKey": false,
-          "notNull": true,
-          "default": "'success'"
+          "notNull": true
         },
         "error": {
           "name": "error",

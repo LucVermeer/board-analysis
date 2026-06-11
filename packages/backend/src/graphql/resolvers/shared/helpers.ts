@@ -35,7 +35,7 @@ export const SESSION_MEMBER_RETRY_CONFIG = {
  */
 export function requireSession(ctx: ConnectionContext): string {
   if (!ctx.sessionId) {
-    logger.error(`[Auth] requireSession failed: connectionId=${ctx.connectionId}, sessionId=${ctx.sessionId}`);
+    logger.warn('[Auth] requireSession failed', { connectionId: ctx.connectionId, sessionId: ctx.sessionId });
     throw new Error(`Must be in a session to perform this operation (connectionId: ${ctx.connectionId})`);
   }
   return ctx.sessionId;
@@ -109,15 +109,19 @@ export async function requireSessionMember(
   }
 
   if (!finalCtx?.sessionId) {
-    logger.error(
-      `[Auth] requireSessionMember failed after ${maxRetries} retries: not in any session. connectionId=${ctx.connectionId}, requested=${sessionId}`,
-    );
+    logger.warn('[Auth] requireSessionMember failed after retries: not in any session', {
+      connectionId: ctx.connectionId,
+      requestedSessionId: sessionId,
+      maxRetries,
+    });
     throw new Error(`Unauthorized: not in any session (connectionId: ${ctx.connectionId}, requested: ${sessionId})`);
   }
   if (finalCtx.sessionId !== sessionId) {
-    logger.error(
-      `[Auth] requireSessionMember failed: session mismatch. connectionId=${ctx.connectionId}, have=${finalCtx.sessionId}, requested=${sessionId}`,
-    );
+    logger.warn('[Auth] requireSessionMember failed: session mismatch', {
+      connectionId: ctx.connectionId,
+      currentSessionId: finalCtx.sessionId,
+      requestedSessionId: sessionId,
+    });
     throw new Error(`Unauthorized: session mismatch (have: ${finalCtx.sessionId}, requested: ${sessionId})`);
   }
 }

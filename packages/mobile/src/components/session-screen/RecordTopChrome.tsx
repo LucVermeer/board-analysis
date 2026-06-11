@@ -1,7 +1,12 @@
+import { useCallback } from 'react';
+import { type LayoutChangeEvent, StyleSheet, View } from 'react-native';
 import { type SharedValue } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
+import { Appbar } from 'react-native-paper';
 import { CollapsingTopChrome, GlassToolbarAction } from '../chrome';
 import { Icon } from '../Icon';
+import { iconMap } from '../icon-map';
 import { useTheme } from '../../providers/theme-provider';
 
 // Record's defining action is the Start/End footer button, so the chrome's
@@ -25,12 +30,21 @@ type RecordTopChromeProps = {
 };
 
 /**
- * The Record tab's floating glass chrome. A thin wrapper over the shared
- * `CollapsingTopChrome` (mirroring `DiscoverTopChrome`) that injects the session
- * title plus the board / invite i18n strings. Record's primary action is the
- * Start/End footer button, so there's no create "+"; instead, while a session is
- * live it docks a share/invite control as the chrome's `trailingAction`. The
- * board pill, angle, and light islands come for free from `CollapsingTopChrome`.
+ * The Record tab's top chrome, routed by UI variant.
+ *
+ * Liquid Glass: a thin wrapper over the shared `CollapsingTopChrome` (mirroring
+ * `DiscoverTopChrome`) that injects the session title plus the board / invite
+ * i18n strings. Record's primary action is the Start/End footer button, so
+ * there's no create "+"; instead, while a session is live it docks a
+ * share/invite control as the chrome's `trailingAction`. The board pill, angle,
+ * and light islands come for free from `CollapsingTopChrome`.
+ *
+ * Material: an absolutely-positioned, `onHeightChange`-measured M3 small app bar
+ * (mirroring `ClimbTopChrome`) — the session title via `Appbar.Content` and (only
+ * while a session is live) a share `Appbar.Action`. The board is switched from the
+ * in-body `BoardSummaryCard` (which carries the full name · size · angle), so the
+ * app bar stays session-titled rather than duplicating a board switcher. There's
+ * no collapse on Material, so `scrollY` / `onPressTitle` are unused.
  */
 export function RecordTopChrome({
   title,
@@ -42,8 +56,50 @@ export function RecordTopChrome({
 }: RecordTopChromeProps) {
   const { t } = useTranslation('session');
   const { t: tBoards } = useTranslation('boards');
-  const { brandColors } = useTheme();
+  const { brandColors, systemColors, variant } = useTheme();
+  const insets = useSafeAreaInsets();
 
+  const handleLayout = useCallback(
+    (event: LayoutChangeEvent) => onHeightChange(event.nativeEvent.layout.height),
+    [onHeightChange],
+  );
+
+  if (variant === 'material') {
+    return (
+      <View
+        pointerEvents="box-none"
+        style={[
+          styles.materialContainer,
+          {
+            paddingTop: insets.top,
+            backgroundColor: systemColors.secondaryBackground,
+            borderBottomColor: systemColors.separator,
+          },
+        ]}
+        onLayout={handleLayout}
+      >
+        <Appbar.Header
+          statusBarHeight={0}
+          mode="small"
+          elevated
+          style={[styles.materialAppbar, { backgroundColor: systemColors.secondaryBackground }]}
+        >
+          <Appbar.Content title={title} color={systemColors.label as string} />
+          {onShare ? (
+            <Appbar.Action
+              icon={iconMap['person.badge.plus'].android}
+              color={systemColors.label as string}
+              onPress={onShare}
+              accessibilityLabel={t('mobile.session.invite')}
+            />
+          ) : null}
+        </Appbar.Header>
+      </View>
+    );
+  }
+
+  // Liquid-glass variant: the shared collapsing chrome with the session title,
+  // board pill, and (while live) the share/invite trailing action.
   const trailingAction = onShare ? (
     <GlassToolbarAction onPress={onShare} accessibilityLabel={t('mobile.session.invite')}>
       <Icon name="person.badge.plus" size={22} color={brandColors.primary} />
@@ -67,3 +123,18 @@ export function RecordTopChrome({
     />
   );
 }
+
+const styles = StyleSheet.create({
+  materialContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 20,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  materialAppbar: {
+    elevation: 0,
+    shadowOpacity: 0,
+  },
+});

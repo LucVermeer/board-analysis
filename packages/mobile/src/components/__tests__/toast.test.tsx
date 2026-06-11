@@ -81,6 +81,7 @@ vi.mock('../../theme/colors', () => ({
 vi.mock('../../theme/tokens', () => ({ borderRadius: { full: 999 }, spacing: { 2: 8, 3: 12, 4: 16 } }));
 vi.mock('../../theme/layout', () => ({
   MATERIAL_ACTIVE_CONTEXT_BAR_HEIGHT: 48,
+  MATERIAL_TAB_BAR_HEIGHT: 80,
   TAB_BAR_HEIGHT: 49,
   TOOLBAR_RESERVE: 56,
 }));
@@ -119,8 +120,12 @@ describe('Toast', () => {
   it('positions Material toasts above the docked climb bar and tab bar', () => {
     ctrl.variant = 'material';
     const { container } = render(<Toast toast={toast} onDismiss={() => {}} />);
+    // insets.bottom(34) + MATERIAL_TAB_BAR_HEIGHT(80) + active-context bar(48) +
+    // spacing[2](8) = 170. The tab-bar term is the taller M3 80dp nav bar, not the
+    // 49pt iOS bar, so the Material snackbar clears the nav bar rather than tucking
+    // under it.
     expect(container.querySelector('[data-paper-snackbar]')?.getAttribute('data-wrapper-style')).toContain(
-      '"bottom":139',
+      '"bottom":170',
     );
   });
 
