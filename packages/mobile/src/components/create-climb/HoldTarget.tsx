@@ -58,6 +58,7 @@ export const HoldTarget = React.memo(function HoldTarget({
   return (
     <GestureDetector gesture={gesture}>
       <View
+        collapsable={false}
         style={{
           position: 'absolute',
           left: `${leftPct}%`,

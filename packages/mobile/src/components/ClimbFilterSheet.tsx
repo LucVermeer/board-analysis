@@ -164,6 +164,7 @@ export function ClimbFilterSheet({
   const [localBoardFilters, setLocalBoardFilters] = useState<ClimbBoardFilterState>(currentBoardFilters);
   // Bumped on Reset so the Refine/Advanced sections collapse back to default.
   const [sectionResetKey, setSectionResetKey] = useState(0);
+  const [refineExpanded, setRefineExpanded] = useState(false);
   const [activeChildSheet, setActiveChildSheet] = useState<ActiveChildFilterSheet>(null);
   const [mountedChildSheet, setMountedChildSheet] = useState<ActiveChildFilterSheet>(null);
 
@@ -371,6 +372,7 @@ export function ClimbFilterSheet({
     hapticSelection();
     updateLocalFilters(DEFAULT_FILTERS);
     updateLocalBoardFilters(DEFAULT_CLIMB_BOARD_FILTER_STATE);
+    setRefineExpanded(false);
     setSectionResetKey((key) => key + 1);
   }, [updateLocalBoardFilters, updateLocalFilters]);
 
@@ -403,6 +405,7 @@ export function ClimbFilterSheet({
 
   const handleRefineExpandedChange = useCallback(
     (expanded: boolean) => {
+      setRefineExpanded(expanded);
       if (expanded) scheduleBoardHoldsPrewarm();
     },
     [scheduleBoardHoldsPrewarm],
@@ -627,6 +630,7 @@ export function ClimbFilterSheet({
             {/* REFINE — mid-band controls, opt-in. */}
             <CollapsibleSection
               title={t('mobile.filter.section.refine')}
+              defaultExpanded={refineExpanded}
               summary={refineSummary ?? t('mobile.filter.refineHint')}
               resetKey={sectionResetKey}
               onExpandedChange={handleRefineExpandedChange}

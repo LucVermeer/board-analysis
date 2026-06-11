@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { createElement, forwardRef, useImperativeHandle, type ReactNode } from 'react';
+import { createElement, forwardRef, useImperativeHandle, useState, type ReactNode } from 'react';
 import { act, fireEvent, render } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ClimbBoardFilterState } from '@boardsesh/climb-filters';
@@ -194,18 +194,32 @@ vi.mock('../CollapsibleSection', () => ({
   CollapsibleSection: ({
     children,
     title,
+    defaultExpanded = false,
     onExpandedChange,
   }: {
     children?: ReactNode;
     title: string;
+    defaultExpanded?: boolean;
     onExpandedChange?: (expanded: boolean) => void;
-  }) =>
-    createElement(
+  }) => {
+    const [expanded, setExpanded] = useState(defaultExpanded);
+    return createElement(
       'section',
-      null,
-      createElement('button', { onClick: () => onExpandedChange?.(true) }, `expand-${title}`),
+      { 'data-testid': `section-${title}`, 'data-expanded': String(expanded) },
+      createElement(
+        'button',
+        {
+          onClick: () => {
+            const nextExpanded = !expanded;
+            setExpanded(nextExpanded);
+            onExpandedChange?.(nextExpanded);
+          },
+        },
+        `expand-${title}`,
+      ),
       children,
-    ),
+    );
+  },
 }));
 vi.mock('../RadioGroup', () => ({ RadioGroup: () => null }));
 vi.mock('../SwitchRow', () => ({ SwitchRow: () => null }));
@@ -434,6 +448,18 @@ describe('ClimbFilterSheet child filters', () => {
     expect(bottomSheetModalProps.latest?.enablePanDownToClose).toBe(true);
     expect(bottomSheetModalProps.latest?.enableContentPanningGesture).toBe(true);
     expect(bottomSheetModalProps.latest?.enableHandlePanningGesture).toBe(true);
+  });
+
+  it('keeps Refine expanded after a child sheet closes', () => {
+    const { getByLabelText, getByTestId, getByText } = renderFilterSheet();
+
+    fireEvent.click(getByText('expand-mobile.filter.section.refine'));
+    expect(getByTestId('section-mobile.filter.section.refine').getAttribute('data-expanded')).toBe('true');
+
+    fireEvent.click(getByLabelText('mobile.filter.setters'));
+    fireEvent.click(getByText('setters-close'));
+
+    expect(getByTestId('section-mobile.filter.section.refine').getAttribute('data-expanded')).toBe('true');
   });
 
   it('re-enables parent sheet gestures when a child sheet dismisses', () => {
