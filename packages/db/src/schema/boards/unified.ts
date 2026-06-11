@@ -562,8 +562,9 @@ export const boardClimbStats = pgTable(
     // statement; Kilter sync updates kilter_ascensionist_count +
     // ascensionist_count in one statement; the Boardsesh tick recompute updates
     // boardsesh_ascensionist_count + ascensionist_count in one statement.
-    // Keep it as a regular column (not GENERATED) so the custom covering index
-    // board_climb_stats_ascents_covering_idx (migration 0067) keeps working.
+    // Keep it as a regular column (not GENERATED) so the custom covering indexes
+    // (board_climb_stats_ascents_covering_idx, migration 0068; the v2 variant with
+    // climb_uuid as a trailing key column, migration 0122) keep working.
     ascensionistCount: bigint('ascensionist_count', { mode: 'number' }),
     auroraAscensionistCount: bigint('aurora_ascensionist_count', { mode: 'number' }),
     kilterAscensionistCount: bigint('kilter_ascensionist_count', { mode: 'number' }),
@@ -581,9 +582,11 @@ export const boardClimbStats = pgTable(
   },
   (table) => ({
     pk: primaryKey({ columns: [table.boardType, table.climbUuid, table.angle] }),
-    // Note: board_climb_stats_ascents_covering_idx is created in custom migration 0067
-    // with DESC NULLS LAST and INCLUDE columns that Drizzle can't express.
-    // Do NOT add an ascents index here — it would conflict with the custom migration.
+    // Note: the ascents/quality covering indexes are created in custom migrations
+    // (0068/0121, and the v2 climb_uuid-as-key variants in 0122) with DESC NULLS LAST
+    // + INCLUDE columns that Drizzle can't express.
+    // Do NOT add an ascents/quality index here — it would conflict with those custom
+    // migrations and make drizzle-kit generate emit destructive diffs.
     // Note: No FK to board_climbs - stats may arrive before their corresponding climbs during sync
   }),
 );

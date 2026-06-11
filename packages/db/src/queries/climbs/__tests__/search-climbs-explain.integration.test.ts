@@ -113,6 +113,8 @@ if (!EXPLAIN_DB_URL) {
   const indexNames = (nodes: PlanNode[]) => nodes.filter((n) => n.index).map((n) => n.index as string);
   const hasSeqScanOnBoardTable = (nodes: PlanNode[]) =>
     nodes.some((n) => n.type === 'Seq Scan' && /board_climb/.test(n.rel ?? ''));
+  const hasSortNode = (nodes: PlanNode[]) => nodes.some((n) => /Sort/.test(n.type));
+  const hasGatherNode = (nodes: PlanNode[]) => nodes.some((n) => /Gather/.test(n.type));
 
   async function logTiming(label: string, capture: Captured): Promise<void> {
     try {
@@ -137,27 +139,34 @@ if (!EXPLAIN_DB_URL) {
       await client.unsafe('ANALYZE board_climb_holds');
     });
 
-    void it('hot path (ascents DESC, page 0) scans the ascents covering index, no seq scan', async () => {
+    void it('hot path (ascents DESC, page 0) is a pure index-ordered scan: no sort, no Gather', async () => {
       const selects = tableSelects(await runSearch({ page: 0, pageSize: 20, sortBy: 'ascents', sortOrder: 'desc' }));
       assert.ok(selects.length >= 1, 'expected a stats-driven SELECT');
       const nodes = await explainNodes(selects[0].query, selects[0].params, false);
       assert.ok(
-        indexNames(nodes).some((n) => /ascents_covering/.test(n)),
-        `hot path should use an ascents covering index; saw: ${indexNames(nodes).join(', ')}`,
+        indexNames(nodes).some((n) => /ascents_covering_v2/.test(n)),
+        `hot path should use the v2 ascents covering index; saw: ${indexNames(nodes).join(', ')}`,
       );
       assert.equal(hasSeqScanOnBoardTable(nodes), false, 'hot path must not seq-scan a board table');
+      // With climb_uuid as a trailing key column, the covering index already returns
+      // rows in ORDER BY order — no Incremental Sort, no parallel Gather/DSM.
+      assert.equal(hasSortNode(nodes), false, 'hot path must not need a sort (v2 index orders climb_uuid)');
+      assert.equal(hasGatherNode(nodes), false, 'hot path must not go parallel (no Incremental Sort to parallelize)');
       if (RUN_ANALYZE) await logTiming('hot path', selects[0]);
     });
 
-    void it('quality DESC page 0 scans the quality covering index, no seq scan', async () => {
+    void it('quality DESC page 0 is a pure index-ordered scan: no sort, no Gather', async () => {
       const selects = tableSelects(await runSearch({ page: 0, pageSize: 20, sortBy: 'quality', sortOrder: 'desc' }));
       assert.ok(selects.length >= 1);
       const nodes = await explainNodes(selects[0].query, selects[0].params, false);
       assert.ok(
-        indexNames(nodes).some((n) => /quality_covering/.test(n)),
-        `quality path should use a quality covering index; saw: ${indexNames(nodes).join(', ')}`,
+        indexNames(nodes).some((n) => /quality_covering_v2/.test(n)),
+        `quality path should use the v2 quality covering index; saw: ${indexNames(nodes).join(', ')}`,
       );
       assert.equal(hasSeqScanOnBoardTable(nodes), false);
+      assert.equal(hasSortNode(nodes), false, 'quality path must not need a sort (v2 index orders climb_uuid)');
+      assert.equal(hasGatherNode(nodes), false, 'quality path must not go parallel');
+      if (RUN_ANALYZE) await logTiming('quality path', selects[0]);
     });
 
     void it('stats-driven deep page (page 3) still uses the ascents covering index', async () => {

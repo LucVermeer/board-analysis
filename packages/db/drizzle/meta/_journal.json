@@ -855,6 +855,13 @@
       "when": 1781130786841,
       "tag": "0121_add_quality_search_covering_index",
       "breakpoints": true
+    },
+    {
+      "idx": 122,
+      "version": "7",
+      "when": 1781145433936,
+      "tag": "0122_add_search_covering_indexes_v2",
+      "breakpoints": true
     }
   ]
 }
