@@ -172,7 +172,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
+    gap: spacing[2],
     height: CAPSULE_HEIGHT,
     paddingHorizontal: spacing[5],
     borderRadius: CAPSULE_RADIUS,

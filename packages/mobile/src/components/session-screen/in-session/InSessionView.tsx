@@ -483,11 +483,16 @@ export function InSessionView({
 
   const handleConfirmEnd = useCallback(async () => {
     setIsEnding(true);
-    const summary = await endSession();
-    setIsEnding(false);
-    onEndDismiss?.();
-    if (summary) {
-      router.push({ pathname: '/(tabs)/record/summary', params: { sessionId: summary.sessionId } });
+    try {
+      const summary = await endSession();
+      onEndDismiss?.();
+      if (summary) {
+        router.push({ pathname: '/(tabs)/record/summary', params: { sessionId: summary.sessionId } });
+      }
+    } finally {
+      // Always clear the spinner — without finally a thrown endSession() would leave
+      // the confirm button spinning forever and the sheet undismissable.
+      setIsEnding(false);
     }
   }, [endSession, router, onEndDismiss]);
 
