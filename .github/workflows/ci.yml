@@ -82,6 +82,10 @@ jobs:
               - 'packages/board-constants/**'
               - 'packages/crypto/**'
               - 'packages/aurora-sync/**'
+              - 'packages/kilter-sync/**'
+              - 'packages/location-sync/**'
+              - 'packages/moonboard-sync/**'
+              - 'packages/sync-runtime/**'
             sharedSchema:
               - 'packages/shared-schema/**'
               - 'packages/shared/graphql/**'

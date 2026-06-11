@@ -1,9 +1,9 @@
 {
-  "name": "@boardsesh/aurora-sync",
+  "name": "@boardsesh/moonboard-sync",
   "version": "1.0.0",
-  "description": "Aurora board sync utility for Boardsesh",
+  "description": "MoonBoard public location sync utility for Boardsesh",
   "bin": {
-    "aurora-sync": "./dist/cli/index.js"
+    "moonboard-sync": "./dist/cli/index.js"
   },
   "type": "module",
   "main": "src/index.ts",
@@ -13,11 +13,6 @@
       "types": "./src/index.ts",
       "import": "./src/index.ts",
       "default": "./src/index.ts"
-    },
-    "./runner": {
-      "types": "./src/runner/index.ts",
-      "import": "./src/runner/index.ts",
-      "default": "./src/runner/index.ts"
     },
     "./api": {
       "types": "./src/api/index.ts",
@@ -38,25 +33,19 @@
     "typecheck": "tsc --noEmit",
     "lint": "vp lint",
     "lint-fix": "vp lint --fix",
-    "sync:all": "tsx src/cli/index.ts all",
-    "sync:daemon": "tsx src/cli/index.ts daemon",
-    "sync:locations": "tsx src/cli/index.ts locations",
-    "sync:user": "tsx src/cli/index.ts user"
+    "sync:locations": "tsx src/cli/index.ts locations --skip-if-missing-credentials"
   },
   "dependencies": {
-    "@boardsesh/board-constants": "*",
-    "@boardsesh/crypto": "*",
     "@boardsesh/db": "*",
     "@boardsesh/location-sync": "*",
-    "@boardsesh/shared-schema": "*",
     "commander": "^14.0.3",
     "dotenv": "^17.3.1",
-    "drizzle-orm": "^0.45.1",
-    "postgres": "^3.4.8"
+    "drizzle-orm": "^0.45.1"
   },
   "devDependencies": {
     "@types/node": "^25.3.3",
     "tsx": "^4.21.0",
-    "typescript": "^5.9.3"
+    "typescript": "~6.0.3",
+    "vitest": "*"
   }
 }
