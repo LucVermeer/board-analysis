@@ -338,6 +338,7 @@ jobs:
             DEVELOPMENT_TEAM=9L3HKPZBH3
 
       - name: Export archive (uploads to TestFlight)
+        id: testflight_upload
         env:
           APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
           APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
@@ -366,7 +367,7 @@ jobs:
           if-no-files-found: warn
 
       - name: Notify deployments channel
-        if: github.ref == 'refs/heads/main' && success()
+        if: github.ref == 'refs/heads/main' && steps.testflight_upload.outcome == 'success'
         env:
           DISCORD_DEPLOY_WEBHOOK: ${{ secrets.DISCORD_DEPLOY_WEBHOOK }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -378,6 +379,24 @@ jobs:
             exit 0
           fi
           CONTENT=$(printf '📱 **iOS RN TestFlight uploaded** on `%s`\n• version: %s\n• build: %s\n<%s>' \
+            "${COMMIT_SHA:0:7}" "$BOARDSESH_MOBILE_VERSION" "$BUILD_NUMBER" "$RUN_URL")
+          jq -n --arg content "$CONTENT" '{content: $content, allowed_mentions: {parse: []}}' \
+            | curl -sS --fail-with-body -X POST -H "Content-Type: application/json" -d @- "$DISCORD_DEPLOY_WEBHOOK" || \
+              echo "::warning::Failed to post Discord notification (see status above)"
+
+      - name: Notify deployments channel of failure
+        if: github.ref == 'refs/heads/main' && failure()
+        env:
+          DISCORD_DEPLOY_WEBHOOK: ${{ secrets.DISCORD_DEPLOY_WEBHOOK }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          COMMIT_SHA: ${{ github.sha }}
+          BUILD_NUMBER: ${{ steps.build_number.outputs.value }}
+        run: |
+          if [ -z "$DISCORD_DEPLOY_WEBHOOK" ]; then
+            echo "DISCORD_DEPLOY_WEBHOOK not set — skipping notification"
+            exit 0
+          fi
+          CONTENT=$(printf '🚨 **iOS RN TestFlight failed** on `%s`\n• version: %s\n• build: %s\n<%s>' \
             "${COMMIT_SHA:0:7}" "$BOARDSESH_MOBILE_VERSION" "$BUILD_NUMBER" "$RUN_URL")
           jq -n --arg content "$CONTENT" '{content: $content, allowed_mentions: {parse: []}}' \
             | curl -sS --fail-with-body -X POST -H "Content-Type: application/json" -d @- "$DISCORD_DEPLOY_WEBHOOK" || \
