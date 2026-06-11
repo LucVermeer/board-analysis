@@ -344,7 +344,7 @@ Since the Kilter backend has been shut down, API-based sync is no longer availab
 
 ### Climb Name Resolution
 
-Climb names are resolved via `board_climbs` table using a composite index on `(board_type, name)`. When multiple climbs share the same name (rare), the one with the highest `ascensionist_count` is chosen.
+Climb names are resolved via `board_climbs` table using a composite index on `(board_type, name)`. When multiple climbs share the same name (rare), listed public climbs are preferred first, then the importing user's own climbs, then unlisted Aurora catalog climbs. Within the same tier, the climb with the highest `ascensionist_count` is chosen.
 
 Exact non-draft Aurora catalog matches remain importable even if the climb has since been delisted in Boardsesh. This keeps historical logbook data importable without making the delisted climb appear in public search.
 

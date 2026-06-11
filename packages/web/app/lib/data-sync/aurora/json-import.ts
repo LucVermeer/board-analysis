@@ -181,6 +181,7 @@ export function generateJsonImportAuroraId(
 
 const VARIATION_SELECTOR_AND_JOINER_PATTERN = /[\u200d\ufe0e\ufe0f]/gu;
 const EMOJI_AND_PRESENTATION_PATTERN = /[\p{Extended_Pictographic}\p{Emoji_Presentation}\u200d\ufe0e\ufe0f]/gu;
+const EMOJI_PLACEHOLDER_REGEX_SOURCE = '[\\p{Extended_Pictographic}\\p{Emoji_Presentation}\\u200d\\ufe0e\\ufe0f]+';
 
 function compactResolutionName(value: string): string {
   return value.normalize('NFKC').replace(/\s+/g, ' ').trim().toLowerCase();
@@ -192,6 +193,29 @@ export function normalizeAuroraExportClimbNameForResolution(name: string): strin
 
 export function normalizeBoardClimbNameForAuroraExportResolution(name: string): string {
   return compactResolutionName(name.replace(EMOJI_AND_PRESENTATION_PATTERN, ''));
+}
+
+function boardClimbNameHasEmojiForAuroraExportResolution(name: string): boolean {
+  return name.replace(EMOJI_AND_PRESENTATION_PATTERN, '') !== name;
+}
+
+function escapeRegExpPattern(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function buildQuestionPlaceholderRegExp(name: string): RegExp {
+  const source = name.split(/\?+/g).map(escapeRegExpPattern).join(EMOJI_PLACEHOLDER_REGEX_SOURCE);
+  return new RegExp(`^${source}$`, 'u');
+}
+
+export function doesBoardClimbNameMatchAuroraQuestionPlaceholder(exportName: string, boardClimbName: string): boolean {
+  if (!boardClimbNameHasEmojiForAuroraExportResolution(boardClimbName)) return false;
+
+  const exportKey = normalizeAuroraExportClimbNameForResolution(exportName);
+  const boardClimbKey = normalizeBoardClimbNameForAuroraExportResolution(boardClimbName);
+  if (exportKey !== boardClimbKey) return false;
+
+  return buildQuestionPlaceholderRegExp(exportName).test(boardClimbName);
 }
 
 // Escape LIKE/ILIKE metacharacters so export names are matched literally except
@@ -219,9 +243,9 @@ export function isClimbNameResolutionCandidateAllowed(
 }
 
 function getClimbNameResolutionCandidateTier(candidate: ClimbNameResolutionCandidate, userId?: string): number {
-  if (candidate.isDraft === false && candidate.isListed === true) return 3;
+  if (candidate.isDraft === false && candidate.isListed === true) return 4;
+  if (userId != null && candidate.userId === userId) return 3;
   if (candidate.isDraft === false && candidate.userId == null) return 2;
-  if (userId != null && candidate.userId === userId) return 1;
   return 0;
 }
 
@@ -267,8 +291,7 @@ export function resolveQuestionPlaceholderClimbNameForCandidates(
   const nameToMatch = new Map<string, ClimbNameResolutionMatch>();
   for (const candidate of candidates) {
     if (!candidate.name) continue;
-    const candidateKey = normalizeBoardClimbNameForAuroraExportResolution(candidate.name);
-    if (candidateKey !== exportKey) continue;
+    if (!doesBoardClimbNameMatchAuroraQuestionPlaceholder(exportName, candidate.name)) continue;
     addClimbNameResolutionCandidate(nameToMatch, exportName, candidate, userId);
   }
 
@@ -497,14 +520,10 @@ async function resolveQuestionPlaceholderClimbNames(
 
   for (let i = 0; i < fallbackRequests.length; i += FALLBACK_NAME_CHUNK_SIZE) {
     const chunk = fallbackRequests.slice(i, i + FALLBACK_NAME_CHUNK_SIZE);
-    const namesByNormalizedKey = new Map<string, string[]>();
     const patterns = new Set<string>();
 
     for (const request of chunk) {
       patterns.add(request.pattern);
-      const names = namesByNormalizedKey.get(request.normalizedKey) ?? [];
-      names.push(request.name);
-      namesByNormalizedKey.set(request.normalizedKey, names);
     }
 
     const namePatternFilters = [...patterns].map((pattern) => ilike(boardClimbs.name, pattern));
@@ -532,12 +551,9 @@ async function resolveQuestionPlaceholderClimbNames(
     for (const row of results) {
       if (!row.name) continue;
 
-      const candidateKey = normalizeBoardClimbNameForAuroraExportResolution(row.name);
-      const exportNames = namesByNormalizedKey.get(candidateKey);
-      if (!exportNames) continue;
-
-      for (const exportName of exportNames) {
-        addClimbNameResolutionCandidate(nameToMatch, exportName, row, userId);
+      for (const request of chunk) {
+        if (!doesBoardClimbNameMatchAuroraQuestionPlaceholder(request.name, row.name)) continue;
+        addClimbNameResolutionCandidate(nameToMatch, request.name, row, userId);
       }
     }
   }

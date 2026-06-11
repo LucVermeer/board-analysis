@@ -11,6 +11,7 @@ import {
   normalizeAuroraExportClimbNameForResolution,
   normalizeBoardClimbNameForAuroraExportResolution,
   isClimbNameResolutionCandidateAllowed,
+  doesBoardClimbNameMatchAuroraQuestionPlaceholder,
   resolveQuestionPlaceholderClimbNameForCandidates,
   type ClimbNameResolutionCandidate,
 } from '../json-import';
@@ -414,6 +415,23 @@ describe('Aurora export climb name resolution', () => {
     ).toBe('rose');
   });
 
+  it('requires the DB candidate to contain emoji where Aurora exported question marks', () => {
+    expect(doesBoardClimbNameMatchAuroraQuestionPlaceholder('Friend Forever?', 'Friend Forever👭')).toBe(true);
+    expect(doesBoardClimbNameMatchAuroraQuestionPlaceholder('Friend Forever?', 'Friend Forever')).toBe(false);
+
+    expect(
+      resolveQuestionPlaceholderClimbNameForCandidates('Friend Forever?', [
+        candidate({ uuid: 'plain-base-name', name: 'Friend Forever', ascensionistCount: 99999 }),
+        candidate({ uuid: 'emoji-name', name: 'Friend Forever👭', ascensionistCount: 1 }),
+      ]),
+    ).toBe('emoji-name');
+  });
+
+  it('checks the candidate against the specific export question-mark pattern', () => {
+    expect(doesBoardClimbNameMatchAuroraQuestionPlaceholder('A?B', 'A😀B')).toBe(true);
+    expect(doesBoardClimbNameMatchAuroraQuestionPlaceholder('AB?', 'A😀B')).toBe(false);
+  });
+
   it('does not fuzzy-match unrelated question-mark names', () => {
     expect(
       resolveQuestionPlaceholderClimbNameForCandidates('Dad?', [
@@ -438,6 +456,22 @@ describe('Aurora export climb name resolution', () => {
     ).toBe(false);
   });
 
+  it("allows the current user's own climbs but rejects another user's drafts", () => {
+    expect(
+      isClimbNameResolutionCandidateAllowed(
+        candidate({ uuid: 'own-draft', name: 'Project', isDraft: true, isListed: false, userId: 'current-user' }),
+        'current-user',
+      ),
+    ).toBe(true);
+
+    expect(
+      isClimbNameResolutionCandidateAllowed(
+        candidate({ uuid: 'other-draft', name: 'Project', isDraft: true, isListed: false, userId: 'other-user' }),
+        'current-user',
+      ),
+    ).toBe(false);
+  });
+
   it('prefers listed public matches over unlisted catalog matches', () => {
     expect(
       resolveQuestionPlaceholderClimbNameForCandidates('Friend Forever?', [
@@ -451,6 +485,32 @@ describe('Aurora export climb name resolution', () => {
         candidate({ uuid: 'listed-less-popular', name: 'Friend Forever👭', ascensionistCount: 1 }),
       ]),
     ).toBe('listed-less-popular');
+  });
+
+  it("prefers the current user's own climb over an unlisted catalog match", () => {
+    expect(
+      resolveQuestionPlaceholderClimbNameForCandidates(
+        'Friend Forever?',
+        [
+          candidate({
+            uuid: 'unlisted-catalog',
+            name: 'Friend Forever👭',
+            ascensionistCount: 99999,
+            isListed: false,
+            userId: null,
+          }),
+          candidate({
+            uuid: 'own-climb',
+            name: 'Friend Forever👭',
+            ascensionistCount: 1,
+            isDraft: true,
+            isListed: false,
+            userId: 'current-user',
+          }),
+        ],
+        'current-user',
+      ),
+    ).toBe('own-climb');
   });
 });
 
