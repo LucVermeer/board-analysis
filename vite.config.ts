@@ -485,6 +485,10 @@ export default defineConfig({
         command: 'tsx scripts/mobile-dev-client-build.ts',
         cache: false,
       },
+      'testflight:feedback-issues': {
+        command: 'tsx scripts/testflight-feedback-to-issues.ts',
+        cache: false,
+      },
 
       // --- Dev servers ---
       'dev:mobile': {
