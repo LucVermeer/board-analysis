@@ -95,7 +95,7 @@ if (!EXPLAIN_DB_URL) {
   // imported here). Keep in sync with packages/backend/.../count-climbs.ts.
   function buildCountSql(searchParams: ClimbSearchParams): { text: string; params: unknown[] } {
     const filters = createClimbFilters(PARAMS, searchParams, undefined);
-    const isDraftsQuery = !!searchParams.onlyDrafts;
+    const isDraftsQuery = filters.isOnlyDrafts;
     const whereConditions = [
       ...filters.getClimbWhereConditions(),
       ...(isDraftsQuery ? [] : filters.getSizeConditions()),
