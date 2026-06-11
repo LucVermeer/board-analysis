@@ -551,6 +551,11 @@ export {
 } from './use-you-data';
 export { useYouProfileData } from './use-you-profile-data';
 export {
+  usePublicProfile,
+  useFollowers,
+  useFollowing,
+  useSearchUsers,
+  useToggleUserFollow,
   useVote,
   useBulkVoteSummaries,
   useChunkedBulkVoteSummaries,
