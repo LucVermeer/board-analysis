@@ -13,11 +13,18 @@ import {
   type SyncSessionToIntegrationVariables,
   type SyncSessionToIntegrationResponse,
 } from '@boardsesh/graphql/operations/integrations';
+import type { IntegrationProvider } from '@boardsesh/shared-schema';
 import { useAuth } from '../../../providers/auth-provider';
 import { track } from '../../analytics';
 import { getHttpClient } from '../client';
 
 const INTEGRATION_STATUSES_KEY = ['integrationStatuses'] as const;
+
+/** Analytics name for a provider ('STRAVA' → 'strava') — never hardcode one
+ *  provider here or future providers' events get misattributed. */
+function analyticsIntegrationName(provider: IntegrationProvider): string {
+  return provider.toLowerCase();
+}
 
 /**
  * Server-side integration statuses (Strava today). Gated on auth like the other
@@ -43,9 +50,9 @@ export function useDisconnectIntegration() {
   return useMutation({
     mutationFn: (variables: DisconnectIntegrationVariables) =>
       getHttpClient().request<DisconnectIntegrationResponse>(DISCONNECT_INTEGRATION, variables),
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       void queryClient.invalidateQueries({ queryKey: INTEGRATION_STATUSES_KEY });
-      track(SHARED_EVENTS.IntegrationDisconnected, { integration: 'strava' });
+      track(SHARED_EVENTS.IntegrationDisconnected, { integration: analyticsIntegrationName(variables.provider) });
     },
   });
 }
@@ -83,7 +90,10 @@ export function useSetIntegrationAutoSync() {
       void queryClient.invalidateQueries({ queryKey: INTEGRATION_STATUSES_KEY });
     },
     onSuccess: (_data, variables) => {
-      track(SHARED_EVENTS.IntegrationAutoSyncToggled, { integration: 'strava', enabled: variables.enabled });
+      track(SHARED_EVENTS.IntegrationAutoSyncToggled, {
+        integration: analyticsIntegrationName(variables.provider),
+        enabled: variables.enabled,
+      });
     },
   });
 }
@@ -94,12 +104,15 @@ export function useSyncSessionToIntegration() {
   return useMutation({
     mutationFn: (variables: SyncSessionToIntegrationVariables) =>
       getHttpClient().request<SyncSessionToIntegrationResponse>(SYNC_SESSION_TO_INTEGRATION, variables),
-    onSuccess: (data) => {
+    onSuccess: (data, variables) => {
       // A resolved mutation can still carry a domain-level upload failure in
       // `error` (the resolver returns rather than throws so the UI can toast
       // it) — that must not count as a successful export.
       if (!data.syncSessionToIntegration.error) {
-        track(SHARED_EVENTS.SessionExportedToIntegration, { integration: 'strava', trigger: 'manual' });
+        track(SHARED_EVENTS.SessionExportedToIntegration, {
+          integration: analyticsIntegrationName(variables.provider),
+          trigger: 'manual',
+        });
       }
     },
   });

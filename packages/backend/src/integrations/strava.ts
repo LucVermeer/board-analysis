@@ -2,6 +2,7 @@
 // lazily inside each function so tests can stub STRAVA_CLIENT_ID / _SECRET.
 
 import type { IntegrationProviderImpl, ProviderTokens, SessionActivityInput } from './types';
+import { logger } from '../utils/logger';
 
 const STRAVA_AUTHORIZE_URL = 'https://www.strava.com/oauth/mobile/authorize';
 const STRAVA_TOKEN_URL = 'https://www.strava.com/oauth/token';
@@ -218,15 +219,21 @@ export const stravaProvider: IntegrationProviderImpl = {
   activityUrl: stravaActivityUrl,
 
   async revoke(accessToken: string): Promise<void> {
-    // Best-effort: a failed deauthorize must not block disconnecting locally.
-    const form = new URLSearchParams({ access_token: accessToken });
-    const response = await fetch(STRAVA_DEAUTHORIZE_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: form.toString(),
-    });
-    if (!response.ok) {
-      throw new IntegrationHttpError(`Strava deauthorize failed with status ${response.status}`, response.status);
+    // Best-effort per the interface contract: a failed deauthorize must never
+    // throw — the local disconnect proceeds regardless, so the only useful
+    // output here is a diagnostic log.
+    try {
+      const form = new URLSearchParams({ access_token: accessToken });
+      const response = await fetch(STRAVA_DEAUTHORIZE_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: form.toString(),
+      });
+      if (!response.ok) {
+        logger.warn(`[Integrations] Strava deauthorize returned status ${response.status}`);
+      }
+    } catch (error) {
+      logger.warn('[Integrations] Strava deauthorize request failed:', error);
     }
   },
 };

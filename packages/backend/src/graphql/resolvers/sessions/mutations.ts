@@ -775,11 +775,16 @@ export const sessionMutations = {
     // connected external integration (Strava) that has auto-sync on. Never
     // blocks or fails the endSession response — failures are logged inside the
     // service and here as a backstop.
-    autoSyncSessionToIntegrations(sessionId, summary, sessionData.boardPath, normalizedTimezone).catch(
-      (error: unknown) => {
-        logger.error(`[Integrations] auto-sync dispatch failed for session ${sessionId}:`, error);
-      },
-    );
+    // No summary (no recorded activity) means there is nothing to export —
+    // skip the dispatch entirely so the catch below can never misattribute
+    // that case as a failure.
+    if (summary) {
+      autoSyncSessionToIntegrations(sessionId, summary, sessionData.boardPath, normalizedTimezone).catch(
+        (error: unknown) => {
+          logger.error(`[Integrations] auto-sync dispatch failed for session ${sessionId}:`, error);
+        },
+      );
+    }
 
     return summary;
   },

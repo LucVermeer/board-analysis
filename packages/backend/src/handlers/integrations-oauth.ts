@@ -199,9 +199,10 @@ export async function handleIntegrationOAuthCallback(
 
   // Strava returns the granted scope on the callback. Require activity:write —
   // a read-only grant cannot upload activities, so fail early with clear copy
-  // rather than at the first upload.
-  const grantedScope = url.searchParams.get('scope') ?? '';
-  if (!grantedScope.split(',').includes('activity:write')) {
+  // rather than at the first upload. Trim each entry: a "read, activity:write"
+  // form (space after comma) must not read as a missing grant.
+  const grantedScopes = (url.searchParams.get('scope') ?? '').split(',').map((scopeEntry) => scopeEntry.trim());
+  if (!grantedScopes.includes('activity:write')) {
     redirectError(res, providerDbName, 'missing_scope' satisfies CallbackReason);
     return;
   }
