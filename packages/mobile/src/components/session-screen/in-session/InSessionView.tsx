@@ -478,8 +478,8 @@ export function InSessionView({
   // End moved to the top chrome's trailing slot, so the bottom edge keeps only the
   // climb accessory + tab bar (no third glass band). The history list reserves the
   // bottom offset so its last row clears them: Liquid Glass anchors to the raw
-  // safe-area inset (which already includes the tab bar + accessory); Material uses
-  // the fixed-footer reserve.
+  // safe-area inset (on iOS 26 it already includes the tab bar + accessory — see the
+  // on-device evidence in PreSessionView); Material uses the fixed-footer reserve.
   const footerBottom = variant === 'material' ? bottomChrome.fixedFooterBottom : insets.bottom;
 
   const handleConfirmEnd = useCallback(async () => {

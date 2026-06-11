@@ -214,6 +214,33 @@ describe('CollapsingTopChrome', () => {
     expect(container.querySelector('[data-leading="invite"]')).not.toBeNull();
   });
 
+  it('widens the right island for a multi-slot trailing action (trailingActionCount)', () => {
+    const { container } = render(
+      <CollapsingTopChrome
+        {...makeProps({
+          trailingAction: createElement('button', { 'data-trailing': 'stop' }),
+          trailingActionCount: 2,
+        })}
+      />,
+    );
+    // The two-slot count widens the right toolbar past zero, so the Stop pill renders.
+    expect(container.querySelector('[data-trailing="stop"]')).not.toBeNull();
+  });
+
+  it('respects an explicit trailingActionCount of 0 (the ?? guard, not ||)', () => {
+    const { container } = render(
+      <CollapsingTopChrome
+        {...makeProps({
+          trailingAction: createElement('button', { 'data-trailing': 'stop' }),
+          trailingActionCount: 0,
+        })}
+      />,
+    );
+    // A `||` instead of `??` would let the phantom element widen the toolbar to one
+    // slot and render; `??` honours the explicit 0, so the right island stays empty.
+    expect(container.querySelector('[data-trailing="stop"]')).toBeNull();
+  });
+
   it('renders the children slot (e.g. the search row)', () => {
     const { container } = render(
       <CollapsingTopChrome {...makeProps()}>

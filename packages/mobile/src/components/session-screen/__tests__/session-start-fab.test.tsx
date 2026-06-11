@@ -89,7 +89,7 @@ import { SessionStartFab } from '../SessionStartFab';
 function makeProps(over: Partial<Parameters<typeof SessionStartFab>[0]> = {}) {
   return {
     label: 'Start session',
-    materialIcon: 'play.fill' as const,
+    icon: 'play.fill' as const,
     onPress: vi.fn(),
     testID: 'pre-session-footer',
     bottomOffset: 130,

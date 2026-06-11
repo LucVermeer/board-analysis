@@ -207,8 +207,14 @@ export function PreSessionView({ showChrome = false }: PreSessionViewProps) {
   const canStart = activeBoard != null && !isStarting && generatorPreviewReady;
   // The single source of the Start capsule's bottom offset: passed to SessionStartFab
   // AND used for the list reservation, so the FAB position and the last-row clearance
-  // can't drift. Liquid Glass anchors to the raw safe-area inset (which already
-  // includes the tab bar + accessory); Material uses the fixed-footer reserve.
+  // can't drift. Liquid Glass anchors to the raw safe-area inset; Material uses the
+  // fixed-footer reserve.
+  //
+  // Verified on-device (iPhone 17 Pro / iOS 26): with the native tab bar + climb
+  // accessory present, `useSafeAreaInsets().bottom` is 139 = home indicator (34) +
+  // tab bar (49) + accessory (56) — i.e. the glass tab bar DOES extend the UIKit safe
+  // area. `bottomChrome.fixedFooterBottom` adds the tab bar + accessory a second time
+  // (246), which strands the control ~110px up the screen — hence the raw inset here.
   const footerBottom = variant === 'material' ? bottomChrome.fixedFooterBottom : insets.bottom;
 
   // Inline status copy shown above an empty preview (loading / no results /
@@ -331,7 +337,7 @@ export function PreSessionView({ showChrome = false }: PreSessionViewProps) {
         bottomOffset={footerBottom}
         onHeightChange={setFooterHeight}
         label={isStarting ? t('mobile.session.preStarting') : t('mobile.session.preStart')}
-        materialIcon="play.fill"
+        icon="play.fill"
         onPress={() => void handleStart()}
         disabled={!canStart}
         loading={isStarting}

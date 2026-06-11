@@ -23,8 +23,9 @@ type SessionStartFabProps = {
   /** Visible label — the Start copy (Material renders it as the extended FAB label;
    *  Liquid Glass as the floating capsule title). */
   label: string;
-  /** Glyph for the Material extended FAB (maps to its Android icon). */
-  materialIcon: IconName;
+  /** Icon name — rendered as the SF Symbol on the Liquid Glass capsule and mapped to
+   *  its Android glyph for the Material extended FAB. */
+  icon: IconName;
   onPress: () => void;
   disabled?: boolean;
   loading?: boolean;
@@ -52,7 +53,7 @@ type SessionStartFabProps = {
  */
 export function SessionStartFab({
   label,
-  materialIcon,
+  icon,
   onPress,
   disabled,
   loading,
@@ -78,7 +79,7 @@ export function SessionStartFab({
     >
       {variant === 'material' ? (
         <FAB
-          icon={iconMap[materialIcon].android}
+          icon={iconMap[icon].android}
           label={label}
           onPress={onPress}
           disabled={disabled}
@@ -87,7 +88,7 @@ export function SessionStartFab({
           mode="elevated"
         />
       ) : (
-        <StartGlassCapsule label={label} icon={materialIcon} onPress={onPress} disabled={disabled} loading={loading} />
+        <StartGlassCapsule label={label} icon={icon} onPress={onPress} disabled={disabled} loading={loading} />
       )}
     </View>
   );
