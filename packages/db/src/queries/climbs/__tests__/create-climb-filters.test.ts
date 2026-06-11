@@ -119,22 +119,19 @@ void describe('createClimbFilters: size filter', () => {
 });
 
 void describe('createClimbFilters: minRating', () => {
-  const ratingScaleCases: Array<{ minRating: number; expectedThreshold: string }> = [
-    { minRating: 1, expectedThreshold: '0.2' },
-    { minRating: 4, expectedThreshold: '0.8' },
-    { minRating: 5, expectedThreshold: '1' },
-  ];
-
-  for (const { minRating, expectedThreshold } of ratingScaleCases) {
-    void it(`scales minRating ${minRating} to stored threshold ${expectedThreshold}`, () => {
+  // quality_average is the canonical 1-5 scale, so minRating (1-5 whole stars) is
+  // compared directly. The old code divided by 5 (assuming a dead 0-1 scale), which
+  // made the filter a near no-op — these cases guard against that regression.
+  for (const minRating of [1, 4, 5]) {
+    void it(`compares minRating ${minRating} directly against quality_average (1-5 scale)`, () => {
       const filters = createClimbFilters(params, { minRating });
       assert.equal(filters.climbStatsConditions.length, 1);
 
       const rendered = sqlToString(filters.climbStatsConditions[0]);
       assert.match(rendered, /quality_average/);
-      assert.match(rendered, />=/);
-      assert.match(rendered, new RegExp(`>=\\s*${expectedThreshold}`));
-      assert.doesNotMatch(rendered, new RegExp(`>=\\s*${minRating}(?:\\D|$)`));
+      assert.match(rendered, new RegExp(`>=\\s*${minRating}(?:\\D|$)`));
+      // Must NOT divide by 5 anymore (old 0-1-scale threshold).
+      assert.doesNotMatch(rendered, new RegExp(`>=\\s*${minRating / 5}(?:\\D|$)`));
     });
   }
 
@@ -201,12 +198,20 @@ void describe('createClimbFilters: zone modes', () => {
     assert.doesNotMatch(rendered, /zone_bp\.set_id IN/);
   });
 
-  void it('ignores zoneMode when the zone box is empty or inverted', () => {
+  void it('fails closed when a requested zone box is inverted or empty', () => {
     const filters = createClimbFilters(params, {
       zoneBox: { edgeLeft: 80, edgeRight: 10, edgeBottom: 20, edgeTop: 120 },
       zoneMode: 'anyHold',
     });
 
+    // A requested-but-degenerate box must not return every climb — it fails closed
+    // (single `false` predicate), matching the tall/wide filters.
+    assert.equal(filters.zoneConditions.length, 1);
+    assert.match(sqlToString(filters.zoneConditions[0]), /false/i);
+  });
+
+  void it('adds no zone predicate when no zone box is requested', () => {
+    const filters = createClimbFilters(params, { zoneMode: 'anyHold' });
     assert.equal(filters.zoneConditions.length, 0);
   });
 });
