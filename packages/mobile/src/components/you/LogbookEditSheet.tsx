@@ -123,9 +123,6 @@ export function LogbookEditSheet({ sheetRef, ascent, onClose }: LogbookEditSheet
 
   const handleStatusSelect = useCallback((nextStatus: TickStatus) => {
     setStatus(nextStatus);
-    if (nextStatus === 'flash') {
-      setAttemptCount(1);
-    }
   }, []);
 
   const handleDateChange = useCallback(

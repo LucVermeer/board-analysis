@@ -363,4 +363,23 @@ describe('LogbookEditSheet', () => {
       expect.any(Object),
     );
   });
+
+  it('preserves attempts when flash selection is reverted before saving', () => {
+    renderSheet(makeAscent({ status: 'send', attemptCount: 5 }));
+
+    fireEvent.click(screen.getByTestId('status-flash'));
+    fireEvent.click(screen.getByTestId('status-send'));
+    fireEvent.click(screen.getByText('mobile.logbook.save'));
+
+    expect(mutations.updateMutate).toHaveBeenCalledWith(
+      {
+        uuid: 'tick-1',
+        input: expect.objectContaining({
+          status: 'send',
+          attemptCount: 5,
+        }),
+      },
+      expect.any(Object),
+    );
+  });
 });
