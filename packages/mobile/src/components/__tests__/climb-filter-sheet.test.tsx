@@ -19,6 +19,14 @@ type BottomSheetModalHandle = {
   dismiss: () => void;
 };
 
+const bottomSheetModalProps = vi.hoisted(() => ({
+  latest: null as null | {
+    enablePanDownToClose?: boolean;
+    enableContentPanningGesture?: boolean;
+    enableHandlePanningGesture?: boolean;
+  },
+}));
+
 const currentFilters: ClimbFilters = {
   sortBy: 'popular',
   sortOrder: 'desc',
@@ -67,9 +75,10 @@ vi.mock('react-native-gesture-handler', () => ({
 
 vi.mock('@gorhom/bottom-sheet', () => ({
   BottomSheetModal: forwardRef<BottomSheetModalHandle, { children?: ReactNode }>(function BottomSheetModal(
-    { children },
+    { children, ...props },
     ref,
   ) {
+    bottomSheetModalProps.latest = props;
     useImperativeHandle(ref, () => ({ present: vi.fn(), dismiss: vi.fn() }), []);
     return createElement('div', null, children);
   }),
@@ -177,6 +186,39 @@ vi.mock('../RadioGroup', () => ({ RadioGroup: () => null }));
 vi.mock('../SwitchRow', () => ({ SwitchRow: () => null }));
 vi.mock('../Icon', () => ({ Icon: () => null }));
 vi.mock('../grade', () => ({ GradeRangeRail: () => null }));
+vi.mock('../search/SettersFilterSheet', () => ({
+  SettersFilterSheet: ({
+    visible,
+    onSelectedSettersChange,
+    onClose,
+  }: {
+    visible: boolean;
+    onSelectedSettersChange: (selectedSetters: string[]) => void;
+    onClose: () => void;
+  }) =>
+    createElement(
+      'div',
+      { 'data-testid': 'setters-filter-sheet', 'data-visible': String(visible) },
+      createElement('button', { onClick: () => onSelectedSettersChange(['stacked-setter']) }, 'setters-change'),
+      createElement('button', { onClick: onClose }, 'setters-close'),
+    ),
+}));
+vi.mock('../search/HoldFilterEditorSheet', () => ({
+  HoldFilterEditorSheet: ({ visible, onClose }: { visible: boolean; onClose: () => void }) =>
+    createElement(
+      'div',
+      { 'data-testid': 'hold-filter-editor-sheet', 'data-visible': String(visible) },
+      createElement('button', { onClick: onClose }, 'holds-close'),
+    ),
+}));
+vi.mock('../search/ZoneFilterEditorSheet', () => ({
+  ZoneFilterEditorSheet: ({ visible, onClose }: { visible: boolean; onClose: () => void }) =>
+    createElement(
+      'div',
+      { 'data-testid': 'zone-filter-editor-sheet', 'data-visible': String(visible) },
+      createElement('button', { onClick: onClose }, 'zone-close'),
+    ),
+}));
 
 function renderFilterSheet(overrides: Partial<Parameters<typeof ClimbFilterSheet>[0]> = {}) {
   const props: Parameters<typeof ClimbFilterSheet>[0] = {
@@ -186,9 +228,6 @@ function renderFilterSheet(overrides: Partial<Parameters<typeof ClimbFilterSheet
     currentBoardFilters,
     searchName: '',
     onApply: vi.fn(),
-    onOpenSetters: vi.fn(),
-    onOpenHoldFilter: vi.fn(),
-    onOpenZoneFilter: vi.fn(),
     ...overrides,
   };
 
@@ -197,36 +236,42 @@ function renderFilterSheet(overrides: Partial<Parameters<typeof ClimbFilterSheet
 
 beforeEach(() => {
   vi.clearAllMocks();
+  bottomSheetModalProps.latest = null;
 });
 
-describe('ClimbFilterSheet picker navigation', () => {
-  it('delegates the setters picker with the current filter draft', () => {
-    const onOpenSetters = vi.fn();
-    const { getByLabelText } = renderFilterSheet({ onOpenSetters });
+describe('ClimbFilterSheet child filters', () => {
+  it('opens the setters sheet above the filter sheet and keeps draft edits local until Apply', () => {
+    const onApply = vi.fn();
+    const { getByLabelText, getByTestId, getByText } = renderFilterSheet({ onApply });
 
     fireEvent.click(getByLabelText('mobile.filter.setters'));
 
-    expect(onOpenSetters).toHaveBeenCalledTimes(1);
-    expect(onOpenSetters).toHaveBeenCalledWith(currentFilters, currentBoardFilters);
+    expect(getByTestId('setters-filter-sheet').getAttribute('data-visible')).toBe('true');
+    expect(bottomSheetModalProps.latest?.enablePanDownToClose).toBe(false);
+    expect(bottomSheetModalProps.latest?.enableContentPanningGesture).toBe(false);
+    expect(bottomSheetModalProps.latest?.enableHandlePanningGesture).toBe(false);
+
+    fireEvent.click(getByText('setters-change'));
+    fireEvent.click(getByText('mobile.filter.showCount12'));
+
+    expect(onApply).toHaveBeenCalledWith({ ...currentFilters, setter: ['stacked-setter'] }, currentBoardFilters);
   });
 
-  it('delegates the hold picker with the current filter draft', () => {
-    const onOpenHoldFilter = vi.fn();
-    const { getByLabelText } = renderFilterSheet({ onOpenHoldFilter });
+  it('opens the hold editor sheet above the filter sheet', () => {
+    const { getByLabelText, getByTestId } = renderFilterSheet();
 
     fireEvent.click(getByLabelText('mobile.holdFilter.title'));
 
-    expect(onOpenHoldFilter).toHaveBeenCalledTimes(1);
-    expect(onOpenHoldFilter).toHaveBeenCalledWith(currentFilters, currentBoardFilters);
+    expect(getByTestId('hold-filter-editor-sheet').getAttribute('data-visible')).toBe('true');
+    expect(bottomSheetModalProps.latest?.enablePanDownToClose).toBe(false);
   });
 
-  it('delegates the zone picker with the current filter draft', () => {
-    const onOpenZoneFilter = vi.fn();
-    const { getByLabelText } = renderFilterSheet({ onOpenZoneFilter });
+  it('opens the zone editor sheet above the filter sheet', () => {
+    const { getByLabelText, getByTestId } = renderFilterSheet();
 
     fireEvent.click(getByLabelText('mobile.zoneFilter.title'));
 
-    expect(onOpenZoneFilter).toHaveBeenCalledTimes(1);
-    expect(onOpenZoneFilter).toHaveBeenCalledWith(currentFilters, currentBoardFilters);
+    expect(getByTestId('zone-filter-editor-sheet').getAttribute('data-visible')).toBe('true');
+    expect(bottomSheetModalProps.latest?.enablePanDownToClose).toBe(false);
   });
 });

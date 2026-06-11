@@ -10,7 +10,7 @@ import {
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import { useSharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Stack, useFocusEffect, useRouter } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import type { Climb, BoardName } from '@boardsesh/shared-schema';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
@@ -62,16 +62,6 @@ import { getLastSearch, saveLastSearch, boardConfigKey } from '../../../src/lib/
 import { getFilterSummary, buildClimbFilterSummary } from '../../../src/lib/filter-summary';
 import { getActiveFilterTokens } from '../../../src/lib/filter-tokens';
 import { normalizeSearchName, visibleSearchTextNeedsSync } from '../../../src/lib/search-name';
-import { subscribeToSetterSelection } from '../../../src/lib/filter-handoff';
-import { subscribeToHoldsFilterSelection } from '../../../src/lib/hold-filter-handoff';
-import { subscribeToZoneFilterSelection } from '../../../src/lib/zone-filter-handoff';
-import {
-  applyHoldsFilterSelectionToFilterDraft,
-  applySetterSelectionToFilterDraft,
-  applyZoneFilterSelectionToFilterDraft,
-  createClimbFilterDraft,
-  type ClimbFilterDraft,
-} from '../../../src/lib/climb-filter-draft';
 import { track } from '../../../src/lib/analytics';
 import { iosSystemColors } from '../../../src/theme/ios-colors';
 import { spacing } from '../../../src/theme/tokens';
@@ -198,10 +188,7 @@ function ClimbListInner() {
   const [searchTextLength, setSearchTextLength] = useState(0);
   const [showFilters, setShowFilters] = useState(false);
   const [showGrade, setShowGrade] = useState(false);
-  const [filterDraft, setFilterDraft] = useState<ClimbFilterDraft | null>(null);
   const [recentFilters, setRecentFilters] = useState<RecentFilter[]>([]);
-  const reopenFilterSheetAfterPickerRef = useRef(false);
-  const skipNextFilterDismissCleanupRef = useRef(false);
   // Measured height of the floating glass chrome (incl. the top safe-area inset).
   // The list pads its top by this so the first row rests below the chrome and the
   // rest scroll under it.
@@ -217,21 +204,14 @@ function ClimbListInner() {
   const handleOpenFilters = useCallback(() => {
     blurSearchInputs();
     setShowGrade(false);
-    setFilterDraft(createClimbFilterDraft(filters, boardFilters));
     setShowFilters(true);
-  }, [blurSearchInputs, filters, boardFilters]);
+  }, [blurSearchInputs]);
   const handleDismissFilters = useCallback(() => {
     setShowFilters(false);
-    if (skipNextFilterDismissCleanupRef.current) {
-      skipNextFilterDismissCleanupRef.current = false;
-      return;
-    }
-    setFilterDraft(null);
   }, []);
   const handleOpenGrade = useCallback(() => {
     blurSearchInputs();
     setShowFilters(false);
-    setFilterDraft(null);
     setShowGrade(true);
   }, [blurSearchInputs]);
   const handleDismissGrade = useCallback(() => setShowGrade(false), []);
@@ -273,7 +253,6 @@ function ClimbListInner() {
   const handleNativeSearchCancel = useCallback(() => {
     if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
     setShowFilters(false);
-    setFilterDraft(null);
     visibleSearchTextRef.current = '';
     setSearchTextLength(0);
     setName('');
@@ -287,45 +266,6 @@ function ClimbListInner() {
   const handleSearchBlur = useCallback(() => {
     setIsSearchFocused(false);
   }, []);
-
-  useEffect(() => {
-    return subscribeToSetterSelection((selectedSetters) => {
-      setFilterDraft((previousDraft) => {
-        const baseDraft = previousDraft ?? createClimbFilterDraft(filters, boardFilters);
-        return applySetterSelectionToFilterDraft(baseDraft, selectedSetters);
-      });
-    });
-  }, [filters, boardFilters]);
-
-  useEffect(() => {
-    return subscribeToHoldsFilterSelection((holdsFilter) => {
-      setFilterDraft((previousDraft) => {
-        const baseDraft = previousDraft ?? createClimbFilterDraft(filters, boardFilters);
-        return applyHoldsFilterSelectionToFilterDraft(baseDraft, holdsFilter);
-      });
-    });
-  }, [filters, boardFilters]);
-
-  useEffect(() => {
-    return subscribeToZoneFilterSelection((zoneSelection) => {
-      setFilterDraft((previousDraft) => {
-        const baseDraft = previousDraft ?? createClimbFilterDraft(filters, boardFilters);
-        return applyZoneFilterSelectionToFilterDraft(baseDraft, zoneSelection);
-      });
-    });
-  }, [filters, boardFilters]);
-
-  useFocusEffect(
-    useCallback(() => {
-      if (reopenFilterSheetAfterPickerRef.current) {
-        reopenFilterSheetAfterPickerRef.current = false;
-        skipNextFilterDismissCleanupRef.current = false;
-        setShowGrade(false);
-        setShowFilters(true);
-      }
-      return undefined;
-    }, []),
-  );
 
   useEffect(() => {
     return () => {
@@ -607,9 +547,6 @@ function ClimbListInner() {
       setFilters(newFilters);
       setBoardFilters(newBoardFilters);
       setShowFilters(false);
-      setFilterDraft(null);
-      reopenFilterSheetAfterPickerRef.current = false;
-      skipNextFilterDismissCleanupRef.current = false;
 
       // Recent pills capture climb filters + name only (not board-renderer
       // filters), so we still gate on those for the pill.
@@ -672,76 +609,6 @@ function ClimbListInner() {
       params: { boardName, layoutId: String(layoutId), sizeId: String(sizeId), setIds, angle: String(angle) },
     });
   }, [router, boardName, layoutId, sizeId, setIds, angle]);
-
-  const prepareFilterPickerNavigation = useCallback(
-    (draftFilters: ClimbFilters, draftBoardFilters: ClimbBoardFilterState) => {
-      setFilterDraft(createClimbFilterDraft(draftFilters, draftBoardFilters));
-      reopenFilterSheetAfterPickerRef.current = true;
-      skipNextFilterDismissCleanupRef.current = true;
-      setShowFilters(false);
-    },
-    [],
-  );
-
-  const handleOpenSettersFilter = useCallback(
-    (draftFilters: ClimbFilters, draftBoardFilters: ClimbBoardFilterState) => {
-      if (!boardConfig) return;
-      prepareFilterPickerNavigation(draftFilters, draftBoardFilters);
-      router.push({
-        pathname: '/(tabs)/climbs/setters',
-        params: {
-          boardName: boardConfig.boardName,
-          layoutId: String(boardConfig.layoutId),
-          sizeId: String(boardConfig.sizeId),
-          setIds: boardConfig.setIds,
-          angle: String(boardConfig.angle),
-          selected: JSON.stringify(draftFilters.setter ?? []),
-        },
-      });
-    },
-    [router, boardConfig, prepareFilterPickerNavigation],
-  );
-
-  const handleOpenHoldFilter = useCallback(
-    (draftFilters: ClimbFilters, draftBoardFilters: ClimbBoardFilterState) => {
-      if (!boardConfig) return;
-      prepareFilterPickerNavigation(draftFilters, draftBoardFilters);
-      router.push({
-        pathname: '/(tabs)/climbs/holds',
-        params: {
-          boardName: boardConfig.boardName,
-          layoutId: String(boardConfig.layoutId),
-          sizeId: String(boardConfig.sizeId),
-          setIds: boardConfig.setIds,
-          holdsFilter: JSON.stringify(draftBoardFilters.holdsFilter ?? {}),
-        },
-      });
-    },
-    [router, boardConfig, prepareFilterPickerNavigation],
-  );
-
-  const handleOpenZoneFilter = useCallback(
-    (draftFilters: ClimbFilters, draftBoardFilters: ClimbBoardFilterState) => {
-      if (!boardConfig) return;
-      prepareFilterPickerNavigation(draftFilters, draftBoardFilters);
-      router.push({
-        pathname: '/(tabs)/climbs/zone',
-        params: {
-          boardName: boardConfig.boardName,
-          layoutId: String(boardConfig.layoutId),
-          sizeId: String(boardConfig.sizeId),
-          setIds: boardConfig.setIds,
-          angle: String(boardConfig.angle),
-          // Omit zoneBox entirely when no zone is set. Absent param means no
-          // zone, and avoids forcing the route to parse the literal "null".
-          ...(draftBoardFilters.zoneBox ? { zoneBox: JSON.stringify(draftBoardFilters.zoneBox) } : {}),
-          zoneMode: draftBoardFilters.zoneMode ?? 'allHolds',
-          holdsFilter: JSON.stringify(draftBoardFilters.holdsFilter ?? {}),
-        },
-      });
-    },
-    [router, boardConfig, prepareFilterPickerNavigation],
-  );
 
   // Recent-filter pills live in the list header on search focus — only meaningful
   // with native search (the custom in-chrome field sits behind a scrim/keyboard,
@@ -1035,13 +902,10 @@ function ClimbListInner() {
         <ClimbFilterSheet
           onDismiss={handleDismissFilters}
           boardConfig={boardConfig}
-          currentFilters={filterDraft?.filters ?? filters}
-          currentBoardFilters={filterDraft?.boardFilters ?? boardFilters}
+          currentFilters={filters}
+          currentBoardFilters={boardFilters}
           searchName={name}
           onApply={handleApplyFilters}
-          onOpenSetters={handleOpenSettersFilter}
-          onOpenHoldFilter={handleOpenHoldFilter}
-          onOpenZoneFilter={handleOpenZoneFilter}
         />
       ) : null}
     </View>
