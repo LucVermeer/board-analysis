@@ -89,7 +89,8 @@ export function RecordTopChrome({
           elevated
           style={[styles.materialAppbar, { backgroundColor: systemColors.secondaryBackground }]}
         >
-          <Appbar.Content title={title} color={systemColors.label as string} />
+          {/* Invite/share docks on the LEFT (leading) while a session is live; the
+              destructive Stop sits on the right. */}
           {onShare ? (
             <Appbar.Action
               icon={iconMap['person.badge.plus'].android}
@@ -98,6 +99,7 @@ export function RecordTopChrome({
               accessibilityLabel={t('mobile.session.invite')}
             />
           ) : null}
+          <Appbar.Content title={title} color={systemColors.label as string} />
           {onEndSession ? (
             <Appbar.Action
               icon={iconMap['flag'].android}
@@ -111,26 +113,22 @@ export function RecordTopChrome({
     );
   }
 
-  // Liquid-glass variant: the shared collapsing chrome with the session title,
-  // board pill, and (while live) the share/invite + End trailing actions. End sits
-  // up here (destructive tint) rather than as a bottom bar, so the bottom edge keeps
-  // at most the tab bar + climb accessory.
-  const trailingAction =
-    onShare || onEndSession ? (
-      <>
-        {onShare ? (
-          <GlassToolbarAction onPress={onShare} accessibilityLabel={t('mobile.session.invite')}>
-            <Icon name="person.badge.plus" size={22} color={brandColors.primary} />
-          </GlassToolbarAction>
-        ) : null}
-        {onEndSession ? (
-          <GlassToolbarAction onPress={onEndSession} accessibilityLabel={t('mobile.session.inEndSession')}>
-            <Icon name="flag" size={22} color={brandColors.error} />
-          </GlassToolbarAction>
-        ) : null}
-      </>
-    ) : undefined;
-  const trailingActionCount = (onShare ? 1 : 0) + (onEndSession ? 1 : 0);
+  // Liquid-glass variant: the shared collapsing chrome. While a session is live the
+  // invite/share control docks on the LEFT and a single destructive Stop control on
+  // the RIGHT, with no lightbulb — so the active header reads invite | title | stop.
+  // End sits up here rather than as a bottom bar, keeping the bottom edge to the tab
+  // bar + climb accessory.
+  const inSession = onEndSession !== undefined;
+  const leadingAction = onShare ? (
+    <GlassToolbarAction onPress={onShare} accessibilityLabel={t('mobile.session.invite')}>
+      <Icon name="person.badge.plus" size={22} color={brandColors.primary} />
+    </GlassToolbarAction>
+  ) : undefined;
+  const trailingAction = onEndSession ? (
+    <GlassToolbarAction onPress={onEndSession} accessibilityLabel={t('mobile.session.inEndSession')}>
+      <Icon name="flag" size={22} color={brandColors.error} />
+    </GlassToolbarAction>
+  ) : undefined;
 
   return (
     <CollapsingTopChrome
@@ -145,8 +143,11 @@ export function RecordTopChrome({
       onHeightChange={onHeightChange}
       scrollY={scrollY}
       onPressTitle={onPressTitle}
+      leadingAction={leadingAction}
+      leadingActionCount={onShare ? 1 : 0}
       trailingAction={trailingAction}
-      trailingActionCount={trailingActionCount}
+      trailingActionCount={onEndSession ? 1 : 0}
+      hideLight={inSession}
     />
   );
 }

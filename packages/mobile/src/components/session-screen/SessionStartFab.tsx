@@ -1,11 +1,19 @@
 import { useCallback } from 'react';
 import { type LayoutChangeEvent, StyleSheet, View } from 'react-native';
 import { FAB } from 'react-native-paper';
-import { Button } from '../Button';
+import { GlassSurface } from '../GlassSurface';
+import { PressableSurface } from '../PressableSurface';
+import { Icon } from '../Icon';
+import { Text } from '../Text';
 import { iconMap, type IconName } from '../icon-map';
 import { useTheme } from '../../providers/theme-provider';
+import { useNativeGlass } from '../../hooks/use-native-glass';
 import { useBottomChromeMetrics } from '../../hooks/use-bottom-chrome-metrics';
-import { spacing } from '../../theme/tokens';
+import { hapticLight } from '../../lib/haptics';
+import { spacing, shadows } from '../../theme/tokens';
+
+const CAPSULE_HEIGHT = 52;
+const CAPSULE_RADIUS = CAPSULE_HEIGHT / 2;
 
 type SessionStartFabProps = {
   /** Visible label — the Start copy (Material renders it as the extended FAB label;
@@ -18,21 +26,23 @@ type SessionStartFabProps = {
   loading?: boolean;
   testID?: string;
   /** Fires with the measured action height (excluding the bottom-chrome offset) so
-   *  the host list reserves `measuredHeight + <offset>` and keeps its last row clear. */
+   *  the host list reserves `measuredHeight + fixedFooterBottom` and keeps its last
+   *  row clear. */
   onHeightChange?: (height: number) => void;
 };
 
 /**
  * The session Start action, routed by UI variant. It is the screen's single
  * primary action, floated bottom-trailing with the scroll list running under it —
- * not a full-width pinned bar. Liquid Glass renders a brand-tinted prominent
- * capsule (the filled {@link Button}, whose `primaryFill` is the `glassProminent`
- * primary-action treatment); Material renders an M3 extended FAB. Both measure
- * their own height and report it through `onHeightChange`.
+ * not a full-width pinned bar. Liquid Glass renders a brand-tinted **glass**
+ * capsule (the iOS 26 `.glassProminent` look: a `GlassSurface` tinted with the
+ * brand hue, not a flat opaque fill); Material renders an M3 extended FAB. Both
+ * sit over `fixedFooterBottom`, which hugs the tab bar when no climb accessory is
+ * present and lifts to clear it when there is one, and report their height through
+ * `onHeightChange`.
  *
  * The End action no longer lives here — it docks in the top chrome (see
- * `RecordTopChrome` / `SessionScreenHeader`), so the bottom edge keeps at most the
- * tab bar + climb accessory rather than stacking a third glass band.
+ * `RecordTopChrome` / `SessionScreenHeader`).
  */
 export function SessionStartFab({
   label,
@@ -53,13 +63,6 @@ export function SessionStartFab({
     [onHeightChange],
   );
 
-  // Both variants float the action in the screen's content area over the same
-  // fixed-footer offset, which already clears any climb accessory and is
-  // variant-correct: it includes the tab bar where it overlays content (the Liquid
-  // Glass native tab bar) and excludes the in-flow Material nav bar. The host list
-  // reserves `measuredHeight + fixedFooterBottom`, so the offset and the reservation
-  // stay in lockstep on both variants (unlike `floatingControlBottom`, which is for
-  // root-level overlays rendered over the tab bar, e.g. the queue snackbar).
   return (
     <View
       testID={testID}
@@ -78,9 +81,70 @@ export function SessionStartFab({
           mode="elevated"
         />
       ) : (
-        <Button title={label} onPress={onPress} variant="filled" size="large" disabled={disabled} loading={loading} />
+        <StartGlassCapsule label={label} icon={materialIcon} onPress={onPress} disabled={disabled} loading={loading} />
       )}
     </View>
+  );
+}
+
+/**
+ * The Liquid Glass Start capsule: a brand-tinted glass pill (real iOS 26 glass via
+ * `GlassSurface`, with an opaque brand fill on the no-glass fallback) rather than a
+ * flat filled button. Off native glass it gets a shadow + hairline so it still
+ * reads as a raised control.
+ */
+function StartGlassCapsule({
+  label,
+  icon,
+  onPress,
+  disabled,
+  loading,
+}: {
+  label: string;
+  icon: IconName;
+  onPress: () => void;
+  disabled?: boolean;
+  loading?: boolean;
+}) {
+  const { brandColors, systemColors } = useTheme();
+  const nativeGlass = useNativeGlass();
+  const inactive = disabled || loading;
+
+  const handlePress = useCallback(() => {
+    if (inactive) return;
+    hapticLight();
+    onPress();
+  }, [inactive, onPress]);
+
+  return (
+    <PressableSurface
+      onPress={handlePress}
+      feedback="scale"
+      scaleTo={0.96}
+      disabled={inactive}
+      accessibilityRole="button"
+      accessibilityState={{ disabled: inactive }}
+      accessibilityLabel={label}
+      style={[
+        styles.capsule,
+        { opacity: disabled ? 0.5 : 1 },
+        !nativeGlass && shadows.sm,
+        !nativeGlass && { borderWidth: StyleSheet.hairlineWidth, borderColor: systemColors.separator },
+      ]}
+    >
+      <GlassSurface
+        glassEffectStyle="regular"
+        tintColor={brandColors.primary}
+        fallbackColor={brandColors.primaryFill}
+        borderRadius={CAPSULE_RADIUS}
+        style={StyleSheet.absoluteFill}
+        pointerEvents="none"
+      />
+      <Icon name={icon} size={18} color={brandColors.onPrimary} />
+      <Text variant="body" color={brandColors.onPrimary} style={styles.capsuleLabel}>
+        {loading ? '…' : label}
+      </Text>
+    </PressableSurface>
   );
 }
 
@@ -94,5 +158,18 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     paddingHorizontal: spacing[4],
     paddingBottom: spacing[2],
+  },
+  capsule: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    height: CAPSULE_HEIGHT,
+    paddingHorizontal: spacing[5],
+    borderRadius: CAPSULE_RADIUS,
+    overflow: 'hidden',
+  },
+  capsuleLabel: {
+    fontWeight: '600',
   },
 });

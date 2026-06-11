@@ -1,13 +1,14 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, fireEvent } from '@testing-library/react';
+import { render } from '@testing-library/react';
 import { createElement, type ReactNode } from 'react';
 
-const ctrl = vi.hoisted(() => ({ variant: 'glass' as 'glass' | 'material' }));
-// Captures the props the glass Button and the Material FAB receive so the test can
-// assert the variant routing + the forwarded contract.
-const button = vi.hoisted(() => ({ props: null as Record<string, unknown> | null }));
+const ctrl = vi.hoisted(() => ({ variant: 'glass' as 'glass' | 'material', nativeGlass: true }));
+// Captures the props the Material FAB and the glass capsule's surface/pressable
+// receive so the test can assert variant routing + the tinted-glass contract.
 const fab = vi.hoisted(() => ({ props: null as Record<string, unknown> | null }));
+const glass = vi.hoisted(() => ({ props: null as Record<string, unknown> | null }));
+const haptics = vi.hoisted(() => ({ light: vi.fn() }));
 
 vi.mock('react-native', () => ({
   View: ({
@@ -29,14 +30,17 @@ vi.mock('react-native', () => ({
         ...(testID ? { 'data-testid': testID } : {}),
         'data-style': JSON.stringify(style),
         'data-pointer-events': pointerEvents ?? '',
-        // Expose the measured-height layout so the test can fire it.
         ref: (node: (HTMLElement & { fireLayout?: () => void }) | null) => {
           if (node && onLayout) node.fireLayout = () => onLayout({ nativeEvent: { layout: { height: 72 } } });
         },
       },
       children,
     ),
-  StyleSheet: { create: (styles: Record<string, unknown>) => styles },
+  StyleSheet: {
+    create: (styles: Record<string, unknown>) => styles,
+    absoluteFill: { position: 'absolute' },
+    hairlineWidth: 1,
+  },
 }));
 
 vi.mock('react-native-paper', () => ({
@@ -46,26 +50,41 @@ vi.mock('react-native-paper', () => ({
   },
 }));
 
-vi.mock('../../Button', () => ({
-  Button: (props: Record<string, unknown>) => {
-    button.props = props;
-    return createElement(
-      'button',
-      { 'data-button': 'true', onClick: props.onPress as () => void },
-      String(props.title),
-    );
+vi.mock('../../GlassSurface', () => ({
+  GlassSurface: (props: Record<string, unknown>) => {
+    glass.props = props;
+    return createElement('div', { 'data-glass': 'true' });
   },
 }));
-
+vi.mock('../../PressableSurface', () => ({
+  PressableSurface: (props: { children?: ReactNode; onPress?: () => void; disabled?: boolean }) =>
+    createElement(
+      'button',
+      { 'data-pressable': 'true', 'data-disabled': props.disabled ? 'true' : 'false', onClick: props.onPress },
+      props.children,
+    ),
+}));
+vi.mock('../../Icon', () => ({ Icon: ({ name }: { name: string }) => createElement('span', { 'data-icon': name }) }));
+vi.mock('../../Text', () => ({
+  Text: ({ children }: { children?: ReactNode }) => createElement('span', { 'data-text': 'true' }, children),
+}));
 vi.mock('../../icon-map', () => ({
   iconMap: { 'play.fill': { ios: 'play.fill', android: 'play' } },
 }));
 
-vi.mock('../../../providers/theme-provider', () => ({ useTheme: () => ({ variant: ctrl.variant }) }));
+vi.mock('../../../providers/theme-provider', () => ({
+  useTheme: () => ({
+    variant: ctrl.variant,
+    brandColors: { primary: '#6D28D9', primaryFill: '#7C3AED', onPrimary: '#FFFFFF' },
+    systemColors: { separator: '#333' },
+  }),
+}));
+vi.mock('../../../hooks/use-native-glass', () => ({ useNativeGlass: () => ctrl.nativeGlass }));
 vi.mock('../../../hooks/use-bottom-chrome-metrics', () => ({
   useBottomChromeMetrics: () => ({ fixedFooterBottom: 88 }),
 }));
-vi.mock('../../../theme/tokens', () => ({ spacing: { 2: 8, 4: 16 } }));
+vi.mock('../../../lib/haptics', () => ({ hapticLight: haptics.light }));
+vi.mock('../../../theme/tokens', () => ({ spacing: { 2: 8, 4: 16, 5: 20 }, shadows: { sm: { shadowOpacity: 0.1 } } }));
 
 import { SessionStartFab } from '../SessionStartFab';
 
@@ -82,38 +101,45 @@ function makeProps(over: Partial<Parameters<typeof SessionStartFab>[0]> = {}) {
 
 beforeEach(() => {
   ctrl.variant = 'glass';
-  button.props = null;
+  ctrl.nativeGlass = true;
   fab.props = null;
+  glass.props = null;
+  haptics.light.mockClear();
 });
 
 describe('SessionStartFab', () => {
   describe('glass variant', () => {
-    it('floats a filled Button capsule at fixedFooterBottom (box-none, no FAB)', () => {
+    it('renders a brand-tinted glass capsule (not a FAB) at fixedFooterBottom, box-none', () => {
       const { getByTestId, container } = render(<SessionStartFab {...makeProps()} />);
 
       expect(container.querySelector('[data-fab="true"]')).toBeNull();
-      expect(container.querySelector('[data-button="true"]')).not.toBeNull();
+      expect(container.querySelector('[data-glass="true"]')).not.toBeNull();
+      // The glass is tinted with the brand hue — the Liquid Glass `.glassProminent` look.
+      expect(glass.props?.tintColor).toBe('#6D28D9');
       const node = getByTestId('pre-session-footer');
       expect(node.getAttribute('data-pointer-events')).toBe('box-none');
-      // fixedFooterBottom clears the tab bar (where it overlays) + any climb accessory.
       expect(node.getAttribute('data-style')).toContain('"bottom":88');
     });
 
-    it('renders the filled, large Button and forwards label / disabled / loading', () => {
-      render(<SessionStartFab {...makeProps({ label: 'Start session', disabled: true, loading: true })} />);
-
-      expect(button.props?.title).toBe('Start session');
-      expect(button.props?.variant).toBe('filled');
-      expect(button.props?.size).toBe('large');
-      expect(button.props?.disabled).toBe(true);
-      expect(button.props?.loading).toBe(true);
+    it('renders the label and the play glyph', () => {
+      const { container } = render(<SessionStartFab {...makeProps({ label: 'Start session' })} />);
+      expect(container.querySelector('[data-icon="play.fill"]')).not.toBeNull();
+      expect(container.textContent).toContain('Start session');
     });
 
-    it('fires onPress through the Button', () => {
+    it('fires onPress (with a haptic) through the capsule', () => {
       const onPress = vi.fn();
       const { container } = render(<SessionStartFab {...makeProps({ onPress })} />);
-      fireEvent.click(container.querySelector('[data-button="true"]')!);
+      (container.querySelector('[data-pressable="true"]') as HTMLButtonElement).click();
       expect(onPress).toHaveBeenCalledTimes(1);
+      expect(haptics.light).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not fire onPress while disabled', () => {
+      const onPress = vi.fn();
+      const { container } = render(<SessionStartFab {...makeProps({ onPress, disabled: true })} />);
+      (container.querySelector('[data-pressable="true"]') as HTMLButtonElement).click();
+      expect(onPress).not.toHaveBeenCalled();
     });
 
     it('reports the measured container height through onHeightChange', () => {
@@ -130,10 +156,10 @@ describe('SessionStartFab', () => {
       ctrl.variant = 'material';
     });
 
-    it('renders the extended FAB (not the Button) at fixedFooterBottom (box-none)', () => {
+    it('renders the extended FAB (not the glass capsule) at fixedFooterBottom, box-none', () => {
       const { getByTestId, container } = render(<SessionStartFab {...makeProps({ label: 'Start session' })} />);
 
-      expect(container.querySelector('[data-button="true"]')).toBeNull();
+      expect(container.querySelector('[data-glass="true"]')).toBeNull();
       expect(container.querySelector('[data-fab="true"]')).not.toBeNull();
       expect(fab.props?.icon).toBe('play'); // iconMap['play.fill'].android
       expect(fab.props?.label).toBe('Start session');

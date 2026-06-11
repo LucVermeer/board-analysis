@@ -15,6 +15,9 @@ type ChromeProps = {
   onPressTitle?: () => void;
   trailingAction?: ReactNode;
   trailingActionCount?: number;
+  leadingAction?: ReactNode;
+  leadingActionCount?: number;
+  hideLight?: boolean;
 };
 
 // Captures every prop CollapsingTopChrome receives so the wrapper's forwarding +
@@ -66,7 +69,7 @@ vi.mock('../../Icon', () => ({ Icon: ({ name }: { name: string }) => createEleme
 vi.mock('../../chrome', () => ({
   CollapsingTopChrome: (props: ChromeProps) => {
     chrome.props = props;
-    return createElement('div', { 'data-chrome': 'true' }, props.trailingAction);
+    return createElement('div', { 'data-chrome': 'true' }, props.leadingAction, props.trailingAction);
   },
   GlassToolbarAction: ({
     children,
@@ -122,29 +125,39 @@ describe('RecordTopChrome', () => {
     expect(chrome.props?.onOpenBoardSwitcher).toBe(onOpenBoardSwitcher);
   });
 
-  it('omits the share trailingAction when onShare is not provided', () => {
+  it('omits both leading and trailing actions and keeps the light before a session is live', () => {
     render(<RecordTopChrome {...makeProps()} />);
+    expect(chrome.props?.leadingAction).toBeUndefined();
     expect(chrome.props?.trailingAction).toBeUndefined();
+    expect(chrome.props?.leadingActionCount).toBe(0);
+    expect(chrome.props?.trailingActionCount).toBe(0);
+    expect(chrome.props?.hideLight).toBe(false);
   });
 
-  it('passes a share trailingAction (calling onShare) only when onShare is provided', () => {
+  it('docks invite/share as the LEADING (left) action, calling onShare', () => {
     const onShare = vi.fn();
     const { container } = render(<RecordTopChrome {...makeProps({ onShare })} />);
 
-    expect(isValidElement(chrome.props?.trailingAction)).toBe(true);
+    expect(isValidElement(chrome.props?.leadingAction)).toBe(true);
+    expect(chrome.props?.leadingActionCount).toBe(1);
     const shareButton = container.querySelector('[data-action="mobile.session.invite"]') as HTMLButtonElement | null;
     expect(shareButton).not.toBeNull();
     shareButton!.click();
     expect(onShare).toHaveBeenCalledTimes(1);
   });
 
-  it('docks share + End as two trailing slots (calling onEndSession) when a session is live', () => {
+  it('docks invite on the left and a single Stop on the right (no light) while a session is live', () => {
     const onShare = vi.fn();
     const onEndSession = vi.fn();
     const { container } = render(<RecordTopChrome {...makeProps({ onShare, onEndSession })} />);
 
-    // Both glyphs share the right toolbar, so it must reserve two slots, not one.
-    expect(chrome.props?.trailingActionCount).toBe(2);
+    // Invite is the lone left slot; Stop is the lone right slot; the light is hidden.
+    expect(chrome.props?.leadingActionCount).toBe(1);
+    expect(chrome.props?.trailingActionCount).toBe(1);
+    expect(chrome.props?.hideLight).toBe(true);
+
+    const shareButton = container.querySelector('[data-action="mobile.session.invite"]') as HTMLButtonElement | null;
+    expect(shareButton).not.toBeNull();
     const endButton = container.querySelector(
       '[data-action="mobile.session.inEndSession"]',
     ) as HTMLButtonElement | null;
@@ -153,14 +166,11 @@ describe('RecordTopChrome', () => {
     expect(onEndSession).toHaveBeenCalledTimes(1);
   });
 
-  it('reserves a single trailing slot when only End is provided', () => {
+  it('reserves a single right slot (and hides the light) when only End is provided', () => {
     render(<RecordTopChrome {...makeProps({ onEndSession: vi.fn() })} />);
     expect(chrome.props?.trailingActionCount).toBe(1);
-  });
-
-  it('reserves no trailing slots before a session is live', () => {
-    render(<RecordTopChrome {...makeProps()} />);
-    expect(chrome.props?.trailingActionCount).toBe(0);
+    expect(chrome.props?.leadingActionCount).toBe(0);
+    expect(chrome.props?.hideLight).toBe(true);
   });
 
   describe('material variant', () => {

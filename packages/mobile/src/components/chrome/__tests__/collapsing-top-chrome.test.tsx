@@ -194,6 +194,26 @@ describe('CollapsingTopChrome', () => {
     expect(lightbulb(container)).not.toBeNull();
   });
 
+  it('hides the lightbulb when hideLight is set, even with bluetooth available', () => {
+    ctrl.board = board;
+    ctrl.bluetooth = { isConnected: true, connect: vi.fn(), disconnect: vi.fn().mockResolvedValue(undefined) };
+    const { container } = render(<CollapsingTopChrome {...makeProps({ hideLight: true })} />);
+    expect(lightbulb(container)).toBeNull();
+  });
+
+  it('docks a leading action in the left island', () => {
+    ctrl.board = board;
+    const { container } = render(
+      <CollapsingTopChrome
+        {...makeProps({
+          leadingAction: createElement('button', { 'data-leading': 'invite' }),
+          leadingActionCount: 1,
+        })}
+      />,
+    );
+    expect(container.querySelector('[data-leading="invite"]')).not.toBeNull();
+  });
+
   it('renders the children slot (e.g. the search row)', () => {
     const { container } = render(
       <CollapsingTopChrome {...makeProps()}>
