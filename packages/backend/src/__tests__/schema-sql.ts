@@ -369,7 +369,7 @@ export const schemaSQL = `
     "session_type" text NOT NULL,
     "session_id" text NOT NULL,
     "external_activity_id" text,
-    "status" text DEFAULT 'success' NOT NULL,
+    "status" text NOT NULL,
     "error" text,
     "synced_at" timestamp DEFAULT now() NOT NULL
   );

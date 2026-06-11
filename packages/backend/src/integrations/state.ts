@@ -16,13 +16,31 @@
 //   Redis-backed in the start handler.
 //
 // Format mirrors verifyTransferToken in handlers/native-auth.ts: base64url JSON
-// payload + '.' + base64url HMAC-SHA256 keyed by NEXTAUTH_SECRET, constant-time
-// compare, iat/exp checks, lifetime cap, random nonce to defeat guessability.
+// payload + '.' + base64url HMAC-SHA256, constant-time compare, iat/exp
+// checks, lifetime cap, random nonce to defeat guessability. The HMAC key is
+// HKDF-derived from NEXTAUTH_SECRET with a purpose-specific info string, so
+// these tokens are domain-separated from NextAuth session tokens (and any
+// other NEXTAUTH_SECRET consumer) without needing a second deployed secret.
 
 import crypto from 'crypto';
 import type { ProviderName } from './registry';
 import { isSupportedProvider } from './registry';
 import { logger } from '../utils/logger';
+
+const HKDF_INFO = 'boardsesh-integration-oauth-tokens-v1';
+
+let cachedSigningKey: { secret: string; key: Buffer } | null = null;
+
+function getSigningKey(): Buffer | null {
+  const secret = process.env.NEXTAUTH_SECRET;
+  if (!secret) return null;
+  if (cachedSigningKey && cachedSigningKey.secret === secret) {
+    return cachedSigningKey.key;
+  }
+  const derived = Buffer.from(crypto.hkdfSync('sha256', secret, '', HKDF_INFO, 32));
+  cachedSigningKey = { secret, key: derived };
+  return derived;
+}
 
 /** State lifetime: a user has 10 minutes to complete the provider handshake. */
 const STATE_LIFETIME_SECONDS = 10 * 60;
@@ -55,8 +73,8 @@ function signPayload(
   purpose: TokenPurpose,
   lifetimeSeconds: number,
 ): string {
-  const secret = process.env.NEXTAUTH_SECRET;
-  if (!secret) {
+  const signingKey = getSigningKey();
+  if (!signingKey) {
     throw new Error('NEXTAUTH_SECRET is not configured');
   }
 
@@ -71,7 +89,7 @@ function signPayload(
   };
 
   const encodedPayload = Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');
-  const signature = crypto.createHmac('sha256', secret).update(encodedPayload).digest('base64url');
+  const signature = crypto.createHmac('sha256', signingKey).update(encodedPayload).digest('base64url');
   return `${encodedPayload}.${signature}`;
 }
 
@@ -80,8 +98,8 @@ function verifySignedPayload(
   expectedPurpose: TokenPurpose,
   lifetimeSeconds: number,
 ): VerifiedIntegrationToken | null {
-  const secret = process.env.NEXTAUTH_SECRET;
-  if (!secret) {
+  const signingKey = getSigningKey();
+  if (!signingKey) {
     logger.warn('[Integrations] NEXTAUTH_SECRET not configured');
     return null;
   }
@@ -92,7 +110,7 @@ function verifySignedPayload(
   }
   const [encodedPayload, signature] = parts;
 
-  const expectedSignature = crypto.createHmac('sha256', secret).update(encodedPayload).digest('base64url');
+  const expectedSignature = crypto.createHmac('sha256', signingKey).update(encodedPayload).digest('base64url');
 
   const sigBuffer = Buffer.from(signature);
   const expectedSigBuffer = Buffer.from(expectedSignature);

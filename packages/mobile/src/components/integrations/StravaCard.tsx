@@ -27,8 +27,11 @@ export function StravaCard() {
   const { systemColors, brandColors } = useTheme();
   const { showToast } = useToast();
   const { data: statuses, isLoading, refetch } = useIntegrationStatuses();
-  const setAutoSync = useSetIntegrationAutoSync();
-  const disconnectIntegration = useDisconnectIntegration();
+  // Destructure .mutate (stable across renders per React Query) — the
+  // mutation object itself is a fresh reference every render and would churn
+  // the useCallback identities below.
+  const { mutate: setAutoSyncMutate } = useSetIntegrationAutoSync();
+  const { mutate: disconnectIntegrationMutate } = useDisconnectIntegration();
   const [connecting, setConnecting] = useState(false);
 
   const strava = findStravaStatus(statuses);
@@ -56,9 +59,9 @@ export function StravaCard() {
   const handleAutoSyncChange = useCallback(
     (enabled: boolean) => {
       // The mutation hook owns the optimistic cache update.
-      setAutoSync.mutate({ provider: 'STRAVA', enabled });
+      setAutoSyncMutate({ provider: 'STRAVA', enabled });
     },
-    [setAutoSync],
+    [setAutoSyncMutate],
   );
 
   const handleDisconnect = useCallback(() => {
@@ -68,7 +71,7 @@ export function StravaCard() {
         text: t('integrations.strava.disconnect'),
         style: 'destructive',
         onPress: () => {
-          disconnectIntegration.mutate(
+          disconnectIntegrationMutate(
             { provider: 'STRAVA' },
             {
               onSuccess: () => {
@@ -84,7 +87,7 @@ export function StravaCard() {
         },
       },
     ]);
-  }, [disconnectIntegration, showToast, t, tCommon]);
+  }, [disconnectIntegrationMutate, showToast, t, tCommon]);
 
   if (isLoading && !strava) {
     return (

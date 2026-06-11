@@ -35,6 +35,7 @@ import { integrationMutations } from '../graphql/resolvers/integrations/mutation
 import { generateSessionSummary } from '../graphql/resolvers/sessions/session-summary';
 import { syncPartySessionForUser } from '../integrations/export-service';
 import { verifyIntegrationHandoff } from '../integrations/state';
+import { IntegrationHttpError } from '../integrations/strava';
 
 function makeCtx(userId = 'user-1') {
   return { isAuthenticated: true, userId, connectionId: 'conn-1' };
@@ -301,7 +302,7 @@ describe('integration query/mutation resolvers', () => {
         endedAt: endedAt.toISOString(),
         gradeDistribution: [],
       });
-      syncPartySessionForUser.mockRejectedValueOnce(new Error('Strava activity upload failed with status 500'));
+      syncPartySessionForUser.mockRejectedValueOnce(new IntegrationHttpError('upload failed with status 500', 500));
 
       const result = await integrationMutations.syncSessionToIntegration(
         null,
@@ -309,7 +310,35 @@ describe('integration query/mutation resolvers', () => {
         makeCtx('user-1'),
       );
       expect(result.externalActivityId).toBeNull();
-      expect(result.error).toMatch(/upload failed/i);
+      expect(result.error).toBe('The provider rejected the upload (status 500)');
+    });
+
+    it('sanitizes internal error detail out of the returned error message', async () => {
+      const startedAt = new Date('2026-06-01T10:00:00.000Z');
+      const endedAt = new Date('2026-06-01T11:00:00.000Z');
+      setupSelectResults([
+        [], // EXISTS subquery builder slot
+        [{ createdByUserId: 'user-1', boardPath: 'kilter/1', startedAt, endedAt, callerHasTick: false }],
+      ]);
+      generateSessionSummary.mockResolvedValueOnce({
+        sessionId: 'session-x',
+        totalSends: 1,
+        totalAttempts: 1,
+        participants: [{ userId: 'user-1', sends: 1, attempts: 1 }],
+        startedAt: startedAt.toISOString(),
+        endedAt: endedAt.toISOString(),
+        gradeDistribution: [],
+      });
+      syncPartySessionForUser.mockRejectedValueOnce(
+        new Error('connect ECONNREFUSED 10.0.0.5:5432 at /app/src/secret-path.ts'),
+      );
+
+      const result = await integrationMutations.syncSessionToIntegration(
+        null,
+        { provider: 'STRAVA', sessionId: 'session-x' },
+        makeCtx('user-1'),
+      );
+      expect(result.error).toBe('Export failed');
     });
   });
 });

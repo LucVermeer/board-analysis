@@ -25,7 +25,9 @@ export const integrationExports = pgTable(
     sessionType: text('session_type').notNull(), // 'party' | 'inferred'
     sessionId: text('session_id').notNull(),
     externalActivityId: text('external_activity_id'),
-    status: text('status').default('success').notNull(), // 'success' | 'error' | 'pending'
+    // No default on purpose: a write that forgets to set status must fail
+    // loudly rather than silently masquerade as a successful export.
+    status: text('status').notNull(), // 'success' | 'error' | 'pending'
     error: text('error'),
     syncedAt: timestamp('synced_at').defaultNow().notNull(),
   },

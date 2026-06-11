@@ -280,7 +280,13 @@ export async function autoSaveToAppleHealth(
       return null;
     }
 
-    const granted = await requestAppleHealthAuthorization();
+    // Status first: only a never-decided user gets the consent sheet (their
+    // first session end is the natural moment to ask). A decided user must
+    // never see a re-request call — and a denied one silently skips.
+    const authorizationStatus = await getAppleHealthAuthorizationStatus();
+    const granted =
+      authorizationStatus === 'authorized' ||
+      (authorizationStatus === 'notDetermined' && (await requestAppleHealthAuthorization()));
     if (!granted) {
       clearSaveState(sessionId);
       return null;
@@ -309,10 +315,10 @@ export async function autoSaveToAppleHealth(
  * screen). Like the auto path but skips the preference check and reports a
  * coarse outcome the UI can render.
  *
- * - Already 'saved', or a save is in flight ('saving') → returns 'saved'
- *   without starting a second native write. This is what keeps a concurrent
- *   auto + manual save (they share this store) down to ONE native call: whoever
- *   claims 'saving' first wins, the other observes it and bails.
+ * - Already 'saved' → returns 'saved'. A save still in flight ('saving') →
+ *   returns 'inFlight' — NOT 'saved', the running task may yet fail; the
+ *   button keeps rendering the store's live state. Either way no second
+ *   native write starts: whoever claims 'saving' first wins.
  * - A previous 'failed' (retryable) or no prior entry → claims 'saving' and
  *   proceeds, so a manual retry after a failed save works.
  * - unavailable / denied delete the entry and return that outcome.
@@ -322,11 +328,12 @@ export async function autoSaveToAppleHealth(
 export async function manualSaveToAppleHealth(
   summary: SessionSummary,
   ctx: SessionExportContext,
-): Promise<'saved' | 'denied' | 'unavailable' | 'failed'> {
+): Promise<'saved' | 'inFlight' | 'denied' | 'unavailable' | 'failed'> {
   const { sessionId } = summary;
 
   const existing = saveStateBySession.get(sessionId);
-  if (existing === 'saved' || existing === 'saving') return 'saved';
+  if (existing === 'saved') return 'saved';
+  if (existing === 'saving') return 'inFlight';
   // 'failed' (retryable) or no entry proceed by claiming.
   setSaveState(sessionId, 'saving');
 
@@ -337,7 +344,12 @@ export async function manualSaveToAppleHealth(
       return 'unavailable';
     }
 
-    const granted = await requestAppleHealthAuthorization();
+    // Manual taps are explicit user intent, so prompting an undecided user is
+    // correct — but a decided user still skips the request call.
+    const authorizationStatus = await getAppleHealthAuthorizationStatus();
+    const granted =
+      authorizationStatus === 'authorized' ||
+      (authorizationStatus === 'notDetermined' && (await requestAppleHealthAuthorization()));
     if (!granted) {
       clearSaveState(sessionId);
       return 'denied';

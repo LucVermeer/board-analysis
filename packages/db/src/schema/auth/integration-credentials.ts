@@ -1,4 +1,4 @@
-import { pgTable, bigserial, text, timestamp, boolean, index, uniqueIndex } from 'drizzle-orm/pg-core';
+import { pgTable, bigserial, text, timestamp, boolean, uniqueIndex } from 'drizzle-orm/pg-core';
 import { users } from './users';
 
 // Per-user credentials for external platform integrations (Strava today;
@@ -27,7 +27,8 @@ export const integrationCredentials = pgTable(
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
   },
   (table) => ({
+    // Also serves single-column user_id lookups via its leading column — no
+    // separate user index needed.
     uniqueUserProvider: uniqueIndex('unique_user_integration').on(table.userId, table.provider),
-    userIdx: index('integration_credentials_user_idx').on(table.userId),
   }),
 );

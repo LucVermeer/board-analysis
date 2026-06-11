@@ -87,6 +87,23 @@ describe('claimExport (real Postgres)', () => {
     expect(result.blockingRow?.status).toBe('pending');
   });
 
+  it('grants exactly one winner under true concurrency', async () => {
+    // Two claims race on real Postgres. ON CONFLICT serializes on the row
+    // lock; the loser's DO UPDATE ... WHERE predicate evaluates false against
+    // the winner's fresh 'pending' row, so RETURNING yields nothing for it.
+    // This pins the property the whole dedupe design rests on: concurrent
+    // callers can never BOTH believe they hold the claim.
+    const results = await Promise.all([
+      claimExport('strava', USER_ID, 'session-race'),
+      claimExport('strava', USER_ID, 'session-race'),
+    ]);
+
+    const winners = results.filter((result) => result.claimed);
+    expect(winners).toHaveLength(1);
+    const loser = results.find((result) => !result.claimed);
+    expect(loser?.blockingRow?.status).toBe('pending');
+  });
+
   it('takes over a stale pending claim (abandoned upload)', async () => {
     await insertExportRow('session-abandoned', 'pending', minutesAgo(11), null);
 

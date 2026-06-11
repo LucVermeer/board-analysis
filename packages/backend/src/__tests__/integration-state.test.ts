@@ -7,6 +7,13 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vite-plus/test'
 const TEST_SECRET = 'test-secret-for-integration-state';
 process.env.NEXTAUTH_SECRET = TEST_SECRET;
 
+// The signing key is HKDF-derived from NEXTAUTH_SECRET (domain separation from
+// NextAuth session tokens) — hand-crafted payloads must sign with the same
+// derived key to exercise the checks past signature verification.
+const DERIVED_KEY = Buffer.from(
+  crypto.hkdfSync('sha256', TEST_SECRET, '', 'boardsesh-integration-oauth-tokens-v1', 32),
+);
+
 import {
   signIntegrationState,
   verifyIntegrationState,
@@ -88,7 +95,7 @@ describe('integration state token', () => {
         exp: now + 600,
       }),
     ).toString('base64url');
-    const signature = crypto.createHmac('sha256', TEST_SECRET).update(payload).digest('base64url');
+    const signature = crypto.createHmac('sha256', DERIVED_KEY).update(payload).digest('base64url');
     expect(verifyIntegrationState(`${payload}.${signature}`)).toBeNull();
   });
 

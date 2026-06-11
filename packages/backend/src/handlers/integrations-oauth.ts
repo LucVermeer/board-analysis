@@ -77,10 +77,14 @@ function getBackendPublicUrl(): string | null {
 }
 
 /**
- * Best-effort single-use enforcement for handoff codes. Redis remembers each
- * consumed nonce for the handoff lifetime; a second consumption is rejected.
- * Without Redis the HMAC + 60-second expiry still bound the exposure, so the
- * flow degrades gracefully rather than failing closed.
+ * Single-use enforcement for handoff codes. Redis remembers each consumed
+ * nonce for the handoff lifetime; a second consumption is rejected.
+ *
+ * Failure posture is split: when Redis is simply not configured (local dev),
+ * the HMAC + 60-second expiry still bound the exposure and the flow degrades
+ * to expiry-only. But when a supposedly-healthy Redis errors mid-check, we
+ * fail CLOSED — replay protection must not silently turn into a no-op during
+ * an outage, and the only user cost is retrying the connect button.
  */
 async function consumeHandoffNonce(nonce: string): Promise<boolean> {
   if (!redisClientManager.isRedisConnected()) {
@@ -91,8 +95,8 @@ async function consumeHandoffNonce(nonce: string): Promise<boolean> {
     const setResult = await publisher.set(`integrations:handoff:${nonce}`, '1', 'EX', 120, 'NX');
     return setResult === 'OK';
   } catch (error) {
-    logger.warn('[Integrations] Redis handoff-nonce check failed, allowing:', error);
-    return true;
+    logger.warn('[Integrations] Redis handoff-nonce check failed, rejecting handoff:', error);
+    return false;
   }
 }
 

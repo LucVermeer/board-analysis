@@ -7,6 +7,7 @@ import type { SessionSummary } from '@boardsesh/shared-schema';
 // hoisted block to be in scope when the factory runs.
 const {
   isAvailableMock,
+  getAuthorizationStatusMock,
   requestAuthorizationMock,
   saveWorkoutMock,
   getPreferenceMock,
@@ -15,6 +16,7 @@ const {
   requestMock,
 } = vi.hoisted(() => ({
   isAvailableMock: vi.fn(),
+  getAuthorizationStatusMock: vi.fn(),
   requestAuthorizationMock: vi.fn(),
   saveWorkoutMock: vi.fn(),
   getPreferenceMock: vi.fn(),
@@ -26,6 +28,7 @@ const {
 vi.mock('../../../../modules/health-workouts/src/index', () => ({
   healthWorkoutsNative: {
     isAvailable: () => isAvailableMock(),
+    getAuthorizationStatus: () => getAuthorizationStatusMock(),
     requestAuthorization: () => requestAuthorizationMock(),
     saveWorkout: (options: unknown) => saveWorkoutMock(options),
   },
@@ -77,6 +80,7 @@ describe('autoSaveToAppleHealth', () => {
     // Sensible happy-path defaults; individual tests override.
     autoSaveOn();
     isAvailableMock.mockResolvedValue({ available: true });
+    getAuthorizationStatusMock.mockResolvedValue({ status: 'authorized' });
     requestAuthorizationMock.mockResolvedValue({ granted: true });
     saveWorkoutMock.mockResolvedValue({ workoutId: 'hk-workout-1' });
     requestMock.mockResolvedValue({});
@@ -104,17 +108,29 @@ describe('autoSaveToAppleHealth', () => {
   });
 
   it('skips and releases the guard when authorization is denied (manual retry works)', async () => {
-    requestAuthorizationMock.mockResolvedValueOnce({ granted: false });
+    getAuthorizationStatusMock.mockResolvedValueOnce({ status: 'denied' });
 
     const result = await autoSaveToAppleHealth(makeSummary({ sessionId: 'denied' }), ctx);
 
     expect(result).toBeNull();
     expect(saveWorkoutMock).not.toHaveBeenCalled();
+    // A decided user must never get another consent-sheet request.
+    expect(requestAuthorizationMock).not.toHaveBeenCalled();
 
     // Guard was released; a manual retry (auth now granted) saves.
-    requestAuthorizationMock.mockResolvedValueOnce({ granted: true });
+    getAuthorizationStatusMock.mockResolvedValueOnce({ status: 'authorized' });
     const retry = await manualSaveToAppleHealth(makeSummary({ sessionId: 'denied' }), ctx);
     expect(retry).toBe('saved');
+  });
+
+  it('prompts exactly once for an undecided user, then saves on grant', async () => {
+    getAuthorizationStatusMock.mockResolvedValueOnce({ status: 'notDetermined' });
+    requestAuthorizationMock.mockResolvedValueOnce({ granted: true });
+
+    const result = await autoSaveToAppleHealth(makeSummary({ sessionId: 'undecided' }), ctx);
+
+    expect(result).toBe('hk-workout-1');
+    expect(requestAuthorizationMock).toHaveBeenCalledTimes(1);
   });
 
   it('saves once, persists the workout id, and marks state saved', async () => {
@@ -176,9 +192,10 @@ describe('autoSaveToAppleHealth', () => {
     ]);
 
     // Auto claims 'saving' synchronously first; the manual call observes the
-    // in-flight claim and bails with 'saved' without a second native write.
+    // in-flight claim and bails with 'inFlight' — NOT 'saved', since the
+    // running auto-save may yet fail — without a second native write.
     expect(saveWorkoutMock).toHaveBeenCalledTimes(1);
     expect(autoResult).toBe('hk-workout-concurrent');
-    expect(manualResult).toBe('saved');
+    expect(manualResult).toBe('inFlight');
   });
 });

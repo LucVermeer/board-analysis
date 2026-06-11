@@ -33,21 +33,12 @@ public class HealthWorkoutsModule: Module {
     // estimate, never written back.
     private let fallbackBodyMassKg = 70.0
 
-    // Static date formatters — allocated once, reused across calls. Mirrors the
-    // Capacitor plugin's parsing chain (fractional ISO, plain ISO, then a few
-    // SQL-style fallbacks).
-    private static let isoWithFrac: ISO8601DateFormatter = {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return formatter
-    }()
-
-    private static let isoPlain: ISO8601DateFormatter = {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime]
-        return formatter
-    }()
-
+    // Parsing chain mirrors the Capacitor plugin (fractional ISO, plain ISO,
+    // then a few SQL-style fallbacks). Formatters are created per call rather
+    // than shared as statics: parseISO8601 runs from a detached Task and from
+    // HealthKit query callbacks on arbitrary threads, and Apple only documents
+    // DateFormatter (not ISO8601DateFormatter) as thread-safe. A handful of
+    // allocations per save is irrelevant next to the HealthKit I/O.
     private static let fallbackFormats = [
         "yyyy-MM-dd'T'HH:mm:ss.SSSZ",
         "yyyy-MM-dd'T'HH:mm:ssZ",
@@ -275,7 +266,12 @@ public class HealthWorkoutsModule: Module {
     // MARK: - Date parsing
 
     private static func parseISO8601(_ string: String) -> Date? {
+        let isoWithFrac = ISO8601DateFormatter()
+        isoWithFrac.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         if let date = isoWithFrac.date(from: string) { return date }
+
+        let isoPlain = ISO8601DateFormatter()
+        isoPlain.formatOptions = [.withInternetDateTime]
         if let date = isoPlain.date(from: string) { return date }
 
         // Fallback: try common non-ISO formats (e.g. SQL timestamp).

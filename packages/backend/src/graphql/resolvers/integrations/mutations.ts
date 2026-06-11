@@ -10,10 +10,27 @@ import {
   SyncSessionToIntegrationSchema,
 } from '../../../validation/schemas';
 import { providerEnumToDb, providerDbToEnum, type ProviderName } from '../../../integrations/registry';
+import { IntegrationHttpError } from '../../../integrations/strava';
 import { disconnect, setAutoSync, type IntegrationCredentialRow } from '../../../integrations/credentials';
 import { signIntegrationHandoff } from '../../../integrations/state';
 import { syncPartySessionForUser } from '../../../integrations/export-service';
 import { generateSessionSummary } from '../sessions/session-summary';
+
+// Domain errors whose exact wording is ours and safe to show the user. Anything
+// else (provider HTTP errors, fetch failures, shape guards) may carry internal
+// detail and collapses to a generic message.
+const SAFE_EXPORT_ERRORS = new Set<string>(['Integration not connected', 'Export already in progress']);
+
+function sanitizeExportError(error: unknown): string {
+  if (error instanceof Error) {
+    if (SAFE_EXPORT_ERRORS.has(error.message)) return error.message;
+    if (error.message.startsWith('Integration credential is not usable')) return error.message;
+    if (error instanceof IntegrationHttpError) {
+      return `The provider rejected the upload (status ${error.statusCode})`;
+    }
+  }
+  return 'Export failed';
+}
 
 function credentialRowToStatus(provider: ProviderName, row: IntegrationCredentialRow): IntegrationStatus {
   return {
@@ -52,6 +69,9 @@ export const integrationMutations = {
     ctx: ConnectionContext,
   ): Promise<boolean> => {
     requireAuthenticated(ctx);
+    // Disconnect calls the provider's revoke endpoint — rate-limit so rapid
+    // disconnect/reconnect cycles can't hammer it.
+    await applyRateLimit(ctx, 10, 'disconnectIntegration');
     const { provider } = validateInput(DisconnectIntegrationSchema, args, 'args');
     const userId = ctx.userId!;
     await disconnect(userId, providerEnumToDb(provider));
@@ -65,6 +85,7 @@ export const integrationMutations = {
     ctx: ConnectionContext,
   ): Promise<IntegrationStatus> => {
     requireAuthenticated(ctx);
+    await applyRateLimit(ctx, 20, 'setIntegrationAutoSync');
     const { provider, enabled } = validateInput(SetIntegrationAutoSyncSchema, args, 'args');
     const userId = ctx.userId!;
     const providerName = providerEnumToDb(provider);
@@ -142,14 +163,16 @@ export const integrationMutations = {
     } catch (error) {
       // Upload-time failures are surfaced through the result rather than thrown
       // so the mobile client can toast them. The error export row is already
-      // recorded inside syncPartySessionForUser.
+      // recorded inside syncPartySessionForUser. The message is sanitized —
+      // provider/network errors can carry internal detail that must not reach
+      // the client.
       return {
         provider: providerDbToEnum(providerName),
         sessionId,
         externalActivityId: null,
         externalActivityUrl: null,
         syncedAt: null,
-        error: error instanceof Error ? error.message : 'Export failed',
+        error: sanitizeExportError(error),
       };
     }
   },

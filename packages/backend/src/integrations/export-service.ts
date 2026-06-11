@@ -7,7 +7,7 @@ import { and, eq, inArray, lt, or } from 'drizzle-orm';
 import type { SessionSummary, SessionParticipant, IntegrationExportResult } from '@boardsesh/shared-schema';
 import { db } from '../db/client';
 import { integrationCredentials, integrationExports } from '@boardsesh/db/schema';
-import { getProvider, providerDbToEnum, type ProviderName } from './registry';
+import { getProvider, providerDbToEnum, SUPPORTED_PROVIDERS, type ProviderName } from './registry';
 import { getFreshAccessToken, recordSyncSuccess, type IntegrationCredentialRow } from './credentials';
 import { IntegrationHttpError } from './strava';
 import type { SessionActivityInput } from './types';
@@ -134,6 +134,13 @@ async function findExportRow(
  * activities. The conditional upsert only steals the slot from an 'error' row
  * (manual retry) or a stale 'pending' claim (abandoned upload); a 'success'
  * or fresh 'pending' row wins the conflict and we report it instead.
+ *
+ * Postgres only includes rows in RETURNING that were actually inserted or
+ * updated — a conflict whose DO UPDATE ... WHERE predicate is false returns
+ * nothing (pinned by the concurrent-claim test against real Postgres). The
+ * returned-row check below additionally verifies the row carries OUR claim
+ * (status + our exact syncedAt) as defense in depth against any driver or
+ * ORM change to that contract.
  */
 export async function claimExport(
   provider: ProviderName,
@@ -169,8 +176,14 @@ export async function claimExport(
     })
     .returning();
 
-  if (claimedRows.length > 0) {
+  const claimedRow = claimedRows[0];
+  if (claimedRow && claimedRow.status === 'pending' && claimedRow.syncedAt.getTime() === now.getTime()) {
     return { claimed: true, blockingRow: null };
+  }
+  if (claimedRow) {
+    // A returned row that doesn't carry our claim would mean the RETURNING
+    // contract changed underneath us — treat it as a lost claim, never as won.
+    return { claimed: false, blockingRow: claimedRow };
   }
   return { claimed: false, blockingRow: await findExportRow(provider, userId, sessionId) };
 }
@@ -274,6 +287,14 @@ export async function syncPartySessionForUser(
 ): Promise<IntegrationExportResult> {
   const allowErrorStatus = options.allowErrorStatus ?? false;
 
+  // Resolve everything that can fail BEFORE taking the claim — a throw after
+  // the claim would leave a 'pending' row blocking retries until the stale
+  // takeover window elapses.
+  const providerImpl = getProvider(provider);
+  if (!providerImpl) {
+    throw new Error(`Unsupported integration provider: ${provider}`);
+  }
+
   const credRow = await loadCredential(userId, provider);
   if (!credRow) {
     throw new Error('Integration not connected');
@@ -300,11 +321,6 @@ export async function syncPartySessionForUser(
     attempts: 0,
   };
   const activity = buildSessionActivity(summary, boardPath, participant, options.timezone);
-
-  const providerImpl = getProvider(provider);
-  if (!providerImpl) {
-    throw new Error(`Unsupported integration provider: ${provider}`);
-  }
 
   let accessToken: string;
   try {
@@ -342,8 +358,9 @@ export async function syncPartySessionForUser(
 
 /**
  * Fire-and-forget fan-out: when a session ends, upload it for every
- * participant who has Strava connected with auto-sync on. Never throws; one
- * user's failure does not block the others.
+ * participant with ANY supported integration connected and auto-sync on (one
+ * activity per connected provider per participant). Never throws; one user's
+ * failure does not block the others.
  */
 export async function autoSyncSessionToIntegrations(
   sessionId: string,
@@ -355,7 +372,6 @@ export async function autoSyncSessionToIntegrations(
   if (!summary.participants || summary.participants.length === 0) return;
   if (!summary.startedAt || !summary.endedAt) return;
 
-  const provider: ProviderName = 'strava';
   const participantUserIds = summary.participants.map((entry) => entry.userId).filter(Boolean);
   if (participantUserIds.length === 0) return;
 
@@ -364,7 +380,7 @@ export async function autoSyncSessionToIntegrations(
     .from(integrationCredentials)
     .where(
       and(
-        eq(integrationCredentials.provider, provider),
+        inArray(integrationCredentials.provider, [...SUPPORTED_PROVIDERS]),
         eq(integrationCredentials.autoSyncEnabled, true),
         eq(integrationCredentials.status, 'active'),
         inArray(integrationCredentials.userId, participantUserIds),
@@ -372,6 +388,7 @@ export async function autoSyncSessionToIntegrations(
     );
 
   for (const credRow of credentialRows) {
+    const provider = credRow.provider as ProviderName;
     try {
       await syncPartySessionForUser(provider, credRow.userId, sessionId, summary, boardPath, { timezone });
     } catch (error) {

@@ -40,10 +40,12 @@ vi.mock('../db/client', () => {
         onConflictDoUpdate: vi.fn((config) => {
           insertCalls.push({ values, set: config?.set });
           // upsertSuccessExport/upsertErrorExport await this directly; the
-          // claim insert chains .returning() — default to a won claim.
+          // claim insert chains .returning() — default to a won claim that
+          // echoes the inserted values (claimExport verifies the returned row
+          // carries its own status + syncedAt).
           const result = Promise.resolve(undefined);
           result.returning = vi.fn(() => {
-            const claimResult = claimReturning[claimIndex] ?? [{ status: 'pending' }];
+            const claimResult = claimReturning[claimIndex] ?? [{ ...values }];
             claimIndex += 1;
             return Promise.resolve(claimResult);
           });
