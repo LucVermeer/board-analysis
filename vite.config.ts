@@ -18,7 +18,7 @@ export default defineConfig({
     // formatting it produces noise diffs every time `vp check --fix`
     // runs without changing what ships, and the linter already ignores
     // the same path. Keep them in lock-step.
-    ignore: ['design/**', '**/generated/**', '**/board-controller/**'],
+    ignore: ['**/generated/**', '**/board-controller/**'],
   },
   lint: {
     ignorePatterns: ['**/board-controller/**'],
