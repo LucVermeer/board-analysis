@@ -105,6 +105,19 @@ void describe('createClimbFilters: projectsOnly', () => {
   });
 });
 
+void describe('createClimbFilters: size filter', () => {
+  void it('uses array containment so the compatible_size_ids GIN index can support the predicate', () => {
+    const filters = createClimbFilters(params, baseSearch);
+    assert.equal(filters.sizeConditions.length, 1);
+
+    const rendered = sqlToString(filters.sizeConditions[0]);
+    assert.match(rendered, /compatible_size_ids/);
+    assert.match(rendered, /@>/);
+    assert.match(rendered, /ARRAY\[/);
+    assert.match(rendered, /::int\[\]/);
+  });
+});
+
 void describe('createClimbFilters: minRating', () => {
   const ratingScaleCases: Array<{ minRating: number; expectedThreshold: string }> = [
     { minRating: 1, expectedThreshold: '0.2' },

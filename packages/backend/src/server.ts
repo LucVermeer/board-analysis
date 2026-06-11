@@ -36,6 +36,8 @@ import { startApnsHeartbeat, stopApnsHeartbeat } from './services/apns/heartbeat
 import { startApnsStaleTokenCleanup, stopApnsStaleTokenCleanup } from './services/apns/cleanup';
 import { buildContentStateFromQueueState } from './services/apns/content-state';
 import { logger, setInstanceIdProvider } from './utils/logger';
+import { verifyDeployCompatibility } from './utils/deploy-preflight';
+import { isClientAbortError } from './utils/http-errors';
 import type { QueueEvent } from '@boardsesh/shared-schema';
 
 /**
@@ -75,6 +77,12 @@ export async function startServer(): Promise<ServerResources> {
   // tag (dev) / `instanceId` field (prod) once Redis is connected, and
   // an untagged line when running without Redis.
   setInstanceIdProvider(() => pubsub.getInstanceId());
+  // Crash before accepting traffic only when migration state proves this
+  // backend bundle predates the database. That deliberately blocks rollbacks
+  // to bundles whose journal is older than an applied migration, including
+  // backward-compatible/index-only migrations; unknown DB state warns and
+  // continues so a transient DB read failure does not create a crash loop.
+  await verifyDeployCompatibility();
 
   // Initialize RoomManager with Redis for session persistence
   if (redisClientManager.isRedisConfigured() && redisClientManager.isRedisConnected()) {
@@ -383,6 +391,16 @@ export async function startServer(): Promise<ServerResources> {
       res.writeHead(404, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'Not found' }));
     } catch (error) {
+      if (
+        isClientAbortError(error, {
+          requestDestroyed: req.destroyed,
+          responseDestroyed: res.destroyed,
+          socketDestroyed: res.socket?.destroyed,
+        })
+      ) {
+        logger.info('Request aborted by client', { method: req.method, url: req.url });
+        return;
+      }
       logger.error('Request handler error:', error);
       if (!res.headersSent) {
         res.writeHead(500, { 'Content-Type': 'application/json' });
