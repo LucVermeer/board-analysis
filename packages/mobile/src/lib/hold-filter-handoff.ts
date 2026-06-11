@@ -1,9 +1,8 @@
 import type { HoldsFilter } from '@boardsesh/shared-schema';
 
 // Hands the edited hold filter back from the full-screen board sub-screen to the
-// ClimbFilterSheet, mirroring `filter-handoff` (setters). The sub-screen owns the
-// interactive board; the sheet stays mounted underneath and picks up the result
-// when the screen pops, so the user keeps editing the rest of the filters.
+// climb-list filter coordinator. The coordinator keeps the in-progress filter
+// draft while the sheet is hidden, then reopens the sheet after the route pops.
 type HoldsFilterListener = (holdsFilter: HoldsFilter) => void;
 
 const holdsFilterListeners = new Set<HoldsFilterListener>();

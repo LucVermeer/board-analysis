@@ -2,10 +2,9 @@ import type { HoldsFilter, ZoneBoxInput, ZoneMatchMode } from '@boardsesh/shared
 
 /**
  * Hands the edited board-region (zone) filter back from the full-screen board
- * sub-screen to the ClimbFilterSheet, mirroring `hold-filter-handoff`. The
- * sub-screen owns the interactive board + draggable rectangle; the sheet stays
- * mounted underneath and picks up the result when the screen pops, so the user
- * keeps editing the rest of the filters.
+ * sub-screen to the climb-list filter coordinator. The coordinator keeps the
+ * in-progress filter draft while the sheet is hidden, then reopens the sheet
+ * after the route pops.
  *
  * The zone screen can also prune out-of-zone hold filters (the `allHolds`
  * backend filter discards a climb if any hold is outside the box), so it hands

@@ -16,7 +16,6 @@ import {
 import { FullWindowOverlay } from 'react-native-screens';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import {
   hasActiveClimbFilters,
@@ -49,9 +48,6 @@ import { useTheme } from '../providers/theme-provider';
 import { useGrades, useSearchClimbsCount } from '../lib/graphql/hooks';
 import { useAuth } from '../providers/auth-provider';
 import { hapticSelection } from '../lib/haptics';
-import { subscribeToSetterSelection } from '../lib/filter-handoff';
-import { subscribeToHoldsFilterSelection } from '../lib/hold-filter-handoff';
-import { subscribeToZoneFilterSelection } from '../lib/zone-filter-handoff';
 import { springs } from '../theme/animations';
 // Aliased: the active-filter label reads scheme-aware brand from `useTheme()`.
 // `staticBrandColors` is the static set, used only for the selected chip — a FILL
@@ -82,6 +78,9 @@ type ClimbFilterSheetProps = {
   /** Current committed name term, so the live "Show N" count matches Apply. */
   searchName?: string;
   onApply: (filters: ClimbFilters, boardFilters: ClimbBoardFilterState) => void;
+  onOpenSetters: (filters: ClimbFilters, boardFilters: ClimbBoardFilterState) => void;
+  onOpenHoldFilter: (filters: ClimbFilters, boardFilters: ClimbBoardFilterState) => void;
+  onOpenZoneFilter: (filters: ClimbFilters, boardFilters: ClimbBoardFilterState) => void;
 };
 
 // Status options exposed in the sheet. "established" is retired as a user-facing
@@ -149,11 +148,13 @@ export function ClimbFilterSheet({
   currentBoardFilters,
   searchName,
   onApply,
+  onOpenSetters,
+  onOpenHoldFilter,
+  onOpenZoneFilter,
 }: ClimbFilterSheetProps) {
   const { t } = useTranslation('climbs');
   const theme = useTheme();
   const { systemColors } = theme;
-  const router = useRouter();
   const { isAuthenticated } = useAuth();
   const insets = useSafeAreaInsets();
   const sheetRef = useRef<BottomSheetModal>(null);
@@ -167,37 +168,12 @@ export function ClimbFilterSheet({
   const [sectionResetKey, setSectionResetKey] = useState(0);
 
   useEffect(() => {
+    setLocalFilters(normalizeRetiredStatus(currentFilters));
+    setLocalBoardFilters(currentBoardFilters);
+  }, [currentFilters, currentBoardFilters]);
+
+  useEffect(() => {
     sheetRef.current?.present();
-  }, []);
-
-  useEffect(() => {
-    return subscribeToSetterSelection((setters) => {
-      setLocalFilters((previous) => ({ ...previous, setter: setters.length > 0 ? setters : undefined }));
-    });
-  }, []);
-
-  useEffect(() => {
-    return subscribeToHoldsFilterSelection((holdsFilter) => {
-      setLocalBoardFilters((previous) => ({
-        ...previous,
-        holdsFilter: Object.keys(holdsFilter).length > 0 ? holdsFilter : undefined,
-      }));
-    });
-  }, []);
-
-  useEffect(() => {
-    return subscribeToZoneFilterSelection(({ zoneBox, zoneMode, holdsFilter }) => {
-      setLocalBoardFilters((previous) => ({
-        ...previous,
-        zoneBox,
-        zoneMode: zoneBox ? zoneMode : undefined,
-        // The zone editor may have pruned out-of-zone hold filters; fold the
-        // possibly-edited holds filter back in when it handed one over.
-        ...(holdsFilter !== undefined
-          ? { holdsFilter: Object.keys(holdsFilter).length > 0 ? holdsFilter : undefined }
-          : {}),
-      }));
-    });
   }, []);
 
   const snapPoints = useMemo(() => ['90%'], []);
@@ -368,52 +344,18 @@ export function ClimbFilterSheet({
 
   const openSetters = useCallback(() => {
     if (!boardConfig) return;
-    router.push({
-      pathname: '/(tabs)/climbs/setters',
-      params: {
-        boardName: boardConfig.boardName,
-        layoutId: String(boardConfig.layoutId),
-        sizeId: String(boardConfig.sizeId),
-        setIds: boardConfig.setIds,
-        angle: String(boardConfig.angle),
-        selected: JSON.stringify(localFilters.setter ?? []),
-      },
-    });
-  }, [router, boardConfig, localFilters.setter]);
+    onOpenSetters(localFilters, localBoardFilters);
+  }, [boardConfig, localFilters, localBoardFilters, onOpenSetters]);
 
   const openHoldFilter = useCallback(() => {
     if (!boardConfig) return;
-    router.push({
-      pathname: '/(tabs)/climbs/holds',
-      params: {
-        boardName: boardConfig.boardName,
-        layoutId: String(boardConfig.layoutId),
-        sizeId: String(boardConfig.sizeId),
-        setIds: boardConfig.setIds,
-        holdsFilter: JSON.stringify(localBoardFilters.holdsFilter ?? {}),
-      },
-    });
-  }, [router, boardConfig, localBoardFilters.holdsFilter]);
+    onOpenHoldFilter(localFilters, localBoardFilters);
+  }, [boardConfig, localFilters, localBoardFilters, onOpenHoldFilter]);
 
   const openZoneFilter = useCallback(() => {
     if (!boardConfig) return;
-    router.push({
-      pathname: '/(tabs)/climbs/zone',
-      params: {
-        boardName: boardConfig.boardName,
-        layoutId: String(boardConfig.layoutId),
-        sizeId: String(boardConfig.sizeId),
-        setIds: boardConfig.setIds,
-        angle: String(boardConfig.angle),
-        // Omit zoneBox entirely when no zone is set — passing
-        // `JSON.stringify(null)` would send the literal string "null", which the
-        // parse side then has to special-case. Absent param → no zone.
-        ...(localBoardFilters.zoneBox ? { zoneBox: JSON.stringify(localBoardFilters.zoneBox) } : {}),
-        zoneMode: localBoardFilters.zoneMode ?? 'allHolds',
-        holdsFilter: JSON.stringify(localBoardFilters.holdsFilter ?? {}),
-      },
-    });
-  }, [router, boardConfig, localBoardFilters.zoneBox, localBoardFilters.zoneMode, localBoardFilters.holdsFilter]);
+    onOpenZoneFilter(localFilters, localBoardFilters);
+  }, [boardConfig, localFilters, localBoardFilters, onOpenZoneFilter]);
 
   const holdFilterCount = countFilteredHolds(localBoardFilters.holdsFilter);
   const zoneActive = localBoardFilters.zoneBox != null;

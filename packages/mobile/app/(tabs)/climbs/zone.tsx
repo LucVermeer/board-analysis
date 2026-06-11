@@ -82,10 +82,12 @@ function parseZoneMode(raw: string | undefined): ZoneMatchMode {
 
 /**
  * Full-screen board sub-screen for the board-region (zone) search filter.
- * Mirrors the hold filter handoff: the ClimbFilterSheet pushes here with the
- * current zone serialized, the user drags a rectangle over the board to restrict
- * results, and the edited zone (plus a possibly-pruned hold filter) is handed
- * back via `emitZoneFilterSelection` when the screen pops (Done or swipe-back).
+ * Mirrors the hold filter handoff: the climb-list filter coordinator pushes
+ * here with the current zone serialized, the user drags a rectangle over the
+ * board to restrict results, and the edited zone (plus a possibly-pruned hold
+ * filter) is handed back via `emitZoneFilterSelection` when the screen pops
+ * (Done or swipe-back). The coordinator then reopens the filter sheet with the
+ * updated draft.
  */
 export default function ZoneFilterScreen() {
   const params = useLocalSearchParams<Params>();

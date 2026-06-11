@@ -35,10 +35,11 @@ const CHROME_BUDGET = 132;
 
 /**
  * Full-screen board sub-screen for the hold-type search filter. Mirrors the
- * setters handoff: the ClimbFilterSheet pushes here with the current
+ * setters handoff: the climb-list filter coordinator pushes here with the current
  * `holdsFilter` serialized, the user taps holds to include/exclude hold types,
  * and the edited filter is handed back via `emitHoldsFilterSelection` when the
- * screen pops (Done or swipe-back).
+ * screen pops (Done or swipe-back). The coordinator then reopens the filter
+ * sheet with the updated draft.
  */
 export default function HoldFilterScreen() {
   const params = useLocalSearchParams<Params>();
