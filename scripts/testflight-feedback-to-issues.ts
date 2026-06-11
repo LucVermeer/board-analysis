@@ -618,7 +618,7 @@ export function buildIssueDraft(feedback: TestFlightFeedback): IssueDraft {
 
 function buildScreenshotIssueDraft(feedback: TestFlightScreenshotFeedback): IssueDraft {
   const marker = testFlightMarker(feedback.kind, feedback.id);
-  const title = buildIssueTitle('TestFlight screenshot feedback', feedback);
+  const title = buildIssueTitle('Screenshot feedback', feedback);
   const bodyParts = [
     marker,
     'TestFlight screenshot feedback submitted by a beta tester.',
@@ -641,7 +641,7 @@ function buildScreenshotIssueDraft(feedback: TestFlightScreenshotFeedback): Issu
 
 function buildCrashIssueDraft(feedback: TestFlightCrashFeedback): IssueDraft {
   const marker = testFlightMarker(feedback.kind, feedback.id);
-  const title = buildIssueTitle('TestFlight crash feedback', feedback);
+  const title = buildIssueTitle('Crash feedback', feedback);
   const redactedLog = feedback.crashLog ? redactSensitiveText(feedback.crashLog) : null;
   const bodyWithoutLog = [
     marker,
