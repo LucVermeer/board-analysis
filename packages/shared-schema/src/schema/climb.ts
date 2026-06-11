@@ -26,7 +26,7 @@ export const climbTypeDefs = /* GraphQL */ `
     difficulty: String!
     "Average quality rating from users"
     quality_average: String!
-    "Star rating (0-3)"
+    "Star rating (0-5), rounded from quality_average"
     stars: Float!
     "Difficulty uncertainty/spread"
     difficulty_error: String!

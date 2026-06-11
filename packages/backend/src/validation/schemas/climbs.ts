@@ -52,6 +52,9 @@ export const ClimbInputSchema = z.object({
     .max(20)
     .nullish()
     .transform((v) => v ?? ''),
+  // getClimbStars now emits 0-5, but keep the upper bound at 15 so queue items
+  // persisted (IndexedDB) or in flight from before that change — which carry the
+  // old 0-15 stars — still validate and sync instead of being rejected.
   stars: z
     .number()
     .min(0)

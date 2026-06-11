@@ -123,7 +123,7 @@ export async function hydrateClimbsByRefs(refs: ClimbRef[], options?: HydrateCli
       ascensionist_count: Number(row.ascensionist_count || 0),
       difficulty: getGradeLabel(row.difficulty_id),
       quality_average: row.quality_average?.toString() || '0',
-      stars: getClimbStars(boardName, row.quality_average),
+      stars: getClimbStars(row.quality_average),
       difficulty_error: row.difficulty_error?.toString() || '0',
       benchmark_difficulty:
         row.benchmark_difficulty && row.benchmark_difficulty > 0 ? row.benchmark_difficulty.toString() : null,
