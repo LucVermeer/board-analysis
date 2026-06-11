@@ -81,12 +81,6 @@ vi.mock('../../../providers/theme-provider', () => ({
   }),
 }));
 vi.mock('../../../hooks/use-native-glass', () => ({ useNativeGlass: () => ctrl.nativeGlass }));
-vi.mock('../../../hooks/use-bottom-chrome-metrics', () => ({
-  useBottomChromeMetrics: () => ({ fixedFooterBottom: 88 }),
-}));
-vi.mock('react-native-safe-area-context', () => ({
-  useSafeAreaInsets: () => ({ bottom: 130, top: 0, left: 0, right: 0 }),
-}));
 vi.mock('../../../lib/haptics', () => ({ hapticLight: haptics.light }));
 vi.mock('../../../theme/tokens', () => ({ spacing: { 2: 8, 4: 16, 5: 20 }, shadows: { sm: { shadowOpacity: 0.1 } } }));
 
@@ -98,6 +92,7 @@ function makeProps(over: Partial<Parameters<typeof SessionStartFab>[0]> = {}) {
     materialIcon: 'play.fill' as const,
     onPress: vi.fn(),
     testID: 'pre-session-footer',
+    bottomOffset: 130,
     onHeightChange: vi.fn(),
     ...over,
   };
@@ -122,8 +117,7 @@ describe('SessionStartFab', () => {
       expect(glass.props?.tintColor).toBe('#6D28D9');
       const node = getByTestId('pre-session-footer');
       expect(node.getAttribute('data-pointer-events')).toBe('box-none');
-      // Glass anchors to the raw safe-area inset (the native tab bar + accessory are
-      // already in it), not the double-counting fixed-footer metric.
+      // The host supplies the variant-correct bottom offset via the prop.
       expect(node.getAttribute('data-style')).toContain('"bottom":130');
     });
 
@@ -168,7 +162,7 @@ describe('SessionStartFab', () => {
       ctrl.variant = 'material';
     });
 
-    it('renders the extended FAB (not the glass capsule) at fixedFooterBottom, box-none', () => {
+    it('renders the extended FAB (not the glass capsule) at the host bottomOffset, box-none', () => {
       const { getByTestId, container } = render(<SessionStartFab {...makeProps({ label: 'Start session' })} />);
 
       expect(container.querySelector('[data-glass="true"]')).toBeNull();
@@ -179,7 +173,7 @@ describe('SessionStartFab', () => {
       expect(fab.props?.mode).toBe('elevated');
       const node = getByTestId('pre-session-footer');
       expect(node.getAttribute('data-pointer-events')).toBe('box-none');
-      expect(node.getAttribute('data-style')).toContain('"bottom":88');
+      expect(node.getAttribute('data-style')).toContain('"bottom":130');
     });
 
     it('forwards disabled / loading to the FAB', () => {

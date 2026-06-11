@@ -115,6 +115,7 @@ vi.mock('../../../GlassSurface', () => ({ GlassSurface: () => null }));
 vi.mock('../../../SectionHeader', () => ({ SectionHeader: () => null }));
 vi.mock('../../RecordTopChrome', () => ({ RecordTopChrome: () => null }));
 vi.mock('../../SessionStartFab', () => ({
+  SESSION_START_FAB_HEIGHT: 60,
   SessionStartFab: ({ onPress }: { onPress?: () => void }) => {
     startButton.onPress = onPress ?? null;
     return null;

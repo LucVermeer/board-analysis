@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render } from '@testing-library/react';
+import { act, render } from '@testing-library/react';
 import { createElement, type ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -15,6 +15,11 @@ const bottomChrome = vi.hoisted(() => ({
     tabBarBottom: 50,
   },
 }));
+
+// Controllable endSession + a captured view of the EndSessionSheet props, so the
+// error path (endSession rejects) can assert the spinner clears.
+const queue = vi.hoisted(() => ({ endSession: vi.fn() }));
+const sheet = vi.hoisted(() => ({ isEnding: false as boolean, onConfirm: null as (() => void) | null }));
 
 vi.mock('react-native', () => ({
   Pressable: ({ children }: { children?: ReactNode }) => createElement('button', null, children),
@@ -80,7 +85,14 @@ vi.mock('../../../PressableSurface', () => ({
 vi.mock('../../../SectionHeader', () => ({ SectionHeader: () => null }));
 vi.mock('../../RecordTopChrome', () => ({ RecordTopChrome: () => null }));
 vi.mock('../../../ClimbListItemContent', () => ({ ClimbListItemContent: () => null }));
-vi.mock('../../../EndSessionSheet', () => ({ EndSessionSheet: () => null }));
+vi.mock('../../../EndSessionSheet', () => ({
+  EndSessionSheet: ({ isEnding, onConfirm }: { isEnding?: boolean; onConfirm?: () => void }) => {
+    sheet.isEnding = isEnding ?? false;
+    sheet.onConfirm = onConfirm ?? null;
+    return null;
+  },
+}));
+vi.mock('../../../../lib/sentry', () => ({ reportError: vi.fn() }));
 vi.mock('../../../Icon', () => ({ Icon: () => null }));
 vi.mock('../../../Text', () => ({
   Text: ({ children }: { children?: ReactNode }) => createElement('span', null, children),
@@ -97,7 +109,7 @@ vi.mock('../../../../providers/theme-provider', () => ({
   }),
 }));
 vi.mock('../../../../providers/queue-provider', () => ({
-  useQueueActions: () => ({ endSession: vi.fn(async () => null), setCurrentClimb: vi.fn() }),
+  useQueueActions: () => ({ endSession: queue.endSession, setCurrentClimb: vi.fn() }),
   useQueueLiveStats: () => ({ liveStats: null, sessionUsers: [] }),
   useQueueSessionControls: () => ({
     driverParticipantId: null,
@@ -139,6 +151,10 @@ describe('InSessionView footer', () => {
   beforeEach(() => {
     list.contentContainerStyle = null;
     bottomChrome.metrics = { fixedFooterBottom: 88, tabBarBottom: 50 };
+    queue.endSession.mockReset();
+    queue.endSession.mockResolvedValue(null);
+    sheet.isEnding = false;
+    sheet.onConfirm = null;
   });
 
   it('reserves only the bottom-chrome offset now that End moved to the top chrome', () => {
@@ -153,5 +169,22 @@ describe('InSessionView footer', () => {
   it('renders no in-session bottom action bar', () => {
     const { queryByTestId } = render(createElement(InSessionView));
     expect(queryByTestId('in-session-footer')).toBeNull();
+  });
+
+  it('clears the ending spinner even when endSession rejects', async () => {
+    queue.endSession.mockRejectedValueOnce(new Error('boom'));
+    render(createElement(InSessionView));
+    expect(sheet.onConfirm).not.toBeNull();
+
+    await act(async () => {
+      sheet.onConfirm?.();
+      // Let the rejected endSession + catch + finally settle.
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(queue.endSession).toHaveBeenCalledTimes(1);
+    // The finally always clears isEnding, so the confirm spinner doesn't hang.
+    expect(sheet.isEnding).toBe(false);
   });
 });

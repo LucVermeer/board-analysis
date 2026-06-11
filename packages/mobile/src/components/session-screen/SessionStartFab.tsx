@@ -1,6 +1,5 @@
 import { useCallback } from 'react';
 import { ActivityIndicator, type LayoutChangeEvent, StyleSheet, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FAB } from 'react-native-paper';
 import { GlassSurface } from '../GlassSurface';
 import { PressableSurface } from '../PressableSurface';
@@ -9,12 +8,16 @@ import { Text } from '../Text';
 import { iconMap, type IconName } from '../icon-map';
 import { useTheme } from '../../providers/theme-provider';
 import { useNativeGlass } from '../../hooks/use-native-glass';
-import { useBottomChromeMetrics } from '../../hooks/use-bottom-chrome-metrics';
 import { hapticLight } from '../../lib/haptics';
 import { spacing, shadows } from '../../theme/tokens';
 
 const CAPSULE_HEIGHT = 52;
 const CAPSULE_RADIUS = CAPSULE_HEIGHT / 2;
+
+/** The Liquid Glass capsule's container height (capsule + its bottom padding). Hosts
+ *  seed their reserved bottom inset with this so the first paint matches the measured
+ *  `onHeightChange` value instead of a glass-vs-material-agnostic guess. */
+export const SESSION_START_FAB_HEIGHT = CAPSULE_HEIGHT + spacing[2];
 
 type SessionStartFabProps = {
   /** Visible label — the Start copy (Material renders it as the extended FAB label;
@@ -26,9 +29,11 @@ type SessionStartFabProps = {
   disabled?: boolean;
   loading?: boolean;
   testID?: string;
-  /** Fires with the measured action height (excluding the bottom-chrome offset) so
-   *  the host list reserves `measuredHeight + fixedFooterBottom` and keeps its last
-   *  row clear. */
+  /** Bottom offset from the screen edge — the host computes the variant-correct value
+   *  once (so the FAB and the host's list reservation can't drift) and passes it here. */
+  bottomOffset: number;
+  /** Fires with the measured action height (excluding the bottom offset) so the host
+   *  list reserves `measuredHeight + bottomOffset` and keeps its last row clear. */
   onHeightChange?: (height: number) => void;
 };
 
@@ -37,10 +42,10 @@ type SessionStartFabProps = {
  * primary action, floated bottom-trailing with the scroll list running under it —
  * not a full-width pinned bar. Liquid Glass renders a brand-tinted **glass**
  * capsule (the iOS 26 `.glassProminent` look: a `GlassSurface` tinted with the
- * brand hue, not a flat opaque fill); Material renders an M3 extended FAB. Both
- * sit over `fixedFooterBottom`, which hugs the tab bar when no climb accessory is
- * present and lifts to clear it when there is one, and report their height through
- * `onHeightChange`.
+ * brand hue, not a flat opaque fill); Material renders an M3 extended FAB. Both sit
+ * over the host-supplied `bottomOffset` (variant-correct: the raw safe-area inset on
+ * Liquid Glass — which already includes the tab bar + accessory — or the fixed-footer
+ * reserve on Material) and report their height through `onHeightChange`.
  *
  * The End action no longer lives here — it docks in the top chrome (see
  * `RecordTopChrome` / `SessionScreenHeader`).
@@ -52,18 +57,10 @@ export function SessionStartFab({
   disabled,
   loading,
   testID,
+  bottomOffset,
   onHeightChange,
 }: SessionStartFabProps) {
   const { variant } = useTheme();
-  const bottomChrome = useBottomChromeMetrics();
-  const insets = useSafeAreaInsets();
-  // The Liquid Glass NativeTabs + BottomAccessory already inflate the safe-area
-  // bottom inset to include the tab bar AND the accessory, so the capsule anchors to
-  // that raw inset — everything below it is system chrome. (`fixedFooterBottom` adds
-  // the tab bar + accessory a second time, which strands the capsule mid-screen.)
-  // Only the Material variant — in-flow tab bar + a JS queue bar that isn't in the
-  // safe-area inset — needs the metric's reserve.
-  const bottomOffset = variant === 'material' ? bottomChrome.fixedFooterBottom : insets.bottom;
 
   const handleLayout = useCallback(
     (event: LayoutChangeEvent) => {

@@ -32,7 +32,15 @@ const list = vi.hoisted(() => ({
     dataLength: number;
     hasGestureScrollComponent: boolean;
     hasHeaderComponent: boolean;
+    paddingBottom?: unknown;
   }>,
+}));
+
+// Captures the props PreSessionView passes to the (mocked) Start FAB, so the test
+// can fire onHeightChange and verify the list reservation tracks it + the offset.
+const fab = vi.hoisted(() => ({
+  onHeightChange: null as ((height: number) => void) | null,
+  bottomOffset: null as number | null,
 }));
 
 const bottomChrome = vi.hoisted(() => ({
@@ -56,7 +64,7 @@ vi.mock('react-native-gesture-handler', () => ({
 }));
 
 vi.mock('react-native-safe-area-context', () => ({
-  useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
+  useSafeAreaInsets: () => ({ top: 0, bottom: 100, left: 0, right: 0 }),
 }));
 
 vi.mock('react-native-reanimated', () => ({
@@ -73,6 +81,7 @@ vi.mock('@shopify/flash-list', () => ({
     ListHeaderComponent,
     nestedScrollEnabled,
     keyboardShouldPersistTaps,
+    contentContainerStyle,
   }: {
     data?: unknown[];
     renderItem?: (info: { item: unknown; index: number }) => ReactNode;
@@ -80,6 +89,7 @@ vi.mock('@shopify/flash-list', () => ({
     ListHeaderComponent?: ReactNode;
     nestedScrollEnabled?: boolean;
     keyboardShouldPersistTaps?: unknown;
+    contentContainerStyle?: { paddingBottom?: unknown };
   }) => {
     list.props.push({
       nestedScrollEnabled,
@@ -87,6 +97,7 @@ vi.mock('@shopify/flash-list', () => ({
       dataLength: data?.length ?? 0,
       hasGestureScrollComponent: renderScrollComponent != null,
       hasHeaderComponent: ListHeaderComponent != null,
+      paddingBottom: contentContainerStyle?.paddingBottom,
     });
     return createElement(
       'div',
@@ -110,7 +121,18 @@ vi.mock('../../../GlassSurface', () => ({ GlassSurface: () => null }));
 vi.mock('../../../SectionHeader', () => ({ SectionHeader: () => null }));
 vi.mock('../../RecordTopChrome', () => ({ RecordTopChrome: () => null }));
 vi.mock('../../SessionStartFab', () => ({
-  SessionStartFab: () => createElement('div', { 'data-testid': 'pre-session-footer' }),
+  SESSION_START_FAB_HEIGHT: 60,
+  SessionStartFab: ({
+    onHeightChange,
+    bottomOffset,
+  }: {
+    onHeightChange?: (height: number) => void;
+    bottomOffset?: number;
+  }) => {
+    fab.onHeightChange = onHeightChange ?? null;
+    fab.bottomOffset = bottomOffset ?? null;
+    return createElement('div', { 'data-testid': 'pre-session-footer' });
+  },
 }));
 vi.mock('../../../Text', () => ({
   Text: ({ children }: { children?: ReactNode }) => createElement('span', null, children),
@@ -175,6 +197,8 @@ beforeEach(() => {
   };
   preview.result.items = [makeRow('a'), makeRow('b')] as unknown[];
   preview.result.refreshingUuids = new Set<string>();
+  fab.onHeightChange = null;
+  fab.bottomOffset = null;
 });
 
 describe('PreSessionView preview rows', () => {
@@ -232,5 +256,19 @@ describe('PreSessionView preview rows', () => {
 
     expect(list.props.at(-1)).toMatchObject({ dataLength: 0, hasHeaderComponent: true });
     expect(rows.rendered).toEqual([]);
+  });
+
+  it('reserves the Start FAB height + bottom offset as the list bottom padding', () => {
+    render(createElement(PreSessionView));
+
+    // The FAB receives the same offset the list reserves (single source — no drift).
+    // Liquid Glass anchors to the safe-area inset (100 here).
+    expect(fab.bottomOffset).toBe(100);
+
+    // When the FAB measures itself, the list's bottom padding tracks height + offset.
+    act(() => {
+      fab.onHeightChange?.(50);
+    });
+    expect(list.props.at(-1)?.paddingBottom).toBe(150);
   });
 });

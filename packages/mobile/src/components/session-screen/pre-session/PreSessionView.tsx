@@ -17,7 +17,6 @@ import { Text } from '../../Text';
 import type { QueueItemRowBoard } from '../../QueueItemRow';
 import { useTheme } from '../../../providers/theme-provider';
 import { spacing } from '../../../theme/tokens';
-import { glassSize } from '../../../theme/layout';
 import { useActiveBoard } from '../../../lib/graphql/use-active-board';
 import { useAuth } from '../../../providers/auth-provider';
 import { useQueueActions } from '../../../providers/queue-provider';
@@ -26,7 +25,7 @@ import { useDrawerHost } from '../../../providers/drawer-host-provider';
 import { useBottomChromeMetrics } from '../../../hooks/use-bottom-chrome-metrics';
 import { reportError } from '../../../lib/sentry';
 import { RecordTopChrome } from '../RecordTopChrome';
-import { SessionStartFab } from '../SessionStartFab';
+import { SESSION_START_FAB_HEIGHT, SessionStartFab } from '../SessionStartFab';
 import { BoardSummaryCard } from './BoardSummaryCard';
 import { GeneratorPickerCard, type GeneratorSelection } from './GeneratorPickerCard';
 import { WorkoutPreviewRow } from './WorkoutPreviewRow';
@@ -88,11 +87,11 @@ export function PreSessionView({ showChrome = false }: PreSessionViewProps) {
   const [selection, setSelection] = useState<GeneratorSelection>({ type: 'off' });
   const [isStarting, setIsStarting] = useState(false);
   const [activePreviewUuid, setActivePreviewUuid] = useState<string | null>(null);
-  // Measured height of the pinned Start bar, so the list reserves exactly the
-  // bar's real height (+ bottom-chrome offset) instead of a hardcoded clearance.
-  // Seeded near the rendered size (large button + the bar's vertical padding) so
-  // the first paint is close before onLayout settles.
-  const [footerHeight, setFooterHeight] = useState(glassSize.hero + spacing[3] * 2);
+  // Measured height of the Start capsule's container, so the list reserves exactly
+  // its real height (+ the bottom offset) instead of a hardcoded clearance. Seeded
+  // with the capsule's own constant so the first paint matches before onLayout
+  // settles (Material's extended FAB is close enough and self-corrects on layout).
+  const [footerHeight, setFooterHeight] = useState(SESSION_START_FAB_HEIGHT);
 
   const preview = useWorkoutPreview(selection, activeBoard ?? null, { isAuthenticated });
   const { items: previewItems, status, refreshingUuids, plannedCount, refreshSlot, toQueueItems } = preview;
@@ -206,12 +205,10 @@ export function PreSessionView({ showChrome = false }: PreSessionViewProps) {
   const generatorPreviewReady =
     selection.type !== 'on' || (status === 'ready' && previewItems.length > 0 && refreshingUuids.size === 0);
   const canStart = activeBoard != null && !isStarting && generatorPreviewReady;
-  // The Start capsule (SessionStartFab) floats bottom-trailing above the bottom
-  // chrome and reports its measured height; the list reserves that height plus the
-  // capsule's bottom offset so its last row clears the capsule. Liquid Glass anchors
-  // to the raw safe-area inset (which already includes the tab bar + accessory);
-  // Material uses the fixed-footer reserve. Mirrors SessionStartFab so they stay in
-  // lockstep on both variants.
+  // The single source of the Start capsule's bottom offset: passed to SessionStartFab
+  // AND used for the list reservation, so the FAB position and the last-row clearance
+  // can't drift. Liquid Glass anchors to the raw safe-area inset (which already
+  // includes the tab bar + accessory); Material uses the fixed-footer reserve.
   const footerBottom = variant === 'material' ? bottomChrome.fixedFooterBottom : insets.bottom;
 
   // Inline status copy shown above an empty preview (loading / no results /
@@ -331,6 +328,7 @@ export function PreSessionView({ showChrome = false }: PreSessionViewProps) {
 
       <SessionStartFab
         testID="pre-session-footer"
+        bottomOffset={footerBottom}
         onHeightChange={setFooterHeight}
         label={isStarting ? t('mobile.session.preStarting') : t('mobile.session.preStart')}
         materialIcon="play.fill"
