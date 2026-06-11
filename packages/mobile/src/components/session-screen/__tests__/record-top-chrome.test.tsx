@@ -14,6 +14,10 @@ type ChromeProps = {
   scrollY?: unknown;
   onPressTitle?: () => void;
   trailingAction?: ReactNode;
+  trailingActionCount?: number;
+  leadingAction?: ReactNode;
+  leadingActionCount?: number;
+  hideLight?: boolean;
 };
 
 // Captures every prop CollapsingTopChrome receives so the wrapper's forwarding +
@@ -37,7 +41,7 @@ vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => k
 // CollapsingTopChrome forwarding contract; 'material' exercises the Paper app bar.
 vi.mock('../../../providers/theme-provider', () => ({
   useTheme: () => ({
-    brandColors: { primary: '#6D28D9' },
+    brandColors: { primary: '#6D28D9', error: '#C81E1E' },
     systemColors: { label: '#000', secondaryBackground: '#111', separator: '#333' },
     variant: ctrl.variant,
   }),
@@ -56,13 +60,16 @@ vi.mock('react-native-paper', () => ({
   },
 }));
 vi.mock('../../icon-map', () => ({
-  iconMap: { 'person.badge.plus': { ios: 'person.badge.plus', android: 'account-plus-outline' } },
+  iconMap: {
+    'person.badge.plus': { ios: 'person.badge.plus', android: 'account-plus-outline' },
+    flag: { ios: 'flag', android: 'flag-outline' },
+  },
 }));
 vi.mock('../../Icon', () => ({ Icon: ({ name }: { name: string }) => createElement('span', { 'data-icon': name }) }));
 vi.mock('../../chrome', () => ({
   CollapsingTopChrome: (props: ChromeProps) => {
     chrome.props = props;
-    return createElement('div', { 'data-chrome': 'true' }, props.trailingAction);
+    return createElement('div', { 'data-chrome': 'true' }, props.leadingAction, props.trailingAction);
   },
   GlassToolbarAction: ({
     children,
@@ -73,7 +80,23 @@ vi.mock('../../chrome', () => ({
     onPress?: () => void;
     accessibilityLabel?: string;
   }) => createElement('button', { onClick: onPress, 'data-action': accessibilityLabel ?? '' }, children),
+  TOP_ACTION_SIZE: 48,
 }));
+vi.mock('../../Text', () => ({
+  Text: ({ children }: { children?: ReactNode }) => createElement('span', null, children),
+}));
+vi.mock('../../PressableSurface', () => ({
+  PressableSurface: ({
+    children,
+    onPress,
+    accessibilityLabel,
+  }: {
+    children?: ReactNode;
+    onPress?: () => void;
+    accessibilityLabel?: string;
+  }) => createElement('button', { onClick: onPress, 'data-pressable': accessibilityLabel ?? '' }, children),
+}));
+vi.mock('../../../theme/tokens', () => ({ spacing: { 1: 4, 3: 12 } }));
 
 import { RecordTopChrome } from '../RecordTopChrome';
 
@@ -118,20 +141,55 @@ describe('RecordTopChrome', () => {
     expect(chrome.props?.onOpenBoardSwitcher).toBe(onOpenBoardSwitcher);
   });
 
-  it('omits the share trailingAction when onShare is not provided', () => {
+  it('omits both leading and trailing actions and keeps the light before a session is live', () => {
     render(<RecordTopChrome {...makeProps()} />);
+    expect(chrome.props?.leadingAction).toBeUndefined();
     expect(chrome.props?.trailingAction).toBeUndefined();
+    expect(chrome.props?.leadingActionCount).toBe(0);
+    expect(chrome.props?.trailingActionCount).toBe(0);
+    expect(chrome.props?.hideLight).toBe(false);
   });
 
-  it('passes a share trailingAction (calling onShare) only when onShare is provided', () => {
+  it('docks invite/share as the LEADING (left) action, calling onShare', () => {
     const onShare = vi.fn();
     const { container } = render(<RecordTopChrome {...makeProps({ onShare })} />);
 
-    expect(isValidElement(chrome.props?.trailingAction)).toBe(true);
+    expect(isValidElement(chrome.props?.leadingAction)).toBe(true);
+    expect(chrome.props?.leadingActionCount).toBe(1);
     const shareButton = container.querySelector('[data-action="mobile.session.invite"]') as HTMLButtonElement | null;
     expect(shareButton).not.toBeNull();
     shareButton!.click();
     expect(onShare).toHaveBeenCalledTimes(1);
+  });
+
+  it('docks invite on the left and a labelled Stop pill on the right (no light) while a session is live', () => {
+    const onShare = vi.fn();
+    const onEndSession = vi.fn();
+    const { container } = render(<RecordTopChrome {...makeProps({ onShare, onEndSession })} />);
+
+    // Invite is the lone left slot; the Stop pill reserves two slots for its label;
+    // the light is hidden.
+    expect(chrome.props?.leadingActionCount).toBe(1);
+    expect(chrome.props?.trailingActionCount).toBe(2);
+    expect(chrome.props?.hideLight).toBe(true);
+
+    const shareButton = container.querySelector('[data-action="mobile.session.invite"]') as HTMLButtonElement | null;
+    expect(shareButton).not.toBeNull();
+    const stopButton = container.querySelector(
+      '[data-pressable="mobile.session.inEndSession"]',
+    ) as HTMLButtonElement | null;
+    expect(stopButton).not.toBeNull();
+    // The Stop control carries a visible "Stop" label, not just an icon.
+    expect(stopButton?.textContent).toContain('mobile.session.inStop');
+    stopButton!.click();
+    expect(onEndSession).toHaveBeenCalledTimes(1);
+  });
+
+  it('reserves two right slots for the Stop label (and hides the light) when only End is provided', () => {
+    render(<RecordTopChrome {...makeProps({ onEndSession: vi.fn() })} />);
+    expect(chrome.props?.trailingActionCount).toBe(2);
+    expect(chrome.props?.leadingActionCount).toBe(0);
+    expect(chrome.props?.hideLight).toBe(true);
   });
 
   describe('material variant', () => {
@@ -153,6 +211,15 @@ describe('RecordTopChrome', () => {
       appbar.actions = [];
       rerender(<RecordTopChrome {...makeProps({ onShare: vi.fn() })} />);
       expect(appbar.actions).toContain('mobile.session.invite');
+    });
+
+    it('shows the End app-bar action only while a session is live (onEndSession set)', () => {
+      const { rerender } = render(<RecordTopChrome {...makeProps()} />);
+      expect(appbar.actions).not.toContain('mobile.session.inEndSession');
+
+      appbar.actions = [];
+      rerender(<RecordTopChrome {...makeProps({ onEndSession: vi.fn() })} />);
+      expect(appbar.actions).toContain('mobile.session.inEndSession');
     });
   });
 });

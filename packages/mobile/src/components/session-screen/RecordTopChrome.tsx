@@ -4,10 +4,13 @@ import { type SharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { Appbar } from 'react-native-paper';
-import { CollapsingTopChrome, GlassToolbarAction } from '../chrome';
+import { CollapsingTopChrome, GlassToolbarAction, TOP_ACTION_SIZE } from '../chrome';
 import { Icon } from '../Icon';
+import { Text } from '../Text';
+import { PressableSurface } from '../PressableSurface';
 import { iconMap } from '../icon-map';
 import { useTheme } from '../../providers/theme-provider';
+import { spacing } from '../../theme/tokens';
 
 // Record's defining action is the Start/End footer button, so the chrome's
 // create island is gated off — its handler is never invoked.
@@ -27,6 +30,10 @@ type RecordTopChromeProps = {
   /** Open the invite sheet. Provided only while a session is live; the share
    *  glyph then docks at the far right of the chrome's right toolbar. */
   onShare?: () => void;
+  /** Open the End-session confirmation. Provided only while a session is live; the
+   *  End glyph docks beside the share control (destructive tint) so the session's
+   *  stop lives in the nav-bar trailing slot, off the bottom edge. */
+  onEndSession?: () => void;
 };
 
 /**
@@ -53,6 +60,7 @@ export function RecordTopChrome({
   scrollY,
   onPressTitle,
   onShare,
+  onEndSession,
 }: RecordTopChromeProps) {
   const { t } = useTranslation('session');
   const { t: tBoards } = useTranslation('boards');
@@ -84,7 +92,8 @@ export function RecordTopChrome({
           elevated
           style={[styles.materialAppbar, { backgroundColor: systemColors.secondaryBackground }]}
         >
-          <Appbar.Content title={title} color={systemColors.label as string} />
+          {/* Invite/share docks on the LEFT (leading) while a session is live; the
+              destructive Stop sits on the right. */}
           {onShare ? (
             <Appbar.Action
               icon={iconMap['person.badge.plus'].android}
@@ -93,17 +102,48 @@ export function RecordTopChrome({
               accessibilityLabel={t('mobile.session.invite')}
             />
           ) : null}
+          <Appbar.Content title={title} color={systemColors.label as string} />
+          {onEndSession ? (
+            <Appbar.Action
+              icon={iconMap['flag'].android}
+              color={brandColors.error}
+              onPress={onEndSession}
+              accessibilityLabel={t('mobile.session.inEndSession')}
+            />
+          ) : null}
         </Appbar.Header>
       </View>
     );
   }
 
-  // Liquid-glass variant: the shared collapsing chrome with the session title,
-  // board pill, and (while live) the share/invite trailing action.
-  const trailingAction = onShare ? (
+  // Liquid-glass variant: the shared collapsing chrome. While a session is live the
+  // invite/share control docks on the LEFT and a single destructive Stop control on
+  // the RIGHT, with no lightbulb — so the active header reads invite | title | stop.
+  // End sits up here rather than as a bottom bar, keeping the bottom edge to the tab
+  // bar + climb accessory.
+  const inSession = onEndSession !== undefined;
+  const leadingAction = onShare ? (
     <GlassToolbarAction onPress={onShare} accessibilityLabel={t('mobile.session.invite')}>
       <Icon name="person.badge.plus" size={22} color={brandColors.primary} />
     </GlassToolbarAction>
+  ) : undefined;
+  // Stop is a labelled glass pill (icon + "Stop"), not an icon-only slot, so it reads
+  // clearly as the session-ending control. It occupies two toolbar slots to fit the
+  // label.
+  const trailingAction = onEndSession ? (
+    <PressableSurface
+      onPress={onEndSession}
+      feedback="opacity"
+      hitSlop={4}
+      accessibilityRole="button"
+      accessibilityLabel={t('mobile.session.inEndSession')}
+      style={styles.stopAction}
+    >
+      <Icon name="flag" size={20} color={brandColors.error} />
+      <Text variant="subheadline" color={brandColors.error} style={styles.stopLabel}>
+        {t('mobile.session.inStop')}
+      </Text>
+    </PressableSurface>
   ) : undefined;
 
   return (
@@ -119,7 +159,12 @@ export function RecordTopChrome({
       onHeightChange={onHeightChange}
       scrollY={scrollY}
       onPressTitle={onPressTitle}
+      leadingAction={leadingAction}
+      leadingActionCount={onShare ? 1 : 0}
       trailingAction={trailingAction}
+      // The Stop pill spans two icon-slots so its "Stop" label fits the toolbar width.
+      trailingActionCount={onEndSession ? 2 : 0}
+      hideLight={inSession}
     />
   );
 }
@@ -136,5 +181,17 @@ const styles = StyleSheet.create({
   materialAppbar: {
     elevation: 0,
     shadowOpacity: 0,
+  },
+  // The labelled Stop pill fills the two trailing toolbar slots it reserves.
+  stopAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing[1],
+    paddingHorizontal: spacing[3],
+    height: TOP_ACTION_SIZE,
+  },
+  stopLabel: {
+    fontWeight: '600',
   },
 });

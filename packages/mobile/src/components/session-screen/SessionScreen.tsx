@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { PanGesture } from 'react-native-gesture-handler';
@@ -45,6 +45,23 @@ export function SessionScreen({ onClose, headerGesture, translateY, screenHeight
   const handleShare = useCallback(() => setShowInvite(true), []);
   const onShare = sessionActive ? handleShare : undefined;
 
+  // The End-session confirmation sheet lives in InSessionView, but its trigger
+  // comes from either the tab chrome (RecordTopChrome's End trailing action) or the
+  // overlay header strip — so the open/close intent is owned here and the sheet is
+  // driven as a controlled prop below.
+  const [showEndSession, setShowEndSession] = useState(false);
+  const requestEndSession = useCallback(() => setShowEndSession(true), []);
+  const dismissEndSession = useCallback(() => setShowEndSession(false), []);
+  const onEndSession = sessionActive ? requestEndSession : undefined;
+
+  // If the session ends out from under us (e.g. another participant ends it) while
+  // the confirm sheet is open, clear the intent — InSessionView (which renders the
+  // sheet) unmounts, so a stale `true` would otherwise auto-open the sheet on the
+  // next session.
+  useEffect(() => {
+    if (!sessionActive) setShowEndSession(false);
+  }, [sessionActive]);
+
   // Overlay mode keeps the original padded container + drag-handle header strip.
   const isOverlay = onClose !== undefined;
 
@@ -55,12 +72,19 @@ export function SessionScreen({ onClose, headerGesture, translateY, screenHeight
           onClose={onClose}
           sessionActive={sessionActive}
           onShare={onShare}
+          onEndSession={onEndSession}
           inviteHint={soloInvite}
           dragGesture={headerGesture}
         />
         <View style={styles.body}>
           {sessionActive ? (
-            <InSessionView showChrome={false} translateY={translateY} screenHeight={screenHeight} />
+            <InSessionView
+              showChrome={false}
+              endVisible={showEndSession}
+              onEndDismiss={dismissEndSession}
+              translateY={translateY}
+              screenHeight={screenHeight}
+            />
           ) : (
             <PreSessionView showChrome={false} />
           )}
@@ -77,7 +101,17 @@ export function SessionScreen({ onClose, headerGesture, translateY, screenHeight
   // chrome height. No padded container, no header strip.
   return (
     <View style={styles.container}>
-      {sessionActive ? <InSessionView showChrome onShare={onShare} /> : <PreSessionView showChrome />}
+      {sessionActive ? (
+        <InSessionView
+          showChrome
+          onShare={onShare}
+          onRequestEndSession={requestEndSession}
+          endVisible={showEndSession}
+          onEndDismiss={dismissEndSession}
+        />
+      ) : (
+        <PreSessionView showChrome />
+      )}
       {sessionId ? (
         <InviteSheet visible={showInvite} onDismiss={() => setShowInvite(false)} sessionId={sessionId} />
       ) : null}

@@ -25,10 +25,6 @@ const rows = vi.hoisted(() => ({
   onPress: null as ((item: ClimbQueueItem) => void) | null,
 }));
 
-const footer = vi.hoisted(() => ({
-  styles: [] as unknown[],
-}));
-
 const list = vi.hoisted(() => ({
   props: [] as Array<{
     nestedScrollEnabled?: boolean;
@@ -36,7 +32,15 @@ const list = vi.hoisted(() => ({
     dataLength: number;
     hasGestureScrollComponent: boolean;
     hasHeaderComponent: boolean;
+    paddingBottom?: unknown;
   }>,
+}));
+
+// Captures the props PreSessionView passes to the (mocked) Start FAB, so the test
+// can fire onHeightChange and verify the list reservation tracks it + the offset.
+const fab = vi.hoisted(() => ({
+  onHeightChange: null as ((height: number) => void) | null,
+  bottomOffset: null as number | null,
 }));
 
 const bottomChrome = vi.hoisted(() => ({
@@ -50,12 +54,8 @@ const bottomChrome = vi.hoisted(() => ({
 }));
 
 vi.mock('react-native', () => ({
-  View: ({ children, testID, style }: { children?: ReactNode; testID?: string; style?: unknown }) => {
-    if (testID === 'pre-session-footer') {
-      footer.styles = Array.isArray(style) ? style : [style];
-    }
-    return createElement('div', testID ? { 'data-testid': testID } : null, children);
-  },
+  View: ({ children, testID }: { children?: ReactNode; testID?: string }) =>
+    createElement('div', testID ? { 'data-testid': testID } : null, children),
   StyleSheet: { create: (styles: unknown) => styles, hairlineWidth: 1 },
 }));
 
@@ -64,7 +64,7 @@ vi.mock('react-native-gesture-handler', () => ({
 }));
 
 vi.mock('react-native-safe-area-context', () => ({
-  useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
+  useSafeAreaInsets: () => ({ top: 0, bottom: 100, left: 0, right: 0 }),
 }));
 
 vi.mock('react-native-reanimated', () => ({
@@ -81,6 +81,7 @@ vi.mock('@shopify/flash-list', () => ({
     ListHeaderComponent,
     nestedScrollEnabled,
     keyboardShouldPersistTaps,
+    contentContainerStyle,
   }: {
     data?: unknown[];
     renderItem?: (info: { item: unknown; index: number }) => ReactNode;
@@ -88,6 +89,7 @@ vi.mock('@shopify/flash-list', () => ({
     ListHeaderComponent?: ReactNode;
     nestedScrollEnabled?: boolean;
     keyboardShouldPersistTaps?: unknown;
+    contentContainerStyle?: { paddingBottom?: unknown };
   }) => {
     list.props.push({
       nestedScrollEnabled,
@@ -95,6 +97,7 @@ vi.mock('@shopify/flash-list', () => ({
       dataLength: data?.length ?? 0,
       hasGestureScrollComponent: renderScrollComponent != null,
       hasHeaderComponent: ListHeaderComponent != null,
+      paddingBottom: contentContainerStyle?.paddingBottom,
     });
     return createElement(
       'div',
@@ -117,6 +120,20 @@ vi.mock('../../../Card', () => ({
 vi.mock('../../../GlassSurface', () => ({ GlassSurface: () => null }));
 vi.mock('../../../SectionHeader', () => ({ SectionHeader: () => null }));
 vi.mock('../../RecordTopChrome', () => ({ RecordTopChrome: () => null }));
+vi.mock('../../SessionStartFab', () => ({
+  SESSION_START_FAB_HEIGHT: 60,
+  SessionStartFab: ({
+    onHeightChange,
+    bottomOffset,
+  }: {
+    onHeightChange?: (height: number) => void;
+    bottomOffset?: number;
+  }) => {
+    fab.onHeightChange = onHeightChange ?? null;
+    fab.bottomOffset = bottomOffset ?? null;
+    return createElement('div', { 'data-testid': 'pre-session-footer' });
+  },
+}));
 vi.mock('../../../Text', () => ({
   Text: ({ children }: { children?: ReactNode }) => createElement('span', null, children),
 }));
@@ -167,19 +184,9 @@ function makeRow(uuid: string) {
   };
 }
 
-function getStyleNumber(styles: unknown[], key: string): number | null {
-  for (const style of styles) {
-    if (style == null || typeof style !== 'object' || Array.isArray(style)) continue;
-    const value = (style as Record<string, unknown>)[key];
-    if (typeof value === 'number') return value;
-  }
-  return null;
-}
-
 beforeEach(() => {
   rows.rendered = [];
   rows.onPress = null;
-  footer.styles = [];
   list.props = [];
   bottomChrome.metrics = {
     insideTabs: true,
@@ -190,6 +197,8 @@ beforeEach(() => {
   };
   preview.result.items = [makeRow('a'), makeRow('b')] as unknown[];
   preview.result.refreshingUuids = new Set<string>();
+  fab.onHeightChange = null;
+  fab.bottomOffset = null;
 });
 
 describe('PreSessionView preview rows', () => {
@@ -249,19 +258,17 @@ describe('PreSessionView preview rows', () => {
     expect(rows.rendered).toEqual([]);
   });
 
-  it('pins the Start bar above the bottom chrome via the fixed-footer metric', () => {
+  it('reserves the Start FAB height + bottom offset as the list bottom padding', () => {
     render(createElement(PreSessionView));
 
-    // fixedFooterBottom is the tab-bar clearance when no queue accessory is
-    // present, so the bar sits flush rather than stranded mid-screen.
-    expect(getStyleNumber(footer.styles, 'bottom')).toBe(120);
-  });
+    // The FAB receives the same offset the list reserves (single source — no drift).
+    // Liquid Glass anchors to the safe-area inset (100 here).
+    expect(fab.bottomOffset).toBe(100);
 
-  it('lifts to clear the queue accessory when it reserves space', () => {
-    bottomChrome.metrics = { ...bottomChrome.metrics, fixedFooterBottom: 178 };
-
-    render(createElement(PreSessionView));
-
-    expect(getStyleNumber(footer.styles, 'bottom')).toBe(178);
+    // When the FAB measures itself, the list's bottom padding tracks height + offset.
+    act(() => {
+      fab.onHeightChange?.(50);
+    });
+    expect(list.props.at(-1)?.paddingBottom).toBe(150);
   });
 });

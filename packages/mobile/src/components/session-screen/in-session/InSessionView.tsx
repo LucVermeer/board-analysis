@@ -39,11 +39,10 @@ import { withAlpha } from '../../../theme/colors';
 import { iosSystemColors } from '../../../theme/ios-colors';
 import { springs } from '../../../theme/animations';
 import { borderRadius, spacing } from '../../../theme/tokens';
-import { glassSize } from '../../../theme/layout';
 import { gradeBadgeColor } from '../../you/profile-chart-colors';
 import { hapticSelection } from '../../../lib/haptics';
+import { reportError } from '../../../lib/sentry';
 import { RecordTopChrome } from '../RecordTopChrome';
-import { SessionActionFooter } from '../SessionActionFooter';
 import { SessionAnalytics } from './SessionAnalytics';
 import { SessionLeaderboard } from './SessionLeaderboard';
 import { SessionPresenceRow } from './SessionPresenceRow';
@@ -56,6 +55,14 @@ type InSessionViewProps = {
   showChrome?: boolean;
   /** Open the invite sheet. The chrome docks the share/invite glyph (tab mode). */
   onShare?: () => void;
+  /** Open the End-session confirmation (tab mode wires this into the chrome's End
+   *  trailing action; overlay mode triggers it from the header strip). */
+  onRequestEndSession?: () => void;
+  /** Controlled visibility of the End-session confirmation sheet (owned by
+   *  SessionScreen so the overlay header strip can open it too). */
+  endVisible?: boolean;
+  /** Dismiss the End-session confirmation sheet. */
+  onEndDismiss?: () => void;
   /** Host overlay offset (0 = presented). The body pull-to-dismiss drives it. Absent in tab mode. */
   translateY?: SharedValue<number>;
   /** Screen height for the dismiss-distance threshold. Absent in tab mode. */
@@ -238,7 +245,15 @@ const SessionHistoryRow = memo(function SessionHistoryRow({
   );
 });
 
-export function InSessionView({ showChrome = false, onShare, translateY, screenHeight }: InSessionViewProps) {
+export function InSessionView({
+  showChrome = false,
+  onShare,
+  onRequestEndSession,
+  endVisible = false,
+  onEndDismiss,
+  translateY,
+  screenHeight,
+}: InSessionViewProps) {
   const { t } = useTranslation('session');
   const { systemColors, brandColors, variant } = useTheme();
   const insets = useSafeAreaInsets();
@@ -459,25 +474,36 @@ export function InSessionView({ showChrome = false, onShare, translateY, screenH
       });
   }, [translateY, screenHeight, scrollOffset, startedAtTop]);
 
-  const [showEndSession, setShowEndSession] = useState(false);
   const [isEnding, setIsEnding] = useState(false);
-  // The End bar matches the pre-session Start bar: a PinnedActionBar glass
-  // toolbar above the bottom chrome that reports its measured height. The list
-  // reserves that height plus the same bottom-chrome offset. Seed near the
-  // rendered size (large button + the bar's vertical padding) so the first paint
-  // is close before onLayout settles.
-  const footerBottom = bottomChrome.fixedFooterBottom;
-  const [footerHeight, setFooterHeight] = useState(glassSize.hero + spacing[3] * 2);
+  // End moved to the top chrome's trailing slot, so the bottom edge keeps only the
+  // climb accessory + tab bar (no third glass band). The history list reserves the
+  // bottom offset so its last row clears them: Liquid Glass anchors to the raw
+  // safe-area inset (on iOS 26 it already includes the tab bar + accessory — see the
+  // on-device evidence in PreSessionView); Material uses the fixed-footer reserve.
+  const footerBottom = variant === 'material' ? bottomChrome.fixedFooterBottom : insets.bottom;
 
   const handleConfirmEnd = useCallback(async () => {
     setIsEnding(true);
-    const summary = await endSession();
-    setIsEnding(false);
-    setShowEndSession(false);
-    if (summary) {
-      router.push({ pathname: '/(tabs)/record/summary', params: { sessionId: summary.sessionId } });
+    try {
+      const summary = await endSession();
+      onEndDismiss?.();
+      if (summary) {
+        router.push({ pathname: '/(tabs)/record/summary', params: { sessionId: summary.sessionId } });
+      }
+    } catch (error) {
+      // Surface the failure (the sheet stays open so the user can retry) rather than
+      // leaving a thrown endSession() as a silent unhandled rejection.
+      reportError(error, { tags: { source: 'endSession' } });
+    } finally {
+      // Always clear the spinner — without this a thrown endSession() would leave the
+      // confirm button spinning forever and the sheet undismissable.
+      setIsEnding(false);
     }
-  }, [endSession, router]);
+  }, [endSession, router, onEndDismiss]);
+
+  // Stable dismiss handler so the always-mounted EndSessionSheet doesn't get a fresh
+  // onDismiss ref every render (onEndDismiss is optional, hence the wrapper).
+  const handleEndDismiss = useCallback(() => onEndDismiss?.(), [onEndDismiss]);
 
   // The history tick list is unbounded (it grows with every logged ascent in a
   // long party session), so it virtualizes through a FlashList instead of a
@@ -598,7 +624,7 @@ export function InSessionView({ showChrome = false, onShare, translateY, screenH
       contentContainerStyle={{
         paddingHorizontal: spacing[4],
         paddingTop: listPaddingTop,
-        paddingBottom: footerHeight + footerBottom,
+        paddingBottom: footerBottom,
       }}
       scrollIndicatorInsets={{ top: showChrome ? chromeHeight : 0 }}
       showsVerticalScrollIndicator={false}
@@ -620,22 +646,13 @@ export function InSessionView({ showChrome = false, onShare, translateY, screenH
           scrollY={scrollOffset}
           onPressTitle={handleScrollToTop}
           onShare={onShare}
+          onEndSession={onRequestEndSession}
         />
       ) : null}
 
-      <SessionActionFooter
-        testID="in-session-footer"
-        onHeightChange={setFooterHeight}
-        label={t('mobile.session.inEndSession')}
-        materialIcon="flag"
-        emphasis="secondary"
-        glassButtonVariant="outlined"
-        onPress={() => setShowEndSession(true)}
-      />
-
       <EndSessionSheet
-        visible={showEndSession}
-        onDismiss={() => setShowEndSession(false)}
+        visible={endVisible}
+        onDismiss={handleEndDismiss}
         onConfirm={() => void handleConfirmEnd()}
         isEnding={isEnding}
         climbCount={sessionHistoryTicks.length}
