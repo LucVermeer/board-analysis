@@ -12,6 +12,15 @@ type PlaylistItem = {
   creatorName?: string;
   color?: string;
   icon?: string;
+  isPinnedByMe?: boolean;
+};
+
+type DiscoverOptions = {
+  generatedRecommendation?: boolean;
+  boardType?: string;
+  layoutId?: number;
+  sizeId?: number;
+  angle?: number;
 };
 
 // Mutable hook return values — each test sets the slice it needs. The two
@@ -24,7 +33,7 @@ const userHook = vi.hoisted(() => ({
   loadMore: vi.fn(),
   refetch: vi.fn(),
 }));
-const forYouHook = vi.hoisted(() => ({
+const exactForYouHook = vi.hoisted(() => ({
   popular: [] as PlaylistItem[],
   recent: [] as PlaylistItem[],
   isLoading: false,
@@ -42,15 +51,24 @@ const communityHook = vi.hoisted(() => ({
   loadMore: vi.fn(),
   refetch: vi.fn(),
 }));
+const pinnedHook = vi.hoisted(() => ({
+  pinned: [] as PlaylistItem[],
+  refetch: vi.fn(),
+}));
 const createPlaylist = vi.hoisted(() => vi.fn());
+const pinPlaylist = vi.hoisted(() => vi.fn());
+const unpinPlaylist = vi.hoisted(() => vi.fn());
+const discoverOptions = vi.hoisted(() => [] as DiscoverOptions[]);
 
 vi.mock('@boardsesh/playlists-react', () => ({
   useUserPlaylists: () => userHook,
-  useDiscoverPlaylists: (options: { generatedRecommendation?: boolean }) =>
-    options.generatedRecommendation ? forYouHook : communityHook,
-  usePinnedPlaylists: () => ({ pinned: [], refetch: vi.fn() }),
+  useDiscoverPlaylists: (options: DiscoverOptions) => {
+    discoverOptions.push(options);
+    return options.generatedRecommendation ? exactForYouHook : communityHook;
+  },
+  usePinnedPlaylists: () => pinnedHook,
   useSmartPlaylistCounts: () => ({ data: [], isLoading: false }),
-  usePlaylistMutations: () => ({ createPlaylist, pinPlaylist: vi.fn(), unpinPlaylist: vi.fn() }),
+  usePlaylistMutations: () => ({ createPlaylist, pinPlaylist, unpinPlaylist }),
 }));
 
 // @tanstack/react-query is NOT mocked — the create flow writes to the real
@@ -105,7 +123,7 @@ vi.mock('../../../../src/providers/toast-provider', () => ({
 vi.mock('../../../../src/lib/graphql/use-auth-token', () => ({ useAuthToken: () => ({ data: 'token' }) }));
 vi.mock('../../../../src/lib/graphql/hooks', () => ({ useProfile: () => ({ data: { id: 'me' } }) }));
 vi.mock('../../../../src/lib/graphql/use-active-board', () => ({
-  useActiveBoard: () => ({ data: { boardType: 'kilter', layoutId: 1 } }),
+  useActiveBoard: () => ({ data: { boardType: 'kilter', layoutId: 1, sizeId: 10, angle: 40 } }),
 }));
 vi.mock('../../../../src/hooks/use-bottom-chrome-metrics', () => ({
   useBottomChromeMetrics: () => ({ scrollBottomPadding: 0 }),
@@ -140,16 +158,32 @@ vi.mock('../../../../src/components/ActivityIndicator', () => ({
   ActivityIndicator: () => createElement('div', { 'data-spinner': 'true' }),
 }));
 vi.mock('../../../../src/components/SectionHeader', () => ({
-  SectionHeader: ({ title }: { title: string }) => createElement('div', { 'data-section': title }),
+  SectionHeader: ({ title, actionLabel }: { title: string; actionLabel?: string }) =>
+    createElement('h2', { 'data-section': title }, actionLabel ? `${title} ${actionLabel}` : title),
 }));
 // The form sheet exposes a submit button driving onSubmit with fixed form
 // values, so the test can trigger the create flow without the real sheet UI.
 const FORM_VALUES = { name: 'Crimps', description: '', color: undefined, icon: undefined, isPublic: false };
 vi.mock('../../../../src/components/playlist', () => ({
-  PlaylistCard: ({ name, metaLabel }: { name: string; metaLabel?: string }) =>
-    createElement('div', { 'data-card': name }, metaLabel ? `${name} ${metaLabel}` : name),
+  PlaylistCard: ({
+    name,
+    metaLabel,
+    isPinned,
+    onTogglePin,
+  }: {
+    name: string;
+    metaLabel?: string;
+    isPinned?: boolean;
+    onTogglePin?: () => void;
+  }) =>
+    createElement(
+      'div',
+      { 'data-card': name, 'data-pinned': isPinned ? 'true' : 'false' },
+      createElement('span', null, metaLabel ? `${name} ${metaLabel}` : name),
+      onTogglePin ? createElement('button', { 'aria-label': `pin-${name}`, onClick: onTogglePin }, 'pin') : null,
+    ),
   PlaylistScrollSection: ({ children, title }: { children?: ReactNode; title: string }) =>
-    createElement('div', { 'data-scroll-section': title }, children),
+    createElement('section', { 'data-scroll-section': title }, createElement('h2', null, title), children),
   PlaylistFormSheet: ({ onSubmit }: { onSubmit: (values: typeof FORM_VALUES) => void }) =>
     createElement('button', { 'aria-label': 'submit-create', onClick: () => onSubmit(FORM_VALUES) }, 'submit'),
 }));
@@ -178,17 +212,22 @@ beforeEach(() => {
   userHook.isLoading = false;
   userHook.hasError = false;
   userHook.refetch.mockClear();
-  forYouHook.popular = [];
-  forYouHook.recent = [];
-  forYouHook.isLoading = false;
-  forYouHook.hasError = false;
-  forYouHook.refetch.mockClear();
+  exactForYouHook.popular = [];
+  exactForYouHook.recent = [];
+  exactForYouHook.isLoading = false;
+  exactForYouHook.hasError = false;
+  exactForYouHook.refetch.mockClear();
   communityHook.popular = [];
   communityHook.recent = [];
   communityHook.isLoading = false;
   communityHook.hasError = false;
   communityHook.refetch.mockClear();
+  pinnedHook.pinned = [];
+  pinnedHook.refetch.mockClear();
   createPlaylist.mockReset();
+  pinPlaylist.mockReset();
+  unpinPlaylist.mockReset();
+  discoverOptions.length = 0;
 });
 
 describe('DiscoverLibrary error handling', () => {
@@ -210,16 +249,16 @@ describe('DiscoverLibrary error handling', () => {
 
     fireEvent.click(getByLabelText('library.errors.tryAgain'));
     expect(communityHook.refetch).toHaveBeenCalledTimes(1);
-    expect(forYouHook.refetch).not.toHaveBeenCalled();
+    expect(exactForYouHook.refetch).not.toHaveBeenCalled();
     expect(userHook.refetch).not.toHaveBeenCalled();
   });
 
   it('retries only the forYou stream when only it failed', () => {
-    forYouHook.hasError = true;
+    exactForYouHook.hasError = true;
     const { getByLabelText } = renderHub();
 
     fireEvent.click(getByLabelText('library.errors.tryAgain'));
-    expect(forYouHook.refetch).toHaveBeenCalledTimes(1);
+    expect(exactForYouHook.refetch).toHaveBeenCalledTimes(1);
     expect(communityHook.refetch).not.toHaveBeenCalled();
     expect(userHook.refetch).not.toHaveBeenCalled();
   });
@@ -232,16 +271,15 @@ describe('DiscoverLibrary error handling', () => {
     expect(queryByText('library.errors.loadTitle')).toBeNull();
   });
 
-  it('shows the default smart cards instead of the empty state when all sections succeed with no playlists', () => {
+  it('shows the empty state when all sections succeed with no playlists', () => {
     const { getByText, queryByText } = renderHub();
 
-    expect(getByText('library.smart.likedClimbs.title')).toBeTruthy();
-    expect(queryByText('library.empty.title')).toBeNull();
+    expect(getByText('library.empty.title')).toBeTruthy();
     expect(queryByText('library.errors.loadTitle')).toBeNull();
   });
 
   it('renders for-you and community playlists from separate discover streams', () => {
-    forYouHook.popular = [{ uuid: 'generated', name: 'Fresh for you', climbCount: 4 }];
+    exactForYouHook.popular = [{ uuid: 'generated', name: 'Fresh for you', climbCount: 4 }];
     communityHook.popular = [
       { uuid: 'community', name: 'Setter picks', climbCount: 7, creatorId: 'creator-2', creatorName: 'Jess' },
     ];
@@ -250,6 +288,108 @@ describe('DiscoverLibrary error handling', () => {
 
     expect(getByText('Fresh for you')).toBeTruthy();
     expect(getByText('Setter picks library.communityByline')).toBeTruthy();
+  });
+
+  it('requests generated playlists for the active board size and angle', () => {
+    renderHub();
+
+    expect(discoverOptions).toContainEqual(
+      expect.objectContaining({
+        generatedRecommendation: true,
+        boardType: 'kilter',
+        layoutId: 1,
+        sizeId: 10,
+        angle: 40,
+      }),
+    );
+  });
+
+  it('renders pinned grid, owned playlists, generated, and community in order', () => {
+    pinnedHook.pinned = [{ uuid: 'pinned', name: 'Pinned list', climbCount: 2, isPinnedByMe: true }];
+    userHook.playlists = [
+      { uuid: 'pinned', name: 'Pinned list', climbCount: 2, isPinnedByMe: true },
+      { uuid: 'owned', name: 'Project drawer', climbCount: 5, isPinnedByMe: false },
+    ];
+    exactForYouHook.popular = [{ uuid: 'generated', name: 'Fresh for you', climbCount: 4 }];
+    communityHook.popular = [
+      { uuid: 'community', name: 'Setter picks', climbCount: 7, creatorId: 'creator-2', creatorName: 'Jess' },
+    ];
+
+    const { container, getByText } = renderHub();
+    const bodyText = container.textContent ?? '';
+    const pinnedIndex = bodyText.indexOf('library.sections.pinned');
+    const pinnedItemIndex = bodyText.indexOf('Pinned list');
+    const userPlaylistsIndex = bodyText.indexOf('library.allPlaylists.title');
+    const forYouIndex = bodyText.indexOf('library.sections.forYou');
+    const communityIndex = bodyText.indexOf('library.sections.community');
+
+    expect(getByText('Pinned list')).toBeTruthy();
+    expect(getByText('Project drawer')).toBeTruthy();
+    expect(pinnedIndex).toBeGreaterThanOrEqual(0);
+    expect(pinnedItemIndex).toBeGreaterThan(pinnedIndex);
+    expect(pinnedItemIndex).toBeLessThan(userPlaylistsIndex);
+    expect(userPlaylistsIndex).toBeLessThan(forYouIndex);
+    expect(forYouIndex).toBeLessThan(communityIndex);
+  });
+
+  it('does not render an empty generated shelf when generated playlists are empty', () => {
+    userHook.playlists = [{ uuid: 'owned', name: 'Project drawer', climbCount: 5, isPinnedByMe: false }];
+    communityHook.popular = [
+      { uuid: 'community', name: 'Setter picks', climbCount: 7, creatorId: 'creator-2', creatorName: 'Jess' },
+    ];
+
+    const { queryByText } = renderHub();
+
+    expect(queryByText('library.sections.forYou')).toBeNull();
+  });
+
+  it('does not show see all in the pinned header', () => {
+    pinnedHook.pinned = [{ uuid: 'pinned', name: 'Pinned list', climbCount: 2, isPinnedByMe: true }];
+    userHook.playlists = [
+      { uuid: 'pinned', name: 'Pinned list', climbCount: 2, isPinnedByMe: true },
+      { uuid: 'owned', name: 'Project drawer', climbCount: 5, isPinnedByMe: false },
+    ];
+
+    const { container } = renderHub();
+    const pinnedHeader = container.querySelector('[data-section="library.sections.pinned"]');
+
+    expect(pinnedHeader?.textContent).toBe('library.sections.pinned');
+  });
+
+  it('shows pin controls on generated and community playlist cards', async () => {
+    exactForYouHook.popular = [{ uuid: 'generated', name: 'Fresh for you', climbCount: 4 }];
+    communityHook.popular = [
+      { uuid: 'community', name: 'Setter picks', climbCount: 7, creatorId: 'creator-2', creatorName: 'Jess' },
+    ];
+    pinPlaylist.mockResolvedValue(true);
+
+    const { getByLabelText } = renderHub();
+
+    await act(async () => {
+      fireEvent.click(getByLabelText('pin-Fresh for you'));
+    });
+    await act(async () => {
+      fireEvent.click(getByLabelText('pin-Setter picks'));
+    });
+
+    expect(pinPlaylist).toHaveBeenCalledWith('generated');
+    expect(pinPlaylist).toHaveBeenCalledWith('community');
+    expect(pinnedHook.refetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('caps the pinned grid at eight playlists', () => {
+    pinnedHook.pinned = Array.from({ length: 9 }, (_, index) => ({
+      uuid: `pinned-${index}`,
+      name: `Pinned ${index + 1}`,
+      climbCount: index,
+      isPinnedByMe: true,
+    }));
+
+    const { getByText, queryByText } = renderHub();
+
+    expect(getByText('Pinned 1')).toBeTruthy();
+    expect(getByText('Pinned 8')).toBeTruthy();
+    expect(queryByText('Pinned 9')).toBeNull();
   });
 });
 
