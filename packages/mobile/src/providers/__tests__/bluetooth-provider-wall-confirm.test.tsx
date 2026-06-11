@@ -3,6 +3,7 @@ import { act, render, waitFor, cleanup } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createElement, type ReactNode } from 'react';
 import type { ClimbQueueItem } from '@boardsesh/queue';
+import { derivePreviewOnly } from '@boardsesh/queue-runtime';
 import type { BoardSerialConfig } from '@boardsesh/graphql/operations';
 import type { ResolvedBoardEntry } from '../../lib/ble/resolve-serials';
 import type { PickerState } from '../../lib/ble/use-board-bluetooth';
@@ -30,7 +31,10 @@ const queue = vi.hoisted(() => ({
   sessionId: 'session-1' as string | null,
   driverParticipantId: 'participant-self' as string | null,
   participantId: 'participant-self' as string | null,
-  isPartyPreviewOnly: false,
+  // Live roster size — 0 during the pre-JOIN window (unseeded), >1 once JOIN
+  // resolves. Used by the useIsPartyPreviewOnly mock via derivePreviewOnly so
+  // tests exercise the actual gating logic rather than a hand-wired boolean.
+  sessionUserCount: 2,
   lastConnectedBoardSerial: null as string | null,
   confirmClimbOnWall: vi.fn(async () => {}),
   setSessionBoardSerial: vi.fn(async () => {}),
@@ -131,7 +135,15 @@ vi.mock('../queue-provider', () => ({
     confirmClimbOnWall: queue.confirmClimbOnWall,
     setSessionBoardSerial: queue.setSessionBoardSerial,
   }),
-  useIsPartyPreviewOnly: () => queue.isPartyPreviewOnly,
+  // Derive from the real derivePreviewOnly so tests exercise the actual gating
+  // path, including the participantId-null / empty-roster pre-JOIN window.
+  useIsPartyPreviewOnly: () =>
+    derivePreviewOnly({
+      isSessionActive: queue.sessionId !== null,
+      participantId: queue.participantId,
+      driverParticipantId: queue.driverParticipantId,
+      sessionUserCount: queue.sessionUserCount,
+    }),
 }));
 
 const boardDetails = vi.hoisted(() => ({
@@ -199,7 +211,7 @@ describe('BluetoothProvider wall-confirm integration', () => {
     queue.sessionId = 'session-1';
     queue.driverParticipantId = 'participant-self';
     queue.participantId = 'participant-self';
-    queue.isPartyPreviewOnly = false;
+    queue.sessionUserCount = 2;
     queue.lastConnectedBoardSerial = null;
     queue.confirmClimbOnWall.mockClear();
     queue.setSessionBoardSerial.mockClear();
@@ -278,7 +290,6 @@ describe('BluetoothProvider wall-confirm integration', () => {
 
   it('does not auto-send shared climb updates while connected as a party non-driver', async () => {
     queue.driverParticipantId = 'participant-other';
-    queue.isPartyPreviewOnly = true;
 
     renderProvider();
 
@@ -294,7 +305,6 @@ describe('BluetoothProvider wall-confirm integration', () => {
 
   it('starts auto-sending once a connected party participant becomes the driver', async () => {
     queue.driverParticipantId = 'participant-other';
-    queue.isPartyPreviewOnly = true;
     const { rerender } = renderProvider();
 
     await waitFor(() => {
@@ -304,7 +314,6 @@ describe('BluetoothProvider wall-confirm integration', () => {
 
     await act(async () => {
       queue.driverParticipantId = 'participant-self';
-      queue.isPartyPreviewOnly = false;
       rerender(
         createElement(BluetoothProvider, {
           boardName: 'kilter',
@@ -342,7 +351,6 @@ describe('BluetoothProvider wall-confirm integration', () => {
 
     await act(async () => {
       queue.driverParticipantId = 'participant-other';
-      queue.isPartyPreviewOnly = true;
       rerender(
         createElement(BluetoothProvider, {
           boardName: 'kilter',
@@ -365,10 +373,15 @@ describe('BluetoothProvider wall-confirm integration', () => {
   });
 
   it('keeps auto-sending while a restored session is waiting for JOIN to resolve identity', async () => {
+    // Simulate the pre-JOIN window: sessionId is restored from storage (truthy)
+    // but participantId and driverParticipantId are both null, and the roster is
+    // empty (sessionUserCount = 0) because JOIN hasn't returned yet. With an
+    // unseeded roster, derivePreviewOnly must return false so BluetoothAutoSender
+    // mounts and the eventual wall driver can auto-send immediately on JOIN.
     queue.sessionId = 'session-1';
     queue.driverParticipantId = null;
     queue.participantId = null;
-    queue.isPartyPreviewOnly = false;
+    queue.sessionUserCount = 0;
 
     renderProvider();
 
