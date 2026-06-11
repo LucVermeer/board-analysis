@@ -12,6 +12,7 @@ import Animated from 'react-native-reanimated';
 import { getGradeColor, DEFAULT_GRADE_COLOR } from '@boardsesh/board-constants/grade-colors';
 import type { Climb } from '@boardsesh/queue';
 import { TOOLBAR_CAPSULE_HEIGHT, TOOLBAR_CAPSULE_MAX_WIDTH } from '../../theme/layout';
+import { spacing } from '../../theme/tokens';
 import { CHROME_LABEL_MAX_FONT_SCALE } from '../../theme/typography';
 import { useGradeFormat } from '../../hooks/use-grade-format';
 import { Text } from '../Text';
@@ -120,8 +121,8 @@ export function ClimbCapsule({
 
   const capsuleRadius = surfaceTreatment === 'docked' ? 0 : height / 2;
   // Reserve room on the right so the name/grade never slide under the inline tick.
-  const endActionReservedWidth = endAction ? endActionSize + 8 : 0;
-  const labelRight = 16 + endActionReservedWidth;
+  const endActionReservedWidth = endAction ? endActionSize + spacing[2] : 0;
+  const labelRight = spacing[4] + endActionReservedWidth;
 
   // The docked Material bar stays on a neutral M3 surface (a step above the tab bar
   // via elevation) and marks the grade with a vivid leading colour stripe — distinct
@@ -205,7 +206,7 @@ const styles = StyleSheet.create({
     left: 0,
     top: 0,
     bottom: 0,
-    width: 4,
+    width: spacing[1],
   },
   // Centered-pill cap; omitted on the full-width Material bar.
   capsuleCap: {
@@ -215,31 +216,31 @@ const styles = StyleSheet.create({
     flex: 1,
     overflow: 'hidden',
     justifyContent: 'center',
-    paddingHorizontal: 16,
+    paddingHorizontal: spacing[4],
   },
   labelSlot: {
     position: 'absolute',
-    left: 16,
-    right: 16,
+    left: spacing[4],
+    right: spacing[4],
     justifyContent: 'center',
   },
   peekSlot: {
     position: 'absolute',
-    left: 16,
-    right: 16,
+    left: spacing[4],
+    right: spacing[4],
     justifyContent: 'center',
   },
   endActionSlot: {
     position: 'absolute',
     top: 0,
-    right: 8,
+    right: spacing[2],
     alignItems: 'center',
     justifyContent: 'center',
   },
   labelInner: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: spacing[2],
   },
   gradeText: {
     // Colorized like the list rows; right-aligned with a reserved min width

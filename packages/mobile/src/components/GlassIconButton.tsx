@@ -3,11 +3,13 @@ import {
   type AccessibilityActionEvent,
   type AccessibilityActionInfo,
   type ColorValue,
+  type StyleProp,
   StyleSheet,
   View,
+  type ViewStyle,
 } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
-import { IconButton as PaperIconButton, Badge as PaperBadge } from 'react-native-paper';
+import { IconButton as PaperIconButton } from 'react-native-paper';
 import { GlassSurface } from './GlassSurface';
 import { PressableSurface } from './PressableSurface';
 import { Icon } from './Icon';
@@ -53,6 +55,14 @@ type GlassIconButtonProps = {
   active?: boolean;
 };
 
+const MAX_BADGE_COUNT = 99;
+const BADGE_MAX_FONT_SIZE_MULTIPLIER = 1;
+
+function formatBadgeCount(badgeCount: number | undefined): string | null {
+  if (badgeCount == null || badgeCount <= 0) return null;
+  return badgeCount > MAX_BADGE_COUNT ? `${MAX_BADGE_COUNT}+` : String(badgeCount);
+}
+
 /**
  * Circular icon button shared by the climb-list search row (filter, create) and
  * the bottom-bar search FAB. Routes to a Material 3 `IconButton` on the Material
@@ -69,8 +79,9 @@ export function GlassIconButton(props: GlassIconButtonProps) {
  * (see material-theme-provider), so we hand it the `.android` MDI name. Paper's
  * `IconButton` renders a single glyph — the Liquid Glass cross-fade morph
  * (`secondaryIconName` / `active`) has no Material equivalent and is dropped
- * here; the static `iconName` is shown instead. The count badge is overlaid via
- * Paper's `Badge` in an outer wrapper so the round target can't crop it.
+ * here; the static `iconName` is shown instead. The count badge uses the same
+ * owned overlay as the Liquid Glass path so clamping and Dynamic Type limits
+ * stay identical across variants.
  */
 function GlassIconButtonMaterial({
   iconName,
@@ -86,7 +97,7 @@ function GlassIconButtonMaterial({
   disabled = false,
   size = glassSize.standard,
 }: GlassIconButtonProps) {
-  const showBadge = badgeCount != null && badgeCount > 0;
+  const badgeLabel = formatBadgeCount(badgeCount);
 
   return (
     <View style={[styles.wrapper, { width: size, height: size }]}>
@@ -110,11 +121,7 @@ function GlassIconButtonMaterial({
         accessibilityActions={accessibilityActions}
         onAccessibilityAction={onAccessibilityAction}
       />
-      {showBadge ? (
-        <PaperBadge style={styles.materialBadge} visible>
-          {badgeCount}
-        </PaperBadge>
-      ) : null}
+      {badgeLabel ? <BadgeLabel label={badgeLabel} style={styles.materialBadge} /> : null}
     </View>
   );
 }
@@ -147,7 +154,7 @@ function GlassIconButtonGlass({
   active = false,
 }: GlassIconButtonProps) {
   const reduceMotion = useReduceMotion();
-  const showBadge = badgeCount != null && badgeCount > 0;
+  const badgeLabel = formatBadgeCount(badgeCount);
   const suppressPressRef = useRef(false);
   const releaseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -236,13 +243,22 @@ function GlassIconButtonGlass({
         )}
       </PressableSurface>
 
-      {showBadge ? (
-        <View style={[styles.badge, { backgroundColor: brandColors.primary }]} pointerEvents="none">
-          <Text variant="caption2" color={iosSystemColors.white} style={styles.badgeText}>
-            {badgeCount}
-          </Text>
-        </View>
-      ) : null}
+      {badgeLabel ? <BadgeLabel label={badgeLabel} /> : null}
+    </View>
+  );
+}
+
+function BadgeLabel({ label, style }: { label: string; style?: StyleProp<ViewStyle> }) {
+  return (
+    <View style={[styles.badge, style, { backgroundColor: brandColors.primary }]} pointerEvents="none">
+      <Text
+        variant="caption2"
+        color={iosSystemColors.white}
+        maxFontSizeMultiplier={BADGE_MAX_FONT_SIZE_MULTIPLIER}
+        style={styles.badgeText}
+      >
+        {label}
+      </Text>
     </View>
   );
 }

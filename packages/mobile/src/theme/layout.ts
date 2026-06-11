@@ -66,6 +66,12 @@ export const TOOLBAR_SIDE_MARGIN = 16;
 /** Gap between the toolbar's floating elements. */
 export const TOOLBAR_GAP = 8;
 
+/** Max readable width for UIKit's iOS 26 bottom accessory content. */
+export const NATIVE_BOTTOM_ACCESSORY_MAX_WIDTH = 344;
+
+/** Total horizontal screen gutter reserved around UIKit's iOS 26 bottom accessory. */
+export const NATIVE_BOTTOM_ACCESSORY_SCREEN_GUTTER = 32;
+
 /** Lift between the floating toolbar and the tab bar below it, so the islands
  *  read as floating (the old opaque queue bar sat flush against the tab bar). */
 export const TOOLBAR_GAP_ABOVE_TABBAR = 10;

@@ -9,6 +9,7 @@ import { useReduceMotion } from '../../hooks/use-reduce-motion';
 import { useIsPartyPreviewOnly, usePlaylistSuggestionSource, useQueue } from '../../providers/queue-provider';
 import { useDrawerHost } from '../../providers/drawer-host-provider';
 import { hapticLight, hapticSelection } from '../../lib/haptics';
+import { opacity } from '../../theme/tokens';
 import { useCarouselGesture } from '../play-drawer/use-carousel-gesture';
 import { useWallOrQueueCurrentClimb, useIsWallPinned } from './use-wall-or-queue-climb';
 
@@ -206,11 +207,11 @@ export function useQueueClimbCarousel(
   // sidesteps the Android "derived value doesn't rebuild on width change" symptom.
   const nextPeekStyle = useAnimatedStyle(() => {
     if (translateX.value === 0) return { opacity: 0, transform: [{ translateX: widthSV.value }] };
-    return { opacity: 1, transform: [{ translateX: Math.max(0, widthSV.value + translateX.value) }] };
+    return { opacity: opacity.peek, transform: [{ translateX: Math.max(0, widthSV.value + translateX.value) }] };
   });
   const prevPeekStyle = useAnimatedStyle(() => {
     if (translateX.value === 0) return { opacity: 0, transform: [{ translateX: -widthSV.value }] };
-    return { opacity: 1, transform: [{ translateX: Math.min(0, -widthSV.value + translateX.value) }] };
+    return { opacity: opacity.peek, transform: [{ translateX: Math.min(0, -widthSV.value + translateX.value) }] };
   });
 
   const swipeAccessibilityActions: AccessibilityActionInfo[] = [
