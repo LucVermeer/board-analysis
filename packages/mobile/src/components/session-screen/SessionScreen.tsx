@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { PanGesture } from 'react-native-gesture-handler';
@@ -53,6 +53,14 @@ export function SessionScreen({ onClose, headerGesture, translateY, screenHeight
   const requestEndSession = useCallback(() => setShowEndSession(true), []);
   const dismissEndSession = useCallback(() => setShowEndSession(false), []);
   const onEndSession = sessionActive ? requestEndSession : undefined;
+
+  // If the session ends out from under us (e.g. another participant ends it) while
+  // the confirm sheet is open, clear the intent — InSessionView (which renders the
+  // sheet) unmounts, so a stale `true` would otherwise auto-open the sheet on the
+  // next session.
+  useEffect(() => {
+    if (!sessionActive) setShowEndSession(false);
+  }, [sessionActive]);
 
   // Overlay mode keeps the original padded container + drag-handle header strip.
   const isOverlay = onClose !== undefined;
