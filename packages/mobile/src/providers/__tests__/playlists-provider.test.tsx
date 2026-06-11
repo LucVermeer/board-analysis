@@ -132,7 +132,7 @@ describe('PlaylistsProvider', () => {
     );
     const { result } = renderHook(() => usePlaylistsContext(), { wrapper });
     await result.current.createPlaylist('Projects');
-    expect(createPlaylist).toHaveBeenCalledWith('Projects', undefined, undefined, undefined);
+    expect(createPlaylist).toHaveBeenCalledWith('Projects', undefined, undefined, undefined, undefined);
     expect(trackMock).toHaveBeenCalledTimes(1);
     expect(trackMock).toHaveBeenCalledWith('Create Playlist', {
       playlistId: 'p-new',
