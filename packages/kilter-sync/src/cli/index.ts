@@ -133,8 +133,9 @@ program
   .command('locations')
   .description('Sync public Kilter gym and wall locations into gyms / user_boards')
   .option('--user <userId>', 'use this linked user’s stored Kilter credential (refresh grant)')
+  .option('--skip-if-missing-credentials', 'exit successfully when no token source is configured')
   .option('-v, --verbose', 'verbose logging')
-  .action(async (opts: { user?: string; verbose?: boolean }) => {
+  .action(async (opts: { user?: string; skipIfMissingCredentials?: boolean; verbose?: boolean }) => {
     const runner = new SyncRunner({ onLog: (message) => (opts.verbose ? console.info(message) : undefined) });
     try {
       let tokenProvider;
@@ -146,6 +147,12 @@ program
           process.env.KILTER_TEST_PASSWORD,
         );
       } else {
+        if (opts.skipIfMissingCredentials) {
+          console.log(
+            'Skipping Kilter location sync: no --user or KILTER_TEST_USERNAME/KILTER_TEST_PASSWORD configured.',
+          );
+          return;
+        }
         console.error(
           'No token source: pass --user <id> for a linked account, or set KILTER_TEST_USERNAME/KILTER_TEST_PASSWORD for local testing.',
         );

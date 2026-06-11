@@ -9,8 +9,24 @@ import { MoonBoardClient, type MoonBoardMarker } from '../api/moonboard-client';
 
 type DrizzleDb = PgDatabase<PgQueryResultHKT, Record<string, unknown>>;
 
+type MarkerCoordinates = {
+  latitude: number;
+  longitude: number;
+};
+
+function finiteNumber(value: number | null | undefined): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+function markerCoordinates(marker: MoonBoardMarker): MarkerCoordinates {
+  const latitude = finiteNumber(marker.Latitude) ? marker.Latitude : (marker.LatLng?.[0] ?? Number.NaN);
+  const longitude = finiteNumber(marker.Longitude) ? marker.Longitude : (marker.LatLng?.[1] ?? Number.NaN);
+  return { latitude, longitude };
+}
+
 function baseSourceKey(marker: MoonBoardMarker): string {
-  return `moonboard:${marker.Name}:${marker.Latitude}:${marker.Longitude}`;
+  const coordinates = markerCoordinates(marker);
+  return `moonboard:${marker.Name}:${coordinates.latitude}:${coordinates.longitude}`;
 }
 
 function sourceKeyForConfig(marker: MoonBoardMarker, layoutId: number, angle: number): string {
@@ -27,6 +43,7 @@ export function buildMoonBoardLocationRecords(markers: MoonBoardMarker[]): Publi
   for (const marker of markers) {
     const gymName = marker.Name || 'MoonBoard Gym';
     const gymSourceKey = baseSourceKey(marker);
+    const coordinates = markerCoordinates(marker);
     for (const config of configs) {
       records.push({
         ...config,
@@ -38,8 +55,8 @@ export function buildMoonBoardLocationRecords(markers: MoonBoardMarker[]): Publi
             ? `${gymName}-moonboard`
             : `${gymName}-moonboard-${config.layoutId}-${config.angle}`,
         locationName: null,
-        latitude: marker.Latitude ?? Number.NaN,
-        longitude: marker.Longitude ?? Number.NaN,
+        latitude: coordinates.latitude,
+        longitude: coordinates.longitude,
         gymName,
         gymAddress: marker.Description ?? null,
       });

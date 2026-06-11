@@ -33,7 +33,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "vp lint",
     "lint-fix": "vp lint --fix",
-    "sync:locations": "tsx src/cli/index.ts locations"
+    "sync:locations": "tsx src/cli/index.ts locations --skip-if-missing-credentials"
   },
   "dependencies": {
     "@boardsesh/db": "*",

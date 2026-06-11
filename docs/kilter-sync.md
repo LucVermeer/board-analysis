@@ -200,6 +200,8 @@ bunx kilter-sync locations --user <nextauth-user-id>
 
 For local testing without a linked credential, set `KILTER_TEST_USERNAME` and `KILTER_TEST_PASSWORD`; the CLI will use the password token flow.
 
+The package `sync:locations` script passes `--skip-if-missing-credentials` so aggregate repo tasks can run in clean environments. Direct `kilter-sync locations` calls still require `--user` or test credentials unless that flag is passed explicitly.
+
 ## Climb dedup
 
 Kilter's catalog has duplicate climbs at different UUIDs with identical hold layouts. We collapse them behind a canonical row.
@@ -288,6 +290,7 @@ bunx kilter-sync user <userId>       # Force a sync for one user
 bunx kilter-sync daemon              # Run the daemon (one-user-per-cycle, quiet hours)
 bunx kilter-sync catalog --user <id> # Sync the public climb catalog (Flow A)
 bunx kilter-sync locations --user <id> # Sync public Kilter gym/board locations
+bunx kilter-sync locations --skip-if-missing-credentials # No-op when no token source is configured
 ```
 
 Run with 1Password like aurora-sync:

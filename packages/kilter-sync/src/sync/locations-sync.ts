@@ -59,6 +59,10 @@ function formatAddress(gym: KilterRefGym): string | null {
   return parts.length > 0 ? parts.join(', ') : null;
 }
 
+function wallSourceKey(gym: KilterRefGym, wall: KilterRefWall): string {
+  return `kilter:${gym.gymUuid}:${wall.wallUuid || wall.id}`;
+}
+
 export function buildKilterLocationRecords(
   reference: KilterReferencePull,
   resolver: LayoutResolver,
@@ -74,11 +78,22 @@ export function buildKilterLocationRecords(
       continue;
     }
 
+    if (gym.isListed !== true) {
+      for (const wall of gymWalls) {
+        skipped.push({ sourceKey: wallSourceKey(gym, wall), reason: 'unlisted gym' });
+      }
+      continue;
+    }
+
     const gymName = gym.name || `Kilter Gym ${gym.gymUuid}`;
     const gymSourceKey = `kilter:${gym.gymUuid}`;
 
     for (const wall of gymWalls) {
-      const sourceKey = `kilter:${gym.gymUuid}:${wall.wallUuid || wall.id}`;
+      const sourceKey = wallSourceKey(gym, wall);
+      if (wall.isListed !== true) {
+        skipped.push({ sourceKey, reason: 'unlisted wall' });
+        continue;
+      }
       if (!wall.productName || !wall.productLayoutUuid) {
         skipped.push({ sourceKey, reason: 'missing product name or product layout' });
         continue;

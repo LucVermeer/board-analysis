@@ -40,7 +40,7 @@
     "lint-fix": "vp lint --fix",
     "sync:catalog": "tsx src/cli/index.ts catalog",
     "sync:daemon": "tsx src/cli/index.ts daemon",
-    "sync:locations": "tsx src/cli/index.ts locations",
+    "sync:locations": "tsx src/cli/index.ts locations --skip-if-missing-credentials",
     "sync:user": "tsx src/cli/index.ts user"
   },
   "dependencies": {

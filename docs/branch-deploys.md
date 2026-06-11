@@ -1242,10 +1242,10 @@ What changed → what gets deployed:
 | `packages/backend` only   |    Yes     |    Yes    |      Yes       | Full stack for complete isolation   |
 | `packages/db/src/schema`  |    Yes     |    Yes    |      Yes       | Schema change needs isolated DB     |
 | `packages/db/drizzle`     |    Yes     |    Yes    |      Yes       | Migration needs isolated DB         |
-| `packages/aurora-sync`    |     No     |    No     |    Optional    | Test via manual sync trigger        |
-| `packages/kilter-sync`    |     No     |    No     |    Optional    | Test via manual sync trigger        |
-| `packages/location-sync`  |     No     |    No     |    Optional    | Shared public location writer       |
-| `packages/moonboard-sync` |     No     |    No     |    Optional    | Test via manual location sync       |
+| `packages/aurora-sync`    |    Yes     |    Yes    |      Yes       | Daemon is not run on branch deploys |
+| `packages/kilter-sync`    |    Yes     |    Yes    |      Yes       | Daemon is not run on branch deploys |
+| `packages/location-sync`  |    Yes     |    Yes    |      Yes       | Shared public location writer       |
+| `packages/moonboard-sync` |    Yes     |    Yes    |      Yes       | Manual CLI is not run automatically |
 | Multiple packages         |    Yes     |    Yes    |      Yes       | Full stack always deployed together |
 
 **Implementation:** The `dorny/paths-filter` step from Phase 1 (Section 1.3) drives this matrix. The build-images job builds both web and backend images. The deploy job invokes the Ansible playbook on a self-hosted runner.

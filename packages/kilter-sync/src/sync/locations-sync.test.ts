@@ -85,4 +85,58 @@ describe('buildKilterLocationRecords', () => {
       serialNumber: 'SERIAL-1',
     });
   });
+
+  it('skips unlisted gyms and walls', () => {
+    const baseGym = {
+      id: 'gym-row',
+      gymUuid: 'gym-uuid',
+      name: 'Board House',
+      address: null,
+      city: null,
+      country: null,
+      countryCode: null,
+      postalCode: null,
+      latitude: 1,
+      longitude: 2,
+      instagramUsername: null,
+      gymLogo: null,
+      bannerLogo: null,
+      isListed: true,
+    };
+    const baseWall = {
+      id: 'wall-row',
+      wallUuid: 'wall-uuid',
+      gymUuid: 'gym-uuid',
+      name: null,
+      productName: 'Kilter Board Original',
+      productLayoutUuid: '27',
+      isAdjustable: true,
+      minAngle: null,
+      maxAngle: null,
+      angleIncrements: null,
+      angle: 35,
+      serialNumber: null,
+      accumulatedHoldSetValue: 1,
+      isListed: false,
+      createdAt: null,
+    };
+    const reference: KilterReferencePull = {
+      products: [],
+      holds: [],
+      difficultyGrades: [],
+      productLayouts: [],
+      gyms: [baseGym],
+      walls: [baseWall],
+    };
+
+    expect(buildKilterLocationRecords(reference, resolver())).toEqual({
+      records: [],
+      skipped: [{ sourceKey: 'kilter:gym-uuid:wall-uuid', reason: 'unlisted wall' }],
+    });
+
+    expect(buildKilterLocationRecords({ ...reference, gyms: [{ ...baseGym, isListed: false }] }, resolver())).toEqual({
+      records: [],
+      skipped: [{ sourceKey: 'kilter:gym-uuid:wall-uuid', reason: 'unlisted gym' }],
+    });
+  });
 });

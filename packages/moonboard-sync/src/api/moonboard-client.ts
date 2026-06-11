@@ -52,10 +52,38 @@ function upsertCookies(existingCookies: string[], nextCookies: string[]): string
   return [...cookieByName.values()];
 }
 
+function inputAttributes(inputTag: string): Record<string, string> {
+  const attributes: Record<string, string> = {};
+  const attributePattern = /([A-Za-z_:][-A-Za-z0-9_:.]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/g;
+  for (const match of inputTag.matchAll(attributePattern)) {
+    const name = match[1]?.toLowerCase();
+    const value = match[2] ?? match[3] ?? match[4] ?? '';
+    if (name) {
+      attributes[name] = value;
+    }
+  }
+  return attributes;
+}
+
 function extractInputValue(formContent: string, name: string): string | null {
-  const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const regex = new RegExp(`<input[^>]*name="${escapedName}"[^>]*value="([^"]*)"[^>]*>`, 'i');
-  return formContent.match(regex)?.[1] ?? null;
+  for (const match of formContent.matchAll(/<input\b[^>]*>/gi)) {
+    const attributes = inputAttributes(match[0]);
+    if (attributes.name === name) {
+      return attributes.value ?? '';
+    }
+  }
+  return null;
+}
+
+function containsLoginForm(responseText: string): boolean {
+  return /<form\b[^>]*id\s*=\s*["']frmLogin["'][^>]*>/i.test(responseText);
+}
+
+async function assertNotLoginForm(response: Response, context: string): Promise<void> {
+  const text = await response.text();
+  if (containsLoginForm(text)) {
+    throw new Error(`MoonBoard login failed: still on login form after ${context}`);
+  }
 }
 
 export class MoonBoardClient {
@@ -86,7 +114,7 @@ export class MoonBoardClient {
     }
     this.storeResponseCookies(loginPageResponse);
     const loginPageText = await loginPageResponse.text();
-    const formMatch = loginPageText.match(/<form[^>]*id="frmLogin"[^>]*>([\s\S]*?)<\/form>/i);
+    const formMatch = loginPageText.match(/<form\b[^>]*id\s*=\s*["']frmLogin["'][^>]*>([\s\S]*?)<\/form>/i);
     if (!formMatch?.[1]) {
       throw new Error("Could not find MoonBoard login form with id='frmLogin'");
     }
@@ -122,20 +150,24 @@ export class MoonBoardClient {
 
     if (loginResponse.status >= 300 && loginResponse.status < 400) {
       const redirectLocation = loginResponse.headers.get('location');
-      if (redirectLocation) {
-        const redirectUrl = redirectLocation.startsWith('/') ? `${this.host}${redirectLocation}` : redirectLocation;
-        const redirectResponse = await fetch(redirectUrl, {
-          method: 'GET',
-          headers: { Cookie: this.cookieHeader() },
-          signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-        });
-        this.storeResponseCookies(redirectResponse);
-        if (!redirectResponse.ok) {
-          throw new Error(`MoonBoard login redirect failed: ${redirectResponse.status}`);
-        }
+      if (!redirectLocation) {
+        throw new Error('MoonBoard login redirect missing Location header');
       }
+      const redirectUrl = redirectLocation.startsWith('/') ? `${this.host}${redirectLocation}` : redirectLocation;
+      const redirectResponse = await fetch(redirectUrl, {
+        method: 'GET',
+        headers: { Cookie: this.cookieHeader() },
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      });
+      this.storeResponseCookies(redirectResponse);
+      if (!redirectResponse.ok) {
+        throw new Error(`MoonBoard login redirect failed: ${redirectResponse.status}`);
+      }
+      await assertNotLoginForm(redirectResponse, 'redirect');
     } else if (!loginResponse.ok) {
       throw new Error(`MoonBoard login failed: ${loginResponse.status}`);
+    } else {
+      await assertNotLoginForm(loginResponse, 'submit');
     }
 
     this.authenticated = true;

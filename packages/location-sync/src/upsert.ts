@@ -81,7 +81,7 @@ export async function upsertPublicBoardLocations(
       .onConflictDoUpdate({
         target: gyms.uuid,
         set: {
-          slug: sql`excluded.slug`,
+          slug: sql`COALESCE(${gyms.slug}, excluded.slug)`,
           name: sql`excluded.name`,
           address: sql`excluded.address`,
           latitude: sql`excluded.latitude`,
@@ -94,6 +94,9 @@ export async function upsertPublicBoardLocations(
       .returning({ id: gyms.id });
 
     if (upsertedGym) {
+      await db.execute(
+        sql`UPDATE gyms SET location = ST_MakePoint(${record.longitude}, ${record.latitude})::geography WHERE id = ${upsertedGym.id}`,
+      );
       gymIdBySource.set(sourceKey, upsertedGym.id);
     }
   }
@@ -119,7 +122,7 @@ export async function upsertPublicBoardLocations(
         ${record.isAngleAdjustable}, ${record.serialNumber ?? null}, ${gymId}, NOW(), NOW()
       )
       ON CONFLICT (uuid) DO UPDATE SET
-        slug = EXCLUDED.slug,
+        slug = COALESCE(user_boards.slug, EXCLUDED.slug),
         board_type = EXCLUDED.board_type,
         layout_id = EXCLUDED.layout_id,
         size_id = EXCLUDED.size_id,

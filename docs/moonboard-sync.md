@@ -36,4 +36,4 @@ Run with 1Password:
 op run --env-file=packages/moonboard-sync/.env.1password -- bunx moonboard-sync locations -v
 ```
 
-The root `vp run db:seed-locations` task runs the Aurora, Kilter, and MoonBoard location CLIs instead of the removed GeoJSON seed script.
+The root `vp run db:seed-locations` task runs the Aurora, Kilter, and MoonBoard location CLIs instead of the removed GeoJSON seed script. Credentialed providers are safe in clean dev environments: Kilter and MoonBoard skip with a successful exit when their credentials are not configured.
