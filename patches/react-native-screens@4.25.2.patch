@@ -104,7 +104,7 @@ index 2434c612951a40bd1ecfcc476acebb9a9a6b500e..6d23e2e466cc602560aa101b91bb7c76
 +static UIScrollView *RNSContentScrollViewForEdgeFallback(
 +    UIViewController *self,
 +    SEL _cmd,
-+    NSDirectionalRectEdge edge) API_AVAILABLE(ios(17.0))
++    NSDirectionalRectEdge edge) API_AVAILABLE(ios(26.0))
 +{
 +  SEL originalSelectorAfterSwizzle = NSSelectorFromString(@"rnscreens_contentScrollViewForEdge:");
 +  using ContentScrollViewForEdgeMsgSend = UIScrollView *(*)(id, SEL, NSDirectionalRectEdge);
@@ -128,24 +128,24 @@ index 2434c612951a40bd1ecfcc476acebb9a9a6b500e..6d23e2e466cc602560aa101b91bb7c76
 +    // If two react-native-screens copies are linked, the second +load must not
 +    // exchange the IMPs back.
 +    SEL installedKey = NSSelectorFromString(@"rnscreens_contentScrollViewFallbackInstalled");
-+    @synchronized (UIViewController.class) {
-+      if ([objc_getAssociatedObject(UIViewController.class, installedKey) boolValue]) {
-+        return;
-+      }
-+      SEL originalSelector = @selector(contentScrollViewForEdge:);
-+      SEL fallbackSelector = NSSelectorFromString(@"rnscreens_contentScrollViewForEdge:");
-+      Method originalMethod = class_getInstanceMethod(UIViewController.class, originalSelector);
-+      if (originalMethod != NULL &&
-+          class_addMethod(
-+              UIViewController.class,
-+              fallbackSelector,
-+              reinterpret_cast<IMP>(RNSContentScrollViewForEdgeFallback),
-+              method_getTypeEncoding(originalMethod))) {
-+        Method fallbackMethod = class_getInstanceMethod(UIViewController.class, fallbackSelector);
-+        if (fallbackMethod != NULL) {
-+          method_exchangeImplementations(originalMethod, fallbackMethod);
-+          objc_setAssociatedObject(UIViewController.class, installedKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-+        }
++    // +load is serialized by the Objective-C runtime; avoid taking another lock.
++    // The associated marker still prevents duplicate linked copies from re-swizzling.
++    if ([objc_getAssociatedObject(UIViewController.class, installedKey) boolValue]) {
++      return;
++    }
++    SEL originalSelector = @selector(contentScrollViewForEdge:);
++    SEL fallbackSelector = NSSelectorFromString(@"rnscreens_contentScrollViewForEdge:");
++    Method originalMethod = class_getInstanceMethod(UIViewController.class, originalSelector);
++    if (originalMethod != NULL &&
++        class_addMethod(
++            UIViewController.class,
++            fallbackSelector,
++            reinterpret_cast<IMP>(RNSContentScrollViewForEdgeFallback),
++            method_getTypeEncoding(originalMethod))) {
++      Method fallbackMethod = class_getInstanceMethod(UIViewController.class, fallbackSelector);
++      if (fallbackMethod != NULL) {
++        method_exchangeImplementations(originalMethod, fallbackMethod);
++        objc_setAssociatedObject(UIViewController.class, installedKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 +      }
 +    }
 +  }
