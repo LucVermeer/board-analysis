@@ -8,6 +8,7 @@ import {
   buildDefaultZone,
   pruneHoldsToZone,
   type BoardDimensions,
+  type BoardSearchConfig,
   type HoldPositionLookup,
 } from '@boardsesh/climb-filters';
 import { getLayout } from '@boardsesh/board-constants';
@@ -21,18 +22,10 @@ import { GlassSurface } from '../GlassSurface';
 import { InteractiveFilterBoard, type FilterBoardTransformContext } from './InteractiveFilterBoard';
 import { ZoneOverlay, type ZoneCornerLabels } from './ZoneOverlay';
 import { useTheme } from '../../providers/theme-provider';
-import { getCreateBoardHolds } from '../../lib/create-board-holds';
+import { getCreateBoardHolds, parseSetIdsParam } from '../../lib/create-board-holds';
 import { track } from '../../lib/analytics';
 import { hapticSelection } from '../../lib/haptics';
 import { overlays, spacing } from '../../theme/tokens';
-
-type BoardSearchConfig = {
-  boardName: string;
-  layoutId: number;
-  sizeId: number;
-  setIds: string;
-  angle: number;
-};
 
 export type ZoneFilterEditorSelection = {
   zoneBox: ZoneBoxInput | null;
@@ -95,7 +88,7 @@ export function ZoneFilterEditorSheet({
       boardName,
       layoutId: boardConfig.layoutId,
       sizeId: boardConfig.sizeId,
-      setIds: boardConfig.setIds.split(',').map(Number).filter(Number.isFinite),
+      setIds: parseSetIdsParam(boardConfig.setIds),
     });
   }, [contentReady, boardName, boardConfig.layoutId, boardConfig.sizeId, boardConfig.setIds]);
 

@@ -5,13 +5,19 @@ vi.mock('../board-details', () => ({
 }));
 
 import { getBoardRenderData } from '../board-details';
-import { getCreateBoardHolds, parseSetIdsParam } from '../create-board-holds';
+import {
+  clearCreateBoardHoldsCache,
+  getCreateBoardHolds,
+  parseSetIdsParam,
+  prewarmCreateBoardHolds,
+} from '../create-board-holds';
 
 const mockedGetBoardRenderData = vi.mocked(getBoardRenderData);
 
 describe('getCreateBoardHolds', () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    clearCreateBoardHoldsCache();
   });
 
   it('returns MoonBoard hold targets and family from render data', () => {
@@ -62,6 +68,30 @@ describe('getCreateBoardHolds', () => {
         setIds: [8],
       }),
     ).toBeNull();
+  });
+
+  it('reuses cached hold targets for a board config', () => {
+    mockedGetBoardRenderData.mockReturnValue({
+      boardWidth: 650,
+      boardHeight: 1000,
+      edgeLeft: 0,
+      edgeRight: 11,
+      edgeBottom: 0,
+      edgeTop: 18,
+      imageUrls: ['https://example.com/images/moonboard/moonboard-bg.png'],
+      holdsData: [{ id: 1, mirroredHoldId: null, cx: 68, cy: 950, r: 12 }],
+    });
+
+    const config = {
+      boardName: 'moonboard' as const,
+      layoutId: 3,
+      sizeId: 1,
+      setIds: [8],
+    };
+
+    prewarmCreateBoardHolds(config);
+    expect(getCreateBoardHolds(config)?.holdTargets).toEqual([{ id: 1, cx: 68, cy: 950, r: 12 }]);
+    expect(mockedGetBoardRenderData).toHaveBeenCalledTimes(1);
   });
 });
 

@@ -654,6 +654,7 @@
       "ascents": "{{count}}+ 🧗",
       "rating": "{{count}}+ ⭐",
       "more": "+{{count}} de plus",
+      "setterName": "Par {{setter}}",
       "settersCount_one": "{{count}} ouvreur",
       "settersCount_other": "{{count}} ouvreurs",
       "climbsCount_one": "{{count}} voie",

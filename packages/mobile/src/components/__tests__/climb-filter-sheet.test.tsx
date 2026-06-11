@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { createElement, forwardRef, useImperativeHandle, type ReactNode } from 'react';
-import { fireEvent, render } from '@testing-library/react';
+import { act, fireEvent, render } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ClimbBoardFilterState } from '@boardsesh/climb-filters';
 import type { ClimbFilters } from '../../lib/climb-filter-types';
@@ -25,6 +25,11 @@ const bottomSheetModalProps = vi.hoisted(() => ({
     enableContentPanningGesture?: boolean;
     enableHandlePanningGesture?: boolean;
   },
+}));
+
+const createBoardHoldsMocks = vi.hoisted(() => ({
+  parseSetIdsParam: vi.fn((setIds: string) => setIds.split(',').map(Number).filter(Number.isFinite)),
+  prewarmCreateBoardHolds: vi.fn(),
 }));
 
 const currentFilters: ClimbFilters = {
@@ -141,6 +146,11 @@ vi.mock('../../providers/auth-provider', () => ({
   useAuth: () => ({ isAuthenticated: true }),
 }));
 
+vi.mock('../../lib/create-board-holds', () => ({
+  parseSetIdsParam: createBoardHoldsMocks.parseSetIdsParam,
+  prewarmCreateBoardHolds: createBoardHoldsMocks.prewarmCreateBoardHolds,
+}));
+
 vi.mock('../../providers/theme-provider', () => ({
   useTheme: () => ({
     systemColors: {
@@ -180,7 +190,21 @@ vi.mock('../Button', () => ({
 vi.mock('../SegmentedControl', () => ({ SegmentedControl: () => null }));
 vi.mock('../StarRating', () => ({ StarRating: () => null }));
 vi.mock('../CollapsibleSection', () => ({
-  CollapsibleSection: ({ children }: { children?: ReactNode }) => createElement('section', null, children),
+  CollapsibleSection: ({
+    children,
+    title,
+    onExpandedChange,
+  }: {
+    children?: ReactNode;
+    title: string;
+    onExpandedChange?: (expanded: boolean) => void;
+  }) =>
+    createElement(
+      'section',
+      null,
+      createElement('button', { onClick: () => onExpandedChange?.(true) }, `expand-${title}`),
+      children,
+    ),
 }));
 vi.mock('../RadioGroup', () => ({ RadioGroup: () => null }));
 vi.mock('../SwitchRow', () => ({ SwitchRow: () => null }));
@@ -191,32 +215,53 @@ vi.mock('../search/SettersFilterSheet', () => ({
     visible,
     onSelectedSettersChange,
     onClose,
+    onDismiss,
   }: {
     visible: boolean;
     onSelectedSettersChange: (selectedSetters: string[]) => void;
     onClose: () => void;
+    onDismiss: () => void;
   }) =>
     createElement(
       'div',
       { 'data-testid': 'setters-filter-sheet', 'data-visible': String(visible) },
       createElement('button', { onClick: () => onSelectedSettersChange(['stacked-setter']) }, 'setters-change'),
       createElement('button', { onClick: onClose }, 'setters-close'),
+      createElement('button', { onClick: onDismiss }, 'setters-dismiss'),
     ),
 }));
 vi.mock('../search/HoldFilterEditorSheet', () => ({
-  HoldFilterEditorSheet: ({ visible, onClose }: { visible: boolean; onClose: () => void }) =>
+  HoldFilterEditorSheet: ({
+    visible,
+    onClose,
+    onDismiss,
+  }: {
+    visible: boolean;
+    onClose: () => void;
+    onDismiss: () => void;
+  }) =>
     createElement(
       'div',
       { 'data-testid': 'hold-filter-editor-sheet', 'data-visible': String(visible) },
       createElement('button', { onClick: onClose }, 'holds-close'),
+      createElement('button', { onClick: onDismiss }, 'holds-dismiss'),
     ),
 }));
 vi.mock('../search/ZoneFilterEditorSheet', () => ({
-  ZoneFilterEditorSheet: ({ visible, onClose }: { visible: boolean; onClose: () => void }) =>
+  ZoneFilterEditorSheet: ({
+    visible,
+    onClose,
+    onDismiss,
+  }: {
+    visible: boolean;
+    onClose: () => void;
+    onDismiss: () => void;
+  }) =>
     createElement(
       'div',
       { 'data-testid': 'zone-filter-editor-sheet', 'data-visible': String(visible) },
       createElement('button', { onClick: onClose }, 'zone-close'),
+      createElement('button', { onClick: onDismiss }, 'zone-dismiss'),
     ),
 }));
 
@@ -240,6 +285,34 @@ beforeEach(() => {
 });
 
 describe('ClimbFilterSheet child filters', () => {
+  it('prewarms board holds when Refine expands', () => {
+    vi.useFakeTimers();
+    try {
+      const { getByText } = renderFilterSheet();
+
+      fireEvent.click(getByText('expand-mobile.filter.section.refine'));
+
+      act(() => {
+        vi.advanceTimersByTime(149);
+      });
+      expect(createBoardHoldsMocks.prewarmCreateBoardHolds).not.toHaveBeenCalled();
+
+      act(() => {
+        vi.advanceTimersByTime(1);
+      });
+
+      expect(createBoardHoldsMocks.parseSetIdsParam).toHaveBeenCalledWith('1,2');
+      expect(createBoardHoldsMocks.prewarmCreateBoardHolds).toHaveBeenCalledWith({
+        boardName: 'kilter',
+        layoutId: 1,
+        sizeId: 10,
+        setIds: [1, 2],
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('opens the setters sheet above the filter sheet and keeps draft edits local until Apply', () => {
     const onApply = vi.fn();
     const { getByLabelText, getByTestId, getByText } = renderFilterSheet({ onApply });
@@ -273,5 +346,39 @@ describe('ClimbFilterSheet child filters', () => {
 
     expect(getByTestId('zone-filter-editor-sheet').getAttribute('data-visible')).toBe('true');
     expect(bottomSheetModalProps.latest?.enablePanDownToClose).toBe(false);
+  });
+
+  it('re-enables parent sheet gestures when a child sheet closes', () => {
+    const { getByLabelText, getByTestId, getByText } = renderFilterSheet();
+
+    fireEvent.click(getByLabelText('mobile.filter.setters'));
+
+    expect(getByTestId('setters-filter-sheet').getAttribute('data-visible')).toBe('true');
+    expect(bottomSheetModalProps.latest?.enablePanDownToClose).toBe(false);
+    expect(bottomSheetModalProps.latest?.enableContentPanningGesture).toBe(false);
+    expect(bottomSheetModalProps.latest?.enableHandlePanningGesture).toBe(false);
+
+    fireEvent.click(getByText('setters-close'));
+
+    expect(getByTestId('setters-filter-sheet').getAttribute('data-visible')).toBe('false');
+    expect(bottomSheetModalProps.latest?.enablePanDownToClose).toBe(true);
+    expect(bottomSheetModalProps.latest?.enableContentPanningGesture).toBe(true);
+    expect(bottomSheetModalProps.latest?.enableHandlePanningGesture).toBe(true);
+  });
+
+  it('re-enables parent sheet gestures when a child sheet dismisses', () => {
+    const { getByLabelText, queryByTestId, getByText } = renderFilterSheet();
+
+    fireEvent.click(getByLabelText('mobile.filter.setters'));
+
+    expect(queryByTestId('setters-filter-sheet')?.getAttribute('data-visible')).toBe('true');
+    expect(bottomSheetModalProps.latest?.enablePanDownToClose).toBe(false);
+
+    fireEvent.click(getByText('setters-dismiss'));
+
+    expect(queryByTestId('setters-filter-sheet')).toBeNull();
+    expect(bottomSheetModalProps.latest?.enablePanDownToClose).toBe(true);
+    expect(bottomSheetModalProps.latest?.enableContentPanningGesture).toBe(true);
+    expect(bottomSheetModalProps.latest?.enableHandlePanningGesture).toBe(true);
   });
 });

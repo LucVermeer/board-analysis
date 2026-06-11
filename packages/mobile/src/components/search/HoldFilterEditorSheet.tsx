@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { getLayout } from '@boardsesh/board-constants/product-sizes';
-import { countFilteredHolds, toggleHoldFilterType } from '@boardsesh/climb-filters';
+import { countFilteredHolds, toggleHoldFilterType, type BoardSearchConfig } from '@boardsesh/climb-filters';
 import type { BoardName, HoldFilterEntry, HoldFilterMode, HoldFilterType, HoldsFilter } from '@boardsesh/shared-schema';
 import { ModalSheet } from '../ModalSheet';
 import { Text } from '../Text';
@@ -16,14 +16,6 @@ import { useTheme } from '../../providers/theme-provider';
 import { getCreateBoardHolds, parseSetIdsParam } from '../../lib/create-board-holds';
 import { track } from '../../lib/analytics';
 import { spacing } from '../../theme/tokens';
-
-type BoardSearchConfig = {
-  boardName: string;
-  layoutId: number;
-  sizeId: number;
-  setIds: string;
-  angle: number;
-};
 
 type HoldFilterEditorSheetProps = {
   visible: boolean;

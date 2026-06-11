@@ -3,6 +3,7 @@ import { View, Pressable, StyleSheet, TextInput } from 'react-native';
 import { BottomSheetFlatList } from '@gorhom/bottom-sheet';
 import type { BottomSheetModal } from '@gorhom/bottom-sheet';
 import { useTranslation } from 'react-i18next';
+import type { BoardSearchConfig } from '@boardsesh/climb-filters';
 import { ModalSheet } from '../ModalSheet';
 import { ActivityIndicator } from '../ActivityIndicator';
 import { Text } from '../Text';
@@ -14,14 +15,6 @@ import { iosSystemColors } from '../../theme/ios-colors';
 import { spacing } from '../../theme/tokens';
 
 const SEARCH_DEBOUNCE_MS = 250;
-
-type BoardSearchConfig = {
-  boardName: string;
-  layoutId: number;
-  sizeId: number;
-  setIds: string;
-  angle: number;
-};
 
 type SetterStat = { setterUsername: string; climbCount: number };
 

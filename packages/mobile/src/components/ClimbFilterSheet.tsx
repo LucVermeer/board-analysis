@@ -34,6 +34,7 @@ import {
   type ClimbBoardFilterState,
   SORT_OPTIONS,
   GRADE_ACCURACY_VALUES,
+  type BoardSearchConfig,
 } from '@boardsesh/climb-filters';
 import { Text } from './Text';
 import { GlassSheetBackground } from './GlassSheetBackground';
@@ -46,8 +47,9 @@ import { SwitchRow } from './SwitchRow';
 import { Icon } from './Icon';
 import { useTheme } from '../providers/theme-provider';
 import { useGrades, useSearchClimbsCount } from '../lib/graphql/hooks';
-import type { HoldsFilter } from '@boardsesh/shared-schema';
+import type { BoardName, HoldsFilter } from '@boardsesh/shared-schema';
 import { buildFilterLabels, formatSettersLabel } from '../lib/filter-labels';
+import { parseSetIdsParam, prewarmCreateBoardHolds } from '../lib/create-board-holds';
 import { useAuth } from '../providers/auth-provider';
 import { hapticSelection } from '../lib/haptics';
 import { springs } from '../theme/animations';
@@ -66,14 +68,6 @@ import { DEFAULT_FILTERS } from '../lib/climb-filter-types';
 
 export type { ClimbFilters };
 export { DEFAULT_FILTERS };
-
-type BoardSearchConfig = {
-  boardName: string;
-  layoutId: number;
-  sizeId: number;
-  setIds: string;
-  angle: number;
-};
 
 type ClimbFilterSheetProps = {
   onDismiss: () => void;
@@ -95,6 +89,7 @@ const STATUS_OPTIONS_UI = ['any', 'drafts', 'projects'] as const;
 // Popularity buckets consolidate the old min-ascents chips + the "established"
 // status into one control. undefined = Any; 2 = Established (≥2 ascents).
 const POPULARITY_BUCKETS: ReadonlyArray<number | undefined> = [undefined, 2, 10, 100, 1000];
+const PREWARM_BOARD_HOLDS_AFTER_REFINE_EXPAND_MS = 150;
 
 // Portal the sheet above the tab bar / persistent queue bar on iOS.
 function FilterSheetContainer({ children }: PropsWithChildren) {
@@ -160,6 +155,7 @@ export function ClimbFilterSheet({
   const insets = useSafeAreaInsets();
   const sheetRef = useRef<BottomSheetModal>(null);
   const scrollRef = useRef<BottomSheetScrollViewMethods>(null);
+  const refinePrewarmTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const boardName = boardConfig?.boardName ?? '';
   const { data: grades } = useGrades(boardName);
 
@@ -170,6 +166,8 @@ export function ClimbFilterSheet({
   const [activeChildSheet, setActiveChildSheet] = useState<ActiveChildFilterSheet>(null);
   const [mountedChildSheet, setMountedChildSheet] = useState<ActiveChildFilterSheet>(null);
 
+  // Sync from committed parent filters. Callers should keep these references
+  // stable while the sheet is open because local edits are draft-only until Apply.
   useEffect(() => {
     setLocalFilters(normalizeRetiredStatus(currentFilters));
     setLocalBoardFilters(currentBoardFilters);
@@ -177,6 +175,12 @@ export function ClimbFilterSheet({
 
   useEffect(() => {
     sheetRef.current?.present();
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (refinePrewarmTimeoutRef.current) clearTimeout(refinePrewarmTimeoutRef.current);
+    };
   }, []);
 
   const snapPoints = useMemo(() => ['90%'], []);
@@ -356,6 +360,27 @@ export function ClimbFilterSheet({
     setMountedChildSheet('setters');
     setActiveChildSheet('setters');
   }, [boardConfig]);
+
+  const scheduleBoardHoldsPrewarm = useCallback(() => {
+    if (!boardConfig) return;
+    if (refinePrewarmTimeoutRef.current) clearTimeout(refinePrewarmTimeoutRef.current);
+    refinePrewarmTimeoutRef.current = setTimeout(() => {
+      refinePrewarmTimeoutRef.current = null;
+      prewarmCreateBoardHolds({
+        boardName: boardConfig.boardName as BoardName,
+        layoutId: boardConfig.layoutId,
+        sizeId: boardConfig.sizeId,
+        setIds: parseSetIdsParam(boardConfig.setIds),
+      });
+    }, PREWARM_BOARD_HOLDS_AFTER_REFINE_EXPAND_MS);
+  }, [boardConfig]);
+
+  const handleRefineExpandedChange = useCallback(
+    (expanded: boolean) => {
+      if (expanded) scheduleBoardHoldsPrewarm();
+    },
+    [scheduleBoardHoldsPrewarm],
+  );
 
   const openHoldFilter = useCallback(() => {
     if (!boardConfig) return;
@@ -569,6 +594,7 @@ export function ClimbFilterSheet({
               title={t('mobile.filter.section.refine')}
               summary={refineSummary ?? t('mobile.filter.refineHint')}
               resetKey={sectionResetKey}
+              onExpandedChange={handleRefineExpandedChange}
             >
               <Text variant="footnote" style={styles.subsectionLabel}>
                 {t('mobile.filter.climbType')}
