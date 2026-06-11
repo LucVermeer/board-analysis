@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { eq, and, or, inArray, sql } from 'drizzle-orm';
+import { eq, and, or, inArray, sql, isNull, ilike } from 'drizzle-orm';
 import { getDb } from '@/app/lib/db/db';
 import type { PgDatabase, PgQueryResultHKT } from 'drizzle-orm/pg-core';
 import {
@@ -17,6 +17,8 @@ import type { AuroraBoardName } from '@boardsesh/shared-schema';
 import { populateDenormalizedColumns } from '@boardsesh/db/queries';
 
 const BATCH_SIZE = 100;
+const FALLBACK_NAME_CHUNK_SIZE = 50;
+const MIN_FALLBACK_NAME_KEY_LENGTH = 3;
 
 // ---------------------------------------------------------------------------
 // Zod schema for the Aurora JSON export format
@@ -80,6 +82,21 @@ export const auroraExportSchema = z.object({
 export type AuroraExportData = z.infer<typeof auroraExportSchema>;
 
 type BoardType = AuroraBoardName;
+
+export type ClimbNameResolutionCandidate = {
+  uuid: string;
+  name: string | null;
+  ascensionistCount: number | null;
+  isListed: boolean | null;
+  isDraft: boolean | null;
+  userId: string | null;
+};
+
+type ClimbNameResolutionMatch = {
+  uuid: string;
+  count: number;
+  tier: number;
+};
 
 // ---------------------------------------------------------------------------
 // Import result types
@@ -156,6 +173,106 @@ export function generateJsonImportAuroraId(
     .digest('hex')
     .slice(0, 32);
   return `json-import-${hash}`;
+}
+
+// ---------------------------------------------------------------------------
+// Climb name normalization
+// ---------------------------------------------------------------------------
+
+const VARIATION_SELECTOR_AND_JOINER_PATTERN = /[\u200d\ufe0e\ufe0f]/gu;
+const EMOJI_AND_PRESENTATION_PATTERN = /[\p{Extended_Pictographic}\p{Emoji_Presentation}\u200d\ufe0e\ufe0f]/gu;
+
+function compactResolutionName(value: string): string {
+  return value.normalize('NFKC').replace(/\s+/g, ' ').trim().toLowerCase();
+}
+
+export function normalizeAuroraExportClimbNameForResolution(name: string): string {
+  return compactResolutionName(name.replace(/\?/g, '').replace(VARIATION_SELECTOR_AND_JOINER_PATTERN, ''));
+}
+
+export function normalizeBoardClimbNameForAuroraExportResolution(name: string): string {
+  return compactResolutionName(name.replace(EMOJI_AND_PRESENTATION_PATTERN, ''));
+}
+
+// Escape LIKE/ILIKE metacharacters so export names are matched literally except
+// for Aurora's `?` placeholders, which we intentionally turn into wildcards.
+function escapeLikePattern(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/[_%]/g, (match) => `\\${match}`);
+}
+
+function buildQuestionPlaceholderLikePattern(name: string): string | null {
+  const normalizedKey = normalizeAuroraExportClimbNameForResolution(name);
+  if (normalizedKey.length < MIN_FALLBACK_NAME_KEY_LENGTH) return null;
+
+  const pattern = escapeLikePattern(name).replace(/\?+/g, '%');
+  return pattern.includes('%') ? pattern : null;
+}
+
+export function isClimbNameResolutionCandidateAllowed(
+  candidate: ClimbNameResolutionCandidate,
+  userId?: string,
+): boolean {
+  const isNonDraft = candidate.isDraft === false;
+  const isCatalogOrPublic = isNonDraft && (candidate.isListed === true || candidate.userId == null);
+  const isUsersOwnClimb = userId != null && candidate.userId === userId;
+  return isCatalogOrPublic || isUsersOwnClimb;
+}
+
+function getClimbNameResolutionCandidateTier(candidate: ClimbNameResolutionCandidate, userId?: string): number {
+  if (candidate.isDraft === false && candidate.isListed === true) return 3;
+  if (candidate.isDraft === false && candidate.userId == null) return 2;
+  if (userId != null && candidate.userId === userId) return 1;
+  return 0;
+}
+
+function isBetterClimbNameResolutionCandidate(
+  candidate: ClimbNameResolutionCandidate,
+  candidateMatch: ClimbNameResolutionMatch,
+  existingMatch?: ClimbNameResolutionMatch,
+): boolean {
+  if (!existingMatch) return true;
+  if (candidateMatch.tier !== existingMatch.tier) return candidateMatch.tier > existingMatch.tier;
+  if (candidateMatch.count !== existingMatch.count) return candidateMatch.count > existingMatch.count;
+  return candidate.uuid < existingMatch.uuid;
+}
+
+function addClimbNameResolutionCandidate(
+  nameToMatch: Map<string, ClimbNameResolutionMatch>,
+  exportName: string,
+  candidate: ClimbNameResolutionCandidate,
+  userId?: string,
+): void {
+  if (!candidate.name || !isClimbNameResolutionCandidateAllowed(candidate, userId)) return;
+
+  const candidateMatch: ClimbNameResolutionMatch = {
+    uuid: candidate.uuid,
+    count: candidate.ascensionistCount ?? 0,
+    tier: getClimbNameResolutionCandidateTier(candidate, userId),
+  };
+  const existingMatch = nameToMatch.get(exportName);
+
+  if (isBetterClimbNameResolutionCandidate(candidate, candidateMatch, existingMatch)) {
+    nameToMatch.set(exportName, candidateMatch);
+  }
+}
+
+export function resolveQuestionPlaceholderClimbNameForCandidates(
+  exportName: string,
+  candidates: ClimbNameResolutionCandidate[],
+  userId?: string,
+): string | null {
+  const exportKey = normalizeAuroraExportClimbNameForResolution(exportName);
+  if (exportKey.length < MIN_FALLBACK_NAME_KEY_LENGTH) return null;
+
+  const nameToMatch = new Map<string, ClimbNameResolutionMatch>();
+  for (const candidate of candidates) {
+    if (!candidate.name) continue;
+    const candidateKey = normalizeBoardClimbNameForAuroraExportResolution(candidate.name);
+    if (candidateKey !== exportKey) continue;
+    addClimbNameResolutionCandidate(nameToMatch, exportName, candidate, userId);
+  }
+
+  return nameToMatch.get(exportName)?.uuid ?? null;
 }
 
 // ---------------------------------------------------------------------------
@@ -285,28 +402,36 @@ async function resolveClimbNames(
 ): Promise<Map<string, string>> {
   if (climbNames.length === 0) return new Map();
 
-  // Track best match across all chunks: name -> { uuid, ascensionistCount, isPublic }
-  const nameToMatch = new Map<string, { uuid: string; count: number; isPublic: boolean }>();
+  // Track best match across all chunks.
+  const nameToMatch = new Map<string, ClimbNameResolutionMatch>();
+
+  const eligibleCatalogOrPublicFilter = and(
+    eq(boardClimbs.isDraft, false),
+    or(eq(boardClimbs.isListed, true), isNull(boardClimbs.userId)),
+  );
 
   // Batch in chunks of 500 to avoid overly large IN clauses
   const chunkSize = 500;
   for (let i = 0; i < climbNames.length; i += chunkSize) {
     const chunk = climbNames.slice(i, i + chunkSize);
 
-    // Query public climbs with stats to pick the most popular when duplicates exist
-    const publicFilter = and(
+    // Query exact name matches with stats to pick the most popular when
+    // duplicates exist. Aurora catalog climbs can be delisted after a user
+    // logged them, so non-draft catalog rows stay eligible even when
+    // is_listed=false.
+    const catalogOrPublicFilter = and(
       eq(boardClimbs.boardType, boardType),
       inArray(boardClimbs.name, chunk),
-      eq(boardClimbs.isListed, true),
-      eq(boardClimbs.isDraft, false),
+      eligibleCatalogOrPublicFilter,
     );
 
-    // Also match user's own drafts so ascents/circuits referencing their climbs resolve
-    const userDraftFilter = userId
+    // Also match the user's own imported/local climbs so ascents/circuits
+    // referencing them resolve.
+    const userOwnedFilter = userId
       ? and(eq(boardClimbs.boardType, boardType), inArray(boardClimbs.name, chunk), eq(boardClimbs.userId, userId))
       : undefined;
 
-    const whereClause = userDraftFilter ? or(publicFilter, userDraftFilter) : publicFilter;
+    const whereClause = userOwnedFilter ? or(catalogOrPublicFilter, userOwnedFilter) : catalogOrPublicFilter;
 
     const results = await db
       .select({
@@ -315,6 +440,7 @@ async function resolveClimbNames(
         ascensionistCount: boardClimbStats.ascensionistCount,
         isListed: boardClimbs.isListed,
         isDraft: boardClimbs.isDraft,
+        userId: boardClimbs.userId,
       })
       .from(boardClimbs)
       .leftJoin(
@@ -325,26 +451,96 @@ async function resolveClimbNames(
 
     for (const row of results) {
       if (!row.name) continue;
-
-      const count = row.ascensionistCount ?? 0;
-      const isPublic = row.isListed === true && row.isDraft === false;
-      const existing = nameToMatch.get(row.name);
-
-      // Prefer public climbs over drafts; among same type prefer higher ascensionist count
-      if (!existing) {
-        nameToMatch.set(row.name, { uuid: row.uuid, count, isPublic });
-      } else if (isPublic && !existing.isPublic) {
-        // Public always wins over draft
-        nameToMatch.set(row.name, { uuid: row.uuid, count, isPublic });
-      } else if (isPublic === existing.isPublic && count > existing.count) {
-        // Same visibility tier: pick higher count
-        nameToMatch.set(row.name, { uuid: row.uuid, count, isPublic });
-      }
+      addClimbNameResolutionCandidate(nameToMatch, row.name, row, userId);
     }
+  }
+
+  const unresolvedQuestionNames = climbNames.filter((name) => !nameToMatch.has(name) && name.includes('?'));
+  if (unresolvedQuestionNames.length > 0) {
+    await resolveQuestionPlaceholderClimbNames(
+      db,
+      boardType,
+      unresolvedQuestionNames,
+      eligibleCatalogOrPublicFilter,
+      nameToMatch,
+      userId,
+    );
   }
 
   // Convert to simple name -> uuid map
   return new Map([...nameToMatch].map(([name, match]) => [name, match.uuid]));
+}
+
+async function resolveQuestionPlaceholderClimbNames(
+  db: PgDatabase<PgQueryResultHKT, Record<string, unknown>>,
+  boardType: BoardType,
+  climbNames: string[],
+  eligibleCatalogOrPublicFilter: ReturnType<typeof and>,
+  nameToMatch: Map<string, ClimbNameResolutionMatch>,
+  userId?: string,
+): Promise<void> {
+  const fallbackRequests = climbNames
+    .map((name) => ({
+      name,
+      normalizedKey: normalizeAuroraExportClimbNameForResolution(name),
+      pattern: buildQuestionPlaceholderLikePattern(name),
+    }))
+    .filter(
+      (
+        request,
+      ): request is {
+        name: string;
+        normalizedKey: string;
+        pattern: string;
+      } => request.pattern != null && request.normalizedKey.length >= MIN_FALLBACK_NAME_KEY_LENGTH,
+    );
+
+  for (let i = 0; i < fallbackRequests.length; i += FALLBACK_NAME_CHUNK_SIZE) {
+    const chunk = fallbackRequests.slice(i, i + FALLBACK_NAME_CHUNK_SIZE);
+    const namesByNormalizedKey = new Map<string, string[]>();
+    const patterns = new Set<string>();
+
+    for (const request of chunk) {
+      patterns.add(request.pattern);
+      const names = namesByNormalizedKey.get(request.normalizedKey) ?? [];
+      names.push(request.name);
+      namesByNormalizedKey.set(request.normalizedKey, names);
+    }
+
+    const namePatternFilters = [...patterns].map((pattern) => ilike(boardClimbs.name, pattern));
+    const userOwnedFilter = userId ? eq(boardClimbs.userId, userId) : undefined;
+    const eligibilityFilter = userOwnedFilter
+      ? or(eligibleCatalogOrPublicFilter, userOwnedFilter)
+      : eligibleCatalogOrPublicFilter;
+
+    const results = await db
+      .select({
+        uuid: boardClimbs.uuid,
+        name: boardClimbs.name,
+        ascensionistCount: boardClimbStats.ascensionistCount,
+        isListed: boardClimbs.isListed,
+        isDraft: boardClimbs.isDraft,
+        userId: boardClimbs.userId,
+      })
+      .from(boardClimbs)
+      .leftJoin(
+        boardClimbStats,
+        and(eq(boardClimbStats.climbUuid, boardClimbs.uuid), eq(boardClimbStats.boardType, boardClimbs.boardType)),
+      )
+      .where(and(eq(boardClimbs.boardType, boardType), eligibilityFilter, or(...namePatternFilters)));
+
+    for (const row of results) {
+      if (!row.name) continue;
+
+      const candidateKey = normalizeBoardClimbNameForAuroraExportResolution(row.name);
+      const exportNames = namesByNormalizedKey.get(candidateKey);
+      if (!exportNames) continue;
+
+      for (const exportName of exportNames) {
+        addClimbNameResolutionCandidate(nameToMatch, exportName, row, userId);
+      }
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------

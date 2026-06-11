@@ -346,7 +346,11 @@ Since the Kilter backend has been shut down, API-based sync is no longer availab
 
 Climb names are resolved via `board_climbs` table using a composite index on `(board_type, name)`. When multiple climbs share the same name (rare), the one with the highest `ascensionist_count` is chosen.
 
-Unresolvable names (delisted climbs, typos) are returned to the user in the result dialog so they know which entries could not be imported.
+Exact non-draft Aurora catalog matches remain importable even if the climb has since been delisted in Boardsesh. This keeps historical logbook data importable without making the delisted climb appear in public search.
+
+Some Aurora exports replace emoji with literal `?` characters in climb names. After exact matching, the importer tries a narrow fallback for still-unresolved names containing `?`: it gathers candidates with an escaped `ILIKE` pattern, strips emoji from DB names, strips question marks from export names, and only accepts normalized exact matches. This recovers names such as `Friend Forever?` → `Friend Forever👭` without broad fuzzy matching.
+
+Unresolvable names (missing climbs, renamed climbs, typos) are returned to the user in the result dialog so they know which entries could not be imported.
 
 ## Migration from Vercel Cron
 
