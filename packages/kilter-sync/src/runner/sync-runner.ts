@@ -11,6 +11,7 @@ import {
   type ResolvedDaemonOptions,
   type DaemonOptions,
 } from '@boardsesh/sync-runtime';
+import type { LocationSyncSummary } from '@boardsesh/location-sync';
 
 import { KILTER_BOARD_TYPE } from '../api/types';
 import { isTransientKilterError, KilterApiError } from '../api/errors';
@@ -18,6 +19,8 @@ import { refreshAccessToken, type KeycloakClientConfig } from '../api/keycloak';
 import { passwordTokenProvider, refreshTokenProvider, type KilterTokenProvider } from '../api/token-provider';
 import { syncKilterUserData } from '../sync/user-sync';
 import { syncKilterCatalog, type KilterCatalogSummary } from '../sync/catalog-sync';
+import { buildLayoutResolver } from '../sync/layout-resolver';
+import { syncKilterLocations, pullKilterReference } from '../sync';
 import type { RunnerClient, RunnerDb, SyncRunnerConfig, SyncSummary, KilterCredentialRecord } from './types';
 
 // Catalog cooldown: a full per-cycle catalog pull is expensive, so the daemon
@@ -259,6 +262,14 @@ export class SyncRunner {
       layoutUuids: opts.layoutUuids,
       suppressNotifications: opts.suppressNotifications,
     });
+  }
+
+  async runLocationSync(tokenProvider: KilterTokenProvider): Promise<LocationSyncSummary> {
+    const { db } = this.getClient();
+    const accessToken = await tokenProvider();
+    const reference = await pullKilterReference({ accessToken, log: (message) => this.log(message) });
+    const resolver = await buildLayoutResolver(db);
+    return syncKilterLocations({ db, reference, resolver, log: (message) => this.log(message) });
   }
 
   /** Build a refresh-grant token provider from a linked user's stored credential. */

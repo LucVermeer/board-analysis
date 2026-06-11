@@ -180,6 +180,26 @@ A full run reports a small `climbsUnmapped` count (~0.01% after the UUID-first m
 - **New multi-frame animated climbs.** Kilter's animated (`frame_count > 1`) climbs encode `climb_concat` as `h{hole}p{code}s{startFrame}e{endFrame}` rather than the comma-frame format, which the parser doesn't decode. Existing animated climbs match by UUID (so they still get stats); only a _new_ animated climb (unseen UUID) is skipped. Decoding the `s`/`e` format is a follow-up.
 - **Post-2024 hold-set placements.** A handful of climbs use holds whose `board_placements` rows postdate the legacy snapshot (`board_shared_syncs` shows placements last synced 2024-06-22). The holds exist in `board_holes` but aren't placed on the layout, so the hole→placement remap fails. Refreshing `board_placements` (needs the `mounting_holes` PowerSync bucket) is a follow-up.
 
+## Public board locations
+
+Kilter public locations come from the same PowerSync reference pull as the catalog. `global_gyms` carries `gyms`, `walls`, `products`, and `product_layouts`; `syncKilterLocations` maps each wall to a Boardsesh layout/size/set config and then delegates the actual `gyms` / `user_boards` upsert to `@boardsesh/location-sync`.
+
+The location writer creates deterministic system-owned public rows:
+
+- one `gyms` row per upstream gym UUID
+- one public, unowned `user_boards` row per upstream wall
+- stable UUIDs and slugs derived from the upstream source key
+
+It never deletes rows that disappear upstream. Rows with missing layout mappings, unsupported product/size data, or invalid coordinates are reported as skipped.
+
+The catalog sync refreshes locations after a successful catalog pull. You can also run the location-only path:
+
+```bash
+bunx kilter-sync locations --user <nextauth-user-id>
+```
+
+For local testing without a linked credential, set `KILTER_TEST_USERNAME` and `KILTER_TEST_PASSWORD`; the CLI will use the password token flow.
+
 ## Climb dedup
 
 Kilter's catalog has duplicate climbs at different UUIDs with identical hold layouts. We collapse them behind a canonical row.
@@ -267,6 +287,7 @@ bunx kilter-sync list                # List all stored kilter credentials
 bunx kilter-sync user <userId>       # Force a sync for one user
 bunx kilter-sync daemon              # Run the daemon (one-user-per-cycle, quiet hours)
 bunx kilter-sync catalog --user <id> # Sync the public climb catalog (Flow A)
+bunx kilter-sync locations --user <id> # Sync public Kilter gym/board locations
 ```
 
 Run with 1Password like aurora-sync:

@@ -61,13 +61,11 @@
     "db:import-aurora-unified": "tsx scripts/import-aurora-board-unified.ts",
     "db:seed-social": "tsx scripts/seed-social.ts",
     "db:create-test-user": "tsx scripts/create-test-user.ts",
-    "db:seed-locations": "tsx scripts/seed-board-locations.ts",
     "db:seed-beta-links": "tsx scripts/seed-dev-beta-links.ts"
   },
   "dependencies": {
     "@boardsesh/board-constants": "*",
     "@boardsesh/shared-schema": "*",
-    "@hangtime/climbing-boards": "^1.0.6",
     "drizzle-orm": "^0.45.1",
     "postgres": "^3.4.8"
   },

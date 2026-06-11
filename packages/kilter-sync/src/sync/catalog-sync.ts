@@ -25,6 +25,8 @@ import { gripsClimbConcatToFrames, framesToHolds } from './catalog-parse';
 import { fingerprintFromHolds } from './fingerprint';
 import { createSetterSyncNotifications, type NewClimbInfo } from './notifications';
 import { reconcileDeletions, type DeletionReport } from './deletions';
+import { syncKilterLocations } from './locations-sync';
+import type { LocationSyncSummary } from '@boardsesh/location-sync';
 
 type DrizzleDb = PgDatabase<PgQueryResultHKT, Record<string, unknown>>;
 
@@ -62,6 +64,7 @@ export type KilterCatalogSummary = {
   canonicalsInserted: number;
   aliasesUpserted: number;
   statsUpserted: number;
+  locations: LocationSyncSummary | null;
   deletions: DeletionReport;
 };
 
@@ -464,6 +467,7 @@ export async function syncKilterCatalog(args: SyncKilterCatalogArgs): Promise<Ki
     canonicalsInserted: 0,
     aliasesUpserted: 0,
     statsUpserted: 0,
+    locations: null,
     deletions: {
       reported: 0,
       aliasDeletes: 0,
@@ -496,6 +500,12 @@ export async function syncKilterCatalog(args: SyncKilterCatalogArgs): Promise<Ki
     log(
       `[kilter-catalog] ${unmapped.length} unmapped layout(s): ${unmapped.map((entry) => `${entry.productLayoutUuid}(${entry.productName})`).join(', ')}`,
     );
+  }
+
+  try {
+    summary.locations = await syncKilterLocations({ db: args.db, reference, resolver, log });
+  } catch (error) {
+    log(`[kilter-locations] failed: ${error instanceof Error ? error.message : String(error)}`);
   }
 
   if (allNewCanonicals.length > 0 && args.suppressNotifications) {

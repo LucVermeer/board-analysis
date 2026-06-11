@@ -9,6 +9,11 @@ export { pushKilterUserData, type PushBackArgs } from './push-back';
 export { syncKilterCatalog, type SyncKilterCatalogArgs, type KilterCatalogSummary } from './catalog-sync';
 export { pullKilterReference, type KilterReferencePull } from './reference-pull';
 export { buildLayoutResolver, type LayoutResolver } from './layout-resolver';
+export {
+  buildKilterLocationRecords,
+  syncKilterLocations,
+  type BuildKilterLocationRecordsResult,
+} from './locations-sync';
 export { gripsClimbConcatToFrames, framesToHolds, fingerprintFrames } from './catalog-parse';
 export { reconcileDeletions, type DeletionReport } from './deletions';
 export { createSetterSyncNotifications, type NewClimbInfo } from './notifications';
