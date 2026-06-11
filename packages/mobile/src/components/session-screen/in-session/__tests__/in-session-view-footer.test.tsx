@@ -44,7 +44,7 @@ vi.mock('react-native-reanimated', () => ({
 }));
 
 vi.mock('react-native-safe-area-context', () => ({
-  useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
+  useSafeAreaInsets: () => ({ top: 0, bottom: 130, left: 0, right: 0 }),
 }));
 
 vi.mock('@shopify/flash-list', () => ({
@@ -145,8 +145,9 @@ describe('InSessionView footer', () => {
     render(createElement(InSessionView));
 
     // End no longer renders a bottom action bar, so the list reserves just the
-    // fixed-footer offset (tab bar + climb accessory) — no extra footer height.
-    expect(list.contentContainerStyle?.paddingBottom).toBe(88);
+    // safe-area inset (the native tab bar + climb accessory are already in it on the
+    // Liquid Glass path) — no extra footer height.
+    expect(list.contentContainerStyle?.paddingBottom).toBe(130);
   });
 
   it('renders no in-session bottom action bar', () => {

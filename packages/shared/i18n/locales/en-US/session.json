@@ -366,7 +366,7 @@
       "preGeneratorIncreaseOption": "Increase {{label}}",
       "preGeneratorOptionAccessibilityLabel": "{{group}}, {{value}}",
       "preGeneratorTuning": "Tuning",
-      "preStart": "Start session",
+      "preStart": "Start",
       "preStarting": "Starting…",
       "preNoBoard": "Pick a board to start",
       "preStartError": "Couldn't start session. Try again.",
@@ -383,6 +383,7 @@
       "inHistoryEmpty": "Log climbs to build your session history.",
       "historyRowAria": "{{name}}, {{status}}",
       "inEndSession": "End session",
+      "inStop": "Stop",
       "notification": {
         "channelName": "Active climbing session",
         "channelDescription": "Keeps your board connected and shows session controls while Boardsesh runs in the background.",

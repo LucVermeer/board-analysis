@@ -80,7 +80,23 @@ vi.mock('../../chrome', () => ({
     onPress?: () => void;
     accessibilityLabel?: string;
   }) => createElement('button', { onClick: onPress, 'data-action': accessibilityLabel ?? '' }, children),
+  TOP_ACTION_SIZE: 48,
 }));
+vi.mock('../../Text', () => ({
+  Text: ({ children }: { children?: ReactNode }) => createElement('span', null, children),
+}));
+vi.mock('../../PressableSurface', () => ({
+  PressableSurface: ({
+    children,
+    onPress,
+    accessibilityLabel,
+  }: {
+    children?: ReactNode;
+    onPress?: () => void;
+    accessibilityLabel?: string;
+  }) => createElement('button', { onClick: onPress, 'data-pressable': accessibilityLabel ?? '' }, children),
+}));
+vi.mock('../../../theme/tokens', () => ({ spacing: { 1: 4, 3: 12 } }));
 
 import { RecordTopChrome } from '../RecordTopChrome';
 
@@ -146,29 +162,32 @@ describe('RecordTopChrome', () => {
     expect(onShare).toHaveBeenCalledTimes(1);
   });
 
-  it('docks invite on the left and a single Stop on the right (no light) while a session is live', () => {
+  it('docks invite on the left and a labelled Stop pill on the right (no light) while a session is live', () => {
     const onShare = vi.fn();
     const onEndSession = vi.fn();
     const { container } = render(<RecordTopChrome {...makeProps({ onShare, onEndSession })} />);
 
-    // Invite is the lone left slot; Stop is the lone right slot; the light is hidden.
+    // Invite is the lone left slot; the Stop pill reserves two slots for its label;
+    // the light is hidden.
     expect(chrome.props?.leadingActionCount).toBe(1);
-    expect(chrome.props?.trailingActionCount).toBe(1);
+    expect(chrome.props?.trailingActionCount).toBe(2);
     expect(chrome.props?.hideLight).toBe(true);
 
     const shareButton = container.querySelector('[data-action="mobile.session.invite"]') as HTMLButtonElement | null;
     expect(shareButton).not.toBeNull();
-    const endButton = container.querySelector(
-      '[data-action="mobile.session.inEndSession"]',
+    const stopButton = container.querySelector(
+      '[data-pressable="mobile.session.inEndSession"]',
     ) as HTMLButtonElement | null;
-    expect(endButton).not.toBeNull();
-    endButton!.click();
+    expect(stopButton).not.toBeNull();
+    // The Stop control carries a visible "Stop" label, not just an icon.
+    expect(stopButton?.textContent).toContain('mobile.session.inStop');
+    stopButton!.click();
     expect(onEndSession).toHaveBeenCalledTimes(1);
   });
 
-  it('reserves a single right slot (and hides the light) when only End is provided', () => {
+  it('reserves two right slots for the Stop label (and hides the light) when only End is provided', () => {
     render(<RecordTopChrome {...makeProps({ onEndSession: vi.fn() })} />);
-    expect(chrome.props?.trailingActionCount).toBe(1);
+    expect(chrome.props?.trailingActionCount).toBe(2);
     expect(chrome.props?.leadingActionCount).toBe(0);
     expect(chrome.props?.hideLight).toBe(true);
   });

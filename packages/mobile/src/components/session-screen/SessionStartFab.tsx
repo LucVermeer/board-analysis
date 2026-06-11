@@ -1,5 +1,6 @@
 import { useCallback } from 'react';
 import { type LayoutChangeEvent, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FAB } from 'react-native-paper';
 import { GlassSurface } from '../GlassSurface';
 import { PressableSurface } from '../PressableSurface';
@@ -55,6 +56,14 @@ export function SessionStartFab({
 }: SessionStartFabProps) {
   const { variant } = useTheme();
   const bottomChrome = useBottomChromeMetrics();
+  const insets = useSafeAreaInsets();
+  // The Liquid Glass NativeTabs + BottomAccessory already inflate the safe-area
+  // bottom inset to include the tab bar AND the accessory, so the capsule anchors to
+  // that raw inset — everything below it is system chrome. (`fixedFooterBottom` adds
+  // the tab bar + accessory a second time, which strands the capsule mid-screen.)
+  // Only the Material variant — in-flow tab bar + a JS queue bar that isn't in the
+  // safe-area inset — needs the metric's reserve.
+  const bottomOffset = variant === 'material' ? bottomChrome.fixedFooterBottom : insets.bottom;
 
   const handleLayout = useCallback(
     (event: LayoutChangeEvent) => {
@@ -68,7 +77,7 @@ export function SessionStartFab({
       testID={testID}
       pointerEvents="box-none"
       onLayout={onHeightChange ? handleLayout : undefined}
-      style={[styles.container, { bottom: bottomChrome.fixedFooterBottom }]}
+      style={[styles.container, { bottom: bottomOffset }]}
     >
       {variant === 'material' ? (
         <FAB
@@ -142,7 +151,7 @@ function StartGlassCapsule({
       />
       <Icon name={icon} size={18} color={brandColors.onPrimary} />
       <Text variant="body" color={brandColors.onPrimary} style={styles.capsuleLabel}>
-        {loading ? '…' : label}
+        {label}
       </Text>
     </PressableSurface>
   );

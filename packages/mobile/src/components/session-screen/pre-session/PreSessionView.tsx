@@ -208,10 +208,11 @@ export function PreSessionView({ showChrome = false }: PreSessionViewProps) {
   const canStart = activeBoard != null && !isStarting && generatorPreviewReady;
   // The Start capsule (SessionStartFab) floats bottom-trailing above the bottom
   // chrome and reports its measured height; the list reserves that height plus the
-  // fixed-footer offset (clears the tab bar where it overlays content + any climb
-  // accessory) so its last row clears the capsule. Same offset the capsule uses, so
-  // they stay in lockstep on both variants.
-  const footerBottom = bottomChrome.fixedFooterBottom;
+  // capsule's bottom offset so its last row clears the capsule. Liquid Glass anchors
+  // to the raw safe-area inset (which already includes the tab bar + accessory);
+  // Material uses the fixed-footer reserve. Mirrors SessionStartFab so they stay in
+  // lockstep on both variants.
+  const footerBottom = variant === 'material' ? bottomChrome.fixedFooterBottom : insets.bottom;
 
   // Inline status copy shown above an empty preview (loading / no results /
   // error). When rows are already present a rebuild keeps them mounted, so these

@@ -366,7 +366,7 @@
       "preGeneratorIncreaseOption": "Aumentar {{label}}",
       "preGeneratorOptionAccessibilityLabel": "{{group}}, {{value}}",
       "preGeneratorTuning": "Ajustes",
-      "preStart": "Empezar sesión",
+      "preStart": "Empezar",
       "preStarting": "Empezando…",
       "preNoBoard": "Elige una tabla para empezar",
       "preStartError": "No se pudo iniciar la sesión. Inténtalo de nuevo.",
@@ -383,6 +383,7 @@
       "inHistoryEmpty": "Registra bloques para crear el historial de tu sesión.",
       "historyRowAria": "{{name}}, {{status}}",
       "inEndSession": "Terminar sesión",
+      "inStop": "Parar",
       "notification": {
         "channelName": "Sesión de escalada activa",
         "channelDescription": "Mantiene tu tablero conectado y muestra los controles de la sesión mientras Boardsesh está en segundo plano.",

@@ -83,6 +83,9 @@ vi.mock('../../../hooks/use-native-glass', () => ({ useNativeGlass: () => ctrl.n
 vi.mock('../../../hooks/use-bottom-chrome-metrics', () => ({
   useBottomChromeMetrics: () => ({ fixedFooterBottom: 88 }),
 }));
+vi.mock('react-native-safe-area-context', () => ({
+  useSafeAreaInsets: () => ({ bottom: 130, top: 0, left: 0, right: 0 }),
+}));
 vi.mock('../../../lib/haptics', () => ({ hapticLight: haptics.light }));
 vi.mock('../../../theme/tokens', () => ({ spacing: { 2: 8, 4: 16, 5: 20 }, shadows: { sm: { shadowOpacity: 0.1 } } }));
 
@@ -109,7 +112,7 @@ beforeEach(() => {
 
 describe('SessionStartFab', () => {
   describe('glass variant', () => {
-    it('renders a brand-tinted glass capsule (not a FAB) at fixedFooterBottom, box-none', () => {
+    it('renders a brand-tinted glass capsule (not a FAB) anchored to the safe-area inset, box-none', () => {
       const { getByTestId, container } = render(<SessionStartFab {...makeProps()} />);
 
       expect(container.querySelector('[data-fab="true"]')).toBeNull();
@@ -118,7 +121,9 @@ describe('SessionStartFab', () => {
       expect(glass.props?.tintColor).toBe('#6D28D9');
       const node = getByTestId('pre-session-footer');
       expect(node.getAttribute('data-pointer-events')).toBe('box-none');
-      expect(node.getAttribute('data-style')).toContain('"bottom":88');
+      // Glass anchors to the raw safe-area inset (the native tab bar + accessory are
+      // already in it), not the double-counting fixed-footer metric.
+      expect(node.getAttribute('data-style')).toContain('"bottom":130');
     });
 
     it('renders the label and the play glyph', () => {

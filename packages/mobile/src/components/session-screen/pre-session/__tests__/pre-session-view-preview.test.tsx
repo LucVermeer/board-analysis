@@ -25,10 +25,6 @@ const rows = vi.hoisted(() => ({
   onPress: null as ((item: ClimbQueueItem) => void) | null,
 }));
 
-const footer = vi.hoisted(() => ({
-  styles: [] as unknown[],
-}));
-
 const list = vi.hoisted(() => ({
   props: [] as Array<{
     nestedScrollEnabled?: boolean;
@@ -50,12 +46,8 @@ const bottomChrome = vi.hoisted(() => ({
 }));
 
 vi.mock('react-native', () => ({
-  View: ({ children, testID, style }: { children?: ReactNode; testID?: string; style?: unknown }) => {
-    if (testID === 'pre-session-footer') {
-      footer.styles = Array.isArray(style) ? style : [style];
-    }
-    return createElement('div', testID ? { 'data-testid': testID } : null, children);
-  },
+  View: ({ children, testID }: { children?: ReactNode; testID?: string }) =>
+    createElement('div', testID ? { 'data-testid': testID } : null, children),
   StyleSheet: { create: (styles: unknown) => styles, hairlineWidth: 1 },
 }));
 
@@ -117,6 +109,9 @@ vi.mock('../../../Card', () => ({
 vi.mock('../../../GlassSurface', () => ({ GlassSurface: () => null }));
 vi.mock('../../../SectionHeader', () => ({ SectionHeader: () => null }));
 vi.mock('../../RecordTopChrome', () => ({ RecordTopChrome: () => null }));
+vi.mock('../../SessionStartFab', () => ({
+  SessionStartFab: () => createElement('div', { 'data-testid': 'pre-session-footer' }),
+}));
 vi.mock('../../../Text', () => ({
   Text: ({ children }: { children?: ReactNode }) => createElement('span', null, children),
 }));
@@ -167,19 +162,9 @@ function makeRow(uuid: string) {
   };
 }
 
-function getStyleNumber(styles: unknown[], key: string): number | null {
-  for (const style of styles) {
-    if (style == null || typeof style !== 'object' || Array.isArray(style)) continue;
-    const value = (style as Record<string, unknown>)[key];
-    if (typeof value === 'number') return value;
-  }
-  return null;
-}
-
 beforeEach(() => {
   rows.rendered = [];
   rows.onPress = null;
-  footer.styles = [];
   list.props = [];
   bottomChrome.metrics = {
     insideTabs: true,
@@ -247,21 +232,5 @@ describe('PreSessionView preview rows', () => {
 
     expect(list.props.at(-1)).toMatchObject({ dataLength: 0, hasHeaderComponent: true });
     expect(rows.rendered).toEqual([]);
-  });
-
-  it('floats the Start capsule above the bottom chrome via the fixed-footer metric', () => {
-    render(createElement(PreSessionView));
-
-    // fixedFooterBottom is the tab-bar clearance when no queue accessory is present,
-    // so the capsule sits just above the tab bar rather than stranded mid-screen.
-    expect(getStyleNumber(footer.styles, 'bottom')).toBe(120);
-  });
-
-  it('lifts to clear the queue accessory when it reserves space', () => {
-    bottomChrome.metrics = { ...bottomChrome.metrics, fixedFooterBottom: 178 };
-
-    render(createElement(PreSessionView));
-
-    expect(getStyleNumber(footer.styles, 'bottom')).toBe(178);
   });
 });
