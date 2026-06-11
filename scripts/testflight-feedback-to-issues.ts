@@ -621,7 +621,7 @@ function buildScreenshotIssueDraft(feedback: TestFlightScreenshotFeedback): Issu
   const title = buildIssueTitle('Screenshot feedback', feedback);
   const bodyParts = [
     marker,
-    'TestFlight screenshot feedback submitted by a beta tester.',
+    'Screenshot feedback submitted by a beta tester.',
     '',
     formatComment(feedback.comment),
     '',
@@ -645,7 +645,7 @@ function buildCrashIssueDraft(feedback: TestFlightCrashFeedback): IssueDraft {
   const redactedLog = feedback.crashLog ? redactSensitiveText(feedback.crashLog) : null;
   const bodyWithoutLog = [
     marker,
-    'TestFlight crash feedback submitted by a beta tester.',
+    'Crash feedback submitted by a beta tester.',
     '',
     formatComment(feedback.comment),
     '',

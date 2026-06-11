@@ -117,6 +117,7 @@ describe('buildIssueDraft', () => {
     );
 
     expect(draft.marker).toBe(testFlightMarker('screenshot', 'screenshot-1'));
+    expect(draft.title).toBe('Screenshot feedback: Queue button disappears after I add a climb.');
     expect(draft.labels).toEqual(['testflight', 'ios', 'feedback', 'screenshot']);
     expect(draft.body).toContain('<!-- testflight-feedback:screenshot:screenshot-1 -->');
     expect(draft.body).toContain('email: [redacted]');
@@ -129,6 +130,7 @@ describe('buildIssueDraft', () => {
   it('splits long crash logs into follow-up comments', () => {
     const draft = buildIssueDraft(crashFeedback({ crashLog: `name: Marco\n${'crash line\n'.repeat(7000)}` }));
 
+    expect(draft.title).toBe('Crash feedback: It crashes when I open party mode.');
     expect(draft.labels).toEqual(['testflight', 'ios', 'feedback', 'crash']);
     expect(draft.body).toContain('Crash log is split across');
     expect(draft.body).not.toContain('Marco');
