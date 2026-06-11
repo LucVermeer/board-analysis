@@ -51,7 +51,7 @@ function mapResultToClimbRow(result: RawSelectResult, params: BoardRouteParams):
     ascensionist_count: Number(result.ascensionist_count || 0),
     difficulty: getGradeLabel(toIntegerOrNull(result.difficulty_id)),
     quality_average: result.quality_average?.toString() || '0',
-    stars: getClimbStars(params.board_name, result.quality_average),
+    stars: getClimbStars(result.quality_average),
     difficulty_error: result.difficulty_error?.toString() || '0',
     benchmark_difficulty:
       result.benchmark_difficulty && result.benchmark_difficulty > 0 ? result.benchmark_difficulty.toString() : null,

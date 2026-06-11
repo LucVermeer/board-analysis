@@ -476,7 +476,7 @@ export type Climb = {
   quality_average: Scalars['String']['output'];
   /** Username of the person who created this climb */
   setter_username: Scalars['String']['output'];
-  /** Star rating (0-3) */
+  /** Star rating (0-5), rounded from quality_average */
   stars: Scalars['Float']['output'];
   /** Number of times the current user has sent this climb */
   userAscents?: Maybe<Scalars['Int']['output']>;
