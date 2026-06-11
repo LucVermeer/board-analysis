@@ -1,5 +1,5 @@
-import { useCallback, useMemo, useState } from 'react';
-import { type LayoutChangeEvent } from 'react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { type AccessibilityActionEvent, type AccessibilityActionInfo, type LayoutChangeEvent } from 'react-native';
 import { Gesture, type ComposedGesture } from 'react-native-gesture-handler';
 import { runOnJS, useAnimatedStyle, useSharedValue, type AnimatedStyle } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
@@ -11,8 +11,6 @@ import { useDrawerHost } from '../../providers/drawer-host-provider';
 import { hapticLight, hapticSelection } from '../../lib/haptics';
 import { useCarouselGesture } from '../play-drawer/use-carousel-gesture';
 
-type AccessibilityAction = { name: string; label: string };
-
 /**
  * The shared "current climb" carousel behind the floating queue capsule
  * (`ClimbCapsule`) and the iOS 26 native bottom accessory
@@ -22,7 +20,7 @@ type AccessibilityAction = { name: string; label: string };
  * composition, peek animation, a11y actions) so the two presentational wrappers
  * keep only their own labels and chrome.
  */
-export type QueueCarousel = {
+export type QueueClimbCarousel = {
   /** Measure the swipe viewport so the peek offsets are width-relative. */
   onLayout: (event: LayoutChangeEvent) => void;
   /** Tap (open) ∪ swipe-up (open) ∪ horizontal pan (prev/next). */
@@ -41,10 +39,20 @@ export type QueueCarousel = {
   handleNext: () => void;
   handlePrevious: () => void;
   /** Prev/next exposed as a11y actions (swipe is invisible to VoiceOver). */
-  swipeAccessibilityActions: AccessibilityAction[];
+  swipeAccessibilityActions: AccessibilityActionInfo[];
+  /** Shared handler for the prev/next a11y actions. */
+  onAccessibilityAction: (event: AccessibilityActionEvent) => void;
 };
 
-export function useQueueCarousel(): QueueCarousel {
+type QueueClimbCarouselOptions = {
+  width?: number;
+  reduceMotion?: boolean;
+};
+
+export function useQueueClimbCarousel(
+  viewportWidthOrOptions?: number | QueueClimbCarouselOptions,
+  reduceMotionOverride?: boolean,
+): QueueClimbCarousel {
   const { state, nextClimb, previousClimb } = useQueue();
   const playlistSuggestionSource = usePlaylistSuggestionSource();
   // Party non-drivers may only preview — stepping the current climb is a
@@ -56,9 +64,17 @@ export function useQueueCarousel(): QueueCarousel {
   const isPartyPreviewOnly = useIsPartyPreviewOnly();
   const { openPlayDrawer } = useDrawerHost();
   const { t } = useTranslation('session');
-  const reduceMotion = useReduceMotion();
+  const systemReduceMotion = useReduceMotion();
 
-  const [width, setWidth] = useState(0);
+  const configuredWidth =
+    typeof viewportWidthOrOptions === 'number' ? viewportWidthOrOptions : viewportWidthOrOptions?.width;
+  const reduceMotion =
+    typeof viewportWidthOrOptions === 'object'
+      ? (viewportWidthOrOptions.reduceMotion ?? systemReduceMotion)
+      : (reduceMotionOverride ?? systemReduceMotion);
+
+  const [measuredWidth, setMeasuredWidth] = useState(0);
+  const width = configuredWidth ?? measuredWidth;
   // Mirror the measured viewport width into a shared value so the peek-offset
   // worklets read it on the UI thread instead of capturing the React-state
   // primitive. On Android's new architecture the derived-value worklet does not
@@ -67,6 +83,12 @@ export function useQueueCarousel(): QueueCarousel {
   // `boardWidthSV` in use-carousel-gesture.ts.
   const widthSV = useSharedValue(0);
   const { currentClimbQueueItem, queue } = state;
+
+  useEffect(() => {
+    if (configuredWidth != null) {
+      widthSV.value = configuredWidth;
+    }
+  }, [configuredWidth, widthSV]);
 
   // Suggestion-aware so the capsule carousel matches the play drawer: at the
   // queue tail of an active playlist, `nextItem` falls through to the next
@@ -151,10 +173,10 @@ export function useQueueCarousel(): QueueCarousel {
   const onLayout = useCallback(
     (event: LayoutChangeEvent) => {
       const measured = event.nativeEvent.layout.width;
-      setWidth(measured);
-      widthSV.value = measured;
+      setMeasuredWidth(measured);
+      widthSV.value = configuredWidth ?? measured;
     },
-    [widthSV],
+    [configuredWidth, widthSV],
   );
 
   const currentLabelStyle = useAnimatedStyle(() => ({ transform: [{ translateX: translateX.value }] }));
@@ -175,10 +197,23 @@ export function useQueueCarousel(): QueueCarousel {
     return { opacity: 1, transform: [{ translateX: Math.min(0, -widthSV.value + translateX.value) }] };
   });
 
-  const swipeAccessibilityActions: AccessibilityAction[] = [
+  const swipeAccessibilityActions: AccessibilityActionInfo[] = [
     ...(canPrevious ? [{ name: 'previous', label: t('mobile.queue.previousClimb') }] : []),
     ...(canNext ? [{ name: 'next', label: t('mobile.queue.nextClimb') }] : []),
   ];
+
+  const onAccessibilityAction = useCallback(
+    (event: AccessibilityActionEvent) => {
+      if (event.nativeEvent.actionName === 'next') {
+        handleNext();
+        return;
+      }
+      if (event.nativeEvent.actionName === 'previous') {
+        handlePrevious();
+      }
+    },
+    [handleNext, handlePrevious],
+  );
 
   return {
     onLayout,
@@ -195,5 +230,6 @@ export function useQueueCarousel(): QueueCarousel {
     handleNext,
     handlePrevious,
     swipeAccessibilityActions,
+    onAccessibilityAction,
   };
 }
