@@ -215,7 +215,7 @@ export function doesBoardClimbNameMatchAuroraQuestionPlaceholder(exportName: str
   const boardClimbKey = normalizeBoardClimbNameForAuroraExportResolution(boardClimbName);
   if (exportKey !== boardClimbKey) return false;
 
-  return buildQuestionPlaceholderRegExp(exportName).test(boardClimbName);
+  return buildQuestionPlaceholderRegExp(exportName.normalize('NFKC')).test(boardClimbName.normalize('NFKC'));
 }
 
 // Escape LIKE/ILIKE metacharacters so export names are matched literally except
@@ -236,16 +236,17 @@ export function isClimbNameResolutionCandidateAllowed(
   candidate: ClimbNameResolutionCandidate,
   userId?: string,
 ): boolean {
-  const isNonDraft = candidate.isDraft === false;
+  const isNonDraft = candidate.isDraft !== true;
   const isCatalogOrPublic = isNonDraft && (candidate.isListed === true || candidate.userId == null);
   const isUsersOwnClimb = userId != null && candidate.userId === userId;
   return isCatalogOrPublic || isUsersOwnClimb;
 }
 
 function getClimbNameResolutionCandidateTier(candidate: ClimbNameResolutionCandidate, userId?: string): number {
-  if (candidate.isDraft === false && candidate.isListed === true) return 4;
-  if (userId != null && candidate.userId === userId) return 3;
-  if (candidate.isDraft === false && candidate.userId == null) return 2;
+  const isNonDraft = candidate.isDraft !== true;
+  if (isNonDraft && candidate.isListed === true) return 3;
+  if (userId != null && candidate.userId === userId) return 2;
+  if (isNonDraft && candidate.userId == null) return 1;
   return 0;
 }
 
@@ -429,7 +430,7 @@ async function resolveClimbNames(
   const nameToMatch = new Map<string, ClimbNameResolutionMatch>();
 
   const eligibleCatalogOrPublicFilter = and(
-    eq(boardClimbs.isDraft, false),
+    or(eq(boardClimbs.isDraft, false), isNull(boardClimbs.isDraft)),
     or(eq(boardClimbs.isListed, true), isNull(boardClimbs.userId)),
   );
 
