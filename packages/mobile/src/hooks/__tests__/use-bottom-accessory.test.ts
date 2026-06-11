@@ -1,8 +1,13 @@
+// @vitest-environment jsdom
+
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { renderHook } from '@testing-library/react';
 
 const cfg = vi.hoisted(() => ({
   platformOS: 'ios' as 'ios' | 'android',
+  reactNativeMinor: 82 as number | undefined,
   liquidGlassAvailable: true,
+  nativeTabs: {} as unknown,
   bottomAccessory: {} as unknown,
   variant: 'liquidGlass' as 'liquidGlass' | 'material',
 }));
@@ -12,6 +17,9 @@ vi.mock('react-native', () => ({
     get OS() {
       return cfg.platformOS;
     },
+    get constants() {
+      return { reactNativeVersion: { minor: cfg.reactNativeMinor } };
+    },
   },
 }));
 
@@ -20,10 +28,14 @@ vi.mock('expo-glass-effect', () => ({
 }));
 
 vi.mock('expo-router/unstable-native-tabs', () => ({
-  NativeTabs: {
-    get BottomAccessory() {
-      return cfg.bottomAccessory;
-    },
+  get NativeTabs() {
+    if (cfg.nativeTabs == null) {
+      return cfg.nativeTabs;
+    }
+
+    return {
+      BottomAccessory: cfg.bottomAccessory,
+    };
   },
 }));
 
@@ -36,7 +48,9 @@ import { isBottomAccessoryAvailable, useNativeAccessoryActive } from '../use-bot
 describe('use-bottom-accessory', () => {
   beforeEach(() => {
     cfg.platformOS = 'ios';
+    cfg.reactNativeMinor = 82;
     cfg.liquidGlassAvailable = true;
+    cfg.nativeTabs = {};
     cfg.bottomAccessory = {};
     cfg.variant = 'liquidGlass';
   });
@@ -45,7 +59,15 @@ describe('use-bottom-accessory', () => {
     expect(isBottomAccessoryAvailable()).toBe(true);
   });
 
+  it('does not require React Native minor 82 or newer', () => {
+    cfg.reactNativeMinor = 81;
+
+    expect(isBottomAccessoryAvailable()).toBe(true);
+  });
+
   it('does not require the React Native minor version to be present', () => {
+    cfg.reactNativeMinor = undefined;
+
     expect(isBottomAccessoryAvailable()).toBe(true);
   });
 
@@ -67,11 +89,26 @@ describe('use-bottom-accessory', () => {
     expect(isBottomAccessoryAvailable()).toBe(false);
   });
 
+  it('returns false when the NativeTabs export is missing', () => {
+    cfg.nativeTabs = null;
+
+    expect(isBottomAccessoryAvailable()).toBe(false);
+  });
+
+  it('returns false when the NativeTabs export is undefined', () => {
+    cfg.nativeTabs = undefined;
+
+    expect(isBottomAccessoryAvailable()).toBe(false);
+  });
+
   it('only reports the native accessory active for the Liquid Glass variant', () => {
-    expect(useNativeAccessoryActive()).toBe(true);
+    const { result, rerender } = renderHook(() => useNativeAccessoryActive());
+
+    expect(result.current).toBe(true);
 
     cfg.variant = 'material';
+    rerender();
 
-    expect(useNativeAccessoryActive()).toBe(false);
+    expect(result.current).toBe(false);
   });
 });
