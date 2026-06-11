@@ -12,7 +12,7 @@ describe('custom board options', () => {
     expect(getBoardLayouts('kilter')).toEqual(getAllLayouts('kilter'));
   });
 
-  it('returns MoonBoard layouts for the custom board selector', () => {
+  it('returns supported MoonBoard layouts for the custom board selector', () => {
     const layouts = getBoardLayouts('moonboard');
     expect(layouts.map((layout) => layout.name)).toEqual([
       'MoonBoard 2010',
@@ -20,8 +20,8 @@ describe('custom board options', () => {
       'MoonBoard 2024',
       'MoonBoard Masters 2017',
       'MoonBoard Masters 2019',
-      'Mini MoonBoard 2020',
     ]);
+    expect(layouts.map((layout) => layout.id)).not.toContain(6);
   });
 
   it('returns the MoonBoard standard size for known layouts', () => {
