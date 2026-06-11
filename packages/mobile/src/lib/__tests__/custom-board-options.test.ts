@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { getAllLayouts } from '@boardsesh/board-constants/product-sizes';
+import { MOONBOARD_LAYOUTS } from '@boardsesh/board-config';
 import {
   getBoardLayouts,
   getBoardSetsForLayoutAndSize,
@@ -21,7 +22,7 @@ describe('custom board options', () => {
       'MoonBoard Masters 2017',
       'MoonBoard Masters 2019',
     ]);
-    expect(layouts.map((layout) => layout.id)).not.toContain(6);
+    expect(layouts.map((layout) => layout.id)).not.toContain(MOONBOARD_LAYOUTS['mini-moonboard-2020'].id);
   });
 
   it('returns the MoonBoard standard size for known layouts', () => {
