@@ -10,6 +10,8 @@ import {
   requireSessionMember,
   applyRateLimit,
   validateInput,
+  RATE_LIMIT_SESSION,
+  RATE_LIMIT_SESSION_OP,
 } from '../shared/helpers';
 import {
   SessionIdSchema,
@@ -407,7 +409,7 @@ export const sessionMutations = {
    * provided.
    */
   takeControl: async (_: unknown, { climb }: { climb?: ClimbQueueItem | null }, ctx: ConnectionContext) => {
-    await applyRateLimit(ctx);
+    await applyRateLimit(ctx, RATE_LIMIT_SESSION, RATE_LIMIT_SESSION_OP);
     const sessionId = requireSession(ctx);
     await requireSessionMember(ctx, sessionId);
     if (climb !== null && climb !== undefined) {
@@ -523,12 +525,22 @@ export const sessionMutations = {
    * `sessionId` argument.
    */
   setSessionBoardSerial: async (_: unknown, { serial }: { serial: string }, ctx: ConnectionContext) => {
-    await applyRateLimit(ctx);
+    await applyRateLimit(ctx, RATE_LIMIT_SESSION, RATE_LIMIT_SESSION_OP);
     // Session identity from the WebSocket context (WS-implicit pattern); no
     // sessionId argument.
     const sessionId = requireSession(ctx);
     validateInput(BoardSerialSchema, serial, 'serial');
     await requireSessionMember(ctx, sessionId);
+
+    // Hard-error when ctx.participantId is missing — same reasoning as
+    // takeControl / confirmClimbOnWall: connectionIds aren't stable across
+    // reconnects. Must run BEFORE the roomManager write and event publish
+    // below; otherwise an anonymous/unidentified caller would mutate Redis
+    // and broadcast SessionBoardSerialChanged before we reject them.
+    if (!ctx.participantId) {
+      throw new Error('setSessionBoardSerial requires ctx.participantId; refusing to fall back to connectionId.');
+    }
+    const participantId = ctx.participantId;
 
     const previousSerial = await roomManager.setSessionBoardSerialAndReturnPrevious(sessionId, serial);
     if (previousSerial !== serial) {
@@ -537,14 +549,6 @@ export const sessionMutations = {
         lastConnectedBoardSerial: serial,
       });
     }
-
-    // Hard-error when ctx.participantId is missing — same reasoning as
-    // takeControl / confirmClimbOnWall: connectionIds aren't stable across
-    // reconnects.
-    if (!ctx.participantId) {
-      throw new Error('setSessionBoardSerial requires ctx.participantId; refusing to fall back to connectionId.');
-    }
-    const participantId = ctx.participantId;
 
     // Mirror takeControl / releaseControl: return the resolved Session.
     // Re-read `lastConnectedBoardSerial` (via the helper's default lookup)
@@ -567,7 +571,7 @@ export const sessionMutations = {
    * WebSocket connection context — no `sessionId` argument.
    */
   setSessionBoardPath: async (_: unknown, { boardPath }: { boardPath: string }, ctx: ConnectionContext) => {
-    await applyRateLimit(ctx);
+    await applyRateLimit(ctx, RATE_LIMIT_SESSION, RATE_LIMIT_SESSION_OP);
     const sessionId = requireSession(ctx);
     validateInput(BoardPathSchema, boardPath, 'boardPath');
     await requireSessionMember(ctx, sessionId);
@@ -641,7 +645,7 @@ export const sessionMutations = {
    * only when the clear actually happened.
    */
   releaseControl: async (_: unknown, __: unknown, ctx: ConnectionContext) => {
-    await applyRateLimit(ctx);
+    await applyRateLimit(ctx, RATE_LIMIT_SESSION, RATE_LIMIT_SESSION_OP);
     const sessionId = requireSession(ctx);
     await requireSessionMember(ctx, sessionId);
 

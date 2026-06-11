@@ -4,16 +4,24 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vite-plus/test';
+import { GraphQLError } from 'graphql';
 import type { ConnectionContext } from '@boardsesh/shared-schema';
-import { applyRateLimit } from '../graphql/resolvers/shared/helpers';
+import { applyRateLimit, RATE_LIMIT_SESSION, RATE_LIMIT_PLAYBACK } from '../graphql/resolvers/shared/helpers';
+import { RateLimitError } from '../utils/rate-limiter';
 
-// Mock rate limiter utilities so we can inspect which keys are used
+// Mock rate limiter utilities so we can inspect which keys are used. Spread the
+// real module so the genuine RateLimitError class survives — applyRateLimit
+// branches on `error instanceof RateLimitError` to build the coded error.
 const mockCheckRateLimit = vi.fn();
 const mockCheckRateLimitRedis = vi.fn().mockResolvedValue(undefined);
 
-vi.mock('../utils/rate-limiter', () => ({
-  checkRateLimit: (...args: unknown[]) => mockCheckRateLimit(...args),
-}));
+vi.mock('../utils/rate-limiter', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../utils/rate-limiter')>();
+  return {
+    ...actual,
+    checkRateLimit: (...args: unknown[]) => mockCheckRateLimit(...args),
+  };
+});
 
 vi.mock('../utils/redis-rate-limiter', () => ({
   checkRateLimitRedis: (...args: unknown[]) => mockCheckRateLimitRedis(...args),
@@ -105,5 +113,50 @@ describe('applyRateLimit key selection', () => {
 
     expect(mockCheckRateLimit).toHaveBeenCalledWith('ws-anon-456', 5);
     expect(mockCheckRateLimitRedis).not.toHaveBeenCalled();
+  });
+});
+
+describe('applyRateLimit structured RATE_LIMITED error (#2763)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('rethrows a coded GraphQLError carrying retryAfterSeconds when a bucket is exceeded', async () => {
+    mockCheckRateLimit.mockImplementationOnce(() => {
+      throw new RateLimitError(22);
+    });
+    const ctx: ConnectionContext = { connectionId: 'ws-1', isAuthenticated: true, userId: 'user-1' };
+
+    const error = await applyRateLimit(ctx, RATE_LIMIT_SESSION, 'session').catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(GraphQLError);
+    expect((error as GraphQLError).extensions).toMatchObject({
+      code: 'RATE_LIMITED',
+      operation: 'session',
+      retryAfterSeconds: 22,
+    });
+    // Message text is preserved for older clients that still string-match.
+    expect((error as GraphQLError).message).toMatch(/Rate limit exceeded/);
+  });
+
+  it('passes non-rate-limit errors through untouched', async () => {
+    const boom = new Error('redis exploded');
+    mockCheckRateLimit.mockImplementationOnce(() => {
+      throw boom;
+    });
+    const ctx: ConnectionContext = { connectionId: 'ws-2', isAuthenticated: false };
+
+    await expect(applyRateLimit(ctx, RATE_LIMIT_SESSION, 'session')).rejects.toBe(boom);
+  });
+
+  it('gives interactive session + playback traffic far more headroom than the 60/min default', () => {
+    // The crux of the fix: queue/wall mutations and playback no longer share the
+    // 60/min `default` bucket that a two-person session exhausted by switching.
+    expect(RATE_LIMIT_SESSION).toBeGreaterThan(60);
+    expect(RATE_LIMIT_PLAYBACK).toBeGreaterThanOrEqual(RATE_LIMIT_SESSION);
   });
 });

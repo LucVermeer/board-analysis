@@ -302,6 +302,16 @@ export default ({ config }: ConfigContext): ExpoConfig & { newArchEnabled?: bool
       // provisioning profiles for both com.boardsesh.app.share-extension and
       // com.boardsesh.app.widgets on the next native build (NOT deliverable via
       // OTA). androidIntentFilters only accepts text/* | image/* | video/* | */*.
+      //
+      // iosShareExtensionName MUST NOT sanitize to the main app target name
+      // 'Boardsesh' (Expo names the main target after `name`, project is
+      // Boardsesh.xcodeproj). expo-share-intent derives the extension's Xcode
+      // target name from this value via .replace(/[^a-zA-Z0-9]/g,''), then bails
+      // ("already exists … Skipping") if a target with that name exists — so
+      // 'Boardsesh' collided with the main app and the extension was silently
+      // never created (the share option never appeared in any iOS build). The
+      // raw value is also the extension's CFBundleDisplayName, i.e. the label in
+      // the share sheet's top app-icon row, so keep it short to avoid truncation.
       [
         'expo-share-intent',
         {
@@ -309,7 +319,7 @@ export default ({ config }: ConfigContext): ExpoConfig & { newArchEnabled?: bool
             NSExtensionActivationSupportsWebURLWithMaxCount: 1,
             NSExtensionActivationSupportsText: true,
           },
-          iosShareExtensionName: 'Boardsesh',
+          iosShareExtensionName: 'Boardsesh Beta',
           iosAppGroupIdentifier: 'group.com.boardsesh.app',
           androidIntentFilters: ['text/*'],
         },

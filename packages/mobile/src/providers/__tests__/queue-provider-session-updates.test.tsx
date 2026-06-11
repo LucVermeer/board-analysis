@@ -4,6 +4,7 @@ import { createElement, useEffect } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ClimbQueueItem, PlaylistSuggestionSource } from '@boardsesh/queue';
 import type { SessionStatus, SessionUser, UserBoard } from '@boardsesh/shared-schema';
+import { GraphQLOperationError } from '@boardsesh/graphql-client';
 
 const ws = vi.hoisted(() => {
   type WsEventName = 'connected' | 'closed';
@@ -123,7 +124,8 @@ vi.mock('expo-crypto', () => ({
   randomUUID: () => 'test-correlation-id',
 }));
 
-vi.mock('@boardsesh/graphql-client', () => ({
+vi.mock('@boardsesh/graphql-client', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@boardsesh/graphql-client')>()),
   execute: graph.execute,
 }));
 
@@ -707,6 +709,41 @@ describe('QueueProvider session update subscription', () => {
       expect(latestSnapshot?.state.queue.map((item) => item.uuid)).not.toContain('queue-fail');
     });
     expect(toast.showToast).toHaveBeenCalledWith('mobile.queue.actionFailed', 'error');
+  });
+
+  it('shows the gentle rate-limit toast (not the generic failure) when takeControl is throttled (#2763)', async () => {
+    const snapshots: Snapshot[] = [];
+    renderProvider((snapshot) => snapshots.push(snapshot));
+
+    await waitFor(() => {
+      expect(snapshots.at(-1)?.sessionId).toBe('session-1');
+    });
+
+    const queueItem = makeQueueItem('queue-rl', 'climb-rl');
+    // The backend throttles interactive session mutations with this coded error
+    // when a burst (rapid boulder switching) trips a bucket.
+    const rateLimited = new GraphQLOperationError([
+      {
+        message: 'Rate limit exceeded. Try again in 22 seconds.',
+        extensions: { code: 'RATE_LIMITED', retryAfterSeconds: 22 },
+      },
+    ]);
+    queueMutations.takeControl.mockRejectedValueOnce(rateLimited);
+    const snapshot = snapshots.at(-1);
+    if (!snapshot) throw new Error('queue snapshot was not captured');
+
+    await expect(snapshot.takeControl(queueItem)).rejects.toBe(rateLimited);
+
+    // Optimistic driver/climb still rolls back to match the server.
+    await waitFor(() => {
+      const latestSnapshot = snapshots.at(-1);
+      expect(latestSnapshot?.driverParticipantId).toBeNull();
+      expect(latestSnapshot?.state.currentClimbQueueItem).toBeNull();
+      expect(latestSnapshot?.state.queue.map((item) => item.uuid)).not.toContain('queue-rl');
+    });
+    // Specific, gentle copy instead of the alarming generic "Action failed".
+    expect(toast.showToast).toHaveBeenCalledWith('mobile.queue.rateLimited', 'error');
+    expect(toast.showToast).not.toHaveBeenCalledWith('mobile.queue.actionFailed', 'error');
   });
 
   it('preserves suggested playlist items when takeControl rollback restores the queue', async () => {

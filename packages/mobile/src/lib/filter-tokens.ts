@@ -20,7 +20,7 @@ import {
   type ClimbFilterState,
   type ClimbBoardFilterState,
 } from '@boardsesh/climb-filters';
-import { buildFilterLabels, buildSortLabel } from './filter-labels';
+import { buildFilterLabels, buildSortLabel, formatSettersLabel } from './filter-labels';
 import type { GradeBound } from '../providers/climb-search-provider';
 
 export type FilterToken = {
@@ -118,7 +118,7 @@ export function getActiveFilterTokens({
   if (filters.setter != null && filters.setter.length > 0) {
     tokens.push({
       key: 'setter',
-      label: labels.setters(filters.setter.length),
+      label: formatSettersLabel(filters.setter, labels, t),
       clear: () => patchFilters({ setter: undefined }),
     });
   }

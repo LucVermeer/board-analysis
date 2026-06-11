@@ -12,6 +12,9 @@ type SessionScreenHeaderProps = {
   sessionActive: boolean;
   /** When set, a share button floats at the trailing edge to invite climbers. */
   onShare?: () => void;
+  /** When set (session live), an End glyph docks beside share (destructive tint) so
+   *  the overlay's stop control matches the tab chrome's trailing End action. */
+  onEndSession?: () => void;
   /**
    * Show a short "Invite" label beside the share glyph to teach the affordance.
    * Set while the climber is solo; collapses to the icon alone once a friend
@@ -36,6 +39,7 @@ export function SessionScreenHeader({
   onClose,
   sessionActive,
   onShare,
+  onEndSession,
   inviteHint,
   dragGesture,
 }: SessionScreenHeaderProps) {
@@ -62,21 +66,36 @@ export function SessionScreenHeader({
       <Text variant="title3" color={systemColors.label} style={styles.title} numberOfLines={1}>
         {title}
       </Text>
-      {onShare ? (
-        <Pressable
-          onPress={onShare}
-          hitSlop={12}
-          accessibilityRole="button"
-          accessibilityLabel={t('mobile.session.invite')}
-          style={styles.shareButton}
-        >
-          {inviteHint ? (
-            <Text variant="subheadline" color={brandColors.primary} style={styles.shareLabel}>
-              {t('mobile.session.inviteAction')}
-            </Text>
+      {onShare || onEndSession ? (
+        <View style={styles.rightCluster}>
+          {onShare ? (
+            <Pressable
+              onPress={onShare}
+              hitSlop={12}
+              accessibilityRole="button"
+              accessibilityLabel={t('mobile.session.invite')}
+              style={styles.shareButton}
+            >
+              {inviteHint ? (
+                <Text variant="subheadline" color={brandColors.primary} style={styles.shareLabel}>
+                  {t('mobile.session.inviteAction')}
+                </Text>
+              ) : null}
+              <Icon name="share" size={22} color={brandColors.primary} />
+            </Pressable>
           ) : null}
-          <Icon name="share" size={22} color={brandColors.primary} />
-        </Pressable>
+          {onEndSession ? (
+            <Pressable
+              onPress={onEndSession}
+              hitSlop={12}
+              accessibilityRole="button"
+              accessibilityLabel={t('mobile.session.inEndSession')}
+              style={styles.iconButton}
+            >
+              <Icon name="flag" size={22} color={brandColors.error} />
+            </Pressable>
+          ) : null}
+        </View>
       ) : (
         <View style={styles.iconButton} />
       )}
@@ -109,6 +128,11 @@ const styles = StyleSheet.create({
     height: 40,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  rightCluster: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
   },
   shareButton: {
     flexDirection: 'row',

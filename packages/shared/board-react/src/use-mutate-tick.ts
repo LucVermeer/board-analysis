@@ -29,7 +29,7 @@ function invalidateTickDependents(queryClient: QueryClient) {
   void queryClient.invalidateQueries({ queryKey: ['sessionDetail'] });
 }
 
-/** Edit an existing tick (status / grade / quality / attempts / comment). */
+/** Edit an existing tick (status / date / grade / quality / attempts / comment). */
 export function useUpdateTick() {
   const { isAuthenticated, executeHttp } = useBoardAdapter();
   const queryClient = useQueryClient();

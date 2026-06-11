@@ -57,6 +57,12 @@ export type SaveTickInput = {
   layoutId?: number;
   sizeId?: number;
   setIds?: string;
+  /**
+   * Specific board entity this tick is on. When provided, takes precedence
+   * over `(layoutId, sizeId, setIds)` resolution and lets ticks attach to a
+   * board the climber doesn't own (e.g. a seeded gym board).
+   */
+  boardUuid?: string;
   videoUrl?: string | null;
 };
 

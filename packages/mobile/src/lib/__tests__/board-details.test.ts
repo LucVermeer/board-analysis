@@ -68,7 +68,7 @@ describe('getBoardAspectRatio', () => {
     mockedGetMoonBoardDetails.mockReturnValue({
       boardWidth: 650,
       boardHeight: 1000,
-      imageUrls: [],
+      backgroundImageKeys: [],
       holdsData: [],
       images_to_holds: { 'moonboard-bg.png': [] },
     } as unknown as ReturnType<typeof getMoonBoardDetails>);
@@ -94,7 +94,7 @@ describe('getBoardRenderData', () => {
     mockedGetMoonBoardDetails.mockReturnValue({
       boardWidth: 650,
       boardHeight: 1000,
-      imageUrls: [],
+      backgroundImageKeys: [],
       holdsData: [{ id: 1, mirroredHoldId: null, cx: 100, cy: 200, r: 12 }],
       images_to_holds: {
         'moonboard-bg.png': [],
@@ -112,10 +112,7 @@ describe('getBoardRenderData', () => {
     expect(result).toEqual({
       boardWidth: 650,
       boardHeight: 1000,
-      imageUrls: [
-        'https://example.com/images/moonboard/moonboard-bg.png',
-        'https://example.com/images/moonboard/moonboard2024/woodenholds.png',
-      ],
+      backgroundImageKeys: ['moonboard/moonboard-bg.webp', 'moonboard/moonboard2024/woodenholds.webp'],
       holdsData: [{ id: 1, mirroredHoldId: null, cx: 100, cy: 200, r: 12 }],
     });
   });

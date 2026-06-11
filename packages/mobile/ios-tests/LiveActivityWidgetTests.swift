@@ -147,5 +147,6 @@ final class LiveActivityWidgetTests: XCTestCase {
         XCTAssertTrue(url?.absoluteString.contains("board_name=kilter") ?? false)
         XCTAssertTrue(url?.absoluteString.contains("frames=p1r12p2r13") ?? false)
         XCTAssertTrue(url?.absoluteString.contains("thumbnail=1") ?? false)
+        XCTAssertFalse(url?.absoluteString.contains("include_background=1") ?? true)
     }
 }

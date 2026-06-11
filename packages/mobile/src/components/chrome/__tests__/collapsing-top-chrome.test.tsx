@@ -194,6 +194,53 @@ describe('CollapsingTopChrome', () => {
     expect(lightbulb(container)).not.toBeNull();
   });
 
+  it('hides the lightbulb when hideLight is set, even with bluetooth available', () => {
+    ctrl.board = board;
+    ctrl.bluetooth = { isConnected: true, connect: vi.fn(), disconnect: vi.fn().mockResolvedValue(undefined) };
+    const { container } = render(<CollapsingTopChrome {...makeProps({ hideLight: true })} />);
+    expect(lightbulb(container)).toBeNull();
+  });
+
+  it('docks a leading action in the left island', () => {
+    ctrl.board = board;
+    const { container } = render(
+      <CollapsingTopChrome
+        {...makeProps({
+          leadingAction: createElement('button', { 'data-leading': 'invite' }),
+          leadingActionCount: 1,
+        })}
+      />,
+    );
+    expect(container.querySelector('[data-leading="invite"]')).not.toBeNull();
+  });
+
+  it('widens the right island for a multi-slot trailing action (trailingActionCount)', () => {
+    const { container } = render(
+      <CollapsingTopChrome
+        {...makeProps({
+          trailingAction: createElement('button', { 'data-trailing': 'stop' }),
+          trailingActionCount: 2,
+        })}
+      />,
+    );
+    // The two-slot count widens the right toolbar past zero, so the Stop pill renders.
+    expect(container.querySelector('[data-trailing="stop"]')).not.toBeNull();
+  });
+
+  it('respects an explicit trailingActionCount of 0 (the ?? guard, not ||)', () => {
+    const { container } = render(
+      <CollapsingTopChrome
+        {...makeProps({
+          trailingAction: createElement('button', { 'data-trailing': 'stop' }),
+          trailingActionCount: 0,
+        })}
+      />,
+    );
+    // A `||` instead of `??` would let the phantom element widen the toolbar to one
+    // slot and render; `??` honours the explicit 0, so the right island stays empty.
+    expect(container.querySelector('[data-trailing="stop"]')).toBeNull();
+  });
+
   it('renders the children slot (e.g. the search row)', () => {
     const { container } = render(
       <CollapsingTopChrome {...makeProps()}>

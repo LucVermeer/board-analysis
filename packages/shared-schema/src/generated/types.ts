@@ -476,7 +476,7 @@ export type Climb = {
   quality_average: Scalars['String']['output'];
   /** Username of the person who created this climb */
   setter_username: Scalars['String']['output'];
-  /** Star rating (0-3) */
+  /** Star rating (0-5), rounded from quality_average */
   stars: Scalars['Float']['output'];
   /** Number of times the current user has sent this climb */
   userAscents?: Maybe<Scalars['Int']['output']>;
@@ -4072,6 +4072,8 @@ export type SaveTickInput = {
   attemptCount: Scalars['Int']['input'];
   /** Board type */
   boardType: Scalars['String']['input'];
+  /** Specific board entity this tick is on. When provided, takes precedence over (layoutId, sizeId, setIds) resolution and lets ticks attach to a board the climber doesn't own (e.g. a seeded gym board). */
+  boardUuid?: InputMaybe<Scalars['String']['input']>;
   /** Climb UUID */
   climbUuid: Scalars['String']['input'];
   /** When the climb was attempted (ISO 8601) */
@@ -5108,6 +5110,8 @@ export type UpdateProfileInput = {
 export type UpdateTickInput = {
   /** Number of attempts */
   attemptCount?: InputMaybe<Scalars['Int']['input']>;
+  /** When the climb was attempted (ISO 8601) */
+  climbedAt?: InputMaybe<Scalars['String']['input']>;
   /** User comment */
   comment?: InputMaybe<Scalars['String']['input']>;
   /** User's difficulty rating */

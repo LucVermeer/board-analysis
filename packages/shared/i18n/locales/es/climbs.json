@@ -641,7 +641,6 @@
       "betaVideosDescription": "Solo vías con un vídeo de beta",
       "searchSetters": "Buscar equipadores",
       "noSetters": "Sin equipadores",
-      "cancel": "Cancelar",
       "done": "Listo",
       "clearAll": "Borrar todo"
     },
@@ -654,6 +653,7 @@
       "ascents": "{{count}}+ 🧗",
       "rating": "{{count}}+ ⭐",
       "more": "+{{count}} más",
+      "setterName": "Por {{setter}}",
       "settersCount_one": "{{count}} equipador",
       "settersCount_other": "{{count}} equipadores",
       "climbsCount_one": "{{count}} vía",

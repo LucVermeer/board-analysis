@@ -52,6 +52,7 @@ function createBoardContextValue({
   }
   return {
     boardName,
+    boardUuid: null,
     isAuthenticated: true,
     isLoading: false,
     error: null,

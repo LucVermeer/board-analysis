@@ -36,6 +36,15 @@ export function buildFilterLabels(t: TFunction<'climbs'>): Required<FilterSummar
   };
 }
 
+export function formatSettersLabel(
+  setters: readonly string[],
+  labels: Pick<Required<FilterSummaryLabels>, 'setters'>,
+  t: TFunction<'climbs'>,
+): string {
+  // i18n-keep mobile.search.setterName
+  return setters.length === 1 ? t('mobile.search.setterName', { setter: setters[0] }) : labels.setters(setters.length);
+}
+
 export function buildSortLabel(t: TFunction<'climbs'>): (sortBy: string) => string | undefined {
   const sortLabels: Record<SortOption, string> = {
     ascents: t('mobile.filter.sort.ascents'),

@@ -30,7 +30,7 @@ type Climb {
   difficulty: String!
   "Average quality rating from users"
   quality_average: String!
-  "Star rating (0-3)"
+  "Star rating (0-5), rounded from quality_average"
   stars: Float!
   "Difficulty uncertainty/spread"
   difficulty_error: String!
@@ -777,6 +777,8 @@ input SaveTickInput {
   sizeId: Int
   "Set IDs for board resolution"
   setIds: String
+  "Specific board entity this tick is on. When provided, takes precedence over (layoutId, sizeId, setIds) resolution and lets ticks attach to a board the climber doesn't own (e.g. a seeded gym board)."
+  boardUuid: String
   "Optional Instagram post or reel URL to attach as beta for the climb"
   videoUrl: String
 }
@@ -798,6 +800,8 @@ input UpdateTickInput {
   isBenchmark: Boolean
   "User comment"
   comment: String
+  "When the climb was attempted (ISO 8601)"
+  climbedAt: String
 }
 
 """

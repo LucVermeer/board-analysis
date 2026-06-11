@@ -237,9 +237,9 @@
         "description": "Sistema usa el idioma de tu dispositivo."
       },
       "diagnostics": {
-        "title": "Diagnóstico",
-        "recording": "Ayúdanos a arreglar el Bluetooth",
-        "recordingDescription": "Cuando la tabla se desconecte una y otra vez, activa esto. Grabaremos tu pantalla y la conexión Bluetooth para ver qué falla. Lo que escribes queda oculto, y está apagado hasta que lo enciendas."
+        "title": "Privacidad",
+        "recording": "Ayúdanos a mejorar",
+        "recordingDescription": "Envía grabaciones de sesión anónimas y enmascaradas para que corrijamos errores más rápido. Lo que escribes y tus fotos quedan ocultos. Desactívalo cuando quieras."
       },
       "integrations": {
         "title": "Aplicaciones conectadas",
@@ -279,7 +279,6 @@
       "climbs": "Bloques",
       "climb": "Bloque",
       "profile": "Perfil",
-      "setters": "Equipadores",
       "holdFilter": "Tipos de presa",
       "zoneFilter": "Zona del muro"
     }

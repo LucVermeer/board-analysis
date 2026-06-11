@@ -859,8 +859,15 @@
     {
       "idx": 122,
       "version": "7",
-      "when": 1781138774468,
-      "tag": "0122_handy_tattoo",
+      "when": 1781145433936,
+      "tag": "0122_add_search_covering_indexes_v2",
+      "breakpoints": true
+    },
+    {
+      "idx": 123,
+      "version": "7",
+      "when": 1781222169952,
+      "tag": "0123_true_firestar",
       "breakpoints": true
     }
   ]

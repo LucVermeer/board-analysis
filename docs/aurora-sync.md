@@ -89,6 +89,19 @@ After every successful per-user sync, the daemon also runs a shared sync for tha
 
 When the climbs upsert sees previously-unseen UUIDs, the daemon also writes `new_climbs_synced` rows into the `notifications` table for each follower of the climb's setter (`setter_follows` and any linked `user_follows` accounts).
 
+#### Public board locations
+
+For non-Kilter Aurora boards, the shared sync also refreshes public gym/board locations through `GET /pins?gyms=1`. The location writer lives in `@boardsesh/location-sync`; it upserts a deterministic system-owned `gyms` row per source gym and one public, unowned `user_boards` row per board install. It does not delete gyms or boards that disappear upstream.
+
+Run it directly with:
+
+```bash
+aurora-sync locations --board all
+aurora-sync locations --board tension -v
+```
+
+The direct command supports the Aurora boards that still use Aurora's API for location pins: Tension, Decoy, So iLL, Touchstone, and Grasshopper. Kilter Grips locations are handled by `kilter-sync`, and MoonBoard locations are handled by `moonboard-sync`.
+
 ### `board_climb_stats`: multi-writer model
 
 `ascensionist_count` is the materialized count derived from per-source columns,
@@ -166,6 +179,10 @@ aurora-sync user <nextauth-user-id> -b tension -v
 
 # List stored credentials
 aurora-sync list
+
+# Refresh public gym and board locations from Aurora pins
+aurora-sync locations --board all
+aurora-sync locations --board tension -v
 ```
 
 ### Environment Variables
@@ -327,9 +344,13 @@ Since the Kilter backend has been shut down, API-based sync is no longer availab
 
 ### Climb Name Resolution
 
-Climb names are resolved via `board_climbs` table using a composite index on `(board_type, name)`. When multiple climbs share the same name (rare), the one with the highest `ascensionist_count` is chosen.
+Climb names are resolved via `board_climbs` table using a composite index on `(board_type, name)`. When multiple climbs share the same name (rare), listed public climbs are preferred first, then the importing user's own climbs, then unlisted Aurora catalog climbs. Within the same tier, the climb with the highest `ascensionist_count` is chosen.
 
-Unresolvable names (delisted climbs, typos) are returned to the user in the result dialog so they know which entries could not be imported.
+Exact non-draft Aurora catalog matches remain importable even if the climb has since been delisted in Boardsesh. This keeps historical logbook data importable without making the delisted climb appear in public search.
+
+Some Aurora exports replace emoji with literal `?` characters in climb names. After exact matching, the importer tries a narrow fallback for still-unresolved names containing `?`: it gathers candidates with an escaped `ILIKE` pattern, strips emoji from DB names, strips question marks from export names, and only accepts normalized exact matches. This recovers names such as `Friend Forever?` → `Friend Forever👭` without broad fuzzy matching.
+
+Unresolvable names (missing climbs, renamed climbs, typos) are returned to the user in the result dialog so they know which entries could not be imported.
 
 ## Migration from Vercel Cron
 

@@ -17,6 +17,7 @@ import { climbToQueueItem } from '../../lib/climb-to-queue-item';
 import type { ActiveSubDrawer } from '@boardsesh/play-view';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { DeferredBoard } from './DeferredBoard';
+import { BoardRenderUnavailable } from './BoardRenderUnavailable';
 import { PlaybackControls } from './PlaybackControls';
 import { useMobilePlayback } from './use-mobile-playback';
 import { PlayDrawerHeader } from './PlayDrawerHeader';
@@ -807,7 +808,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
                 />
 
                 <View style={styles.boardSection}>
-                  {boardRenderData && (
+                  {boardRenderData ? (
                     <DeferredBoard
                       open={isSheetOpen}
                       boardName={boardName as BoardName}
@@ -826,6 +827,15 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
                       onSwipePrevious={handlePrev}
                       onResetZoomReady={handleResetZoomReady}
                       enabled={!isTickBarActive}
+                    />
+                  ) : (
+                    <BoardRenderUnavailable
+                      boardName={boardName}
+                      layoutId={layoutId}
+                      sizeId={sizeId}
+                      setIds={setIds}
+                      climbUuid={displayedClimb.uuid}
+                      climbName={displayedClimb.name}
                     />
                   )}
                 </View>

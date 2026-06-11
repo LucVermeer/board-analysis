@@ -188,7 +188,7 @@ vi.mock('../../../providers/queue-provider', () => ({
   }),
   usePlaylistSuggestionSource: () => null,
   // Default to driver (not preview-only); these tests encode the bar's wiring,
-  // not party gating — that is covered in use-queue-carousel.test.tsx.
+  // not party gating — that is covered in use-queue-climb-carousel.test.tsx.
   useIsPartyPreviewOnly: () => false,
 }));
 
@@ -217,16 +217,15 @@ vi.mock('../../../lib/board-details', () => ({
   getBoardRenderData: () => ({
     boardWidth: boardRender.boardWidth,
     boardHeight: boardRender.boardHeight,
-    imageUrls: ['https://example.test/board.webp'],
+    backgroundImageKeys: ['kilter/product_sizes_layouts_sets/36-1.webp'],
     holdsData: [],
   }),
 }));
 
 // The accessory thumbnail renders through BoardImageNative (the rasterized
-// native-PNG path) rather than the SVG BoardRenderer. The mock surfaces the
-// fitted box dimensions (width/height from `style`), the rounding/clipping it
-// applies, and the mirror flag so the aspect-fit + mirroring assertions hold
-// without a native renderer.
+// native-PNG path). The mock surfaces the fitted box dimensions (width/height
+// from `style`), the rounding/clipping it applies, and the mirror flag so the
+// aspect-fit + mirroring assertions hold without a native renderer.
 vi.mock('../../BoardImageNative', () => ({
   BoardImageNative: ({
     frames,

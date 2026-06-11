@@ -422,6 +422,7 @@ export const UPDATE_TICK = gql`
       difficulty
       isBenchmark
       comment
+      climbedAt
       updatedAt
     }
   }
@@ -438,6 +439,7 @@ export type UpdateTickInput = {
   difficulty?: number | null;
   isBenchmark?: boolean;
   comment?: string;
+  climbedAt?: string;
 };
 
 export type UpdateTickVariables = {
@@ -454,6 +456,7 @@ export type UpdateTickResponse = {
     difficulty: number | null;
     isBenchmark: boolean;
     comment: string;
+    climbedAt: string;
     updatedAt: string;
   };
 };

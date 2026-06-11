@@ -40,13 +40,15 @@ function getClient(): PostHog | null {
   // don't be surprised to see a few lifecycle events on a transient anon id.
   client = new PostHog(apiKey, {
     host,
-    // Session replay stays OFF by construction: `enableSessionReplay` defaults
-    // false, so the SDK NEVER auto-records — capture only ever begins when a user
-    // opts in via setSessionRecordingEnabled() → startSessionRecording(), which
-    // lazily initialises the native replay SDK. The masking below is what gets
-    // applied at that point: text inputs + images stay masked (the app has auth
-    // forms and white dark-mode input fields), and console capture is left on so
-    // the BLE console.warn/error lines land on the replay timeline.
+    // `enableSessionReplay` defaults false, so the SDK never auto-records —
+    // capture only begins when we call setSessionRecordingEnabled() →
+    // startSessionRecording(), which lazily initialises the native replay SDK.
+    // We drive that at startup from the resolved preference (on by default in the
+    // open TestFlight beta, opt-in otherwise — see session-recording-preference).
+    // The masking below is what gets applied at that point: text inputs + images
+    // stay masked (the app has auth forms and white dark-mode input fields), and
+    // console capture is left on so the BLE console.warn/error lines land on the
+    // replay timeline.
     sessionReplayConfig: {
       maskAllTextInputs: true,
       maskAllImages: true,
@@ -56,8 +58,9 @@ function getClient(): PostHog | null {
   return client;
 }
 
-// Opt-in diagnostics session recording. Off by default — nothing records until a
-// climber turns it on (see session-recording-preference). startSessionRecording()
+// Start/stop session recording. The resolved preference decides whether it runs
+// (on by default in the open TestFlight beta, opt-in otherwise — see
+// session-recording-preference); this just applies it. startSessionRecording()
 // lazily initialises the native replay SDK with the masking config above;
 // stopSessionRecording() halts it. No-op when analytics is disabled (dev / no
 // key) because getClient() returns null. Safe to call before the client is built

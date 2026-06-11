@@ -3,7 +3,7 @@
 // rows. Tap opens the PlayDrawer; horizontal swipe steps the queue (prev/next)
 // with the neighbouring climb peeking in. The pill's background adapts to the UI
 // variant (Liquid Glass / Material / fallback) via AccessoryBarSurface; the
-// swipe/peek/tap behaviour is shared with the native accessory via useQueueCarousel.
+// swipe/peek/tap behaviour is shared with the native accessory via useQueueClimbCarousel.
 
 import { useMemo, type ReactNode } from 'react';
 import { View, StyleSheet, type ColorValue } from 'react-native';
@@ -19,7 +19,7 @@ import { useTheme } from '../../providers/theme-provider';
 import { useDrawerHost, type BoardConfig } from '../../providers/drawer-host-provider';
 import { AccessoryBarSurface, type AccessoryBarSurfaceTreatment } from './AccessoryBarSurface';
 import { AccessoryClimbThumbnail } from './AccessoryClimbThumbnail';
-import { useQueueCarousel } from './use-queue-carousel';
+import { useQueueClimbCarousel } from './use-queue-climb-carousel';
 
 type ClimbLabelProps = {
   climb: Climb;
@@ -89,10 +89,9 @@ export function ClimbCapsule({
     previousItem,
     nextItem,
     canPeek,
-    handleNext,
-    handlePrevious,
     swipeAccessibilityActions,
-  } = useQueueCarousel();
+    onAccessibilityAction,
+  } = useQueueClimbCarousel();
 
   const currentClimb = currentItem?.climb ?? null;
   const previousClimb = previousItem?.climb ?? null;
@@ -147,10 +146,7 @@ export function ClimbCapsule({
           accessibilityRole="button"
           accessibilityLabel={currentClimb.name}
           accessibilityActions={swipeAccessibilityActions}
-          onAccessibilityAction={(event) => {
-            if (event.nativeEvent.actionName === 'next') handleNext();
-            else if (event.nativeEvent.actionName === 'previous') handlePrevious();
-          }}
+          onAccessibilityAction={onAccessibilityAction}
         >
           <Animated.View style={[styles.labelSlot, { right: labelRight }, currentLabelStyle]}>
             <ClimbLabel
