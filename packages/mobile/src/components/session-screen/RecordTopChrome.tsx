@@ -162,6 +162,7 @@ export function RecordTopChrome({
       leadingAction={leadingAction}
       leadingActionCount={onShare ? 1 : 0}
       trailingAction={trailingAction}
+      // The Stop pill spans two icon-slots so its "Stop" label fits the toolbar width.
       trailingActionCount={onEndSession ? 2 : 0}
       hideLight={inSession}
     />

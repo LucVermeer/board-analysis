@@ -496,6 +496,10 @@ export function InSessionView({
     }
   }, [endSession, router, onEndDismiss]);
 
+  // Stable dismiss handler so the always-mounted EndSessionSheet doesn't get a fresh
+  // onDismiss ref every render (onEndDismiss is optional, hence the wrapper).
+  const handleEndDismiss = useCallback(() => onEndDismiss?.(), [onEndDismiss]);
+
   // The history tick list is unbounded (it grows with every logged ascent in a
   // long party session), so it virtualizes through a FlashList instead of a
   // `.map` inside a ScrollView. The presence row + analytics ride as the list
@@ -643,7 +647,7 @@ export function InSessionView({
 
       <EndSessionSheet
         visible={endVisible}
-        onDismiss={() => onEndDismiss?.()}
+        onDismiss={handleEndDismiss}
         onConfirm={() => void handleConfirmEnd()}
         isEnding={isEnding}
         climbCount={sessionHistoryTicks.length}

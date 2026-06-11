@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { type LayoutChangeEvent, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, type LayoutChangeEvent, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FAB } from 'react-native-paper';
 import { GlassSurface } from '../GlassSurface';
@@ -149,7 +149,11 @@ function StartGlassCapsule({
         style={StyleSheet.absoluteFill}
         pointerEvents="none"
       />
-      <Icon name={icon} size={18} color={brandColors.onPrimary} />
+      {loading ? (
+        <ActivityIndicator size="small" color={brandColors.onPrimary} />
+      ) : (
+        <Icon name={icon} size={18} color={brandColors.onPrimary} />
+      )}
       <Text variant="body" color={brandColors.onPrimary} style={styles.capsuleLabel}>
         {label}
       </Text>

@@ -41,6 +41,7 @@ vi.mock('react-native', () => ({
     absoluteFill: { position: 'absolute' },
     hairlineWidth: 1,
   },
+  ActivityIndicator: () => createElement('div', { 'data-spinner': 'true' }),
 }));
 
 vi.mock('react-native-paper', () => ({
@@ -130,6 +131,12 @@ describe('SessionStartFab', () => {
       const { container } = render(<SessionStartFab {...makeProps({ label: 'Start session' })} />);
       expect(container.querySelector('[data-icon="play.fill"]')).not.toBeNull();
       expect(container.textContent).toContain('Start session');
+    });
+
+    it('swaps the play glyph for a spinner while loading', () => {
+      const { container } = render(<SessionStartFab {...makeProps({ loading: true })} />);
+      expect(container.querySelector('[data-spinner="true"]')).not.toBeNull();
+      expect(container.querySelector('[data-icon="play.fill"]')).toBeNull();
     });
 
     it('fires onPress (with a haptic) through the capsule', () => {
