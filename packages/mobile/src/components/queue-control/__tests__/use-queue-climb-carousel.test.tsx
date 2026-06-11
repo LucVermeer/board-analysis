@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
-import { renderHook } from '@testing-library/react';
+import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { LayoutChangeEvent } from 'react-native';
 import type { ClimbQueueItem } from '@boardsesh/queue';
 
 // Hoisted provider/nav spies so each test drives party-preview gating + the
@@ -176,6 +177,14 @@ describe('useQueueClimbCarousel party-preview gating', () => {
     expect(gestureCalls.last?.boardWidth).toBe(320);
     expect(gestureCalls.last?.enabled).toBe(true);
     expect(gestureCalls.last?.reduceMotion).toBe(true);
+
+    // A layout event with a conflicting width must not override the configured value.
+    act(() => {
+      result.current.onLayout({ nativeEvent: { layout: { width: 0 } } } as LayoutChangeEvent);
+    });
+
+    expect(result.current.canPeek).toBe(true);      // configuredWidth=320 still in effect
+    expect(gestureCalls.last?.boardWidth).toBe(320); // widthSV not overwritten to 0
   });
 
   it('still surfaces the peek labels so a non-driver can SEE the next climb', () => {

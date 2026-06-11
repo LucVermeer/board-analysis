@@ -49,6 +49,9 @@ type QueueClimbCarouselOptions = {
   reduceMotion?: boolean;
 };
 
+export function useQueueClimbCarousel(): QueueClimbCarousel;
+export function useQueueClimbCarousel(width: number, reduceMotion?: boolean): QueueClimbCarousel;
+export function useQueueClimbCarousel(options: QueueClimbCarouselOptions): QueueClimbCarousel;
 export function useQueueClimbCarousel(
   viewportWidthOrOptions?: number | QueueClimbCarouselOptions,
   reduceMotionOverride?: boolean,
@@ -172,9 +175,10 @@ export function useQueueClimbCarousel(
 
   const onLayout = useCallback(
     (event: LayoutChangeEvent) => {
+      if (configuredWidth != null) return;
       const measured = event.nativeEvent.layout.width;
       setMeasuredWidth(measured);
-      widthSV.value = configuredWidth ?? measured;
+      widthSV.value = measured;
     },
     [configuredWidth, widthSV],
   );
