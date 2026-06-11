@@ -8,6 +8,7 @@ import {
   tryGetBackgroundPathsSync,
   type BackgroundVariant,
 } from '../lib/background-image-cache';
+import { reportError } from '../lib/sentry';
 
 /**
  * Bump when the Rust renderer output format changes. v2 marks the
@@ -598,6 +599,21 @@ export function useNativeClimbRender(params: NativeClimbRenderParams): NativeCli
           `[useNativeClimbRender] render failed for ${currentCacheKey}:`,
           error instanceof Error ? error.message : String(error),
         );
+        reportError(error, {
+          tags: {
+            feature: 'mobile_board_renderer',
+            boardName,
+          },
+          extra: {
+            layoutId,
+            sizeId,
+            setIds,
+            filledStyle,
+            renderWidth,
+            framesLength: frames.length,
+            cacheKey: currentCacheKey,
+          },
+        });
       });
     // nativeRender is intentionally excluded from deps: this effect *sets* it,
     // and the only meaningful re-trigger is a cacheKey change.
