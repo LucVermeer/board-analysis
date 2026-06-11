@@ -77,7 +77,7 @@ describe('ensureBackgroundsCached', () => {
       edgeBottom: 0,
       edgeTop: 18,
       holdsData: [],
-      imageUrls: ['https://www.boardsesh.com/images/kilter/product_sizes_layouts_sets/36-1.png'],
+      backgroundImageKeys: ['kilter/product_sizes_layouts_sets/36-1.webp'],
     } as ReturnType<typeof getBoardRenderData>);
 
     const result = await ensureBackgroundsCached({
@@ -94,7 +94,7 @@ describe('ensureBackgroundsCached', () => {
     expect(downloadAsyncMock).not.toHaveBeenCalled();
   });
 
-  it('rewrites .png URL suffix to .webp before looking up the manifest', async () => {
+  it('looks up bundled .webp manifest keys directly', async () => {
     vi.mocked(getBoardRenderData).mockReturnValue({
       boardWidth: 100,
       boardHeight: 100,
@@ -103,8 +103,7 @@ describe('ensureBackgroundsCached', () => {
       edgeBottom: 0,
       edgeTop: 18,
       holdsData: [],
-      // Server URLs always come back with .png; manifest only has .webp.
-      imageUrls: ['https://www.boardsesh.com/images/tension/product_sizes_layouts_sets/12.png'],
+      backgroundImageKeys: ['tension/product_sizes_layouts_sets/12.webp'],
     } as ReturnType<typeof getBoardRenderData>);
 
     const result = await ensureBackgroundsCached({
@@ -126,7 +125,7 @@ describe('ensureBackgroundsCached', () => {
       edgeBottom: 0,
       edgeTop: 18,
       holdsData: [],
-      imageUrls: ['https://www.boardsesh.com/images/newboard/bg.png'],
+      backgroundImageKeys: ['newboard/bg.webp'],
     } as ReturnType<typeof getBoardRenderData>);
 
     const result = await ensureBackgroundsCached({
@@ -152,12 +151,9 @@ describe('ensureBackgroundsCached', () => {
       edgeBottom: 0,
       edgeTop: 18,
       holdsData: [],
-      // First URL resolves via the manifest; second is a Tension layer
+      // First key resolves via the manifest; second is a new board layer
       // we never bundled (the bug this fix targets).
-      imageUrls: [
-        'https://www.boardsesh.com/images/kilter/product_sizes_layouts_sets/36-1.png',
-        'https://www.boardsesh.com/images/newboard/missing-layer.png',
-      ],
+      backgroundImageKeys: ['kilter/product_sizes_layouts_sets/36-1.webp', 'newboard/missing-layer.webp'],
     } as ReturnType<typeof getBoardRenderData>);
 
     const result = await ensureBackgroundsCached({
@@ -188,7 +184,7 @@ describe('tryGetBackgroundPathsSync', () => {
       edgeBottom: 0,
       edgeTop: 18,
       holdsData: [],
-      imageUrls: ['https://www.boardsesh.com/images/kilter/product_sizes_layouts_sets/36-1.png'],
+      backgroundImageKeys: ['kilter/product_sizes_layouts_sets/36-1.webp'],
     } as ReturnType<typeof getBoardRenderData>);
 
     const result = tryGetBackgroundPathsSync({
@@ -210,10 +206,7 @@ describe('tryGetBackgroundPathsSync', () => {
       edgeBottom: 0,
       edgeTop: 18,
       holdsData: [],
-      imageUrls: [
-        'https://www.boardsesh.com/images/kilter/product_sizes_layouts_sets/36-1.png',
-        'https://www.boardsesh.com/images/newboard/bg.png',
-      ],
+      backgroundImageKeys: ['kilter/product_sizes_layouts_sets/36-1.webp', 'newboard/bg.webp'],
     } as ReturnType<typeof getBoardRenderData>);
 
     const result = tryGetBackgroundPathsSync({
@@ -256,7 +249,7 @@ describe('thumb variant', () => {
       edgeBottom: 0,
       edgeTop: 18,
       holdsData: [],
-      imageUrls: ['https://www.boardsesh.com/images/kilter/product_sizes_layouts_sets/36-1.png'],
+      backgroundImageKeys: ['kilter/product_sizes_layouts_sets/36-1.webp'],
     } as ReturnType<typeof getBoardRenderData>);
 
     const result = tryGetBackgroundPathsSync({
@@ -281,7 +274,7 @@ describe('thumb variant', () => {
       edgeTop: 18,
       holdsData: [],
       // Tension has no thumbs/ entry in the mock manifest.
-      imageUrls: ['https://www.boardsesh.com/images/tension/product_sizes_layouts_sets/12.png'],
+      backgroundImageKeys: ['tension/product_sizes_layouts_sets/12.webp'],
     } as ReturnType<typeof getBoardRenderData>);
 
     const result = tryGetBackgroundPathsSync({

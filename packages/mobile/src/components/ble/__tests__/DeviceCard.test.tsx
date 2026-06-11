@@ -78,7 +78,7 @@ vi.mock('../../../lib/board-details', () => ({
     edgeRight: 100,
     edgeBottom: 0,
     edgeTop: 200,
-    imageUrls: [],
+    backgroundImageKeys: [],
     holdsData: [],
   })),
 }));

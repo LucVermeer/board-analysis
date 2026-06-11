@@ -2,7 +2,6 @@ import { getProductSize, getImageFilename, getHolePlacements } from '@boardsesh/
 import { BOARD_IMAGE_DIMENSIONS, MOONBOARD_SIZE, getMoonBoardDetails } from '@boardsesh/board-config';
 import type { BoardName } from '@boardsesh/shared-schema';
 import type { HoldPlacement } from '../components/board-renderer/types';
-import { WEB_BASE_URL } from './env';
 
 type BoardRenderData = {
   boardWidth: number;
@@ -14,7 +13,7 @@ type BoardRenderData = {
   edgeRight: number;
   edgeBottom: number;
   edgeTop: number;
-  imageUrls: string[];
+  backgroundImageKeys: string[];
   holdsData: HoldPlacement[];
 };
 
@@ -27,8 +26,9 @@ const RENDER_DATA_CACHE_LIMIT = 16;
 const renderDataCache = new Map<string, BoardRenderData | null>();
 
 /**
- * Computes board rendering data (dimensions, image URLs, hold positions)
- * from board config parameters. Mirrors the web's `getBoardDetails()`.
+ * Computes board rendering data (dimensions, bundled background manifest
+ * keys, hold positions) from board config parameters. Mirrors the web's
+ * `getBoardDetails()` geometry without handing mobile renderers network URLs.
  * Cached by board config — the placement data behind it never changes.
  */
 export function getBoardRenderData(params: {
@@ -110,9 +110,9 @@ function computeBoardRenderData(params: {
       r: xSpacing * 4,
     }));
 
-  const imageUrls = imageFilenames.map((filename) => `${WEB_BASE_URL}/images/${boardName}/${filename}`);
+  const backgroundImageKeys = imageFilenames.map((filename) => `${boardName}/${filename}`.replace(/\.png$/, '.webp'));
 
-  return { boardWidth, boardHeight, edgeLeft, edgeRight, edgeBottom, edgeTop, imageUrls, holdsData };
+  return { boardWidth, boardHeight, edgeLeft, edgeRight, edgeBottom, edgeTop, backgroundImageKeys, holdsData };
 }
 
 function getMoonBoardRenderData(params: {
@@ -125,8 +125,8 @@ function getMoonBoardRenderData(params: {
 
   try {
     const details = getMoonBoardDetails({ layout_id: layoutId, set_ids: setIds });
-    const imageUrls = Object.keys(details.images_to_holds).map(
-      (filename) => `${WEB_BASE_URL}/images/moonboard/${filename}`,
+    const backgroundImageKeys = Object.keys(details.images_to_holds).map((filename) =>
+      `moonboard/${filename}`.replace(/\.png$/, '.webp'),
     );
     const holdsData: HoldPlacement[] = details.holdsData.map((hold) => ({
       id: hold.id,
@@ -143,7 +143,7 @@ function getMoonBoardRenderData(params: {
       edgeRight: details.edge_right,
       edgeBottom: details.edge_bottom,
       edgeTop: details.edge_top,
-      imageUrls,
+      backgroundImageKeys,
       holdsData,
     };
   } catch (error) {

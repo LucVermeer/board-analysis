@@ -28,7 +28,7 @@ describe('getCreateBoardHolds', () => {
       edgeRight: 11,
       edgeBottom: 0,
       edgeTop: 18,
-      imageUrls: ['https://example.com/images/moonboard/moonboard-bg.png'],
+      backgroundImageKeys: ['moonboard/moonboard-bg.webp'],
       holdsData: [
         { id: 1, mirroredHoldId: null, cx: 68, cy: 950, r: 12 },
         { id: 198, mirroredHoldId: null, cx: 618, cy: 50, r: 12 },
@@ -78,7 +78,7 @@ describe('getCreateBoardHolds', () => {
       edgeRight: 11,
       edgeBottom: 0,
       edgeTop: 18,
-      imageUrls: ['https://example.com/images/moonboard/moonboard-bg.png'],
+      backgroundImageKeys: ['moonboard/moonboard-bg.webp'],
       holdsData: [{ id: 1, mirroredHoldId: null, cx: 68, cy: 950, r: 12 }],
     });
 
@@ -102,7 +102,7 @@ describe('getCreateBoardHolds', () => {
       edgeRight: 11,
       edgeBottom: 0,
       edgeTop: 18,
-      imageUrls: ['https://example.com/images/moonboard/moonboard-bg.png'],
+      backgroundImageKeys: ['moonboard/moonboard-bg.webp'],
       holdsData: [{ id: 1, mirroredHoldId: null, cx: 68, cy: 950, r: 12 }],
     });
 
