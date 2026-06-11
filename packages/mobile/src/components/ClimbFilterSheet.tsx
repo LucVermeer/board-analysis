@@ -175,6 +175,8 @@ export function ClimbFilterSheet({
   // ref churn while the sheet is open.
   useEffect(() => {
     if (hasLocalDraftEditsRef.current) return;
+    // These direct setters intentionally bypass the draft-guard wrappers:
+    // parent prop sync should not mark committed state as an in-flight edit.
     setLocalFilters(normalizeRetiredStatus(currentFilters));
     setLocalBoardFilters(currentBoardFilters);
   }, [currentFilters, currentBoardFilters]);

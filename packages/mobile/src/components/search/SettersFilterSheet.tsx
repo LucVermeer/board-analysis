@@ -111,7 +111,7 @@ export function SettersFilterSheet({
     [boardConfig, debouncedSearch],
   );
 
-  const { data: setters, isLoading } = useSetterStats(queryInput, true);
+  const { data: setters, isLoading } = useSetterStats(queryInput, boardConfig.boardName.length > 0);
 
   const toggle = useCallback(
     (username: string) => {

@@ -13,6 +13,7 @@ const hookState = vi.hoisted(() => ({
     { setterUsername: 'bob', climbCount: 4 },
   ] satisfies SetterStat[],
   isLoading: false,
+  enabledCalls: [] as boolean[],
 }));
 
 type PressableMockProps = {
@@ -87,7 +88,10 @@ vi.mock('../../../providers/theme-provider', () => ({
 }));
 
 vi.mock('../../../lib/graphql/hooks', () => ({
-  useSetterStats: () => ({ data: hookState.setters, isLoading: hookState.isLoading }),
+  useSetterStats: (_queryInput: unknown, enabled: boolean) => {
+    hookState.enabledCalls.push(enabled);
+    return { data: hookState.setters, isLoading: hookState.isLoading };
+  },
 }));
 
 vi.mock('../../../lib/haptics', () => ({ hapticSelection: vi.fn() }));
@@ -123,6 +127,7 @@ describe('SettersFilterSheet', () => {
   beforeEach(() => {
     flatListSnapshots.length = 0;
     hookState.isLoading = false;
+    hookState.enabledCalls = [];
   });
 
   it('keeps renderRow stable while selection changes through extraData', () => {
@@ -157,5 +162,20 @@ describe('SettersFilterSheet', () => {
 
     fireEvent.click(view.container.querySelector('[data-label="alice"]') as HTMLButtonElement);
     expect(onSelectedSettersChange).toHaveBeenLastCalledWith([]);
+  });
+
+  it('disables the setter query without a board name', () => {
+    render(
+      <SettersFilterSheet
+        visible
+        boardConfig={{ ...boardConfig, boardName: '' as typeof boardConfig.boardName }}
+        selectedSetters={[]}
+        onSelectedSettersChange={vi.fn()}
+        onClose={vi.fn()}
+        onDismiss={vi.fn()}
+      />,
+    );
+
+    expect(hookState.enabledCalls.at(-1)).toBe(false);
   });
 });
