@@ -14,6 +14,7 @@ type ChromeProps = {
   scrollY?: unknown;
   onPressTitle?: () => void;
   trailingAction?: ReactNode;
+  trailingActionCount?: number;
 };
 
 // Captures every prop CollapsingTopChrome receives so the wrapper's forwarding +
@@ -37,7 +38,7 @@ vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => k
 // CollapsingTopChrome forwarding contract; 'material' exercises the Paper app bar.
 vi.mock('../../../providers/theme-provider', () => ({
   useTheme: () => ({
-    brandColors: { primary: '#6D28D9' },
+    brandColors: { primary: '#6D28D9', error: '#C81E1E' },
     systemColors: { label: '#000', secondaryBackground: '#111', separator: '#333' },
     variant: ctrl.variant,
   }),
@@ -56,7 +57,10 @@ vi.mock('react-native-paper', () => ({
   },
 }));
 vi.mock('../../icon-map', () => ({
-  iconMap: { 'person.badge.plus': { ios: 'person.badge.plus', android: 'account-plus-outline' } },
+  iconMap: {
+    'person.badge.plus': { ios: 'person.badge.plus', android: 'account-plus-outline' },
+    flag: { ios: 'flag', android: 'flag-outline' },
+  },
 }));
 vi.mock('../../Icon', () => ({ Icon: ({ name }: { name: string }) => createElement('span', { 'data-icon': name }) }));
 vi.mock('../../chrome', () => ({
@@ -134,6 +138,31 @@ describe('RecordTopChrome', () => {
     expect(onShare).toHaveBeenCalledTimes(1);
   });
 
+  it('docks share + End as two trailing slots (calling onEndSession) when a session is live', () => {
+    const onShare = vi.fn();
+    const onEndSession = vi.fn();
+    const { container } = render(<RecordTopChrome {...makeProps({ onShare, onEndSession })} />);
+
+    // Both glyphs share the right toolbar, so it must reserve two slots, not one.
+    expect(chrome.props?.trailingActionCount).toBe(2);
+    const endButton = container.querySelector(
+      '[data-action="mobile.session.inEndSession"]',
+    ) as HTMLButtonElement | null;
+    expect(endButton).not.toBeNull();
+    endButton!.click();
+    expect(onEndSession).toHaveBeenCalledTimes(1);
+  });
+
+  it('reserves a single trailing slot when only End is provided', () => {
+    render(<RecordTopChrome {...makeProps({ onEndSession: vi.fn() })} />);
+    expect(chrome.props?.trailingActionCount).toBe(1);
+  });
+
+  it('reserves no trailing slots before a session is live', () => {
+    render(<RecordTopChrome {...makeProps()} />);
+    expect(chrome.props?.trailingActionCount).toBe(0);
+  });
+
   describe('material variant', () => {
     beforeEach(() => {
       ctrl.variant = 'material';
@@ -153,6 +182,15 @@ describe('RecordTopChrome', () => {
       appbar.actions = [];
       rerender(<RecordTopChrome {...makeProps({ onShare: vi.fn() })} />);
       expect(appbar.actions).toContain('mobile.session.invite');
+    });
+
+    it('shows the End app-bar action only while a session is live (onEndSession set)', () => {
+      const { rerender } = render(<RecordTopChrome {...makeProps()} />);
+      expect(appbar.actions).not.toContain('mobile.session.inEndSession');
+
+      appbar.actions = [];
+      rerender(<RecordTopChrome {...makeProps({ onEndSession: vi.fn() })} />);
+      expect(appbar.actions).toContain('mobile.session.inEndSession');
     });
   });
 });

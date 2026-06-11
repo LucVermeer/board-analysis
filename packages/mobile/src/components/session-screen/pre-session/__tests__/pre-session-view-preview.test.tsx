@@ -249,11 +249,11 @@ describe('PreSessionView preview rows', () => {
     expect(rows.rendered).toEqual([]);
   });
 
-  it('pins the Start bar above the bottom chrome via the fixed-footer metric', () => {
+  it('floats the Start capsule above the bottom chrome via the fixed-footer metric', () => {
     render(createElement(PreSessionView));
 
-    // fixedFooterBottom is the tab-bar clearance when no queue accessory is
-    // present, so the bar sits flush rather than stranded mid-screen.
+    // fixedFooterBottom is the tab-bar clearance when no queue accessory is present,
+    // so the capsule sits just above the tab bar rather than stranded mid-screen.
     expect(getStyleNumber(footer.styles, 'bottom')).toBe(120);
   });
 

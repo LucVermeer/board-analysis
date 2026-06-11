@@ -38,10 +38,15 @@ type CollapsingTopChromeProps = {
   scrollY: SharedValue<number>;
   /** Tapping the collapsed title capsule scrolls the list back to the top. */
   onPressTitle: () => void;
-  /** Optional glass action docked at the far right of the right toolbar (e.g. the
-   *  Record tab's share/invite control). Discover/Climbs pass none, so their
+  /** Optional glass action(s) docked at the far right of the right toolbar (e.g. the
+   *  Record tab's share/invite + End controls). Discover/Climbs pass none, so their
    *  toolbar is unchanged. Stays visible at rest and collapsed, like the light. */
   trailingAction?: ReactNode;
+  /** Number of action slots `trailingAction` occupies, so the right toolbar widens
+   *  correctly when it carries more than one glyph (e.g. share + End). Defaults to
+   *  1 when `trailingAction` is a single element, 0 otherwise — a fragment of N
+   *  actions must pass its real count so the island doesn't clip to one slot. */
+  trailingActionCount?: number;
   /** Extra controls rendered below the islands row (e.g. the Climbs search row).
    *  Discover passes none. Measured into the reported chrome height. */
   children?: ReactNode;
@@ -73,6 +78,7 @@ export function CollapsingTopChrome({
   scrollY,
   onPressTitle,
   trailingAction,
+  trailingActionCount,
   children,
 }: CollapsingTopChromeProps) {
   const { systemColors } = useTheme();
@@ -89,8 +95,10 @@ export function CollapsingTopChrome({
   // sits left of the light). The trailing action stays visible throughout.
   const lightActions = bluetooth ? 1 : 0;
   // Reserve a slot only for a real element — a `false`/`null` from a `cond && <…>`
-  // caller must not widen the toolbar by a phantom 48px.
-  const trailingActions = isValidElement(trailingAction) ? 1 : 0;
+  // caller must not widen the toolbar by a phantom 48px. Callers passing a fragment
+  // of several actions supply `trailingActionCount` explicitly (a fragment reads as
+  // one element), so the island widens to fit them all.
+  const trailingActions = trailingActionCount ?? (isValidElement(trailingAction) ? 1 : 0);
   const expandedRightActions = lightActions + trailingActions;
   const collapsedRightActions = (activeBoard ? 1 : 0) + lightActions + trailingActions;
   const expandedRightWidth = expandedRightActions * TOP_ACTION_SIZE;

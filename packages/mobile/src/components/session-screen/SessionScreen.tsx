@@ -45,6 +45,15 @@ export function SessionScreen({ onClose, headerGesture, translateY, screenHeight
   const handleShare = useCallback(() => setShowInvite(true), []);
   const onShare = sessionActive ? handleShare : undefined;
 
+  // The End-session confirmation sheet lives in InSessionView, but its trigger
+  // comes from either the tab chrome (RecordTopChrome's End trailing action) or the
+  // overlay header strip — so the open/close intent is owned here and the sheet is
+  // driven as a controlled prop below.
+  const [showEndSession, setShowEndSession] = useState(false);
+  const requestEndSession = useCallback(() => setShowEndSession(true), []);
+  const dismissEndSession = useCallback(() => setShowEndSession(false), []);
+  const onEndSession = sessionActive ? requestEndSession : undefined;
+
   // Overlay mode keeps the original padded container + drag-handle header strip.
   const isOverlay = onClose !== undefined;
 
@@ -55,12 +64,19 @@ export function SessionScreen({ onClose, headerGesture, translateY, screenHeight
           onClose={onClose}
           sessionActive={sessionActive}
           onShare={onShare}
+          onEndSession={onEndSession}
           inviteHint={soloInvite}
           dragGesture={headerGesture}
         />
         <View style={styles.body}>
           {sessionActive ? (
-            <InSessionView showChrome={false} translateY={translateY} screenHeight={screenHeight} />
+            <InSessionView
+              showChrome={false}
+              endVisible={showEndSession}
+              onEndDismiss={dismissEndSession}
+              translateY={translateY}
+              screenHeight={screenHeight}
+            />
           ) : (
             <PreSessionView showChrome={false} />
           )}
@@ -77,7 +93,17 @@ export function SessionScreen({ onClose, headerGesture, translateY, screenHeight
   // chrome height. No padded container, no header strip.
   return (
     <View style={styles.container}>
-      {sessionActive ? <InSessionView showChrome onShare={onShare} /> : <PreSessionView showChrome />}
+      {sessionActive ? (
+        <InSessionView
+          showChrome
+          onShare={onShare}
+          onRequestEndSession={requestEndSession}
+          endVisible={showEndSession}
+          onEndDismiss={dismissEndSession}
+        />
+      ) : (
+        <PreSessionView showChrome />
+      )}
       {sessionId ? (
         <InviteSheet visible={showInvite} onDismiss={() => setShowInvite(false)} sessionId={sessionId} />
       ) : null}

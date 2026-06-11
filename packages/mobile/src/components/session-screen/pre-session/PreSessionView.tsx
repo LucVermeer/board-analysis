@@ -26,7 +26,7 @@ import { useDrawerHost } from '../../../providers/drawer-host-provider';
 import { useBottomChromeMetrics } from '../../../hooks/use-bottom-chrome-metrics';
 import { reportError } from '../../../lib/sentry';
 import { RecordTopChrome } from '../RecordTopChrome';
-import { SessionActionFooter } from '../SessionActionFooter';
+import { SessionStartFab } from '../SessionStartFab';
 import { BoardSummaryCard } from './BoardSummaryCard';
 import { GeneratorPickerCard, type GeneratorSelection } from './GeneratorPickerCard';
 import { WorkoutPreviewRow } from './WorkoutPreviewRow';
@@ -206,9 +206,11 @@ export function PreSessionView({ showChrome = false }: PreSessionViewProps) {
   const generatorPreviewReady =
     selection.type !== 'on' || (status === 'ready' && previewItems.length > 0 && refreshingUuids.size === 0);
   const canStart = activeBoard != null && !isStarting && generatorPreviewReady;
-  // The Start bar (PinnedActionBar) is a glass toolbar pinned above the bottom
-  // chrome and reports its measured height; the list reserves that height plus
-  // the same bottom-chrome offset so its last row clears the bar.
+  // The Start capsule (SessionStartFab) floats bottom-trailing above the bottom
+  // chrome and reports its measured height; the list reserves that height plus the
+  // fixed-footer offset (clears the tab bar where it overlays content + any climb
+  // accessory) so its last row clears the capsule. Same offset the capsule uses, so
+  // they stay in lockstep on both variants.
   const footerBottom = bottomChrome.fixedFooterBottom;
 
   // Inline status copy shown above an empty preview (loading / no results /
@@ -326,13 +328,11 @@ export function PreSessionView({ showChrome = false }: PreSessionViewProps) {
         />
       ) : null}
 
-      <SessionActionFooter
+      <SessionStartFab
         testID="pre-session-footer"
         onHeightChange={setFooterHeight}
         label={isStarting ? t('mobile.session.preStarting') : t('mobile.session.preStart')}
         materialIcon="play.fill"
-        emphasis="primary"
-        glassButtonVariant="filled"
         onPress={() => void handleStart()}
         disabled={!canStart}
         loading={isStarting}

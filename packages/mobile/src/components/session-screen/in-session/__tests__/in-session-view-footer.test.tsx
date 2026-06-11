@@ -3,8 +3,10 @@ import { render } from '@testing-library/react';
 import { createElement, type ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const footer = vi.hoisted(() => ({
-  styles: [] as unknown[],
+// Captures the history list's reserved bottom padding so the test can assert the
+// in-session list clears the bottom chrome without an End action bar.
+const list = vi.hoisted(() => ({
+  contentContainerStyle: null as Record<string, unknown> | null,
 }));
 
 const bottomChrome = vi.hoisted(() => ({
@@ -17,12 +19,8 @@ const bottomChrome = vi.hoisted(() => ({
 vi.mock('react-native', () => ({
   Pressable: ({ children }: { children?: ReactNode }) => createElement('button', null, children),
   StyleSheet: { create: (styles: unknown) => styles, hairlineWidth: 1 },
-  View: ({ children, testID, style }: { children?: ReactNode; testID?: string; style?: unknown }) => {
-    if (testID === 'in-session-footer') {
-      footer.styles = Array.isArray(style) ? style : [style];
-    }
-    return createElement('div', testID ? { 'data-testid': testID } : null, children);
-  },
+  View: ({ children, testID }: { children?: ReactNode; testID?: string }) =>
+    createElement('div', testID ? { 'data-testid': testID } : null, children),
 }));
 
 vi.mock('react-native-gesture-handler', () => ({
@@ -53,10 +51,15 @@ vi.mock('@shopify/flash-list', () => ({
   FlashList: ({
     ListHeaderComponent,
     ListFooterComponent,
+    contentContainerStyle,
   }: {
     ListHeaderComponent?: ReactNode;
     ListFooterComponent?: ReactNode;
-  }) => createElement('div', null, ListHeaderComponent, ListFooterComponent),
+    contentContainerStyle?: Record<string, unknown>;
+  }) => {
+    list.contentContainerStyle = contentContainerStyle ?? null;
+    return createElement('div', null, ListHeaderComponent, ListFooterComponent);
+  },
 }));
 
 vi.mock('expo-crypto', () => ({ randomUUID: () => 'test-uuid' }));
@@ -132,26 +135,22 @@ vi.mock('../SessionPresenceRow', () => ({ SessionPresenceRow: () => null }));
 
 import { InSessionView } from '../InSessionView';
 
-function getStyleNumber(styles: unknown[], key: string): number | null {
-  for (const style of styles) {
-    if (style == null || typeof style !== 'object' || Array.isArray(style)) continue;
-    const value = (style as Record<string, unknown>)[key];
-    if (typeof value === 'number') return value;
-  }
-  return null;
-}
-
 describe('InSessionView footer', () => {
   beforeEach(() => {
-    footer.styles = [];
+    list.contentContainerStyle = null;
     bottomChrome.metrics = { fixedFooterBottom: 88, tabBarBottom: 50 };
   });
 
-  it('pins the End bar above the bottom chrome (matching the pre-session Start bar)', () => {
+  it('reserves only the bottom-chrome offset now that End moved to the top chrome', () => {
     render(createElement(InSessionView));
 
-    // fixedFooterBottom collapses to the tab-bar clearance when no accessory is
-    // present and lifts to clear it when there is one.
-    expect(getStyleNumber(footer.styles, 'bottom')).toBe(88);
+    // End no longer renders a bottom action bar, so the list reserves just the
+    // fixed-footer offset (tab bar + climb accessory) — no extra footer height.
+    expect(list.contentContainerStyle?.paddingBottom).toBe(88);
+  });
+
+  it('renders no in-session bottom action bar', () => {
+    const { queryByTestId } = render(createElement(InSessionView));
+    expect(queryByTestId('in-session-footer')).toBeNull();
   });
 });

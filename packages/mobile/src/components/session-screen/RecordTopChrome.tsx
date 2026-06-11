@@ -27,6 +27,10 @@ type RecordTopChromeProps = {
   /** Open the invite sheet. Provided only while a session is live; the share
    *  glyph then docks at the far right of the chrome's right toolbar. */
   onShare?: () => void;
+  /** Open the End-session confirmation. Provided only while a session is live; the
+   *  End glyph docks beside the share control (destructive tint) so the session's
+   *  stop lives in the nav-bar trailing slot, off the bottom edge. */
+  onEndSession?: () => void;
 };
 
 /**
@@ -53,6 +57,7 @@ export function RecordTopChrome({
   scrollY,
   onPressTitle,
   onShare,
+  onEndSession,
 }: RecordTopChromeProps) {
   const { t } = useTranslation('session');
   const { t: tBoards } = useTranslation('boards');
@@ -93,18 +98,39 @@ export function RecordTopChrome({
               accessibilityLabel={t('mobile.session.invite')}
             />
           ) : null}
+          {onEndSession ? (
+            <Appbar.Action
+              icon={iconMap['flag'].android}
+              color={brandColors.error}
+              onPress={onEndSession}
+              accessibilityLabel={t('mobile.session.inEndSession')}
+            />
+          ) : null}
         </Appbar.Header>
       </View>
     );
   }
 
   // Liquid-glass variant: the shared collapsing chrome with the session title,
-  // board pill, and (while live) the share/invite trailing action.
-  const trailingAction = onShare ? (
-    <GlassToolbarAction onPress={onShare} accessibilityLabel={t('mobile.session.invite')}>
-      <Icon name="person.badge.plus" size={22} color={brandColors.primary} />
-    </GlassToolbarAction>
-  ) : undefined;
+  // board pill, and (while live) the share/invite + End trailing actions. End sits
+  // up here (destructive tint) rather than as a bottom bar, so the bottom edge keeps
+  // at most the tab bar + climb accessory.
+  const trailingAction =
+    onShare || onEndSession ? (
+      <>
+        {onShare ? (
+          <GlassToolbarAction onPress={onShare} accessibilityLabel={t('mobile.session.invite')}>
+            <Icon name="person.badge.plus" size={22} color={brandColors.primary} />
+          </GlassToolbarAction>
+        ) : null}
+        {onEndSession ? (
+          <GlassToolbarAction onPress={onEndSession} accessibilityLabel={t('mobile.session.inEndSession')}>
+            <Icon name="flag" size={22} color={brandColors.error} />
+          </GlassToolbarAction>
+        ) : null}
+      </>
+    ) : undefined;
+  const trailingActionCount = (onShare ? 1 : 0) + (onEndSession ? 1 : 0);
 
   return (
     <CollapsingTopChrome
@@ -120,6 +146,7 @@ export function RecordTopChrome({
       scrollY={scrollY}
       onPressTitle={onPressTitle}
       trailingAction={trailingAction}
+      trailingActionCount={trailingActionCount}
     />
   );
 }
