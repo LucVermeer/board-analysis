@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { buildLocationUpsertPlan } from '@boardsesh/location-sync';
 import { buildAuroraLocationRecords } from './locations-sync';
 
 describe('buildAuroraLocationRecords', () => {
@@ -27,5 +28,23 @@ describe('buildAuroraLocationRecords', () => {
       angle: 40,
       isAngleAdjustable: true,
     });
+  });
+
+  it('passes pins without valid coordinates to the shared skip path', () => {
+    const { records, skipped } = buildAuroraLocationRecords('tension', [
+      {
+        id: 456,
+        username: 'missing-latitude',
+        name: 'Missing Latitude',
+        latitude: null,
+        longitude: 151.2,
+      },
+    ]);
+
+    const plan = buildLocationUpsertPlan(records);
+
+    expect(skipped).toEqual([]);
+    expect(plan.validRecords).toEqual([]);
+    expect(plan.skipped).toEqual([{ sourceKey: 'tension:456', reason: 'invalid coordinates' }]);
   });
 });

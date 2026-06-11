@@ -6,7 +6,7 @@ describe('buildMoonBoardLocationRecords', () => {
     const records = buildMoonBoardLocationRecords([
       {
         Name: 'Board House',
-        Description: '1 Wall St',
+        Description: '<p>Ask staff for the key.</p>',
         Image: null,
         Latitude: -33.86,
         Longitude: 151.2,
@@ -25,6 +25,7 @@ describe('buildMoonBoardLocationRecords', () => {
     expect(records.find((record) => record.layoutId === 2 && record.angle === 25)?.sourceKey).toBe(
       'moonboard:Board House:-33.86:151.2:2:25',
     );
+    expect(records.every((record) => record.gymAddress === null)).toBe(true);
   });
 
   it('falls back to LatLng when scalar coordinates are missing', () => {

@@ -58,7 +58,7 @@ export function buildMoonBoardLocationRecords(markers: MoonBoardMarker[]): Publi
         latitude: coordinates.latitude,
         longitude: coordinates.longitude,
         gymName,
-        gymAddress: marker.Description ?? null,
+        gymAddress: null,
       });
     }
   }

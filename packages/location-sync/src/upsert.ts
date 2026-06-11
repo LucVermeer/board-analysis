@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm';
 import type { PgDatabase, PgQueryResultHKT } from 'drizzle-orm/pg-core';
-import { gyms, users } from '@boardsesh/db/schema';
+import { gyms, userBoards, users } from '@boardsesh/db/schema';
 import {
   boardUuidForSource,
   gymUuidForSource,
@@ -14,7 +14,7 @@ import type { LocationSyncSummary, PublicBoardLocationInput, SkippedLocationReco
 
 type DrizzleDb = PgDatabase<PgQueryResultHKT, Record<string, unknown>>;
 
-type ValidBoardLocation = PublicBoardLocationInput & {
+export type ValidBoardLocation = PublicBoardLocationInput & {
   latitude: number;
   longitude: number;
 };
@@ -30,7 +30,7 @@ async function ensureSystemUser(db: DrizzleDb): Promise<void> {
     .onConflictDoNothing({ target: users.id });
 }
 
-function collectValidRecords(records: PublicBoardLocationInput[]): {
+export function collectValidLocationRecords(records: PublicBoardLocationInput[]): {
   validRecords: ValidBoardLocation[];
   skipped: SkippedLocationRecord[];
 } {
@@ -48,29 +48,69 @@ function collectValidRecords(records: PublicBoardLocationInput[]): {
   return { validRecords, skipped };
 }
 
-export async function upsertPublicBoardLocations(
-  db: DrizzleDb,
-  records: PublicBoardLocationInput[],
-): Promise<LocationSyncSummary> {
-  await ensureSystemUser(db);
-
-  const { validRecords, skipped } = collectValidRecords(records);
+export function collectUniqueGymLocationRecords(validRecords: ValidBoardLocation[]): Map<string, ValidBoardLocation> {
   const gymsBySource = new Map<string, ValidBoardLocation>();
   for (const record of validRecords) {
     if (!gymsBySource.has(record.gymSourceKey)) {
       gymsBySource.set(record.gymSourceKey, record);
     }
   }
+  return gymsBySource;
+}
+
+export function buildLocationUpsertPlan(records: PublicBoardLocationInput[]): {
+  validRecords: ValidBoardLocation[];
+  skipped: SkippedLocationRecord[];
+  gymsBySource: Map<string, ValidBoardLocation>;
+} {
+  const { validRecords, skipped } = collectValidLocationRecords(records);
+  return {
+    validRecords,
+    skipped,
+    gymsBySource: collectUniqueGymLocationRecords(validRecords),
+  };
+}
+
+export function buildGymWriteIdentifiers(
+  sourceKey: string,
+  record: ValidBoardLocation,
+): {
+  uuid: string;
+  slug: string;
+} {
+  return {
+    uuid: gymUuidForSource(sourceKey),
+    slug: slugifyLocationName(record.gymName, shortHash(sourceKey)),
+  };
+}
+
+export function buildBoardWriteIdentifiers(record: ValidBoardLocation): {
+  uuid: string;
+  slug: string;
+} {
+  const uuid = boardUuidForSource(record.sourceKey);
+  return {
+    uuid,
+    slug: slugifyLocationName(record.slugBase, uuid),
+  };
+}
+
+export async function upsertPublicBoardLocations(
+  db: DrizzleDb,
+  records: PublicBoardLocationInput[],
+): Promise<LocationSyncSummary> {
+  await ensureSystemUser(db);
+
+  const { validRecords, skipped, gymsBySource } = buildLocationUpsertPlan(records);
 
   const gymIdBySource = new Map<string, number>();
   for (const [sourceKey, record] of gymsBySource) {
-    const gymUuid = gymUuidForSource(sourceKey);
-    const gymSlug = slugifyLocationName(record.gymName, shortHash(sourceKey));
+    const gymIdentifiers = buildGymWriteIdentifiers(sourceKey, record);
     const [upsertedGym] = await db
       .insert(gyms)
       .values({
-        uuid: gymUuid,
-        slug: gymSlug,
+        uuid: gymIdentifiers.uuid,
+        slug: gymIdentifiers.slug,
         ownerId: SYSTEM_USER_ID,
         name: record.gymName,
         address: record.gymAddress,
@@ -104,46 +144,63 @@ export async function upsertPublicBoardLocations(
   let boardsUpserted = 0;
   for (const record of validRecords) {
     const gymId = gymIdBySource.get(record.gymSourceKey) ?? null;
-    const boardUuid = boardUuidForSource(record.sourceKey);
-    const boardSlug = slugifyLocationName(record.slugBase, boardUuid);
+    const boardIdentifiers = buildBoardWriteIdentifiers(record);
 
-    await db.execute(sql`
-      INSERT INTO user_boards (
-        uuid, slug, owner_id, board_type, layout_id, size_id, set_ids,
-        name, location_name, latitude, longitude, location,
-        is_public, is_unlisted, hide_location, is_owned, angle,
-        is_angle_adjustable, serial_number, gym_id, created_at, updated_at
-      ) VALUES (
-        ${boardUuid}, ${boardSlug}, ${SYSTEM_USER_ID},
-        ${record.boardType}, ${record.layoutId}, ${record.sizeId}, ${record.setIds},
-        ${record.name}, ${record.locationName}, ${record.latitude}, ${record.longitude},
-        ST_MakePoint(${record.longitude}, ${record.latitude})::geography,
-        true, false, false, false, ${record.angle},
-        ${record.isAngleAdjustable}, ${record.serialNumber ?? null}, ${gymId}, NOW(), NOW()
-      )
-      ON CONFLICT (uuid) DO UPDATE SET
-        slug = COALESCE(user_boards.slug, EXCLUDED.slug),
-        board_type = EXCLUDED.board_type,
-        layout_id = EXCLUDED.layout_id,
-        size_id = EXCLUDED.size_id,
-        set_ids = EXCLUDED.set_ids,
-        name = EXCLUDED.name,
-        location_name = EXCLUDED.location_name,
-        latitude = EXCLUDED.latitude,
-        longitude = EXCLUDED.longitude,
-        location = EXCLUDED.location,
-        is_public = EXCLUDED.is_public,
-        is_unlisted = EXCLUDED.is_unlisted,
-        hide_location = EXCLUDED.hide_location,
-        is_owned = EXCLUDED.is_owned,
-        angle = EXCLUDED.angle,
-        is_angle_adjustable = EXCLUDED.is_angle_adjustable,
-        serial_number = EXCLUDED.serial_number,
-        gym_id = EXCLUDED.gym_id,
-        updated_at = NOW(),
-        deleted_at = NULL
-    `);
-    boardsUpserted += 1;
+    const [upsertedBoard] = await db
+      .insert(userBoards)
+      .values({
+        uuid: boardIdentifiers.uuid,
+        slug: boardIdentifiers.slug,
+        ownerId: SYSTEM_USER_ID,
+        boardType: record.boardType,
+        layoutId: record.layoutId,
+        sizeId: record.sizeId,
+        setIds: record.setIds,
+        name: record.name,
+        locationName: record.locationName,
+        latitude: record.latitude,
+        longitude: record.longitude,
+        isPublic: true,
+        isUnlisted: false,
+        hideLocation: false,
+        isOwned: false,
+        angle: record.angle,
+        isAngleAdjustable: record.isAngleAdjustable,
+        serialNumber: record.serialNumber ?? null,
+        gymId,
+      })
+      .onConflictDoUpdate({
+        target: userBoards.uuid,
+        set: {
+          slug: sql`COALESCE(${userBoards.slug}, excluded.slug)`,
+          boardType: sql`excluded.board_type`,
+          layoutId: sql`excluded.layout_id`,
+          sizeId: sql`excluded.size_id`,
+          setIds: sql`excluded.set_ids`,
+          name: sql`excluded.name`,
+          locationName: sql`excluded.location_name`,
+          latitude: sql`excluded.latitude`,
+          longitude: sql`excluded.longitude`,
+          isPublic: sql`excluded.is_public`,
+          isUnlisted: sql`excluded.is_unlisted`,
+          hideLocation: sql`excluded.hide_location`,
+          isOwned: sql`excluded.is_owned`,
+          angle: sql`excluded.angle`,
+          isAngleAdjustable: sql`excluded.is_angle_adjustable`,
+          serialNumber: sql`excluded.serial_number`,
+          gymId: sql`excluded.gym_id`,
+          updatedAt: sql`NOW()`,
+          deletedAt: null,
+        },
+      })
+      .returning({ id: userBoards.id });
+
+    if (upsertedBoard) {
+      await db.execute(
+        sql`UPDATE user_boards SET location = ST_MakePoint(${record.longitude}, ${record.latitude})::geography WHERE id = ${upsertedBoard.id}`,
+      );
+      boardsUpserted += 1;
+    }
   }
 
   return {
