@@ -5012,6 +5012,8 @@ export type UpdateProfileInput = {
 export type UpdateTickInput = {
   /** Number of attempts */
   attemptCount?: InputMaybe<Scalars['Int']['input']>;
+  /** When the climb was attempted (ISO 8601) */
+  climbedAt?: InputMaybe<Scalars['String']['input']>;
   /** User comment */
   comment?: InputMaybe<Scalars['String']['input']>;
   /** User's difficulty rating */
@@ -7368,6 +7370,7 @@ export type UpdateTickMutation = {
     difficulty?: number | null;
     isBenchmark: boolean;
     comment: string;
+    climbedAt: string;
     updatedAt: string;
   };
 };
@@ -13012,6 +13015,7 @@ export const UpdateTickDocument = {
                 { kind: 'Field', name: { kind: 'Name', value: 'difficulty' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'isBenchmark' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'comment' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'climbedAt' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
               ],
             },
