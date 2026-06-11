@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
-import { eq, and, inArray } from 'drizzle-orm';
+import { eq, and, inArray, isNull } from 'drizzle-orm';
 import { GraphQLError } from 'graphql';
 import type { ConnectionContext, TickStatus } from '@boardsesh/shared-schema';
 import { db } from '../../../db/client';
@@ -36,6 +36,21 @@ export function videoUrlForTickStatus(status: TickStatus, videoUrl: string | nul
     case 'attempt':
       return null;
   }
+}
+
+// Hold-set IDs are stored and transported as a comma-separated string but the
+// order isn't part of the identity — `15,20` and `20,15` describe the same
+// configuration. Normalize before comparing so a client serializing in a
+// different order doesn't trip the boardUuid consistency check.
+export function normalizeSetIds(setIds: string): string {
+  return setIds
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0)
+    .map(Number)
+    .filter((n) => Number.isFinite(n))
+    .sort((a, b) => a - b)
+    .join(',');
 }
 
 export type ShortcodeConflict = { kind: 'none' } | { kind: 'same-climb' } | { kind: 'cross-climb'; climbName: string };
@@ -293,9 +308,69 @@ export const tickMutations = {
     const now = new Date().toISOString();
     const climbedAt = new Date(validatedInput.climbedAt).toISOString();
 
-    // Resolve board ID from board config if provided
+    // Resolve board ID. Prefer the explicit boardUuid coming from a named-board
+    // route (`/b/<slug>/...`) so ticks attach to that exact board entity even
+    // when the climber doesn't own it (e.g. a seeded gym board owned by the
+    // system user). Fall back to the user-owned config lookup for the legacy
+    // `/[board_name]/[layout_id]/...` route, which doesn't reference a
+    // specific board entity.
     let boardId: number | null = null;
-    if (validatedInput.layoutId && validatedInput.sizeId && validatedInput.setIds) {
+    if (validatedInput.boardUuid) {
+      const [board] = await db
+        .select({
+          id: dbSchema.userBoards.id,
+          ownerId: dbSchema.userBoards.ownerId,
+          isPublic: dbSchema.userBoards.isPublic,
+          boardType: dbSchema.userBoards.boardType,
+          layoutId: dbSchema.userBoards.layoutId,
+          sizeId: dbSchema.userBoards.sizeId,
+          setIds: dbSchema.userBoards.setIds,
+        })
+        .from(dbSchema.userBoards)
+        .where(and(eq(dbSchema.userBoards.uuid, validatedInput.boardUuid), isNull(dbSchema.userBoards.deletedAt)))
+        .limit(1);
+
+      if (!board) {
+        throw new GraphQLError('Board not found', { extensions: { code: 'BAD_USER_INPUT' } });
+      }
+
+      // Don't let a client write ticks against someone else's private board.
+      // Public boards (including seeded gym boards) and the climber's own
+      // boards are both fine.
+      if (!board.isPublic && board.ownerId !== userId) {
+        throw new GraphQLError('Cannot tick on a private board', { extensions: { code: 'FORBIDDEN' } });
+      }
+
+      // Make sure the board the client is pointing at actually matches the
+      // tick payload. Without this, a client could attach a Kilter tick to
+      // any public Tension board (or any other config) and skew that board's
+      // ascent/climber stats — those aggregations key purely on `board_id`.
+      if (board.boardType !== validatedInput.boardType) {
+        throw new GraphQLError("Board type doesn't match tick payload", {
+          extensions: { code: 'BAD_USER_INPUT' },
+        });
+      }
+      if (validatedInput.layoutId !== undefined && Number(board.layoutId) !== validatedInput.layoutId) {
+        throw new GraphQLError("Board layout doesn't match tick payload", {
+          extensions: { code: 'BAD_USER_INPUT' },
+        });
+      }
+      if (validatedInput.sizeId !== undefined && Number(board.sizeId) !== validatedInput.sizeId) {
+        throw new GraphQLError("Board size doesn't match tick payload", {
+          extensions: { code: 'BAD_USER_INPUT' },
+        });
+      }
+      if (
+        validatedInput.setIds !== undefined &&
+        normalizeSetIds(board.setIds) !== normalizeSetIds(validatedInput.setIds)
+      ) {
+        throw new GraphQLError("Board hold sets don't match tick payload", {
+          extensions: { code: 'BAD_USER_INPUT' },
+        });
+      }
+
+      boardId = board.id;
+    } else if (validatedInput.layoutId && validatedInput.sizeId && validatedInput.setIds) {
       boardId = await resolveBoardFromPath(
         userId,
         validatedInput.boardType,

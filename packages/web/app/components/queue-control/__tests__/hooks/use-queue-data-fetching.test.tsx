@@ -158,6 +158,7 @@ describe('useQueueDataFetching', () => {
       saveClimb: vi.fn(),
       updateClimb: vi.fn(),
       boardName: 'kilter',
+      boardUuid: null,
     });
 
     mockUseOptionalBoardProvider.mockReturnValue({
@@ -172,6 +173,7 @@ describe('useQueueDataFetching', () => {
       saveClimb: vi.fn(),
       updateClimb: vi.fn(),
       boardName: 'kilter',
+      boardUuid: null,
     });
 
     mockUseOptionalBoardProvider.mockReturnValue({
@@ -186,6 +188,7 @@ describe('useQueueDataFetching', () => {
       saveClimb: vi.fn(),
       updateClimb: vi.fn(),
       boardName: 'kilter',
+      boardUuid: null,
     });
 
     mockUseWsAuthToken.mockReturnValue({
