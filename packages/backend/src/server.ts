@@ -20,6 +20,7 @@ import { handleWidgetTakeControl } from './handlers/widget-take-control';
 import {
   handleNativeAuthCredentials,
   handleNativeAuthExchange,
+  handleNativeAuthOAuth,
   handleNativeAuthRefresh,
   handleNativeAuthRevoke,
   startRefreshTokenCleanup,
@@ -353,6 +354,11 @@ export async function startServer(): Promise<ServerResources> {
         return;
       }
 
+      if (pathname === '/auth/native/oauth' && (req.method === 'POST' || req.method === 'OPTIONS')) {
+        await handleNativeAuthOAuth(req, res);
+        return;
+      }
+
       if (pathname === '/auth/native/refresh' && (req.method === 'POST' || req.method === 'OPTIONS')) {
         await handleNativeAuthRefresh(req, res);
         return;
@@ -424,6 +430,7 @@ export async function startServer(): Promise<ServerResources> {
     logger.info(`  Widget take-control: ${httpScheme}://0.0.0.0:${PORT}/api/widget/take-control`);
     logger.info(`  Native auth exchange: ${httpScheme}://0.0.0.0:${PORT}/auth/native/exchange`);
     logger.info(`  Native auth credentials: ${httpScheme}://0.0.0.0:${PORT}/auth/native/credentials`);
+    logger.info(`  Native auth oauth: ${httpScheme}://0.0.0.0:${PORT}/auth/native/oauth`);
     logger.info(`  Native auth refresh: ${httpScheme}://0.0.0.0:${PORT}/auth/native/refresh`);
     logger.info(`  Native auth revoke: ${httpScheme}://0.0.0.0:${PORT}/auth/native/revoke`);
 

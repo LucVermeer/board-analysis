@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { classifyNativeAuthFailureReason } from '../native-auth-analytics';
 
 describe('classifyNativeAuthFailureReason', () => {
-  it('maps native credential and transfer failures to low-cardinality analytics reasons', () => {
+  it('maps native credential and OAuth failures to low-cardinality analytics reasons', () => {
     expect(classifyNativeAuthFailureReason({ success: false, status: null, error: 'network' }, 'credentials')).toBe(
       'network',
     );
@@ -13,32 +13,26 @@ describe('classifyNativeAuthFailureReason', () => {
       ),
     ).toBe('invalid_request');
     expect(
-      classifyNativeAuthFailureReason(
-        { success: false, status: 409, error: 'Transfer token has already been used' },
-        'exchange',
-      ),
-    ).toBe('transfer_token_replay');
-    expect(
-      classifyNativeAuthFailureReason({ success: false, status: 429, error: 'Rate limit exceeded' }, 'exchange'),
+      classifyNativeAuthFailureReason({ success: false, status: 429, error: 'Rate limit exceeded' }, 'oauth'),
     ).toBe('rate_limited');
     expect(
       classifyNativeAuthFailureReason(
         { success: false, status: 503, error: 'Service temporarily overloaded' },
-        'exchange',
+        'oauth',
       ),
     ).toBe('service_unavailable');
     expect(
-      classifyNativeAuthFailureReason({ success: false, status: 500, error: 'Internal server error' }, 'exchange'),
+      classifyNativeAuthFailureReason({ success: false, status: 500, error: 'Internal server error' }, 'oauth'),
     ).toBe('server_error');
-    expect(classifyNativeAuthFailureReason({ success: false, status: 418, error: 'teapot' }, 'exchange')).toBe(
+    expect(classifyNativeAuthFailureReason({ success: false, status: 418, error: 'teapot' }, 'oauth')).toBe(
       'http_error',
     );
   });
 
   // Regression: the classifier used to string-match the 401 body against
   // 'Invalid credentials', but the backend says 'Invalid email or password' —
-  // every real wrong-password attempt was logged as invalid_transfer_token.
-  it('classifies a 401 by which exchange failed, not by server copy', () => {
+  // every real wrong-password attempt was mislabelled. Classify by endpoint.
+  it('classifies a 401 by which endpoint failed, not by server copy', () => {
     expect(
       classifyNativeAuthFailureReason(
         { success: false, status: 401, error: 'Invalid email or password' },
@@ -47,16 +41,16 @@ describe('classifyNativeAuthFailureReason', () => {
     ).toBe('invalid_credentials');
     expect(
       classifyNativeAuthFailureReason(
-        { success: false, status: 401, error: 'Invalid or expired transfer token' },
-        'exchange',
+        { success: false, status: 401, error: 'Invalid or expired identity token' },
+        'oauth',
       ),
-    ).toBe('invalid_transfer_token');
+    ).toBe('invalid_oauth_token');
     // Even an unexpected body keeps the right bucket for its endpoint.
     expect(classifyNativeAuthFailureReason({ success: false, status: 401, error: 'Unauthorized' }, 'credentials')).toBe(
       'invalid_credentials',
     );
-    expect(classifyNativeAuthFailureReason({ success: false, status: 401, error: 'Unauthorized' }, 'exchange')).toBe(
-      'invalid_transfer_token',
+    expect(classifyNativeAuthFailureReason({ success: false, status: 401, error: 'Unauthorized' }, 'oauth')).toBe(
+      'invalid_oauth_token',
     );
   });
 });

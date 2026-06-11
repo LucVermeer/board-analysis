@@ -1,9 +1,9 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import crypto from 'crypto';
-import { SignJWT } from 'jose';
+import { SignJWT, createRemoteJWKSet, jwtVerify } from 'jose';
 import { compare } from 'bcryptjs';
 import { eq, and, isNull, lt, or, isNotNull } from 'drizzle-orm';
-import { mobileRefreshTokens, users, userCredentials } from '@boardsesh/db/schema/auth';
+import { mobileRefreshTokens, users, userCredentials, accounts, userProfiles } from '@boardsesh/db/schema/auth';
 import { db } from '../db/client';
 import { redisClientManager } from '../redis/client';
 import { applyCorsHeaders } from './cors';
@@ -544,6 +544,314 @@ export async function handleNativeAuthCredentials(req: IncomingMessage, res: Ser
     sendJson(res, 200, tokenPair);
   } catch (error) {
     logger.error('[NativeAuth] Credentials sign-in failed:', error);
+    sendJson(res, 500, { error: 'Internal server error' });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// POST /auth/native/oauth — native Sign in with Apple / Google
+//
+// The mobile app runs the native provider flow (expo-apple-authentication /
+// @react-native-google-signin) and posts the provider's identity token here.
+// We verify the token against the provider's JWKS, then find-or-create the
+// Boardsesh user and issue our own mobile JWT pair. Account linking is by the
+// provider's stable `sub`, falling back to email — mirroring the web
+// NextAuth `allowDangerousEmailAccountLinking: true` behaviour.
+// ---------------------------------------------------------------------------
+
+/** Apple's bundle identifier — the `aud` claim on Apple identity tokens. */
+const APPLE_BUNDLE_ID = process.env.APPLE_BUNDLE_ID ?? 'com.boardsesh.app';
+
+/** Apple's issuer for Sign in with Apple identity tokens. */
+const APPLE_ISSUER = 'https://appleid.apple.com';
+
+/**
+ * Google accepts two issuer spellings on its ID tokens. Both are valid and
+ * which one appears depends on the signing key / rollout.
+ */
+const GOOGLE_ISSUERS = ['https://accounts.google.com', 'accounts.google.com'];
+
+// Module-level JWKS singletons. `createRemoteJWKSet` returns a function that
+// caches the fetched keys internally and only re-fetches on key rotation, so
+// constructing these once (not per-request) is the documented pattern.
+const appleJwks = createRemoteJWKSet(new URL('https://appleid.apple.com/auth/keys'));
+const googleJwks = createRemoteJWKSet(new URL('https://www.googleapis.com/oauth2/v3/certs'));
+
+type OAuthProvider = 'apple' | 'google';
+
+type ForwardedName = { firstName?: string; lastName?: string };
+
+/**
+ * The identity claims we trust from a verified provider token. `sub` is the
+ * provider's stable per-user id (used for account linking); `email` may be
+ * absent on Apple resubmissions (handled by the sub lookup).
+ */
+type VerifiedOAuthIdentity = {
+  sub: string;
+  email: string | null;
+  emailVerified: boolean;
+  name: string | null;
+};
+
+/**
+ * The configured Google OAuth client IDs. Any of the iOS / Android / Web
+ * client IDs is an accepted `aud` because @react-native-google-signin issues
+ * ID tokens whose audience is the *webClientId*, while a raw native flow can
+ * produce a platform-client audience.
+ */
+function getGoogleAudiences(): string[] {
+  return [
+    process.env.GOOGLE_IOS_CLIENT_ID,
+    process.env.GOOGLE_ANDROID_CLIENT_ID,
+    process.env.GOOGLE_WEB_CLIENT_ID,
+  ].filter((clientId): clientId is string => typeof clientId === 'string' && clientId.length > 0);
+}
+
+/**
+ * Best-effort nonce check, enforced only when the client supplies a `nonce`.
+ * Apple echoes the request nonce into the token's `nonce` claim verbatim
+ * (expo-apple-authentication passes it unmodified), so the client SHA-256-hashes
+ * the nonce before handing it to Apple and sends us the raw value: the token
+ * carries `SHA-256(raw)` and we re-hash to compare, so the raw nonce never lives
+ * in the token. We also accept a verbatim match as a fallback for a client that
+ * forwards the nonce unhashed. The JWT signature/audience is the real
+ * authentication boundary; the nonce only ties a token to this sign-in attempt
+ * (and is unenforced when omitted, e.g. Google's native SDK sends none).
+ */
+function verifyNonce(rawNonce: string | undefined, payloadNonce: unknown): boolean {
+  if (!rawNonce) return true;
+  if (typeof payloadNonce !== 'string' || payloadNonce.length === 0) return false;
+  const hashedNonce = crypto.createHash('sha256').update(rawNonce).digest('hex');
+  return payloadNonce === hashedNonce || payloadNonce === rawNonce;
+}
+
+/**
+ * Verify a provider identity token against the provider's JWKS and extract the
+ * claims we need. Returns null on any verification failure (bad signature,
+ * wrong issuer/audience, expired, nonce mismatch). Network-free in tests when
+ * `jose.jwtVerify` is mocked.
+ */
+async function verifyProviderIdentityToken(
+  provider: OAuthProvider,
+  identityToken: string,
+  nonce?: string,
+): Promise<VerifiedOAuthIdentity | null> {
+  try {
+    if (provider === 'apple') {
+      const { payload } = await jwtVerify(identityToken, appleJwks, {
+        issuer: APPLE_ISSUER,
+        audience: APPLE_BUNDLE_ID,
+        // Both providers sign id tokens with RS256; pin it so a future JWKS that
+        // also advertises a weaker/asymmetric-confusable alg can't be selected.
+        algorithms: ['RS256'],
+        clockTolerance: 60,
+      });
+      if (!payload.sub || !verifyNonce(nonce, payload.nonce)) return null;
+      return {
+        sub: payload.sub,
+        email: typeof payload.email === 'string' ? payload.email : null,
+        emailVerified: payload.email_verified === true || payload.email_verified === 'true',
+        // Apple never returns the name in the token — it's delivered once, in
+        // the authorization response, and forwarded by the client separately.
+        name: null,
+      };
+    }
+
+    const audiences = getGoogleAudiences();
+    if (audiences.length === 0) {
+      logger.error('[NativeAuth] No Google client IDs configured — cannot verify Google token');
+      return null;
+    }
+    const { payload } = await jwtVerify(identityToken, googleJwks, {
+      issuer: GOOGLE_ISSUERS,
+      audience: audiences,
+      algorithms: ['RS256'],
+      clockTolerance: 60,
+    });
+    if (!payload.sub || !verifyNonce(nonce, payload.nonce)) return null;
+    return {
+      sub: payload.sub,
+      email: typeof payload.email === 'string' ? payload.email : null,
+      emailVerified: payload.email_verified === true || payload.email_verified === 'true',
+      name: typeof payload.name === 'string' ? payload.name : null,
+    };
+  } catch (error) {
+    logger.warn('[NativeAuth] OAuth identity token verification failed:', error);
+    return null;
+  }
+}
+
+/** Build a display name from the forwarded Apple name or the Google token. */
+function resolveDisplayName(identity: VerifiedOAuthIdentity, forwardedName: ForwardedName | undefined): string | null {
+  if (forwardedName) {
+    const parts = [forwardedName.firstName, forwardedName.lastName].filter(
+      (part): part is string => typeof part === 'string' && part.trim().length > 0,
+    );
+    if (parts.length > 0) return parts.join(' ').trim();
+  }
+  return identity.name;
+}
+
+/** Narrow an unknown `name` field from the request body to ForwardedName. */
+function parseForwardedName(value: unknown): ForwardedName | undefined {
+  if (typeof value !== 'object' || value === null) return undefined;
+  const { firstName, lastName } = value as Record<string, unknown>;
+  const forwarded: ForwardedName = {};
+  if (typeof firstName === 'string') forwarded.firstName = firstName;
+  if (typeof lastName === 'string') forwarded.lastName = lastName;
+  return forwarded.firstName !== undefined || forwarded.lastName !== undefined ? forwarded : undefined;
+}
+
+type FindOrCreateResult =
+  | { status: 'ok'; tokenPair: { jwt: string; refreshToken: string; expiresAt: string }; userId: string }
+  | { status: 'no_email' };
+
+/**
+ * Resolve the Boardsesh user for a verified identity and mint a token pair,
+ * all inside one transaction:
+ *   1. Existing `accounts` row for (provider, sub) → that user.
+ *   2. Else a `users` row matching the normalized email → link it (insert the
+ *      accounts row; mark email verified when the provider asserts it).
+ *   3. Else create the user + profile + accounts link.
+ * Apple resubmissions omit the email but always resolve via step 1.
+ */
+async function findOrCreateOAuthUser(
+  provider: OAuthProvider,
+  identity: VerifiedOAuthIdentity,
+  forwardedName: ForwardedName | undefined,
+): Promise<FindOrCreateResult> {
+  return db.transaction(async (tx) => {
+    // 1. Link by the provider's stable subject id.
+    const linkedRows = await tx
+      .select({ userId: accounts.userId })
+      .from(accounts)
+      .where(and(eq(accounts.provider, provider), eq(accounts.providerAccountId, identity.sub)))
+      .limit(1);
+    const linked = linkedRows[0];
+    if (linked) {
+      const tokenPair = await generateTokenPair(linked.userId, tx);
+      return { status: 'ok', tokenPair, userId: linked.userId };
+    }
+
+    const normalizedEmail = identity.email ? identity.email.trim().toLowerCase() : null;
+
+    // 2. Link by email — ONLY when the provider asserts the email is verified.
+    // This is the security boundary NextAuth's allowDangerousEmailAccountLinking
+    // leaves to the provider: auto-linking an *unverified* provider email to an
+    // existing account would let anyone able to mint a token for an arbitrary
+    // email claim take over that account. Apple always verifies (real or relay);
+    // Google's email_verified is almost always true. An unverified email falls
+    // through to creation, which anchors on the provider sub instead.
+    if (normalizedEmail && identity.emailVerified) {
+      const matchedRows = await tx
+        .select({ id: users.id, emailVerified: users.emailVerified })
+        .from(users)
+        .where(eq(users.email, normalizedEmail))
+        .limit(1);
+      const matched = matchedRows[0];
+      if (matched) {
+        await tx
+          .insert(accounts)
+          .values({ userId: matched.id, type: 'oauth', provider, providerAccountId: identity.sub })
+          .onConflictDoNothing();
+        if (!matched.emailVerified) {
+          await tx.update(users).set({ emailVerified: new Date() }).where(eq(users.id, matched.id));
+        }
+        const tokenPair = await generateTokenPair(matched.id, tx);
+        return { status: 'ok', tokenPair, userId: matched.id };
+      }
+    }
+
+    // 3. Create. Email is NOT NULL on `users`; Apple/Google both return an
+    // email on first authorization (Apple's relay address when hidden), so a
+    // brand-new sub without an email is unexpected — reject rather than
+    // fabricate one.
+    if (!normalizedEmail) {
+      return { status: 'no_email' };
+    }
+
+    const newUserId = crypto.randomUUID();
+    await tx.insert(users).values({
+      id: newUserId,
+      email: normalizedEmail,
+      name: resolveDisplayName(identity, forwardedName),
+      emailVerified: identity.emailVerified ? new Date() : null,
+    });
+    // Mirror the web `createUser` event: every user gets a profile row.
+    await tx.insert(userProfiles).values({ userId: newUserId }).onConflictDoNothing();
+    await tx.insert(accounts).values({ userId: newUserId, type: 'oauth', provider, providerAccountId: identity.sub });
+    const tokenPair = await generateTokenPair(newUserId, tx);
+    return { status: 'ok', tokenPair, userId: newUserId };
+  });
+}
+
+export async function handleNativeAuthOAuth(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  if (!applyCorsHeaders(req, res)) return;
+
+  if (req.method !== 'POST') {
+    sendJson(res, 405, { error: 'Method not allowed' });
+    return;
+  }
+
+  // Rate limit by IP (shared limiter with the other native-auth endpoints)
+  const clientIp = getClientIp(req);
+  const retryAfter = checkAuthRateLimit(clientIp);
+  if (retryAfter === -1) {
+    sendJson(res, 503, { error: 'Service temporarily overloaded' });
+    return;
+  }
+  if (retryAfter !== null) {
+    res.setHeader('Retry-After', String(retryAfter));
+    sendJson(res, 429, { error: `Rate limit exceeded. Try again in ${retryAfter} seconds.` });
+    return;
+  }
+
+  let body: unknown;
+  try {
+    const raw = await readBody(req);
+    body = JSON.parse(raw);
+  } catch {
+    sendJson(res, 400, { error: 'Invalid JSON body' });
+    return;
+  }
+
+  if (typeof body !== 'object' || body === null) {
+    sendJson(res, 400, { error: 'Request body must be a JSON object' });
+    return;
+  }
+
+  const { provider, identityToken, nonce, name } = body as Record<string, unknown>;
+
+  if (provider !== 'apple' && provider !== 'google') {
+    sendJson(res, 400, { error: 'provider must be "apple" or "google"' });
+    return;
+  }
+  if (typeof identityToken !== 'string' || identityToken.length === 0) {
+    sendJson(res, 400, { error: 'identityToken is required' });
+    return;
+  }
+  if (nonce !== undefined && typeof nonce !== 'string') {
+    sendJson(res, 400, { error: 'nonce must be a string' });
+    return;
+  }
+
+  const identity = await verifyProviderIdentityToken(provider, identityToken, nonce);
+  if (!identity) {
+    sendJson(res, 401, { error: 'Invalid or expired identity token' });
+    return;
+  }
+
+  try {
+    const result = await findOrCreateOAuthUser(provider, identity, parseForwardedName(name));
+    if (result.status === 'no_email') {
+      logger.warn(`[NativeAuth] ${provider} sign-in for a new account without an email — rejecting`);
+      sendJson(res, 401, { error: 'An email is required to create an account' });
+      return;
+    }
+    logger.info(`[NativeAuth] ${provider} sign-in successful for user ${result.userId}`);
+    sendJson(res, 200, result.tokenPair);
+  } catch (error) {
+    logger.error('[NativeAuth] OAuth sign-in failed:', error);
     sendJson(res, 500, { error: 'Internal server error' });
   }
 }

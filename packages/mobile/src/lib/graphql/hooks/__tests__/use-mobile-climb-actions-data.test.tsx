@@ -83,7 +83,8 @@ function signedIn() {
   useAuthMock.mockReturnValue({
     isAuthenticated: true,
     isLoading: false,
-    signIn: vi.fn(),
+    signInWithApple: vi.fn(),
+    signInWithGoogle: vi.fn(),
     signInWithCredentials: vi.fn(),
     signOut: vi.fn(),
     refreshAuthState: vi.fn(),
@@ -94,7 +95,8 @@ function signedOut() {
   useAuthMock.mockReturnValue({
     isAuthenticated: false,
     isLoading: false,
-    signIn: vi.fn(),
+    signInWithApple: vi.fn(),
+    signInWithGoogle: vi.fn(),
     signInWithCredentials: vi.fn(),
     signOut: vi.fn(),
     refreshAuthState: vi.fn(),
