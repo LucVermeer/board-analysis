@@ -12,6 +12,8 @@ type HoldTargetLayerProps = {
   mirrored: boolean;
   /** When true, every hold gets a brighter, larger discoverability dot. */
   showAllHolds: boolean;
+  /** When false, tap targets remain but their discoverability dots are hidden. */
+  showHoldMarkers?: boolean;
   onPaint: (holdId: number) => void;
   onLongPress: (holdId: number) => void;
 };
@@ -32,6 +34,7 @@ export const HoldTargetLayer = React.memo(function HoldTargetLayer({
   measuredWidth,
   mirrored,
   showAllHolds,
+  showHoldMarkers = true,
   onPaint,
   onLongPress,
 }: HoldTargetLayerProps) {
@@ -48,14 +51,24 @@ export const HoldTargetLayer = React.memo(function HoldTargetLayer({
           topPct={geometry.topPct}
           tapDiameter={geometry.tapDiameter}
           dotDiameter={dotDiameter}
-          showDot
+          showDot={showHoldMarkers}
           dotColor={showAllHolds ? BRIGHT_DOT : FAINT_DOT}
           onPaint={onPaint}
           onLongPress={onLongPress}
         />
       );
     });
-  }, [holdTargets, boardWidth, boardHeight, measuredWidth, mirrored, showAllHolds, onPaint, onLongPress]);
+  }, [
+    holdTargets,
+    boardWidth,
+    boardHeight,
+    measuredWidth,
+    mirrored,
+    showAllHolds,
+    showHoldMarkers,
+    onPaint,
+    onLongPress,
+  ]);
 
   return (
     <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>

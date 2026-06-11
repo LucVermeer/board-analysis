@@ -133,7 +133,7 @@ export function HoldFilterEditorSheet({
   return (
     <ModalSheet ref={sheetRef} snapPoints={['95%']} onDismiss={onDismiss} stackBehavior="push">
       <View style={styles.container}>
-        {!boardHolds || !boardName ? (
+        {!boardHolds ? (
           <View style={styles.loading}>
             <ActivityIndicator size="large" />
           </View>
@@ -169,6 +169,7 @@ export function HoldFilterEditorSheet({
                 holdsFilter={holdsFilter}
                 activeHoldId={activeHoldId}
                 onHoldTap={handleHoldTap}
+                showHoldMarkers={false}
                 renderWidth={boardRender.width}
                 renderHeight={boardRender.height}
               />

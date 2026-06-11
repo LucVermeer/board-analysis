@@ -3,6 +3,7 @@ import { createElement, forwardRef, useImperativeHandle, type ReactNode } from '
 import { act, fireEvent, render } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ClimbBoardFilterState } from '@boardsesh/climb-filters';
+import type { HoldsFilter, ZoneBoxInput, ZoneMatchMode } from '@boardsesh/shared-schema';
 import type { ClimbFilters } from '../../lib/climb-filter-types';
 import { ClimbFilterSheet } from '../ClimbFilterSheet';
 
@@ -233,16 +234,19 @@ vi.mock('../search/SettersFilterSheet', () => ({
 vi.mock('../search/HoldFilterEditorSheet', () => ({
   HoldFilterEditorSheet: ({
     visible,
+    onHoldsFilterChange,
     onClose,
     onDismiss,
   }: {
     visible: boolean;
+    onHoldsFilterChange: (holdsFilter: HoldsFilter) => void;
     onClose: () => void;
     onDismiss: () => void;
   }) =>
     createElement(
       'div',
       { 'data-testid': 'hold-filter-editor-sheet', 'data-visible': String(visible) },
+      createElement('button', { onClick: () => onHoldsFilterChange({ '99': { HAND: 'include' } }) }, 'holds-change'),
       createElement('button', { onClick: onClose }, 'holds-close'),
       createElement('button', { onClick: onDismiss }, 'holds-dismiss'),
     ),
@@ -250,16 +254,34 @@ vi.mock('../search/HoldFilterEditorSheet', () => ({
 vi.mock('../search/ZoneFilterEditorSheet', () => ({
   ZoneFilterEditorSheet: ({
     visible,
+    onZoneFilterChange,
     onClose,
     onDismiss,
   }: {
     visible: boolean;
+    onZoneFilterChange: (selection: {
+      zoneBox: ZoneBoxInput | null;
+      zoneMode: ZoneMatchMode;
+      holdsFilter?: HoldsFilter;
+    }) => void;
     onClose: () => void;
     onDismiss: () => void;
   }) =>
     createElement(
       'div',
       { 'data-testid': 'zone-filter-editor-sheet', 'data-visible': String(visible) },
+      createElement(
+        'button',
+        {
+          onClick: () =>
+            onZoneFilterChange({
+              zoneBox: { edgeLeft: 1, edgeRight: 9, edgeBottom: 2, edgeTop: 8 },
+              zoneMode: 'allHolds',
+              holdsFilter: { '77': { FOOT: 'include' } },
+            }),
+        },
+        'zone-change',
+      ),
       createElement('button', { onClick: onClose }, 'zone-close'),
       createElement('button', { onClick: onDismiss }, 'zone-dismiss'),
     ),
@@ -330,6 +352,25 @@ describe('ClimbFilterSheet child filters', () => {
     expect(onApply).toHaveBeenCalledWith({ ...currentFilters, setter: ['stacked-setter'] }, currentBoardFilters);
   });
 
+  it('keeps local draft edits when parent filter props change while open', () => {
+    const onApply = vi.fn();
+    const rendered = renderFilterSheet({ onApply });
+
+    fireEvent.click(rendered.getByLabelText('mobile.filter.setters'));
+    fireEvent.click(rendered.getByText('setters-change'));
+
+    rendered.rerender(
+      <ClimbFilterSheet
+        {...rendered.props}
+        currentFilters={{ ...currentFilters, setter: ['parent-update'] }}
+        currentBoardFilters={{ ...currentBoardFilters, onlyBenchmarks: true }}
+      />,
+    );
+    fireEvent.click(rendered.getByText('mobile.filter.showCount12'));
+
+    expect(onApply).toHaveBeenCalledWith({ ...currentFilters, setter: ['stacked-setter'] }, currentBoardFilters);
+  });
+
   it('opens the hold editor sheet above the filter sheet', () => {
     const { getByLabelText, getByTestId } = renderFilterSheet();
 
@@ -339,6 +380,20 @@ describe('ClimbFilterSheet child filters', () => {
     expect(bottomSheetModalProps.latest?.enablePanDownToClose).toBe(false);
   });
 
+  it('applies hold filter changes from the hold editor child sheet', () => {
+    const onApply = vi.fn();
+    const { getByLabelText, getByText } = renderFilterSheet({ onApply });
+
+    fireEvent.click(getByLabelText('mobile.holdFilter.title'));
+    fireEvent.click(getByText('holds-change'));
+    fireEvent.click(getByText('mobile.filter.showCount12'));
+
+    expect(onApply).toHaveBeenCalledWith(currentFilters, {
+      ...currentBoardFilters,
+      holdsFilter: { '99': { HAND: 'include' } },
+    });
+  });
+
   it('opens the zone editor sheet above the filter sheet', () => {
     const { getByLabelText, getByTestId } = renderFilterSheet();
 
@@ -346,6 +401,21 @@ describe('ClimbFilterSheet child filters', () => {
 
     expect(getByTestId('zone-filter-editor-sheet').getAttribute('data-visible')).toBe('true');
     expect(bottomSheetModalProps.latest?.enablePanDownToClose).toBe(false);
+  });
+
+  it('applies zone and pruned hold filter changes from the zone editor child sheet', () => {
+    const onApply = vi.fn();
+    const { getByLabelText, getByText } = renderFilterSheet({ onApply });
+
+    fireEvent.click(getByLabelText('mobile.zoneFilter.title'));
+    fireEvent.click(getByText('zone-change'));
+    fireEvent.click(getByText('mobile.filter.showCount12'));
+
+    expect(onApply).toHaveBeenCalledWith(currentFilters, {
+      holdsFilter: { '77': { FOOT: 'include' } },
+      zoneBox: { edgeLeft: 1, edgeRight: 9, edgeBottom: 2, edgeTop: 8 },
+      zoneMode: 'allHolds',
+    });
   });
 
   it('re-enables parent sheet gestures when a child sheet closes', () => {

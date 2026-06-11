@@ -64,12 +64,16 @@ vi.mock('../../Text', () => ({
 
 // HoldTargetLayer renders a tap button per hold so the test can fire a tap and
 // assert it routes back through onHoldTap (wired to onPaint).
-type HoldTargetLayerMockProps = { holdTargets: BoardHoldTarget[]; onPaint: (id: number) => void };
+type HoldTargetLayerMockProps = {
+  holdTargets: BoardHoldTarget[];
+  showHoldMarkers?: boolean;
+  onPaint: (id: number) => void;
+};
 vi.mock('../../create-climb/HoldTargetLayer', () => ({
-  HoldTargetLayer: ({ holdTargets, onPaint }: HoldTargetLayerMockProps) =>
+  HoldTargetLayer: ({ holdTargets, showHoldMarkers, onPaint }: HoldTargetLayerMockProps) =>
     createElement(
       'div',
-      { 'data-hold-layer': 'true' },
+      { 'data-hold-layer': 'true', 'data-show-hold-markers': String(showHoldMarkers) },
       holdTargets.map((hold) =>
         createElement('button', { key: hold.id, 'data-hold-id': hold.id, onClick: () => onPaint(hold.id) }),
       ),
@@ -95,6 +99,7 @@ type Overrides = {
   holdsFilter?: HoldsFilter;
   activeHoldId?: number | null;
   onHoldTap?: (id: number) => void;
+  showHoldMarkers?: boolean;
 };
 
 function renderBoard(overrides: Overrides = {}) {
@@ -111,6 +116,7 @@ function renderBoard(overrides: Overrides = {}) {
       holdsFilter={overrides.holdsFilter ?? {}}
       activeHoldId={overrides.activeHoldId ?? null}
       onHoldTap={onHoldTap}
+      showHoldMarkers={overrides.showHoldMarkers}
       renderWidth={400}
       renderHeight={500}
     />,
@@ -137,6 +143,13 @@ describe('InteractiveFilterBoard', () => {
     fireEvent.click(tapTarget);
     expect(onHoldTap).toHaveBeenCalledTimes(1);
     expect(onHoldTap).toHaveBeenCalledWith(20);
+  });
+
+  it('can hide visible hold markers while keeping tap targets', () => {
+    const { container } = renderBoard({ showHoldMarkers: false });
+    const holdLayer = container.querySelector('[data-hold-layer="true"]');
+    expect(holdLayer?.getAttribute('data-show-hold-markers')).toBe('false');
+    expect(container.querySelectorAll('[data-hold-id]').length).toBe(holdTargets.length);
   });
 
   it('hides the pan overlay and reset button while not zoomed', () => {

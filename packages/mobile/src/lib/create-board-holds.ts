@@ -48,8 +48,12 @@ export function parseSetIdsParam(setIds: string): number[] {
  */
 export function getCreateBoardHolds(cfg: CreateBoardHoldsConfig): CreateBoardHolds | null {
   const cacheKey = createBoardHoldsCacheKey(cfg);
-  const cached = createBoardHoldsCache.get(cacheKey);
-  if (cached !== undefined) return cached;
+  if (createBoardHoldsCache.has(cacheKey)) {
+    const cached = createBoardHoldsCache.get(cacheKey) ?? null;
+    createBoardHoldsCache.delete(cacheKey);
+    createBoardHoldsCache.set(cacheKey, cached);
+    return cached;
+  }
 
   const data = getBoardRenderData(cfg);
   const result = data

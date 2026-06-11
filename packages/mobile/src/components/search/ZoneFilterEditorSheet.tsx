@@ -197,7 +197,7 @@ export function ZoneFilterEditorSheet({
     [t],
   );
 
-  const zoneActive = zoneBox != null;
+  const zoneEnabled = zoneBox != null;
   const renderZoneOverlay = useCallback(
     ({ pinchGesture, scaleSV, renderWidth, renderHeight }: FilterBoardTransformContext) => {
       const currentZoneBox = selectionRef.current.zoneBox;
@@ -220,15 +220,13 @@ export function ZoneFilterEditorSheet({
         />
       );
     },
-    [zoneActive, dims, handleCommitZone, brandColors.primary, t, cornerLabels],
+    [dims, handleCommitZone, brandColors.primary, t, cornerLabels],
   );
-
-  const zoneEnabled = zoneBox != null;
 
   return (
     <ModalSheet ref={sheetRef} snapPoints={['95%']} onDismiss={onDismiss} stackBehavior="push">
       <View style={styles.container}>
-        {!boardHolds || !boardName || !dims ? (
+        {!boardHolds || !dims ? (
           <View style={styles.loading}>
             <ActivityIndicator size="large" />
           </View>

@@ -12,7 +12,8 @@ import { useTheme } from '../../providers/theme-provider';
 import { useSetterStats } from '../../lib/graphql/hooks';
 import { hapticSelection } from '../../lib/haptics';
 import { iosSystemColors } from '../../theme/ios-colors';
-import { spacing } from '../../theme/tokens';
+import { textStyles } from '../../theme/typography';
+import { spacing, borderRadius } from '../../theme/tokens';
 
 const SEARCH_DEBOUNCE_MS = 250;
 
@@ -227,11 +228,11 @@ const styles = StyleSheet.create({
     marginBottom: spacing[2],
     paddingHorizontal: spacing[3],
     paddingVertical: spacing[2],
-    borderRadius: 10,
+    borderRadius: borderRadius.lg,
   },
   searchInput: {
     flex: 1,
-    fontSize: 16,
+    fontSize: textStyles.callout.fontSize,
     paddingVertical: 0,
   },
   row: {

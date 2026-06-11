@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState, useEffect, type PropsWithChildren } from 'react';
+import { useCallback, useMemo, useRef, useState, useEffect, type PropsWithChildren, type SetStateAction } from 'react';
 import { View, Pressable, StyleSheet, Platform, type ViewStyle } from 'react-native';
 // react-native-gesture-handler's ScrollView (not the bare RN one) for the
 // horizontal sort-by chip rail: nested inside the sheet's vertical
@@ -156,6 +156,7 @@ export function ClimbFilterSheet({
   const sheetRef = useRef<BottomSheetModal>(null);
   const scrollRef = useRef<BottomSheetScrollViewMethods>(null);
   const refinePrewarmTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hasLocalDraftEditsRef = useRef(false);
   const boardName = boardConfig?.boardName ?? '';
   const { data: grades } = useGrades(boardName);
 
@@ -166,9 +167,11 @@ export function ClimbFilterSheet({
   const [activeChildSheet, setActiveChildSheet] = useState<ActiveChildFilterSheet>(null);
   const [mountedChildSheet, setMountedChildSheet] = useState<ActiveChildFilterSheet>(null);
 
-  // Sync from committed parent filters. Callers should keep these references
-  // stable while the sheet is open because local edits are draft-only until Apply.
+  // Sync committed parent filters only until the user starts editing. After that,
+  // local edits are draft-only until Apply and must not be overwritten by parent
+  // ref churn while the sheet is open.
   useEffect(() => {
+    if (hasLocalDraftEditsRef.current) return;
     setLocalFilters(normalizeRetiredStatus(currentFilters));
     setLocalBoardFilters(currentBoardFilters);
   }, [currentFilters, currentBoardFilters]);
@@ -280,35 +283,57 @@ export function ClimbFilterSheet({
     [t],
   );
 
-  const setFiltersPatch = useCallback((patch: Partial<ClimbFilters>) => {
-    setLocalFilters((previous) => ({ ...previous, ...patch }));
+  const updateLocalFilters = useCallback((nextFilters: SetStateAction<ClimbFilters>) => {
+    hasLocalDraftEditsRef.current = true;
+    setLocalFilters(nextFilters);
   }, []);
+
+  const updateLocalBoardFilters = useCallback((nextBoardFilters: SetStateAction<ClimbBoardFilterState>) => {
+    hasLocalDraftEditsRef.current = true;
+    setLocalBoardFilters(nextBoardFilters);
+  }, []);
+
+  const setFiltersPatch = useCallback(
+    (patch: Partial<ClimbFilters>) => {
+      updateLocalFilters((previous) => ({ ...previous, ...patch }));
+    },
+    [updateLocalFilters],
+  );
 
   const handleSortByChange = useCallback((sortBy: SortOption) => setFiltersPatch({ sortBy }), [setFiltersPatch]);
   const handleSortOrderChange = useCallback(
     (sortOrder: string) => setFiltersPatch({ sortOrder: sortOrder as SortOrder }),
     [setFiltersPatch],
   );
-  const handleStatusChange = useCallback((status: StatusFilter) => {
-    setLocalFilters((previous) => ({ ...previous, ...applyStatusChange(previous, status) }));
-  }, []);
-  const handlePopularity = useCallback((bucket: number | undefined) => {
-    // minAscents is mutually exclusive with projects/drafts at the DB layer
-    // (createClimbFilters skips minAscents under projectsOnly; drafts drop all
-    // stats conditions). Clearing the status here stops a bucket from rendering
-    // active-but-inert when one of those statuses is set.
-    setLocalFilters((previous) => {
-      const conflicts = bucket != null && (previous.status === 'projects' || previous.status === 'drafts');
-      return { ...previous, minAscents: bucket, ...(conflicts ? { status: 'any' } : {}) };
-    });
-  }, []);
+  const handleStatusChange = useCallback(
+    (status: StatusFilter) => {
+      updateLocalFilters((previous) => ({ ...previous, ...applyStatusChange(previous, status) }));
+    },
+    [updateLocalFilters],
+  );
+  const handlePopularity = useCallback(
+    (bucket: number | undefined) => {
+      // minAscents is mutually exclusive with projects/drafts at the DB layer
+      // (createClimbFilters skips minAscents under projectsOnly; drafts drop all
+      // stats conditions). Clearing the status here stops a bucket from rendering
+      // active-but-inert when one of those statuses is set.
+      updateLocalFilters((previous) => {
+        const conflicts = bucket != null && (previous.status === 'projects' || previous.status === 'drafts');
+        return { ...previous, minAscents: bucket, ...(conflicts ? { status: 'any' } : {}) };
+      });
+    },
+    [updateLocalFilters],
+  );
   const handleAccuracyChange = useCallback(
     (value: GradeAccuracyValue | 'off') => setFiltersPatch({ gradeAccuracy: value === 'off' ? undefined : value }),
     [setFiltersPatch],
   );
-  const handleGradeChange = useCallback((grade: { minGradeId: number | undefined; maxGradeId: number | undefined }) => {
-    setLocalFilters((previous) => ({ ...previous, minGrade: grade.minGradeId, maxGrade: grade.maxGradeId }));
-  }, []);
+  const handleGradeChange = useCallback(
+    (grade: { minGradeId: number | undefined; maxGradeId: number | undefined }) => {
+      updateLocalFilters((previous) => ({ ...previous, minGrade: grade.minGradeId, maxGrade: grade.maxGradeId }));
+    },
+    [updateLocalFilters],
+  );
   // Climb-type toggle (main's #2496 control). A 3-way control means there's no
   // UI path to "neither", so the never-both-off invariant is structural (see
   // toClimbSearchInput). "Both" = show everything; boulders-only is the default.
@@ -337,16 +362,17 @@ export function ClimbFilterSheet({
   );
 
   const handleApply = useCallback(() => {
+    hasLocalDraftEditsRef.current = false;
     onApply(localFilters, localBoardFilters);
     sheetRef.current?.dismiss();
   }, [localFilters, localBoardFilters, onApply]);
 
   const handleReset = useCallback(() => {
     hapticSelection();
-    setLocalFilters(DEFAULT_FILTERS);
-    setLocalBoardFilters(DEFAULT_CLIMB_BOARD_FILTER_STATE);
+    updateLocalFilters(DEFAULT_FILTERS);
+    updateLocalBoardFilters(DEFAULT_CLIMB_BOARD_FILTER_STATE);
     setSectionResetKey((key) => key + 1);
-  }, []);
+  }, [updateLocalBoardFilters, updateLocalFilters]);
 
   const renderBackdrop = useCallback(
     (backdropProps: BottomSheetBackdropProps) => (
@@ -403,34 +429,43 @@ export function ClimbFilterSheet({
     setMountedChildSheet(null);
   }, []);
 
-  const handleSelectedSettersChange = useCallback((selectedSetters: string[]) => {
-    setLocalFilters((previous) => ({
-      ...previous,
-      setter: selectedSetters.length > 0 ? selectedSetters : undefined,
-    }));
-  }, []);
-
-  const handleHoldsFilterChange = useCallback((holdsFilter: HoldsFilter) => {
-    setLocalBoardFilters((previous) => ({
-      ...previous,
-      holdsFilter: Object.keys(holdsFilter).length > 0 ? holdsFilter : undefined,
-    }));
-  }, []);
-
-  const handleZoneFilterChange = useCallback((selection: ZoneFilterEditorSelection) => {
-    setLocalBoardFilters((previous) => {
-      const nextBoardFilters: ClimbBoardFilterState = {
+  const handleSelectedSettersChange = useCallback(
+    (selectedSetters: string[]) => {
+      updateLocalFilters((previous) => ({
         ...previous,
-        zoneBox: selection.zoneBox,
-        zoneMode: selection.zoneBox ? selection.zoneMode : undefined,
-      };
-      if (selection.holdsFilter !== undefined) {
-        nextBoardFilters.holdsFilter =
-          Object.keys(selection.holdsFilter).length > 0 ? selection.holdsFilter : undefined;
-      }
-      return nextBoardFilters;
-    });
-  }, []);
+        setter: selectedSetters.length > 0 ? selectedSetters : undefined,
+      }));
+    },
+    [updateLocalFilters],
+  );
+
+  const handleHoldsFilterChange = useCallback(
+    (holdsFilter: HoldsFilter) => {
+      updateLocalBoardFilters((previous) => ({
+        ...previous,
+        holdsFilter: Object.keys(holdsFilter).length > 0 ? holdsFilter : undefined,
+      }));
+    },
+    [updateLocalBoardFilters],
+  );
+
+  const handleZoneFilterChange = useCallback(
+    (selection: ZoneFilterEditorSelection) => {
+      updateLocalBoardFilters((previous) => {
+        const nextBoardFilters: ClimbBoardFilterState = {
+          ...previous,
+          zoneBox: selection.zoneBox,
+          zoneMode: selection.zoneBox ? selection.zoneMode : undefined,
+        };
+        if (selection.holdsFilter !== undefined) {
+          nextBoardFilters.holdsFilter =
+            Object.keys(selection.holdsFilter).length > 0 ? selection.holdsFilter : undefined;
+        }
+        return nextBoardFilters;
+      });
+    },
+    [updateLocalBoardFilters],
+  );
 
   const holdFilterCount = countFilteredHolds(localBoardFilters.holdsFilter);
   const zoneActive = localBoardFilters.zoneBox != null;
@@ -550,7 +585,7 @@ export function ClimbFilterSheet({
                 description={t('mobile.filter.benchmarkDescription')}
                 value={!!localBoardFilters.onlyBenchmarks}
                 onValueChange={(value) =>
-                  setLocalBoardFilters((previous) => ({ ...previous, onlyBenchmarks: value || undefined }))
+                  updateLocalBoardFilters((previous) => ({ ...previous, onlyBenchmarks: value || undefined }))
                 }
               />
             </View>

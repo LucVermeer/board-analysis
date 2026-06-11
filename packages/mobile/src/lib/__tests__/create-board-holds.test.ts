@@ -93,6 +93,41 @@ describe('getCreateBoardHolds', () => {
     expect(getCreateBoardHolds(config)?.holdTargets).toEqual([{ id: 1, cx: 68, cy: 950, r: 12 }]);
     expect(mockedGetBoardRenderData).toHaveBeenCalledTimes(1);
   });
+
+  it('promotes reused configs before evicting old cache entries', () => {
+    mockedGetBoardRenderData.mockReturnValue({
+      boardWidth: 650,
+      boardHeight: 1000,
+      edgeLeft: 0,
+      edgeRight: 11,
+      edgeBottom: 0,
+      edgeTop: 18,
+      imageUrls: ['https://example.com/images/moonboard/moonboard-bg.png'],
+      holdsData: [{ id: 1, mirroredHoldId: null, cx: 68, cy: 950, r: 12 }],
+    });
+
+    const configs = Array.from({ length: 17 }, (_, index) => ({
+      boardName: 'moonboard' as const,
+      layoutId: index,
+      sizeId: 1,
+      setIds: [8],
+    }));
+
+    for (const config of configs.slice(0, 16)) getCreateBoardHolds(config);
+    expect(mockedGetBoardRenderData).toHaveBeenCalledTimes(16);
+
+    getCreateBoardHolds(configs[0]);
+    expect(mockedGetBoardRenderData).toHaveBeenCalledTimes(16);
+
+    getCreateBoardHolds(configs[16]);
+    expect(mockedGetBoardRenderData).toHaveBeenCalledTimes(17);
+
+    getCreateBoardHolds(configs[0]);
+    expect(mockedGetBoardRenderData).toHaveBeenCalledTimes(17);
+
+    getCreateBoardHolds(configs[1]);
+    expect(mockedGetBoardRenderData).toHaveBeenCalledTimes(18);
+  });
 });
 
 describe('parseSetIdsParam', () => {

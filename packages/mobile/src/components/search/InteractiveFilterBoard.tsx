@@ -38,6 +38,8 @@ type InteractiveFilterBoardProps = {
   activeHoldId?: number | null;
   /** Tap handler that opens the hold picker. Omit to disable hold taps (zone mode). */
   onHoldTap?: (holdId: number) => void;
+  /** Hide visible all-hold tap markers while keeping hold tap targets active. */
+  showHoldMarkers?: boolean;
   mirrored?: boolean;
   renderWidth: number;
   renderHeight: number;
@@ -71,6 +73,7 @@ export const InteractiveFilterBoard = React.memo(function InteractiveFilterBoard
   holdsFilter,
   activeHoldId = null,
   onHoldTap,
+  showHoldMarkers = true,
   mirrored = false,
   renderWidth,
   renderHeight,
@@ -192,7 +195,8 @@ export const InteractiveFilterBoard = React.memo(function InteractiveFilterBoard
                 boardHeight={boardHeight}
                 measuredWidth={renderWidth}
                 mirrored={mirrored}
-                showAllHolds
+                showAllHolds={showHoldMarkers}
+                showHoldMarkers={showHoldMarkers}
                 onPaint={onHoldTap}
                 onLongPress={onHoldTap}
               />
