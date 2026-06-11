@@ -71,7 +71,9 @@ vi.mock('../../play-drawer/use-carousel-gesture', () => ({
 vi.mock('../../../hooks/use-reduce-motion', () => ({ useReduceMotion: () => false }));
 vi.mock('../../../lib/haptics', () => ({ hapticLight: vi.fn(), hapticSelection: vi.fn() }));
 
-import { useQueueCarousel } from '../use-queue-carousel';
+import { useQueueClimbCarousel } from '../use-queue-climb-carousel';
+
+type AccessibilityActionHandler = ReturnType<typeof useQueueClimbCarousel>['onAccessibilityAction'];
 
 function makeItem(uuid: string): ClimbQueueItem {
   return {
@@ -92,7 +94,11 @@ function makeItem(uuid: string): ClimbQueueItem {
   };
 }
 
-describe('useQueueCarousel party-preview gating', () => {
+function makeAccessibilityAction(actionName: string): Parameters<AccessibilityActionHandler>[0] {
+  return { nativeEvent: { actionName } } as Parameters<AccessibilityActionHandler>[0];
+}
+
+describe('useQueueClimbCarousel party-preview gating', () => {
   beforeEach(() => {
     queue.nextClimb.mockClear();
     queue.previousClimb.mockClear();
@@ -106,7 +112,7 @@ describe('useQueueCarousel party-preview gating', () => {
   });
 
   it('drives the shared current climb when the user IS the driver (not preview-only)', () => {
-    const { result } = renderHook(() => useQueueCarousel());
+    const { result } = renderHook(() => useQueueClimbCarousel());
 
     result.current.handleNext();
     result.current.handlePrevious();
@@ -119,21 +125,34 @@ describe('useQueueCarousel party-preview gating', () => {
     expect(result.current.swipeAccessibilityActions.map((action) => action.name)).toEqual(['previous', 'next']);
   });
 
+  it('routes VoiceOver prev/next actions through the shared step handlers', () => {
+    const { result } = renderHook(() => useQueueClimbCarousel());
+
+    result.current.onAccessibilityAction(makeAccessibilityAction('next'));
+    result.current.onAccessibilityAction(makeAccessibilityAction('previous'));
+
+    expect(queue.nextClimb).toHaveBeenCalledTimes(1);
+    expect(queue.previousClimb).toHaveBeenCalledTimes(1);
+  });
+
   it('does NOT mutate the shared current climb when party preview-only (gesture path)', () => {
     queue.isPartyPreviewOnly = true;
-    const { result } = renderHook(() => useQueueCarousel());
+    const { result } = renderHook(() => useQueueClimbCarousel());
 
     result.current.handleNext();
     result.current.handlePrevious();
+    result.current.onAccessibilityAction(makeAccessibilityAction('next'));
+    result.current.onAccessibilityAction(makeAccessibilityAction('previous'));
 
-    // Non-driver: the bar swipe must not call into the session mutation path.
+    // Non-driver: neither the bar swipe nor the a11y actions can call into the
+    // shared-session mutation path.
     expect(queue.nextClimb).not.toHaveBeenCalled();
     expect(queue.previousClimb).not.toHaveBeenCalled();
   });
 
   it('disables swipe + a11y prev/next for a preview-only member', () => {
     queue.isPartyPreviewOnly = true;
-    const { result } = renderHook(() => useQueueCarousel());
+    const { result } = renderHook(() => useQueueClimbCarousel());
 
     // The exported flags that gate the swipe and the VoiceOver actions are off,
     // even though the underlying navigation reports next/previous are available.
@@ -144,15 +163,24 @@ describe('useQueueCarousel party-preview gating', () => {
 
   it('passes the gated swipe flags into the pan gesture (RNGH cannot commit a step)', () => {
     queue.isPartyPreviewOnly = true;
-    renderHook(() => useQueueCarousel());
+    renderHook(() => useQueueClimbCarousel());
 
     expect(gestureCalls.last?.canSwipeNext).toBe(false);
     expect(gestureCalls.last?.canSwipePrevious).toBe(false);
   });
 
+  it('accepts explicit viewport width and reduce-motion overrides', () => {
+    const { result } = renderHook(() => useQueueClimbCarousel(320, true));
+
+    expect(result.current.canPeek).toBe(true);
+    expect(gestureCalls.last?.boardWidth).toBe(320);
+    expect(gestureCalls.last?.enabled).toBe(true);
+    expect(gestureCalls.last?.reduceMotion).toBe(true);
+  });
+
   it('still surfaces the peek labels so a non-driver can SEE the next climb', () => {
     queue.isPartyPreviewOnly = true;
-    const { result } = renderHook(() => useQueueCarousel());
+    const { result } = renderHook(() => useQueueClimbCarousel());
 
     // Preview, not blackout: the next/previous peek items still render.
     expect(result.current.nextItem?.uuid).toBe('next');
