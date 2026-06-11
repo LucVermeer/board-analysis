@@ -12,8 +12,13 @@ const list = vi.hoisted(() => ({
 const bottomChrome = vi.hoisted(() => ({
   metrics: {
     fixedFooterBottom: 88,
+    jsQueueReserve: 0,
     tabBarBottom: 50,
   },
+}));
+
+const theme = vi.hoisted(() => ({
+  variant: 'liquidGlass' as 'liquidGlass' | 'material',
 }));
 
 // Controllable endSession + a captured view of the EndSessionSheet props, so the
@@ -99,6 +104,7 @@ vi.mock('../../../Text', () => ({
 }));
 vi.mock('../../../../providers/theme-provider', () => ({
   useTheme: () => ({
+    variant: theme.variant,
     systemColors: {
       background: '#000',
       secondaryBackground: '#111',
@@ -150,7 +156,8 @@ import { InSessionView } from '../InSessionView';
 describe('InSessionView footer', () => {
   beforeEach(() => {
     list.contentContainerStyle = null;
-    bottomChrome.metrics = { fixedFooterBottom: 88, tabBarBottom: 50 };
+    bottomChrome.metrics = { fixedFooterBottom: 88, jsQueueReserve: 0, tabBarBottom: 50 };
+    theme.variant = 'liquidGlass';
     queue.endSession.mockReset();
     queue.endSession.mockResolvedValue(null);
     sheet.isEnding = false;
@@ -164,6 +171,25 @@ describe('InSessionView footer', () => {
     // safe-area inset (the native tab bar + climb accessory are already in it on the
     // Liquid Glass path) — no extra footer height.
     expect(list.contentContainerStyle?.paddingBottom).toBe(130);
+  });
+
+  it('adds the JS queue capsule reserve on Liquid Glass fallback devices', () => {
+    bottomChrome.metrics = { fixedFooterBottom: 196, jsQueueReserve: 66, tabBarBottom: 50 };
+
+    render(createElement(InSessionView));
+
+    // NativeTabs has already expanded the safe-area inset for the tab bar; the
+    // fallback JS current-climb capsule is the only extra chrome to reserve.
+    expect(list.contentContainerStyle?.paddingBottom).toBe(196);
+  });
+
+  it('uses the fixed-footer reserve for the Material active-context bar', () => {
+    theme.variant = 'material';
+    bottomChrome.metrics = { fixedFooterBottom: 88, jsQueueReserve: 48, tabBarBottom: 50 };
+
+    render(createElement(InSessionView));
+
+    expect(list.contentContainerStyle?.paddingBottom).toBe(88);
   });
 
   it('renders no in-session bottom action bar', () => {

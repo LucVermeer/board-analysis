@@ -476,11 +476,13 @@ export function InSessionView({
 
   const [isEnding, setIsEnding] = useState(false);
   // End moved to the top chrome's trailing slot, so the bottom edge keeps only the
-  // climb accessory + tab bar (no third glass band). The history list reserves the
-  // bottom offset so its last row clears them: Liquid Glass anchors to the raw
-  // safe-area inset (on iOS 26 it already includes the tab bar + accessory — see the
-  // on-device evidence in PreSessionView); Material uses the fixed-footer reserve.
-  const footerBottom = variant === 'material' ? bottomChrome.fixedFooterBottom : insets.bottom;
+  // global current-climb chrome + tab bar (no third glass band). NativeTabs/Liquid
+  // Glass anchors to the raw UIKit safe-area inset (on iOS 26 it already includes
+  // the tab bar + native accessory — see the on-device evidence in PreSessionView).
+  // When the native accessory is unavailable, the JS queue capsule still floats
+  // above that inset, so add only its reserve and avoid double-counting the tab bar.
+  const listBottomPadding =
+    variant === 'material' ? bottomChrome.fixedFooterBottom : insets.bottom + bottomChrome.jsQueueReserve;
 
   const handleConfirmEnd = useCallback(async () => {
     setIsEnding(true);
@@ -624,7 +626,7 @@ export function InSessionView({
       contentContainerStyle={{
         paddingHorizontal: spacing[4],
         paddingTop: listPaddingTop,
-        paddingBottom: footerBottom,
+        paddingBottom: listBottomPadding,
       }}
       scrollIndicatorInsets={{ top: showChrome ? chromeHeight : 0 }}
       showsVerticalScrollIndicator={false}
