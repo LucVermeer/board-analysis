@@ -157,7 +157,7 @@ describe('TabLayout', () => {
     expect(container.querySelector('[data-bottom-accessory="true"]')).toBeNull();
   });
 
-  it('keeps the Record tab lazy outside Android dev builds', () => {
+  it('keeps the Record tab lazy outside Android builds', () => {
     cfg.variant = 'material';
 
     render(<TabLayout />);
@@ -165,7 +165,7 @@ describe('TabLayout', () => {
     expect(cfg.materialScreens.find((screen) => screen.name === 'record')?.options?.lazy).not.toBe(false);
   });
 
-  it('eager-mounts the Record tab on Android dev builds', () => {
+  it('eager-mounts the Record tab on Android builds', () => {
     cfg.variant = 'material';
     cfg.platformOS = 'android';
 
