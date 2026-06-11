@@ -44,8 +44,13 @@ const LayeredClimbImage = React.memo(function LayeredClimbImage({
   dimBackground,
   recyclingKey,
 }: LayeredClimbImageProps) {
+  const shouldShowEmptyFallback = backgroundPaths.length === 0 && missingBackgroundCount === 0;
+
   return (
     <View style={[styles.stack, mirrored && styles.mirrored]}>
+      {shouldShowEmptyFallback && (
+        <View testID="layered-climb-image-empty-fallback" style={[styles.layer, styles.emptyLayer]} />
+      )}
       {backgroundPaths.map((path) => (
         <Image
           key={path}
@@ -116,7 +121,10 @@ const styles = StyleSheet.create({
   // so loud it looks like a crash. The whole point of the no-network
   // rule is that broken renders must be visible-broken.
   missingLayer: {
-    backgroundColor: 'rgba(120, 120, 128, 0.18)',
+    backgroundColor: 'rgba(120, 120, 128, 0.28)',
+  },
+  emptyLayer: {
+    backgroundColor: 'rgba(120, 120, 128, 0.28)',
   },
   // Subtle list-only board scrim. Tunable: drop dimBackground if the filled
   // hold style already separates the climb on a given board / in light mode.
