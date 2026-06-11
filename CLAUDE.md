@@ -94,7 +94,7 @@ Ad-hoc edits and direct feature requests don't trigger this workflow. If the use
 Read relevant `docs/` before working on the matching area; update docs when the system changes.
 
 - `docs/websocket-implementation.md` — WebSocket party session architecture
-- `docs/ai-design-guidelines.md` — UI design tokens and patterns
+- `docs/ai-design-guidelines.md` — Velvet Send design system (mobile-canonical: palette, typography, tokens, Liquid Glass / Material variants; web still on the legacy rose/sage palette, pending migration)
 - `docs/live-activity-push-testing.md` — APNs Live Activity push testing
 - `docs/logging.md` — backend structured logger (winston)
 
