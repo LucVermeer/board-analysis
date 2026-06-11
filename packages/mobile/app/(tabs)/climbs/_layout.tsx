@@ -35,13 +35,6 @@ export default function ClimbsLayout() {
         }}
       />
       <Stack.Screen
-        name="setters"
-        options={{
-          title: t('mobile.nav.setters'),
-          presentation: 'modal',
-        }}
-      />
-      <Stack.Screen
         name="create"
         options={{
           // The create UI is just the drawer floating over the climbs/search

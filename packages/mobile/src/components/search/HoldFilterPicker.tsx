@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { View, Pressable, StyleSheet } from 'react-native';
-import BottomSheet from '@gorhom/bottom-sheet';
+import type { BottomSheetModal } from '@gorhom/bottom-sheet';
 import { useTranslation } from 'react-i18next';
 import type { BoardName, HoldFilterEntry, HoldFilterMode, HoldFilterType } from '@boardsesh/shared-schema';
 import { buildHoldFilterOptions } from '@boardsesh/climb-filters';
-import { Sheet } from '../Sheet';
+import { ModalSheet } from '../ModalSheet';
 import { Text } from '../Text';
 import { Icon } from '../Icon';
 import { SegmentedControl } from '../SegmentedControl';
@@ -31,7 +31,7 @@ type HoldFilterPickerProps = {
  * Hosts an Include / Exclude apply-mode toggle plus one swatch per hold type
  * (board-filtered) and a Clear button — the native port of the web
  * `HoldTypePicker` search toolbar. Works in both UI variants: the chrome comes
- * from `Sheet` (glass / Material via theme) and `SegmentedControl`.
+ * from `ModalSheet` (glass / Material via theme) and `SegmentedControl`.
  */
 export function HoldFilterPicker({
   holdId,
@@ -45,13 +45,13 @@ export function HoldFilterPicker({
 }: HoldFilterPickerProps) {
   const { t } = useTranslation('climbs');
   const { systemColors } = useTheme();
-  const sheetRef = useRef<BottomSheet>(null);
+  const sheetRef = useRef<BottomSheetModal>(null);
 
   useEffect(() => {
     if (holdId != null) {
-      sheetRef.current?.snapToIndex(0);
+      sheetRef.current?.present();
     } else {
-      sheetRef.current?.close();
+      sheetRef.current?.dismiss();
     }
   }, [holdId]);
 
@@ -88,7 +88,7 @@ export function HoldFilterPicker({
   );
 
   return (
-    <Sheet ref={sheetRef} snapPoints={snapPoints} onClose={onClose} enablePanDownToClose fullWindowOverlay>
+    <ModalSheet ref={sheetRef} snapPoints={snapPoints} onDismiss={onClose} enablePanDownToClose stackBehavior="push">
       <View style={styles.content}>
         <Text variant="headline" style={styles.title}>
           {t('mobile.holdFilter.pickerTitle')}
@@ -170,7 +170,7 @@ export function HoldFilterPicker({
           {t('mobile.holdFilter.pickerHelp')}
         </Text>
       </View>
-    </Sheet>
+    </ModalSheet>
   );
 }
 

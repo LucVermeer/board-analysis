@@ -81,11 +81,11 @@ function parseZoneMode(raw: string | undefined): ZoneMatchMode {
 }
 
 /**
- * Full-screen board sub-screen for the board-region (zone) search filter.
- * Mirrors the hold filter handoff: the ClimbFilterSheet pushes here with the
- * current zone serialized, the user drags a rectangle over the board to restrict
- * results, and the edited zone (plus a possibly-pruned hold filter) is handed
- * back via `emitZoneFilterSelection` when the screen pops (Done or swipe-back).
+ * Full-screen route variant for the board-region (zone) search filter.
+ * Route-based flows can serialize the current zone, let the user drag a
+ * rectangle over the board, and receive the edited zone (plus a possibly-pruned
+ * hold filter) via `emitZoneFilterSelection` when the screen pops. The climb
+ * filter sheet uses a stacked modal editor instead.
  */
 export default function ZoneFilterScreen() {
   const params = useLocalSearchParams<Params>();

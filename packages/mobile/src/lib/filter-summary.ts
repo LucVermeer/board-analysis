@@ -2,7 +2,7 @@ import type { TFunction } from 'i18next';
 import type { Grade } from '@boardsesh/shared-schema';
 import { getBaseFilterParts, formatFilterSummary } from '@boardsesh/climb-filters';
 import { DEFAULT_FILTERS, type ClimbFilters } from './climb-filter-types';
-import { buildFilterLabels, buildSortLabel } from './filter-labels';
+import { buildFilterLabels, buildSortLabel, formatSettersLabel } from './filter-labels';
 
 export function getFilterSummary(
   filters: ClimbFilters,
@@ -10,7 +10,14 @@ export function getFilterSummary(
   grades: Grade[] | undefined,
   t: TFunction<'climbs'>,
 ): string {
-  const labels = buildFilterLabels(t);
+  const baseLabels = buildFilterLabels(t);
+  const labels = {
+    ...baseLabels,
+    setters: (count: number) =>
+      filters.setter != null && count === filters.setter.length
+        ? formatSettersLabel(filters.setter, baseLabels, t)
+        : baseLabels.setters(count),
+  };
   const parts = getBaseFilterParts(
     {
       // Only include grade bounds when grades data is available — without it

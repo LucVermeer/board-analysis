@@ -29,13 +29,9 @@ vi.mock('react-native', () => ({
   StyleSheet: { create: (styles: Record<string, unknown>) => styles },
 }));
 
-// gorhom BottomSheet pulls in native modules; the picker only needs a ref with
-// imperative snap/close, neither of which affects the tap behaviour under test.
-vi.mock('@gorhom/bottom-sheet', () => ({ default: {} }));
-
-// Sheet wraps gorhom; render children inline so the swatches are queryable.
-vi.mock('../../Sheet', () => ({
-  Sheet: forwardRef<unknown, { children?: ReactNode }>(function SheetMock({ children }, _ref) {
+// ModalSheet wraps gorhom; render children inline so the swatches are queryable.
+vi.mock('../../ModalSheet', () => ({
+  ModalSheet: forwardRef<unknown, { children?: ReactNode }>(function ModalSheetMock({ children }, _ref) {
     return createElement('div', { 'data-sheet': 'true' }, children);
   }),
 }));
