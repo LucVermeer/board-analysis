@@ -2278,6 +2278,7 @@ export type MutationDisconnectIntegrationArgs = {
 /** Root mutation type for all write operations. */
 export type MutationEndSessionArgs = {
   sessionId: Scalars['ID']['input'];
+  timezone?: InputMaybe<Scalars['String']['input']>;
 };
 
 /** Root mutation type for all write operations. */

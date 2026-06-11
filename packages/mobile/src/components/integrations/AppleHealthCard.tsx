@@ -7,7 +7,7 @@ import { SwitchRow } from '../SwitchRow';
 import { useTheme } from '../../providers/theme-provider';
 import { borderRadius, spacing } from '../../theme/tokens';
 import {
-  getAppleHealthAuthRequested,
+  getAppleHealthAuthorizationStatus,
   requestAppleHealthAuthorization,
   useHealthKitAutoSavePreference,
 } from '../../lib/integrations';
@@ -29,16 +29,15 @@ export function AppleHealthCard() {
   const [denied, setDenied] = useState(false);
 
   // On mount, reflect a previously-denied permission so the hint shows even
-  // before the user touches the toggle. We only probe once authorization has
-  // been requested at least once — asking unprompted would pop the OS sheet.
+  // before the user touches the toggle. This is a read-only status probe —
+  // it must never present the OS consent sheet (requestAuthorization would,
+  // for users who haven't decided yet).
   useEffect(() => {
     if (Platform.OS !== 'ios') return;
     let cancelled = false;
-    getAppleHealthAuthRequested()
-      .then(async (requested) => {
-        if (cancelled || !requested) return;
-        const granted = await requestAppleHealthAuthorization();
-        if (!cancelled) setDenied(!granted);
+    getAppleHealthAuthorizationStatus()
+      .then((status) => {
+        if (!cancelled) setDenied(status === 'denied');
       })
       .catch(() => {
         // A native bridge failure here is non-fatal — leave the hint hidden
@@ -52,15 +51,19 @@ export function AppleHealthCard() {
   const handleToggle = useCallback(
     (next: boolean) => {
       // Persist the preference regardless of the grant result — see the class
-      // comment. Only an "on" toggle needs to trigger the authorization flow.
+      // comment. Only an "on" toggle needs to trigger the authorization flow,
+      // and only for users who haven't decided yet (HealthKit never re-shows
+      // the sheet for an already-decided type).
       setEnabled(next);
       if (!next) return;
       void (async () => {
         try {
-          const alreadyRequested = await getAppleHealthAuthRequested();
-          if (!alreadyRequested) {
+          const status = await getAppleHealthAuthorizationStatus();
+          if (status === 'notDetermined') {
             const granted = await requestAppleHealthAuthorization();
             setDenied(!granted);
+          } else {
+            setDenied(status === 'denied');
           }
         } catch {
           // Same rationale as the mount effect — non-fatal.

@@ -66,6 +66,7 @@ import {
   type GetSessionQueueStateQueryResponse,
 } from '../lib/graphql/operations';
 import { getStoredActiveBoard } from '../lib/active-board-store';
+import { getDeviceTimezone } from '../lib/device-timezone';
 import { useActiveBoard, useSetActiveBoard } from '../lib/graphql/use-active-board';
 import { getStoredSessionId, setStoredSessionId, clearStoredSessionId } from '../lib/session-store';
 import { getStoredQueueSnapshot, setStoredQueueSnapshot, clearStoredQueueSnapshot } from '../lib/queue-snapshot-store';
@@ -1579,6 +1580,9 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       locallyEndingSessionIdRef.current = currentSessionId;
       const response = await getHttpClient().request<EndSessionMutationResponse>(END_SESSION, {
         sessionId: currentSessionId,
+        // Device IANA zone so the backend can export wall-clock local times
+        // to platforms like Strava.
+        timezone: getDeviceTimezone(),
       });
       await clearSession();
       locallyEndingSessionIdRef.current = null;

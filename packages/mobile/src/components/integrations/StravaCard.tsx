@@ -74,6 +74,11 @@ export function StravaCard() {
               onSuccess: () => {
                 showToast(t('integrations.toast.disconnected'), 'success');
               },
+              onError: () => {
+                // The card stays in its connected state (statuses are only
+                // invalidated on success) — tell the user the tap did nothing.
+                showToast(t('integrations.toast.disconnectFailed'), 'error');
+              },
             },
           );
         },

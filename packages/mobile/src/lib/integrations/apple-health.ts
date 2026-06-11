@@ -26,11 +26,12 @@ import { getPreference, setPreference } from '../preference-store';
 import type { SessionExportContext } from './types';
 
 const AUTO_SAVE_KEY = 'appleHealthAutoSave';
-const AUTH_REQUESTED_KEY = 'appleHealthAuthRequested';
 
 // ============================================
 // Availability + authorization
 // ============================================
+
+export type AppleHealthAuthorizationStatus = 'notDetermined' | 'denied' | 'authorized' | 'unavailable';
 
 export async function isAppleHealthAvailable(): Promise<boolean> {
   if (!healthWorkoutsNative) return false;
@@ -38,19 +39,25 @@ export async function isAppleHealthAvailable(): Promise<boolean> {
   return available;
 }
 
-export async function requestAppleHealthAuthorization(): Promise<boolean> {
-  if (!healthWorkoutsNative) return false;
-  // Record that we've shown the system sheet at least once. The UI uses this to
-  // decide whether the first auto-save will prompt vs. silently use a prior
-  // grant/denial (HealthKit never re-shows the sheet for an already-decided
-  // type).
-  await setPreference(AUTH_REQUESTED_KEY, true);
-  const { granted } = await healthWorkoutsNative.requestAuthorization();
-  return granted;
+/**
+ * Read the workout-share authorization state WITHOUT presenting the system
+ * sheet. UI probes (settings card mount, footnote hints) must use this —
+ * requestAppleHealthAuthorization pops the consent sheet for undecided users.
+ */
+export async function getAppleHealthAuthorizationStatus(): Promise<AppleHealthAuthorizationStatus> {
+  if (!healthWorkoutsNative) return 'unavailable';
+  try {
+    const { status } = await healthWorkoutsNative.getAuthorizationStatus();
+    return status;
+  } catch {
+    return 'unavailable';
+  }
 }
 
-export async function getAppleHealthAuthRequested(): Promise<boolean> {
-  return (await getPreference<boolean>(AUTH_REQUESTED_KEY)) === true;
+export async function requestAppleHealthAuthorization(): Promise<boolean> {
+  if (!healthWorkoutsNative) return false;
+  const { granted } = await healthWorkoutsNative.requestAuthorization();
+  return granted;
 }
 
 // ============================================

@@ -62,6 +62,25 @@ public class HealthWorkoutsModule: Module {
             ["available": HKHealthStore.isHealthDataAvailable()]
         }
 
+        AsyncFunction("getAuthorizationStatus") { () -> [String: Any] in
+            guard HKHealthStore.isHealthDataAvailable() else {
+                return ["status": "denied"]
+            }
+            // Read-only probe — never presents the consent sheet. UI uses this
+            // on mount; requestAuthorization is reserved for explicit user
+            // intent (it prompts undecided users).
+            switch self.healthStore.authorizationStatus(for: HKObjectType.workoutType()) {
+            case .sharingAuthorized:
+                return ["status": "authorized"]
+            case .sharingDenied:
+                return ["status": "denied"]
+            case .notDetermined:
+                return ["status": "notDetermined"]
+            @unknown default:
+                return ["status": "notDetermined"]
+            }
+        }
+
         AsyncFunction("requestAuthorization") { (promise: Promise) in
             self.requestAuthorization(promise: promise)
         }

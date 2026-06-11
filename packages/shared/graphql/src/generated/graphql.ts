@@ -2275,6 +2275,7 @@ export type MutationDisconnectIntegrationArgs = {
 /** Root mutation type for all write operations. */
 export type MutationEndSessionArgs = {
   sessionId: Scalars['ID']['input'];
+  timezone?: InputMaybe<Scalars['String']['input']>;
 };
 
 /** Root mutation type for all write operations. */
@@ -6852,6 +6853,7 @@ export type SessionSummaryFieldsFragment = {
 
 export type EndSessionMutationVariables = Exact<{
   sessionId: Scalars['ID']['input'];
+  timezone?: InputMaybe<Scalars['String']['input']>;
 }>;
 
 export type EndSessionMutation = {
@@ -11554,6 +11556,11 @@ export const EndSessionDocument = {
           variable: { kind: 'Variable', name: { kind: 'Name', value: 'sessionId' } },
           type: { kind: 'NonNullType', type: { kind: 'NamedType', name: { kind: 'Name', value: 'ID' } } },
         },
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'timezone' } },
+          type: { kind: 'NamedType', name: { kind: 'Name', value: 'String' } },
+        },
       ],
       selectionSet: {
         kind: 'SelectionSet',
@@ -11566,6 +11573,11 @@ export const EndSessionDocument = {
                 kind: 'Argument',
                 name: { kind: 'Name', value: 'sessionId' },
                 value: { kind: 'Variable', name: { kind: 'Name', value: 'sessionId' } },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'timezone' },
+                value: { kind: 'Variable', name: { kind: 'Name', value: 'timezone' } },
               },
             ],
             selectionSet: {

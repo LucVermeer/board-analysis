@@ -166,7 +166,8 @@ describe('integration query/mutation resolvers', () => {
 
   describe('syncSessionToIntegration authorization', () => {
     it('throws when the session does not exist', async () => {
-      setupSelectResults([[]]); // session lookup → empty
+      // First slot: the EXISTS subquery builder (constructed, never awaited).
+      setupSelectResults([[], []]); // session lookup → empty
       await expect(
         integrationMutations.syncSessionToIntegration(null, { provider: 'STRAVA', sessionId: 'session-x' }, makeCtx()),
       ).rejects.toThrow('Session not found');
@@ -174,7 +175,16 @@ describe('integration query/mutation resolvers', () => {
 
     it('throws when the session has not ended', async () => {
       setupSelectResults([
-        [{ createdByUserId: 'user-1', boardPath: 'kilter/1', startedAt: new Date(), endedAt: null }],
+        [], // EXISTS subquery builder slot
+        [
+          {
+            createdByUserId: 'user-1',
+            boardPath: 'kilter/1',
+            startedAt: new Date(),
+            endedAt: null,
+            callerHasTick: false,
+          },
+        ],
       ]);
       await expect(
         integrationMutations.syncSessionToIntegration(null, { provider: 'STRAVA', sessionId: 'session-x' }, makeCtx()),
@@ -183,10 +193,18 @@ describe('integration query/mutation resolvers', () => {
 
     it('throws when the caller is neither creator nor a participant', async () => {
       setupSelectResults([
-        // session row: created by someone else, ended
-        [{ createdByUserId: 'owner', boardPath: 'kilter/1', startedAt: new Date(), endedAt: new Date() }],
-        // participant tick lookup → empty
-        [],
+        [], // EXISTS subquery builder slot
+        // session row: created by someone else, ended, no tick by the caller —
+        // the EXISTS rides the same SELECT so this is one atomic check.
+        [
+          {
+            createdByUserId: 'owner',
+            boardPath: 'kilter/1',
+            startedAt: new Date(),
+            endedAt: new Date(),
+            callerHasTick: false,
+          },
+        ],
       ]);
       await expect(
         integrationMutations.syncSessionToIntegration(
@@ -197,10 +215,46 @@ describe('integration query/mutation resolvers', () => {
       ).rejects.toThrow('Not a participant of this session');
     });
 
+    it('allows a non-creator participant whose tick EXISTS in the same snapshot', async () => {
+      const startedAt = new Date('2026-06-01T10:00:00.000Z');
+      const endedAt = new Date('2026-06-01T11:00:00.000Z');
+      setupSelectResults([
+        [], // EXISTS subquery builder slot
+        [{ createdByUserId: 'owner', boardPath: 'kilter/1', startedAt, endedAt, callerHasTick: true }],
+      ]);
+      generateSessionSummary.mockResolvedValueOnce({
+        sessionId: 'session-x',
+        totalSends: 1,
+        totalAttempts: 1,
+        participants: [{ userId: 'member', sends: 1, attempts: 1 }],
+        startedAt: startedAt.toISOString(),
+        endedAt: endedAt.toISOString(),
+        gradeDistribution: [],
+      });
+      syncPartySessionForUser.mockResolvedValueOnce({
+        provider: 'STRAVA',
+        sessionId: 'session-x',
+        externalActivityId: '123',
+        externalActivityUrl: 'https://www.strava.com/activities/123',
+        syncedAt: '2026-06-01T11:05:00.000Z',
+        error: null,
+      });
+
+      const result = await integrationMutations.syncSessionToIntegration(
+        null,
+        { provider: 'STRAVA', sessionId: 'session-x' },
+        makeCtx('member'),
+      );
+      expect(result.externalActivityId).toBe('123');
+    });
+
     it('returns the export result for an authorized creator', async () => {
       const startedAt = new Date('2026-06-01T10:00:00.000Z');
       const endedAt = new Date('2026-06-01T11:00:00.000Z');
-      setupSelectResults([[{ createdByUserId: 'user-1', boardPath: 'kilter/1', startedAt, endedAt }]]);
+      setupSelectResults([
+        [], // EXISTS subquery builder slot
+        [{ createdByUserId: 'user-1', boardPath: 'kilter/1', startedAt, endedAt, callerHasTick: false }],
+      ]);
       generateSessionSummary.mockResolvedValueOnce({
         sessionId: 'session-x',
         participants: [{ userId: 'user-1', sends: 3, attempts: 5 }],
@@ -236,7 +290,10 @@ describe('integration query/mutation resolvers', () => {
     it('returns a result with the error field set when the upload throws', async () => {
       const startedAt = new Date('2026-06-01T10:00:00.000Z');
       const endedAt = new Date('2026-06-01T11:00:00.000Z');
-      setupSelectResults([[{ createdByUserId: 'user-1', boardPath: 'kilter/1', startedAt, endedAt }]]);
+      setupSelectResults([
+        [], // EXISTS subquery builder slot
+        [{ createdByUserId: 'user-1', boardPath: 'kilter/1', startedAt, endedAt, callerHasTick: false }],
+      ]);
       generateSessionSummary.mockResolvedValueOnce({
         sessionId: 'session-x',
         participants: [{ userId: 'user-1', sends: 1, attempts: 1 }],

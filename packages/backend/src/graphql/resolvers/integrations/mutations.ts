@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm';
+import { and, eq, exists } from 'drizzle-orm';
 import type { ConnectionContext, IntegrationStatus, IntegrationExportResult } from '@boardsesh/shared-schema';
 import { db } from '../../../db/client';
 import * as dbSchema from '@boardsesh/db/schema';
@@ -92,12 +92,25 @@ export const integrationMutations = {
     const userId = ctx.userId!;
     const providerName = providerEnumToDb(provider);
 
+    // Authorize: the caller must be the session creator or have logged at least
+    // one tick in it (the creator-or-has-ticks rule from
+    // setInferredSessionHealthKitWorkoutId, adapted to party ticks). The tick
+    // check rides the session SELECT as an EXISTS so authorization reads one
+    // consistent snapshot — two sequential queries would leave a window where
+    // membership changes between them.
+    const callerTickQuery = db
+      .select({ uuid: dbSchema.boardseshTicks.uuid })
+      .from(dbSchema.boardseshTicks)
+      .where(and(eq(dbSchema.boardseshTicks.sessionId, sessionId), eq(dbSchema.boardseshTicks.userId, userId)));
+
     const [session] = await db
       .select({
         createdByUserId: dbSchema.boardSessions.createdByUserId,
         boardPath: dbSchema.boardSessions.boardPath,
         startedAt: dbSchema.boardSessions.startedAt,
         endedAt: dbSchema.boardSessions.endedAt,
+        timezone: dbSchema.boardSessions.timezone,
+        callerHasTick: exists(callerTickQuery).mapWith(Boolean),
       })
       .from(dbSchema.boardSessions)
       .where(eq(dbSchema.boardSessions.id, sessionId))
@@ -109,21 +122,9 @@ export const integrationMutations = {
     if (!session.endedAt) {
       throw new Error('Session has not ended');
     }
-
-    // Authorize: the caller must be the session creator or have logged at least
-    // one tick in it. Mirrors the creator-or-has-ticks check in
-    // setInferredSessionHealthKitWorkoutId, adapted to party ticks.
-    if (session.createdByUserId !== userId) {
-      const [participantTick] = await db
-        .select({ uuid: dbSchema.boardseshTicks.uuid })
-        .from(dbSchema.boardseshTicks)
-        .where(and(eq(dbSchema.boardseshTicks.sessionId, sessionId), eq(dbSchema.boardseshTicks.userId, userId)))
-        .limit(1);
-      if (!participantTick) {
-        throw new Error('Not a participant of this session');
-      }
+    if (session.createdByUserId !== userId && !session.callerHasTick) {
+      throw new Error('Not a participant of this session');
     }
-
     if (!session.startedAt) {
       throw new Error('Session has no start time');
     }
@@ -136,6 +137,7 @@ export const integrationMutations = {
     try {
       return await syncPartySessionForUser(providerName, userId, sessionId, summary, session.boardPath, {
         allowErrorStatus: true,
+        timezone: session.timezone,
       });
     } catch (error) {
       // Upload-time failures are surfaced through the result rather than thrown

@@ -12,6 +12,7 @@ import { getFreshAccessToken, recordSyncSuccess, type IntegrationCredentialRow }
 import { IntegrationHttpError } from './strava';
 import type { SessionActivityInput } from './types';
 import { logger } from '../utils/logger';
+import { utcIsoToLocalWallClock } from '../utils/timezone';
 
 const EXPORT_SESSION_TYPE = 'party';
 
@@ -48,6 +49,7 @@ export function buildSessionActivity(
   summary: SessionSummary,
   boardPath: string | null | undefined,
   participant: SessionParticipant,
+  timezone?: string | null,
 ): SessionActivityInput {
   const descriptionLines: string[] = [];
 
@@ -63,7 +65,10 @@ export function buildSessionActivity(
   descriptionLines.push(`${participant.sends} sends / ${participant.attempts} attempts`);
   descriptionLines.push('Logged with Boardsesh');
 
-  const startDateLocal = summary.startedAt ?? new Date().toISOString();
+  // Strava interprets start_date_local literally, so convert the stored UTC
+  // instant into the session's wall-clock local time. Without a recorded
+  // timezone this falls back to UTC (pre-timezone sessions keep old behavior).
+  const startDateLocal = utcIsoToLocalWallClock(summary.startedAt ?? new Date().toISOString(), timezone);
   // Strava rejects elapsed_time=0, so a session whose start and end coincide
   // (or arrive skewed) is floored to one second rather than failing upload.
   let elapsedSeconds = 1;
@@ -130,7 +135,7 @@ async function findExportRow(
  * (manual retry) or a stale 'pending' claim (abandoned upload); a 'success'
  * or fresh 'pending' row wins the conflict and we report it instead.
  */
-async function claimExport(
+export async function claimExport(
   provider: ProviderName,
   userId: string,
   sessionId: string,
@@ -265,7 +270,7 @@ export async function syncPartySessionForUser(
   sessionId: string,
   summary: SessionSummary,
   boardPath: string | null | undefined,
-  options: { allowErrorStatus?: boolean } = {},
+  options: { allowErrorStatus?: boolean; timezone?: string | null } = {},
 ): Promise<IntegrationExportResult> {
   const allowErrorStatus = options.allowErrorStatus ?? false;
 
@@ -294,7 +299,7 @@ export async function syncPartySessionForUser(
     sends: 0,
     attempts: 0,
   };
-  const activity = buildSessionActivity(summary, boardPath, participant);
+  const activity = buildSessionActivity(summary, boardPath, participant, options.timezone);
 
   const providerImpl = getProvider(provider);
   if (!providerImpl) {
@@ -344,6 +349,7 @@ export async function autoSyncSessionToIntegrations(
   sessionId: string,
   summary: SessionSummary | null,
   boardPath: string | null | undefined,
+  timezone?: string | null,
 ): Promise<void> {
   if (!summary) return;
   if (!summary.participants || summary.participants.length === 0) return;
@@ -367,7 +373,7 @@ export async function autoSyncSessionToIntegrations(
 
   for (const credRow of credentialRows) {
     try {
-      await syncPartySessionForUser(provider, credRow.userId, sessionId, summary, boardPath);
+      await syncPartySessionForUser(provider, credRow.userId, sessionId, summary, boardPath, { timezone });
     } catch (error) {
       logger.error(
         `[Integrations] auto-sync failed for ${provider} user ${credRow.userId} session ${sessionId}:`,

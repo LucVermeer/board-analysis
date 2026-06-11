@@ -39,8 +39,8 @@ export const SESSION_SUMMARY_FIELDS = gql`
 
 export const END_SESSION = gql`
   ${SESSION_SUMMARY_FIELDS}
-  mutation EndSession($sessionId: ID!) {
-    endSession(sessionId: $sessionId) {
+  mutation EndSession($sessionId: ID!, $timezone: String) {
+    endSession(sessionId: $sessionId, timezone: $timezone) {
       ...SessionSummaryFields
     }
   }
@@ -65,6 +65,8 @@ export const GET_SESSION_SUMMARY = gql`
 
 export type EndSessionVariables = {
   sessionId: string;
+  /** IANA timezone of the ending device, for local-time export to platforms like Strava. */
+  timezone?: string;
 };
 
 export type EndSessionResponse = {

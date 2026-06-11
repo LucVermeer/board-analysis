@@ -31,7 +31,7 @@ export const mutationsTypeDefs = /* GraphQL */ `
     """
     End a session (active participant only).
     """
-    endSession(sessionId: ID!): SessionSummary
+    endSession(sessionId: ID!, timezone: String): SessionSummary
 
     """
     Update display name and avatar in the current session.

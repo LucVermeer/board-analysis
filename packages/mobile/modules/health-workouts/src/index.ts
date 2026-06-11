@@ -13,6 +13,8 @@ export type SaveWorkoutOptions = {
 
 export type HealthWorkoutsNativeModule = {
   isAvailable(): Promise<{ available: boolean }>;
+  /** Workout-share authorization state; never presents the consent sheet. */
+  getAuthorizationStatus(): Promise<{ status: 'notDetermined' | 'denied' | 'authorized' }>;
   requestAuthorization(): Promise<{ granted: boolean }>;
   saveWorkout(options: SaveWorkoutOptions): Promise<{ workoutId: string }>;
 };

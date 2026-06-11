@@ -9,7 +9,8 @@ export { INTEGRATIONS, getSupportedIntegrations, runSessionEndExports } from './
 export {
   isAppleHealthAvailable,
   requestAppleHealthAuthorization,
-  getAppleHealthAuthRequested,
+  getAppleHealthAuthorizationStatus,
+  type AppleHealthAuthorizationStatus,
   useHealthKitAutoSavePreference,
   useHealthKitSaveState,
   autoSaveToAppleHealth,
