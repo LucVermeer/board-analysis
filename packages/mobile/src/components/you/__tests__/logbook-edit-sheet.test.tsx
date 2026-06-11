@@ -2,7 +2,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { createElement, type ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { AscentFeedItem } from '@boardsesh/graphql/operations';
+import type { AscentFeedItem, UpdateTickInput } from '@boardsesh/graphql/operations';
 import { formatTickAbsoluteTime } from '@boardsesh/profile-stats';
 
 const mutations = vi.hoisted(() => ({
@@ -180,16 +180,20 @@ function renderSheet(ascent = makeAscent()) {
   );
 }
 
-function firstUpdateVariables(): { uuid: string; input: { climbedAt: string } } {
-  const [variables] = mutations.updateMutate.mock.calls[0] as [{ uuid: string; input: { climbedAt: string } }, unknown];
+function firstUpdateVariables(): { uuid: string; input: UpdateTickInput } {
+  const [variables] = mutations.updateMutate.mock.calls[0] as [{ uuid: string; input: UpdateTickInput }, unknown];
   return variables;
 }
 
-function expectSavedClimbedAt(isoTimestamp: string) {
+function expectSavedClimbedAt(isoTimestamp: string | undefined) {
+  expect(isoTimestamp).toBeDefined();
+  if (!isoTimestamp) return;
   expect(formatTickAbsoluteTime(isoTimestamp, 'YYYY-MM-DD HH:mm')).toBe('2026-01-09 20:15');
 }
 
-function expectFormattedClimbedAt(isoTimestamp: string, expectedLocalTime: string) {
+function expectFormattedClimbedAt(isoTimestamp: string | undefined, expectedLocalTime: string) {
+  expect(isoTimestamp).toBeDefined();
+  if (!isoTimestamp) return;
   expect(formatTickAbsoluteTime(isoTimestamp, 'YYYY-MM-DD HH:mm')).toBe(expectedLocalTime);
 }
 
@@ -258,7 +262,27 @@ describe('LogbookEditSheet', () => {
     expectFormattedClimbedAt(variables.input.climbedAt, '2026-01-09 10:00');
   });
 
+  it('warns when iOS time selection is clamped to now', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 0, 9, 10, 0, 0, 0));
+    renderSheet(
+      makeAscent({
+        climbedAt: new Date(2026, 0, 9, 9, 30, 0, 0).toISOString(),
+      }),
+    );
+
+    fireEvent.click(screen.getByTestId('picker-time'));
+
+    expect(toast.showToast).toHaveBeenCalledWith('mobile.logbook.futureTimeAdjusted', 'warning');
+    fireEvent.click(screen.getByText('mobile.logbook.save'));
+
+    const variables = firstUpdateVariables();
+
+    expectFormattedClimbedAt(variables.input.climbedAt, '2026-01-09 10:00');
+  });
+
   it('re-seeds climbed-at when a different ascent opens in the sheet', () => {
+    nativePlatform.OS = 'android';
     const firstAscent = makeAscent({
       uuid: 'tick-1',
       climbedAt: new Date(2026, 0, 8, 10, 5, 0, 0).toISOString(),
@@ -269,6 +293,9 @@ describe('LogbookEditSheet', () => {
     });
     const { rerender } = renderSheet(firstAscent);
 
+    expect(screen.getByText('2026-01-08')).toBeTruthy();
+    expect(screen.getByText('10:05')).toBeTruthy();
+
     rerender(
       createElement(LogbookEditSheet, {
         sheetRef: { current: null },
@@ -276,12 +303,20 @@ describe('LogbookEditSheet', () => {
         onClose: vi.fn(),
       }),
     );
+
+    expect(screen.getByText('2026-02-03')).toBeTruthy();
+    expect(screen.getByText('07:45')).toBeTruthy();
+  });
+
+  it('does not send climbed-at when the date and time were not edited', () => {
+    renderSheet();
+
     fireEvent.click(screen.getByText('mobile.logbook.save'));
 
     const variables = firstUpdateVariables();
 
-    expect(variables.uuid).toBe('tick-2');
-    expectFormattedClimbedAt(variables.input.climbedAt, '2026-02-03 07:45');
+    expect(variables.uuid).toBe('tick-1');
+    expect(variables.input).not.toHaveProperty('climbedAt');
   });
 
   it('hides tries and saves one attempt when flash is selected', () => {

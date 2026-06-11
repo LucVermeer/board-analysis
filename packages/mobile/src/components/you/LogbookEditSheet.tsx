@@ -7,7 +7,7 @@ import DateTimePicker, {
 } from '@react-native-community/datetimepicker';
 import { useTranslation } from 'react-i18next';
 import { useUpdateTick, useDeleteTick } from '@boardsesh/board-react';
-import type { AscentFeedItem } from '@boardsesh/graphql/operations';
+import type { AscentFeedItem, UpdateTickInput } from '@boardsesh/graphql/operations';
 import { parseTickTime } from '@boardsesh/profile-stats';
 import { Text } from '../Text';
 import { Icon } from '../Icon';
@@ -24,6 +24,8 @@ import { useTheme } from '../../providers/theme-provider';
 import { useToast } from '../../providers/toast-provider';
 
 type TickStatus = 'flash' | 'send' | 'attempt';
+
+const MAXIMUM_CLIMBED_AT_REFRESH_MS = 60_000;
 
 type LogbookEditSheetProps = {
   sheetRef: RefObject<BottomSheet | null>;
@@ -87,6 +89,8 @@ export function LogbookEditSheet({ sheetRef, ascent, onClose }: LogbookEditSheet
   const [quality, setQuality] = useState<number | undefined>(undefined);
   const [attemptCount, setAttemptCount] = useState(1);
   const [climbedAt, setClimbedAt] = useState(() => new Date());
+  const [hasClimbedAtChanged, setHasClimbedAtChanged] = useState(false);
+  const [maximumClimbedAtDate, setMaximumClimbedAtDate] = useState(() => new Date());
   const [comment, setComment] = useState('');
 
   // Re-seed the form whenever a different ascent opens the sheet.
@@ -97,8 +101,16 @@ export function LogbookEditSheet({ sheetRef, ascent, onClose }: LogbookEditSheet
     setQuality(ascent.quality ?? undefined);
     setAttemptCount(Math.max(1, ascent.attemptCount));
     setClimbedAt(toEditableDate(ascent.climbedAt));
+    setHasClimbedAtChanged(false);
     setComment(ascent.comment ?? '');
   }, [ascent]);
+
+  useEffect(() => {
+    if (!ascent?.uuid) return undefined;
+    setMaximumClimbedAtDate(new Date());
+    const intervalId = setInterval(() => setMaximumClimbedAtDate(new Date()), MAXIMUM_CLIMBED_AT_REFRESH_MS);
+    return () => clearInterval(intervalId);
+  }, [ascent?.uuid]);
 
   const statusOptions = useMemo<{ key: TickStatus; label: string }[]>(
     () => [
@@ -118,13 +130,25 @@ export function LogbookEditSheet({ sheetRef, ascent, onClose }: LogbookEditSheet
 
   const handleDateChange = useCallback((_event: DateTimePickerEvent, selectedDate?: Date) => {
     if (!selectedDate) return;
+    setHasClimbedAtChanged(true);
     setClimbedAt((current) => mergeDatePart(current, selectedDate));
   }, []);
 
-  const handleTimeChange = useCallback((_event: DateTimePickerEvent, selectedTime?: Date) => {
-    if (!selectedTime) return;
-    setClimbedAt((current) => applyTimePart(current, selectedTime, { clampToPresent: true }));
-  }, []);
+  const handleTimeChange = useCallback(
+    (_event: DateTimePickerEvent, selectedTime?: Date) => {
+      if (!selectedTime) return;
+      setHasClimbedAtChanged(true);
+      setClimbedAt((current) => {
+        const requestedTime = applyTimePart(current, selectedTime, { clampToPresent: false });
+        const clampedTime = clampToNow(requestedTime);
+        if (clampedTime.getTime() !== requestedTime.getTime()) {
+          showToast(t('mobile.logbook.futureTimeAdjusted'), 'warning');
+        }
+        return clampedTime;
+      });
+    },
+    [showToast, t],
+  );
 
   const openAndroidDatePicker = useCallback(() => {
     DateTimePickerAndroid.open({
@@ -134,6 +158,7 @@ export function LogbookEditSheet({ sheetRef, ascent, onClose }: LogbookEditSheet
       maximumDate: new Date(),
       onChange: (event, selectedDate) => {
         if (event.type !== 'set' || !selectedDate) return;
+        setHasClimbedAtChanged(true);
         setClimbedAt((current) => mergeDatePart(current, selectedDate));
       },
     });
@@ -147,6 +172,7 @@ export function LogbookEditSheet({ sheetRef, ascent, onClose }: LogbookEditSheet
       maximumDate: new Date(),
       onChange: (event, selectedTime) => {
         if (event.type !== 'set' || !selectedTime) return;
+        setHasClimbedAtChanged(true);
         setClimbedAt((current) => {
           const requestedTime = applyTimePart(current, selectedTime, { clampToPresent: false });
           const clampedTime = clampToNow(requestedTime);
@@ -162,17 +188,20 @@ export function LogbookEditSheet({ sheetRef, ascent, onClose }: LogbookEditSheet
   const save = () => {
     if (!ascent || isMutating) return;
     const finalAttemptCount = status === 'flash' ? 1 : attemptCount;
+    const input: UpdateTickInput = {
+      status,
+      difficulty,
+      quality: quality ?? null,
+      attemptCount: finalAttemptCount,
+      comment,
+    };
+    if (hasClimbedAtChanged) {
+      input.climbedAt = clampToNow(climbedAt).toISOString();
+    }
     updateTick.mutate(
       {
         uuid: ascent.uuid,
-        input: {
-          status,
-          difficulty,
-          quality: quality ?? null,
-          attemptCount: finalAttemptCount,
-          climbedAt: clampToNow(climbedAt).toISOString(),
-          comment,
-        },
+        input,
       },
       {
         onSuccess: () => {
@@ -243,7 +272,7 @@ export function LogbookEditSheet({ sheetRef, ascent, onClose }: LogbookEditSheet
             value={climbedAt}
             mode="date"
             display="compact"
-            maximumDate={new Date()}
+            maximumDate={maximumClimbedAtDate}
             accessibilityLabel={t('mobile.logbook.dateLabel')}
             onChange={handleDateChange}
           />
@@ -269,7 +298,7 @@ export function LogbookEditSheet({ sheetRef, ascent, onClose }: LogbookEditSheet
             value={climbedAt}
             mode="time"
             display="compact"
-            maximumDate={new Date()}
+            maximumDate={maximumClimbedAtDate}
             accessibilityLabel={t('mobile.logbook.timeLabel')}
             onChange={handleTimeChange}
           />
