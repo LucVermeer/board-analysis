@@ -554,7 +554,7 @@ export const tickMutations = {
       logger.warn('[updateTick] Coerced flash tick attemptCount to 1', {
         tickUuid: uuid,
         userId,
-        previousAttemptCount: existing[0].attemptCount,
+        previousAttemptCount: finalAttemptCount,
       });
       updates.attemptCount = 1;
     }

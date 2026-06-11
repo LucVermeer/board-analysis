@@ -176,7 +176,7 @@ describeWithDatabase('tickMutations.updateTick', () => {
       expect.objectContaining({
         tickUuid,
         userId: authenticatedContext.userId,
-        previousAttemptCount: 1,
+        previousAttemptCount: 5,
       }),
     );
     expect(queueMocks.queueClimbStatsRecompute).toHaveBeenCalledWith('kilter', TEST_CLIMB_UUID, 40);

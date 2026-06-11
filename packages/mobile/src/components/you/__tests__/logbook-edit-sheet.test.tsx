@@ -191,10 +191,10 @@ function expectSavedClimbedAt(isoTimestamp: string | undefined) {
   expect(formatTickAbsoluteTime(isoTimestamp, 'YYYY-MM-DD HH:mm')).toBe('2026-01-09 20:15');
 }
 
-function expectFormattedClimbedAt(isoTimestamp: string | undefined, expectedLocalTime: string) {
+function expectClimbedAtIso(isoTimestamp: string | undefined, expectedDate: Date) {
   expect(isoTimestamp).toBeDefined();
   if (!isoTimestamp) return;
-  expect(formatTickAbsoluteTime(isoTimestamp, 'YYYY-MM-DD HH:mm')).toBe(expectedLocalTime);
+  expect(isoTimestamp).toBe(expectedDate.toISOString());
 }
 
 beforeEach(() => {
@@ -245,7 +245,8 @@ describe('LogbookEditSheet', () => {
   it('warns when Android time selection is clamped to now', () => {
     nativePlatform.OS = 'android';
     vi.useFakeTimers();
-    vi.setSystemTime(new Date(2026, 0, 9, 10, 0, 0, 0));
+    const now = new Date(2026, 0, 9, 10, 0, 0, 0);
+    vi.setSystemTime(now);
     renderSheet(
       makeAscent({
         climbedAt: new Date(2026, 0, 9, 9, 30, 0, 0).toISOString(),
@@ -259,12 +260,35 @@ describe('LogbookEditSheet', () => {
 
     const variables = firstUpdateVariables();
 
-    expectFormattedClimbedAt(variables.input.climbedAt, '2026-01-09 10:00');
+    expectClimbedAtIso(variables.input.climbedAt, now);
+  });
+
+  it('warns when Android date selection is clamped to now', () => {
+    nativePlatform.OS = 'android';
+    vi.useFakeTimers();
+    const now = new Date(2026, 0, 9, 10, 0, 0, 0);
+    vi.setSystemTime(now);
+    pickerSelections.date = new Date(2026, 0, 9, 0, 0, 0, 0);
+    renderSheet(
+      makeAscent({
+        climbedAt: new Date(2026, 0, 8, 23, 50, 0, 0).toISOString(),
+      }),
+    );
+
+    fireEvent.click(screen.getByLabelText('mobile.logbook.dateLabel'));
+
+    expect(toast.showToast).toHaveBeenCalledWith('mobile.logbook.futureTimeAdjusted', 'warning');
+    fireEvent.click(screen.getByText('mobile.logbook.save'));
+
+    const variables = firstUpdateVariables();
+
+    expectClimbedAtIso(variables.input.climbedAt, now);
   });
 
   it('warns when iOS time selection is clamped to now', () => {
     vi.useFakeTimers();
-    vi.setSystemTime(new Date(2026, 0, 9, 10, 0, 0, 0));
+    const now = new Date(2026, 0, 9, 10, 0, 0, 0);
+    vi.setSystemTime(now);
     renderSheet(
       makeAscent({
         climbedAt: new Date(2026, 0, 9, 9, 30, 0, 0).toISOString(),
@@ -278,7 +302,7 @@ describe('LogbookEditSheet', () => {
 
     const variables = firstUpdateVariables();
 
-    expectFormattedClimbedAt(variables.input.climbedAt, '2026-01-09 10:00');
+    expectClimbedAtIso(variables.input.climbedAt, now);
   });
 
   it('re-seeds climbed-at when a different ascent opens in the sheet', () => {

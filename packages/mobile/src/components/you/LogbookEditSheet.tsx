@@ -43,10 +43,10 @@ function clampToNow(date: Date): Date {
   return date.getTime() > now.getTime() ? now : date;
 }
 
-function mergeDatePart(current: Date, selectedDate: Date): Date {
+function applyDatePart(current: Date, selectedDate: Date, options: { clampToPresent: boolean }): Date {
   const next = new Date(current);
   next.setFullYear(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
-  return clampToNow(next);
+  return options.clampToPresent ? clampToNow(next) : next;
 }
 
 function applyTimePart(current: Date, selectedTime: Date, options: { clampToPresent: boolean }): Date {
@@ -128,11 +128,21 @@ export function LogbookEditSheet({ sheetRef, ascent, onClose }: LogbookEditSheet
     }
   }, []);
 
-  const handleDateChange = useCallback((_event: DateTimePickerEvent, selectedDate?: Date) => {
-    if (!selectedDate) return;
-    setHasClimbedAtChanged(true);
-    setClimbedAt((current) => mergeDatePart(current, selectedDate));
-  }, []);
+  const handleDateChange = useCallback(
+    (_event: DateTimePickerEvent, selectedDate?: Date) => {
+      if (!selectedDate) return;
+      setHasClimbedAtChanged(true);
+      setClimbedAt((current) => {
+        const requestedDate = applyDatePart(current, selectedDate, { clampToPresent: false });
+        const clampedDate = clampToNow(requestedDate);
+        if (clampedDate.getTime() !== requestedDate.getTime()) {
+          showToast(t('mobile.logbook.futureTimeAdjusted'), 'warning');
+        }
+        return clampedDate;
+      });
+    },
+    [showToast, t],
+  );
 
   const handleTimeChange = useCallback(
     (_event: DateTimePickerEvent, selectedTime?: Date) => {
@@ -159,10 +169,17 @@ export function LogbookEditSheet({ sheetRef, ascent, onClose }: LogbookEditSheet
       onChange: (event, selectedDate) => {
         if (event.type !== 'set' || !selectedDate) return;
         setHasClimbedAtChanged(true);
-        setClimbedAt((current) => mergeDatePart(current, selectedDate));
+        setClimbedAt((current) => {
+          const requestedDate = applyDatePart(current, selectedDate, { clampToPresent: false });
+          const clampedDate = clampToNow(requestedDate);
+          if (clampedDate.getTime() !== requestedDate.getTime()) {
+            showToast(t('mobile.logbook.futureTimeAdjusted'), 'warning');
+          }
+          return clampedDate;
+        });
       },
     });
-  }, [climbedAt]);
+  }, [climbedAt, showToast, t]);
 
   const openAndroidTimePicker = useCallback(() => {
     DateTimePickerAndroid.open({
@@ -185,7 +202,7 @@ export function LogbookEditSheet({ sheetRef, ascent, onClose }: LogbookEditSheet
     });
   }, [climbedAt, showToast, t]);
 
-  const save = () => {
+  const save = useCallback(() => {
     if (!ascent || isMutating) return;
     const finalAttemptCount = status === 'flash' ? 1 : attemptCount;
     const input: UpdateTickInput = {
@@ -214,7 +231,21 @@ export function LogbookEditSheet({ sheetRef, ascent, onClose }: LogbookEditSheet
         },
       },
     );
-  };
+  }, [
+    ascent,
+    attemptCount,
+    climbedAt,
+    comment,
+    difficulty,
+    hasClimbedAtChanged,
+    isMutating,
+    quality,
+    sheetRef,
+    showToast,
+    status,
+    t,
+    updateTick,
+  ]);
 
   const confirmDelete = () => {
     if (!ascent || isMutating) return;
