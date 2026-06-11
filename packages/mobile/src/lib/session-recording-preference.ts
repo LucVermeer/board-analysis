@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useSyncExternalStore } from 'react';
 import { getPreference, setPreference } from './preference-store';
+import { SESSION_RECORDING_DEFAULTS_ON } from './env';
 
-// Whether the user has opted in to PostHog session recording. OFF by default —
-// nothing records until the climber flips the diagnostics toggle themselves
-// (we surface it for people hitting Bluetooth issues). Persisted so the choice
-// survives restarts; the value is restored and applied at app startup.
+// Whether the user has opted in to PostHog session recording. The default
+// follows the build: ON in opted-in builds (the open TestFlight beta sets
+// EXPO_PUBLIC_SESSION_RECORDING_DEFAULT_ON), OFF (opt-in) everywhere else. An
+// explicit choice from the Privacy toggle always wins over the default and is
+// persisted so it survives restarts; the value is restored and applied at app
+// startup.
 //
 // Structure mirrors `grade-format-preference.ts`: a module-level store read via
 // `useSyncExternalStore` with a referentially-stable cached snapshot (rebuilt
@@ -14,12 +17,12 @@ const STORAGE_KEY = 'sessionRecordingEnabled';
 
 type SessionRecordingSnapshot = { enabled: boolean; loaded: boolean };
 
-let current = false;
+let current = SESSION_RECORDING_DEFAULTS_ON;
 let hasLoaded = false;
 let snapshot: SessionRecordingSnapshot = { enabled: current, loaded: hasLoaded };
 const listeners = new Set<() => void>();
 
-const SERVER_SNAPSHOT: SessionRecordingSnapshot = { enabled: false, loaded: false };
+const SERVER_SNAPSHOT: SessionRecordingSnapshot = { enabled: SESSION_RECORDING_DEFAULTS_ON, loaded: false };
 
 function notify(): void {
   snapshot = { enabled: current, loaded: hasLoaded };
@@ -32,7 +35,9 @@ export async function loadSessionRecordingEnabled(): Promise<boolean> {
   // A `setSessionRecordingEnabledPreference` may have raced in while we awaited
   // storage; honour the user's choice over the (now stale) persisted value.
   if (hasLoaded) return current;
-  current = stored === true;
+  // An explicit stored choice (true/false) wins; an absent value falls back to
+  // the build default (on in the beta, off otherwise).
+  current = typeof stored === 'boolean' ? stored : SESSION_RECORDING_DEFAULTS_ON;
   hasLoaded = true;
   notify();
   return current;
