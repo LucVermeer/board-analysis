@@ -294,7 +294,12 @@ async function statsDrivenSearch(
         ...filters.getClimbStatsConditions(),
       ),
     )
-    .orderBy(orderByClause, desc(boardClimbs.uuid))
+    // Tiebreak on the stats-side climb_uuid (identical value to board_climbs.uuid under
+    // the INNER JOIN equality) so the ORDER BY textually matches the v2 covering index's
+    // trailing key column — the scan returns rows already in order, no sort. Do NOT
+    // mirror this in runStandardSearch: there it's a LEFT JOIN and climb_uuid is NULL
+    // for stats-less rows, which would corrupt the ordering.
+    .orderBy(orderByClause, desc(boardClimbStats.climbUuid))
     .limit(pageSize + 1)
     .offset(page * pageSize)) as unknown as RawSelectResult[];
 
