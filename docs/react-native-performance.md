@@ -211,18 +211,17 @@ gesture must resolve taps itself. Two non-obvious choices there:
 
 ## 6. Warm board-art surfaces use the rasterized native-PNG path, not remote SVG
 
-**Rule:** Any board-art surface that appears repeatedly while scrolling or swiping (the list
-thumbnail, the play-drawer board) renders through the native-PNG path —
-`useNativeClimbRender` + `LayeredClimbImage` with `cachePolicy="memory-disk"` on bundled assets.
-Do **not** use the `react-native-svg` `BoardRenderer` with a remote `<SvgImage href={remoteUrl}>`
-on these surfaces.
+**Rule:** Any board-art surface that appears while scrolling, swiping, or inside always-mounted
+chrome (the list thumbnail, the play-drawer board, the accessory bar) renders through the native-PNG
+path: `useNativeClimbRender` + `LayeredClimbImage` with `cachePolicy="memory-disk"` on bundled
+assets. Do not render mobile board backgrounds through `react-native-svg` `<Image href>` or any
+remote URL.
 
-**Why:** `BoardRenderer` parses the frames string, builds an SVG hold overlay, and paints N
-`<Circle>`s in `react-native-svg` on every render, on top of an `<SvgImage>` that fetches the board
-photo over the network. That is fine for a one-off static diagram, but on a recycling list it
-re-parses and re-paints per row and re-fetches art that should be on disk. The native path renders
-the holds once into a cached PNG (deduped by cache key, warmed from disk on launch — see the
-`renderedOverlays` map and `warmupRenderedOverlaysOnce` in `use-native-climb-render.ts`) and stacks
+**Why:** The removed SVG background renderer parsed the frames string, built an SVG hold overlay,
+and painted N `<Circle>`s in `react-native-svg` on every render, on top of a remote image fetch for
+board art that should be on disk. The native path renders the holds once into a cached PNG (deduped
+by cache key, warmed from disk on launch — see the `renderedOverlays` map and
+`warmupRenderedOverlaysOnce` in `use-native-climb-render.ts`) and stacks
 it over bundled background images via `expo-image` with `cachePolicy="memory-disk"`, so a scrolled-
 past climb is an instant cache hit with zero network and zero per-row SVG work. It also satisfies
 the no-network offline rule — missing layers render as visible gray blocks rather than silently
@@ -252,9 +251,9 @@ surface the previous size's bundled background paths.
 - Warm path (use this): `packages/mobile/src/hooks/use-native-climb-render.ts` +
   `packages/mobile/src/components/LayeredClimbImage.tsx` (`cachePolicy="memory-disk"`), wired up in
   `packages/mobile/src/components/ClimbListThumbnail.tsx` and `BoardImageNative.tsx`.
-- Cold/static path (don't use on lists): `packages/mobile/src/components/board-renderer/BoardRenderer.tsx`
-  (`react-native-svg`, `<SvgImage href>`). Reserve it for genuinely static, non-recycled diagrams
-  like `AngleBoardDiagram.tsx`.
+- Static diagrams should still avoid network board art. Use bundled background paths through
+  `background-image-cache.ts` or draw diagram-only shapes; the old `react-native-svg` background
+  renderer was removed because it accepted remote `<SvgImage href>` board-art URLs.
 
 ---
 

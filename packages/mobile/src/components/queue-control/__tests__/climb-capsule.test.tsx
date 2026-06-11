@@ -147,8 +147,8 @@ vi.mock('../../../providers/drawer-host-provider', () => ({
   useDrawerHost: () => ({ openPlayDrawer: drawer.openPlayDrawer, boardConfig: null }),
 }));
 
-// The board thumbnail pulls in BoardRenderer/board-details (native deps); the
-// capsule only renders it when boardConfig is set (null here), so stub it out.
+// The board thumbnail pulls in board-details/native render deps; the capsule
+// only renders it when boardConfig is set (null here), so stub it out.
 vi.mock('../AccessoryClimbThumbnail', () => ({ AccessoryClimbThumbnail: () => null }));
 
 // formatGrade prefixes so the displayed grade is distinguishable from the raw

@@ -127,6 +127,7 @@ export default defineConfig({
     },
     'packages/web/app/**/*.{ts,tsx}': () => ['vp run check:i18n', 'vp run check:i18n:orphans'],
     'packages/mobile/{src,app}/**/*.{ts,tsx}': () => 'vp run check:i18n:orphans',
+    'packages/mobile/**/*.{ts,tsx,swift}': () => 'vp run check:mobile-board-art-network',
     'packages/shared/i18n/locales/**/*.json': () => 'vp run check:i18n:orphans',
   },
   run: {
@@ -261,6 +262,10 @@ export default defineConfig({
       },
       'check:i18n:orphans': {
         command: 'bun packages/web/scripts/check-orphaned-i18n-keys.ts',
+        cache: false,
+      },
+      'check:mobile-board-art-network': {
+        command: 'bun scripts/mobile-board-art-network-check.ts',
         cache: false,
       },
       'generate:ios-board-placement-data': {
