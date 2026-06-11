@@ -530,6 +530,16 @@ export const sessionMutations = {
     validateInput(BoardSerialSchema, serial, 'serial');
     await requireSessionMember(ctx, sessionId);
 
+    // Hard-error when ctx.participantId is missing — same reasoning as
+    // takeControl / confirmClimbOnWall: connectionIds aren't stable across
+    // reconnects. Must run BEFORE the roomManager write and event publish
+    // below; otherwise an anonymous/unidentified caller would mutate Redis
+    // and broadcast SessionBoardSerialChanged before we reject them.
+    if (!ctx.participantId) {
+      throw new Error('setSessionBoardSerial requires ctx.participantId; refusing to fall back to connectionId.');
+    }
+    const participantId = ctx.participantId;
+
     const previousSerial = await roomManager.setSessionBoardSerialAndReturnPrevious(sessionId, serial);
     if (previousSerial !== serial) {
       pubsub.publishSessionEvent(sessionId, {
@@ -537,14 +547,6 @@ export const sessionMutations = {
         lastConnectedBoardSerial: serial,
       });
     }
-
-    // Hard-error when ctx.participantId is missing — same reasoning as
-    // takeControl / confirmClimbOnWall: connectionIds aren't stable across
-    // reconnects.
-    if (!ctx.participantId) {
-      throw new Error('setSessionBoardSerial requires ctx.participantId; refusing to fall back to connectionId.');
-    }
-    const participantId = ctx.participantId;
 
     // Mirror takeControl / releaseControl: return the resolved Session.
     // Re-read `lastConnectedBoardSerial` (via the helper's default lookup)
