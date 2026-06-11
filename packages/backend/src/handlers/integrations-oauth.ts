@@ -41,7 +41,8 @@ type CallbackReason =
   | 'missing_params'
   | 'missing_scope'
   | 'exchange_failed'
-  | 'persist_failed';
+  | 'persist_failed'
+  | 'server_error';
 
 function safeOauthErrorReason(raw: string): string {
   return REFLECTABLE_OAUTH_ERRORS.has(raw) ? raw : 'oauth_error';
@@ -211,7 +212,17 @@ export async function handleIntegrationOAuthCallback(
     return;
   }
 
-  const redirectUri = `${getBackendPublicUrl() ?? ''}/integrations/${providerName}/callback`;
+  // Mirror the start handler's config check: without the public URL the
+  // redirect URI sent to the token exchange would be a relative path, which
+  // the provider rejects with an opaque upstream error instead of this clear
+  // one. (Reaching here without it requires the env var vanishing mid-flow.)
+  const backendPublicUrl = getBackendPublicUrl();
+  if (!backendPublicUrl) {
+    logger.error('[Integrations] BACKEND_PUBLIC_URL is not configured; cannot complete code exchange');
+    redirectError(res, providerDbName, 'server_error' satisfies CallbackReason);
+    return;
+  }
+  const redirectUri = `${backendPublicUrl}/integrations/${providerName}/callback`;
 
   let tokens;
   try {

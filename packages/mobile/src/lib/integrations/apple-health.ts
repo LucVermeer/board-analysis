@@ -293,6 +293,9 @@ export async function autoSaveToAppleHealth(
     }
 
     const options = buildSaveOptions(summary, ctx);
+    // `!healthWorkoutsNative` is unreachable at runtime (isAppleHealthAvailable
+    // above already bailed when the module is null) — it's here purely to
+    // narrow the type for the call below.
     if (!options || !healthWorkoutsNative) {
       clearSaveState(sessionId);
       return null;
@@ -356,6 +359,9 @@ export async function manualSaveToAppleHealth(
     }
 
     const options = buildSaveOptions(summary, ctx);
+    // `!healthWorkoutsNative` is unreachable at runtime (isAppleHealthAvailable
+    // above already bailed when the module is null) — it's here purely to
+    // narrow the type for the call below.
     if (!options || !healthWorkoutsNative) {
       setSaveState(sessionId, 'failed');
       return 'failed';
