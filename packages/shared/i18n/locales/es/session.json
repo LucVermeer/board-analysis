@@ -299,6 +299,7 @@
       "sessionCreateError": "No se pudo crear la sesión",
       "noBoardSelected": "Selecciona un board primero",
       "actionFailed": "Acción fallida. Inténtalo de nuevo.",
+      "rateLimited": "Demasiados cambios muy rápido. Espera un momento.",
       "endSession": "Terminar sesión",
       "endSessionConfirm": "¿Estás seguro de que quieres terminar esta sesión?",
       "climbCount_one": "{{count}} bloque",

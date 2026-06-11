@@ -43,7 +43,7 @@ import {
 } from '@boardsesh/queue-runtime';
 import { useQueueMutations, type PublishPlaybackStateInput } from '@boardsesh/queue-react';
 import type { SessionSummary, SubscriptionQueueEvent, SessionUser, UserBoard } from '@boardsesh/shared-schema';
-import { execute } from '@boardsesh/graphql-client';
+import { execute, GraphQLOperationError, isRateLimitedExtension } from '@boardsesh/graphql-client';
 import { buildBoardPath, parseBoardPath } from '@boardsesh/board-config';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { JOIN_SESSION, LEAVE_SESSION } from '@boardsesh/graphql/operations/queue-session';
@@ -88,6 +88,24 @@ export type StartSessionConfig = {
 };
 
 const JOIN_SESSION_RETRY_BACKOFF_MS = [1_000, 2_500, 5_000] as const;
+
+// A party-session queue/wall mutation that fails because the backend throttled
+// it (RATE_LIMITED) is transient — the optimistic state already applied and a
+// peer-resync or the next gesture reconciles. Show a specific, gentle "slow
+// down" message rather than the alarming generic "Action failed" toast (which
+// a beta tester read as "the connection fails every time we switch boulders",
+// #2763). Any other failure keeps the generic toast.
+function showQueueMutationErrorToast(
+  error: unknown,
+  t: (key: string) => string,
+  showToast: (message: string, variant: 'error') => void,
+): void {
+  if (error instanceof GraphQLOperationError && isRateLimitedExtension(error.extensions)) {
+    showToast(t('mobile.queue.rateLimited'), 'error');
+  } else {
+    showToast(t('mobile.queue.actionFailed'), 'error');
+  }
+}
 
 type QueueContextValue = {
   state: QueueState;
@@ -1202,7 +1220,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
           );
         }
         if (wallControlOperationRef.current === plan.operationId) {
-          showToast(t('mobile.queue.actionFailed'), 'error');
+          showQueueMutationErrorToast(error, t, showToast);
         }
         throw error;
       }
@@ -1251,7 +1269,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
           shouldOptimisticallyRelease: plan.shouldOptimisticallyRelease,
         })
       ) {
-        showToast(t('mobile.queue.actionFailed'), 'error');
+        showQueueMutationErrorToast(error, t, showToast);
       }
       throw error;
     }
@@ -1457,7 +1475,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
         // to the pre-reorder order — that matches the server, which never applied
         // the move — and surface the failure.
         dispatch({ type: 'UPDATE_QUEUE', payload: { queue: previousQueue, currentClimbQueueItem: previousCurrent } });
-        showToast(t('mobile.queue.actionFailed'), 'error');
+        showQueueMutationErrorToast(error, t, showToast);
       });
     },
     [mutations, showToast, t],

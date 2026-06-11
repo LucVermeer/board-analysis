@@ -10,6 +10,8 @@ import {
   requireSessionMember,
   applyRateLimit,
   validateInput,
+  RATE_LIMIT_SESSION,
+  RATE_LIMIT_SESSION_OP,
 } from '../shared/helpers';
 import {
   SessionIdSchema,
@@ -405,7 +407,7 @@ export const sessionMutations = {
    * provided.
    */
   takeControl: async (_: unknown, { climb }: { climb?: ClimbQueueItem | null }, ctx: ConnectionContext) => {
-    await applyRateLimit(ctx);
+    await applyRateLimit(ctx, RATE_LIMIT_SESSION, RATE_LIMIT_SESSION_OP);
     const sessionId = requireSession(ctx);
     await requireSessionMember(ctx, sessionId);
     if (climb !== null && climb !== undefined) {
@@ -521,7 +523,7 @@ export const sessionMutations = {
    * `sessionId` argument.
    */
   setSessionBoardSerial: async (_: unknown, { serial }: { serial: string }, ctx: ConnectionContext) => {
-    await applyRateLimit(ctx);
+    await applyRateLimit(ctx, RATE_LIMIT_SESSION, RATE_LIMIT_SESSION_OP);
     // Session identity from the WebSocket context (WS-implicit pattern); no
     // sessionId argument.
     const sessionId = requireSession(ctx);
@@ -565,7 +567,7 @@ export const sessionMutations = {
    * WebSocket connection context — no `sessionId` argument.
    */
   setSessionBoardPath: async (_: unknown, { boardPath }: { boardPath: string }, ctx: ConnectionContext) => {
-    await applyRateLimit(ctx);
+    await applyRateLimit(ctx, RATE_LIMIT_SESSION, RATE_LIMIT_SESSION_OP);
     const sessionId = requireSession(ctx);
     validateInput(BoardPathSchema, boardPath, 'boardPath');
     await requireSessionMember(ctx, sessionId);
@@ -639,7 +641,7 @@ export const sessionMutations = {
    * only when the clear actually happened.
    */
   releaseControl: async (_: unknown, __: unknown, ctx: ConnectionContext) => {
-    await applyRateLimit(ctx);
+    await applyRateLimit(ctx, RATE_LIMIT_SESSION, RATE_LIMIT_SESSION_OP);
     const sessionId = requireSession(ctx);
     await requireSessionMember(ctx, sessionId);
 

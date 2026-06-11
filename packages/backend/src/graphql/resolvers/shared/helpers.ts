@@ -1,5 +1,6 @@
 import type { ConnectionContext } from '@boardsesh/shared-schema';
-import { checkRateLimit } from '../../../utils/rate-limiter';
+import { GraphQLError } from 'graphql';
+import { checkRateLimit, RateLimitError } from '../../../utils/rate-limiter';
 import { checkRateLimitRedis } from '../../../utils/redis-rate-limiter';
 import { getContext } from '../../context';
 import { getDistributedState } from '../../../services/distributed-state';
@@ -28,6 +29,28 @@ export const SESSION_MEMBER_RETRY_CONFIG = {
   maxRetries: 8,
   initialDelayMs: 50,
 } as const;
+
+/**
+ * Per-user rate-limit ceilings (requests/minute) for interactive party-session
+ * traffic, on dedicated buckets separate from the shared `default` (60/min).
+ *
+ * Before #2763 every queue + wall-control mutation shared `default`, so a
+ * two-person session exhausted it just by switching boulders (each swipe fans
+ * out to ~2 mutations; the setCurrentClimb coalescer also fires addQueueItem
+ * for superseded swipes) — every subsequent action then failed for up to 60s,
+ * surfacing as "the connection fails every time we switch boulders".
+ *
+ * `RATE_LIMIT_SESSION` covers user-gesture-driven queue + wall-control
+ * mutations; `RATE_LIMIT_PLAYBACK` isolates the per-frame publishPlaybackState
+ * broadcast so a playing variable-speed climb can't starve climb switching.
+ * Both are well above any human gesture rate (with fan-out) yet still cap a
+ * runaway client. Mirrors the existing per-operation buckets for
+ * `confirmClimbOnWall` and `search-climbs`.
+ */
+export const RATE_LIMIT_SESSION_OP = 'session';
+export const RATE_LIMIT_SESSION = 240;
+export const RATE_LIMIT_PLAYBACK_OP = 'playback';
+export const RATE_LIMIT_PLAYBACK = 600;
 
 /**
  * Helper to require a session context.
@@ -168,11 +191,27 @@ export async function applyRateLimit(ctx: ConnectionContext, limit?: number, ope
   } else {
     key = ctx.connectionId;
   }
-  checkRateLimit(key, maxRequests);
 
-  // Tier 2: Distributed Redis rate limiting (authenticated users only)
-  if (ctx.isAuthenticated && ctx.userId) {
-    await checkRateLimitRedis(ctx.userId, operation, maxRequests, 60_000);
+  // Surface a structured RATE_LIMITED error (with retryAfterSeconds) so clients
+  // can branch on `extensions.code` instead of message-string matching, and the
+  // generic "Action failed" toast can be replaced with a specific, gentle
+  // message. Mirrors the CLIMB_IS_DUPLICATE extension pattern. The message text
+  // is preserved for older clients. See #2763.
+  try {
+    // Tier 1: Synchronous in-memory rate limiting (fast path, per-instance)
+    checkRateLimit(key, maxRequests);
+
+    // Tier 2: Distributed Redis rate limiting (authenticated users only)
+    if (ctx.isAuthenticated && ctx.userId) {
+      await checkRateLimitRedis(ctx.userId, operation, maxRequests, 60_000);
+    }
+  } catch (error) {
+    if (error instanceof RateLimitError) {
+      throw new GraphQLError(error.message, {
+        extensions: { code: 'RATE_LIMITED', operation, retryAfterSeconds: error.retryAfterSeconds },
+      });
+    }
+    throw error;
   }
 }
 

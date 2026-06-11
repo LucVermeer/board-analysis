@@ -299,6 +299,7 @@
       "sessionCreateError": "Couldn't create session",
       "noBoardSelected": "Pick a board first",
       "actionFailed": "Action failed. Try again.",
+      "rateLimited": "Too many changes too fast. Give it a sec.",
       "endSession": "End session",
       "endSessionConfirm": "Are you sure you want to end this session?",
       "climbCount_one": "{{count}} climb",
