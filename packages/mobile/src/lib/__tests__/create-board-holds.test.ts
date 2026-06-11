@@ -128,6 +128,15 @@ describe('getCreateBoardHolds', () => {
     getCreateBoardHolds(configs[1]);
     expect(mockedGetBoardRenderData).toHaveBeenCalledTimes(18);
   });
+
+  it('throws when the test-only cache clearer runs outside dev mode', () => {
+    vi.stubGlobal('__DEV__', false);
+    try {
+      expect(() => clearCreateBoardHoldsCache()).toThrow('test-only');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 });
 
 describe('parseSetIdsParam', () => {

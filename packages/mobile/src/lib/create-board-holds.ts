@@ -83,5 +83,9 @@ export function prewarmCreateBoardHolds(cfg: CreateBoardHoldsConfig): void {
 
 // @test-only: production code should share the module-level hold geometry cache.
 export function clearCreateBoardHoldsCache(): void {
+  const isDevRuntime = typeof __DEV__ === 'undefined' || __DEV__;
+  if (!isDevRuntime) {
+    throw new Error('clearCreateBoardHoldsCache is test-only and cannot run in production.');
+  }
   createBoardHoldsCache.clear();
 }

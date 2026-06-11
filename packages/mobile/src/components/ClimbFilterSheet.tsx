@@ -50,6 +50,8 @@ import { useGrades, useSearchClimbsCount } from '../lib/graphql/hooks';
 import type { BoardName, HoldsFilter } from '@boardsesh/shared-schema';
 import { buildFilterLabels, formatSettersLabel } from '../lib/filter-labels';
 import { parseSetIdsParam, prewarmCreateBoardHolds } from '../lib/create-board-holds';
+import { subscribeToHoldsFilterSelection } from '../lib/hold-filter-handoff';
+import { subscribeToZoneFilterSelection } from '../lib/zone-filter-handoff';
 import { useAuth } from '../providers/auth-provider';
 import { hapticSelection } from '../lib/haptics';
 import { springs } from '../theme/animations';
@@ -475,6 +477,17 @@ export function ClimbFilterSheet({
     },
     [updateLocalBoardFilters],
   );
+
+  // Primary editing happens in stacked child sheets, but the standalone hold and
+  // zone routes are retained as fallbacks; keep their focus-cleanup handoff live.
+  useEffect(() => {
+    const unsubscribeHolds = subscribeToHoldsFilterSelection(handleHoldsFilterChange);
+    const unsubscribeZone = subscribeToZoneFilterSelection(handleZoneFilterChange);
+    return () => {
+      unsubscribeHolds();
+      unsubscribeZone();
+    };
+  }, [handleHoldsFilterChange, handleZoneFilterChange]);
 
   const holdFilterCount = countFilteredHolds(localBoardFilters.holdsFilter);
   const zoneActive = localBoardFilters.zoneBox != null;

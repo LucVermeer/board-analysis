@@ -90,6 +90,8 @@ export function SettersFilterSheet({
   }, []);
 
   const selectedSet = useMemo(() => new Set(selectedSetters), [selectedSetters]);
+  const selectedSetRef = useRef(selectedSet);
+  selectedSetRef.current = selectedSet;
 
   const handleSearchChange = useCallback((text: string) => {
     setSearchInput(text);
@@ -114,7 +116,7 @@ export function SettersFilterSheet({
   const toggle = useCallback(
     (username: string) => {
       hapticSelection();
-      const next = new Set(selectedSet);
+      const next = new Set(selectedSetRef.current);
       if (next.has(username)) {
         next.delete(username);
       } else {
@@ -122,7 +124,7 @@ export function SettersFilterSheet({
       }
       onSelectedSettersChange(Array.from(next));
     },
-    [onSelectedSettersChange, selectedSet],
+    [onSelectedSettersChange],
   );
 
   const clear = useCallback(() => {
@@ -132,9 +134,9 @@ export function SettersFilterSheet({
 
   const renderRow = useCallback(
     ({ item }: { item: SetterStat }) => (
-      <SetterRow setter={item} isSelected={selectedSet.has(item.setterUsername)} onToggle={toggle} />
+      <SetterRow setter={item} isSelected={selectedSetRef.current.has(item.setterUsername)} onToggle={toggle} />
     ),
-    [selectedSet, toggle],
+    [toggle],
   );
 
   return (
