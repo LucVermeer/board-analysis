@@ -57,6 +57,11 @@ jobs:
       # build time; without this, analytics.ts sees no key and isAnalyticsEnabled is
       # false, so every track() silently no-ops (the app shipped zero events before).
       EXPO_PUBLIC_POSTHOG_KEY: ${{ vars.NEXT_PUBLIC_POSTHOG_KEY }}
+      # Opt this build (the open TestFlight beta) into session recording ON by
+      # default. session-recording-preference reads this to set the default; an
+      # explicit off from the Privacy toggle still wins. Production App Store
+      # builds omit this var, so recording stays opt-in there.
+      EXPO_PUBLIC_SESSION_RECORDING_DEFAULT_ON: 'true'
 
     steps:
       - name: Checkout repository
@@ -79,6 +84,7 @@ jobs:
           EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID=$EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID
           EXPO_PUBLIC_SENTRY_DSN=$EXPO_PUBLIC_SENTRY_DSN
           EXPO_PUBLIC_POSTHOG_KEY=$EXPO_PUBLIC_POSTHOG_KEY
+          EXPO_PUBLIC_SESSION_RECORDING_DEFAULT_ON=$EXPO_PUBLIC_SESSION_RECORDING_DEFAULT_ON
           EOF
 
       - name: Expo prebuild (generate ios/)
