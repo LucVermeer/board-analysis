@@ -122,6 +122,7 @@ export const iconMap = {
   'star.fill': { ios: 'star.fill', android: 'star' },
   location: { ios: 'location', android: 'map-marker-outline' },
   'location.fill': { ios: 'location.fill', android: 'map-marker' },
+  calendar: { ios: 'calendar', android: 'calendar-outline' },
   clock: { ios: 'clock', android: 'clock-outline' },
   filter: { ios: 'line.3.horizontal.decrease', android: 'filter-variant' },
   sort: { ios: 'arrow.up.arrow.down', android: 'sort-variant' },

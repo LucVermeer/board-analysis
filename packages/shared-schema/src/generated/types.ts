@@ -5015,6 +5015,8 @@ export type UpdateProfileInput = {
 export type UpdateTickInput = {
   /** Number of attempts */
   attemptCount?: InputMaybe<Scalars['Int']['input']>;
+  /** When the climb was attempted (ISO 8601) */
+  climbedAt?: InputMaybe<Scalars['String']['input']>;
   /** User comment */
   comment?: InputMaybe<Scalars['String']['input']>;
   /** User's difficulty rating */
