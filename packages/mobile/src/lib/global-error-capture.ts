@@ -29,9 +29,11 @@ export type GlobalErrorCaptureDeps = {
 
 // react-native-worklets / Reanimated serialization failures. The thrown message
 // varies by version ("…cannot be sent to the UI runtime/thread", references to
-// the (de)serialization helpers), so match generously across message + stack.
+// the (de)serialization helpers), so match generously across message + stack —
+// but only on signatures specific to the serialization path, never a bare
+// "worklet" mention (that would swallow unrelated fatals).
 const WORKLET_SERIALIZATION_PATTERN =
-  /cannot be (sent|serialized|cloned|copied)|UI (runtime|thread)|extractSerializable|makeShareable|makeSerializable|ValueUnpacker|\bworklet\b/i;
+  /cannot be (sent|serialized|cloned|copied)|UI (runtime|thread)|extractSerializable|makeShareable|makeSerializable|ValueUnpacker/i;
 
 function toError(value: unknown): Error {
   if (value instanceof Error) return value;
