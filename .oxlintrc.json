@@ -122,6 +122,7 @@
     "embedded/**",
     "packages/board-renderer/wasm/pkg/**",
     "packages/db/drizzle/**",
+    "design/**",
     "**/generated/**"
   ]
 }
