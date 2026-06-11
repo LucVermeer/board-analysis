@@ -31,10 +31,12 @@ type HoldFilterEditorSheetProps = {
   holdsFilter: HoldsFilter;
   onHoldsFilterChange: (holdsFilter: HoldsFilter) => void;
   onClose: () => void;
+  onDismiss: () => void;
 };
 
 const SHEET_HEIGHT_RATIO = 0.95;
 const CHROME_BUDGET = 132;
+const DEFER_BOARD_RENDER_MS = 120;
 
 export function HoldFilterEditorSheet({
   visible,
@@ -42,6 +44,7 @@ export function HoldFilterEditorSheet({
   holdsFilter,
   onHoldsFilterChange,
   onClose,
+  onDismiss,
 }: HoldFilterEditorSheetProps) {
   const sheetRef = useRef<BottomSheetModal>(null);
   const { t } = useTranslation('climbs');
@@ -52,26 +55,30 @@ export function HoldFilterEditorSheet({
   const boardLayout = getLayout(boardName, boardConfig.layoutId)?.name ?? '';
   const [activeHoldId, setActiveHoldId] = useState<number | null>(null);
   const [applyMode, setApplyMode] = useState<HoldFilterMode>('include');
+  const [contentReady, setContentReady] = useState(false);
 
   useEffect(() => {
     if (visible) {
       sheetRef.current?.present();
+      const timeout = setTimeout(() => setContentReady(true), DEFER_BOARD_RENDER_MS);
+      return () => clearTimeout(timeout);
     } else {
       setActiveHoldId(null);
+      setContentReady(false);
       sheetRef.current?.dismiss();
     }
+    return undefined;
   }, [visible]);
 
-  const boardHolds = useMemo(
-    () =>
-      getCreateBoardHolds({
-        boardName,
-        layoutId: boardConfig.layoutId,
-        sizeId: boardConfig.sizeId,
-        setIds: parseSetIdsParam(boardConfig.setIds),
-      }),
-    [boardName, boardConfig.layoutId, boardConfig.sizeId, boardConfig.setIds],
-  );
+  const boardHolds = useMemo(() => {
+    if (!contentReady) return null;
+    return getCreateBoardHolds({
+      boardName,
+      layoutId: boardConfig.layoutId,
+      sizeId: boardConfig.sizeId,
+      setIds: parseSetIdsParam(boardConfig.setIds),
+    });
+  }, [contentReady, boardName, boardConfig.layoutId, boardConfig.sizeId, boardConfig.setIds]);
 
   const boardRender = useMemo(() => {
     if (!boardHolds) return { width: 0, height: 0 };
@@ -132,8 +139,8 @@ export function HoldFilterEditorSheet({
   const filteredCount = countFilteredHolds(holdsFilter);
 
   return (
-    <ModalSheet ref={sheetRef} snapPoints={['95%']} onDismiss={onClose} stackBehavior="push" glass={false}>
-      <View style={[styles.container, { backgroundColor: systemColors.background }]}>
+    <ModalSheet ref={sheetRef} snapPoints={['95%']} onDismiss={onDismiss} stackBehavior="push">
+      <View style={styles.container}>
         {!boardHolds || !boardName ? (
           <View style={styles.loading}>
             <ActivityIndicator size="large" />

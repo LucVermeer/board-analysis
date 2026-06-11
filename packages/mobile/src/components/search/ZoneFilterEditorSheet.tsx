@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Pressable, StyleSheet, useWindowDimensions } from 'react-native';
 import type { BottomSheetModal } from '@gorhom/bottom-sheet';
 import { useTranslation } from 'react-i18next';
@@ -48,10 +48,12 @@ type ZoneFilterEditorSheetProps = {
   holdsFilter: HoldsFilter;
   onZoneFilterChange: (selection: ZoneFilterEditorSelection) => void;
   onClose: () => void;
+  onDismiss: () => void;
 };
 
 const SHEET_HEIGHT_RATIO = 0.95;
 const CHROME_BUDGET = 220;
+const DEFER_BOARD_RENDER_MS = 120;
 
 export function ZoneFilterEditorSheet({
   visible,
@@ -61,6 +63,7 @@ export function ZoneFilterEditorSheet({
   holdsFilter,
   onZoneFilterChange,
   onClose,
+  onDismiss,
 }: ZoneFilterEditorSheetProps) {
   const sheetRef = useRef<BottomSheetModal>(null);
   const { t } = useTranslation('climbs');
@@ -69,6 +72,7 @@ export function ZoneFilterEditorSheet({
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const boardName = boardConfig.boardName as BoardName;
   const layoutName = getLayout(boardName, boardConfig.layoutId)?.name ?? '';
+  const [contentReady, setContentReady] = useState(false);
 
   const selectionRef = useRef({ zoneBox, zoneMode, holdsFilter });
   selectionRef.current = { zoneBox, zoneMode, holdsFilter };
@@ -76,21 +80,24 @@ export function ZoneFilterEditorSheet({
   useEffect(() => {
     if (visible) {
       sheetRef.current?.present();
+      const timeout = setTimeout(() => setContentReady(true), DEFER_BOARD_RENDER_MS);
+      return () => clearTimeout(timeout);
     } else {
+      setContentReady(false);
       sheetRef.current?.dismiss();
     }
+    return undefined;
   }, [visible]);
 
-  const boardHolds = useMemo(
-    () =>
-      getCreateBoardHolds({
-        boardName,
-        layoutId: boardConfig.layoutId,
-        sizeId: boardConfig.sizeId,
-        setIds: boardConfig.setIds.split(',').map(Number).filter(Number.isFinite),
-      }),
-    [boardName, boardConfig.layoutId, boardConfig.sizeId, boardConfig.setIds],
-  );
+  const boardHolds = useMemo(() => {
+    if (!contentReady) return null;
+    return getCreateBoardHolds({
+      boardName,
+      layoutId: boardConfig.layoutId,
+      sizeId: boardConfig.sizeId,
+      setIds: boardConfig.setIds.split(',').map(Number).filter(Number.isFinite),
+    });
+  }, [contentReady, boardName, boardConfig.layoutId, boardConfig.sizeId, boardConfig.setIds]);
 
   const dims = useMemo<BoardDimensions | null>(() => {
     if (!boardHolds) return null;
@@ -226,8 +233,8 @@ export function ZoneFilterEditorSheet({
   const zoneEnabled = zoneBox != null;
 
   return (
-    <ModalSheet ref={sheetRef} snapPoints={['95%']} onDismiss={onClose} stackBehavior="push" glass={false}>
-      <View style={[styles.container, { backgroundColor: systemColors.background }]}>
+    <ModalSheet ref={sheetRef} snapPoints={['95%']} onDismiss={onDismiss} stackBehavior="push">
+      <View style={styles.container}>
         {!boardHolds || !boardName || !dims ? (
           <View style={styles.loading}>
             <ActivityIndicator size="large" />

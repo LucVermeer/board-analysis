@@ -31,6 +31,7 @@ type SettersFilterSheetProps = {
   selectedSetters: string[];
   onSelectedSettersChange: (selectedSetters: string[]) => void;
   onClose: () => void;
+  onDismiss: () => void;
 };
 
 const SetterSeparator = memo(function SetterSeparator() {
@@ -71,6 +72,7 @@ export function SettersFilterSheet({
   selectedSetters,
   onSelectedSettersChange,
   onClose,
+  onDismiss,
 }: SettersFilterSheetProps) {
   const sheetRef = useRef<BottomSheetModal>(null);
   const { t } = useTranslation('climbs');
@@ -144,8 +146,8 @@ export function SettersFilterSheet({
   );
 
   return (
-    <ModalSheet ref={sheetRef} snapPoints={['80%', '95%']} onDismiss={onClose} stackBehavior="push" glass={false}>
-      <View style={[styles.container, { backgroundColor: systemColors.background }]}>
+    <ModalSheet ref={sheetRef} snapPoints={['80%', '95%']} onDismiss={onDismiss} stackBehavior="push">
+      <View style={styles.container}>
         <View style={styles.header}>
           <Text variant="title3">{t('mobile.filter.setters')}</Text>
           <Pressable onPress={onClose} hitSlop={8} accessibilityRole="button">

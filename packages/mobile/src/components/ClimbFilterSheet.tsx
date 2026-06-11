@@ -47,6 +47,7 @@ import { Icon } from './Icon';
 import { useTheme } from '../providers/theme-provider';
 import { useGrades, useSearchClimbsCount } from '../lib/graphql/hooks';
 import type { HoldsFilter } from '@boardsesh/shared-schema';
+import { buildFilterLabels, formatSettersLabel } from '../lib/filter-labels';
 import { useAuth } from '../providers/auth-provider';
 import { hapticSelection } from '../lib/haptics';
 import { springs } from '../theme/animations';
@@ -167,6 +168,7 @@ export function ClimbFilterSheet({
   // Bumped on Reset so the Refine/Advanced sections collapse back to default.
   const [sectionResetKey, setSectionResetKey] = useState(0);
   const [activeChildSheet, setActiveChildSheet] = useState<ActiveChildFilterSheet>(null);
+  const [mountedChildSheet, setMountedChildSheet] = useState<ActiveChildFilterSheet>(null);
 
   useEffect(() => {
     setLocalFilters(normalizeRetiredStatus(currentFilters));
@@ -259,6 +261,11 @@ export function ClimbFilterSheet({
       })),
     [accuracyLabels],
   );
+  const filterLabels = useMemo(() => buildFilterLabels(t), [t]);
+  const formatSetterSelection = useCallback(
+    (setters: readonly string[]) => formatSettersLabel(setters, filterLabels, t),
+    [filterLabels, t],
+  );
 
   const popularityLabel = useCallback(
     (bucket: number | undefined): string => {
@@ -346,21 +353,29 @@ export function ClimbFilterSheet({
 
   const openSetters = useCallback(() => {
     if (!boardConfig) return;
+    setMountedChildSheet('setters');
     setActiveChildSheet('setters');
   }, [boardConfig]);
 
   const openHoldFilter = useCallback(() => {
     if (!boardConfig) return;
+    setMountedChildSheet('holds');
     setActiveChildSheet('holds');
   }, [boardConfig]);
 
   const openZoneFilter = useCallback(() => {
     if (!boardConfig) return;
+    setMountedChildSheet('zone');
     setActiveChildSheet('zone');
   }, [boardConfig]);
 
   const closeChildSheet = useCallback(() => {
     setActiveChildSheet(null);
+  }, []);
+
+  const handleChildSheetDismiss = useCallback(() => {
+    setActiveChildSheet(null);
+    setMountedChildSheet(null);
   }, []);
 
   const handleSelectedSettersChange = useCallback((selectedSetters: string[]) => {
@@ -404,14 +419,14 @@ export function ClimbFilterSheet({
     else if (routesOn && bouldersOn) parts.push(t('mobile.filter.both'));
     if (localFilters.gradeAccuracy != null) parts.push(accuracyLabels[localFilters.gradeAccuracy]);
     if (localFilters.setter && localFilters.setter.length > 0) {
-      parts.push(t('mobile.search.settersCount', { count: localFilters.setter.length }));
+      parts.push(formatSetterSelection(localFilters.setter));
     }
     if (holdFilterCount > 0) parts.push(t('mobile.holdFilter.summaryCount', { count: holdFilterCount }));
     if (zoneActive) parts.push(t('mobile.zoneFilter.title'));
     if (localFilters.onlyTallClimbs) parts.push(t('mobile.filter.tallClimbs'));
     if (localFilters.onlyWideClimbs) parts.push(t('mobile.filter.wideClimbs'));
     return parts.join(' · ') || null;
-  }, [localFilters, accuracyLabels, holdFilterCount, zoneActive, t]);
+  }, [localFilters, accuracyLabels, holdFilterCount, zoneActive, formatSetterSelection, t]);
 
   const advancedSummary = useMemo(() => {
     const parts: string[] = [];
@@ -581,7 +596,7 @@ export function ClimbFilterSheet({
                 <View style={styles.tappableRowTrailing}>
                   <Text variant="footnote" style={styles.tappableRowValue}>
                     {localFilters.setter && localFilters.setter.length > 0
-                      ? t('mobile.search.settersCount', { count: localFilters.setter.length })
+                      ? formatSetterSelection(localFilters.setter)
                       : t('mobile.filter.none')}
                   </Text>
                   <Icon name="chevron.right" size={14} color={iosSystemColors.systemGray4} />
@@ -741,29 +756,38 @@ export function ClimbFilterSheet({
 
       {boardConfig ? (
         <>
-          <SettersFilterSheet
-            visible={activeChildSheet === 'setters'}
-            boardConfig={boardConfig}
-            selectedSetters={localFilters.setter ?? []}
-            onSelectedSettersChange={handleSelectedSettersChange}
-            onClose={closeChildSheet}
-          />
-          <HoldFilterEditorSheet
-            visible={activeChildSheet === 'holds'}
-            boardConfig={boardConfig}
-            holdsFilter={localBoardFilters.holdsFilter ?? {}}
-            onHoldsFilterChange={handleHoldsFilterChange}
-            onClose={closeChildSheet}
-          />
-          <ZoneFilterEditorSheet
-            visible={activeChildSheet === 'zone'}
-            boardConfig={boardConfig}
-            zoneBox={localBoardFilters.zoneBox ?? null}
-            zoneMode={localBoardFilters.zoneMode ?? 'allHolds'}
-            holdsFilter={localBoardFilters.holdsFilter ?? {}}
-            onZoneFilterChange={handleZoneFilterChange}
-            onClose={closeChildSheet}
-          />
+          {mountedChildSheet === 'setters' ? (
+            <SettersFilterSheet
+              visible={activeChildSheet === 'setters'}
+              boardConfig={boardConfig}
+              selectedSetters={localFilters.setter ?? []}
+              onSelectedSettersChange={handleSelectedSettersChange}
+              onClose={closeChildSheet}
+              onDismiss={handleChildSheetDismiss}
+            />
+          ) : null}
+          {mountedChildSheet === 'holds' ? (
+            <HoldFilterEditorSheet
+              visible={activeChildSheet === 'holds'}
+              boardConfig={boardConfig}
+              holdsFilter={localBoardFilters.holdsFilter ?? {}}
+              onHoldsFilterChange={handleHoldsFilterChange}
+              onClose={closeChildSheet}
+              onDismiss={handleChildSheetDismiss}
+            />
+          ) : null}
+          {mountedChildSheet === 'zone' ? (
+            <ZoneFilterEditorSheet
+              visible={activeChildSheet === 'zone'}
+              boardConfig={boardConfig}
+              zoneBox={localBoardFilters.zoneBox ?? null}
+              zoneMode={localBoardFilters.zoneMode ?? 'allHolds'}
+              holdsFilter={localBoardFilters.holdsFilter ?? {}}
+              onZoneFilterChange={handleZoneFilterChange}
+              onClose={closeChildSheet}
+              onDismiss={handleChildSheetDismiss}
+            />
+          ) : null}
         </>
       ) : null}
     </>

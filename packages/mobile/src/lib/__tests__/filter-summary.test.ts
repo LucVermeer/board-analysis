@@ -11,6 +11,8 @@ const mockGrades: Grade[] = [
   { difficultyId: 20, name: 'V8' },
 ];
 
+const text = (value: unknown) => (typeof value === 'string' || typeof value === 'number' ? String(value) : '');
+
 const mockT = ((key: string, options?: Record<string, unknown>) => {
   const translations: Record<string, string> = {
     'mobile.filter.title': 'Filters',
@@ -23,12 +25,14 @@ const mockT = ((key: string, options?: Record<string, unknown>) => {
   };
   if (translations[key]) return translations[key];
 
-  if (key === 'mobile.search.gradeRange') return `${options?.min}–${options?.max}`;
-  if (key === 'mobile.search.gradeMin') return `${options?.grade}+`;
-  if (key === 'mobile.search.gradeMax') return `≤${options?.grade}`;
-  if (key === 'mobile.search.ascents') return `${options?.count}+ 🧗`;
-  if (key === 'mobile.search.rating') return `${options?.count}+ ⭐`;
-  if (key === 'mobile.search.more') return `+${options?.count} more`;
+  if (key === 'mobile.search.gradeRange') return `${text(options?.min)}–${text(options?.max)}`;
+  if (key === 'mobile.search.gradeMin') return `${text(options?.grade)}+`;
+  if (key === 'mobile.search.gradeMax') return `≤${text(options?.grade)}`;
+  if (key === 'mobile.search.ascents') return `${text(options?.count)}+ 🧗`;
+  if (key === 'mobile.search.rating') return `${text(options?.count)}+ ⭐`;
+  if (key === 'mobile.search.more') return `+${text(options?.count)} more`;
+  if (key === 'mobile.search.setterName') return `By ${text(options?.setter)}`;
+  if (key === 'mobile.search.settersCount') return `${text(options?.count)} setters`;
 
   return key;
 }) as unknown as Parameters<typeof getFilterSummary>[3];
@@ -97,6 +101,16 @@ describe('getFilterSummary', () => {
   it('shows the beta videos filter part when enabled', () => {
     const filters: ClimbFilters = { ...DEFAULT_FILTERS, onlyWithBetaVideos: true };
     expect(getFilterSummary(filters, '', mockGrades, mockT)).toBe('mobile.filter.betaVideosShort');
+  });
+
+  it('shows the translated setter name when exactly one setter is selected', () => {
+    const filters: ClimbFilters = { ...DEFAULT_FILTERS, setter: ['marco'] };
+    expect(getFilterSummary(filters, '', mockGrades, mockT)).toBe('By marco');
+  });
+
+  it('shows the setter count when multiple setters are selected', () => {
+    const filters: ClimbFilters = { ...DEFAULT_FILTERS, setter: ['marco', 'jules'] };
+    expect(getFilterSummary(filters, '', mockGrades, mockT)).toBe('2 setters');
   });
 });
 
