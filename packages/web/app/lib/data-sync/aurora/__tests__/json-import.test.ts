@@ -427,6 +427,10 @@ describe('Aurora export climb name resolution', () => {
     ).toBe('emoji-name');
   });
 
+  it('normalizes DB climb names before checking the question-mark placeholder positions', () => {
+    expect(doesBoardClimbNameMatchAuroraQuestionPlaceholder('Friend Forever?', 'Ｆriend Forever👭')).toBe(true);
+  });
+
   it('checks the candidate against the specific export question-mark pattern', () => {
     expect(doesBoardClimbNameMatchAuroraQuestionPlaceholder('A?B', 'A😀B')).toBe(true);
     expect(doesBoardClimbNameMatchAuroraQuestionPlaceholder('AB?', 'A😀B')).toBe(false);
@@ -454,6 +458,14 @@ describe('Aurora export climb name resolution', () => {
         'current-user',
       ),
     ).toBe(false);
+  });
+
+  it('allows null isDraft catalog rows as non-draft matches', () => {
+    expect(
+      isClimbNameResolutionCandidateAllowed(
+        candidate({ uuid: 'null-draft-catalog', name: 'Stige-spillet', isDraft: null, isListed: false, userId: null }),
+      ),
+    ).toBe(true);
   });
 
   it("allows the current user's own climbs but rejects another user's drafts", () => {
