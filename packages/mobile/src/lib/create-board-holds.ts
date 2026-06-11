@@ -81,6 +81,7 @@ export function prewarmCreateBoardHolds(cfg: CreateBoardHoldsConfig): void {
   getCreateBoardHolds(cfg);
 }
 
+// @test-only: production code should share the module-level hold geometry cache.
 export function clearCreateBoardHoldsCache(): void {
   createBoardHoldsCache.clear();
 }

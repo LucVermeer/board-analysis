@@ -25,11 +25,28 @@ vi.mock('react-native', () => ({
 vi.mock('react-native-reanimated', () => ({
   // Animated.View → plain div; the zoom style is irrelevant to behaviour here.
   default: { View: ({ children }: StyleProps) => createElement('div', { 'data-animated': 'true' }, children) },
+  runOnJS: (handler: (...args: unknown[]) => unknown) => handler,
 }));
 
-vi.mock('react-native-gesture-handler', () => ({
-  GestureDetector: ({ children }: ChildrenProps) => createElement('div', { 'data-gesture': 'true' }, children),
-}));
+vi.mock('react-native-gesture-handler', () => {
+  const createGesture = () => {
+    const gesture = {
+      maxDuration: () => gesture,
+      maxDistance: () => gesture,
+      minDuration: () => gesture,
+      onStart: () => gesture,
+    };
+    return gesture;
+  };
+  return {
+    Gesture: {
+      Tap: createGesture,
+      LongPress: createGesture,
+      Exclusive: (...gestures: unknown[]) => ({ gestures }),
+    },
+    GestureDetector: ({ children }: ChildrenProps) => createElement('div', { 'data-gesture': 'true' }, children),
+  };
+});
 
 vi.mock('../../play-drawer/use-zoom-pan-gesture', () => ({
   useZoomPanGesture: () => ({
@@ -66,14 +83,19 @@ vi.mock('../../Text', () => ({
 // assert it routes back through onHoldTap (wired to onPaint).
 type HoldTargetLayerMockProps = {
   holdTargets: BoardHoldTarget[];
+  showAllHolds: boolean;
   showHoldMarkers?: boolean;
   onPaint: (id: number) => void;
 };
 vi.mock('../../create-climb/HoldTargetLayer', () => ({
-  HoldTargetLayer: ({ holdTargets, showHoldMarkers, onPaint }: HoldTargetLayerMockProps) =>
+  HoldTargetLayer: ({ holdTargets, showAllHolds, showHoldMarkers, onPaint }: HoldTargetLayerMockProps) =>
     createElement(
       'div',
-      { 'data-hold-layer': 'true', 'data-show-hold-markers': String(showHoldMarkers) },
+      {
+        'data-hold-layer': 'true',
+        'data-show-all-holds': String(showAllHolds),
+        'data-show-hold-markers': String(showHoldMarkers),
+      },
       holdTargets.map((hold) =>
         createElement('button', { key: hold.id, 'data-hold-id': hold.id, onClick: () => onPaint(hold.id) }),
       ),
@@ -148,6 +170,7 @@ describe('InteractiveFilterBoard', () => {
   it('can hide visible hold markers while keeping tap targets', () => {
     const { container } = renderBoard({ showHoldMarkers: false });
     const holdLayer = container.querySelector('[data-hold-layer="true"]');
+    expect(holdLayer?.getAttribute('data-show-all-holds')).toBe('true');
     expect(holdLayer?.getAttribute('data-show-hold-markers')).toBe('false');
     expect(container.querySelectorAll('[data-hold-id]').length).toBe(holdTargets.length);
   });

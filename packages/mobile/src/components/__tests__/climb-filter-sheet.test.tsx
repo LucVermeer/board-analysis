@@ -25,6 +25,7 @@ const bottomSheetModalProps = vi.hoisted(() => ({
     enablePanDownToClose?: boolean;
     enableContentPanningGesture?: boolean;
     enableHandlePanningGesture?: boolean;
+    onDismiss?: () => void;
   },
 }));
 
@@ -383,6 +384,53 @@ describe('ClimbFilterSheet child filters', () => {
     fireEvent.click(rendered.getByText('mobile.filter.showCount12'));
 
     expect(onApply).toHaveBeenCalledWith({ ...currentFilters, setter: ['stacked-setter'] }, currentBoardFilters);
+  });
+
+  it('syncs parent filters again after dismissing without Apply', () => {
+    const onApply = vi.fn();
+    const rendered = renderFilterSheet({ onApply });
+
+    fireEvent.click(rendered.getByLabelText('mobile.filter.setters'));
+    fireEvent.click(rendered.getByText('setters-change'));
+
+    bottomSheetModalProps.latest?.onDismiss?.();
+    rendered.rerender(
+      <ClimbFilterSheet
+        {...rendered.props}
+        currentFilters={{ ...currentFilters, setter: ['parent-update'] }}
+        currentBoardFilters={{ ...currentBoardFilters, onlyBenchmarks: true }}
+      />,
+    );
+    fireEvent.click(rendered.getByText('mobile.filter.showCount12'));
+
+    expect(onApply).toHaveBeenCalledWith(
+      { ...currentFilters, setter: ['parent-update'] },
+      { ...currentBoardFilters, onlyBenchmarks: true },
+    );
+  });
+
+  it('syncs parent filters again after Reset then dismiss without Apply', () => {
+    const onApply = vi.fn();
+    const rendered = renderFilterSheet({ onApply });
+
+    fireEvent.click(rendered.getByLabelText('mobile.filter.setters'));
+    fireEvent.click(rendered.getByText('setters-change'));
+    fireEvent.click(rendered.getByText('mobile.filter.reset'));
+
+    bottomSheetModalProps.latest?.onDismiss?.();
+    rendered.rerender(
+      <ClimbFilterSheet
+        {...rendered.props}
+        currentFilters={{ ...currentFilters, setter: ['parent-update'] }}
+        currentBoardFilters={{ ...currentBoardFilters, onlyBenchmarks: true }}
+      />,
+    );
+    fireEvent.click(rendered.getByText('mobile.filter.showCount12'));
+
+    expect(onApply).toHaveBeenCalledWith(
+      { ...currentFilters, setter: ['parent-update'] },
+      { ...currentBoardFilters, onlyBenchmarks: true },
+    );
   });
 
   it('opens the hold editor sheet above the filter sheet', () => {

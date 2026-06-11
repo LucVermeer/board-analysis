@@ -368,11 +368,17 @@ export function ClimbFilterSheet({
     sheetRef.current?.dismiss();
   }, [localFilters, localBoardFilters, onApply]);
 
+  const handleSheetDismiss = useCallback(() => {
+    hasLocalDraftEditsRef.current = false;
+    onDismiss();
+  }, [onDismiss]);
+
   const handleReset = useCallback(() => {
     hapticSelection();
     updateLocalFilters(DEFAULT_FILTERS);
     updateLocalBoardFilters(DEFAULT_CLIMB_BOARD_FILTER_STATE);
     setRefineExpanded(false);
+    hasLocalDraftEditsRef.current = false;
     setSectionResetKey((key) => key + 1);
   }, [updateLocalBoardFilters, updateLocalFilters]);
 
@@ -537,7 +543,7 @@ export function ClimbFilterSheet({
         enableContentPanningGesture={!childSheetOpen}
         enableHandlePanningGesture={!childSheetOpen}
         backdropComponent={renderBackdrop}
-        onDismiss={onDismiss}
+        onDismiss={handleSheetDismiss}
         handleIndicatorStyle={styles.indicator}
         backgroundComponent={GlassSheetBackground}
       >
@@ -628,6 +634,8 @@ export function ClimbFilterSheet({
 
           <View style={styles.sectionsContainer}>
             {/* REFINE — mid-band controls, opt-in. */}
+            {/* `defaultExpanded` is read when `sectionResetKey` remounts this
+                section; Reset clears `refineExpanded` before bumping the key. */}
             <CollapsibleSection
               title={t('mobile.filter.section.refine')}
               defaultExpanded={refineExpanded}
