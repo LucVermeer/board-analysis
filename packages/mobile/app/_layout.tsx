@@ -25,6 +25,7 @@ import {
 import { SystemBars } from 'react-native-edge-to-edge';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { BottomSheetModalProvider } from '@expo/ui/community/bottom-sheet';
+import { SQLiteProvider } from 'expo-sqlite';
 import { QueryProvider } from '../src/providers/query-provider';
 import { ThemeProvider, useTheme } from '../src/providers/theme-provider';
 import { MaterialThemeProvider } from '../src/providers/material-theme-provider';
@@ -54,6 +55,7 @@ import { BoardProvider } from '@boardsesh/board-react';
 import { toBoardName } from '@boardsesh/board-config';
 import { PersistentQueueBar } from '../src/components/queue-control/persistent-queue-bar';
 import { UserDrawerProvider } from '../src/components/user-drawer/UserDrawerProvider';
+import { OfflineSyncBridge } from '../src/components/offline-sync-bridge';
 import { useMobileClimbActionsData } from '../src/lib/graphql/hooks';
 import { useActiveBoard } from '../src/lib/graphql/use-active-board';
 import { ScreenshotBoardAutoActivator } from '../src/components/screenshot-board-auto-activator';
@@ -74,6 +76,7 @@ import { InstallReferrerTracker } from '../src/components/analytics/InstallRefer
 import { OnboardingGate } from '../src/components/onboarding/OnboardingGate';
 import { AccessoryOnboardingTip } from '../src/components/onboarding/AccessoryOnboardingTip';
 import { FreezeDebugOverlay } from '../src/components/FreezeDebugOverlay';
+import { DATABASE_NAME, initializeDatabase } from '../src/db';
 
 void SplashScreen.preventAutoHideAsync();
 
@@ -104,6 +107,12 @@ function buildStaticFeatureFlags(): FeatureFlags | undefined {
 }
 
 const STATIC_FEATURE_FLAGS = buildStaticFeatureFlags();
+
+function handleDatabaseError(error: Error): void {
+  if (__DEV__) {
+    console.warn('[SQLite] database initialization failed; running without local storage:', error);
+  }
+}
 
 const errorStyles = StyleSheet.create({
   container: {
@@ -321,6 +330,7 @@ function RootLayout() {
       <AnalyticsProvider>
         <I18nProvider>
           <QueryProvider>
+            <SQLiteProvider databaseName={DATABASE_NAME} onInit={initializeDatabase} onError={handleDatabaseError}>
             <ThemeProvider>
               <MaterialThemeProvider>
                 {/* Inside MaterialThemeProvider (Paper Portal host) and above every
@@ -507,6 +517,7 @@ function RootLayout() {
                                                                 </Stack>
                                                               </ThemedNavigation>
                                                               <PersistentQueueBar />
+                                                                <OfflineSyncBridge />
                                                               {/* One-time tip floating above the tab bar / accessory bar,
                                                             mounted next to PersistentQueueBar so it watches climb
                                                             presence globally and overlays both the native (iOS 26) and
@@ -546,6 +557,7 @@ function RootLayout() {
                 </DialogProvider>
               </MaterialThemeProvider>
             </ThemeProvider>
+            </SQLiteProvider>
           </QueryProvider>
         </I18nProvider>
       </AnalyticsProvider>
