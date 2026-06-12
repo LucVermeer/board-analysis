@@ -133,13 +133,13 @@ export function MobileBoardPresenceProvider({ children }: { children: ReactNode 
     setBoardId(null);
     try {
       const resolved = await activeClient.resolveBoardForSerial(args);
-      if (resolveGenerationRef.current !== resolveGeneration || lastResolvedSerialRef.current !== args.serial) {
+      if (resolveGenerationRef.current !== resolveGeneration) {
         return null;
       }
       setBoardId(resolved.boardId);
       return resolved;
     } catch (error) {
-      if (resolveGenerationRef.current === resolveGeneration && lastResolvedSerialRef.current === args.serial) {
+      if (resolveGenerationRef.current === resolveGeneration) {
         lastResolvedSerialRef.current = null;
       }
       console.warn('[board-presence] resolveBoardForSerial failed', error);

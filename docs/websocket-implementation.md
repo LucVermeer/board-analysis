@@ -7,17 +7,18 @@ This document describes the WebSocket implementation used for real-time party se
 1. [Architecture Overview](#architecture-overview)
 2. [Technology Stack](#technology-stack)
 3. [Connection Flow](#connection-flow)
-4. [Backend URL Resolution](#backend-url-resolution)
-5. [Session Management](#session-management)
-6. [Queue State Synchronization](#queue-state-synchronization)
-7. [Multi-Instance Support](#multi-instance-support)
-8. [Failure States and Recovery](#failure-states-and-recovery)
-9. [Client-Side Connection Supervisor](#client-side-connection-supervisor)
-10. [Data Persistence Strategy](#data-persistence-strategy)
-11. [iOS Live Activity Integration](#ios-live-activity-integration)
-12. [Live Activity Push Notifications (APNs)](#live-activity-push-notifications-apns)
-13. [Activity Push Token Lifecycle](#activity-push-token-lifecycle)
-14. [Widget Navigation REST Endpoint](#widget-navigation-rest-endpoint)
+4. [Board Presence Wall Feed](#board-presence-wall-feed)
+5. [Backend URL Resolution](#backend-url-resolution)
+6. [Session Management](#session-management)
+7. [Queue State Synchronization](#queue-state-synchronization)
+8. [Multi-Instance Support](#multi-instance-support)
+9. [Failure States and Recovery](#failure-states-and-recovery)
+10. [Client-Side Connection Supervisor](#client-side-connection-supervisor)
+11. [Data Persistence Strategy](#data-persistence-strategy)
+12. [iOS Live Activity Integration](#ios-live-activity-integration)
+13. [Live Activity Push Notifications (APNs)](#live-activity-push-notifications-apns)
+14. [Activity Push Token Lifecycle](#activity-push-token-lifecycle)
+15. [Widget Navigation REST Endpoint](#widget-navigation-rest-endpoint)
 
 ---
 
@@ -305,6 +306,20 @@ The `getBaseBoardPath()` utility in `url-utils.ts` extracts the stable board con
 - `/{angle}` - board angle (numeric segment at end)
 
 This ensures `BoardSessionBridge` only calls `activateSession()` when the actual board configuration changes, not when users swipe between climbs or adjust the board angle.
+
+---
+
+## Board Presence Wall Feed
+
+Board presence powers the mobile "now on the wall" feed, board sheet history, and board sheet stats. It is independent of party-session join: the mobile app resolves a board id for the wall feed before subscribing to `boardNowPlaying` or fetching board-presence history/stats.
+
+Mobile resolves the feed board id in this order:
+
+1. `resolveBoardForUuid(boardUuid)` for the selected named board. This is the default board-sheet path and binds to the actual `user_boards` row, so stats/history are available before Bluetooth connects and stay aligned with board-scoped ticks.
+2. `resolveBoardForSerial(serial, boardType, layoutId, sizeId, setIds)` after a BLE connection when the controller exposes a serial. This keeps everyone at the same physical wall converged on the same board id.
+3. `resolveBoardForConfig(boardType, layoutId, sizeId, setIds)` only when no serial is available, giving serial-less boards a per-config fallback feed.
+
+Each resolver stamps short-lived proof-of-presence for the authenticated user before `reportBoardClimb` will accept a wall-feed report. On the mobile client, starting a newer UUID/config/serial resolve clears the previous board id and stale async results are ignored by a resolve-generation guard, so the sheet does not temporarily show another selected board's feed.
 
 ---
 
