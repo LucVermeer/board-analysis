@@ -14,6 +14,7 @@ type BluetoothCtx = {
   isConnected: boolean;
   connect: () => Promise<boolean>;
   disconnect: () => Promise<void>;
+  armUndoWallChangeToast: () => void;
 } | null;
 
 const ctrl = vi.hoisted(() => ({
@@ -467,14 +468,24 @@ describe('ClimbTopChrome', () => {
   });
 
   it('shows a disconnected lightbulb when not connected', () => {
-    ctrl.bluetooth = { isConnected: false, connect: vi.fn().mockResolvedValue(true), disconnect: vi.fn() };
+    ctrl.bluetooth = {
+      isConnected: false,
+      connect: vi.fn().mockResolvedValue(true),
+      disconnect: vi.fn(),
+      armUndoWallChangeToast: vi.fn(),
+    };
     const { container } = render(<ClimbTopChrome {...makeProps()} />);
     expect(lightbulb(container)).not.toBeNull();
     expect(container.querySelector('[data-icon="lightbulb"]')).not.toBeNull();
   });
 
   it('shows a connected lightbulb when connected', () => {
-    ctrl.bluetooth = { isConnected: true, connect: vi.fn(), disconnect: vi.fn().mockResolvedValue(undefined) };
+    ctrl.bluetooth = {
+      isConnected: true,
+      connect: vi.fn(),
+      disconnect: vi.fn().mockResolvedValue(undefined),
+      armUndoWallChangeToast: vi.fn(),
+    };
     const { container } = render(<ClimbTopChrome {...makeProps()} />);
     expect(lightbulb(container)).not.toBeNull();
     expect(container.querySelector('[data-icon="lightbulb.fill"]')).not.toBeNull();
@@ -483,9 +494,11 @@ describe('ClimbTopChrome', () => {
   it('connects on lightbulb press when disconnected', () => {
     const connect = vi.fn().mockResolvedValue(true);
     const disconnect = vi.fn().mockResolvedValue(undefined);
-    ctrl.bluetooth = { isConnected: false, connect, disconnect };
+    const armUndoWallChangeToast = vi.fn();
+    ctrl.bluetooth = { isConnected: false, connect, disconnect, armUndoWallChangeToast };
     const { container } = render(<ClimbTopChrome {...makeProps()} />);
     fireEvent.click(lightbulb(container)!);
+    expect(armUndoWallChangeToast).toHaveBeenCalledTimes(1);
     expect(connect).toHaveBeenCalledTimes(1);
     expect(disconnect).not.toHaveBeenCalled();
     expect(haptics.light).toHaveBeenCalledTimes(1);
@@ -494,11 +507,13 @@ describe('ClimbTopChrome', () => {
   it('disconnects on lightbulb press when connected', () => {
     const connect = vi.fn().mockResolvedValue(true);
     const disconnect = vi.fn().mockResolvedValue(undefined);
-    ctrl.bluetooth = { isConnected: true, connect, disconnect };
+    const armUndoWallChangeToast = vi.fn();
+    ctrl.bluetooth = { isConnected: true, connect, disconnect, armUndoWallChangeToast };
     const { container } = render(<ClimbTopChrome {...makeProps()} />);
     fireEvent.click(lightbulb(container)!);
     expect(disconnect).toHaveBeenCalledTimes(1);
     expect(connect).not.toHaveBeenCalled();
+    expect(armUndoWallChangeToast).not.toHaveBeenCalled();
   });
 
   it('reports its measured height through onHeightChange via onLayout', () => {

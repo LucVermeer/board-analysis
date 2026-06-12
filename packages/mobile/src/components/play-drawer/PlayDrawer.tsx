@@ -534,6 +534,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
       // without releasing wall control, so it relights in one tap. No control
       // changes hands here, and connect() already emits BluetoothConnectionSuccess,
       // so we don't fire 'Wall Control Taken' (which would inflate party-take counts).
+      bluetooth.armUndoWallChangeToast();
       void bluetooth.connect(undefined, undefined, bluetooth.reconnectSerialForCurrentBoard ?? undefined);
       return;
     }
@@ -548,6 +549,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
         climbUuid: displayedClimb?.uuid ?? null,
       });
       const reconnectSerialForBoard = bluetooth.reconnectSerialForCurrentBoard;
+      bluetooth.armUndoWallChangeToast();
       if (reconnectSerialForBoard) {
         void bluetooth.connect(undefined, undefined, reconnectSerialForBoard);
       } else {
@@ -562,6 +564,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
       if (!bluetooth) return;
       // Already connected — re-light the current climb. Re-tapping the lightbulb
       // re-pushes the wall (and trips disconnect detection if the link is dead).
+      bluetooth.armUndoWallChangeToast();
       bluetooth.reassertWall();
       setDrawerPreviewItem(null);
       track('Wall Control Taken', {
@@ -584,6 +587,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
     wallControlPressOperationRef.current = operationId;
     setDrawerPreviewItem(null);
     setPendingClimbUuid(displayedClimb.uuid);
+    bluetooth?.armUndoWallChangeToast();
     const takeControlOptions = drawerPreviewSuggestionSource
       ? { playlistSuggestionSource: drawerPreviewSuggestionSource }
       : undefined;

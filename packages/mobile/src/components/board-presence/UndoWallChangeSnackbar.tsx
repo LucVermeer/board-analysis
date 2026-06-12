@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { Pressable, StyleSheet, View, type ViewStyle } from 'react-native';
 import Animated, { FadeInDown, FadeOutDown } from 'react-native-reanimated';
-import { Snackbar } from 'react-native-paper';
+import { Portal, Snackbar } from 'react-native-paper';
 import { useTranslation } from 'react-i18next';
 import { Text } from '../Text';
 import { borderRadius, spacing, shadowColor } from '../../theme/tokens';
@@ -32,10 +32,14 @@ type UndoWallChangeSnackbarProps = {
  */
 export function UndoWallChangeSnackbar(props: UndoWallChangeSnackbarProps) {
   const { variant: uiVariant } = useTheme();
-  return uiVariant === 'material' ? (
-    <UndoWallChangeSnackbarMaterial {...props} />
-  ) : (
-    <UndoWallChangeSnackbarGlass {...props} />
+  return (
+    <Portal>
+      {uiVariant === 'material' ? (
+        <UndoWallChangeSnackbarMaterial {...props} />
+      ) : (
+        <UndoWallChangeSnackbarGlass {...props} />
+      )}
+    </Portal>
   );
 }
 

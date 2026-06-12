@@ -8,7 +8,12 @@ type BoardFields = Pick<
   UserBoard,
   'name' | 'angle' | 'boardType' | 'sizeName' | 'layoutName' | 'layoutId' | 'isAngleAdjustable'
 >;
-type BluetoothCtx = { isConnected: boolean; connect: () => Promise<boolean>; disconnect: () => Promise<void> } | null;
+type BluetoothCtx = {
+  isConnected: boolean;
+  connect: () => Promise<boolean>;
+  disconnect: () => Promise<void>;
+  armUndoWallChangeToast: () => void;
+} | null;
 
 const ctrl = vi.hoisted(() => ({
   board: null as BoardFields | null,
@@ -172,7 +177,12 @@ describe('DiscoverTopChrome', () => {
     const { container, rerender } = render(<DiscoverTopChrome {...makeProps()} />);
     expect(lightbulb(container)).toBeNull();
 
-    ctrl.bluetooth = { isConnected: true, connect: vi.fn(), disconnect: vi.fn().mockResolvedValue(undefined) };
+    ctrl.bluetooth = {
+      isConnected: true,
+      connect: vi.fn(),
+      disconnect: vi.fn().mockResolvedValue(undefined),
+      armUndoWallChangeToast: vi.fn(),
+    };
     rerender(<DiscoverTopChrome {...makeProps()} />);
     expect(lightbulb(container)).not.toBeNull();
     expect(container.querySelector('[data-icon="lightbulb.fill"]')).not.toBeNull();

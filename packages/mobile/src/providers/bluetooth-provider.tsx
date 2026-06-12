@@ -52,6 +52,11 @@ type BluetoothContextValue = {
    */
   undoWallChange: () => Promise<boolean>;
   /**
+   * Show the undo affordance for the next accepted wall report only. UI control
+   * surfaces call this immediately before a deliberate control-gain action.
+   */
+  armUndoWallChangeToast: () => void;
+  /**
    * Serial to silently reconnect to for the board currently in view, or null
    * when nothing is remembered or the user switched boards — in which case
    * callers open the device picker instead.
@@ -64,6 +69,7 @@ const EMPTY_PICKER_DEVICES: [] = [];
 // How long a switch-to-config auto-connect request stays armed waiting for the
 // switched board's props to reach this provider before it is dropped.
 const PENDING_AUTO_CONNECT_TTL_MS = 15_000;
+const UNDO_WALL_CHANGE_TOAST_ARM_TTL_MS = 10_000;
 
 function formatPickerBoardConfig(t: TFunction<'settings'>, config: BleBoardConfig): string {
   return t('boardConfigMismatch.mobileConfigValue', {
@@ -77,6 +83,7 @@ function formatPickerBoardConfig(t: TFunction<'settings'>, config: BleBoardConfi
 type PendingWallReport = {
   item: ClimbQueueItem;
   undoTarget: BoardPresenceClimb | null;
+  showUndoToast: boolean;
 };
 
 function queueItemReportSignature(item: ClimbQueueItem): string {
@@ -348,6 +355,43 @@ export function BluetoothProvider({
   const resolvedPresenceBoardIdRef = useRef<number | null>(presenceBoardId);
   const undoWallChangeTargetRef = useRef<BoardPresenceClimb | null>(null);
   const previousPresenceBoardIdRef = useRef<number | null>(presenceBoardId);
+  const boardConfigIdentity = `${boardName ?? ''}:${layoutId ?? ''}:${sizeId ?? ''}:${setIds ?? ''}`;
+  const previousBoardConfigIdentityRef = useRef(boardConfigIdentity);
+  const undoWallChangeToastArmedRef = useRef(false);
+  const undoWallChangeToastArmTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearUndoWallChangeToastArm = useCallback(() => {
+    undoWallChangeToastArmedRef.current = false;
+    if (undoWallChangeToastArmTimeoutRef.current) {
+      clearTimeout(undoWallChangeToastArmTimeoutRef.current);
+      undoWallChangeToastArmTimeoutRef.current = null;
+    }
+  }, []);
+
+  const armUndoWallChangeToast = useCallback(() => {
+    clearUndoWallChangeToastArm();
+    undoWallChangeToastArmedRef.current = true;
+    undoWallChangeToastArmTimeoutRef.current = setTimeout(() => {
+      undoWallChangeToastArmedRef.current = false;
+      undoWallChangeToastArmTimeoutRef.current = null;
+    }, UNDO_WALL_CHANGE_TOAST_ARM_TTL_MS);
+  }, [clearUndoWallChangeToastArm]);
+
+  const consumeUndoWallChangeToastArm = useCallback(() => {
+    const wasArmed = undoWallChangeToastArmedRef.current;
+    clearUndoWallChangeToastArm();
+    return wasArmed;
+  }, [clearUndoWallChangeToastArm]);
+
+  useEffect(() => clearUndoWallChangeToastArm, [clearUndoWallChangeToastArm]);
+
+  useEffect(() => {
+    const previousBoardConfigIdentity = previousBoardConfigIdentityRef.current;
+    previousBoardConfigIdentityRef.current = boardConfigIdentity;
+    if (previousBoardConfigIdentity !== boardConfigIdentity) {
+      clearUndoWallChangeToastArm();
+    }
+  }, [boardConfigIdentity, clearUndoWallChangeToastArm]);
 
   useEffect(() => {
     if (presenceBoardId !== null) {
@@ -374,11 +418,12 @@ export function BluetoothProvider({
       lastAcceptedReportSignatureRef.current = null;
       pendingWallReportRef.current = null;
       undoWallChangeTargetRef.current = null;
+      clearUndoWallChangeToastArm();
     }
-  }, [presenceBoardId]);
+  }, [clearUndoWallChangeToastArm, presenceBoardId]);
 
   const reportWallClimb = useCallback(
-    async (item: ClimbQueueItem, boardId: number, undoTarget: BoardPresenceClimb | null) => {
+    async (item: ClimbQueueItem, boardId: number, undoTarget: BoardPresenceClimb | null, showUndoToast: boolean) => {
       const reportSignature = queueItemReportSignature(item);
       if (
         lastAcceptedReportSignatureRef.current === reportSignature &&
@@ -406,7 +451,7 @@ export function BluetoothProvider({
         climbUuid: item.climb.uuid,
         inSession: sessionIdRef.current != null,
       });
-      if (undoTarget?.frames) {
+      if (showUndoToast && undoTarget?.frames) {
         showUndoWallChangeSnackbarRef.current();
       }
       return true;
@@ -419,7 +464,7 @@ export function BluetoothProvider({
       const pendingReport = pendingWallReportRef.current;
       if (!pendingReport) return;
       pendingWallReportRef.current = null;
-      void reportWallClimb(pendingReport.item, boardId, pendingReport.undoTarget);
+      void reportWallClimb(pendingReport.item, boardId, pendingReport.undoTarget, pendingReport.showUndoToast);
     },
     [reportWallClimb],
   );
@@ -436,15 +481,16 @@ export function BluetoothProvider({
       if (!presenceEnabledRef.current) return;
       const boardId = presenceBoardIdRef.current ?? resolvedPresenceBoardIdRef.current;
       const undoTarget = wallCurrentClimbRef.current;
+      const showUndoToast = consumeUndoWallChangeToastArm();
       if (boardId === null) {
         if (pendingPresenceResolveRef.current) {
-          pendingWallReportRef.current = { item, undoTarget };
+          pendingWallReportRef.current = { item, undoTarget, showUndoToast };
         }
         return;
       }
-      void reportWallClimb(item, boardId, undoTarget);
+      void reportWallClimb(item, boardId, undoTarget, showUndoToast);
     },
-    [confirmClimbOnWall, reportWallClimb],
+    [confirmClimbOnWall, consumeUndoWallChangeToastArm, reportWallClimb],
   );
 
   const handleConnectSuccess = useCallback(
@@ -774,6 +820,7 @@ export function BluetoothProvider({
 
   // Wrap disconnect to track user-initiated disconnects
   const wrappedDisconnect = useCallback(async () => {
+    clearUndoWallChangeToastArm();
     isUserDisconnectRef.current = true;
     track(SHARED_EVENTS.BluetoothDisconnected, { boardName, reason: 'user', inSession: sessionIdRef.current != null });
     try {
@@ -787,7 +834,7 @@ export function BluetoothProvider({
     } finally {
       isUserDisconnectRef.current = false;
     }
-  }, [disconnect, boardName]);
+  }, [clearUndoWallChangeToastArm, disconnect, boardName]);
 
   // Register with the module-level status store so consumers rendered outside
   // this provider (e.g. the root tab bar, the long-press BLE controls sheet) can
@@ -809,6 +856,7 @@ export function BluetoothProvider({
   // drop frequency stays visible in analytics.
   useEffect(() => {
     if (wasConnectedRef.current && !isConnected && !isUserDisconnectRef.current) {
+      clearUndoWallChangeToastArm();
       track(SHARED_EVENTS.BluetoothDisconnected, {
         boardName,
         reason: 'unexpected',
@@ -816,7 +864,7 @@ export function BluetoothProvider({
       });
     }
     wasConnectedRef.current = isConnected;
-  }, [isConnected, boardName]);
+  }, [clearUndoWallChangeToastArm, isConnected, boardName]);
 
   const value = useMemo<BluetoothContextValue>(
     () => ({
@@ -828,6 +876,7 @@ export function BluetoothProvider({
       clearBoard,
       reassertWall,
       undoWallChange,
+      armUndoWallChangeToast,
       reconnectSerialForCurrentBoard,
     }),
     [
@@ -839,6 +888,7 @@ export function BluetoothProvider({
       clearBoard,
       reassertWall,
       undoWallChange,
+      armUndoWallChangeToast,
       reconnectSerialForCurrentBoard,
     ],
   );
