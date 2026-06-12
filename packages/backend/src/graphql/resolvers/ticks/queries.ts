@@ -242,6 +242,7 @@ export const tickQueries = {
         toDate?: string;
       };
     },
+    ctx?: ConnectionContext,
   ): Promise<{
     items: unknown[];
     totalCount: number;
@@ -326,6 +327,9 @@ export const tickQueries = {
         setterUsername: dbSchema.boardClimbs.setterUsername,
         layoutId: dbSchema.boardClimbs.layoutId,
         frames: dbSchema.boardClimbs.frames,
+        boardName: dbSchema.userBoards.name,
+        boardIsPublic: dbSchema.userBoards.isPublic,
+        boardIsUnlisted: dbSchema.userBoards.isUnlisted,
         difficultyName: dbSchema.boardDifficultyGrades.boulderName,
         consensusDifficulty: consensusDifficultyExpr,
         consensusDifficultyName: consensusDifficultyNameExpr,
@@ -333,6 +337,7 @@ export const tickQueries = {
         qualityAverage: dbSchema.boardClimbStats.qualityAverage,
       })
       .from(dbSchema.boardseshTicks)
+      .leftJoin(dbSchema.userBoards, eq(dbSchema.boardseshTicks.boardId, dbSchema.userBoards.id))
       // Resolve dedup-merged climbs to their canonical UUID before joining
       // board_climbs / board_climb_stats. See the `ticks` resolver for rationale.
       .leftJoin(
@@ -481,35 +486,44 @@ export const tickQueries = {
         setterUsername,
         layoutId,
         frames,
+        boardName,
+        boardIsPublic,
+        boardIsUnlisted,
         difficultyName,
         consensusDifficulty,
         consensusDifficultyName,
         resolvedIsBenchmark,
         qualityAverage,
-      }) => ({
-        uuid: tick.uuid,
-        climbUuid: tick.climbUuid,
-        climbName: climbName || 'Unknown Climb',
-        setterUsername,
-        boardType: tick.boardType,
-        layoutId,
-        angle: tick.angle,
-        isMirror: tick.isMirror,
-        status: tick.status,
-        attemptCount: tick.attemptCount,
-        quality: tick.quality,
-        difficulty: tick.difficulty,
-        difficultyName,
-        consensusDifficulty:
-          consensusDifficulty !== null && consensusDifficulty !== undefined ? Number(consensusDifficulty) : null,
-        consensusDifficultyName,
-        isBenchmark: Boolean(resolvedIsBenchmark),
-        isNoMatch: isNoMatchClimb(climbDescription),
-        qualityAverage: qualityAverage != null ? Number(qualityAverage) : null,
-        comment: tick.comment || '',
-        climbedAt: tick.climbedAt,
-        frames,
-      }),
+      }) => {
+        const canShowBoard =
+          tick.boardId != null && (ctx?.userId === userId || (boardIsPublic === true && boardIsUnlisted !== true));
+        return {
+          uuid: tick.uuid,
+          climbUuid: tick.climbUuid,
+          climbName: climbName || 'Unknown Climb',
+          setterUsername,
+          boardType: tick.boardType,
+          boardId: canShowBoard ? tick.boardId : null,
+          boardDisplayName: canShowBoard ? boardName : null,
+          layoutId,
+          angle: tick.angle,
+          isMirror: tick.isMirror,
+          status: tick.status,
+          attemptCount: tick.attemptCount,
+          quality: tick.quality,
+          difficulty: tick.difficulty,
+          difficultyName,
+          consensusDifficulty:
+            consensusDifficulty !== null && consensusDifficulty !== undefined ? Number(consensusDifficulty) : null,
+          consensusDifficultyName,
+          isBenchmark: Boolean(resolvedIsBenchmark),
+          isNoMatch: isNoMatchClimb(climbDescription),
+          qualityAverage: qualityAverage != null ? Number(qualityAverage) : null,
+          comment: tick.comment || '',
+          climbedAt: tick.climbedAt,
+          frames,
+        };
+      },
     );
 
     return {

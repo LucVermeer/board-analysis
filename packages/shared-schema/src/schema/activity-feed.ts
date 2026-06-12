@@ -17,6 +17,10 @@ export const activityFeedTypeDefs = /* GraphQL */ `
     setterUsername: String
     "Board type"
     boardType: String!
+    "Specific board entity id, when this ascent is safe to associate with a named board"
+    boardId: Int
+    "Specific board display name, when this ascent is safe to associate with a named board"
+    boardDisplayName: String
     "Layout ID"
     layoutId: Int
     "Board angle"

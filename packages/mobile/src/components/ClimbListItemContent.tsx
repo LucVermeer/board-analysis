@@ -52,7 +52,7 @@ type ClimbListItemContentProps = {
   sizeId: number;
   setIds: string;
   angle: number;
-  subtitleLeadingParts?: readonly string[];
+  subtitleDetailParts?: readonly string[];
   /**
    * Whether to render the trailing ascent-status glyph. Defaults to true. Set
    * false where the host already shows the ascent status (e.g. the in-session
@@ -114,7 +114,7 @@ const ClimbListItemContent = React.memo(function ClimbListItemContent({
   sizeId,
   setIds,
   angle,
-  subtitleLeadingParts,
+  subtitleDetailParts,
   showAscentStatus = true,
 }: ClimbListItemContentProps) {
   const { t } = useTranslation('climbs');
@@ -125,7 +125,7 @@ const ClimbListItemContent = React.memo(function ClimbListItemContent({
 
   // Subtitle parts: sends · quality★ · setter (each dropped when absent).
   const subtitleText = useMemo(() => {
-    const parts = subtitleLeadingParts?.filter((part) => part.length > 0) ?? [];
+    const parts: string[] = [];
     if (climb.is_draft) {
       parts.push(t('createClimbForm.draftBadge'));
     }
@@ -140,7 +140,12 @@ const ClimbListItemContent = React.memo(function ClimbListItemContent({
       parts.push(climb.setter_username);
     }
     return parts.length > 0 ? parts.join(' · ') : t('mobile.climbRow.projectFallback');
-  }, [climb.is_draft, climb.ascensionist_count, climb.quality_average, climb.setter_username, subtitleLeadingParts, t]);
+  }, [climb.is_draft, climb.ascensionist_count, climb.quality_average, climb.setter_username, t]);
+
+  const subtitleDetailText = useMemo(() => {
+    const parts = subtitleDetailParts?.filter((part) => part.length > 0) ?? [];
+    return parts.length > 0 ? parts.join(' · ') : null;
+  }, [subtitleDetailParts]);
 
   return (
     <>
@@ -167,6 +172,11 @@ const ClimbListItemContent = React.memo(function ClimbListItemContent({
         <Text variant="footnote" numberOfLines={1} style={styles.subtitle}>
           {subtitleText}
         </Text>
+        {subtitleDetailText ? (
+          <Text variant="caption1" numberOfLines={1} style={styles.subtitle}>
+            {subtitleDetailText}
+          </Text>
+        ) : null}
       </View>
 
       {/* Right: ascent-status glyph + colorized grade — the two scan keys together */}
