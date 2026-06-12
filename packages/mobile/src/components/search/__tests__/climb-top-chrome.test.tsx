@@ -312,6 +312,14 @@ vi.mock('../../play-drawer/AngleSelectorSheet', () => ({
         )
       : null,
 }));
+vi.mock('../../user-drawer/UserAvatarToolbarAction', () => ({
+  UserAvatarToolbarAction: ({ variant }: { variant: 'glass' | 'material' }) =>
+    createElement('button', {
+      'data-pressable': variant === 'glass' ? 'ariaLabels.userMenu' : undefined,
+      'data-appbar-action': variant === 'material' ? 'ariaLabels.userMenu' : undefined,
+      'data-avatar-variant': variant,
+    }),
+}));
 
 import { ClimbTopChrome } from '../ClimbTopChrome';
 

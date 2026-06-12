@@ -29,8 +29,9 @@ export default function BoardSelection() {
   const { isAuthenticated, refreshAuthState } = useAuth();
   const bottomChrome = useBottomChromeMetrics();
   const router = useRouter();
-  const { returnTo } = useLocalSearchParams<{ returnTo?: string }>();
+  const { returnTo, focus } = useLocalSearchParams<{ returnTo?: string; focus?: string }>();
   const boardReturnTo = resolveBoardReturnTo(returnTo);
+  const shouldFocusMyBoards = focus === 'myBoards';
   const { t } = useTranslation('boards');
   const { showToast } = useToast();
 
@@ -127,6 +128,18 @@ export default function BoardSelection() {
     },
     [myBoards, nearby?.boards, activateBoard, showToast, t],
   );
+  const nearbySection =
+    nearbyItems.length > 0 ? (
+      <Section title={t('mobile.discovery.nearbyTitle')}>
+        <BoardCarousel items={nearbyItems} onSelect={onSelectMyBoard} />
+      </Section>
+    ) : null;
+  const myBoardsSection =
+    myBoardItems.length > 0 ? (
+      <Section title={t('mobile.discovery.yourBoardsTitle')}>
+        <BoardCarousel items={myBoardItems} onSelect={onSelectMyBoard} />
+      </Section>
+    ) : null;
 
   const requestLocation = location.request;
   const onModeFindNearby = useCallback(() => {
@@ -254,17 +267,8 @@ export default function BoardSelection() {
           />
         </View>
 
-        {nearbyItems.length > 0 ? (
-          <Section title={t('mobile.discovery.nearbyTitle')}>
-            <BoardCarousel items={nearbyItems} onSelect={onSelectMyBoard} />
-          </Section>
-        ) : null}
-
-        {myBoardItems.length > 0 ? (
-          <Section title={t('mobile.discovery.yourBoardsTitle')}>
-            <BoardCarousel items={myBoardItems} onSelect={onSelectMyBoard} />
-          </Section>
-        ) : null}
+        {shouldFocusMyBoards ? myBoardsSection : nearbySection}
+        {shouldFocusMyBoards ? nearbySection : myBoardsSection}
 
         {popularItems.length > 0 ? (
           <Section title={t('mobile.discovery.popularTitle')}>

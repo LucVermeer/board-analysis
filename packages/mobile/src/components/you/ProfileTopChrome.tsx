@@ -1,20 +1,19 @@
 // Top chrome for the Profile ("You") tab, routed by UI variant.
 //
 // Liquid Glass: the board-agnostic CollapsingLargeTitleHeader (no board pill —
-// unlike Climbs/Discover) with a settings-gear island on the left, an optional
+// unlike Climbs/Discover) with an account-avatar island on the left, an optional
 // filter island on the right (the Progress sub-tab only), and the
 // Progress/Sessions/Logbook segmented control (glass-track-wrapped) as its
 // below-row content.
 //
 // Material: an absolutely-positioned, onHeightChange-measured M3 small app bar
-// (mirroring ClimbTopChrome) — the dashboard title via Appbar.Content, settings
-// + (Progress-only) filter Appbar.Actions, and the MaterialTabs primary tabs as
+// (mirroring ClimbTopChrome) — the account avatar, dashboard title via
+// Appbar.Content, the Progress-only filter Appbar.Action, and the MaterialTabs primary tabs as
 // the app bar's bottom row.
 
 import { useCallback, useMemo } from 'react';
 import { type LayoutChangeEvent, StyleSheet, View } from 'react-native';
 import { type SharedValue } from 'react-native-reanimated';
-import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { Appbar } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -27,6 +26,7 @@ import { GlassSurface } from '../GlassSurface';
 import { SegmentedControl } from '../SegmentedControl';
 import { MaterialTabs } from '../navigation/MaterialTabs';
 import { CollapsingLargeTitleHeader, GlassActionToolbar, GlassToolbarAction } from '../chrome';
+import { UserAvatarToolbarAction } from '../user-drawer/UserAvatarToolbarAction';
 
 // The segmented control floats over the chrome's faded scrim with scrolling
 // content behind it, so it needs its own glass track to stay legible and to give
@@ -78,16 +78,11 @@ function ProfileTopChromeMaterial({
   onHeightChange,
 }: ProfileTopChromeProps) {
   const { t } = useTranslation('you');
-  const router = useRouter();
   const { systemColors, brandColors, m3 } = useTheme();
   const insets = useSafeAreaInsets();
 
   const dashboardTitle = t('metadata.dashboard.title');
   const tabOptions = useSegmentOptions();
-
-  const handleOpenSettings = useCallback(() => {
-    router.push('/(tabs)/profile/more');
-  }, [router]);
 
   const handleLayout = useCallback(
     (event: LayoutChangeEvent) => onHeightChange(event.nativeEvent.layout.height),
@@ -117,13 +112,8 @@ function ProfileTopChromeMaterial({
         elevated
         style={[styles.materialAppbar, { backgroundColor: systemColors.secondaryBackground }]}
       >
+        <UserAvatarToolbarAction variant="material" />
         <Appbar.Content title={dashboardTitle} color={systemColors.label as string} />
-        <Appbar.Action
-          icon={iconMap.settings.android}
-          color={systemColors.label as string}
-          onPress={handleOpenSettings}
-          accessibilityLabel={t('mobile.settings')}
-        />
         {activeTab === 'progress' ? (
           <Appbar.Action
             icon={iconMap.filter.android}
@@ -156,22 +146,15 @@ function ProfileTopChromeGlass({
   onHeightChange,
 }: ProfileTopChromeProps) {
   const { t } = useTranslation('you');
-  const router = useRouter();
   const { systemColors, brandColors } = useTheme();
   const nativeGlass = useNativeGlass();
 
   const dashboardTitle = t('metadata.dashboard.title');
   const segmentOptions = useSegmentOptions();
 
-  const handleOpenSettings = useCallback(() => {
-    router.push('/(tabs)/profile/more');
-  }, [router]);
-
   const leftActions = (
     <GlassActionToolbar actionCount={1}>
-      <GlassToolbarAction onPress={handleOpenSettings} accessibilityLabel={t('mobile.settings')}>
-        <Icon name="settings" size={22} color={systemColors.label} />
-      </GlassToolbarAction>
+      <UserAvatarToolbarAction variant="glass" />
     </GlassActionToolbar>
   );
 

@@ -7,7 +7,6 @@ import type { ProfileTabKey } from '../ProfileTopChrome';
 const ctrl = vi.hoisted(() => ({
   variant: 'glass' as 'glass' | 'material',
 }));
-const router = vi.hoisted(() => ({ push: vi.fn() }));
 // Captures the props the SegmentedControl receives so the test can assert its
 // option set / selected key / which variant branch rendered it.
 const segments = vi.hoisted(() => ({
@@ -36,7 +35,6 @@ vi.mock('react-native-reanimated', () => ({}));
 vi.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
 }));
-vi.mock('expo-router', () => ({ useRouter: () => router }));
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 
 vi.mock('../../../providers/theme-provider', () => ({
@@ -84,6 +82,10 @@ vi.mock('../../navigation/MaterialTabs', () => ({
     materialTabs.entries.push({ options, selectedKey, onSelect });
     return createElement('div', { 'data-material-tabs': 'true' });
   },
+}));
+vi.mock('../../user-drawer/UserAvatarToolbarAction', () => ({
+  UserAvatarToolbarAction: ({ variant }: { variant: 'glass' | 'material' }) =>
+    createElement('button', { 'data-action': 'ariaLabels.userMenu', 'data-avatar-variant': variant }),
 }));
 // Paper Appbar: render the title + actions so the material-branch cases can query
 // them via the accessibility label (mirroring the glass islands).
@@ -160,8 +162,8 @@ function makeProps(over: Partial<Parameters<typeof ProfileTopChrome>[0]> = {}) {
   };
 }
 
-const settingsAction = (root: HTMLElement) =>
-  root.querySelector('[data-action="mobile.settings"]') as HTMLButtonElement | null;
+const userMenuAction = (root: HTMLElement) =>
+  root.querySelector('[data-action="ariaLabels.userMenu"]') as HTMLButtonElement | null;
 const filterAction = (root: HTMLElement) =>
   root.querySelector('[data-action="mobile.filter.title"]') as HTMLButtonElement | null;
 const filterIcon = (root: HTMLElement) => root.querySelector('[data-icon="filter"]') as HTMLElement | null;
@@ -169,16 +171,14 @@ const filterIcon = (root: HTMLElement) => root.querySelector('[data-icon="filter
 describe('ProfileTopChrome', () => {
   beforeEach(() => {
     ctrl.variant = 'glass';
-    router.push.mockClear();
     segments.entries = [];
     materialTabs.entries = [];
   });
 
   describe('glass variant', () => {
-    it('pushes the settings route when the settings island is pressed', () => {
+    it('renders the avatar menu in the left island', () => {
       const { container } = render(<ProfileTopChrome {...makeProps()} />);
-      fireEvent.click(settingsAction(container)!);
-      expect(router.push).toHaveBeenCalledWith('/(tabs)/profile/more');
+      expect(userMenuAction(container)?.getAttribute('data-avatar-variant')).toBe('glass');
     });
 
     it('renders the filter island only on the Progress sub-tab', () => {
@@ -250,10 +250,9 @@ describe('ProfileTopChrome', () => {
       expect(container.querySelector('[data-glass="true"]')).toBeNull();
     });
 
-    it('pushes the settings route from the settings Appbar.Action', () => {
+    it('renders the avatar menu before the dashboard title', () => {
       const { container } = render(<ProfileTopChrome {...makeProps()} />);
-      fireEvent.click(settingsAction(container)!);
-      expect(router.push).toHaveBeenCalledWith('/(tabs)/profile/more');
+      expect(userMenuAction(container)?.getAttribute('data-avatar-variant')).toBe('material');
     });
 
     it('renders the filter Appbar.Action only on the Progress sub-tab', () => {

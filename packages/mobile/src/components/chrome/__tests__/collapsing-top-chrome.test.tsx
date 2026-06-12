@@ -106,6 +106,10 @@ vi.mock('../../play-drawer/AngleSelectorSheet', () => ({
   AngleSelectorSheet: ({ visible }: { visible: boolean }) =>
     visible ? createElement('div', { 'data-angle-selector': 'true' }) : null,
 }));
+vi.mock('../../user-drawer/UserAvatarToolbarAction', () => ({
+  UserAvatarToolbarAction: ({ variant }: { variant: 'glass' | 'material' }) =>
+    createElement('button', { 'data-pressable': 'ariaLabels.userMenu', 'data-avatar-variant': variant }),
+}));
 
 import { CollapsingTopChrome } from '../CollapsingTopChrome';
 

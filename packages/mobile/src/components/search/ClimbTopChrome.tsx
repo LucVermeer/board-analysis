@@ -26,6 +26,7 @@ import { iconMap } from '../icon-map';
 import { BoardSwitcherButton, CollapsingTopChrome, TOP_ACTION_SIZE } from '../chrome';
 import { GradeRangeRail } from '../grade';
 import { AngleSelectorSheet } from '../play-drawer/AngleSelectorSheet';
+import { UserAvatarToolbarAction } from '../user-drawer/UserAvatarToolbarAction';
 import { FilterButton } from './FilterButton';
 import { GradeFilterControl } from './GradeFilterControl';
 
@@ -150,6 +151,7 @@ export function ClimbTopChrome({
           elevated
           style={[styles.materialAppbar, { backgroundColor: systemColors.secondaryBackground }]}
         >
+          <UserAvatarToolbarAction variant="material" />
           <BoardSwitcherButton onPress={onOpenBoardDetail} accessibilityHint={t('mobile.search.boardSwitcherHint')} />
           {canCreate ? (
             <Appbar.Action

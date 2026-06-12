@@ -14,12 +14,10 @@ import { DevMetadataPanel } from '../../../src/components/DevMetadataPanel';
 import { Icon } from '../../../src/components/Icon';
 import { Text } from '../../../src/components/Text';
 import { ListRow } from '../../../src/components/ListRow';
-import { SwitchRow } from '../../../src/components/SwitchRow';
 import { SectionHeader } from '../../../src/components/SectionHeader';
 import { SegmentedControl } from '../../../src/components/SegmentedControl';
 import { HoldColorAccessibilitySection } from '../../../src/components/settings/HoldColorAccessibilitySection';
-import { useSessionRecordingPreference } from '../../../src/lib/session-recording-preference';
-import { setSessionRecordingEnabled } from '../../../src/lib/analytics';
+import { SessionRecordingSwitchRow } from '../../../src/components/settings/SessionRecordingSwitchRow';
 import { isPreviewBuild } from '../../../src/lib/eas-api';
 import { useGradeFormat } from '../../../src/hooks/use-grade-format';
 import { useGlassCapability } from '../../../src/hooks/use-glass-capability';
@@ -38,8 +36,6 @@ export default function MoreScreen() {
   const { gradeFormat, setGradeFormat } = useGradeFormat();
   const glassCapable = useGlassCapability();
   const { localePreference, setLocalePreference } = useLocalePreference();
-  const { enabled: sessionRecordingEnabled, setEnabled: setSessionRecordingPreference } =
-    useSessionRecordingPreference();
   const { showToast } = useToast();
 
   // 'System' follows the device language; the rest are the supported locales,
@@ -195,16 +191,9 @@ export default function MoreScreen() {
       <View style={styles.section}>
         <SectionHeader title={t('mobile.more.diagnostics.title')} />
         <View style={[styles.card, { backgroundColor: systemColors.secondaryBackground }]}>
-          <SwitchRow
+          <SessionRecordingSwitchRow
             label={t('mobile.more.diagnostics.recording')}
             description={t('mobile.more.diagnostics.recordingDescription')}
-            value={sessionRecordingEnabled}
-            onValueChange={(next) => {
-              // Persist the choice and apply it live: start/stop the PostHog
-              // recording immediately rather than waiting for the next launch.
-              setSessionRecordingPreference(next);
-              setSessionRecordingEnabled(next);
-            }}
           />
         </View>
       </View>

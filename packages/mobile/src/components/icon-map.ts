@@ -19,6 +19,8 @@ export const iconMap = {
   settings: { ios: 'gearshape', android: 'cog-outline' },
   'settings.fill': { ios: 'gearshape.fill', android: 'cog' },
   server: { ios: 'server.rack', android: 'server-network' },
+  help: { ios: 'questionmark.circle', android: 'help-circle-outline' },
+  logout: { ios: 'rectangle.portrait.and.arrow.right', android: 'logout' },
 
   // Navigation
   'chevron.right': { ios: 'chevron.right', android: 'chevron-right' },

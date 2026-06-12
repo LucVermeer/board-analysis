@@ -295,6 +295,8 @@
     "bugPlaceholder": "¿Qué estabas haciendo? ¿Qué esperabas y qué viste?",
     "ratingPlaceholder": "¿Qué piensas?",
     "remainingChars": "Faltan {{count}} caracteres",
+    "starRating_one": "{{count}} estrella",
+    "starRating_other": "{{count}} estrellas",
     "nextAria": "Siguiente"
   },
   "feedbackBanner": {
