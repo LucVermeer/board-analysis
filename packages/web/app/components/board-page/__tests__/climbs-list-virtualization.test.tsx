@@ -335,7 +335,7 @@ describe('ClimbsList thumbnail and row click both open the play drawer', () => {
 
     fireEvent.click(screen.getByTestId('row-climb-0'));
 
-    expect(onClimbSelect).toHaveBeenCalledWith(expect.objectContaining({ uuid: 'climb-0' }), 0);
+    expect(onClimbSelect).toHaveBeenCalledWith(expect.objectContaining({ uuid: 'climb-0' }));
   });
 
   it('thumbnail click delegates to onClimbSelect override when provided', () => {
@@ -353,7 +353,7 @@ describe('ClimbsList thumbnail and row click both open the play drawer', () => {
 
     fireEvent.click(screen.getByTestId('thumb-climb-0'));
 
-    expect(onClimbSelect).toHaveBeenCalledWith(expect.objectContaining({ uuid: 'climb-0' }), 0);
+    expect(onClimbSelect).toHaveBeenCalledWith(expect.objectContaining({ uuid: 'climb-0' }));
   });
 
   it('row click dispatches the drawer-open event with the climb when no onClimbSelect is provided', () => {

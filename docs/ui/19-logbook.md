@@ -77,17 +77,18 @@ Full logbook browser with:
   - **Angle range**: Slider for angle range filter.
 - **Sort options**: Field selector (Newest, Hardest, Most Attempts, etc.) with direction toggle (ascending/descending).
 
-**Feed Items** (`ClimbsList` + logbook slots):
-The `/you/logbook` feed reuses the shared board-page climb list in forced list mode. `LogbookFeed` maps each `userAscentsFeed` row to a climb with `ascentFeedItemToClimb`, keeping the tick UUID as the list item key so multiple logs for the same climb render as separate rows.
+**Feed Items** (`LogbookFeedItem`):
+Swipeable cards with:
 
-Logbook-specific rendering is provided through `ClimbsList.getListItemProps`:
-
-- `centerBottomSlot`: `LogbookEntryMeta`, showing ascent status, attempt count, board/layout name, angle, relative time, and comment preview.
-- `belowContentSlot`: `LogbookEntryEditor`, mounted inline for the currently edited tick.
-- `menuSlot`: `LogbookEntryMenu`, keeping Edit, Delete, Post to Instagram, Attach Beta Video, and shared climb actions.
-- Default list swipe/favourite/selection affordances are disabled on this surface.
-
-Regular row taps open inline logbook-entry edit mode. They do not open the play drawer on `/you/logbook`; the three-dot menu remains the path for climb actions.
+- Climb thumbnail (`AscentThumbnail`).
+- Board/layout display name.
+- Climb name, grade, ascent status icon.
+- Date, angle, attempt count, quality stars.
+- Comment preview.
+- Climb icons (benchmark, mirror).
+- Swipe actions: Edit (left swipe), Delete (right swipe).
+- Inline editing: Star picker, grade picker, attempts picker, comment field.
+- Three-dot menu: Edit, Delete, Post to Instagram, Attach Beta Video.
 
 **Export:**
 

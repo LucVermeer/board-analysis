@@ -17,7 +17,7 @@ import { useWindowVirtualizer } from '@tanstack/react-virtual';
 import type { Climb, BoardDetails } from '@/app/lib/types';
 import type { AddToQueueSource } from '../queue-control/types';
 import ErrorBoundary from '../error-boundary';
-import ClimbListItem, { type ClimbListItemProps } from '../climb-card/climb-list-item';
+import ClimbListItem from '../climb-card/climb-list-item';
 import { ClimbCardSkeleton, ClimbListItemSkeleton } from './board-page-skeleton';
 import { themeTokens } from '@/app/theme/theme-config';
 import { getPreference, setPreference } from '@/app/lib/user-preferences-db';
@@ -213,7 +213,7 @@ export type ClimbsListProps = {
   selectedClimbUuid?: string | null;
   isFetching: boolean;
   hasMore: boolean;
-  onClimbSelect?: (climb: Climb, index: number) => void;
+  onClimbSelect?: (climb: Climb) => void;
   addToQueue?: (climb: Climb, source?: AddToQueueSource) => void;
   onLoadMore: () => void;
   header?: React.ReactNode;
@@ -221,31 +221,7 @@ export type ClimbsListProps = {
   /** Angle selector to render on the right side of the first header row */
   angleSelector?: React.ReactNode;
   hideEndMessage?: boolean;
-  renderItemExtra?: (climb: Climb, index: number) => React.ReactNode;
-  getItemKey?: (climb: Climb, index: number) => string | number;
-  forcedViewMode?: ViewMode;
-  listOverscan?: number;
-  getListItemProps?: (
-    climb: Climb,
-    index: number,
-    boardDetails: BoardDetails,
-  ) => Partial<
-    Pick<
-      ClimbListItemProps,
-      | 'afterTitleSlot'
-      | 'backgroundColor'
-      | 'belowContentSlot'
-      | 'centerBottomSlot'
-      | 'contentOpacity'
-      | 'contentPadding'
-      | 'disableFavorite'
-      | 'disableSelection'
-      | 'disableSwipe'
-      | 'menuSlot'
-      | 'titleProps'
-    >
-  >;
-  showSwipeHint?: boolean;
+  renderItemExtra?: (climb: Climb) => React.ReactNode;
   showBottomSpacer?: boolean;
 };
 
@@ -330,11 +306,6 @@ const ClimbsList = ({
   angleSelector,
   hideEndMessage,
   renderItemExtra,
-  getItemKey,
-  forcedViewMode,
-  listOverscan = 10,
-  getListItemProps,
-  showSwipeHint = true,
   showBottomSpacer,
 }: ClimbsListProps) => {
   const { t } = useTranslation('climbs');
@@ -382,8 +353,7 @@ const ClimbsList = ({
 
   const visibleClimbs = useMemo(() => climbs.slice(0, visibleCount), [climbs, visibleCount]);
 
-  const [storedViewMode, setStoredViewMode] = useState<ViewMode>('list');
-  const viewMode = forcedViewMode ?? storedViewMode;
+  const [viewMode, setViewMode] = useState<ViewMode>('list');
 
   const onClimbSelectRef = useRef(onClimbSelect);
   onClimbSelectRef.current = onClimbSelect;
@@ -404,13 +374,12 @@ const ClimbsList = ({
   const tourNotifyViewMode = tour?.notifyViewMode;
 
   useEffect(() => {
-    if (forcedViewMode) return;
     void getPreference<ViewMode>(VIEW_MODE_PREFERENCE_KEY).then((stored) => {
       if (stored === 'grid' || stored === 'list') {
-        setStoredViewMode(stored);
+        setViewMode(stored);
       }
     });
-  }, [forcedViewMode]);
+  }, []);
 
   // Notify the onboarding tour of the current view mode whenever it changes
   // or the tour advances to a new step. Re-firing on step changes lets the
@@ -421,15 +390,11 @@ const ClimbsList = ({
     tourNotifyViewMode?.(viewMode);
   }, [viewMode, tourCurrentStepId, tourNotifyViewMode]);
 
-  const handleViewModeChange = useCallback(
-    (mode: ViewMode) => {
-      if (forcedViewMode) return;
-      setStoredViewMode(mode);
-      setPreference(VIEW_MODE_PREFERENCE_KEY, mode).catch(() => {});
-      track('View Mode Changed', { mode });
-    },
-    [forcedViewMode],
-  );
+  const handleViewModeChange = useCallback((mode: ViewMode) => {
+    setViewMode(mode);
+    setPreference(VIEW_MODE_PREFERENCE_KEY, mode).catch(() => {});
+    track('View Mode Changed', { mode });
+  }, []);
 
   const handleListView = useCallback(() => handleViewModeChange('list'), [handleViewModeChange]);
   const handleGridView = useCallback(() => handleViewModeChange('grid'), [handleViewModeChange]);
@@ -471,7 +436,7 @@ const ClimbsList = ({
       if (onClimbSelectRef.current) {
         // Caller-owned tap handling (e.g. multiboard navigating away).
         // The caller is responsible for opening the drawer or navigating.
-        onClimbSelectRef.current(climb, index);
+        onClimbSelectRef.current(climb);
       } else if (previewClimbFromBrowseRef.current) {
         // Default browse path: forks on solo/party inside QueueContext.
         previewClimbFromBrowseRef.current(climb);
@@ -599,7 +564,7 @@ const ClimbsList = ({
   const selectionStore = useSelectionStore(selectedClimbUuid ?? null);
 
   // --- List virtualization ---
-  // Overscan of 10 items (~1070px at the estimate) is enough headroom for
+  // Overscan of 10 items (~1070px at the 107px estimate) is enough headroom for
   // fast scrolling while keeping the LCP-time mount count low. Production traces
   // showed the previous overscan=25 was mounting ~50 items on first paint, with
   // each item attaching virtualizer.measureElement (a ResizeObserver) — this
@@ -607,11 +572,8 @@ const ClimbsList = ({
   const virtualizer = useWindowVirtualizer({
     count: visibleClimbs.length,
     estimateSize: () => 107,
-    overscan: listOverscan,
-    getItemKey: (index) => {
-      const climb = visibleClimbs[index];
-      return climb ? (getItemKey?.(climb, index) ?? climb.uuid) : index;
-    },
+    overscan: 10,
+    getItemKey: (index) => visibleClimbs[index]?.uuid ?? index,
     // Provide a fake viewport so the virtualizer renders items during SSR.
     // Without this, getVirtualItems() returns [] on the server and the
     // climb list is entirely client-rendered (hurts LCP).
@@ -639,28 +601,26 @@ const ClimbsList = ({
           <Box sx={searchPillsContainerSx}>{headerInline}</Box>
           {/* Right: View toggle + Angle selector */}
           <Box sx={rightControlsSx}>
-            {!forcedViewMode && (
-              <Box sx={viewModeToggleBoxSx}>
-                <IconButton
-                  id="onboarding-view-mode-list"
-                  onClick={handleListView}
-                  aria-label={t('list.viewMode.list')}
-                  size="small"
-                  sx={listButtonSx}
-                >
-                  <FormatListBulletedOutlined fontSize="small" />
-                </IconButton>
-                <IconButton
-                  id="onboarding-view-mode-grid"
-                  onClick={handleGridView}
-                  aria-label={t('list.viewMode.grid')}
-                  size="small"
-                  sx={gridButtonSx}
-                >
-                  <AppsOutlined fontSize="small" />
-                </IconButton>
-              </Box>
-            )}
+            <Box sx={viewModeToggleBoxSx}>
+              <IconButton
+                id="onboarding-view-mode-list"
+                onClick={handleListView}
+                aria-label={t('list.viewMode.list')}
+                size="small"
+                sx={listButtonSx}
+              >
+                <FormatListBulletedOutlined fontSize="small" />
+              </IconButton>
+              <IconButton
+                id="onboarding-view-mode-grid"
+                onClick={handleGridView}
+                aria-label={t('list.viewMode.grid')}
+                size="small"
+                sx={gridButtonSx}
+              >
+                <AppsOutlined fontSize="small" />
+              </IconButton>
+            </Box>
             {angleSelector}
           </Box>
         </Box>
@@ -670,7 +630,7 @@ const ClimbsList = ({
             /* Grid (card) mode — not virtualized */
             <Box sx={gridContainerSx} translate="no">
               {visibleClimbs.map((climb, index) => (
-                <Box key={getItemKey?.(climb, index) ?? climb.uuid} sx={cardBoxSx} className={listStyles.gridItem}>
+                <Box key={climb.uuid} sx={cardBoxSx} className={listStyles.gridItem}>
                   <GridClimbItem
                     climb={climb}
                     index={index}
@@ -680,7 +640,7 @@ const ClimbsList = ({
                     needsBiggerBoard={upsizedClimbs?.has(climb.uuid)}
                     onClimbClickByIndex={handleClimbThumbnailClickByIndex}
                     onNeedsBiggerBoard={handleNeedsBiggerBoard}
-                    renderItemExtra={(itemClimb) => renderItemExtra?.(itemClimb, index)}
+                    renderItemExtra={renderItemExtra}
                   />
                 </Box>
               ))}
@@ -706,8 +666,6 @@ const ClimbsList = ({
                     const climb = visibleClimbs[virtualItem.index];
                     const index = virtualItem.index;
                     if (!climb) return null;
-                    const resolvedBoardDetails = resolveBoardDetails(climb);
-                    const itemProps = getListItemProps?.(climb, index, resolvedBoardDetails);
                     return (
                       <div
                         key={virtualItem.key}
@@ -725,7 +683,7 @@ const ClimbsList = ({
                       >
                         <ClimbListItem
                           climb={climb}
-                          boardDetails={resolvedBoardDetails}
+                          boardDetails={resolveBoardDetails(climb)}
                           pathname={pathname}
                           isDark={isDark}
                           preferImageLayers={index < initialImageCount}
@@ -738,9 +696,8 @@ const ClimbsList = ({
                           onOpenActions={handleOpenActions}
                           onOpenPlaylistSelector={handleOpenPlaylistSelector}
                           addToQueue={addToQueue}
-                          {...itemProps}
                         />
-                        {renderItemExtra?.(climb, index)}
+                        {renderItemExtra?.(climb)}
                       </div>
                     );
                   })}
@@ -750,7 +707,7 @@ const ClimbsList = ({
           )}
         </ErrorBoundary>
 
-        {showSwipeHint && viewMode === 'list' && climbs.length > 0 && <SwipeHintOrchestrator />}
+        {viewMode === 'list' && climbs.length > 0 && <SwipeHintOrchestrator />}
 
         {/* Sentinel for infinite scroll — only needed for grid mode (list mode uses virtualizer) */}
         <Box ref={viewMode === 'grid' ? sentinelRef : undefined} sx={sentinelBoxSx}>
