@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { Pressable, StyleSheet, View, type ViewStyle } from 'react-native';
 import Animated, { FadeInDown, FadeOutDown } from 'react-native-reanimated';
-import { Snackbar } from 'react-native-paper';
+import { Portal, Snackbar } from 'react-native-paper';
 import { useTranslation } from 'react-i18next';
 import { Text } from '../Text';
 import { borderRadius, spacing, shadowColor } from '../../theme/tokens';
@@ -32,24 +32,33 @@ type UndoWallChangeSnackbarProps = {
  */
 export function UndoWallChangeSnackbar(props: UndoWallChangeSnackbarProps) {
   const { variant: uiVariant } = useTheme();
-  return uiVariant === 'material' ? (
-    <UndoWallChangeSnackbarMaterial {...props} />
-  ) : (
-    <UndoWallChangeSnackbarGlass {...props} />
+  const bottomChrome = useBottomChromeMetrics();
+  const bottom = bottomChrome.floatingControlBottom + spacing[2];
+  return (
+    <Portal>
+      {uiVariant === 'material' ? (
+        <UndoWallChangeSnackbarMaterial {...props} bottom={bottom} />
+      ) : (
+        <UndoWallChangeSnackbarGlass {...props} bottom={bottom} />
+      )}
+    </Portal>
   );
 }
+
+type PortaledUndoWallChangeSnackbarProps = UndoWallChangeSnackbarProps & {
+  bottom: number;
+};
 
 function UndoWallChangeSnackbarMaterial({
   visible,
   nonce,
   onDismiss,
   onUndo,
+  bottom,
   duration = UNDO_DURATION,
-}: UndoWallChangeSnackbarProps) {
+}: PortaledUndoWallChangeSnackbarProps) {
   const { t } = useTranslation('session');
-  const bottomChrome = useBottomChromeMetrics();
 
-  const bottom = bottomChrome.floatingControlBottom + spacing[2];
   const wrapperStyle: ViewStyle = { bottom };
 
   return (
@@ -75,19 +84,17 @@ function UndoWallChangeSnackbarGlass({
   nonce,
   onDismiss,
   onUndo,
+  bottom,
   duration = UNDO_DURATION,
-}: UndoWallChangeSnackbarProps) {
+}: PortaledUndoWallChangeSnackbarProps) {
   const { systemColors, brandColors } = useTheme();
   const { t } = useTranslation('session');
-  const bottomChrome = useBottomChromeMetrics();
 
   useEffect(() => {
     if (!visible) return undefined;
     const timer = setTimeout(onDismiss, duration);
     return () => clearTimeout(timer);
   }, [visible, nonce, duration, onDismiss]);
-
-  const bottom = bottomChrome.floatingControlBottom + spacing[2];
 
   return (
     <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>

@@ -305,6 +305,7 @@ describe('BluetoothProvider wall-confirm integration', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     cleanup();
   });
 
@@ -598,7 +599,7 @@ describe('BluetoothProvider wall-confirm integration', () => {
       expect(queue.setSessionBoardSerial).not.toHaveBeenCalled();
     });
 
-    it('reports the lit climb to the wall on wall-confirm, in a SOLO flow, then shows the Undo snackbar', async () => {
+    it('reports the lit climb to the wall on wall-confirm in a SOLO flow without showing an unarmed Undo snackbar', async () => {
       presence.enabled = true;
       presence.boardId = 99;
       presence.currentClimb = makePresenceClimb();
@@ -616,9 +617,157 @@ describe('BluetoothProvider wall-confirm integration', () => {
       );
       expect(queue.confirmClimbOnWall).not.toHaveBeenCalled();
 
+      expect(presence.showUndoWallChangeSnackbar).not.toHaveBeenCalled();
+    });
+
+    it('shows the Undo snackbar once after an armed control gain reports a wall change', async () => {
+      presence.enabled = true;
+      presence.boardId = 99;
+      presence.currentClimb = makePresenceClimb();
+      queue.sessionId = null;
+      bluetooth.state.isConnected = false;
+
+      const { rerender } = renderProvider(createElement(BluetoothProbe));
+      capturedBluetooth?.armUndoWallChangeToast();
+
+      bluetooth.state.isConnected = true;
+      rerender(
+        createElement(BluetoothProvider, {
+          boardName: 'kilter',
+          layoutId: 1,
+          sizeId: 10,
+          setIds: '1,20',
+          children: createElement(BluetoothProbe),
+        }),
+      );
+
       await waitFor(() => {
-        expect(presence.showUndoWallChangeSnackbar).toHaveBeenCalledTimes(1);
+        expect(presence.reportClimbForBoard).toHaveBeenCalledTimes(1);
       });
+      expect(presence.showUndoWallChangeSnackbar).toHaveBeenCalledTimes(1);
+
+      presence.currentClimb = makePresenceClimb({ climbUuid: 'reported-first', frames: 'p1r12', seq: 8 });
+      queue.currentClimbQueueItem = makeQueueItem('climb-2', 'p2r12');
+      rerender(
+        createElement(BluetoothProvider, {
+          boardName: 'kilter',
+          layoutId: 1,
+          sizeId: 10,
+          setIds: '1,20',
+          children: createElement(BluetoothProbe),
+        }),
+      );
+
+      await waitFor(() => {
+        expect(presence.reportClimbForBoard).toHaveBeenCalledTimes(2);
+      });
+      expect(presence.showUndoWallChangeSnackbar).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps the armed Undo snackbar for a retry after the first wall report is rejected', async () => {
+      presence.enabled = true;
+      presence.boardId = 99;
+      presence.currentClimb = makePresenceClimb();
+      presence.reportClimbForBoard.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+      queue.sessionId = null;
+      bluetooth.state.isConnected = false;
+      const firstItem = makeQueueItem('climb-1');
+      queue.currentClimbQueueItem = firstItem;
+
+      const { rerender } = renderProvider(createElement(BluetoothProbe));
+      capturedBluetooth?.armUndoWallChangeToast();
+
+      bluetooth.state.isConnected = true;
+      rerender(
+        createElement(BluetoothProvider, {
+          boardName: 'kilter',
+          layoutId: 1,
+          sizeId: 10,
+          setIds: '1,20',
+          children: createElement(BluetoothProbe),
+        }),
+      );
+
+      await waitFor(() => {
+        expect(presence.reportClimbForBoard).toHaveBeenCalledTimes(1);
+      });
+      expect(presence.showUndoWallChangeSnackbar).not.toHaveBeenCalled();
+
+      queue.currentClimbQueueItem = { ...firstItem };
+      rerender(
+        createElement(BluetoothProvider, {
+          boardName: 'kilter',
+          layoutId: 1,
+          sizeId: 10,
+          setIds: '1,20',
+          children: createElement(BluetoothProbe),
+        }),
+      );
+
+      await waitFor(() => {
+        expect(presence.reportClimbForBoard).toHaveBeenCalledTimes(2);
+      });
+      expect(presence.showUndoWallChangeSnackbar).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not show the Undo snackbar after the control-gain arm expires', async () => {
+      vi.useFakeTimers();
+      presence.enabled = true;
+      presence.boardId = 99;
+      presence.currentClimb = makePresenceClimb();
+      queue.sessionId = null;
+      bluetooth.state.isConnected = false;
+
+      const { rerender } = renderProvider(createElement(BluetoothProbe));
+      capturedBluetooth?.armUndoWallChangeToast();
+
+      await act(async () => {
+        vi.advanceTimersByTime(10_000);
+      });
+      vi.useRealTimers();
+
+      bluetooth.state.isConnected = true;
+      rerender(
+        createElement(BluetoothProvider, {
+          boardName: 'kilter',
+          layoutId: 1,
+          sizeId: 10,
+          setIds: '1,20',
+          children: createElement(BluetoothProbe),
+        }),
+      );
+
+      await waitFor(() => {
+        expect(presence.reportClimbForBoard).toHaveBeenCalledTimes(1);
+      });
+      expect(presence.showUndoWallChangeSnackbar).not.toHaveBeenCalled();
+    });
+
+    it('does not show the Undo snackbar when the armed report has no restorable frames', async () => {
+      presence.enabled = true;
+      presence.boardId = 99;
+      presence.currentClimb = makePresenceClimb({ frames: null });
+      queue.sessionId = null;
+      bluetooth.state.isConnected = false;
+
+      const { rerender } = renderProvider(createElement(BluetoothProbe));
+      capturedBluetooth?.armUndoWallChangeToast();
+
+      bluetooth.state.isConnected = true;
+      rerender(
+        createElement(BluetoothProvider, {
+          boardName: 'kilter',
+          layoutId: 1,
+          sizeId: 10,
+          setIds: '1,20',
+          children: createElement(BluetoothProbe),
+        }),
+      );
+
+      await waitFor(() => {
+        expect(presence.reportClimbForBoard).toHaveBeenCalledTimes(1);
+      });
+      expect(presence.showUndoWallChangeSnackbar).not.toHaveBeenCalled();
     });
 
     it('does NOT report to the wall when no board is bound', async () => {
@@ -684,6 +833,90 @@ describe('BluetoothProvider wall-confirm integration', () => {
           40,
         );
       });
+    });
+
+    it('preserves the armed Undo snackbar while a wall report waits for board resolution', async () => {
+      presence.enabled = true;
+      presence.boardId = null;
+      presence.currentClimb = makePresenceClimb();
+      bluetooth.state.isConnected = false;
+      let resolveBoard: (value: { boardId: number }) => void = () => {};
+      presence.resolveAndBindBoard.mockReturnValue(
+        new Promise((resolve) => {
+          resolveBoard = resolve;
+        }),
+      );
+
+      const { rerender } = renderProvider(createElement(BluetoothProbe));
+      bluetooth.options?.onConnectSuccess?.('SERIAL-PENDING');
+      capturedBluetooth?.armUndoWallChangeToast();
+
+      bluetooth.state.isConnected = true;
+      rerender(
+        createElement(BluetoothProvider, {
+          boardName: 'kilter',
+          layoutId: 1,
+          sizeId: 10,
+          setIds: '1,20',
+          children: createElement(BluetoothProbe),
+        }),
+      );
+
+      await waitFor(() => {
+        expect(wallConfirm.emitWallConfirm).toHaveBeenCalledWith('climb-1');
+      });
+      expect(presence.reportClimbForBoard).not.toHaveBeenCalled();
+
+      resolveBoard({ boardId: 123 });
+
+      await waitFor(() => {
+        expect(presence.reportClimbForBoard).toHaveBeenCalledTimes(1);
+      });
+      expect(presence.showUndoWallChangeSnackbar).toHaveBeenCalledTimes(1);
+    });
+
+    it('drops an armed pending wall report when the board disconnects before resolution completes', async () => {
+      presence.enabled = true;
+      presence.boardId = null;
+      presence.currentClimb = makePresenceClimb();
+      bluetooth.state.isConnected = false;
+      let resolveBoard: (value: { boardId: number }) => void = () => {};
+      presence.resolveAndBindBoard.mockReturnValue(
+        new Promise((resolve) => {
+          resolveBoard = resolve;
+        }),
+      );
+
+      const { rerender } = renderProvider(createElement(BluetoothProbe));
+      bluetooth.options?.onConnectSuccess?.('SERIAL-PENDING');
+      capturedBluetooth?.armUndoWallChangeToast();
+
+      bluetooth.state.isConnected = true;
+      rerender(
+        createElement(BluetoothProvider, {
+          boardName: 'kilter',
+          layoutId: 1,
+          sizeId: 10,
+          setIds: '1,20',
+          children: createElement(BluetoothProbe),
+        }),
+      );
+
+      await waitFor(() => {
+        expect(wallConfirm.emitWallConfirm).toHaveBeenCalledWith('climb-1');
+      });
+      expect(presence.reportClimbForBoard).not.toHaveBeenCalled();
+
+      await act(async () => {
+        await capturedBluetooth?.disconnect();
+      });
+
+      await act(async () => {
+        resolveBoard({ boardId: 123 });
+      });
+
+      expect(presence.reportClimbForBoard).not.toHaveBeenCalled();
+      expect(presence.showUndoWallChangeSnackbar).not.toHaveBeenCalled();
     });
 
     it('does not poison same-climb retries when a report is rejected', async () => {

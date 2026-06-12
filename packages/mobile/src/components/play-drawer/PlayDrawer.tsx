@@ -168,6 +168,9 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   const { boardName, layoutId, sizeId, setIds, angle } = boardConfig;
   const bluetoothConnected = bluetooth?.isConnected ?? false;
   const bluetoothLoading = bluetooth?.loading ?? false;
+  const bluetoothArmUndoWallChangeToast = bluetooth?.armUndoWallChangeToast;
+  const bluetoothReassertWall = bluetooth?.reassertWall;
+  const bluetoothClearBoard = bluetooth?.clearBoard;
   // Single source for "is a board's BLE available at all" so the lightbulb's
   // accessibility label and its press action stay in lockstep — both read this
   // instead of one checking `bluetooth` and the other `bluetooth !== null`.
@@ -534,6 +537,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
       // without releasing wall control, so it relights in one tap. No control
       // changes hands here, and connect() already emits BluetoothConnectionSuccess,
       // so we don't fire 'Wall Control Taken' (which would inflate party-take counts).
+      bluetooth.armUndoWallChangeToast();
       void bluetooth.connect(undefined, undefined, bluetooth.reconnectSerialForCurrentBoard ?? undefined);
       return;
     }
@@ -548,6 +552,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
         climbUuid: displayedClimb?.uuid ?? null,
       });
       const reconnectSerialForBoard = bluetooth.reconnectSerialForCurrentBoard;
+      bluetooth.armUndoWallChangeToast();
       if (reconnectSerialForBoard) {
         void bluetooth.connect(undefined, undefined, reconnectSerialForBoard);
       } else {
@@ -562,6 +567,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
       if (!bluetooth) return;
       // Already connected — re-light the current climb. Re-tapping the lightbulb
       // re-pushes the wall (and trips disconnect detection if the link is dead).
+      bluetooth.armUndoWallChangeToast();
       bluetooth.reassertWall();
       setDrawerPreviewItem(null);
       track('Wall Control Taken', {
@@ -584,6 +590,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
     wallControlPressOperationRef.current = operationId;
     setDrawerPreviewItem(null);
     setPendingClimbUuid(displayedClimb.uuid);
+    bluetooth?.armUndoWallChangeToast();
     const takeControlOptions = drawerPreviewSuggestionSource
       ? { playlistSuggestionSource: drawerPreviewSuggestionSource }
       : undefined;
@@ -651,6 +658,19 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
     // blind — keeps the destructive action behind a labelled menu.
     setBleControlOpen(true);
   }, [bluetooth]);
+
+  const handleBleReassert = useCallback(() => {
+    bluetoothArmUndoWallChangeToast?.();
+    bluetoothReassertWall?.();
+  }, [bluetoothArmUndoWallChangeToast, bluetoothReassertWall]);
+
+  const handleBleClearLights = useCallback(() => {
+    void bluetoothClearBoard?.();
+  }, [bluetoothClearBoard]);
+
+  const handleBleControlClose = useCallback(() => {
+    setBleControlOpen(false);
+  }, []);
 
   // Close the BLE controls sheet if the link drops while it's open — otherwise
   // it lingers showing Re-light / Disconnect actions that no-op on a dead link.
@@ -966,11 +986,11 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
       {bluetooth && (
         <BleControlSheet
           visible={bleControlOpen}
-          onReassert={bluetooth.reassertWall}
-          onClearLights={() => void bluetooth.clearBoard()}
+          onReassert={handleBleReassert}
+          onClearLights={handleBleClearLights}
           supportsClearLights={boardName !== 'moonboard'}
           onDisconnect={disconnectAllBluetooth}
-          onClose={() => setBleControlOpen(false)}
+          onClose={handleBleControlClose}
         />
       )}
     </>

@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createElement, type ReactNode } from 'react';
 import type { ClimbQueueItem } from '@boardsesh/queue';
 import type { BoardSerialConfig } from '@boardsesh/graphql/operations';
-import type { UserBoard } from '@boardsesh/shared-schema';
+import type { BoardPresenceClimb, UserBoard } from '@boardsesh/shared-schema';
 import type { ResolvedBoardEntry } from '../../lib/ble/resolve-serials';
 import type { PickerState } from '../../lib/ble/use-board-bluetooth';
 
@@ -40,6 +40,7 @@ const bluetooth = vi.hoisted(() => {
       sendFramesToBoard: vi.fn(async () => true as boolean | undefined),
       pickerState: null as PickerState | null,
       reconnectSerialForCurrentBoard: null,
+      connectInitialSendRef: { current: null as { frames: string; mirrored: boolean } | null },
     },
     useBoardBluetooth: vi.fn((options: BluetoothHookOptions) => {
       mock.options = options;
@@ -48,6 +49,14 @@ const bluetooth = vi.hoisted(() => {
   };
   return mock;
 });
+
+const presence = vi.hoisted(() => ({
+  enabled: false,
+  boardId: null as number | null,
+  currentClimb: null as BoardPresenceClimb | null,
+  reportClimbForBoard: vi.fn(async () => true),
+  showUndoWallChangeSnackbar: vi.fn(),
+}));
 
 type PickerSheetProps = {
   onSelect: (deviceId: string) => void;
@@ -135,30 +144,78 @@ vi.mock('../../lib/board-details', () => ({
   })),
 }));
 
-// BluetoothProvider now reads board presence; mock it (and the wall context +
-// undo snackbar) so the test doesn't pull in the ws-client → expo-secure-store
-// chain. This suite doesn't exercise board presence.
+// BluetoothProvider reads board presence; mock it (and the wall context + undo
+// snackbar) so the suite doesn't pull in the ws-client → expo-secure-store
+// chain. Most tests keep board presence off; the auto-connect undo regression
+// opts into the mocked state below.
 vi.mock('@boardsesh/board-presence-react', () => ({
-  useBoardPresenceCurrent: () => ({ currentClimb: null, previousClimb: null, undoTarget: null, isLive: false }),
+  useBoardPresenceCurrent: () => ({
+    currentClimb: presence.currentClimb,
+    previousClimb: null,
+    undoTarget: null,
+    isLive: false,
+  }),
 }));
 vi.mock('../board-presence-provider', () => ({
   useBoardPresenceControls: () => ({
-    enabled: false,
-    boardId: null,
+    enabled: presence.enabled,
+    boardId: presence.boardId,
     resolveAndBindBoard: vi.fn(async () => null),
     resolveAndBindBoardByConfig: vi.fn(async () => null),
-    reportClimbForBoard: vi.fn(async () => true),
+    reportClimbForBoard: presence.reportClimbForBoard,
   }),
 }));
 vi.mock('../queue-snackbar-provider', () => ({
-  useQueueSnackbar: () => ({ showUndoWallChangeSnackbar: vi.fn() }),
+  useQueueSnackbar: () => ({ showUndoWallChangeSnackbar: presence.showUndoWallChangeSnackbar }),
 }));
 // toClimbInput pulls in expo-crypto (randomUUID); stub it (board presence is off here).
 vi.mock('../../lib/climb-to-queue-item', () => ({
   toClimbInput: (climb: { uuid: string }) => ({ uuid: climb.uuid }),
 }));
 
-import { BluetoothProvider } from '../bluetooth-provider';
+import { BluetoothProvider, useBluetoothContext } from '../bluetooth-provider';
+
+let capturedBluetooth: ReturnType<typeof useBluetoothContext> | null = null;
+
+function BluetoothProbe() {
+  capturedBluetooth = useBluetoothContext();
+  return null;
+}
+
+function makeQueueItem(uuid: string, frames = 'p1r12', mirrored = false): ClimbQueueItem {
+  return {
+    uuid: `queue-${uuid}`,
+    climb: {
+      uuid,
+      name: `Climb ${uuid}`,
+      frames,
+      mirrored,
+      setter_username: 'setter',
+      angle: 40,
+      ascensionist_count: 0,
+      difficulty: 'V3',
+      quality_average: '3.0',
+      stars: 3,
+      difficulty_error: '0.3',
+      benchmark_difficulty: null,
+    },
+  };
+}
+
+function makePresenceClimb(overrides: Partial<BoardPresenceClimb> = {}): BoardPresenceClimb {
+  return {
+    climbUuid: 'previous-climb',
+    queueItemUuid: 'queue-previous-climb',
+    name: 'Previous climb',
+    grade: 'V4',
+    frames: 'previous-frames',
+    angle: 35,
+    setter: 'setter',
+    sentAt: '2026-06-10T00:00:00.000Z',
+    seq: 7,
+    ...overrides,
+  };
+}
 
 function makeBoard(overrides: Partial<UserBoard> = {}): UserBoard {
   return {
@@ -258,7 +315,17 @@ describe('BluetoothProvider mismatch switch', () => {
     bluetooth.state.reconnectSerialForCurrentBoard = null;
     bluetooth.state.connect.mockClear();
     bluetooth.state.connect.mockResolvedValue(true);
+    bluetooth.state.sendFramesToBoard.mockClear();
+    bluetooth.state.sendFramesToBoard.mockResolvedValue(true);
+    bluetooth.state.connectInitialSendRef.current = null;
     bluetooth.useBoardBluetooth.mockClear();
+    presence.enabled = false;
+    presence.boardId = null;
+    presence.currentClimb = null;
+    presence.reportClimbForBoard.mockClear();
+    presence.reportClimbForBoard.mockResolvedValue(true);
+    presence.showUndoWallChangeSnackbar.mockClear();
+    capturedBluetooth = null;
   });
 
   afterEach(() => {
@@ -321,6 +388,51 @@ describe('BluetoothProvider mismatch switch', () => {
       }),
     );
     expect(bluetooth.state.connect).toHaveBeenCalledOnce();
+  });
+
+  it('carries an armed undo toast through switch-to-board auto-connect', async () => {
+    const pickerState = makeMismatchingPickerState();
+    bluetooth.state.pickerState = pickerState;
+    const savedBoard = makeBoard();
+    resolvedBoards.value = new Map([['SN-2', { kind: 'saved', board: savedBoard }]]);
+    presence.enabled = true;
+    presence.boardId = 99;
+    presence.currentClimb = makePresenceClimb();
+    queue.currentClimbQueueItem = makeQueueItem('climb-1');
+
+    const { rerender } = renderProvider(KILTER_PROPS, createElement(BluetoothProbe));
+    capturedBluetooth?.armUndoWallChangeToast();
+    pickerSheet.props?.onSelect('device-2');
+
+    lastAlertButtons()[2]?.onPress?.();
+    await waitFor(() => {
+      expect(activeBoard.setActiveBoard).toHaveBeenCalledWith(savedBoard);
+    });
+
+    // The config change clears the original arm; the pending auto-connect
+    // request should re-arm immediately before it calls connect().
+    rerender(
+      createElement(BluetoothProvider, {
+        ...TENSION_PROPS,
+        children: createElement(BluetoothProbe),
+      }),
+    );
+    await waitFor(() => {
+      expect(bluetooth.state.connect).toHaveBeenCalledWith(undefined, undefined, 'SN-2');
+    });
+
+    bluetooth.state.isConnected = true;
+    rerender(
+      createElement(BluetoothProvider, {
+        ...TENSION_PROPS,
+        children: createElement(BluetoothProbe),
+      }),
+    );
+
+    await waitFor(() => {
+      expect(presence.reportClimbForBoard).toHaveBeenCalledTimes(1);
+    });
+    expect(presence.showUndoWallChangeSnackbar).toHaveBeenCalledTimes(1);
   });
 
   it('drops a pending auto-connect whose switched config never propagates', async () => {

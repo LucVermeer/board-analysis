@@ -8,7 +8,12 @@ type BoardFields = Pick<
   UserBoard,
   'name' | 'angle' | 'boardType' | 'sizeName' | 'layoutName' | 'layoutId' | 'isAngleAdjustable'
 >;
-type BluetoothCtx = { isConnected: boolean; connect: () => Promise<boolean>; disconnect: () => Promise<void> } | null;
+type BluetoothCtx = {
+  isConnected: boolean;
+  connect: () => Promise<boolean>;
+  disconnect: () => Promise<void>;
+  armUndoWallChangeToast: () => void;
+} | null;
 
 const ctrl = vi.hoisted(() => ({
   board: null as BoardFields | null,
@@ -189,14 +194,24 @@ describe('CollapsingTopChrome', () => {
     const { container, rerender } = render(<CollapsingTopChrome {...makeProps()} />);
     expect(lightbulb(container)).toBeNull();
 
-    ctrl.bluetooth = { isConnected: true, connect: vi.fn(), disconnect: vi.fn().mockResolvedValue(undefined) };
+    ctrl.bluetooth = {
+      isConnected: true,
+      connect: vi.fn(),
+      disconnect: vi.fn().mockResolvedValue(undefined),
+      armUndoWallChangeToast: vi.fn(),
+    };
     rerender(<CollapsingTopChrome {...makeProps()} />);
     expect(lightbulb(container)).not.toBeNull();
   });
 
   it('hides the lightbulb when hideLight is set, even with bluetooth available', () => {
     ctrl.board = board;
-    ctrl.bluetooth = { isConnected: true, connect: vi.fn(), disconnect: vi.fn().mockResolvedValue(undefined) };
+    ctrl.bluetooth = {
+      isConnected: true,
+      connect: vi.fn(),
+      disconnect: vi.fn().mockResolvedValue(undefined),
+      armUndoWallChangeToast: vi.fn(),
+    };
     const { container } = render(<CollapsingTopChrome {...makeProps({ hideLight: true })} />);
     expect(lightbulb(container)).toBeNull();
   });

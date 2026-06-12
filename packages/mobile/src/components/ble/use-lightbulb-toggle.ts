@@ -22,6 +22,7 @@ export function useLightbulbToggle() {
     if (bluetooth.isConnected) {
       void bluetooth.disconnect();
     } else {
+      bluetooth.armUndoWallChangeToast();
       void bluetooth.connect(undefined, undefined, bluetooth.reconnectSerialForCurrentBoard ?? undefined);
     }
   }, [bluetooth]);
