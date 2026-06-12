@@ -474,6 +474,20 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
     [addToQueue],
   );
 
+  const handleBoardSheetOpenPlaylist = useCallback(
+    (action: BoardSheetClimbAction) => {
+      openAddToPlaylist(action.climb, action.boardConfig);
+    },
+    [openAddToPlaylist],
+  );
+
+  const handleBoardSheetOpenActions = useCallback(
+    (action: BoardSheetClimbAction) => {
+      openClimbActions(action.climb, action.boardConfig);
+    },
+    [openClimbActions],
+  );
+
   // Undo a wall change YOU just caused. Queue navigation is untouched; the
   // Bluetooth provider re-lights the captured target over BLE first, then
   // re-reports it to board presence.
@@ -586,8 +600,8 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
         onSwitchBoard={handleSwitchBoardFromSheet}
         onClimbPress={handleBoardSheetClimbPress}
         onAddToQueue={handleBoardSheetAddToQueue}
-        onOpenPlaylist={(action) => openAddToPlaylist(action.climb, action.boardConfig)}
-        onOpenActions={(action) => openClimbActions(action.climb, action.boardConfig)}
+        onOpenPlaylist={handleBoardSheetOpenPlaylist}
+        onOpenActions={handleBoardSheetOpenActions}
       />
       <QueueAddedSnackbar
         visible={snackbarVisible}

@@ -387,10 +387,7 @@ const boardSheetActionBoardConfig: BoardConfig = {
   angle: 30,
 };
 
-function makeBoardSheetAction(
-  climb: Climb,
-  overrides: Partial<BoardSheetClimbAction> = {},
-): BoardSheetClimbAction {
+function makeBoardSheetAction(climb: Climb, overrides: Partial<BoardSheetClimbAction> = {}): BoardSheetClimbAction {
   return {
     climb,
     queueItemUuid: 'wall-queue-x',

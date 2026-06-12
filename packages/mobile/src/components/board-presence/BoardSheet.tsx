@@ -39,6 +39,8 @@ import { getHttpClient } from '../../lib/graphql/client';
 import { GET_CLIMB, type GetClimbQueryResponse } from '../../lib/graphql/operations';
 import { spacing, borderRadius } from '../../theme/tokens';
 
+const ACTION_CLIMB_CACHE_LIMIT = 50;
+
 function presenceClimbToPreviewClimb(presenceClimb: BoardPresenceClimb): Climb {
   return {
     uuid: presenceClimb.climbUuid,
@@ -97,6 +99,13 @@ function actionCacheKey(boardConfig: BoardConfig, climbUuid: string): string {
     boardConfig.angle,
     climbUuid,
   ].join(':');
+}
+
+function setActionClimbCacheEntry(cache: Map<string, Climb>, key: string, climb: Climb): void {
+  cache.set(key, climb);
+  if (cache.size <= ACTION_CLIMB_CACHE_LIMIT) return;
+  const oldestKey = cache.keys().next().value;
+  if (oldestKey) cache.delete(oldestKey);
 }
 
 /**
@@ -208,7 +217,7 @@ export const BoardSheet = forwardRef<BoardSheetHandle, BoardSheetProps>(function
           climbUuid: presenceClimb.climbUuid,
         });
         if (!response.climb) return null;
-        actionClimbCacheRef.current.set(cacheKey, response.climb);
+        setActionClimbCacheEntry(actionClimbCacheRef.current, cacheKey, response.climb);
         return {
           climb: response.climb,
           queueItemUuid: presenceClimb.queueItemUuid ?? null,
@@ -537,7 +546,7 @@ type InteractiveRowActionProps = {
   onOpenActions?: (climb: BoardPresenceClimb) => void;
 };
 
-type HeroContentProps = Omit<HeroProps, 'climb'> & {
+type HeroContentProps = Omit<HeroProps, 'climb' | 'surfaceColor'> & {
   climb: BoardPresenceClimb;
   renderClimb: Climb;
   thumbnailSize?: number;
@@ -587,7 +596,12 @@ function NowOnTheWallHeroContent({
   );
 }
 
-function InteractiveHeroRow({
+type InteractiveHeroRowProps = HeroProps & {
+  climb: BoardPresenceClimb;
+  rowBoard: BoardSheetRowBoard;
+} & InteractiveRowActionProps;
+
+const InteractiveHeroRow = memo(function InteractiveHeroRowInner({
   climb,
   rowBoard,
   boardConfig,
@@ -601,7 +615,7 @@ function InteractiveHeroRow({
   onAddToQueue,
   onOpenPlaylist,
   onOpenActions,
-}: HeroProps & { climb: BoardPresenceClimb; rowBoard: BoardSheetRowBoard } & InteractiveRowActionProps) {
+}: InteractiveHeroRowProps) {
   const rowClimb = useMemo(() => presenceClimbToPreviewClimb(climb), [climb]);
   const climbBoardConfig = useMemo(
     () => (boardConfig ? actionBoardConfigForPresenceClimb(boardConfig, climb) : null),
@@ -610,6 +624,35 @@ function InteractiveHeroRow({
   const climbRowBoard = useMemo(
     () => (climbBoardConfig ? rowBoardForBoardConfig(climbBoardConfig) : rowBoard),
     [climbBoardConfig, rowBoard],
+  );
+  const contentRowStyle = useMemo(() => [styles.heroInteractiveRow, { backgroundColor: surfaceColor }], [surfaceColor]);
+  const handlePress = useCallback(() => {
+    onPress(climb);
+  }, [climb, onPress]);
+  const handleAddToQueue = useCallback(() => {
+    onAddToQueue?.(climb);
+  }, [climb, onAddToQueue]);
+  const handleOpenPlaylist = useCallback(() => {
+    onOpenPlaylist?.(climb);
+  }, [climb, onOpenPlaylist]);
+  const handleOpenActions = useCallback(() => {
+    onOpenActions?.(climb);
+  }, [climb, onOpenActions]);
+  const renderContent = useCallback(
+    () => (
+      <NowOnTheWallHeroContent
+        climb={climb}
+        renderClimb={rowClimb}
+        boardConfig={climbBoardConfig}
+        labelColor={labelColor}
+        secondaryColor={secondaryColor}
+        accentColor={accentColor}
+        formattedGrade={formattedGrade}
+        gradeColor={gradeColor}
+        thumbnailSize={52}
+      />
+    ),
+    [accentColor, climb, climbBoardConfig, formattedGrade, gradeColor, labelColor, rowClimb, secondaryColor],
   );
 
   return (
@@ -620,30 +663,17 @@ function InteractiveHeroRow({
       sizeId={climbRowBoard.sizeId}
       setIds={climbRowBoard.setIds}
       angle={climbRowBoard.angle}
-      onPress={() => onPress(climb)}
-      onAddToQueue={onAddToQueue ? () => onAddToQueue(climb) : undefined}
-      onOpenPlaylist={onOpenPlaylist ? () => onOpenPlaylist(climb) : undefined}
-      onOpenActions={onOpenActions ? () => onOpenActions(climb) : undefined}
+      onPress={handlePress}
+      onAddToQueue={onAddToQueue ? handleAddToQueue : undefined}
+      onOpenPlaylist={onOpenPlaylist ? handleOpenPlaylist : undefined}
+      onOpenActions={onOpenActions ? handleOpenActions : undefined}
       containerStyle={styles.heroInteractiveContainer}
-      contentRowStyle={[styles.heroInteractiveRow, { backgroundColor: surfaceColor }]}
+      contentRowStyle={contentRowStyle}
       showSeparator={false}
-      renderContent={() => (
-        <NowOnTheWallHeroContent
-          climb={climb}
-          renderClimb={rowClimb}
-          boardConfig={climbBoardConfig}
-          labelColor={labelColor}
-          secondaryColor={secondaryColor}
-          accentColor={accentColor}
-          surfaceColor={surfaceColor}
-          formattedGrade={formattedGrade}
-          gradeColor={gradeColor}
-          thumbnailSize={52}
-        />
-      )}
+      renderContent={renderContent}
     />
   );
-}
+});
 
 function NowOnTheWallHero({
   climb,
@@ -668,7 +698,6 @@ function NowOnTheWallHero({
         labelColor={labelColor}
         secondaryColor={secondaryColor}
         accentColor={accentColor}
-        surfaceColor={surfaceColor}
         formattedGrade={formattedGrade}
         gradeColor={gradeColor}
       />
@@ -723,7 +752,11 @@ function HistoryRowContent({
   );
 }
 
-function InteractiveHistoryRow({
+type InteractiveHistoryRowProps = HistoryRowProps & {
+  rowBoard: BoardSheetRowBoard;
+} & InteractiveRowActionProps;
+
+const InteractiveHistoryRow = memo(function InteractiveHistoryRowInner({
   climb,
   rowBoard,
   boardConfig,
@@ -735,7 +768,7 @@ function InteractiveHistoryRow({
   onAddToQueue,
   onOpenPlaylist,
   onOpenActions,
-}: HistoryRowProps & { rowBoard: BoardSheetRowBoard } & InteractiveRowActionProps) {
+}: InteractiveHistoryRowProps) {
   const rowClimb = useMemo(() => presenceClimbToPreviewClimb(climb), [climb]);
   const climbBoardConfig = useMemo(
     () => (boardConfig ? actionBoardConfigForPresenceClimb(boardConfig, climb) : null),
@@ -744,6 +777,32 @@ function InteractiveHistoryRow({
   const climbRowBoard = useMemo(
     () => (climbBoardConfig ? rowBoardForBoardConfig(climbBoardConfig) : rowBoard),
     [climbBoardConfig, rowBoard],
+  );
+  const handlePress = useCallback(() => {
+    onPress(climb);
+  }, [climb, onPress]);
+  const handleAddToQueue = useCallback(() => {
+    onAddToQueue?.(climb);
+  }, [climb, onAddToQueue]);
+  const handleOpenPlaylist = useCallback(() => {
+    onOpenPlaylist?.(climb);
+  }, [climb, onOpenPlaylist]);
+  const handleOpenActions = useCallback(() => {
+    onOpenActions?.(climb);
+  }, [climb, onOpenActions]);
+  const renderContent = useCallback(
+    () => (
+      <HistoryRowContent
+        climb={climb}
+        renderClimb={rowClimb}
+        boardConfig={climbBoardConfig}
+        labelColor={labelColor}
+        secondaryColor={secondaryColor}
+        formattedGrade={formattedGrade}
+        gradeColor={gradeColor}
+      />
+    ),
+    [climb, climbBoardConfig, formattedGrade, gradeColor, labelColor, rowClimb, secondaryColor],
   );
 
   return (
@@ -754,26 +813,16 @@ function InteractiveHistoryRow({
       sizeId={climbRowBoard.sizeId}
       setIds={climbRowBoard.setIds}
       angle={climbRowBoard.angle}
-      onPress={() => onPress(climb)}
-      onAddToQueue={onAddToQueue ? () => onAddToQueue(climb) : undefined}
-      onOpenPlaylist={onOpenPlaylist ? () => onOpenPlaylist(climb) : undefined}
-      onOpenActions={onOpenActions ? () => onOpenActions(climb) : undefined}
+      onPress={handlePress}
+      onAddToQueue={onAddToQueue ? handleAddToQueue : undefined}
+      onOpenPlaylist={onOpenPlaylist ? handleOpenPlaylist : undefined}
+      onOpenActions={onOpenActions ? handleOpenActions : undefined}
       contentRowStyle={styles.historyInteractiveRow}
       showSeparator={false}
-      renderContent={() => (
-        <HistoryRowContent
-          climb={climb}
-          renderClimb={rowClimb}
-          boardConfig={climbBoardConfig}
-          labelColor={labelColor}
-          secondaryColor={secondaryColor}
-          formattedGrade={formattedGrade}
-          gradeColor={gradeColor}
-        />
-      )}
+      renderContent={renderContent}
     />
   );
-}
+});
 
 const HistoryRow = memo(function HistoryRowInner({
   climb,

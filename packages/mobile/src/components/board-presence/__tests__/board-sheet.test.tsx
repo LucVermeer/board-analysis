@@ -27,6 +27,27 @@ const climbRows = vi.hoisted(() => ({ props: [] as Record<string, unknown>[] }))
 const thumbnails = vi.hoisted(() => ({ props: [] as Record<string, unknown>[] }));
 
 type ViewMockProps = { children?: ReactNode; style?: unknown };
+type ClimbListRowMockProps = {
+  climb?: { uuid?: string; name?: string };
+  boardName?: string;
+  layoutId?: number;
+  sizeId?: number;
+  setIds?: string;
+  angle?: number;
+  renderContent?: (args: {
+    climb?: { uuid?: string; name?: string };
+    boardName?: string;
+    layoutId?: number;
+    sizeId?: number;
+    setIds?: string;
+    angle?: number;
+  }) => ReactNode;
+  onPress?: (climb?: { uuid?: string; name?: string }) => void;
+  onAddToQueue?: (climb?: { uuid?: string; name?: string }) => void;
+  onOpenPlaylist?: (climb?: { uuid?: string; name?: string }) => void;
+  onOpenActions?: (climb?: { uuid?: string; name?: string }) => void;
+  [key: string]: unknown;
+};
 vi.mock('react-native', () => ({
   Platform: { OS: 'ios', select: (options: Record<string, unknown>) => options.ios ?? options.default },
   StyleSheet: { create: (styles: Record<string, unknown>) => styles, hairlineWidth: 1 },
@@ -115,22 +136,10 @@ vi.mock('../../Text', () => ({
 }));
 vi.mock('../../Icon', () => ({ Icon: ({ name }: { name: string }) => createElement('span', { 'data-icon': name }) }));
 vi.mock('../../ClimbListRow', () => ({
-  ClimbListRow: (props: Record<string, unknown>) => {
+  ClimbListRow: (props: ClimbListRowMockProps) => {
     climbRows.props.push(props);
-    const renderContent =
-      typeof props.renderContent === 'function'
-        ? (props.renderContent as (args: {
-            climb: unknown;
-            boardName: unknown;
-            layoutId: unknown;
-            sizeId: unknown;
-            setIds: unknown;
-            angle: unknown;
-          }) => ReactNode)
-        : null;
-    const climb = props.climb as { uuid?: string; name?: string } | undefined;
-    const content = renderContent
-      ? renderContent({
+    const content = props.renderContent
+      ? props.renderContent({
           climb: props.climb,
           boardName: props.boardName,
           layoutId: props.layoutId,
@@ -138,49 +147,29 @@ vi.mock('../../ClimbListRow', () => ({
           setIds: props.setIds,
           angle: props.angle,
         })
-      : climb?.name;
-    const climbUuid = climb?.uuid ?? 'unknown';
+      : props.climb?.name;
+    const climbUuid = props.climb?.uuid ?? 'unknown';
     return createElement(
       'div',
       { 'data-climb-row': climbUuid },
       createElement(
         'button',
-        {
-          'aria-label': `press ${climbUuid}`,
-          onClick: () => {
-            if (typeof props.onPress === 'function') props.onPress(props.climb);
-          },
-        },
+        { 'aria-label': `press ${climbUuid}`, onClick: () => props.onPress?.(props.climb) },
         content,
       ),
       createElement(
         'button',
-        {
-          'aria-label': `queue ${climbUuid}`,
-          onClick: () => {
-            if (typeof props.onAddToQueue === 'function') props.onAddToQueue(props.climb);
-          },
-        },
+        { 'aria-label': `queue ${climbUuid}`, onClick: () => props.onAddToQueue?.(props.climb) },
         'queue',
       ),
       createElement(
         'button',
-        {
-          'aria-label': `playlist ${climbUuid}`,
-          onClick: () => {
-            if (typeof props.onOpenPlaylist === 'function') props.onOpenPlaylist(props.climb);
-          },
-        },
+        { 'aria-label': `playlist ${climbUuid}`, onClick: () => props.onOpenPlaylist?.(props.climb) },
         'playlist',
       ),
       createElement(
         'button',
-        {
-          'aria-label': `actions ${climbUuid}`,
-          onClick: () => {
-            if (typeof props.onOpenActions === 'function') props.onOpenActions(props.climb);
-          },
-        },
+        { 'aria-label': `actions ${climbUuid}`, onClick: () => props.onOpenActions?.(props.climb) },
         'actions',
       ),
     );
