@@ -76,6 +76,7 @@
     "about": "Sobre",
     "rateBoardsesh": "Valorar Boardsesh",
     "reportBug": "Reportar un bug",
+    "joinDiscord": "Únete a Discord",
     "logout": "Cerrar sesión",
     "devBuild": "Build de dev",
     "branch": "Rama",
@@ -270,6 +271,9 @@
         "title": "Aplicaciones conectadas",
         "subtitle": "Apple Health y Strava"
       }
+    },
+    "about": {
+      "joinDiscord": "Únete a Discord"
     },
     "onboarding": {
       "skip": "Omitir",

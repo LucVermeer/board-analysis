@@ -86,7 +86,8 @@
       "openTitle": "Built in the open",
       "openBody": "The project is open source so climbers can report rough edges, request features, and help steer what comes next.",
       "independentTitle": "Independent project",
-      "independentBody": "Boardsesh is not affiliated with or endorsed by Aurora Climbing, Kilter, Tension, Moon Climbing, or any board manufacturer."
+      "independentBody": "Boardsesh is not affiliated with or endorsed by Aurora Climbing, Kilter, Tension, Moon Climbing, or any board manufacturer.",
+      "joinDiscord": "Join Discord"
     },
     "onboarding": {
       "skip": "Skip",
@@ -232,6 +233,7 @@
     "about": "About",
     "rateBoardsesh": "Rate Boardsesh",
     "reportBug": "Report a bug",
+    "joinDiscord": "Join Discord",
     "logout": "Log out"
   },
   "loading": {
