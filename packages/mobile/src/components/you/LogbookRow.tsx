@@ -63,7 +63,7 @@ export const LogbookRow = memo(function LogbookRow({ ascent, onPress }: LogbookR
   const gradeColor = gradeLabel ? gradeBadgeColor(rawGradeLabel ?? gradeLabel) : undefined;
   const layoutName = getLayoutDisplayName(ascent.boardType, ascent.layoutId);
   const triesLabel = t('mobile.logbook.tries', { count: ascent.attemptCount });
-  const subtitleParts = [layoutName, `${ascent.angle}°`, triesLabel, formatTickRelativeTime(ascent.climbedAt)];
+  const subtitleParts = [layoutName, triesLabel, `${ascent.angle}°`, formatTickRelativeTime(ascent.climbedAt)];
   const subtitle = subtitleParts.join(' · ');
   const climb = ascentToClimb(ascent);
   const boardConfig = getBoardConfigForPlaylist(ascent.boardType, ascent.layoutId);
@@ -96,7 +96,7 @@ export const LogbookRow = memo(function LogbookRow({ ascent, onPress }: LogbookR
             sizeId={boardConfig.sizeId}
             setIds={boardConfig.setIds.join(',')}
             angle={ascent.angle}
-            subtitleExtraParts={subtitleParts}
+            subtitleLeadingParts={subtitleParts}
             showAscentStatus={false}
           />
         </PressableSurface>

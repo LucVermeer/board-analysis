@@ -52,7 +52,7 @@ type ClimbListItemContentProps = {
   sizeId: number;
   setIds: string;
   angle: number;
-  subtitleExtraParts?: readonly string[];
+  subtitleLeadingParts?: readonly string[];
   /**
    * Whether to render the trailing ascent-status glyph. Defaults to true. Set
    * false where the host already shows the ascent status (e.g. the in-session
@@ -114,7 +114,7 @@ const ClimbListItemContent = React.memo(function ClimbListItemContent({
   sizeId,
   setIds,
   angle,
-  subtitleExtraParts,
+  subtitleLeadingParts,
   showAscentStatus = true,
 }: ClimbListItemContentProps) {
   const { t } = useTranslation('climbs');
@@ -125,7 +125,7 @@ const ClimbListItemContent = React.memo(function ClimbListItemContent({
 
   // Subtitle parts: sends · quality★ · setter (each dropped when absent).
   const subtitleText = useMemo(() => {
-    const parts: string[] = [];
+    const parts = subtitleLeadingParts?.filter((part) => part.length > 0) ?? [];
     if (climb.is_draft) {
       parts.push(t('createClimbForm.draftBadge'));
     }
@@ -139,11 +139,8 @@ const ClimbListItemContent = React.memo(function ClimbListItemContent({
     if (climb.setter_username) {
       parts.push(climb.setter_username);
     }
-    if (subtitleExtraParts) {
-      parts.push(...subtitleExtraParts.filter((part) => part.length > 0));
-    }
     return parts.length > 0 ? parts.join(' · ') : t('mobile.climbRow.projectFallback');
-  }, [climb.is_draft, climb.ascensionist_count, climb.quality_average, climb.setter_username, subtitleExtraParts, t]);
+  }, [climb.is_draft, climb.ascensionist_count, climb.quality_average, climb.setter_username, subtitleLeadingParts, t]);
 
   return (
     <>
