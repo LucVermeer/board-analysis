@@ -108,6 +108,20 @@ export default function MoreScreen() {
       ) : null}
 
       <View style={styles.section}>
+        <SectionHeader title={t('mobile.more.integrations.title')} />
+        <View style={[styles.card, { backgroundColor: systemColors.secondaryBackground }]}>
+          <ListRow
+            title={t('mobile.more.integrations.title')}
+            subtitle={t('mobile.more.integrations.subtitle')}
+            leading={<Icon name="favorite" size={22} color={systemColors.secondaryLabel} />}
+            showChevron
+            showSeparator={false}
+            onPress={() => router.push('/(tabs)/profile/integrations')}
+          />
+        </View>
+      </View>
+
+      <View style={styles.section}>
         <SectionHeader title={t('mobile.more.appearance.title')} />
         <View style={[styles.card, styles.cardPadded, { backgroundColor: systemColors.secondaryBackground }]}>
           <SegmentedControl

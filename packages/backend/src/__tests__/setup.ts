@@ -34,6 +34,8 @@ const TABLES_TO_RESET = [
   'user_climb_percentiles',
   'user_board_mappings',
   'mobile_refresh_tokens',
+  'integration_credentials',
+  'integration_exports',
   'users',
 ];
 

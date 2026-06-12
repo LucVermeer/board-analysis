@@ -30,6 +30,16 @@ vi.mock('expo-router', () => ({
 }));
 vi.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ bottom: 0 }) }));
 vi.mock('../../../../src/lib/graphql/hooks', () => ({ useSessionSummary: () => hook.result }));
+vi.mock('../../../../src/lib/graphql/use-active-board', () => ({ useActiveBoard: () => ({ data: null }) }));
+// Stub the integration summary actions so the real integrations lib (which
+// pulls in the native health-workouts/reanimated modules) isn't loaded in the
+// node test env.
+vi.mock('../../../../src/components/integrations/SaveToAppleHealthButton', () => ({
+  SaveToAppleHealthButton: () => createElement('div', { 'data-testid': 'save-apple-health' }),
+}));
+vi.mock('../../../../src/components/integrations/ShareToStravaButton', () => ({
+  ShareToStravaButton: () => createElement('div', { 'data-testid': 'share-strava' }),
+}));
 vi.mock('../../../../src/providers/theme-provider', () => ({
   useTheme: () => ({ systemColors: {}, brandColors: { primary: '#6D28D9' } }),
 }));

@@ -379,5 +379,35 @@
     "errorPermissionDenied": "Autorisez le Bluetooth pour connecter un panneau.",
     "errorLedMissing": "Impossible d'envoyer au panneau — données LED manquantes pour cette configuration.",
     "errorIncompatible": "Ce bloc est pour une configuration de panneau différente."
+  },
+  "integrations": {
+    "title": "Applications connectées",
+    "appleHealth": {
+      "title": "Apple Health",
+      "autoSave": "Enregistrer les séances automatiquement",
+      "autoSaveDescription": "Les séances terminées sont ajoutées à Apple Health comme entraînements d'escalade avec une estimation des calories.",
+      "permissionDenied": "L'accès à Santé est désactivé. Autorisez Boardsesh à écrire des entraînements dans Réglages.",
+      "openSettings": "Ouvrir Réglages"
+    },
+    "strava": {
+      "title": "Strava",
+      "connect": "Se connecter avec Strava",
+      "connectedAs": "Connecté en tant que {{name}}",
+      "connected": "Connecté",
+      "autoSync": "Téléverser les séances automatiquement",
+      "autoSyncDescription": "Les séances terminées apparaissent sur votre fil Strava comme activités d'escalade.",
+      "disconnect": "Déconnecter",
+      "disconnectConfirmTitle": "Déconnecter Strava ?",
+      "disconnectConfirmBody": "Les nouvelles séances ne seront plus envoyées à Strava. Les activités déjà envoyées restent sur Strava.",
+      "reconnect": "Reconnecter",
+      "expired": "Connexion expirée. Reconnectez-vous pour continuer à téléverser."
+    },
+    "toast": {
+      "connected": "Strava connecté",
+      "connectFailed": "Impossible de se connecter à Strava",
+      "disconnected": "Strava déconnecté",
+      "disconnectFailed": "Impossible de déconnecter Strava. Réessayez.",
+      "syncFailed": "Échec de l'envoi. Réessayez."
+    }
   }
 }

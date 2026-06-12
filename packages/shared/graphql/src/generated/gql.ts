@@ -96,7 +96,7 @@ type Documents = {
   '\n  query GetCommunitySettings($scope: String!, $scopeKey: String!) {\n    communitySettings(scope: $scope, scopeKey: $scopeKey) {\n      id\n      scope\n      scopeKey\n      key\n      value\n      setBy\n      createdAt\n      updatedAt\n    }\n  }\n': typeof types.GetCommunitySettingsDocument;
   '\n  mutation SetCommunitySettings($input: SetCommunitySettingInput!) {\n    setCommunitySettings(input: $input) {\n      id\n      scope\n      scopeKey\n      key\n      value\n      setBy\n      createdAt\n      updatedAt\n    }\n  }\n': typeof types.SetCommunitySettingsDocument;
   '\n  fragment SessionSummaryFields on SessionSummary {\n    sessionId\n    totalSends\n    totalAttempts\n    gradeDistribution {\n      grade\n      count\n    }\n    hardestClimb {\n      climbUuid\n      climbName\n      grade\n    }\n    participants {\n      userId\n      displayName\n      avatarUrl\n      sends\n      attempts\n    }\n    startedAt\n    endedAt\n    durationMinutes\n    goal\n  }\n': typeof types.SessionSummaryFieldsFragmentDoc;
-  '\n  \n  mutation EndSession($sessionId: ID!) {\n    endSession(sessionId: $sessionId) {\n      ...SessionSummaryFields\n    }\n  }\n': typeof types.EndSessionDocument;
+  '\n  \n  mutation EndSession($sessionId: ID!, $timezone: String) {\n    endSession(sessionId: $sessionId, timezone: $timezone) {\n      ...SessionSummaryFields\n    }\n  }\n': typeof types.EndSessionDocument;
   '\n  \n  query GetSessionSummary($sessionId: ID!) {\n    sessionSummary(sessionId: $sessionId) {\n      ...SessionSummaryFields\n    }\n  }\n': typeof types.GetSessionSummaryDocument;
   '\n  mutation FollowUser($input: FollowInput!) {\n    followUser(input: $input)\n  }\n': typeof types.FollowUserDocument;
   '\n  mutation UnfollowUser($input: FollowInput!) {\n    unfollowUser(input: $input)\n  }\n': typeof types.UnfollowUserDocument;
@@ -287,7 +287,7 @@ const documents: Documents = {
     types.SetCommunitySettingsDocument,
   '\n  fragment SessionSummaryFields on SessionSummary {\n    sessionId\n    totalSends\n    totalAttempts\n    gradeDistribution {\n      grade\n      count\n    }\n    hardestClimb {\n      climbUuid\n      climbName\n      grade\n    }\n    participants {\n      userId\n      displayName\n      avatarUrl\n      sends\n      attempts\n    }\n    startedAt\n    endedAt\n    durationMinutes\n    goal\n  }\n':
     types.SessionSummaryFieldsFragmentDoc,
-  '\n  \n  mutation EndSession($sessionId: ID!) {\n    endSession(sessionId: $sessionId) {\n      ...SessionSummaryFields\n    }\n  }\n':
+  '\n  \n  mutation EndSession($sessionId: ID!, $timezone: String) {\n    endSession(sessionId: $sessionId, timezone: $timezone) {\n      ...SessionSummaryFields\n    }\n  }\n':
     types.EndSessionDocument,
   '\n  \n  query GetSessionSummary($sessionId: ID!) {\n    sessionSummary(sessionId: $sessionId) {\n      ...SessionSummaryFields\n    }\n  }\n':
     types.GetSessionSummaryDocument,
@@ -850,8 +850,8 @@ export function graphql(
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(
-  source: '\n  \n  mutation EndSession($sessionId: ID!) {\n    endSession(sessionId: $sessionId) {\n      ...SessionSummaryFields\n    }\n  }\n',
-): (typeof documents)['\n  \n  mutation EndSession($sessionId: ID!) {\n    endSession(sessionId: $sessionId) {\n      ...SessionSummaryFields\n    }\n  }\n'];
+  source: '\n  \n  mutation EndSession($sessionId: ID!, $timezone: String) {\n    endSession(sessionId: $sessionId, timezone: $timezone) {\n      ...SessionSummaryFields\n    }\n  }\n',
+): (typeof documents)['\n  \n  mutation EndSession($sessionId: ID!, $timezone: String) {\n    endSession(sessionId: $sessionId, timezone: $timezone) {\n      ...SessionSummaryFields\n    }\n  }\n'];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

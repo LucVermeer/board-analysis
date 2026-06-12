@@ -10,7 +10,11 @@ import { SectionHeader } from '../../../src/components/SectionHeader';
 import { Separator } from '../../../src/components/Separator';
 import { useTheme } from '../../../src/providers/theme-provider';
 import { useSessionSummary } from '../../../src/lib/graphql/hooks';
+import { useActiveBoard } from '../../../src/lib/graphql/use-active-board';
 import { useGradeFormat } from '../../../src/hooks/use-grade-format';
+import { SaveToAppleHealthButton } from '../../../src/components/integrations/SaveToAppleHealthButton';
+import { ShareToStravaButton } from '../../../src/components/integrations/ShareToStravaButton';
+import type { SessionExportContext } from '../../../src/lib/integrations';
 import { brandColors } from '../../../src/theme/colors';
 import { spacing, borderRadius as br } from '../../../src/theme/tokens';
 
@@ -54,6 +58,7 @@ export default function SessionSummaryScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { formatGrade } = useGradeFormat();
+  const { data: activeBoard } = useActiveBoard();
 
   // Still loading: query hasn't settled yet (first fetch in flight or refetching
   // after a retry). isPending covers the disabled (no sessionId) case too.
@@ -87,6 +92,14 @@ export default function SessionSummaryScreen() {
   }
 
   const maxGradeCount = Math.max(...summary.gradeDistribution.map((gradeItem) => gradeItem.count), 1);
+
+  // Context for a manual Apple Health save from this screen. Auto-save at session
+  // end passes the real per-lap timestamps; a manual save here (e.g. after an app
+  // restart) can't reconstruct them, so the workout is written without laps.
+  const exportContext: SessionExportContext = {
+    boardType: activeBoard?.boardType ?? '',
+    lapTimestamps: [],
+  };
 
   return (
     <ScrollView
@@ -204,6 +217,13 @@ export default function SessionSummaryScreen() {
           <Text variant="body">{summary.goal}</Text>
         </View>
       ) : null}
+
+      {/* External integration actions: save this session to Apple Health / share
+          to Strava. Each renders only when applicable (iOS / connected account). */}
+      <View style={styles.integrationActions}>
+        <SaveToAppleHealthButton summary={summary} exportContext={exportContext} />
+        <ShareToStravaButton sessionId={summary.sessionId} />
+      </View>
 
       {/* Done button */}
       <Button title={t('summary.done')} variant="filled" onPress={() => router.back()} style={styles.doneButton} />
@@ -324,6 +344,9 @@ const styles = StyleSheet.create({
     padding: spacing[4],
     borderRadius: br.lg,
     gap: spacing[1],
+  },
+  integrationActions: {
+    gap: spacing[3],
   },
   doneButton: {
     marginTop: spacing[2],

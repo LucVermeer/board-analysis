@@ -13,6 +13,7 @@ import { END_SESSION as END_SESSION_GQL, type EndSessionResponse } from '@boards
 import { emitSessionEnded } from '@/app/lib/session-lifecycle-tracking';
 import type { SessionSummary } from '@boardsesh/shared-schema';
 import type { ClimbQueueItem } from '../../queue-control/types';
+import { getBrowserTimezone } from '@/app/lib/browser-timezone';
 
 type UseSessionIdManagementParams = {
   isOffBoardMode: boolean;
@@ -181,7 +182,7 @@ export function useSessionIdManagement({
     if (endingSessionId && wsAuthToken) {
       const client = createGraphQLHttpClient(wsAuthToken);
       client
-        .request<EndSessionResponse>(END_SESSION_GQL, { sessionId: endingSessionId })
+        .request<EndSessionResponse>(END_SESSION_GQL, { sessionId: endingSessionId, timezone: getBrowserTimezone() })
         .then((response: EndSessionResponse) => {
           if (response.endSession) setSessionSummary(response.endSession);
         })

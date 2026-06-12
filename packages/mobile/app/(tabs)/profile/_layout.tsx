@@ -22,6 +22,7 @@ export default function ProfileLayout() {
           so the stack header is hidden here. */}
       <Stack.Screen name="index" options={{ headerShown: false, title: t('mobile.nav.profile') }} />
       <Stack.Screen name="more" options={{ title: t('mobile.more.title') }} />
+      <Stack.Screen name="integrations" options={{ title: tSettings('integrations.title') }} />
       {/* i18n-ignore-next-line — preview-only screen */}
       <Stack.Screen name="branch-switcher" options={{ title: 'Branch Switcher' }} />
       <Stack.Screen name="dev-servers" options={{ title: t('mobile.more.metroServersTitle') }} />

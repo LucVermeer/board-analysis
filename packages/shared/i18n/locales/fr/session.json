@@ -155,7 +155,11 @@
     "retry": "Réessayer",
     "minutes": "{{count}} min",
     "hours": "{{count}} h",
-    "hoursAndMinutes": "{{hours}} h {{mins}} min"
+    "hoursAndMinutes": "{{hours}} h {{mins}} min",
+    "shareToStrava": "Partager sur Strava",
+    "sharingToStrava": "Partage sur Strava…",
+    "sharedToStrava": "Partagé sur Strava",
+    "shareToStravaFailed": "Impossible de partager sur Strava"
   },
   "overview": {
     "goal": "Objectif : {{goal}}"

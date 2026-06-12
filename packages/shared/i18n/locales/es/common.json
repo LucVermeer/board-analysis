@@ -240,6 +240,10 @@
         "title": "Privacidad",
         "recording": "Ayúdanos a mejorar",
         "recordingDescription": "Envía grabaciones de sesión anónimas y enmascaradas para que corrijamos errores más rápido. Lo que escribes y tus fotos quedan ocultos. Desactívalo cuando quieras."
+      },
+      "integrations": {
+        "title": "Aplicaciones conectadas",
+        "subtitle": "Apple Health y Strava"
       }
     },
     "onboarding": {

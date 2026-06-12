@@ -31,9 +31,11 @@ import { markErrorReported } from '../../../utils/sentry-dedupe';
 import type { CreateSessionInput } from '../shared/types';
 import { db } from '../../../db/client';
 import { esp32Controllers, userBoards } from '@boardsesh/db/schema/app';
-import { sessionBoards } from '../../../db/schema';
+import { sessionBoards, sessions } from '../../../db/schema';
 import { eq, inArray } from 'drizzle-orm';
 import { generateSessionSummary } from './session-summary';
+import { autoSyncSessionToIntegrations } from '../../../integrations/export-service';
+import { normalizeIanaTimezone } from '../../../utils/timezone';
 import { endLiveActivity } from '../../../services/apns';
 import { takeSessionDriverControl } from '../../../services/session-driver-control';
 import { buildSessionPayload } from './helpers';
@@ -681,7 +683,11 @@ export const sessionMutations = {
    * Validates the caller is the creator or current leader.
    * Returns a session summary with stats, or null if no ticks.
    */
-  endSession: async (_: unknown, { sessionId }: { sessionId: string }, ctx: ConnectionContext) => {
+  endSession: async (
+    _: unknown,
+    { sessionId, timezone }: { sessionId: string; timezone?: string | null },
+    ctx: ConnectionContext,
+  ) => {
     await applyRateLimit(ctx, 5);
     validateInput(SessionIdSchema, sessionId, 'sessionId');
     // Ending a session is destructive (terminates every subscriber, generates
@@ -734,6 +740,19 @@ export const sessionMutations = {
       }
     }
 
+    // Record the ending device's timezone before the session is closed out —
+    // exports to platforms like Strava need wall-clock local time, and UTC
+    // timestamps alone can't provide it. Best-effort: a bad zone string never
+    // fails the end.
+    const normalizedTimezone = normalizeIanaTimezone(timezone);
+    if (normalizedTimezone) {
+      try {
+        await db.update(sessions).set({ timezone: normalizedTimezone }).where(eq(sessions.id, sessionId));
+      } catch (error) {
+        logger.warn(`[endSession] failed to persist timezone for session ${sessionId}:`, error);
+      }
+    }
+
     // End the session via room manager
     await roomManager.endSession(sessionId);
 
@@ -755,6 +774,22 @@ export const sessionMutations = {
 
     // Generate and return summary
     const summary = await generateSessionSummary(sessionId);
+
+    // Fire-and-forget: upload the finished session to every participant's
+    // connected external integration (Strava) that has auto-sync on. Never
+    // blocks or fails the endSession response — failures are logged inside the
+    // service and here as a backstop.
+    // No summary (no recorded activity) means there is nothing to export —
+    // skip the dispatch entirely so the catch below can never misattribute
+    // that case as a failure.
+    if (summary) {
+      autoSyncSessionToIntegrations(sessionId, summary, sessionData.boardPath, normalizedTimezone).catch(
+        (error: unknown) => {
+          logger.error(`[Integrations] auto-sync dispatch failed for session ${sessionId}:`, error);
+        },
+      );
+    }
+
     return summary;
   },
 

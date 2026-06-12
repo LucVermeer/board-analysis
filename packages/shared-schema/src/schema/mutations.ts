@@ -31,7 +31,7 @@ export const mutationsTypeDefs = /* GraphQL */ `
     """
     End a session (active participant only).
     """
-    endSession(sessionId: ID!): SessionSummary
+    endSession(sessionId: ID!, timezone: String): SessionSummary
 
     """
     Update display name and avatar in the current session.
@@ -563,5 +563,37 @@ export const mutationsTypeDefs = /* GraphQL */ `
     associated with the user.
     """
     submitAppFeedback(input: SubmitAppFeedbackInput!): Boolean!
+
+    # ============================================
+    # External Platform Integration Mutations
+    # ============================================
+
+    """
+    Mint a short-lived, single-use handoff code for starting the provider's
+    browser OAuth flow (GET /integrations/:provider/start?handoff=...). Keeps
+    the session token out of URLs, where it would persist in logs and browser
+    history. Requires authentication.
+    """
+    createIntegrationOAuthHandoff(provider: IntegrationProvider!): String!
+
+    """
+    Unlink an external platform integration. Revokes the token on the
+    provider's side (best-effort) and deletes the stored credentials.
+    Requires authentication.
+    """
+    disconnectIntegration(provider: IntegrationProvider!): Boolean!
+
+    """
+    Toggle automatic upload of finished sessions for a connected integration.
+    Requires authentication.
+    """
+    setIntegrationAutoSync(provider: IntegrationProvider!, enabled: Boolean!): IntegrationStatus!
+
+    """
+    Export an ended session to an external platform. Idempotent: returns the
+    existing export when the session was already uploaded (e.g. by auto-sync).
+    Caller must be a participant of the session. Requires authentication.
+    """
+    syncSessionToIntegration(provider: IntegrationProvider!, sessionId: ID!): IntegrationExportResult!
   }
 `;

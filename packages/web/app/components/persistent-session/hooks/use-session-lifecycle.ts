@@ -35,6 +35,7 @@ import { END_SESSION as END_SESSION_GQL, type EndSessionResponse } from '@boards
 import { fetchAutoFinishedSummary } from './use-queue-storage';
 import { coerceSessionUser } from '../event-utils';
 import { TransientJoinError } from '../errors';
+import { getBrowserTimezone } from '@/app/lib/browser-timezone';
 import {
   type Session,
   type ActiveSessionInfo,
@@ -364,7 +365,7 @@ export function useSessionLifecycle({
     if (endingSessionId && token) {
       const httpClient = createGraphQLHttpClient(token);
       httpClient
-        .request<EndSessionResponse>(END_SESSION_GQL, { sessionId: endingSessionId })
+        .request<EndSessionResponse>(END_SESSION_GQL, { sessionId: endingSessionId, timezone: getBrowserTimezone() })
         .then((response) => {
           if (response.endSession) {
             setSessionSummary(response.endSession);

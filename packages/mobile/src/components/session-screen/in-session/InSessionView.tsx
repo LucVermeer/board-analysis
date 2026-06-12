@@ -30,6 +30,8 @@ import {
 } from '../../../providers/queue-provider';
 import { useDrawerHost } from '../../../providers/drawer-host-provider';
 import { useSessionDetail, useSessionSummary } from '../../../lib/graphql/hooks';
+import { useActiveBoard } from '../../../lib/graphql/use-active-board';
+import { runSessionEndExports } from '../../../lib/integrations';
 import { climbToQueueItem } from '../../../lib/climb-to-queue-item';
 import { getBoardConfigForPlaylist } from '../../../lib/playlists/board-details-for-playlist';
 import { navigateToSessionClimb } from '../../../lib/session-tick-mapping';
@@ -283,6 +285,12 @@ export function InSessionView({
   const summaryQuery = useSessionSummary(sessionId);
   const startedAt = summaryQuery.data?.startedAt ?? null;
 
+  // Board type for the session-end integration exports (Apple Health workout
+  // metadata + lap mapping). Falls back to '' when the active board hasn't
+  // resolved — the export still records a workout, just without a board label.
+  const { data: activeBoard } = useActiveBoard();
+  const exportBoardType = activeBoard?.boardType ?? '';
+
   // Refresh detail whenever live tick aggregates move so the history list and
   // hardest-send names catch the newly logged tick. The live push only carries
   // aggregates (not the tick list), so a refetch is the only path by which a new
@@ -366,6 +374,20 @@ export function InSessionView({
   const selfUserId = useMemo(
     () => sessionUsers.find((user) => user.id === participantId)?.userId ?? null,
     [sessionUsers, participantId],
+  );
+
+  // climbedAt timestamps of THIS user's ascents, mapped to HealthKit `.lap`
+  // events by the session-end Apple Health export. In a party session the tick
+  // list spans every climber, so we filter to our own (selfUserId). If we can't
+  // resolve selfUserId (rare; roster not yet hydrated) we fall back to every
+  // tick rather than recording zero laps — an over-broad lap set is harmless,
+  // a missing one loses data.
+  const selfLapTimestamps = useMemo(
+    () =>
+      sessionHistoryTicks
+        .filter((tick) => selfUserId == null || tick.userId === selfUserId)
+        .map((tick) => tick.climbedAt),
+    [sessionHistoryTicks, selfUserId],
   );
 
   // History-tick taps mutate the shared queue (setCurrentClimb) — gate them on
@@ -490,6 +512,12 @@ export function InSessionView({
       const summary = await endSession();
       onEndDismiss?.();
       if (summary) {
+        // Fire the device-local integration exports (Apple Health) before we
+        // navigate. Fire-and-forget — the export is async + best-effort and must
+        // never block or derail the summary navigation; the registry swallows any
+        // rejection. The manual save button on the summary screen shares the same
+        // dedup guard, so this won't double-write.
+        runSessionEndExports(summary, { boardType: exportBoardType, lapTimestamps: selfLapTimestamps });
         router.push({ pathname: '/(tabs)/record/summary', params: { sessionId: summary.sessionId } });
       }
     } catch (error) {
@@ -501,7 +529,7 @@ export function InSessionView({
       // confirm button spinning forever and the sheet undismissable.
       setIsEnding(false);
     }
-  }, [endSession, router, onEndDismiss]);
+  }, [endSession, router, onEndDismiss, exportBoardType, selfLapTimestamps]);
 
   // Stable dismiss handler so the always-mounted EndSessionSheet doesn't get a fresh
   // onDismiss ref every render (onEndDismiss is optional, hence the wrapper).

@@ -86,8 +86,8 @@ export const LEAVE_SESSION = `
 `;
 
 export const END_SESSION = `
-  mutation EndSession($sessionId: ID!) {
-    endSession(sessionId: $sessionId) {
+  mutation EndSession($sessionId: ID!, $timezone: String) {
+    endSession(sessionId: $sessionId, timezone: $timezone) {
       sessionId
       totalSends
       totalAttempts
