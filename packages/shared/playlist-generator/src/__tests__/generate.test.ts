@@ -120,6 +120,17 @@ describe('generateLadderPlan', () => {
     expect(slots.filter((slot) => slot.section === 'peak').every((slot) => slot.grade === 18)).toBe(true);
     expect(slots).toHaveLength(4 * 2);
   });
+
+  it('does not walk above the target when warm-up ends near the target', () => {
+    const slots = generateLadderPlan(
+      { ...DEFAULT_LADDER_OPTIONS, warmUp: 'standard', numberOfSteps: 5, climbsPerStep: 1, targetGrade: 22 },
+      GRADES,
+    );
+
+    const mainSlots = slots.filter((slot) => slot.section !== 'warmUp');
+    expect(mainSlots.map((slot) => slot.grade)).toEqual([18, 19, 20, 21, 22]);
+    expect(Math.max(...mainSlots.map((slot) => slot.grade))).toBe(22);
+  });
 });
 
 describe('generateGradeFocusPlan', () => {

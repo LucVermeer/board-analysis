@@ -125,28 +125,24 @@ export const generateLadderPlan = (options: LadderOptions, grades: GeneratorGrad
   const warmUpSlots = generateWarmUp(options.targetGrade, options.warmUp, grades);
   slots.push(...warmUpSlots);
 
-  const warmUpEndGrade =
-    warmUpSlots.length > 0
-      ? warmUpSlots[warmUpSlots.length - 1].grade
-      : clampGrade(options.targetGrade - options.numberOfSteps, grades);
-
-  const gradeIncrement = Math.max(
-    1,
-    Math.floor((options.targetGrade - warmUpEndGrade) / Math.max(1, options.numberOfSteps - 1)),
-  );
-
+  const stepCount = Math.max(0, options.numberOfSteps);
+  const climbsPerStep = Math.max(0, options.climbsPerStep);
+  const targetIndex = getTargetGradeIndex(options.targetGrade, grades);
+  const startIndex = targetIndex >= 0 ? Math.max(0, targetIndex - stepCount + 1) : -1;
   let currentIndex = slots.length;
 
-  for (let step = 0; step < options.numberOfSteps; step++) {
+  for (let step = 0; step < stepCount; step++) {
     const grade =
-      step === options.numberOfSteps - 1
+      step === stepCount - 1
         ? options.targetGrade
-        : clampGrade(warmUpEndGrade + gradeIncrement * step, grades);
+        : targetIndex >= 0
+          ? grades[Math.min(targetIndex, startIndex + step)].difficulty_id
+          : options.targetGrade - (stepCount - step - 1);
 
-    for (let i = 0; i < options.climbsPerStep; i++) {
+    for (let climb = 0; climb < climbsPerStep; climb++) {
       slots.push({
         grade,
-        section: step === options.numberOfSteps - 1 ? 'peak' : 'increasing',
+        section: step === stepCount - 1 ? 'peak' : 'increasing',
         index: currentIndex++,
       });
     }
