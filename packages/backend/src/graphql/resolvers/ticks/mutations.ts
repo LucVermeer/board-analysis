@@ -319,8 +319,6 @@ export const tickMutations = {
       const [board] = await db
         .select({
           id: dbSchema.userBoards.id,
-          ownerId: dbSchema.userBoards.ownerId,
-          isPublic: dbSchema.userBoards.isPublic,
           boardType: dbSchema.userBoards.boardType,
           layoutId: dbSchema.userBoards.layoutId,
           sizeId: dbSchema.userBoards.sizeId,
@@ -332,13 +330,6 @@ export const tickMutations = {
 
       if (!board) {
         throw new GraphQLError('Board not found', { extensions: { code: 'BAD_USER_INPUT' } });
-      }
-
-      // Don't let a client write ticks against someone else's private board.
-      // Public boards (including seeded gym boards) and the climber's own
-      // boards are both fine.
-      if (!board.isPublic && board.ownerId !== userId) {
-        throw new GraphQLError('Cannot tick on a private board', { extensions: { code: 'FORBIDDEN' } });
       }
 
       // Make sure the board the client is pointing at actually matches the
