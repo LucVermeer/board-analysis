@@ -434,6 +434,12 @@ describe('board-presence resolvers', () => {
         boardPresenceMutations.resolveBoardForUuid(undefined, { boardUuid }, authCtx()),
       ).rejects.toThrow('Board not found');
     });
+
+    it('rejects a board uuid that does not exist', async () => {
+      await expect(
+        boardPresenceMutations.resolveBoardForUuid(undefined, { boardUuid: uuidv4() }, authCtx()),
+      ).rejects.toThrow('Board not found');
+    });
   });
 
   describe('reportBoardClimb', () => {

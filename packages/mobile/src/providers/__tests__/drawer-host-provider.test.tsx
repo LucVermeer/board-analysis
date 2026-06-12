@@ -309,6 +309,26 @@ describe('DrawerHostProvider board presence binding', () => {
     expect(presence.resolveAndBindBoardByUuid).not.toHaveBeenCalled();
   });
 
+  it('resets board presence when the selected active board is cleared', async () => {
+    presence.enabled = true;
+    const hosts: Array<ReturnType<typeof useDrawerHost>> = [];
+    const onHost = (host: ReturnType<typeof useDrawerHost>) => hosts.push(host);
+    const { rerender } = renderHost(onHost);
+    await waitFor(() => {
+      expect(presence.resolveAndBindBoardByUuid).toHaveBeenCalledWith({ boardUuid: 'board-1' });
+    });
+
+    presence.resolveAndBindBoardByUuid.mockClear();
+    presence.resetPresence.mockClear();
+    activeBoard.stored = null;
+    rerender(createElement(DrawerHostProvider, null, createElement(Probe, { onHost })));
+
+    await waitFor(() => {
+      expect(presence.resetPresence).toHaveBeenCalledTimes(1);
+    });
+    expect(presence.resolveAndBindBoardByUuid).not.toHaveBeenCalled();
+  });
+
   it('rebinds board presence when the selected active board changes', async () => {
     presence.enabled = true;
     const hosts: Array<ReturnType<typeof useDrawerHost>> = [];

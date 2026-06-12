@@ -190,6 +190,43 @@ describe('MobileBoardPresenceProvider', () => {
     });
   });
 
+  it('does not start a second uuid resolve while the same uuid is pending', async () => {
+    flags.value = true;
+    let resolveBoard: ((value: ResolvedBoard) => void) | null = null;
+    transport.resolveBoardForUuid.mockImplementationOnce(
+      () =>
+        new Promise<ResolvedBoard>((resolve) => {
+          resolveBoard = resolve;
+        }),
+    );
+    renderProvider();
+
+    let firstPromise: Promise<ResolvedBoard | null> | undefined;
+    act(() => {
+      firstPromise = capturedControls?.resolveAndBindBoardByUuid({
+        boardUuid: '11111111-1111-4111-8111-111111111111',
+      });
+    });
+
+    let secondResult: ResolvedBoard | null | undefined;
+    await act(async () => {
+      secondResult = await capturedControls?.resolveAndBindBoardByUuid({
+        boardUuid: '11111111-1111-4111-8111-111111111111',
+      });
+    });
+
+    expect(secondResult).toBeNull();
+    expect(transport.resolveBoardForUuid).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      resolveBoard?.({ boardId: 44, boardName: 'Named Board' } as unknown as ResolvedBoard);
+      await firstPromise;
+    });
+    await waitFor(() => {
+      expect(sharedProvider.lastBoardId).toBe(44);
+    });
+  });
+
   it('does not re-resolve an unchanged config once bound', async () => {
     flags.value = true;
     renderProvider();

@@ -153,7 +153,7 @@ export function MobileBoardPresenceProvider({ children }: { children: ReactNode 
       if (!enabledRef.current || activeClient === null || !activeClient.resolveBoardForUuid) {
         return null;
       }
-      if (lastResolvedBoardUuidRef.current === args.boardUuid && boardIdRef.current !== null) {
+      if (lastResolvedBoardUuidRef.current === args.boardUuid) {
         return null;
       }
       const resolveGeneration = resolveGenerationRef.current + 1;
@@ -164,19 +164,13 @@ export function MobileBoardPresenceProvider({ children }: { children: ReactNode 
       setBoardId(null);
       try {
         const resolved = await activeClient.resolveBoardForUuid(args);
-        if (
-          resolveGenerationRef.current !== resolveGeneration ||
-          lastResolvedBoardUuidRef.current !== args.boardUuid
-        ) {
+        if (resolveGenerationRef.current !== resolveGeneration) {
           return null;
         }
         setBoardId(resolved.boardId);
         return resolved;
       } catch (error) {
-        if (
-          resolveGenerationRef.current === resolveGeneration &&
-          lastResolvedBoardUuidRef.current === args.boardUuid
-        ) {
+        if (resolveGenerationRef.current === resolveGeneration) {
           lastResolvedBoardUuidRef.current = null;
         }
         console.warn('[board-presence] resolveBoardForUuid failed', error);
