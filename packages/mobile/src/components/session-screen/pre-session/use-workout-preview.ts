@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getGradesForBoard, toBoardName } from '@boardsesh/board-config';
-import { generateWorkoutPlan, type GeneratorGradeScale } from '@boardsesh/playlist-generator';
+import { generateWorkoutPlan, type GeneratorGradeScale, type PlannedClimbSlot } from '@boardsesh/playlist-generator';
 import type { ClimbQueueItem } from '@boardsesh/queue';
 import type { UserBoard } from '@boardsesh/shared-schema';
 import { useTranslation } from 'react-i18next';
@@ -28,6 +28,8 @@ export type UseWorkoutPreviewResult = {
   refreshingUuids: ReadonlySet<string>;
   /** Slots the generator planned — for the `SessionQueueGenerated.failedCount` delta. */
   plannedCount: number;
+  /** Actual generated slot plan, before climb-pool shortfalls remove rows from the preview. */
+  plannedSlots: readonly PlannedClimbSlot[];
   regenerate: () => void;
   refreshSlot: (itemUuid: string) => void;
   /** The current preview as a plain queue (the hand-off to `setQueue` on Start). */
@@ -69,6 +71,19 @@ function getSelectionGenerationKey(selection: GeneratorSelection): string {
   }
 }
 
+function getBoardGenerationKey(board: UserBoard | null): string {
+  return board ? `${board.boardType}:${board.layoutId}:${board.sizeId}:${board.setIds}:${board.angle}` : 'none';
+}
+
+function getPreviewGenerationKey(
+  selection: GeneratorSelection,
+  board: UserBoard | null,
+  isAuthenticated: boolean,
+): string {
+  const authKey = isAuthenticated ? 'authenticated' : 'anonymous';
+  return `${getSelectionGenerationKey(selection)}|${getBoardGenerationKey(board)}|${authKey}`;
+}
+
 /**
  * Owns the live workout preview: a debounced rebuild whenever the workout type /
  * target grade / filters change, plus per-row regeneration. All mutable
@@ -88,11 +103,14 @@ export function useWorkoutPreview(
   const [items, setItems] = useState<PreviewItem[]>([]);
   const [refreshingUuids, setRefreshingUuids] = useState<ReadonlySet<string>>(() => new Set());
   const [plannedCount, setPlannedCount] = useState(0);
+  const [plannedSlots, setPlannedSlots] = useState<readonly PlannedClimbSlot[]>([]);
+  const [committedPreviewKey, setCommittedPreviewKeyState] = useState<string | null>(null);
 
   // Mutable source of truth the async callbacks read/write without re-rendering.
   const dataRef = useRef<WorkoutPreviewData>(EMPTY_DATA());
   // Monotonic token: a build/clear only commits if it's still the latest.
   const genTokenRef = useRef(0);
+  const committedPreviewKeyRef = useRef<string | null>(null);
   // Rows with a refresh fetch in flight (guards double-tap races).
   const inFlightSlotsRef = useRef<Set<string>>(new Set());
   const toastRef = useRef({ showToast, t });
@@ -110,6 +128,11 @@ export function useWorkoutPreview(
   fetchPoolRef.current = deps?.fetchPool ?? fetchGradePool;
   const gradesOverrideRef = useRef(deps?.grades);
   gradesOverrideRef.current = deps?.grades;
+
+  const setCommittedPreviewKey = useCallback((nextPreviewKey: string | null) => {
+    committedPreviewKeyRef.current = nextPreviewKey;
+    setCommittedPreviewKeyState(nextPreviewKey);
+  }, []);
 
   const buildCtx = useCallback((): PreviewFetchContext | null => {
     const currentBoard = boardRef.current;
@@ -130,13 +153,18 @@ export function useWorkoutPreview(
     return getGradesForBoard(boardName);
   }, []);
 
-  const clearPreview = useCallback((nextStatus: WorkoutPreviewStatus) => {
-    genTokenRef.current++; // invalidate any in-flight build
-    dataRef.current = EMPTY_DATA();
-    setItems([]);
-    setPlannedCount(0);
-    setStatus(nextStatus);
-  }, []);
+  const clearPreview = useCallback(
+    (nextStatus: WorkoutPreviewStatus) => {
+      genTokenRef.current++; // invalidate any in-flight build
+      dataRef.current = EMPTY_DATA();
+      setCommittedPreviewKey(null);
+      setItems([]);
+      setPlannedCount(0);
+      setPlannedSlots([]);
+      setStatus(nextStatus);
+    },
+    [setCommittedPreviewKey],
+  );
 
   const regenerate = useCallback(async () => {
     const currentSelection = selectionRef.current;
@@ -151,6 +179,7 @@ export function useWorkoutPreview(
       return;
     }
 
+    const nextPreviewKey = getPreviewGenerationKey(currentSelection, currentBoard, isAuthRef.current);
     const token = ++genTokenRef.current;
     setStatus('loading'); // keep prior items mounted so the list doesn't jump
     try {
@@ -159,8 +188,10 @@ export function useWorkoutPreview(
       if (!ctx || token !== genTokenRef.current) return; // selection/board changed underneath
       if (plan.length === 0) {
         dataRef.current = EMPTY_DATA();
+        setCommittedPreviewKey(nextPreviewKey);
         setItems([]);
         setPlannedCount(0);
+        setPlannedSlots([]);
         setStatus('ready');
         return;
       }
@@ -168,8 +199,10 @@ export function useWorkoutPreview(
       if (token !== genTokenRef.current) return; // superseded by a newer build
       const { items: nextItems, usedUuids } = selectItemsFromPools(plan, pools);
       dataRef.current = { items: nextItems, pools, usedUuids };
+      setCommittedPreviewKey(nextPreviewKey);
       setItems(nextItems);
       setPlannedCount(plan.length);
+      setPlannedSlots(plan);
       setStatus('ready');
     } catch {
       if (token !== genTokenRef.current) return;
@@ -208,15 +241,21 @@ export function useWorkoutPreview(
     [buildCtx],
   );
 
-  const toQueueItems = useCallback(() => dataRef.current.items.map((preview) => preview.item), []);
+  const toQueueItems = useCallback(() => {
+    const currentPreviewKey = getPreviewGenerationKey(selectionRef.current, boardRef.current, isAuthRef.current);
+    if (committedPreviewKeyRef.current !== currentPreviewKey) return [];
+    return dataRef.current.items.map((preview) => preview.item);
+  }, []);
 
   // Debounced live rebuild. `off`/no-board clears immediately; a real change
   // schedules a rebuild and supersedes any pending one via the cleared timer.
   const generationKey = useMemo(() => getSelectionGenerationKey(selection), [selection]);
   const authKey = options.isAuthenticated ? 'authenticated' : 'anonymous';
-  const boardKey = board
-    ? `${board.boardType}:${board.layoutId}:${board.sizeId}:${board.setIds}:${board.angle}`
-    : 'none';
+  const boardKey = getBoardGenerationKey(board);
+  const currentPreviewKey = useMemo(
+    () => getPreviewGenerationKey(selection, board, options.isAuthenticated),
+    [selection, board, options.isAuthenticated],
+  );
 
   useEffect(() => {
     if (generationKey === 'off' || boardKey === 'none') {
@@ -232,16 +271,35 @@ export function useWorkoutPreview(
   const regenerateVoid = useCallback(() => void regenerate(), [regenerate]);
   const refreshSlotVoid = useCallback((itemUuid: string) => void refreshSlot(itemUuid), [refreshSlot]);
 
-  return useMemo(
-    () => ({
-      status,
-      items,
+  return useMemo(() => {
+    const hasActivePreviewRequest = generationKey !== 'off' && boardKey !== 'none';
+    const isCommittedPreviewCurrent = committedPreviewKey === currentPreviewKey;
+    let exposedStatus = status;
+    if (hasActivePreviewRequest && !isCommittedPreviewCurrent) {
+      exposedStatus = status === 'error' ? 'error' : 'loading';
+    }
+    return {
+      status: hasActivePreviewRequest ? exposedStatus : 'idle',
+      items: hasActivePreviewRequest ? items : [],
       refreshingUuids,
-      plannedCount,
+      plannedCount: hasActivePreviewRequest && isCommittedPreviewCurrent ? plannedCount : 0,
+      plannedSlots: hasActivePreviewRequest && isCommittedPreviewCurrent ? plannedSlots : [],
       regenerate: regenerateVoid,
       refreshSlot: refreshSlotVoid,
       toQueueItems,
-    }),
-    [status, items, refreshingUuids, plannedCount, regenerateVoid, refreshSlotVoid, toQueueItems],
-  );
+    };
+  }, [
+    generationKey,
+    boardKey,
+    committedPreviewKey,
+    currentPreviewKey,
+    status,
+    items,
+    refreshingUuids,
+    plannedCount,
+    plannedSlots,
+    regenerateVoid,
+    refreshSlotVoid,
+    toQueueItems,
+  ]);
 }

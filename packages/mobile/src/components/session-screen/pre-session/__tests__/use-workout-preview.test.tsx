@@ -114,6 +114,7 @@ describe('useWorkoutPreview', () => {
 
     await waitFor(() => expect(result.current.status).toBe('ready'));
     expect(result.current.items).toHaveLength(2); // 2-slot plan
+    expect(result.current.plannedSlots).toEqual(generator.plan);
     // Pool order is shuffled, so assert distinct membership rather than order.
     const uuids = result.current.items.map((preview) => preview.item.climb.uuid);
     expect(new Set(uuids).size).toBe(2); // two distinct climbs
@@ -147,6 +148,24 @@ describe('useWorkoutPreview', () => {
     await waitFor(() => expect(fetchPool).toHaveBeenCalledTimes(1));
   });
 
+  it('hides stale generated plan data while a changed selection rebuilds', async () => {
+    const fetchPool = vi.fn<FetchGradePool>(async () => [makeClimb('a'), makeClimb('b'), makeClimb('c')]);
+    const { result, rerender } = renderPreview(fetchPool, OFF);
+
+    rerender({ selection: on(10) });
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+    expect(result.current.toQueueItems()).toHaveLength(2);
+
+    rerender({ selection: on(11) });
+
+    expect(result.current.status).toBe('loading');
+    expect(result.current.plannedSlots).toEqual([]);
+    expect(result.current.plannedCount).toBe(0);
+    expect(result.current.toQueueItems()).toEqual([]);
+
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+  });
+
   it('rebuilds when authentication changes because climb-bias filters depend on auth', async () => {
     const fetchPool = vi.fn<FetchGradePool>(async () => [makeClimb('a'), makeClimb('b'), makeClimb('c')]);
     const selection = on(10, { climbBias: 'unfamiliar' });
@@ -170,6 +189,7 @@ describe('useWorkoutPreview', () => {
     rerender({ selection: OFF });
     await waitFor(() => expect(result.current.status).toBe('idle'));
     expect(result.current.items).toEqual([]);
+    expect(result.current.plannedSlots).toEqual([]);
   });
 
   it('refreshes a single row and de-dupes a double-tap into one fetch', async () => {
@@ -277,6 +297,9 @@ describe('useWorkoutPreview', () => {
     await waitFor(() => expect(result.current.status).toBe('error'));
 
     expect(result.current.items.map((preview) => preview.item.climb.uuid)).toEqual(previousUuids);
+    expect(result.current.plannedSlots).toEqual([]);
+    expect(result.current.plannedCount).toBe(0);
+    expect(result.current.toQueueItems()).toEqual([]);
     expect(toast.showToast).toHaveBeenCalledWith('mobile.session.preWorkoutPreviewError', 'error');
   });
 });

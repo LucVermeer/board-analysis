@@ -1,4 +1,4 @@
-import { useEffect, useMemo, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, type ReactNode } from 'react';
 import { Pressable, StyleSheet, View, type ViewStyle } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { Chip as PaperChip } from 'react-native-paper';
@@ -22,6 +22,7 @@ import {
   DEFAULT_PYRAMID_OPTIONS,
   DEFAULT_VOLUME_OPTIONS,
   WARM_UP_OPTIONS,
+  generateWorkoutPlan,
   type ClimbBias,
   type GeneratorOptions,
   type WarmUpType,
@@ -37,6 +38,7 @@ import { SwitchRow } from '../../SwitchRow';
 import { Stepper } from '../../Stepper';
 import { Text } from '../../Text';
 import { GradeSingleSelectRail } from '../../grade';
+import { useGradeFormat } from '../../../hooks/use-grade-format';
 import { useTheme } from '../../../providers/theme-provider';
 import { hapticSelection } from '../../../lib/haptics';
 import { spacing, borderRadius } from '../../../theme/tokens';
@@ -45,6 +47,9 @@ import { springs } from '../../../theme/animations';
 // both schemes, so it reads the static brand set (mirrors ClimbFilterSheet).
 import { brandColors as staticBrandColors } from '../../../theme/colors';
 import { iosSystemColors } from '../../../theme/ios-colors';
+import type { ColoredBar } from '../../you/profile-chart-colors';
+import { WorkoutTypeShelf, type WorkoutTypeShelfItem } from './WorkoutTypeShelf';
+import { buildWorkoutGradeBars, buildWorkoutProgressionBars } from './workout-type-shelf-data';
 
 export type GeneratorSelection = { type: 'off' } | { type: 'on'; options: GeneratorOptions };
 
@@ -127,6 +132,10 @@ function getDefaultTargetGrade(boardName: BoardName | null): number {
   const grades = getGradesForBoard(boardName);
   if (grades.length === 0) return 15;
   return grades[Math.floor(grades.length / 2)].difficulty_id;
+}
+
+function getChartClimbCount(bar: ColoredBar): number {
+  return bar.segments.reduce((total, segment) => total + segment.value, 0);
 }
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
@@ -249,8 +258,7 @@ function toRailGrades(boardName: BoardName | null): Grade[] {
  * Laid out as iOS grouped inset sections (mirroring ClimbFilterSheet): a
  * filled-chip workout-type rail, a single-select grade rail, a grouped stepper
  * card for the primary count(s), and a collapsed "Tuning" section for the long
- * tail (warm-up, secondary steppers, min-ascents, min-rating, climb bias,
- * tall/wide).
+ * tail (min-ascents, min-rating, climb bias, tall/wide).
  */
 export function GeneratorPickerCard({
   boardName,
@@ -262,6 +270,7 @@ export function GeneratorPickerCard({
 }: GeneratorPickerCardProps) {
   const { t } = useTranslation('session');
   const { systemColors, variant, m3 } = useTheme();
+  const { formatGradeByDifficultyId } = useGradeFormat();
   const isMaterial = variant === 'material';
 
   const isKilterHomewall = boardName === 'kilter' && layoutId === KILTER_HOMEWALL_LAYOUT_ID;
@@ -284,6 +293,7 @@ export function GeneratorPickerCard({
   }, [selection, showTallClimbsFilter, showWideClimbsFilter, onChange]);
 
   const railGrades = useMemo(() => toRailGrades(boardName), [boardName]);
+  const generatorGrades = useMemo(() => (boardName ? getGradesForBoard(boardName) : []), [boardName]);
   const activeType = selection.type === 'on' ? selection.options.type : 'off';
 
   const minAscentsOptions = useMemo(() => {
@@ -292,22 +302,104 @@ export function GeneratorPickerCard({
     return [...baseOptions, selection.options.minAscents].sort((first, second) => first - second);
   }, [selection]);
 
-  const handleSelectType = (value: ChipValue) => {
-    if (value === 'off') {
-      onChange({ type: 'off' });
-      return;
-    }
-    // Enabling the generator (off → a workout type) reveals the configurator —
-    // the mobile analogue of web's `Workout Generator Opened`. Match web's exact
-    // payload (playlist-generator-drawer.tsx): `{ targetType, boardName, angle }`.
-    // The pre-session flow always feeds the session queue, so targetType is
-    // 'session'; PostHog groups by exact prop name, so the keys must line up.
-    if (selection.type === 'off') {
-      track(SHARED_EVENTS.WorkoutGeneratorOpened, { targetType: 'session', boardName, angle });
-    }
-    const currentTarget = selection.type === 'on' ? selection.options.targetGrade : getDefaultTargetGrade(boardName);
-    onChange({ type: 'on', options: buildDefaultOptions(value, currentTarget) });
-  };
+  const handleSelectType = useCallback(
+    (value: ChipValue) => {
+      hapticSelection();
+      if (value === 'off') {
+        onChange({ type: 'off' });
+        return;
+      }
+      // Enabling the generator (off → a workout type) reveals the configurator —
+      // the mobile analogue of web's `Workout Generator Opened`. Match web's exact
+      // payload (playlist-generator-drawer.tsx): `{ targetType, boardName, angle }`.
+      // The pre-session flow always feeds the session queue, so targetType is
+      // 'session'; PostHog groups by exact prop name, so the keys must line up.
+      if (selection.type === 'off') {
+        track(SHARED_EVENTS.WorkoutGeneratorOpened, { targetType: 'session', boardName, angle });
+      }
+      const currentTarget = selection.type === 'on' ? selection.options.targetGrade : getDefaultTargetGrade(boardName);
+      onChange({ type: 'on', options: buildDefaultOptions(value, currentTarget) });
+    },
+    [angle, boardName, onChange, selection],
+  );
+
+  const shelfItems = useMemo<WorkoutTypeShelfItem[]>(() => {
+    const groupLabel = t('mobile.session.preGeneratorLabel');
+    const targetGrade = selection.type === 'on' ? selection.options.targetGrade : getDefaultTargetGrade(boardName);
+    const commonPatch: CommonGeneratorPatch =
+      selection.type === 'on'
+        ? {
+            warmUp: selection.options.warmUp,
+            targetGrade,
+            climbBias: selection.options.climbBias,
+            minAscents: selection.options.minAscents,
+            minRating: selection.options.minRating,
+            onlyTallClimbs: selection.options.onlyTallClimbs,
+            onlyWideClimbs: selection.options.onlyWideClimbs,
+          }
+        : { targetGrade };
+
+    return CHIP_VALUES.map((value) => {
+      const label = chipLabel(value, t);
+      if (value === 'off') {
+        return {
+          key: value,
+          label,
+          selected: activeType === value,
+          bars: null,
+          emptyIcon: 'hand.raised',
+          onPress: () => handleSelectType(value),
+          accessibilityLabel: t('mobile.session.preGeneratorOptionAccessibilityLabel', {
+            group: groupLabel,
+            value: label,
+          }),
+        };
+      }
+
+      const options: GeneratorOptions =
+        selection.type === 'on' && selection.options.type === value
+          ? selection.options
+          : ({ ...buildDefaultOptions(value, targetGrade), ...commonPatch } as GeneratorOptions);
+      const slots = generateWorkoutPlan(options, generatorGrades);
+      const bars =
+        value === 'pyramid'
+          ? buildWorkoutProgressionBars(slots, formatGradeByDifficultyId, generatorGrades)
+          : buildWorkoutGradeBars(slots, formatGradeByDifficultyId);
+      const chartSummary =
+        value === 'pyramid'
+          ? slots
+              .map((slot, slotIndex) =>
+                t('mobile.session.preGeneratorChartProgressPoint', {
+                  index: slotIndex + 1,
+                  grade: formatGradeByDifficultyId(slot.grade) ?? String(slot.grade),
+                }),
+              )
+              .join(' · ')
+          : bars
+              ?.map((bar) =>
+                t('mobile.session.preGeneratorChartPoint', {
+                  count: getChartClimbCount(bar),
+                  grade: bar.label,
+                }),
+              )
+              .join(' · ');
+      const accessibleValue = chartSummary
+        ? t('mobile.session.preGeneratorOptionChartValue', { value: label, summary: chartSummary })
+        : label;
+
+      return {
+        key: value,
+        label,
+        selected: activeType === value,
+        bars,
+        onPress: () => handleSelectType(value),
+        accessibilityLabel: t('mobile.session.preGeneratorOptionAccessibilityLabel', {
+          group: groupLabel,
+          value: accessibleValue,
+        }),
+      };
+    });
+  }, [activeType, boardName, formatGradeByDifficultyId, generatorGrades, handleSelectType, selection, t]);
 
   const updateCommonOptions = (patch: CommonGeneratorPatch) => {
     if (selection.type !== 'on') return;
@@ -318,13 +410,13 @@ export function GeneratorPickerCard({
   // workout shows its defaults summarised rather than a stale expanded state.
   const tuningResetKey = activeType === 'off' ? 0 : CHIP_VALUES.indexOf(activeType);
 
-  // Tuning summary, built like ClimbFilterSheet's refineSummary: warm-up · min
-  // ascents · stars · climb bias. Stars render as filled glyphs (a symbol, not
+  // Tuning summary, built like ClimbFilterSheet's refineSummary: min ascents ·
+  // stars · climb bias. Stars render as filled glyphs (a symbol, not
   // translatable copy); "Any" rating shows nothing so the line stays short.
   const tuningSummary = useMemo(() => {
     if (selection.type !== 'on') return null;
     const { options } = selection;
-    const parts: string[] = [warmUpLabel(options.warmUp, t)];
+    const parts: string[] = [];
     parts.push(
       t('mobile.session.preGeneratorMinAscentsOption', { value: formatMinAscentsFilterCount(options.minAscents) }),
     );
@@ -447,15 +539,6 @@ export function GeneratorPickerCard({
     const minRatingPickerValue = getMinRatingPickerValue(options.minRating);
     return (
       <View style={styles.tuningBody}>
-        <SegmentedControl
-          options={warmUpOptions}
-          selectedKey={options.warmUp}
-          onSelect={(warmUp) => updateCommonOptions({ warmUp })}
-          textVariant="footnote"
-          trackColor={systemColors.fill}
-          accessibilityLabel={t('mobile.session.preGeneratorWarmUp')}
-        />
-
         <View>
           <Text variant="footnote" style={styles.subsectionLabel}>
             {t('mobile.session.preGeneratorMinAscents')}
@@ -560,25 +643,7 @@ export function GeneratorPickerCard({
   return (
     <View>
       <SectionHeader title={t('mobile.session.preGeneratorLabel')} />
-      <View style={styles.inset}>
-        <View style={styles.chipRow}>
-          {CHIP_VALUES.map((value) => {
-            const label = chipLabel(value, t);
-            return (
-              <Chip
-                key={value}
-                label={label}
-                selected={value === activeType}
-                onPress={() => handleSelectType(value)}
-                accessibilityLabel={t('mobile.session.preGeneratorOptionAccessibilityLabel', {
-                  group: t('mobile.session.preGeneratorLabel'),
-                  value: label,
-                })}
-              />
-            );
-          })}
-        </View>
-      </View>
+      <WorkoutTypeShelf items={shelfItems} />
 
       {selection.type === 'on' ? (
         <>
@@ -595,6 +660,18 @@ export function GeneratorPickerCard({
               />
             </>
           ) : null}
+
+          <SectionHeader title={t('mobile.session.preGeneratorWarmUp')} />
+          <View style={[styles.inset, styles.warmUpInset]}>
+            <SegmentedControl
+              options={warmUpOptions}
+              selectedKey={selection.options.warmUp}
+              onSelect={(warmUp) => updateCommonOptions({ warmUp })}
+              textVariant="footnote"
+              trackColor={systemColors.fill}
+              accessibilityLabel={t('mobile.session.preGeneratorWarmUp')}
+            />
+          </View>
 
           <View style={[styles.inset, styles.steppersInset]}>
             <GroupedSteppers rows={[...primarySteppers(selection.options), ...secondarySteppers(selection.options)]} />
@@ -624,6 +701,9 @@ const styles = StyleSheet.create({
   // The grade rail self-insets, so the stepper card sits a little below it.
   steppersInset: {
     marginTop: spacing[2],
+  },
+  warmUpInset: {
+    marginBottom: spacing[2],
   },
   tuningInset: {
     marginTop: spacing[3],

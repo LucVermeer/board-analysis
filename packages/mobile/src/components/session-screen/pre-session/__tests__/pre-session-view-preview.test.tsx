@@ -12,6 +12,7 @@ const preview = vi.hoisted(() => ({
     status: 'ready' as 'idle' | 'loading' | 'ready' | 'error',
     refreshingUuids: new Set<string>(),
     plannedCount: 0,
+    plannedSlots: [],
     regenerate: vi.fn(),
     refreshSlot: vi.fn(),
     toQueueItems: () => [] as ClimbQueueItem[],
