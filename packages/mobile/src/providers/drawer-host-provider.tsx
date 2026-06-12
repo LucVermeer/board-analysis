@@ -331,6 +331,14 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
     });
   }, [climbActions]);
 
+  const handleClimbActionsOpenPlaylist = useCallback(() => {
+    if (!climbActions) return;
+    setPlaylistClimb({
+      climb: climbActions.climb,
+      boardConfig: climbActions.boardConfig,
+    });
+  }, [climbActions]);
+
   // Present the always-mounted queue sheet imperatively. Calling `present()`
   // synchronously from the handler (rather than from a `visible`-prop effect)
   // is what actually shows the sheet — see QueueSheetHandle for the gorhom
@@ -565,6 +573,7 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
           angle={climbActions.boardConfig.angle}
           currentUserId={profile?.id ?? null}
           onAddToQueue={handleClimbActionsAddToQueue}
+          onOpenPlaylist={handleClimbActionsOpenPlaylist}
           onToggleFavorite={handleClimbActionsToggleFavorite}
           onTick={handleClimbActionsTick}
           onClose={closeClimbActions}

@@ -131,7 +131,7 @@ export function useCreateClimbScreen({
   } = useCreateClimb(board.boardName, { initialHoldsMap });
 
   const [selectedBrush, setSelectedBrush] = useState<BrushRole>('HAND');
-  const [name, setName] = useState(isForking && forkName ? `${forkName} fork` : '');
+  const [name, setName] = useState(isForking && forkName ? `${forkName} remix` : '');
   const [description, setDescription] = useState(
     isForking && forkDescription ? withNoMatch(forkDescription, false) : '',
   );

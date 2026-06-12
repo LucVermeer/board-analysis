@@ -339,13 +339,13 @@ export default function CreateClimbForm({
   } | null>(null);
   const [showDuplicateMatchDrawer, setShowDuplicateMatchDrawer] = useState(false);
 
-  // Common state — in edit mode use the original name, not "{name} fork"
+  // Common state — in edit mode use the original name, not "{name} remix"
   const isEditMode = !!editClimb;
   let initialClimbName: string;
   if (isEditMode) {
     initialClimbName = forkName || '';
   } else if (forkName) {
-    initialClimbName = `${forkName} fork`;
+    initialClimbName = `${forkName} remix`;
   } else {
     initialClimbName = '';
   }

@@ -695,11 +695,10 @@
     },
     "climbActions": {
       "copyLink": "Copy link",
-      "report": "Report",
       "linkCopied": "Link copied",
       "tick": "Log a tick",
       "openInApp": "Open in Aurora app",
-      "fork": "Fork this climb",
+      "fork": "Remix this climb",
       "edit": "Edit climb"
     },
     "create": {

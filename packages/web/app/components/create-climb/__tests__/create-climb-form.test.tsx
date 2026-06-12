@@ -960,10 +960,10 @@ describe('CreateClimbForm — forkName prop', () => {
     mockRequest.mockResolvedValue({ checkMoonBoardClimbDuplicates: [] });
   });
 
-  it('initialises the climb name input with "<forkName> fork" when forkName provided', () => {
+  it('initialises the climb name input with "<forkName> remix" when forkName provided', () => {
     renderMoonboard({ forkName: 'Original Climb' });
     fireEvent.click(screen.getByRole('button', { name: /settings/i }));
-    expect(screen.getByDisplayValue('Original Climb fork')).toBeTruthy();
+    expect(screen.getByDisplayValue('Original Climb remix')).toBeTruthy();
   });
 
   it('initialises the climb name input as empty when forkName is absent', () => {

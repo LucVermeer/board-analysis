@@ -31,6 +31,7 @@ type ClimbActionsSheetProps = {
   /** Current signed-in user id — gates the owner-only Edit row. */
   currentUserId?: string | null;
   onAddToQueue?: () => void;
+  onOpenPlaylist?: () => void;
   onToggleFavorite?: () => void;
   /** When provided, shows a "Log a tick" row that opens the LogAscent sheet. */
   onTick?: () => void;
@@ -54,6 +55,7 @@ function ClimbActionsSheet({
   angle,
   currentUserId,
   onAddToQueue,
+  onOpenPlaylist,
   onToggleFavorite,
   onTick,
   onClose,
@@ -83,6 +85,11 @@ function ClimbActionsSheet({
     onAddToQueue?.();
     onClose();
   }, [onAddToQueue, onClose]);
+
+  const handleOpenPlaylist = useCallback(() => {
+    onOpenPlaylist?.();
+    onClose();
+  }, [onOpenPlaylist, onClose]);
 
   const handleToggleFavorite = useCallback(() => {
     onToggleFavorite?.();
@@ -117,16 +124,6 @@ function ClimbActionsSheet({
       onClose();
     }
   }, [climb, boardName, layoutId, sizeId, setIds, angle, onClose, showToast, t]);
-
-  const handleReport = useCallback(async () => {
-    if (!climb) return;
-    try {
-      const reportUrl = `${WEB_BASE_URL}${buildClimbViewPath(boardName, layoutId, sizeId, setIds, angle, climb.uuid)}?report=true`;
-      await WebBrowser.openBrowserAsync(reportUrl);
-    } finally {
-      onClose();
-    }
-  }, [climb, boardName, layoutId, sizeId, setIds, angle, onClose]);
 
   const handleDismiss = useCallback(() => {
     isPresentedRef.current = false;
@@ -191,7 +188,6 @@ function ClimbActionsSheet({
   const successActionIconColor = theme.variant === 'liquidGlass' ? neutralActionIconColor : theme.brandColors.success;
   const favoriteActionIconColor = theme.variant === 'liquidGlass' ? neutralActionIconColor : iosSystemColors.systemRed;
   const accentActionIconColor = theme.variant === 'liquidGlass' ? neutralActionIconColor : theme.systemColors.accent;
-  const reportActionIconColor = theme.variant === 'liquidGlass' ? neutralActionIconColor : iosSystemColors.systemOrange;
 
   return (
     <ModalSheet ref={sheetRef} snapPoints={snapPoints} onDismiss={handleDismiss} enablePanDownToClose>
@@ -211,6 +207,14 @@ function ClimbActionsSheet({
             title={t('mobile.climbRow.addToQueue')}
             leading={<Icon name="add" size={22} color={successActionIconColor} />}
             onPress={handleAddToQueue}
+            showSeparator
+          />
+        )}
+        {onOpenPlaylist && (
+          <ListRow
+            title={t('actions.playlist.popover.title')}
+            leading={<Icon name="playlist" size={22} color={accentActionIconColor} />}
+            onPress={handleOpenPlaylist}
             showSeparator
           />
         )}
@@ -248,12 +252,6 @@ function ClimbActionsSheet({
           title={t('mobile.climbActions.copyLink')}
           leading={<Icon name="copy" size={22} color={accentActionIconColor} />}
           onPress={handleCopyLink}
-          showSeparator
-        />
-        <ListRow
-          title={t('mobile.climbActions.report')}
-          leading={<Icon name="flag" size={22} color={reportActionIconColor} />}
-          onPress={handleReport}
           showSeparator={!!auroraAppUrl}
         />
         {auroraAppUrl && (
