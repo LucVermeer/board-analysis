@@ -347,14 +347,22 @@ export function useFavoriteStatus(
 
 import {
   GET_BETA_LINKS,
+  GET_RECENT_BETA_LINKS,
   ATTACH_BETA_LINK,
   type GetBetaLinksQueryResponse,
   type GetBetaLinksQueryVariables,
+  type GetRecentBetaLinksQueryResponse,
+  type GetRecentBetaLinksQueryVariables,
+  type RecentBetaLinkGqlRow,
   type AttachBetaLinkMutationVariables,
   type AttachBetaLinkMutationResponse,
 } from '@boardsesh/graphql/operations/beta-links';
-import { dedupeBetaLinks } from '@boardsesh/shared-schema';
-import { mapBetaLinks } from '../../beta-video-url';
+import { betaLinkIdentity, dedupeBetaLinks, type BetaLink } from '@boardsesh/shared-schema';
+import { mapBetaLink, mapBetaLinks } from '../../beta-video-url';
+
+export type RecentBetaVideo = Omit<RecentBetaLinkGqlRow, 'betaLink'> & {
+  betaLink: BetaLink;
+};
 
 export function useBetaLinks(boardType: string, climbUuid: string, enabled = true) {
   return useQuery({
@@ -365,6 +373,36 @@ export function useBetaLinks(boardType: string, climbUuid: string, enabled = tru
         climbUuid,
       }),
     select: (data) => dedupeBetaLinks(mapBetaLinks(data.betaLinks)),
+    enabled,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useRecentBetaLinks(limit = 20, boardType?: string | null, enabled = true) {
+  return useQuery({
+    queryKey: ['recentBetaLinks', limit, boardType ?? null],
+    queryFn: () =>
+      getHttpClient().request<GetRecentBetaLinksQueryResponse, GetRecentBetaLinksQueryVariables>(
+        GET_RECENT_BETA_LINKS,
+        {
+          limit,
+          boardType,
+        },
+      ),
+    select: (data) => {
+      const seenIdentities = new Set<string>();
+      const videos: RecentBetaVideo[] = [];
+
+      for (const row of data.recentBetaLinks) {
+        const betaLink = mapBetaLink(row.betaLink);
+        const identity = betaLinkIdentity(betaLink.link);
+        if (seenIdentities.has(identity)) continue;
+        seenIdentities.add(identity);
+        videos.push({ ...row, betaLink });
+      }
+
+      return videos;
+    },
     enabled,
     staleTime: 5 * 60 * 1000,
   });
@@ -426,7 +464,7 @@ export function useAttachBetaLink() {
         input,
       }),
     onSuccess: (_data, vars) => {
-      queryClient.invalidateQueries({ queryKey: ['betaLinks', vars.boardType, vars.climbUuid] });
+      void queryClient.invalidateQueries({ queryKey: ['betaLinks', vars.boardType, vars.climbUuid] });
     },
   });
 }
@@ -441,6 +479,7 @@ export {
   useUserProfileStats,
   useUserClimbPercentile,
   useUserAscentsFeed,
+  useActivityFeed,
   useSessionGroupedFeed,
 } from './use-you-data';
 export { useYouProfileData } from './use-you-profile-data';

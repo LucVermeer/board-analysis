@@ -15,6 +15,39 @@
   "activityFeed": {
     "signInPrompt": "Inicia sesión para ver un feed de los escaladores que sigues."
   },
+  "mobile": {
+    "home": {
+      "title": "Home",
+      "betaTitle": "Beta reciente",
+      "betaEmpty": "Aún no hay vídeos de beta",
+      "betaError": "No se pudieron cargar los vídeos de beta.",
+      "betaOpenError": "No se pudo abrir ese vídeo de beta.",
+      "betaCardLabel": "Abrir vídeo de beta",
+      "feedTitle": "De tu crew",
+      "signInTitle": "Inicia sesión para ver tu feed",
+      "signInBody": "Sigue a escaladores y equipadores para ver sus encadenes y bloques nuevos aquí.",
+      "emptyTitle": "Aún no hay actividad",
+      "emptyBody": "Sigue a escaladores y equipadores para llenar esto.",
+      "unknownClimb": "Bloque desconocido",
+      "unknownClimber": "Escalador",
+      "activityLine": "{{action}} - {{time}}",
+      "angle": "{{angle}}°",
+      "boards": {
+        "kilter": "Kilter",
+        "tension": "Tension",
+        "moonboard": "MoonBoard"
+      },
+      "activity": {
+        "ascent": "registró un ascenso",
+        "flash": "hizo flash",
+        "send": "encadenó",
+        "attempt": "probó",
+        "newClimb": "equipó un bloque nuevo",
+        "comment": "comentó",
+        "proposalApproved": "consiguió una propuesta aprobada"
+      }
+    }
+  },
   "ascentsFeed": {
     "mirrored": "Espejo",
     "benchmark": "Referencia",

@@ -1,6 +1,13 @@
 import { gql } from 'graphql-request';
 import type { AttachBetaLinkInput, BetaLinksGqlRow } from '@boardsesh/shared-schema';
 
+export type RecentBetaLinkGqlRow = {
+  climbName: string | null;
+  boardType: string;
+  layoutId: number | null;
+  betaLink: BetaLinksGqlRow;
+};
+
 export const GET_BETA_LINKS = gql`
   query GetBetaLinks($boardType: String!, $climbUuid: String!) {
     betaLinks(boardType: $boardType, climbUuid: $climbUuid) {
@@ -46,6 +53,15 @@ export const GET_RECENT_BETA_LINKS = gql`
   }
 `;
 
+export type GetRecentBetaLinksQueryVariables = {
+  limit?: number;
+  boardType?: string | null;
+};
+
+export type GetRecentBetaLinksQueryResponse = {
+  recentBetaLinks: RecentBetaLinkGqlRow[];
+};
+
 export const GET_USER_BETA_LINKS = gql`
   query GetUserBetaLinks($userId: String!, $limit: Int) {
     userBetaLinks(userId: $userId, limit: $limit) {
@@ -64,6 +80,15 @@ export const GET_USER_BETA_LINKS = gql`
     }
   }
 `;
+
+export type GetUserBetaLinksQueryVariables = {
+  userId: string;
+  limit?: number;
+};
+
+export type GetUserBetaLinksQueryResponse = {
+  userBetaLinks: RecentBetaLinkGqlRow[];
+};
 
 export const BETA_LINK_PREVIEW = gql`
   query BetaLinkPreview($link: String!) {

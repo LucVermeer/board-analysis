@@ -12,10 +12,10 @@ import { useTheme } from '../../src/providers/theme-provider';
 import { brandColors } from '../../src/theme/colors';
 import { useNativeAccessoryActive } from '../../src/hooks/use-bottom-accessory';
 
-// Cold-start on the climbs list (our search surface), not the boards tab — board
-// switching is rare, so the filtered climb list is the home base. Drives the
-// default-selected tab in both the native-tabs and Material `Tabs` variants.
-export const unstable_settings = { initialRouteName: 'climbs' };
+// Cold-start on Home: the leftmost tab carries the beta shelf and followed
+// activity feed, while Climbs remains the search surface one tab over. Drives
+// the default-selected tab in both the native-tabs and Material `Tabs` variants.
+export const unstable_settings = { initialRouteName: 'home' };
 
 type TabIconProps = { focused: boolean; color: ColorValue; size: number };
 type MaterialIconName = ComponentProps<typeof MaterialCommunityIcons>['name'];
@@ -60,6 +60,10 @@ export default function TabLayout() {
   if (variant === 'material') {
     return (
       <Tabs tabBar={(props) => <MaterialTabBar {...props} />} screenOptions={{ headerShown: false }}>
+        <Tabs.Screen
+          name="home"
+          options={{ title: t('mobile.nav.home'), tabBarIcon: materialTabIcon('home', 'home-outline') }}
+        />
         <Tabs.Screen
           name="climbs"
           options={{ title: t('mobile.nav.climbs'), tabBarIcon: materialTabIcon('magnify', 'magnify') }}
@@ -109,6 +113,11 @@ export default function TabLayout() {
           <QueueBottomAccessory />
         </NativeTabs.BottomAccessory>
       ) : null}
+
+      <NativeTabs.Trigger name="home">
+        <NativeTabs.Trigger.Icon sf="house" md="home" />
+        <NativeTabs.Trigger.Label>{t('mobile.nav.home')}</NativeTabs.Trigger.Label>
+      </NativeTabs.Trigger>
 
       <NativeTabs.Trigger name="climbs" role="search">
         <NativeTabs.Trigger.Icon sf="magnifyingglass" md="search" />

@@ -18,7 +18,12 @@ import {
   resolveClimbCreatedSubscriptionRecipients,
 } from './recipient-resolution';
 import { logger } from '../utils/logger';
-import { fanoutFeedItems, fanoutNewClimbFeedItems } from './feed-fanout';
+import {
+  fanoutCommentFeedItems,
+  fanoutFeedItems,
+  fanoutNewClimbFeedItems,
+  fanoutProposalApprovedFeedItems,
+} from './feed-fanout';
 import { isNoMatchClimb } from '../graphql/resolvers/shared/helpers';
 import crypto from 'crypto';
 
@@ -88,6 +93,8 @@ export class NotificationWorker {
         event.metadata.commentUuid,
       );
     }
+
+    await fanoutCommentFeedItems(event);
   }
 
   private async handleCommentReply(event: SocialEvent): Promise<void> {
@@ -103,6 +110,8 @@ export class NotificationWorker {
         event.metadata.commentUuid,
       );
     }
+
+    await fanoutCommentFeedItems(event);
   }
 
   private async handleVoteCast(event: SocialEvent): Promise<void> {
@@ -191,6 +200,8 @@ export class NotificationWorker {
         event.entityId,
       );
     }
+
+    await fanoutProposalApprovedFeedItems(event);
   }
 
   private async handleProposalRejected(event: SocialEvent): Promise<void> {

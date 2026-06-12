@@ -118,6 +118,7 @@
       }
     },
     "nav": {
+      "home": "Home",
       "boards": "Boards",
       "climbs": "Climbs",
       "climb": "Climb",
