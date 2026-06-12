@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, fireEvent } from '@testing-library/react';
+import { render, fireEvent, waitFor } from '@testing-library/react';
 import { createElement, createRef, forwardRef, useImperativeHandle, type ReactNode, type Ref } from 'react';
-import type { BoardPresenceClimb, BoardPresenceStats } from '@boardsesh/shared-schema';
+import type { BoardPresenceClimb, BoardPresenceStats, Climb } from '@boardsesh/shared-schema';
 
 const presence = vi.hoisted(() => ({
   currentClimb: null as BoardPresenceClimb | null,
@@ -16,6 +16,10 @@ const presenceControls = vi.hoisted(() => ({
 
 const analytics = vi.hoisted(() => ({
   track: vi.fn(),
+}));
+
+const graphql = vi.hoisted(() => ({
+  request: vi.fn(),
 }));
 
 const sheetModal = vi.hoisted(() => ({ present: vi.fn(), dismiss: vi.fn() }));
@@ -100,6 +104,9 @@ vi.mock('../../../providers/board-presence-provider', () => ({
 
 vi.mock('../../../lib/analytics', () => ({
   track: analytics.track,
+}));
+vi.mock('../../../lib/graphql/client', () => ({
+  getHttpClient: () => graphql,
 }));
 
 vi.mock('../../GlassSheetBackground', () => ({ GlassSheetBackground: () => createElement('div', null) }));
@@ -223,6 +230,25 @@ function makeClimb(climbUuid: string, seq: number, overrides: Partial<BoardPrese
   };
 }
 
+function makeFullClimb(uuid: string, overrides: Partial<Climb> = {}): Climb {
+  return {
+    uuid,
+    name: `Hydrated ${uuid}`,
+    frames: 'hydrated-frames',
+    setter_username: 'Hydrated Setter',
+    angle: 40,
+    ascensionist_count: 12,
+    difficulty: 'V6',
+    quality_average: '3.5',
+    stars: 4,
+    difficulty_error: '0.4',
+    benchmark_difficulty: null,
+    framesCount: 3,
+    framesPace: 700,
+    ...overrides,
+  };
+}
+
 const noop = () => {};
 const boardConfig = { boardName: 'kilter', layoutId: 1, sizeId: 10, setIds: '1,2', angle: 40 };
 
@@ -233,6 +259,7 @@ describe('BoardSheet', () => {
     presence.stats = null;
     presenceControls.boardId = 123;
     analytics.track.mockClear();
+    graphql.request.mockReset();
     sheetModal.present.mockClear();
     sheetModal.dismiss.mockClear();
     climbRows.props = [];
@@ -343,14 +370,40 @@ describe('BoardSheet', () => {
     expect(container.querySelector('[data-list="true"]')).not.toBeNull();
   });
 
-  it('wires the hero and lit-on-this-wall rows to the shared climb actions', () => {
-    presence.currentClimb = makeClimb('hero-climb', 3, { frames: 'hero-frames', grade: 'V7' });
-    presence.history = [makeClimb('old-climb', 2, { frames: 'old-frames', grade: 'V4', angle: 30 })];
+  it('hydrates hero and lit-on-this-wall rows before invoking shared climb actions', async () => {
+    presence.currentClimb = makeClimb('hero-climb', 3, {
+      frames: 'hero-frames',
+      grade: 'V7',
+      queueItemUuid: 'queue-hero',
+    });
+    presence.history = [
+      makeClimb('old-climb', 2, {
+        frames: 'old-frames',
+        grade: 'V4',
+        angle: 30,
+        queueItemUuid: 'queue-old',
+      }),
+    ];
     const onClose = vi.fn();
     const onClimbPress = vi.fn();
     const onAddToQueue = vi.fn();
     const onOpenPlaylist = vi.fn();
     const onOpenActions = vi.fn();
+    const heroDetail = makeFullClimb('hero-climb', {
+      name: 'Hydrated Hero',
+      frames: 'hydrated-hero-frames',
+      difficulty: 'V8',
+      benchmark_difficulty: 'V8',
+    });
+    const oldDetail = makeFullClimb('old-climb', {
+      name: 'Hydrated Old',
+      frames: 'hydrated-old-frames',
+      angle: 30,
+      difficulty: 'V5',
+      framesCount: 2,
+      framesPace: 900,
+    });
+    graphql.request.mockResolvedValueOnce({ climb: heroDetail }).mockResolvedValueOnce({ climb: oldDetail });
 
     const { getByLabelText } = render(
       createElement(BoardSheet, {
@@ -367,34 +420,77 @@ describe('BoardSheet', () => {
     );
 
     fireEvent.click(getByLabelText('press hero-climb'));
-    expect(onClimbPress).toHaveBeenCalledWith(
-      expect.objectContaining({
-        uuid: 'hero-climb',
-        name: 'Climb hero-climb',
-        frames: 'hero-frames',
-        difficulty: 'V7',
-        setter_username: 'Some Setter',
-        angle: 40,
+    await waitFor(() =>
+      expect(onClimbPress).toHaveBeenCalledWith({
+        climb: heroDetail,
+        queueItemUuid: 'queue-hero',
+        boardConfig,
       }),
     );
+    expect(graphql.request).toHaveBeenCalledWith(expect.anything(), {
+      boardName: 'kilter',
+      layoutId: 1,
+      sizeId: 10,
+      setIds: '1,2',
+      angle: 40,
+      climbUuid: 'hero-climb',
+    });
     expect(onClose).toHaveBeenCalledTimes(1);
 
     fireEvent.click(getByLabelText('queue old-climb'));
-    expect(onAddToQueue).toHaveBeenCalledWith(
-      expect.objectContaining({ uuid: 'old-climb', frames: 'old-frames', difficulty: 'V4', angle: 30 }),
+    await waitFor(() =>
+      expect(onAddToQueue).toHaveBeenCalledWith({
+        climb: oldDetail,
+        queueItemUuid: 'queue-old',
+        boardConfig: { ...boardConfig, angle: 30 },
+      }),
     );
+    expect(graphql.request).toHaveBeenCalledWith(expect.anything(), {
+      boardName: 'kilter',
+      layoutId: 1,
+      sizeId: 10,
+      setIds: '1,2',
+      angle: 30,
+      climbUuid: 'old-climb',
+    });
 
     fireEvent.click(getByLabelText('playlist old-climb'));
-    expect(onOpenPlaylist).toHaveBeenCalledWith(expect.objectContaining({ uuid: 'old-climb' }));
+    await waitFor(() =>
+      expect(onOpenPlaylist).toHaveBeenCalledWith({
+        climb: oldDetail,
+        queueItemUuid: 'queue-old',
+        boardConfig: { ...boardConfig, angle: 30 },
+      }),
+    );
 
     fireEvent.click(getByLabelText('actions old-climb'));
-    expect(onOpenActions).toHaveBeenCalledWith(expect.objectContaining({ uuid: 'old-climb' }));
+    await waitFor(() =>
+      expect(onOpenActions).toHaveBeenCalledWith({
+        climb: oldDetail,
+        queueItemUuid: 'queue-old',
+        boardConfig: { ...boardConfig, angle: 30 },
+      }),
+    );
     expect(onClose).toHaveBeenCalledTimes(1);
+    expect(graphql.request).toHaveBeenCalledTimes(2);
 
     expect(thumbnails.props).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ climb: expect.objectContaining({ uuid: 'hero-climb' }), size: 52 }),
-        expect.objectContaining({ climb: expect.objectContaining({ uuid: 'old-climb' }) }),
+        expect.objectContaining({
+          climb: expect.objectContaining({ uuid: 'old-climb' }),
+          boardConfig: { ...boardConfig, angle: 30 },
+        }),
+      ]),
+    );
+    expect(climbRows.props).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          climb: expect.objectContaining({ uuid: 'old-climb' }),
+          angle: 30,
+          contentRowStyle: expect.objectContaining({ backgroundColor: 'transparent' }),
+          showSeparator: false,
+        }),
       ]),
     );
   });

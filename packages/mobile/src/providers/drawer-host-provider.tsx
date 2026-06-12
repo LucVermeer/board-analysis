@@ -23,7 +23,7 @@ import { LogAscentSheet } from '../components/LogAscentSheet';
 import { QueueSheet, type QueueSheetHandle } from '../components/play-drawer/QueueSheet';
 import { QueueAddedSnackbar } from '../components/QueueAddedSnackbar';
 import { UndoWallChangeSnackbar } from '../components/board-presence/UndoWallChangeSnackbar';
-import { BoardSheet, type BoardSheetHandle } from '../components/board-presence/BoardSheet';
+import { BoardSheet, type BoardSheetClimbAction, type BoardSheetHandle } from '../components/board-presence/BoardSheet';
 import type { QueueItemRowBoard } from '../components/QueueItemRow';
 import { useActiveBoard, useSetActiveBoard } from '../lib/graphql/use-active-board';
 import { formatActiveBoardLabel } from '../lib/boards/active-board-label';
@@ -63,6 +63,17 @@ export type LogAscentInput = {
   consensusGradeName?: string;
 };
 
+function boardConfigsMatch(left: BoardConfig | null, right: BoardConfig | null): boolean {
+  if (!left || !right) return false;
+  return (
+    left.boardName === right.boardName &&
+    left.layoutId === right.layoutId &&
+    left.sizeId === right.sizeId &&
+    left.setIds === right.setIds &&
+    left.angle === right.angle
+  );
+}
+
 export type OpenPlayDrawerOptions = PlayDrawerOpenOptions & {
   /** Switch the drawer to a different board config before opening (e.g. the
    *  caller is opening a climb that belongs to a board other than the user's
@@ -79,11 +90,11 @@ type DrawerHostValue = {
   openLogAscent: (input: LogAscentInput) => void;
   /** Opens the climb actions bottom sheet for the given climb. Uses the active
    *  boardConfig at the time of opening. */
-  openClimbActions: (climb: Climb) => void;
+  openClimbActions: (climb: Climb, boardConfigOverride?: BoardConfig) => void;
   closeClimbActions: () => void;
   /** Opens the add-to-playlist bottom sheet for the given climb. Snapshots the
    *  active boardConfig (for the angle) at open time. */
-  openAddToPlaylist: (climb: Climb) => void;
+  openAddToPlaylist: (climb: Climb, boardConfigOverride?: BoardConfig) => void;
   /** Opens the queue list sheet (from the play-drawer queue button or the
    *  "Climb added to queue" snackbar's Open action). */
   openQueueSheet: () => void;
@@ -261,8 +272,8 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
   // Snapshot the board config at open time so the sheet's per-row handlers
   // (queue / favorite / tick) keep operating on the same angle even if the
   // user switches their active board mid-interaction.
-  const openClimbActions = useCallback((climb: Climb) => {
-    const boardConfig = activeBoardConfigRef.current;
+  const openClimbActions = useCallback((climb: Climb, boardConfigOverride?: BoardConfig) => {
+    const boardConfig = boardConfigOverride ?? activeBoardConfigRef.current;
     if (!boardConfig) return;
     setClimbActions({ climb, boardConfig });
   }, []);
@@ -271,8 +282,8 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
     setClimbActions(null);
   }, []);
 
-  const openAddToPlaylist = useCallback((climb: Climb) => {
-    const boardConfig = activeBoardConfigRef.current;
+  const openAddToPlaylist = useCallback((climb: Climb, boardConfigOverride?: BoardConfig) => {
+    const boardConfig = boardConfigOverride ?? activeBoardConfigRef.current;
     if (!boardConfig) return;
     setPlaylistClimb({ climb, boardConfig });
   }, []);
@@ -433,21 +444,32 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
   }, [requestCloseBoardSheet]);
 
   const handleBoardSheetClimbPress = useCallback(
-    (climb: Climb) => {
-      const item = climbToQueueItem(climb);
+    (action: BoardSheetClimbAction) => {
+      const item = climbToQueueItem(action.climb, { uuid: action.queueItemUuid ?? undefined });
+      const boardConfigOverride = boardConfigsMatch(action.boardConfig, activeBoardConfigRef.current)
+        ? undefined
+        : action.boardConfig;
       if (isPartyPreviewOnly) {
-        openPlayDrawer(climb, { setAsCurrent: false, previewQueueItem: item });
+        openPlayDrawer(action.climb, {
+          setAsCurrent: false,
+          previewQueueItem: item,
+          boardConfig: boardConfigOverride,
+        });
         return;
       }
       setCurrentClimb(item);
-      openPlayDrawer(climb, { setAsCurrent: false, previewQueueItem: item });
+      openPlayDrawer(action.climb, {
+        setAsCurrent: false,
+        previewQueueItem: item,
+        boardConfig: boardConfigOverride,
+      });
     },
     [isPartyPreviewOnly, openPlayDrawer, setCurrentClimb],
   );
 
   const handleBoardSheetAddToQueue = useCallback(
-    (climb: Climb) => {
-      addToQueue(climbToQueueItem(climb));
+    (action: BoardSheetClimbAction) => {
+      addToQueue(climbToQueueItem(action.climb));
     },
     [addToQueue],
   );
@@ -564,8 +586,8 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
         onSwitchBoard={handleSwitchBoardFromSheet}
         onClimbPress={handleBoardSheetClimbPress}
         onAddToQueue={handleBoardSheetAddToQueue}
-        onOpenPlaylist={openAddToPlaylist}
-        onOpenActions={openClimbActions}
+        onOpenPlaylist={(action) => openAddToPlaylist(action.climb, action.boardConfig)}
+        onOpenActions={(action) => openClimbActions(action.climb, action.boardConfig)}
       />
       <QueueAddedSnackbar
         visible={snackbarVisible}

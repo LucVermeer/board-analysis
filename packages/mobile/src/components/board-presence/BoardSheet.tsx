@@ -35,9 +35,11 @@ import type { BoardConfig } from '../../providers/drawer-host-provider';
 import { useBoardPresenceControls } from '../../providers/board-presence-provider';
 import { useGradeFormat } from '../../hooks/use-grade-format';
 import { track } from '../../lib/analytics';
+import { getHttpClient } from '../../lib/graphql/client';
+import { GET_CLIMB, type GetClimbQueryResponse } from '../../lib/graphql/operations';
 import { spacing, borderRadius } from '../../theme/tokens';
 
-function presenceClimbToClimb(presenceClimb: BoardPresenceClimb): Climb {
+function presenceClimbToPreviewClimb(presenceClimb: BoardPresenceClimb): Climb {
   return {
     uuid: presenceClimb.climbUuid,
     name: presenceClimb.name ?? '',
@@ -64,6 +66,38 @@ type BoardSheetRowBoard = {
   setIds: string;
   angle: number;
 };
+
+export type BoardSheetClimbAction = {
+  climb: Climb;
+  queueItemUuid: string | null;
+  boardConfig: BoardConfig;
+};
+
+function actionBoardConfigForPresenceClimb(boardConfig: BoardConfig, presenceClimb: BoardPresenceClimb): BoardConfig {
+  const angle = presenceClimb.angle ?? boardConfig.angle;
+  return angle === boardConfig.angle ? boardConfig : { ...boardConfig, angle };
+}
+
+function rowBoardForBoardConfig(boardConfig: BoardConfig): BoardSheetRowBoard {
+  return {
+    boardName: boardConfig.boardName as BoardName,
+    layoutId: boardConfig.layoutId,
+    sizeId: boardConfig.sizeId,
+    setIds: boardConfig.setIds,
+    angle: boardConfig.angle,
+  };
+}
+
+function actionCacheKey(boardConfig: BoardConfig, climbUuid: string): string {
+  return [
+    boardConfig.boardName,
+    boardConfig.layoutId,
+    boardConfig.sizeId,
+    boardConfig.setIds,
+    boardConfig.angle,
+    climbUuid,
+  ].join(':');
+}
 
 /**
  * Imperative handle — the host presents/dismisses the sheet by calling these
@@ -92,13 +126,13 @@ type BoardSheetProps = {
   /** Open the existing board switcher from the footer control. */
   onSwitchBoard: () => void;
   /** Activate/open a climb from the wall feed. BoardSheet closes itself after this. */
-  onClimbPress?: (climb: Climb) => void;
+  onClimbPress?: (action: BoardSheetClimbAction) => void;
   /** Swipe action: append this wall-feed climb to the queue. */
-  onAddToQueue?: (climb: Climb) => void;
+  onAddToQueue?: (action: BoardSheetClimbAction) => void;
   /** Swipe action: open the add-to-playlist sheet for this climb. */
-  onOpenPlaylist?: (climb: Climb) => void;
+  onOpenPlaylist?: (action: BoardSheetClimbAction) => void;
   /** Long press action: open the existing climb actions sheet. */
-  onOpenActions?: (climb: Climb) => void;
+  onOpenActions?: (action: BoardSheetClimbAction) => void;
 };
 
 export const BoardSheet = forwardRef<BoardSheetHandle, BoardSheetProps>(function BoardSheet(
@@ -130,6 +164,7 @@ export const BoardSheet = forwardRef<BoardSheetHandle, BoardSheetProps>(function
   historyCountRef.current = history.length;
 
   const lastReceivedWallClimbRef = useRef<string | null>(null);
+  const actionClimbCacheRef = useRef(new Map<string, Climb>());
   useEffect(() => {
     const currentClimbUuid = currentClimb?.climbUuid;
     if (!currentClimbUuid) return;
@@ -143,26 +178,93 @@ export const BoardSheet = forwardRef<BoardSheetHandle, BoardSheetProps>(function
 
   const snapPoints = useMemo(() => ['55%', '92%'], []);
   const rowBoard = useMemo<BoardSheetRowBoard | null>(
-    () =>
-      boardConfig
-        ? {
-            boardName: boardConfig.boardName as BoardName,
-            layoutId: boardConfig.layoutId,
-            sizeId: boardConfig.sizeId,
-            setIds: boardConfig.setIds,
-            angle: boardConfig.angle,
-          }
-        : null,
+    () => (boardConfig ? rowBoardForBoardConfig(boardConfig) : null),
     [boardConfig],
   );
   const canUseInteractiveRows = !!rowBoard && !!onClimbPress;
 
-  const handleInteractiveClimbPress = useCallback(
-    (climb: Climb) => {
-      onClimbPress?.(climb);
-      onClose();
+  const resolveAction = useCallback(
+    async (presenceClimb: BoardPresenceClimb): Promise<BoardSheetClimbAction | null> => {
+      if (!boardConfig) return null;
+
+      const actionBoardConfig = actionBoardConfigForPresenceClimb(boardConfig, presenceClimb);
+      const cacheKey = actionCacheKey(actionBoardConfig, presenceClimb.climbUuid);
+      const cachedClimb = actionClimbCacheRef.current.get(cacheKey);
+      if (cachedClimb) {
+        return {
+          climb: cachedClimb,
+          queueItemUuid: presenceClimb.queueItemUuid ?? null,
+          boardConfig: actionBoardConfig,
+        };
+      }
+
+      try {
+        const response = await getHttpClient().request<GetClimbQueryResponse>(GET_CLIMB, {
+          boardName: actionBoardConfig.boardName,
+          layoutId: actionBoardConfig.layoutId,
+          sizeId: actionBoardConfig.sizeId,
+          setIds: actionBoardConfig.setIds,
+          angle: actionBoardConfig.angle,
+          climbUuid: presenceClimb.climbUuid,
+        });
+        if (!response.climb) return null;
+        actionClimbCacheRef.current.set(cacheKey, response.climb);
+        return {
+          climb: response.climb,
+          queueItemUuid: presenceClimb.queueItemUuid ?? null,
+          boardConfig: actionBoardConfig,
+        };
+      } catch (error) {
+        console.warn('Failed to load board-sheet climb action', error);
+        return null;
+      }
     },
-    [onClimbPress, onClose],
+    [boardConfig],
+  );
+
+  const handleInteractiveClimbPress = useCallback(
+    (presenceClimb: BoardPresenceClimb) => {
+      if (!onClimbPress) return;
+      void resolveAction(presenceClimb).then((action) => {
+        if (!action) return;
+        onClimbPress(action);
+        onClose();
+      });
+    },
+    [onClimbPress, onClose, resolveAction],
+  );
+
+  const handleInteractiveAddToQueue = useCallback(
+    (presenceClimb: BoardPresenceClimb) => {
+      if (!onAddToQueue) return;
+      void resolveAction(presenceClimb).then((action) => {
+        if (!action) return;
+        onAddToQueue(action);
+      });
+    },
+    [onAddToQueue, resolveAction],
+  );
+
+  const handleInteractiveOpenPlaylist = useCallback(
+    (presenceClimb: BoardPresenceClimb) => {
+      if (!onOpenPlaylist) return;
+      void resolveAction(presenceClimb).then((action) => {
+        if (!action) return;
+        onOpenPlaylist(action);
+      });
+    },
+    [onOpenPlaylist, resolveAction],
+  );
+
+  const handleInteractiveOpenActions = useCallback(
+    (presenceClimb: BoardPresenceClimb) => {
+      if (!onOpenActions) return;
+      void resolveAction(presenceClimb).then((action) => {
+        if (!action) return;
+        onOpenActions(action);
+      });
+    },
+    [onOpenActions, resolveAction],
   );
 
   useImperativeHandle(ref, () => ({
@@ -209,9 +311,9 @@ export const BoardSheet = forwardRef<BoardSheetHandle, BoardSheetProps>(function
             formattedGrade={formattedGrade}
             gradeColor={gradeColor}
             onPress={handleInteractiveClimbPress}
-            onAddToQueue={onAddToQueue}
-            onOpenPlaylist={onOpenPlaylist}
-            onOpenActions={onOpenActions}
+            onAddToQueue={handleInteractiveAddToQueue}
+            onOpenPlaylist={handleInteractiveOpenPlaylist}
+            onOpenActions={handleInteractiveOpenActions}
           />
         );
       }
@@ -235,9 +337,9 @@ export const BoardSheet = forwardRef<BoardSheetHandle, BoardSheetProps>(function
       systemColors.secondaryLabel,
       formatGrade,
       handleInteractiveClimbPress,
-      onAddToQueue,
-      onOpenPlaylist,
-      onOpenActions,
+      handleInteractiveAddToQueue,
+      handleInteractiveOpenPlaylist,
+      handleInteractiveOpenActions,
     ],
   );
 
@@ -256,9 +358,9 @@ export const BoardSheet = forwardRef<BoardSheetHandle, BoardSheetProps>(function
             formattedGrade={currentClimb.grade ? formatGrade(currentClimb.grade) : null}
             gradeColor={getGradeColor(currentClimb.grade ?? '') ?? DEFAULT_GRADE_COLOR}
             onPress={handleInteractiveClimbPress}
-            onAddToQueue={onAddToQueue}
-            onOpenPlaylist={onOpenPlaylist}
-            onOpenActions={onOpenActions}
+            onAddToQueue={handleInteractiveAddToQueue}
+            onOpenPlaylist={handleInteractiveOpenPlaylist}
+            onOpenActions={handleInteractiveOpenActions}
           />
         ) : (
           <NowOnTheWallHero
@@ -328,9 +430,9 @@ export const BoardSheet = forwardRef<BoardSheetHandle, BoardSheetProps>(function
       canUseInteractiveRows,
       rowBoard,
       handleInteractiveClimbPress,
-      onAddToQueue,
-      onOpenPlaylist,
-      onOpenActions,
+      handleInteractiveAddToQueue,
+      handleInteractiveOpenPlaylist,
+      handleInteractiveOpenActions,
     ],
   );
 
@@ -429,10 +531,10 @@ type HeroProps = {
 };
 
 type InteractiveRowActionProps = {
-  onPress: (climb: Climb) => void;
-  onAddToQueue?: (climb: Climb) => void;
-  onOpenPlaylist?: (climb: Climb) => void;
-  onOpenActions?: (climb: Climb) => void;
+  onPress: (climb: BoardPresenceClimb) => void;
+  onAddToQueue?: (climb: BoardPresenceClimb) => void;
+  onOpenPlaylist?: (climb: BoardPresenceClimb) => void;
+  onOpenActions?: (climb: BoardPresenceClimb) => void;
 };
 
 type HeroContentProps = Omit<HeroProps, 'climb'> & {
@@ -500,20 +602,28 @@ function InteractiveHeroRow({
   onOpenPlaylist,
   onOpenActions,
 }: HeroProps & { climb: BoardPresenceClimb; rowBoard: BoardSheetRowBoard } & InteractiveRowActionProps) {
-  const rowClimb = useMemo(() => presenceClimbToClimb(climb), [climb]);
+  const rowClimb = useMemo(() => presenceClimbToPreviewClimb(climb), [climb]);
+  const climbBoardConfig = useMemo(
+    () => (boardConfig ? actionBoardConfigForPresenceClimb(boardConfig, climb) : null),
+    [boardConfig, climb],
+  );
+  const climbRowBoard = useMemo(
+    () => (climbBoardConfig ? rowBoardForBoardConfig(climbBoardConfig) : rowBoard),
+    [climbBoardConfig, rowBoard],
+  );
 
   return (
     <ClimbListRow
       climb={rowClimb}
-      boardName={rowBoard.boardName}
-      layoutId={rowBoard.layoutId}
-      sizeId={rowBoard.sizeId}
-      setIds={rowBoard.setIds}
-      angle={rowBoard.angle}
-      onPress={onPress}
-      onAddToQueue={onAddToQueue}
-      onOpenPlaylist={onOpenPlaylist}
-      onOpenActions={onOpenActions}
+      boardName={climbRowBoard.boardName}
+      layoutId={climbRowBoard.layoutId}
+      sizeId={climbRowBoard.sizeId}
+      setIds={climbRowBoard.setIds}
+      angle={climbRowBoard.angle}
+      onPress={() => onPress(climb)}
+      onAddToQueue={onAddToQueue ? () => onAddToQueue(climb) : undefined}
+      onOpenPlaylist={onOpenPlaylist ? () => onOpenPlaylist(climb) : undefined}
+      onOpenActions={onOpenActions ? () => onOpenActions(climb) : undefined}
       containerStyle={styles.heroInteractiveContainer}
       contentRowStyle={[styles.heroInteractiveRow, { backgroundColor: surfaceColor }]}
       showSeparator={false}
@@ -521,7 +631,7 @@ function InteractiveHeroRow({
         <NowOnTheWallHeroContent
           climb={climb}
           renderClimb={rowClimb}
-          boardConfig={boardConfig}
+          boardConfig={climbBoardConfig}
           labelColor={labelColor}
           secondaryColor={secondaryColor}
           accentColor={accentColor}
@@ -546,14 +656,15 @@ function NowOnTheWallHero({
   gradeColor,
 }: HeroProps) {
   if (!climb) return null;
-  const renderClimb = presenceClimbToClimb(climb);
+  const renderClimb = presenceClimbToPreviewClimb(climb);
+  const climbBoardConfig = boardConfig ? actionBoardConfigForPresenceClimb(boardConfig, climb) : null;
 
   return (
     <View style={[styles.hero, { backgroundColor: surfaceColor }]}>
       <NowOnTheWallHeroContent
         climb={climb}
         renderClimb={renderClimb}
-        boardConfig={boardConfig}
+        boardConfig={climbBoardConfig}
         labelColor={labelColor}
         secondaryColor={secondaryColor}
         accentColor={accentColor}
@@ -625,27 +736,35 @@ function InteractiveHistoryRow({
   onOpenPlaylist,
   onOpenActions,
 }: HistoryRowProps & { rowBoard: BoardSheetRowBoard } & InteractiveRowActionProps) {
-  const rowClimb = useMemo(() => presenceClimbToClimb(climb), [climb]);
+  const rowClimb = useMemo(() => presenceClimbToPreviewClimb(climb), [climb]);
+  const climbBoardConfig = useMemo(
+    () => (boardConfig ? actionBoardConfigForPresenceClimb(boardConfig, climb) : null),
+    [boardConfig, climb],
+  );
+  const climbRowBoard = useMemo(
+    () => (climbBoardConfig ? rowBoardForBoardConfig(climbBoardConfig) : rowBoard),
+    [climbBoardConfig, rowBoard],
+  );
 
   return (
     <ClimbListRow
       climb={rowClimb}
-      boardName={rowBoard.boardName}
-      layoutId={rowBoard.layoutId}
-      sizeId={rowBoard.sizeId}
-      setIds={rowBoard.setIds}
-      angle={rowBoard.angle}
-      onPress={onPress}
-      onAddToQueue={onAddToQueue}
-      onOpenPlaylist={onOpenPlaylist}
-      onOpenActions={onOpenActions}
+      boardName={climbRowBoard.boardName}
+      layoutId={climbRowBoard.layoutId}
+      sizeId={climbRowBoard.sizeId}
+      setIds={climbRowBoard.setIds}
+      angle={climbRowBoard.angle}
+      onPress={() => onPress(climb)}
+      onAddToQueue={onAddToQueue ? () => onAddToQueue(climb) : undefined}
+      onOpenPlaylist={onOpenPlaylist ? () => onOpenPlaylist(climb) : undefined}
+      onOpenActions={onOpenActions ? () => onOpenActions(climb) : undefined}
       contentRowStyle={styles.historyInteractiveRow}
       showSeparator={false}
       renderContent={() => (
         <HistoryRowContent
           climb={climb}
           renderClimb={rowClimb}
-          boardConfig={boardConfig}
+          boardConfig={climbBoardConfig}
           labelColor={labelColor}
           secondaryColor={secondaryColor}
           formattedGrade={formattedGrade}
@@ -664,14 +783,18 @@ const HistoryRow = memo(function HistoryRowInner({
   formattedGrade,
   gradeColor,
 }: HistoryRowProps) {
-  const thumbnailClimb = useMemo(() => presenceClimbToClimb(climb), [climb]);
+  const thumbnailClimb = useMemo(() => presenceClimbToPreviewClimb(climb), [climb]);
+  const climbBoardConfig = useMemo(
+    () => (boardConfig ? actionBoardConfigForPresenceClimb(boardConfig, climb) : null),
+    [boardConfig, climb],
+  );
 
   return (
     <View style={styles.historyRow}>
       <HistoryRowContent
         climb={climb}
         renderClimb={thumbnailClimb}
-        boardConfig={boardConfig}
+        boardConfig={climbBoardConfig}
         labelColor={labelColor}
         secondaryColor={secondaryColor}
         formattedGrade={formattedGrade}
@@ -799,6 +922,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing[2],
   },
   historyInteractiveRow: {
+    backgroundColor: 'transparent',
     paddingHorizontal: spacing[4],
     paddingVertical: spacing[2],
   },
