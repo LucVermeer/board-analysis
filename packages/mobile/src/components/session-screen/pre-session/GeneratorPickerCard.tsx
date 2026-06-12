@@ -258,8 +258,7 @@ function toRailGrades(boardName: BoardName | null): Grade[] {
  * Laid out as iOS grouped inset sections (mirroring ClimbFilterSheet): a
  * filled-chip workout-type rail, a single-select grade rail, a grouped stepper
  * card for the primary count(s), and a collapsed "Tuning" section for the long
- * tail (warm-up, secondary steppers, min-ascents, min-rating, climb bias,
- * tall/wide).
+ * tail (min-ascents, min-rating, climb bias, tall/wide).
  */
 export function GeneratorPickerCard({
   boardName,
@@ -411,13 +410,13 @@ export function GeneratorPickerCard({
   // workout shows its defaults summarised rather than a stale expanded state.
   const tuningResetKey = activeType === 'off' ? 0 : CHIP_VALUES.indexOf(activeType);
 
-  // Tuning summary, built like ClimbFilterSheet's refineSummary: warm-up · min
-  // ascents · stars · climb bias. Stars render as filled glyphs (a symbol, not
+  // Tuning summary, built like ClimbFilterSheet's refineSummary: min ascents ·
+  // stars · climb bias. Stars render as filled glyphs (a symbol, not
   // translatable copy); "Any" rating shows nothing so the line stays short.
   const tuningSummary = useMemo(() => {
     if (selection.type !== 'on') return null;
     const { options } = selection;
-    const parts: string[] = [warmUpLabel(options.warmUp, t)];
+    const parts: string[] = [];
     parts.push(
       t('mobile.session.preGeneratorMinAscentsOption', { value: formatMinAscentsFilterCount(options.minAscents) }),
     );
@@ -540,15 +539,6 @@ export function GeneratorPickerCard({
     const minRatingPickerValue = getMinRatingPickerValue(options.minRating);
     return (
       <View style={styles.tuningBody}>
-        <SegmentedControl
-          options={warmUpOptions}
-          selectedKey={options.warmUp}
-          onSelect={(warmUp) => updateCommonOptions({ warmUp })}
-          textVariant="footnote"
-          trackColor={systemColors.fill}
-          accessibilityLabel={t('mobile.session.preGeneratorWarmUp')}
-        />
-
         <View>
           <Text variant="footnote" style={styles.subsectionLabel}>
             {t('mobile.session.preGeneratorMinAscents')}
@@ -671,6 +661,18 @@ export function GeneratorPickerCard({
             </>
           ) : null}
 
+          <SectionHeader title={t('mobile.session.preGeneratorWarmUp')} />
+          <View style={[styles.inset, styles.warmUpInset]}>
+            <SegmentedControl
+              options={warmUpOptions}
+              selectedKey={selection.options.warmUp}
+              onSelect={(warmUp) => updateCommonOptions({ warmUp })}
+              textVariant="footnote"
+              trackColor={systemColors.fill}
+              accessibilityLabel={t('mobile.session.preGeneratorWarmUp')}
+            />
+          </View>
+
           <View style={[styles.inset, styles.steppersInset]}>
             <GroupedSteppers rows={[...primarySteppers(selection.options), ...secondarySteppers(selection.options)]} />
           </View>
@@ -699,6 +701,9 @@ const styles = StyleSheet.create({
   // The grade rail self-insets, so the stepper card sits a little below it.
   steppersInset: {
     marginTop: spacing[2],
+  },
+  warmUpInset: {
+    marginBottom: spacing[2],
   },
   tuningInset: {
     marginTop: spacing[3],

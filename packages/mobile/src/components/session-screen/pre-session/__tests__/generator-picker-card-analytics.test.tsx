@@ -102,10 +102,10 @@ vi.mock('@boardsesh/climb-filters', () => ({
 }));
 vi.mock('@boardsesh/playlist-generator', () => ({
   CLIMB_BIAS_OPTIONS: ['unfamiliar', 'attempted', 'any'],
-  WARM_UP_OPTIONS: ['standard', 'extended', 'none'],
+  WARM_UP_OPTIONS: ['none', 'standard', 'extended'],
   DEFAULT_GRADE_FOCUS_OPTIONS: {
     type: 'gradeFocus',
-    warmUp: 'standard',
+    warmUp: 'none',
     numberOfClimbs: 15,
     climbBias: 'unfamiliar',
     minAscents: 5,
@@ -115,7 +115,7 @@ vi.mock('@boardsesh/playlist-generator', () => ({
   },
   DEFAULT_LADDER_OPTIONS: {
     type: 'ladder',
-    warmUp: 'standard',
+    warmUp: 'none',
     numberOfSteps: 5,
     climbsPerStep: 2,
     climbBias: 'unfamiliar',
@@ -126,7 +126,7 @@ vi.mock('@boardsesh/playlist-generator', () => ({
   },
   DEFAULT_PYRAMID_OPTIONS: {
     type: 'pyramid',
-    warmUp: 'standard',
+    warmUp: 'none',
     numberOfSteps: 5,
     climbsPerStep: 1,
     climbBias: 'unfamiliar',
@@ -137,7 +137,7 @@ vi.mock('@boardsesh/playlist-generator', () => ({
   },
   DEFAULT_VOLUME_OPTIONS: {
     type: 'volume',
-    warmUp: 'standard',
+    warmUp: 'none',
     mainSetClimbs: 20,
     mainSetVariability: 0,
     climbBias: 'unfamiliar',
@@ -171,7 +171,7 @@ vi.mock('../../../SegmentedControl', () => ({
   },
 }));
 vi.mock('../../../CollapsibleSection', () => ({
-  // Render children so the Tuning controls (segmented warm-up etc.) mount.
+  // Render children so the Tuning controls mount.
   CollapsibleSection: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
 }));
 vi.mock('../../../StarRating', () => ({ StarRating: () => null }));
@@ -305,6 +305,7 @@ describe('GeneratorPickerCard analytics', () => {
   });
 
   it('fires "Workout Generator Opened" with web-aligned targetType + angle when switching off → a workout type', () => {
+    const onChange = vi.fn();
     render(
       createElement(GeneratorPickerCard, {
         boardName: 'kilter',
@@ -312,7 +313,7 @@ describe('GeneratorPickerCard analytics', () => {
         sizeId: 21,
         angle: 40,
         selection: { type: 'off' } satisfies GeneratorSelection,
-        onChange: vi.fn(),
+        onChange,
       }),
     );
 
@@ -325,6 +326,10 @@ describe('GeneratorPickerCard analytics', () => {
       targetType: 'session',
       boardName: 'kilter',
       angle: 40,
+    });
+    expect(onChange).toHaveBeenCalledWith({
+      type: 'on',
+      options: expect.objectContaining({ type: 'volume', warmUp: 'none' }),
     });
   });
 
