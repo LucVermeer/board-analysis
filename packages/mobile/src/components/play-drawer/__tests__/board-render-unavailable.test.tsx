@@ -12,7 +12,7 @@ vi.mock('react-native', () => ({
   StyleSheet: { create: (styles: Record<string, unknown>) => styles },
 }));
 
-vi.mock('../../../lib/sentry', () => ({
+vi.mock('../../../lib/error-reporting', () => ({
   reportError,
 }));
 

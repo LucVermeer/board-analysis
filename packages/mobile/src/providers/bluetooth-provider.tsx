@@ -909,8 +909,8 @@ export function BluetoothProvider({
     } catch {
       // The native iOS adapter's disconnect() can reject (e.g. peripheral
       // already torn down). Callers `void` this promise, so an unhandled
-      // rejection would surface as Sentry noise. Connection state is cleared
-      // before the await, so the disconnect is effectively done either way —
+      // rejection would surface as error-reporting noise. Connection state is
+      // cleared before the await, so the disconnect is effectively done either way —
       // safe to swallow, matching the keep-awake `.catch(() => {})` pattern.
     } finally {
       isUserDisconnectRef.current = false;

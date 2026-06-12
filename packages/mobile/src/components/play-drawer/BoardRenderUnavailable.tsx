@@ -1,6 +1,6 @@
 import { memo, useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { reportError } from '../../lib/sentry';
+import { reportError } from '../../lib/error-reporting';
 import { iosSystemColors } from '../../theme/ios-colors';
 
 type BoardRenderUnavailableProps = {

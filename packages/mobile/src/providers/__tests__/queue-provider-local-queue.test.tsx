@@ -88,7 +88,7 @@ const queueSnapshotStore = vi.hoisted(() => ({
   clearStoredQueueSnapshot: vi.fn(async () => {}),
 }));
 
-const sentry = vi.hoisted(() => ({
+const errorReporter = vi.hoisted(() => ({
   reportError: vi.fn(),
 }));
 
@@ -126,7 +126,7 @@ vi.mock('../../lib/graphql/use-active-board', () => ({
 }));
 vi.mock('../../lib/graphql/client', () => ({ getHttpClient: () => ({ request: http.request }) }));
 vi.mock('../../lib/analytics', () => ({ track: vi.fn() }));
-vi.mock('../../lib/sentry', () => ({ reportError: sentry.reportError }));
+vi.mock('../../lib/error-reporting', () => ({ reportError: errorReporter.reportError }));
 vi.mock('../toast-provider', () => ({ useToast: () => ({ showToast: toast.showToast }) }));
 vi.mock('../queue-snackbar-provider', () => ({ useQueueSnackbar: () => ({ showQueueAddedSnackbar: vi.fn() }) }));
 
@@ -218,7 +218,7 @@ describe('QueueProvider local solo queue', () => {
     queueSnapshotStore.getStoredQueueSnapshot.mockResolvedValue(null);
     queueSnapshotStore.setStoredQueueSnapshot.mockClear();
     queueSnapshotStore.clearStoredQueueSnapshot.mockClear();
-    sentry.reportError.mockClear();
+    errorReporter.reportError.mockClear();
     toast.showToast.mockClear();
     graph.execute.mockReset();
     graph.execute.mockResolvedValue({
@@ -405,7 +405,7 @@ describe('QueueProvider local solo queue', () => {
     expect(sessionStore.setStoredSessionId).toHaveBeenCalledWith('session-new');
   });
 
-  it('does not report createSession rate limits to Sentry', async () => {
+  it('does not report createSession rate limits to error reporting', async () => {
     http.request.mockRejectedValueOnce({
       response: {
         status: 200,
@@ -430,7 +430,7 @@ describe('QueueProvider local solo queue', () => {
 
     expect(toast.showToast).toHaveBeenCalledWith('mobile.queue.rateLimited', 'error');
     expect(toast.showToast).not.toHaveBeenCalledWith('mobile.queue.sessionCreateError', 'error');
-    expect(sentry.reportError).not.toHaveBeenCalled();
+    expect(errorReporter.reportError).not.toHaveBeenCalled();
     expect(sessionStore.setStoredSessionId).not.toHaveBeenCalled();
     expect(graph.execute).not.toHaveBeenCalled();
   });

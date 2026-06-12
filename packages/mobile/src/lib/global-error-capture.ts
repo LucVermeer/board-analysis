@@ -6,10 +6,10 @@
 // is uncaught, and React Native escalates it to a fatal `RCTFatal` abort.
 //
 // We wrap the global handler to (1) always log the full message + stack so a
-// TestFlight reproduction is diagnosable from Console.app even when Sentry isn't
-// delivering, and (2) recover from worklet-serialization fatals instead of
-// aborting the whole app — a value that can't cross to the UI runtime should
-// degrade the animation, not SIGABRT.
+// TestFlight reproduction is diagnosable from Console.app even when production
+// reporting is unavailable, and (2) recover from worklet-serialization fatals
+// instead of aborting the whole app. A value that can't cross to the UI runtime
+// should degrade the animation, not SIGABRT.
 
 type GlobalErrorHandler = (error: unknown, isFatal?: boolean) => void;
 
@@ -19,7 +19,7 @@ type ErrorUtilsLike = {
 };
 
 export type GlobalErrorCaptureDeps = {
-  /** Forward to the crash backend (Sentry). No-op when Sentry is disabled. */
+  /** Forward to production error reporting. No-op when reporting is disabled. */
   report: (error: Error, context: { level: 'fatal' | 'error'; tags: Record<string, string> }) => void;
   /** Best-effort flush so a report survives a later hard crash. */
   flush?: () => Promise<unknown>;
@@ -103,8 +103,8 @@ export function installGlobalErrorCapture(deps: GlobalErrorCaptureDeps): void {
       return;
     }
 
-    // Everything else falls through to the previous handler (Sentry's, then RN's
-    // default), preserving normal fatal/red-box behaviour and Sentry capture.
+    // Everything else falls through to the previous handler (PostHog's, then
+    // RN's default), preserving normal fatal/red-box behaviour and capture.
     previousHandler(error, isFatal);
   });
 }

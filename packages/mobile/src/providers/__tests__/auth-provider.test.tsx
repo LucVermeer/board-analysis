@@ -28,10 +28,10 @@ vi.mock('../../lib/auth-store', () => ({
   isTokenExpiringSoon: () => isTokenExpiringSoonMock(),
 }));
 
-// checkAuth reports keychain read failures to Sentry; record the calls so the
+// checkAuth reports keychain read failures; record the calls so the
 // rejection test can assert the failure was surfaced (and is a no-op otherwise).
 const reportErrorMock = vi.fn();
-vi.mock('../../lib/sentry', () => ({
+vi.mock('../../lib/error-reporting', () => ({
   reportError: (...args: unknown[]) => reportErrorMock(...args),
 }));
 
@@ -304,7 +304,7 @@ describe('AuthProvider.checkAuth keychain read failure', () => {
 
     // The whole point: the splash gate must release even though the read threw.
     await waitFor(() => expect(onReady).toHaveBeenCalled());
-    // The failure is surfaced to Sentry rather than swallowed silently.
+    // The failure is surfaced rather than swallowed silently.
     expect(reportErrorMock).toHaveBeenCalledTimes(1);
   });
 

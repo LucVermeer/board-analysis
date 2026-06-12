@@ -99,7 +99,7 @@ describe('installGlobalErrorCapture', () => {
     dispatch(error, true);
 
     expect(previousHandler).toHaveBeenCalledWith(error, true);
-    // Sentry's own handler (the previous one) captures it — we don't double-report.
+    // The previous handler captures it, so we don't double-report.
     expect(report).not.toHaveBeenCalled();
   });
 

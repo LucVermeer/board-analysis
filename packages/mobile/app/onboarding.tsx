@@ -4,7 +4,7 @@ import { useTheme as usePaperTheme } from 'react-native-paper';
 import { OnboardingCarousel } from '../src/components/onboarding/OnboardingCarousel';
 import { useTheme } from '../src/providers/theme-provider';
 import { markOnboardingSeen } from '../src/lib/onboarding/onboarding-storage';
-import { reportError } from '../src/lib/sentry';
+import { reportError } from '../src/lib/error-reporting';
 
 /**
  * First-run welcome walkthrough. Presented as a full-screen cover over the

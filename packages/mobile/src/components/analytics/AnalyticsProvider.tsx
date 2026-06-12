@@ -13,8 +13,7 @@ const styles = StyleSheet.create({ root: { flex: 1 } });
 // posthog-react-native can't read Expo Router's navigation container reliably
 // anyway. AnalyticsScreenTracker emits explicit $screen events instead, and
 // user actions are tracked from reviewed call sites. When analytics is disabled
-// (dev / no key) this renders children untouched — mirroring how wrapWithSentry
-// returns the component unchanged when Sentry is off.
+// (dev / no key) this renders children untouched.
 export function AnalyticsProvider({ children }: { children: ReactNode }) {
   const client = getAnalyticsClient();
 

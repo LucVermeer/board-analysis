@@ -25,7 +25,7 @@ import { useGradeFormat } from '../../../src/hooks/use-grade-format';
 import { useGlassCapability } from '../../../src/hooks/use-glass-capability';
 import { useToast } from '../../../src/providers/toast-provider';
 import { replayOnboarding } from '../../../src/lib/onboarding/onboarding-storage';
-import { reportError } from '../../../src/lib/sentry';
+import { reportError } from '../../../src/lib/error-reporting';
 
 export default function MoreScreen() {
   const { systemColors, brandColors, themeOverride, setThemeOverride, uiVariantPreference, setUiVariant } = useTheme();
