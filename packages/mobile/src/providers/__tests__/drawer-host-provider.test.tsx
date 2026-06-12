@@ -740,4 +740,31 @@ describe('DrawerHostProvider climb actions', () => {
     });
     await waitFor(() => expect(container.querySelector('[data-climb-actions]')).toBeNull());
   });
+
+  it('opens add-to-playlist from climb actions with the same climb and board snapshot', async () => {
+    const hosts: Array<ReturnType<typeof useDrawerHost>> = [];
+    const { container } = renderHost((host) => hosts.push(host));
+    await waitFor(() => expect(hosts.at(-1)).toBeDefined());
+
+    const climb = makeQueueItem('queue-x', 'climb-x').climb as unknown as Climb;
+    act(() => {
+      hosts.at(-1)?.openClimbActions(climb);
+    });
+    await waitFor(() => expect(climbActions.props).not.toBeNull());
+
+    act(() => {
+      (climbActions.props?.onOpenPlaylist as (() => void) | undefined)?.();
+    });
+
+    await waitFor(() => expect(container.querySelector('[data-add-to-playlist]')).not.toBeNull());
+    expect(playlistSheet.props).toMatchObject({
+      visible: true,
+      climb,
+      boardName: 'kilter',
+      layoutId: 1,
+      sizeId: 10,
+      setIds: '1,2',
+      angle: 40,
+    });
+  });
 });

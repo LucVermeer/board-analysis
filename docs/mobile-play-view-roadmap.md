@@ -77,7 +77,7 @@ Adds queue management and deferred content sections.
 - **Nested queue bottom sheet** -- second bottom sheet stacked over the play drawer, opened via the queue action bar button; dismissed by swipe-down or tap-outside
 - **Queue list** -- three regions (history, current, up-next) with drag-to-reorder, swipe-to-remove, edit mode for bulk operations
 - **Below-fold deferred sections** -- logbook entries, similar climbs, and community data loaded via `InteractionManager.runAfterInteractions()` to avoid blocking the initial drawer render
-- **Climb actions sheet** -- action sheet triggered by long-press or the overflow button, with options: share, add to playlist, copy link, report
+- **Climb actions sheet** -- action sheet triggered by long-press or the overflow button, with options: share, add to playlist, copy link, and remix
 - **Angle selector sheet** -- bottom sheet with angle slider or segmented control, updating the board renderer and persisting the selection
 
 ### Phase 4: Advanced Interactions

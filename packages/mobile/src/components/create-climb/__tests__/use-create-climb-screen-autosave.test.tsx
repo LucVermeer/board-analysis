@@ -166,7 +166,7 @@ describe('useCreateClimbScreen autosave flush', () => {
       useCreateClimbScreen({ board: BOARD, forkFrames: 'p1r12', forkName: 'Original' }),
     );
     // A fork seeds its own holds/name; let any restore settle.
-    await waitFor(() => expect(result.current.name).toBe('Original fork'));
+    await waitFor(() => expect(result.current.name).toBe('Original remix'));
 
     vi.useFakeTimers();
     act(() => result.current.setDescription('forked beta'));

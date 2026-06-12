@@ -695,11 +695,10 @@
     },
     "climbActions": {
       "copyLink": "Copiar enlace",
-      "report": "Reportar",
       "linkCopied": "Enlace copiado",
       "tick": "Registrar un envío",
       "openInApp": "Abrir en la app Aurora",
-      "fork": "Bifurcar esta vía",
+      "fork": "Remix this climb",
       "edit": "Editar vía"
     },
     "create": {

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { createElement, type ReactNode, type Ref } from 'react';
 import type { Climb } from '@boardsesh/shared-schema';
 
@@ -37,8 +37,8 @@ vi.mock('../ClimbPreviewCard', () => ({
 }));
 
 vi.mock('../ListRow', () => ({
-  ListRow: ({ title, leading }: { title: string; leading?: ReactNode }) =>
-    createElement('div', { 'data-row': title }, leading),
+  ListRow: ({ title, leading, onPress }: { title: string; leading?: ReactNode; onPress?: () => void }) =>
+    createElement('button', { 'data-row': title, onClick: onPress }, leading, title),
 }));
 vi.mock('../Icon', () => ({
   Icon: ({ name, color }: { name: string; color?: unknown }) =>
@@ -141,17 +141,18 @@ describe('ClimbActionsSheet present-on-visible (always-mounted toggle)', () => {
         visible={true}
         {...baseProps}
         onAddToQueue={vi.fn()}
+        onOpenPlaylist={vi.fn()}
         onToggleFavorite={vi.fn()}
         onTick={vi.fn()}
       />,
     );
 
     expect(container.querySelector('[data-icon="add"]')?.getAttribute('data-color')).toBe('#fff');
+    expect(container.querySelector('[data-icon="playlist"]')?.getAttribute('data-color')).toBe('#fff');
     expect(container.querySelector('[data-icon="favorite"]')?.getAttribute('data-color')).toBe('#fff');
     expect(container.querySelector('[data-icon="tick"]')?.getAttribute('data-color')).toBe('#fff');
     expect(container.querySelector('[data-icon="branch"]')?.getAttribute('data-color')).toBe('#fff');
     expect(container.querySelector('[data-icon="copy"]')?.getAttribute('data-color')).toBe('#fff');
-    expect(container.querySelector('[data-icon="flag"]')?.getAttribute('data-color')).toBe('#fff');
   });
 
   it('keeps Material action rows on their semantic/action colors', () => {
@@ -161,16 +162,33 @@ describe('ClimbActionsSheet present-on-visible (always-mounted toggle)', () => {
         visible={true}
         {...baseProps}
         onAddToQueue={vi.fn()}
+        onOpenPlaylist={vi.fn()}
         onToggleFavorite={vi.fn()}
         onTick={vi.fn()}
       />,
     );
 
     expect(container.querySelector('[data-icon="add"]')?.getAttribute('data-color')).toBe('#0a0');
+    expect(container.querySelector('[data-icon="playlist"]')?.getAttribute('data-color')).toBe('#00f');
     expect(container.querySelector('[data-icon="favorite"]')?.getAttribute('data-color')).toBe('#f00');
     expect(container.querySelector('[data-icon="tick"]')?.getAttribute('data-color')).toBe('#0a0');
     expect(container.querySelector('[data-icon="branch"]')?.getAttribute('data-color')).toBe('#00f');
     expect(container.querySelector('[data-icon="copy"]')?.getAttribute('data-color')).toBe('#00f');
-    expect(container.querySelector('[data-icon="flag"]')?.getAttribute('data-color')).toBe('#f80');
+  });
+
+  it('shows add to playlist and removes report from the action list', () => {
+    render(<ClimbActionsSheet visible={true} {...baseProps} onOpenPlaylist={vi.fn()} />);
+
+    expect(screen.getByText('actions.playlist.popover.title')).toBeTruthy();
+    expect(screen.queryByText('mobile.climbActions.report')).toBeNull();
+  });
+
+  it('opens the playlist sheet callback from the add-to-playlist row', () => {
+    const onOpenPlaylist = vi.fn();
+    render(<ClimbActionsSheet visible={true} {...baseProps} onOpenPlaylist={onOpenPlaylist} />);
+
+    fireEvent.click(screen.getByText('actions.playlist.popover.title'));
+
+    expect(onOpenPlaylist).toHaveBeenCalledTimes(1);
   });
 });
