@@ -39,6 +39,16 @@ export type BoardStatsUpdated = {
 
 export type BoardPresenceEvent = BoardClimbSet | BoardClimbCleared | BoardStatsUpdated;
 
+export type BoardPresenceHardestSend = {
+  climbUuid: string;
+  name?: string | null;
+  grade: string;
+  sentByUserId: string;
+  sentByDisplayName?: string | null;
+  sentByAvatarUrl?: string | null;
+  sentAt: string;
+};
+
 export type ResolvedBoard = {
   boardId: number;
   boardName: string;
@@ -52,6 +62,7 @@ export type BoardPresenceStats = {
   climbsSentCount: number;
   distinctClimbersCount: number;
   hardestGrade?: string | null;
+  hardestSend?: BoardPresenceHardestSend | null;
   topGrade?: string | null;
   lastSentAt?: string | null;
 };

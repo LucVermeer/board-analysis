@@ -432,6 +432,25 @@ export type BoardPresenceClimb = {
 /** Union of board-presence events streamed by `boardNowPlaying`. */
 export type BoardPresenceEvent = BoardClimbCleared | BoardClimbSet | BoardStatsUpdated;
 
+/** The first climber to send the hardest grade logged on this wall. */
+export type BoardPresenceHardestSend = {
+  __typename?: 'BoardPresenceHardestSend';
+  /** UUID of the hardest sent climb */
+  climbUuid: Scalars['String']['output'];
+  /** Grade name (e.g. V6 / 7A+) */
+  grade: Scalars['String']['output'];
+  /** Climb name */
+  name?: Maybe<Scalars['String']['output']>;
+  /** ISO 8601 timestamp of the send */
+  sentAt: Scalars['String']['output'];
+  /** Avatar URL of the climber */
+  sentByAvatarUrl?: Maybe<Scalars['String']['output']>;
+  /** Display name of the climber */
+  sentByDisplayName?: Maybe<Scalars['String']['output']>;
+  /** Boardsesh user id of the climber */
+  sentByUserId: Scalars['String']['output'];
+};
+
 /**
  * Lightweight live + durable stats for a board's wall feed. Durable counts are
  * derived from `boardsesh_ticks` stamped with this board_id; "right now" comes
@@ -445,6 +464,8 @@ export type BoardPresenceStats = {
   distinctClimbersCount: Scalars['Int']['output'];
   /** Hardest grade sent on this wall (name), if any */
   hardestGrade?: Maybe<Scalars['String']['output']>;
+  /** First send at the hardest grade logged on this wall, if any */
+  hardestSend?: Maybe<BoardPresenceHardestSend>;
   /** ISO 8601 timestamp of the most recent send on this wall */
   lastSentAt?: Maybe<Scalars['String']['output']>;
   /** Most-sent grade on this wall (name), if any */

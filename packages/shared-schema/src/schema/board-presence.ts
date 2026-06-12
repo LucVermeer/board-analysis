@@ -76,6 +76,26 @@ export const boardPresenceTypeDefs = /* GraphQL */ `
   union BoardPresenceEvent = BoardClimbSet | BoardClimbCleared | BoardStatsUpdated
 
   """
+  The first climber to send the hardest grade logged on this wall.
+  """
+  type BoardPresenceHardestSend {
+    "UUID of the hardest sent climb"
+    climbUuid: String!
+    "Climb name"
+    name: String
+    "Grade name (e.g. V6 / 7A+)"
+    grade: String!
+    "Boardsesh user id of the climber"
+    sentByUserId: String!
+    "Display name of the climber"
+    sentByDisplayName: String
+    "Avatar URL of the climber"
+    sentByAvatarUrl: String
+    "ISO 8601 timestamp of the send"
+    sentAt: String!
+  }
+
+  """
   A board resolved from a BLE serial — the one shared board everyone at this
   physical wall sees. \`boardId\` is the shared key for the presence channel.
   """
@@ -106,6 +126,8 @@ export const boardPresenceTypeDefs = /* GraphQL */ `
     distinctClimbersCount: Int!
     "Hardest grade sent on this wall (name), if any"
     hardestGrade: String
+    "First send at the hardest grade logged on this wall, if any"
+    hardestSend: BoardPresenceHardestSend
     "Most-sent grade on this wall (name), if any"
     topGrade: String
     "ISO 8601 timestamp of the most recent send on this wall"

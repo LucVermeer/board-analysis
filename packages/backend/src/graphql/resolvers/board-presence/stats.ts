@@ -10,7 +10,7 @@
 
 import { randomUUID } from 'crypto';
 import { and, eq, inArray, sql } from 'drizzle-orm';
-import type { BoardPresenceStats } from '@boardsesh/shared-schema';
+import type { BoardPresenceHardestSend, BoardPresenceStats } from '@boardsesh/shared-schema';
 import { db } from '../../../db/client';
 import * as dbSchema from '@boardsesh/db/schema';
 import { pubsub } from '../../../pubsub/index';
@@ -21,11 +21,37 @@ type DifficultyRow = {
   difficulty: number | null;
 };
 
-function parsePostgresUtcTimestamp(timestamp: string | null | undefined): string | null {
+type HardestSendRow = {
+  climbUuid: string;
+  name: string | null;
+  grade: string;
+  sentByUserId: string;
+  sentByDisplayName: string | null;
+  sentByAvatarUrl: string | null;
+  sentAt: string | Date;
+};
+
+function parsePostgresUtcTimestamp(timestamp: string | Date | null | undefined): string | null {
   if (!timestamp) return null;
+  if (timestamp instanceof Date) return timestamp.toISOString();
   const isoLikeTimestamp = timestamp.includes('T') ? timestamp : timestamp.replace(' ', 'T');
   const zonedTimestamp = /(?:Z|[+-]\d{2}:?\d{2})$/.test(isoLikeTimestamp) ? isoLikeTimestamp : `${isoLikeTimestamp}Z`;
   return new Date(zonedTimestamp).toISOString();
+}
+
+function toHardestSend(row: HardestSendRow | undefined): BoardPresenceHardestSend | null {
+  if (!row) return null;
+  const sentAt = parsePostgresUtcTimestamp(row.sentAt);
+  if (!sentAt) return null;
+  return {
+    climbUuid: row.climbUuid,
+    name: row.name,
+    grade: row.grade,
+    sentByUserId: row.sentByUserId,
+    sentByDisplayName: row.sentByDisplayName,
+    sentByAvatarUrl: row.sentByAvatarUrl,
+    sentAt,
+  };
 }
 
 async function resolveGradeNames(
@@ -103,12 +129,53 @@ export async function computeBoardPresenceStats(boardId: number, boardType: stri
     LIMIT 1
   `);
   const topGradeRow = topGradeRows[0] as DifficultyRow | undefined;
+  const hardestSendRows = await db.execute(sql<HardestSendRow>`
+    SELECT
+      ranked.climb_uuid AS "climbUuid",
+      c.name AS "name",
+      COALESCE(g.boulder_name, ranked.difficulty::text) AS "grade",
+      ranked.user_id AS "sentByUserId",
+      COALESCE(p.display_name, u.name) AS "sentByDisplayName",
+      COALESCE(p.avatar_url, u.image) AS "sentByAvatarUrl",
+      ranked.climbed_at AS "sentAt"
+    FROM (
+      SELECT
+        t.id,
+        t.climb_uuid,
+        t.user_id,
+        t.board_type,
+        t.climbed_at,
+        COALESCE(t.difficulty, ROUND(s.display_difficulty)::int) AS difficulty
+      FROM boardsesh_ticks t
+      LEFT JOIN board_climb_stats s
+        ON s.board_type = t.board_type
+       AND s.climb_uuid = t.climb_uuid
+       AND s.angle = t.angle
+      WHERE t.board_id = ${boardId}
+        AND t.status IN ('send', 'flash')
+    ) ranked
+    LEFT JOIN board_climbs c
+      ON c.board_type = ranked.board_type
+     AND c.uuid = ranked.climb_uuid
+    LEFT JOIN board_difficulty_grades g
+      ON g.board_type = ranked.board_type
+     AND g.difficulty = ranked.difficulty
+    LEFT JOIN users u
+      ON u.id = ranked.user_id
+    LEFT JOIN user_profiles p
+      ON p.user_id = ranked.user_id
+    WHERE ranked.difficulty IS NOT NULL
+    ORDER BY ranked.difficulty DESC, ranked.climbed_at ASC, ranked.id ASC
+    LIMIT 1
+  `);
+  const hardestSendRow = hardestSendRows[0] as HardestSendRow | undefined;
   const gradeNames = await resolveGradeNames(boardType, [stats?.hardestDifficulty, topGradeRow?.difficulty]);
 
   return {
     climbsSentCount: Number(stats?.climbsSentCount ?? 0),
     distinctClimbersCount: Number(stats?.distinctClimbersCount ?? 0),
     hardestGrade: gradeNameFor(stats?.hardestDifficulty, gradeNames),
+    hardestSend: toHardestSend(hardestSendRow),
     topGrade: gradeNameFor(topGradeRow?.difficulty, gradeNames),
     lastSentAt: parsePostgresUtcTimestamp(stats?.lastSentAt),
   };

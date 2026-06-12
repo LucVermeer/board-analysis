@@ -361,6 +361,7 @@
       "statSent": "sends",
       "statClimbers": "climbers",
       "statHardest": "hardest",
+      "hardestSendLabel": "Hardest send",
       "statTopGrade": "most sent",
       "wallChanged": "You changed the wall",
       "undo": "Undo",

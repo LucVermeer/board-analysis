@@ -361,6 +361,7 @@
       "statSent": "encadenes",
       "statClimbers": "escaladores",
       "statHardest": "más difícil",
+      "hardestSendLabel": "Encadene más duro",
       "statTopGrade": "más repetido",
       "wallChanged": "Has cambiado el muro",
       "undo": "Deshacer",

@@ -24,12 +24,13 @@ import { useTranslation } from 'react-i18next';
 import { getGradeColor, DEFAULT_GRADE_COLOR } from '@boardsesh/board-constants/grade-colors';
 import { useBoardPresenceCurrent, useBoardPresenceFeed } from '@boardsesh/board-presence-react';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
-import type { BoardName, BoardPresenceClimb, Climb } from '@boardsesh/shared-schema';
+import type { BoardName, BoardPresenceClimb, BoardPresenceHardestSend, Climb } from '@boardsesh/shared-schema';
 import { GlassSheetBackground } from '../GlassSheetBackground';
 import { Text } from '../Text';
 import { Icon } from '../Icon';
 import { ActivityIndicator } from '../ActivityIndicator';
 import { ClimbListRow, type ClimbListRowRenderContentArgs } from '../ClimbListRow';
+import { Avatar } from '../Avatar';
 import { AccessoryClimbThumbnail } from '../queue-control/AccessoryClimbThumbnail';
 import { useTheme } from '../../providers/theme-provider';
 import { useToast } from '../../providers/toast-provider';
@@ -40,6 +41,7 @@ import { track } from '../../lib/analytics';
 import { getHttpClient } from '../../lib/graphql/client';
 import { GET_CLIMB, type GetClimbQueryResponse } from '../../lib/graphql/operations';
 import { boardPresenceClimbToClimb } from '../../lib/board-presence/presence-climb';
+import { withAlpha } from '../../theme/colors';
 import { spacing, borderRadius } from '../../theme/tokens';
 
 const ACTION_CLIMB_CACHE_LIMIT = 50;
@@ -565,6 +567,17 @@ export const BoardSheet = forwardRef<BoardSheetHandle, BoardSheetProps>(function
                 valueColor={systemColors.label}
               />
             </View>
+            {stats.hardestSend ? (
+              <HardestSendRow
+                hardestSend={stats.hardestSend}
+                labelColor={systemColors.label}
+                secondaryColor={systemColors.secondaryLabel}
+                surfaceColor={systemColors.secondaryBackground}
+                crownColor={brandColors.warning}
+                formattedGrade={formatGrade(stats.hardestSend.grade) ?? stats.hardestSend.grade}
+                gradeColor={getGradeColor(stats.hardestSend.grade) ?? DEFAULT_GRADE_COLOR}
+              />
+            ) : null}
           </View>
         ) : null}
         {visibleHistory.length > 0 ? (
@@ -1051,6 +1064,56 @@ function StatTile({ value, label, surfaceColor, labelColor, valueColor }: StatTi
   );
 }
 
+type HardestSendRowProps = {
+  hardestSend: BoardPresenceHardestSend;
+  labelColor: ColorValue;
+  secondaryColor: ColorValue;
+  surfaceColor: ColorValue;
+  crownColor: string;
+  formattedGrade: string;
+  gradeColor: string;
+};
+
+function HardestSendRow({
+  hardestSend,
+  labelColor,
+  secondaryColor,
+  surfaceColor,
+  crownColor,
+  formattedGrade,
+  gradeColor,
+}: HardestSendRowProps) {
+  const { t } = useTranslation('session');
+  const climberName = hardestSend.sentByDisplayName?.trim();
+
+  return (
+    <View style={[styles.hardestSendRow, { backgroundColor: surfaceColor }]}>
+      <View style={styles.hardestAvatar}>
+        <Avatar uri={hardestSend.sentByAvatarUrl} name={climberName} size={34} />
+        <View style={[styles.crownBadge, { backgroundColor: withAlpha(crownColor, 0.18) }]}>
+          <Icon name="crown" size={11} color={crownColor} />
+        </View>
+      </View>
+      <View style={styles.hardestBody}>
+        <Text variant="caption1" color={secondaryColor} numberOfLines={1}>
+          {t('mobile.boardPresence.hardestSendLabel')}
+        </Text>
+        <Text variant="subheadline" color={labelColor} numberOfLines={1} style={styles.hardestName}>
+          {hardestSend.name ?? ''}
+        </Text>
+        {climberName ? (
+          <Text variant="caption1" color={secondaryColor} numberOfLines={1}>
+            {t('mobile.boardPresence.litByLine', { name: climberName })}
+          </Text>
+        ) : null}
+      </View>
+      <Text variant="headline" style={[styles.historyGrade, { color: gradeColor }]}>
+        {formattedGrade}
+      </Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   sheet: {
     ...Platform.select({
@@ -1139,6 +1202,38 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[3],
     borderRadius: borderRadius.md,
     gap: 2,
+  },
+  hardestSendRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[3],
+    marginHorizontal: spacing[4],
+    marginTop: spacing[2],
+    paddingVertical: spacing[3],
+    paddingHorizontal: spacing[3],
+    borderRadius: borderRadius.md,
+  },
+  hardestAvatar: {
+    width: 42,
+    height: 42,
+    justifyContent: 'flex-end',
+  },
+  crownBadge: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  hardestBody: {
+    flex: 1,
+    gap: 2,
+  },
+  hardestName: {
+    fontWeight: '600',
   },
   historyRow: {
     flexDirection: 'row',

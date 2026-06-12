@@ -32,6 +32,15 @@ const BOARD_PRESENCE_STATS_FIELDS = `
   climbsSentCount
   distinctClimbersCount
   hardestGrade
+  hardestSend {
+    climbUuid
+    name
+    grade
+    sentByUserId
+    sentByDisplayName
+    sentByAvatarUrl
+    sentAt
+  }
   topGrade
   lastSentAt
 `;

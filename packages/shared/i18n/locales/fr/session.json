@@ -361,6 +361,7 @@
       "statSent": "enchaînements",
       "statClimbers": "grimpeurs",
       "statHardest": "le plus dur",
+      "hardestSendLabel": "Plus dure enchaînée",
       "statTopGrade": "la plus fréquente",
       "wallChanged": "Tu as changé le mur",
       "undo": "Annuler",
