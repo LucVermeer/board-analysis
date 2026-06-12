@@ -36,6 +36,16 @@ const climbActions = vi.hoisted(() => ({
   props: null as null | Record<string, unknown>,
 }));
 
+const playlistSheet = vi.hoisted(() => ({
+  props: null as null | Record<string, unknown>,
+}));
+
+const boardSheet = vi.hoisted(() => ({
+  props: null as null | Record<string, unknown>,
+  present: vi.fn(),
+  dismiss: vi.fn(),
+}));
+
 const activeBoard = vi.hoisted(() => {
   const defaultStored = {
     uuid: 'board-1',
@@ -137,7 +147,10 @@ vi.mock('../../components/ClimbActionsSheet', () => ({
   },
 }));
 vi.mock('../../components/AddToPlaylistSheet', () => ({
-  AddToPlaylistSheet: () => createElement('div', { 'data-add-to-playlist': 'true' }),
+  AddToPlaylistSheet: (props: Record<string, unknown>) => {
+    playlistSheet.props = props;
+    return createElement('div', { 'data-add-to-playlist': 'true' });
+  },
 }));
 vi.mock('../../components/QueueAddedSnackbar', () => ({
   QueueAddedSnackbar: () => createElement('div', { 'data-queue-snackbar': 'true' }),
@@ -145,8 +158,9 @@ vi.mock('../../components/QueueAddedSnackbar', () => ({
 vi.mock('../../components/board-presence/BoardSheet', async () => {
   const React = await vi.importActual<typeof import('react')>('react');
   return {
-    BoardSheet: React.forwardRef((_props: unknown, ref) => {
-      React.useImperativeHandle(ref, () => ({ present: () => {}, dismiss: () => {} }));
+    BoardSheet: React.forwardRef((props: Record<string, unknown>, ref) => {
+      boardSheet.props = props;
+      React.useImperativeHandle(ref, () => ({ present: boardSheet.present, dismiss: boardSheet.dismiss }));
       return React.createElement('div', { 'data-board-sheet': 'true' });
     }),
   };
@@ -232,14 +246,15 @@ vi.mock('../../lib/analytics', () => ({
 }));
 
 vi.mock('../../lib/climb-to-queue-item', () => ({
-  climbToQueueItem: (climb: ClimbQueueItem['climb'], options?: { suggested?: boolean }) => ({
-    uuid: `queue-${climb.uuid}`,
+  climbToQueueItem: (climb: ClimbQueueItem['climb'], options?: { suggested?: boolean; uuid?: string }) => ({
+    uuid: options?.uuid ?? `queue-${climb.uuid}`,
     climb,
     suggested: options?.suggested ?? false,
   }),
 }));
 
-import { DrawerHostProvider, useDrawerHost } from '../drawer-host-provider';
+import { DrawerHostProvider, useDrawerHost, type BoardConfig } from '../drawer-host-provider';
+import type { BoardSheetClimbAction } from '../../components/board-presence/BoardSheet';
 
 function makeQueueItem(uuid: string, climbUuid = uuid): ClimbQueueItem {
   return {
@@ -353,6 +368,34 @@ describe('DrawerHostProvider board presence binding', () => {
   });
 });
 
+type BoardSheetTestProps = {
+  onClimbPress: (action: BoardSheetClimbAction) => void;
+  onAddToQueue: (action: BoardSheetClimbAction) => void;
+  onOpenPlaylist: (action: BoardSheetClimbAction) => void;
+  onOpenActions: (action: BoardSheetClimbAction) => void;
+};
+
+function getBoardSheetProps(): BoardSheetTestProps {
+  return boardSheet.props as unknown as BoardSheetTestProps;
+}
+
+const boardSheetActionBoardConfig: BoardConfig = {
+  boardName: 'kilter',
+  layoutId: 1,
+  sizeId: 10,
+  setIds: '1,2',
+  angle: 30,
+};
+
+function makeBoardSheetAction(climb: Climb, overrides: Partial<BoardSheetClimbAction> = {}): BoardSheetClimbAction {
+  return {
+    climb,
+    queueItemUuid: 'wall-queue-x',
+    boardConfig: boardSheetActionBoardConfig,
+    ...overrides,
+  };
+}
+
 describe('DrawerHostProvider queue sheet wall-control gating', () => {
   beforeEach(() => {
     queue.sessionId = 'session-1';
@@ -368,6 +411,10 @@ describe('DrawerHostProvider queue sheet wall-control gating', () => {
     queueSheet.present.mockClear();
     queueSheet.dismiss.mockClear();
     climbActions.props = null;
+    playlistSheet.props = null;
+    boardSheet.props = null;
+    boardSheet.present.mockClear();
+    boardSheet.dismiss.mockClear();
   });
 
   it('opens a preview without broadcasting when a party non-driver taps a queued climb', async () => {
@@ -485,6 +532,112 @@ describe('DrawerHostProvider queue sheet wall-control gating', () => {
   });
 });
 
+describe('DrawerHostProvider board sheet climb actions', () => {
+  beforeEach(() => {
+    queue.sessionId = 'session-1';
+    queue.driverParticipantId = 'participant-other';
+    queue.participantId = 'participant-self';
+    queue.sessionUserCount = 2;
+    queue.setCurrentClimb.mockClear();
+    queue.addToQueue.mockClear();
+    playDrawer.open.mockClear();
+    climbActions.props = null;
+    playlistSheet.props = null;
+    boardSheet.props = null;
+    boardSheet.present.mockClear();
+    boardSheet.dismiss.mockClear();
+  });
+
+  it('opens a preview without broadcasting when a party non-driver taps a board-sheet climb', async () => {
+    const hosts: Array<ReturnType<typeof useDrawerHost>> = [];
+    renderHost((host) => hosts.push(host));
+    await waitFor(() => expect(boardSheet.props).not.toBeNull());
+
+    const climb = makeQueueItem('queue-x', 'climb-x').climb as unknown as Climb;
+    const action = makeBoardSheetAction(climb);
+    act(() => {
+      getBoardSheetProps().onClimbPress(action);
+    });
+
+    expect(queue.setCurrentClimb).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(playDrawer.open).toHaveBeenCalledWith(climb, {
+        setAsCurrent: false,
+        previewQueueItem: expect.objectContaining({ uuid: 'wall-queue-x', climb }),
+      }),
+    );
+    await waitFor(() =>
+      expect(hosts.at(-1)?.boardConfig).toMatchObject({
+        boardName: 'kilter',
+        layoutId: 1,
+        sizeId: 10,
+        setIds: '1,2',
+        angle: 30,
+      }),
+    );
+  });
+
+  it('sets current and opens the drawer when the party driver taps a board-sheet climb', async () => {
+    queue.driverParticipantId = 'participant-self';
+    const hosts: Array<ReturnType<typeof useDrawerHost>> = [];
+    renderHost((host) => hosts.push(host));
+    await waitFor(() => expect(boardSheet.props).not.toBeNull());
+
+    const climb = makeQueueItem('queue-x', 'climb-x').climb as unknown as Climb;
+    const action = makeBoardSheetAction(climb);
+    act(() => {
+      getBoardSheetProps().onClimbPress(action);
+    });
+
+    expect(queue.setCurrentClimb).toHaveBeenCalledWith(expect.objectContaining({ uuid: 'wall-queue-x', climb }));
+    await waitFor(() =>
+      expect(playDrawer.open).toHaveBeenCalledWith(climb, {
+        setAsCurrent: false,
+        previewQueueItem: expect.objectContaining({ uuid: 'wall-queue-x', climb }),
+      }),
+    );
+  });
+
+  it('reuses queue, playlist, and climb-actions handlers for board-sheet climbs', async () => {
+    const hosts: Array<ReturnType<typeof useDrawerHost>> = [];
+    const { container } = renderHost((host) => hosts.push(host));
+    await waitFor(() => expect(boardSheet.props).not.toBeNull());
+
+    const climb = makeQueueItem('queue-x', 'climb-x').climb as unknown as Climb;
+    const action = makeBoardSheetAction(climb);
+    act(() => {
+      getBoardSheetProps().onAddToQueue(action);
+    });
+    expect(queue.addToQueue).toHaveBeenCalledWith(expect.objectContaining({ uuid: 'queue-climb-x', climb }));
+
+    act(() => {
+      getBoardSheetProps().onOpenPlaylist(action);
+    });
+    await waitFor(() => expect(container.querySelector('[data-add-to-playlist]')).not.toBeNull());
+    expect(playlistSheet.props).toMatchObject({
+      climb,
+      boardName: 'kilter',
+      layoutId: 1,
+      sizeId: 10,
+      setIds: '1,2',
+      angle: 30,
+    });
+
+    act(() => {
+      getBoardSheetProps().onOpenActions(action);
+    });
+    await waitFor(() => expect(container.querySelector('[data-climb-actions]')).not.toBeNull());
+    expect(climbActions.props).toMatchObject({
+      climb,
+      boardName: 'kilter',
+      layoutId: 1,
+      sizeId: 10,
+      setIds: '1,2',
+      angle: 30,
+    });
+  });
+});
+
 describe('DrawerHostProvider queue sheet open / re-open', () => {
   beforeEach(() => {
     queue.sessionId = 'session-1';
@@ -494,6 +647,10 @@ describe('DrawerHostProvider queue sheet open / re-open', () => {
     queueSheet.present.mockClear();
     queueSheet.dismiss.mockClear();
     climbActions.props = null;
+    playlistSheet.props = null;
+    boardSheet.props = null;
+    boardSheet.present.mockClear();
+    boardSheet.dismiss.mockClear();
   });
 
   it('stays mounted and presents via the imperative handle on open', async () => {
@@ -547,6 +704,10 @@ describe('DrawerHostProvider climb actions', () => {
     queue.sessionId = 'session-1';
     queueSheet.props = null;
     climbActions.props = null;
+    playlistSheet.props = null;
+    boardSheet.props = null;
+    boardSheet.present.mockClear();
+    boardSheet.dismiss.mockClear();
   });
 
   it('opens the climb actions sheet for a climb against the active board, then closes it', async () => {

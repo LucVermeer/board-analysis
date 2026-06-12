@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useRef } from 'react';
-import { View, StyleSheet } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, type ReactNode } from 'react';
+import { View, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 import Animated, {
   useAnimatedStyle,
   useAnimatedReaction,
@@ -148,6 +148,15 @@ function PlaylistSwipeAction({ translation, active }: { translation: SharedValue
   );
 }
 
+export type ClimbListRowRenderContentArgs = {
+  climb: Climb;
+  boardName: BoardName;
+  layoutId: number;
+  sizeId: number;
+  setIds: string;
+  angle: number;
+};
+
 type ClimbListRowProps = {
   climb: Climb;
   boardName: BoardName;
@@ -155,12 +164,17 @@ type ClimbListRowProps = {
   sizeId: number;
   setIds: string;
   angle: number;
-  onPress: (climb: Climb) => void;
+  onPress?: (climb: Climb) => void;
   onAddToQueue?: (climb: Climb) => void;
   onOpenPlaylist?: (climb: Climb) => void;
   onOpenActions?: (climb: Climb) => void;
   selected?: boolean;
   unsupported?: boolean;
+  renderContent?: (args: ClimbListRowRenderContentArgs) => ReactNode;
+  containerStyle?: StyleProp<ViewStyle>;
+  contentRowStyle?: StyleProp<ViewStyle>;
+  separatorStyle?: StyleProp<ViewStyle>;
+  showSeparator?: boolean;
 };
 
 const ClimbListRow = React.memo(function ClimbListRow({
@@ -176,6 +190,11 @@ const ClimbListRow = React.memo(function ClimbListRow({
   onOpenActions,
   selected,
   unsupported,
+  renderContent,
+  containerStyle,
+  contentRowStyle,
+  separatorStyle,
+  showSeparator = true,
 }: ClimbListRowProps) {
   const { systemColors, brandColors: brand } = useTheme();
   // Active-row highlight colours, derived from the scheme-aware brand so the wash
@@ -220,8 +239,10 @@ const ClimbListRow = React.memo(function ClimbListRow({
 
   const handleRowPress = useCallback(() => {
     if (unsupportedRef.current) return;
+    const press = onPressRef.current;
+    if (!press) return;
     hapticLight();
-    onPressRef.current(climbRef.current);
+    press(climbRef.current);
   }, []);
 
   const handleLongPress = useCallback(() => {
@@ -238,13 +259,17 @@ const ClimbListRow = React.memo(function ClimbListRow({
   // onSwipeableOpen (handleSwipeableOpened) instead — a clean closed→open→
   // closed cycle that fires on every swipe.
   const handleAddToQueue = useCallback(() => {
+    const addToQueue = onAddToQueueRef.current;
+    if (!addToQueue) return;
     hapticSuccess();
-    onAddToQueueRef.current?.(climbRef.current);
+    addToQueue(climbRef.current);
   }, []);
 
   const handleOpenPlaylist = useCallback(() => {
+    const openPlaylist = onOpenPlaylistRef.current;
+    if (!openPlaylist) return;
     hapticMedium();
-    onOpenPlaylistRef.current?.(climbRef.current);
+    openPlaylist(climbRef.current);
   }, []);
 
   // Snap the row shut once it has fully settled open. Runs after the action
@@ -332,8 +357,21 @@ const ClimbListRow = React.memo(function ClimbListRow({
     [dragArmedRef],
   );
 
+  const rowContent = renderContent ? (
+    renderContent({ climb, boardName, layoutId, sizeId, setIds, angle })
+  ) : (
+    <ClimbListItemContent
+      climb={climb}
+      boardName={boardName}
+      layoutId={layoutId}
+      sizeId={sizeId}
+      setIds={setIds}
+      angle={angle}
+    />
+  );
+
   return (
-    <View style={[styles.outerContainer, unsupported && styles.unsupported]}>
+    <View style={[styles.outerContainer, containerStyle, unsupported && styles.unsupported]}>
       <ReanimatedSwipeable
         ref={swipeableRef}
         friction={SWIPE_FRICTION}
@@ -341,8 +379,8 @@ const ClimbListRow = React.memo(function ClimbListRow({
         rightThreshold={COMMIT_THRESHOLD}
         overshootLeft={false}
         overshootRight={false}
-        renderLeftActions={renderLeftActions}
-        renderRightActions={renderRightActions}
+        renderLeftActions={onAddToQueue ? renderLeftActions : undefined}
+        renderRightActions={onOpenPlaylist ? renderRightActions : undefined}
         onSwipeableOpenStartDrag={handleSwipeStartDrag}
         onSwipeableWillOpen={handleSwipeWillOpen}
         onSwipeableOpen={handleSwipeableOpened}
@@ -350,7 +388,7 @@ const ClimbListRow = React.memo(function ClimbListRow({
       >
         <GestureDetector gesture={tapGesture}>
           <View
-            style={[climbListRowStyles.contentRow, { backgroundColor: systemColors.background }]}
+            style={[climbListRowStyles.contentRow, { backgroundColor: systemColors.background }, contentRowStyle]}
             accessible
             accessibilityRole="button"
             accessibilityLabel={climb.name}
@@ -364,20 +402,15 @@ const ClimbListRow = React.memo(function ClimbListRow({
               <View style={[styles.selectedAccent, { backgroundColor: highlight.accent }]} pointerEvents="none" />
             ) : null}
 
-            <ClimbListItemContent
-              climb={climb}
-              boardName={boardName}
-              layoutId={layoutId}
-              sizeId={sizeId}
-              setIds={setIds}
-              angle={angle}
-            />
+            {rowContent}
           </View>
         </GestureDetector>
       </ReanimatedSwipeable>
 
       {/* Separator — inset to start at the text column (after the thumbnail) */}
-      <View style={[climbListRowStyles.separator, { backgroundColor: systemColors.separator }]} />
+      {showSeparator ? (
+        <View style={[climbListRowStyles.separator, { backgroundColor: systemColors.separator }, separatorStyle]} />
+      ) : null}
     </View>
   );
 });

@@ -1,7 +1,6 @@
 import { useMemo } from 'react';
 import { StyleSheet, View, type ViewStyle } from 'react-native';
 import type { BoardName } from '@boardsesh/shared-schema';
-import type { Climb } from '@boardsesh/queue';
 import { getBoardRenderData } from '../../lib/board-details';
 import { type BoardConfig } from '../../providers/drawer-host-provider';
 import { BoardImageNative } from '../BoardImageNative';
@@ -11,15 +10,20 @@ export const ACCESSORY_THUMBNAIL_SLOT_SIZE = 40;
 const ACCESSORY_THUMBNAIL_ART_MAX_SIZE = 40;
 const ACCESSORY_THUMBNAIL_ART_RADIUS = 10;
 
-function getAccessoryThumbnailBoardSize(boardWidth: number, boardHeight: number) {
+type AccessoryThumbnailClimb = {
+  frames: string;
+  mirrored?: boolean | null;
+};
+
+function getAccessoryThumbnailBoardSize(boardWidth: number, boardHeight: number, maxSize: number) {
   const boardAspectRatio = boardWidth / boardHeight;
   if (!Number.isFinite(boardAspectRatio) || boardAspectRatio <= 0) {
-    return { width: ACCESSORY_THUMBNAIL_ART_MAX_SIZE, height: ACCESSORY_THUMBNAIL_ART_MAX_SIZE };
+    return { width: maxSize, height: maxSize };
   }
   if (boardAspectRatio >= 1) {
-    return { width: ACCESSORY_THUMBNAIL_ART_MAX_SIZE, height: ACCESSORY_THUMBNAIL_ART_MAX_SIZE / boardAspectRatio };
+    return { width: maxSize, height: maxSize / boardAspectRatio };
   }
-  return { width: ACCESSORY_THUMBNAIL_ART_MAX_SIZE * boardAspectRatio, height: ACCESSORY_THUMBNAIL_ART_MAX_SIZE };
+  return { width: maxSize * boardAspectRatio, height: maxSize };
 }
 
 /**
@@ -40,7 +44,15 @@ function getAccessoryThumbnailBoardSize(boardWidth: number, boardHeight: number)
  * render uses the stroke-only style (`_s_`) at native width (`_wfull_`) and caches
  * as a separate PNG. See docs/react-native-performance.md §6.
  */
-export function AccessoryClimbThumbnail({ climb, boardConfig }: { climb: Climb; boardConfig: BoardConfig | null }) {
+export function AccessoryClimbThumbnail({
+  climb,
+  boardConfig,
+  size = ACCESSORY_THUMBNAIL_SLOT_SIZE,
+}: {
+  climb: AccessoryThumbnailClimb;
+  boardConfig: BoardConfig | null;
+  size?: number;
+}) {
   const boardRenderData = useMemo(() => {
     if (!boardConfig) return null;
     const setIdValues = boardConfig.setIds
@@ -61,16 +73,17 @@ export function AccessoryClimbThumbnail({ climb, boardConfig }: { climb: Climb; 
   // Fit the board art into the 40×40 slot at its native aspect ratio, then
   // hand BoardImageNative an explicitly-sized, rounded, clipped box. (Its
   // default `width: '100%'` would otherwise stretch the art across the slot.)
-  const fittedSize = getAccessoryThumbnailBoardSize(boardRenderData.boardWidth, boardRenderData.boardHeight);
+  const fittedSize = getAccessoryThumbnailBoardSize(boardRenderData.boardWidth, boardRenderData.boardHeight, size);
+  const radius = ACCESSORY_THUMBNAIL_ART_RADIUS * (size / ACCESSORY_THUMBNAIL_ART_MAX_SIZE);
   const thumbnailBoardStyle: ViewStyle = {
     width: fittedSize.width,
     height: fittedSize.height,
-    borderRadius: ACCESSORY_THUMBNAIL_ART_RADIUS,
+    borderRadius: radius,
     overflow: 'hidden',
   };
 
   return (
-    <View style={styles.thumbnailSlot}>
+    <View style={[styles.thumbnailSlot, { width: size, height: size }]}>
       <BoardImageNative
         frames={climb.frames}
         boardName={boardConfig.boardName as BoardName}
