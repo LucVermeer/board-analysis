@@ -25,9 +25,22 @@ const BOARD_PRESENCE_CLIMB_FIELDS = `
   seq
 `;
 
+// Durable stat tiles for a board's wall feed. Shared between the cold-fetch
+// query and the live BoardStatsUpdated subscription payload so both decode the
+// same shape.
+const BOARD_PRESENCE_STATS_FIELDS = `
+  climbsSentCount
+  distinctClimbersCount
+  hardestGrade
+  topGrade
+  lastSentAt
+`;
+
 // Subscription — the live "now on the wall" feed for a board. Emits a
 // BoardPresenceEvent union discriminated by __typename: a BoardClimbSet carries
-// the full climb, a BoardClimbCleared carries only the clear timestamp + seq.
+// the full climb, a BoardClimbCleared carries only the clear timestamp + seq,
+// and a BoardStatsUpdated carries the recomputed stat tiles (pushed when a tick
+// lands on the wall) so the tiles update live instead of re-fetching.
 export const BOARD_NOW_PLAYING = `
   subscription BoardNowPlaying($boardId: Int!) {
     boardNowPlaying(boardId: $boardId) {
@@ -39,6 +52,12 @@ export const BOARD_NOW_PLAYING = `
       }
       ... on BoardClimbCleared {
         clearedAt
+        seq
+      }
+      ... on BoardStatsUpdated {
+        stats {
+          ${BOARD_PRESENCE_STATS_FIELDS}
+        }
         seq
       }
     }
@@ -121,11 +140,7 @@ export const BOARD_RECENT_CLIMBS = `
 export const BOARD_PRESENCE_STATS = `
   query BoardPresenceStats($boardId: Int!) {
     boardPresenceStats(boardId: $boardId) {
-      climbsSentCount
-      distinctClimbersCount
-      hardestGrade
-      topGrade
-      lastSentAt
+      ${BOARD_PRESENCE_STATS_FIELDS}
     }
   }
 `;

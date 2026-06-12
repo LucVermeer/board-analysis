@@ -430,7 +430,7 @@ export type BoardPresenceClimb = {
 };
 
 /** Union of board-presence events streamed by `boardNowPlaying`. */
-export type BoardPresenceEvent = BoardClimbCleared | BoardClimbSet;
+export type BoardPresenceEvent = BoardClimbCleared | BoardClimbSet | BoardStatsUpdated;
 
 /**
  * Lightweight live + durable stats for a board's wall feed. Durable counts are
@@ -476,6 +476,19 @@ export type BoardSerialConfig = {
   sizeId: Scalars['Int']['output'];
   /** When the recording was last updated */
   updatedAt: Scalars['String']['output'];
+};
+
+/**
+ * Event: this board's durable stats changed (a tick was logged on the wall).
+ * Carries the freshly recomputed snapshot so subscribers update their tiles live
+ * instead of re-fetching — the stat counterpart of `BoardClimbSet`.
+ */
+export type BoardStatsUpdated = {
+  __typename?: 'BoardStatsUpdated';
+  /** Monotonic per-board sequence number (shared counter with climb events) */
+  seq: Scalars['Int']['output'];
+  /** Recomputed stats snapshot for the board */
+  stats: BoardPresenceStats;
 };
 
 export type BrowseProposalsInput = {

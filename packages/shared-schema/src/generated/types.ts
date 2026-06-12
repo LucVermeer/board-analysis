@@ -433,7 +433,7 @@ export type BoardPresenceClimb = {
 };
 
 /** Union of board-presence events streamed by `boardNowPlaying`. */
-export type BoardPresenceEvent = BoardClimbCleared | BoardClimbSet;
+export type BoardPresenceEvent = BoardClimbCleared | BoardClimbSet | BoardStatsUpdated;
 
 /**
  * Lightweight live + durable stats for a board's wall feed. Durable counts are
@@ -479,6 +479,19 @@ export type BoardSerialConfig = {
   sizeId: Scalars['Int']['output'];
   /** When the recording was last updated */
   updatedAt: Scalars['String']['output'];
+};
+
+/**
+ * Event: this board's durable stats changed (a tick was logged on the wall).
+ * Carries the freshly recomputed snapshot so subscribers update their tiles live
+ * instead of re-fetching — the stat counterpart of `BoardClimbSet`.
+ */
+export type BoardStatsUpdated = {
+  __typename?: 'BoardStatsUpdated';
+  /** Monotonic per-board sequence number (shared counter with climb events) */
+  seq: Scalars['Int']['output'];
+  /** Recomputed stats snapshot for the board */
+  stats: BoardPresenceStats;
 };
 
 export type BrowseProposalsInput = {
@@ -5614,7 +5627,7 @@ export type DirectiveResolverFn<TResult = {}, TParent = {}, TContext = {}, TArgs
 
 /** Mapping of union types */
 export type ResolversUnionTypes<_RefType extends Record<string, unknown>> = ResolversObject<{
-  BoardPresenceEvent: BoardClimbCleared | BoardClimbSet;
+  BoardPresenceEvent: BoardClimbCleared | BoardClimbSet | BoardStatsUpdated;
   CommentEvent: CommentAdded | CommentDeleted | CommentUpdated;
   ControllerEvent: ControllerPing | ControllerQueueSync | LedUpdate;
   QueueEvent:
@@ -5666,6 +5679,7 @@ export type ResolversTypes = ResolversObject<{
   BoardPresenceEvent: ResolverTypeWrapper<ResolversUnionTypes<ResolversTypes>['BoardPresenceEvent']>;
   BoardPresenceStats: ResolverTypeWrapper<BoardPresenceStats>;
   BoardSerialConfig: ResolverTypeWrapper<BoardSerialConfig>;
+  BoardStatsUpdated: ResolverTypeWrapper<BoardStatsUpdated>;
   Boolean: ResolverTypeWrapper<Scalars['Boolean']['output']>;
   BrowseProposalsInput: BrowseProposalsInput;
   BulkVoteSummaryInput: BulkVoteSummaryInput;
@@ -5937,6 +5951,7 @@ export type ResolversParentTypes = ResolversObject<{
   BoardPresenceEvent: ResolversUnionTypes<ResolversParentTypes>['BoardPresenceEvent'];
   BoardPresenceStats: BoardPresenceStats;
   BoardSerialConfig: BoardSerialConfig;
+  BoardStatsUpdated: BoardStatsUpdated;
   Boolean: Scalars['Boolean']['output'];
   BrowseProposalsInput: BrowseProposalsInput;
   BulkVoteSummaryInput: BulkVoteSummaryInput;
@@ -6383,7 +6398,7 @@ export type BoardPresenceEventResolvers<
   ContextType = ConnectionContext,
   ParentType extends ResolversParentTypes['BoardPresenceEvent'] = ResolversParentTypes['BoardPresenceEvent'],
 > = ResolversObject<{
-  __resolveType: TypeResolveFn<'BoardClimbCleared' | 'BoardClimbSet', ParentType, ContextType>;
+  __resolveType: TypeResolveFn<'BoardClimbCleared' | 'BoardClimbSet' | 'BoardStatsUpdated', ParentType, ContextType>;
 }>;
 
 export type BoardPresenceStatsResolvers<
@@ -6411,6 +6426,15 @@ export type BoardSerialConfigResolvers<
   setIds?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   sizeId?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   updatedAt?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
+}>;
+
+export type BoardStatsUpdatedResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['BoardStatsUpdated'] = ResolversParentTypes['BoardStatsUpdated'],
+> = ResolversObject<{
+  seq?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  stats?: Resolver<ResolversTypes['BoardPresenceStats'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
@@ -9255,6 +9279,7 @@ export type Resolvers<ContextType = ConnectionContext> = ResolversObject<{
   BoardPresenceEvent?: BoardPresenceEventResolvers<ContextType>;
   BoardPresenceStats?: BoardPresenceStatsResolvers<ContextType>;
   BoardSerialConfig?: BoardSerialConfigResolvers<ContextType>;
+  BoardStatsUpdated?: BoardStatsUpdatedResolvers<ContextType>;
   Climb?: ClimbResolvers<ContextType>;
   ClimbClassicStatus?: ClimbClassicStatusResolvers<ContextType>;
   ClimbCommunityStatus?: ClimbCommunityStatusResolvers<ContextType>;

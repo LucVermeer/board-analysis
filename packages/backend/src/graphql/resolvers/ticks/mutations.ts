@@ -10,6 +10,7 @@ import { getConsensusDifficultyName } from '../shared/sql-expressions';
 import { SaveTickInputSchema, UpdateTickInputSchema, AttachBetaLinkInputSchema } from '../../../validation/schemas';
 import { resolveBoardFromPath } from '../social/boards';
 import { findActiveBoardById, isBoardPresenceEnabled, normalizeSetIds } from '../board-presence/shared';
+import { queueBoardStatsPublish } from '../board-presence/stats';
 import { publishSocialEvent } from '../../../events';
 import { publishDebouncedSessionStats } from '../sessions/debounced-stats-publisher';
 import { queueClimbStatsRecompute } from './debounced-climb-stats-publisher';
@@ -537,6 +538,18 @@ export const tickMutations = {
     // fields stay in sync with boardsesh_ticks. Debounced so a burst of saves
     // on the same climb collapses into one recompute.
     queueClimbStatsRecompute(tick.boardType, tick.climbUuid, tick.angle);
+
+    // Board presence: a tick on a connected wall changes that wall's durable
+    // stats (sends / climbers / hardest / top grade). Push the freshly
+    // recomputed snapshot over the board's live `boardNowPlaying` feed so every
+    // watcher's stat tiles update without re-fetching. Debounced per board so a
+    // burst of logs collapses into one recompute+publish and so concurrent
+    // ticks can't pair a stale snapshot with a higher seq. Runs after the tick
+    // has committed (the recompute sees it) and self-guards, so a presence push
+    // can never fail the tick that triggered it.
+    if (boardId != null && isBoardPresenceEnabled()) {
+      queueBoardStatsPublish(boardId, tick.boardType);
+    }
 
     logger.info(
       `[saveTick] saved tick=${tick.uuid} user=${userId} ` +

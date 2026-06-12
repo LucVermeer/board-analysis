@@ -5454,9 +5454,21 @@ type BoardClimbCleared {
 }
 
 """
+Event: this board's durable stats changed (a tick was logged on the wall).
+Carries the freshly recomputed snapshot so subscribers update their tiles live
+instead of re-fetching — the stat counterpart of `BoardClimbSet`.
+"""
+type BoardStatsUpdated {
+  "Recomputed stats snapshot for the board"
+  stats: BoardPresenceStats!
+  "Monotonic per-board sequence number (shared counter with climb events)"
+  seq: Int!
+}
+
+"""
 Union of board-presence events streamed by `boardNowPlaying`.
 """
-union BoardPresenceEvent = BoardClimbSet | BoardClimbCleared
+union BoardPresenceEvent = BoardClimbSet | BoardClimbCleared | BoardStatsUpdated
 
 """
 A board resolved from a BLE serial — the one shared board everyone at this

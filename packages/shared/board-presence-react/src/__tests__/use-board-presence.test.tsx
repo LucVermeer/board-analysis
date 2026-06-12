@@ -39,6 +39,12 @@ const emptyStats: BoardPresenceStats = {
   lastSentAt: null,
 };
 
+const statsEvent = (seq: number, stats: Partial<BoardPresenceStats>): BoardPresenceEvent => ({
+  __typename: 'BoardStatsUpdated',
+  stats: { ...emptyStats, ...stats },
+  seq,
+});
+
 type Deferred<T> = { promise: Promise<T>; resolve: (value: T) => void };
 function deferred<T>(): Deferred<T> {
   let resolve: (value: T) => void = () => {};
@@ -236,6 +242,44 @@ describe('useBoardPresence — subscribe before backfill', () => {
     expect(result.current.stats?.hardestGrade).toBe('V8');
   });
 
+  it('updates the stat tiles live from a BoardStatsUpdated push (no re-fetch)', async () => {
+    const harness = makeClient();
+    const { result } = renderHook(() => useBoardPresence(1, harness.client));
+
+    await act(async () => {
+      await harness.resolveStats(1, { ...emptyStats, climbsSentCount: 2, distinctClimbersCount: 1 });
+    });
+    expect(result.current.stats?.climbsSentCount).toBe(2);
+
+    // A tick landed on the wall: the server pushes a fresh snapshot over the
+    // subscription. The tiles update without any new fetch call.
+    act(() => {
+      harness.emit(statsEvent(7, { climbsSentCount: 3, distinctClimbersCount: 2, hardestGrade: 'V9' }));
+    });
+    expect(result.current.stats?.climbsSentCount).toBe(3);
+    expect(result.current.stats?.distinctClimbersCount).toBe(2);
+    expect(result.current.stats?.hardestGrade).toBe('V9');
+    // The one fetch was the initial seed only — live pushes don't re-fetch.
+    expect(harness.fetchStats).toHaveBeenCalledTimes(1);
+  });
+
+  it('a live push that arrives before the seed wins; the late seed cannot clobber it', async () => {
+    const harness = makeClient();
+    const { result } = renderHook(() => useBoardPresence(1, harness.client));
+
+    // Live stats land first (subscription is attached before the fetch resolves).
+    act(() => {
+      harness.emit(statsEvent(4, { climbsSentCount: 5 }));
+    });
+    expect(result.current.stats?.climbsSentCount).toBe(5);
+
+    // The slower cold fetch resolves with a now-stale snapshot — it must not win.
+    await act(async () => {
+      await harness.resolveStats(1, { ...emptyStats, climbsSentCount: 1 });
+    });
+    expect(result.current.stats?.climbsSentCount).toBe(5);
+  });
+
   it('flips isLive false when the subscription reports an error', async () => {
     const harness = makeClient();
     const { result } = renderHook(() => useBoardPresence(1, harness.client));
@@ -291,6 +335,34 @@ describe('useBoardPresence — switching boards', () => {
       harness.emit(setEvent(climb('board2', 2)));
     });
     expect(result.current.currentClimb?.climbUuid).toBe('board2');
+  });
+
+  it('resets stats on board switch and ignores the old board’s late stats fetch', async () => {
+    const harness = makeClient();
+    const { result, rerender } = renderHook(({ boardId }) => useBoardPresence(boardId, harness.client), {
+      initialProps: { boardId: 1 },
+    });
+
+    await act(async () => {
+      await harness.resolveStats(1, { ...emptyStats, climbsSentCount: 7, hardestGrade: 'V7' });
+    });
+    expect(result.current.stats?.climbsSentCount).toBe(7);
+
+    // Switch to board 2: the prior wall's tiles must not bleed into the next.
+    rerender({ boardId: 2 });
+    expect(result.current.stats).toBeNull();
+
+    // A late stats fetch for board 1 resolving after the switch is ignored.
+    await act(async () => {
+      await harness.resolveStats(1, { ...emptyStats, climbsSentCount: 99 });
+    });
+    expect(result.current.stats).toBeNull();
+
+    // Board 2's own stats seed populates normally.
+    await act(async () => {
+      await harness.resolveStats(2, { ...emptyStats, climbsSentCount: 1 });
+    });
+    expect(result.current.stats?.climbsSentCount).toBe(1);
   });
 
   it('unsubscribes on unmount', () => {

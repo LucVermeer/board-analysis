@@ -5,6 +5,7 @@ import type {
   ConnectionContext,
   BoardPresenceEvent,
   BoardClimbSet,
+  BoardStatsUpdated,
   BoardPresenceClimb,
   ClimbQueueItemInput,
 } from '@boardsesh/shared-schema';
@@ -636,6 +637,118 @@ describe('board-presence resolvers', () => {
       }
 
       expect(await latestTickBoardId()).toBe(ownBoardId);
+    });
+
+    it('pushes a BoardStatsUpdated event that excludes attempts, resolves grades, and equals the cold fetch', async () => {
+      const sharedBoardId = await createSecondUserSharedBoard();
+
+      // A second climber's ATTEMPT on a different (never-sent) climb, at a
+      // HARDER difficulty. It must count toward distinctClimbersCount but must
+      // NOT inflate climbsSentCount or hardestGrade — that's the status FILTER.
+      await db.execute(sql`
+        INSERT INTO boardsesh_ticks
+          (uuid, user_id, board_type, climb_uuid, angle, is_mirror, status, attempt_count, difficulty, is_benchmark, comment, climbed_at, created_at, updated_at, board_id)
+        VALUES
+          (${`presence-attempt-${Date.now()}`}, ${SECOND_USER_ID}, 'kilter', ${OTHER_TEST_CLIMB_UUID}, 40, false, 'attempt', 3, 20, false, '', ${new Date().toISOString()}, now(), now(), ${sharedBoardId})
+      `);
+
+      const received: BoardPresenceEvent[] = [];
+      const unsubscribe = await pubsub.subscribeBoardPresence(String(sharedBoardId), (event) => received.push(event));
+      try {
+        // TEST_USER logs a real SEND of TEST_CLIMB (difficulty 17 → V5). This
+        // commits the tick and queues the debounced board-stats push.
+        await tickMutations.saveTick(undefined, { input: baseTickInput({ boardId: sharedBoardId }) }, authCtx());
+
+        // The push is debounced (~2s) then fire-and-forget — poll for it.
+        const deadline = Date.now() + 6000;
+        while (!received.some((event) => event.__typename === 'BoardStatsUpdated') && Date.now() < deadline) {
+          await new Promise((resolve) => setTimeout(resolve, 25));
+        }
+
+        const statsEvent = received.find((event) => event.__typename === 'BoardStatsUpdated') as
+          | BoardStatsUpdated
+          | undefined;
+        expect(statsEvent).toBeDefined();
+        // Only the send counts; the attempt is filtered out.
+        expect(statsEvent?.stats.climbsSentCount).toBe(1);
+        // The attempting climber still counts toward distinct climbers.
+        expect(statsEvent?.stats.distinctClimbersCount).toBe(2);
+        // Hardest/top grade come from the SEND (V5), not the harder attempt.
+        expect(statsEvent?.stats.hardestGrade).toBe('V5');
+        expect(statsEvent?.stats.topGrade).toBe('V5');
+        expect(statsEvent?.stats.lastSentAt).not.toBeNull();
+        expect(statsEvent?.seq).toBeGreaterThan(0);
+
+        // The push payload must equal the on-demand query — both go through
+        // computeBoardPresenceStats, so a future divergence fails here.
+        const coldFetch = await boardPresenceQueries.boardPresenceStats(
+          undefined,
+          { boardId: sharedBoardId },
+          authCtx(),
+        );
+        expect(statsEvent?.stats).toEqual(coldFetch);
+      } finally {
+        unsubscribe();
+      }
+    });
+
+    it('collapses a burst of ticks on one board into a single stats push reflecting all of them', async () => {
+      // Pins the debounce: concurrent/rapid ticks must not each fire their own
+      // recompute+publish (which could pair a stale snapshot with a higher seq
+      // and regress the tiles). One trailing push per board, reflecting all.
+      const sharedBoardId = await createSecondUserSharedBoard();
+      const received: BoardPresenceEvent[] = [];
+      const unsubscribe = await pubsub.subscribeBoardPresence(String(sharedBoardId), (event) => received.push(event));
+      try {
+        await tickMutations.saveTick(
+          undefined,
+          { input: baseTickInput({ boardId: sharedBoardId, climbUuid: TEST_CLIMB_UUID }) },
+          authCtx(),
+        );
+        await tickMutations.saveTick(
+          undefined,
+          { input: baseTickInput({ boardId: sharedBoardId, climbUuid: OTHER_TEST_CLIMB_UUID, difficulty: 18 }) },
+          authCtx(),
+        );
+
+        const deadline = Date.now() + 6000;
+        while (!received.some((event) => event.__typename === 'BoardStatsUpdated') && Date.now() < deadline) {
+          await new Promise((resolve) => setTimeout(resolve, 25));
+        }
+        // Give any (wrongly) second push time to arrive before asserting one.
+        await new Promise((resolve) => setTimeout(resolve, 400));
+
+        const statsEvents = received.filter((event) => event.__typename === 'BoardStatsUpdated');
+        expect(statsEvents).toHaveLength(1);
+        // The single push reflects BOTH sends, not just the first.
+        expect((statsEvents[0] as BoardStatsUpdated).stats.climbsSentCount).toBe(2);
+      } finally {
+        unsubscribe();
+      }
+    });
+
+    it('does NOT push board stats from reportBoardClimb (lit-but-not-logged must not move tick-derived stats)', async () => {
+      const sharedBoardId = await createSecondUserSharedBoard();
+      const received: BoardPresenceEvent[] = [];
+      const unsubscribe = await pubsub.subscribeBoardPresence(String(sharedBoardId), (event) => received.push(event));
+      try {
+        await boardPresenceMutations.reportBoardClimb(
+          undefined,
+          { boardId: sharedBoardId, climb: makeQueueItemInput(), angle: 40 },
+          authCtx({ userId: SECOND_USER_ID }),
+        );
+
+        // Give any (erroneous) debounced stats push time to fire.
+        await new Promise((resolve) => setTimeout(resolve, 200));
+
+        expect(received.some((event) => event.__typename === 'BoardClimbSet')).toBe(true);
+        expect(received.some((event) => event.__typename === 'BoardStatsUpdated')).toBe(false);
+        // No tick was written, so the durable stats stay at zero sends.
+        const stats = await boardPresenceQueries.boardPresenceStats(undefined, { boardId: sharedBoardId }, authCtx());
+        expect(stats.climbsSentCount).toBe(0);
+      } finally {
+        unsubscribe();
+      }
     });
   });
 

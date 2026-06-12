@@ -31,7 +31,13 @@ export type BoardClimbCleared = {
   seq: number;
 };
 
-export type BoardPresenceEvent = BoardClimbSet | BoardClimbCleared;
+export type BoardStatsUpdated = {
+  __typename: 'BoardStatsUpdated';
+  stats: BoardPresenceStats;
+  seq: number;
+};
+
+export type BoardPresenceEvent = BoardClimbSet | BoardClimbCleared | BoardStatsUpdated;
 
 export type ResolvedBoard = {
   boardId: number;

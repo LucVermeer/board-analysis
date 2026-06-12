@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import type { BoardPresenceClimb, BoardPresenceEvent } from '@boardsesh/shared-schema';
+import type { BoardPresenceClimb, BoardPresenceEvent, BoardPresenceStats } from '@boardsesh/shared-schema';
 import { boardPresenceReducer, initialBoardPresenceState, HISTORY_CAP } from '../reducer';
 import { mapBoardPresenceEnvelopeToAction } from '../map-envelope';
 import type { BoardPresenceState } from '../types';
@@ -21,6 +21,17 @@ function makeState(overrides: Partial<BoardPresenceState> = {}): BoardPresenceSt
   };
 }
 
+function makeStats(overrides: Partial<BoardPresenceStats> = {}): BoardPresenceStats {
+  return {
+    climbsSentCount: 0,
+    distinctClimbersCount: 0,
+    hardestGrade: null,
+    topGrade: null,
+    lastSentAt: null,
+    ...overrides,
+  };
+}
+
 describe('initialBoardPresenceState', () => {
   it('starts empty with seq 0', () => {
     expect(initialBoardPresenceState).toEqual({
@@ -28,6 +39,8 @@ describe('initialBoardPresenceState', () => {
       previousClimb: null,
       history: [],
       lastSeq: 0,
+      stats: null,
+      lastStatsSeq: 0,
     });
   });
 });
@@ -223,12 +236,139 @@ describe('BACKFILL_HISTORY', () => {
   });
 });
 
+describe('APPLY_STATS_UPDATED', () => {
+  it('applies the live stats push and advances lastStatsSeq', () => {
+    const stats = makeStats({ climbsSentCount: 3, distinctClimbersCount: 2, hardestGrade: 'V8' });
+    const result = boardPresenceReducer(initialBoardPresenceState, {
+      type: 'APPLY_STATS_UPDATED',
+      payload: { stats, seq: 7 },
+    });
+
+    expect(result.stats).toEqual(stats);
+    expect(result.lastStatsSeq).toBe(7);
+  });
+
+  it('ignores a stale or duplicate push (seq <= lastStatsSeq) so out-of-order fan-out cannot regress', () => {
+    const fresh = makeStats({ climbsSentCount: 5 });
+    const state = makeState({ stats: fresh, lastStatsSeq: 10 });
+
+    const stale = boardPresenceReducer(state, {
+      type: 'APPLY_STATS_UPDATED',
+      payload: { stats: makeStats({ climbsSentCount: 1 }), seq: 9 },
+    });
+    expect(stale).toBe(state);
+
+    const duplicate = boardPresenceReducer(state, {
+      type: 'APPLY_STATS_UPDATED',
+      payload: { stats: makeStats({ climbsSentCount: 1 }), seq: 10 },
+    });
+    expect(duplicate).toBe(state);
+  });
+
+  it('does not touch climb-ordering state (lastSeq / currentClimb)', () => {
+    const current = makeClimb({ seq: 4 });
+    const state = makeState({ currentClimb: current, history: [current], lastSeq: 4 });
+
+    const result = boardPresenceReducer(state, {
+      type: 'APPLY_STATS_UPDATED',
+      payload: { stats: makeStats({ climbsSentCount: 2 }), seq: 5 },
+    });
+
+    expect(result.currentClimb).toEqual(current);
+    expect(result.lastSeq).toBe(4);
+    expect(result.lastStatsSeq).toBe(5);
+  });
+});
+
+describe('shared seq counter — climb vs stats cursors are independent', () => {
+  // Climb and stats events draw from ONE monotonic per-board counter, but the
+  // reducer gates them on two SEPARATE cursors (lastSeq vs lastStatsSeq). A
+  // stats push must not be gated against the climb cursor, and vice versa.
+  it('applies a stats push whose seq is below lastSeq (the climb cursor must not gate stats)', () => {
+    // A climb already advanced the shared counter to 7; the first stats push
+    // happens to carry seq 4. It must STILL apply — lastStatsSeq is 0, not 7.
+    const current = makeClimb({ seq: 7 });
+    const state = makeState({ currentClimb: current, history: [current], lastSeq: 7 });
+
+    const result = boardPresenceReducer(state, {
+      type: 'APPLY_STATS_UPDATED',
+      payload: { stats: makeStats({ climbsSentCount: 2 }), seq: 4 },
+    });
+
+    expect(result.stats?.climbsSentCount).toBe(2);
+    expect(result.lastStatsSeq).toBe(4);
+    expect(result.lastSeq).toBe(7);
+    expect(result.currentClimb).toEqual(current);
+  });
+
+  it('still dedups a climb re-delivery against lastSeq after a higher stats seq has landed', () => {
+    const climb = makeClimb({ climbUuid: 'dup', seq: 5 });
+    let state = boardPresenceReducer(makeState(), { type: 'APPLY_CLIMB_SET', payload: climb });
+    // A stats push at seq 6 advances lastStatsSeq but not lastSeq.
+    state = boardPresenceReducer(state, {
+      type: 'APPLY_STATS_UPDATED',
+      payload: { stats: makeStats({ climbsSentCount: 1 }), seq: 6 },
+    });
+    expect(state.lastSeq).toBe(5);
+    expect(state.lastStatsSeq).toBe(6);
+
+    // Re-delivery of the same climb (seq 5) must dedup against lastSeq, wholly
+    // unaffected by lastStatsSeq having advanced to 6.
+    const afterRedeliver = boardPresenceReducer(state, { type: 'APPLY_CLIMB_SET', payload: climb });
+    expect(afterRedeliver).toBe(state);
+  });
+
+  it('preserves stats + lastStatsSeq across climb set and clear', () => {
+    const stats = makeStats({ climbsSentCount: 3, hardestGrade: 'V7' });
+    const base = makeState({ stats, lastStatsSeq: 9 });
+
+    const afterSet = boardPresenceReducer(base, { type: 'APPLY_CLIMB_SET', payload: makeClimb({ seq: 10 }) });
+    expect(afterSet.stats).toBe(stats);
+    expect(afterSet.lastStatsSeq).toBe(9);
+
+    const afterClear = boardPresenceReducer(afterSet, {
+      type: 'APPLY_CLIMB_CLEARED',
+      payload: { clearedAt: '2026-06-09T01:00:00.000Z', seq: 11 },
+    });
+    expect(afterClear.stats).toBe(stats);
+    expect(afterClear.lastStatsSeq).toBe(9);
+  });
+});
+
+describe('SEED_STATS', () => {
+  it('fills the tiles when no stats have landed yet, leaving lastStatsSeq at 0 so a live push still wins', () => {
+    const seeded = makeStats({ climbsSentCount: 1 });
+    const afterSeed = boardPresenceReducer(initialBoardPresenceState, { type: 'SEED_STATS', payload: seeded });
+    expect(afterSeed.stats).toEqual(seeded);
+    expect(afterSeed.lastStatsSeq).toBe(0);
+
+    // A subsequent live push (any seq > 0) overrides the seed.
+    const live = makeStats({ climbsSentCount: 9 });
+    const afterLive = boardPresenceReducer(afterSeed, {
+      type: 'APPLY_STATS_UPDATED',
+      payload: { stats: live, seq: 1 },
+    });
+    expect(afterLive.stats).toEqual(live);
+    expect(afterLive.lastStatsSeq).toBe(1);
+  });
+
+  it('is a no-op once any stats are present, so a late cold fetch cannot clobber a fresher live push', () => {
+    const live = makeStats({ climbsSentCount: 9 });
+    const state = makeState({ stats: live, lastStatsSeq: 3 });
+
+    const result = boardPresenceReducer(state, { type: 'SEED_STATS', payload: makeStats({ climbsSentCount: 1 }) });
+    expect(result).toBe(state);
+  });
+});
+
 describe('RESET', () => {
-  it('returns the initial state', () => {
+  it('returns the initial state, clearing stats and lastStatsSeq', () => {
     const state = makeState({
       currentClimb: makeClimb({ seq: 9 }),
       history: [makeClimb({ seq: 9 })],
       lastSeq: 9,
+      stats: makeStats({ climbsSentCount: 4 }),
+      lastStatsSeq: 9,
     });
 
     expect(boardPresenceReducer(state, { type: 'RESET' })).toEqual(initialBoardPresenceState);
@@ -253,6 +393,16 @@ describe('mapBoardPresenceEnvelopeToAction', () => {
     expect(mapBoardPresenceEnvelopeToAction(event)).toEqual({
       type: 'APPLY_CLIMB_CLEARED',
       payload: { clearedAt: '2026-06-09T02:00:00.000Z', seq: 12 },
+    });
+  });
+
+  it('maps BoardStatsUpdated to APPLY_STATS_UPDATED with the stats + seq', () => {
+    const stats = makeStats({ climbsSentCount: 6, hardestGrade: 'V9' });
+    const event: BoardPresenceEvent = { __typename: 'BoardStatsUpdated', stats, seq: 21 };
+
+    expect(mapBoardPresenceEnvelopeToAction(event)).toEqual({
+      type: 'APPLY_STATS_UPDATED',
+      payload: { stats, seq: 21 },
     });
   });
 

@@ -75,7 +75,6 @@ export type BoardPresenceActions = {
 
 export function useBoardPresence(boardId: number | null, client: BoardPresenceClient | null): UseBoardPresenceResult {
   const [state, dispatch] = useReducer(boardPresenceReducer, initialBoardPresenceState);
-  const [stats, setStats] = useState<BoardPresenceStats | null>(null);
   const [isLive, setIsLive] = useState(false);
   const [undoTarget, setUndoTarget] = useState<BoardPresenceClimb | null>(null);
 
@@ -92,18 +91,17 @@ export function useBoardPresence(boardId: number | null, client: BoardPresenceCl
 
   useEffect(() => {
     // No board or no transport: collapse to the initial state and stay inert.
+    // RESET clears stats too (they live in the reducer now).
     if (boardId === null || client === null) {
       dispatch({ type: 'RESET' });
-      setStats(null);
       setIsLive(false);
       setUndoTarget(null);
       return;
     }
 
     // Reset for the board we're about to attach to, so the prior board's
-    // history/current never bleeds into this one.
+    // history/current/stats never bleed into this one.
     dispatch({ type: 'RESET' });
-    setStats(null);
     setUndoTarget(null);
 
     let isActive = true;
@@ -138,9 +136,13 @@ export function useBoardPresence(boardId: number | null, client: BoardPresenceCl
     );
     setIsLive(true);
 
-    // 2) Backfill recent history, then 3) fetch stats. Both guarded against
+    // 2) Backfill recent history, then 3) seed stats. Both guarded against
     //    unmount and against a board switch (a late resolve for the previous
-    //    board must not write into the new board's state).
+    //    board must not write into the new board's state). The stats fetch is
+    //    only the initial SEED — from here on, every tick on this wall pushes a
+    //    fresh `BoardStatsUpdated` over the subscription above (handled by the
+    //    reducer), so the tiles update live without re-fetching. SEED_STATS is a
+    //    no-op once any live push has landed, so it can't clobber fresher data.
     void client
       .fetchRecentClimbs(boardId)
       .then((recentClimbs) => {
@@ -156,7 +158,7 @@ export function useBoardPresence(boardId: number | null, client: BoardPresenceCl
       .fetchStats(boardId)
       .then((nextStats) => {
         if (isActive && boardIdRef.current === subscribedBoardId) {
-          setStats(nextStats);
+          dispatch({ type: 'SEED_STATS', payload: nextStats });
         }
       })
       .catch(() => {
@@ -207,7 +209,7 @@ export function useBoardPresence(boardId: number | null, client: BoardPresenceCl
       previousClimb: state.previousClimb,
       undoTarget,
       history: state.history,
-      stats,
+      stats: state.stats,
       isLive,
       reportClimb,
       reportClimbWithUndoTarget,
@@ -218,7 +220,7 @@ export function useBoardPresence(boardId: number | null, client: BoardPresenceCl
       state.previousClimb,
       undoTarget,
       state.history,
-      stats,
+      state.stats,
       isLive,
       reportClimb,
       reportClimbWithUndoTarget,

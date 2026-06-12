@@ -22,6 +22,8 @@ export const initialBoardPresenceState: BoardPresenceState = {
   previousClimb: null,
   history: [],
   lastSeq: 0,
+  stats: null,
+  lastStatsSeq: 0,
 };
 
 /** True when an entry with the same `(climbUuid, seq)` is already in history. */
@@ -62,6 +64,7 @@ export function boardPresenceReducer(state: BoardPresenceState, action: BoardPre
       }
 
       return {
+        ...state,
         currentClimb: incomingClimb,
         previousClimb: state.currentClimb,
         history: [incomingClimb, ...state.history].slice(0, HISTORY_CAP),
@@ -107,6 +110,34 @@ export function boardPresenceReducer(state: BoardPresenceState, action: BoardPre
         previousClimb: shouldAdoptHistoryClimb ? state.currentClimb : state.previousClimb,
         history: mergedHistory,
         lastSeq: highestSeq,
+      };
+    }
+
+    case 'APPLY_STATS_UPDATED': {
+      // Live stats push. Stats events share the per-board seq counter with climb
+      // events, so a stale/duplicate push (out-of-order Redis fan-out) is
+      // ignored. Each push is a full recompute, so the highest-seq one wins.
+      if (action.payload.seq <= state.lastStatsSeq) {
+        return state;
+      }
+      return {
+        ...state,
+        stats: action.payload.stats,
+        lastStatsSeq: action.payload.seq,
+      };
+    }
+
+    case 'SEED_STATS': {
+      // One-time initial fetch. Only fill the tiles if no stats have landed yet
+      // (live or seeded); a live push that arrived during the fetch is fresher,
+      // so never clobber it. Leaves `lastStatsSeq` at 0 so the next live push
+      // always applies.
+      if (state.stats !== null) {
+        return state;
+      }
+      return {
+        ...state,
+        stats: action.payload,
       };
     }
 
