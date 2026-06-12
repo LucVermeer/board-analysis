@@ -307,22 +307,21 @@ export const tickMutations = {
     const climbedAt = new Date(validatedInput.climbedAt).toISOString();
 
     // Resolve the tick's board_id. Two explicit-board inputs feed the same FK,
-    // each from a different surface; both fall back to the user-owned config
-    // lookup for the legacy `/[board_name]/[layout_id]/...` route when absent:
+    // each from a different surface:
     //  1. boardUuid — a named-board route (`/b/<slug>/...`); attaches to that
     //     exact board entity even when the climber doesn't own it (e.g. a
-    //     seeded gym board owned by the system user). Validated against the
-    //     payload; throws on mismatch.
+    //     seeded gym board owned by the system user). Best-effort: a deleted or
+    //     stale uuid records the tick unassociated rather than rejecting it, and
+    //     does NOT fall back to config resolution.
     //  2. boardId — the board-presence connected wall (resolveBoardForSerial),
-    //     flag-gated. On a stale/mismatched id we warn and fall back to config
-    //     resolution rather than surfacing a raw FK/type mismatch.
+    //     flag-gated. On a stale/mismatched id we warn and fall back to the
+    //     config lookup rather than surfacing a raw FK/type mismatch.
+    // Absent both, the legacy `/[board_name]/[layout_id]/...` config lookup runs.
     let boardId: number | null = null;
     if (validatedInput.boardUuid) {
       const [board] = await db
         .select({
           id: dbSchema.userBoards.id,
-          ownerId: dbSchema.userBoards.ownerId,
-          isPublic: dbSchema.userBoards.isPublic,
           boardType: dbSchema.userBoards.boardType,
           layoutId: dbSchema.userBoards.layoutId,
           sizeId: dbSchema.userBoards.sizeId,
@@ -332,46 +331,12 @@ export const tickMutations = {
         .where(and(eq(dbSchema.userBoards.uuid, validatedInput.boardUuid), isNull(dbSchema.userBoards.deletedAt)))
         .limit(1);
 
-      if (!board) {
-        throw new GraphQLError('Board not found', { extensions: { code: 'BAD_USER_INPUT' } });
+      // Board may have been deleted or the client sent a stale UUID — just
+      // record the tick without a board association rather than rejecting it.
+      // board_id is nullable (onDelete: 'set null') so this is always valid.
+      if (board) {
+        boardId = board.id;
       }
-
-      // Don't let a client write ticks against someone else's private board.
-      // Public boards (including seeded gym boards) and the climber's own
-      // boards are both fine.
-      if (!board.isPublic && board.ownerId !== userId) {
-        throw new GraphQLError('Cannot tick on a private board', { extensions: { code: 'FORBIDDEN' } });
-      }
-
-      // Make sure the board the client is pointing at actually matches the
-      // tick payload. Without this, a client could attach a Kilter tick to
-      // any public Tension board (or any other config) and skew that board's
-      // ascent/climber stats — those aggregations key purely on `board_id`.
-      if (board.boardType !== validatedInput.boardType) {
-        throw new GraphQLError("Board type doesn't match tick payload", {
-          extensions: { code: 'BAD_USER_INPUT' },
-        });
-      }
-      if (validatedInput.layoutId !== undefined && Number(board.layoutId) !== validatedInput.layoutId) {
-        throw new GraphQLError("Board layout doesn't match tick payload", {
-          extensions: { code: 'BAD_USER_INPUT' },
-        });
-      }
-      if (validatedInput.sizeId !== undefined && Number(board.sizeId) !== validatedInput.sizeId) {
-        throw new GraphQLError("Board size doesn't match tick payload", {
-          extensions: { code: 'BAD_USER_INPUT' },
-        });
-      }
-      if (
-        validatedInput.setIds !== undefined &&
-        normalizeSetIds(board.setIds) !== normalizeSetIds(validatedInput.setIds)
-      ) {
-        throw new GraphQLError("Board hold sets don't match tick payload", {
-          extensions: { code: 'BAD_USER_INPUT' },
-        });
-      }
-
-      boardId = board.id;
     } else if (validatedInput.boardId != null && isBoardPresenceEnabled()) {
       const explicitBoard = await findActiveBoardById(validatedInput.boardId);
       // Accept the explicit wall board only when its FULL config matches the
@@ -394,7 +359,17 @@ export const tickMutations = {
       }
     }
 
-    if (boardId == null && validatedInput.layoutId && validatedInput.sizeId && validatedInput.setIds) {
+    // Legacy `/[board_name]/[layout_id]/...` route (no specific board entity),
+    // plus the fallback when a board-presence boardId didn't match. A
+    // best-effort boardUuid that resolved to nothing is intentionally left
+    // unassociated (handled above), so it does not fall through to here.
+    if (
+      boardId == null &&
+      !validatedInput.boardUuid &&
+      validatedInput.layoutId &&
+      validatedInput.sizeId &&
+      validatedInput.setIds
+    ) {
       boardId = await resolveBoardFromPath(
         userId,
         validatedInput.boardType,

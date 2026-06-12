@@ -150,7 +150,11 @@ function ClimbActionsDataWrapper({ children }: { children: ReactNode }) {
 // than send an empty `boardType`.
 function BoardProviderWrapper({ children }: { children: ReactNode }) {
   const { data: activeBoard } = useActiveBoard();
-  return <BoardProvider boardName={toBoardName(activeBoard?.boardType)}>{children}</BoardProvider>;
+  return (
+    <BoardProvider boardName={toBoardName(activeBoard?.boardType)} boardUuid={activeBoard?.uuid}>
+      {children}
+    </BoardProvider>
+  );
 }
 
 // Dark-aware navigation theme so screen/scene backgrounds adapt — without it,
