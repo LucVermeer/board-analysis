@@ -354,6 +354,7 @@
       "close": "Close",
       "setByLine": "Set by {{setter}}",
       "litByLine": "Lit by {{name}}",
+      "sentByLine": "Sent by {{name}}",
       "emptyTitle": "Nobody's on this wall yet",
       "emptyBody": "Connect and send a climb to kick off the history.",
       "historyHeader": "Lit on this wall",

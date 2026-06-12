@@ -1103,7 +1103,7 @@ function HardestSendRow({
         </Text>
         {climberName ? (
           <Text variant="caption1" color={secondaryColor} numberOfLines={1}>
-            {t('mobile.boardPresence.litByLine', { name: climberName })}
+            {t('mobile.boardPresence.sentByLine', { name: climberName })}
           </Text>
         ) : null}
       </View>

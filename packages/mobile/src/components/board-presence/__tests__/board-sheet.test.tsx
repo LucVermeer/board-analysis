@@ -394,7 +394,7 @@ describe('BoardSheet', () => {
     expect(container.textContent).toContain('14');
     expect(container.textContent).toContain('mobile.boardPresence.hardestSendLabel');
     expect(container.textContent).toContain('Hard Rig');
-    expect(container.textContent).toContain('mobile.boardPresence.litByLine:Mina');
+    expect(container.textContent).toContain('mobile.boardPresence.sentByLine:Mina');
     expect(container.querySelector('[data-avatar="Mina"]')).not.toBeNull();
     expect(container.querySelector('[data-icon="crown"]')).not.toBeNull();
     expect(container.textContent).toContain('mobile.boardPresence.historyHeader');
