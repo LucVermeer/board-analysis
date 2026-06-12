@@ -34,11 +34,10 @@ type Params = {
 const CHROME_BUDGET = 132;
 
 /**
- * Full-screen board sub-screen for the hold-type search filter. Mirrors the
- * setters handoff: the ClimbFilterSheet pushes here with the current
- * `holdsFilter` serialized, the user taps holds to include/exclude hold types,
- * and the edited filter is handed back via `emitHoldsFilterSelection` when the
- * screen pops (Done or swipe-back).
+ * Full-screen route variant for the hold-type search filter. Route-based flows
+ * can serialize `holdsFilter`, let the user tap holds to include/exclude hold
+ * types, and receive the edited filter via `emitHoldsFilterSelection` when the
+ * screen pops. The climb filter sheet uses a stacked modal editor instead.
  */
 export default function HoldFilterScreen() {
   const params = useLocalSearchParams<Params>();

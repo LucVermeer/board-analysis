@@ -1,16 +1,16 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, useCallback, type ReactNode } from 'react';
 import { AppState } from 'react-native';
-import type { WebBrowserAuthSessionResult } from 'expo-web-browser';
 import { useSegments, Redirect } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { getAuthToken, isTokenExpiringSoon } from '../lib/auth-store';
 import {
-  startSignIn,
+  signInWithApple as authSignInWithApple,
+  signInWithGoogle as authSignInWithGoogle,
   signOut as authSignOut,
   signInWithCredentials as authSignInWithCredentials,
-  type AuthProvider as AuthProviderType,
   type CredentialsSignInResult,
+  type OAuthSignInResult,
 } from '../lib/auth';
 import { reset as resetAnalytics, track } from '../lib/analytics';
 import { reportError } from '../lib/sentry';
@@ -24,7 +24,8 @@ import { ACTIVE_BOARD_QUERY_KEY } from '../lib/graphql/use-active-board';
 type AuthState = {
   isAuthenticated: boolean;
   isLoading: boolean;
-  signIn: (provider: AuthProviderType) => Promise<WebBrowserAuthSessionResult>;
+  signInWithApple: () => Promise<OAuthSignInResult>;
+  signInWithGoogle: () => Promise<OAuthSignInResult>;
   signInWithCredentials: (email: string, password: string) => Promise<CredentialsSignInResult>;
   signOut: (method?: 'manual' | 'account_deleted') => Promise<void>;
   refreshAuthState: () => Promise<void>;
@@ -156,9 +157,24 @@ export function AuthProvider({ children, onReady }: AuthProviderProps) {
     return () => subscription.remove();
   }, [checkAuth]);
 
-  const signIn = useCallback((provider: AuthProviderType) => {
-    return startSignIn(provider);
-  }, []);
+  // Both native OAuth flows run their provider sheet, exchange the identity
+  // token for our JWT pair, and — on success — re-run checkAuth so the provider
+  // flips to the authenticated UI (matching signInWithCredentials).
+  const signInWithApple = useCallback(async (): Promise<OAuthSignInResult> => {
+    const result = await authSignInWithApple();
+    if (result.success) {
+      await checkAuth();
+    }
+    return result;
+  }, [checkAuth]);
+
+  const signInWithGoogle = useCallback(async (): Promise<OAuthSignInResult> => {
+    const result = await authSignInWithGoogle();
+    if (result.success) {
+      await checkAuth();
+    }
+    return result;
+  }, [checkAuth]);
 
   const signInWithCredentials = useCallback(
     async (email: string, password: string): Promise<CredentialsSignInResult> => {
@@ -217,12 +233,13 @@ export function AuthProvider({ children, onReady }: AuthProviderProps) {
     () => ({
       isAuthenticated,
       isLoading,
-      signIn,
+      signInWithApple,
+      signInWithGoogle,
       signInWithCredentials,
       signOut,
       refreshAuthState: checkAuth,
     }),
-    [isAuthenticated, isLoading, signIn, signInWithCredentials, signOut, checkAuth],
+    [isAuthenticated, isLoading, signInWithApple, signInWithGoogle, signInWithCredentials, signOut, checkAuth],
   );
 
   if (isLoading) {

@@ -23,7 +23,7 @@ import { GET_BOARD } from '../lib/graphql/operations';
 import type { GetBoardQueryResponse } from '../lib/graphql/operations';
 import { getBoardRenderData } from '../lib/board-details';
 import { registerBluetoothConnection } from '../lib/ble/bluetooth-status-store';
-import { useQueue, useQueueSessionControls } from './queue-provider';
+import { useIsPartyPreviewOnly, useQueue, useQueueSessionControls } from './queue-provider';
 import { useBoardPresenceControls } from './board-presence-provider';
 import { useQueueSnackbar } from './queue-snackbar-provider';
 import { toClimbInput } from '../lib/climb-to-queue-item';
@@ -292,6 +292,7 @@ export function BluetoothProvider({
   children,
 }: BluetoothProviderProps) {
   const { sessionId, confirmClimbOnWall, setSessionBoardSerial, lastConnectedBoardSerial } = useQueueSessionControls();
+  const isPartyPreviewOnly = useIsPartyPreviewOnly();
   const { t } = useTranslation('settings');
   // Board presence ("now on the wall"). All of these are inert when the
   // `board-presence` flag is off: `enabled` is false, `boardId` is null, and the
@@ -844,7 +845,7 @@ export function BluetoothProvider({
 
   return (
     <BluetoothContext.Provider value={value}>
-      {isConnected && (
+      {isConnected && !isPartyPreviewOnly && (
         <BluetoothAutoSender
           sendFramesToBoard={sendFramesToBoard}
           onWallConfirmed={handleWallConfirmed}

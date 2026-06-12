@@ -43,7 +43,7 @@ import {
 } from '@boardsesh/queue-runtime';
 import { useQueueMutations, type PublishPlaybackStateInput } from '@boardsesh/queue-react';
 import type { SessionSummary, SubscriptionQueueEvent, SessionUser, UserBoard } from '@boardsesh/shared-schema';
-import { execute } from '@boardsesh/graphql-client';
+import { execute, GraphQLOperationError, isRateLimitedExtension } from '@boardsesh/graphql-client';
 import { buildBoardPath, parseBoardPath } from '@boardsesh/board-config';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { JOIN_SESSION, LEAVE_SESSION } from '@boardsesh/graphql/operations/queue-session';
@@ -86,6 +86,26 @@ export type StartSessionConfig = {
   discoverable?: boolean;
   isPermanent?: boolean;
 };
+
+const JOIN_SESSION_RETRY_BACKOFF_MS = [1_000, 2_500, 5_000] as const;
+
+// A party-session queue/wall mutation that fails because the backend throttled
+// it (RATE_LIMITED) is transient — the optimistic state already applied and a
+// peer-resync or the next gesture reconciles. Show a specific, gentle "slow
+// down" message rather than the alarming generic "Action failed" toast (which
+// a beta tester read as "the connection fails every time we switch boulders",
+// #2763). Any other failure keeps the generic toast.
+function showQueueMutationErrorToast(
+  error: unknown,
+  t: (key: string) => string,
+  showToast: (message: string, variant: 'error') => void,
+): void {
+  if (error instanceof GraphQLOperationError && isRateLimitedExtension(error.extensions)) {
+    showToast(t('mobile.queue.rateLimited'), 'error');
+  } else {
+    showToast(t('mobile.queue.actionFailed'), 'error');
+  }
+}
 
 type QueueContextValue = {
   state: QueueState;
@@ -562,208 +582,256 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     }
 
     const wsClient = getWsClient();
+    let disposed = false;
+    let subscriptionStartToken = 0;
+    let queueUpdatesCleanup: (() => void) | null = null;
+    let sessionUpdatesCleanup: (() => void) | null = null;
+    let joinRetryTimer: ReturnType<typeof setTimeout> | null = null;
+    let joinRetryCount = 0;
 
-    // graphql-ws auto-reconnects, and every reconnect gives us a fresh
-    // per-connection ConnectionContext on the backend. Invalidate the join
-    // cache on `closed` (not on `connected`) — invalidating on `connected`
-    // races mutations issued while the socket is down: they read the
-    // resolved-but-stale ref from the dead connection, then graphql-ws sends
-    // them over the new socket before the re-issued JOIN_SESSION lands.
-    // Bumping the epoch on `closed` makes any cached entry stale by key.
-    const unsubClosed = wsClient.on('closed', () => {
-      joinTracker.bumpEpoch();
-    });
+    const clearJoinRetryTimer = () => {
+      if (!joinRetryTimer) return;
+      clearTimeout(joinRetryTimer);
+      joinRetryTimer = null;
+    };
+
+    const cleanupSubscriptions = () => {
+      clearJoinRetryTimer();
+      queueUpdatesCleanup?.();
+      sessionUpdatesCleanup?.();
+      queueUpdatesCleanup = null;
+      sessionUpdatesCleanup = null;
+      unsubscribeRef.current = null;
+    };
+
     const logJoinFailure = (err: unknown) => {
       if (__DEV__) console.warn('[queue] joinSession failed', err);
     };
-    const unsubConnected = wsClient.on('connected', () => {
-      // On initial connect this is a no-op (eager fire below cached the
-      // entry at the same epoch); on reconnect `closed` already cleared
-      // the ref so this re-fires JOIN_SESSION on the new socket.
-      ensureJoined(sessionId).catch(logJoinFailure);
-    });
 
-    // Fire the initial join eagerly so mutations issued before the first user
-    // interaction still find a resolved promise in joinPromiseRef.
-    ensureJoined(sessionId).catch(logJoinFailure);
+    const scheduleJoinRetry = (failedStartToken: number) => {
+      const retryDelayMs =
+        JOIN_SESSION_RETRY_BACKOFF_MS[Math.min(joinRetryCount, JOIN_SESSION_RETRY_BACKOFF_MS.length - 1)];
+      joinRetryCount++;
+      joinRetryTimer = setTimeout(() => {
+        joinRetryTimer = null;
+        if (disposed || failedStartToken !== subscriptionStartToken || sessionIdRef.current !== sessionId) return;
+        void startJoinedSubscriptions();
+      }, retryDelayMs);
+    };
 
-    const cleanup = wsClient.subscribe<{ queueUpdates: QueueUpdateEvent }>(
-      {
-        query: QUEUE_UPDATES_SUBSCRIPTION,
-        variables: { sessionId },
-      },
-      {
-        next: ({ data }) => {
-          if (!data?.queueUpdates) return;
-          const event = data.queueUpdates;
-          // Forward every event to transient-event listeners (route playback
-          // party-sync) before the reducer path. The wire-envelope type doesn't
-          // model PlaybackStateChanged, but the subscription selects it and the
-          // server emits it — SubscriptionQueueEvent is the canonical client
-          // union that includes it.
-          // TODO(#2507): add PlaybackStateChanged to SubscriptionWireEnvelope so
-          // this `as unknown as` cast can be removed (don't strip it before then).
-          const queueEvent = event as unknown as SubscriptionQueueEvent;
-          if (queueEventListenersRef.current.size > 0) {
-            for (const listener of queueEventListenersRef.current) {
-              try {
-                listener(queueEvent);
-              } catch (listenerError) {
-                if (__DEV__) console.warn('[queue] queue-event listener threw', listenerError);
+    const startJoinedSubscriptions = async () => {
+      const currentStartToken = ++subscriptionStartToken;
+      cleanupSubscriptions();
+
+      try {
+        await ensureJoined(sessionId);
+      } catch (joinError) {
+        if (disposed || currentStartToken !== subscriptionStartToken || sessionIdRef.current !== sessionId) return;
+        logJoinFailure(joinError);
+        if (joinRetryCount === 0) {
+          showToastRef.current(tRef.current('mobile.queue.syncError'), 'error');
+        }
+        scheduleJoinRetry(currentStartToken);
+        return;
+      }
+
+      if (disposed || currentStartToken !== subscriptionStartToken || sessionIdRef.current !== sessionId) return;
+      joinRetryCount = 0;
+
+      queueUpdatesCleanup = wsClient.subscribe<{ queueUpdates: QueueUpdateEvent }>(
+        {
+          query: QUEUE_UPDATES_SUBSCRIPTION,
+          variables: { sessionId },
+        },
+        {
+          next: ({ data }) => {
+            if (!data?.queueUpdates) return;
+            const event = data.queueUpdates;
+            // Forward every event to transient-event listeners (route playback
+            // party-sync) before the reducer path. The wire-envelope type doesn't
+            // model PlaybackStateChanged, but the subscription selects it and the
+            // server emits it — SubscriptionQueueEvent is the canonical client
+            // union that includes it.
+            // TODO(#2507): add PlaybackStateChanged to SubscriptionWireEnvelope so
+            // this `as unknown as` cast can be removed (don't strip it before then).
+            const queueEvent = event as unknown as SubscriptionQueueEvent;
+            if (queueEventListenersRef.current.size > 0) {
+              for (const listener of queueEventListenersRef.current) {
+                try {
+                  listener(queueEvent);
+                } catch (listenerError) {
+                  if (__DEV__) console.warn('[queue] queue-event listener threw', listenerError);
+                }
               }
             }
-          }
-          // PlaybackStateChanged is transient — it carries no queue state and
-          // reuses the room's current sequence, so it bypasses the reducer.
-          if (queueEvent.__typename === 'PlaybackStateChanged') return;
-          const result = mapSubscriptionEnvelopeToAction(event, {
-            mapItem: toClimbQueueItem,
-            context: { myClientId: coordinator.clientId },
-          });
-          if (result.kind !== 'dispatch') return;
-          dispatch(result.action);
-          switch (result.eventType) {
-            case 'QueueItemAdded':
-              track(SHARED_EVENTS.ClimbAddedToQueue, {
-                boardName: activeBoardRef.current?.boardType,
-                layoutId: activeBoardRef.current?.layoutId,
-                addedFromTab: 'peer_broadcast',
-                currentQueueLength: stateRef.current.queue.length + 1,
-                partyMode: true,
-              });
-              break;
-            case 'QueueItemRemoved':
-              track(SHARED_EVENTS.ClimbRemovedFromQueue, {
-                boardName: activeBoardRef.current?.boardType,
-                layoutId: activeBoardRef.current?.layoutId,
-                partyMode: true,
-                removedBy: 'peer',
-              });
-              break;
-            case 'QueueReordered':
-              if (event.__typename === 'QueueReordered') {
-                track(SHARED_EVENTS.QueueReordered, {
+            // PlaybackStateChanged is transient — it carries no queue state and
+            // reuses the room's current sequence, so it bypasses the reducer.
+            if (queueEvent.__typename === 'PlaybackStateChanged') return;
+            const result = mapSubscriptionEnvelopeToAction(event, {
+              mapItem: toClimbQueueItem,
+              context: { myClientId: coordinator.clientId },
+            });
+            if (result.kind !== 'dispatch') return;
+            dispatch(result.action);
+            switch (result.eventType) {
+              case 'QueueItemAdded':
+                track(SHARED_EVENTS.ClimbAddedToQueue, {
                   boardName: activeBoardRef.current?.boardType,
                   layoutId: activeBoardRef.current?.layoutId,
-                  oldIndex: event.oldIndex,
-                  newIndex: event.newIndex,
+                  addedFromTab: 'peer_broadcast',
+                  currentQueueLength: stateRef.current.queue.length + 1,
                   partyMode: true,
-                  reorderedBy: 'peer',
                 });
-              }
-              break;
-          }
-        },
-        error: () => {
-          // i18n-keep session:mobile.queue.syncError — called through `tRef.current`,
-          // which the orphan checker can't trace back to the session-bound `t`.
-          showToastRef.current(tRef.current('mobile.queue.syncError'), 'error');
-        },
-        complete: () => {},
-      },
-    );
-
-    unsubscribeRef.current = cleanup;
-
-    // Follow board-path (angle) changes broadcast by other party members. The
-    // angle is session-shared: when a peer changes it we update our own active
-    // board's angle (which cascades to the climb list, play drawer, and the
-    // re-grade effect). We don't switch the whole board — only the angle.
-    const sessionUpdatesCleanup = wsClient.subscribe<{ sessionUpdates: SessionUpdateEvent }>(
-      {
-        query: SESSION_UPDATES_SUBSCRIPTION,
-        variables: { sessionId },
-      },
-      {
-        next: ({ data }) => {
-          const event = data?.sessionUpdates;
-          if (!event) return;
-          if (sessionIdRef.current !== sessionId) return;
-
-          // Live analytics push: flashes + flash/send/attempt grade split +
-          // per-participant breakdown. Drives the in-session analytics view and
-          // leaderboard without polling.
-          if (event.__typename === 'SessionStatsUpdated') {
-            setLiveStats({
-              sessionId: event.sessionId ?? sessionId,
-              totalSends: event.totalSends ?? 0,
-              totalFlashes: event.totalFlashes ?? 0,
-              totalAttempts: event.totalAttempts ?? 0,
-              tickCount: event.tickCount ?? 0,
-              participants: event.participants ?? [],
-              gradeDistribution: event.gradeDistribution ?? [],
-              boardTypes: event.boardTypes ?? [],
-              hardestGrade: event.hardestGrade ?? null,
-              durationMinutes: event.durationMinutes ?? null,
-              goal: event.goal ?? null,
-            });
-            return;
-          }
-
-          if (event.__typename === 'SessionEnded') {
-            if (locallyEndingSessionIdRef.current === sessionId) {
-              suppressedRemoteEndSessionIdRef.current = sessionId;
-              return;
+                break;
+              case 'QueueItemRemoved':
+                track(SHARED_EVENTS.ClimbRemovedFromQueue, {
+                  boardName: activeBoardRef.current?.boardType,
+                  layoutId: activeBoardRef.current?.layoutId,
+                  partyMode: true,
+                  removedBy: 'peer',
+                });
+                break;
+              case 'QueueReordered':
+                if (event.__typename === 'QueueReordered') {
+                  track(SHARED_EVENTS.QueueReordered, {
+                    boardName: activeBoardRef.current?.boardType,
+                    layoutId: activeBoardRef.current?.layoutId,
+                    oldIndex: event.oldIndex,
+                    newIndex: event.newIndex,
+                    partyMode: true,
+                    reorderedBy: 'peer',
+                  });
+                }
+                break;
             }
-            void clearSessionRef.current();
-            showToastRef.current(tRef.current('mobile.toast.sessionEnded'), 'success');
-            return;
-          }
+          },
+          error: () => {
+            // i18n-keep session:mobile.queue.syncError — called through `tRef.current`,
+            // which the orphan checker can't trace back to the session-bound `t`.
+            showToastRef.current(tRef.current('mobile.queue.syncError'), 'error');
+          },
+          complete: () => {},
+        },
+      );
 
-          if (event.__typename === 'WallConfirmedClimb') {
-            if (event.climbUuid) emitWallConfirm(event.climbUuid);
-            return;
-          }
-
-          const runtimeEvent = toMobileSessionRuntimeEvent(event);
-          if (runtimeEvent) {
-            setSessionRuntimeState(
-              (prev) => applySessionRuntimeEvent(prev, runtimeEvent) ?? createEmptySessionRuntimeState(),
-            );
-          }
-
-          if (event.__typename !== 'SessionBoardPathChanged' || !event.boardPath) return;
-          // Echo of our own change — we already applied it locally before
-          // broadcasting. A null local participant id (peer event before our
-          // JOIN_SESSION resolved) can't be the originator, so we apply it.
-          if (event.changedByParticipantId && event.changedByParticipantId === participantIdRef.current) return;
-          const parsed = parseBoardPath(event.boardPath);
-          if (!parsed || parsed.angle == null) return;
-          const nextAngle = parsed.angle;
-          void (async () => {
-            const stored = await getStoredActiveBoard();
+      // Follow board-path (angle) changes broadcast by other party members. The
+      // angle is session-shared: when a peer changes it we update our own active
+      // board's angle (which cascades to the climb list, play drawer, and the
+      // re-grade effect). We don't switch the whole board — only the angle.
+      sessionUpdatesCleanup = wsClient.subscribe<{ sessionUpdates: SessionUpdateEvent }>(
+        {
+          query: SESSION_UPDATES_SUBSCRIPTION,
+          variables: { sessionId },
+        },
+        {
+          next: ({ data }) => {
+            const event = data?.sessionUpdates;
+            if (!event) return;
             if (sessionIdRef.current !== sessionId) return;
-            if (!stored || stored.angle === nextAngle) return;
-            // Never override a fixed-angle board (mirrors handleAngleChange's
-            // local guard) — a peer can't change an angle the board can't be
-            // set to.
-            if (stored.isAngleAdjustable === false) return;
-            // Follow ONLY the angle, and only when the peer is on the SAME
-            // board. A mixed-board session must not push a foreign angle (board
-            // angle tables differ, e.g. MoonBoard only allows 25°/40°). Compare
-            // the parsed board identity to our stored board before applying.
-            if (
-              parsed.boardName !== stored.boardType ||
-              parsed.layoutId !== stored.layoutId ||
-              parsed.sizeId !== stored.sizeId ||
-              parsed.setIds !== stored.setIds
-            ) {
+
+            // Live analytics push: flashes + flash/send/attempt grade split +
+            // per-participant breakdown. Drives the in-session analytics view and
+            // leaderboard without polling.
+            if (event.__typename === 'SessionStatsUpdated') {
+              setLiveStats({
+                sessionId: event.sessionId ?? sessionId,
+                totalSends: event.totalSends ?? 0,
+                totalFlashes: event.totalFlashes ?? 0,
+                totalAttempts: event.totalAttempts ?? 0,
+                tickCount: event.tickCount ?? 0,
+                participants: event.participants ?? [],
+                gradeDistribution: event.gradeDistribution ?? [],
+                boardTypes: event.boardTypes ?? [],
+                hardestGrade: event.hardestGrade ?? null,
+                durationMinutes: event.durationMinutes ?? null,
+                goal: event.goal ?? null,
+              });
               return;
             }
-            await setActiveBoardRef.current({ ...stored, angle: nextAngle });
-          })();
+
+            if (event.__typename === 'SessionEnded') {
+              if (locallyEndingSessionIdRef.current === sessionId) {
+                suppressedRemoteEndSessionIdRef.current = sessionId;
+                return;
+              }
+              void clearSessionRef.current();
+              showToastRef.current(tRef.current('mobile.toast.sessionEnded'), 'success');
+              return;
+            }
+
+            if (event.__typename === 'WallConfirmedClimb') {
+              if (event.climbUuid) emitWallConfirm(event.climbUuid);
+              return;
+            }
+
+            const runtimeEvent = toMobileSessionRuntimeEvent(event);
+            if (runtimeEvent) {
+              setSessionRuntimeState(
+                (prev) => applySessionRuntimeEvent(prev, runtimeEvent) ?? createEmptySessionRuntimeState(),
+              );
+            }
+
+            if (event.__typename !== 'SessionBoardPathChanged' || !event.boardPath) return;
+            // Echo of our own change — we already applied it locally before
+            // broadcasting. A null local participant id (peer event before our
+            // JOIN_SESSION resolved) can't be the originator, so we apply it.
+            if (event.changedByParticipantId && event.changedByParticipantId === participantIdRef.current) return;
+            const parsed = parseBoardPath(event.boardPath);
+            if (!parsed || parsed.angle == null) return;
+            const nextAngle = parsed.angle;
+            void (async () => {
+              const stored = await getStoredActiveBoard();
+              if (sessionIdRef.current !== sessionId) return;
+              if (!stored || stored.angle === nextAngle) return;
+              // Never override a fixed-angle board (mirrors handleAngleChange's
+              // local guard) — a peer can't change an angle the board can't be
+              // set to.
+              if (stored.isAngleAdjustable === false) return;
+              // Follow ONLY the angle, and only when the peer is on the SAME
+              // board. A mixed-board session must not push a foreign angle (board
+              // angle tables differ, e.g. MoonBoard only allows 25°/40°). Compare
+              // the parsed board identity to our stored board before applying.
+              if (
+                parsed.boardName !== stored.boardType ||
+                parsed.layoutId !== stored.layoutId ||
+                parsed.sizeId !== stored.sizeId ||
+                parsed.setIds !== stored.setIds
+              ) {
+                return;
+              }
+              await setActiveBoardRef.current({ ...stored, angle: nextAngle });
+            })();
+          },
+          error: () => {},
+          complete: () => {},
         },
-        error: () => {},
-        complete: () => {},
-      },
-    );
+      );
+
+      unsubscribeRef.current = cleanupSubscriptions;
+    };
+
+    // graphql-ws auto-reconnects, and every reconnect gives us a fresh
+    // per-connection ConnectionContext on the backend. Tear down subscriptions
+    // when the socket closes so they cannot auto-resubscribe before JOIN_SESSION
+    // has updated that fresh context.
+    const unsubClosed = wsClient.on('closed', () => {
+      joinTracker.bumpEpoch();
+      subscriptionStartToken++;
+      joinRetryCount = 0;
+      cleanupSubscriptions();
+    });
+    const unsubConnected = wsClient.on('connected', () => {
+      void startJoinedSubscriptions();
+    });
+
+    void startJoinedSubscriptions();
 
     return () => {
-      cleanup();
-      sessionUpdatesCleanup();
+      disposed = true;
+      subscriptionStartToken++;
+      cleanupSubscriptions();
       unsubConnected();
       unsubClosed();
-      unsubscribeRef.current = null;
       // Reset live analytics/presence on EVERY session change (not only on
       // teardown to null). A direct A→B switch (joinSession) flips sessionId
       // without an intermediate null, so without this the previous session's
@@ -1152,7 +1220,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
           );
         }
         if (wallControlOperationRef.current === plan.operationId) {
-          showToast(t('mobile.queue.actionFailed'), 'error');
+          showQueueMutationErrorToast(error, t, showToast);
         }
         throw error;
       }
@@ -1201,7 +1269,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
           shouldOptimisticallyRelease: plan.shouldOptimisticallyRelease,
         })
       ) {
-        showToast(t('mobile.queue.actionFailed'), 'error');
+        showQueueMutationErrorToast(error, t, showToast);
       }
       throw error;
     }
@@ -1407,7 +1475,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
         // to the pre-reorder order — that matches the server, which never applied
         // the move — and surface the failure.
         dispatch({ type: 'UPDATE_QUEUE', payload: { queue: previousQueue, currentClimbQueueItem: previousCurrent } });
-        showToast(t('mobile.queue.actionFailed'), 'error');
+        showQueueMutationErrorToast(error, t, showToast);
       });
     },
     [mutations, showToast, t],

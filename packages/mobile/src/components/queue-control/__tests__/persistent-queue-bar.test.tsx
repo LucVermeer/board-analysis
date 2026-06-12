@@ -48,6 +48,7 @@ vi.mock('../../../hooks/use-reduce-motion', () => ({ useReduceMotion: () => true
 vi.mock('../../../theme/animations', () => ({ timing: { fast: 150, normal: 250 } }));
 vi.mock('../../../theme/layout', () => ({
   MATERIAL_ACTIVE_CONTEXT_BAR_HEIGHT: 48,
+  MATERIAL_TAB_BAR_HEIGHT: 80,
   TAB_BAR_HEIGHT: 49,
   TOOLBAR_RESERVE: 74,
   TOOLBAR_SIDE_MARGIN: 16,

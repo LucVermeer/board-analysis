@@ -17,6 +17,20 @@ export type CreateBoardHolds = BoardEdges & {
   family: 'aurora' | 'moonboard';
 };
 
+type CreateBoardHoldsConfig = {
+  boardName: BoardName;
+  layoutId: number;
+  sizeId: number;
+  setIds: number[];
+};
+
+const CREATE_BOARD_HOLDS_CACHE_LIMIT = 16;
+const createBoardHoldsCache = new Map<string, CreateBoardHolds | null>();
+
+function createBoardHoldsCacheKey(cfg: CreateBoardHoldsConfig): string {
+  return `${cfg.boardName}-${cfg.layoutId}-${cfg.sizeId}-${cfg.setIds.join(',')}`;
+}
+
 /**
  * Parse a comma-separated `setIds` route/param string into numeric set ids.
  * Mirrors the `split(',').map(Number).filter(Boolean)` pattern the board render
@@ -32,22 +46,46 @@ export function parseSetIdsParam(setIds: string): number[] {
  * agnostic. Aurora boards come from the hole-placement pipeline; MoonBoard comes
  * from the grid-backed render data branch.
  */
-export function getCreateBoardHolds(cfg: {
-  boardName: BoardName;
-  layoutId: number;
-  sizeId: number;
-  setIds: number[];
-}): CreateBoardHolds | null {
+export function getCreateBoardHolds(cfg: CreateBoardHoldsConfig): CreateBoardHolds | null {
+  const cacheKey = createBoardHoldsCacheKey(cfg);
+  if (createBoardHoldsCache.has(cacheKey)) {
+    const cached = createBoardHoldsCache.get(cacheKey) ?? null;
+    createBoardHoldsCache.delete(cacheKey);
+    createBoardHoldsCache.set(cacheKey, cached);
+    return cached;
+  }
+
   const data = getBoardRenderData(cfg);
-  if (!data) return null;
-  return {
-    holdTargets: data.holdsData.map((hold) => ({ id: hold.id, cx: hold.cx, cy: hold.cy, r: hold.r })),
-    boardWidth: data.boardWidth,
-    boardHeight: data.boardHeight,
-    edgeLeft: data.edgeLeft,
-    edgeRight: data.edgeRight,
-    edgeBottom: data.edgeBottom,
-    edgeTop: data.edgeTop,
-    family: cfg.boardName === 'moonboard' ? 'moonboard' : 'aurora',
-  };
+  const result = data
+    ? {
+        holdTargets: data.holdsData.map((hold) => ({ id: hold.id, cx: hold.cx, cy: hold.cy, r: hold.r })),
+        boardWidth: data.boardWidth,
+        boardHeight: data.boardHeight,
+        edgeLeft: data.edgeLeft,
+        edgeRight: data.edgeRight,
+        edgeBottom: data.edgeBottom,
+        edgeTop: data.edgeTop,
+        family: cfg.boardName === 'moonboard' ? ('moonboard' as const) : ('aurora' as const),
+      }
+    : null;
+
+  if (createBoardHoldsCache.size >= CREATE_BOARD_HOLDS_CACHE_LIMIT) {
+    const oldestKey = createBoardHoldsCache.keys().next().value;
+    if (oldestKey !== undefined) createBoardHoldsCache.delete(oldestKey);
+  }
+  createBoardHoldsCache.set(cacheKey, result);
+  return result;
+}
+
+export function prewarmCreateBoardHolds(cfg: CreateBoardHoldsConfig): void {
+  getCreateBoardHolds(cfg);
+}
+
+// @test-only: production code should share the module-level hold geometry cache.
+export function clearCreateBoardHoldsCache(): void {
+  const isDevRuntime = typeof __DEV__ === 'undefined' || __DEV__;
+  if (!isDevRuntime) {
+    throw new Error('clearCreateBoardHoldsCache is test-only and cannot run in production.');
+  }
+  createBoardHoldsCache.clear();
 }

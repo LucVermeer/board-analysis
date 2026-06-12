@@ -37,7 +37,7 @@ type LogbookTabProps = {
 
 export function LogbookTab({ userId, onScroll, topInset = 0, registerScrollToTop }: LogbookTabProps) {
   const { t } = useTranslation('you');
-  const { systemColors, brandColors } = useTheme();
+  const { systemColors, brandColors, variant } = useTheme();
   const bottomChrome = useBottomChromeMetrics();
   const paddingBottom = bottomChrome.scrollBottomPadding + spacing[4];
 
@@ -78,12 +78,15 @@ export function LogbookTab({ userId, onScroll, topInset = 0, registerScrollToTop
   // FlashList doesn't re-render the header on every LogbookTab render. Always
   // present so it sits above the empty state too.
   const listHeader = useMemo(
-    () => (
-      <Text variant="largeTitle" style={styles.screenTitle}>
-        {t('metadata.dashboard.title')}
-      </Text>
-    ),
-    [t],
+    // On Material the M3 app bar owns the title, so the in-body large title is
+    // gated off there to avoid a doubled title.
+    () =>
+      variant === 'material' ? null : (
+        <Text variant="largeTitle" style={styles.screenTitle}>
+          {t('metadata.dashboard.title')}
+        </Text>
+      ),
+    [t, variant],
   );
 
   if (!userId || feed.isPending) {

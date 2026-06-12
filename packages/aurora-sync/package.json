@@ -40,12 +40,14 @@
     "lint-fix": "vp lint --fix",
     "sync:all": "tsx src/cli/index.ts all",
     "sync:daemon": "tsx src/cli/index.ts daemon",
+    "sync:locations": "tsx src/cli/index.ts locations",
     "sync:user": "tsx src/cli/index.ts user"
   },
   "dependencies": {
     "@boardsesh/board-constants": "*",
     "@boardsesh/crypto": "*",
     "@boardsesh/db": "*",
+    "@boardsesh/location-sync": "*",
     "@boardsesh/shared-schema": "*",
     "commander": "^14.0.3",
     "dotenv": "^17.3.1",

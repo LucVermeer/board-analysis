@@ -1,4 +1,4 @@
-import type { BoardName, HoldState } from '@boardsesh/shared-schema';
+import type { HoldState } from '@boardsesh/shared-schema';
 import type { HoldRenderStyle } from '@boardsesh/board-constants/hold-states';
 
 /**
@@ -32,25 +32,4 @@ export type HoldPlacement = {
   cx: number;
   cy: number;
   r: number;
-};
-
-export type BoardRendererProps = {
-  /** The climb's frames string encoding active holds and their roles */
-  frames: string;
-  /** Board name (kilter, tension, moonboard, etc.) */
-  boardName: BoardName;
-  /** Native pixel width of the board image coordinate system */
-  boardWidth: number;
-  /** Native pixel height of the board image coordinate system */
-  boardHeight: number;
-  /** URL(s) for the board background image(s) */
-  imageUrls: string[];
-  /** All hold placements on this board (position + radius data) */
-  holdsData: HoldPlacement[];
-  /** Whether to mirror the board horizontally */
-  mirrored?: boolean;
-  /** Fill the caller's frame and rely on SVG `meet` scaling instead of deriving height from board aspect ratio. */
-  fillContainer?: boolean;
-  /** External style applied to the outermost View wrapper */
-  style?: import('react-native').ViewStyle;
 };

@@ -12,10 +12,11 @@
  *
  * For react-native-screens specifically, the patch adds a
  * `-[UIViewController contentScrollViewForEdge:]` fallback (the
- * `rnscreens_contentScrollViewForEdge` swizzle + `findScrollViewDeepFirstFrom`
- * deep search) so the iOS 26 tab-bar minimize tracks the climbs FlashList. Drop
- * the patch and the tab bar just stops minimizing — invisible to typecheck, the
- * Metro bundle, and every existing test, all the way into TestFlight.
+ * `rnscreens_contentScrollViewForEdge` swizzle +
+ * `findContentScrollViewInManagedSubtreeFrom` bounded search) so the iOS 26
+ * tab-bar minimize tracks the climbs FlashList. Drop the patch and the tab bar
+ * just stops minimizing — invisible to typecheck, the Metro bundle, and every
+ * existing test, all the way into TestFlight.
  *
  * This check resolves the COPY packages/mobile actually uses (the same one
  * CocoaPods compiles) and asserts the patch's sentinel symbols are present in
@@ -50,7 +51,18 @@ export const RULES: readonly PatchRule[] = [
   {
     package: 'react-native-screens',
     file: 'ios/helpers/scroll-view/RNSScrollViewFinder.mm',
-    sentinels: ['rnscreens_contentScrollViewForEdge', 'findScrollViewDeepFirstFrom'],
+    sentinels: [
+      'rnscreens_contentScrollViewForEdge',
+      'rnscreens_contentScrollViewFallbackInstalled',
+      'findContentScrollViewInManagedSubtreeFrom',
+      'RNSManagedContentScrollViewSearchMaxDepth',
+    ],
+    patchedKey: 'react-native-screens@4.25.2',
+  },
+  {
+    package: 'react-native-screens',
+    file: 'ios/tabs/host/RNSTabsHostComponentView.mm',
+    sentinels: ['rnscreens_relayoutBottomAccessoryIfAttachedAfterAppearance'],
     patchedKey: 'react-native-screens@4.25.2',
   },
 ];

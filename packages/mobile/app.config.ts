@@ -73,11 +73,34 @@ function isDevBuildProfile(): boolean {
   return profile === undefined || profile === 'development' || profile === 'development-device';
 }
 
+// Native Google Sign-In registers the reversed iOS OAuth client id as a
+// CFBundleURLScheme so its account-picker redirect lands back in the app.
+// Prefer an explicit override; otherwise derive it from the iOS client id.
+// Returns null when neither is set (Apple-only dev builds) so `expo prebuild`
+// stays valid without Google credentials — the real EAS build supplies them.
+function resolveGoogleIosUrlScheme(): string | null {
+  const explicit = process.env.EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME;
+  if (explicit && explicit.length > 0) return explicit;
+  const iosClientId = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID;
+  if (!iosClientId) return null;
+  // 1234-abc.apps.googleusercontent.com → com.googleusercontent.apps.1234-abc
+  const match = iosClientId.match(/^(.+)\.apps\.googleusercontent\.com$/);
+  return match ? `com.googleusercontent.apps.${match[1]}` : null;
+}
+
 export default ({ config }: ConfigContext): ExpoConfig & { newArchEnabled?: boolean } => {
   const devMetadata = resolveDevMetadata();
   const hasDevMetadata = devMetadata.branchName || devMetadata.qaNotes || devMetadata.qaNotesFilePath;
   const tailscaleHosts = resolveTailscaleHosts();
   const isDevBuild = isDevBuildProfile();
+
+  // Only register the Google Sign-In config plugin when we can supply a valid
+  // iosUrlScheme; without Google credentials the entry is omitted (Apple-only).
+  const googleIosUrlScheme = resolveGoogleIosUrlScheme();
+  type PluginEntry = NonNullable<ExpoConfig['plugins']>[number];
+  const googleSignInPlugin: PluginEntry[] = googleIosUrlScheme
+    ? [['@react-native-google-signin/google-signin', { iosUrlScheme: googleIosUrlScheme }]]
+    : [];
 
   return {
     ...config,
@@ -118,6 +141,11 @@ export default ({ config }: ConfigContext): ExpoConfig & { newArchEnabled?: bool
       // packages/web at /.well-known/apple-app-site-association. Changing this
       // requires a native rebuild (it's baked into the entitlements).
       associatedDomains: ['applinks:www.boardsesh.com', 'applinks:boardsesh.com'],
+      // Sign in with Apple. Expo injects the com.apple.developer.applesignin
+      // entitlement; the capability must also be enabled on the com.boardsesh.app
+      // App ID in the Apple Developer portal (manual, one-time). App Review
+      // requires Apple sign-in whenever a third-party login (Google) is offered.
+      usesAppleSignIn: true,
       supportsTablet: false,
       // Entitlements for the App Group (shared with the BoardseshWidgets target),
       // shared keychain (so SharedKeychain.swift can read auth + push tokens),
@@ -226,6 +254,10 @@ export default ({ config }: ConfigContext): ExpoConfig & { newArchEnabled?: bool
       './plugins/with-share-intent-app-group-dedup',
       'expo-router',
       'expo-secure-store',
+      // Native Sign in with Apple (adds the entitlement alongside usesAppleSignIn).
+      'expo-apple-authentication',
+      // Native Google Sign-In — only when an iosUrlScheme is resolvable (see above).
+      ...googleSignInPlugin,
       'expo-localization',
       [
         'expo-location',
@@ -270,6 +302,16 @@ export default ({ config }: ConfigContext): ExpoConfig & { newArchEnabled?: bool
       // provisioning profiles for both com.boardsesh.app.share-extension and
       // com.boardsesh.app.widgets on the next native build (NOT deliverable via
       // OTA). androidIntentFilters only accepts text/* | image/* | video/* | */*.
+      //
+      // iosShareExtensionName MUST NOT sanitize to the main app target name
+      // 'Boardsesh' (Expo names the main target after `name`, project is
+      // Boardsesh.xcodeproj). expo-share-intent derives the extension's Xcode
+      // target name from this value via .replace(/[^a-zA-Z0-9]/g,''), then bails
+      // ("already exists … Skipping") if a target with that name exists — so
+      // 'Boardsesh' collided with the main app and the extension was silently
+      // never created (the share option never appeared in any iOS build). The
+      // raw value is also the extension's CFBundleDisplayName, i.e. the label in
+      // the share sheet's top app-icon row, so keep it short to avoid truncation.
       [
         'expo-share-intent',
         {
@@ -277,7 +319,7 @@ export default ({ config }: ConfigContext): ExpoConfig & { newArchEnabled?: bool
             NSExtensionActivationSupportsWebURLWithMaxCount: 1,
             NSExtensionActivationSupportsText: true,
           },
-          iosShareExtensionName: 'Boardsesh',
+          iosShareExtensionName: 'Boardsesh Beta',
           iosAppGroupIdentifier: 'group.com.boardsesh.app',
           androidIntentFilters: ['text/*'],
         },

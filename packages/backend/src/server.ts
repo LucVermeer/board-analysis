@@ -20,6 +20,7 @@ import { handleWidgetTakeControl } from './handlers/widget-take-control';
 import {
   handleNativeAuthCredentials,
   handleNativeAuthExchange,
+  handleNativeAuthOAuth,
   handleNativeAuthRefresh,
   handleNativeAuthRevoke,
   startRefreshTokenCleanup,
@@ -35,6 +36,7 @@ import { startApnsHeartbeat, stopApnsHeartbeat } from './services/apns/heartbeat
 import { startApnsStaleTokenCleanup, stopApnsStaleTokenCleanup } from './services/apns/cleanup';
 import { buildContentStateFromQueueState } from './services/apns/content-state';
 import { logger, setInstanceIdProvider } from './utils/logger';
+import { isClientAbortError } from './utils/http-errors';
 import type { QueueEvent } from '@boardsesh/shared-schema';
 
 /**
@@ -353,6 +355,11 @@ export async function startServer(): Promise<ServerResources> {
         return;
       }
 
+      if (pathname === '/auth/native/oauth' && (req.method === 'POST' || req.method === 'OPTIONS')) {
+        await handleNativeAuthOAuth(req, res);
+        return;
+      }
+
       if (pathname === '/auth/native/refresh' && (req.method === 'POST' || req.method === 'OPTIONS')) {
         await handleNativeAuthRefresh(req, res);
         return;
@@ -377,6 +384,16 @@ export async function startServer(): Promise<ServerResources> {
       res.writeHead(404, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'Not found' }));
     } catch (error) {
+      if (
+        isClientAbortError(error, {
+          requestDestroyed: req.destroyed,
+          responseDestroyed: res.destroyed,
+          socketDestroyed: res.socket?.destroyed,
+        })
+      ) {
+        logger.info('Request aborted by client', { method: req.method, url: req.url });
+        return;
+      }
       logger.error('Request handler error:', error);
       if (!res.headersSent) {
         res.writeHead(500, { 'Content-Type': 'application/json' });
@@ -424,6 +441,7 @@ export async function startServer(): Promise<ServerResources> {
     logger.info(`  Widget take-control: ${httpScheme}://0.0.0.0:${PORT}/api/widget/take-control`);
     logger.info(`  Native auth exchange: ${httpScheme}://0.0.0.0:${PORT}/auth/native/exchange`);
     logger.info(`  Native auth credentials: ${httpScheme}://0.0.0.0:${PORT}/auth/native/credentials`);
+    logger.info(`  Native auth oauth: ${httpScheme}://0.0.0.0:${PORT}/auth/native/oauth`);
     logger.info(`  Native auth refresh: ${httpScheme}://0.0.0.0:${PORT}/auth/native/refresh`);
     logger.info(`  Native auth revoke: ${httpScheme}://0.0.0.0:${PORT}/auth/native/revoke`);
 

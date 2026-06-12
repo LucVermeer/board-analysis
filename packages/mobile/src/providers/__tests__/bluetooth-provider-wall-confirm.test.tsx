@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, waitFor, cleanup } from '@testing-library/react';
+import { act, render, waitFor, cleanup } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createElement, type ReactNode } from 'react';
 import type { ClimbQueueItem } from '@boardsesh/queue';
@@ -14,6 +14,7 @@ type BluetoothHookOptions = {
   onConnectSuccess?: (serial: string | null) => void;
   holdsData?: unknown;
 };
+type SendFramesToBoard = (frames: string, mirrored?: boolean, signal?: AbortSignal) => Promise<boolean | undefined>;
 
 const wallConfirm = vi.hoisted(() => ({
   emitWallConfirm: vi.fn(),
@@ -30,6 +31,9 @@ const alert = vi.hoisted(() => ({
 const queue = vi.hoisted(() => ({
   currentClimbQueueItem: null as ClimbQueueItem | null,
   sessionId: 'session-1' as string | null,
+  driverParticipantId: 'participant-self' as string | null,
+  participantId: 'participant-self' as string | null,
+  isPartyPreviewOnly: false,
   lastConnectedBoardSerial: null as string | null,
   confirmClimbOnWall: vi.fn(async () => {}),
   setSessionBoardSerial: vi.fn(async () => {}),
@@ -43,7 +47,7 @@ const bluetooth = vi.hoisted(() => {
       loading: false,
       connect: vi.fn(async () => true),
       disconnect: vi.fn(async () => {}),
-      sendFramesToBoard: vi.fn(async () => true as boolean | undefined),
+      sendFramesToBoard: vi.fn<SendFramesToBoard>(async () => true),
       pickerState: null as PickerState | null,
       reconnectSerialForCurrentBoard: null,
       connectInitialSendRef: { current: null as { frames: string; mirrored: boolean } | null },
@@ -161,10 +165,13 @@ vi.mock('../queue-provider', () => ({
   }),
   useQueueSessionControls: () => ({
     sessionId: queue.sessionId,
+    driverParticipantId: queue.driverParticipantId,
+    participantId: queue.participantId,
     lastConnectedBoardSerial: queue.lastConnectedBoardSerial,
     confirmClimbOnWall: queue.confirmClimbOnWall,
     setSessionBoardSerial: queue.setSessionBoardSerial,
   }),
+  useIsPartyPreviewOnly: () => queue.isPartyPreviewOnly,
 }));
 
 const boardDetails = vi.hoisted(() => ({
@@ -252,6 +259,9 @@ describe('BluetoothProvider wall-confirm integration', () => {
   beforeEach(() => {
     queue.currentClimbQueueItem = makeQueueItem('climb-1');
     queue.sessionId = 'session-1';
+    queue.driverParticipantId = 'participant-self';
+    queue.participantId = 'participant-self';
+    queue.isPartyPreviewOnly = false;
     queue.lastConnectedBoardSerial = null;
     queue.confirmClimbOnWall.mockClear();
     queue.setSessionBoardSerial.mockClear();
@@ -337,6 +347,109 @@ describe('BluetoothProvider wall-confirm integration', () => {
     });
 
     expect(queue.confirmClimbOnWall).not.toHaveBeenCalled();
+  });
+
+  it('does not auto-send shared climb updates while connected as a party non-driver', async () => {
+    queue.driverParticipantId = 'participant-other';
+    queue.isPartyPreviewOnly = true;
+
+    renderProvider();
+
+    await waitFor(() => {
+      expect(bluetooth.useBoardBluetooth).toHaveBeenCalledOnce();
+    });
+    await act(async () => {});
+
+    expect(bluetooth.state.sendFramesToBoard).not.toHaveBeenCalled();
+    expect(wallConfirm.emitWallConfirm).not.toHaveBeenCalled();
+    expect(queue.confirmClimbOnWall).not.toHaveBeenCalled();
+  });
+
+  it('starts auto-sending once a connected party participant becomes the driver', async () => {
+    queue.driverParticipantId = 'participant-other';
+    queue.isPartyPreviewOnly = true;
+    const { rerender } = renderProvider();
+
+    await waitFor(() => {
+      expect(bluetooth.useBoardBluetooth).toHaveBeenCalledOnce();
+    });
+    expect(bluetooth.state.sendFramesToBoard).not.toHaveBeenCalled();
+
+    await act(async () => {
+      queue.driverParticipantId = 'participant-self';
+      queue.isPartyPreviewOnly = false;
+      rerender(
+        createElement(BluetoothProvider, {
+          boardName: 'kilter',
+          layoutId: 1,
+          sizeId: 10,
+          setIds: '1,20',
+          children: createElement('div', null),
+        }),
+      );
+    });
+
+    await waitFor(() => {
+      expect(bluetooth.state.sendFramesToBoard).toHaveBeenCalledWith('p1r12', false, expect.any(AbortSignal));
+    });
+    expect(wallConfirm.emitWallConfirm).toHaveBeenCalledWith('climb-1');
+    expect(queue.confirmClimbOnWall).toHaveBeenCalledWith('climb-1');
+  });
+
+  it('aborts an in-flight auto-send when the participant loses wall control', async () => {
+    let capturedSignal: AbortSignal | undefined;
+    let resolveWrite: ((value: boolean) => void) | undefined;
+    bluetooth.state.sendFramesToBoard.mockImplementationOnce((_frames, _mirrored, signal) => {
+      capturedSignal = signal;
+      return new Promise<boolean>((resolve) => {
+        resolveWrite = resolve;
+      });
+    });
+
+    const { rerender } = renderProvider();
+
+    await waitFor(() => {
+      expect(bluetooth.state.sendFramesToBoard).toHaveBeenCalledWith('p1r12', false, expect.any(AbortSignal));
+    });
+    expect(capturedSignal?.aborted).toBe(false);
+
+    await act(async () => {
+      queue.driverParticipantId = 'participant-other';
+      queue.isPartyPreviewOnly = true;
+      rerender(
+        createElement(BluetoothProvider, {
+          boardName: 'kilter',
+          layoutId: 1,
+          sizeId: 10,
+          setIds: '1,20',
+          children: createElement('div', null),
+        }),
+      );
+    });
+
+    expect(capturedSignal?.aborted).toBe(true);
+
+    await act(async () => {
+      resolveWrite?.(true);
+    });
+
+    expect(wallConfirm.emitWallConfirm).not.toHaveBeenCalled();
+    expect(queue.confirmClimbOnWall).not.toHaveBeenCalled();
+  });
+
+  it('keeps auto-sending while a restored session is waiting for JOIN to resolve identity', async () => {
+    queue.sessionId = 'session-1';
+    queue.driverParticipantId = null;
+    queue.participantId = null;
+    queue.isPartyPreviewOnly = false;
+
+    renderProvider();
+
+    await waitFor(() => {
+      expect(bluetooth.state.sendFramesToBoard).toHaveBeenCalledWith('p1r12', false, expect.any(AbortSignal));
+    });
+    expect(wallConfirm.emitWallConfirm).toHaveBeenCalledWith('climb-1');
+    expect(queue.confirmClimbOnWall).toHaveBeenCalledWith('climb-1');
   });
 
   it('does not confirm the wall when the BLE write fails', async () => {

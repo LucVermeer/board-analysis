@@ -50,6 +50,7 @@ import { SEARCH_CLIMBS, type SearchClimbsQueryResponse } from '../../../src/lib/
 import { getHttpClient } from '../../../src/lib/graphql/client';
 import { usePlaylistActivation } from '../../../src/lib/playlists/use-playlist-activation';
 import { toQueueClimb, toQueueClimbs } from '../../../src/lib/climb-types';
+import { parseSetIdsParam, prewarmCreateBoardHolds } from '../../../src/lib/create-board-holds';
 import { useActiveBoard } from '../../../src/lib/graphql/use-active-board';
 import { useAuth } from '../../../src/providers/auth-provider';
 import { ensureBackgroundsCached } from '../../../src/lib/background-image-cache';
@@ -81,6 +82,7 @@ const FOOTER_SKELETON_ROW_COUNT = 6;
 // Debounce persisting the per-board last search so rapid grade nudges don't
 // thrash secure-store.
 const SAVE_DEBOUNCE_MS = 600;
+const PREWARM_BOARD_HOLDS_DELAY_MS = 1200;
 
 type NativeSearchBarRef = {
   focus: () => void;
@@ -363,6 +365,19 @@ function ClimbListInner() {
 
   // Search is "ready" once this board's restore has landed — gate queries on it.
   const searchReady = hasBoardConfig && restoredKey === boardKey;
+
+  useEffect(() => {
+    if (!boardConfig || !searchReady) return;
+    const timeout = setTimeout(() => {
+      prewarmCreateBoardHolds({
+        boardName: boardConfig.boardName as BoardName,
+        layoutId: boardConfig.layoutId,
+        sizeId: boardConfig.sizeId,
+        setIds: parseSetIdsParam(boardConfig.setIds),
+      });
+    }, PREWARM_BOARD_HOLDS_DELAY_MS);
+    return () => clearTimeout(timeout);
+  }, [boardConfig, searchReady]);
 
   useEffect(() => {
     // Compare NORMALIZED so an in-progress trim-only difference (e.g. the user

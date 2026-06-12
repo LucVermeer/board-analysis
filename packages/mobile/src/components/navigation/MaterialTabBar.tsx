@@ -5,9 +5,9 @@ import { Text } from '../Text';
 import { PressableSurface } from '../PressableSurface';
 import { useTheme } from '../../providers/theme-provider';
 import { useSetMeasuredTabBarHeight } from '../../providers/tab-bar-height-provider';
-import { brandColors as staticBrandColors, withAlpha } from '../../theme/colors';
+import { brandColors as staticBrandColors } from '../../theme/colors';
 import { material } from '../../theme/tokens';
-import { TAB_BAR_HEIGHT } from '../../theme/layout';
+import { MATERIAL_TAB_BAR_HEIGHT } from '../../theme/layout';
 
 /**
  * Material 3 bottom navigation bar — the JS tab bar for the Material UI variant
@@ -18,14 +18,16 @@ import { TAB_BAR_HEIGHT } from '../../theme/layout';
  * screen's React Navigation options, so this stays a generic custom tab bar.
  */
 export function MaterialTabBar({ state, descriptors, navigation, insets }: BottomTabBarProps) {
-  const { systemColors, brandColors } = useTheme();
-  // Softened active state (closer to M3, which tints the indicator gently rather
-  // than using full primary): a lighter violet pill + a muted violet icon/label.
-  // Brand colours resolve per scheme (lifted #A78BFA in dark), so the active tab
-  // stays legible on the dark Material bar instead of dimming to the dark fill.
-  const activeColor = withAlpha(brandColors.primary, 0.8);
-  const inactiveColor = systemColors.secondaryLabel;
-  const indicatorColor = withAlpha(brandColors.primary, 0.1);
+  const { systemColors, brandColors, m3 } = useTheme();
+  // M3 navigation bar roles: the focused destination's icon sits on a
+  // secondaryContainer active-indicator pill (onSecondaryContainer glyph), its
+  // label lifts to onSurface, and inactive destinations use onSurfaceVariant for
+  // both icon and label. These read correctly on the tonal M3 surface in both
+  // schemes (the Paper palette resolves per scheme) — no manual alpha tinting.
+  const activeIconColor = m3.onSecondaryContainer;
+  const activeLabelColor = m3.onSurface;
+  const inactiveColor = m3.onSurfaceVariant;
+  const indicatorColor = m3.secondaryContainer;
 
   // Publish the real rendered height so the root-level queue bar docks flush against
   // it (rather than re-deriving the tab-bar top from TAB_BAR_HEIGHT + inset). #2611.
@@ -44,7 +46,7 @@ export function MaterialTabBar({ state, descriptors, navigation, insets }: Botto
           backgroundColor: systemColors.elevatedSurface,
           borderTopColor: systemColors.separator,
           paddingBottom: insets.bottom,
-          height: TAB_BAR_HEIGHT + insets.bottom,
+          height: MATERIAL_TAB_BAR_HEIGHT + insets.bottom,
         },
       ]}
     >
@@ -52,7 +54,8 @@ export function MaterialTabBar({ state, descriptors, navigation, insets }: Botto
         const { options } = descriptors[route.key];
         const focused = state.index === index;
         const label = typeof options.title === 'string' ? options.title : route.name;
-        const color = focused ? activeColor : inactiveColor;
+        const iconColor = focused ? activeIconColor : inactiveColor;
+        const labelColor = focused ? activeLabelColor : inactiveColor;
 
         const onPress = () => {
           const event = navigation.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });
@@ -78,7 +81,7 @@ export function MaterialTabBar({ state, descriptors, navigation, insets }: Botto
             style={styles.item}
           >
             <View style={[styles.indicator, focused && { backgroundColor: indicatorColor }]}>
-              {options.tabBarIcon?.({ focused, color, size: 24 })}
+              {options.tabBarIcon?.({ focused, color: iconColor, size: 24 })}
               {options.tabBarBadge != null ? (
                 <View
                   testID="badge"
@@ -91,7 +94,7 @@ export function MaterialTabBar({ state, descriptors, navigation, insets }: Botto
                 />
               ) : null}
             </View>
-            <Text variant="caption2" color={color} numberOfLines={1}>
+            <Text variant="caption2" color={labelColor} numberOfLines={1}>
               {label}
             </Text>
           </PressableSurface>

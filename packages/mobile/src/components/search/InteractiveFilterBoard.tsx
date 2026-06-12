@@ -1,14 +1,14 @@
-import React, { useMemo, type ReactNode } from 'react';
+import React, { useCallback, useMemo, useRef, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { View, StyleSheet, Pressable } from 'react-native';
-import Animated, { type SharedValue } from 'react-native-reanimated';
-import { GestureDetector, type GestureType } from 'react-native-gesture-handler';
+import Animated, { runOnJS, type SharedValue } from 'react-native-reanimated';
+import { Gesture, GestureDetector, type GestureType } from 'react-native-gesture-handler';
 import type { BoardName, HoldsFilter } from '@boardsesh/shared-schema';
 import { BoardImageNative } from '../BoardImageNative';
 import { Text } from '../Text';
 import { useZoomPanGesture } from '../play-drawer/use-zoom-pan-gesture';
 import { HoldTargetLayer } from '../create-climb/HoldTargetLayer';
-import { holdGeometry, buildHoldHitTargets } from '../create-climb/holdLayout';
+import { holdGeometry, buildHoldHitTargets, resolveHoldAtPoint } from '../create-climb/holdLayout';
 import { useZoomedHoldTapGesture, PAN_ACTIVATION_OFFSET } from '../create-climb/use-zoomed-hold-tap-gesture';
 import { overlays } from '../../theme/tokens';
 import type { BoardHoldTarget } from '../../lib/create-board-holds';
@@ -38,6 +38,8 @@ type InteractiveFilterBoardProps = {
   activeHoldId?: number | null;
   /** Tap handler that opens the hold picker. Omit to disable hold taps (zone mode). */
   onHoldTap?: (holdId: number) => void;
+  /** Hide visible all-hold tap markers while keeping hold tap targets active. */
+  showHoldMarkers?: boolean;
   mirrored?: boolean;
   renderWidth: number;
   renderHeight: number;
@@ -48,6 +50,10 @@ type InteractiveFilterBoardProps = {
    */
   renderInTransform?: (context: FilterBoardTransformContext) => ReactNode;
 };
+
+const TAP_MAX_DURATION_MS = 300;
+const TAP_MAX_DISTANCE_PX = 15;
+const LONG_PRESS_MIN_DURATION_MS = 400;
 
 /**
  * Full-bleed interactive board for the search hold filter, built on the same
@@ -71,6 +77,7 @@ export const InteractiveFilterBoard = React.memo(function InteractiveFilterBoard
   holdsFilter,
   activeHoldId = null,
   onHoldTap,
+  showHoldMarkers = true,
   mirrored = false,
   renderWidth,
   renderHeight,
@@ -111,6 +118,33 @@ export const InteractiveFilterBoard = React.memo(function InteractiveFilterBoard
     () => buildHoldHitTargets(holdTargets, boardWidth, boardHeight, renderWidth, renderHeight, mirrored),
     [holdTargets, boardWidth, boardHeight, renderWidth, renderHeight, mirrored],
   );
+  const hasHoldTap = onHoldTap != null;
+  const holdTapResolutionRef = useRef({ hitTargets, onHoldTap });
+  holdTapResolutionRef.current = { hitTargets, onHoldTap };
+  const handleRestHoldTap = useCallback((boardX: number, boardY: number) => {
+    const current = holdTapResolutionRef.current;
+    if (!current.onHoldTap) return;
+    const holdId = resolveHoldAtPoint(boardX, boardY, current.hitTargets);
+    if (holdId != null) current.onHoldTap(holdId);
+  }, []);
+  const restHoldTapGesture = useMemo(() => {
+    if (!hasHoldTap) return null;
+
+    const tap = Gesture.Tap()
+      .maxDuration(TAP_MAX_DURATION_MS)
+      .maxDistance(TAP_MAX_DISTANCE_PX)
+      .onStart((event) => {
+        'worklet';
+        runOnJS(handleRestHoldTap)(event.x, event.y);
+      });
+    const longPress = Gesture.LongPress()
+      .minDuration(LONG_PRESS_MIN_DURATION_MS)
+      .onStart((event) => {
+        'worklet';
+        runOnJS(handleRestHoldTap)(event.x, event.y);
+      });
+    return Gesture.Exclusive(longPress, tap);
+  }, [hasHoldTap, handleRestHoldTap]);
 
   const overlayGesture = useZoomedHoldTapGesture({
     zoomPanGesture,
@@ -193,9 +227,15 @@ export const InteractiveFilterBoard = React.memo(function InteractiveFilterBoard
                 measuredWidth={renderWidth}
                 mirrored={mirrored}
                 showAllHolds
+                showHoldMarkers={showHoldMarkers}
                 onPaint={onHoldTap}
                 onLongPress={onHoldTap}
               />
+            ) : null}
+            {!isZoomed && restHoldTapGesture ? (
+              <GestureDetector gesture={restHoldTapGesture}>
+                <View collapsable={false} style={StyleSheet.absoluteFill} />
+              </GestureDetector>
             ) : null}
           </Animated.View>
 

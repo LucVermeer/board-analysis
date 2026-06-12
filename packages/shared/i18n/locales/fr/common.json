@@ -39,9 +39,9 @@
         "description": "Système suit la langue de votre appareil."
       },
       "diagnostics": {
-        "title": "Diagnostic",
-        "recording": "Aidez-nous à régler le Bluetooth",
-        "recordingDescription": "Quand le mur décroche sans arrêt, activez ceci. On enregistre votre écran et la connexion Bluetooth pour voir ce qui cloche. Ce que vous tapez reste masqué, et c'est désactivé tant que vous ne l'activez pas."
+        "title": "Confidentialité",
+        "recording": "Aidez-nous à nous améliorer",
+        "recordingDescription": "Envoyez des enregistrements de session anonymes et masqués pour qu'on corrige les bugs plus vite. Ce que vous tapez et vos photos restent masqués. Désactivez quand vous voulez."
       }
     },
     "onboarding": {
@@ -77,7 +77,6 @@
       "climbs": "Blocs",
       "climb": "Bloc",
       "profile": "Profil",
-      "setters": "Ouvreurs",
       "holdFilter": "Types de prise",
       "zoneFilter": "Zone du mur"
     }

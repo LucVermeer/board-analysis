@@ -2,8 +2,10 @@ import Foundation
 
 // MARK: - ThumbnailFetcher
 
-/// Fetches climb thumbnail images from the server and caches them in the
-/// App Group shared container so Live Activities can display them.
+/// Fetches climb hold-overlay thumbnails from the server and caches them in
+/// the App Group shared container so Live Activities can display them. The
+/// request intentionally omits `include_background=1`; bundled board photos
+/// must not be fetched over the network from native widget code.
 actor ThumbnailFetcher {
 
     // MARK: - Configuration

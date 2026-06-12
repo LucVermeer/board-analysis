@@ -1,6 +1,7 @@
 import type { UiVariant } from '../theme/resolve-ui-variant';
 import {
   MATERIAL_ACTIVE_CONTEXT_BAR_HEIGHT,
+  MATERIAL_TAB_BAR_HEIGHT,
   TAB_BAR_HEIGHT,
   TOOLBAR_GAP_ABOVE_TABBAR,
   TOOLBAR_RESERVE,
@@ -73,7 +74,11 @@ export function computeBottomChromeMetrics({
 }: BottomChromeInputs): BottomChromeMetrics {
   const nativeAccessoryVisible = nativeAccessoryMounted && hasCurrentClimb;
   const jsQueueToolbarVisible = hasCurrentClimb && !nativeAccessoryMounted;
-  const tabBarHeight = insideTabs ? TAB_BAR_HEIGHT : 0;
+  // The Material variant renders the taller M3 JS nav bar; Liquid Glass uses the
+  // native 49pt iOS tab bar. Floating overlays (FAB, snackbar) and scroll padding
+  // clear this height, so it has to track the real bar per variant.
+  const tabBarConstant = uiVariant === 'material' ? MATERIAL_TAB_BAR_HEIGHT : TAB_BAR_HEIGHT;
+  const tabBarHeight = insideTabs ? tabBarConstant : 0;
   const tabBarOverlaysContent = insideTabs && uiVariant !== 'material';
   // The Material bar reserves its full height even though it's tucked ~2px into the
   // tab bar (MATERIAL_TABBAR_OVERLAP in persistent-queue-bar), so its visible height

@@ -2,6 +2,8 @@ import { z } from 'zod';
 import { BETA_VIDEO_URL_REGEX, BETA_VIDEO_URL_VALIDATION_MESSAGE } from '@boardsesh/shared-schema';
 import { ExternalUUIDSchema, BoardNameSchema } from './primitives';
 
+const CLIMBED_AT_FUTURE_TOLERANCE_MS = 60_000;
+
 /**
  * Tick status validation schema
  */
@@ -112,6 +114,14 @@ export const UpdateTickInputSchema = z
     difficulty: z.number().int().optional().nullable(),
     isBenchmark: z.boolean().optional(),
     comment: z.string().max(2000).optional(),
+    climbedAt: z
+      .string()
+      .refine((value) => !Number.isNaN(new Date(value).getTime()), 'Climbed at must be a valid date')
+      .refine(
+        (value) => new Date(value).getTime() <= Date.now() + CLIMBED_AT_FUTURE_TOLERANCE_MS,
+        'Climbed at cannot be in the future',
+      )
+      .optional(),
   })
   .refine(
     (data) => {

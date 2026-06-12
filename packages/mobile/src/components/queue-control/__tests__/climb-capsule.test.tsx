@@ -139,7 +139,7 @@ vi.mock('../../../providers/queue-provider', () => ({
   useQueue: () => ({ state: queue.state, nextClimb: queue.nextClimb, previousClimb: queue.previousClimb }),
   usePlaylistSuggestionSource: () => null,
   // Default to driver (not preview-only); these tests encode the bar's wiring,
-  // not party gating — that is covered in use-queue-carousel.test.tsx.
+  // not party gating — that is covered in use-queue-climb-carousel.test.tsx.
   useIsPartyPreviewOnly: () => false,
 }));
 
@@ -147,8 +147,8 @@ vi.mock('../../../providers/drawer-host-provider', () => ({
   useDrawerHost: () => ({ openPlayDrawer: drawer.openPlayDrawer, boardConfig: null }),
 }));
 
-// The board thumbnail pulls in BoardRenderer/board-details (native deps); the
-// capsule only renders it when boardConfig is set (null here), so stub it out.
+// The board thumbnail pulls in board-details/native render deps; the capsule
+// only renders it when boardConfig is set (null here), so stub it out.
 vi.mock('../AccessoryClimbThumbnail', () => ({ AccessoryClimbThumbnail: () => null }));
 
 // formatGrade prefixes so the displayed grade is distinguishable from the raw

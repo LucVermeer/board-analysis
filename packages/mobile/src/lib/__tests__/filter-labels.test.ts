@@ -1,18 +1,21 @@
 import { describe, it, expect } from 'vitest';
 import type { TFunction } from 'i18next';
-import { buildFilterLabels, buildSortLabel } from '../filter-labels';
+import { buildFilterLabels, buildSortLabel, formatSettersLabel } from '../filter-labels';
 
 // Mirrors the pattern from filter-summary.test.ts: the mock t returns the key
 // (with interpolated placeholders for readable assertions) or a formatted string
 // for parametric keys.
+const text = (value: unknown) => (typeof value === 'string' || typeof value === 'number' ? String(value) : '');
+
 const mockT = ((key: string, opts?: Record<string, unknown>) => {
-  if (key === 'mobile.search.gradeRange') return `${opts?.min}–${opts?.max}`;
-  if (key === 'mobile.search.gradeMin') return `${opts?.grade}+`;
-  if (key === 'mobile.search.gradeMax') return `≤${opts?.grade}`;
-  if (key === 'mobile.search.ascents') return `${opts?.count}+ 🧗`;
-  if (key === 'mobile.search.rating') return `${opts?.count}+ ⭐`;
-  if (key === 'mobile.search.more') return `+${opts?.count} more`;
-  if (key === 'mobile.search.settersCount') return `${opts?.count} setters`;
+  if (key === 'mobile.search.gradeRange') return `${text(opts?.min)}–${text(opts?.max)}`;
+  if (key === 'mobile.search.gradeMin') return `${text(opts?.grade)}+`;
+  if (key === 'mobile.search.gradeMax') return `≤${text(opts?.grade)}`;
+  if (key === 'mobile.search.ascents') return `${text(opts?.count)}+ 🧗`;
+  if (key === 'mobile.search.rating') return `${text(opts?.count)}+ ⭐`;
+  if (key === 'mobile.search.more') return `+${text(opts?.count)} more`;
+  if (key === 'mobile.search.setterName') return `By ${text(opts?.setter)}`;
+  if (key === 'mobile.search.settersCount') return `${text(opts?.count)} setters`;
   return key;
 }) as unknown as TFunction<'climbs'>;
 
@@ -46,6 +49,14 @@ describe('buildFilterLabels', () => {
   it('setters uses mobile.search.settersCount (not mobile.search.setters)', () => {
     // The key rename is the silent-typo risk the doc comment warns about.
     expect(labels.setters(5)).toBe('5 setters');
+  });
+
+  it('formats one setter with the translated By label', () => {
+    expect(formatSettersLabel(['marco'], labels, mockT)).toBe('By marco');
+  });
+
+  it('formats multiple setters by count', () => {
+    expect(formatSettersLabel(['marco', 'jules'], labels, mockT)).toBe('2 setters');
   });
 
   it('gradeAccuracy resolves the bucket suffix — off', () => {

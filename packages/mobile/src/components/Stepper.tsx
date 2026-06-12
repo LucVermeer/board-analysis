@@ -25,14 +25,23 @@ function clampStepperValue(value: number, min: number, max: number): number {
  * divided by the parent). Clamps to [min, max] before reporting changes.
  */
 export function Stepper({ label, value, min, max, onChange, decreaseLabel, increaseLabel }: StepperProps) {
-  const { systemColors, brandColors, opacity: themeOpacity } = useTheme();
+  const { systemColors, brandColors, opacity: themeOpacity, variant, m3 } = useTheme();
+  const isMaterial = variant === 'material';
   const decrementDisabled = value <= min;
   const incrementDisabled = value >= max;
 
   const updateValue = (nextValue: number) => onChange(clampStepperValue(nextValue, min, max));
 
+  // Material: a tonal secondary-container pill with onSecondaryContainer glyphs
+  // and a state-layer ripple (Android), 48dp targets. Glass keeps the iOS
+  // tertiaryBackground fill + violet glyphs + scale feedback.
+  const controlsFill = isMaterial ? m3.secondaryContainer : systemColors.tertiaryBackground;
+  const dividerColor = isMaterial ? m3.outlineVariant : systemColors.separator;
+  const activeGlyph = isMaterial ? m3.onSecondaryContainer : brandColors.primary;
+  const buttonStyle = [styles.button, isMaterial && styles.buttonMaterial];
+
   return (
-    <View style={styles.row}>
+    <View style={[styles.row, isMaterial && styles.rowMaterial]}>
       <Text variant="body" style={styles.label}>
         {label}
       </Text>
@@ -40,29 +49,31 @@ export function Stepper({ label, value, min, max, onChange, decreaseLabel, incre
         <Text variant="body" color={systemColors.label} style={styles.value}>
           {value}
         </Text>
-        <View style={[styles.controls, { backgroundColor: systemColors.tertiaryBackground }]}>
+        <View style={[styles.controls, { backgroundColor: controlsFill }]}>
           <PressableSurface
             onPress={() => updateValue(value - 1)}
             disabled={decrementDisabled}
             feedback="scale"
+            rippleColor={isMaterial ? m3.onSecondaryContainer : undefined}
             hitSlop={2}
             accessibilityRole="button"
             accessibilityLabel={decreaseLabel}
-            style={[styles.button, decrementDisabled ? { opacity: themeOpacity.disabled } : null]}
+            style={[buttonStyle, decrementDisabled ? { opacity: themeOpacity.disabled } : null]}
           >
-            <Icon name="minus" size={16} color={decrementDisabled ? systemColors.tertiaryLabel : brandColors.primary} />
+            <Icon name="minus" size={16} color={decrementDisabled ? systemColors.tertiaryLabel : activeGlyph} />
           </PressableSurface>
-          <View style={[styles.controlDivider, { backgroundColor: systemColors.separator }]} />
+          <View style={[styles.controlDivider, { backgroundColor: dividerColor }]} />
           <PressableSurface
             onPress={() => updateValue(value + 1)}
             disabled={incrementDisabled}
             feedback="scale"
+            rippleColor={isMaterial ? m3.onSecondaryContainer : undefined}
             hitSlop={2}
             accessibilityRole="button"
             accessibilityLabel={increaseLabel}
-            style={[styles.button, incrementDisabled ? { opacity: themeOpacity.disabled } : null]}
+            style={[buttonStyle, incrementDisabled ? { opacity: themeOpacity.disabled } : null]}
           >
-            <Icon name="plus" size={16} color={incrementDisabled ? systemColors.tertiaryLabel : brandColors.primary} />
+            <Icon name="plus" size={16} color={incrementDisabled ? systemColors.tertiaryLabel : activeGlyph} />
           </PressableSurface>
         </View>
       </View>
@@ -79,6 +90,10 @@ const styles = StyleSheet.create({
     paddingVertical: spacing[2],
     minHeight: 44,
     gap: spacing[3],
+  },
+  // M3 lifts the row to a 48dp minimum so the taller ± targets sit comfortably.
+  rowMaterial: {
+    minHeight: 48,
   },
   label: {
     flex: 1,
@@ -109,5 +124,10 @@ const styles = StyleSheet.create({
     height: 36,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  // M3 ≥48dp touch target for the ± controls.
+  buttonMaterial: {
+    width: 48,
+    height: 48,
   },
 });

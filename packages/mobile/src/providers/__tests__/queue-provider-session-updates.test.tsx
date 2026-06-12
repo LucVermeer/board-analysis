@@ -4,13 +4,27 @@ import { createElement, useEffect } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ClimbQueueItem, PlaylistSuggestionSource } from '@boardsesh/queue';
 import type { SessionStatus, SessionUser, UserBoard } from '@boardsesh/shared-schema';
+import { GraphQLOperationError } from '@boardsesh/graphql-client';
 
 const ws = vi.hoisted(() => {
+  type WsEventName = 'connected' | 'closed';
   let sessionUpdatesSink: { next: (payload: { data?: { sessionUpdates?: unknown } }) => void } | null = null;
+  const listeners: Record<WsEventName, Set<() => void>> = {
+    connected: new Set(),
+    closed: new Set(),
+  };
   return {
     getSessionUpdatesSink: () => sessionUpdatesSink,
+    emit: (eventName: WsEventName) => {
+      for (const listener of listeners[eventName]) listener();
+    },
     client: {
-      on: vi.fn(() => vi.fn()),
+      on: vi.fn((eventName: WsEventName, listener: () => void) => {
+        listeners[eventName].add(listener);
+        return () => {
+          listeners[eventName].delete(listener);
+        };
+      }),
       subscribe: vi.fn((request: { query: string }, sink: { next: (payload: unknown) => void }) => {
         if (request.query.includes('sessionUpdates')) {
           sessionUpdatesSink = sink as { next: (payload: { data?: { sessionUpdates?: unknown } }) => void };
@@ -20,6 +34,8 @@ const ws = vi.hoisted(() => {
     },
     reset: () => {
       sessionUpdatesSink = null;
+      listeners.connected.clear();
+      listeners.closed.clear();
     },
   };
 });
@@ -108,7 +124,8 @@ vi.mock('expo-crypto', () => ({
   randomUUID: () => 'test-correlation-id',
 }));
 
-vi.mock('@boardsesh/graphql-client', () => ({
+vi.mock('@boardsesh/graphql-client', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@boardsesh/graphql-client')>()),
   execute: graph.execute,
 }));
 
@@ -234,6 +251,20 @@ function createDeferred<T>() {
     rejectDeferred = reject;
   });
   return { promise, resolve: resolveDeferred, reject: rejectDeferred };
+}
+
+function createJoinSessionResponse() {
+  return {
+    joinSession: {
+      participantId: 'participant-self',
+      clientId: 'client-self',
+      isLeader: false,
+      driverParticipantId: null,
+      lastConnectedBoardSerial: null,
+      boardPath: '/kilter/1/10/1,2/40/list',
+      users: [user({ id: 'participant-self', username: 'Self', userId: 'db-self' })],
+    },
+  };
 }
 
 function Probe({ onSnapshot }: { onSnapshot: (snapshot: Snapshot) => void }) {
@@ -363,16 +394,137 @@ describe('QueueProvider session update subscription', () => {
         ? Promise.resolve(statusResponse())
         : Promise.resolve({ endSession: { sessionId: 'session-1' } }),
     );
-    graph.execute.mockResolvedValue({
-      joinSession: {
-        participantId: 'participant-self',
-        clientId: 'client-self',
-        isLeader: false,
-        driverParticipantId: null,
-        lastConnectedBoardSerial: null,
-        boardPath: '/kilter/1/10/1,2/40/list',
-        users: [user({ id: 'participant-self', username: 'Self', userId: 'db-self' })],
-      },
+    graph.execute.mockResolvedValue(createJoinSessionResponse());
+  });
+
+  it('waits for JOIN_SESSION before opening queue and session subscriptions', async () => {
+    const snapshots: Snapshot[] = [];
+    const selectorSnapshots: SelectorSnapshot[] = [];
+    const joinSessionDeferred = createDeferred<ReturnType<typeof createJoinSessionResponse>>();
+    graph.execute.mockReturnValueOnce(joinSessionDeferred.promise);
+
+    renderProviderWithSelectors(
+      (snapshot) => snapshots.push(snapshot),
+      (selectorSnapshot) => selectorSnapshots.push(selectorSnapshot),
+    );
+
+    await waitFor(() => {
+      expect(snapshots.at(-1)?.sessionId).toBe('session-1');
+      expect(graph.execute).toHaveBeenCalledTimes(1);
+    });
+    expect(ws.client.subscribe).not.toHaveBeenCalled();
+
+    await act(async () => {
+      joinSessionDeferred.resolve(createJoinSessionResponse());
+      await joinSessionDeferred.promise;
+    });
+
+    await waitFor(() => {
+      expect(ws.client.subscribe).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it('retries a failed JOIN_SESSION before opening subscriptions', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+
+    try {
+      const snapshots: Snapshot[] = [];
+      const selectorSnapshots: SelectorSnapshot[] = [];
+      graph.execute.mockRejectedValueOnce(new Error('temporary join failure'));
+
+      renderProviderWithSelectors(
+        (snapshot) => snapshots.push(snapshot),
+        (selectorSnapshot) => selectorSnapshots.push(selectorSnapshot),
+      );
+
+      await waitFor(() => {
+        expect(snapshots.at(-1)?.sessionId).toBe('session-1');
+        expect(graph.execute).toHaveBeenCalledTimes(1);
+      });
+      expect(ws.client.subscribe).not.toHaveBeenCalled();
+      expect(toast.showToast).toHaveBeenCalledWith('mobile.queue.syncError', 'error');
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1_000);
+      });
+
+      await waitFor(() => {
+        expect(graph.execute).toHaveBeenCalledTimes(2);
+        expect(ws.client.subscribe).toHaveBeenCalledTimes(2);
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps retrying JOIN_SESSION with capped backoff while the socket stays live', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+
+    try {
+      const snapshots: Snapshot[] = [];
+      const selectorSnapshots: SelectorSnapshot[] = [];
+      graph.execute.mockRejectedValue(new Error('temporary join failure'));
+
+      renderProviderWithSelectors(
+        (snapshot) => snapshots.push(snapshot),
+        (selectorSnapshot) => selectorSnapshots.push(selectorSnapshot),
+      );
+
+      await waitFor(() => {
+        expect(snapshots.at(-1)?.sessionId).toBe('session-1');
+        expect(graph.execute).toHaveBeenCalledTimes(1);
+      });
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1_000);
+        await vi.advanceTimersByTimeAsync(2_500);
+        await vi.advanceTimersByTimeAsync(5_000);
+        await vi.advanceTimersByTimeAsync(5_000);
+      });
+
+      await waitFor(() => {
+        expect(graph.execute).toHaveBeenCalledTimes(5);
+      });
+      expect(ws.client.subscribe).not.toHaveBeenCalled();
+      expect(toast.showToast).toHaveBeenCalledWith('mobile.queue.syncError', 'error');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('rejoins before reopening subscriptions after a websocket reconnect', async () => {
+    const snapshots: Snapshot[] = [];
+    const selectorSnapshots: SelectorSnapshot[] = [];
+    renderProviderWithSelectors(
+      (snapshot) => snapshots.push(snapshot),
+      (selectorSnapshot) => selectorSnapshots.push(selectorSnapshot),
+    );
+
+    await waitFor(() => {
+      expect(ws.client.subscribe).toHaveBeenCalledTimes(2);
+    });
+
+    const reconnectJoinDeferred = createDeferred<ReturnType<typeof createJoinSessionResponse>>();
+    graph.execute.mockReturnValueOnce(reconnectJoinDeferred.promise);
+    ws.client.subscribe.mockClear();
+
+    act(() => {
+      ws.emit('closed');
+      ws.emit('connected');
+    });
+
+    await waitFor(() => {
+      expect(graph.execute).toHaveBeenCalledTimes(2);
+    });
+    expect(ws.client.subscribe).not.toHaveBeenCalled();
+
+    await act(async () => {
+      reconnectJoinDeferred.resolve(createJoinSessionResponse());
+      await reconnectJoinDeferred.promise;
+    });
+
+    await waitFor(() => {
+      expect(ws.client.subscribe).toHaveBeenCalledTimes(2);
     });
   });
 
@@ -557,6 +709,41 @@ describe('QueueProvider session update subscription', () => {
       expect(latestSnapshot?.state.queue.map((item) => item.uuid)).not.toContain('queue-fail');
     });
     expect(toast.showToast).toHaveBeenCalledWith('mobile.queue.actionFailed', 'error');
+  });
+
+  it('shows the gentle rate-limit toast (not the generic failure) when takeControl is throttled (#2763)', async () => {
+    const snapshots: Snapshot[] = [];
+    renderProvider((snapshot) => snapshots.push(snapshot));
+
+    await waitFor(() => {
+      expect(snapshots.at(-1)?.sessionId).toBe('session-1');
+    });
+
+    const queueItem = makeQueueItem('queue-rl', 'climb-rl');
+    // The backend throttles interactive session mutations with this coded error
+    // when a burst (rapid boulder switching) trips a bucket.
+    const rateLimited = new GraphQLOperationError([
+      {
+        message: 'Rate limit exceeded. Try again in 22 seconds.',
+        extensions: { code: 'RATE_LIMITED', retryAfterSeconds: 22 },
+      },
+    ]);
+    queueMutations.takeControl.mockRejectedValueOnce(rateLimited);
+    const snapshot = snapshots.at(-1);
+    if (!snapshot) throw new Error('queue snapshot was not captured');
+
+    await expect(snapshot.takeControl(queueItem)).rejects.toBe(rateLimited);
+
+    // Optimistic driver/climb still rolls back to match the server.
+    await waitFor(() => {
+      const latestSnapshot = snapshots.at(-1);
+      expect(latestSnapshot?.driverParticipantId).toBeNull();
+      expect(latestSnapshot?.state.currentClimbQueueItem).toBeNull();
+      expect(latestSnapshot?.state.queue.map((item) => item.uuid)).not.toContain('queue-rl');
+    });
+    // Specific, gentle copy instead of the alarming generic "Action failed".
+    expect(toast.showToast).toHaveBeenCalledWith('mobile.queue.rateLimited', 'error');
+    expect(toast.showToast).not.toHaveBeenCalledWith('mobile.queue.actionFailed', 'error');
   });
 
   it('preserves suggested playlist items when takeControl rollback restores the queue', async () => {

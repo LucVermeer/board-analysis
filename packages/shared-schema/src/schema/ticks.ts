@@ -132,6 +132,8 @@ export const ticksTypeDefs = /* GraphQL */ `
     isBenchmark: Boolean
     "User comment"
     comment: String
+    "When the climb was attempted (ISO 8601)"
+    climbedAt: String
   }
 
   """

@@ -18,10 +18,11 @@ const styles = StyleSheet.create({ root: { flex: 1 } });
 export function AnalyticsProvider({ children }: { children: ReactNode }) {
   const client = getAnalyticsClient();
 
-  // Restore the user's session-recording opt-in at startup. Off by default —
-  // this only resumes recording for someone who previously turned diagnostics on.
-  // No-op when analytics is disabled (setSessionRecordingEnabled guards on a null
-  // client). Runs once.
+  // Apply the session-recording preference at startup. The default follows the
+  // build: ON in the open TestFlight beta, OFF (opt-in) elsewhere — and an
+  // explicit choice from the Privacy toggle overrides it. Starts recording when
+  // the resolved preference is on. No-op when analytics is disabled
+  // (setSessionRecordingEnabled guards on a null client). Runs once.
   useEffect(() => {
     loadSessionRecordingEnabled()
       .then((enabled) => {

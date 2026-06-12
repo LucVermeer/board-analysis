@@ -23,40 +23,35 @@ export function toFilesystemPath(fileUri: string): string {
 export type BackgroundVariant = 'full' | 'thumb';
 
 /**
- * Map a background image URL produced by getBoardRenderData (always .png
- * suffix, served from the web public/ tree) to the manifest key. The
- * manifest stores .webp variants — full-quality webp is what we bundle
- * into the IPA/APK for every board background, plus a `thumbs/` sibling
- * for most boards.
+ * Map a full-resolution background manifest key produced by getBoardRenderData
+ * to the requested bundled variant. The manifest stores .webp variants —
+ * full-quality webp is what we bundle into the IPA/APK for every board
+ * background, plus a `thumbs/` sibling for most boards.
  *
- * Manifest keys are URL suffixes after `/images/`, e.g.
- * `kilter/product_sizes_layouts_sets/36-1.webp`. The thumb variant
- * inserts a `thumbs/` segment before the filename, e.g.
+ * Manifest keys are paths relative to the bundled board-art manifest, e.g.
+ * `kilter/product_sizes_layouts_sets/36-1.webp`. The thumb variant inserts a
+ * `thumbs/` segment before the filename, e.g.
  * `kilter/product_sizes_layouts_sets/thumbs/36-1.webp`.
  */
-function manifestKeyFromUrl(url: string, variant: BackgroundVariant = 'full'): string | null {
-  const marker = '/images/';
-  const idx = url.indexOf(marker);
-  if (idx < 0) return null;
-  const fullKey = url.substring(idx + marker.length).replace(/\.png$/, '.webp');
-  if (variant === 'full') return fullKey;
-  const lastSlash = fullKey.lastIndexOf('/');
-  if (lastSlash < 0) return `thumbs/${fullKey}`;
-  return `${fullKey.slice(0, lastSlash)}/thumbs/${fullKey.slice(lastSlash + 1)}`;
+function manifestKeyForVariant(backgroundImageKey: string, variant: BackgroundVariant = 'full'): string {
+  if (variant === 'full') return backgroundImageKey;
+  const lastSlash = backgroundImageKey.lastIndexOf('/');
+  if (lastSlash < 0) return `thumbs/${backgroundImageKey}`;
+  return `${backgroundImageKey.slice(0, lastSlash)}/thumbs/${backgroundImageKey.slice(lastSlash + 1)}`;
 }
 
 /**
- * Resolve the best bundled manifest key for an image URL + variant.
+ * Resolve the best bundled manifest key for a background key + variant.
  * When `thumb` is requested but no thumb was bundled (e.g. a board that
  * ships only a full-res webp), fall back to the full-res key — never to
- * the backend. Returns null only when the URL has no `/images/` marker.
+ * the backend.
  */
-function resolveManifestKey(url: string, variant: BackgroundVariant): string | null {
+function resolveManifestKey(backgroundImageKey: string, variant: BackgroundVariant): string {
   if (variant === 'thumb') {
-    const thumbKey = manifestKeyFromUrl(url, 'thumb');
-    if (thumbKey && BOARD_BACKGROUND_ASSETS[thumbKey] !== undefined) return thumbKey;
+    const thumbKey = manifestKeyForVariant(backgroundImageKey, 'thumb');
+    if (BOARD_BACKGROUND_ASSETS[thumbKey] !== undefined) return thumbKey;
   }
-  return manifestKeyFromUrl(url, 'full');
+  return backgroundImageKey;
 }
 
 /**
@@ -195,12 +190,8 @@ export function tryGetBackgroundPathsSync(params: BackgroundParams): BackgroundL
   const variant = params.variant ?? 'full';
   const paths: string[] = [];
   let missingCount = 0;
-  for (const imageUrl of renderData.imageUrls) {
-    const manifestKey = resolveManifestKey(imageUrl, variant);
-    if (!manifestKey) {
-      missingCount++;
-      continue;
-    }
+  for (const backgroundImageKey of renderData.backgroundImageKeys) {
+    const manifestKey = resolveManifestKey(backgroundImageKey, variant);
     const path = tryResolveBundledPathSync(manifestKey);
     if (!path) {
       // Sync miss: could be a true manifest miss OR just the dev-mode
@@ -232,12 +223,8 @@ export async function ensureBackgroundsCached(params: BackgroundParams): Promise
   const variant = params.variant ?? 'full';
   const paths: string[] = [];
   let missingCount = 0;
-  for (const imageUrl of renderData.imageUrls) {
-    const manifestKey = resolveManifestKey(imageUrl, variant);
-    if (!manifestKey) {
-      missingCount++;
-      continue;
-    }
+  for (const backgroundImageKey of renderData.backgroundImageKeys) {
+    const manifestKey = resolveManifestKey(backgroundImageKey, variant);
     const path = await resolveBundledPathAsync(manifestKey);
     if (path) {
       paths.push(path);

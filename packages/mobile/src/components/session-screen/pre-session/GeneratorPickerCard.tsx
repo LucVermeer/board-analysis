@@ -1,6 +1,7 @@
 import { useEffect, useMemo, type ReactNode } from 'react';
 import { Pressable, StyleSheet, View, type ViewStyle } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
+import { Chip as PaperChip } from 'react-native-paper';
 import { useTranslation } from 'react-i18next';
 import type { BoardName, Grade } from '@boardsesh/shared-schema';
 import { getGradesForBoard } from '@boardsesh/board-config';
@@ -130,20 +131,43 @@ function getDefaultTargetGrade(boardName: BoardName | null): number {
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
-// Filled-rest-state chip (no faint border), matching the ClimbFilterSheet
-// `Chip`: the selected chip is a static-brand FILL with white text; the rest
-// state is the system fill so unselected chips stay legible.
-function Chip({
-  label,
-  selected,
-  onPress,
-  accessibilityLabel,
-}: {
+type ChipProps = {
   label: string;
   selected: boolean;
   onPress: () => void;
   accessibilityLabel?: string;
-}) {
+};
+
+// Filled-rest-state chip (no faint border), matching the ClimbFilterSheet
+// `Chip`: the selected chip is a static-brand FILL with white text; the rest
+// state is the system fill so unselected chips stay legible. On Material it
+// routes to the Paper M3 filter chip (secondaryContainer + checkmark when
+// selected) so it reads as a native M3 filter chip rather than an iOS pill.
+// Split into two sub-components (rather than an early return) so the glass
+// branch's reanimated hooks stay unconditional across a runtime variant flip.
+function Chip(props: ChipProps) {
+  const { variant } = useTheme();
+  return variant === 'material' ? <ChipMaterial {...props} /> : <ChipGlass {...props} />;
+}
+
+function ChipMaterial({ label, selected, onPress, accessibilityLabel }: ChipProps) {
+  return (
+    <PaperChip
+      mode="flat"
+      selected={selected}
+      showSelectedCheck
+      onPress={() => {
+        hapticSelection();
+        onPress();
+      }}
+      accessibilityLabel={accessibilityLabel ?? label}
+    >
+      {label}
+    </PaperChip>
+  );
+}
+
+function ChipGlass({ label, selected, onPress, accessibilityLabel }: ChipProps) {
   const { systemColors } = useTheme();
   const scale = useSharedValue(1);
   const animatedStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
@@ -183,12 +207,22 @@ type StepperRow = { key: string; node: ReactNode };
 // hairline-divided between rows, matching the ClimbFilterSheet groupedCard
 // pattern. Rows carry stable keys (the option field name), so no index keys.
 function GroupedSteppers({ rows }: { rows: StepperRow[] }) {
-  const { systemColors } = useTheme();
+  const { systemColors, variant, m3 } = useTheme();
+  const isMaterial = variant === 'material';
+  // Material: a filled tonal card (surfaceVariant) with outlineVariant dividers,
+  // instead of the iOS `${systemGray}14` inset-table look.
   return (
-    <View style={styles.groupedCard}>
+    <View style={[styles.groupedCard, isMaterial && { backgroundColor: m3.surfaceVariant }]}>
       {rows.map((row, index) => (
         <View key={row.key}>
-          {index > 0 ? <View style={[styles.groupDivider, { backgroundColor: systemColors.separator }]} /> : null}
+          {index > 0 ? (
+            <View
+              style={[
+                styles.groupDivider,
+                { backgroundColor: isMaterial ? m3.outlineVariant : systemColors.separator },
+              ]}
+            />
+          ) : null}
           {row.node}
         </View>
       ))}
@@ -227,7 +261,8 @@ export function GeneratorPickerCard({
   onChange,
 }: GeneratorPickerCardProps) {
   const { t } = useTranslation('session');
-  const { systemColors } = useTheme();
+  const { systemColors, variant, m3 } = useTheme();
+  const isMaterial = variant === 'material';
 
   const isKilterHomewall = boardName === 'kilter' && layoutId === KILTER_HOMEWALL_LAYOUT_ID;
   const showTallClimbsFilter = isKilterHomewall && sizeId != null && isKilterHomewallTallSizeId(sizeId);
@@ -299,9 +334,10 @@ export function GeneratorPickerCard({
     return parts.join(' · ');
   }, [selection, t]);
 
-  // A stepper row whose label is already translated by the caller (callers use
-  // static t() so the orphan checker can see the keys). The decrease/increase
-  // accessibility labels interpolate the same label.
+  // A stepper row with an already-translated label; resolves the decrease /
+  // increase accessibility labels off the same label. Callers pass the resolved
+  // string (via a literal `t('mobile.session.preGenerator…')`) so the i18n key
+  // stays statically analysable.
   const stepperRow = (
     label: string,
     fieldKey: string,
@@ -365,8 +401,9 @@ export function GeneratorPickerCard({
     }
   };
 
-  // Secondary count stepper(s) that live inside Tuning. Volume's grade spread,
-  // and pyramid/ladder's climbs-per-step.
+  // Each shape's secondary knob — Volume's variability ("grade spread") and
+  // pyramid/ladder's climbs-per-step. Shown in the primary group next to the main
+  // count (promoted out of Tuning for discoverability); Grade Focus has none.
   const secondarySteppers = (options: GeneratorOptions): StepperRow[] => {
     switch (options.type) {
       case 'volume':
@@ -408,7 +445,6 @@ export function GeneratorPickerCard({
 
   const renderTuning = (options: GeneratorOptions): ReactNode => {
     const minRatingPickerValue = getMinRatingPickerValue(options.minRating);
-    const secondary = secondarySteppers(options);
     return (
       <View style={styles.tuningBody}>
         <SegmentedControl
@@ -419,8 +455,6 @@ export function GeneratorPickerCard({
           trackColor={systemColors.fill}
           accessibilityLabel={t('mobile.session.preGeneratorWarmUp')}
         />
-
-        {secondary.length > 0 ? <GroupedSteppers rows={secondary} /> : null}
 
         <View>
           <Text variant="footnote" style={styles.subsectionLabel}>
@@ -492,7 +526,7 @@ export function GeneratorPickerCard({
         </View>
 
         {showTallClimbsFilter || showWideClimbsFilter ? (
-          <View style={styles.groupedCard}>
+          <View style={[styles.groupedCard, isMaterial && { backgroundColor: m3.surfaceVariant }]}>
             {showTallClimbsFilter ? (
               <SwitchRow
                 label={t('mobile.session.preGeneratorTallClimbsLabel')}
@@ -502,7 +536,12 @@ export function GeneratorPickerCard({
               />
             ) : null}
             {showTallClimbsFilter && showWideClimbsFilter ? (
-              <View style={[styles.groupDivider, { backgroundColor: systemColors.separator }]} />
+              <View
+                style={[
+                  styles.groupDivider,
+                  { backgroundColor: isMaterial ? m3.outlineVariant : systemColors.separator },
+                ]}
+              />
             ) : null}
             {showWideClimbsFilter ? (
               <SwitchRow
@@ -558,7 +597,7 @@ export function GeneratorPickerCard({
           ) : null}
 
           <View style={[styles.inset, styles.steppersInset]}>
-            <GroupedSteppers rows={primarySteppers(selection.options)} />
+            <GroupedSteppers rows={[...primarySteppers(selection.options), ...secondarySteppers(selection.options)]} />
           </View>
 
           <View style={[styles.inset, styles.tuningInset]}>

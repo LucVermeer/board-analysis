@@ -11,11 +11,12 @@ type SyncRunnerPrivates = {
   getNextCredentialToSync: () => Promise<ReturnType<typeof createCredential> | null>;
 };
 
-const { mockDecrypt, mockEncrypt, mockSignIn, mockSyncSharedData } = vi.hoisted(() => ({
+const { mockDecrypt, mockEncrypt, mockSignIn, mockSyncSharedData, mockSyncAuroraBoardLocations } = vi.hoisted(() => ({
   mockDecrypt: vi.fn(),
   mockEncrypt: vi.fn(),
   mockSignIn: vi.fn(),
   mockSyncSharedData: vi.fn(),
+  mockSyncAuroraBoardLocations: vi.fn(),
 }));
 
 vi.mock('@boardsesh/crypto', () => ({
@@ -29,6 +30,12 @@ vi.mock('../sync/user-sync', () => ({
 
 vi.mock('../sync/shared-sync', () => ({
   syncSharedData: mockSyncSharedData,
+}));
+
+vi.mock('../sync/locations-sync', () => ({
+  AURORA_LOCATION_BOARDS: ['tension', 'decoy', 'touchstone', 'grasshopper', 'soill'],
+  syncAuroraBoardLocations: mockSyncAuroraBoardLocations,
+  syncAllAuroraBoardLocations: vi.fn(),
 }));
 
 vi.mock('../api/aurora-client', () => ({
@@ -119,6 +126,8 @@ describe('SyncRunner shared-sync per-board throttle', () => {
   beforeEach(() => {
     mockSyncSharedData.mockReset();
     mockSyncSharedData.mockResolvedValue({ complete: true, results: {}, newClimbs: [] });
+    mockSyncAuroraBoardLocations.mockReset();
+    mockSyncAuroraBoardLocations.mockResolvedValue({ boardsSeen: 0, boardsUpserted: 0, boardsSkipped: 0 });
     // postgres-js is lazy; getClient() builds a client object but won't open a
     // connection until something runs a query. The throttle tests never get
     // there because syncSharedData is mocked.
@@ -133,6 +142,7 @@ describe('SyncRunner shared-sync per-board throttle', () => {
 
     expect(mockSyncSharedData).toHaveBeenCalledTimes(1);
     expect(mockSyncSharedData).toHaveBeenCalledWith(expect.anything(), 'decoy', 'token-abc', expect.any(Function));
+    expect(mockSyncAuroraBoardLocations).toHaveBeenCalledTimes(1);
   });
 
   it('skips shared sync when called again within the cooldown window', async () => {
@@ -144,6 +154,7 @@ describe('SyncRunner shared-sync per-board throttle', () => {
     await runnerPrivates.maybeRunSharedSync('decoy', 'token-3', 'user-3');
 
     expect(mockSyncSharedData).toHaveBeenCalledTimes(1);
+    expect(mockSyncAuroraBoardLocations).toHaveBeenCalledTimes(1);
   });
 
   it('runs shared sync again once the cooldown has elapsed', async () => {
@@ -159,6 +170,7 @@ describe('SyncRunner shared-sync per-board throttle', () => {
       await runnerPrivates.maybeRunSharedSync('decoy', 'token-3', 'user-3');
 
       expect(mockSyncSharedData).toHaveBeenCalledTimes(2);
+      expect(mockSyncAuroraBoardLocations).toHaveBeenCalledTimes(2);
     } finally {
       vi.useRealTimers();
     }
@@ -177,6 +189,7 @@ describe('SyncRunner shared-sync per-board throttle', () => {
 
     expect(mockSyncSharedData).toHaveBeenCalledTimes(3);
     expect(mockSyncSharedData.mock.calls.map((call) => call[1])).toEqual(['decoy', 'tension', 'grasshopper']);
+    expect(mockSyncAuroraBoardLocations).toHaveBeenCalledTimes(3);
   });
 
   it('still respects the cooldown when the previous run failed', async () => {
@@ -189,6 +202,7 @@ describe('SyncRunner shared-sync per-board throttle', () => {
     await runnerPrivates.maybeRunSharedSync('decoy', 'tok', 'u2');
 
     expect(mockSyncSharedData).toHaveBeenCalledTimes(1);
+    expect(mockSyncAuroraBoardLocations).not.toHaveBeenCalled();
   });
 });
 

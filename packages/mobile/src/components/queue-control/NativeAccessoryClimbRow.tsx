@@ -10,7 +10,7 @@ import { glassSize } from '../../theme/layout';
 import { CHROME_LABEL_MAX_FONT_SCALE } from '../../theme/typography';
 import { Text } from '../Text';
 import { AccessoryClimbThumbnail } from './AccessoryClimbThumbnail';
-import { useQueueCarousel } from './use-queue-carousel';
+import { useQueueClimbCarousel } from './use-queue-climb-carousel';
 import { useWallOrQueueCurrentClimb } from './use-wall-or-queue-climb';
 import { LogAscentToolbarButton } from './LogAscentToolbarButton';
 
@@ -69,7 +69,7 @@ function climbFromItem(item: ClimbQueueItem | null | undefined): Climb | null {
  * Content for the iOS 26 tab-bar bottom accessory (Liquid Glass variant only).
  * UIKit supplies the glass platter, so this stays bare: current climb + tick,
  * with the same swipe/peek carousel as the floating capsule (shared via
- * useQueueCarousel). Its plain grade + board thumbnail are tuned for the platter,
+ * useQueueClimbCarousel). Its plain grade + board thumbnail are tuned for the platter,
  * so they intentionally differ from the floating capsule's colorized grade.
  */
 export function NativeAccessoryClimbRow({ placement, width }: NativeAccessoryClimbRowProps) {
@@ -86,10 +86,9 @@ export function NativeAccessoryClimbRow({ placement, width }: NativeAccessoryCli
     previousItem,
     nextItem,
     canPeek,
-    handleNext,
-    handlePrevious,
     swipeAccessibilityActions,
-  } = useQueueCarousel();
+    onAccessibilityAction,
+  } = useQueueClimbCarousel();
 
   const queueCurrentClimb = climbFromItem(currentItem);
   // Source-of-truth flip: when a board feed is live (and the flag is on) the
@@ -117,10 +116,7 @@ export function NativeAccessoryClimbRow({ placement, width }: NativeAccessoryCli
           accessibilityRole="button"
           accessibilityLabel={currentClimb.name}
           accessibilityActions={swipeAccessibilityActions}
-          onAccessibilityAction={(event) => {
-            if (event.nativeEvent.actionName === 'next') handleNext();
-            else if (event.nativeEvent.actionName === 'previous') handlePrevious();
-          }}
+          onAccessibilityAction={onAccessibilityAction}
         >
           <Animated.View style={[styles.labelSlot, currentLabelStyle]}>
             <ClimbLabel

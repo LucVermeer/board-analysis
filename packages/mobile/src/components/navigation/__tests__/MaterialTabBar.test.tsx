@@ -98,15 +98,19 @@ vi.mock('../../../providers/theme-provider', () => ({
     // MaterialTabBar now reads the scheme-aware brand from the theme (lifted
     // tint in dark) rather than the static import.
     brandColors: { primary: '#FF3B30', success: '#6B9080' },
+    // M3 navigation-bar roles: active icon on a secondaryContainer pill, active
+    // label onSurface, inactive icon+label onSurfaceVariant.
+    m3: {
+      onSecondaryContainer: '#E8DEF8',
+      onSurface: '#E6E1E5',
+      onSurfaceVariant: '#CAC4D0',
+      secondaryContainer: '#4A4458',
+    },
   }),
 }));
 
 vi.mock('../../../theme/colors', () => ({
   brandColors: { primary: '#FF3B30', success: '#6B9080' },
-  withAlpha: (color: string, alpha: number) =>
-    `${color}${Math.round(alpha * 255)
-      .toString(16)
-      .padStart(2, '0')}`,
 }));
 
 vi.mock('../../../theme/tokens', () => ({
@@ -121,7 +125,7 @@ vi.mock('../../../theme/tokens', () => ({
 }));
 
 vi.mock('../../../theme/layout', () => ({
-  TAB_BAR_HEIGHT: 49,
+  MATERIAL_TAB_BAR_HEIGHT: 80,
 }));
 
 import { MaterialTabBar } from '../MaterialTabBar';

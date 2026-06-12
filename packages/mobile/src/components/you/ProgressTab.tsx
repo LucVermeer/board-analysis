@@ -37,7 +37,7 @@ export const ProgressTab = memo(function ProgressTab({
 }: ProgressTabProps) {
   const { t } = useTranslation('profile');
   const { t: tYou } = useTranslation('you');
-  const { systemColors, colorScheme, brandColors } = useTheme();
+  const { systemColors, colorScheme, brandColors, variant } = useTheme();
   const bottomChrome = useBottomChromeMetrics();
   const paddingBottom = bottomChrome.scrollBottomPadding + spacing[6];
 
@@ -89,10 +89,13 @@ export const ProgressTab = memo(function ProgressTab({
       }
     >
       {/* The screen's identity, in-body under the floating chrome — collapses into
-          the header capsule as it scrolls up behind the glass. */}
-      <Text variant="largeTitle" style={styles.screenTitle}>
-        {dashboardTitle}
-      </Text>
+          the header capsule as it scrolls up behind the glass. On Material the M3
+          app bar owns the title, so it's gated off there to avoid a doubled title. */}
+      {variant === 'material' ? null : (
+        <Text variant="largeTitle" style={styles.screenTitle}>
+          {dashboardTitle}
+        </Text>
+      )}
 
       {totalAscents === 0 ? (
         <View style={styles.empty}>

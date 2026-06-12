@@ -55,7 +55,7 @@ export default function TabLayout() {
   // doesn't re-render the tab tree on every queue change.
   const hasCurrentClimb = useHasActiveClimb();
   const showRecordBadge = isBluetoothConnected || sessionId !== null;
-  const eagerMountRecord = __DEV__ && Platform.OS === 'android';
+  const eagerMountRecord = Platform.OS === 'android';
 
   if (variant === 'material') {
     return (
@@ -70,8 +70,8 @@ export default function TabLayout() {
             title: tSession('mobile.session.recordTab'),
             tabBarIcon: materialTabIcon('record-circle', 'record-circle-outline'),
             tabBarBadge: showRecordBadge ? '' : undefined,
-            // Android Fast Refresh can stall the first lazy mount of this nested
-            // stack in Metro. Keep production cold start lazy.
+            // Android can stall the first lazy mount of this nested stack,
+            // leaving the Record tab blank until another tab forces a remount.
             lazy: eagerMountRecord ? false : undefined,
           }}
         />

@@ -38,10 +38,23 @@ type CollapsingTopChromeProps = {
   scrollY: SharedValue<number>;
   /** Tapping the collapsed title capsule scrolls the list back to the top. */
   onPressTitle: () => void;
-  /** Optional glass action docked at the far right of the right toolbar (e.g. the
-   *  Record tab's share/invite control). Discover/Climbs pass none, so their
+  /** Optional glass action(s) docked at the far right of the right toolbar (e.g. the
+   *  Record tab's share/invite + End controls). Discover/Climbs pass none, so their
    *  toolbar is unchanged. Stays visible at rest and collapsed, like the light. */
   trailingAction?: ReactNode;
+  /** Number of action slots `trailingAction` occupies, so the right toolbar widens
+   *  correctly when it carries more than one glyph (e.g. share + End). Defaults to
+   *  1 when `trailingAction` is a single element, 0 otherwise — a fragment of N
+   *  actions must pass its real count so the island doesn't clip to one slot. */
+  trailingActionCount?: number;
+  /** Glass action docked at the LEFT of the islands row, inside the left island
+   *  before the create/angle controls (e.g. the Record tab's in-session invite). */
+  leadingAction?: ReactNode;
+  /** Number of slots `leadingAction` occupies (defaults to 1 for a single element). */
+  leadingActionCount?: number;
+  /** Suppress the bluetooth lightbulb in the right toolbar — e.g. the active-session
+   *  header, which keeps only the stop control on the right. */
+  hideLight?: boolean;
   /** Extra controls rendered below the islands row (e.g. the Climbs search row).
    *  Discover passes none. Measured into the reported chrome height. */
   children?: ReactNode;
@@ -73,6 +86,10 @@ export function CollapsingTopChrome({
   scrollY,
   onPressTitle,
   trailingAction,
+  trailingActionCount,
+  leadingAction,
+  leadingActionCount,
+  hideLight = false,
   children,
 }: CollapsingTopChromeProps) {
   const { systemColors } = useTheme();
@@ -82,15 +99,21 @@ export function CollapsingTopChrome({
   const { progress, collapsed } = useCollapseProgress(scrollY);
 
   const canOpenAngle = activeBoard?.isAngleAdjustable !== false && activeBoard?.angle != null;
-  const leftActionCount = (canCreate ? 1 : 0) + (canOpenAngle ? 1 : 0);
+  // A fragment/element of leading actions reads as one element, so callers passing
+  // several supply the explicit count; otherwise reserve a slot only for a real one.
+  const leadingActions = leadingActionCount ?? (isValidElement(leadingAction) ? 1 : 0);
+  const leftActionCount = leadingActions + (canCreate ? 1 : 0) + (canOpenAngle ? 1 : 0);
 
   // The right glass toolbar holds the lightbulb (and an optional trailing action)
   // at rest, and grows to also hold a compact board glyph once collapsed (board
-  // sits left of the light). The trailing action stays visible throughout.
-  const lightActions = bluetooth ? 1 : 0;
+  // sits left of the light). The trailing action stays visible throughout. The
+  // lightbulb is hidden when `hideLight` (e.g. the active-session header).
+  const lightActions = bluetooth && !hideLight ? 1 : 0;
   // Reserve a slot only for a real element — a `false`/`null` from a `cond && <…>`
-  // caller must not widen the toolbar by a phantom 48px.
-  const trailingActions = isValidElement(trailingAction) ? 1 : 0;
+  // caller must not widen the toolbar by a phantom 48px. Callers passing a fragment
+  // of several actions supply `trailingActionCount` explicitly (a fragment reads as
+  // one element), so the island widens to fit them all.
+  const trailingActions = trailingActionCount ?? (isValidElement(trailingAction) ? 1 : 0);
   const expandedRightActions = lightActions + trailingActions;
   const collapsedRightActions = (activeBoard ? 1 : 0) + lightActions + trailingActions;
   const expandedRightWidth = expandedRightActions * TOP_ACTION_SIZE;
@@ -106,6 +129,7 @@ export function CollapsingTopChrome({
   const leftActions =
     leftActionCount > 0 ? (
       <GlassActionToolbar actionCount={leftActionCount}>
+        {leadingAction}
         {canCreate ? (
           <GlassToolbarAction onPress={onCreate} accessibilityLabel={createAccessibilityLabel}>
             <Icon name="plus" size={24} color={systemColors.label} />
@@ -142,7 +166,7 @@ export function CollapsingTopChrome({
             </GlassToolbarAction>
           </Animated.View>
         ) : null}
-        {bluetooth ? <LightbulbToolbarAction /> : null}
+        {bluetooth && !hideLight ? <LightbulbToolbarAction /> : null}
         {trailingAction}
       </Animated.View>
     ) : null;

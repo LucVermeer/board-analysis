@@ -27,12 +27,11 @@ function getAccessoryThumbnailBoardSize(boardWidth: number, boardHeight: number)
  * floating capsule and the iOS 26 native accessory). Renders nothing if the
  * board config or render data isn't available.
  *
- * Uses the rasterized native-PNG path (BoardImageNative → useNativeClimbRender
+ * Uses the rasterized native-PNG path (BoardImageNative -> useNativeClimbRender
  * + LayeredClimbImage, `cachePolicy="memory-disk"` over bundled `file://`
- * backgrounds) — the same warm path the list thumbnails use — rather than the
- * react-native-svg BoardRenderer with a remote `<SvgImage href>`. The accessory
- * bar is always mounted and re-renders on every queue swipe, so the cheap
- * cached-PNG path matters here.
+ * backgrounds) — the same warm path the list thumbnails use. The accessory bar
+ * is always mounted and re-renders on every queue swipe, so the cheap cached-PNG
+ * path matters here.
  *
  * Renders with `filledStyle` and the same `renderWidth` as the list thumbnail so
  * lit holds read as solid dots at the 40×40 slot size. Matching both means the

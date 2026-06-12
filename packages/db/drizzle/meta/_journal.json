@@ -852,8 +852,22 @@
     {
       "idx": 121,
       "version": "7",
-      "when": 1781002729907,
-      "tag": "0121_abnormal_masked_marvel",
+      "when": 1781130786841,
+      "tag": "0121_add_quality_search_covering_index",
+      "breakpoints": true
+    },
+    {
+      "idx": 122,
+      "version": "7",
+      "when": 1781145433936,
+      "tag": "0122_add_search_covering_indexes_v2",
+      "breakpoints": true
+    },
+    {
+      "idx": 123,
+      "version": "7",
+      "when": 1781223311975,
+      "tag": "0123_classy_xorn",
       "breakpoints": true
     }
   ]

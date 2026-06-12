@@ -1,27 +1,49 @@
 import { StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
+import { formatBoardDisplayName } from '@boardsesh/board-config';
 import { Card } from '../../Card';
 import { Text } from '../../Text';
 import { Icon } from '../../Icon';
 import { useTheme } from '../../../providers/theme-provider';
 import { spacing } from '../../../theme/tokens';
 
+/** The board fields shown at a glance — a structural subset of the active board. */
+type BoardSummary = {
+  name: string;
+  boardType: string;
+  sizeName?: string | null;
+  angle?: number | null;
+};
+
 type BoardSummaryCardProps = {
   /** Open the board switcher (the Boards tab, where the cascading picker lives). */
   onPress: () => void;
+  /** The active board, or null when none is set. Drives summary-vs-prompt. */
+  board?: BoardSummary | null;
 };
 
 /**
- * No-board prompt for the pre-session screen. Once a board is set the chrome's
- * board pill owns the board identity, so this renders only when none is chosen —
- * a card guiding the climber to the Boards tab, which is the single source of
- * truth for board configuration. Laid out as a `ListRow`-style leading icon /
- * label / chevron, drawn inside `Card` (so it picks up the glass-vs-material
- * surface) without `ListRow`'s extra inset doubling the card padding.
+ * Pre-session board row. When a board is set it shows the config at a glance
+ * (name · size · angle) — the chrome pill carries the same identity but collapses
+ * on scroll, so this keeps the full config (incl. size) persistently visible.
+ * When none is set it's a prompt guiding the climber to the Boards tab. Laid out
+ * as a `ListRow`-style leading icon / label / chevron inside `Card` (so it picks
+ * up the glass-vs-material surface) without `ListRow`'s extra inset doubling the
+ * card padding.
  */
-export function BoardSummaryCard({ onPress }: BoardSummaryCardProps) {
+export function BoardSummaryCard({ onPress, board }: BoardSummaryCardProps) {
   const { t } = useTranslation('session');
   const { systemColors } = useTheme();
+
+  const summary = board
+    ? [
+        board.name || formatBoardDisplayName(board.boardType),
+        board.sizeName,
+        board.angle != null ? `${board.angle}°` : null,
+      ]
+        .filter((part): part is string => !!part)
+        .join(' · ')
+    : null;
 
   return (
     <Card onPress={onPress}>
@@ -32,7 +54,7 @@ export function BoardSummaryCard({ onPress }: BoardSummaryCardProps) {
             {t('mobile.session.preBoardLabel')}
           </Text>
           <Text variant="body" color={systemColors.label}>
-            {t('mobile.session.preNoBoard')}
+            {summary ?? t('mobile.session.preNoBoard')}
           </Text>
         </View>
         <Icon name="chevron.right" size={18} color={systemColors.tertiaryLabel} />

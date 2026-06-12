@@ -55,6 +55,17 @@ export function pickUnused(pool: readonly Climb[], used: ReadonlySet<string>): C
 }
 
 /**
+ * A uniformly random climb in `pool` whose uuid isn't in `used`, or null. Used
+ * by refresh so re-rolling the same row reaches across the whole grade pool
+ * instead of toggling between the lowest-index climbs `pickUnused` would return.
+ */
+export function pickRandomUnused(pool: readonly Climb[], used: ReadonlySet<string>): Climb | null {
+  const candidates = pool.filter((climb) => !used.has(climb.uuid));
+  if (candidates.length === 0) return null;
+  return candidates[Math.floor(Math.random() * candidates.length)];
+}
+
+/**
  * Fetch one shuffled pool per unique grade in the plan. Round-trips stay
  * proportional to the workout shape (unique grades), not the climb count.
  */
@@ -99,11 +110,13 @@ export function selectItemsFromPools(
 export type RefreshSlotResult = { state: WorkoutPreviewData; changed: boolean };
 
 /**
- * Swap a single preview row for a different climb at the same grade. Prefers the
- * cached pool (no network); refetches+reshuffles that grade once if the cache is
- * exhausted of unused climbs; allows a differing repeat only as a last resort.
- * Keeps the queue-item uuid (swaps `.climb`) so the row keeps its identity and
- * highlight — mirroring DELTA_REPLACE_QUEUE_ITEM.
+ * Swap a single preview row for a different climb at the same grade. Picks a
+ * random unused climb from the cached pool (no network) so repeated refreshes of
+ * one row keep re-rolling across the whole pool rather than toggling between two
+ * climbs; refetches+reshuffles that grade once if the cache is exhausted of
+ * unused climbs; allows a differing repeat only as a last resort. Keeps the
+ * queue-item uuid (swaps `.climb`) so the row keeps its identity and highlight —
+ * mirroring DELTA_REPLACE_QUEUE_ITEM.
  */
 export async function refreshSlotInState(
   state: WorkoutPreviewData,
@@ -122,14 +135,14 @@ export async function refreshSlotInState(
   const cachedPool = pools.get(grade) ?? [];
   // Exclude every climb currently shown (including this row's own) so the refresh
   // lands on a genuinely different climb that isn't already on screen elsewhere.
-  let nextClimb = pickUnused(cachedPool, state.usedUuids);
+  let nextClimb = pickRandomUnused(cachedPool, state.usedUuids);
   let refreshedPool: Climb[] | null = null;
 
   // 1) Cache exhausted of unused climbs → refetch + reshuffle this grade once.
   if (!nextClimb) {
     refreshedPool = shuffleInPlace((await fetchPool(grade, ctx)).slice());
     pools.set(grade, refreshedPool);
-    nextClimb = pickUnused(refreshedPool, state.usedUuids);
+    nextClimb = pickRandomUnused(refreshedPool, state.usedUuids);
   }
 
   // 2) Tiny catalog: everything at this grade is already shown somewhere. Accept

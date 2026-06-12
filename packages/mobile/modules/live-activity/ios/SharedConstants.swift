@@ -205,7 +205,6 @@ enum SharedQueueState {
             URLQueryItem(name: "set_ids", value: setIds),
             URLQueryItem(name: "frames", value: item.frames),
             URLQueryItem(name: "thumbnail", value: "1"),
-            URLQueryItem(name: "include_background", value: "1"),
         ]
 
         return components?.url

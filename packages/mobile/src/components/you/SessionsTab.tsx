@@ -44,7 +44,7 @@ function sectionLabel(bucket: FeedRecencyBucket, t: TFunc): string {
 
 export function SessionsTab({ userId, onScroll, topInset = 0, registerScrollToTop }: SessionsTabProps) {
   const { t } = useTranslation('you');
-  const { systemColors, brandColors } = useTheme();
+  const { systemColors, brandColors, variant } = useTheme();
   const router = useRouter();
   const bottomChrome = useBottomChromeMetrics();
   const paddingBottom = bottomChrome.scrollBottomPadding + spacing[4];
@@ -144,13 +144,17 @@ export function SessionsTab({ userId, onScroll, topInset = 0, registerScrollToTo
   const listHeader = useMemo(
     () => (
       <>
-        <Text variant="largeTitle" style={styles.screenTitle}>
-          {t('metadata.dashboard.title')}
-        </Text>
+        {/* On Material the M3 app bar owns the title, so the in-body large title is
+            gated off there to avoid a doubled title. */}
+        {variant === 'material' ? null : (
+          <Text variant="largeTitle" style={styles.screenTitle}>
+            {t('metadata.dashboard.title')}
+          </Text>
+        )}
         {sessions.length > 0 ? <SessionsFeedHeader sessions={sessions} now={now} /> : null}
       </>
     ),
-    [t, sessions, now],
+    [t, sessions, now, variant],
   );
 
   if (!userId || feed.isPending) {

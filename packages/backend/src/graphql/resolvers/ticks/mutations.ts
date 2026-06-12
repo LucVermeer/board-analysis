@@ -573,6 +573,18 @@ export const tickMutations = {
     if (validatedInput.difficulty !== undefined) updates.difficulty = validatedInput.difficulty;
     if (validatedInput.isBenchmark !== undefined) updates.isBenchmark = validatedInput.isBenchmark;
     if (validatedInput.comment !== undefined) updates.comment = validatedInput.comment;
+    if (validatedInput.climbedAt !== undefined) updates.climbedAt = validatedInput.climbedAt;
+
+    const finalStatus = validatedInput.status ?? existing[0].status;
+    const finalAttemptCount = validatedInput.attemptCount ?? existing[0].attemptCount;
+    if (finalStatus === 'flash' && finalAttemptCount !== 1) {
+      logger.warn('[updateTick] Coerced flash tick attemptCount to 1', {
+        tickUuid: uuid,
+        userId,
+        previousAttemptCount: finalAttemptCount,
+      });
+      updates.attemptCount = 1;
+    }
 
     const [updated] = await db
       .update(dbSchema.boardseshTicks)

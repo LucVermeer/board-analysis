@@ -89,6 +89,8 @@ export default defineConfig({
       './packages/board-constants/vite.config.ts',
       './packages/aurora-sync/vite.config.ts',
       './packages/kilter-sync/vite.config.ts',
+      './packages/location-sync/vite.config.ts',
+      './packages/moonboard-sync/vite.config.ts',
       './packages/sync-runtime/vite.config.ts',
       './packages/crypto/vite.config.ts',
       './packages/shared/ble-protocol/vite.config.ts',
@@ -127,6 +129,7 @@ export default defineConfig({
     },
     'packages/web/app/**/*.{ts,tsx}': () => ['vp run check:i18n', 'vp run check:i18n:orphans'],
     'packages/mobile/{src,app}/**/*.{ts,tsx}': () => 'vp run check:i18n:orphans',
+    'packages/mobile/**/*.{ts,tsx,swift}': () => 'vp run check:mobile-board-art-network',
     'packages/shared/i18n/locales/**/*.json': () => 'vp run check:i18n:orphans',
   },
   run: {
@@ -157,7 +160,22 @@ export default defineConfig({
         cache: false,
       },
       'db:seed-locations': {
-        command: 'bun run --filter=@boardsesh/db db:seed-locations',
+        command: 'true',
+        dependsOn: ['locations:aurora', 'locations:kilter', 'locations:moonboard'],
+        cache: false,
+      },
+      'locations:aurora': {
+        command: 'bun run --filter=@boardsesh/aurora-sync sync:locations',
+        dependsOn: ['db:up'],
+        cache: false,
+      },
+      'locations:kilter': {
+        command: 'bun run --filter=@boardsesh/kilter-sync sync:locations',
+        dependsOn: ['db:up'],
+        cache: false,
+      },
+      'locations:moonboard': {
+        command: 'bun run --filter=@boardsesh/moonboard-sync sync:locations',
         dependsOn: ['db:up'],
         cache: false,
       },
@@ -211,13 +229,21 @@ export default defineConfig({
       'build:sync-runtime': {
         command: 'bun run --filter=@boardsesh/sync-runtime build',
       },
+      'build:location-sync': {
+        command: 'bun run --filter=@boardsesh/location-sync build',
+        dependsOn: ['build:shared', 'build:constants', 'build:db'],
+      },
+      'build:moonboard-sync': {
+        command: 'bun run --filter=@boardsesh/moonboard-sync build',
+        dependsOn: ['build:db', 'build:location-sync'],
+      },
       'build:aurora': {
         command: 'bun run --filter=@boardsesh/aurora-sync build',
-        dependsOn: ['build:shared', 'build:crypto', 'build:db', 'build:sync-runtime'],
+        dependsOn: ['build:shared', 'build:crypto', 'build:db', 'build:location-sync', 'build:sync-runtime'],
       },
       'build:kilter': {
         command: 'bun run --filter=@boardsesh/kilter-sync build',
-        dependsOn: ['build:shared', 'build:crypto', 'build:db', 'build:sync-runtime'],
+        dependsOn: ['build:shared', 'build:crypto', 'build:db', 'build:location-sync', 'build:sync-runtime'],
       },
       'build:backend': {
         command: 'bun run --filter=boardsesh-backend build',
@@ -238,6 +264,10 @@ export default defineConfig({
       },
       'check:i18n:orphans': {
         command: 'bun packages/web/scripts/check-orphaned-i18n-keys.ts',
+        cache: false,
+      },
+      'check:mobile-board-art-network': {
+        command: 'bun scripts/mobile-board-art-network-check.ts',
         cache: false,
       },
       'generate:ios-board-placement-data': {
@@ -269,7 +299,7 @@ export default defineConfig({
       },
       build: {
         command: 'true',
-        dependsOn: ['build:backend', 'build:web'],
+        dependsOn: ['build:backend', 'build:web', 'build:moonboard-sync'],
       },
 
       // --- Typecheck (depends on build for type declarations) ---
@@ -368,6 +398,18 @@ export default defineConfig({
         command: 'bun run --filter=@boardsesh/kilter-sync typecheck',
         dependsOn: ['build:kilter'],
       },
+      'typecheck:aurora': {
+        command: 'bun run --filter=@boardsesh/aurora-sync typecheck',
+        dependsOn: ['build:aurora'],
+      },
+      'typecheck:location-sync': {
+        command: 'bun run --filter=@boardsesh/location-sync typecheck',
+        dependsOn: ['build:location-sync'],
+      },
+      'typecheck:moonboard-sync': {
+        command: 'bun run --filter=@boardsesh/moonboard-sync typecheck',
+        dependsOn: ['build:moonboard-sync'],
+      },
       'typecheck:sync-runtime': {
         command: 'bun run --filter=@boardsesh/sync-runtime typecheck',
         dependsOn: ['build:sync-runtime'],
@@ -403,6 +445,9 @@ export default defineConfig({
           'typecheck:graphql-client',
           'typecheck:mobile',
           'typecheck:kilter',
+          'typecheck:aurora',
+          'typecheck:location-sync',
+          'typecheck:moonboard-sync',
           'typecheck:sync-runtime',
         ],
       },
@@ -455,6 +500,10 @@ export default defineConfig({
       },
       'mobile:dev-client-build': {
         command: 'tsx scripts/mobile-dev-client-build.ts',
+        cache: false,
+      },
+      'testflight:feedback-issues': {
+        command: 'tsx scripts/testflight-feedback-to-issues.ts',
         cache: false,
       },
 

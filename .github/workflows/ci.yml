@@ -82,6 +82,10 @@ jobs:
               - 'packages/board-constants/**'
               - 'packages/crypto/**'
               - 'packages/aurora-sync/**'
+              - 'packages/kilter-sync/**'
+              - 'packages/location-sync/**'
+              - 'packages/moonboard-sync/**'
+              - 'packages/sync-runtime/**'
             sharedSchema:
               - 'packages/shared-schema/**'
               - 'packages/shared/graphql/**'
@@ -480,6 +484,8 @@ jobs:
           cache: true
       - name: Install dependencies
         run: bun install --frozen-lockfile
+      - name: Check mobile board art stays bundled
+        run: vp run check:mobile-board-art-network
       # Catches iOS bundle-phase dep-resolution breaks (e.g. a transitive-only
       # @sentry/cli unresolvable from packages/mobile under Bun's isolated
       # linker) here on Linux, instead of in the macOS TestFlight archive on

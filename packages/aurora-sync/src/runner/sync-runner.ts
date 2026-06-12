@@ -5,9 +5,16 @@ import { eq, ne, and, or, isNotNull, sql } from 'drizzle-orm';
 import { auroraCredentials } from '@boardsesh/db/schema/auth';
 import { syncUserData } from '../sync/user-sync';
 import { syncSharedData } from '../sync/shared-sync';
+import {
+  AURORA_LOCATION_BOARDS,
+  syncAllAuroraBoardLocations,
+  syncAuroraBoardLocations,
+  type AuroraLocationBoardName,
+} from '../sync/locations-sync';
 import { AuroraClimbingClient } from '../api/aurora-client';
 import { isTransientAuroraError } from '../api/errors';
 import { decrypt, encrypt } from '@boardsesh/crypto';
+import type { LocationSyncSummary } from '@boardsesh/location-sync';
 import type { AuroraBoardName } from '../api/types';
 import { resolveDaemonOptions, runDaemonLoop } from './daemon';
 import type { SyncRunnerConfig, SyncSummary, CredentialRecord, DaemonOptions } from './types';
@@ -315,10 +322,13 @@ export class SyncRunner {
     // either way — a permanent failure shouldn't loop on every cycle.
     this.lastSharedSyncAt.set(boardType, now);
 
-    const { client } = this.getClient();
+    const { client, db } = this.getClient();
     try {
       this.log(`[SyncRunner] Running shared sync for ${boardType} using ${userId}'s token...`);
       await syncSharedData(client, boardType, token, this.log.bind(this));
+      if (this.isLocationBoard(boardType)) {
+        await syncAuroraBoardLocations({ db, board: boardType, log: this.log.bind(this) });
+      }
       this.lastSharedSyncAt.set(boardType, Date.now());
     } catch (sharedError) {
       this.lastSharedSyncAt.set(boardType, Date.now());
@@ -329,6 +339,20 @@ export class SyncRunner {
       });
       this.log(`[SyncRunner] Shared sync for ${boardType} failed (user sync was OK): ${sharedErrorMessage}`);
     }
+  }
+
+  async syncLocations(
+    board: AuroraLocationBoardName | 'all',
+  ): Promise<LocationSyncSummary | Record<AuroraLocationBoardName, LocationSyncSummary>> {
+    const { db } = this.getClient();
+    if (board === 'all') {
+      return syncAllAuroraBoardLocations({ db, log: this.log.bind(this) });
+    }
+    return syncAuroraBoardLocations({ db, board, log: this.log.bind(this) });
+  }
+
+  private isLocationBoard(boardType: AuroraBoardName): boardType is AuroraLocationBoardName {
+    return AURORA_LOCATION_BOARDS.includes(boardType as AuroraLocationBoardName);
   }
 
   private async updateCredentialStatus(
