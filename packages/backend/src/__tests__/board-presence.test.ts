@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll, vi } from 'vite-plus/test';
 import Redis from 'ioredis';
+import { v4 as uuidv4 } from 'uuid';
 import { sql } from 'drizzle-orm';
 import type {
   ConnectionContext,
@@ -401,6 +402,43 @@ describe('board-presence resolvers', () => {
       // The original board still owns the serial.
       const [orig] = await db.execute(sql`SELECT serial_number FROM user_boards WHERE id = ${resolved.boardId}`);
       expect((orig as { serial_number: string }).serial_number).toBe(serialA);
+    });
+  });
+
+  describe('resolveBoardForUuid', () => {
+    it('resolves the selected named board and stamps proof-of-presence', async () => {
+      const boardUuid = uuidv4();
+      const slug = `presence-uuid-${Date.now()}`;
+      await db.execute(sql`
+        INSERT INTO user_boards (uuid, slug, owner_id, board_type, layout_id, size_id, set_ids, name, serial_number, is_public)
+        VALUES (${boardUuid}, ${slug}, ${TEST_USER_ID}, 'kilter', 4, 12, '1,2', 'Named Wall', null, false)
+      `);
+
+      const resolved = await boardPresenceMutations.resolveBoardForUuid(undefined, { boardUuid }, authCtx());
+
+      expect(resolved.boardName).toBe('Named Wall');
+      expect(resolved.boardType).toBe('kilter');
+      expect(resolved.layoutId).toBe(4);
+      expect(await pubsub.hasBoardMembership(String(resolved.boardId), TEST_USER_ID)).toBe(true);
+    });
+
+    it('rejects a private board owned by another user', async () => {
+      const boardUuid = uuidv4();
+      const slug = `presence-private-${Date.now()}`;
+      await db.execute(sql`
+        INSERT INTO user_boards (uuid, slug, owner_id, board_type, layout_id, size_id, set_ids, name, serial_number, is_public)
+        VALUES (${boardUuid}, ${slug}, ${SECOND_USER_ID}, 'kilter', 4, 12, '1,2', 'Private Wall', null, false)
+      `);
+
+      await expect(
+        boardPresenceMutations.resolveBoardForUuid(undefined, { boardUuid }, authCtx()),
+      ).rejects.toThrow('Board not found');
+    });
+
+    it('rejects a board uuid that does not exist', async () => {
+      await expect(
+        boardPresenceMutations.resolveBoardForUuid(undefined, { boardUuid: uuidv4() }, authCtx()),
+      ).rejects.toThrow('Board not found');
     });
   });
 

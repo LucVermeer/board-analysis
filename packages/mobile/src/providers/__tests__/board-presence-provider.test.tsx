@@ -6,8 +6,15 @@ import type { ClimbQueueItemInput, ResolvedBoard } from '@boardsesh/shared-schem
 
 const flags = vi.hoisted(() => ({ value: false as boolean }));
 const transport = vi.hoisted(() => ({
-  resolveBoardForSerial: vi.fn(async () => ({ boardId: 42, boardName: 'Garage Wall' }) as unknown as ResolvedBoard),
-  resolveBoardForConfig: vi.fn(async () => ({ boardId: 43, boardName: 'MoonBoard 40' }) as unknown as ResolvedBoard),
+  resolveBoardForSerial: vi.fn(
+    async (_args: unknown) => ({ boardId: 42, boardName: 'Garage Wall' }) as unknown as ResolvedBoard,
+  ),
+  resolveBoardForUuid: vi.fn(
+    async (_args: unknown) => ({ boardId: 44, boardName: 'Named Board' }) as unknown as ResolvedBoard,
+  ),
+  resolveBoardForConfig: vi.fn(
+    async (_args: unknown) => ({ boardId: 43, boardName: 'MoonBoard 40' }) as unknown as ResolvedBoard,
+  ),
   reportClimb: vi.fn(async () => true),
 }));
 const sharedProvider = vi.hoisted(() => ({ lastBoardId: undefined as number | null | undefined }));
@@ -19,6 +26,7 @@ vi.mock('../feature-flags-provider', () => ({
 vi.mock('../../lib/board-presence/board-presence-client', () => ({
   createMobileBoardPresenceClient: () => ({
     resolveBoardForSerial: transport.resolveBoardForSerial,
+    resolveBoardForUuid: transport.resolveBoardForUuid,
     resolveBoardForConfig: transport.resolveBoardForConfig,
     subscribeNowPlaying: () => () => {},
     fetchRecentClimbs: async () => [],
@@ -65,6 +73,11 @@ describe('MobileBoardPresenceProvider', () => {
     transport.resolveBoardForConfig.mockResolvedValue({
       boardId: 43,
       boardName: 'MoonBoard 40',
+    } as unknown as ResolvedBoard);
+    transport.resolveBoardForUuid.mockClear();
+    transport.resolveBoardForUuid.mockResolvedValue({
+      boardId: 44,
+      boardName: 'Named Board',
     } as unknown as ResolvedBoard);
     transport.reportClimb.mockClear();
     transport.reportClimb.mockResolvedValue(true);
@@ -156,6 +169,214 @@ describe('MobileBoardPresenceProvider', () => {
     await waitFor(() => {
       expect(sharedProvider.lastBoardId).toBe(43);
     });
+  });
+
+  it('resolves+binds by board uuid for selected named boards', async () => {
+    flags.value = true;
+    renderProvider();
+
+    await act(async () => {
+      const resolved = await capturedControls?.resolveAndBindBoardByUuid({
+        boardUuid: '11111111-1111-4111-8111-111111111111',
+      });
+      expect(resolved?.boardId).toBe(44);
+    });
+
+    expect(transport.resolveBoardForUuid).toHaveBeenCalledWith({
+      boardUuid: '11111111-1111-4111-8111-111111111111',
+    });
+    await waitFor(() => {
+      expect(sharedProvider.lastBoardId).toBe(44);
+    });
+  });
+
+  it('does not start a second uuid resolve while the same uuid is pending', async () => {
+    flags.value = true;
+    let resolveBoard: ((value: ResolvedBoard) => void) | null = null;
+    transport.resolveBoardForUuid.mockImplementationOnce(
+      () =>
+        new Promise<ResolvedBoard>((resolve) => {
+          resolveBoard = resolve;
+        }),
+    );
+    renderProvider();
+
+    let firstPromise: Promise<ResolvedBoard | null> | undefined;
+    act(() => {
+      firstPromise = capturedControls?.resolveAndBindBoardByUuid({
+        boardUuid: '11111111-1111-4111-8111-111111111111',
+      });
+    });
+
+    let secondResult: ResolvedBoard | null | undefined;
+    await act(async () => {
+      secondResult = await capturedControls?.resolveAndBindBoardByUuid({
+        boardUuid: '11111111-1111-4111-8111-111111111111',
+      });
+    });
+
+    expect(secondResult).toBeNull();
+    expect(transport.resolveBoardForUuid).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      resolveBoard?.({ boardId: 44, boardName: 'Named Board' } as unknown as ResolvedBoard);
+      await firstPromise;
+    });
+    await waitFor(() => {
+      expect(sharedProvider.lastBoardId).toBe(44);
+    });
+  });
+
+  it('does not re-resolve an unchanged config once bound', async () => {
+    flags.value = true;
+    renderProvider();
+
+    const args = {
+      boardType: 'moonboard',
+      layoutId: 1,
+      sizeId: 1,
+      setIds: '2019',
+    };
+    await act(async () => {
+      await capturedControls?.resolveAndBindBoardByConfig(args);
+    });
+    await waitFor(() => {
+      expect(sharedProvider.lastBoardId).toBe(43);
+    });
+
+    await act(async () => {
+      const resolved = await capturedControls?.resolveAndBindBoardByConfig(args);
+      expect(resolved).toBeNull();
+    });
+    expect(transport.resolveBoardForConfig).toHaveBeenCalledTimes(1);
+  });
+
+  it('ignores stale config resolve results after a newer selected config resolves', async () => {
+    flags.value = true;
+    let resolveFirst: ((value: ResolvedBoard) => void) | null = null;
+    let resolveSecond: ((value: ResolvedBoard) => void) | null = null;
+    transport.resolveBoardForConfig.mockImplementation(
+      (args: unknown) =>
+        new Promise<ResolvedBoard>((resolve) => {
+          const boardType = (args as { boardType: string }).boardType;
+          if (boardType === 'moonboard') {
+            resolveFirst = resolve;
+            return;
+          }
+          resolveSecond = resolve;
+        }),
+    );
+    renderProvider();
+
+    let firstPromise: Promise<ResolvedBoard | null> | undefined;
+    let secondPromise: Promise<ResolvedBoard | null> | undefined;
+    act(() => {
+      firstPromise = capturedControls?.resolveAndBindBoardByConfig({
+        boardType: 'moonboard',
+        layoutId: 1,
+        sizeId: 1,
+        setIds: '2019',
+      });
+      secondPromise = capturedControls?.resolveAndBindBoardByConfig({
+        boardType: 'kilter',
+        layoutId: 1,
+        sizeId: 10,
+        setIds: '1,2',
+      });
+    });
+
+    await act(async () => {
+      resolveSecond?.({ boardId: 44, boardName: 'Kilter' } as unknown as ResolvedBoard);
+      await secondPromise;
+    });
+    await waitFor(() => {
+      expect(sharedProvider.lastBoardId).toBe(44);
+    });
+
+    let firstResult: ResolvedBoard | null | undefined;
+    await act(async () => {
+      resolveFirst?.({ boardId: 43, boardName: 'MoonBoard 40' } as unknown as ResolvedBoard);
+      firstResult = await firstPromise;
+    });
+
+    expect(firstResult).toBeNull();
+    expect(sharedProvider.lastBoardId).toBe(44);
+  });
+
+  it('clears the bound board while a different uuid resolve is pending', async () => {
+    flags.value = true;
+    let resolveNext: ((value: ResolvedBoard) => void) | null = null;
+    renderProvider();
+
+    await act(async () => {
+      await capturedControls?.resolveAndBindBoardByUuid({
+        boardUuid: '11111111-1111-4111-8111-111111111111',
+      });
+    });
+    await waitFor(() => {
+      expect(sharedProvider.lastBoardId).toBe(44);
+    });
+
+    transport.resolveBoardForUuid.mockImplementationOnce(
+      () =>
+        new Promise<ResolvedBoard>((resolve) => {
+          resolveNext = resolve;
+        }),
+    );
+
+    act(() => {
+      void capturedControls?.resolveAndBindBoardByUuid({
+        boardUuid: '22222222-2222-4222-8222-222222222222',
+      });
+    });
+    await waitFor(() => {
+      expect(sharedProvider.lastBoardId).toBeNull();
+    });
+
+    await act(async () => {
+      resolveNext?.({ boardId: 45, boardName: 'Next Board' } as unknown as ResolvedBoard);
+    });
+    await waitFor(() => {
+      expect(sharedProvider.lastBoardId).toBe(45);
+    });
+  });
+
+  it('ignores stale serial resolve results after a newer uuid resolve wins', async () => {
+    flags.value = true;
+    let resolveSerial: ((value: ResolvedBoard) => void) | null = null;
+    transport.resolveBoardForSerial.mockImplementationOnce(
+      () =>
+        new Promise<ResolvedBoard>((resolve) => {
+          resolveSerial = resolve;
+        }),
+    );
+    renderProvider();
+
+    let serialPromise: Promise<ResolvedBoard | null> | undefined;
+    await act(async () => {
+      serialPromise = capturedControls?.resolveAndBindBoard({
+        serial: 'SERIAL-1',
+        boardType: 'kilter',
+        layoutId: 1,
+        sizeId: 10,
+        setIds: '1,2',
+      });
+      await capturedControls?.resolveAndBindBoardByUuid({
+        boardUuid: '11111111-1111-4111-8111-111111111111',
+      });
+    });
+    await waitFor(() => {
+      expect(sharedProvider.lastBoardId).toBe(44);
+    });
+
+    let serialResult: ResolvedBoard | null | undefined;
+    await act(async () => {
+      resolveSerial?.({ boardId: 42, boardName: 'Serial Board' } as unknown as ResolvedBoard);
+      serialResult = await serialPromise;
+    });
+
+    expect(serialResult).toBeNull();
+    expect(sharedProvider.lastBoardId).toBe(44);
   });
 
   it('returns null instead of leaking a rejected serial resolve', async () => {

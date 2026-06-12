@@ -157,6 +157,13 @@ export const mutationsTypeDefs = /* GraphQL */ `
     ): ResolvedBoard!
 
     """
+    Resolve the wall feed for the selected named board. This binds to the actual
+    board entity, so board sheet stats/history are available before Bluetooth
+    connects and stay aligned with board-scoped ticks.
+    """
+    resolveBoardForUuid(boardUuid: ID!): ResolvedBoard!
+
+    """
     Resolve the shared board feed for boards without a BLE serial. This is a
     per-config fallback in v1: every caller with the same board type, layout,
     size, and set IDs gets the same shared board id.

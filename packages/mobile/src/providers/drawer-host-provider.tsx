@@ -35,7 +35,7 @@ import { favoritesStore } from '@boardsesh/climb-actions';
 import { climbToQueueItem } from '../lib/climb-to-queue-item';
 import { useIsPartyPreviewOnly, useQueueActions, useQueueSessionControls } from './queue-provider';
 import { useQueueSnackbar } from './queue-snackbar-provider';
-import { useBoardPresenceControls } from './board-presence-provider';
+import { useBoardPresenceControls, type ResolveBoardUuidArgs } from './board-presence-provider';
 import { useOptionalBluetoothContext } from './bluetooth-provider';
 
 export type BoardConfig = {
@@ -127,7 +127,12 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
     dismissUndoWallChangeSnackbar,
   } = useQueueSnackbar();
   const bluetooth = useOptionalBluetoothContext();
-  const { boardId: boardPresenceBoardId } = useBoardPresenceControls();
+  const {
+    enabled: boardPresenceEnabled,
+    boardId: boardPresenceBoardId,
+    resolveAndBindBoardByUuid,
+    resetPresence,
+  } = useBoardPresenceControls();
   const boardPresenceBoardIdRef = useRef(boardPresenceBoardId);
   boardPresenceBoardIdRef.current = boardPresenceBoardId;
   const { mutate: toggleFavoriteMutate } = useToggleFavorite();
@@ -153,6 +158,20 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
       angle: activeBoard.angle,
     };
   }, [boardConfigOverride, activeBoard]);
+
+  const selectedBoardPresenceBoard = useMemo<ResolveBoardUuidArgs | null>(() => {
+    if (!activeBoard) return null;
+    return { boardUuid: activeBoard.uuid };
+  }, [activeBoard?.uuid]);
+
+  useEffect(() => {
+    if (!boardPresenceEnabled) return;
+    if (!selectedBoardPresenceBoard) {
+      resetPresence();
+      return;
+    }
+    void resolveAndBindBoardByUuid(selectedBoardPresenceBoard);
+  }, [boardPresenceEnabled, selectedBoardPresenceBoard, resolveAndBindBoardByUuid, resetPresence]);
 
   // Keep a ref so the otherwise empty-dep `openClimbActions` callback can
   // snapshot the current board config without churning its identity.

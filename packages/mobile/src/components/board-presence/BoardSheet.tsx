@@ -4,7 +4,7 @@
 // split, GlassSheetBackground, stackBehavior="push". (No FullWindowOverlay — it
 // prevented the sheet from presenting in this app; QueueSheet/PlayDrawer omit it.)
 // Renders the wall's now-on-the-wall hero, a VIRTUALIZED history list
-// (BottomSheetFlatList — never .map), light stat tiles, and a SEPARATE
+// (BottomSheetFlatList — never .map), light stat tiles, and a discoverable
 // "Switch board" footer row that opens the existing board switcher.
 //
 // State comes from `@boardsesh/board-presence-react`'s split current/feed
@@ -69,7 +69,7 @@ export type BoardSheetHandle = {
 };
 
 type BoardSheetProps = {
-  /** The active board label, shown as the sheet title + footer subtitle. */
+  /** The active board label, shown as the sheet title. */
   boardLabel: string | null;
   /**
    * Active board config for the climb thumbnails. Passed by the host (NOT read
@@ -78,11 +78,11 @@ type BoardSheetProps = {
    * interfering with gorhom's `present()`, so the sheet never appeared.
    */
   boardConfig: BoardConfig | null;
-  /** Request an animated close (header X) — the host calls `dismiss()`. */
+  /** Request an animated close (header chevron) — the host calls `dismiss()`. */
   onClose: () => void;
   /** Optional: fired AFTER the dismiss animation finishes (gorhom `onDismiss`). */
   onDismissed?: () => void;
-  /** Open the existing board switcher (the separated "Switch board" control). */
+  /** Open the existing board switcher from the footer control. */
   onSwitchBoard: () => void;
 };
 
@@ -254,17 +254,19 @@ export const BoardSheet = forwardRef<BoardSheetHandle, BoardSheetProps>(function
       style={styles.sheet}
     >
       <View style={[styles.header, { borderBottomColor: systemColors.separator }]}>
-        <Text variant="title3" color={systemColors.label} numberOfLines={1} style={styles.headerTitle}>
-          {boardLabel ?? t('mobile.boardPresence.title')}
-        </Text>
         <Pressable
           onPress={onClose}
           hitSlop={8}
           accessibilityRole="button"
           accessibilityLabel={t('mobile.boardPresence.close')}
+          style={styles.headerAction}
         >
-          <Icon name="close" size={20} color={systemColors.secondaryLabel} />
+          <Icon name="chevron.down" size={20} color={systemColors.secondaryLabel} />
         </Pressable>
+        <Text variant="title3" color={systemColors.label} numberOfLines={1} style={styles.headerTitle}>
+          {boardLabel ?? t('mobile.boardPresence.title')}
+        </Text>
+        <View pointerEvents="none" style={styles.headerAction} />
       </View>
 
       <BottomSheetFlatList
@@ -282,6 +284,9 @@ export const BoardSheet = forwardRef<BoardSheetHandle, BoardSheetProps>(function
         accessibilityLabel={t('mobile.boardPresence.switchBoardAria')}
         style={[styles.footer, { borderTopColor: systemColors.separator, paddingBottom: insets.bottom + spacing[3] }]}
       >
+        <View style={[styles.footerIcon, { backgroundColor: systemColors.secondaryBackground }]}>
+          <Icon name="transfer" size={20} color={systemColors.label} />
+        </View>
         <View style={styles.footerText}>
           <Text variant="body" color={systemColors.label}>
             {t('mobile.boardPresence.switchBoard')}
@@ -435,14 +440,21 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing[4],
+    paddingHorizontal: spacing[3],
     paddingBottom: spacing[3],
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
+  headerAction: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   headerTitle: {
     flex: 1,
-    marginRight: spacing[3],
+    marginHorizontal: spacing[2],
+    textAlign: 'center',
   },
   hero: {
     flexDirection: 'row',
@@ -527,12 +539,20 @@ const styles = StyleSheet.create({
   footer: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: spacing[3],
     paddingHorizontal: spacing[4],
     paddingTop: spacing[3],
     borderTopWidth: StyleSheet.hairlineWidth,
   },
+  footerIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   footerText: {
+    flex: 1,
     gap: 2,
   },
 });

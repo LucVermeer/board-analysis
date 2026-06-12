@@ -162,6 +162,29 @@ describe('createMobileBoardPresenceClient', () => {
     expect(operation.query).toContain('resolveBoardForSerial');
   });
 
+  it('resolves a selected named board by uuid', async () => {
+    const resolved = {
+      boardId: 13,
+      boardName: 'Named Board',
+      boardType: 'kilter',
+      layoutId: 1,
+      sizeId: 10,
+      setIds: '1,2',
+    };
+    transport.execute.mockResolvedValue({ resolveBoardForUuid: resolved });
+
+    const result = await createMobileBoardPresenceClient(getClient).resolveBoardForUuid?.({
+      boardUuid: '11111111-1111-4111-8111-111111111111',
+    });
+
+    expect(result).toEqual(resolved);
+    const [, operation] = transport.execute.mock.calls[0];
+    expect(operation.variables).toEqual({
+      boardUuid: '11111111-1111-4111-8111-111111111111',
+    });
+    expect(operation.query).toContain('resolveBoardForUuid');
+  });
+
   it('resolves a board by config for serial-less boards', async () => {
     const resolved = {
       boardId: 12,

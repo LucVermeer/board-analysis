@@ -36,8 +36,8 @@ const climbActions = vi.hoisted(() => ({
   props: null as null | Record<string, unknown>,
 }));
 
-const activeBoard = vi.hoisted(() => ({
-  stored: {
+const activeBoard = vi.hoisted(() => {
+  const defaultStored = {
     uuid: 'board-1',
     slug: 'board-1',
     ownerId: 'owner-1',
@@ -58,8 +58,21 @@ const activeBoard = vi.hoisted(() => ({
     followerCount: 0,
     commentCount: 0,
     isFollowedByMe: false,
-  } satisfies UserBoard,
-  setActiveBoard: vi.fn(async () => {}),
+  } satisfies UserBoard;
+  return {
+    defaultStored,
+    stored: { ...defaultStored } as UserBoard | null,
+    setActiveBoard: vi.fn(async () => {}),
+  };
+});
+
+const presence = vi.hoisted(() => ({
+  enabled: false,
+  boardId: null as number | null,
+  resolveAndBindBoard: vi.fn(async () => null),
+  resolveAndBindBoardByConfig: vi.fn(async () => null),
+  resolveAndBindBoardByUuid: vi.fn(async () => null),
+  resetPresence: vi.fn(),
 }));
 
 vi.mock('react-native', () => ({
@@ -152,7 +165,14 @@ vi.mock('@boardsesh/board-presence-react', () => ({
 }));
 
 vi.mock('../board-presence-provider', () => ({
-  useBoardPresenceControls: () => ({ enabled: false, boardId: null, resolveAndBindBoard: vi.fn(async () => null) }),
+  useBoardPresenceControls: () => ({
+    enabled: presence.enabled,
+    boardId: presence.boardId,
+    resolveAndBindBoard: presence.resolveAndBindBoard,
+    resolveAndBindBoardByConfig: presence.resolveAndBindBoardByConfig,
+    resolveAndBindBoardByUuid: presence.resolveAndBindBoardByUuid,
+    resetPresence: presence.resetPresence,
+  }),
 }));
 
 vi.mock('../bluetooth-provider', () => ({
@@ -251,6 +271,87 @@ function Probe({ onHost }: { onHost: (host: ReturnType<typeof useDrawerHost>) =>
 function renderHost(onHost: (host: ReturnType<typeof useDrawerHost>) => void) {
   return render(createElement(DrawerHostProvider, null, createElement(Probe, { onHost })));
 }
+
+beforeEach(() => {
+  activeBoard.stored = { ...activeBoard.defaultStored };
+  presence.enabled = false;
+  presence.boardId = null;
+  presence.resolveAndBindBoard.mockClear();
+  presence.resolveAndBindBoardByConfig.mockClear();
+  presence.resolveAndBindBoardByUuid.mockClear();
+  presence.resetPresence.mockClear();
+});
+
+describe('DrawerHostProvider board presence binding', () => {
+  it('resolves board presence from the selected active board without Bluetooth', async () => {
+    presence.enabled = true;
+    const hosts: Array<ReturnType<typeof useDrawerHost>> = [];
+    renderHost((host) => hosts.push(host));
+    await waitFor(() => expect(hosts.at(-1)).toBeDefined());
+
+    await waitFor(() => {
+      expect(presence.resolveAndBindBoardByUuid).toHaveBeenCalledWith({ boardUuid: 'board-1' });
+    });
+    expect(presence.resolveAndBindBoard).not.toHaveBeenCalled();
+    expect(presence.resolveAndBindBoardByConfig).not.toHaveBeenCalled();
+  });
+
+  it('resets board presence when no active board is selected', async () => {
+    presence.enabled = true;
+    activeBoard.stored = null;
+    const hosts: Array<ReturnType<typeof useDrawerHost>> = [];
+    renderHost((host) => hosts.push(host));
+    await waitFor(() => expect(hosts.at(-1)).toBeDefined());
+
+    await waitFor(() => {
+      expect(presence.resetPresence).toHaveBeenCalledTimes(1);
+    });
+    expect(presence.resolveAndBindBoardByUuid).not.toHaveBeenCalled();
+  });
+
+  it('resets board presence when the selected active board is cleared', async () => {
+    presence.enabled = true;
+    const hosts: Array<ReturnType<typeof useDrawerHost>> = [];
+    const onHost = (host: ReturnType<typeof useDrawerHost>) => hosts.push(host);
+    const { rerender } = renderHost(onHost);
+    await waitFor(() => {
+      expect(presence.resolveAndBindBoardByUuid).toHaveBeenCalledWith({ boardUuid: 'board-1' });
+    });
+
+    presence.resolveAndBindBoardByUuid.mockClear();
+    presence.resetPresence.mockClear();
+    activeBoard.stored = null;
+    rerender(createElement(DrawerHostProvider, null, createElement(Probe, { onHost })));
+
+    await waitFor(() => {
+      expect(presence.resetPresence).toHaveBeenCalledTimes(1);
+    });
+    expect(presence.resolveAndBindBoardByUuid).not.toHaveBeenCalled();
+  });
+
+  it('rebinds board presence when the selected active board changes', async () => {
+    presence.enabled = true;
+    const hosts: Array<ReturnType<typeof useDrawerHost>> = [];
+    const onHost = (host: ReturnType<typeof useDrawerHost>) => hosts.push(host);
+    const { rerender } = renderHost(onHost);
+    await waitFor(() => {
+      expect(presence.resolveAndBindBoardByUuid).toHaveBeenCalledWith({ boardUuid: 'board-1' });
+    });
+
+    presence.resolveAndBindBoardByUuid.mockClear();
+    activeBoard.stored = {
+      ...activeBoard.defaultStored,
+      uuid: 'board-2',
+      slug: 'board-2',
+      name: 'Second board',
+    };
+    rerender(createElement(DrawerHostProvider, null, createElement(Probe, { onHost })));
+
+    await waitFor(() => {
+      expect(presence.resolveAndBindBoardByUuid).toHaveBeenCalledWith({ boardUuid: 'board-2' });
+    });
+  });
+});
 
 describe('DrawerHostProvider queue sheet wall-control gating', () => {
   beforeEach(() => {
