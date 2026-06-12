@@ -109,6 +109,7 @@ export async function setHoldColorOverridesPreference(nextOverrides: HoldColorOv
 }
 
 export async function setHoldColorOverridePreference(role: HoldColorOverrideRole, color: string | null): Promise<void> {
+  if (!hasLoaded) await loadHoldColorOverrides();
   const nextOverrides: HoldColorOverrides = { ...currentOverrides };
   const normalizedColor = normalizeHexColor(color);
   if (normalizedColor) {

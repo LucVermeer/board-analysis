@@ -107,14 +107,20 @@ export function HoldColorAccessibilitySection() {
         </View>
         {HOLD_COLOR_OVERRIDE_ROLES.map((role, index) => {
           const roleOverride = overrides[role];
+          const roleLabel = labelForRole(t, role);
+          const modeLabel = roleOverride
+            ? t('mobile.more.accessibility.mode.user')
+            : t('mobile.more.accessibility.mode.default');
           const swatchColor = getEffectiveHoldRoleColor(boardName, role, overrides);
           return (
             <ListRow
               key={role}
-              title={labelForRole(t, role)}
-              subtitle={
-                roleOverride ? t('mobile.more.accessibility.mode.user') : t('mobile.more.accessibility.mode.default')
-              }
+              title={roleLabel}
+              subtitle={modeLabel}
+              accessibilityLabel={t('mobile.more.accessibility.rowAccessibility', {
+                role: roleLabel,
+                mode: modeLabel,
+              })}
               leading={<ColorSwatch color={swatchColor} />}
               trailing={roleOverride ? <Icon name="check.small" size={20} color={systemColors.accent} /> : undefined}
               showChevron
@@ -262,18 +268,21 @@ function HoldColorPickerSheet({ role, boardName, currentColor, onSave, onClose }
               value={rgbText.red}
               onChangeText={(red) => setRgbText((previous) => ({ ...previous, red }))}
               inputStyle={inputStyle}
+              invalid={showValidationError}
             />
             <RgbChannelInput
               label={t('mobile.more.accessibility.channels.green')}
               value={rgbText.green}
               onChangeText={(green) => setRgbText((previous) => ({ ...previous, green }))}
               inputStyle={inputStyle}
+              invalid={showValidationError}
             />
             <RgbChannelInput
               label={t('mobile.more.accessibility.channels.blue')}
               value={rgbText.blue}
               onChangeText={(blue) => setRgbText((previous) => ({ ...previous, blue }))}
               inputStyle={inputStyle}
+              invalid={showValidationError}
             />
           </View>
         ) : (
@@ -297,12 +306,15 @@ function RgbChannelInput({
   value,
   onChangeText,
   inputStyle,
+  invalid,
 }: {
   label: string;
   value: string;
   onChangeText: (value: string) => void;
   inputStyle: StyleProp<TextStyle>;
+  invalid: boolean;
 }) {
+  const { t } = useTranslation('common');
   const { systemColors } = useTheme();
   return (
     <View style={styles.channelColumn}>
@@ -316,6 +328,8 @@ function RgbChannelInput({
         maxLength={3}
         selectTextOnFocus
         returnKeyType="done"
+        accessibilityLabel={label}
+        accessibilityHint={invalid ? t('mobile.more.accessibility.invalidRgb') : undefined}
         style={inputStyle}
       />
     </View>

@@ -123,8 +123,8 @@ function presenceClimbToQueueInput(climb: BoardPresenceClimb): ClimbQueueItemInp
  *
  * Uses a latest-wins drain loop for writes:
  * - `isWritingRef` tracks if a write is in progress
- * - `pendingClimbRef` stores the most recent pending climb
- * - When a new climb arrives during a write, it replaces the pending climb
+ * - `pendingSendRef` stores the most recent pending climb plus colour state
+ * - When a new climb or colour state arrives during a write, it replaces the pending send
  * - When the current write completes, the drain loop picks up whatever's pending
  * - Deduplicates byte-identical broadcasts via `lastSentSignatureRef` (keyed on
  *   uuid + frames + mirror + color signature, so a mirror toggle, hold edit, or
@@ -151,6 +151,12 @@ function BluetoothAutoSender({
   connectInitialSendRef: React.MutableRefObject<{ frames: string; mirrored: boolean; colorSignature: string } | null>;
   colorSignature: string;
 }) {
+  type AutoSendRequest = {
+    item: ClimbQueueItem;
+    sendFramesToBoard: (frames: string, mirrored?: boolean, signal?: AbortSignal) => Promise<boolean | undefined>;
+    colorSignature: string;
+  };
+
   const { state } = useQueue();
   const { currentClimbQueueItem } = state;
   const onWallConfirmedRef = useRef(onWallConfirmed);
@@ -159,7 +165,7 @@ function BluetoothAutoSender({
   }, [onWallConfirmed]);
 
   const isWritingRef = useRef(false);
-  const pendingClimbRef = useRef<ClimbQueueItem | null>(null);
+  const pendingSendRef = useRef<AutoSendRequest | null>(null);
   // The signature of the last climb actually pushed to the wall: uuid + rendered
   // frames + mirror state + colour override state. Re-broadcasts with the same
   // signature skip the physical write (the board is idempotent, but we'd
@@ -202,19 +208,25 @@ function BluetoothAutoSender({
       reassertPendingRef.current = true;
     }
 
+    const sendRequest: AutoSendRequest = {
+      item: currentClimbQueueItem,
+      sendFramesToBoard,
+      colorSignature,
+    };
+
     if (isWritingRef.current) {
-      pendingClimbRef.current = currentClimbQueueItem;
+      pendingSendRef.current = sendRequest;
       return;
     }
 
     isWritingRef.current = true;
 
     const drain = async () => {
-      let toSend: ClimbQueueItem | null = currentClimbQueueItem;
+      let toSend: AutoSendRequest | null = sendRequest;
       try {
         while (toSend) {
           if (signal?.aborted) return;
-          const item = toSend;
+          const { item, sendFramesToBoard: requestSendFramesToBoard, colorSignature: requestColorSignature } = toSend;
 
           // connect() may have just written these exact frames as its
           // initialFrames (connect-and-light flows like the play drawer).
@@ -229,9 +241,9 @@ function BluetoothAutoSender({
               lastSentSignatureRef.current === null &&
               connectSend.frames === item.climb.frames &&
               connectSend.mirrored === !!item.climb.mirrored &&
-              connectSend.colorSignature === colorSignature
+              connectSend.colorSignature === requestColorSignature
             ) {
-              lastSentSignatureRef.current = `${item.climb.uuid}::${item.climb.frames}::${item.climb.mirrored ? 1 : 0}::${colorSignature}`;
+              lastSentSignatureRef.current = `${item.climb.uuid}::${item.climb.frames}::${item.climb.mirrored ? 1 : 0}::${requestColorSignature}`;
             }
           }
 
@@ -247,16 +259,16 @@ function BluetoothAutoSender({
           // mirror, and colours). The board is idempotent so a re-send is
           // functionally fine, but we'd double-fire haptics. A mirror toggle,
           // hold edit, or colour change updates the signature and re-pushes.
-          const sendSignature = `${item.climb.uuid}::${item.climb.frames}::${item.climb.mirrored ? 1 : 0}::${colorSignature}`;
+          const sendSignature = `${item.climb.uuid}::${item.climb.frames}::${item.climb.mirrored ? 1 : 0}::${requestColorSignature}`;
           if (sendSignature === lastSentSignatureRef.current) {
             onWallConfirmedRef.current(item);
-            toSend = pendingClimbRef.current;
-            pendingClimbRef.current = null;
+            toSend = pendingSendRef.current;
+            pendingSendRef.current = null;
             continue;
           }
 
           try {
-            const result = await sendFramesToBoard(item.climb.frames, !!item.climb.mirrored, signal);
+            const result = await requestSendFramesToBoard(item.climb.frames, !!item.climb.mirrored, signal);
 
             // After the await, the AutoSender may have unmounted — skip
             // post-send side effects.
@@ -272,8 +284,8 @@ function BluetoothAutoSender({
             console.error('Error sending climb to board:', error);
           }
 
-          toSend = pendingClimbRef.current;
-          pendingClimbRef.current = null;
+          toSend = pendingSendRef.current;
+          pendingSendRef.current = null;
         }
       } finally {
         isWritingRef.current = false;

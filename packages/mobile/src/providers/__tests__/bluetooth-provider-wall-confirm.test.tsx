@@ -8,6 +8,7 @@ import { derivePreviewOnly } from '@boardsesh/queue-runtime';
 import type { BoardSerialConfig } from '@boardsesh/graphql/operations';
 import type { ResolvedBoardEntry } from '../../lib/ble/resolve-serials';
 import type { PickerState } from '../../lib/ble/use-board-bluetooth';
+import { setHoldColorOverridesPreference } from '../../lib/hold-color-overrides';
 
 type TestResolvedBoard = { boardId: number };
 
@@ -270,7 +271,8 @@ function makeSerialConfig(overrides: Partial<BoardSerialConfig> = {}): BoardSeri
 }
 
 describe('BluetoothProvider wall-confirm integration', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    await setHoldColorOverridesPreference({});
     queue.currentClimbQueueItem = makeQueueItem('climb-1');
     queue.sessionId = 'session-1';
     queue.driverParticipantId = 'participant-self';
@@ -448,6 +450,38 @@ describe('BluetoothProvider wall-confirm integration', () => {
 
     expect(wallConfirm.emitWallConfirm).not.toHaveBeenCalled();
     expect(queue.confirmClimbOnWall).not.toHaveBeenCalled();
+  });
+
+  it('re-sends the current climb when hold colours change during an in-flight auto-send', async () => {
+    let resolveWrite: ((value: boolean) => void) | undefined;
+    bluetooth.state.sendFramesToBoard
+      .mockImplementationOnce(
+        () =>
+          new Promise<boolean>((resolve) => {
+            resolveWrite = resolve;
+          }),
+      )
+      .mockResolvedValue(true);
+
+    renderProvider();
+
+    await waitFor(() => {
+      expect(bluetooth.state.sendFramesToBoard).toHaveBeenCalledTimes(1);
+    });
+
+    await act(async () => {
+      await setHoldColorOverridesPreference({ HAND: '#123456' });
+    });
+    expect(bluetooth.state.sendFramesToBoard).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      resolveWrite?.(true);
+    });
+
+    await waitFor(() => {
+      expect(bluetooth.state.sendFramesToBoard).toHaveBeenCalledTimes(2);
+    });
+    expect(bluetooth.state.sendFramesToBoard).toHaveBeenNthCalledWith(2, 'p1r12', false, expect.any(AbortSignal));
   });
 
   it('keeps auto-sending while a restored session is waiting for JOIN to resolve identity', async () => {

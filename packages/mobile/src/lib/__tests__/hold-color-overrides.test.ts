@@ -58,6 +58,16 @@ describe('hold-color-overrides', () => {
     expect(await loadHoldColorOverrides()).toEqual({ FOOT: '#654321' });
   });
 
+  it('merges single-role edits with stored overrides before the first load completes', async () => {
+    const asyncStorage = await getAsyncStorage();
+    await asyncStorage.setItem('holdColorOverrides', JSON.stringify({ HAND: '#111111', FOOT: '#222222' }));
+    const { setHoldColorOverridePreference } = await import('../hold-color-overrides');
+
+    await setHoldColorOverridePreference('HAND', '#333333');
+
+    expect(await asyncStorage.getItem('holdColorOverrides')).toBe(JSON.stringify({ HAND: '#333333', FOOT: '#222222' }));
+  });
+
   it('exposes Bluetooth overrides only when at least one custom colour is configured', async () => {
     const { getBluetoothColorOverrides } = await import('../hold-color-overrides');
 
