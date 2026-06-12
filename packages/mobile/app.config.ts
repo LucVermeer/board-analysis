@@ -362,6 +362,12 @@ export default ({ config }: ConfigContext): ExpoConfig & { newArchEnabled?: bool
       // entitlement-merge ordering concern like the share-intent dedup above —
       // it sets its own distinct keys.
       './plugins/with-healthkit',
+      // AppCheckCore (pulled in by Google Sign-In) is a Swift pod that depends
+      // on GoogleUtilities and RecaptchaInterop, which don't define modules by
+      // default. Without this fix CocoaPods refuses to link them as static
+      // libraries and pod install fails. The plugin patches the generated
+      // Podfile to add :modular_headers => true for both pods.
+      './plugins/with-podfile-app-check-fix',
       // org/project make `expo prebuild` write a valid ios/sentry.properties so
       // the build-phase source-map + dSYM upload can find the Sentry project.
       // The auth token is supplied via the SENTRY_AUTH_TOKEN env var in CI
