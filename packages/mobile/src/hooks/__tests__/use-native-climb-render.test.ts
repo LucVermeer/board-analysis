@@ -100,6 +100,13 @@ describe('buildCacheKey', () => {
     expect(buildCacheKey('kilter', 1, 10, '24', 'p1r42')).not.toBe(buildCacheKey('kilter', 1, 10, '24', 'p2r43'));
   });
 
+  it('uses custom colour override signatures in the frame hash', () => {
+    const defaultKey = buildCacheKey('kilter', 1, 10, '24', 'p1r42');
+    const customKey = buildCacheKey('kilter', 1, 10, '24', 'p1r42', false, undefined, 'hand-123456');
+    expect(customKey).not.toBe(defaultKey);
+    expect(customKey).toMatch(/^v\d+_s_wfull_kilter_1_10_24_[0-9a-f]{8}$/);
+  });
+
   it('produces different keys for different boards', () => {
     expect(buildCacheKey('kilter', 1, 10, '24', 'p1r42')).not.toBe(buildCacheKey('tension', 1, 10, '24', 'p1r42'));
   });

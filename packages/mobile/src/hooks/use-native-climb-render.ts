@@ -9,6 +9,12 @@ import {
   type BackgroundVariant,
 } from '../lib/background-image-cache';
 import { reportError } from '../lib/sentry';
+import {
+  DEFAULT_HOLD_COLOR_SIGNATURE,
+  getEffectiveHoldStateColor,
+  useHoldColorOverrides,
+  type HoldColorOverrides,
+} from '../lib/hold-color-overrides';
 
 /**
  * Bump when the Rust renderer output format changes. v2 marks the
@@ -265,8 +271,10 @@ export function buildCacheKey(
   frames: string,
   filledStyle = false,
   renderWidth?: number,
+  colorSignature = DEFAULT_HOLD_COLOR_SIGNATURE,
 ): string {
-  const framesHash = fnv1aHex(frames);
+  const framesHash =
+    colorSignature === DEFAULT_HOLD_COLOR_SIGNATURE ? fnv1aHex(frames) : fnv1aHex(`${frames}|${colorSignature}`);
   const canonicalSetIds = canonicalizeSetIds(setIds);
   // Style token sits right after the version prefix so the warm-up scan
   // (which matches on `v${RENDERER_VERSION}_`) still loads both styles and
@@ -312,9 +320,11 @@ function getBoardConfig(
   setIds: string,
   filledStyle: boolean,
   renderWidth?: number,
+  colorOverrides: HoldColorOverrides = {},
+  colorSignature = DEFAULT_HOLD_COLOR_SIGNATURE,
 ) {
   const widthKey = renderWidth != null ? `${renderWidth}` : 'full';
-  const configKey = `${boardName}-${layoutId}-${sizeId}-${setIds}-${filledStyle ? 'f' : 's'}-w${widthKey}`;
+  const configKey = `${boardName}-${layoutId}-${sizeId}-${setIds}-${filledStyle ? 'f' : 's'}-w${widthKey}-${colorSignature}`;
   const cached = boardConfigCache.get(configKey);
   if (cached) return cached;
 
@@ -328,7 +338,7 @@ function getBoardConfig(
   const holdStateMap: Record<number, { color: string; render_style?: string }> = {};
   for (const [codeStr, stateInfo] of Object.entries(stateMap)) {
     holdStateMap[Number(codeStr)] = {
-      color: stateInfo.color,
+      color: getEffectiveHoldStateColor(stateInfo.name, stateInfo.color, colorOverrides),
       ...(stateInfo.renderStyle ? { render_style: stateInfo.renderStyle } : {}),
     };
   }
@@ -425,6 +435,7 @@ function getNativeModule() {
  */
 export function useNativeClimbRender(params: NativeClimbRenderParams): NativeClimbRenderResult {
   const { frames, boardName, layoutId, sizeId, setIds, filledStyle = false, renderWidth } = params;
+  const { overrides: holdColorOverrides, signature: holdColorSignature } = useHoldColorOverrides();
 
   // Small surfaces that pass a renderWidth want the bundled thumb-sized
   // background too, so neither the overlay nor the photo is a large source
@@ -435,7 +446,16 @@ export function useNativeClimbRender(params: NativeClimbRenderParams): NativeCli
   // render — the function self-guards via `warmupRun`.
   warmupRenderedOverlaysOnce();
 
-  const currentCacheKey = buildCacheKey(boardName, layoutId, sizeId, setIds, frames, filledStyle, renderWidth);
+  const currentCacheKey = buildCacheKey(
+    boardName,
+    layoutId,
+    sizeId,
+    setIds,
+    frames,
+    filledStyle,
+    renderWidth,
+    holdColorSignature,
+  );
   const currentBoardKey = buildBoardKey(boardName, layoutId, sizeId, setIds, variant);
 
   // Seed both pieces of state synchronously so the first paint already
@@ -573,7 +593,16 @@ export function useNativeClimbRender(params: NativeClimbRenderParams): NativeCli
     const nativeModule = getNativeModule();
     if (!nativeModule) return;
 
-    const boardConfig = getBoardConfig(boardName, layoutId, sizeId, setIds, filledStyle, renderWidth);
+    const boardConfig = getBoardConfig(
+      boardName,
+      layoutId,
+      sizeId,
+      setIds,
+      filledStyle,
+      renderWidth,
+      holdColorOverrides,
+      holdColorSignature,
+    );
     if (!boardConfig) return;
 
     const renderPromise = getOrStartInflightRender(currentCacheKey, () => {
@@ -618,7 +647,18 @@ export function useNativeClimbRender(params: NativeClimbRenderParams): NativeCli
     // nativeRender is intentionally excluded from deps: this effect *sets* it,
     // and the only meaningful re-trigger is a cacheKey change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentCacheKey, frames, boardName, layoutId, sizeId, setIds, filledStyle, renderWidth]);
+  }, [
+    currentCacheKey,
+    frames,
+    boardName,
+    layoutId,
+    sizeId,
+    setIds,
+    filledStyle,
+    renderWidth,
+    holdColorOverrides,
+    holdColorSignature,
+  ]);
 
   // Only surface the native URI if it matches the *current* cache key —
   // a stale render (from before a prop change) would otherwise show.

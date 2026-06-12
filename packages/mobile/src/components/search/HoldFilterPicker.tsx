@@ -10,6 +10,7 @@ import { Icon } from '../Icon';
 import { SegmentedControl } from '../SegmentedControl';
 import { useTheme } from '../../providers/theme-provider';
 import { hapticSelection } from '../../lib/haptics';
+import { useHoldColorOverrides } from '../../lib/hold-color-overrides';
 import { spacing, borderRadius } from '../../theme/tokens';
 
 type HoldFilterPickerProps = {
@@ -45,6 +46,7 @@ export function HoldFilterPicker({
 }: HoldFilterPickerProps) {
   const { t } = useTranslation('climbs');
   const { systemColors } = useTheme();
+  const { overrides: holdColorOverrides } = useHoldColorOverrides();
   const sheetRef = useRef<BottomSheetModal>(null);
 
   useEffect(() => {
@@ -55,7 +57,7 @@ export function HoldFilterPicker({
     }
   }, [holdId]);
 
-  const options = useMemo(() => buildHoldFilterOptions(boardName), [boardName]);
+  const options = useMemo(() => buildHoldFilterOptions(boardName, holdColorOverrides), [boardName, holdColorOverrides]);
   const snapPoints = useMemo(() => ['42%'], []);
 
   const typeLabels = useMemo<Record<HoldFilterType, string>>(

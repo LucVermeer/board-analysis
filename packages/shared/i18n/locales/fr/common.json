@@ -12,6 +12,32 @@
       "development": "Développement",
       "metroServersTitle": "Serveurs Metro",
       "metroServersSubtitle": "Basculer entre les bundlers Tailnet",
+      "accessibility": {
+        "title": "Accessibilité",
+        "description": "Choisis des couleurs de prises plus faciles à distinguer. Par défaut utilise les couleurs normales de chaque board et n'envoie aucune surcharge Bluetooth.",
+        "resetAll": "Réinitialiser les couleurs des prises",
+        "save": "Enregistrer la couleur",
+        "rowAccessibility": "{{role}}, {{mode}}",
+        "pickerSubtitle": "Utilise n'importe quelle couleur RGB.",
+        "modeLabel": "Mode de couleur des prises",
+        "defaultCopy": "Boardsesh utilisera la couleur par défaut pour ce type de prise et l'omettra des surcharges Bluetooth.",
+        "invalidRgb": "Utilise des nombres de 0 à 255.",
+        "mode": {
+          "default": "Par défaut",
+          "user": "Couleur personnalisée"
+        },
+        "channels": {
+          "red": "Rouge",
+          "green": "Vert",
+          "blue": "Bleu"
+        },
+        "roles": {
+          "starting": "Départ",
+          "hand": "Milieu",
+          "finish": "Top",
+          "foot": "Pied"
+        }
+      },
       "appearance": {
         "title": "Apparence",
         "system": "Système",

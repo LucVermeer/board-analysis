@@ -30,6 +30,7 @@ import { toClimbInput } from '../lib/climb-to-queue-item';
 import { hapticSuccess } from '../lib/haptics';
 import { DevicePickerSheet } from '../components/ble/DevicePickerSheet';
 import { track } from '../lib/analytics';
+import { getBluetoothColorOverrides, useHoldColorOverrides } from '../lib/hold-color-overrides';
 
 type BluetoothContextValue = {
   isConnected: boolean;
@@ -122,18 +123,20 @@ function presenceClimbToQueueInput(climb: BoardPresenceClimb): ClimbQueueItemInp
  *
  * Uses a latest-wins drain loop for writes:
  * - `isWritingRef` tracks if a write is in progress
- * - `pendingClimbRef` stores the most recent pending climb
- * - When a new climb arrives during a write, it replaces the pending climb
+ * - `pendingSendRef` stores the most recent pending climb plus colour state
+ * - When a new climb or colour state arrives during a write, it replaces the pending send
  * - When the current write completes, the drain loop picks up whatever's pending
  * - Deduplicates byte-identical broadcasts via `lastSentSignatureRef` (keyed on
- *   uuid + frames + mirror, so a mirror toggle or hold edit on the same climb
- *   re-pushes), and a `reassertNonce` bump punches through the dedup once.
+ *   uuid + frames + mirror + color signature, so a mirror toggle, hold edit, or
+ *   colour override change on the same climb re-pushes), and a `reassertNonce`
+ *   bump punches through the dedup once.
  */
 function BluetoothAutoSender({
   sendFramesToBoard,
   onWallConfirmed,
   reassertNonce,
   connectInitialSendRef,
+  colorSignature,
 }: {
   sendFramesToBoard: (frames: string, mirrored?: boolean, signal?: AbortSignal) => Promise<boolean | undefined>;
   /**
@@ -145,8 +148,15 @@ function BluetoothAutoSender({
   reassertNonce: number;
   // One-shot seed: what connect() already wrote as initialFrames, so the
   // freshly mounted AutoSender doesn't repeat a byte-identical first send.
-  connectInitialSendRef: React.MutableRefObject<{ frames: string; mirrored: boolean } | null>;
+  connectInitialSendRef: React.MutableRefObject<{ frames: string; mirrored: boolean; colorSignature: string } | null>;
+  colorSignature: string;
 }) {
+  type AutoSendRequest = {
+    item: ClimbQueueItem;
+    sendFramesToBoard: (frames: string, mirrored?: boolean, signal?: AbortSignal) => Promise<boolean | undefined>;
+    colorSignature: string;
+  };
+
   const { state } = useQueue();
   const { currentClimbQueueItem } = state;
   const onWallConfirmedRef = useRef(onWallConfirmed);
@@ -155,11 +165,11 @@ function BluetoothAutoSender({
   }, [onWallConfirmed]);
 
   const isWritingRef = useRef(false);
-  const pendingClimbRef = useRef<ClimbQueueItem | null>(null);
+  const pendingSendRef = useRef<AutoSendRequest | null>(null);
   // The signature of the last climb actually pushed to the wall: uuid + rendered
-  // frames + mirror state. Re-broadcasts with the same signature skip the
-  // physical write (the board is idempotent, but we'd double-fire haptics);
-  // changing any of the three re-pushes.
+  // frames + mirror state + colour override state. Re-broadcasts with the same
+  // signature skip the physical write (the board is idempotent, but we'd
+  // double-fire haptics); changing any piece re-pushes.
   const lastSentSignatureRef = useRef<string | null>(null);
   // Last `reassertNonce` acted on. When the incoming nonce differs, a one-shot
   // re-push is requested so the current climb re-fires even if unchanged.
@@ -198,19 +208,25 @@ function BluetoothAutoSender({
       reassertPendingRef.current = true;
     }
 
+    const sendRequest: AutoSendRequest = {
+      item: currentClimbQueueItem,
+      sendFramesToBoard,
+      colorSignature,
+    };
+
     if (isWritingRef.current) {
-      pendingClimbRef.current = currentClimbQueueItem;
+      pendingSendRef.current = sendRequest;
       return;
     }
 
     isWritingRef.current = true;
 
     const drain = async () => {
-      let toSend: ClimbQueueItem | null = currentClimbQueueItem;
+      let toSend: AutoSendRequest | null = sendRequest;
       try {
         while (toSend) {
           if (signal?.aborted) return;
-          const item = toSend;
+          const { item, sendFramesToBoard: requestSendFramesToBoard, colorSignature: requestColorSignature } = toSend;
 
           // connect() may have just written these exact frames as its
           // initialFrames (connect-and-light flows like the play drawer).
@@ -224,9 +240,10 @@ function BluetoothAutoSender({
             if (
               lastSentSignatureRef.current === null &&
               connectSend.frames === item.climb.frames &&
-              connectSend.mirrored === !!item.climb.mirrored
+              connectSend.mirrored === !!item.climb.mirrored &&
+              connectSend.colorSignature === requestColorSignature
             ) {
-              lastSentSignatureRef.current = `${item.climb.uuid}::${item.climb.frames}::${item.climb.mirrored ? 1 : 0}`;
+              lastSentSignatureRef.current = `${item.climb.uuid}::${item.climb.frames}::${item.climb.mirrored ? 1 : 0}::${requestColorSignature}`;
             }
           }
 
@@ -238,20 +255,20 @@ function BluetoothAutoSender({
             lastSentSignatureRef.current = null;
           }
 
-          // Deduplicate byte-identical re-broadcasts (same climb, frames and
-          // mirror). The board is idempotent so a re-send is functionally fine,
-          // but we'd double-fire haptics. A mirror toggle or hold edit changes
-          // the signature and re-pushes.
-          const sendSignature = `${item.climb.uuid}::${item.climb.frames}::${item.climb.mirrored ? 1 : 0}`;
+          // Deduplicate byte-identical re-broadcasts (same climb, frames,
+          // mirror, and colours). The board is idempotent so a re-send is
+          // functionally fine, but we'd double-fire haptics. A mirror toggle,
+          // hold edit, or colour change updates the signature and re-pushes.
+          const sendSignature = `${item.climb.uuid}::${item.climb.frames}::${item.climb.mirrored ? 1 : 0}::${requestColorSignature}`;
           if (sendSignature === lastSentSignatureRef.current) {
             onWallConfirmedRef.current(item);
-            toSend = pendingClimbRef.current;
-            pendingClimbRef.current = null;
+            toSend = pendingSendRef.current;
+            pendingSendRef.current = null;
             continue;
           }
 
           try {
-            const result = await sendFramesToBoard(item.climb.frames, !!item.climb.mirrored, signal);
+            const result = await requestSendFramesToBoard(item.climb.frames, !!item.climb.mirrored, signal);
 
             // After the await, the AutoSender may have unmounted — skip
             // post-send side effects.
@@ -267,8 +284,8 @@ function BluetoothAutoSender({
             console.error('Error sending climb to board:', error);
           }
 
-          toSend = pendingClimbRef.current;
-          pendingClimbRef.current = null;
+          toSend = pendingSendRef.current;
+          pendingSendRef.current = null;
         }
       } finally {
         isWritingRef.current = false;
@@ -276,7 +293,7 @@ function BluetoothAutoSender({
     };
 
     void drain();
-  }, [currentClimbQueueItem, sendFramesToBoard, reassertNonce]);
+  }, [currentClimbQueueItem, sendFramesToBoard, reassertNonce, colorSignature]);
 
   return null;
 }
@@ -314,6 +331,8 @@ export function BluetoothProvider({
   } = useBoardPresenceControls();
   const { currentClimb: wallCurrentClimb } = useBoardPresenceCurrent();
   const { showUndoWallChangeSnackbar } = useQueueSnackbar();
+  const { overrides: holdColorOverrides, signature: holdColorSignature } = useHoldColorOverrides();
+  const bluetoothColorOverrides = useMemo(() => getBluetoothColorOverrides(holdColorOverrides), [holdColorOverrides]);
 
   // Mirror the board config props so the empty-dep-ish connect callback resolves
   // the serial against the board currently in view without churning identity.
@@ -633,6 +652,7 @@ export function BluetoothProvider({
     boardUuid,
     holdsData,
     analyticsBoardId: presenceBoardId,
+    ledColorOverrides: bluetoothColorOverrides,
     onConnectSuccess: handleConnectSuccess,
   });
 
@@ -962,6 +982,7 @@ export function BluetoothProvider({
           onWallConfirmed={handleWallConfirmed}
           reassertNonce={reassertNonce}
           connectInitialSendRef={connectInitialSendRef}
+          colorSignature={holdColorSignature}
         />
       )}
       {children}

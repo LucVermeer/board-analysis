@@ -17,6 +17,7 @@ import { ListRow } from '../../../src/components/ListRow';
 import { SwitchRow } from '../../../src/components/SwitchRow';
 import { SectionHeader } from '../../../src/components/SectionHeader';
 import { SegmentedControl } from '../../../src/components/SegmentedControl';
+import { HoldColorAccessibilitySection } from '../../../src/components/settings/HoldColorAccessibilitySection';
 import { useSessionRecordingPreference } from '../../../src/lib/session-recording-preference';
 import { setSessionRecordingEnabled } from '../../../src/lib/analytics';
 import { isPreviewBuild } from '../../../src/lib/eas-api';
@@ -166,6 +167,8 @@ export default function MoreScreen() {
           </Text>
         </View>
       </View>
+
+      <HoldColorAccessibilitySection />
 
       <View style={styles.section}>
         <SectionHeader title={t('mobile.more.language.title')} />

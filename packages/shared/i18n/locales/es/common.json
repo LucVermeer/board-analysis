@@ -210,6 +210,32 @@
       "development": "Desarrollo",
       "metroServersTitle": "Servidores Metro",
       "metroServersSubtitle": "Cambia entre bundlers de Tailnet",
+      "accessibility": {
+        "title": "Accesibilidad",
+        "description": "Elige colores de presas que sean más fáciles de distinguir. Predeterminado usa los colores normales de cada tabla y no envía cambios por Bluetooth.",
+        "resetAll": "Restablecer colores de presas",
+        "save": "Guardar color",
+        "rowAccessibility": "{{role}}, {{mode}}",
+        "pickerSubtitle": "Usa cualquier color RGB.",
+        "modeLabel": "Modo de color de presa",
+        "defaultCopy": "Boardsesh usará el color predeterminado de este tipo de presa y lo omitirá en los cambios de Bluetooth.",
+        "invalidRgb": "Usa números del 0 al 255.",
+        "mode": {
+          "default": "Predeterminado",
+          "user": "Color personalizado"
+        },
+        "channels": {
+          "red": "Rojo",
+          "green": "Verde",
+          "blue": "Azul"
+        },
+        "roles": {
+          "starting": "Inicio",
+          "hand": "Medio",
+          "finish": "Final",
+          "foot": "Pie"
+        }
+      },
       "appearance": {
         "title": "Apariencia",
         "system": "Sistema",

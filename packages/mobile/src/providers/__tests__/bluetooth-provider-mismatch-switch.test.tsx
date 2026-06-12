@@ -40,7 +40,7 @@ const bluetooth = vi.hoisted(() => {
       sendFramesToBoard: vi.fn(async () => true as boolean | undefined),
       pickerState: null as PickerState | null,
       reconnectSerialForCurrentBoard: null,
-      connectInitialSendRef: { current: null as { frames: string; mirrored: boolean } | null },
+      connectInitialSendRef: { current: null as { frames: string; mirrored: boolean; colorSignature: string } | null },
     },
     useBoardBluetooth: vi.fn((options: BluetoothHookOptions) => {
       mock.options = options;
