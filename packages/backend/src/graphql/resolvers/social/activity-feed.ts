@@ -1,4 +1,4 @@
-import { eq, and, desc, sql } from 'drizzle-orm';
+import { eq, and, desc, sql, or, isNull } from 'drizzle-orm';
 import type { ConnectionContext } from '@boardsesh/shared-schema';
 import { db } from '../../../db/client';
 import * as dbSchema from '@boardsesh/db/schema';
@@ -6,7 +6,7 @@ import { requireAuthenticated, validateInput, isNoMatchClimb } from '../shared/h
 import { ActivityFeedInputSchema } from '../../../validation/schemas';
 import { encodeCursor, decodeCursor } from '../../../utils/feed-cursor';
 
-function mapFeedItemToGraphQL(row: typeof dbSchema.feedItems.$inferSelect) {
+function mapFeedItemToGraphQL(row: typeof dbSchema.feedItems.$inferSelect, commentCount = 0) {
   const meta = row.metadata || {};
   return {
     id: String(row.id),
@@ -35,8 +35,35 @@ function mapFeedItemToGraphQL(row: typeof dbSchema.feedItems.$inferSelect) {
     quality: (meta.quality as number) ?? null,
     attemptCount: (meta.attemptCount as number) ?? null,
     comment: (meta.comment as string) ?? null,
+    commentCount,
     createdAt: row.createdAt instanceof Date ? row.createdAt.toISOString() : String(row.createdAt),
   };
+}
+
+async function getCommentCountMap(rows: (typeof dbSchema.feedItems.$inferSelect)[]): Promise<Map<string, number>> {
+  const countableRows = rows.filter((row) => row.entityType === 'tick' || row.entityType === 'climb');
+  if (countableRows.length === 0) return new Map();
+
+  const commentRows = await db
+    .select({
+      entityType: dbSchema.comments.entityType,
+      entityId: dbSchema.comments.entityId,
+      commentCount: sql<number>`COUNT(*)::int`,
+    })
+    .from(dbSchema.comments)
+    .where(
+      and(
+        isNull(dbSchema.comments.deletedAt),
+        or(
+          ...countableRows.map((row) =>
+            and(eq(dbSchema.comments.entityType, row.entityType), eq(dbSchema.comments.entityId, row.entityId)),
+          ),
+        ),
+      ),
+    )
+    .groupBy(dbSchema.comments.entityType, dbSchema.comments.entityId);
+
+  return new Map(commentRows.map((row) => [`${row.entityType}:${row.entityId}`, Number(row.commentCount)]));
 }
 
 type TickJoinRow = {
@@ -141,7 +168,10 @@ export const activityFeedQueries = {
 
     const hasMore = rows.length > limit;
     const resultRows = hasMore ? rows.slice(0, limit) : rows;
-    const items = resultRows.map(mapFeedItemToGraphQL);
+    const commentCountMap = await getCommentCountMap(resultRows);
+    const items = resultRows.map((row) =>
+      mapFeedItemToGraphQL(row, commentCountMap.get(`${row.entityType}:${row.entityId}`) ?? 0),
+    );
 
     let nextCursor: string | null = null;
     if (hasMore && resultRows.length > 0) {

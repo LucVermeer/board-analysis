@@ -79,7 +79,7 @@ function truncateCommentBody(body: string): string {
   return body.length > COMMENT_PREVIEW_LENGTH ? `${body.slice(0, COMMENT_PREVIEW_LENGTH)}...` : body;
 }
 
-async function buildNewClimbMetadata(event: SocialEvent): Promise<Record<string, unknown>> {
+async function buildNewClimbMetadata(event: SocialEvent): Promise<Record<string, unknown> | null> {
   const metadata = buildFeedItemMetadata(event);
   const boardType = event.metadata.boardType || (metadata.boardType as string | undefined);
   const climbConditions = [eq(dbSchema.boardClimbs.uuid, event.entityId)];
@@ -96,6 +96,8 @@ async function buildNewClimbMetadata(event: SocialEvent): Promise<Record<string,
       angle: dbSchema.boardClimbs.angle,
       frames: dbSchema.boardClimbs.frames,
       description: dbSchema.boardClimbs.description,
+      isDraft: dbSchema.boardClimbs.isDraft,
+      isListed: dbSchema.boardClimbs.isListed,
       difficultyName: dbSchema.boardDifficultyGrades.boulderName,
     })
     .from(dbSchema.boardClimbs)
@@ -117,23 +119,25 @@ async function buildNewClimbMetadata(event: SocialEvent): Promise<Record<string,
     .where(and(...climbConditions))
     .limit(1);
 
+  if (!climb || climb.isDraft === true || climb.isListed === false) return null;
+
   const actorMetadata = await getActorMetadata(event.actorId);
-  const setterUsername = (metadata.setterUsername as string | undefined) || climb?.setterUsername || null;
+  const setterUsername = (metadata.setterUsername as string | undefined) || climb.setterUsername || null;
 
   return {
     ...metadata,
     ...actorMetadata,
     actorDisplayName: metadata.actorDisplayName || actorMetadata.actorDisplayName || setterUsername,
     actorAvatarUrl: metadata.actorAvatarUrl || actorMetadata.actorAvatarUrl || null,
-    climbName: metadata.climbName || climb?.name || null,
+    climbName: metadata.climbName || climb.name || null,
     climbUuid: metadata.climbUuid || event.entityId,
-    boardType: metadata.boardType || climb?.boardType || boardType || null,
-    layoutId: metadata.layoutId || climb?.layoutId || null,
+    boardType: metadata.boardType || climb.boardType || boardType || null,
+    layoutId: metadata.layoutId || climb.layoutId || null,
     setterUsername,
-    angle: metadata.angle || climb?.angle || null,
-    frames: metadata.frames || climb?.frames || null,
-    difficultyName: metadata.difficultyName || climb?.difficultyName || null,
-    isNoMatch: metadata.isNoMatch || isNoMatchClimb(climb?.description),
+    angle: metadata.angle ?? climb.angle ?? null,
+    frames: metadata.frames || climb.frames || null,
+    difficultyName: metadata.difficultyName || climb.difficultyName || null,
+    isNoMatch: metadata.isNoMatch || isNoMatchClimb(climb.description),
   };
 }
 
@@ -151,6 +155,7 @@ async function getCommentContextMetadata(entityType: string, entityId: string): 
         comment: dbSchema.boardseshTicks.comment,
         isMirror: dbSchema.boardseshTicks.isMirror,
         isBenchmark: dbSchema.boardseshTicks.isBenchmark,
+        boardUuid: dbSchema.userBoards.uuid,
         climbName: dbSchema.boardClimbs.name,
         layoutId: dbSchema.boardClimbs.layoutId,
         frames: dbSchema.boardClimbs.frames,
@@ -166,6 +171,7 @@ async function getCommentContextMetadata(entityType: string, entityId: string): 
           eq(dbSchema.boardClimbs.boardType, dbSchema.boardseshTicks.boardType),
         ),
       )
+      .leftJoin(dbSchema.userBoards, eq(dbSchema.userBoards.id, dbSchema.boardseshTicks.boardId))
       .leftJoin(
         dbSchema.boardDifficultyGrades,
         and(
@@ -189,6 +195,7 @@ async function getCommentContextMetadata(entityType: string, entityId: string): 
       comment: tickContext.comment,
       isMirror: tickContext.isMirror ?? false,
       isBenchmark: tickContext.isBenchmark ?? false,
+      boardUuid: tickContext.boardUuid,
       climbName: tickContext.climbName,
       layoutId: tickContext.layoutId,
       frames: tickContext.frames,
@@ -351,6 +358,8 @@ export async function fanoutFeedItems(event: SocialEvent): Promise<void> {
  */
 export async function fanoutNewClimbFeedItems(event: SocialEvent): Promise<void> {
   const metadata = await buildNewClimbMetadata(event);
+  if (!metadata) return;
+
   const setterUsername = metadata.setterUsername as string | null | undefined;
   const [userFollowerIds, setterFollowerIds] = await Promise.all([
     getUserFollowerIds(event.actorId),
@@ -383,6 +392,7 @@ export async function fanoutCommentFeedItems(event: SocialEvent): Promise<void> 
 
   const metadata = await buildCommentMetadata(event);
   if (!metadata) return;
+  const boardUuid = (metadata.boardUuid as string | null | undefined) || event.metadata.boardUuid || null;
 
   const rows = recipientIds.map((recipientId) => ({
     recipientId,
@@ -390,7 +400,7 @@ export async function fanoutCommentFeedItems(event: SocialEvent): Promise<void> 
     type: 'comment' as const,
     entityType: 'comment' as SocialEntityType,
     entityId: commentUuid,
-    boardUuid: event.metadata.boardUuid || null,
+    boardUuid,
     metadata,
   }));
 

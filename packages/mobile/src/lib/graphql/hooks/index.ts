@@ -465,6 +465,7 @@ export function useAttachBetaLink() {
       }),
     onSuccess: (_data, vars) => {
       void queryClient.invalidateQueries({ queryKey: ['betaLinks', vars.boardType, vars.climbUuid] });
+      void queryClient.invalidateQueries({ queryKey: ['recentBetaLinks'] });
     },
   });
 }
@@ -483,7 +484,7 @@ export {
   useSessionGroupedFeed,
 } from './use-you-data';
 export { useYouProfileData } from './use-you-profile-data';
-export { useVote, useBulkVoteSummaries, useComments, useAddComment } from './use-social';
+export { useVote, useBulkVoteSummaries, useChunkedBulkVoteSummaries, useComments, useAddComment } from './use-social';
 export { useSessionDetail, useSessionPreview } from './use-session-detail';
 export { useDeleteAccountInfo, useDeleteAccount } from './use-delete-account';
 export {

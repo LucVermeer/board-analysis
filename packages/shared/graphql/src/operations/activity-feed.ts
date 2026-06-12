@@ -35,6 +35,7 @@ export const GET_ACTIVITY_FEED = gql`
         quality
         attemptCount
         comment
+        commentCount
         createdAt
       }
       cursor

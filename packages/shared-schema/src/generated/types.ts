@@ -58,6 +58,8 @@ export type ActivityFeedItem = {
   comment?: Maybe<Scalars['String']['output']>;
   /** Comment body preview */
   commentBody?: Maybe<Scalars['String']['output']>;
+  /** Number of comments on the social entity */
+  commentCount?: Maybe<Scalars['Int']['output']>;
   /** When this feed item was created (ISO 8601) */
   createdAt: Scalars['String']['output'];
   /** Difficulty rating */
@@ -6233,6 +6235,7 @@ export type ActivityFeedItemResolvers<
   climbUuid?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   comment?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   commentBody?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  commentCount?: Resolver<Maybe<ResolversTypes['Int']>, ParentType, ContextType>;
   createdAt?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   difficulty?: Resolver<Maybe<ResolversTypes['Int']>, ParentType, ContextType>;
   difficultyName?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;

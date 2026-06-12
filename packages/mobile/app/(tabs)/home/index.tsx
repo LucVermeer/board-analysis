@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { Linking, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { useQueryClient } from '@tanstack/react-query';
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
@@ -20,7 +21,7 @@ import { FeedSocialRow } from '../../../src/components/you/FeedSocialRow';
 import { CommentSheet } from '../../../src/components/you/CommentSheet';
 import {
   useActivityFeed,
-  useBulkVoteSummaries,
+  useChunkedBulkVoteSummaries,
   useRecentBetaLinks,
   type RecentBetaVideo,
 } from '../../../src/lib/graphql/hooks';
@@ -116,28 +117,29 @@ function useActivitySummaries(items: ActivityFeedItem[], enabled: boolean): Acti
     [items],
   );
 
-  const tickSummaries = useBulkVoteSummaries('tick', tickEntityIds, enabled && tickEntityIds.length > 0);
-  const climbSummaries = useBulkVoteSummaries('climb', climbEntityIds, enabled && climbEntityIds.length > 0);
+  const tickSummaries = useChunkedBulkVoteSummaries('tick', tickEntityIds, enabled && tickEntityIds.length > 0);
+  const climbSummaries = useChunkedBulkVoteSummaries('climb', climbEntityIds, enabled && climbEntityIds.length > 0);
 
   return useMemo(() => {
     const ticks = new Map<string, VoteSummary>();
     const climbs = new Map<string, VoteSummary>();
 
-    for (const summary of tickSummaries.data ?? []) {
+    for (const summary of tickSummaries) {
       ticks.set(summary.entityId, { upvotes: summary.upvotes, userVote: summary.userVote });
     }
-    for (const summary of climbSummaries.data ?? []) {
+    for (const summary of climbSummaries) {
       climbs.set(summary.entityId, { upvotes: summary.upvotes, userVote: summary.userVote });
     }
 
     return { ticks, climbs };
-  }, [tickSummaries.data, climbSummaries.data]);
+  }, [tickSummaries, climbSummaries]);
 }
 
 export default function HomeTab() {
   const { t } = useTranslation('feed');
   const { t: tCommon } = useTranslation('common');
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { isAuthenticated } = useAuth();
   const { systemColors, brandColors } = useTheme();
   const bottomChrome = useBottomChromeMetrics();
@@ -172,8 +174,9 @@ export default function HomeTab() {
 
   const handleRefresh = useCallback(() => {
     void betaVideos.refetch();
+    void queryClient.invalidateQueries({ queryKey: ['bulkVoteSummaries'] });
     if (isAuthenticated) void feed.refetch();
-  }, [betaVideos, feed, isAuthenticated]);
+  }, [betaVideos, feed, isAuthenticated, queryClient]);
 
   const renderItem = useCallback(
     ({ item }: { item: ActivityFeedItem }) => (
@@ -400,34 +403,36 @@ function RecentBetaCard({
   }, [showToast, t, video.betaLink.link]);
 
   return (
-    <Pressable
-      onPress={handleOpenVideo}
-      accessibilityRole="link"
-      accessibilityLabel={t('mobile.home.betaCardLabel')}
-      style={({ pressed }) => [styles.betaCard, pressed && styles.pressed]}
-    >
-      {video.betaLink.thumbnail && !imageFailed ? (
-        <Image
-          source={{ uri: video.betaLink.thumbnail }}
-          style={styles.betaThumbnail}
-          contentFit="cover"
-          transition={150}
-          recyclingKey={video.betaLink.thumbnail}
-          onError={() => setImageFailed(true)}
-          accessibilityIgnoresInvertColors
-          allowDownscaling={false}
-        />
-      ) : (
-        <View style={[styles.betaThumbnail, styles.thumbnailFallback]}>
-          <Icon name="video" size={28} color={iosSystemColors.systemGray} />
-        </View>
-      )}
+    <View style={styles.betaCard}>
+      <Pressable
+        onPress={handleOpenVideo}
+        accessibilityRole="link"
+        accessibilityLabel={t('mobile.home.betaCardLabel')}
+        style={({ pressed }) => [styles.betaVideoSurface, pressed && styles.pressed]}
+      >
+        {video.betaLink.thumbnail && !imageFailed ? (
+          <Image
+            source={{ uri: video.betaLink.thumbnail }}
+            style={styles.betaThumbnail}
+            contentFit="cover"
+            transition={150}
+            recyclingKey={video.betaLink.thumbnail}
+            onError={() => setImageFailed(true)}
+            accessibilityIgnoresInvertColors
+            allowDownscaling={false}
+          />
+        ) : (
+          <View style={[styles.betaThumbnail, styles.thumbnailFallback]}>
+            <Icon name="video" size={28} color={iosSystemColors.systemGray} />
+          </View>
+        )}
 
-      {platform ? (
-        <View style={styles.platformBadge}>
-          <Icon name={platform.icon} size={12} color={iosSystemColors.white} />
-        </View>
-      ) : null}
+        {platform ? (
+          <View style={styles.platformBadge}>
+            <Icon name={platform.icon} size={12} color={iosSystemColors.white} />
+          </View>
+        ) : null}
+      </Pressable>
 
       <View style={styles.betaCardFooter}>
         <Pressable
@@ -446,7 +451,7 @@ function RecentBetaCard({
           </Text>
         ) : null}
       </View>
-    </Pressable>
+    </View>
   );
 }
 
@@ -477,50 +482,56 @@ function ActivityCard({
 
   return (
     <View style={styles.cardOuter}>
-      <Card onPress={canOpenClimb ? () => onOpenClimb(item) : undefined}>
-        <View style={styles.activityHeader}>
-          <Avatar uri={item.actorAvatarUrl} name={actorName} size={40} />
-          <View style={styles.activityHeaderText}>
-            <Text variant="headline" numberOfLines={1}>
-              {actorName}
-            </Text>
-            <Text variant="footnote" color={systemColors.secondaryLabel} numberOfLines={1}>
-              {activityLine}
-            </Text>
-          </View>
-        </View>
-
-        <View style={styles.activityBody}>
-          {boardConfig && item.frames ? (
-            <ClimbListThumbnail
-              frames={item.frames}
-              boardName={boardConfig.boardName as unknown as BoardName}
-              layoutId={boardConfig.layoutId}
-              sizeId={boardConfig.sizeId}
-              setIds={boardConfig.setIds.join(',')}
-              mirrored={item.isMirror === true}
-            />
-          ) : (
-            <View style={[styles.activityThumbnailFallback, { backgroundColor: systemColors.fill }]}>
-              <Icon name="lightbulb" size={24} color={systemColors.tertiaryLabel} />
+      <Card>
+        <Pressable
+          onPress={canOpenClimb ? () => onOpenClimb(item) : undefined}
+          disabled={!canOpenClimb}
+          accessibilityRole={canOpenClimb ? 'button' : undefined}
+        >
+          <View style={styles.activityHeader}>
+            <Avatar uri={item.actorAvatarUrl} name={actorName} size={40} />
+            <View style={styles.activityHeaderText}>
+              <Text variant="headline" numberOfLines={1}>
+                {actorName}
+              </Text>
+              <Text variant="footnote" color={systemColors.secondaryLabel} numberOfLines={1}>
+                {activityLine}
+              </Text>
             </View>
-          )}
-          <View style={styles.activityDetails}>
-            <Text variant="headline" numberOfLines={2}>
-              {climbName}
-            </Text>
-            <ActivityMeta item={item} />
-            {item.commentBody ? (
-              <Text variant="subheadline" color={systemColors.secondaryLabel} numberOfLines={3} style={styles.quote}>
-                {item.commentBody}
-              </Text>
-            ) : item.comment ? (
-              <Text variant="subheadline" color={systemColors.secondaryLabel} numberOfLines={3} style={styles.quote}>
-                {item.comment}
-              </Text>
-            ) : null}
           </View>
-        </View>
+
+          <View style={styles.activityBody}>
+            {boardConfig && item.frames ? (
+              <ClimbListThumbnail
+                frames={item.frames}
+                boardName={boardConfig.boardName as unknown as BoardName}
+                layoutId={boardConfig.layoutId}
+                sizeId={boardConfig.sizeId}
+                setIds={boardConfig.setIds.join(',')}
+                mirrored={item.isMirror === true}
+              />
+            ) : (
+              <View style={[styles.activityThumbnailFallback, { backgroundColor: systemColors.fill }]}>
+                <Icon name="lightbulb" size={24} color={systemColors.tertiaryLabel} />
+              </View>
+            )}
+            <View style={styles.activityDetails}>
+              <Text variant="headline" numberOfLines={2}>
+                {climbName}
+              </Text>
+              <ActivityMeta item={item} />
+              {item.commentBody ? (
+                <Text variant="subheadline" color={systemColors.secondaryLabel} numberOfLines={3} style={styles.quote}>
+                  {item.commentBody}
+                </Text>
+              ) : item.comment ? (
+                <Text variant="subheadline" color={systemColors.secondaryLabel} numberOfLines={3} style={styles.quote}>
+                  {item.comment}
+                </Text>
+              ) : null}
+            </View>
+          </View>
+        </Pressable>
 
         {item.entityType === 'tick' || item.entityType === 'climb' ? (
           <FeedSocialRow
@@ -528,7 +539,7 @@ function ActivityCard({
             entityType={item.entityType}
             upvotes={summary?.upvotes ?? 0}
             userVote={summary?.userVote ?? null}
-            commentCount={0}
+            commentCount={item.commentCount ?? 0}
             onOpenComments={(entityId) => onOpenComments(entityId, item.entityType)}
           />
         ) : null}
@@ -617,6 +628,10 @@ const styles = StyleSheet.create({
   pressed: {
     opacity: 0.85,
     transform: [{ scale: 0.97 }],
+  },
+  betaVideoSurface: {
+    width: '100%',
+    height: '100%',
   },
   betaThumbnail: {
     width: '100%',
