@@ -665,7 +665,7 @@ export const socialBoardQueries = {
    * Unauthenticated callers receive stripped responses (no GPS/owner data).
    */
   boardsBySerialNumbers: async (_: unknown, { serialNumbers }: { serialNumbers: string[] }, ctx: ConnectionContext) => {
-    await applyRateLimit(ctx, 20);
+    await applyRateLimit(ctx, 20, 'boardsBySerialNumbers');
 
     // Behaviour change: this used to silently `.slice(0, 20)` on overflow, now
     // it throws via Zod (`SerialNumberLookupSchema.max(20)`). Callers MUST cap
@@ -741,7 +741,7 @@ export const socialBoardQueries = {
    */
   myBoardSerialConfigs: async (_: unknown, { serialNumbers }: { serialNumbers: string[] }, ctx: ConnectionContext) => {
     requireAuthenticated(ctx);
-    await applyRateLimit(ctx, 20);
+    await applyRateLimit(ctx, 20, 'myBoardSerialConfigs');
 
     const validated = validateInput(SerialNumberLookupSchema, { serialNumbers }, 'serialNumbers');
     const cleaned = validated.serialNumbers.filter((s) => s.length > 0);
@@ -840,7 +840,7 @@ export const socialBoardQueries = {
    * Search public boards
    */
   searchBoards: async (_: unknown, { input }: { input: unknown }, ctx: ConnectionContext) => {
-    await applyRateLimit(ctx, 20);
+    await applyRateLimit(ctx, 20, 'searchBoards');
     const validatedInput = validateInput(SearchBoardsInputSchema, input, 'input');
     const { query, boardType, latitude, longitude, radiusKm } = validatedInput;
     const limit = validatedInput.limit ?? 20;
@@ -1321,7 +1321,7 @@ export const socialBoardMutations = {
    */
   createBoard: async (_: unknown, { input }: { input: unknown }, ctx: ConnectionContext) => {
     requireAuthenticated(ctx);
-    await applyRateLimit(ctx, 10);
+    await applyRateLimit(ctx, 10, 'createBoard');
 
     const validatedInput = validateInput(CreateBoardInputSchema, input, 'input');
     const userId = ctx.userId!;
@@ -1510,7 +1510,7 @@ export const socialBoardMutations = {
    */
   updateBoard: async (_: unknown, { input }: { input: unknown }, ctx: ConnectionContext) => {
     requireAuthenticated(ctx);
-    await applyRateLimit(ctx, 20);
+    await applyRateLimit(ctx, 20, 'updateBoard');
 
     const validatedInput = validateInput(UpdateBoardInputSchema, input, 'input');
     const userId = ctx.userId!;
@@ -1656,7 +1656,7 @@ export const socialBoardMutations = {
    */
   deleteBoard: async (_: unknown, { boardUuid }: { boardUuid: string }, ctx: ConnectionContext): Promise<boolean> => {
     requireAuthenticated(ctx);
-    await applyRateLimit(ctx, 10);
+    await applyRateLimit(ctx, 10, 'deleteBoard');
 
     validateInput(UUIDSchema, boardUuid, 'boardUuid');
     const userId = ctx.userId!;
@@ -1689,7 +1689,7 @@ export const socialBoardMutations = {
     ctx: ConnectionContext,
   ): Promise<boolean> => {
     requireAuthenticated(ctx);
-    await applyRateLimit(ctx, 20);
+    await applyRateLimit(ctx, 20, 'followBoard');
 
     const validatedInput = validateInput(FollowBoardInputSchema, input, 'input');
     const userId = ctx.userId!;
@@ -1733,7 +1733,7 @@ export const socialBoardMutations = {
     ctx: ConnectionContext,
   ): Promise<boolean> => {
     requireAuthenticated(ctx);
-    await applyRateLimit(ctx, 20);
+    await applyRateLimit(ctx, 20, 'unfollowBoard');
 
     const validatedInput = validateInput(FollowBoardInputSchema, input, 'input');
     const userId = ctx.userId!;

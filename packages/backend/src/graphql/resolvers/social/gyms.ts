@@ -451,7 +451,7 @@ export const socialGymQueries = {
 export const socialGymMutations = {
   createGym: async (_: unknown, { input }: { input: unknown }, ctx: ConnectionContext) => {
     requireAuthenticated(ctx);
-    await applyRateLimit(ctx, 10);
+    await applyRateLimit(ctx, 10, 'createGym');
 
     const validatedInput = validateInput(CreateGymInputSchema, input, 'input');
     const userId = ctx.userId!;
@@ -502,7 +502,7 @@ export const socialGymMutations = {
 
   updateGym: async (_: unknown, { input }: { input: unknown }, ctx: ConnectionContext) => {
     requireAuthenticated(ctx);
-    await applyRateLimit(ctx, 20);
+    await applyRateLimit(ctx, 20, 'updateGym');
 
     const validatedInput = validateInput(UpdateGymInputSchema, input, 'input');
     const userId = ctx.userId!;
@@ -563,7 +563,7 @@ export const socialGymMutations = {
 
   deleteGym: async (_: unknown, { gymUuid }: { gymUuid: string }, ctx: ConnectionContext): Promise<boolean> => {
     requireAuthenticated(ctx);
-    await applyRateLimit(ctx, 10);
+    await applyRateLimit(ctx, 10, 'deleteGym');
 
     validateInput(UUIDSchema, gymUuid, 'gymUuid');
     const userId = ctx.userId!;
@@ -593,7 +593,7 @@ export const socialGymMutations = {
 
   addGymMember: async (_: unknown, { input }: { input: unknown }, ctx: ConnectionContext): Promise<boolean> => {
     requireAuthenticated(ctx);
-    await applyRateLimit(ctx, 20);
+    await applyRateLimit(ctx, 20, 'addGymMember');
 
     const validatedInput = validateInput(AddGymMemberInputSchema, input, 'input');
     const userId = ctx.userId!;
@@ -625,7 +625,7 @@ export const socialGymMutations = {
 
   removeGymMember: async (_: unknown, { input }: { input: unknown }, ctx: ConnectionContext): Promise<boolean> => {
     requireAuthenticated(ctx);
-    await applyRateLimit(ctx, 20);
+    await applyRateLimit(ctx, 20, 'removeGymMember');
 
     const validatedInput = validateInput(RemoveGymMemberInputSchema, input, 'input');
     const userId = ctx.userId!;
@@ -646,7 +646,7 @@ export const socialGymMutations = {
 
   followGym: async (_: unknown, { input }: { input: unknown }, ctx: ConnectionContext): Promise<boolean> => {
     requireAuthenticated(ctx);
-    await applyRateLimit(ctx, 20);
+    await applyRateLimit(ctx, 20, 'followGym');
 
     const validatedInput = validateInput(FollowGymInputSchema, input, 'input');
     const userId = ctx.userId!;
@@ -682,7 +682,7 @@ export const socialGymMutations = {
 
   unfollowGym: async (_: unknown, { input }: { input: unknown }, ctx: ConnectionContext): Promise<boolean> => {
     requireAuthenticated(ctx);
-    await applyRateLimit(ctx, 20);
+    await applyRateLimit(ctx, 20, 'unfollowGym');
 
     const validatedInput = validateInput(FollowGymInputSchema, input, 'input');
     const userId = ctx.userId!;
@@ -707,7 +707,7 @@ export const socialGymMutations = {
 
   linkBoardToGym: async (_: unknown, { input }: { input: unknown }, ctx: ConnectionContext): Promise<boolean> => {
     requireAuthenticated(ctx);
-    await applyRateLimit(ctx, 20);
+    await applyRateLimit(ctx, 20, 'linkBoardToGym');
 
     const validatedInput = validateInput(LinkBoardToGymInputSchema, input, 'input');
     const userId = ctx.userId!;

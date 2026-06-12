@@ -199,7 +199,7 @@ export const socialFollowMutations = {
     ctx: ConnectionContext,
   ): Promise<boolean> => {
     requireAuthenticated(ctx);
-    await applyRateLimit(ctx, 30, 'follow');
+    await applyRateLimit(ctx, 30, 'followUser');
 
     const validatedInput = validateInput(FollowInputSchema, input, 'input');
     const myUserId = ctx.userId!;
@@ -254,7 +254,7 @@ export const socialFollowMutations = {
     ctx: ConnectionContext,
   ): Promise<boolean> => {
     requireAuthenticated(ctx);
-    await applyRateLimit(ctx, 30, 'follow');
+    await applyRateLimit(ctx, 30, 'unfollowUser');
 
     const validatedInput = validateInput(FollowInputSchema, input, 'input');
     const myUserId = ctx.userId!;

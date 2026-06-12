@@ -48,15 +48,19 @@ export const SESSION_MEMBER_RETRY_CONFIG = {
  * `confirmClimbOnWall` and `search-climbs`.
  */
 export const RATE_LIMIT_SESSION_OP = 'session';
-export const RATE_LIMIT_SESSION = 240;
+export const RATE_LIMIT_SESSION = 360;
 export const RATE_LIMIT_PLAYBACK_OP = 'playback';
-export const RATE_LIMIT_PLAYBACK = 600;
+export const RATE_LIMIT_PLAYBACK = 900;
 export const RATE_LIMIT_JOIN_SESSION_OP = 'joinSession';
-export const RATE_LIMIT_JOIN_SESSION = 30;
+export const RATE_LIMIT_JOIN_SESSION = 120;
 export const RATE_LIMIT_CREATE_SESSION_OP = 'createSession';
-export const RATE_LIMIT_CREATE_SESSION = 10;
+export const RATE_LIMIT_CREATE_SESSION = 30;
 export const RATE_LIMIT_END_SESSION_OP = 'endSession';
-export const RATE_LIMIT_END_SESSION = 10;
+export const RATE_LIMIT_END_SESSION = 30;
+export const RATE_LIMIT_CONFIRM_CLIMB_ON_WALL_OP = 'confirmClimbOnWall';
+export const RATE_LIMIT_CONFIRM_CLIMB_ON_WALL = 120;
+export const RATE_LIMIT_SET_QUEUE_OP = 'setQueue';
+export const RATE_LIMIT_SET_QUEUE = 60;
 
 /**
  * Helper to require a session context.

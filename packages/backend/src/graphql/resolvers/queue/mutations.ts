@@ -11,6 +11,8 @@ import {
   RATE_LIMIT_SESSION_OP,
   RATE_LIMIT_PLAYBACK,
   RATE_LIMIT_PLAYBACK_OP,
+  RATE_LIMIT_SET_QUEUE,
+  RATE_LIMIT_SET_QUEUE_OP,
 } from '../shared/helpers';
 import {
   ClimbQueueItemSchema,
@@ -365,7 +367,7 @@ export const queueMutations = {
     ctx: ConnectionContext,
   ) => {
     const startTime = performance.now();
-    await applyRateLimit(ctx, 30); // Lower limit for bulk operations
+    await applyRateLimit(ctx, RATE_LIMIT_SET_QUEUE, RATE_LIMIT_SET_QUEUE_OP);
     const sessionId = requireSession(ctx);
 
     // Validate queue size to prevent memory exhaustion

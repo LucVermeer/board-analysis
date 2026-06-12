@@ -18,6 +18,8 @@ import {
   RATE_LIMIT_CREATE_SESSION_OP,
   RATE_LIMIT_END_SESSION,
   RATE_LIMIT_END_SESSION_OP,
+  RATE_LIMIT_CONFIRM_CLIMB_ON_WALL,
+  RATE_LIMIT_CONFIRM_CLIMB_ON_WALL_OP,
 } from '../shared/helpers';
 import {
   SessionIdSchema,
@@ -474,7 +476,7 @@ export const sessionMutations = {
     // 2 s picker timeout. 60/min covers worst-case rapid swiping with
     // headroom while still choking off replay storms from a misbehaving
     // client.
-    await applyRateLimit(ctx, 60, 'confirmClimbOnWall');
+    await applyRateLimit(ctx, RATE_LIMIT_CONFIRM_CLIMB_ON_WALL, RATE_LIMIT_CONFIRM_CLIMB_ON_WALL_OP);
     // Session identity comes from the WebSocket connection context (the
     // "WS-implicit" pattern used by takeControl / releaseControl) — clients
     // no longer pass `sessionId` as an argument.
