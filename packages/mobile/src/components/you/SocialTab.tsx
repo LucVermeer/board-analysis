@@ -58,6 +58,11 @@ export function SocialTab({ userId, onScroll, topInset = 0, registerScrollToTop 
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
 
   useEffect(() => {
+    if (trimmedSearchQuery.length < 2) {
+      setDebouncedSearchQuery('');
+      return;
+    }
+
     const handle = setTimeout(() => setDebouncedSearchQuery(trimmedSearchQuery), SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(handle);
   }, [trimmedSearchQuery]);
@@ -101,7 +106,8 @@ export function SocialTab({ userId, onScroll, topInset = 0, registerScrollToTop 
   const showSearchHint = mode === 'search' && trimmedSearchQuery.length < 2;
   const searchIsDebouncing =
     mode === 'search' && trimmedSearchQuery.length >= 2 && debouncedSearchQuery !== trimmedSearchQuery;
-  const canRefetchActiveQuery = mode !== 'search' || (debouncedSearchQuery.length >= 2 && !searchIsDebouncing);
+  const canRefetchActiveQuery =
+    mode !== 'search' || (trimmedSearchQuery.length >= 2 && debouncedSearchQuery === trimmedSearchQuery);
   const showInitialSpinner = searchIsDebouncing || (!showSearchHint && activeQuery.isPending && people.length === 0);
   const showError = !showSearchHint && !searchIsDebouncing && activeQuery.isError && people.length === 0;
   const isRefreshing = publicProfile.isRefetching || (canRefetchActiveQuery && activeQuery.isRefetching);
@@ -138,10 +144,11 @@ export function SocialTab({ userId, onScroll, topInset = 0, registerScrollToTop 
     ({ item }: { item: SocialPerson }) => {
       const isCurrentUser = item.id === userId;
       const isRowMutating = toggleFollow.isPending && toggleFollow.variables?.userId === item.id;
+      const displayName = item.displayName || t('mobile.unknownName');
 
       return (
         <ListRow
-          title={item.displayName || t('mobile.unknownName')}
+          title={displayName}
           subtitle={personSubtitle(item, t)}
           leading={<Avatar uri={item.avatarUrl} name={item.displayName} size={36} />}
           trailing={
@@ -151,11 +158,17 @@ export function SocialTab({ userId, onScroll, topInset = 0, registerScrollToTop 
               </Text>
             ) : (
               <Button
-                title={item.isFollowedByMe ? t('mobile.social.followingAction') : t('mobile.social.followAction')}
+                title={item.isFollowedByMe ? t('mobile.social.unfollowAction') : t('mobile.social.followAction')}
+                accessibilityLabel={
+                  item.isFollowedByMe
+                    ? t('mobile.social.unfollowUser', { name: displayName })
+                    : t('mobile.social.followUser', { name: displayName })
+                }
                 size="small"
                 variant={item.isFollowedByMe ? 'outlined' : 'filled'}
                 loading={isRowMutating}
                 disabled={isRowMutating}
+                style={styles.followButton}
                 onPress={() => handleToggleFollow(item)}
               />
             )
@@ -230,6 +243,7 @@ export function SocialTab({ userId, onScroll, topInset = 0, registerScrollToTop 
                   hitSlop={8}
                   accessibilityRole="button"
                   accessibilityLabel={t('mobile.social.clearSearch')}
+                  style={styles.clearButton}
                 >
                   <Icon name="close" size={16} color={systemColors.secondaryLabel} />
                 </Pressable>
@@ -455,6 +469,17 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 17,
     paddingVertical: 0,
+  },
+  clearButton: {
+    minWidth: 44,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: -spacing[3],
+  },
+  followButton: {
+    minWidth: 84,
+    minHeight: 44,
   },
   stateBlock: {
     alignItems: 'center',

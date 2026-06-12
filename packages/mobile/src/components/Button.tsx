@@ -13,6 +13,7 @@ type ButtonSize = 'small' | 'medium' | 'large';
 type ButtonProps = {
   title: string;
   onPress: () => void;
+  accessibilityLabel?: string;
   variant?: ButtonVariant;
   size?: ButtonSize;
   icon?: IconName;
@@ -44,6 +45,7 @@ const PAPER_MODE = { filled: 'contained', outlined: 'outlined', text: 'text' } a
 function ButtonMaterial({
   title,
   onPress,
+  accessibilityLabel,
   variant = 'filled',
   size = 'medium',
   icon,
@@ -75,7 +77,7 @@ function ButtonMaterial({
       icon={icon ? iconMap[icon].android : undefined}
       buttonColor={variant === 'filled' ? fillColor : undefined}
       textColor={variant === 'filled' ? undefined : accentColor}
-      accessibilityLabel={title}
+      accessibilityLabel={accessibilityLabel ?? title}
       // Approximate the small/medium/large ladder on Paper's single-height button.
       labelStyle={{ fontSize: config.fontSize }}
       contentStyle={{ paddingVertical: config.paddingVertical }}
@@ -90,6 +92,7 @@ function ButtonMaterial({
 function ButtonGlass({
   title,
   onPress,
+  accessibilityLabel,
   variant = 'filled',
   size = 'medium',
   icon,
@@ -140,7 +143,7 @@ function ButtonGlass({
       disabled={disabled || loading}
       accessibilityRole="button"
       accessibilityState={{ disabled: disabled || loading }}
-      accessibilityLabel={title}
+      accessibilityLabel={accessibilityLabel ?? title}
       style={[containerStyle, style]}
     >
       {icon && <Icon name={icon} size={config.iconSize} color={textColor} />}

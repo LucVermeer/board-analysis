@@ -17,9 +17,13 @@ import {
   type AddCommentMutationVariables,
   type GetBulkVoteSummariesQueryResponse,
   type GetPublicProfileQueryResponse,
+  type GetPublicProfileQueryVariables,
   type GetFollowersQueryResponse,
+  type GetFollowersQueryVariables,
   type GetFollowingQueryResponse,
+  type GetFollowingQueryVariables,
   type SearchUsersQueryResponse,
+  type SearchUsersQueryVariables,
   type FollowUserMutationResponse,
   type FollowUserMutationVariables,
   type UnfollowUserMutationResponse,
@@ -57,7 +61,12 @@ export function usePublicProfile(userId: string | undefined, enabled = true) {
   return useQuery({
     queryKey: ['publicProfile', userId],
     queryFn: async () => {
-      const response = await getHttpClient().request<GetPublicProfileQueryResponse>(GET_PUBLIC_PROFILE, { userId });
+      if (!userId) throw new Error('Cannot load a public profile without a user id.');
+      const variables: GetPublicProfileQueryVariables = { userId };
+      const response = await getHttpClient().request<GetPublicProfileQueryResponse, GetPublicProfileQueryVariables>(
+        GET_PUBLIC_PROFILE,
+        variables,
+      );
       return response.publicProfile;
     },
     enabled: enabled && !!userId,
@@ -70,9 +79,14 @@ export function useFollowers(userId: string | undefined, enabled = true) {
     queryKey: ['followers', userId],
     initialPageParam: 0,
     queryFn: async ({ pageParam }) => {
-      const response = await getHttpClient().request<GetFollowersQueryResponse>(GET_FOLLOWERS, {
-        input: { userId, limit: SOCIAL_PAGE_SIZE, offset: pageParam },
-      });
+      if (!userId) throw new Error('Cannot load followers without a user id.');
+      const variables: GetFollowersQueryVariables = {
+        input: { userId, limit: SOCIAL_PAGE_SIZE, offset: Number(pageParam) },
+      };
+      const response = await getHttpClient().request<GetFollowersQueryResponse, GetFollowersQueryVariables>(
+        GET_FOLLOWERS,
+        variables,
+      );
       return response.followers;
     },
     getNextPageParam: (lastPage, allPages) =>
@@ -87,9 +101,14 @@ export function useFollowing(userId: string | undefined, enabled = true) {
     queryKey: ['following', userId],
     initialPageParam: 0,
     queryFn: async ({ pageParam }) => {
-      const response = await getHttpClient().request<GetFollowingQueryResponse>(GET_FOLLOWING, {
-        input: { userId, limit: SOCIAL_PAGE_SIZE, offset: pageParam },
-      });
+      if (!userId) throw new Error('Cannot load following without a user id.');
+      const variables: GetFollowingQueryVariables = {
+        input: { userId, limit: SOCIAL_PAGE_SIZE, offset: Number(pageParam) },
+      };
+      const response = await getHttpClient().request<GetFollowingQueryResponse, GetFollowingQueryVariables>(
+        GET_FOLLOWING,
+        variables,
+      );
       return response.following;
     },
     getNextPageParam: (lastPage, allPages) =>
@@ -106,9 +125,14 @@ export function useSearchUsers(query: string, enabled = true) {
     queryKey: ['searchUsers', trimmedQuery],
     initialPageParam: 0,
     queryFn: async ({ pageParam }) => {
-      const response = await getHttpClient().request<SearchUsersQueryResponse>(SEARCH_USERS, {
-        input: { query: trimmedQuery, limit: SOCIAL_PAGE_SIZE, offset: pageParam },
-      });
+      if (trimmedQuery.length < 2) throw new Error('Cannot search users with fewer than 2 characters.');
+      const variables: SearchUsersQueryVariables = {
+        input: { query: trimmedQuery, limit: SOCIAL_PAGE_SIZE, offset: Number(pageParam) },
+      };
+      const response = await getHttpClient().request<SearchUsersQueryResponse, SearchUsersQueryVariables>(
+        SEARCH_USERS,
+        variables,
+      );
       return response.searchUsers;
     },
     getNextPageParam: (lastPage, allPages) =>
@@ -124,12 +148,18 @@ export function useToggleUserFollow(currentUserId: string | undefined) {
     mutationFn: async ({ userId, isFollowedByMe }: { userId: string; isFollowedByMe: boolean }) => {
       if (isFollowedByMe) {
         const variables: UnfollowUserMutationVariables = { input: { userId } };
-        const response = await getHttpClient().request<UnfollowUserMutationResponse>(UNFOLLOW_USER, variables);
+        const response = await getHttpClient().request<UnfollowUserMutationResponse, UnfollowUserMutationVariables>(
+          UNFOLLOW_USER,
+          variables,
+        );
         return response.unfollowUser;
       }
 
       const variables: FollowUserMutationVariables = { input: { userId } };
-      const response = await getHttpClient().request<FollowUserMutationResponse>(FOLLOW_USER, variables);
+      const response = await getHttpClient().request<FollowUserMutationResponse, FollowUserMutationVariables>(
+        FOLLOW_USER,
+        variables,
+      );
       return response.followUser;
     },
     onSuccess: (_data, variables) => {

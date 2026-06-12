@@ -184,7 +184,7 @@ function ProfileTopChromeGlass({
             selectedKey={activeTab}
             onSelect={onSelectTab}
             trackColor="transparent"
-            textVariant="subheadline"
+            textVariant="footnote"
             accessibilityLabel={dashboardTitle}
           />
         </View>

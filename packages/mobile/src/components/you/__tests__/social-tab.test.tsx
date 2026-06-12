@@ -54,12 +54,12 @@ vi.mock('react-i18next', () => ({
         'mobile.social.title': 'Social',
         'mobile.social.followers': 'Followers',
         'mobile.social.following': 'Following',
-        'mobile.social.findFriends': 'Find friends',
+        'mobile.social.findFriends': 'Find',
         'mobile.social.searchPlaceholder': 'Search climbers',
         'mobile.social.clearSearch': 'Clear search',
         'mobile.social.you': 'You',
         'mobile.social.followAction': 'Follow',
-        'mobile.social.followingAction': 'Following',
+        'mobile.social.unfollowAction': 'Unfollow',
         'mobile.social.emptyFollowers': 'No followers yet',
         'mobile.social.emptyFollowing': 'Not following anyone yet',
         'mobile.social.searchHint': 'Type at least 2 characters to search climbers',
@@ -67,6 +67,9 @@ vi.mock('react-i18next', () => ({
         'mobile.social.loadError': "Couldn't load climbers",
         'mobile.social.retry': 'Try again',
       };
+      const name = typeof options?.name === 'string' ? options.name : '';
+      if (key === 'mobile.social.followUser') return `Follow ${name}`;
+      if (key === 'mobile.social.unfollowUser') return `Unfollow ${name}`;
       if (key === 'mobile.social.followerCount') return `${count} follower${count === 1 ? '' : 's'}`;
       if (key === 'mobile.social.followingCount') return `${count} following`;
       if (key === 'mobile.social.recentAscents') return `${count} ascents this month`;
@@ -175,8 +178,15 @@ vi.mock('../../ActivityIndicator', () => ({
   ActivityIndicator: () => createElement('div', { 'data-spinner': 'true' }),
 }));
 vi.mock('../../Button', () => ({
-  Button: ({ title, onPress }: { title: string; onPress: () => void }) =>
-    createElement('button', { onClick: onPress }, title),
+  Button: ({
+    title,
+    onPress,
+    accessibilityLabel,
+  }: {
+    title: string;
+    onPress: () => void;
+    accessibilityLabel?: string;
+  }) => createElement('button', { onClick: onPress, 'aria-label': accessibilityLabel }, title),
 }));
 vi.mock('../../ListRow', () => ({
   ListRow: ({ title, subtitle, trailing }: { title: string; subtitle?: string; trailing?: ReactNode }) =>
@@ -280,10 +290,10 @@ describe('SocialTab', () => {
     expect(getByText('1 follower · 2 following')).toBeTruthy();
   });
 
-  it('debounces climber search and follows a result from the Find friends segment', () => {
+  it('debounces climber search and follows a result from the Find segment', () => {
     const { getByText, getByPlaceholderText } = render(<SocialTab userId="me" />);
 
-    fireEvent.click(getByText('Find friends'));
+    fireEvent.click(getByText('Find'));
     expect(getByText('Type at least 2 characters to search climbers')).toBeTruthy();
 
     fireEvent.change(getByPlaceholderText('Search climbers'), { target: { value: 'ma' } });
@@ -304,7 +314,7 @@ describe('SocialTab', () => {
   it('does not refetch disabled search queries on pull-to-refresh', () => {
     const { getByText, getByPlaceholderText } = render(<SocialTab userId="me" />);
 
-    fireEvent.click(getByText('Find friends'));
+    fireEvent.click(getByText('Find'));
     fireEvent.change(getByPlaceholderText('Search climbers'), { target: { value: 'm' } });
 
     act(() => {
@@ -315,11 +325,38 @@ describe('SocialTab', () => {
     expect(social.searchRefetch).not.toHaveBeenCalled();
   });
 
+  it('does not refetch a stale debounced search after the live query becomes too short', () => {
+    const { getByText, getByPlaceholderText } = render(<SocialTab userId="me" />);
+
+    fireEvent.click(getByText('Find'));
+    fireEvent.change(getByPlaceholderText('Search climbers'), { target: { value: 'ma' } });
+    act(() => {
+      vi.advanceTimersByTime(300);
+    });
+    expect(social.latestSearchQuery).toBe('ma');
+
+    fireEvent.change(getByPlaceholderText('Search climbers'), { target: { value: 'm' } });
+    expect(social.latestSearchQuery).toBe('');
+
+    act(() => {
+      social.refresh?.();
+    });
+
+    expect(social.publicProfileRefetch).toHaveBeenCalledOnce();
+    expect(social.searchRefetch).not.toHaveBeenCalled();
+  });
+
+  it('exposes follow and unfollow actions through accessibility labels', () => {
+    const { getByLabelText } = render(<SocialTab userId="me" />);
+
+    expect(getByLabelText('Unfollow Ada Lovelace')).toBeTruthy();
+  });
+
   it('shows a retryable error state for failed searches', () => {
     social.searchError = true;
     const { getByText, getByPlaceholderText } = render(<SocialTab userId="me" />);
 
-    fireEvent.click(getByText('Find friends'));
+    fireEvent.click(getByText('Find'));
     fireEvent.change(getByPlaceholderText('Search climbers'), { target: { value: 'ma' } });
     act(() => {
       vi.advanceTimersByTime(300);
