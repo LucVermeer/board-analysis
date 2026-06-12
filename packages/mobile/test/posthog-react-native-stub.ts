@@ -15,11 +15,15 @@
 
 export class PostHog {
   capture(): void {}
+  captureException(): void {}
   identify(): void {}
   alias(): void {}
   reset(): void {}
   screen(): void {}
   setPersonProperties(): void {}
+  flush(): Promise<void> {
+    return Promise.resolve();
+  }
   startSessionRecording(): Promise<void> {
     return Promise.resolve();
   }

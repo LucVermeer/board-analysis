@@ -13,7 +13,7 @@ import {
   type OAuthSignInResult,
 } from '../lib/auth';
 import { reset as resetAnalytics, track } from '../lib/analytics';
-import { reportError } from '../lib/sentry';
+import { reportError } from '../lib/error-reporting';
 import { setOnForcedSignOut } from '../lib/auth-interceptor';
 import { resetHttpClient } from '../lib/graphql/client';
 import { disposeWsClient } from '../lib/graphql/ws-client';

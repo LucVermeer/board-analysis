@@ -8,7 +8,7 @@ import { useToast } from '../providers/toast-provider';
 import { useAuth } from '../providers/auth-provider';
 import { useDeleteAccount, useDeleteAccountInfo } from '../lib/graphql/hooks';
 import { borderRadius, spacing } from '../theme/tokens';
-import { reportError } from '../lib/sentry';
+import { reportError } from '../lib/error-reporting';
 import { Text, type TextVariant } from './Text';
 import { SwitchRow } from './SwitchRow';
 import { Button } from './Button';

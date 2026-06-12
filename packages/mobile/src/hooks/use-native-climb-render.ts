@@ -8,7 +8,7 @@ import {
   tryGetBackgroundPathsSync,
   type BackgroundVariant,
 } from '../lib/background-image-cache';
-import { reportError } from '../lib/sentry';
+import { reportError } from '../lib/error-reporting';
 import {
   DEFAULT_HOLD_COLOR_SIGNATURE,
   getEffectiveHoldStateColor,

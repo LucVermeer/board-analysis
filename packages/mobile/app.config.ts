@@ -373,11 +373,6 @@ export default ({ config }: ConfigContext): ExpoConfig & { newArchEnabled?: bool
       // libraries and pod install fails. The plugin patches the generated
       // Podfile to add :modular_headers => true for both pods.
       './plugins/with-podfile-app-check-fix',
-      // org/project make `expo prebuild` write a valid ios/sentry.properties so
-      // the build-phase source-map + dSYM upload can find the Sentry project.
-      // The auth token is supplied via the SENTRY_AUTH_TOKEN env var in CI
-      // (never committed); url defaults to https://sentry.io/ (US region).
-      ['@sentry/react-native/expo', { organization: 'boardsesh', project: 'boardsesh' }],
     ],
     extra: {
       ...config.extra,

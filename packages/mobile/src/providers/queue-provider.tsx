@@ -75,7 +75,7 @@ import { toClimbQueueItem, type SubscriptionQueueItem } from '../lib/queue-conve
 import { toMobileSessionRuntimeEvent } from '../lib/session-runtime-event';
 import { climbToQueueItem, toClimbInput } from '../lib/climb-to-queue-item';
 import { track } from '../lib/analytics';
-import { reportError } from '../lib/sentry';
+import { reportError } from '../lib/error-reporting';
 import { extractGraphqlMessage, isGraphqlRateLimitedError } from '../lib/graphql/extract-error-message';
 import { useToast } from './toast-provider';
 import { useQueueSnackbar } from './queue-snackbar-provider';
@@ -970,10 +970,10 @@ export function QueueProvider({ children }: { children: ReactNode }) {
             return null;
           }
           // Production masks the GraphQL message to "Unexpected error", but the
-          // graphql-request ClientError still carries the HTTP status — so Sentry
-          // can distinguish network-down from a 4xx/5xx from a masked server
-          // throw. Capture it with boardPath context; the backend captures the
-          // unmasked cause for the same request (see createSession resolver).
+          // graphql-request ClientError still carries the HTTP status — so error
+          // reporting can distinguish network-down from a 4xx/5xx from a masked
+          // server throw. Capture it with boardPath context; the backend captures
+          // the unmasked cause for the same request (see createSession resolver).
           const httpStatus =
             error && typeof error === 'object' && 'response' in error
               ? ((error as { response?: { status?: number } }).response?.status ?? null)

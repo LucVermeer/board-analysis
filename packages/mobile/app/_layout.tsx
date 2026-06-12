@@ -46,7 +46,7 @@ import { Icon } from '../src/components/Icon';
 import { brandColors } from '../src/theme/colors';
 import { iosDarkColors } from '../src/theme/ios-colors';
 import { spacing } from '../src/theme/tokens';
-import { wrapWithSentry, reportError } from '../src/lib/sentry';
+import { reportError } from '../src/lib/error-reporting';
 import { loadRequiredFonts } from '../src/lib/required-fonts';
 import { AnalyticsProvider } from '../src/components/analytics/AnalyticsProvider';
 import { AnalyticsScreenTracker } from '../src/components/analytics/AnalyticsScreenTracker';
@@ -339,4 +339,4 @@ function RootLayout() {
   );
 }
 
-export default wrapWithSentry(RootLayout);
+export default RootLayout;

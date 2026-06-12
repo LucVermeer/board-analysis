@@ -117,7 +117,7 @@ describe('buildIssueDraft', () => {
     );
 
     expect(draft.marker).toBe(testFlightMarker('screenshot', 'screenshot-1'));
-    expect(draft.title).toBe('Screenshot feedback: Queue button disappears after I add a climb.');
+    expect(draft.title).toBe('Screenshot feedback: email: [redacted] Screenshot is attached.');
     expect(draft.labels).toEqual(['testflight', 'ios', 'feedback', 'screenshot']);
     expect(draft.body).toContain('<!-- testflight-feedback:screenshot:screenshot-1 -->');
     expect(draft.body).toContain('email: [redacted]');

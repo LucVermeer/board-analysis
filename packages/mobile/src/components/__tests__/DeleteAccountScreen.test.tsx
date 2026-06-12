@@ -43,7 +43,7 @@ vi.mock('react-native', () => ({
 vi.mock('expo-router', () => ({ useRouter: () => ({ back: ctrl.back }) }));
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock('graphql-request', () => ({ ClientError: class ClientError extends Error {} }));
-vi.mock('../../lib/sentry', () => ({ reportError: (...args: unknown[]) => ctrl.reportError(...args) }));
+vi.mock('../../lib/error-reporting', () => ({ reportError: (...args: unknown[]) => ctrl.reportError(...args) }));
 
 vi.mock('../../providers/theme-provider', () => ({
   useTheme: () => ({
