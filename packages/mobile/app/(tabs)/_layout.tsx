@@ -40,7 +40,7 @@ export default function TabLayout() {
   const { t } = useTranslation('common');
   const { t: tPlaylists } = useTranslation('playlists');
   const { t: tSession } = useTranslation('session');
-  const { variant } = useTheme();
+  const { variant, systemColors } = useTheme();
   const nativeAccessoryActive = useNativeAccessoryActive();
 
   // Record-tab status cue: a badge when a board is connected over Bluetooth or a
@@ -98,7 +98,12 @@ export default function TabLayout() {
     // FlashList's nested scroll view, which it can't by default — that fallback
     // lives in patches/react-native-screens@4.25.2.patch. `vp run check:mobile-patches`
     // (CI) fails the build if that patch ever stops applying after a dep bump.
-    <NativeTabs minimizeBehavior="onScrollDown">
+    <NativeTabs
+      minimizeBehavior="onScrollDown"
+      iconColor={{ default: systemColors.secondaryLabel, selected: systemColors.label }}
+      labelStyle={{ default: { color: systemColors.secondaryLabel }, selected: { color: systemColors.label } }}
+      tintColor={systemColors.label}
+    >
       {nativeAccessoryActive && hasCurrentClimb ? (
         <NativeTabs.BottomAccessory>
           <QueueBottomAccessory />

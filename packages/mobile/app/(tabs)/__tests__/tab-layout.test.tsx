@@ -43,7 +43,13 @@ vi.mock('../../../src/theme/colors', () => ({
 }));
 
 vi.mock('../../../src/providers/theme-provider', () => ({
-  useTheme: () => ({ variant: cfg.variant }),
+  useTheme: () => ({
+    variant: cfg.variant,
+    systemColors: {
+      label: '#F5F2FB',
+      secondaryLabel: '#A9A2B6',
+    },
+  }),
 }));
 
 vi.mock('../../../src/hooks/use-bottom-accessory', () => ({
@@ -88,8 +94,30 @@ vi.mock('expo-router/unstable-native-tabs', () => {
   );
 
   const NativeTabs = Object.assign(
-    ({ children, minimizeBehavior }: { children?: ReactNode; minimizeBehavior?: string }) =>
-      createElement('nav', { 'data-tabs': 'true', 'data-minimize-behavior': minimizeBehavior ?? '' }, children),
+    ({
+      children,
+      minimizeBehavior,
+      iconColor,
+      labelStyle,
+      tintColor,
+    }: {
+      children?: ReactNode;
+      minimizeBehavior?: string;
+      iconColor?: unknown;
+      labelStyle?: unknown;
+      tintColor?: unknown;
+    }) =>
+      createElement(
+        'nav',
+        {
+          'data-tabs': 'true',
+          'data-minimize-behavior': minimizeBehavior ?? '',
+          'data-icon-color': JSON.stringify(iconColor),
+          'data-label-style': JSON.stringify(labelStyle),
+          'data-tint-color': typeof tintColor === 'string' ? tintColor : '',
+        },
+        children,
+      ),
     {
       BottomAccessory: ({ children }: { children?: ReactNode }) =>
         createElement('div', { 'data-bottom-accessory': 'true' }, children),
@@ -128,6 +156,17 @@ describe('TabLayout', () => {
     const { container } = render(<TabLayout />);
 
     expect(container.querySelector('[data-tabs="true"]')?.getAttribute('data-minimize-behavior')).toBe('onScrollDown');
+  });
+
+  it('uses adaptive neutral colors for native Liquid Glass tab icons and labels', () => {
+    const { container } = render(<TabLayout />);
+    const tabs = container.querySelector('[data-tabs="true"]');
+
+    expect(tabs?.getAttribute('data-icon-color')).toBe(JSON.stringify({ default: '#A9A2B6', selected: '#F5F2FB' }));
+    expect(tabs?.getAttribute('data-label-style')).toBe(
+      JSON.stringify({ default: { color: '#A9A2B6' }, selected: { color: '#F5F2FB' } }),
+    );
+    expect(tabs?.getAttribute('data-tint-color')).toBe('#F5F2FB');
   });
 
   it('mounts the native bottom accessory when active and a climb is current', () => {

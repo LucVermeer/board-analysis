@@ -23,7 +23,10 @@ vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => k
 vi.mock('../../Text', () => ({
   Text: ({ children }: { children?: ReactNode }) => createElement('span', null, children),
 }));
-vi.mock('../../Icon', () => ({ Icon: ({ name }: { name: string }) => createElement('span', { 'data-icon': name }) }));
+vi.mock('../../Icon', () => ({
+  Icon: ({ name, color }: { name: string; color?: unknown }) =>
+    createElement('span', { 'data-icon': name, 'data-color': typeof color === 'string' ? color : '' }),
+}));
 vi.mock('../../../providers/theme-provider', () => ({
   useTheme: () => ({
     systemColors: { label: '#000', tertiaryLabel: '#999' },
@@ -62,6 +65,7 @@ describe('SessionScreenHeader', () => {
     const { container } = render(<SessionScreenHeader sessionActive onShare={onShare} />);
     const share = container.querySelector(SHARE) as HTMLButtonElement | null;
     expect(share).not.toBeNull();
+    expect(share?.querySelector('[data-icon="share"]')?.getAttribute('data-color')).toBe('#000');
     share!.click();
     expect(onShare).toHaveBeenCalledTimes(1);
   });

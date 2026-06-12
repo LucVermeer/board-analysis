@@ -77,11 +77,11 @@ export function SessionScreenHeader({
               style={styles.shareButton}
             >
               {inviteHint ? (
-                <Text variant="subheadline" color={brandColors.primary} style={styles.shareLabel}>
+                <Text variant="subheadline" color={systemColors.label} style={styles.shareLabel}>
                   {t('mobile.session.inviteAction')}
                 </Text>
               ) : null}
-              <Icon name="share" size={22} color={brandColors.primary} />
+              <Icon name="share" size={22} color={systemColors.label} />
             </Pressable>
           ) : null}
           {onEndSession ? (
