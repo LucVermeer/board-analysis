@@ -205,6 +205,10 @@ export type AscentFeedItem = {
   angle: Scalars['Int']['output'];
   /** Number of attempts */
   attemptCount: Scalars['Int']['output'];
+  /** Specific board display name, when this ascent is safe to associate with a named board */
+  boardDisplayName?: Maybe<Scalars['String']['output']>;
+  /** Specific board entity id, when this ascent is safe to associate with a named board */
+  boardId?: Maybe<Scalars['Int']['output']>;
   /** Board type */
   boardType: Scalars['String']['output'];
   /** Name of the climb */
@@ -7558,6 +7562,8 @@ export type GetUserAscentsFeedQuery = {
       climbName: string;
       setterUsername?: string | null;
       boardType: string;
+      boardId?: number | null;
+      boardDisplayName?: string | null;
       layoutId?: number | null;
       angle: number;
       isMirror: boolean;
@@ -13055,6 +13061,8 @@ export const GetUserAscentsFeedDocument = {
                       { kind: 'Field', name: { kind: 'Name', value: 'climbName' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'setterUsername' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'boardType' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'boardId' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'boardDisplayName' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'layoutId' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'angle' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'isMirror' } },

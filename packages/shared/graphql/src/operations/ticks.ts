@@ -145,6 +145,8 @@ export const GET_USER_ASCENTS_FEED = gql`
         climbName
         setterUsername
         boardType
+        boardId
+        boardDisplayName
         layoutId
         angle
         isMirror
@@ -175,6 +177,8 @@ export type AscentFeedItem = {
   climbName: string;
   setterUsername: string | null;
   boardType: string;
+  boardId: number | null;
+  boardDisplayName: string | null;
   layoutId: number | null;
   angle: number;
   isMirror: boolean;

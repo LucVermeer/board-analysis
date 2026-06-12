@@ -208,6 +208,10 @@ export type AscentFeedItem = {
   angle: Scalars['Int']['output'];
   /** Number of attempts */
   attemptCount: Scalars['Int']['output'];
+  /** Specific board display name, when this ascent is safe to associate with a named board */
+  boardDisplayName?: Maybe<Scalars['String']['output']>;
+  /** Specific board entity id, when this ascent is safe to associate with a named board */
+  boardId?: Maybe<Scalars['Int']['output']>;
   /** Board type */
   boardType: Scalars['String']['output'];
   /** Name of the climb */
@@ -6283,6 +6287,8 @@ export type AscentFeedItemResolvers<
 > = ResolversObject<{
   angle?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   attemptCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  boardDisplayName?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  boardId?: Resolver<Maybe<ResolversTypes['Int']>, ParentType, ContextType>;
   boardType?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   climbName?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   climbUuid?: Resolver<ResolversTypes['String'], ParentType, ContextType>;

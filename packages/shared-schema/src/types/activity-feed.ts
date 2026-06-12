@@ -38,6 +38,8 @@ export type AscentFeedItem = {
   climbName: string;
   setterUsername?: string | null;
   boardType: string;
+  boardId?: number | null;
+  boardDisplayName?: string | null;
   layoutId?: number | null;
   angle: number;
   isMirror: boolean;
