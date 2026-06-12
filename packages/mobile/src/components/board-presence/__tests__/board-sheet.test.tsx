@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, fireEvent, waitFor } from '@testing-library/react';
+import { act, render, fireEvent, waitFor } from '@testing-library/react';
 import { createElement, createRef, forwardRef, useImperativeHandle, type ReactNode, type Ref } from 'react';
 import type { BoardPresenceClimb, BoardPresenceStats, Climb } from '@boardsesh/shared-schema';
 
@@ -215,6 +215,7 @@ vi.mock('../../../theme/tokens', () => ({
 
 import { BoardSheet, type BoardSheetHandle } from '../BoardSheet';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
+import { GET_CLIMB } from '../../../lib/graphql/operations';
 
 function makeClimb(climbUuid: string, seq: number, overrides: Partial<BoardPresenceClimb> = {}): BoardPresenceClimb {
   return {
@@ -456,7 +457,8 @@ describe('BoardSheet', () => {
         boardConfig,
       }),
     );
-    expect(graphql.request).toHaveBeenCalledWith(expect.anything(), {
+    expect(onClimbPress).toHaveBeenCalledTimes(1);
+    expect(graphql.request).toHaveBeenCalledWith(GET_CLIMB, {
       boardName: 'kilter',
       layoutId: 1,
       sizeId: 10,
@@ -474,7 +476,8 @@ describe('BoardSheet', () => {
         boardConfig: { ...boardConfig, angle: 30 },
       }),
     );
-    expect(graphql.request).toHaveBeenCalledWith(expect.anything(), {
+    expect(onAddToQueue).toHaveBeenCalledTimes(1);
+    expect(graphql.request).toHaveBeenCalledWith(GET_CLIMB, {
       boardName: 'kilter',
       layoutId: 1,
       sizeId: 10,
@@ -491,6 +494,7 @@ describe('BoardSheet', () => {
         boardConfig: { ...boardConfig, angle: 30 },
       }),
     );
+    expect(onOpenPlaylist).toHaveBeenCalledTimes(1);
 
     fireEvent.click(getByLabelText('actions old-climb'));
     await waitFor(() =>
@@ -500,6 +504,7 @@ describe('BoardSheet', () => {
         boardConfig: { ...boardConfig, angle: 30 },
       }),
     );
+    expect(onOpenActions).toHaveBeenCalledTimes(1);
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(graphql.request).toHaveBeenCalledTimes(2);
 
@@ -517,11 +522,110 @@ describe('BoardSheet', () => {
         expect.objectContaining({
           climb: expect.objectContaining({ uuid: 'old-climb' }),
           angle: 30,
-          contentRowStyle: expect.objectContaining({ backgroundColor: 'transparent' }),
+          contentRowStyle: expect.objectContaining({ paddingVertical: 8 }),
           showSeparator: false,
         }),
       ]),
     );
+  });
+
+  it('hydrates playlist actions on a cold cache without requiring a press action', async () => {
+    presence.history = [
+      makeClimb('old-climb', 2, {
+        frames: 'old-frames',
+        grade: 'V4',
+        angle: 30,
+        queueItemUuid: 'queue-old',
+      }),
+    ];
+    const onOpenPlaylist = vi.fn();
+    const oldDetail = makeFullClimb('old-climb', {
+      name: 'Hydrated Old',
+      angle: 30,
+      difficulty: 'V5',
+    });
+    graphql.request.mockResolvedValueOnce({ climb: oldDetail });
+
+    const { getByLabelText } = render(
+      createElement(BoardSheet, {
+        boardLabel: 'Garage Wall',
+        onClose: noop,
+        onDismissed: noop,
+        boardConfig,
+        onSwitchBoard: noop,
+        onOpenPlaylist,
+      }),
+    );
+
+    expect(climbRows.props[0]?.onPress).toBeUndefined();
+    fireEvent.click(getByLabelText('playlist old-climb'));
+
+    await waitFor(() =>
+      expect(onOpenPlaylist).toHaveBeenCalledWith({
+        climb: oldDetail,
+        queueItemUuid: 'queue-old',
+        boardConfig: { ...boardConfig, angle: 30 },
+      }),
+    );
+    expect(onOpenPlaylist).toHaveBeenCalledTimes(1);
+    expect(graphql.request).toHaveBeenCalledTimes(1);
+    expect(graphql.request).toHaveBeenCalledWith(GET_CLIMB, {
+      boardName: 'kilter',
+      layoutId: 1,
+      sizeId: 10,
+      setIds: '1,2',
+      angle: 30,
+      climbUuid: 'old-climb',
+    });
+  });
+
+  it('hydrates action-sheet actions on a cold cache', async () => {
+    presence.history = [
+      makeClimb('old-climb', 2, {
+        frames: 'old-frames',
+        grade: 'V4',
+        angle: 30,
+        queueItemUuid: 'queue-old',
+      }),
+    ];
+    const onOpenActions = vi.fn();
+    const oldDetail = makeFullClimb('old-climb', {
+      name: 'Hydrated Old',
+      angle: 30,
+      difficulty: 'V5',
+    });
+    graphql.request.mockResolvedValueOnce({ climb: oldDetail });
+
+    const { getByLabelText } = render(
+      createElement(BoardSheet, {
+        boardLabel: 'Garage Wall',
+        onClose: noop,
+        onDismissed: noop,
+        boardConfig,
+        onSwitchBoard: noop,
+        onOpenActions,
+      }),
+    );
+
+    fireEvent.click(getByLabelText('actions old-climb'));
+
+    await waitFor(() =>
+      expect(onOpenActions).toHaveBeenCalledWith({
+        climb: oldDetail,
+        queueItemUuid: 'queue-old',
+        boardConfig: { ...boardConfig, angle: 30 },
+      }),
+    );
+    expect(onOpenActions).toHaveBeenCalledTimes(1);
+    expect(graphql.request).toHaveBeenCalledTimes(1);
+    expect(graphql.request).toHaveBeenCalledWith(GET_CLIMB, {
+      boardName: 'kilter',
+      layoutId: 1,
+      sizeId: 10,
+      setIds: '1,2',
+      angle: 30,
+      climbUuid: 'old-climb',
+    });
   });
 
   it('shows loading feedback and ignores repeat taps while a climb action is resolving', async () => {
@@ -556,7 +660,10 @@ describe('BoardSheet', () => {
     expect(onClimbPress).not.toHaveBeenCalled();
     await waitFor(() => expect(queryByLabelText('mobile.boardPresence.actionLoading')).not.toBeNull());
 
-    climbRequest.resolve({ climb: heroDetail });
+    await act(async () => {
+      climbRequest.resolve({ climb: heroDetail });
+      await climbRequest.promise;
+    });
 
     await waitFor(() => expect(onClimbPress).toHaveBeenCalledTimes(1));
     expect(onClimbPress).toHaveBeenCalledWith({
@@ -569,14 +676,86 @@ describe('BoardSheet', () => {
     await waitFor(() => expect(queryByLabelText('mobile.boardPresence.actionLoading')).toBeNull());
   });
 
+  it('drops stale action results after the sheet is closed', async () => {
+    presence.currentClimb = makeClimb('hero-climb', 3, {
+      frames: 'hero-frames',
+      grade: 'V7',
+      queueItemUuid: 'queue-hero',
+    });
+    const onClose = vi.fn();
+    const onClimbPress = vi.fn();
+    const heroDetail = makeFullClimb('hero-climb', { name: 'Hydrated Hero' });
+    const climbRequest = createDeferred<{ climb: Climb | null }>();
+    graphql.request.mockReturnValueOnce(climbRequest.promise);
+
+    const { getByLabelText, queryByLabelText } = render(
+      createElement(BoardSheet, {
+        boardLabel: 'Garage Wall',
+        onClose,
+        onDismissed: noop,
+        boardConfig,
+        onSwitchBoard: noop,
+        onClimbPress,
+      }),
+    );
+
+    fireEvent.click(getByLabelText('press hero-climb'));
+    await waitFor(() => expect(queryByLabelText('mobile.boardPresence.actionLoading')).not.toBeNull());
+
+    fireEvent.click(getByLabelText('mobile.boardPresence.close'));
+    expect(onClose).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(queryByLabelText('mobile.boardPresence.actionLoading')).toBeNull());
+
+    await act(async () => {
+      climbRequest.resolve({ climb: heroDetail });
+      await climbRequest.promise;
+    });
+
+    expect(onClimbPress).not.toHaveBeenCalled();
+    expect(toast.showToast).not.toHaveBeenCalled();
+  });
+
+  it('shows a toast instead of leaking errors thrown by action callbacks', async () => {
+    presence.currentClimb = makeClimb('hero-climb', 3);
+    const callbackError = new Error('callback failed');
+    const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const onClose = vi.fn();
+    const onClimbPress = vi.fn(() => {
+      throw callbackError;
+    });
+    const heroDetail = makeFullClimb('hero-climb', { name: 'Hydrated Hero' });
+    graphql.request.mockResolvedValueOnce({ climb: heroDetail });
+
+    const { getByLabelText } = render(
+      createElement(BoardSheet, {
+        boardLabel: 'Garage Wall',
+        onClose,
+        onDismissed: noop,
+        boardConfig,
+        onSwitchBoard: noop,
+        onClimbPress,
+      }),
+    );
+
+    fireEvent.click(getByLabelText('press hero-climb'));
+
+    await waitFor(() => expect(toast.showToast).toHaveBeenCalledWith('mobile.boardPresence.actionFailed', 'error'));
+    expect(onClimbPress).toHaveBeenCalledTimes(1);
+    expect(onClose).not.toHaveBeenCalled();
+    expect(consoleWarn).toHaveBeenCalledWith('Failed to run board-sheet climb action', callbackError);
+    consoleWarn.mockRestore();
+  });
+
   it('shows a toast and skips the action when climb hydration throws', async () => {
     presence.currentClimb = makeClimb('hero-climb', 3);
     const onClimbPress = vi.fn();
     const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const requestError = new Error('network down');
-    graphql.request.mockRejectedValueOnce(requestError);
+    const retryDetail = makeFullClimb('hero-climb', { name: 'Retry Hero' });
+    const climbRequest = createDeferred<{ climb: Climb | null }>();
+    graphql.request.mockReturnValueOnce(climbRequest.promise).mockResolvedValueOnce({ climb: retryDetail });
 
-    const { getByLabelText } = render(
+    const { getByLabelText, queryByLabelText } = render(
       createElement(BoardSheet, {
         boardLabel: 'Garage Wall',
         onClose: noop,
@@ -588,10 +767,29 @@ describe('BoardSheet', () => {
     );
 
     fireEvent.click(getByLabelText('press hero-climb'));
+    await waitFor(() => expect(queryByLabelText('mobile.boardPresence.actionLoading')).not.toBeNull());
+
+    await act(async () => {
+      climbRequest.reject(requestError);
+      await climbRequest.promise.catch(() => undefined);
+    });
 
     await waitFor(() => expect(toast.showToast).toHaveBeenCalledWith('mobile.boardPresence.actionFailed', 'error'));
     expect(onClimbPress).not.toHaveBeenCalled();
     expect(consoleWarn).toHaveBeenCalledWith('Failed to load board-sheet climb action', requestError);
+    await waitFor(() => expect(queryByLabelText('mobile.boardPresence.actionLoading')).toBeNull());
+
+    fireEvent.click(getByLabelText('press hero-climb'));
+    await waitFor(() =>
+      expect(onClimbPress).toHaveBeenCalledWith({
+        climb: retryDetail,
+        queueItemUuid: null,
+        boardConfig,
+      }),
+    );
+    expect(onClimbPress).toHaveBeenCalledTimes(1);
+    expect(graphql.request).toHaveBeenCalledTimes(2);
+    expect(toast.showToast).toHaveBeenCalledTimes(1);
     consoleWarn.mockRestore();
   });
 
@@ -599,9 +797,10 @@ describe('BoardSheet', () => {
     presence.currentClimb = makeClimb('hero-climb', 3);
     const onClimbPress = vi.fn();
     const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    graphql.request.mockResolvedValueOnce({ climb: null });
+    const retryDetail = makeFullClimb('hero-climb', { name: 'Retry Hero' });
+    graphql.request.mockResolvedValueOnce({ climb: null }).mockResolvedValueOnce({ climb: retryDetail });
 
-    const { getByLabelText } = render(
+    const { getByLabelText, queryByLabelText } = render(
       createElement(BoardSheet, {
         boardLabel: 'Garage Wall',
         onClose: noop,
@@ -617,6 +816,19 @@ describe('BoardSheet', () => {
     await waitFor(() => expect(toast.showToast).toHaveBeenCalledWith('mobile.boardPresence.actionFailed', 'error'));
     expect(onClimbPress).not.toHaveBeenCalled();
     expect(consoleWarn).toHaveBeenCalledWith('Board-sheet climb action returned no climb', 'hero-climb');
+    await waitFor(() => expect(queryByLabelText('mobile.boardPresence.actionLoading')).toBeNull());
+
+    fireEvent.click(getByLabelText('press hero-climb'));
+    await waitFor(() =>
+      expect(onClimbPress).toHaveBeenCalledWith({
+        climb: retryDetail,
+        queueItemUuid: null,
+        boardConfig,
+      }),
+    );
+    expect(onClimbPress).toHaveBeenCalledTimes(1);
+    expect(graphql.request).toHaveBeenCalledTimes(2);
+    expect(toast.showToast).toHaveBeenCalledTimes(1);
     consoleWarn.mockRestore();
   });
 

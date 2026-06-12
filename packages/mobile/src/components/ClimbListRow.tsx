@@ -164,7 +164,7 @@ type ClimbListRowProps = {
   sizeId: number;
   setIds: string;
   angle: number;
-  onPress: (climb: Climb) => void;
+  onPress?: (climb: Climb) => void;
   onAddToQueue?: (climb: Climb) => void;
   onOpenPlaylist?: (climb: Climb) => void;
   onOpenActions?: (climb: Climb) => void;
@@ -239,8 +239,10 @@ const ClimbListRow = React.memo(function ClimbListRow({
 
   const handleRowPress = useCallback(() => {
     if (unsupportedRef.current) return;
+    const press = onPressRef.current;
+    if (!press) return;
     hapticLight();
-    onPressRef.current(climbRef.current);
+    press(climbRef.current);
   }, []);
 
   const handleLongPress = useCallback(() => {
@@ -257,13 +259,17 @@ const ClimbListRow = React.memo(function ClimbListRow({
   // onSwipeableOpen (handleSwipeableOpened) instead — a clean closed→open→
   // closed cycle that fires on every swipe.
   const handleAddToQueue = useCallback(() => {
+    const addToQueue = onAddToQueueRef.current;
+    if (!addToQueue) return;
     hapticSuccess();
-    onAddToQueueRef.current?.(climbRef.current);
+    addToQueue(climbRef.current);
   }, []);
 
   const handleOpenPlaylist = useCallback(() => {
+    const openPlaylist = onOpenPlaylistRef.current;
+    if (!openPlaylist) return;
     hapticMedium();
-    onOpenPlaylistRef.current?.(climbRef.current);
+    openPlaylist(climbRef.current);
   }, []);
 
   // Snap the row shut once it has fully settled open. Runs after the action
@@ -373,8 +379,8 @@ const ClimbListRow = React.memo(function ClimbListRow({
         rightThreshold={COMMIT_THRESHOLD}
         overshootLeft={false}
         overshootRight={false}
-        renderLeftActions={renderLeftActions}
-        renderRightActions={renderRightActions}
+        renderLeftActions={onAddToQueue ? renderLeftActions : undefined}
+        renderRightActions={onOpenPlaylist ? renderRightActions : undefined}
         onSwipeableOpenStartDrag={handleSwipeStartDrag}
         onSwipeableWillOpen={handleSwipeWillOpen}
         onSwipeableOpen={handleSwipeableOpened}

@@ -108,6 +108,13 @@ function actionCacheKey(boardConfig: BoardConfig, climbUuid: string): string {
   ].join(':');
 }
 
+function boardConfigActionSignature(boardConfig: BoardConfig | null): string {
+  if (!boardConfig) return 'none';
+  return [boardConfig.boardName, boardConfig.layoutId, boardConfig.sizeId, boardConfig.setIds, boardConfig.angle].join(
+    ':',
+  );
+}
+
 function actionContextForPresenceClimb(
   boardConfig: BoardConfig | null,
   presenceClimb: BoardPresenceClimb,
@@ -194,6 +201,9 @@ export const BoardSheet = forwardRef<BoardSheetHandle, BoardSheetProps>(function
   const sheetRef = useRef<BottomSheetModal>(null);
   const boardConfigRef = useRef(boardConfig);
   boardConfigRef.current = boardConfig;
+  const boardConfigSignature = useMemo(() => boardConfigActionSignature(boardConfig), [boardConfig]);
+  const boardConfigSignatureRef = useRef(boardConfigSignature);
+  boardConfigSignatureRef.current = boardConfigSignature;
 
   const { currentClimb } = useBoardPresenceCurrent();
   const { history, stats } = useBoardPresenceFeed();
@@ -216,6 +226,7 @@ export const BoardSheet = forwardRef<BoardSheetHandle, BoardSheetProps>(function
   const actionClimbCacheRef = useRef(new Map<string, Climb>());
   const actionClimbRequestRef = useRef(new Map<string, Promise<Climb | null>>());
   const pendingActionKeysRef = useRef(new Set<string>());
+  const actionGenerationRef = useRef(0);
   const [pendingActionKeys, setPendingActionKeys] = useState<ReadonlySet<string>>(() => new Set());
   useEffect(() => {
     const currentClimbUuid = currentClimb?.climbUuid;
@@ -233,7 +244,7 @@ export const BoardSheet = forwardRef<BoardSheetHandle, BoardSheetProps>(function
     () => (boardConfig ? rowBoardForBoardConfig(boardConfig) : null),
     [boardConfig],
   );
-  const canUseInteractiveRows = !!rowBoard && !!onClimbPress;
+  const canUseInteractiveRows = !!rowBoard && (!!onClimbPress || !!onAddToQueue || !!onOpenPlaylist || !!onOpenActions);
 
   const getActionContext = useCallback((presenceClimb: BoardPresenceClimb) => {
     return actionContextForPresenceClimb(boardConfigRef.current, presenceClimb);
@@ -257,6 +268,22 @@ export const BoardSheet = forwardRef<BoardSheetHandle, BoardSheetProps>(function
     }
     setPendingActionKeys(new Set(pendingKeys));
   }, []);
+
+  const clearPendingActionKeys = useCallback(() => {
+    const pendingKeys = pendingActionKeysRef.current;
+    if (pendingKeys.size === 0) return;
+    pendingKeys.clear();
+    setPendingActionKeys(new Set());
+  }, []);
+
+  const invalidatePendingActions = useCallback(() => {
+    actionGenerationRef.current += 1;
+    clearPendingActionKeys();
+  }, [clearPendingActionKeys]);
+
+  useEffect(() => {
+    invalidatePendingActions();
+  }, [boardConfigSignature, invalidatePendingActions]);
 
   const notifyActionFailed = useCallback(() => {
     showToast(t('mobile.boardPresence.actionFailed'), 'error');
@@ -327,21 +354,37 @@ export const BoardSheet = forwardRef<BoardSheetHandle, BoardSheetProps>(function
 
       if (pendingActionKeysRef.current.has(actionContext.cacheKey)) return;
 
+      const actionGeneration = actionGenerationRef.current;
+      const actionBoardSignature = boardConfigSignatureRef.current;
       setActionLoading(actionContext.cacheKey, true);
       void resolveAction(presenceClimb, actionContext)
         .then((action) => {
+          if (
+            actionGeneration !== actionGenerationRef.current ||
+            actionBoardSignature !== boardConfigSignatureRef.current
+          ) {
+            return;
+          }
           if (!action) {
             notifyActionFailed();
             return;
           }
-          callback(action);
-          if (closeOnSuccess) onClose();
+          try {
+            callback(action);
+            if (closeOnSuccess) {
+              invalidatePendingActions();
+              onClose();
+            }
+          } catch (error) {
+            console.warn('Failed to run board-sheet climb action', error);
+            notifyActionFailed();
+          }
         })
         .finally(() => {
           setActionLoading(actionContext.cacheKey, false);
         });
     },
-    [getActionContext, notifyActionFailed, onClose, resolveAction, setActionLoading],
+    [getActionContext, invalidatePendingActions, notifyActionFailed, onClose, resolveAction, setActionLoading],
   );
 
   const handleInteractiveClimbPress = useCallback(
@@ -376,6 +419,21 @@ export const BoardSheet = forwardRef<BoardSheetHandle, BoardSheetProps>(function
     [onOpenActions, runInteractiveAction],
   );
 
+  const handleClose = useCallback(() => {
+    invalidatePendingActions();
+    onClose();
+  }, [invalidatePendingActions, onClose]);
+
+  const handleDismissed = useCallback(() => {
+    invalidatePendingActions();
+    onDismissed?.();
+  }, [invalidatePendingActions, onDismissed]);
+
+  const handleSwitchBoard = useCallback(() => {
+    invalidatePendingActions();
+    onSwitchBoard();
+  }, [invalidatePendingActions, onSwitchBoard]);
+
   useImperativeHandle(ref, () => ({
     present: () => {
       if (historyCountRef.current > 0) {
@@ -387,6 +445,7 @@ export const BoardSheet = forwardRef<BoardSheetHandle, BoardSheetProps>(function
       sheetRef.current?.present();
     },
     dismiss: () => {
+      invalidatePendingActions();
       sheetRef.current?.dismiss();
     },
   }));
@@ -420,7 +479,7 @@ export const BoardSheet = forwardRef<BoardSheetHandle, BoardSheetProps>(function
             formattedGrade={formattedGrade}
             gradeColor={gradeColor}
             isActionLoading={isActionLoading(item)}
-            onPress={handleInteractiveClimbPress}
+            onPress={onClimbPress ? handleInteractiveClimbPress : undefined}
             onAddToQueue={handleInteractiveAddToQueue}
             onOpenPlaylist={handleInteractiveOpenPlaylist}
             onOpenActions={handleInteractiveOpenActions}
@@ -451,6 +510,7 @@ export const BoardSheet = forwardRef<BoardSheetHandle, BoardSheetProps>(function
       handleInteractiveOpenPlaylist,
       handleInteractiveOpenActions,
       isActionLoading,
+      onClimbPress,
     ],
   );
 
@@ -469,7 +529,7 @@ export const BoardSheet = forwardRef<BoardSheetHandle, BoardSheetProps>(function
             formattedGrade={currentClimb.grade ? formatGrade(currentClimb.grade) : null}
             gradeColor={getGradeColor(currentClimb.grade ?? '') ?? DEFAULT_GRADE_COLOR}
             isActionLoading={isActionLoading(currentClimb)}
-            onPress={handleInteractiveClimbPress}
+            onPress={onClimbPress ? handleInteractiveClimbPress : undefined}
             onAddToQueue={handleInteractiveAddToQueue}
             onOpenPlaylist={handleInteractiveOpenPlaylist}
             onOpenActions={handleInteractiveOpenActions}
@@ -546,6 +606,7 @@ export const BoardSheet = forwardRef<BoardSheetHandle, BoardSheetProps>(function
       handleInteractiveOpenPlaylist,
       handleInteractiveOpenActions,
       isActionLoading,
+      onClimbPress,
     ],
   );
 
@@ -577,14 +638,14 @@ export const BoardSheet = forwardRef<BoardSheetHandle, BoardSheetProps>(function
       stackBehavior="push"
       enablePanDownToClose
       backdropComponent={renderBackdrop}
-      onDismiss={onDismissed}
+      onDismiss={handleDismissed}
       handleIndicatorStyle={sheet.handleStyle}
       backgroundComponent={GlassSheetBackground}
       style={styles.sheet}
     >
       <View style={[styles.header, { borderBottomColor: systemColors.separator }]}>
         <Pressable
-          onPress={onClose}
+          onPress={handleClose}
           hitSlop={8}
           accessibilityRole="button"
           accessibilityLabel={t('mobile.boardPresence.close')}
@@ -608,7 +669,7 @@ export const BoardSheet = forwardRef<BoardSheetHandle, BoardSheetProps>(function
       />
 
       <Pressable
-        onPress={onSwitchBoard}
+        onPress={handleSwitchBoard}
         accessibilityRole="button"
         accessibilityLabel={t('mobile.boardPresence.switchBoardAria')}
         style={[styles.footer, { borderTopColor: systemColors.separator, paddingBottom: insets.bottom + spacing[3] }]}
@@ -644,7 +705,7 @@ type HeroProps = {
 };
 
 type InteractiveRowActionProps = {
-  onPress: (climb: BoardPresenceClimb) => void;
+  onPress?: (climb: BoardPresenceClimb) => void;
   onAddToQueue?: (climb: BoardPresenceClimb) => void;
   onOpenPlaylist?: (climb: BoardPresenceClimb) => void;
   onOpenActions?: (climb: BoardPresenceClimb) => void;
@@ -742,7 +803,7 @@ const InteractiveHeroRow = memo(function InteractiveHeroRowInner({
   );
   const contentRowStyle = useMemo(() => [styles.heroInteractiveRow, { backgroundColor: surfaceColor }], [surfaceColor]);
   const handlePress = useCallback(() => {
-    onPress(climb);
+    onPress?.(climb);
   }, [climb, onPress]);
   const handleAddToQueue = useCallback(() => {
     onAddToQueue?.(climb);
@@ -779,7 +840,7 @@ const InteractiveHeroRow = memo(function InteractiveHeroRowInner({
       sizeId={climbRowBoard.sizeId}
       setIds={climbRowBoard.setIds}
       angle={climbRowBoard.angle}
-      onPress={handlePress}
+      onPress={onPress ? handlePress : undefined}
       onAddToQueue={onAddToQueue ? handleAddToQueue : undefined}
       onOpenPlaylist={onOpenPlaylist ? handleOpenPlaylist : undefined}
       onOpenActions={onOpenActions ? handleOpenActions : undefined}
@@ -910,7 +971,7 @@ const InteractiveHistoryRow = memo(function InteractiveHistoryRowInner({
     [climbBoardConfig, rowBoard],
   );
   const handlePress = useCallback(() => {
-    onPress(climb);
+    onPress?.(climb);
   }, [climb, onPress]);
   const handleAddToQueue = useCallback(() => {
     onAddToQueue?.(climb);
@@ -945,7 +1006,7 @@ const InteractiveHistoryRow = memo(function InteractiveHistoryRowInner({
       sizeId={climbRowBoard.sizeId}
       setIds={climbRowBoard.setIds}
       angle={climbRowBoard.angle}
-      onPress={handlePress}
+      onPress={onPress ? handlePress : undefined}
       onAddToQueue={onAddToQueue ? handleAddToQueue : undefined}
       onOpenPlaylist={onOpenPlaylist ? handleOpenPlaylist : undefined}
       onOpenActions={onOpenActions ? handleOpenActions : undefined}
@@ -1103,7 +1164,6 @@ const styles = StyleSheet.create({
     paddingVertical: spacing[2],
   },
   historyInteractiveRow: {
-    backgroundColor: 'transparent',
     paddingHorizontal: spacing[4],
     paddingVertical: spacing[2],
   },
