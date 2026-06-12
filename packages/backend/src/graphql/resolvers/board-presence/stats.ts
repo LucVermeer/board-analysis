@@ -9,53 +9,49 @@
 // a later cold fetch never disagree.
 
 import { randomUUID } from 'crypto';
-import { and, eq, inArray, sql } from 'drizzle-orm';
-import type { BoardPresenceStats } from '@boardsesh/shared-schema';
+import { sql } from 'drizzle-orm';
+import type { BoardPresenceHardestSend, BoardPresenceStats } from '@boardsesh/shared-schema';
 import { db } from '../../../db/client';
-import * as dbSchema from '@boardsesh/db/schema';
 import { pubsub } from '../../../pubsub/index';
 import { redisClientManager } from '../../../redis/client';
 import { logger } from '../../../utils/logger';
 
-type DifficultyRow = {
-  difficulty: number | null;
+type BoardPresenceStatsRow = {
+  climbsSentCount: number;
+  distinctClimbersCount: number;
+  hardestGrade: string | null;
+  topGrade: string | null;
+  lastSentAt: string | Date | null;
+  hardestSendClimbUuid: string | null;
+  name: string | null;
+  grade: string | null;
+  sentByUserId: string | null;
+  sentByDisplayName: string | null;
+  sentByAvatarUrl: string | null;
+  sentAt: string | Date | null;
 };
 
-function parsePostgresUtcTimestamp(timestamp: string | null | undefined): string | null {
+function parsePostgresUtcTimestamp(timestamp: string | Date | null | undefined): string | null {
   if (!timestamp) return null;
+  if (timestamp instanceof Date) return timestamp.toISOString();
   const isoLikeTimestamp = timestamp.includes('T') ? timestamp : timestamp.replace(' ', 'T');
   const zonedTimestamp = /(?:Z|[+-]\d{2}:?\d{2})$/.test(isoLikeTimestamp) ? isoLikeTimestamp : `${isoLikeTimestamp}Z`;
   return new Date(zonedTimestamp).toISOString();
 }
 
-async function resolveGradeNames(
-  boardType: string,
-  difficulties: Array<number | null | undefined>,
-): Promise<Map<number, string>> {
-  const uniqueDifficulties = [
-    ...new Set(difficulties.filter((difficulty): difficulty is number => difficulty != null)),
-  ];
-  if (uniqueDifficulties.length === 0) return new Map();
-
-  const rows = await db
-    .select({
-      difficulty: dbSchema.boardDifficultyGrades.difficulty,
-      boulderName: dbSchema.boardDifficultyGrades.boulderName,
-    })
-    .from(dbSchema.boardDifficultyGrades)
-    .where(
-      and(
-        eq(dbSchema.boardDifficultyGrades.boardType, boardType),
-        inArray(dbSchema.boardDifficultyGrades.difficulty, uniqueDifficulties),
-      ),
-    );
-
-  return new Map(rows.map((row) => [row.difficulty, row.boulderName ?? String(row.difficulty)]));
-}
-
-function gradeNameFor(difficulty: number | null | undefined, gradeNames: Map<number, string>): string | null {
-  if (difficulty == null) return null;
-  return gradeNames.get(difficulty) ?? String(difficulty);
+function toHardestSend(row: BoardPresenceStatsRow | undefined): BoardPresenceHardestSend | null {
+  if (!row?.hardestSendClimbUuid || !row.grade || !row.sentByUserId) return null;
+  const sentAt = parsePostgresUtcTimestamp(row.sentAt);
+  if (!sentAt) return null;
+  return {
+    climbUuid: row.hardestSendClimbUuid,
+    name: row.name,
+    grade: row.grade,
+    sentByUserId: row.sentByUserId,
+    sentByDisplayName: row.sentByDisplayName,
+    sentByAvatarUrl: row.sentByAvatarUrl,
+    sentAt,
+  };
 }
 
 /**
@@ -63,53 +59,101 @@ function gradeNameFor(difficulty: number | null | undefined, gradeNames: Map<num
  * source of truth for both the `boardPresenceStats` query and the live push.
  */
 export async function computeBoardPresenceStats(boardId: number, boardType: string): Promise<BoardPresenceStats> {
-  const [stats] = await db
-    .select({
-      climbsSentCount: sql<number>`COUNT(DISTINCT ${dbSchema.boardseshTicks.climbUuid}) FILTER (WHERE ${dbSchema.boardseshTicks.status} IN ('send', 'flash'))`,
-      distinctClimbersCount: sql<number>`COUNT(DISTINCT ${dbSchema.boardseshTicks.userId})`,
-      lastSentAt: sql<
-        string | null
-      >`MAX(${dbSchema.boardseshTicks.climbedAt}) FILTER (WHERE ${dbSchema.boardseshTicks.status} IN ('send', 'flash'))`,
-      hardestDifficulty: sql<
-        number | null
-      >`MAX(COALESCE(${dbSchema.boardseshTicks.difficulty}, ROUND(${dbSchema.boardClimbStats.displayDifficulty})::int)) FILTER (WHERE ${dbSchema.boardseshTicks.status} IN ('send', 'flash'))`,
-    })
-    .from(dbSchema.boardseshTicks)
-    .leftJoin(
-      dbSchema.boardClimbStats,
-      and(
-        eq(dbSchema.boardClimbStats.boardType, dbSchema.boardseshTicks.boardType),
-        eq(dbSchema.boardClimbStats.climbUuid, dbSchema.boardseshTicks.climbUuid),
-        eq(dbSchema.boardClimbStats.angle, dbSchema.boardseshTicks.angle),
-      ),
-    )
-    .where(eq(dbSchema.boardseshTicks.boardId, boardId));
-
-  const topGradeRows = await db.execute(sql<DifficultyRow>`
-    SELECT tick_difficulties.difficulty
-    FROM (
-      SELECT COALESCE(t.difficulty, ROUND(s.display_difficulty)::int) AS difficulty
+  const rows = await db.execute(sql<BoardPresenceStatsRow>`
+    WITH tick_difficulties AS (
+      SELECT
+        t.id,
+        t.user_id,
+        t.board_type,
+        t.climb_uuid,
+        COALESCE(a.canonical_uuid, t.climb_uuid) AS canonical_climb_uuid,
+        t.climbed_at,
+        t.status,
+        COALESCE(t.difficulty, ROUND(s.display_difficulty)::int) AS difficulty
       FROM boardsesh_ticks t
+      LEFT JOIN board_climb_aliases a
+        ON a.board_type = t.board_type
+       AND a.alias_uuid = t.climb_uuid
       LEFT JOIN board_climb_stats s
         ON s.board_type = t.board_type
-       AND s.climb_uuid = t.climb_uuid
+       AND s.climb_uuid = COALESCE(a.canonical_uuid, t.climb_uuid)
        AND s.angle = t.angle
       WHERE t.board_id = ${boardId}
-        AND t.status IN ('send', 'flash')
-    ) tick_difficulties
-    WHERE tick_difficulties.difficulty IS NOT NULL
-    GROUP BY tick_difficulties.difficulty
-    ORDER BY COUNT(*) DESC, tick_difficulties.difficulty DESC
-    LIMIT 1
+    ),
+    aggregate_stats AS (
+      SELECT
+        (COUNT(DISTINCT canonical_climb_uuid) FILTER (WHERE status IN ('send', 'flash')))::int AS climbs_sent_count,
+        COUNT(DISTINCT user_id)::int AS distinct_climbers_count,
+        MAX(climbed_at) FILTER (WHERE status IN ('send', 'flash')) AS last_sent_at,
+        MAX(difficulty) FILTER (WHERE status IN ('send', 'flash')) AS hardest_difficulty
+      FROM tick_difficulties
+    ),
+    top_grade AS (
+      SELECT difficulty
+      FROM tick_difficulties
+      WHERE status IN ('send', 'flash')
+        AND difficulty IS NOT NULL
+      GROUP BY difficulty
+      ORDER BY COUNT(*) DESC, difficulty DESC
+      LIMIT 1
+    ),
+    hardest_send AS (
+      SELECT
+        id,
+        user_id,
+        board_type,
+        canonical_climb_uuid,
+        climbed_at,
+        difficulty
+      FROM tick_difficulties
+      WHERE status IN ('send', 'flash')
+        AND difficulty IS NOT NULL
+      ORDER BY difficulty DESC, climbed_at ASC, id ASC
+      LIMIT 1
+    )
+    SELECT
+      stats.climbs_sent_count AS "climbsSentCount",
+      stats.distinct_climbers_count AS "distinctClimbersCount",
+      COALESCE(hardest_grade.boulder_name, stats.hardest_difficulty::text) AS "hardestGrade",
+      COALESCE(top_grade_name.boulder_name, top_grade.difficulty::text) AS "topGrade",
+      stats.last_sent_at AS "lastSentAt",
+      hardest_send.canonical_climb_uuid AS "hardestSendClimbUuid",
+      c.name AS "name",
+      COALESCE(hardest_send_grade.boulder_name, hardest_send.difficulty::text) AS "grade",
+      hardest_send.user_id AS "sentByUserId",
+      COALESCE(p.display_name, u.name) AS "sentByDisplayName",
+      COALESCE(p.avatar_url, u.image) AS "sentByAvatarUrl",
+      hardest_send.climbed_at AS "sentAt"
+    FROM aggregate_stats stats
+    LEFT JOIN board_difficulty_grades hardest_grade
+      ON hardest_grade.board_type = ${boardType}
+     AND hardest_grade.difficulty = stats.hardest_difficulty
+    LEFT JOIN top_grade
+      ON TRUE
+    LEFT JOIN board_difficulty_grades top_grade_name
+      ON top_grade_name.board_type = ${boardType}
+     AND top_grade_name.difficulty = top_grade.difficulty
+    LEFT JOIN hardest_send
+      ON TRUE
+    LEFT JOIN board_climbs c
+      ON c.board_type = hardest_send.board_type
+     AND c.uuid = hardest_send.canonical_climb_uuid
+    LEFT JOIN board_difficulty_grades hardest_send_grade
+      ON hardest_send_grade.board_type = hardest_send.board_type
+     AND hardest_send_grade.difficulty = hardest_send.difficulty
+    LEFT JOIN users u
+      ON u.id = hardest_send.user_id
+    LEFT JOIN user_profiles p
+      ON p.user_id = hardest_send.user_id
   `);
-  const topGradeRow = topGradeRows[0] as DifficultyRow | undefined;
-  const gradeNames = await resolveGradeNames(boardType, [stats?.hardestDifficulty, topGradeRow?.difficulty]);
+  const stats = rows[0] as BoardPresenceStatsRow | undefined;
 
   return {
     climbsSentCount: Number(stats?.climbsSentCount ?? 0),
     distinctClimbersCount: Number(stats?.distinctClimbersCount ?? 0),
-    hardestGrade: gradeNameFor(stats?.hardestDifficulty, gradeNames),
-    topGrade: gradeNameFor(topGradeRow?.difficulty, gradeNames),
+    hardestGrade: stats?.hardestGrade ?? null,
+    hardestSend: toHardestSend(stats),
+    topGrade: stats?.topGrade ?? null,
     lastSentAt: parsePostgresUtcTimestamp(stats?.lastSentAt),
   };
 }

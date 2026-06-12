@@ -38,6 +38,7 @@ const SENDER_AVATAR_URL = 'https://example.com/carla.jpg';
 const TEST_CLIMB_UUID = 'board-presence-test-climb-uuid';
 const OTHER_TEST_CLIMB_UUID = 'board-presence-other-climb-uuid';
 const BOARD_MEMBERSHIP_TTL_MS = 43_200_000;
+const ALIAS_TEST_CLIMB_UUID = 'board-presence-alias-climb-uuid';
 
 function authCtx(overrides: Partial<ConnectionContext> = {}): ConnectionContext {
   return {
@@ -109,6 +110,14 @@ async function seedCatalogClimb(): Promise<void> {
       ('kilter', ${OTHER_TEST_CLIMB_UUID}, 40, 18, 5, 18, 3)
     ON CONFLICT (board_type, climb_uuid, angle) DO UPDATE SET display_difficulty = EXCLUDED.display_difficulty
   `);
+  await db.execute(sql`
+    INSERT INTO board_climb_aliases (board_type, alias_uuid, canonical_uuid, source)
+    VALUES ('kilter', ${ALIAS_TEST_CLIMB_UUID}, ${TEST_CLIMB_UUID}, 'board-presence-test')
+    ON CONFLICT (board_type, alias_uuid) DO UPDATE
+      SET canonical_uuid = EXCLUDED.canonical_uuid,
+          source = EXCLUDED.source,
+          last_seen_at = now()
+  `);
 }
 
 async function cleanup(): Promise<void> {
@@ -121,6 +130,11 @@ async function cleanup(): Promise<void> {
   await db.execute(
     sql`DELETE FROM board_climb_stats WHERE climb_uuid IN (${TEST_CLIMB_UUID}, ${OTHER_TEST_CLIMB_UUID})`,
   );
+  await db.execute(sql`
+    DELETE FROM board_climb_aliases
+    WHERE alias_uuid IN (${TEST_CLIMB_UUID}, ${OTHER_TEST_CLIMB_UUID}, ${ALIAS_TEST_CLIMB_UUID})
+       OR canonical_uuid IN (${TEST_CLIMB_UUID}, ${OTHER_TEST_CLIMB_UUID}, ${ALIAS_TEST_CLIMB_UUID})
+  `);
   await db.execute(sql`DELETE FROM board_climbs WHERE uuid IN (${TEST_CLIMB_UUID}, ${OTHER_TEST_CLIMB_UUID})`);
   await db.execute(sql`DELETE FROM user_profiles WHERE user_id = ${TEST_USER_ID}`);
   await db.execute(sql`DELETE FROM users WHERE id IN (${TEST_USER_ID}, ${SECOND_USER_ID})`);
@@ -816,6 +830,15 @@ describe('board-presence resolvers', () => {
         expect(statsEvent?.stats.distinctClimbersCount).toBe(2);
         // Hardest/top grade come from the SEND (V5), not the harder attempt.
         expect(statsEvent?.stats.hardestGrade).toBe('V5');
+        expect(statsEvent?.stats.hardestSend).toMatchObject({
+          climbUuid: TEST_CLIMB_UUID,
+          name: 'Real Catalog Climb',
+          grade: 'V5',
+          sentByUserId: TEST_USER_ID,
+          sentByDisplayName: SENDER_DISPLAY_NAME,
+          sentByAvatarUrl: SENDER_AVATAR_URL,
+        });
+        expect(statsEvent?.stats.hardestSend?.sentAt).toMatch(/T.*Z$/);
         expect(statsEvent?.stats.topGrade).toBe('V5');
         expect(statsEvent?.stats.lastSentAt).not.toBeNull();
         expect(statsEvent?.seq).toBeGreaterThan(0);
@@ -887,6 +910,7 @@ describe('board-presence resolvers', () => {
         // No tick was written, so the durable stats stay at zero sends.
         const stats = await boardPresenceQueries.boardPresenceStats(undefined, { boardId: sharedBoardId }, authCtx());
         expect(stats.climbsSentCount).toBe(0);
+        expect(stats.hardestSend).toBeNull();
       } finally {
         unsubscribe();
       }
@@ -924,10 +948,79 @@ describe('board-presence resolvers', () => {
       expect(stats.climbsSentCount).toBe(1);
       expect(stats.distinctClimbersCount).toBe(2);
       expect(stats.hardestGrade).toBe('V5');
+      expect(stats.hardestSend).toMatchObject({
+        climbUuid: TEST_CLIMB_UUID,
+        name: 'Real Catalog Climb',
+        grade: 'V5',
+        sentByUserId: TEST_USER_ID,
+        sentByDisplayName: SENDER_DISPLAY_NAME,
+        sentByAvatarUrl: SENDER_AVATAR_URL,
+        sentAt: new Date(oldClimbedAt).toISOString(),
+      });
       expect(stats.topGrade).toBe('V5');
       expect(stats.lastSentAt).not.toBeNull();
       // ISO 8601 normalised.
       expect(stats.lastSentAt).toMatch(/T.*Z$/);
+    });
+
+    it('uses the first send when multiple climbers share the hardest grade', async () => {
+      const resolved = await boardPresenceMutations.resolveBoardForSerial(
+        undefined,
+        { serial: `TIE-${Date.now()}`, boardType: 'kilter', layoutId: 1, sizeId: 10, setIds: '1,2' },
+        authCtx(),
+      );
+
+      const firstHardestClimbedAt = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString();
+      const laterHardestClimbedAt = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      await db.execute(sql`
+        INSERT INTO boardsesh_ticks
+          (uuid, user_id, board_type, climb_uuid, angle, is_mirror, status, attempt_count, difficulty, is_benchmark, comment, climbed_at, created_at, updated_at, board_id)
+        VALUES
+          (${`tick-first-hardest-${Date.now()}`}, ${SECOND_USER_ID}, 'kilter', ${OTHER_TEST_CLIMB_UUID}, 40, false, 'send', 1, 18, false, '', ${firstHardestClimbedAt}, now(), now(), ${resolved.boardId}),
+          (${`tick-later-hardest-${Date.now()}`}, ${TEST_USER_ID}, 'kilter', ${TEST_CLIMB_UUID}, 40, false, 'flash', 1, 18, false, '', ${laterHardestClimbedAt}, now(), now(), ${resolved.boardId})
+      `);
+
+      const stats = await boardPresenceQueries.boardPresenceStats(undefined, { boardId: resolved.boardId }, authCtx());
+      expect(stats.hardestGrade).toBe('V6');
+      expect(stats.hardestSend).toMatchObject({
+        climbUuid: OTHER_TEST_CLIMB_UUID,
+        name: 'Other Catalog Climb',
+        grade: 'V6',
+        sentByUserId: SECOND_USER_ID,
+        sentByDisplayName: 'Second Sender',
+        sentByAvatarUrl: null,
+        sentAt: new Date(firstHardestClimbedAt).toISOString(),
+      });
+    });
+
+    it('resolves aliased climb UUIDs before hardest-send name and consensus grade joins', async () => {
+      const resolved = await boardPresenceMutations.resolveBoardForSerial(
+        undefined,
+        { serial: `ALIAS-${Date.now()}`, boardType: 'kilter', layoutId: 1, sizeId: 10, setIds: '1,2' },
+        authCtx(),
+      );
+
+      const climbedAt = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+      await db.execute(sql`
+        INSERT INTO boardsesh_ticks
+          (uuid, user_id, board_type, climb_uuid, angle, is_mirror, status, attempt_count, difficulty, is_benchmark, comment, climbed_at, created_at, updated_at, board_id)
+        VALUES
+          (${`tick-alias-hardest-${Date.now()}`}, ${TEST_USER_ID}, 'kilter', ${ALIAS_TEST_CLIMB_UUID}, 40, false, 'send', 1, NULL, false, '', ${climbedAt}, now(), now(), ${resolved.boardId})
+      `);
+
+      const stats = await boardPresenceQueries.boardPresenceStats(undefined, { boardId: resolved.boardId }, authCtx());
+      expect(stats.climbsSentCount).toBe(1);
+      expect(stats.hardestGrade).toBe('V5');
+      expect(stats.topGrade).toBe('V5');
+      expect(stats.hardestSend).toMatchObject({
+        climbUuid: TEST_CLIMB_UUID,
+        name: 'Real Catalog Climb',
+        grade: 'V5',
+        sentByUserId: TEST_USER_ID,
+        sentByDisplayName: SENDER_DISPLAY_NAME,
+        sentByAvatarUrl: SENDER_AVATAR_URL,
+        sentAt: new Date(climbedAt).toISOString(),
+      });
     });
 
     it('returns zeroes for a board with no ticks', async () => {
@@ -940,6 +1033,7 @@ describe('board-presence resolvers', () => {
       expect(stats.climbsSentCount).toBe(0);
       expect(stats.distinctClimbersCount).toBe(0);
       expect(stats.hardestGrade).toBeNull();
+      expect(stats.hardestSend).toBeNull();
       expect(stats.topGrade).toBeNull();
       expect(stats.lastSentAt).toBeNull();
     });

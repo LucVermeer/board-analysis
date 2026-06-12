@@ -98,6 +98,15 @@ describe('createMobileBoardPresenceClient', () => {
       climbsSentCount: 3,
       distinctClimbersCount: 2,
       hardestGrade: 'V7',
+      hardestSend: {
+        climbUuid: 'c7',
+        name: 'Hard Thing',
+        grade: 'V7',
+        sentByUserId: 'user-1',
+        sentByDisplayName: 'Mina',
+        sentByAvatarUrl: 'https://example.com/mina.jpg',
+        sentAt: '2026-06-09T00:00:00.000Z',
+      },
       topGrade: 'V4',
       lastSentAt: null,
     };

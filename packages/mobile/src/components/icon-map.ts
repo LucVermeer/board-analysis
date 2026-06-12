@@ -121,6 +121,7 @@ export const iconMap = {
   // Misc
   star: { ios: 'star', android: 'star-outline' },
   'star.fill': { ios: 'star.fill', android: 'star' },
+  crown: { ios: 'crown.fill', android: 'crown' },
   location: { ios: 'location', android: 'map-marker-outline' },
   'location.fill': { ios: 'location.fill', android: 'map-marker' },
   calendar: { ios: 'calendar', android: 'calendar-outline' },

@@ -139,6 +139,9 @@ vi.mock('../../Text', () => ({
   Text: ({ children }: { children?: ReactNode }) => createElement('span', { 'data-text': 'true' }, children),
 }));
 vi.mock('../../Icon', () => ({ Icon: ({ name }: { name: string }) => createElement('span', { 'data-icon': name }) }));
+vi.mock('../../Avatar', () => ({
+  Avatar: ({ name }: { name?: string | null }) => createElement('span', { 'data-avatar': name ?? '' }),
+}));
 vi.mock('../../ActivityIndicator', () => ({
   ActivityIndicator: ({ accessibilityLabel }: { accessibilityLabel?: string }) =>
     createElement('span', { 'aria-label': accessibilityLabel, 'data-loading': 'true' }),
@@ -207,6 +210,9 @@ vi.mock('../../../providers/toast-provider', () => ({
 }));
 vi.mock('../../../hooks/use-grade-format', () => ({
   useGradeFormat: () => ({ formatGrade: (grade: string) => grade }),
+}));
+vi.mock('../../../theme/colors', () => ({
+  withAlpha: (color: string, alpha: number) => `${color}|${alpha}`,
 }));
 vi.mock('../../../theme/tokens', () => ({
   spacing: { 2: 8, 3: 12, 4: 16, 6: 24, 8: 32 },
@@ -358,6 +364,15 @@ describe('BoardSheet', () => {
       climbsSentCount: 14,
       distinctClimbersCount: 5,
       hardestGrade: 'V9',
+      hardestSend: {
+        climbUuid: 'hard-c1',
+        name: 'Hard Rig',
+        grade: 'V9',
+        sentByUserId: 'user-1',
+        sentByDisplayName: 'Mina',
+        sentByAvatarUrl: 'https://example.com/mina.jpg',
+        sentAt: '2026-06-09T00:00:00.000Z',
+      },
       topGrade: 'V5',
       lastSentAt: null,
     };
@@ -377,6 +392,11 @@ describe('BoardSheet', () => {
     expect(container.textContent).toContain('Older Climb');
     // Stats tiles.
     expect(container.textContent).toContain('14');
+    expect(container.textContent).toContain('mobile.boardPresence.hardestSendLabel');
+    expect(container.textContent).toContain('Hard Rig');
+    expect(container.textContent).toContain('mobile.boardPresence.sentByLine:Mina');
+    expect(container.querySelector('[data-avatar="Mina"]')).not.toBeNull();
+    expect(container.querySelector('[data-icon="crown"]')).not.toBeNull();
     expect(container.textContent).toContain('mobile.boardPresence.historyHeader');
     // History list rendered one node per item.
     expect(container.querySelector('[data-list="true"]')).not.toBeNull();

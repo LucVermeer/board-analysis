@@ -26,11 +26,8 @@ export const boardPresenceQueries = {
    * Durable stats for a board's wall feed, derived from `boardsesh_ticks`
    * stamped with this board_id.
    *
-   * v1 keeps it to what a single grouped query over the ticks table can
-   * answer cheaply: distinct climbs, distinct climbers, and the most recent
-   * send. `hardestGrade` / `topGrade` need a grade-name join across the
-   * board-specific difficulty tables (the same TODO the board leaderboard
-   * carries) — left null for now rather than shipping an approximate label.
+   * Includes the representative hardest send so the board sheet can show the
+   * climber + climb that established the wall's hardest logged grade.
    */
   boardPresenceStats: async (
     _: unknown,

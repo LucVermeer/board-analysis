@@ -147,38 +147,35 @@ export function MobileBoardPresenceProvider({ children }: { children: ReactNode 
     }
   }, []);
 
-  const resolveAndBindBoardByUuid = useCallback(
-    async (args: ResolveBoardUuidArgs): Promise<ResolvedBoard | null> => {
-      const activeClient = clientRef.current;
-      if (!enabledRef.current || activeClient === null || !activeClient.resolveBoardForUuid) {
+  const resolveAndBindBoardByUuid = useCallback(async (args: ResolveBoardUuidArgs): Promise<ResolvedBoard | null> => {
+    const activeClient = clientRef.current;
+    if (!enabledRef.current || activeClient === null || !activeClient.resolveBoardForUuid) {
+      return null;
+    }
+    if (lastResolvedBoardUuidRef.current === args.boardUuid) {
+      return null;
+    }
+    const resolveGeneration = resolveGenerationRef.current + 1;
+    resolveGenerationRef.current = resolveGeneration;
+    lastResolvedBoardUuidRef.current = args.boardUuid;
+    lastResolvedConfigKeyRef.current = null;
+    lastResolvedSerialRef.current = null;
+    setBoardId(null);
+    try {
+      const resolved = await activeClient.resolveBoardForUuid(args);
+      if (resolveGenerationRef.current !== resolveGeneration) {
         return null;
       }
-      if (lastResolvedBoardUuidRef.current === args.boardUuid) {
-        return null;
+      setBoardId(resolved.boardId);
+      return resolved;
+    } catch (error) {
+      if (resolveGenerationRef.current === resolveGeneration) {
+        lastResolvedBoardUuidRef.current = null;
       }
-      const resolveGeneration = resolveGenerationRef.current + 1;
-      resolveGenerationRef.current = resolveGeneration;
-      lastResolvedBoardUuidRef.current = args.boardUuid;
-      lastResolvedConfigKeyRef.current = null;
-      lastResolvedSerialRef.current = null;
-      setBoardId(null);
-      try {
-        const resolved = await activeClient.resolveBoardForUuid(args);
-        if (resolveGenerationRef.current !== resolveGeneration) {
-          return null;
-        }
-        setBoardId(resolved.boardId);
-        return resolved;
-      } catch (error) {
-        if (resolveGenerationRef.current === resolveGeneration) {
-          lastResolvedBoardUuidRef.current = null;
-        }
-        console.warn('[board-presence] resolveBoardForUuid failed', error);
-        return null;
-      }
-    },
-    [],
-  );
+      console.warn('[board-presence] resolveBoardForUuid failed', error);
+      return null;
+    }
+  }, []);
 
   const resolveAndBindBoardByConfig = useCallback(
     async (args: ResolveBoardConfigArgs): Promise<ResolvedBoard | null> => {
