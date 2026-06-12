@@ -165,7 +165,11 @@ vi.mock('../../../lib/haptics', () => ({ hapticLight: vi.fn(), hapticSelection: 
 
 vi.mock('../../../theme/colors', () => ({ withAlpha: (color: string) => `${color}29` }));
 vi.mock('../../../theme/layout', () => ({ TOOLBAR_CAPSULE_HEIGHT: 52, TOOLBAR_CAPSULE_MAX_WIDTH: 260 }));
-vi.mock('../../../theme/tokens', () => ({ shadows: { sm: {} } }));
+vi.mock('../../../theme/tokens', () => ({
+  opacity: { peek: 0.62 },
+  shadows: { sm: {} },
+  spacing: { 1: 4, 2: 8, 4: 16 },
+}));
 vi.mock('../../../hooks/use-native-glass', () => ({ useNativeGlass: () => false }));
 // AccessoryBarSurface (the capsule background) resolves the surface via this —
 // force the glass branch so the GlassSurface mock renders and `[data-glass]`

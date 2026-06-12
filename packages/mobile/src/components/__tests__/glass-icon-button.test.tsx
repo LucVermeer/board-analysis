@@ -13,7 +13,7 @@ vi.mock('react-native', () => ({
   StyleSheet: { create: (styles: Record<string, unknown>) => styles, absoluteFill: {}, hairlineWidth: 1 },
 }));
 
-// Paper IconButton / Badge → DOM nodes exposing the props the material test asserts on.
+// Paper IconButton → DOM node exposing the props the material test asserts on.
 vi.mock('react-native-paper', () => ({
   IconButton: ({
     icon,
@@ -32,7 +32,6 @@ vi.mock('react-native-paper', () => ({
       disabled,
       'data-label': accessibilityLabel,
     }),
-  Badge: ({ children }: { children?: ReactNode }) => createElement('span', { 'data-paper-badge': 'true' }, children),
 }));
 
 vi.mock('react-native-reanimated', () => ({
@@ -86,7 +85,15 @@ vi.mock('../Icon', () => ({
 }));
 
 vi.mock('../Text', () => ({
-  Text: ({ children }: { children?: ReactNode }) => createElement('span', { 'data-text': 'true' }, children),
+  Text: ({ children, maxFontSizeMultiplier }: { children?: ReactNode; maxFontSizeMultiplier?: number }) =>
+    createElement(
+      'span',
+      {
+        'data-text': 'true',
+        'data-max-font-size-multiplier': maxFontSizeMultiplier == null ? '' : String(maxFontSizeMultiplier),
+      },
+      children,
+    ),
 }));
 
 // GlassIconButton reads only `variant` from the theme; its count badge is a
@@ -134,6 +141,13 @@ describe('GlassIconButton (Liquid Glass variant)', () => {
     expect(container.textContent).toContain('3');
     rerender(<GlassIconButton {...base} iconName="filter" badgeCount={0} />);
     expect(container.textContent).not.toContain('3');
+  });
+
+  it('clamps large badges and caps badge text scaling', () => {
+    const { container } = render(<GlassIconButton {...base} iconName="filter" badgeCount={150} />);
+    const badgeText = container.querySelector('[data-text]');
+    expect(badgeText?.textContent).toBe('99+');
+    expect(badgeText?.getAttribute('data-max-font-size-multiplier')).toBe('1');
   });
 
   it('forwards accessibilityLabel and accessibilityHint', () => {
@@ -219,11 +233,13 @@ describe('GlassIconButton (Material variant)', () => {
     expect(onPress).toHaveBeenCalledTimes(1);
   });
 
-  it('overlays a Paper Badge only when badgeCount > 0', () => {
+  it('overlays a clamped badge only when badgeCount > 0', () => {
     const { container, rerender } = render(<GlassIconButton {...base} iconName="filter" badgeCount={3} />);
-    expect(container.querySelector('[data-paper-badge]')?.textContent).toBe('3');
+    expect(container.querySelector('[data-text]')?.textContent).toBe('3');
+    rerender(<GlassIconButton {...base} iconName="filter" badgeCount={150} />);
+    expect(container.querySelector('[data-text]')?.textContent).toBe('99+');
     rerender(<GlassIconButton {...base} iconName="filter" badgeCount={0} />);
-    expect(container.querySelector('[data-paper-badge]')).toBeNull();
+    expect(container.querySelector('[data-text]')).toBeNull();
   });
 
   it('passes disabled through to the Paper IconButton', () => {

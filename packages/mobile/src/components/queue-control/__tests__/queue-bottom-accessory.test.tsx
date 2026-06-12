@@ -22,7 +22,8 @@ vi.mock('react-native', () => ({
         ? (styleEntry as { width?: unknown }).width
         : null;
     }, null);
-    return createElement('div', { 'data-width': width == null ? '' : String(width) }, children);
+    const dataWidth = typeof width === 'number' || typeof width === 'string' ? String(width) : '';
+    return createElement('div', { 'data-width': dataWidth }, children);
   },
   StyleSheet: { create: (styles: Record<string, unknown>) => styles },
   useWindowDimensions: () => ({ width: 402, height: 874, scale: 3, fontScale: 1 }),
@@ -33,6 +34,8 @@ vi.mock('../../../providers/queue-provider', () => ({
 }));
 vi.mock('../../../theme/layout', () => ({
   glassSize: { standard: 56, inline: 44, capsule: 52 },
+  NATIVE_BOTTOM_ACCESSORY_MAX_WIDTH: 344,
+  NATIVE_BOTTOM_ACCESSORY_SCREEN_GUTTER: 32,
 }));
 vi.mock('../NativeAccessoryClimbRow', () => ({
   NativeAccessoryClimbRow: ({ placement, width }: { placement: 'regular' | 'inline'; width: number }) =>

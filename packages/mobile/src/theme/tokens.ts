@@ -74,6 +74,7 @@ export const shadows = {
 
 export const opacity = {
   subtle: 0.7,
+  peek: 0.62,
   disabled: 0.5,
 } as const;
 

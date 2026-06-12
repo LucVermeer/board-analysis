@@ -79,6 +79,7 @@ vi.mock('../use-wall-or-queue-climb', () => ({
   useWallOrQueueCurrentClimb: (localClimb: unknown) => wall.climb ?? localClimb,
   useIsWallPinned: () => wall.pinned,
 }));
+vi.mock('../../../theme/tokens', () => ({ opacity: { peek: 0.62 } }));
 
 import { useQueueClimbCarousel } from '../use-queue-climb-carousel';
 
