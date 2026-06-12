@@ -123,4 +123,12 @@ describe('UndoWallChangeSnackbar', () => {
     expect(container.querySelector('[data-animated]')?.getAttribute('data-role')).toBe('alert');
     expect(container.textContent).toContain('mobile.boardPresence.wallChanged');
   });
+
+  it('routes the Liquid Glass action to onUndo', () => {
+    ctrl.variant = 'liquidGlass';
+    const onUndo = vi.fn();
+    const { container } = render(<UndoWallChangeSnackbar {...base} onUndo={onUndo} />);
+    (container.querySelector('[data-label="mobile.boardPresence.undoAria"]') as HTMLElement).click();
+    expect(onUndo).toHaveBeenCalledTimes(1);
+  });
 });

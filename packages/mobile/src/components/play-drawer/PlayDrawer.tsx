@@ -168,6 +168,9 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   const { boardName, layoutId, sizeId, setIds, angle } = boardConfig;
   const bluetoothConnected = bluetooth?.isConnected ?? false;
   const bluetoothLoading = bluetooth?.loading ?? false;
+  const bluetoothArmUndoWallChangeToast = bluetooth?.armUndoWallChangeToast;
+  const bluetoothReassertWall = bluetooth?.reassertWall;
+  const bluetoothClearBoard = bluetooth?.clearBoard;
   // Single source for "is a board's BLE available at all" so the lightbulb's
   // accessibility label and its press action stay in lockstep — both read this
   // instead of one checking `bluetooth` and the other `bluetooth !== null`.
@@ -656,6 +659,19 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
     setBleControlOpen(true);
   }, [bluetooth]);
 
+  const handleBleReassert = useCallback(() => {
+    bluetoothArmUndoWallChangeToast?.();
+    bluetoothReassertWall?.();
+  }, [bluetoothArmUndoWallChangeToast, bluetoothReassertWall]);
+
+  const handleBleClearLights = useCallback(() => {
+    void bluetoothClearBoard?.();
+  }, [bluetoothClearBoard]);
+
+  const handleBleControlClose = useCallback(() => {
+    setBleControlOpen(false);
+  }, []);
+
   // Close the BLE controls sheet if the link drops while it's open — otherwise
   // it lingers showing Re-light / Disconnect actions that no-op on a dead link.
   useEffect(() => {
@@ -970,14 +986,11 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
       {bluetooth && (
         <BleControlSheet
           visible={bleControlOpen}
-          onReassert={() => {
-            bluetooth.armUndoWallChangeToast();
-            bluetooth.reassertWall();
-          }}
-          onClearLights={() => void bluetooth.clearBoard()}
+          onReassert={handleBleReassert}
+          onClearLights={handleBleClearLights}
           supportsClearLights={boardName !== 'moonboard'}
           onDisconnect={disconnectAllBluetooth}
-          onClose={() => setBleControlOpen(false)}
+          onClose={handleBleControlClose}
         />
       )}
     </>

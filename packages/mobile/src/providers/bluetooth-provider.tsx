@@ -398,6 +398,7 @@ export function BluetoothProvider({
     clearUndoWallChangeToastArm();
   }, [clearUndoWallChangeToastArm]);
 
+  // Cleanup-only effect: drop any one-shot arm timer when the provider unmounts.
   useEffect(() => clearUndoWallChangeToastArm, [clearUndoWallChangeToastArm]);
 
   useEffect(() => {
