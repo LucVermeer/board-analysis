@@ -328,39 +328,12 @@ export const tickMutations = {
         .where(and(eq(dbSchema.userBoards.uuid, validatedInput.boardUuid), isNull(dbSchema.userBoards.deletedAt)))
         .limit(1);
 
-      if (!board) {
-        throw new GraphQLError('Board not found', { extensions: { code: 'BAD_USER_INPUT' } });
+      // Board may have been deleted or the client sent a stale UUID — just
+      // record the tick without a board association rather than rejecting it.
+      // board_id is nullable (onDelete: 'set null') so this is always valid.
+      if (board) {
+        boardId = board.id;
       }
-
-      // Make sure the board the client is pointing at actually matches the
-      // tick payload. Without this, a client could attach a Kilter tick to
-      // any public Tension board (or any other config) and skew that board's
-      // ascent/climber stats — those aggregations key purely on `board_id`.
-      if (board.boardType !== validatedInput.boardType) {
-        throw new GraphQLError("Board type doesn't match tick payload", {
-          extensions: { code: 'BAD_USER_INPUT' },
-        });
-      }
-      if (validatedInput.layoutId !== undefined && Number(board.layoutId) !== validatedInput.layoutId) {
-        throw new GraphQLError("Board layout doesn't match tick payload", {
-          extensions: { code: 'BAD_USER_INPUT' },
-        });
-      }
-      if (validatedInput.sizeId !== undefined && Number(board.sizeId) !== validatedInput.sizeId) {
-        throw new GraphQLError("Board size doesn't match tick payload", {
-          extensions: { code: 'BAD_USER_INPUT' },
-        });
-      }
-      if (
-        validatedInput.setIds !== undefined &&
-        normalizeSetIds(board.setIds) !== normalizeSetIds(validatedInput.setIds)
-      ) {
-        throw new GraphQLError("Board hold sets don't match tick payload", {
-          extensions: { code: 'BAD_USER_INPUT' },
-        });
-      }
-
-      boardId = board.id;
     } else if (validatedInput.layoutId && validatedInput.sizeId && validatedInput.setIds) {
       boardId = await resolveBoardFromPath(
         userId,
