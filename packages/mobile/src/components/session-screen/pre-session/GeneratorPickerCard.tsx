@@ -25,7 +25,6 @@ import {
   generateWorkoutPlan,
   type ClimbBias,
   type GeneratorOptions,
-  type PlannedClimbSlot,
   type WarmUpType,
   type WorkoutType,
 } from '@boardsesh/playlist-generator';
@@ -62,8 +61,6 @@ type GeneratorPickerCardProps = {
   angle: number | null;
   selection: GeneratorSelection;
   onChange: (selection: GeneratorSelection) => void;
-  /** Actual generated slots from the live preview, used for the selected type's chart. */
-  plannedSlots?: readonly PlannedClimbSlot[];
 };
 
 type ChipValue = WorkoutType | 'off';
@@ -271,7 +268,6 @@ export function GeneratorPickerCard({
   angle,
   selection,
   onChange,
-  plannedSlots = [],
 }: GeneratorPickerCardProps) {
   const { t } = useTranslation('session');
   const { systemColors, variant, m3 } = useTheme();
@@ -365,8 +361,7 @@ export function GeneratorPickerCard({
         selection.type === 'on' && selection.options.type === value
           ? selection.options
           : ({ ...buildDefaultOptions(value, targetGrade), ...commonPatch } as GeneratorOptions);
-      const isSelectedWorkoutType = selection.type === 'on' && selection.options.type === value;
-      const slots = isSelectedWorkoutType ? plannedSlots : generateWorkoutPlan(options, generatorGrades);
+      const slots = generateWorkoutPlan(options, generatorGrades);
       const bars = buildWorkoutGradeBars(slots, formatGradeByDifficultyId);
       const chartSummary = bars
         ?.map((bar) =>
@@ -392,7 +387,7 @@ export function GeneratorPickerCard({
         }),
       };
     });
-  }, [activeType, boardName, formatGradeByDifficultyId, generatorGrades, handleSelectType, plannedSlots, selection, t]);
+  }, [activeType, boardName, formatGradeByDifficultyId, generatorGrades, handleSelectType, selection, t]);
 
   const updateCommonOptions = (patch: CommonGeneratorPatch) => {
     if (selection.type !== 'on') return;

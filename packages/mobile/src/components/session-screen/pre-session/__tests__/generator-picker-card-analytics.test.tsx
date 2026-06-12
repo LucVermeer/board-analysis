@@ -245,10 +245,6 @@ describe('GeneratorPickerCard analytics', () => {
         angle: 40,
         selection: VOLUME_SELECTION,
         onChange: vi.fn(),
-        plannedSlots: [
-          { grade: 20, section: 'main', index: 0 },
-          { grade: 20, section: 'main', index: 1 },
-        ],
       }),
     );
 
@@ -256,11 +252,11 @@ describe('GeneratorPickerCard analytics', () => {
     expect(shelf.entries.find((entry) => entry.key === 'volume')).toMatchObject({
       selected: true,
       bars: expect.any(Array),
-      accessibilityLabel: 'mobile.session.preGeneratorLabel, mobile.session.preGeneratorVolume, 2 climbs at V20',
+      accessibilityLabel: 'mobile.session.preGeneratorLabel, mobile.session.preGeneratorVolume, 1 climbs at V20',
     });
   });
 
-  it('waits for live planned slots before rendering the selected workout chart', () => {
+  it('renders the selected workout chart from current settings without waiting for preview data', () => {
     render(
       createElement(GeneratorPickerCard, {
         boardName: 'kilter',
@@ -274,7 +270,7 @@ describe('GeneratorPickerCard analytics', () => {
 
     expect(shelf.entries.find((entry) => entry.key === 'volume')).toMatchObject({
       selected: true,
-      bars: null,
+      bars: expect.any(Array),
     });
     expect(shelf.entries.find((entry) => entry.key === 'pyramid')?.bars).toEqual(expect.any(Array));
   });
