@@ -6,8 +6,12 @@ import type { ClimbQueueItemInput, ResolvedBoard } from '@boardsesh/shared-schem
 
 const flags = vi.hoisted(() => ({ value: false as boolean }));
 const transport = vi.hoisted(() => ({
-  resolveBoardForSerial: vi.fn(async () => ({ boardId: 42, boardName: 'Garage Wall' }) as unknown as ResolvedBoard),
-  resolveBoardForConfig: vi.fn(async () => ({ boardId: 43, boardName: 'MoonBoard 40' }) as unknown as ResolvedBoard),
+  resolveBoardForSerial: vi.fn(
+    async (_args: unknown) => ({ boardId: 42, boardName: 'Garage Wall' }) as unknown as ResolvedBoard,
+  ),
+  resolveBoardForConfig: vi.fn(
+    async (_args: unknown) => ({ boardId: 43, boardName: 'MoonBoard 40' }) as unknown as ResolvedBoard,
+  ),
   reportClimb: vi.fn(async () => true),
 }));
 const sharedProvider = vi.hoisted(() => ({ lastBoardId: undefined as number | null | undefined }));
@@ -156,6 +160,82 @@ describe('MobileBoardPresenceProvider', () => {
     await waitFor(() => {
       expect(sharedProvider.lastBoardId).toBe(43);
     });
+  });
+
+  it('does not re-resolve an unchanged config once bound', async () => {
+    flags.value = true;
+    renderProvider();
+
+    const args = {
+      boardType: 'moonboard',
+      layoutId: 1,
+      sizeId: 1,
+      setIds: '2019',
+    };
+    await act(async () => {
+      await capturedControls?.resolveAndBindBoardByConfig(args);
+    });
+    await waitFor(() => {
+      expect(sharedProvider.lastBoardId).toBe(43);
+    });
+
+    await act(async () => {
+      const resolved = await capturedControls?.resolveAndBindBoardByConfig(args);
+      expect(resolved).toBeNull();
+    });
+    expect(transport.resolveBoardForConfig).toHaveBeenCalledTimes(1);
+  });
+
+  it('ignores stale config resolve results after a newer selected config resolves', async () => {
+    flags.value = true;
+    let resolveFirst: ((value: ResolvedBoard) => void) | null = null;
+    let resolveSecond: ((value: ResolvedBoard) => void) | null = null;
+    transport.resolveBoardForConfig.mockImplementation(
+      (args: unknown) =>
+        new Promise<ResolvedBoard>((resolve) => {
+          const boardType = (args as { boardType: string }).boardType;
+          if (boardType === 'moonboard') {
+            resolveFirst = resolve;
+            return;
+          }
+          resolveSecond = resolve;
+        }),
+    );
+    renderProvider();
+
+    let firstPromise: Promise<ResolvedBoard | null> | undefined;
+    let secondPromise: Promise<ResolvedBoard | null> | undefined;
+    act(() => {
+      firstPromise = capturedControls?.resolveAndBindBoardByConfig({
+        boardType: 'moonboard',
+        layoutId: 1,
+        sizeId: 1,
+        setIds: '2019',
+      });
+      secondPromise = capturedControls?.resolveAndBindBoardByConfig({
+        boardType: 'kilter',
+        layoutId: 1,
+        sizeId: 10,
+        setIds: '1,2',
+      });
+    });
+
+    await act(async () => {
+      resolveSecond?.({ boardId: 44, boardName: 'Kilter' } as unknown as ResolvedBoard);
+      await secondPromise;
+    });
+    await waitFor(() => {
+      expect(sharedProvider.lastBoardId).toBe(44);
+    });
+
+    let firstResult: ResolvedBoard | null | undefined;
+    await act(async () => {
+      resolveFirst?.({ boardId: 43, boardName: 'MoonBoard 40' } as unknown as ResolvedBoard);
+      firstResult = await firstPromise;
+    });
+
+    expect(firstResult).toBeNull();
+    expect(sharedProvider.lastBoardId).toBe(44);
   });
 
   it('returns null instead of leaking a rejected serial resolve', async () => {

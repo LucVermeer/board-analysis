@@ -45,6 +45,7 @@ export const iconMap = {
   edit: { ios: 'pencil', android: 'pencil-outline' },
   pin: { ios: 'pin', android: 'pin-outline' },
   'pin.fill': { ios: 'pin.fill', android: 'pin' },
+  transfer: { ios: 'arrow.left.arrow.right', android: 'swap-horizontal' },
   tag: { ios: 'tag', android: 'tag-outline' },
   'check.small': { ios: 'checkmark', android: 'check' },
   flash: { ios: 'bolt.fill', android: 'flash' },

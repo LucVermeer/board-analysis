@@ -38,6 +38,10 @@ export type ResolveBoardArgs = {
 
 export type ResolveBoardConfigArgs = Omit<ResolveBoardArgs, 'serial'>;
 
+function boardConfigResolveKey({ boardType, layoutId, sizeId, setIds }: ResolveBoardConfigArgs): string {
+  return `${boardType}:${layoutId}:${sizeId}:${setIds}`;
+}
+
 type BoardPresenceControlsValue = {
   /** True when the `board-presence` flag is on. All wall surfaces gate on this. */
   enabled: boolean;
@@ -80,6 +84,8 @@ export function MobileBoardPresenceProvider({ children }: { children: ReactNode 
 
   // The serial last resolved, so a reconnect to the same wall doesn't re-resolve.
   const lastResolvedSerialRef = useRef<string | null>(null);
+  const lastResolvedConfigKeyRef = useRef<string | null>(null);
+  const configResolveGenerationRef = useRef(0);
   const enabledRef = useRef(enabled);
   enabledRef.current = enabled;
   // Mirror boardId into a ref so the empty-dep callback can read it without
@@ -89,6 +95,8 @@ export function MobileBoardPresenceProvider({ children }: { children: ReactNode 
 
   const resetPresence = useCallback(() => {
     lastResolvedSerialRef.current = null;
+    lastResolvedConfigKeyRef.current = null;
+    configResolveGenerationRef.current += 1;
     setBoardId(null);
   }, []);
 
@@ -106,6 +114,8 @@ export function MobileBoardPresenceProvider({ children }: { children: ReactNode 
     if (lastResolvedSerialRef.current === args.serial && boardIdRef.current !== null) {
       return null;
     }
+    configResolveGenerationRef.current += 1;
+    lastResolvedConfigKeyRef.current = null;
     lastResolvedSerialRef.current = args.serial;
     try {
       const resolved = await activeClient.resolveBoardForSerial(args);
@@ -124,11 +134,25 @@ export function MobileBoardPresenceProvider({ children }: { children: ReactNode 
       if (!enabledRef.current || activeClient === null || !activeClient.resolveBoardForConfig) {
         return null;
       }
+      const configKey = boardConfigResolveKey(args);
+      if (lastResolvedConfigKeyRef.current === configKey && boardIdRef.current !== null) {
+        return null;
+      }
+      const resolveGeneration = configResolveGenerationRef.current + 1;
+      configResolveGenerationRef.current = resolveGeneration;
+      lastResolvedConfigKeyRef.current = configKey;
+      lastResolvedSerialRef.current = null;
       try {
         const resolved = await activeClient.resolveBoardForConfig(args);
+        if (configResolveGenerationRef.current !== resolveGeneration || lastResolvedConfigKeyRef.current !== configKey) {
+          return null;
+        }
         setBoardId(resolved.boardId);
         return resolved;
       } catch (error) {
+        if (configResolveGenerationRef.current === resolveGeneration && lastResolvedConfigKeyRef.current === configKey) {
+          lastResolvedConfigKeyRef.current = null;
+        }
         console.warn('[board-presence] resolveBoardForConfig failed', error);
         return null;
       }

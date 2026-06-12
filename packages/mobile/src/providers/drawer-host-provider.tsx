@@ -35,7 +35,7 @@ import { favoritesStore } from '@boardsesh/climb-actions';
 import { climbToQueueItem } from '../lib/climb-to-queue-item';
 import { useIsPartyPreviewOnly, useQueueActions, useQueueSessionControls } from './queue-provider';
 import { useQueueSnackbar } from './queue-snackbar-provider';
-import { useBoardPresenceControls } from './board-presence-provider';
+import { useBoardPresenceControls, type ResolveBoardConfigArgs } from './board-presence-provider';
 import { useOptionalBluetoothContext } from './bluetooth-provider';
 
 export type BoardConfig = {
@@ -127,7 +127,12 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
     dismissUndoWallChangeSnackbar,
   } = useQueueSnackbar();
   const bluetooth = useOptionalBluetoothContext();
-  const { boardId: boardPresenceBoardId } = useBoardPresenceControls();
+  const {
+    enabled: boardPresenceEnabled,
+    boardId: boardPresenceBoardId,
+    resolveAndBindBoardByConfig,
+    resetPresence,
+  } = useBoardPresenceControls();
   const boardPresenceBoardIdRef = useRef(boardPresenceBoardId);
   boardPresenceBoardIdRef.current = boardPresenceBoardId;
   const { mutate: toggleFavoriteMutate } = useToggleFavorite();
@@ -153,6 +158,26 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
       angle: activeBoard.angle,
     };
   }, [boardConfigOverride, activeBoard]);
+
+  const selectedBoardPresenceConfig = useMemo<ResolveBoardConfigArgs | null>(() => {
+    if (!activeBoard) return null;
+    if (!activeBoard.boardType || activeBoard.layoutId <= 0 || activeBoard.sizeId <= 0) return null;
+    return {
+      boardType: activeBoard.boardType,
+      layoutId: activeBoard.layoutId,
+      sizeId: activeBoard.sizeId,
+      setIds: activeBoard.setIds,
+    };
+  }, [activeBoard?.boardType, activeBoard?.layoutId, activeBoard?.sizeId, activeBoard?.setIds]);
+
+  useEffect(() => {
+    if (!boardPresenceEnabled) return;
+    if (!selectedBoardPresenceConfig) {
+      resetPresence();
+      return;
+    }
+    void resolveAndBindBoardByConfig(selectedBoardPresenceConfig);
+  }, [boardPresenceEnabled, selectedBoardPresenceConfig, resolveAndBindBoardByConfig, resetPresence]);
 
   // Keep a ref so the otherwise empty-dep `openClimbActions` callback can
   // snapshot the current board config without churning its identity.

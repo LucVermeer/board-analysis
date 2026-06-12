@@ -264,9 +264,9 @@ describe('BoardSheet', () => {
     expect(container.querySelector('[data-list="true"]')).not.toBeNull();
   });
 
-  it('fires onSwitchBoard from the separated footer control', () => {
+  it('fires onSwitchBoard from the footer switch control', () => {
     const onSwitchBoard = vi.fn();
-    const { getByLabelText } = render(
+    const { container, getByLabelText } = render(
       createElement(BoardSheet, {
         boardLabel: 'Garage Wall',
         onClose: noop,
@@ -275,13 +275,15 @@ describe('BoardSheet', () => {
         onSwitchBoard,
       }),
     );
+    expect(container.querySelector('[data-icon="transfer"]')).not.toBeNull();
+    expect(container.textContent).toContain('mobile.boardPresence.switchBoard');
     fireEvent.click(getByLabelText('mobile.boardPresence.switchBoardAria'));
     expect(onSwitchBoard).toHaveBeenCalledTimes(1);
   });
 
-  it('fires onClose from the header X', () => {
+  it('fires onClose from the header chevron', () => {
     const onClose = vi.fn();
-    const { getByLabelText } = render(
+    const { container, getByLabelText } = render(
       createElement(BoardSheet, {
         boardLabel: 'Garage Wall',
         onClose,
@@ -290,6 +292,8 @@ describe('BoardSheet', () => {
         onSwitchBoard: noop,
       }),
     );
+    expect(container.querySelector('[data-icon="chevron.down"]')).not.toBeNull();
+    expect(container.querySelector('[data-icon="close"]')).toBeNull();
     fireEvent.click(getByLabelText('mobile.boardPresence.close'));
     expect(onClose).toHaveBeenCalledTimes(1);
   });

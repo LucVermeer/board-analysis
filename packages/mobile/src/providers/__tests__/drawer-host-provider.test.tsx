@@ -62,6 +62,14 @@ const activeBoard = vi.hoisted(() => ({
   setActiveBoard: vi.fn(async () => {}),
 }));
 
+const presence = vi.hoisted(() => ({
+  enabled: false,
+  boardId: null as number | null,
+  resolveAndBindBoard: vi.fn(async () => null),
+  resolveAndBindBoardByConfig: vi.fn(async () => null),
+  resetPresence: vi.fn(),
+}));
+
 vi.mock('react-native', () => ({
   Platform: { OS: 'ios', select: (options: Record<string, unknown>) => options.ios ?? options.default },
   StyleSheet: { create: (styles: Record<string, unknown>) => styles, hairlineWidth: 1 },
@@ -152,7 +160,13 @@ vi.mock('@boardsesh/board-presence-react', () => ({
 }));
 
 vi.mock('../board-presence-provider', () => ({
-  useBoardPresenceControls: () => ({ enabled: false, boardId: null, resolveAndBindBoard: vi.fn(async () => null) }),
+  useBoardPresenceControls: () => ({
+    enabled: presence.enabled,
+    boardId: presence.boardId,
+    resolveAndBindBoard: presence.resolveAndBindBoard,
+    resolveAndBindBoardByConfig: presence.resolveAndBindBoardByConfig,
+    resetPresence: presence.resetPresence,
+  }),
 }));
 
 vi.mock('../bluetooth-provider', () => ({
@@ -251,6 +265,33 @@ function Probe({ onHost }: { onHost: (host: ReturnType<typeof useDrawerHost>) =>
 function renderHost(onHost: (host: ReturnType<typeof useDrawerHost>) => void) {
   return render(createElement(DrawerHostProvider, null, createElement(Probe, { onHost })));
 }
+
+beforeEach(() => {
+  presence.enabled = false;
+  presence.boardId = null;
+  presence.resolveAndBindBoard.mockClear();
+  presence.resolveAndBindBoardByConfig.mockClear();
+  presence.resetPresence.mockClear();
+});
+
+describe('DrawerHostProvider board presence binding', () => {
+  it('resolves board presence from the selected active board without Bluetooth', async () => {
+    presence.enabled = true;
+    const hosts: Array<ReturnType<typeof useDrawerHost>> = [];
+    renderHost((host) => hosts.push(host));
+    await waitFor(() => expect(hosts.at(-1)).toBeDefined());
+
+    await waitFor(() => {
+      expect(presence.resolveAndBindBoardByConfig).toHaveBeenCalledWith({
+        boardType: 'kilter',
+        layoutId: 1,
+        sizeId: 10,
+        setIds: '1,2',
+      });
+    });
+    expect(presence.resolveAndBindBoard).not.toHaveBeenCalled();
+  });
+});
 
 describe('DrawerHostProvider queue sheet wall-control gating', () => {
   beforeEach(() => {
