@@ -25,7 +25,6 @@ export type UserPreferenceKeyMap = {
   logbookPreferences: LogbookPreferences;
   'swipeHint:climbListSeen': boolean;
   'swipeHint:queueBarSeen': boolean;
-  'swipeHint:logbookSeen': boolean;
   /**
    * Queue-control-bar pivot Phase 3 first-run coachmark: pulses the lightbulb
    * in the Play View Drawer once, with the tooltip "Send to the wall."
@@ -69,6 +68,8 @@ const ORPHANED_PREFERENCE_KEYS = [
   // Removed when the queue-control-bar pivot dropped the play-view drawer
   // peek-animation hint in favour of the lightbulb coachmark (`swipeHint:lightbulbSeen`).
   'swipeHint:playViewSeen',
+  // Removed when /you/logbook moved to the shared climb list with row swipe disabled.
+  'swipeHint:logbookSeen',
 ] as const;
 
 const getDBRaw = createIndexedDBStore('boardsesh-user-preferences', STORE_NAME);

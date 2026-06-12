@@ -1,72 +1,78 @@
-// @vitest-environment jsdom
-
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vite-plus/test';
-import { render, screen, waitFor } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vite-plus/test';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { createTestQueryClient } from '@/app/test-utils/test-providers';
-import type { LayoutStats, AscentFeedItem } from '@boardsesh/graphql/operations/ticks';
+import type { AscentFeedItem, LayoutStats } from '@boardsesh/graphql/operations/ticks';
+import type { BoardDetails, Climb } from '@/app/lib/types';
 import { tFromCatalog } from '@/app/__test-helpers__/i18n-mock';
+import LogbookFeed from '../logbook-feed';
 
-// --- Capture virtualizer config so tests can pin overscan / count. ---
-let lastVirtualizerOpts: { count: number; overscan: number; estimateSize: () => number } | null = null;
+type LogbookListItemProps = {
+  centerBottomSlot?: React.ReactNode;
+  belowContentSlot?: React.ReactNode;
+  menuSlot?: React.ReactNode;
+  disableFavorite?: boolean;
+  disableSelection?: boolean;
+  disableSwipe?: boolean;
+};
 
-vi.mock('@tanstack/react-virtual', () => ({
-  useWindowVirtualizer: (opts: {
-    count: number;
-    estimateSize: () => number;
-    overscan: number;
-    getItemKey: (i: number) => string | number;
-  }) => {
-    lastVirtualizerOpts = opts;
-    // Render visible window + overscan, capped at count. Mirrors how the real
-    // virtualizer behaves on first paint.
-    const itemCount = Math.min(opts.overscan + 7, opts.count);
-    const estimatedSize = opts.estimateSize();
-    const items = Array.from({ length: itemCount }, (_, i) => ({
-      index: i,
-      key: opts.getItemKey ? opts.getItemKey(i) : `item-${i}`,
-      start: i * estimatedSize,
-      size: estimatedSize,
-      end: (i + 1) * estimatedSize,
-      lane: 0,
-    }));
-    return {
-      getVirtualItems: () => items,
-      getTotalSize: () => opts.count * estimatedSize,
-      measureElement: vi.fn(),
-      scrollToIndex: vi.fn(),
-      scrollOffset: 0,
-      range: opts.count > 0 ? { startIndex: 0, endIndex: Math.min(6, opts.count - 1) } : null,
-    };
-  },
+type ClimbsListMockProps = {
+  climbs: Climb[];
+  onClimbSelect?: (climb: Climb, index: number) => void;
+  getItemKey?: (climb: Climb, index: number) => string | number;
+  getListItemProps?: (climb: Climb, index: number, boardDetails: BoardDetails) => LogbookListItemProps;
+  forcedViewMode?: 'list' | 'grid';
+  showSwipeHint?: boolean;
+  listOverscan?: number;
+};
+
+const feedTestState = vi.hoisted(() => ({
+  mockRequest: vi.fn(),
+  getPreferenceMock: vi.fn(),
+  replaceMock: vi.fn(),
+  showMessageSpy: vi.fn(),
+  trackMock: vi.fn(),
+  lastClimbsListProps: null as unknown,
 }));
 
+const mockBoardDetails = vi.hoisted(
+  () =>
+    ({
+      board_name: 'kilter',
+      layout_id: 1,
+      size_id: 10,
+      set_ids: [1],
+      images_to_holds: {},
+      holdsData: [],
+      edge_left: 0,
+      edge_right: 100,
+      edge_bottom: 0,
+      edge_top: 100,
+      boardHeight: 100,
+      boardWidth: 100,
+    }) as BoardDetails,
+);
+
 vi.mock('react-i18next', () => ({
-  useTranslation: (ns?: string) => ({
-    t: (key: string, options?: Record<string, unknown>) => tFromCatalog(ns, key, options),
+  useTranslation: (namespace?: string) => ({
+    t: (key: string, options?: Record<string, unknown>) => tFromCatalog(namespace, key, options),
     i18n: { language: 'en-US' },
   }),
   Trans: ({ children }: { children?: React.ReactNode }) => children ?? null,
 }));
 
-const mockRequest = vi.fn();
-const getPreferenceMock = vi.fn().mockResolvedValue(null);
-const showMessageSpy = vi.fn();
-
 vi.mock('../library.module.css', () => ({
-  default: new Proxy({}, { get: (_t, p) => String(p) }),
-}));
-vi.mock('@/app/components/activity-feed/ascents-feed.module.css', () => ({
-  default: new Proxy({}, { get: (_t, p) => String(p) }),
+  default: new Proxy({}, { get: (_target, property) => String(property) }),
 }));
 
 vi.mock('@/app/lib/graphql/client', () => ({
-  createGraphQLHttpClient: () => ({ request: mockRequest }),
+  createGraphQLHttpClient: () => ({ request: feedTestState.mockRequest }),
 }));
 
 vi.mock('@/app/lib/backend-url', () => ({
   getBackendHttpUrl: () => 'http://backend.test',
+  getBackendWsUrl: () => 'ws://backend.test',
 }));
 
 vi.mock('@boardsesh/graphql/operations/ticks', async () => {
@@ -85,7 +91,7 @@ vi.mock('next-auth/react', () => ({
 vi.mock('next/navigation', () => ({
   usePathname: () => '/you/logbook',
   useSearchParams: () => new URLSearchParams(),
-  useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
+  useRouter: () => ({ replace: feedTestState.replaceMock, push: vi.fn() }),
 }));
 
 vi.mock('@/app/hooks/use-ws-auth-token', () => ({
@@ -97,17 +103,13 @@ vi.mock('@/app/hooks/use-ws-auth-token', () => ({
   }),
 }));
 
-vi.mock('@/app/hooks/use-infinite-scroll', () => ({
-  useInfiniteScroll: () => ({ sentinelRef: { current: null } }),
-}));
-
 vi.mock('@/app/lib/user-preferences-db', () => ({
-  getPreference: (...args: unknown[]) => getPreferenceMock(...args),
+  getPreference: (...args: unknown[]) => feedTestState.getPreferenceMock(...args),
   setPreference: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('@/app/components/providers/snackbar-provider', () => ({
-  useSnackbar: () => ({ showMessage: showMessageSpy }),
+  useSnackbar: () => ({ showMessage: feedTestState.showMessageSpy }),
 }));
 
 vi.mock('@/app/lib/instagram-posting', () => ({
@@ -122,7 +124,7 @@ vi.mock('@boardsesh/board-constants/product-sizes', async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>();
   return {
     ...actual,
-    getDefaultSizeForLayout: (_boardName: string, layoutId: number) => layoutId * 10,
+    getDefaultSizeForLayout: () => 10,
     getSetsForLayoutAndSize: () => [{ id: 1, name: 'All' }],
   };
 });
@@ -136,16 +138,76 @@ vi.mock('@/app/lib/moonboard-config', async (importOriginal) => {
   };
 });
 
-vi.mock('../logbook-feed-item', () => ({
-  default: ({ item }: { item: AscentFeedItem }) => (
-    <div data-testid="logbook-feed-item" data-uuid={item.uuid}>
-      {item.uuid}
-    </div>
-  ),
+vi.mock('@/app/hooks/use-board-details-map', () => ({
+  useBoardDetailsMap: () => ({
+    boardDetailsByClimb: {},
+    defaultBoardDetails: mockBoardDetails,
+    unsupportedClimbs: new Set<string>(),
+    upsizedClimbs: new Set<string>(),
+  }),
 }));
 
-vi.mock('../logbook-swipe-hint-orchestrator', () => ({
-  default: () => null,
+vi.mock('@/app/hooks/use-climb-actions-data', () => ({
+  useClimbActionsData: () => ({
+    favoritesProviderProps: { favoriteClimbUuids: new Set<string>(), addFavorite: vi.fn(), removeFavorite: vi.fn() },
+    playlistsProviderProps: { playlistsByClimbUuid: {}, refetchPlaylists: vi.fn() },
+  }),
+}));
+
+vi.mock('@/app/components/climb-actions/favorites-batch-context', () => ({
+  FavoritesProvider: ({ children }: { children: React.ReactNode }) => children,
+}));
+
+vi.mock('@/app/components/climb-actions/playlists-batch-context', () => ({
+  PlaylistsProvider: ({ children }: { children: React.ReactNode }) => children,
+}));
+
+vi.mock('@/app/components/board-page/climbs-list', () => ({
+  default: (props: ClimbsListMockProps) => {
+    feedTestState.lastClimbsListProps = props;
+    return (
+      <div
+        data-testid="climbs-list"
+        data-forced-view-mode={props.forcedViewMode}
+        data-list-overscan={props.listOverscan}
+        data-show-swipe-hint={String(props.showSwipeHint)}
+      >
+        {props.climbs.map((climb, index) => {
+          const itemProps = props.getListItemProps?.(climb, index, mockBoardDetails);
+          const itemKey = props.getItemKey?.(climb, index) ?? climb.uuid;
+          return (
+            <div
+              key={itemKey}
+              data-testid="climb-row"
+              data-key={String(itemKey)}
+              data-disable-swipe={String(itemProps?.disableSwipe)}
+              data-disable-selection={String(itemProps?.disableSelection)}
+              onClick={() => props.onClimbSelect?.(climb, index)}
+            >
+              <span>{climb.name}</span>
+              {itemProps?.centerBottomSlot}
+              {itemProps?.menuSlot}
+              {itemProps?.belowContentSlot}
+            </div>
+          );
+        })}
+      </div>
+    );
+  },
+}));
+
+vi.mock('../logbook-feed-item', () => ({
+  LogbookEntryMeta: ({ item }: { item: AscentFeedItem }) => (
+    <div data-testid="entry-meta">
+      {item.attemptCount} tries {item.boardType}
+    </div>
+  ),
+  LogbookEntryEditor: ({ item }: { item: AscentFeedItem }) => <div data-testid="entry-editor">editing {item.uuid}</div>,
+  LogbookEntryMenu: ({ item }: { item: AscentFeedItem }) => (
+    <button type="button" data-testid={`entry-menu-${item.uuid}`}>
+      menu
+    </button>
+  ),
 }));
 
 vi.mock('../logbook-item-skeleton', () => ({
@@ -156,127 +218,118 @@ vi.mock('../logbook-search-form', () => ({
   default: () => <div data-testid="logbook-search-form" />,
 }));
 
-vi.mock('next/dynamic', () => ({
-  default: () => () => null,
-}));
-
 vi.mock('@mui/material/useMediaQuery', () => ({
   default: () => false,
 }));
 
-// Import after mocks.
-import LogbookFeed from '../logbook-feed';
+vi.mock('@/app/lib/analytics', () => ({
+  track: feedTestState.trackMock,
+}));
 
-function makeAscentItem(index: number): AscentFeedItem {
+function makeLayoutStats(): LayoutStats {
   return {
-    uuid: `tick-${index}`,
-    climbUuid: `climb-${index}`,
-    climbName: `Test Climb ${index}`,
-    layoutId: 1,
+    layoutKey: 'kilter-1',
     boardType: 'kilter',
-    angle: 40,
-    status: 'send',
-    quality: 3,
-    difficulty: 14,
-    consensusDifficulty: 14,
-    consensusQuality: 3,
-    attemptCount: 1,
-    comment: '',
-    timestamp: '2026-05-10T00:00:00Z',
-    setterUsername: 'setter',
-    frames: 'p1r14',
-    mirrored: false,
-    boardSize: '12x12',
-    instagramPostId: null,
-  } as unknown as AscentFeedItem;
-}
-
-function makeLayoutStats(boardType: string, layoutId: number): LayoutStats {
-  return {
-    layoutKey: `${boardType}-${layoutId}`,
-    boardType,
-    layoutId,
+    layoutId: 1,
     distinctClimbCount: 10,
     gradeCounts: [],
   };
 }
 
-function renderFeed() {
-  const client = createTestQueryClient();
+function makeAscentItem(index: number, overrides: Partial<AscentFeedItem> = {}): AscentFeedItem {
+  return {
+    uuid: `tick-${index}`,
+    climbUuid: `climb-${index}`,
+    climbName: `Test Climb ${index}`,
+    setterUsername: null,
+    boardType: 'kilter',
+    layoutId: 1,
+    angle: 40,
+    isMirror: false,
+    status: 'send',
+    attemptCount: index + 1,
+    quality: 4,
+    difficulty: 20,
+    difficultyName: '7a/V6',
+    consensusDifficulty: 20,
+    consensusDifficultyName: '7a/V6',
+    qualityAverage: 3.5,
+    isBenchmark: false,
+    isNoMatch: false,
+    comment: '',
+    climbedAt: new Date('2026-04-01T12:00:00Z').toISOString(),
+    frames: 'p1r14',
+    ...overrides,
+  };
+}
+
+function renderFeed(items: AscentFeedItem[]) {
+  feedTestState.mockRequest.mockResolvedValue({
+    userAscentsFeed: { items, hasMore: false },
+  });
+
+  const queryClient = createTestQueryClient();
   return render(
-    <QueryClientProvider client={client}>
-      <LogbookFeed layoutStats={[makeLayoutStats('kilter', 1)]} loadingLayoutStats={false} />
+    <QueryClientProvider client={queryClient}>
+      <LogbookFeed layoutStats={[makeLayoutStats()]} loadingLayoutStats={false} />
     </QueryClientProvider>,
   );
 }
 
+function getLastClimbsListProps(): ClimbsListMockProps {
+  return feedTestState.lastClimbsListProps as ClimbsListMockProps;
+}
+
 beforeEach(() => {
-  mockRequest.mockReset();
-  getPreferenceMock.mockClear();
-  showMessageSpy.mockClear();
-  lastVirtualizerOpts = null;
+  feedTestState.mockRequest.mockReset();
+  feedTestState.getPreferenceMock.mockReset();
+  feedTestState.getPreferenceMock.mockResolvedValue(null);
+  feedTestState.replaceMock.mockReset();
+  feedTestState.showMessageSpy.mockReset();
+  feedTestState.trackMock.mockReset();
+  feedTestState.lastClimbsListProps = null;
 });
 
-afterEach(() => {
-  vi.restoreAllMocks();
-});
+describe('LogbookFeed shared climb list rendering', () => {
+  it('passes all feed items to ClimbsList with list-only logbook config', async () => {
+    renderFeed([makeAscentItem(1), makeAscentItem(2)]);
 
-describe('LogbookFeed virtualization', () => {
-  it('renders only the virtualized window, not the full item list', async () => {
-    const items = Array.from({ length: 100 }, (_, i) => makeAscentItem(i));
-    mockRequest.mockResolvedValue({ userAscentsFeed: { items, hasMore: false } });
+    const climbList = await screen.findByTestId('climbs-list');
+    const rows = screen.getAllByTestId('climb-row');
 
-    renderFeed();
-
-    await waitFor(() => {
-      expect(screen.queryAllByTestId('logbook-feed-item').length).toBeGreaterThan(0);
-    });
-
-    const rendered = screen.getAllByTestId('logbook-feed-item');
-    expect(rendered.length).toBeLessThan(items.length);
-    // With overscan=8 and the mock's window of overscan+7, ~15 items render.
-    expect(rendered.length).toBeLessThanOrEqual(20);
+    expect(rows).toHaveLength(2);
+    expect(climbList.getAttribute('data-forced-view-mode')).toBe('list');
+    expect(climbList.getAttribute('data-show-swipe-hint')).toBe('false');
+    expect(getLastClimbsListProps().listOverscan).toBe(10);
+    expect(rows[0]?.getAttribute('data-disable-swipe')).toBe('true');
+    expect(screen.getAllByTestId('entry-meta')[0]?.textContent).toContain('2 tries kilter');
   });
 
-  it('passes the full item count and overscan=8 to the virtualizer when not editing', async () => {
-    const items = Array.from({ length: 100 }, (_, i) => makeAscentItem(i));
-    mockRequest.mockResolvedValue({ userAscentsFeed: { items, hasMore: false } });
+  it('uses tick UUIDs as item keys when two log rows share a climb UUID', async () => {
+    renderFeed([
+      makeAscentItem(1, { uuid: 'tick-a', climbUuid: 'shared-climb' }),
+      makeAscentItem(2, { uuid: 'tick-b', climbUuid: 'shared-climb' }),
+    ]);
 
-    renderFeed();
+    await screen.findByTestId('climbs-list');
+    const keys = screen.getAllByTestId('climb-row').map((row) => row.getAttribute('data-key'));
 
-    await waitFor(() => {
-      expect(lastVirtualizerOpts).not.toBeNull();
-      expect(lastVirtualizerOpts!.count).toBe(items.length);
-    });
-    // Pinning overscan defends against accidentally bumping the value back up
-    // and undoing the LCP win on /you/logbook.
-    expect(lastVirtualizerOpts!.overscan).toBe(8);
+    expect(keys).toEqual(['tick-a', 'tick-b']);
   });
 
-  it('mounts only the virtualized window — guarantees DOM stays bounded for power users', async () => {
-    const items = Array.from({ length: 500 }, (_, i) => makeAscentItem(i));
-    mockRequest.mockResolvedValue({ userAscentsFeed: { items, hasMore: false } });
+  it('opens the inline editor on a regular row tap', async () => {
+    renderFeed([makeAscentItem(1, { uuid: 'tick-to-edit' })]);
 
-    renderFeed();
+    const row = await screen.findByTestId('climb-row');
+    fireEvent.click(row);
 
     await waitFor(() => {
-      expect(screen.queryAllByTestId('logbook-feed-item').length).toBeGreaterThan(0);
+      expect(screen.getByTestId('entry-editor').textContent).toContain('tick-to-edit');
     });
-
-    const rendered = screen.getAllByTestId('logbook-feed-item');
-    // 500 items in the feed, but the virtualizer keeps ~15 mounted on first
-    // paint. Without virtualization this test would render 500 nodes.
-    expect(rendered.length).toBeLessThan(50);
-  });
-
-  it('renders all items when the feed is small (no virtualization gain)', async () => {
-    const items = Array.from({ length: 5 }, (_, i) => makeAscentItem(i));
-    mockRequest.mockResolvedValue({ userAscentsFeed: { items, hasMore: false } });
-
-    renderFeed();
-
-    await waitFor(() => {
-      expect(screen.getAllByTestId('logbook-feed-item')).toHaveLength(5);
+    expect(getLastClimbsListProps().listOverscan).toBe(100);
+    expect(feedTestState.trackMock).toHaveBeenCalledWith('Logbook Row Edit Opened', {
+      climbUuid: 'climb-1',
+      tickUuid: 'tick-to-edit',
     });
   });
 });

@@ -1,127 +1,57 @@
-/* Logbook feed item — standalone component with swipe gestures */
-
-.container {
-  position: relative;
-  overflow: hidden;
-  border-bottom: 1px solid var(--neutral-200);
+.metaRoot {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-1);
+  margin-top: 2px;
+  min-width: 0;
 }
 
-/* Swipe action layers */
-.leftActionLayer {
-  position: absolute;
-  inset: 0;
+.metaLine {
   display: flex;
   align-items: center;
-  justify-content: flex-start;
-  padding-left: var(--spacing-4);
-  gap: var(--spacing-2);
-  background-color: var(--color-primary);
-  opacity: 0;
-  will-change: opacity;
-  transition: background-color 120ms ease-out;
+  gap: var(--spacing-1);
+  min-width: 0;
 }
 
-/* Delete-ready state: swipe has crossed the long-right threshold */
-.leftActionLayer.deleteReady {
-  background-color: var(--color-error, #b8524c);
-}
-
-.leftActionLayer.deleteReady .swipeIcon {
-  transform: scale(1.2);
-}
-
-.leftActionLayer.deleteReady .deleteLabel {
-  opacity: 1;
-  transform: translateX(0);
-}
-
-/* "Delete" label — hidden by default, slides in when deleteReady */
-.deleteLabel {
-  color: white;
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  opacity: 0;
-  transform: translateX(-6px);
-  transition:
-    opacity 120ms ease-out,
-    transform 120ms ease-out;
-  pointer-events: none;
+.metaText {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.rightActionLayer {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  padding-right: var(--spacing-4);
-  background-color: var(--color-success);
-  opacity: 0;
-  will-change: opacity;
-}
-
-/* Swipe action icons */
-.swipeIcon {
-  color: white;
-  font-size: 20px;
-  transition: transform 120ms ease-out;
-}
-
-/* Swipeable wrapper — covers entire item so swipe gesture works everywhere */
-.swipeableContent {
-  position: relative;
+.editorRoot {
+  border-bottom: 1px solid var(--border-subtle);
+  padding: 0 var(--spacing-2) var(--spacing-2);
   background-color: var(--semantic-surface, #fff);
-  user-select: none;
 }
 
-/* Main content row */
-.content {
+.editorTopRow {
   display: flex;
   align-items: flex-start;
-  padding: var(--spacing-3) var(--spacing-2);
-  gap: var(--spacing-3);
+  gap: var(--spacing-2);
+  padding-top: var(--spacing-1);
 }
 
-/* Thumbnail — 50% larger than the standard 64px via scale transform.
-   The wrapper reserves 96px of space while the inner 64px content scales up to fill it.
-   overflow:hidden keeps the scale(1.5) transform clipped to the 96px box. */
-.thumbnail {
-  width: 96px;
-  height: 96px;
-  flex-shrink: 0;
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-}
-
-.thumbnail > :first-child {
-  transform: scale(1.5);
-  transform-origin: center center;
-}
-
-/* Center section between thumbnail and menu */
-.center {
+.editorMain {
   flex: 1;
   min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
 }
 
-/* Grade row — horizontal bar of stat cells */
+.editorStatusButton {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border-radius: 50%;
+}
+
 .gradeRow {
   display: flex;
   align-items: flex-start;
   gap: 6px;
-  margin-top: 4px;
-  padding-bottom: 8px;
+  padding: var(--spacing-1) 0;
 }
 
-/* Uniform stat cell — consistent height and alignment */
 .statCell {
   display: flex;
   flex-direction: column;
@@ -130,7 +60,6 @@
   min-width: 28px;
 }
 
-/* Fixed-width grade cell so 2-char and 3-char grades take the same space */
 .gradeCell {
   composes: statCell;
   min-width: 32px;
@@ -156,13 +85,11 @@
   opacity: 0.4;
 }
 
-/* Menu button */
 .menuButton {
   flex-shrink: 0;
   color: var(--neutral-400);
 }
 
-/* Edit mode controls wrapper */
 .editControls {
   flex-shrink: 0;
   display: flex;
@@ -171,25 +98,6 @@
   gap: 4px;
 }
 
-/* Status badge button — visible 18x18 badge (matches non-edit placement).
-   A ::before pseudo-element extends the tap area to 44x44 for accessibility
-   without affecting layout. */
-.statusBadgeButton {
-  position: absolute;
-  bottom: 6px;
-  right: 2px;
-  width: 18px;
-  height: 18px;
-  cursor: pointer;
-}
-
-.statusBadgeButton::before {
-  content: '';
-  position: absolute;
-  inset: -13px;
-}
-
-/* Picker panel — animated expand/collapse */
 .pickerPanel {
   display: grid;
   grid-template-rows: 0fr;
@@ -205,7 +113,6 @@
   min-height: 0;
 }
 
-/* Compact star picker — smaller items to fit on one row */
 .compactStarPicker button {
   min-width: 28px;
   min-height: 28px;
@@ -216,24 +123,6 @@
   font-size: var(--font-size-lg) !important;
 }
 
-/* Full-width comment row below the content row.
-   Uses the grid-template-rows 0fr/1fr trick to get a smooth collapse
-   between edit and non-edit modes — height auto cannot interpolate. */
 .commentRow {
-  display: grid;
-  grid-template-rows: 1fr;
-  padding: 0 var(--spacing-2) var(--spacing-2);
-  transition:
-    grid-template-rows 180ms ease-out,
-    padding 180ms ease-out;
-}
-
-.commentRowEmpty {
-  grid-template-rows: 0fr;
-  padding: 0 var(--spacing-2);
-}
-
-.commentRowContent {
-  overflow: hidden;
-  min-height: 0;
+  padding-top: var(--spacing-1);
 }

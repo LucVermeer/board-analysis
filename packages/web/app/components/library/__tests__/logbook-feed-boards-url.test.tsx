@@ -43,6 +43,7 @@ vi.mock('@/app/lib/graphql/client', () => ({
 
 vi.mock('@/app/lib/backend-url', () => ({
   getBackendHttpUrl: () => 'http://backend.test',
+  getBackendWsUrl: () => 'ws://backend.test',
 }));
 
 vi.mock('@boardsesh/graphql/operations/ticks', async () => {
@@ -118,15 +119,25 @@ vi.mock('@/app/lib/moonboard-config', async (importOriginal) => {
   };
 });
 
-// Stub child presentation components — we don't test their rendering here.
-vi.mock('../logbook-feed-item', () => ({
-  default: ({ item }: { item: { uuid: string; climbName: string } }) => (
-    <div data-testid="logbook-feed-item">{item.climbName}</div>
+vi.mock('@/app/components/board-page/climbs-list', () => ({
+  default: ({ climbs }: { climbs: Array<{ uuid: string }> }) => (
+    <div data-testid="climbs-list" data-count={climbs.length} />
   ),
 }));
 
-vi.mock('../logbook-swipe-hint-orchestrator', () => ({
-  default: () => null,
+vi.mock('@/app/hooks/use-climb-actions-data', () => ({
+  useClimbActionsData: () => ({
+    favoritesProviderProps: { favoriteClimbUuids: new Set<string>(), addFavorite: vi.fn(), removeFavorite: vi.fn() },
+    playlistsProviderProps: { playlistsByClimbUuid: {}, refetchPlaylists: vi.fn() },
+  }),
+}));
+
+vi.mock('@/app/components/climb-actions/favorites-batch-context', () => ({
+  FavoritesProvider: ({ children }: { children: React.ReactNode }) => children,
+}));
+
+vi.mock('@/app/components/climb-actions/playlists-batch-context', () => ({
+  PlaylistsProvider: ({ children }: { children: React.ReactNode }) => children,
 }));
 
 vi.mock('../logbook-item-skeleton', () => ({

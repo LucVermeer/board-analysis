@@ -150,7 +150,7 @@ export type SwipeActionOverride = {
   onAction: () => void;
 };
 
-type ClimbListItemProps = {
+export type ClimbListItemProps = {
   climb: Climb;
   /** Board details for thumbnail and actions rendering. Required unless thumbnailSlot + menuSlot are both provided. */
   boardDetails?: BoardDetails;

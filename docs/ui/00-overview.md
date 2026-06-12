@@ -33,7 +33,7 @@ When the web app uses a web-specific technology (CSS Grid, MUI components, brows
 | [16-feed.md](16-feed.md)                           | Feed              | 88    | Sessions, proposals, comments tabs, board filter                                |
 | [17-notifications.md](17-notifications.md)         | Notifications     | 70    | Grouped list, notification types, mark as read, real-time                       |
 | [18-settings.md](18-settings.md)                   | Settings          | 165   | Profile, preferences, password, Aurora linking, controllers, delete             |
-| [19-logbook.md](19-logbook.md)                     | Logbook           | 103   | Ascent list, tick logging, filters, edit/delete, crew logbook                   |
+| [19-logbook.md](19-logbook.md)                     | Logbook           | 106   | Ascent list, tick logging, filters, edit/delete, crew logbook                   |
 | [20-shared-patterns.md](20-shared-patterns.md)     | Shared Patterns   | 165   | Empty states, loading, swipe actions, toasts, grade tints                       |
 | [21-data-layer.md](21-data-layer.md)               | Data Layer        | 112   | GraphQL ops per screen + mobile gap analysis (15 built, 4 partial, 40+ missing) |
 

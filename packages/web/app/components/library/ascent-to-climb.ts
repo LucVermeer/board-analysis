@@ -16,6 +16,7 @@ export function ascentFeedItemToClimb(item: AscentFeedItem): Climb {
     ascensionist_count: 0,
     benchmark_difficulty: item.isBenchmark ? (item.consensusDifficultyName ?? null) : null,
     mirrored: item.isMirror,
+    is_no_match: item.isNoMatch,
     layoutId: item.layoutId,
     boardType: item.boardType,
   };
