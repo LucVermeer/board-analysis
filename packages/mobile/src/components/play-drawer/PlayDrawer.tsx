@@ -970,7 +970,10 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
       {bluetooth && (
         <BleControlSheet
           visible={bleControlOpen}
-          onReassert={bluetooth.reassertWall}
+          onReassert={() => {
+            bluetooth.armUndoWallChangeToast();
+            bluetooth.reassertWall();
+          }}
           onClearLights={() => void bluetooth.clearBoard()}
           supportsClearLights={boardName !== 'moonboard'}
           onDisconnect={disconnectAllBluetooth}

@@ -32,28 +32,33 @@ type UndoWallChangeSnackbarProps = {
  */
 export function UndoWallChangeSnackbar(props: UndoWallChangeSnackbarProps) {
   const { variant: uiVariant } = useTheme();
+  const bottomChrome = useBottomChromeMetrics();
+  const bottom = bottomChrome.floatingControlBottom + spacing[2];
   return (
     <Portal>
       {uiVariant === 'material' ? (
-        <UndoWallChangeSnackbarMaterial {...props} />
+        <UndoWallChangeSnackbarMaterial {...props} bottom={bottom} />
       ) : (
-        <UndoWallChangeSnackbarGlass {...props} />
+        <UndoWallChangeSnackbarGlass {...props} bottom={bottom} />
       )}
     </Portal>
   );
 }
+
+type PortaledUndoWallChangeSnackbarProps = UndoWallChangeSnackbarProps & {
+  bottom: number;
+};
 
 function UndoWallChangeSnackbarMaterial({
   visible,
   nonce,
   onDismiss,
   onUndo,
+  bottom,
   duration = UNDO_DURATION,
-}: UndoWallChangeSnackbarProps) {
+}: PortaledUndoWallChangeSnackbarProps) {
   const { t } = useTranslation('session');
-  const bottomChrome = useBottomChromeMetrics();
 
-  const bottom = bottomChrome.floatingControlBottom + spacing[2];
   const wrapperStyle: ViewStyle = { bottom };
 
   return (
@@ -79,19 +84,17 @@ function UndoWallChangeSnackbarGlass({
   nonce,
   onDismiss,
   onUndo,
+  bottom,
   duration = UNDO_DURATION,
-}: UndoWallChangeSnackbarProps) {
+}: PortaledUndoWallChangeSnackbarProps) {
   const { systemColors, brandColors } = useTheme();
   const { t } = useTranslation('session');
-  const bottomChrome = useBottomChromeMetrics();
 
   useEffect(() => {
     if (!visible) return undefined;
     const timer = setTimeout(onDismiss, duration);
     return () => clearTimeout(timer);
   }, [visible, nonce, duration, onDismiss]);
-
-  const bottom = bottomChrome.floatingControlBottom + spacing[2];
 
   return (
     <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
