@@ -31,8 +31,8 @@ type PostHogPropertyValue =
 let client: PostHog | null = null;
 let initAttempted = false;
 
-// Lazily construct a single PostHog client. Returns null in dev / when unkeyed,
-// which makes every wrapper method a no-op.
+// Construct or return the single PostHog client. Returns null in dev / when
+// unkeyed, which makes every wrapper method a no-op.
 export function getPostHogClient(): PostHog | null {
   if (!isAnalyticsEnabled || !apiKey) return null;
   if (client) return client;
@@ -71,24 +71,35 @@ export function getPostHogClient(): PostHog | null {
   return client;
 }
 
-function toPostHogPropertyValue(value: unknown): PostHogPropertyValue | undefined {
+function toPostHogPropertyValue(
+  value: unknown,
+  seenObjects: WeakSet<object> = new WeakSet(),
+  depth = 0,
+): PostHogPropertyValue | undefined {
   if (value === null || typeof value === 'string' || typeof value === 'boolean') return value;
   if (typeof value === 'number') return Number.isFinite(value) ? value : String(value);
   if (value instanceof Date) return value.toISOString();
+  if (depth > 8) return '[Truncated]';
   if (Array.isArray(value)) {
+    if (seenObjects.has(value)) return '[Circular]';
+    seenObjects.add(value);
     const items: PostHogPropertyValue[] = [];
     for (const item of value) {
-      const mappedItem = toPostHogPropertyValue(item);
+      const mappedItem = toPostHogPropertyValue(item, seenObjects, depth + 1);
       if (mappedItem !== undefined) items.push(mappedItem);
     }
+    seenObjects.delete(value);
     return items;
   }
   if (typeof value === 'object') {
+    if (seenObjects.has(value)) return '[Circular]';
+    seenObjects.add(value);
     const properties: { [key: string]: PostHogPropertyValue } = {};
     for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
-      const mappedItem = toPostHogPropertyValue(item);
+      const mappedItem = toPostHogPropertyValue(item, seenObjects, depth + 1);
       if (mappedItem !== undefined) properties[key] = mappedItem;
     }
+    seenObjects.delete(value);
     return properties;
   }
   return undefined;
@@ -122,7 +133,11 @@ function installMobileGlobalErrorCapture(): void {
 export function captureError(error: unknown, context?: ErrorReportContext): void {
   const posthog = getPostHogClient();
   if (!posthog) return;
-  posthog.captureException(error, buildErrorProperties(context));
+  try {
+    posthog.captureException(error, buildErrorProperties(context));
+  } catch {
+    // Error reporting must never become the crash.
+  }
 }
 
 export function flushPostHog(): Promise<unknown> {
@@ -130,6 +145,8 @@ export function flushPostHog(): Promise<unknown> {
   return posthog ? posthog.flush() : Promise.resolve(true);
 }
 
-if (!isAnalyticsEnabled) {
+if (isAnalyticsEnabled) {
+  getPostHogClient();
+} else {
   installMobileGlobalErrorCapture();
 }
