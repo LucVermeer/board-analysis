@@ -11,6 +11,7 @@
 The mutation requires authentication and rate-limits to 60/min, but never verifies the caller has any relationship to the target board. Any authenticated user who knows or guesses a `boardId` can inject climb reports onto that board's feed. Sender identity is correctly server-derived so names can't be forged, but board access is unguarded.
 
 Suggested fix before the profile lookup:
+
 - Query `userBoards` where `id = boardId AND ownerId = ctx.userId AND deletedAt IS NULL`
 - Throw `GraphQLError('Not authorized for this board')` if no row found
 
