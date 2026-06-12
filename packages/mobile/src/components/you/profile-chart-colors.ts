@@ -25,28 +25,51 @@ export type ColoredBar = Omit<RawBar, 'segments'> & { segments: ColoredBarSegmen
 // @boardsesh/profile-stats. Mirrors the web adapter's palette so the two
 // platforms read the same. Charts never import these from web.
 
-// Layout palette — same soft, muted hsla values the web stats charts use,
-// keyed by `${boardType}-${layoutId}`.
-const layoutColors: Record<string, string> = {
-  'kilter-1': 'hsla(190, 55%, 52%, 0.7)',
-  'kilter-8': 'hsla(160, 40%, 50%, 0.7)',
-  'tension-9': 'hsla(350, 50%, 58%, 0.7)',
-  'tension-10': 'hsla(20, 55%, 58%, 0.7)',
-  'tension-11': 'hsla(42, 50%, 55%, 0.7)',
-  'moonboard-1': 'hsla(270, 40%, 58%, 0.7)',
-  'moonboard-2': 'hsla(250, 40%, 55%, 0.7)',
-  'moonboard-3': 'hsla(290, 35%, 55%, 0.7)',
-  'moonboard-4': 'hsla(230, 40%, 58%, 0.7)',
-  'moonboard-5': 'hsla(210, 45%, 55%, 0.7)',
-  'decoy-2': 'hsla(100, 40%, 52%, 0.7)',
-  'touchstone-1': 'hsla(30, 50%, 55%, 0.7)',
-  'grasshopper-1': 'hsla(75, 45%, 50%, 0.7)',
+type ColorSchemeName = 'light' | 'dark';
+
+// Mobile charts need stronger marks than the softer web palette. Keep layout
+// colours stable by key, but use opaque light/dark pairs with larger hue
+// separation so stacked segments remain readable on M3 white and dark violet
+// cards.
+const layoutColors: Record<string, Record<ColorSchemeName, string>> = {
+  'kilter-1': { light: '#007C92', dark: '#22D3EE' },
+  'kilter-8': { light: '#087F5B', dark: '#34D399' },
+  'tension-9': { light: '#B42318', dark: '#FB7185' },
+  'tension-10': { light: '#C2410C', dark: '#FDBA74' },
+  'tension-11': { light: '#A16207', dark: '#FDE047' },
+  'moonboard-1': { light: '#7E22CE', dark: '#C084FC' },
+  'moonboard-2': { light: '#4338CA', dark: '#818CF8' },
+  'moonboard-3': { light: '#BE185D', dark: '#F472B6' },
+  'moonboard-4': { light: '#0F5FB8', dark: '#60A5FA' },
+  'moonboard-5': { light: '#047A7A', dark: '#2DD4BF' },
+  'decoy-2': { light: '#3F7A1F', dark: '#A3E635' },
+  'touchstone-1': { light: '#B45309', dark: '#FBBF24' },
+  'grasshopper-1': { light: '#4D7C0F', dark: '#BEF264' },
 };
 
+const fallbackLayoutPalette: Array<Record<ColorSchemeName, string>> = [
+  { light: '#007C92', dark: '#22D3EE' },
+  { light: '#087F5B', dark: '#34D399' },
+  { light: '#B45309', dark: '#FBBF24' },
+  { light: '#B42318', dark: '#FB7185' },
+  { light: '#7E22CE', dark: '#C084FC' },
+  { light: '#0F5FB8', dark: '#60A5FA' },
+  { light: '#BE185D', dark: '#F472B6' },
+  { light: '#047A7A', dark: '#2DD4BF' },
+];
+
+function stablePaletteIndex(key: string): number {
+  let hash = 0;
+  for (let index = 0; index < key.length; index += 1) {
+    hash = (hash * 31 + key.charCodeAt(index)) >>> 0;
+  }
+  return hash % fallbackLayoutPalette.length;
+}
+
 /** Color for a `${boardType}-${layoutId}` layout key. */
-export function layoutChartColor(layoutKey: string): string {
-  if (layoutColors[layoutKey]) return layoutColors[layoutKey];
-  return layoutKey.startsWith('kilter') ? 'rgba(6, 182, 212, 0.5)' : 'rgba(239, 68, 68, 0.5)';
+export function layoutChartColor(layoutKey: string, colorScheme: ColorSchemeName = 'light'): string {
+  if (layoutColors[layoutKey]) return layoutColors[layoutKey][colorScheme];
+  return fallbackLayoutPalette[stablePaletteIndex(layoutKey)][colorScheme];
 }
 
 /**
@@ -54,10 +77,10 @@ export function layoutChartColor(layoutKey: string): string {
  * and raises lightness for a cohesive, muted look. Mirrors web's
  * `getGradeChartColor`. `gradeKey` is a grade label (e.g. "V6" or "6A").
  */
-export function gradeChartColor(gradeKey: string): string {
+export function gradeChartColor(gradeKey: string, colorScheme: ColorSchemeName = 'light'): string {
   const normalized = gradeKey.replace(/\+$/, '');
   const hexColor = V_GRADE_COLORS[normalized] ?? FONT_GRADE_COLORS[gradeKey.toLowerCase()];
-  if (!hexColor) return 'hsla(0, 0%, 78%, 0.7)';
+  if (!hexColor) return colorScheme === 'dark' ? '#B8B2C4' : '#5F5868';
 
   const hex = hexColor.replace('#', '');
   const r = parseInt(hex.substring(0, 2), 16) / 255;
@@ -77,9 +100,14 @@ export function gradeChartColor(gradeKey: string): string {
   }
 
   const hDeg = Math.round(h * 360);
-  const sMuted = Math.min(Math.round(s * 100), 50);
-  const lMuted = Math.max(Math.round(l * 100), 48);
-  return `hsla(${hDeg}, ${sMuted}%, ${lMuted}%, 0.75)`;
+  const sourceSaturation = Math.round(s * 100);
+  const sourceLightness = Math.round(l * 100);
+  const saturation = Math.max(sourceSaturation, colorScheme === 'dark' ? 78 : 82);
+  const lightness =
+    colorScheme === 'dark'
+      ? Math.min(Math.max(sourceLightness, 58), 72)
+      : Math.min(Math.max(sourceLightness - 6, 34), 48);
+  return `hsl(${hDeg}, ${saturation}%, ${lightness}%)`;
 }
 
 /**

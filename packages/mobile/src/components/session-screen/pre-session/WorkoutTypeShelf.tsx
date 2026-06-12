@@ -66,7 +66,15 @@ function WorkoutTypeTile({ item }: { item: WorkoutTypeShelfItem }) {
     >
       <View pointerEvents="none" style={styles.chartSlot}>
         {item.bars ? (
-          <StackedBarChart bars={item.bars} colorBy="grade" height={CHART_HEIGHT} maxXLabels={5} />
+          <StackedBarChart
+            bars={item.bars}
+            colorBy="grade"
+            height={CHART_HEIGHT}
+            maxXLabels={5}
+            fitYAxisToData
+            interactive={false}
+            zoomable={false}
+          />
         ) : (
           <View style={[styles.emptyChart, { backgroundColor: systemColors.fill }]}>
             <Icon name={item.emptyIcon ?? 'chart.bar'} size={24} color={systemColors.secondaryLabel} />
