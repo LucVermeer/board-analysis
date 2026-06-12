@@ -9,6 +9,11 @@ const list = vi.hoisted(() => ({
   contentContainerStyle: null as Record<string, unknown> | null,
 }));
 
+// Captures the device-local export handoff fired after a confirmed session end.
+const integrations = vi.hoisted(() => ({
+  runSessionEndExports: vi.fn(),
+}));
+
 const bottomChrome = vi.hoisted(() => ({
   metrics: {
     fixedFooterBottom: 88,
@@ -131,6 +136,10 @@ vi.mock('../../../../lib/graphql/hooks', () => ({
   }),
   useSessionSummary: () => ({ data: { startedAt: '2026-01-01T00:00:00.000Z' } }),
 }));
+vi.mock('../../../../lib/graphql/use-active-board', () => ({ useActiveBoard: () => ({ data: null }) }));
+vi.mock('../../../../lib/integrations', () => ({
+  runSessionEndExports: integrations.runSessionEndExports,
+}));
 vi.mock('../../../../lib/climb-to-queue-item', () => ({ climbToQueueItem: vi.fn() }));
 vi.mock('../../../../lib/playlists/board-details-for-playlist', () => ({ getBoardConfigForPlaylist: () => null }));
 vi.mock('../../../../lib/session-tick-mapping', () => ({ navigateToSessionClimb: vi.fn() }));
@@ -162,6 +171,7 @@ describe('InSessionView footer', () => {
     queue.endSession.mockResolvedValue(null);
     sheet.isEnding = false;
     sheet.onConfirm = null;
+    integrations.runSessionEndExports.mockReset();
   });
 
   it('reserves only the bottom-chrome offset now that End moved to the top chrome', () => {
@@ -212,5 +222,32 @@ describe('InSessionView footer', () => {
     expect(queue.endSession).toHaveBeenCalledTimes(1);
     // The finally always clears isEnding, so the confirm spinner doesn't hang.
     expect(sheet.isEnding).toBe(false);
+  });
+
+  it('hands the ended session to the integrations exporter on confirm', async () => {
+    const summary = {
+      sessionId: 'session-1',
+      startedAt: '2026-01-01T00:00:00.000Z',
+      endedAt: '2026-01-01T01:00:00.000Z',
+      totalSends: 3,
+      totalAttempts: 5,
+    };
+    queue.endSession.mockResolvedValueOnce(summary);
+
+    render(createElement(InSessionView));
+    expect(sheet.onConfirm).not.toBeNull();
+
+    await act(async () => {
+      sheet.onConfirm?.();
+      // handleConfirmEnd awaits endSession before exporting; flush it.
+      await Promise.resolve();
+    });
+
+    // Mocked session detail has no ticks and no active board, so the export
+    // context is empty — the assertion pins the handoff, not the contents.
+    expect(integrations.runSessionEndExports).toHaveBeenCalledWith(summary, {
+      boardType: '',
+      lapTimestamps: [],
+    });
   });
 });

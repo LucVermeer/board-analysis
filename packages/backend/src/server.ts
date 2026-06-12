@@ -27,6 +27,7 @@ import {
   stopRefreshTokenCleanup,
 } from './handlers/native-auth';
 import { handleApnsStats } from './handlers/apns-stats';
+import { handleIntegrationOAuthStart, handleIntegrationOAuthCallback } from './handlers/integrations-oauth';
 import { createYogaInstance } from './graphql/yoga';
 import { setupWebSocketServer } from './websocket/setup';
 import { warmPopularConfigsCache } from './graphql/resolvers/social/boards';
@@ -370,6 +371,22 @@ export async function startServer(): Promise<ServerResources> {
         return;
       }
 
+      // External-platform integration OAuth (browser navigations from the
+      // mobile in-app browser). Path: /integrations/<provider>/{start,callback}.
+      if (pathname.startsWith('/integrations/') && req.method === 'GET') {
+        const segments = pathname.slice('/integrations/'.length).split('/');
+        const provider = segments[0];
+        const action = segments[1];
+        if (provider && action === 'start') {
+          await handleIntegrationOAuthStart(req, res, provider, url);
+          return;
+        }
+        if (provider && action === 'callback') {
+          await handleIntegrationOAuthCallback(req, res, provider, url);
+          return;
+        }
+      }
+
       // GraphQL endpoint - delegate to Yoga
       if (pathname === '/graphql') {
         // Apply CORS for GraphQL requests
@@ -444,6 +461,8 @@ export async function startServer(): Promise<ServerResources> {
     logger.info(`  Native auth oauth: ${httpScheme}://0.0.0.0:${PORT}/auth/native/oauth`);
     logger.info(`  Native auth refresh: ${httpScheme}://0.0.0.0:${PORT}/auth/native/refresh`);
     logger.info(`  Native auth revoke: ${httpScheme}://0.0.0.0:${PORT}/auth/native/revoke`);
+    logger.info(`  Integration OAuth start: ${httpScheme}://0.0.0.0:${PORT}/integrations/:provider/start`);
+    logger.info(`  Integration OAuth callback: ${httpScheme}://0.0.0.0:${PORT}/integrations/:provider/callback`);
 
     // Warm up popular board configs cache in the background.
     // Uses a Redis lock so only one node across the cluster runs the query.

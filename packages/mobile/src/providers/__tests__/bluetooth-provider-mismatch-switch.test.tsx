@@ -126,6 +126,7 @@ vi.mock('../queue-provider', () => ({
     confirmClimbOnWall: queue.confirmClimbOnWall,
     setSessionBoardSerial: queue.setSessionBoardSerial,
   }),
+  useIsPartyPreviewOnly: () => false,
 }));
 
 vi.mock('../../lib/board-details', () => ({

@@ -42,6 +42,10 @@
         "title": "Confidentialité",
         "recording": "Aidez-nous à nous améliorer",
         "recordingDescription": "Envoyez des enregistrements de session anonymes et masqués pour qu'on corrige les bugs plus vite. Ce que vous tapez et vos photos restent masqués. Désactivez quand vous voulez."
+      },
+      "integrations": {
+        "title": "Applications connectées",
+        "subtitle": "Apple Health et Strava"
       }
     },
     "onboarding": {

@@ -51,6 +51,10 @@ export const boardSessions = pgTable(
     startedAt: timestamp('started_at'),
     // When the session was ended (null = still active or inactive)
     endedAt: timestamp('ended_at'),
+    // IANA timezone of the device that ended the session (e.g.
+    // 'Australia/Melbourne'). Timestamps are stored UTC; external platforms
+    // like Strava want wall-clock local time, which needs this to reconstruct.
+    timezone: text('timezone'),
     // Exempt from auto-end cleanup
     isPermanent: boolean('is_permanent').default(false).notNull(),
     // Hex color for multi-session display

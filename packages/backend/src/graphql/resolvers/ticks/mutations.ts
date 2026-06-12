@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
-import { eq, and, inArray } from 'drizzle-orm';
+import { eq, and, inArray, isNull } from 'drizzle-orm';
 import { GraphQLError } from 'graphql';
 import type { ConnectionContext, TickStatus } from '@boardsesh/shared-schema';
 import { db } from '../../../db/client';
@@ -236,6 +236,10 @@ export const tickMutations = {
       throw new Error('You can only delete your own ticks');
     }
 
+    logger.info(
+      `[deleteTick] user=${userId} tick=${uuid} ${tick.boardType}/${tick.climbUuid.slice(0, 8)}/${tick.angle}`,
+    );
+
     await db.transaction(async (tx) => {
       // Collect comment IDs on this tick so we can clean up their notifications
       const tickComments = await tx
@@ -277,6 +281,8 @@ export const tickMutations = {
     // inflated or the FA pinned to a now-vanished tick.
     queueClimbStatsRecompute(tick.boardType, tick.climbUuid, tick.angle);
 
+    logger.info(`[deleteTick] deleted tick=${uuid} user=${userId}`);
+
     return true;
   },
 
@@ -290,17 +296,82 @@ export const tickMutations = {
     const validatedInput = validateInput(SaveTickInputSchema, input, 'input');
 
     const userId = ctx.userId!;
+    logger.info(
+      `[saveTick] user=${userId} ${validatedInput.boardType}/${validatedInput.climbUuid.slice(0, 8)}/${validatedInput.angle} ` +
+        `status=${validatedInput.status}` +
+        (validatedInput.sessionId ? ` session=${validatedInput.sessionId}` : ''),
+    );
     const uuid = uuidv4();
     const now = new Date().toISOString();
     const climbedAt = new Date(validatedInput.climbedAt).toISOString();
 
-    // Resolve the tick's board_id. When board presence is enabled and the
-    // client passes a valid explicit `boardId` (the connected-wall board), use
-    // it over the caller's own config-derived board. If the id is missing,
-    // deleted, or for another board type, ignore it and fall back to today's
-    // config resolution rather than surfacing a raw FK/type mismatch.
+    // Resolve the tick's board_id. Two explicit-board inputs feed the same FK,
+    // each from a different surface; both fall back to the user-owned config
+    // lookup for the legacy `/[board_name]/[layout_id]/...` route when absent:
+    //  1. boardUuid — a named-board route (`/b/<slug>/...`); attaches to that
+    //     exact board entity even when the climber doesn't own it (e.g. a
+    //     seeded gym board owned by the system user). Validated against the
+    //     payload; throws on mismatch.
+    //  2. boardId — the board-presence connected wall (resolveBoardForSerial),
+    //     flag-gated. On a stale/mismatched id we warn and fall back to config
+    //     resolution rather than surfacing a raw FK/type mismatch.
     let boardId: number | null = null;
-    if (validatedInput.boardId != null && isBoardPresenceEnabled()) {
+    if (validatedInput.boardUuid) {
+      const [board] = await db
+        .select({
+          id: dbSchema.userBoards.id,
+          ownerId: dbSchema.userBoards.ownerId,
+          isPublic: dbSchema.userBoards.isPublic,
+          boardType: dbSchema.userBoards.boardType,
+          layoutId: dbSchema.userBoards.layoutId,
+          sizeId: dbSchema.userBoards.sizeId,
+          setIds: dbSchema.userBoards.setIds,
+        })
+        .from(dbSchema.userBoards)
+        .where(and(eq(dbSchema.userBoards.uuid, validatedInput.boardUuid), isNull(dbSchema.userBoards.deletedAt)))
+        .limit(1);
+
+      if (!board) {
+        throw new GraphQLError('Board not found', { extensions: { code: 'BAD_USER_INPUT' } });
+      }
+
+      // Don't let a client write ticks against someone else's private board.
+      // Public boards (including seeded gym boards) and the climber's own
+      // boards are both fine.
+      if (!board.isPublic && board.ownerId !== userId) {
+        throw new GraphQLError('Cannot tick on a private board', { extensions: { code: 'FORBIDDEN' } });
+      }
+
+      // Make sure the board the client is pointing at actually matches the
+      // tick payload. Without this, a client could attach a Kilter tick to
+      // any public Tension board (or any other config) and skew that board's
+      // ascent/climber stats — those aggregations key purely on `board_id`.
+      if (board.boardType !== validatedInput.boardType) {
+        throw new GraphQLError("Board type doesn't match tick payload", {
+          extensions: { code: 'BAD_USER_INPUT' },
+        });
+      }
+      if (validatedInput.layoutId !== undefined && Number(board.layoutId) !== validatedInput.layoutId) {
+        throw new GraphQLError("Board layout doesn't match tick payload", {
+          extensions: { code: 'BAD_USER_INPUT' },
+        });
+      }
+      if (validatedInput.sizeId !== undefined && Number(board.sizeId) !== validatedInput.sizeId) {
+        throw new GraphQLError("Board size doesn't match tick payload", {
+          extensions: { code: 'BAD_USER_INPUT' },
+        });
+      }
+      if (
+        validatedInput.setIds !== undefined &&
+        normalizeSetIds(board.setIds) !== normalizeSetIds(validatedInput.setIds)
+      ) {
+        throw new GraphQLError("Board hold sets don't match tick payload", {
+          extensions: { code: 'BAD_USER_INPUT' },
+        });
+      }
+
+      boardId = board.id;
+    } else if (validatedInput.boardId != null && isBoardPresenceEnabled()) {
       const explicitBoard = await findActiveBoardById(validatedInput.boardId);
       // Accept the explicit wall board only when its FULL config matches the
       // tick's target (type + layout + size + set). A stale presence boardId
@@ -467,6 +538,11 @@ export const tickMutations = {
     // on the same climb collapses into one recompute.
     queueClimbStatsRecompute(tick.boardType, tick.climbUuid, tick.angle);
 
+    logger.info(
+      `[saveTick] saved tick=${tick.uuid} user=${userId} ` +
+        `${tick.boardType}/${tick.climbUuid.slice(0, 8)}/${tick.angle} status=${tick.status}`,
+    );
+
     return result;
   },
 
@@ -563,6 +639,9 @@ export const tickMutations = {
       throw new Error('Not authorized to update this tick');
     }
 
+    const changedFields = Object.keys(validatedInput);
+    logger.info(`[updateTick] user=${userId} tick=${uuid} fields=[${changedFields.join(',')}]`);
+
     const updates: Record<string, unknown> = {
       updatedAt: new Date().toISOString(),
     };
@@ -596,6 +675,11 @@ export const tickMutations = {
     // toward ascensionist_count, and a quality/difficulty/comment edit can
     // also change downstream derived stats once we aggregate those. Recompute.
     queueClimbStatsRecompute(updated.boardType, updated.climbUuid, updated.angle);
+
+    logger.info(
+      `[updateTick] updated tick=${updated.uuid} user=${userId} ` +
+        `${updated.boardType}/${updated.climbUuid.slice(0, 8)}/${updated.angle} status=${updated.status}`,
+    );
 
     return {
       uuid: updated.uuid,

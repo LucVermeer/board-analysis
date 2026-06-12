@@ -42,6 +42,10 @@
         "title": "Privacy",
         "recording": "Help us improve",
         "recordingDescription": "Send anonymous, masked session recordings so we can squash bugs faster. Your typing and photos stay hidden. Flip it off whenever you like."
+      },
+      "integrations": {
+        "title": "Connected apps",
+        "subtitle": "Apple Health, Strava"
       }
     },
     "onboarding": {

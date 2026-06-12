@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vite-plus/test';
+import { logger } from '../utils/logger';
 
 // Captured SQL fragments per call to tx.execute.
 const executedSql: string[] = [];
@@ -195,5 +196,88 @@ describe('recomputeClimbStats', () => {
     expect(sql).toMatch(/quality_average\s*=\s*CASE[\s\S]+?agg\.avg_quality[\s\S]+?s\.quality_average/);
     expect(sql).toMatch(/difficulty_average\s*=\s*CASE[\s\S]+?agg\.avg_difficulty[\s\S]+?s\.difficulty_average/);
     expect(sql).toMatch(/display_difficulty\s*=\s*CASE[\s\S]+?agg\.avg_difficulty[\s\S]+?s\.display_difficulty/);
+  });
+
+  it('emits a [recomputeClimbStats] info log line with prev/new diff when a row was updated', async () => {
+    const loggerSpy = vi.spyOn(logger, 'info').mockImplementation(() => logger);
+    mockDb.transaction.mockImplementation(async (callback: (tx: unknown) => Promise<void>) => {
+      const tx = {
+        insert: vi.fn(() => ({
+          values: vi.fn(() => ({ onConflictDoNothing: vi.fn() })),
+        })),
+        // The combined WITH … RETURNING query returns one diff row.
+        execute: vi.fn(async () => [
+          {
+            prev_bs: 0,
+            prev_total: 3,
+            prev_fa: null,
+            new_bs: 1,
+            new_total: 4,
+            new_fa: 'Alice',
+          },
+        ]),
+      };
+      await callback(tx);
+    });
+
+    await recomputeClimbStats('kilter', 'D15DDE9F3F72410F', 40);
+
+    expect(loggerSpy).toHaveBeenCalledWith(expect.stringContaining('[recomputeClimbStats]'));
+    expect(loggerSpy).toHaveBeenCalledWith(expect.stringContaining('kilter/D15DDE9F/40'));
+    expect(loggerSpy).toHaveBeenCalledWith(expect.stringContaining('boardsesh=1'));
+    expect(loggerSpy).toHaveBeenCalledWith(expect.stringContaining('total=4'));
+    expect(loggerSpy).toHaveBeenCalledWith(expect.stringContaining('delta=+1'));
+    expect(loggerSpy).toHaveBeenCalledWith(expect.stringContaining('fa=set:Alice'));
+    loggerSpy.mockRestore();
+  });
+
+  it('does not log when the UPDATE matched no row (defensive)', async () => {
+    const loggerSpy = vi.spyOn(logger, 'info').mockImplementation(() => logger);
+    mockDb.transaction.mockImplementation(async (callback: (tx: unknown) => Promise<void>) => {
+      const tx = {
+        insert: vi.fn(() => ({
+          values: vi.fn(() => ({ onConflictDoNothing: vi.fn() })),
+        })),
+        execute: vi.fn(async () => []),
+      };
+      await callback(tx);
+    });
+
+    await recomputeClimbStats('kilter', 'D15DDE9F3F72410F', 40);
+
+    const recomputeCalls = (loggerSpy.mock.calls as unknown as unknown[][]).filter(
+      (call) => typeof call[0] === 'string' && call[0].includes('[recomputeClimbStats]'),
+    );
+    expect(recomputeCalls).toHaveLength(0);
+    loggerSpy.mockRestore();
+  });
+
+  it('classifies fa changes (unchanged, set, cleared, changed)', async () => {
+    const cases: Array<{ prev: string | null; next: string | null; expected: string }> = [
+      { prev: 'Alice', next: 'Alice', expected: 'fa=unchanged' },
+      { prev: null, next: 'Alice', expected: 'fa=set:Alice' },
+      { prev: 'Alice', next: null, expected: 'fa=cleared' },
+      { prev: 'Alice', next: 'Bob', expected: 'fa=changed:Alice→Bob' },
+    ];
+
+    for (const { prev, next, expected } of cases) {
+      const loggerSpy = vi.spyOn(logger, 'info').mockImplementation(() => logger);
+      mockDb.transaction.mockImplementation(async (callback: (tx: unknown) => Promise<void>) => {
+        const tx = {
+          insert: vi.fn(() => ({
+            values: vi.fn(() => ({ onConflictDoNothing: vi.fn() })),
+          })),
+          execute: vi.fn(async () => [
+            { prev_bs: 0, prev_total: 0, prev_fa: prev, new_bs: 0, new_total: 0, new_fa: next },
+          ]),
+        };
+        await callback(tx);
+      });
+
+      await recomputeClimbStats('kilter', 'CLIMB-1', 40);
+
+      expect(loggerSpy).toHaveBeenCalledWith(expect.stringContaining(expected));
+      loggerSpy.mockRestore();
+    }
   });
 });

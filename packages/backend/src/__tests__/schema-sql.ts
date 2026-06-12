@@ -46,6 +46,7 @@ export const schemaSQL = `
     "is_public" boolean DEFAULT true NOT NULL,
     "started_at" timestamp,
     "ended_at" timestamp,
+    "timezone" text,
     "is_permanent" boolean DEFAULT false NOT NULL,
     "color" text,
     CONSTRAINT "board_sessions_status_check" CHECK (status IN ('active', 'inactive', 'ended'))
@@ -383,4 +384,39 @@ export const schemaSQL = `
   CREATE UNIQUE INDEX IF NOT EXISTS "user_boards_unique_owner_config"
     ON "user_boards" ("owner_id", "board_type", "layout_id", "size_id", "set_ids")
     WHERE "deleted_at" IS NULL AND "owner_id" != '00000000-0000-0000-0000-000000000000';
+
+  DROP TABLE IF EXISTS "integration_exports" CASCADE;
+  DROP TABLE IF EXISTS "integration_credentials" CASCADE;
+
+  CREATE TABLE IF NOT EXISTS "integration_credentials" (
+    "id" bigserial PRIMARY KEY NOT NULL,
+    "user_id" text NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+    "provider" text NOT NULL,
+    "encrypted_access_token" text,
+    "encrypted_refresh_token" text,
+    "token_expires_at" timestamp,
+    "external_account_id" text,
+    "external_account_name" text,
+    "scopes" text,
+    "auto_sync_enabled" boolean DEFAULT true NOT NULL,
+    "status" text DEFAULT 'active' NOT NULL,
+    "last_error" text,
+    "last_sync_at" timestamp,
+    "created_at" timestamp DEFAULT now() NOT NULL,
+    "updated_at" timestamp DEFAULT now() NOT NULL
+  );
+  CREATE UNIQUE INDEX IF NOT EXISTS "unique_user_integration" ON "integration_credentials" ("user_id","provider");
+
+  CREATE TABLE IF NOT EXISTS "integration_exports" (
+    "id" bigserial PRIMARY KEY NOT NULL,
+    "provider" text NOT NULL,
+    "user_id" text NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+    "session_type" text NOT NULL,
+    "session_id" text NOT NULL,
+    "external_activity_id" text,
+    "status" text NOT NULL,
+    "error" text,
+    "synced_at" timestamp DEFAULT now() NOT NULL
+  );
+  CREATE UNIQUE INDEX IF NOT EXISTS "unique_integration_export" ON "integration_exports" ("provider","user_id","session_type","session_id");
 `;

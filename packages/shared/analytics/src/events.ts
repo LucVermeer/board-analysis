@@ -97,6 +97,13 @@ export const SHARED_EVENTS = {
   BoardSheetOpened: 'Board Sheet Opened',
   BoardHistoryViewed: 'Board History Viewed',
   BoardSwapInvokedFromSheet: 'Board Swap Invoked From Sheet',
+  // External platform integrations (Apple Health, Strava). Props:
+  // { integration: 'apple_health' | 'strava', trigger?: 'auto' | 'manual',
+  //   enabled?: boolean }
+  IntegrationConnected: 'Integration Connected',
+  IntegrationDisconnected: 'Integration Disconnected',
+  IntegrationAutoSyncToggled: 'Integration Auto Sync Toggled',
+  SessionExportedToIntegration: 'Session Exported to Integration',
 } as const;
 
 export type SharedEventKey = keyof typeof SHARED_EVENTS;

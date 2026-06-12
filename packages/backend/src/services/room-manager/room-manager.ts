@@ -8,6 +8,7 @@ import {
   shutdownDistributedState,
   forceResetDistributedState,
 } from '../distributed-state';
+import { RECENT_CLIMBS_BUFFER_SIZE } from '../distributed-state/constants';
 import { logger } from '../../utils/logger';
 import type { ConnectedClient, DiscoverableSession, LocalSessionParticipant, QueueState } from './types';
 import { WriteScheduler } from './write-scheduler';
@@ -57,9 +58,9 @@ class RoomManager {
   // In-memory recent-climbs ring buffer (per session). Same rationale as the
   // other local shadows: tests and single-instance dev don't have Redis. The
   // distributed path writes to a bounded Redis LIST; this mirror enforces the
-  // same bound via Array.unshift + slice on every write.
+  // same bound via Array.unshift + slice on every write, using the canonical
+  // RECENT_CLIMBS_BUFFER_SIZE constant so the two paths can't drift.
   private localRecentClimbsBySession = new Map<string, string[]>();
-  private readonly RECENT_CLIMBS_LOCAL_LIMIT = 3;
   private sessionGraceTimers = new Map<string, NodeJS.Timeout>();
   private readonly SESSION_GRACE_PERIOD_MS = 60_000;
   private pendingJoinPersists = new Map<string, Promise<void>>();
@@ -558,7 +559,7 @@ class RoomManager {
     }
     const buffer = this.localRecentClimbsBySession.get(sessionId) ?? [];
     buffer.unshift(climbUuid);
-    this.localRecentClimbsBySession.set(sessionId, buffer.slice(0, this.RECENT_CLIMBS_LOCAL_LIMIT));
+    this.localRecentClimbsBySession.set(sessionId, buffer.slice(0, RECENT_CLIMBS_BUFFER_SIZE));
   }
 
   /**

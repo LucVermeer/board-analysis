@@ -1781,6 +1781,46 @@ export type GymMembersInput = {
   offset?: InputMaybe<Scalars['Int']['input']>;
 };
 
+/** Result of exporting a session to an external platform. */
+export type IntegrationExportResult = {
+  __typename?: 'IntegrationExportResult';
+  /** Error message when the export failed */
+  error?: Maybe<Scalars['String']['output']>;
+  /** Activity ID on the external platform; null when the export failed */
+  externalActivityId?: Maybe<Scalars['String']['output']>;
+  /** Web URL of the activity on the external platform */
+  externalActivityUrl?: Maybe<Scalars['String']['output']>;
+  provider: IntegrationProvider;
+  sessionId: Scalars['ID']['output'];
+  /** ISO 8601 timestamp of the export */
+  syncedAt?: Maybe<Scalars['String']['output']>;
+};
+
+/**
+ * Server-side external platform integrations. Device-local integrations
+ * (Apple Health, Health Connect) are intentionally absent — they never hold
+ * server-side credentials and are managed entirely on the device.
+ */
+export type IntegrationProvider = 'STRAVA';
+
+/** Connection state of one external platform integration for the current user. */
+export type IntegrationStatus = {
+  __typename?: 'IntegrationStatus';
+  /** Whether finished sessions upload automatically */
+  autoSyncEnabled: Scalars['Boolean']['output'];
+  /** Whether the user has linked an account for this provider */
+  connected: Scalars['Boolean']['output'];
+  /** Display name of the linked external account (e.g. Strava athlete name) */
+  externalAccountName?: Maybe<Scalars['String']['output']>;
+  /** Most recent sync or token error, if any */
+  lastError?: Maybe<Scalars['String']['output']>;
+  /** ISO 8601 timestamp of the last successful upload */
+  lastSyncAt?: Maybe<Scalars['String']['output']>;
+  provider: IntegrationProvider;
+  /** Credential health: 'active' | 'expired' | 'error' | 'revoked'. Null when not connected. */
+  status?: Maybe<Scalars['String']['output']>;
+};
+
 /** Statistics for a specific board layout. */
 export type LayoutStats = {
   __typename?: 'LayoutStats';
@@ -1909,6 +1949,13 @@ export type Mutation = {
   createBoard: UserBoard;
   /** Create a new gym. */
   createGym: Gym;
+  /**
+   * Mint a short-lived, single-use handoff code for starting the provider's
+   * browser OAuth flow (GET /integrations/:provider/start?handoff=...). Keeps
+   * the session token out of URLs, where it would persist in logs and browser
+   * history. Requires authentication.
+   */
+  createIntegrationOAuthHandoff: Scalars['String']['output'];
   /** Create a new playlist. */
   createPlaylist: Playlist;
   /** Create a proposal for a climb grade/classic/benchmark change. */
@@ -1942,6 +1989,12 @@ export type Mutation = {
   deleteProposal: Scalars['Boolean']['output'];
   /** Delete a tick (climb attempt record). Only the owner can delete. */
   deleteTick: Scalars['Boolean']['output'];
+  /**
+   * Unlink an external platform integration. Revokes the token on the
+   * provider's side (best-effort) and deletes the stored credentials.
+   * Requires authentication.
+   */
+  disconnectIntegration: Scalars['Boolean']['output'];
   /** End a session (active participant only). */
   endSession?: Maybe<SessionSummary>;
   /** Follow a board. */
@@ -2069,6 +2122,11 @@ export type Mutation = {
    */
   setCurrentClimb?: Maybe<ClimbQueueItem>;
   /**
+   * Toggle automatic upload of finished sessions for a connected integration.
+   * Requires authentication.
+   */
+  setIntegrationAutoSync: IntegrationStatus;
+  /**
    * Replace the entire queue state.
    * Used for bulk operations or syncing from external sources.
    */
@@ -2112,6 +2170,12 @@ export type Mutation = {
   submitAppFeedback: Scalars['Boolean']['output'];
   /** Subscribe to new climbs for a board type and layout. */
   subscribeNewClimbs: Scalars['Boolean']['output'];
+  /**
+   * Export an ended session to an external platform. Idempotent: returns the
+   * existing export when the session was already uploaded (e.g. by auto-sync).
+   * Caller must be a participant of the session. Requires authentication.
+   */
+  syncSessionToIntegration: IntegrationExportResult;
   /**
    * Claim wall-control authority in the current session and optionally broadcast a climb.
    * Any session participant may call — yank-on-press by design. If `climb` is provided, also
@@ -2231,6 +2295,11 @@ export type MutationCreateGymArgs = {
 };
 
 /** Root mutation type for all write operations. */
+export type MutationCreateIntegrationOAuthHandoffArgs = {
+  provider: IntegrationProvider;
+};
+
+/** Root mutation type for all write operations. */
 export type MutationCreatePlaylistArgs = {
   input: CreatePlaylistInput;
 };
@@ -2297,8 +2366,14 @@ export type MutationDeleteTickArgs = {
 };
 
 /** Root mutation type for all write operations. */
+export type MutationDisconnectIntegrationArgs = {
+  provider: IntegrationProvider;
+};
+
+/** Root mutation type for all write operations. */
 export type MutationEndSessionArgs = {
   sessionId: Scalars['ID']['input'];
+  timezone?: InputMaybe<Scalars['String']['input']>;
 };
 
 /** Root mutation type for all write operations. */
@@ -2516,6 +2591,12 @@ export type MutationSetCurrentClimbArgs = {
 };
 
 /** Root mutation type for all write operations. */
+export type MutationSetIntegrationAutoSyncArgs = {
+  enabled: Scalars['Boolean']['input'];
+  provider: IntegrationProvider;
+};
+
+/** Root mutation type for all write operations. */
 export type MutationSetQueueArgs = {
   currentClimbQueueItem?: InputMaybe<ClimbQueueItemInput>;
   queue: Array<ClimbQueueItemInput>;
@@ -2550,6 +2631,12 @@ export type MutationSubmitAppFeedbackArgs = {
 /** Root mutation type for all write operations. */
 export type MutationSubscribeNewClimbsArgs = {
   input: NewClimbSubscriptionInput;
+};
+
+/** Root mutation type for all write operations. */
+export type MutationSyncSessionToIntegrationArgs = {
+  provider: IntegrationProvider;
+  sessionId: Scalars['ID']['input'];
 };
 
 /** Root mutation type for all write operations. */
@@ -3226,6 +3313,12 @@ export type Query = {
   gymBySlug?: Maybe<Gym>;
   /** Get members of a gym. */
   gymMembers: GymMemberConnection;
+  /**
+   * Connection state of every supported external platform integration for the
+   * current user, including never-connected providers (connected: false).
+   * Requires authentication.
+   */
+  integrations: Array<IntegrationStatus>;
   /**
    * Check if the current user follows a specific user.
    * Requires authentication.
@@ -4137,10 +4230,12 @@ export type SaveTickInput = {
   angle: Scalars['Int']['input'];
   /** Number of attempts */
   attemptCount: Scalars['Int']['input'];
-  /** Resolved shared board id (from resolveBoardForSerial). When present, used directly instead of resolving from board config — the BLE-connected wall everyone is logging to. */
+  /** Resolved shared board id (from resolveBoardForSerial) for the BLE-connected wall everyone is logging to. Used when no boardUuid is given; falls back to board-config resolution if it doesn't match the payload. */
   boardId?: InputMaybe<Scalars['Int']['input']>;
   /** Board type */
   boardType: Scalars['String']['input'];
+  /** Specific board entity this tick is on, by uuid. When provided, takes precedence over (layoutId, sizeId, setIds) resolution and lets ticks attach to a board the climber doesn't own (e.g. a seeded gym board). */
+  boardUuid?: InputMaybe<Scalars['String']['input']>;
   /** Climb UUID */
   climbUuid: Scalars['String']['input'];
   /** When the climb was attempted (ISO 8601) */
@@ -5666,6 +5761,9 @@ export type ResolversTypes = ResolversObject<{
   GymMembersInput: GymMembersInput;
   ID: ResolverTypeWrapper<Scalars['ID']['output']>;
   Int: ResolverTypeWrapper<Scalars['Int']['output']>;
+  IntegrationExportResult: ResolverTypeWrapper<IntegrationExportResult>;
+  IntegrationProvider: IntegrationProvider;
+  IntegrationStatus: ResolverTypeWrapper<IntegrationStatus>;
   JSON: ResolverTypeWrapper<Scalars['JSON']['output']>;
   LayoutStats: ResolverTypeWrapper<LayoutStats>;
   LeaderChanged: ResolverTypeWrapper<LeaderChanged>;
@@ -5930,6 +6028,8 @@ export type ResolversParentTypes = ResolversObject<{
   GymMembersInput: GymMembersInput;
   ID: Scalars['ID']['output'];
   Int: Scalars['Int']['output'];
+  IntegrationExportResult: IntegrationExportResult;
+  IntegrationStatus: IntegrationStatus;
   JSON: Scalars['JSON']['output'];
   LayoutStats: LayoutStats;
   LeaderChanged: LeaderChanged;
@@ -6928,6 +7028,33 @@ export type GymMemberConnectionResolvers<
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
+export type IntegrationExportResultResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['IntegrationExportResult'] = ResolversParentTypes['IntegrationExportResult'],
+> = ResolversObject<{
+  error?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  externalActivityId?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  externalActivityUrl?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  provider?: Resolver<ResolversTypes['IntegrationProvider'], ParentType, ContextType>;
+  sessionId?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
+  syncedAt?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
+}>;
+
+export type IntegrationStatusResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['IntegrationStatus'] = ResolversParentTypes['IntegrationStatus'],
+> = ResolversObject<{
+  autoSyncEnabled?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
+  connected?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
+  externalAccountName?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  lastError?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  lastSyncAt?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  provider?: Resolver<ResolversTypes['IntegrationProvider'], ParentType, ContextType>;
+  status?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
+}>;
+
 export interface JsonScalarConfig extends GraphQLScalarTypeConfig<ResolversTypes['JSON'], any> {
   name: 'JSON';
 }
@@ -7053,6 +7180,12 @@ export type MutationResolvers<
     RequireFields<MutationCreateBoardArgs, 'input'>
   >;
   createGym?: Resolver<ResolversTypes['Gym'], ParentType, ContextType, RequireFields<MutationCreateGymArgs, 'input'>>;
+  createIntegrationOAuthHandoff?: Resolver<
+    ResolversTypes['String'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationCreateIntegrationOAuthHandoffArgs, 'provider'>
+  >;
   createPlaylist?: Resolver<
     ResolversTypes['Playlist'],
     ParentType,
@@ -7130,6 +7263,12 @@ export type MutationResolvers<
     ParentType,
     ContextType,
     RequireFields<MutationDeleteTickArgs, 'uuid'>
+  >;
+  disconnectIntegration?: Resolver<
+    ResolversTypes['Boolean'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationDisconnectIntegrationArgs, 'provider'>
   >;
   endSession?: Resolver<
     Maybe<ResolversTypes['SessionSummary']>,
@@ -7357,6 +7496,12 @@ export type MutationResolvers<
     ContextType,
     Partial<MutationSetCurrentClimbArgs>
   >;
+  setIntegrationAutoSync?: Resolver<
+    ResolversTypes['IntegrationStatus'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationSetIntegrationAutoSyncArgs, 'enabled' | 'provider'>
+  >;
   setQueue?: Resolver<
     ResolversTypes['QueueState'],
     ParentType,
@@ -7398,6 +7543,12 @@ export type MutationResolvers<
     ParentType,
     ContextType,
     RequireFields<MutationSubscribeNewClimbsArgs, 'input'>
+  >;
+  syncSessionToIntegration?: Resolver<
+    ResolversTypes['IntegrationExportResult'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationSyncSessionToIntegrationArgs, 'provider' | 'sessionId'>
   >;
   takeControl?: Resolver<ResolversTypes['Session'], ParentType, ContextType, Partial<MutationTakeControlArgs>>;
   toggleFavorite?: Resolver<
@@ -8022,6 +8173,7 @@ export type QueryResolvers<
     ContextType,
     RequireFields<QueryGymMembersArgs, 'input'>
   >;
+  integrations?: Resolver<Array<ResolversTypes['IntegrationStatus']>, ParentType, ContextType>;
   isFollowing?: Resolver<
     ResolversTypes['Boolean'],
     ParentType,
@@ -9150,6 +9302,8 @@ export type Resolvers<ContextType = ConnectionContext> = ResolversObject<{
   GymConnection?: GymConnectionResolvers<ContextType>;
   GymMember?: GymMemberResolvers<ContextType>;
   GymMemberConnection?: GymMemberConnectionResolvers<ContextType>;
+  IntegrationExportResult?: IntegrationExportResultResolvers<ContextType>;
+  IntegrationStatus?: IntegrationStatusResolvers<ContextType>;
   JSON?: GraphQLScalarType;
   LayoutStats?: LayoutStatsResolvers<ContextType>;
   LeaderChanged?: LeaderChangedResolvers<ContextType>;

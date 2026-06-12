@@ -356,6 +356,12 @@ export default ({ config }: ConfigContext): ExpoConfig & { newArchEnabled?: bool
       // builds — preview/production keep stock Expo ATS so we don't ship an
       // arbitrary-loads relaxation through App Store review.
       ...(isDevBuild ? ['./plugins/with-boardsesh-dev-networking'] : []),
+      // Apple Health entitlement + usage strings for the health-workouts native
+      // module (writes finished sessions as HKWorkouts, reads body mass for the
+      // calorie estimate). iOS-only mod; the module is skipped on Android. No
+      // entitlement-merge ordering concern like the share-intent dedup above —
+      // it sets its own distinct keys.
+      './plugins/with-healthkit',
       // org/project make `expo prebuild` write a valid ios/sentry.properties so
       // the build-phase source-map + dSYM upload can find the Sentry project.
       // The auth token is supplied via the SENTRY_AUTH_TOKEN env var in CI
