@@ -2,11 +2,9 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { Modal, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { router, useSegments } from 'expo-router';
-import * as WebBrowser from 'expo-web-browser';
 import type { BottomSheetModal } from '@gorhom/bottom-sheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
-import { WEB_BASE_URL } from '../../lib/env';
 import { reportError } from '../../lib/error-reporting';
 import { useProfile } from '../../lib/graphql/hooks';
 import { useAuth } from '../../providers/auth-provider';
@@ -118,13 +116,10 @@ export function UserDrawerProvider({ children }: { children: ReactNode }) {
     router.push('/(tabs)/discover/all');
   }, [closeUserDrawer]);
 
-  const openExternalPage = useCallback(
-    (path: '/help' | '/about') => {
-      closeUserDrawer();
-      void WebBrowser.openBrowserAsync(`${WEB_BASE_URL}${path}`).catch(reportError);
-    },
-    [closeUserDrawer],
-  );
+  const openAbout = useCallback(() => {
+    closeUserDrawer();
+    router.push('/about');
+  }, [closeUserDrawer]);
 
   const openFeedback = useCallback(
     (mode: FeedbackSheetMode) => {
@@ -196,13 +191,7 @@ export function UserDrawerProvider({ children }: { children: ReactNode }) {
               <View style={[styles.menuGroup, { backgroundColor: systemColors.elevatedSurface }]}>
                 <DrawerRow icon="settings" title={t('ariaLabels.settings')} onPress={openProfileSettings} />
                 <DrawerRow icon="playlist" title={t('userDrawer.myPlaylists')} onPress={openPlaylists} />
-                <DrawerRow icon="help" title={t('userDrawer.help')} onPress={() => openExternalPage('/help')} />
-                <DrawerRow
-                  icon="info"
-                  title={t('userDrawer.about')}
-                  onPress={() => openExternalPage('/about')}
-                  showSeparator={false}
-                />
+                <DrawerRow icon="info" title={t('userDrawer.about')} onPress={openAbout} showSeparator={false} />
               </View>
 
               <View style={[styles.menuGroup, { backgroundColor: systemColors.elevatedSurface }]}>
