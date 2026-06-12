@@ -122,7 +122,7 @@ export const socialRoleQueries = {
 export const socialRoleMutations = {
   grantRole: async (_: unknown, { input }: { input: unknown }, ctx: ConnectionContext) => {
     await requireAdmin(ctx);
-    await applyRateLimit(ctx, 10);
+    await applyRateLimit(ctx, 10, 'grantRole');
 
     const validated = validateInput(GrantRoleInputSchema, input, 'input');
     const { userId, role, boardType } = validated;
@@ -171,7 +171,7 @@ export const socialRoleMutations = {
 
   revokeRole: async (_: unknown, { input }: { input: unknown }, ctx: ConnectionContext) => {
     await requireAdmin(ctx);
-    await applyRateLimit(ctx, 10);
+    await applyRateLimit(ctx, 10, 'revokeRole');
 
     const validated = validateInput(RevokeRoleInputSchema, input, 'input');
     const { userId, role, boardType } = validated;

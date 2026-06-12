@@ -605,7 +605,7 @@ export const setterFollowQueries = {
     { input }: { input: { query: string; boardType?: string; limit?: number; offset?: number } },
     ctx: ConnectionContext,
   ) => {
-    await applyRateLimit(ctx, 20);
+    await applyRateLimit(ctx, 20, 'searchUsersAndSetters');
 
     const validatedInput = validateInput(SearchUsersInputSchema, input, 'input');
     const query = validatedInput.query;
@@ -784,7 +784,7 @@ export const setterFollowMutations = {
     ctx: ConnectionContext,
   ): Promise<boolean> => {
     requireAuthenticated(ctx);
-    await applyRateLimit(ctx, 30, 'follow');
+    await applyRateLimit(ctx, 30, 'followSetter');
 
     const validatedInput = validateInput(FollowSetterInputSchema, input, 'input');
     const myUserId = ctx.userId!;
@@ -852,7 +852,7 @@ export const setterFollowMutations = {
     ctx: ConnectionContext,
   ): Promise<boolean> => {
     requireAuthenticated(ctx);
-    await applyRateLimit(ctx, 30, 'follow');
+    await applyRateLimit(ctx, 30, 'unfollowSetter');
 
     const validatedInput = validateInput(FollowSetterInputSchema, input, 'input');
     const myUserId = ctx.userId!;

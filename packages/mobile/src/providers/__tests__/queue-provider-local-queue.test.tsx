@@ -88,13 +88,24 @@ const queueSnapshotStore = vi.hoisted(() => ({
   clearStoredQueueSnapshot: vi.fn(async () => {}),
 }));
 
+const sentry = vi.hoisted(() => ({
+  reportError: vi.fn(),
+}));
+
+const toast = vi.hoisted(() => ({
+  showToast: vi.fn(),
+}));
+
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock('react-native', () => ({
   Platform: { OS: 'ios', select: (options: Record<string, unknown>) => options.ios ?? options.default },
   AppState: { addEventListener: vi.fn(() => ({ remove: vi.fn() })) },
 }));
 vi.mock('expo-crypto', () => ({ randomUUID: () => 'test-correlation-id' }));
-vi.mock('@boardsesh/graphql-client', () => ({ execute: graph.execute }));
+vi.mock('@boardsesh/graphql-client', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@boardsesh/graphql-client')>()),
+  execute: graph.execute,
+}));
 vi.mock('@boardsesh/queue-react', () => ({
   useQueueMutations: (deps: CapturedMutationDeps) => {
     capturedMutationDeps.current = deps;
@@ -115,8 +126,8 @@ vi.mock('../../lib/graphql/use-active-board', () => ({
 }));
 vi.mock('../../lib/graphql/client', () => ({ getHttpClient: () => ({ request: http.request }) }));
 vi.mock('../../lib/analytics', () => ({ track: vi.fn() }));
-vi.mock('../../lib/sentry', () => ({ reportError: vi.fn() }));
-vi.mock('../toast-provider', () => ({ useToast: () => ({ showToast: vi.fn() }) }));
+vi.mock('../../lib/sentry', () => ({ reportError: sentry.reportError }));
+vi.mock('../toast-provider', () => ({ useToast: () => ({ showToast: toast.showToast }) }));
 vi.mock('../queue-snackbar-provider', () => ({ useQueueSnackbar: () => ({ showQueueAddedSnackbar: vi.fn() }) }));
 
 import { QueueProvider, usePlaylistSuggestionSource, useQueue } from '../queue-provider';
@@ -207,6 +218,8 @@ describe('QueueProvider local solo queue', () => {
     queueSnapshotStore.getStoredQueueSnapshot.mockResolvedValue(null);
     queueSnapshotStore.setStoredQueueSnapshot.mockClear();
     queueSnapshotStore.clearStoredQueueSnapshot.mockClear();
+    sentry.reportError.mockClear();
+    toast.showToast.mockClear();
     graph.execute.mockReset();
     graph.execute.mockResolvedValue({
       joinSession: {
@@ -390,6 +403,36 @@ describe('QueueProvider local solo queue', () => {
 
     expect(queueMutations.setQueue).not.toHaveBeenCalled();
     expect(sessionStore.setStoredSessionId).toHaveBeenCalledWith('session-new');
+  });
+
+  it('does not report createSession rate limits to Sentry', async () => {
+    http.request.mockRejectedValueOnce({
+      response: {
+        status: 200,
+        errors: [
+          {
+            message: 'Rate limit exceeded. Try again in 7 seconds.',
+            extensions: { code: 'RATE_LIMITED', operation: 'createSession', retryAfterSeconds: 7 },
+          },
+        ],
+      },
+    });
+
+    const snapshots: Snapshot[] = [];
+    renderProvider((snapshot) => snapshots.push(snapshot));
+    await waitFor(() => {
+      expect(snapshots.length).toBeGreaterThan(0);
+    });
+
+    await act(async () => {
+      await expect(snapshots.at(-1)?.startSession()).resolves.toBeNull();
+    });
+
+    expect(toast.showToast).toHaveBeenCalledWith('mobile.queue.rateLimited', 'error');
+    expect(toast.showToast).not.toHaveBeenCalledWith('mobile.queue.sessionCreateError', 'error');
+    expect(sentry.reportError).not.toHaveBeenCalled();
+    expect(sessionStore.setStoredSessionId).not.toHaveBeenCalled();
+    expect(graph.execute).not.toHaveBeenCalled();
   });
 
   it('joinSession persists the id and drops the solo snapshot', async () => {

@@ -99,7 +99,7 @@ export const climbMutations = {
    */
   saveClimb: async (_: unknown, { input }: SaveClimbArgs, ctx: ConnectionContext): Promise<SaveClimbResult> => {
     requireAuthenticated(ctx);
-    await applyRateLimit(ctx, 10);
+    await applyRateLimit(ctx, 10, 'saveClimb');
 
     const validated = validateInput(SaveClimbInputSchema, input, 'input');
     const isListed = !validated.isDraft;
@@ -255,7 +255,7 @@ export const climbMutations = {
     ctx: ConnectionContext,
   ): Promise<SaveClimbResult> => {
     requireAuthenticated(ctx);
-    await applyRateLimit(ctx, 10);
+    await applyRateLimit(ctx, 10, 'saveMoonBoardClimb');
 
     const validated = validateInput(SaveMoonBoardClimbInputSchema, input, 'input');
     const isDraft = validated.isDraft ?? false;
@@ -412,7 +412,7 @@ export const climbMutations = {
     ctx: ConnectionContext,
   ): Promise<UpdateClimbResult> => {
     requireAuthenticated(ctx);
-    await applyRateLimit(ctx, 20);
+    await applyRateLimit(ctx, 20, 'updateClimb');
 
     const validated = validateInput(UpdateClimbInputSchema, input, 'input');
 
@@ -667,7 +667,7 @@ export const climbMutations = {
     ctx: ConnectionContext,
   ): Promise<boolean> => {
     requireAuthenticated(ctx);
-    await applyRateLimit(ctx, 20);
+    await applyRateLimit(ctx, 20, 'deleteDraftClimb');
 
     const validatedUuid = validateInput(ExternalUUIDSchema, uuid, 'uuid');
     const validatedBoardType = validateInput(BoardNameSchema, boardType, 'boardType');

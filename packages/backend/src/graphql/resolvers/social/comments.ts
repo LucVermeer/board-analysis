@@ -328,7 +328,7 @@ export const socialCommentQueries = {
 export const socialCommentMutations = {
   addComment: async (_: unknown, { input }: { input: unknown }, ctx: ConnectionContext) => {
     requireAuthenticated(ctx);
-    await applyRateLimit(ctx, 10, 'comment');
+    await applyRateLimit(ctx, 10, 'addComment');
 
     const validated = validateInput(AddCommentInputSchema, input, 'input');
     const { entityType, entityId, parentCommentUuid, body } = validated;
@@ -432,7 +432,7 @@ export const socialCommentMutations = {
 
   updateComment: async (_: unknown, { input }: { input: unknown }, ctx: ConnectionContext) => {
     requireAuthenticated(ctx);
-    await applyRateLimit(ctx, 10, 'comment');
+    await applyRateLimit(ctx, 10, 'updateComment');
 
     const validated = validateInput(UpdateCommentInputSchema, input, 'input');
     const { commentUuid, body } = validated;

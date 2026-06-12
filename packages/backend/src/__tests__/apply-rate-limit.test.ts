@@ -6,8 +6,38 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vite-plus/test';
 import { GraphQLError } from 'graphql';
 import type { ConnectionContext } from '@boardsesh/shared-schema';
-import { applyRateLimit, RATE_LIMIT_SESSION, RATE_LIMIT_PLAYBACK } from '../graphql/resolvers/shared/helpers';
+import { readdirSync, readFileSync, statSync } from 'fs';
+import { join } from 'path';
+import { fileURLToPath } from 'url';
+import {
+  applyRateLimit,
+  RATE_LIMIT_SESSION,
+  RATE_LIMIT_PLAYBACK,
+  RATE_LIMIT_JOIN_SESSION,
+  RATE_LIMIT_JOIN_SESSION_OP,
+  RATE_LIMIT_CREATE_SESSION,
+  RATE_LIMIT_CREATE_SESSION_OP,
+  RATE_LIMIT_END_SESSION,
+  RATE_LIMIT_END_SESSION_OP,
+  RATE_LIMIT_CONFIRM_CLIMB_ON_WALL,
+  RATE_LIMIT_CONFIRM_CLIMB_ON_WALL_OP,
+  RATE_LIMIT_SET_QUEUE,
+  RATE_LIMIT_SET_QUEUE_OP,
+} from '../graphql/resolvers/shared/helpers';
 import { RateLimitError } from '../utils/rate-limiter';
+
+function listResolverFiles(dir: string): string[] {
+  return readdirSync(dir).flatMap((entry) => {
+    const path = join(dir, entry);
+    const stat = statSync(path);
+    if (stat.isDirectory()) return listResolverFiles(path);
+    return path.endsWith('.ts') ? [path] : [];
+  });
+}
+
+function stripTypeScriptComments(source: string): string {
+  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+}
 
 // Mock rate limiter utilities so we can inspect which keys are used. Spread the
 // real module so the genuine RateLimitError class survives — applyRateLimit
@@ -156,7 +186,45 @@ describe('applyRateLimit structured RATE_LIMITED error (#2763)', () => {
   it('gives interactive session + playback traffic far more headroom than the 60/min default', () => {
     // The crux of the fix: queue/wall mutations and playback no longer share the
     // 60/min `default` bucket that a two-person session exhausted by switching.
-    expect(RATE_LIMIT_SESSION).toBeGreaterThan(60);
-    expect(RATE_LIMIT_PLAYBACK).toBeGreaterThanOrEqual(RATE_LIMIT_SESSION);
+    expect(RATE_LIMIT_SESSION).toBeGreaterThanOrEqual(1200);
+    expect(RATE_LIMIT_PLAYBACK).toBeGreaterThanOrEqual(3600);
+  });
+
+  it('keeps session lifecycle traffic out of the shared default bucket', () => {
+    // Native Live Activity keeps its own websocket and rejoins on reconnect.
+    // Those joins must not spend the same `default` bucket that createSession
+    // previously used, or websocket churn can make a later explicit Start fail.
+    expect(RATE_LIMIT_JOIN_SESSION_OP).toBe('joinSession');
+    expect(RATE_LIMIT_CREATE_SESSION_OP).toBe('createSession');
+    expect(RATE_LIMIT_END_SESSION_OP).toBe('endSession');
+    expect(RATE_LIMIT_CONFIRM_CLIMB_ON_WALL_OP).toBe('confirmClimbOnWall');
+    expect(RATE_LIMIT_SET_QUEUE_OP).toBe('setQueue');
+    expect(
+      new Set([
+        RATE_LIMIT_JOIN_SESSION_OP,
+        RATE_LIMIT_CREATE_SESSION_OP,
+        RATE_LIMIT_END_SESSION_OP,
+        RATE_LIMIT_CONFIRM_CLIMB_ON_WALL_OP,
+        RATE_LIMIT_SET_QUEUE_OP,
+      ]).size,
+    ).toBe(5);
+    expect(RATE_LIMIT_JOIN_SESSION).toBeGreaterThanOrEqual(600);
+    expect(RATE_LIMIT_CREATE_SESSION).toBeGreaterThanOrEqual(180);
+    expect(RATE_LIMIT_END_SESSION).toBeGreaterThanOrEqual(180);
+    expect(RATE_LIMIT_CONFIRM_CLIMB_ON_WALL).toBeGreaterThanOrEqual(600);
+    expect(RATE_LIMIT_SET_QUEUE).toBeGreaterThanOrEqual(300);
+  });
+});
+
+describe('GraphQL resolver rate-limit bucket audit', () => {
+  it('requires explicit operation names for every resolver applyRateLimit call', () => {
+    const resolversDir = fileURLToPath(new URL('../graphql/resolvers', import.meta.url));
+    const implicitCalls = listResolverFiles(resolversDir).flatMap((file) => {
+      const source = stripTypeScriptComments(readFileSync(file, 'utf8'));
+      const matches = source.match(/applyRateLimit\(\s*ctx\s*(?:,\s*(?:\d+|[A-Z0-9_]+))?\s*\)/g) ?? [];
+      return matches.map((match) => `${file.replace(`${resolversDir}/`, '')}: ${match}`);
+    });
+
+    expect(implicitCalls).toEqual([]);
   });
 });

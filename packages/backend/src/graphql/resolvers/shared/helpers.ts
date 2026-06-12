@@ -44,13 +44,25 @@ export const SESSION_MEMBER_RETRY_CONFIG = {
  * mutations; `RATE_LIMIT_PLAYBACK` isolates the per-frame publishPlaybackState
  * broadcast so a playing variable-speed climb can't starve climb switching.
  * Both are well above any human gesture rate (with fan-out) yet still cap a
- * runaway client. Mirrors the existing per-operation buckets for
+ * runaway client. Playback allows up to 60 publishes/sec so route playback
+ * sync can follow fast frame cadences without tripping the limiter. Mirrors
+ * the existing per-operation buckets for
  * `confirmClimbOnWall` and `search-climbs`.
  */
 export const RATE_LIMIT_SESSION_OP = 'session';
-export const RATE_LIMIT_SESSION = 240;
+export const RATE_LIMIT_SESSION = 1200;
 export const RATE_LIMIT_PLAYBACK_OP = 'playback';
-export const RATE_LIMIT_PLAYBACK = 600;
+export const RATE_LIMIT_PLAYBACK = 3600;
+export const RATE_LIMIT_JOIN_SESSION_OP = 'joinSession';
+export const RATE_LIMIT_JOIN_SESSION = 600;
+export const RATE_LIMIT_CREATE_SESSION_OP = 'createSession';
+export const RATE_LIMIT_CREATE_SESSION = 180;
+export const RATE_LIMIT_END_SESSION_OP = 'endSession';
+export const RATE_LIMIT_END_SESSION = 180;
+export const RATE_LIMIT_CONFIRM_CLIMB_ON_WALL_OP = 'confirmClimbOnWall';
+export const RATE_LIMIT_CONFIRM_CLIMB_ON_WALL = 600;
+export const RATE_LIMIT_SET_QUEUE_OP = 'setQueue';
+export const RATE_LIMIT_SET_QUEUE = 300;
 
 /**
  * Helper to require a session context.
