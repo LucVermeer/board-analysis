@@ -115,11 +115,18 @@ export const SessionFeedCard = memo(function SessionFeedCard({
           )}
         </View>
 
-        {gradeBars && (
-          <View style={styles.chart}>
-            <StackedBarChart bars={gradeBars} colorBy="grade" height={84} />
+        {gradeBars ? (
+          <View pointerEvents="none" style={styles.chart}>
+            <StackedBarChart
+              bars={gradeBars}
+              colorBy="grade"
+              height={84}
+              fitYAxisToData
+              interactive={false}
+              zoomable={false}
+            />
           </View>
-        )}
+        ) : null}
 
         <View style={styles.boardRow}>
           <Text variant="caption1" color={systemColors.tertiaryLabel} numberOfLines={1} style={styles.flex}>

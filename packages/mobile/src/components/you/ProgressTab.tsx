@@ -55,8 +55,11 @@ export const ProgressTab = memo(function ProgressTab({
   // flash-vs-redpoint pairs can be decoded (charts are color-only otherwise).
   const gradeDistLegend = useMemo<ChartLegendItem[] | undefined>(
     () =>
-      data.aggregatedStackedBars?.legend.map((entry) => ({ label: entry.label, color: layoutChartColor(entry.key) })),
-    [data.aggregatedStackedBars],
+      data.aggregatedStackedBars?.legend.map((entry) => ({
+        label: entry.label,
+        color: layoutChartColor(entry.key, colorScheme),
+      })),
+    [colorScheme, data.aggregatedStackedBars],
   );
   const flashRedpointLegend = useMemo<ChartLegendItem[] | undefined>(
     () =>
@@ -118,7 +121,13 @@ export const ProgressTab = memo(function ProgressTab({
           <Card style={styles.chartCard}>
             {/* Weekly labels ("W23 '24") are wide, so cap to ~6 evenly-spaced
                 markers — horizontal labels stay readable instead of colliding. */}
-            <StackedBarChart bars={data.weeklyBars} colorBy="grade" emptyLabel={noAscentData} maxXLabels={6} />
+            <StackedBarChart
+              bars={data.weeklyBars}
+              colorBy="grade"
+              emptyLabel={noAscentData}
+              maxXLabels={6}
+              showYAxisScale
+            />
           </Card>
 
           <SectionHeader title={t('stats.gradeDistribution')} />
@@ -128,6 +137,7 @@ export const ProgressTab = memo(function ProgressTab({
               colorBy="layout"
               emptyLabel={noAscentData}
               legend={gradeDistLegend}
+              showYAxisScale
             />
           </Card>
 
