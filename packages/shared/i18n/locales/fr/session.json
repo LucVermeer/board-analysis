@@ -366,7 +366,9 @@
       "statTopGrade": "la plus fréquente",
       "wallChanged": "Tu as changé le mur",
       "undo": "Annuler",
-      "undoAria": "Annuler le changement du mur"
+      "undoAria": "Annuler le changement du mur",
+      "actionLoading": "Chargement du bloc",
+      "actionFailed": "Impossible de charger ce bloc. Réessayez."
     },
     "toast": {
       "sessionEnded": "Session terminée"
