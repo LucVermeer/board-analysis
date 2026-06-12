@@ -49,12 +49,11 @@ function getClient(): PostHog | null {
     // `enableSessionReplay` defaults false, so the SDK never auto-records —
     // capture only begins when we call setSessionRecordingEnabled() →
     // startSessionRecording(), which lazily initialises the native replay SDK.
-    // We drive that at startup from the resolved preference (on by default in the
-    // open TestFlight beta, opt-in otherwise — see session-recording-preference).
-    // The masking below is what gets applied at that point: text inputs + images
-    // stay masked (the app has auth forms and white dark-mode input fields), and
-    // console capture is left on so the BLE console.warn/error lines land on the
-    // replay timeline.
+    // We drive that at startup from the resolved preference: absent a stored
+    // user opt-in, recording stays off. The masking below is what gets applied
+    // once recording starts: text inputs + images stay masked (the app has auth
+    // forms and white dark-mode input fields), and console capture is left on so
+    // the BLE console.warn/error lines land on the replay timeline.
     sessionReplayConfig: {
       maskAllTextInputs: true,
       maskAllImages: true,
@@ -65,12 +64,11 @@ function getClient(): PostHog | null {
 }
 
 // Start/stop session recording. The resolved preference decides whether it runs
-// (on by default in the open TestFlight beta, opt-in otherwise — see
-// session-recording-preference); this just applies it. startSessionRecording()
-// lazily initialises the native replay SDK with the masking config above;
-// stopSessionRecording() halts it. No-op when analytics is disabled (dev / no
-// key) because getClient() returns null. Safe to call before the client is built
-// — getClient() constructs it on demand.
+// (opt-in only — see session-recording-preference); this just applies it.
+// startSessionRecording() lazily initialises the native replay SDK with the
+// masking config above; stopSessionRecording() halts it. No-op when analytics is
+// disabled (dev / no key) because getClient() returns null. Safe to call before
+// the client is built — getClient() constructs it on demand.
 export function setSessionRecordingEnabled(enabled: boolean): void {
   const client = getClient();
   if (!client) return;

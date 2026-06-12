@@ -21,10 +21,10 @@ vi.mock('@react-native-async-storage/async-storage', () => {
   };
 });
 
-const FLAG = 'EXPO_PUBLIC_SESSION_RECORDING_DEFAULT_ON';
+const LEGACY_DEFAULT_ON_FLAG = 'EXPO_PUBLIC_SESSION_RECORDING_DEFAULT_ON';
 
 describe('session-recording-preference', () => {
-  const originalFlag = process.env[FLAG];
+  const originalFlag = process.env[LEGACY_DEFAULT_ON_FLAG];
 
   beforeEach(async () => {
     vi.resetModules();
@@ -35,24 +35,23 @@ describe('session-recording-preference', () => {
   });
 
   afterEach(() => {
-    if (originalFlag === undefined) delete process.env[FLAG];
-    else process.env[FLAG] = originalFlag;
+    if (originalFlag === undefined) delete process.env[LEGACY_DEFAULT_ON_FLAG];
+    else process.env[LEGACY_DEFAULT_ON_FLAG] = originalFlag;
   });
 
-  it('defaults ON when the build flag is set and nothing is stored', async () => {
-    process.env[FLAG] = 'true';
-    const { loadSessionRecordingEnabled } = await import('../session-recording-preference');
-    await expect(loadSessionRecordingEnabled()).resolves.toBe(true);
-  });
-
-  it('defaults OFF when the build flag is unset and nothing is stored', async () => {
-    delete process.env[FLAG];
+  it('defaults OFF when nothing is stored', async () => {
+    delete process.env[LEGACY_DEFAULT_ON_FLAG];
     const { loadSessionRecordingEnabled } = await import('../session-recording-preference');
     await expect(loadSessionRecordingEnabled()).resolves.toBe(false);
   });
 
-  it('honours an explicit OFF choice even when the build flag is on', async () => {
-    process.env[FLAG] = 'true';
+  it('ignores the legacy default-on build flag when nothing is stored', async () => {
+    process.env[LEGACY_DEFAULT_ON_FLAG] = 'true';
+    const { loadSessionRecordingEnabled } = await import('../session-recording-preference');
+    await expect(loadSessionRecordingEnabled()).resolves.toBe(false);
+  });
+
+  it('honours an explicit OFF choice', async () => {
     const asyncStorage = (await import('@react-native-async-storage/async-storage')).default as unknown as {
       __setRaw: (key: string, value: string) => void;
     };
@@ -62,8 +61,7 @@ describe('session-recording-preference', () => {
     await expect(loadSessionRecordingEnabled()).resolves.toBe(false);
   });
 
-  it('honours an explicit ON choice when the build flag is off', async () => {
-    delete process.env[FLAG];
+  it('honours an explicit ON choice', async () => {
     const asyncStorage = (await import('@react-native-async-storage/async-storage')).default as unknown as {
       __setRaw: (key: string, value: string) => void;
     };
@@ -73,11 +71,10 @@ describe('session-recording-preference', () => {
     await expect(loadSessionRecordingEnabled()).resolves.toBe(true);
   });
 
-  it('persists the user choice over the build default', async () => {
-    process.env[FLAG] = 'true';
+  it('persists the user opt-in', async () => {
     const { loadSessionRecordingEnabled, setSessionRecordingEnabledPreference } =
       await import('../session-recording-preference');
-    await setSessionRecordingEnabledPreference(false);
-    await expect(loadSessionRecordingEnabled()).resolves.toBe(false);
+    await setSessionRecordingEnabledPreference(true);
+    await expect(loadSessionRecordingEnabled()).resolves.toBe(true);
   });
 });
