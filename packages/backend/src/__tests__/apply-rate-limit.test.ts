@@ -186,8 +186,8 @@ describe('applyRateLimit structured RATE_LIMITED error (#2763)', () => {
   it('gives interactive session + playback traffic far more headroom than the 60/min default', () => {
     // The crux of the fix: queue/wall mutations and playback no longer share the
     // 60/min `default` bucket that a two-person session exhausted by switching.
-    expect(RATE_LIMIT_SESSION).toBeGreaterThan(60);
-    expect(RATE_LIMIT_PLAYBACK).toBeGreaterThanOrEqual(RATE_LIMIT_SESSION);
+    expect(RATE_LIMIT_SESSION).toBeGreaterThanOrEqual(1200);
+    expect(RATE_LIMIT_PLAYBACK).toBeGreaterThanOrEqual(3600);
   });
 
   it('keeps session lifecycle traffic out of the shared default bucket', () => {
@@ -208,11 +208,11 @@ describe('applyRateLimit structured RATE_LIMITED error (#2763)', () => {
         RATE_LIMIT_SET_QUEUE_OP,
       ]).size,
     ).toBe(5);
-    expect(RATE_LIMIT_JOIN_SESSION).toBeGreaterThanOrEqual(120);
-    expect(RATE_LIMIT_CREATE_SESSION).toBeGreaterThanOrEqual(30);
-    expect(RATE_LIMIT_END_SESSION).toBeGreaterThanOrEqual(30);
-    expect(RATE_LIMIT_CONFIRM_CLIMB_ON_WALL).toBeGreaterThanOrEqual(120);
-    expect(RATE_LIMIT_SET_QUEUE).toBeGreaterThanOrEqual(60);
+    expect(RATE_LIMIT_JOIN_SESSION).toBeGreaterThanOrEqual(600);
+    expect(RATE_LIMIT_CREATE_SESSION).toBeGreaterThanOrEqual(180);
+    expect(RATE_LIMIT_END_SESSION).toBeGreaterThanOrEqual(180);
+    expect(RATE_LIMIT_CONFIRM_CLIMB_ON_WALL).toBeGreaterThanOrEqual(600);
+    expect(RATE_LIMIT_SET_QUEUE).toBeGreaterThanOrEqual(300);
   });
 });
 
