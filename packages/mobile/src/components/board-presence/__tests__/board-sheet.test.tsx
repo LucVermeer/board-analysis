@@ -22,6 +22,10 @@ const graphql = vi.hoisted(() => ({
   request: vi.fn(),
 }));
 
+const toast = vi.hoisted(() => ({
+  showToast: vi.fn(),
+}));
+
 const sheetModal = vi.hoisted(() => ({ present: vi.fn(), dismiss: vi.fn() }));
 const climbRows = vi.hoisted(() => ({ props: [] as Record<string, unknown>[] }));
 const thumbnails = vi.hoisted(() => ({ props: [] as Record<string, unknown>[] }));
@@ -135,6 +139,10 @@ vi.mock('../../Text', () => ({
   Text: ({ children }: { children?: ReactNode }) => createElement('span', { 'data-text': 'true' }, children),
 }));
 vi.mock('../../Icon', () => ({ Icon: ({ name }: { name: string }) => createElement('span', { 'data-icon': name }) }));
+vi.mock('../../ActivityIndicator', () => ({
+  ActivityIndicator: ({ accessibilityLabel }: { accessibilityLabel?: string }) =>
+    createElement('span', { 'aria-label': accessibilityLabel, 'data-loading': 'true' }),
+}));
 vi.mock('../../ClimbListRow', () => ({
   ClimbListRow: (props: ClimbListRowMockProps) => {
     climbRows.props.push(props);
@@ -194,6 +202,9 @@ vi.mock('../../../providers/theme-provider', () => ({
     sheet: { scrimOpacity: 0.3, handleStyle: {} },
   }),
 }));
+vi.mock('../../../providers/toast-provider', () => ({
+  useToast: () => ({ showToast: toast.showToast }),
+}));
 vi.mock('../../../hooks/use-grade-format', () => ({
   useGradeFormat: () => ({ formatGrade: (grade: string) => grade }),
 }));
@@ -238,6 +249,16 @@ function makeFullClimb(uuid: string, overrides: Partial<Climb> = {}): Climb {
   };
 }
 
+function createDeferred<T>() {
+  let resolvePromise!: (value: T | PromiseLike<T>) => void;
+  let rejectPromise!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolve, reject) => {
+    resolvePromise = resolve;
+    rejectPromise = reject;
+  });
+  return { promise, resolve: resolvePromise, reject: rejectPromise };
+}
+
 const noop = () => {};
 const boardConfig = { boardName: 'kilter', layoutId: 1, sizeId: 10, setIds: '1,2', angle: 40 };
 
@@ -249,6 +270,7 @@ describe('BoardSheet', () => {
     presenceControls.boardId = 123;
     analytics.track.mockClear();
     graphql.request.mockReset();
+    toast.showToast.mockClear();
     sheetModal.present.mockClear();
     sheetModal.dismiss.mockClear();
     climbRows.props = [];
@@ -500,6 +522,136 @@ describe('BoardSheet', () => {
         }),
       ]),
     );
+  });
+
+  it('shows loading feedback and ignores repeat taps while a climb action is resolving', async () => {
+    presence.currentClimb = makeClimb('hero-climb', 3, {
+      frames: 'hero-frames',
+      grade: 'V7',
+      queueItemUuid: 'queue-hero',
+    });
+    const onClose = vi.fn();
+    const onClimbPress = vi.fn();
+    const heroDetail = makeFullClimb('hero-climb', { name: 'Hydrated Hero' });
+    const climbRequest = createDeferred<{ climb: Climb | null }>();
+    graphql.request.mockReturnValueOnce(climbRequest.promise);
+
+    const { getByLabelText, queryByLabelText } = render(
+      createElement(BoardSheet, {
+        boardLabel: 'Garage Wall',
+        onClose,
+        onDismissed: noop,
+        boardConfig,
+        onSwitchBoard: noop,
+        onClimbPress,
+      }),
+    );
+
+    expect(queryByLabelText('mobile.boardPresence.actionLoading')).toBeNull();
+
+    fireEvent.click(getByLabelText('press hero-climb'));
+    fireEvent.click(getByLabelText('press hero-climb'));
+
+    expect(graphql.request).toHaveBeenCalledTimes(1);
+    expect(onClimbPress).not.toHaveBeenCalled();
+    await waitFor(() => expect(queryByLabelText('mobile.boardPresence.actionLoading')).not.toBeNull());
+
+    climbRequest.resolve({ climb: heroDetail });
+
+    await waitFor(() => expect(onClimbPress).toHaveBeenCalledTimes(1));
+    expect(onClimbPress).toHaveBeenCalledWith({
+      climb: heroDetail,
+      queueItemUuid: 'queue-hero',
+      boardConfig,
+    });
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(toast.showToast).not.toHaveBeenCalled();
+    await waitFor(() => expect(queryByLabelText('mobile.boardPresence.actionLoading')).toBeNull());
+  });
+
+  it('shows a toast and skips the action when climb hydration throws', async () => {
+    presence.currentClimb = makeClimb('hero-climb', 3);
+    const onClimbPress = vi.fn();
+    const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const requestError = new Error('network down');
+    graphql.request.mockRejectedValueOnce(requestError);
+
+    const { getByLabelText } = render(
+      createElement(BoardSheet, {
+        boardLabel: 'Garage Wall',
+        onClose: noop,
+        onDismissed: noop,
+        boardConfig,
+        onSwitchBoard: noop,
+        onClimbPress,
+      }),
+    );
+
+    fireEvent.click(getByLabelText('press hero-climb'));
+
+    await waitFor(() => expect(toast.showToast).toHaveBeenCalledWith('mobile.boardPresence.actionFailed', 'error'));
+    expect(onClimbPress).not.toHaveBeenCalled();
+    expect(consoleWarn).toHaveBeenCalledWith('Failed to load board-sheet climb action', requestError);
+    consoleWarn.mockRestore();
+  });
+
+  it('shows a toast and skips the action when climb hydration returns no climb', async () => {
+    presence.currentClimb = makeClimb('hero-climb', 3);
+    const onClimbPress = vi.fn();
+    const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    graphql.request.mockResolvedValueOnce({ climb: null });
+
+    const { getByLabelText } = render(
+      createElement(BoardSheet, {
+        boardLabel: 'Garage Wall',
+        onClose: noop,
+        onDismissed: noop,
+        boardConfig,
+        onSwitchBoard: noop,
+        onClimbPress,
+      }),
+    );
+
+    fireEvent.click(getByLabelText('press hero-climb'));
+
+    await waitFor(() => expect(toast.showToast).toHaveBeenCalledWith('mobile.boardPresence.actionFailed', 'error'));
+    expect(onClimbPress).not.toHaveBeenCalled();
+    expect(consoleWarn).toHaveBeenCalledWith('Board-sheet climb action returned no climb', 'hero-climb');
+    consoleWarn.mockRestore();
+  });
+
+  it('shows a toast and skips stale interactive actions when board config is unavailable', async () => {
+    presence.currentClimb = makeClimb('hero-climb', 3);
+    const onClimbPress = vi.fn();
+
+    const { rerender } = render(
+      createElement(BoardSheet, {
+        boardLabel: 'Garage Wall',
+        onClose: noop,
+        onDismissed: noop,
+        boardConfig,
+        onSwitchBoard: noop,
+        onClimbPress,
+      }),
+    );
+    const stalePress = climbRows.props[0]?.onPress;
+
+    rerender(
+      createElement(BoardSheet, {
+        boardLabel: 'Garage Wall',
+        onClose: noop,
+        onDismissed: noop,
+        boardConfig: null,
+        onSwitchBoard: noop,
+        onClimbPress,
+      }),
+    );
+    expect(typeof stalePress).toBe('function');
+    (stalePress as () => void)();
+
+    await waitFor(() => expect(toast.showToast).toHaveBeenCalledWith('mobile.boardPresence.actionFailed', 'error'));
+    expect(graphql.request).not.toHaveBeenCalled();
+    expect(onClimbPress).not.toHaveBeenCalled();
   });
 
   it('fires onSwitchBoard from the footer switch control', () => {

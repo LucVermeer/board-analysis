@@ -364,7 +364,9 @@
       "statTopGrade": "most sent",
       "wallChanged": "You changed the wall",
       "undo": "Undo",
-      "undoAria": "Undo the wall change"
+      "undoAria": "Undo the wall change",
+      "actionLoading": "Loading climb",
+      "actionFailed": "Couldn't load that climb. Try again."
     },
     "toast": {
       "sessionEnded": "Session ended"
