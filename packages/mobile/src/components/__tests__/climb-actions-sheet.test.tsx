@@ -10,6 +10,7 @@ import type { Climb } from '@boardsesh/shared-schema';
 // exposes the present/dismiss it would call through the forwarded ref.
 const modal = vi.hoisted(() => ({ present: vi.fn(), dismiss: vi.fn() }));
 const preview = vi.hoisted(() => ({ props: null as Record<string, unknown> | null }));
+const ctrl = vi.hoisted(() => ({ variant: 'liquidGlass' as 'liquidGlass' | 'material' }));
 
 vi.mock('react-native', () => ({
   View: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
@@ -35,8 +36,14 @@ vi.mock('../ClimbPreviewCard', () => ({
   },
 }));
 
-vi.mock('../ListRow', () => ({ ListRow: () => null }));
-vi.mock('../Icon', () => ({ Icon: () => null }));
+vi.mock('../ListRow', () => ({
+  ListRow: ({ title, leading }: { title: string; leading?: ReactNode }) =>
+    createElement('div', { 'data-row': title }, leading),
+}));
+vi.mock('../Icon', () => ({
+  Icon: ({ name, color }: { name: string; color?: unknown }) =>
+    createElement('span', { 'data-icon': name, 'data-color': typeof color === 'string' ? color : '' }),
+}));
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock('expo-router', () => ({ useRouter: () => ({ push: vi.fn() }) }));
 vi.mock('expo-clipboard', () => ({ setStringAsync: vi.fn() }));
@@ -46,7 +53,11 @@ vi.mock('@boardsesh/create-climb-react', () => ({ computeCanUpdate: () => false 
 vi.mock('@boardsesh/analytics', () => ({ SHARED_EVENTS: {} }));
 vi.mock('../../providers/toast-provider', () => ({ useToast: () => ({ showToast: vi.fn() }) }));
 vi.mock('../../providers/theme-provider', () => ({
-  useTheme: () => ({ brandColors: { success: '#0a0' }, systemColors: { accent: '#00f' } }),
+  useTheme: () => ({
+    variant: ctrl.variant,
+    brandColors: { success: '#0a0' },
+    systemColors: { accent: '#00f', label: '#fff' },
+  }),
 }));
 vi.mock('../../theme/ios-colors', () => ({ iosSystemColors: { systemRed: '#f00', systemOrange: '#f80' } }));
 vi.mock('../../theme/tokens', () => ({ spacing: { 2: 8 } }));
@@ -77,6 +88,7 @@ beforeEach(() => {
   modal.present.mockClear();
   modal.dismiss.mockClear();
   preview.props = null;
+  ctrl.variant = 'liquidGlass';
 });
 
 describe('ClimbActionsSheet present-on-visible (always-mounted toggle)', () => {
@@ -121,5 +133,44 @@ describe('ClimbActionsSheet present-on-visible (always-mounted toggle)', () => {
       setIds: '1,2',
       angle: 40,
     });
+  });
+
+  it('uses neutral adaptive icons for Liquid Glass action rows', () => {
+    const { container } = render(
+      <ClimbActionsSheet
+        visible={true}
+        {...baseProps}
+        onAddToQueue={vi.fn()}
+        onToggleFavorite={vi.fn()}
+        onTick={vi.fn()}
+      />,
+    );
+
+    expect(container.querySelector('[data-icon="add"]')?.getAttribute('data-color')).toBe('#fff');
+    expect(container.querySelector('[data-icon="favorite"]')?.getAttribute('data-color')).toBe('#fff');
+    expect(container.querySelector('[data-icon="tick"]')?.getAttribute('data-color')).toBe('#fff');
+    expect(container.querySelector('[data-icon="branch"]')?.getAttribute('data-color')).toBe('#fff');
+    expect(container.querySelector('[data-icon="copy"]')?.getAttribute('data-color')).toBe('#fff');
+    expect(container.querySelector('[data-icon="flag"]')?.getAttribute('data-color')).toBe('#fff');
+  });
+
+  it('keeps Material action rows on their semantic/action colors', () => {
+    ctrl.variant = 'material';
+    const { container } = render(
+      <ClimbActionsSheet
+        visible={true}
+        {...baseProps}
+        onAddToQueue={vi.fn()}
+        onToggleFavorite={vi.fn()}
+        onTick={vi.fn()}
+      />,
+    );
+
+    expect(container.querySelector('[data-icon="add"]')?.getAttribute('data-color')).toBe('#0a0');
+    expect(container.querySelector('[data-icon="favorite"]')?.getAttribute('data-color')).toBe('#f00');
+    expect(container.querySelector('[data-icon="tick"]')?.getAttribute('data-color')).toBe('#0a0');
+    expect(container.querySelector('[data-icon="branch"]')?.getAttribute('data-color')).toBe('#00f');
+    expect(container.querySelector('[data-icon="copy"]')?.getAttribute('data-color')).toBe('#00f');
+    expect(container.querySelector('[data-icon="flag"]')?.getAttribute('data-color')).toBe('#f80');
   });
 });

@@ -34,7 +34,7 @@ export function PlaylistActionsMenu({
   onClose,
 }: PlaylistActionsMenuProps) {
   const { t } = useTranslation('playlists');
-  const { systemColors, brandColors } = useTheme();
+  const { systemColors, brandColors, variant } = useTheme();
   const sheetRef = useRef<BottomSheetModal>(null);
   // Track presented state so we never call dismiss() on a not-presented modal
   // (which leaves gorhom in a state where the next present() is a no-op — the
@@ -57,6 +57,9 @@ export function PlaylistActionsMenu({
     isPresentedRef.current = false;
     onClose();
   }, [onClose]);
+  const neutralActionIconColor = systemColors.label;
+  const accentActionIconColor = variant === 'liquidGlass' ? neutralActionIconColor : systemColors.accent;
+  const pinActionIconColor = variant === 'liquidGlass' ? neutralActionIconColor : brandColors.primary;
 
   return (
     <ModalSheet ref={sheetRef} snapPoints={snapPoints} onDismiss={handleDismiss}>
@@ -67,7 +70,7 @@ export function PlaylistActionsMenu({
             <Icon
               name={isPinned ? 'pin.fill' : 'pin'}
               size={22}
-              color={isPinned ? brandColors.primary : systemColors.accent}
+              color={isPinned ? pinActionIconColor : accentActionIconColor}
             />
           }
           onPress={onTogglePin}
@@ -75,7 +78,7 @@ export function PlaylistActionsMenu({
         />
         <ListRow
           title={t('detail.menu.editClimbs')}
-          leading={<Icon name="edit" size={22} color={systemColors.accent} />}
+          leading={<Icon name="edit" size={22} color={accentActionIconColor} />}
           onPress={onEdit}
           showSeparator
         />

@@ -187,6 +187,11 @@ function ClimbActionsSheet({
   // Sized for the climb preview row plus the action list (a couple more rows show
   // for owners / Aurora-app climbs); the modal pans down to close.
   const snapPoints = useMemo(() => ['55%'], []);
+  const neutralActionIconColor = theme.systemColors.label;
+  const successActionIconColor = theme.variant === 'liquidGlass' ? neutralActionIconColor : theme.brandColors.success;
+  const favoriteActionIconColor = theme.variant === 'liquidGlass' ? neutralActionIconColor : iosSystemColors.systemRed;
+  const accentActionIconColor = theme.variant === 'liquidGlass' ? neutralActionIconColor : theme.systemColors.accent;
+  const reportActionIconColor = theme.variant === 'liquidGlass' ? neutralActionIconColor : iosSystemColors.systemOrange;
 
   return (
     <ModalSheet ref={sheetRef} snapPoints={snapPoints} onDismiss={handleDismiss} enablePanDownToClose>
@@ -204,7 +209,7 @@ function ClimbActionsSheet({
         {onAddToQueue && (
           <ListRow
             title={t('mobile.climbRow.addToQueue')}
-            leading={<Icon name="add" size={22} color={theme.brandColors.success} />}
+            leading={<Icon name="add" size={22} color={successActionIconColor} />}
             onPress={handleAddToQueue}
             showSeparator
           />
@@ -212,7 +217,7 @@ function ClimbActionsSheet({
         {onToggleFavorite && (
           <ListRow
             title={t('mobile.climbRow.toggleFavorite')}
-            leading={<Icon name="favorite" size={22} color={iosSystemColors.systemRed} />}
+            leading={<Icon name="favorite" size={22} color={favoriteActionIconColor} />}
             onPress={handleToggleFavorite}
             showSeparator
           />
@@ -220,7 +225,7 @@ function ClimbActionsSheet({
         {onTick && (
           <ListRow
             title={t('mobile.climbActions.tick')}
-            leading={<Icon name="tick" size={22} color={theme.brandColors.success} />}
+            leading={<Icon name="tick" size={22} color={successActionIconColor} />}
             onPress={handleTick}
             showSeparator
           />
@@ -228,33 +233,33 @@ function ClimbActionsSheet({
         {canEdit && (
           <ListRow
             title={t('mobile.climbActions.edit')}
-            leading={<Icon name="edit" size={22} color={theme.systemColors.accent} />}
+            leading={<Icon name="edit" size={22} color={accentActionIconColor} />}
             onPress={handleEdit}
             showSeparator
           />
         )}
         <ListRow
           title={t('mobile.climbActions.fork')}
-          leading={<Icon name="branch" size={22} color={theme.systemColors.accent} />}
+          leading={<Icon name="branch" size={22} color={accentActionIconColor} />}
           onPress={handleFork}
           showSeparator
         />
         <ListRow
           title={t('mobile.climbActions.copyLink')}
-          leading={<Icon name="copy" size={22} color={theme.systemColors.accent} />}
+          leading={<Icon name="copy" size={22} color={accentActionIconColor} />}
           onPress={handleCopyLink}
           showSeparator
         />
         <ListRow
           title={t('mobile.climbActions.report')}
-          leading={<Icon name="flag" size={22} color={iosSystemColors.systemOrange} />}
+          leading={<Icon name="flag" size={22} color={reportActionIconColor} />}
           onPress={handleReport}
           showSeparator={!!auroraAppUrl}
         />
         {auroraAppUrl && (
           <ListRow
             title={t('mobile.climbActions.openInApp')}
-            leading={<Icon name="open.external" size={22} color={theme.systemColors.accent} />}
+            leading={<Icon name="open.external" size={22} color={accentActionIconColor} />}
             onPress={handleOpenInApp}
             showSeparator={false}
           />

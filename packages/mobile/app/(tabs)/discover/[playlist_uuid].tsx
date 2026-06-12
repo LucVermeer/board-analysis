@@ -385,7 +385,7 @@ export default function PlaylistDetail() {
   // the pending ref so the sheet's exit animation doesn't fight the top-bar swap).
   const menuTogglePin = useCallback(() => {
     setActionsVisible(false);
-    handleTogglePin();
+    void handleTogglePin();
   }, [handleTogglePin]);
 
   const menuEnterEdit = useCallback(() => {
@@ -450,10 +450,10 @@ export default function PlaylistDetail() {
           {isAuthenticated ? (
             <GlassIconButton
               iconName={isPinned ? 'pin.fill' : 'pin'}
-              iconColor={isPinned ? brandColors.primary : systemColors.label}
+              iconColor={systemColors.label}
               onPress={() => {
                 hapticSelection();
-                handleTogglePin();
+                void handleTogglePin();
               }}
               accessibilityLabel={isPinned ? t('library.pin.unpinAriaLabel') : t('library.pin.pinAriaLabel')}
               fallbackColor={systemColors.fill}

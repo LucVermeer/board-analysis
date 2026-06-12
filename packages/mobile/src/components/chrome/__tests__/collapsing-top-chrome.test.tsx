@@ -101,7 +101,10 @@ vi.mock('../../PressableSurface', () => ({
 vi.mock('../../Text', () => ({
   Text: ({ children }: { children?: ReactNode }) => createElement('span', null, children),
 }));
-vi.mock('../../Icon', () => ({ Icon: ({ name }: { name: string }) => createElement('span', { 'data-icon': name }) }));
+vi.mock('../../Icon', () => ({
+  Icon: ({ name, color }: { name: string; color?: unknown }) =>
+    createElement('span', { 'data-icon': name, 'data-color': typeof color === 'string' ? color : '' }),
+}));
 vi.mock('../../play-drawer/AngleSelectorSheet', () => ({
   AngleSelectorSheet: ({ visible }: { visible: boolean }) =>
     visible ? createElement('div', { 'data-angle-selector': 'true' }) : null,
@@ -202,6 +205,7 @@ describe('CollapsingTopChrome', () => {
     };
     rerender(<CollapsingTopChrome {...makeProps()} />);
     expect(lightbulb(container)).not.toBeNull();
+    expect(container.querySelector('[data-icon="lightbulb.fill"]')?.getAttribute('data-color')).toBe('#FF9500');
   });
 
   it('hides the lightbulb when hideLight is set, even with bluetooth available', () => {

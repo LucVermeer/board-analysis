@@ -65,7 +65,10 @@ vi.mock('../../icon-map', () => ({
     flag: { ios: 'flag', android: 'flag-outline' },
   },
 }));
-vi.mock('../../Icon', () => ({ Icon: ({ name }: { name: string }) => createElement('span', { 'data-icon': name }) }));
+vi.mock('../../Icon', () => ({
+  Icon: ({ name, color }: { name: string; color?: unknown }) =>
+    createElement('span', { 'data-icon': name, 'data-color': typeof color === 'string' ? color : '' }),
+}));
 vi.mock('../../chrome', () => ({
   CollapsingTopChrome: (props: ChromeProps) => {
     chrome.props = props;
@@ -158,6 +161,7 @@ describe('RecordTopChrome', () => {
     expect(chrome.props?.leadingActionCount).toBe(1);
     const shareButton = container.querySelector('[data-action="mobile.session.invite"]') as HTMLButtonElement | null;
     expect(shareButton).not.toBeNull();
+    expect(shareButton?.querySelector('[data-icon="person.badge.plus"]')?.getAttribute('data-color')).toBe('#000');
     shareButton!.click();
     expect(onShare).toHaveBeenCalledTimes(1);
   });

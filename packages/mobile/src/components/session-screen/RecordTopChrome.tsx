@@ -124,7 +124,7 @@ export function RecordTopChrome({
   const inSession = onEndSession !== undefined;
   const leadingAction = onShare ? (
     <GlassToolbarAction onPress={onShare} accessibilityLabel={t('mobile.session.invite')}>
-      <Icon name="person.badge.plus" size={22} color={brandColors.primary} />
+      <Icon name="person.badge.plus" size={22} color={systemColors.label} />
     </GlassToolbarAction>
   ) : undefined;
   // Stop is a labelled glass pill (icon + "Stop"), not an icon-only slot, so it reads

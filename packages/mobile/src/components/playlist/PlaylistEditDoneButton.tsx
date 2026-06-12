@@ -29,7 +29,7 @@ type PlaylistEditDoneButtonProps = {
  */
 export function PlaylistEditDoneButton({ onPress, collapsed }: PlaylistEditDoneButtonProps) {
   const { t } = useTranslation('playlists');
-  const { systemColors, brandColors } = useTheme();
+  const { systemColors } = useTheme();
   const nativeGlass = useNativeGlass();
   const label = t('editClimbs.done');
 
@@ -37,7 +37,7 @@ export function PlaylistEditDoneButton({ onPress, collapsed }: PlaylistEditDoneB
     return (
       <GlassIconButton
         iconName="check.small"
-        iconColor={brandColors.primary}
+        iconColor={systemColors.label}
         onPress={onPress}
         accessibilityLabel={label}
         fallbackColor={systemColors.fill}
@@ -69,8 +69,8 @@ export function PlaylistEditDoneButton({ onPress, collapsed }: PlaylistEditDoneB
           style={StyleSheet.absoluteFill}
           pointerEvents="none"
         />
-        <Icon name="check.small" size={18} color={brandColors.primary} />
-        <Text variant="subheadline" color={brandColors.primary} style={styles.label}>
+        <Icon name="check.small" size={18} color={systemColors.label} />
+        <Text variant="subheadline" color={systemColors.label} style={styles.label}>
           {label}
         </Text>
       </View>
