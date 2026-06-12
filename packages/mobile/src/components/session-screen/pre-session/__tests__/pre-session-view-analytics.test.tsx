@@ -41,6 +41,7 @@ const preview = vi.hoisted(() => ({
     status: 'ready' as 'idle' | 'loading' | 'ready' | 'error',
     refreshingUuids: new Set<string>(),
     plannedCount: 3,
+    plannedSlots: previewRows.map((preview) => preview.slot),
     regenerate: vi.fn(),
     refreshSlot: vi.fn(),
     toQueueItems: () => previewItems,
@@ -163,6 +164,7 @@ beforeEach(() => {
   preview.result.items = previewRows as unknown[];
   preview.result.status = 'ready';
   preview.result.refreshingUuids = new Set<string>();
+  preview.result.plannedSlots = previewRows.map((preview) => preview.slot);
   picker.onChange = null;
   startButton.onPress = null;
 });

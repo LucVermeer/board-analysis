@@ -94,7 +94,15 @@ export function PreSessionView({ showChrome = false }: PreSessionViewProps) {
   const [footerHeight, setFooterHeight] = useState(SESSION_START_FAB_HEIGHT);
 
   const preview = useWorkoutPreview(selection, activeBoard ?? null, { isAuthenticated });
-  const { items: previewItems, status, refreshingUuids, plannedCount, refreshSlot, toQueueItems } = preview;
+  const {
+    items: previewItems,
+    status,
+    refreshingUuids,
+    plannedCount,
+    plannedSlots,
+    refreshSlot,
+    toQueueItems,
+  } = preview;
 
   // Refreshes run one at a time, so once any row is regenerating every row's
   // refresh button is disabled (the rows dim it). Derived as a primitive so
@@ -258,6 +266,7 @@ export function PreSessionView({ showChrome = false }: PreSessionViewProps) {
           angle={activeBoard?.angle ?? null}
           selection={selection}
           onChange={setSelection}
+          plannedSlots={plannedSlots}
         />
 
         {showPreviewSection ? (
@@ -280,6 +289,7 @@ export function PreSessionView({ showChrome = false }: PreSessionViewProps) {
       activeBoard,
       handleOpenBoardSwitcher,
       previewStateMessage,
+      plannedSlots,
       selection,
       setSelection,
       showPreviewSection,

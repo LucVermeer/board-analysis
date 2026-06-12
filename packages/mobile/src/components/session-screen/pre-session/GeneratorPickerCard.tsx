@@ -1,4 +1,4 @@
-import { useEffect, useMemo, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, type ReactNode } from 'react';
 import { Pressable, StyleSheet, View, type ViewStyle } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { Chip as PaperChip } from 'react-native-paper';
@@ -22,8 +22,10 @@ import {
   DEFAULT_PYRAMID_OPTIONS,
   DEFAULT_VOLUME_OPTIONS,
   WARM_UP_OPTIONS,
+  generateWorkoutPlan,
   type ClimbBias,
   type GeneratorOptions,
+  type PlannedClimbSlot,
   type WarmUpType,
   type WorkoutType,
 } from '@boardsesh/playlist-generator';
@@ -37,6 +39,7 @@ import { SwitchRow } from '../../SwitchRow';
 import { Stepper } from '../../Stepper';
 import { Text } from '../../Text';
 import { GradeSingleSelectRail } from '../../grade';
+import { useGradeFormat } from '../../../hooks/use-grade-format';
 import { useTheme } from '../../../providers/theme-provider';
 import { hapticSelection } from '../../../lib/haptics';
 import { spacing, borderRadius } from '../../../theme/tokens';
@@ -45,6 +48,9 @@ import { springs } from '../../../theme/animations';
 // both schemes, so it reads the static brand set (mirrors ClimbFilterSheet).
 import { brandColors as staticBrandColors } from '../../../theme/colors';
 import { iosSystemColors } from '../../../theme/ios-colors';
+import type { ColoredBar } from '../../you/profile-chart-colors';
+import { WorkoutTypeShelf, type WorkoutTypeShelfItem } from './WorkoutTypeShelf';
+import { buildWorkoutGradeBars } from './workout-type-shelf-data';
 
 export type GeneratorSelection = { type: 'off' } | { type: 'on'; options: GeneratorOptions };
 
@@ -56,6 +62,8 @@ type GeneratorPickerCardProps = {
   angle: number | null;
   selection: GeneratorSelection;
   onChange: (selection: GeneratorSelection) => void;
+  /** Actual generated slots from the live preview, used for the selected type's chart. */
+  plannedSlots?: readonly PlannedClimbSlot[];
 };
 
 type ChipValue = WorkoutType | 'off';
@@ -127,6 +135,10 @@ function getDefaultTargetGrade(boardName: BoardName | null): number {
   const grades = getGradesForBoard(boardName);
   if (grades.length === 0) return 15;
   return grades[Math.floor(grades.length / 2)].difficulty_id;
+}
+
+function getChartClimbCount(bar: ColoredBar): number {
+  return bar.segments.reduce((total, segment) => total + segment.value, 0);
 }
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
@@ -259,9 +271,11 @@ export function GeneratorPickerCard({
   angle,
   selection,
   onChange,
+  plannedSlots = [],
 }: GeneratorPickerCardProps) {
   const { t } = useTranslation('session');
   const { systemColors, variant, m3 } = useTheme();
+  const { formatGradeByDifficultyId } = useGradeFormat();
   const isMaterial = variant === 'material';
 
   const isKilterHomewall = boardName === 'kilter' && layoutId === KILTER_HOMEWALL_LAYOUT_ID;
@@ -284,6 +298,7 @@ export function GeneratorPickerCard({
   }, [selection, showTallClimbsFilter, showWideClimbsFilter, onChange]);
 
   const railGrades = useMemo(() => toRailGrades(boardName), [boardName]);
+  const generatorGrades = useMemo(() => (boardName ? getGradesForBoard(boardName) : []), [boardName]);
   const activeType = selection.type === 'on' ? selection.options.type : 'off';
 
   const minAscentsOptions = useMemo(() => {
@@ -292,22 +307,92 @@ export function GeneratorPickerCard({
     return [...baseOptions, selection.options.minAscents].sort((first, second) => first - second);
   }, [selection]);
 
-  const handleSelectType = (value: ChipValue) => {
-    if (value === 'off') {
-      onChange({ type: 'off' });
-      return;
-    }
-    // Enabling the generator (off → a workout type) reveals the configurator —
-    // the mobile analogue of web's `Workout Generator Opened`. Match web's exact
-    // payload (playlist-generator-drawer.tsx): `{ targetType, boardName, angle }`.
-    // The pre-session flow always feeds the session queue, so targetType is
-    // 'session'; PostHog groups by exact prop name, so the keys must line up.
-    if (selection.type === 'off') {
-      track(SHARED_EVENTS.WorkoutGeneratorOpened, { targetType: 'session', boardName, angle });
-    }
-    const currentTarget = selection.type === 'on' ? selection.options.targetGrade : getDefaultTargetGrade(boardName);
-    onChange({ type: 'on', options: buildDefaultOptions(value, currentTarget) });
-  };
+  const handleSelectType = useCallback(
+    (value: ChipValue) => {
+      hapticSelection();
+      if (value === 'off') {
+        onChange({ type: 'off' });
+        return;
+      }
+      // Enabling the generator (off → a workout type) reveals the configurator —
+      // the mobile analogue of web's `Workout Generator Opened`. Match web's exact
+      // payload (playlist-generator-drawer.tsx): `{ targetType, boardName, angle }`.
+      // The pre-session flow always feeds the session queue, so targetType is
+      // 'session'; PostHog groups by exact prop name, so the keys must line up.
+      if (selection.type === 'off') {
+        track(SHARED_EVENTS.WorkoutGeneratorOpened, { targetType: 'session', boardName, angle });
+      }
+      const currentTarget = selection.type === 'on' ? selection.options.targetGrade : getDefaultTargetGrade(boardName);
+      onChange({ type: 'on', options: buildDefaultOptions(value, currentTarget) });
+    },
+    [angle, boardName, onChange, selection],
+  );
+
+  const shelfItems = useMemo<WorkoutTypeShelfItem[]>(() => {
+    const groupLabel = t('mobile.session.preGeneratorLabel');
+    const targetGrade = selection.type === 'on' ? selection.options.targetGrade : getDefaultTargetGrade(boardName);
+    const commonPatch: CommonGeneratorPatch =
+      selection.type === 'on'
+        ? {
+            warmUp: selection.options.warmUp,
+            targetGrade,
+            climbBias: selection.options.climbBias,
+            minAscents: selection.options.minAscents,
+            minRating: selection.options.minRating,
+            onlyTallClimbs: selection.options.onlyTallClimbs,
+            onlyWideClimbs: selection.options.onlyWideClimbs,
+          }
+        : { targetGrade };
+
+    return CHIP_VALUES.map((value) => {
+      const label = chipLabel(value, t);
+      if (value === 'off') {
+        return {
+          key: value,
+          label,
+          selected: activeType === value,
+          bars: null,
+          emptyIcon: 'hand.raised',
+          onPress: () => handleSelectType(value),
+          accessibilityLabel: t('mobile.session.preGeneratorOptionAccessibilityLabel', {
+            group: groupLabel,
+            value: label,
+          }),
+        };
+      }
+
+      const options: GeneratorOptions =
+        selection.type === 'on' && selection.options.type === value
+          ? selection.options
+          : ({ ...buildDefaultOptions(value, targetGrade), ...commonPatch } as GeneratorOptions);
+      const isSelectedWorkoutType = selection.type === 'on' && selection.options.type === value;
+      const slots = isSelectedWorkoutType ? plannedSlots : generateWorkoutPlan(options, generatorGrades);
+      const bars = buildWorkoutGradeBars(slots, formatGradeByDifficultyId);
+      const chartSummary = bars
+        ?.map((bar) =>
+          t('mobile.session.preGeneratorChartPoint', {
+            count: getChartClimbCount(bar),
+            grade: bar.label,
+          }),
+        )
+        .join(' · ');
+      const accessibleValue = chartSummary
+        ? t('mobile.session.preGeneratorOptionChartValue', { value: label, summary: chartSummary })
+        : label;
+
+      return {
+        key: value,
+        label,
+        selected: activeType === value,
+        bars,
+        onPress: () => handleSelectType(value),
+        accessibilityLabel: t('mobile.session.preGeneratorOptionAccessibilityLabel', {
+          group: groupLabel,
+          value: accessibleValue,
+        }),
+      };
+    });
+  }, [activeType, boardName, formatGradeByDifficultyId, generatorGrades, handleSelectType, plannedSlots, selection, t]);
 
   const updateCommonOptions = (patch: CommonGeneratorPatch) => {
     if (selection.type !== 'on') return;
@@ -560,25 +645,7 @@ export function GeneratorPickerCard({
   return (
     <View>
       <SectionHeader title={t('mobile.session.preGeneratorLabel')} />
-      <View style={styles.inset}>
-        <View style={styles.chipRow}>
-          {CHIP_VALUES.map((value) => {
-            const label = chipLabel(value, t);
-            return (
-              <Chip
-                key={value}
-                label={label}
-                selected={value === activeType}
-                onPress={() => handleSelectType(value)}
-                accessibilityLabel={t('mobile.session.preGeneratorOptionAccessibilityLabel', {
-                  group: t('mobile.session.preGeneratorLabel'),
-                  value: label,
-                })}
-              />
-            );
-          })}
-        </View>
-      </View>
+      <WorkoutTypeShelf items={shelfItems} />
 
       {selection.type === 'on' ? (
         <>
