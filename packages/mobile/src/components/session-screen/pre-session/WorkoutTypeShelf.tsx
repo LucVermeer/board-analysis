@@ -64,7 +64,7 @@ function WorkoutTypeTile({ item }: { item: WorkoutTypeShelfItem }) {
         },
       ]}
     >
-      <View style={styles.chartSlot}>
+      <View pointerEvents="none" style={styles.chartSlot}>
         {item.bars ? (
           <StackedBarChart bars={item.bars} colorBy="grade" height={CHART_HEIGHT} maxXLabels={5} />
         ) : (
