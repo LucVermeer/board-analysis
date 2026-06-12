@@ -67,6 +67,7 @@ const presence = vi.hoisted(() => ({
   boardId: null as number | null,
   resolveAndBindBoard: vi.fn(async () => null),
   resolveAndBindBoardByConfig: vi.fn(async () => null),
+  resolveAndBindBoardByUuid: vi.fn(async () => null),
   resetPresence: vi.fn(),
 }));
 
@@ -165,6 +166,7 @@ vi.mock('../board-presence-provider', () => ({
     boardId: presence.boardId,
     resolveAndBindBoard: presence.resolveAndBindBoard,
     resolveAndBindBoardByConfig: presence.resolveAndBindBoardByConfig,
+    resolveAndBindBoardByUuid: presence.resolveAndBindBoardByUuid,
     resetPresence: presence.resetPresence,
   }),
 }));
@@ -271,6 +273,7 @@ beforeEach(() => {
   presence.boardId = null;
   presence.resolveAndBindBoard.mockClear();
   presence.resolveAndBindBoardByConfig.mockClear();
+  presence.resolveAndBindBoardByUuid.mockClear();
   presence.resetPresence.mockClear();
 });
 
@@ -282,14 +285,10 @@ describe('DrawerHostProvider board presence binding', () => {
     await waitFor(() => expect(hosts.at(-1)).toBeDefined());
 
     await waitFor(() => {
-      expect(presence.resolveAndBindBoardByConfig).toHaveBeenCalledWith({
-        boardType: 'kilter',
-        layoutId: 1,
-        sizeId: 10,
-        setIds: '1,2',
-      });
+      expect(presence.resolveAndBindBoardByUuid).toHaveBeenCalledWith({ boardUuid: 'board-1' });
     });
     expect(presence.resolveAndBindBoard).not.toHaveBeenCalled();
+    expect(presence.resolveAndBindBoardByConfig).not.toHaveBeenCalled();
   });
 });
 

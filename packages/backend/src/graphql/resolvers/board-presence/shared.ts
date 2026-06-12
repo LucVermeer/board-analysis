@@ -1,5 +1,5 @@
 import { GraphQLError } from 'graphql';
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, isNull, or } from 'drizzle-orm';
 import { createHash } from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
 import type { ResolvedBoard } from '@boardsesh/shared-schema';
@@ -86,6 +86,33 @@ export async function findActiveBoardById(boardId: number): Promise<ActivePresen
     })
     .from(dbSchema.userBoards)
     .where(and(eq(dbSchema.userBoards.id, boardId), isNull(dbSchema.userBoards.deletedAt)))
+    .limit(1);
+  return board;
+}
+
+export async function findReachableActiveBoardByUuid(
+  userId: string,
+  boardUuid: string,
+): Promise<ActivePresenceBoard | undefined> {
+  const [board] = await db
+    .select({
+      id: dbSchema.userBoards.id,
+      name: dbSchema.userBoards.name,
+      boardType: dbSchema.userBoards.boardType,
+      layoutId: dbSchema.userBoards.layoutId,
+      sizeId: dbSchema.userBoards.sizeId,
+      setIds: dbSchema.userBoards.setIds,
+      serialNumber: dbSchema.userBoards.serialNumber,
+      angle: dbSchema.userBoards.angle,
+    })
+    .from(dbSchema.userBoards)
+    .where(
+      and(
+        eq(dbSchema.userBoards.uuid, boardUuid),
+        isNull(dbSchema.userBoards.deletedAt),
+        or(eq(dbSchema.userBoards.ownerId, userId), eq(dbSchema.userBoards.isPublic, true)),
+      ),
+    )
     .limit(1);
   return board;
 }

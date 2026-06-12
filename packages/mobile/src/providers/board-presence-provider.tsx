@@ -38,6 +38,10 @@ export type ResolveBoardArgs = {
 
 export type ResolveBoardConfigArgs = Omit<ResolveBoardArgs, 'serial'>;
 
+export type ResolveBoardUuidArgs = {
+  boardUuid: string;
+};
+
 function boardConfigResolveKey({ boardType, layoutId, sizeId, setIds }: ResolveBoardConfigArgs): string {
   return `${boardType}:${layoutId}:${sizeId}:${setIds}`;
 }
@@ -58,6 +62,11 @@ type BoardPresenceControlsValue = {
    * boardId. No-op when the active transport does not support config fallback.
    */
   resolveAndBindBoardByConfig: (args: ResolveBoardConfigArgs) => Promise<ResolvedBoard | null>;
+  /**
+   * Resolve a selected named board by UUID, then store its boardId. This is the
+   * preferred non-BLE path for board sheet stats/history.
+   */
+  resolveAndBindBoardByUuid: (args: ResolveBoardUuidArgs) => Promise<ResolvedBoard | null>;
   /**
    * Report directly to a specific board id. Used immediately after a connect
    * resolve when the React boardId context has not re-rendered yet.
@@ -85,7 +94,8 @@ export function MobileBoardPresenceProvider({ children }: { children: ReactNode 
   // The serial last resolved, so a reconnect to the same wall doesn't re-resolve.
   const lastResolvedSerialRef = useRef<string | null>(null);
   const lastResolvedConfigKeyRef = useRef<string | null>(null);
-  const configResolveGenerationRef = useRef(0);
+  const lastResolvedBoardUuidRef = useRef<string | null>(null);
+  const resolveGenerationRef = useRef(0);
   const enabledRef = useRef(enabled);
   enabledRef.current = enabled;
   // Mirror boardId into a ref so the empty-dep callback can read it without
@@ -96,7 +106,8 @@ export function MobileBoardPresenceProvider({ children }: { children: ReactNode 
   const resetPresence = useCallback(() => {
     lastResolvedSerialRef.current = null;
     lastResolvedConfigKeyRef.current = null;
-    configResolveGenerationRef.current += 1;
+    lastResolvedBoardUuidRef.current = null;
+    resolveGenerationRef.current += 1;
     setBoardId(null);
   }, []);
 
@@ -114,19 +125,66 @@ export function MobileBoardPresenceProvider({ children }: { children: ReactNode 
     if (lastResolvedSerialRef.current === args.serial && boardIdRef.current !== null) {
       return null;
     }
-    configResolveGenerationRef.current += 1;
+    const resolveGeneration = resolveGenerationRef.current + 1;
+    resolveGenerationRef.current = resolveGeneration;
     lastResolvedConfigKeyRef.current = null;
+    lastResolvedBoardUuidRef.current = null;
     lastResolvedSerialRef.current = args.serial;
+    setBoardId(null);
     try {
       const resolved = await activeClient.resolveBoardForSerial(args);
+      if (resolveGenerationRef.current !== resolveGeneration || lastResolvedSerialRef.current !== args.serial) {
+        return null;
+      }
       setBoardId(resolved.boardId);
       return resolved;
     } catch (error) {
-      lastResolvedSerialRef.current = null;
+      if (resolveGenerationRef.current === resolveGeneration && lastResolvedSerialRef.current === args.serial) {
+        lastResolvedSerialRef.current = null;
+      }
       console.warn('[board-presence] resolveBoardForSerial failed', error);
       return null;
     }
   }, []);
+
+  const resolveAndBindBoardByUuid = useCallback(
+    async (args: ResolveBoardUuidArgs): Promise<ResolvedBoard | null> => {
+      const activeClient = clientRef.current;
+      if (!enabledRef.current || activeClient === null || !activeClient.resolveBoardForUuid) {
+        return null;
+      }
+      if (lastResolvedBoardUuidRef.current === args.boardUuid && boardIdRef.current !== null) {
+        return null;
+      }
+      const resolveGeneration = resolveGenerationRef.current + 1;
+      resolveGenerationRef.current = resolveGeneration;
+      lastResolvedBoardUuidRef.current = args.boardUuid;
+      lastResolvedConfigKeyRef.current = null;
+      lastResolvedSerialRef.current = null;
+      setBoardId(null);
+      try {
+        const resolved = await activeClient.resolveBoardForUuid(args);
+        if (
+          resolveGenerationRef.current !== resolveGeneration ||
+          lastResolvedBoardUuidRef.current !== args.boardUuid
+        ) {
+          return null;
+        }
+        setBoardId(resolved.boardId);
+        return resolved;
+      } catch (error) {
+        if (
+          resolveGenerationRef.current === resolveGeneration &&
+          lastResolvedBoardUuidRef.current === args.boardUuid
+        ) {
+          lastResolvedBoardUuidRef.current = null;
+        }
+        console.warn('[board-presence] resolveBoardForUuid failed', error);
+        return null;
+      }
+    },
+    [],
+  );
 
   const resolveAndBindBoardByConfig = useCallback(
     async (args: ResolveBoardConfigArgs): Promise<ResolvedBoard | null> => {
@@ -138,19 +196,21 @@ export function MobileBoardPresenceProvider({ children }: { children: ReactNode 
       if (lastResolvedConfigKeyRef.current === configKey && boardIdRef.current !== null) {
         return null;
       }
-      const resolveGeneration = configResolveGenerationRef.current + 1;
-      configResolveGenerationRef.current = resolveGeneration;
+      const resolveGeneration = resolveGenerationRef.current + 1;
+      resolveGenerationRef.current = resolveGeneration;
       lastResolvedConfigKeyRef.current = configKey;
+      lastResolvedBoardUuidRef.current = null;
       lastResolvedSerialRef.current = null;
+      setBoardId(null);
       try {
         const resolved = await activeClient.resolveBoardForConfig(args);
-        if (configResolveGenerationRef.current !== resolveGeneration || lastResolvedConfigKeyRef.current !== configKey) {
+        if (resolveGenerationRef.current !== resolveGeneration || lastResolvedConfigKeyRef.current !== configKey) {
           return null;
         }
         setBoardId(resolved.boardId);
         return resolved;
       } catch (error) {
-        if (configResolveGenerationRef.current === resolveGeneration && lastResolvedConfigKeyRef.current === configKey) {
+        if (resolveGenerationRef.current === resolveGeneration && lastResolvedConfigKeyRef.current === configKey) {
           lastResolvedConfigKeyRef.current = null;
         }
         console.warn('[board-presence] resolveBoardForConfig failed', error);
@@ -182,10 +242,19 @@ export function MobileBoardPresenceProvider({ children }: { children: ReactNode 
       boardId,
       resolveAndBindBoard,
       resolveAndBindBoardByConfig,
+      resolveAndBindBoardByUuid,
       reportClimbForBoard,
       resetPresence,
     }),
-    [enabled, boardId, resolveAndBindBoard, resolveAndBindBoardByConfig, reportClimbForBoard, resetPresence],
+    [
+      enabled,
+      boardId,
+      resolveAndBindBoard,
+      resolveAndBindBoardByConfig,
+      resolveAndBindBoardByUuid,
+      reportClimbForBoard,
+      resetPresence,
+    ],
   );
 
   return (
@@ -213,6 +282,7 @@ const DISABLED_CONTROLS: BoardPresenceControlsValue = {
   boardId: null,
   resolveAndBindBoard: async () => null,
   resolveAndBindBoardByConfig: async () => null,
+  resolveAndBindBoardByUuid: async () => null,
   reportClimbForBoard: async () => false,
   resetPresence: () => {},
 };

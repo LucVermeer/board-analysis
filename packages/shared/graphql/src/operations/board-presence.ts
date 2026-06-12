@@ -101,6 +101,22 @@ export const RESOLVE_BOARD_FOR_SERIAL = `
   }
 `;
 
+// Mutation — resolve the selected named board's wall feed before BLE connects.
+// Unlike the per-config fallback, this uses the actual UserBoard row so durable
+// board stats and live presence stay on the same board_id.
+export const RESOLVE_BOARD_FOR_UUID = `
+  mutation ResolveBoardForUuid($boardUuid: ID!) {
+    resolveBoardForUuid(boardUuid: $boardUuid) {
+      boardId
+      boardName
+      boardType
+      layoutId
+      sizeId
+      setIds
+    }
+  }
+`;
+
 // Mutation — resolve a shared board by configuration when a BLE controller
 // exposes no serial. This gives serial-less boards a per-config wall feed.
 export const RESOLVE_BOARD_FOR_CONFIG = `

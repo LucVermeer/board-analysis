@@ -2110,6 +2110,12 @@ export type Mutation = {
    * config args are used only to create the board the first time a serial is seen.
    */
   resolveBoardForSerial: ResolvedBoard;
+  /**
+   * Resolve the wall feed for the selected named board. This binds to the actual
+   * board entity, so board sheet stats/history are available before Bluetooth
+   * connects and stay aligned with board-scoped ticks.
+   */
+  resolveBoardForUuid: ResolvedBoard;
   /** Resolve a proposal (admin/leader only). */
   resolveProposal: Proposal;
   /** Revoke a community role from a user (admin only). */
@@ -2547,6 +2553,11 @@ export type MutationResolveBoardForSerialArgs = {
   serial: Scalars['String']['input'];
   setIds: Scalars['String']['input'];
   sizeId: Scalars['Int']['input'];
+};
+
+/** Root mutation type for all write operations. */
+export type MutationResolveBoardForUuidArgs = {
+  boardUuid: Scalars['ID']['input'];
 };
 
 /** Root mutation type for all write operations. */
@@ -7464,6 +7475,12 @@ export type MutationResolvers<
     ParentType,
     ContextType,
     RequireFields<MutationResolveBoardForSerialArgs, 'boardType' | 'layoutId' | 'serial' | 'setIds' | 'sizeId'>
+  >;
+  resolveBoardForUuid?: Resolver<
+    ResolversTypes['ResolvedBoard'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationResolveBoardForUuidArgs, 'boardUuid'>
   >;
   resolveProposal?: Resolver<
     ResolversTypes['Proposal'],

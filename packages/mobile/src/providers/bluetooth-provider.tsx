@@ -434,7 +434,9 @@ export function BluetoothProvider({
       // session. Dedup is feed/signature-aware and only arms after an accepted
       // report, so failed reports and two-phone relights can retry.
       if (!presenceEnabledRef.current) return;
-      const boardId = presenceBoardIdRef.current ?? resolvedPresenceBoardIdRef.current;
+      const boardId = pendingPresenceResolveRef.current
+        ? null
+        : (presenceBoardIdRef.current ?? resolvedPresenceBoardIdRef.current);
       const undoTarget = wallCurrentClimbRef.current;
       if (boardId === null) {
         if (pendingPresenceResolveRef.current) {

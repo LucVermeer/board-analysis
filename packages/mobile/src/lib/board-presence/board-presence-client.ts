@@ -22,6 +22,7 @@ import {
   REPORT_BOARD_CLIMB,
   RESOLVE_BOARD_FOR_CONFIG,
   RESOLVE_BOARD_FOR_SERIAL,
+  RESOLVE_BOARD_FOR_UUID,
 } from '@boardsesh/graphql/operations/board-presence';
 import type { BoardPresenceClient } from '@boardsesh/board-presence-react';
 import type {
@@ -37,6 +38,7 @@ type BoardRecentClimbsData = { boardRecentClimbs: BoardPresenceClimb[] };
 type BoardPresenceStatsData = { boardPresenceStats: BoardPresenceStats };
 type ReportBoardClimbData = { reportBoardClimb: boolean };
 type ResolveBoardForSerialData = { resolveBoardForSerial: ResolvedBoard };
+type ResolveBoardForUuidData = { resolveBoardForUuid: ResolvedBoard };
 type ResolveBoardForConfigData = { resolveBoardForConfig: ResolvedBoard };
 
 /**
@@ -97,6 +99,14 @@ export function createMobileBoardPresenceClient(getClient: () => Client): BoardP
         variables: args,
       });
       return data.resolveBoardForSerial;
+    },
+
+    async resolveBoardForUuid(args) {
+      const data = await execute<ResolveBoardForUuidData>(getClient(), {
+        query: RESOLVE_BOARD_FOR_UUID,
+        variables: args,
+      });
+      return data.resolveBoardForUuid;
     },
 
     async resolveBoardForConfig(args) {

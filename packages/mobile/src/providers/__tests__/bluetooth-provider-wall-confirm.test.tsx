@@ -70,6 +70,7 @@ const presence = vi.hoisted(() => ({
   currentClimb: null as BoardPresenceClimb | null,
   resolveAndBindBoard: vi.fn(async (): Promise<TestResolvedBoard | null> => null),
   resolveAndBindBoardByConfig: vi.fn(async (): Promise<TestResolvedBoard | null> => null),
+  resolveAndBindBoardByUuid: vi.fn(async (): Promise<TestResolvedBoard | null> => null),
   reportClimbForBoard: vi.fn(async () => true),
   showUndoWallChangeSnackbar: vi.fn(),
 }));
@@ -109,6 +110,7 @@ vi.mock('../board-presence-provider', () => ({
     boardId: presence.boardId,
     resolveAndBindBoard: presence.resolveAndBindBoard,
     resolveAndBindBoardByConfig: presence.resolveAndBindBoardByConfig,
+    resolveAndBindBoardByUuid: presence.resolveAndBindBoardByUuid,
     reportClimbForBoard: presence.reportClimbForBoard,
   }),
 }));
@@ -298,6 +300,8 @@ describe('BluetoothProvider wall-confirm integration', () => {
     presence.resolveAndBindBoard.mockResolvedValue(null);
     presence.resolveAndBindBoardByConfig.mockClear();
     presence.resolveAndBindBoardByConfig.mockResolvedValue(null);
+    presence.resolveAndBindBoardByUuid.mockClear();
+    presence.resolveAndBindBoardByUuid.mockResolvedValue(null);
     presence.reportClimbForBoard.mockClear();
     presence.reportClimbForBoard.mockResolvedValue(true);
     presence.showUndoWallChangeSnackbar.mockClear();
@@ -646,9 +650,9 @@ describe('BluetoothProvider wall-confirm integration', () => {
       expect(presence.reportClimbForBoard).not.toHaveBeenCalled();
     });
 
-    it('buffers the first wall-confirm while connect board resolution is pending', async () => {
+    it('buffers the first wall-confirm while connect board resolution is pending, ignoring stale board ids', async () => {
       presence.enabled = true;
-      presence.boardId = null;
+      presence.boardId = 88;
       bluetooth.state.isConnected = false;
       let resolveBoard: (value: { boardId: number }) => void = () => {};
       presence.resolveAndBindBoard.mockReturnValue(
@@ -785,6 +789,7 @@ describe('BluetoothProvider wall-confirm integration', () => {
     it('does not include raw serial values in board-presence analytics', async () => {
       presence.enabled = true;
       presence.boardId = 99;
+      presence.resolveAndBindBoard.mockResolvedValueOnce({ boardId: 99 });
       renderProvider();
 
       bluetooth.options?.onConnectSuccess?.('SERIAL-SECRET-123');

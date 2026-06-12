@@ -10,7 +10,7 @@ import type {
 import { db } from '../../../db/client';
 import * as dbSchema from '@boardsesh/db/schema';
 import { requireAuthenticated, applyRateLimit, validateInput } from '../shared/helpers';
-import { BoardSerialSchema } from '../../../validation/schemas/primitives';
+import { BoardSerialSchema, UUIDSchema } from '../../../validation/schemas/primitives';
 import {
   BoardPresenceAngleSchema,
   BoardPresenceConfigInputSchema,
@@ -23,6 +23,7 @@ import {
   defaultBoardName,
   findActiveBoardBySerial,
   findOwnActiveBoardByConfig,
+  findReachableActiveBoardByUuid,
   isDuplicateBoardSerialError,
   requireActiveBoardById,
   requireBoardPresenceEnabled,
@@ -163,6 +164,30 @@ export const boardPresenceMutations = {
   },
 
   /**
+   * Resolve the board-presence feed for a selected named board. Unlike the
+   * per-config fallback, this binds to the actual UserBoard row so durable board
+   * stats and live presence share the same board_id before any BLE connection.
+   */
+  resolveBoardForUuid: async (
+    _: unknown,
+    { boardUuid }: { boardUuid: string },
+    ctx: ConnectionContext,
+  ): Promise<ResolvedBoard> => {
+    requireBoardPresenceEnabled();
+    requireAuthenticated(ctx);
+    await applyRateLimit(ctx, 30, 'resolveBoardForUuid');
+
+    const validBoardUuid = validateInput(UUIDSchema, boardUuid, 'boardUuid');
+    const board = await findReachableActiveBoardByUuid(ctx.userId!, validBoardUuid);
+    if (!board) {
+      throw new GraphQLError('Board not found', { extensions: { code: 'NOT_FOUND' } });
+    }
+    const resolved = toResolvedBoard(board);
+    await pubsub.stampBoardMembership(String(resolved.boardId), ctx.userId!);
+    return resolved;
+  },
+
+  /**
    * Resolve the shared board feed for boards that do not expose a BLE serial
    * (MoonBoard and any future serial-less hardware). This is per-config in v1:
    * every caller with the same board config converges on the same hidden,
@@ -203,9 +228,10 @@ export const boardPresenceMutations = {
     await applyRateLimit(ctx, 60, 'reportBoardClimb');
     const board = await requireActiveBoardById(boardId);
 
-    // Proof-of-presence: only a user who connected to this board (stamped in
-    // resolveBoardForSerial / resolveBoardForConfig) may post to its feed. This
-    // stops a logged-in user from injecting climbs onto any board id they guess.
+    // Proof-of-presence: only a user who selected or connected to this board
+    // (stamped in resolveBoardForUuid / resolveBoardForSerial /
+    // resolveBoardForConfig) may post to its feed. This stops a logged-in user
+    // from injecting climbs onto any board id they guess.
     const isConnected = await pubsub.hasBoardMembership(String(boardId), ctx.userId!);
     if (!isConnected) {
       throw new GraphQLError('Not connected to this board');

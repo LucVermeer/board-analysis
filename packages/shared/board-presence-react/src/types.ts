@@ -48,6 +48,9 @@ export interface BoardPresenceClient {
     setIds: string;
   }): Promise<ResolvedBoard>;
 
+  /** Resolve the selected named board's wall feed before BLE connects. */
+  resolveBoardForUuid?(args: { boardUuid: string }): Promise<ResolvedBoard>;
+
   /**
    * Resolve the shared board by configuration when the BLE controller exposes no
    * serial. Aurora boards should use `resolveBoardForSerial`; serial-less boards
