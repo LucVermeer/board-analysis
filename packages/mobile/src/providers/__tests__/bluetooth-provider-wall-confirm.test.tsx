@@ -510,6 +510,83 @@ describe('BluetoothProvider wall-confirm integration', () => {
     expect(queue.confirmClimbOnWall).toHaveBeenCalledTimes(2);
   });
 
+  it('does not double-report byte-identical wall confirms while the first report is pending', async () => {
+    presence.enabled = true;
+    presence.boardId = 99;
+    queue.sessionId = null;
+    const firstItem = makeQueueItem('climb-1');
+    queue.currentClimbQueueItem = firstItem;
+    let resolveReport: (value: boolean) => void = () => {};
+    presence.reportClimbForBoard.mockReturnValueOnce(
+      new Promise<boolean>((resolve) => {
+        resolveReport = resolve;
+      }),
+    );
+
+    const { rerender } = renderProvider();
+
+    await waitFor(() => {
+      expect(presence.reportClimbForBoard).toHaveBeenCalledTimes(1);
+    });
+
+    queue.currentClimbQueueItem = { ...firstItem };
+    rerender(
+      createElement(BluetoothProvider, {
+        boardName: 'kilter',
+        layoutId: 1,
+        sizeId: 10,
+        setIds: '1,20',
+        children: createElement('div', null),
+      }),
+    );
+
+    await waitFor(() => {
+      expect(wallConfirm.emitWallConfirm).toHaveBeenCalledTimes(2);
+    });
+    expect(bluetooth.state.sendFramesToBoard).toHaveBeenCalledTimes(1);
+    expect(presence.reportClimbForBoard).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      resolveReport(true);
+    });
+    expect(presence.reportClimbForBoard).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not re-report a byte-identical wall confirm after acceptance while waiting for the live echo', async () => {
+    presence.enabled = true;
+    presence.boardId = 99;
+    presence.currentClimb = null;
+    queue.sessionId = null;
+    const firstItem = makeQueueItem('climb-1');
+    queue.currentClimbQueueItem = firstItem;
+    const { rerender } = renderProvider();
+
+    await waitFor(() => {
+      expect(analytics.track).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({ climbUuid: 'climb-1' }),
+      );
+    });
+    expect(presence.reportClimbForBoard).toHaveBeenCalledTimes(1);
+
+    queue.currentClimbQueueItem = { ...firstItem };
+    rerender(
+      createElement(BluetoothProvider, {
+        boardName: 'kilter',
+        layoutId: 1,
+        sizeId: 10,
+        setIds: '1,20',
+        children: createElement('div', null),
+      }),
+    );
+
+    await waitFor(() => {
+      expect(wallConfirm.emitWallConfirm).toHaveBeenCalledTimes(2);
+    });
+    expect(bluetooth.state.sendFramesToBoard).toHaveBeenCalledTimes(1);
+    expect(presence.reportClimbForBoard).toHaveBeenCalledTimes(1);
+  });
+
   it('stores a newly connected board serial on active sessions', () => {
     renderProvider();
 

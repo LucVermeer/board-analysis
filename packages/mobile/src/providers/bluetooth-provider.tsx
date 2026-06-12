@@ -350,6 +350,8 @@ export function BluetoothProvider({
   // and only used to skip a byte-identical local re-broadcast while the feed
   // still shows that same signature.
   const lastAcceptedReportSignatureRef = useRef<string | null>(null);
+  const lastAcceptedWallSignatureRef = useRef<string | null>(null);
+  const pendingReportSignatureRef = useRef<string | null>(null);
   const pendingWallReportRef = useRef<PendingWallReport | null>(null);
   const pendingPresenceResolveRef = useRef(false);
   const resolvedPresenceBoardIdRef = useRef<number | null>(presenceBoardId);
@@ -419,8 +421,14 @@ export function BluetoothProvider({
 
   useEffect(() => {
     const currentWallSignature = presenceClimbReportSignature(wallCurrentClimb);
-    if (currentWallSignature !== lastAcceptedReportSignatureRef.current) {
+    if (
+      lastAcceptedReportSignatureRef.current !== null &&
+      currentWallSignature !== null &&
+      currentWallSignature !== lastAcceptedReportSignatureRef.current &&
+      currentWallSignature !== lastAcceptedWallSignatureRef.current
+    ) {
       lastAcceptedReportSignatureRef.current = null;
+      lastAcceptedWallSignatureRef.current = null;
     }
   }, [wallCurrentClimb]);
 
@@ -432,6 +440,8 @@ export function BluetoothProvider({
     }
     if (previousBoardId !== null || presenceBoardId === null) {
       lastAcceptedReportSignatureRef.current = null;
+      lastAcceptedWallSignatureRef.current = null;
+      pendingReportSignatureRef.current = null;
       undoWallChangeTargetRef.current = null;
       clearPendingWallReportAndUndoToastArm();
     }
@@ -445,20 +455,33 @@ export function BluetoothProvider({
       undoToastArmId: number | null,
     ) => {
       const reportSignature = queueItemReportSignature(item);
-      if (
-        lastAcceptedReportSignatureRef.current === reportSignature &&
-        presenceClimbReportSignature(wallCurrentClimbRef.current) === reportSignature
-      ) {
-        consumeUndoWallChangeToastArm(undoToastArmId);
+      if (lastAcceptedReportSignatureRef.current === reportSignature) {
+        const currentWallSignature = presenceClimbReportSignature(wallCurrentClimbRef.current);
+        if (
+          currentWallSignature === null ||
+          currentWallSignature === reportSignature ||
+          currentWallSignature === lastAcceptedWallSignatureRef.current
+        ) {
+          consumeUndoWallChangeToastArm(undoToastArmId);
+          return true;
+        }
+        lastAcceptedReportSignatureRef.current = null;
+        lastAcceptedWallSignatureRef.current = null;
+      }
+      if (pendingReportSignatureRef.current === reportSignature) {
         return true;
       }
 
       const climbInput = { uuid: item.uuid, climb: toClimbInput(item.climb) };
       const angle = item.climb.angle ?? null;
+      pendingReportSignatureRef.current = reportSignature;
       const accepted = await reportClimbForBoardRef.current(boardId, climbInput, angle).catch((error: unknown) => {
         console.warn('[board-presence] reportBoardClimb failed', error);
         return false;
       });
+      if (pendingReportSignatureRef.current === reportSignature) {
+        pendingReportSignatureRef.current = null;
+      }
 
       if (!accepted) {
         lastAcceptedReportSignatureRef.current = null;
@@ -466,6 +489,7 @@ export function BluetoothProvider({
       }
 
       lastAcceptedReportSignatureRef.current = reportSignature;
+      lastAcceptedWallSignatureRef.current = presenceClimbReportSignature(wallCurrentClimbRef.current);
       undoWallChangeTargetRef.current = undoTarget;
       const showUndoToast = consumeUndoWallChangeToastArm(undoToastArmId);
       track(SHARED_EVENTS.BoardClimbReported, {
@@ -522,6 +546,8 @@ export function BluetoothProvider({
   const handleConnectSuccess = useCallback(
     (serial: string | null) => {
       lastAcceptedReportSignatureRef.current = null;
+      lastAcceptedWallSignatureRef.current = null;
+      pendingReportSignatureRef.current = null;
       pendingWallReportRef.current = null;
       undoWallChangeTargetRef.current = null;
       resolvedPresenceBoardIdRef.current = null;

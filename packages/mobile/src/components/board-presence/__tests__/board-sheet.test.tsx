@@ -349,14 +349,32 @@ describe('BoardSheet', () => {
       }),
     );
 
-    // Hero climb name + history item name both render.
-    expect(container.textContent).toContain('Climb c1');
+    // The current climb renders as the hero only; it is filtered out of history.
+    expect(container.textContent?.match(/Climb c1/g) ?? []).toHaveLength(1);
     expect(container.textContent).toContain('Older Climb');
     // Stats tiles.
     expect(container.textContent).toContain('14');
     expect(container.textContent).toContain('mobile.boardPresence.historyHeader');
     // History list rendered one node per item.
     expect(container.querySelector('[data-list="true"]')).not.toBeNull();
+  });
+
+  it('does not show a history header when the only history entry is the current climb', () => {
+    presence.currentClimb = makeClimb('c1', 3);
+    presence.history = [makeClimb('c1', 3)];
+
+    const { container } = render(
+      createElement(BoardSheet, {
+        boardLabel: 'Garage Wall',
+        onClose: noop,
+        onDismissed: noop,
+        boardConfig,
+        onSwitchBoard: noop,
+      }),
+    );
+
+    expect(container.textContent?.match(/Climb c1/g) ?? []).toHaveLength(1);
+    expect(container.textContent).not.toContain('mobile.boardPresence.historyHeader');
   });
 
   it('hydrates hero and lit-on-this-wall rows before invoking shared climb actions', async () => {

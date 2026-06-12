@@ -169,8 +169,17 @@ export const BoardSheet = forwardRef<BoardSheetHandle, BoardSheetProps>(function
   const { boardId: boardPresenceBoardId } = useBoardPresenceControls();
   const boardPresenceBoardIdRef = useRef(boardPresenceBoardId);
   boardPresenceBoardIdRef.current = boardPresenceBoardId;
-  const historyCountRef = useRef(history.length);
-  historyCountRef.current = history.length;
+  const visibleHistory = useMemo(
+    () =>
+      currentClimb
+        ? history.filter((historyClimb) => {
+            return historyClimb.climbUuid !== currentClimb.climbUuid || historyClimb.seq !== currentClimb.seq;
+          })
+        : history,
+    [currentClimb, history],
+  );
+  const historyCountRef = useRef(visibleHistory.length);
+  historyCountRef.current = visibleHistory.length;
 
   const lastReceivedWallClimbRef = useRef<string | null>(null);
   const actionClimbCacheRef = useRef(new Map<string, Climb>());
@@ -420,7 +429,7 @@ export const BoardSheet = forwardRef<BoardSheetHandle, BoardSheetProps>(function
             </View>
           </View>
         ) : null}
-        {history.length > 0 ? (
+        {visibleHistory.length > 0 ? (
           <Text variant="footnote" color={systemColors.secondaryLabel} style={styles.sectionHeader}>
             {t('mobile.boardPresence.historyHeader')}
           </Text>
@@ -431,7 +440,7 @@ export const BoardSheet = forwardRef<BoardSheetHandle, BoardSheetProps>(function
       currentClimb,
       boardConfig,
       stats,
-      history.length,
+      visibleHistory.length,
       systemColors,
       brandColors.warning,
       formatGrade,
@@ -495,7 +504,7 @@ export const BoardSheet = forwardRef<BoardSheetHandle, BoardSheetProps>(function
       </View>
 
       <BottomSheetFlatList
-        data={history}
+        data={visibleHistory}
         keyExtractor={boardPresenceHistoryKeyExtractor}
         renderItem={renderHistoryItem}
         ListHeaderComponent={listHeader}
