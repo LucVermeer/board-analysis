@@ -76,7 +76,7 @@ import { toMobileSessionRuntimeEvent } from '../lib/session-runtime-event';
 import { climbToQueueItem, toClimbInput } from '../lib/climb-to-queue-item';
 import { track } from '../lib/analytics';
 import { reportError } from '../lib/sentry';
-import { extractGraphqlMessage } from '../lib/graphql/extract-error-message';
+import { extractGraphqlMessage, isGraphqlRateLimitedError } from '../lib/graphql/extract-error-message';
 import { useToast } from './toast-provider';
 import { useQueueSnackbar } from './queue-snackbar-provider';
 
@@ -965,6 +965,10 @@ export function QueueProvider({ children }: { children: ReactNode }) {
           });
           return newId;
         } catch (error) {
+          if (isGraphqlRateLimitedError(error)) {
+            showToast(t('mobile.queue.rateLimited'), 'error');
+            return null;
+          }
           // Production masks the GraphQL message to "Unexpected error", but the
           // graphql-request ClientError still carries the HTTP status — so Sentry
           // can distinguish network-down from a 4xx/5xx from a masked server

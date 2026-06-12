@@ -51,6 +51,12 @@ export const RATE_LIMIT_SESSION_OP = 'session';
 export const RATE_LIMIT_SESSION = 240;
 export const RATE_LIMIT_PLAYBACK_OP = 'playback';
 export const RATE_LIMIT_PLAYBACK = 600;
+export const RATE_LIMIT_JOIN_SESSION_OP = 'joinSession';
+export const RATE_LIMIT_JOIN_SESSION = 30;
+export const RATE_LIMIT_CREATE_SESSION_OP = 'createSession';
+export const RATE_LIMIT_CREATE_SESSION = 10;
+export const RATE_LIMIT_END_SESSION_OP = 'endSession';
+export const RATE_LIMIT_END_SESSION = 10;
 
 /**
  * Helper to require a session context.

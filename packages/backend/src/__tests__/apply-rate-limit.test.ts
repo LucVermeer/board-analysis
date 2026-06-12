@@ -6,7 +6,17 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vite-plus/test';
 import { GraphQLError } from 'graphql';
 import type { ConnectionContext } from '@boardsesh/shared-schema';
-import { applyRateLimit, RATE_LIMIT_SESSION, RATE_LIMIT_PLAYBACK } from '../graphql/resolvers/shared/helpers';
+import {
+  applyRateLimit,
+  RATE_LIMIT_SESSION,
+  RATE_LIMIT_PLAYBACK,
+  RATE_LIMIT_JOIN_SESSION,
+  RATE_LIMIT_JOIN_SESSION_OP,
+  RATE_LIMIT_CREATE_SESSION,
+  RATE_LIMIT_CREATE_SESSION_OP,
+  RATE_LIMIT_END_SESSION,
+  RATE_LIMIT_END_SESSION_OP,
+} from '../graphql/resolvers/shared/helpers';
 import { RateLimitError } from '../utils/rate-limiter';
 
 // Mock rate limiter utilities so we can inspect which keys are used. Spread the
@@ -158,5 +168,20 @@ describe('applyRateLimit structured RATE_LIMITED error (#2763)', () => {
     // 60/min `default` bucket that a two-person session exhausted by switching.
     expect(RATE_LIMIT_SESSION).toBeGreaterThan(60);
     expect(RATE_LIMIT_PLAYBACK).toBeGreaterThanOrEqual(RATE_LIMIT_SESSION);
+  });
+
+  it('keeps session lifecycle traffic out of the shared default bucket', () => {
+    // Native Live Activity keeps its own websocket and rejoins on reconnect.
+    // Those joins must not spend the same `default` bucket that createSession
+    // previously used, or websocket churn can make a later explicit Start fail.
+    expect(RATE_LIMIT_JOIN_SESSION_OP).toBe('joinSession');
+    expect(RATE_LIMIT_CREATE_SESSION_OP).toBe('createSession');
+    expect(RATE_LIMIT_END_SESSION_OP).toBe('endSession');
+    expect(new Set([RATE_LIMIT_JOIN_SESSION_OP, RATE_LIMIT_CREATE_SESSION_OP, RATE_LIMIT_END_SESSION_OP]).size).toBe(
+      3,
+    );
+    expect(RATE_LIMIT_JOIN_SESSION).toBeGreaterThanOrEqual(30);
+    expect(RATE_LIMIT_CREATE_SESSION).toBeGreaterThanOrEqual(10);
+    expect(RATE_LIMIT_END_SESSION).toBeGreaterThanOrEqual(10);
   });
 });

@@ -12,6 +12,12 @@ import {
   validateInput,
   RATE_LIMIT_SESSION,
   RATE_LIMIT_SESSION_OP,
+  RATE_LIMIT_JOIN_SESSION,
+  RATE_LIMIT_JOIN_SESSION_OP,
+  RATE_LIMIT_CREATE_SESSION,
+  RATE_LIMIT_CREATE_SESSION_OP,
+  RATE_LIMIT_END_SESSION,
+  RATE_LIMIT_END_SESSION_OP,
 } from '../shared/helpers';
 import {
   SessionIdSchema,
@@ -113,7 +119,7 @@ export const sessionMutations = {
         `[joinSession] START - connectionId: ${ctx.connectionId}, sessionId: ${sessionId}, username: ${username}, sessionName: ${sessionName}, initialQueueLength: ${initialQueue?.length || 0}`,
       );
 
-    await applyRateLimit(ctx, 10); // Limit session joins to prevent abuse
+    await applyRateLimit(ctx, RATE_LIMIT_JOIN_SESSION, RATE_LIMIT_JOIN_SESSION_OP);
 
     // Validate inputs
     validateInput(SessionIdSchema, sessionId, 'sessionId');
@@ -197,7 +203,7 @@ export const sessionMutations = {
       if (DEBUG)
         logger.info(`[createSession] START - connectionId: ${ctx.connectionId}, boardPath: ${input.boardPath}`);
 
-      await applyRateLimit(ctx, 5); // Limit session creation to prevent abuse
+      await applyRateLimit(ctx, RATE_LIMIT_CREATE_SESSION, RATE_LIMIT_CREATE_SESSION_OP);
 
       // Validate input
       validateInput(CreateSessionInputSchema, input, 'createSession input');
@@ -688,7 +694,7 @@ export const sessionMutations = {
     { sessionId, timezone }: { sessionId: string; timezone?: string | null },
     ctx: ConnectionContext,
   ) => {
-    await applyRateLimit(ctx, 5);
+    await applyRateLimit(ctx, RATE_LIMIT_END_SESSION, RATE_LIMIT_END_SESSION_OP);
     validateInput(SessionIdSchema, sessionId, 'sessionId');
     // Ending a session is destructive (terminates every subscriber, generates
     // a summary row, marks the session ended in Postgres). The pre-#2128 code
