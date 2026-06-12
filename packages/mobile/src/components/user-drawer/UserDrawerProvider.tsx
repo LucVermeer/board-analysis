@@ -5,6 +5,7 @@ import { router, useSegments } from 'expo-router';
 import type { BottomSheetModal } from '@gorhom/bottom-sheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
+import { openDiscordInvite } from '../../lib/discord';
 import { reportError } from '../../lib/error-reporting';
 import { useProfile } from '../../lib/graphql/hooks';
 import { useAuth } from '../../providers/auth-provider';
@@ -130,6 +131,11 @@ export function UserDrawerProvider({ children }: { children: ReactNode }) {
     [closeUserDrawer],
   );
 
+  const openDiscord = useCallback(() => {
+    closeUserDrawer();
+    void openDiscordInvite('user-drawer');
+  }, [closeUserDrawer]);
+
   const handleSignOut = useCallback(() => {
     closeUserDrawer();
     void signOut('manual').catch(reportError);
@@ -196,10 +202,12 @@ export function UserDrawerProvider({ children }: { children: ReactNode }) {
 
               <View style={[styles.menuGroup, { backgroundColor: systemColors.elevatedSurface }]}>
                 <DrawerRow icon="star" title={t('userDrawer.rateBoardsesh')} onPress={() => openFeedback('rating')} />
+                <DrawerRow icon="flag" title={t('userDrawer.reportBug')} onPress={() => openFeedback('bug')} />
                 <DrawerRow
-                  icon="flag"
-                  title={t('userDrawer.reportBug')}
-                  onPress={() => openFeedback('bug')}
+                  icon="open.external"
+                  title={t('userDrawer.joinDiscord')}
+                  tintColor={brandColors.primary}
+                  onPress={openDiscord}
                   showSeparator={false}
                 />
               </View>

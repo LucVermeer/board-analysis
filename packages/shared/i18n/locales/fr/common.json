@@ -74,6 +74,9 @@
         "subtitle": "Apple Health et Strava"
       }
     },
+    "about": {
+      "joinDiscord": "Rejoindre Discord"
+    },
     "onboarding": {
       "skip": "Passer",
       "next": "Suivant",
@@ -218,6 +221,7 @@
     "about": "À propos",
     "rateBoardsesh": "Noter Boardsesh",
     "reportBug": "Signaler un bug",
+    "joinDiscord": "Rejoindre Discord",
     "logout": "Se déconnecter"
   },
   "loading": {
