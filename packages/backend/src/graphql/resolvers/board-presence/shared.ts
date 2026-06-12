@@ -152,6 +152,7 @@ export async function findOwnActiveBoardByConfig(
   sizeId: number,
   setIds: string,
 ): Promise<ActivePresenceBoard | undefined> {
+  const normalizedSetIds = normalizeSetIds(setIds);
   const [board] = await db
     .select({
       id: dbSchema.userBoards.id,
@@ -170,7 +171,7 @@ export async function findOwnActiveBoardByConfig(
         eq(dbSchema.userBoards.boardType, boardType),
         eq(dbSchema.userBoards.layoutId, layoutId),
         eq(dbSchema.userBoards.sizeId, sizeId),
-        eq(dbSchema.userBoards.setIds, setIds),
+        eq(dbSchema.userBoards.setIds, normalizedSetIds),
         isNull(dbSchema.userBoards.deletedAt),
       ),
     )
@@ -238,7 +239,8 @@ export async function resolveSharedBoardForConfig(
   sizeId: number,
   setIds: string,
 ): Promise<ResolvedBoard> {
-  const slug = boardConfigPresenceSlug(boardType, layoutId, sizeId, setIds);
+  const normalizedSetIds = normalizeSetIds(setIds);
+  const slug = boardConfigPresenceSlug(boardType, layoutId, sizeId, normalizedSetIds);
 
   const [existing] = await db
     .select()
@@ -261,7 +263,7 @@ export async function resolveSharedBoardForConfig(
         boardType,
         layoutId,
         sizeId,
-        setIds,
+        setIds: normalizedSetIds,
         name: `${defaultBoardName(boardType)} Shared Feed`,
         serialNumber: null,
         isPublic: false,
@@ -272,6 +274,9 @@ export async function resolveSharedBoardForConfig(
       .returning();
     return toResolvedBoard(created);
   } catch (error) {
+    if (!isUniqueViolation(error, 'user_boards_unique_slug')) {
+      throw error;
+    }
     logger.warn(`[board-presence] resolveSharedBoardForConfig create race: ${String(error)}`);
     const [winner] = await db
       .select()

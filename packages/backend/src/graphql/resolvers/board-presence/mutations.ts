@@ -25,6 +25,7 @@ import {
   findOwnActiveBoardByConfig,
   findReachableActiveBoardByUuid,
   isDuplicateBoardSerialError,
+  normalizeSetIds,
   requireActiveBoardById,
   requireBoardPresenceEnabled,
   resolveSharedBoardForConfig,
@@ -60,6 +61,7 @@ export const boardPresenceMutations = {
 
     const validSerial = validateInput(BoardSerialSchema, serial, 'serial');
     const config = validateInput(BoardPresenceConfigInputSchema, { boardType, layoutId, sizeId, setIds }, 'input');
+    const normalizedSetIds = normalizeSetIds(config.setIds);
 
     const userId = ctx.userId!;
 
@@ -143,7 +145,7 @@ export const boardPresenceMutations = {
           boardType: config.boardType,
           layoutId: config.layoutId,
           sizeId: config.sizeId,
-          setIds: config.setIds,
+          setIds: normalizedSetIds,
           name,
           serialNumber: validSerial,
         })
@@ -302,6 +304,8 @@ export const boardPresenceMutations = {
       queueItemUuid: validatedClimb.uuid,
       name: catalogClimb.name ?? null,
       grade: catalogClimb.grade ?? null,
+      // Grade palettes are still client/theme-specific, so the server leaves
+      // this nullable until a shared color contract exists.
       gradeColor: null,
       frames: catalogClimb.frames ?? null,
       angle: effectiveAngle,

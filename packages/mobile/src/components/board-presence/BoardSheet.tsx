@@ -39,26 +39,10 @@ import { useGradeFormat } from '../../hooks/use-grade-format';
 import { track } from '../../lib/analytics';
 import { getHttpClient } from '../../lib/graphql/client';
 import { GET_CLIMB, type GetClimbQueryResponse } from '../../lib/graphql/operations';
+import { boardPresenceClimbToClimb } from '../../lib/board-presence/presence-climb';
 import { spacing, borderRadius } from '../../theme/tokens';
 
 const ACTION_CLIMB_CACHE_LIMIT = 50;
-
-function presenceClimbToPreviewClimb(presenceClimb: BoardPresenceClimb): Climb {
-  return {
-    uuid: presenceClimb.climbUuid,
-    name: presenceClimb.name ?? '',
-    frames: presenceClimb.frames ?? '',
-    setter_username: presenceClimb.setter ?? '',
-    angle: presenceClimb.angle ?? 0,
-    ascensionist_count: 0,
-    difficulty: presenceClimb.grade ?? '',
-    quality_average: '',
-    stars: 0,
-    difficulty_error: '',
-    benchmark_difficulty: null,
-  };
-}
-
 function boardPresenceHistoryKeyExtractor(item: BoardPresenceClimb): string {
   return `${item.climbUuid}-${item.seq}`;
 }
@@ -792,7 +776,7 @@ const InteractiveHeroRow = memo(function InteractiveHeroRowInner({
   onOpenPlaylist,
   onOpenActions,
 }: InteractiveHeroRowProps) {
-  const rowClimb = useMemo(() => presenceClimbToPreviewClimb(climb), [climb]);
+  const rowClimb = useMemo(() => boardPresenceClimbToClimb(climb), [climb]);
   const climbBoardConfig = useMemo(
     () => (boardConfig ? actionBoardConfigForPresenceClimb(boardConfig, climb) : null),
     [boardConfig, climb],
@@ -862,7 +846,7 @@ const NowOnTheWallHero = memo(function NowOnTheWallHeroInner({
   formattedGrade,
   gradeColor,
 }: HeroProps) {
-  const renderClimb = useMemo(() => (climb ? presenceClimbToPreviewClimb(climb) : null), [climb]);
+  const renderClimb = useMemo(() => (climb ? boardPresenceClimbToClimb(climb) : null), [climb]);
   const climbBoardConfig = useMemo(
     () => (boardConfig && climb ? actionBoardConfigForPresenceClimb(boardConfig, climb) : null),
     [boardConfig, climb],
@@ -961,7 +945,7 @@ const InteractiveHistoryRow = memo(function InteractiveHistoryRowInner({
   onOpenPlaylist,
   onOpenActions,
 }: InteractiveHistoryRowProps) {
-  const rowClimb = useMemo(() => presenceClimbToPreviewClimb(climb), [climb]);
+  const rowClimb = useMemo(() => boardPresenceClimbToClimb(climb), [climb]);
   const climbBoardConfig = useMemo(
     () => (boardConfig ? actionBoardConfigForPresenceClimb(boardConfig, climb) : null),
     [boardConfig, climb],
@@ -1025,7 +1009,7 @@ const HistoryRow = memo(function HistoryRowInner({
   formattedGrade,
   gradeColor,
 }: HistoryRowProps) {
-  const thumbnailClimb = useMemo(() => presenceClimbToPreviewClimb(climb), [climb]);
+  const thumbnailClimb = useMemo(() => boardPresenceClimbToClimb(climb), [climb]);
   const climbBoardConfig = useMemo(
     () => (boardConfig ? actionBoardConfigForPresenceClimb(boardConfig, climb) : null),
     [boardConfig, climb],

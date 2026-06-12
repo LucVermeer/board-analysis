@@ -37,6 +37,7 @@ const SENDER_DISPLAY_NAME = 'Crusher Carla';
 const SENDER_AVATAR_URL = 'https://example.com/carla.jpg';
 const TEST_CLIMB_UUID = 'board-presence-test-climb-uuid';
 const OTHER_TEST_CLIMB_UUID = 'board-presence-other-climb-uuid';
+const BOARD_MEMBERSHIP_TTL_MS = 43_200_000;
 
 function authCtx(overrides: Partial<ConnectionContext> = {}): ConnectionContext {
   return {
@@ -163,6 +164,53 @@ describe('board-presence pubsub', () => {
     const otherNext = await pubsub.nextBoardSeq('seq-board-b');
     expect(otherNext).toBeGreaterThan(other);
   });
+
+  it('evicts expired local proof-of-presence stamps without a membership read', async () => {
+    const boardId = `local-membership-${Math.random().toString(36).slice(2)}`;
+    const userId = `user-${Math.random().toString(36).slice(2)}`;
+    const localKey = `${boardId}:${userId}`;
+
+    pubsub.resetLocalBoardMembershipForTest();
+    vi.useFakeTimers();
+
+    try {
+      await pubsub.stampBoardMembership(boardId, userId);
+      expect(pubsub.hasLocalBoardMembershipForTest(localKey)).toBe(true);
+
+      await vi.advanceTimersByTimeAsync(BOARD_MEMBERSHIP_TTL_MS + 1);
+
+      expect(pubsub.hasLocalBoardMembershipForTest(localKey)).toBe(false);
+    } finally {
+      pubsub.resetLocalBoardMembershipForTest();
+      vi.useRealTimers();
+    }
+  });
+
+  it('reschedules local proof-of-presence cleanup when an earlier expiry is added', async () => {
+    const laterLocalKey = `local-membership-later-${Math.random().toString(36).slice(2)}`;
+    const earlierLocalKey = `local-membership-earlier-${Math.random().toString(36).slice(2)}`;
+
+    pubsub.resetLocalBoardMembershipForTest();
+    vi.useFakeTimers();
+
+    try {
+      const currentTime = Date.now();
+      pubsub.setLocalBoardMembershipForTest(laterLocalKey, currentTime + 1000);
+      pubsub.setLocalBoardMembershipForTest(earlierLocalKey, currentTime + 100);
+
+      await vi.advanceTimersByTimeAsync(101);
+
+      expect(pubsub.hasLocalBoardMembershipForTest(earlierLocalKey)).toBe(false);
+      expect(pubsub.hasLocalBoardMembershipForTest(laterLocalKey)).toBe(true);
+
+      await vi.advanceTimersByTimeAsync(900);
+
+      expect(pubsub.hasLocalBoardMembershipForTest(laterLocalKey)).toBe(false);
+    } finally {
+      pubsub.resetLocalBoardMembershipForTest();
+      vi.useRealTimers();
+    }
+  });
 });
 
 // ============================================================
@@ -251,11 +299,12 @@ describe('board-presence resolvers', () => {
       const serial = `SER-${Date.now()}`;
       const first = await boardPresenceMutations.resolveBoardForSerial(
         undefined,
-        { serial, boardType: 'kilter', layoutId: 1, sizeId: 10, setIds: '1,2' },
+        { serial, boardType: 'kilter', layoutId: 1, sizeId: 10, setIds: '2,1' },
         authCtx(),
       );
       expect(first.boardId).toBeGreaterThan(0);
       expect(first.boardType).toBe('kilter');
+      expect(first.setIds).toBe('1,2');
 
       // Second call (same serial) returns the already-bound shared board.
       const second = await boardPresenceMutations.resolveBoardForSerial(
@@ -299,6 +348,28 @@ describe('board-presence resolvers', () => {
       expect(resolved.boardName).toBe('My Garage');
 
       const [row] = await db.execute(sql`SELECT serial_number FROM user_boards WHERE id = ${resolved.boardId}`);
+      expect((row as { serial_number: string }).serial_number).toBe(serial);
+    });
+
+    it('normalizes setIds before binding a serial to an own config board', async () => {
+      await db.execute(sql`
+        INSERT INTO user_boards (uuid, slug, owner_id, board_type, layout_id, size_id, set_ids, name, serial_number)
+        VALUES (${`uuid-normalized-${Date.now()}`}, ${`slug-normalized-${Date.now()}`}, ${TEST_USER_ID}, 'kilter', 17, 21, '3,4', 'My Normalized Garage', null)
+      `);
+
+      const serial = `NORM-${Date.now()}`;
+      const resolved = await boardPresenceMutations.resolveBoardForSerial(
+        undefined,
+        { serial, boardType: 'kilter', layoutId: 17, sizeId: 21, setIds: '4,3' },
+        authCtx(),
+      );
+      expect(resolved.boardName).toBe('My Normalized Garage');
+      expect(resolved.setIds).toBe('3,4');
+
+      const [row] = await db.execute(sql`
+        SELECT serial_number FROM user_boards
+        WHERE owner_id = ${TEST_USER_ID} AND layout_id = 17 AND size_id = 21
+      `);
       expect((row as { serial_number: string }).serial_number).toBe(serial);
     });
 
@@ -376,6 +447,38 @@ describe('board-presence resolvers', () => {
       expect((row as { is_unlisted: boolean }).is_unlisted).toBe(true);
     });
 
+    it('converges concurrent serial-less config creates onto one normalized shared board', async () => {
+      const layoutId = 9000 + Math.floor(Math.random() * 10_000);
+      const [first, second] = await Promise.all([
+        boardPresenceMutations.resolveBoardForConfig(
+          undefined,
+          { boardType: 'moonboard', layoutId, sizeId: 1, setIds: '3,1' },
+          authCtx(),
+        ),
+        boardPresenceMutations.resolveBoardForConfig(
+          undefined,
+          { boardType: 'moonboard', layoutId, sizeId: 1, setIds: '1,3' },
+          authCtx({ userId: SECOND_USER_ID }),
+        ),
+      ]);
+
+      expect(second.boardId).toBe(first.boardId);
+      expect(first.setIds).toBe('1,3');
+      expect(second.setIds).toBe('1,3');
+
+      const [row] = await db.execute(sql`
+        SELECT count(*)::int AS count, min(set_ids) AS set_ids
+        FROM user_boards
+        WHERE owner_id = '00000000-0000-0000-0000-000000000000'
+          AND board_type = 'moonboard'
+          AND layout_id = ${layoutId}
+          AND size_id = 1
+          AND deleted_at IS NULL
+      `);
+      expect(Number((row as { count: number }).count)).toBe(1);
+      expect((row as { set_ids: string }).set_ids).toBe('1,3');
+    });
+
     it('rejects binding a second serial onto an already-bound board via the unique index', async () => {
       const serialA = `UNIQ-A-${Date.now()}`;
       const resolved = await boardPresenceMutations.resolveBoardForSerial(
@@ -430,9 +533,9 @@ describe('board-presence resolvers', () => {
         VALUES (${boardUuid}, ${slug}, ${SECOND_USER_ID}, 'kilter', 4, 12, '1,2', 'Private Wall', null, false)
       `);
 
-      await expect(
-        boardPresenceMutations.resolveBoardForUuid(undefined, { boardUuid }, authCtx()),
-      ).rejects.toThrow('Board not found');
+      await expect(boardPresenceMutations.resolveBoardForUuid(undefined, { boardUuid }, authCtx())).rejects.toThrow(
+        'Board not found',
+      );
     });
 
     it('rejects a board uuid that does not exist', async () => {
