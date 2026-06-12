@@ -10,26 +10,9 @@
 
 import { useMemo } from 'react';
 import type { Climb } from '@boardsesh/queue';
-import type { BoardPresenceClimb } from '@boardsesh/shared-schema';
 import { useBoardPresenceCurrent } from '@boardsesh/board-presence-react';
 import { useBoardPresenceControls } from '../../providers/board-presence-provider';
-
-/** Map a wall presence climb to the minimal `Climb` the accessory row renders. */
-function presenceClimbToClimb(presenceClimb: BoardPresenceClimb): Climb {
-  return {
-    uuid: presenceClimb.climbUuid,
-    name: presenceClimb.name ?? '',
-    frames: presenceClimb.frames ?? '',
-    setter_username: presenceClimb.setter ?? '',
-    angle: presenceClimb.angle ?? 0,
-    ascensionist_count: 0,
-    difficulty: presenceClimb.grade ?? '',
-    quality_average: '',
-    stars: 0,
-    difficulty_error: '',
-    benchmark_difficulty: null,
-  };
-}
+import { boardPresenceClimbToClimb } from '../../lib/board-presence/presence-climb';
 
 /**
  * Returns the climb the accessory should show. With the flag off (or no live
@@ -50,7 +33,7 @@ export function useWallOrQueueCurrentClimb(localClimb: Climb | null): Climb | nu
       if (localClimb?.uuid === wallClimb.climbUuid) {
         return localClimb;
       }
-      return presenceClimbToClimb(wallClimb);
+      return boardPresenceClimbToClimb(wallClimb);
     }
     return localClimb;
     // `wallClimb` only changes on a wall event (bounded, not per-frame), so

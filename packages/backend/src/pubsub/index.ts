@@ -61,6 +61,8 @@ class PubSub {
   private localBoardSeq = new Map<string, number>();
   // Local-only proof-of-presence: `${boardId}:${userId}` → expiry epoch ms.
   private localBoardMembership = new Map<string, number>();
+  private localBoardMembershipCleanupTimer: ReturnType<typeof setTimeout> | null = null;
+  private localBoardMembershipCleanupExpiry: number | null = null;
   private redisAdapter: RedisPubSubAdapter | null = null;
   private initialized = false;
   private redisRequired = false;
@@ -817,7 +819,7 @@ class PubSub {
         logger.error('[PubSub] Failed to stamp board membership, falling back to local:', error);
       }
     }
-    this.localBoardMembership.set(`${boardId}:${userId}`, Date.now() + BOARD_MEMBERSHIP_TTL * 1000);
+    this.setLocalBoardMembership(`${boardId}:${userId}`, Date.now() + BOARD_MEMBERSHIP_TTL * 1000);
   }
 
   /** True if the user has a live proof-of-presence stamp for the board. */
@@ -843,6 +845,76 @@ class PubSub {
       return false;
     }
     return true;
+  }
+
+  private setLocalBoardMembership(localKey: string, expiry: number): void {
+    this.localBoardMembership.set(localKey, expiry);
+    if (this.localBoardMembershipCleanupExpiry !== null && expiry >= this.localBoardMembershipCleanupExpiry) {
+      return;
+    }
+    this.scheduleLocalBoardMembershipCleanup();
+  }
+
+  /** @internal Test hook for local-only proof-of-presence cleanup coverage. */
+  resetLocalBoardMembershipForTest(): void {
+    this.clearLocalBoardMembershipCleanupTimer();
+    this.localBoardMembership.clear();
+  }
+
+  /** @internal Test hook for local-only proof-of-presence cleanup coverage. */
+  setLocalBoardMembershipForTest(localKey: string, expiry: number): void {
+    this.setLocalBoardMembership(localKey, expiry);
+  }
+
+  /** @internal Test hook for local-only proof-of-presence cleanup coverage. */
+  hasLocalBoardMembershipForTest(localKey: string): boolean {
+    return this.localBoardMembership.has(localKey);
+  }
+
+  private scheduleLocalBoardMembershipCleanup(): void {
+    this.clearLocalBoardMembershipCleanupTimer();
+
+    if (this.localBoardMembership.size === 0) {
+      return;
+    }
+
+    // Local-only mode is single-process and expected to stay small; keep the
+    // scheduler simple unless proof-of-presence cardinality becomes material.
+    let nextExpiry: number | null = null;
+    for (const expiry of this.localBoardMembership.values()) {
+      nextExpiry = nextExpiry === null ? expiry : Math.min(nextExpiry, expiry);
+    }
+    if (nextExpiry === null) return;
+
+    this.localBoardMembershipCleanupExpiry = nextExpiry;
+    const cleanupDelay = Math.max(0, nextExpiry - Date.now());
+    const cleanupTimer = setTimeout(() => {
+      this.localBoardMembershipCleanupTimer = null;
+      this.localBoardMembershipCleanupExpiry = null;
+      this.evictExpiredLocalBoardMemberships();
+      this.scheduleLocalBoardMembershipCleanup();
+    }, cleanupDelay);
+    this.localBoardMembershipCleanupTimer = cleanupTimer;
+    if (typeof cleanupTimer === 'object') {
+      cleanupTimer.unref?.();
+    }
+  }
+
+  private clearLocalBoardMembershipCleanupTimer(): void {
+    if (this.localBoardMembershipCleanupTimer === null) {
+      return;
+    }
+    clearTimeout(this.localBoardMembershipCleanupTimer);
+    this.localBoardMembershipCleanupTimer = null;
+    this.localBoardMembershipCleanupExpiry = null;
+  }
+
+  private evictExpiredLocalBoardMemberships(now = Date.now()): void {
+    for (const [localKey, expiry] of this.localBoardMembership) {
+      if (expiry <= now) {
+        this.localBoardMembership.delete(localKey);
+      }
+    }
   }
 
   /**

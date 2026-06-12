@@ -792,6 +792,7 @@ sequenceDiagram
 - Session events: `boardsesh:session:{sessionId}`
 - Notification events: `boardsesh:notifications:{userId}` (per-user, authenticated)
 - Comment live updates: `boardsesh:comments:{entityType}:{entityId}` (per-entity, public)
+- Board presence: `boardsesh:board:{boardId}` (per physical or shared board feed, authenticated publish)
 
 ### Event Buffer for Delta Sync
 
@@ -1251,7 +1252,24 @@ boardsesh:instance:{id}:heartbeat   # String - instance heartbeat timestamp (60s
 ```
 boardsesh:queue:{sessionId}         # Queue events (add, remove, reorder, etc.)
 boardsesh:session:{sessionId}       # Session events (join, leave, leader change)
+boardsesh:board:{boardId}           # Board-presence "now on the wall" events
 ```
+
+**Board Presence (PubSub):**
+
+These PubSub data keys are intentionally documented as implemented. Unlike the
+pub/sub channels above and the `DistributedStateManager` keys, they currently
+omit the `boardsesh:` namespace prefix.
+
+```
+board:{boardId}:history             # List - latest BoardPresenceClimb payloads, newest first
+board:{boardId}:seq                 # String/integer - per-board monotonic event sequence
+presence:board:{boardId}:user:{id}  # String - proof-of-presence stamp for report authorization
+```
+
+Board presence is a separate pub/sub domain from party sessions. `resolveBoardForSerial` maps a BLE serial to one active `user_boards.id`; `resolveBoardForConfig` maps serial-less hardware to one hidden system-owned board per normalized `(boardType, layoutId, sizeId, setIds)` config. `reportBoardClimb` requires a live proof-of-presence stamp for that board before it publishes a `BoardClimbSet` event.
+
+Redis-backed deployments keep the last 50 climbs for 24 hours so late subscribers can backfill before listening to `boardsesh:board:{boardId}`. Local-only deployments dispatch live board-presence events in process and keep proof-of-presence in memory with scheduled TTL cleanup; they do not provide board history backfill across process restarts.
 
 ### Graceful Shutdown
 
@@ -1542,24 +1560,27 @@ Requires user authentication and controller ownership.
 
 ### Timeouts and Limits
 
-| Setting                 | Value   | Purpose                                   |
-| ----------------------- | ------- | ----------------------------------------- |
-| Retry attempts          | 10      | WebSocket reconnection                    |
-| Max retry delay         | 30s     | Exponential backoff cap                   |
-| Keep-alive interval     | 10s     | Connection health check                   |
-| Mutation timeout        | 30s     | Prevent hanging mutations                 |
-| Redis TTL               | 4 hours | Session cache expiry                      |
-| Postgres debounce       | 30s     | Batch writes                              |
-| Event buffer size       | 100     | Delta sync limit                          |
-| Event buffer TTL        | 5 min   | Old events cleanup                        |
-| Hash verification       | 60s     | State drift detection                     |
-| Subscription queue      | 1000    | Max pending events                        |
-| Connection TTL          | 1 hour  | Distributed connection expiry             |
-| WebSocket ping interval | 30s     | Dead connection detection                 |
-| Instance heartbeat      | 30s     | Heartbeat update interval                 |
-| Instance heartbeat TTL  | 60s     | Dead instance detection                   |
-| Session members TTL     | 4 hours | Matches session TTL                       |
-| Session grace period    | 60s     | In-memory retention after last disconnect |
+| Setting                 | Value    | Purpose                                   |
+| ----------------------- | -------- | ----------------------------------------- |
+| Retry attempts          | 10       | WebSocket reconnection                    |
+| Max retry delay         | 30s      | Exponential backoff cap                   |
+| Keep-alive interval     | 10s      | Connection health check                   |
+| Mutation timeout        | 30s      | Prevent hanging mutations                 |
+| Redis TTL               | 4 hours  | Session cache expiry                      |
+| Postgres debounce       | 30s      | Batch writes                              |
+| Event buffer size       | 100      | Delta sync limit                          |
+| Event buffer TTL        | 5 min    | Old events cleanup                        |
+| Board history size      | 50       | Board-presence backfill limit             |
+| Board history TTL       | 24 hours | Board-presence history expiry             |
+| Board membership TTL    | 12 hours | Proof-of-presence report window           |
+| Hash verification       | 60s      | State drift detection                     |
+| Subscription queue      | 1000     | Max pending events                        |
+| Connection TTL          | 1 hour   | Distributed connection expiry             |
+| WebSocket ping interval | 30s      | Dead connection detection                 |
+| Instance heartbeat      | 30s      | Heartbeat update interval                 |
+| Instance heartbeat TTL  | 60s      | Dead instance detection                   |
+| Session members TTL     | 4 hours  | Matches session TTL                       |
+| Session grace period    | 60s      | In-memory retention after last disconnect |
 
 ---
 

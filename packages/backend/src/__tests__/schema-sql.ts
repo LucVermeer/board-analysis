@@ -384,6 +384,9 @@ export const schemaSQL = `
   CREATE UNIQUE INDEX IF NOT EXISTS "user_boards_unique_owner_config"
     ON "user_boards" ("owner_id", "board_type", "layout_id", "size_id", "set_ids")
     WHERE "deleted_at" IS NULL AND "owner_id" != '00000000-0000-0000-0000-000000000000';
+  CREATE UNIQUE INDEX IF NOT EXISTS "user_boards_unique_slug"
+    ON "user_boards" ("slug")
+    WHERE "deleted_at" IS NULL;
 
   DROP TABLE IF EXISTS "integration_exports" CASCADE;
   DROP TABLE IF EXISTS "integration_credentials" CASCADE;
