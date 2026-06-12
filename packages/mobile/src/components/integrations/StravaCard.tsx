@@ -11,11 +11,7 @@ import { useToast } from '../../providers/toast-provider';
 import { borderRadius, spacing } from '../../theme/tokens';
 import { connectStrava } from '../../lib/integrations';
 import { useDisconnectIntegration, useIntegrationStatuses, useSetIntegrationAutoSync } from '../../lib/graphql/hooks';
-
-// Strava's brand orange. Their guidelines require the official "Connect with
-// Strava" artwork; until we ship that asset we approximate with the brand colour
-// on the repo Button.
-const STRAVA_ORANGE = '#FC4C02';
+import { STRAVA_ORANGE } from './strava-brand';
 
 function findStravaStatus(statuses: IntegrationStatus[] | undefined): IntegrationStatus | undefined {
   return statuses?.find((status) => status.provider === 'STRAVA');

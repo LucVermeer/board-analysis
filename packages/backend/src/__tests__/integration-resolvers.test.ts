@@ -165,6 +165,69 @@ describe('integration query/mutation resolvers', () => {
     });
   });
 
+  describe('disconnectIntegration', () => {
+    it('deletes the credential and reports true', async () => {
+      // No encrypted token on the row, so the best-effort provider revoke is
+      // skipped and the test stays off the network.
+      setupSelectResults([[{ id: 7, userId: 'user-1', provider: 'strava', encryptedAccessToken: null }]]);
+      const deleteWhere = vi.fn(() => Promise.resolve());
+      const deleteChain = vi.fn(() => ({ where: deleteWhere }));
+      db.delete.mockImplementation(deleteChain);
+
+      await expect(integrationMutations.disconnectIntegration(null, { provider: 'STRAVA' }, makeCtx())).resolves.toBe(
+        true,
+      );
+      expect(deleteChain).toHaveBeenCalledTimes(1);
+      expect(deleteWhere).toHaveBeenCalledTimes(1);
+    });
+
+    it('reports false when no credential exists instead of claiming success', async () => {
+      setupSelectResults([[]]);
+      const deleteChain = vi.fn(() => ({ where: vi.fn(() => Promise.resolve()) }));
+      db.delete.mockImplementation(deleteChain);
+
+      await expect(integrationMutations.disconnectIntegration(null, { provider: 'STRAVA' }, makeCtx())).resolves.toBe(
+        false,
+      );
+      expect(deleteChain).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('setIntegrationAutoSync', () => {
+    function setupUpdateReturning(rows) {
+      db.update.mockImplementation(() => ({
+        set: vi.fn(() => ({ where: vi.fn(() => ({ returning: vi.fn(() => Promise.resolve(rows)) })) })),
+      }));
+    }
+
+    it('throws when the integration is not connected', async () => {
+      setupUpdateReturning([]);
+      await expect(
+        integrationMutations.setIntegrationAutoSync(null, { provider: 'STRAVA', enabled: false }, makeCtx()),
+      ).rejects.toThrow('Integration not connected');
+    });
+
+    it('returns the updated status when a credential exists', async () => {
+      setupUpdateReturning([
+        {
+          provider: 'strava',
+          externalAccountName: 'climber99',
+          autoSyncEnabled: false,
+          status: 'active',
+          lastSyncAt: null,
+          lastError: null,
+        },
+      ]);
+
+      const result = await integrationMutations.setIntegrationAutoSync(
+        null,
+        { provider: 'STRAVA', enabled: false },
+        makeCtx(),
+      );
+      expect(result).toMatchObject({ provider: 'STRAVA', connected: true, autoSyncEnabled: false });
+    });
+  });
+
   describe('syncSessionToIntegration authorization', () => {
     it('throws when the session does not exist', async () => {
       // First slot: the EXISTS subquery builder (constructed, never awaited).

@@ -197,7 +197,8 @@ async function loadCredential(userId: string, provider: ProviderName): Promise<I
   return row ?? null;
 }
 
-async function upsertSuccessExport(
+// Exported (like claimExport) so the real-Postgres test can pin the setWhere guard.
+export async function upsertSuccessExport(
   provider: ProviderName,
   userId: string,
   sessionId: string,
@@ -224,10 +225,15 @@ async function upsertSuccessExport(
         integrationExports.sessionId,
       ],
       set: { externalActivityId, status: 'success', error: null, syncedAt: now },
+      // Only a live 'pending' claim may be finalized. If our claim was stolen
+      // (stale takeover) and the thief already finished, overwriting their
+      // 'success' row would clobber its externalActivityId.
+      setWhere: eq(integrationExports.status, 'pending'),
     });
 }
 
-async function upsertErrorExport(
+// Exported (like claimExport) so the real-Postgres test can pin the setWhere guard.
+export async function upsertErrorExport(
   provider: ProviderName,
   userId: string,
   sessionId: string,
@@ -254,6 +260,9 @@ async function upsertErrorExport(
         integrationExports.sessionId,
       ],
       set: { status: 'error', error: message, syncedAt: now },
+      // Same guard as the success path: a late failure from a stolen claim
+      // must not downgrade a row another caller already finalized.
+      setWhere: eq(integrationExports.status, 'pending'),
     });
 }
 

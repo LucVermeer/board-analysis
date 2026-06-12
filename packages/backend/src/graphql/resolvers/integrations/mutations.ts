@@ -62,7 +62,12 @@ export const integrationMutations = {
     return signIntegrationHandoff({ userId: ctx.userId!, provider: providerEnumToDb(provider) });
   },
 
-  /** Revoke + delete the user's credential for a provider. */
+  /**
+   * Revoke + delete the user's credential for a provider. Returns false when
+   * there was no credential to remove (already disconnected) — deliberately
+   * not an error, so a double-tap or a retry after a dropped response stays
+   * idempotent for the client.
+   */
   disconnectIntegration: async (
     _: unknown,
     args: { provider: IntegrationStatus['provider'] },
@@ -74,8 +79,7 @@ export const integrationMutations = {
     await applyRateLimit(ctx, 10, 'disconnectIntegration');
     const { provider } = validateInput(DisconnectIntegrationSchema, args, 'args');
     const userId = ctx.userId!;
-    await disconnect(userId, providerEnumToDb(provider));
-    return true;
+    return disconnect(userId, providerEnumToDb(provider));
   },
 
   /** Toggle automatic upload of finished sessions for a connected provider. */

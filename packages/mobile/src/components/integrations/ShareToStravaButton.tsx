@@ -3,14 +3,11 @@ import { useTranslation } from 'react-i18next';
 import { Button } from '../Button';
 import { useToast } from '../../providers/toast-provider';
 import { useIntegrationStatuses, useSyncSessionToIntegration } from '../../lib/graphql/hooks';
+import { STRAVA_ORANGE } from './strava-brand';
 
 type ShareToStravaButtonProps = {
   sessionId: string;
 };
-
-// Strava brand orange — same approximation as StravaCard until we ship the
-// official "Share to Strava" artwork.
-const STRAVA_ORANGE = '#FC4C02';
 
 /**
  * Manual "Share to Strava" action for the session summary. Only renders when the
@@ -19,7 +16,7 @@ const STRAVA_ORANGE = '#FC4C02';
 export function ShareToStravaButton({ sessionId }: ShareToStravaButtonProps) {
   const { t } = useTranslation('session');
   const { showToast } = useToast();
-  const { data: statuses } = useIntegrationStatuses();
+  const { data: statuses, isLoading: statusesLoading } = useIntegrationStatuses();
   const syncSession = useSyncSessionToIntegration();
 
   const stravaConnected = statuses?.some((status) => status.provider === 'STRAVA' && status.connected) ?? false;
@@ -41,6 +38,22 @@ export function ShareToStravaButton({ sessionId }: ShareToStravaButtonProps) {
       },
     );
   }, [syncSession, sessionId, showToast, t]);
+
+  // Cold cache (fresh app start straight to the summary): the statuses query is
+  // still settling, so we don't yet know whether Strava is connected. Hold the
+  // space with a disabled button instead of rendering nothing — a connected
+  // user would otherwise watch the action pop in after the fetch.
+  if (statusesLoading) {
+    return (
+      <Button
+        title={t('summary.shareToStrava')}
+        variant="filled"
+        tintColor={STRAVA_ORANGE}
+        onPress={handlePress}
+        disabled
+      />
+    );
+  }
 
   if (!stravaConnected) return null;
 
