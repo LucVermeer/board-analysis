@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
-import { describe, it, expect } from 'vitest';
+import { afterEach, describe, it, expect } from 'vitest';
 import { renderHook } from '@testing-library/react';
+import { setHoldColorOverridesPreference } from '../../../lib/hold-color-overrides';
 import { useParseFrames } from '../use-parse-frames';
 import type { HoldPlacement } from '../types';
 
@@ -13,6 +14,10 @@ const HOLD_RIGHT: HoldPlacement = { id: 200, mirroredHoldId: 100, cx: 950, cy: 1
 const HOLD_NO_MIRROR: HoldPlacement = { id: 300, mirroredHoldId: null, cx: 500, cy: 500, r: 25 };
 
 describe('useParseFrames mirroring', () => {
+  afterEach(async () => {
+    await setHoldColorOverridesPreference({});
+  });
+
   it('returns original position when mirrored=false', () => {
     const { result } = renderHook(() => useParseFrames('p100r12', 'kilter', [HOLD_LEFT, HOLD_RIGHT], false));
 
@@ -54,5 +59,13 @@ describe('useParseFrames mirroring', () => {
     // Frame references hold 999 which is not in holdsData
     const { result } = renderHook(() => useParseFrames('p999r12', 'kilter', [HOLD_LEFT], false));
     expect(result.current).toEqual([]);
+  });
+
+  it('applies configured role colour overrides to parsed holds', async () => {
+    await setHoldColorOverridesPreference({ STARTING: '#123456' });
+
+    const { result } = renderHook(() => useParseFrames('p100r12', 'kilter', [HOLD_LEFT], false));
+
+    expect(result.current[0]?.color).toBe('#123456');
   });
 });

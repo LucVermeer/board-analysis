@@ -29,6 +29,11 @@ describe('buildHoldFilterOptions', () => {
     expect(starting?.color).not.toBe(ANY_HOLD_COLOR);
   });
 
+  it('applies hold colour overrides to named filter swatches', () => {
+    const hand = buildHoldFilterOptions('kilter', { HAND: '#123456' }).find((option) => option.type === 'HAND');
+    expect(hand?.color).toBe('#123456');
+  });
+
   it('never surfaces non-setter hold states (OFF / NOT / AUX) as options', () => {
     // MoonBoard's HOLD_STATE_MAP carries an AUX live-preview role; the membership
     // guard must keep it (and any OFF/NOT) out of the filter options.

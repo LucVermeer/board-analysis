@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { HOLD_STATE_MAP, STATE_TO_PRIMARY_CODE } from '@boardsesh/board-constants/hold-states';
 import type { BoardName, HoldState } from '@boardsesh/shared-schema';
+import { getEffectiveHoldRoleColor, type HoldColorOverrides } from '../../lib/hold-color-overrides';
 
 // The four paintable roles plus the eraser. `'OFF'` clears a hold; the four
 // named roles map straight onto the create-climb hold-state machine's
@@ -22,12 +23,16 @@ export function getPaintRoles(boardName: BoardName): ReadonlyArray<Exclude<Brush
  * Tycho-style colour-only product has no STARTING/FINISH) so the chip stays
  * visible rather than rendering an undefined colour.
  */
-export function brushRoleColor(boardName: BoardName, role: Exclude<BrushRole, 'OFF'>): string {
+export function brushRoleColor(
+  boardName: BoardName,
+  role: Exclude<BrushRole, 'OFF'>,
+  overrides: HoldColorOverrides = {},
+): string {
   const code = STATE_TO_PRIMARY_CODE[boardName]?.[role];
   if (code === undefined) return '#8E8E93';
   const info = HOLD_STATE_MAP[boardName]?.[code];
   if (!info) return '#8E8E93';
-  return info.displayColor || info.color;
+  return getEffectiveHoldRoleColor(boardName, role, overrides);
 }
 
 /**

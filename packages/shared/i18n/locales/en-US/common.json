@@ -12,6 +12,31 @@
       "development": "Development",
       "metroServersTitle": "Metro servers",
       "metroServersSubtitle": "Switch between Tailnet bundlers",
+      "accessibility": {
+        "title": "Accessibility",
+        "description": "Pick hold colours that are easier to tell apart. Default uses each board's normal colours and sends no Bluetooth override.",
+        "resetAll": "Reset hold colours",
+        "save": "Save colour",
+        "pickerSubtitle": "Use any RGB colour.",
+        "modeLabel": "Hold colour mode",
+        "defaultCopy": "Boardsesh will use the default colour for this hold type and skip it in Bluetooth overrides.",
+        "invalidRgb": "Use numbers from 0 to 255.",
+        "mode": {
+          "default": "Default",
+          "user": "User colour"
+        },
+        "channels": {
+          "red": "Red",
+          "green": "Green",
+          "blue": "Blue"
+        },
+        "roles": {
+          "starting": "Start",
+          "hand": "Mid",
+          "finish": "Finish",
+          "foot": "Foot"
+        }
+      },
       "appearance": {
         "title": "Appearance",
         "system": "System",

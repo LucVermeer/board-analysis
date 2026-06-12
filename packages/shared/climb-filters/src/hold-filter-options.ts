@@ -41,11 +41,16 @@ export type HoldFilterOption = {
   color: string;
 };
 
+type HoldFilterColorOverrides = Partial<Record<Exclude<HoldFilterType, 'ANY'>, string>>;
+
 /**
  * Build the ordered list of hold-type filter options for a board: the named
  * setting roles (board-filtered) followed by the `ANY` wildcard.
  */
-export function buildHoldFilterOptions(boardName: BoardName): HoldFilterOption[] {
+export function buildHoldFilterOptions(
+  boardName: BoardName,
+  colorOverrides: HoldFilterColorOverrides = {},
+): HoldFilterOption[] {
   const boardMap = HOLD_STATE_MAP[boardName];
   const colorByState = new Map<HoldFilterType, string>();
   if (boardMap) {
@@ -53,8 +58,8 @@ export function buildHoldFilterOptions(boardName: BoardName): HoldFilterOption[]
       // Skip non-selectable states (OFF / NOT / AUX / ANY) so the narrowing to
       // HoldFilterType is sound — no unsafe cast.
       if (!SETTER_STATE_ORDER_SET.has(entry.name)) continue;
-      const name = entry.name as HoldFilterType;
-      if (!colorByState.has(name)) colorByState.set(name, entry.displayColor ?? entry.color);
+      const name = entry.name as Exclude<HoldFilterType, 'ANY'>;
+      if (!colorByState.has(name)) colorByState.set(name, colorOverrides[name] ?? entry.displayColor ?? entry.color);
     }
   }
 

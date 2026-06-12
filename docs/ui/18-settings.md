@@ -72,6 +72,13 @@ The mobile More tab contains appearance and UI-style controls that have no direc
 
 - `SegmentedControl` persisted via `useGradeFormat()`.
 
+**Accessibility**:
+
+- Adds hold-role colour overrides for STARTING, HAND, FINISH, and FOOT.
+- Each role has a Default/User mode. Default stores no override and uses the board's canonical colour.
+- User mode opens a bottom sheet with RGB channel inputs and a live swatch preview.
+- Overrides are persisted in AsyncStorage via `useHoldColorOverrides()` and shared with board rendering plus Bluetooth payload encoding.
+
 ---
 
 ### 11.3 Password Management

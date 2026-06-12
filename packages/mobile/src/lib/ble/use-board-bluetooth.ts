@@ -27,6 +27,7 @@ import { requestBleRuntimePermissions } from './use-ble-permissions';
 import type { BluetoothAdapter, DevicePickerFn, DiscoveredDevice } from './types';
 import type { HoldPlacement } from '../../components/board-renderer/types';
 import { track } from '../analytics';
+import { buildHoldColorOverrideSignature, type HoldColorOverrides } from '../hold-color-overrides';
 
 // Exported for testing — isolates the .packet extraction so regressions are caught.
 //
@@ -267,7 +268,8 @@ export function useBoardBluetooth({
   // (mounted right after isConnected flips true) reads this one-shot seed so a
   // byte-identical current climb doesn't get re-sent immediately on connect —
   // a redundant full-frame write plus a doubled success haptic.
-  const connectInitialSendRef = useRef<{ frames: string; mirrored: boolean } | null>(null);
+  const connectInitialSendRef = useRef<{ frames: string; mirrored: boolean; colorSignature: string } | null>(null);
+  const configuredDeviceNameRef = useRef<string | undefined>(undefined);
 
   // ledColorOverrides narrowed to string values, shared by the connect and
   // adoption configureBoard calls so both push identical overrides natively.
@@ -277,6 +279,10 @@ export function useBoardBluetooth({
       Object.entries(ledColorOverrides).filter(([, value]) => typeof value === 'string') as [string, string][],
     );
   }, [ledColorOverrides]);
+  const colorSignature = useMemo(
+    () => buildHoldColorOverrideSignature((sanitizedColorOverrides ?? {}) as HoldColorOverrides),
+    [sanitizedColorOverrides],
+  );
 
   const [pickerState, setPickerState] = useState<PickerState | null>(null);
   const pickerRejectRef = useRef<((error: Error) => void) | null>(null);
@@ -332,6 +338,7 @@ export function useBoardBluetooth({
     unsubDisconnectRef.current = null;
     const adapter = adapterRef.current;
     adapterRef.current = null;
+    configuredDeviceNameRef.current = undefined;
     connectedConfigKeyRef.current = null;
     writeAbortRef.current?.abort();
     writeAbortRef.current = null;
@@ -589,6 +596,7 @@ export function useBoardBluetooth({
 
         const connection = await adapter.requestAndConnect(targetSerial);
         apiLevelRef.current = parseApiLevel(connection.deviceName);
+        configuredDeviceNameRef.current = connection.deviceName;
 
         unsubDisconnectRef.current = adapter.onDisconnect(handleDisconnection);
         adapterRef.current = adapter;
@@ -597,7 +605,12 @@ export function useBoardBluetooth({
         // Dynamic Island widget intent path (next/prev tapped while the app
         // is backgrounded) can encode wall packets from queue items stored in
         // the App Group without going through JS. No-op on Android.
-        if (isNativeIosBleAdapter(adapter) && layoutId !== undefined && sizeId !== undefined) {
+        if (
+          isNativeIosBleAdapter(adapter) &&
+          typeof adapter.configureBoard === 'function' &&
+          layoutId !== undefined &&
+          sizeId !== undefined
+        ) {
           try {
             await adapter.configureBoard({
               boardName,
@@ -645,7 +658,7 @@ export function useBoardBluetooth({
         // frame (and its success haptic) when it mounts on isConnected.
         if (initialFrames) {
           await sendFramesToBoard(initialFrames, mirrored);
-          connectInitialSendRef.current = { frames: initialFrames, mirrored: !!mirrored };
+          connectInitialSendRef.current = { frames: initialFrames, mirrored: !!mirrored, colorSignature };
         } else {
           connectInitialSendRef.current = null;
         }
@@ -737,6 +750,7 @@ export function useBoardBluetooth({
       onConnectSuccess,
       sendFramesToBoard,
       sanitizedColorOverrides,
+      colorSignature,
       devicePicker,
       t,
       tCommon,
@@ -753,6 +767,7 @@ export function useBoardBluetooth({
     unsubDisconnectRef.current = null;
     const adapter = adapterRef.current;
     adapterRef.current = null;
+    configuredDeviceNameRef.current = undefined;
     connectedConfigKeyRef.current = null;
     // Cancel every in-flight and queued write of this connection generation,
     // and unblock the write chain for the next connect.
@@ -832,9 +847,10 @@ export function useBoardBluetooth({
       }
 
       const adapter = createBluetoothAdapter(devicePicker, scanFamilyForBoard(boardName));
-      if (!isNativeIosBleAdapter(adapter)) return;
+      if (!isNativeIosBleAdapter(adapter) || typeof adapter.configureBoard !== 'function') return;
       adapter.adoptConnection(deviceId);
       apiLevelRef.current = parseApiLevel(deviceName);
+      configuredDeviceNameRef.current = deviceName;
       unsubDisconnectRef.current = adapter.onDisconnect(handleDisconnection);
       adapterRef.current = adapter;
       void adapter
@@ -896,6 +912,24 @@ export function useBoardBluetooth({
     onConnectSuccess,
     sanitizedColorOverrides,
   ]);
+
+  useEffect(() => {
+    const adapter = adapterRef.current;
+    if (!adapter || !isNativeIosBleAdapter(adapter) || typeof adapter.configureBoard !== 'function' || !isConnected) {
+      return;
+    }
+    if (!boardName || layoutId === undefined || sizeId === undefined) return;
+    void adapter
+      .configureBoard({
+        boardName,
+        layoutId,
+        sizeId,
+        apiLevel: apiLevelRef.current,
+        deviceName: configuredDeviceNameRef.current,
+        colorOverrides: sanitizedColorOverrides,
+      })
+      .catch(() => {});
+  }, [boardName, layoutId, sizeId, isConnected, sanitizedColorOverrides]);
 
   // Serial to silently reconnect to for the board currently in view, or null
   // when nothing is remembered or the user switched boards (in which case the

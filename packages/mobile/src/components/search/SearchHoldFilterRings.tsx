@@ -3,6 +3,7 @@ import { View, StyleSheet } from 'react-native';
 import type { BoardName, HoldFilterEntry, HoldFilterMode, HoldFilterType, HoldsFilter } from '@boardsesh/shared-schema';
 import { ANY_HOLD_COLOR, buildHoldFilterOptions } from '@boardsesh/climb-filters';
 import type { BoardHoldTarget } from '../../lib/create-board-holds';
+import { useHoldColorOverrides } from '../../lib/hold-color-overrides';
 import { holdGeometry } from '../create-climb/holdLayout';
 
 type SearchHoldFilterRingsProps = {
@@ -47,11 +48,12 @@ export const SearchHoldFilterRings = React.memo(function SearchHoldFilterRings({
   measuredWidth,
   mirrored,
 }: SearchHoldFilterRingsProps) {
+  const { overrides: holdColorOverrides } = useHoldColorOverrides();
   const colorByType = useMemo(() => {
     const map = new Map<HoldFilterType, string>();
-    for (const option of buildHoldFilterOptions(boardName)) map.set(option.type, option.color);
+    for (const option of buildHoldFilterOptions(boardName, holdColorOverrides)) map.set(option.type, option.color);
     return map;
-  }, [boardName]);
+  }, [boardName, holdColorOverrides]);
 
   const holdById = useMemo(() => {
     const map = new Map<number, BoardHoldTarget>();

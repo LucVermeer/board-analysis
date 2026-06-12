@@ -8,6 +8,7 @@ import { Text } from '../Text';
 import { Icon } from '../Icon';
 import { useTheme } from '../../providers/theme-provider';
 import { hapticSelection } from '../../lib/haptics';
+import { useHoldColorOverrides } from '../../lib/hold-color-overrides';
 import { spacing, borderRadius } from '../../theme/tokens';
 import { brushRoleColor, getPaintRoles, useBrushRoleLabels, type BrushRole } from './brush-roles';
 
@@ -40,6 +41,7 @@ export function HoldRoleSheet({
   const { t } = useTranslation('climbs');
   const { systemColors } = useTheme();
   const roleLabels = useBrushRoleLabels();
+  const { overrides: holdColorOverrides } = useHoldColorOverrides();
   const sheetRef = useRef<BottomSheet>(null);
 
   useEffect(() => {
@@ -73,7 +75,7 @@ export function HoldRoleSheet({
             const isCurrent = currentState === role;
             const atCap = (role === 'STARTING' && startingCount >= 2) || (role === 'FINISH' && finishCount >= 2);
             const disabled = atCap && !isCurrent;
-            const color = brushRoleColor(boardName, role);
+            const color = brushRoleColor(boardName, role, holdColorOverrides);
             return (
               <Pressable
                 key={role}

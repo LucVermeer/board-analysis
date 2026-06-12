@@ -8,6 +8,7 @@ import { Button } from '../Button';
 import { ActionButton, drawerActionBarStyles } from '../drawer-action-bar/DrawerActionBar';
 import { useTheme } from '../../providers/theme-provider';
 import { hapticSelection } from '../../lib/haptics';
+import { useHoldColorOverrides } from '../../lib/hold-color-overrides';
 import { brandColors } from '../../theme/colors';
 import { spacing, borderRadius } from '../../theme/tokens';
 import { brushRoleColor, getPaintRoles, useBrushRoleLabels, type BrushRole } from './brush-roles';
@@ -59,11 +60,17 @@ export const CreateDrawerActionBar = memo(function CreateDrawerActionBar({
   const { t } = useTranslation('climbs');
   const { systemColors } = useTheme();
   const roleLabels = useBrushRoleLabels();
+  const { overrides: holdColorOverrides } = useHoldColorOverrides();
 
   const paintRoles = useMemo(() => getPaintRoles(boardName), [boardName]);
   const roleChips = useMemo(
-    () => paintRoles.map((role) => ({ role, label: roleLabels[role], color: brushRoleColor(boardName, role) })),
-    [boardName, paintRoles, roleLabels],
+    () =>
+      paintRoles.map((role) => ({
+        role,
+        label: roleLabels[role],
+        color: brushRoleColor(boardName, role, holdColorOverrides),
+      })),
+    [boardName, holdColorOverrides, paintRoles, roleLabels],
   );
 
   const handleSelect = (role: BrushRole) => {

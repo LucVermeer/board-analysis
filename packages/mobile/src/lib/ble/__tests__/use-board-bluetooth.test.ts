@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderHook, act } from '@testing-library/react';
+import { renderHook, act, waitFor } from '@testing-library/react';
 import { Alert } from 'react-native';
 import type { HoldPlacement } from '../../../components/board-renderer/types';
 import {
@@ -371,6 +371,45 @@ describe('useBoardBluetooth', () => {
     expect(mockGetAuroraBluetoothPacket).toHaveBeenCalledWith('p99r12', expect.anything(), 'tension', 3, undefined);
   });
 
+  it('passes configured Aurora role colours to the packet builder', async () => {
+    const fakeAdapter = makeFakeAdapter({
+      requestAndConnect: vi.fn().mockResolvedValue({ deviceId: 'dev-1', deviceName: 'Kilter A1#0042@3' }),
+    });
+    vi.mocked(createBluetoothAdapter).mockReturnValue(
+      fakeAdapter as unknown as ReturnType<typeof createBluetoothAdapter>,
+    );
+    mockParseApiLevel.mockReturnValue(3);
+    mockParseSerialNumber.mockReturnValue('0042');
+    mockGetLedPlacements.mockReturnValue({ 100: 7 });
+    mockGetAuroraBluetoothPacket.mockReturnValue({
+      packet: new Uint8Array([0x01]),
+      skippedPositionCount: 0,
+      skippedRoleCount: 0,
+      totalPlacements: 1,
+    });
+    const ledColorOverrides = { HAND: '#123456' };
+
+    const { result } = renderHook(() =>
+      useBoardBluetooth({ boardName: 'kilter', layoutId: 1, sizeId: 1, ledColorOverrides }),
+    );
+
+    await act(async () => {
+      await result.current.connect();
+    });
+
+    await act(async () => {
+      await result.current.sendFramesToBoard('p100r13');
+    });
+
+    expect(mockGetAuroraBluetoothPacket).toHaveBeenCalledWith(
+      'p100r13',
+      expect.anything(),
+      'kilter',
+      3,
+      ledColorOverrides,
+    );
+  });
+
   it('aborts queued and in-flight writes on disconnect', async () => {
     const write = vi.fn(
       (_packet: Uint8Array, signal?: AbortSignal) =>
@@ -529,6 +568,43 @@ describe('useBoardBluetooth native connection adoption', () => {
 
     expect(adapter.adoptConnection).toHaveBeenCalledWith('native-dev');
     expect(result.current.isConnected).toBe(true);
+  });
+
+  it('reconfigures adopted native boards when role colour overrides change', async () => {
+    const adapter = makeAdoptableAdapter();
+    vi.mocked(createBluetoothAdapter).mockReturnValue(adapter as unknown as ReturnType<typeof createBluetoothAdapter>);
+
+    const { rerender } = renderHook((props) => useBoardBluetooth(props), {
+      initialProps: {
+        boardName: 'kilter' as const,
+        layoutId: 1,
+        sizeId: 1,
+        ledColorOverrides: { HAND: '#111111' },
+      },
+    });
+
+    await act(async () => {
+      connectedListener?.({ deviceId: 'native-dev', deviceName: 'Kilter Board#9@3' });
+    });
+
+    await waitFor(() => {
+      expect(adapter.configureBoard).toHaveBeenCalledWith(
+        expect.objectContaining({ colorOverrides: { HAND: '#111111' } }),
+      );
+    });
+
+    rerender({
+      boardName: 'kilter',
+      layoutId: 1,
+      sizeId: 1,
+      ledColorOverrides: { HAND: '#222222' },
+    });
+
+    await waitFor(() => {
+      expect(adapter.configureBoard).toHaveBeenCalledWith(
+        expect.objectContaining({ colorOverrides: { HAND: '#222222' } }),
+      );
+    });
   });
 
   it('refuses to adopt a device it cannot positively identify as the active board type', async () => {
