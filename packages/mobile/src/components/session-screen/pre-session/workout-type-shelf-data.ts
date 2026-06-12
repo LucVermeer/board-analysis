@@ -1,5 +1,5 @@
 import { DEFAULT_GRADE_COLOR, getGradeColor } from '@boardsesh/board-constants/grade-colors';
-import type { PlannedClimbSlot } from '@boardsesh/playlist-generator';
+import type { GeneratorGradeScale, PlannedClimbSlot } from '@boardsesh/playlist-generator';
 import type { ColoredBar } from '../../you/profile-chart-colors';
 
 type FormatDifficultyId = (difficultyId: number | null | undefined) => string | null;
@@ -31,4 +31,43 @@ export function buildWorkoutGradeBars(
     });
 
   return bars.length > 0 ? bars : null;
+}
+
+function getGradeOrdinal(difficultyId: number, grades: GeneratorGradeScale): number {
+  const gradeIndex = grades.findIndex((grade) => grade.difficulty_id === difficultyId);
+  return gradeIndex >= 0 ? gradeIndex : difficultyId;
+}
+
+/**
+ * Render a workout progression as one bar per planned climb. The x-axis is the
+ * climb number in the workout; the y value is the grade's order in the board's
+ * grade scale, normalized to the grades present so the mini chart shape reads.
+ */
+export function buildWorkoutProgressionBars(
+  slots: readonly PlannedClimbSlot[],
+  formatDifficultyId: FormatDifficultyId,
+  grades: GeneratorGradeScale,
+): ColoredBar[] | null {
+  if (slots.length === 0) return null;
+
+  const ordinals = slots.map((slot) => getGradeOrdinal(slot.grade, grades));
+  const minOrdinal = Math.min(...ordinals);
+  const bars: ColoredBar[] = slots.map((slot, slotIndex) => {
+    const gradeLabel = formatDifficultyId(slot.grade) ?? String(slot.grade);
+    const key = String(slot.index);
+    return {
+      key,
+      label: String(slotIndex + 1),
+      segments: [
+        {
+          value: ordinals[slotIndex] - minOrdinal + 1,
+          key: gradeLabel,
+          label: gradeLabel,
+          color: getGradeColor(gradeLabel) ?? DEFAULT_GRADE_COLOR,
+        },
+      ],
+    };
+  });
+
+  return bars;
 }

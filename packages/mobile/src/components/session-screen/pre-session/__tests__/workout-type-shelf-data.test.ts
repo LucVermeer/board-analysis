@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { PlannedClimbSlot } from '@boardsesh/playlist-generator';
-import { buildWorkoutGradeBars } from '../workout-type-shelf-data';
+import { buildWorkoutGradeBars, buildWorkoutProgressionBars } from '../workout-type-shelf-data';
 
 function slot(grade: number, index: number): PlannedClimbSlot {
   return { grade, section: 'main', index };
@@ -32,5 +32,30 @@ describe('buildWorkoutGradeBars', () => {
 
   it('returns null when there are no planned slots', () => {
     expect(buildWorkoutGradeBars([], formatDifficultyId)).toBeNull();
+  });
+});
+
+describe('buildWorkoutProgressionBars', () => {
+  const grades = [10, 11, 12, 13].map((difficulty_id) => ({ difficulty_id }));
+
+  it('uses climb number on x and normalized grade order on y', () => {
+    const bars = buildWorkoutProgressionBars(
+      [slot(11, 0), slot(12, 1), slot(13, 2), slot(12, 3), slot(11, 4)],
+      formatDifficultyId,
+      grades,
+    );
+
+    expect(bars?.map((bar) => ({ label: bar.label, value: bar.segments[0].value }))).toEqual([
+      { label: '1', value: 1 },
+      { label: '2', value: 2 },
+      { label: '3', value: 3 },
+      { label: '4', value: 2 },
+      { label: '5', value: 1 },
+    ]);
+    expect(bars?.map((bar) => bar.segments[0].label)).toEqual(['V1', 'V2', 'V3', 'V2', 'V1']);
+  });
+
+  it('returns null when there are no planned slots', () => {
+    expect(buildWorkoutProgressionBars([], formatDifficultyId, grades)).toBeNull();
   });
 });

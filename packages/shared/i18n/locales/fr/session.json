@@ -418,6 +418,7 @@
       "preGeneratorOptionChartValue": "{{value}}, {{summary}}",
       "preGeneratorChartPoint_one": "{{count}} bloc à {{grade}}",
       "preGeneratorChartPoint_other": "{{count}} blocs à {{grade}}",
+      "preGeneratorChartProgressPoint": "bloc {{index}}, {{grade}}",
       "preGeneratorTuning": "Réglages",
       "preStart": "Démarrer",
       "preStarting": "Démarrage…",

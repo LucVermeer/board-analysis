@@ -418,6 +418,7 @@
       "preGeneratorOptionChartValue": "{{value}}, {{summary}}",
       "preGeneratorChartPoint_one": "{{count}} climb at {{grade}}",
       "preGeneratorChartPoint_other": "{{count}} climbs at {{grade}}",
+      "preGeneratorChartProgressPoint": "climb {{index}}, {{grade}}",
       "preGeneratorTuning": "Tuning",
       "preStart": "Start",
       "preStarting": "Starting…",

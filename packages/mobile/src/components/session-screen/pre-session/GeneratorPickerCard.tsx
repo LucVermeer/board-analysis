@@ -49,7 +49,7 @@ import { brandColors as staticBrandColors } from '../../../theme/colors';
 import { iosSystemColors } from '../../../theme/ios-colors';
 import type { ColoredBar } from '../../you/profile-chart-colors';
 import { WorkoutTypeShelf, type WorkoutTypeShelfItem } from './WorkoutTypeShelf';
-import { buildWorkoutGradeBars } from './workout-type-shelf-data';
+import { buildWorkoutGradeBars, buildWorkoutProgressionBars } from './workout-type-shelf-data';
 
 export type GeneratorSelection = { type: 'off' } | { type: 'on'; options: GeneratorOptions };
 
@@ -362,15 +362,28 @@ export function GeneratorPickerCard({
           ? selection.options
           : ({ ...buildDefaultOptions(value, targetGrade), ...commonPatch } as GeneratorOptions);
       const slots = generateWorkoutPlan(options, generatorGrades);
-      const bars = buildWorkoutGradeBars(slots, formatGradeByDifficultyId);
-      const chartSummary = bars
-        ?.map((bar) =>
-          t('mobile.session.preGeneratorChartPoint', {
-            count: getChartClimbCount(bar),
-            grade: bar.label,
-          }),
-        )
-        .join(' · ');
+      const bars =
+        value === 'pyramid'
+          ? buildWorkoutProgressionBars(slots, formatGradeByDifficultyId, generatorGrades)
+          : buildWorkoutGradeBars(slots, formatGradeByDifficultyId);
+      const chartSummary =
+        value === 'pyramid'
+          ? slots
+              .map((slot, slotIndex) =>
+                t('mobile.session.preGeneratorChartProgressPoint', {
+                  index: slotIndex + 1,
+                  grade: formatGradeByDifficultyId(slot.grade) ?? String(slot.grade),
+                }),
+              )
+              .join(' · ')
+          : bars
+              ?.map((bar) =>
+                t('mobile.session.preGeneratorChartPoint', {
+                  count: getChartClimbCount(bar),
+                  grade: bar.label,
+                }),
+              )
+              .join(' · ');
       const accessibleValue = chartSummary
         ? t('mobile.session.preGeneratorOptionChartValue', { value: label, summary: chartSummary })
         : label;

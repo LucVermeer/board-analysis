@@ -16,6 +16,20 @@ const clampGrade = (grade: number, grades: GeneratorGradeScale): number => {
   return Math.max(minGrade, Math.min(maxGrade, grade));
 };
 
+const getTargetGradeIndex = (targetGrade: number, grades: GeneratorGradeScale): number => {
+  if (grades.length === 0) return -1;
+  const targetIndex = grades.findIndex((grade) => grade.difficulty_id >= targetGrade);
+  return targetIndex >= 0 ? targetIndex : grades.length - 1;
+};
+
+const getPyramidGrade = (targetGrade: number, distanceFromPeak: number, grades: GeneratorGradeScale): number => {
+  if (distanceFromPeak === 0) return targetGrade;
+  if (grades.length === 0) return targetGrade - distanceFromPeak;
+  const targetIndex = getTargetGradeIndex(targetGrade, grades);
+  const gradeIndex = Math.max(0, targetIndex - distanceFromPeak);
+  return grades[gradeIndex].difficulty_id;
+};
+
 const generateWarmUp = (
   targetGrade: number,
   warmUpType: WarmUpType,
@@ -83,38 +97,20 @@ export const generatePyramidPlan = (options: PyramidOptions, grades: GeneratorGr
   const warmUpSlots = generateWarmUp(options.targetGrade, options.warmUp, grades);
   slots.push(...warmUpSlots);
 
-  const warmUpEndGrade =
-    warmUpSlots.length > 0
-      ? warmUpSlots[warmUpSlots.length - 1].grade
-      : clampGrade(options.targetGrade - options.numberOfSteps, grades);
-
-  const stepsUp = Math.floor(options.numberOfSteps / 2) + 1;
-  const stepsDown = options.numberOfSteps - stepsUp + 1;
-
-  const gradeIncrement = Math.max(1, Math.floor((options.targetGrade - warmUpEndGrade) / Math.max(1, stepsUp - 1)));
-
+  const stepCount = Math.max(0, options.numberOfSteps);
+  const climbsPerStep = Math.max(0, options.climbsPerStep);
+  const center = (stepCount - 1) / 2;
   let currentIndex = slots.length;
 
-  for (let step = 0; step < stepsUp; step++) {
-    const grade =
-      step === stepsUp - 1 ? options.targetGrade : clampGrade(warmUpEndGrade + gradeIncrement * step, grades);
+  for (let step = 0; step < stepCount; step++) {
+    const distanceFromPeak = Math.floor(Math.abs(step - center));
+    const grade = getPyramidGrade(options.targetGrade, distanceFromPeak, grades);
+    const section = distanceFromPeak === 0 ? 'peak' : step < center ? 'increasing' : 'decreasing';
 
-    for (let i = 0; i < options.climbsPerStep; i++) {
+    for (let climb = 0; climb < climbsPerStep; climb++) {
       slots.push({
         grade,
-        section: step === stepsUp - 1 ? 'peak' : 'increasing',
-        index: currentIndex++,
-      });
-    }
-  }
-
-  for (let step = 1; step < stepsDown; step++) {
-    const grade = clampGrade(options.targetGrade - gradeIncrement * step, grades);
-
-    for (let i = 0; i < options.climbsPerStep; i++) {
-      slots.push({
-        grade,
-        section: 'decreasing',
+        section,
         index: currentIndex++,
       });
     }

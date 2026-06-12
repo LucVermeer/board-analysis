@@ -76,6 +76,9 @@ vi.mock('react-i18next', () => ({
       if (key === 'mobile.session.preGeneratorChartPoint' && options) {
         return `${options.count} climbs at ${options.grade}`;
       }
+      if (key === 'mobile.session.preGeneratorChartProgressPoint' && options) {
+        return `climb ${options.index}, ${options.grade}`;
+      }
       return key;
     },
   }),
@@ -143,9 +146,14 @@ vi.mock('@boardsesh/playlist-generator', () => ({
     onlyTallClimbs: false,
     onlyWideClimbs: false,
   },
-  generateWorkoutPlan: (options: { targetGrade: number }) => [
-    { grade: options.targetGrade, section: 'main', index: 0 },
-  ],
+  generateWorkoutPlan: (options: { targetGrade: number; type: string }) =>
+    options.type === 'pyramid'
+      ? [
+          { grade: options.targetGrade - 1, section: 'increasing', index: 0 },
+          { grade: options.targetGrade, section: 'peak', index: 1 },
+          { grade: options.targetGrade - 1, section: 'decreasing', index: 2 },
+        ]
+      : [{ grade: options.targetGrade, section: 'main', index: 0 }],
 }));
 vi.mock('../../../SectionHeader', () => ({
   SectionHeader: ({ title }: { title: string }) => createElement('h2', null, title),
@@ -273,6 +281,27 @@ describe('GeneratorPickerCard analytics', () => {
       bars: expect.any(Array),
     });
     expect(shelf.entries.find((entry) => entry.key === 'pyramid')?.bars).toEqual(expect.any(Array));
+  });
+
+  it('renders pyramid shelf charts by climb number instead of grade counts', () => {
+    render(
+      createElement(GeneratorPickerCard, {
+        boardName: 'kilter',
+        layoutId: 8,
+        sizeId: 21,
+        angle: 40,
+        selection: VOLUME_SELECTION,
+        onChange: vi.fn(),
+      }),
+    );
+
+    const pyramidBars = shelf.entries.find((entry) => entry.key === 'pyramid')?.bars;
+    expect(pyramidBars).toEqual([
+      expect.objectContaining({ label: '1' }),
+      expect.objectContaining({ label: '2' }),
+      expect.objectContaining({ label: '3' }),
+    ]);
+    expect(shelf.entries.find((entry) => entry.key === 'pyramid')?.accessibilityLabel).toContain('climb 2, V20');
   });
 
   it('fires "Workout Generator Opened" with web-aligned targetType + angle when switching off → a workout type', () => {
