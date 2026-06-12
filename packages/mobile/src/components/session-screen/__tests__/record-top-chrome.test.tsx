@@ -100,6 +100,18 @@ vi.mock('../../PressableSurface', () => ({
   }) => createElement('button', { onClick: onPress, 'data-pressable': accessibilityLabel ?? '' }, children),
 }));
 vi.mock('../../../theme/tokens', () => ({ spacing: { 1: 4, 3: 12 } }));
+vi.mock('../../user-drawer/UserAvatarToolbarAction', () => ({
+  UserAvatarToolbarAction: ({ variant }: { variant: 'glass' | 'material' }) => {
+    if (variant === 'material') {
+      appbar.actions.push('ariaLabels.userMenu');
+    }
+    return createElement('button', {
+      'data-action': variant === 'glass' ? 'ariaLabels.userMenu' : undefined,
+      'data-appbar-action': variant === 'material' ? 'ariaLabels.userMenu' : undefined,
+      'data-avatar-variant': variant,
+    });
+  },
+}));
 
 import { RecordTopChrome } from '../RecordTopChrome';
 

@@ -13,6 +13,7 @@ import { GlassActionToolbar, GlassToolbarAction, TOP_ACTION_SIZE } from './Glass
 import { AngleToolbarAction } from './AngleToolbarAction';
 import { LightbulbToolbarAction } from './LightbulbToolbarAction';
 import { CollapsingLargeTitleHeader, useCollapseProgress } from './CollapsingLargeTitleHeader';
+import { UserAvatarToolbarAction } from '../user-drawer/UserAvatarToolbarAction';
 
 const TOP_TOOLBAR_RADIUS = TOP_ACTION_SIZE / 2;
 
@@ -102,7 +103,7 @@ export function CollapsingTopChrome({
   // A fragment/element of leading actions reads as one element, so callers passing
   // several supply the explicit count; otherwise reserve a slot only for a real one.
   const leadingActions = leadingActionCount ?? (isValidElement(leadingAction) ? 1 : 0);
-  const leftActionCount = leadingActions + (canCreate ? 1 : 0) + (canOpenAngle ? 1 : 0);
+  const leftActionCount = 1 + leadingActions + (canCreate ? 1 : 0) + (canOpenAngle ? 1 : 0);
 
   // The right glass toolbar holds the lightbulb (and an optional trailing action)
   // at rest, and grows to also hold a compact board glyph once collapsed (board
@@ -126,18 +127,18 @@ export function CollapsingTopChrome({
     opacity: interpolate(progress.value, [0.55, 1], [0, 1], Extrapolation.CLAMP),
   }));
 
-  const leftActions =
-    leftActionCount > 0 ? (
-      <GlassActionToolbar actionCount={leftActionCount}>
-        {leadingAction}
-        {canCreate ? (
-          <GlassToolbarAction onPress={onCreate} accessibilityLabel={createAccessibilityLabel}>
-            <Icon name="plus" size={24} color={systemColors.label} />
-          </GlassToolbarAction>
-        ) : null}
-        <AngleToolbarAction />
-      </GlassActionToolbar>
-    ) : null;
+  const leftActions = (
+    <GlassActionToolbar actionCount={leftActionCount}>
+      <UserAvatarToolbarAction variant="glass" />
+      {leadingAction}
+      {canCreate ? (
+        <GlassToolbarAction onPress={onCreate} accessibilityLabel={createAccessibilityLabel}>
+          <Icon name="plus" size={24} color={systemColors.label} />
+        </GlassToolbarAction>
+      ) : null}
+      <AngleToolbarAction />
+    </GlassActionToolbar>
+  );
 
   // Right glass toolbar: lightbulb (+ trailing action) at rest, widening to dock
   // the board glyph once collapsed. The glass surface stays at full opacity (its

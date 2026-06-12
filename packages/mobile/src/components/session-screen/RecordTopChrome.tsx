@@ -9,6 +9,7 @@ import { Icon } from '../Icon';
 import { Text } from '../Text';
 import { PressableSurface } from '../PressableSurface';
 import { iconMap } from '../icon-map';
+import { UserAvatarToolbarAction } from '../user-drawer/UserAvatarToolbarAction';
 import { useTheme } from '../../providers/theme-provider';
 import { spacing } from '../../theme/tokens';
 
@@ -94,6 +95,7 @@ export function RecordTopChrome({
         >
           {/* Invite/share docks on the LEFT (leading) while a session is live; the
               destructive Stop sits on the right. */}
+          <UserAvatarToolbarAction variant="material" />
           {onShare ? (
             <Appbar.Action
               icon={iconMap['person.badge.plus'].android}

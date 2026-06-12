@@ -74,6 +74,20 @@
         "subtitle": "Apple Health, Strava"
       }
     },
+    "about": {
+      "title": "About",
+      "heroTitle": "Boardsesh",
+      "heroBody": "Run your board from your phone: find climbs, line up sends, light the wall, and keep the session moving.",
+      "sectionTitle": "What Boardsesh is for",
+      "whatItDoesTitle": "Climb without app-hopping",
+      "whatItDoesBody": "Search, queue, light, log, and share climbs from one place while you stay focused on the wall.",
+      "boardsTitle": "For your boards",
+      "boardsBody": "Boardsesh supports sessions on your Kilter, Tension, and MoonBoard setups without pretending to be an official app.",
+      "openTitle": "Built in the open",
+      "openBody": "The project is open source so climbers can report rough edges, request features, and help steer what comes next.",
+      "independentTitle": "Independent project",
+      "independentBody": "Boardsesh is not affiliated with or endorsed by Aurora Climbing, Kilter, Tension, Moon Climbing, or any board manufacturer."
+    },
     "onboarding": {
       "skip": "Skip",
       "next": "Next",
@@ -215,7 +229,6 @@
     "classifyHolds": "Classify holds",
     "myPlaylists": "My playlists",
     "recentSessions": "Recent sessions",
-    "help": "Help",
     "about": "About",
     "rateBoardsesh": "Rate Boardsesh",
     "reportBug": "Report a bug",

@@ -295,6 +295,8 @@
     "bugPlaceholder": "Que faisiez-vous ? Qu'attendiez-vous et qu'avez-vous vu ?",
     "ratingPlaceholder": "Qu'avez-vous en tête ?",
     "remainingChars": "Encore {{count}} caractères à écrire",
+    "starRating_one": "{{count}} étoile",
+    "starRating_other": "{{count}} étoiles",
     "nextAria": "Suivant"
   },
   "feedbackBanner": {
