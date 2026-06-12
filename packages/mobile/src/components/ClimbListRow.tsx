@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useRef } from 'react';
-import { View, StyleSheet } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, type ReactNode } from 'react';
+import { View, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 import Animated, {
   useAnimatedStyle,
   useAnimatedReaction,
@@ -148,6 +148,15 @@ function PlaylistSwipeAction({ translation, active }: { translation: SharedValue
   );
 }
 
+export type ClimbListRowRenderContentArgs = {
+  climb: Climb;
+  boardName: BoardName;
+  layoutId: number;
+  sizeId: number;
+  setIds: string;
+  angle: number;
+};
+
 type ClimbListRowProps = {
   climb: Climb;
   boardName: BoardName;
@@ -161,6 +170,11 @@ type ClimbListRowProps = {
   onOpenActions?: (climb: Climb) => void;
   selected?: boolean;
   unsupported?: boolean;
+  renderContent?: (args: ClimbListRowRenderContentArgs) => ReactNode;
+  containerStyle?: StyleProp<ViewStyle>;
+  contentRowStyle?: StyleProp<ViewStyle>;
+  separatorStyle?: StyleProp<ViewStyle>;
+  showSeparator?: boolean;
 };
 
 const ClimbListRow = React.memo(function ClimbListRow({
@@ -176,6 +190,11 @@ const ClimbListRow = React.memo(function ClimbListRow({
   onOpenActions,
   selected,
   unsupported,
+  renderContent,
+  containerStyle,
+  contentRowStyle,
+  separatorStyle,
+  showSeparator = true,
 }: ClimbListRowProps) {
   const { systemColors, brandColors: brand } = useTheme();
   // Active-row highlight colours, derived from the scheme-aware brand so the wash
@@ -332,8 +351,21 @@ const ClimbListRow = React.memo(function ClimbListRow({
     [dragArmedRef],
   );
 
+  const rowContent = renderContent ? (
+    renderContent({ climb, boardName, layoutId, sizeId, setIds, angle })
+  ) : (
+    <ClimbListItemContent
+      climb={climb}
+      boardName={boardName}
+      layoutId={layoutId}
+      sizeId={sizeId}
+      setIds={setIds}
+      angle={angle}
+    />
+  );
+
   return (
-    <View style={[styles.outerContainer, unsupported && styles.unsupported]}>
+    <View style={[styles.outerContainer, containerStyle, unsupported && styles.unsupported]}>
       <ReanimatedSwipeable
         ref={swipeableRef}
         friction={SWIPE_FRICTION}
@@ -350,7 +382,7 @@ const ClimbListRow = React.memo(function ClimbListRow({
       >
         <GestureDetector gesture={tapGesture}>
           <View
-            style={[climbListRowStyles.contentRow, { backgroundColor: systemColors.background }]}
+            style={[climbListRowStyles.contentRow, { backgroundColor: systemColors.background }, contentRowStyle]}
             accessible
             accessibilityRole="button"
             accessibilityLabel={climb.name}
@@ -364,20 +396,15 @@ const ClimbListRow = React.memo(function ClimbListRow({
               <View style={[styles.selectedAccent, { backgroundColor: highlight.accent }]} pointerEvents="none" />
             ) : null}
 
-            <ClimbListItemContent
-              climb={climb}
-              boardName={boardName}
-              layoutId={layoutId}
-              sizeId={sizeId}
-              setIds={setIds}
-              angle={angle}
-            />
+            {rowContent}
           </View>
         </GestureDetector>
       </ReanimatedSwipeable>
 
       {/* Separator — inset to start at the text column (after the thumbnail) */}
-      <View style={[climbListRowStyles.separator, { backgroundColor: systemColors.separator }]} />
+      {showSeparator ? (
+        <View style={[climbListRowStyles.separator, { backgroundColor: systemColors.separator }, separatorStyle]} />
+      ) : null}
     </View>
   );
 });

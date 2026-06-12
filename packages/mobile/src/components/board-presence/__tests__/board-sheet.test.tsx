@@ -19,6 +19,8 @@ const analytics = vi.hoisted(() => ({
 }));
 
 const sheetModal = vi.hoisted(() => ({ present: vi.fn(), dismiss: vi.fn() }));
+const climbRows = vi.hoisted(() => ({ props: [] as Record<string, unknown>[] }));
+const thumbnails = vi.hoisted(() => ({ props: [] as Record<string, unknown>[] }));
 
 type ViewMockProps = { children?: ReactNode; style?: unknown };
 vi.mock('react-native', () => ({
@@ -105,8 +107,83 @@ vi.mock('../../Text', () => ({
   Text: ({ children }: { children?: ReactNode }) => createElement('span', { 'data-text': 'true' }, children),
 }));
 vi.mock('../../Icon', () => ({ Icon: ({ name }: { name: string }) => createElement('span', { 'data-icon': name }) }));
+vi.mock('../../ClimbListRow', () => ({
+  ClimbListRow: (props: Record<string, unknown>) => {
+    climbRows.props.push(props);
+    const renderContent =
+      typeof props.renderContent === 'function'
+        ? (props.renderContent as (args: {
+            climb: unknown;
+            boardName: unknown;
+            layoutId: unknown;
+            sizeId: unknown;
+            setIds: unknown;
+            angle: unknown;
+          }) => ReactNode)
+        : null;
+    const climb = props.climb as { uuid?: string; name?: string } | undefined;
+    const content = renderContent
+      ? renderContent({
+          climb: props.climb,
+          boardName: props.boardName,
+          layoutId: props.layoutId,
+          sizeId: props.sizeId,
+          setIds: props.setIds,
+          angle: props.angle,
+        })
+      : climb?.name;
+    const climbUuid = climb?.uuid ?? 'unknown';
+    return createElement(
+      'div',
+      { 'data-climb-row': climbUuid },
+      createElement(
+        'button',
+        {
+          'aria-label': `press ${climbUuid}`,
+          onClick: () => {
+            if (typeof props.onPress === 'function') props.onPress(props.climb);
+          },
+        },
+        content,
+      ),
+      createElement(
+        'button',
+        {
+          'aria-label': `queue ${climbUuid}`,
+          onClick: () => {
+            if (typeof props.onAddToQueue === 'function') props.onAddToQueue(props.climb);
+          },
+        },
+        'queue',
+      ),
+      createElement(
+        'button',
+        {
+          'aria-label': `playlist ${climbUuid}`,
+          onClick: () => {
+            if (typeof props.onOpenPlaylist === 'function') props.onOpenPlaylist(props.climb);
+          },
+        },
+        'playlist',
+      ),
+      createElement(
+        'button',
+        {
+          'aria-label': `actions ${climbUuid}`,
+          onClick: () => {
+            if (typeof props.onOpenActions === 'function') props.onOpenActions(props.climb);
+          },
+        },
+        'actions',
+      ),
+    );
+  },
+}));
 vi.mock('../../queue-control/AccessoryClimbThumbnail', () => ({
-  AccessoryClimbThumbnail: () => createElement('div', { 'data-thumb': 'true' }),
+  AccessoryClimbThumbnail: (props: Record<string, unknown>) => {
+    thumbnails.props.push(props);
+    return createElement('div', { 'data-thumb': 'true', 'data-size': props.size ?? 40 });
+  },
 }));
 vi.mock('../../../providers/theme-provider', () => ({
   useTheme: () => ({
@@ -158,6 +235,8 @@ describe('BoardSheet', () => {
     analytics.track.mockClear();
     sheetModal.present.mockClear();
     sheetModal.dismiss.mockClear();
+    climbRows.props = [];
+    thumbnails.props = [];
   });
 
   it('presents and dismisses via the imperative ref', () => {
@@ -262,6 +341,62 @@ describe('BoardSheet', () => {
     expect(container.textContent).toContain('mobile.boardPresence.historyHeader');
     // History list rendered one node per item.
     expect(container.querySelector('[data-list="true"]')).not.toBeNull();
+  });
+
+  it('wires the hero and lit-on-this-wall rows to the shared climb actions', () => {
+    presence.currentClimb = makeClimb('hero-climb', 3, { frames: 'hero-frames', grade: 'V7' });
+    presence.history = [makeClimb('old-climb', 2, { frames: 'old-frames', grade: 'V4', angle: 30 })];
+    const onClose = vi.fn();
+    const onClimbPress = vi.fn();
+    const onAddToQueue = vi.fn();
+    const onOpenPlaylist = vi.fn();
+    const onOpenActions = vi.fn();
+
+    const { getByLabelText } = render(
+      createElement(BoardSheet, {
+        boardLabel: 'Garage Wall',
+        onClose,
+        onDismissed: noop,
+        boardConfig,
+        onSwitchBoard: noop,
+        onClimbPress,
+        onAddToQueue,
+        onOpenPlaylist,
+        onOpenActions,
+      }),
+    );
+
+    fireEvent.click(getByLabelText('press hero-climb'));
+    expect(onClimbPress).toHaveBeenCalledWith(
+      expect.objectContaining({
+        uuid: 'hero-climb',
+        name: 'Climb hero-climb',
+        frames: 'hero-frames',
+        difficulty: 'V7',
+        setter_username: 'Some Setter',
+        angle: 40,
+      }),
+    );
+    expect(onClose).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(getByLabelText('queue old-climb'));
+    expect(onAddToQueue).toHaveBeenCalledWith(
+      expect.objectContaining({ uuid: 'old-climb', frames: 'old-frames', difficulty: 'V4', angle: 30 }),
+    );
+
+    fireEvent.click(getByLabelText('playlist old-climb'));
+    expect(onOpenPlaylist).toHaveBeenCalledWith(expect.objectContaining({ uuid: 'old-climb' }));
+
+    fireEvent.click(getByLabelText('actions old-climb'));
+    expect(onOpenActions).toHaveBeenCalledWith(expect.objectContaining({ uuid: 'old-climb' }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+
+    expect(thumbnails.props).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ climb: expect.objectContaining({ uuid: 'hero-climb' }), size: 52 }),
+        expect.objectContaining({ climb: expect.objectContaining({ uuid: 'old-climb' }) }),
+      ]),
+    );
   });
 
   it('fires onSwitchBoard from the footer switch control', () => {
