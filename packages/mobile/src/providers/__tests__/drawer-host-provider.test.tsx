@@ -129,6 +129,35 @@ vi.mock('../../components/AddToPlaylistSheet', () => ({
 vi.mock('../../components/QueueAddedSnackbar', () => ({
   QueueAddedSnackbar: () => createElement('div', { 'data-queue-snackbar': 'true' }),
 }));
+vi.mock('../../components/board-presence/BoardSheet', async () => {
+  const React = await vi.importActual<typeof import('react')>('react');
+  return {
+    BoardSheet: React.forwardRef((_props: unknown, ref) => {
+      React.useImperativeHandle(ref, () => ({ present: () => {}, dismiss: () => {} }));
+      return React.createElement('div', { 'data-board-sheet': 'true' });
+    }),
+  };
+});
+vi.mock('../../components/board-presence/UndoWallChangeSnackbar', () => ({
+  UndoWallChangeSnackbar: () => createElement('div', { 'data-undo-snackbar': 'true' }),
+}));
+
+vi.mock('expo-router', () => ({
+  router: { push: vi.fn() },
+}));
+
+vi.mock('@boardsesh/board-presence-react', () => ({
+  useBoardPresenceCurrent: () => ({ currentClimb: null, previousClimb: null, undoTarget: null, isLive: false }),
+  useBoardPresenceFeed: () => ({ history: [], stats: null }),
+}));
+
+vi.mock('../board-presence-provider', () => ({
+  useBoardPresenceControls: () => ({ enabled: false, boardId: null, resolveAndBindBoard: vi.fn(async () => null) }),
+}));
+
+vi.mock('../bluetooth-provider', () => ({
+  useOptionalBluetoothContext: () => ({ undoWallChange: vi.fn(async () => true) }),
+}));
 
 vi.mock('../queue-provider', async () => {
   const { derivePreviewOnly } =
@@ -162,6 +191,9 @@ vi.mock('../queue-snackbar-provider', () => ({
     visible: false,
     nonce: 0,
     dismissSnackbar: vi.fn(),
+    undoWallChangeVisible: false,
+    undoWallChangeNonce: 0,
+    dismissUndoWallChangeSnackbar: vi.fn(),
   }),
 }));
 

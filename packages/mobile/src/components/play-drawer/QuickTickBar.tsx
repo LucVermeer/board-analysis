@@ -25,6 +25,7 @@ import { useOptionalBoardProvider, useSaveTick, logbookClimbAngleKey } from '@bo
 import { toBoardName } from '@boardsesh/board-config';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { useToast } from '../../providers/toast-provider';
+import { useBoardPresenceControls } from '../../providers/board-presence-provider';
 import { track } from '../../lib/analytics';
 import { hapticSuccess, hapticError } from '../../lib/haptics';
 import { brandColors } from '../../theme/colors';
@@ -68,6 +69,7 @@ export const QuickTickBar = React.memo(function QuickTickBar({
   const { showToast } = useToast();
   const insets = useSafeAreaInsets();
   const saveTick = useSaveTick(toBoardName(boardName));
+  const { enabled: boardPresenceEnabled, boardId: boardPresenceBoardId } = useBoardPresenceControls();
   const { data: grades } = useGrades(boardName);
 
   // Mobile's `Climb.userAscents`/`userAttempts` GraphQL fields aren't
@@ -162,6 +164,7 @@ export const QuickTickBar = React.memo(function QuickTickBar({
           ...(layoutId != null ? { layoutId } : {}),
           ...(sizeId != null ? { sizeId } : {}),
           ...(setIds ? { setIds } : {}),
+          ...(boardPresenceEnabled && boardPresenceBoardId != null ? { boardId: boardPresenceBoardId } : {}),
         },
         {
           onSuccess: () => {
@@ -203,6 +206,8 @@ export const QuickTickBar = React.memo(function QuickTickBar({
       layoutId,
       sizeId,
       setIds,
+      boardPresenceEnabled,
+      boardPresenceBoardId,
       tickState,
       comment,
       onDismiss,

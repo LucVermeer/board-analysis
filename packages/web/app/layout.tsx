@@ -26,6 +26,9 @@ import { SITE_URL } from './lib/seo/base-url';
 import './components/index.css';
 import type { Viewport, Metadata } from 'next';
 
+const STATIC_FEATURE_FLAGS =
+  process.env.BOARD_PRESENCE_ENABLED === 'true' ? { 'board-presence': true } : EMPTY_FEATURE_FLAGS;
+
 export async function generateMetadata(): Promise<Metadata> {
   const { t, locale } = await getServerTranslation('marketing');
   return {
@@ -98,7 +101,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                   <SnackbarProvider>
                     <NativeDeepLinkListener />
                     <AuthModalProvider>
-                      <FeatureFlagsProvider flags={EMPTY_FEATURE_FLAGS}>
+                      <FeatureFlagsProvider flags={STATIC_FEATURE_FLAGS}>
                         <PersistentSessionWrapper boardConfigs={boardConfigs}>
                           <OnboardingTourProvider>
                             <NotificationSubscriptionManager>{children}</NotificationSubscriptionManager>

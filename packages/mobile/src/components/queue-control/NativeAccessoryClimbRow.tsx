@@ -11,6 +11,7 @@ import { CHROME_LABEL_MAX_FONT_SCALE } from '../../theme/typography';
 import { Text } from '../Text';
 import { AccessoryClimbThumbnail } from './AccessoryClimbThumbnail';
 import { useQueueClimbCarousel } from './use-queue-climb-carousel';
+import { useWallOrQueueCurrentClimb } from './use-wall-or-queue-climb';
 import { LogAscentToolbarButton } from './LogAscentToolbarButton';
 
 type AccessoryPlacement = 'regular' | 'inline';
@@ -89,7 +90,12 @@ export function NativeAccessoryClimbRow({ placement, width }: NativeAccessoryCli
     onAccessibilityAction,
   } = useQueueClimbCarousel();
 
-  const currentClimb = climbFromItem(currentItem);
+  const queueCurrentClimb = climbFromItem(currentItem);
+  // Source-of-truth flip: when a board feed is live (and the flag is on) the
+  // accessory shows the wall's actual lit climb; otherwise the local queue head.
+  // Display + tick only — the carousel gesture/peek still steps the local queue,
+  // so swipe/queue navigation is unchanged (peeks show queue neighbours).
+  const currentClimb = useWallOrQueueCurrentClimb(queueCurrentClimb);
   const previousClimb = climbFromItem(previousItem);
   const nextQueueClimb = climbFromItem(nextItem);
   const showThumbnail = placement === 'regular' && boardConfig !== null;

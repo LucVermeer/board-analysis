@@ -3,10 +3,13 @@ import { act, render, waitFor, cleanup } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createElement, type ReactNode } from 'react';
 import type { ClimbQueueItem } from '@boardsesh/queue';
+import type { BoardPresenceClimb } from '@boardsesh/shared-schema';
 import { derivePreviewOnly } from '@boardsesh/queue-runtime';
 import type { BoardSerialConfig } from '@boardsesh/graphql/operations';
 import type { ResolvedBoardEntry } from '../../lib/ble/resolve-serials';
 import type { PickerState } from '../../lib/ble/use-board-bluetooth';
+
+type TestResolvedBoard = { boardId: number };
 
 type BluetoothHookOptions = {
   onConnectSuccess?: (serial: string | null) => void;
@@ -61,6 +64,16 @@ const bluetooth = vi.hoisted(() => {
   return mock;
 });
 
+const presence = vi.hoisted(() => ({
+  enabled: false,
+  boardId: null as number | null,
+  currentClimb: null as BoardPresenceClimb | null,
+  resolveAndBindBoard: vi.fn(async (): Promise<TestResolvedBoard | null> => null),
+  resolveAndBindBoardByConfig: vi.fn(async (): Promise<TestResolvedBoard | null> => null),
+  reportClimbForBoard: vi.fn(async () => true),
+  showUndoWallChangeSnackbar: vi.fn(),
+}));
+
 type PickerSheetProps = {
   onSelect: (deviceId: string) => void;
 };
@@ -79,6 +92,33 @@ vi.mock('react-native', () => ({
 
 vi.mock('@boardsesh/play-view', () => ({
   emitWallConfirm: wallConfirm.emitWallConfirm,
+}));
+
+vi.mock('@boardsesh/board-presence-react', () => ({
+  useBoardPresenceCurrent: () => ({
+    currentClimb: presence.currentClimb,
+    previousClimb: null,
+    undoTarget: null,
+    isLive: true,
+  }),
+}));
+
+vi.mock('../board-presence-provider', () => ({
+  useBoardPresenceControls: () => ({
+    enabled: presence.enabled,
+    boardId: presence.boardId,
+    resolveAndBindBoard: presence.resolveAndBindBoard,
+    resolveAndBindBoardByConfig: presence.resolveAndBindBoardByConfig,
+    reportClimbForBoard: presence.reportClimbForBoard,
+  }),
+}));
+
+vi.mock('../queue-snackbar-provider', () => ({
+  useQueueSnackbar: () => ({ showUndoWallChangeSnackbar: presence.showUndoWallChangeSnackbar }),
+}));
+
+vi.mock('../../lib/climb-to-queue-item', () => ({
+  toClimbInput: (climb: { uuid: string }) => ({ uuid: climb.uuid }),
 }));
 
 vi.mock('../../lib/ble/use-board-bluetooth', () => ({
@@ -156,7 +196,7 @@ vi.mock('../../lib/board-details', () => ({
   getBoardRenderData: boardDetails.getBoardRenderData,
 }));
 
-import { BluetoothProvider } from '../bluetooth-provider';
+import { BluetoothProvider, useBluetoothContext } from '../bluetooth-provider';
 
 function makeQueueItem(uuid: string, frames = 'p1r12', mirrored = false): ClimbQueueItem {
   return {
@@ -178,6 +218,21 @@ function makeQueueItem(uuid: string, frames = 'p1r12', mirrored = false): ClimbQ
   };
 }
 
+function makePresenceClimb(overrides: Partial<BoardPresenceClimb> = {}): BoardPresenceClimb {
+  return {
+    climbUuid: 'previous-climb',
+    queueItemUuid: 'queue-previous-climb',
+    name: 'Previous climb',
+    grade: 'V4',
+    frames: 'previous-frames',
+    angle: 35,
+    setter: 'setter',
+    sentAt: '2026-06-10T00:00:00.000Z',
+    seq: 7,
+    ...overrides,
+  };
+}
+
 function renderProvider(children?: ReactNode) {
   return render(
     createElement(BluetoothProvider, {
@@ -188,6 +243,13 @@ function renderProvider(children?: ReactNode) {
       children: children ?? createElement('div', null),
     }),
   );
+}
+
+let capturedBluetooth: ReturnType<typeof useBluetoothContext> | null = null;
+
+function BluetoothProbe() {
+  capturedBluetooth = useBluetoothContext();
+  return null;
 }
 
 function makeSerialConfig(overrides: Partial<BoardSerialConfig> = {}): BoardSerialConfig {
@@ -229,6 +291,17 @@ describe('BluetoothProvider wall-confirm integration', () => {
     bluetooth.state.sendFramesToBoard.mockResolvedValue(true);
     bluetooth.state.connectInitialSendRef.current = null;
     bluetooth.useBoardBluetooth.mockClear();
+    presence.enabled = false;
+    presence.boardId = null;
+    presence.currentClimb = null;
+    presence.resolveAndBindBoard.mockClear();
+    presence.resolveAndBindBoard.mockResolvedValue(null);
+    presence.resolveAndBindBoardByConfig.mockClear();
+    presence.resolveAndBindBoardByConfig.mockResolvedValue(null);
+    presence.reportClimbForBoard.mockClear();
+    presence.reportClimbForBoard.mockResolvedValue(true);
+    presence.showUndoWallChangeSnackbar.mockClear();
+    capturedBluetooth = null;
   });
 
   afterEach(() => {
@@ -442,6 +515,7 @@ describe('BluetoothProvider wall-confirm integration', () => {
       mode: 'party',
       previousSerialKnown: false,
       boardLayout: 'kilter',
+      boardId: undefined,
     });
   });
 
@@ -481,6 +555,247 @@ describe('BluetoothProvider wall-confirm integration', () => {
     expect((bluetooth.options as { holdsData?: unknown } | undefined)?.holdsData).toEqual([
       { id: 100, mirroredHoldId: 200, cx: 0, cy: 0, r: 1 },
     ]);
+  });
+
+  describe('board-presence wiring (flag on)', () => {
+    it('resolves+binds the board on connect with the active board config', () => {
+      presence.enabled = true;
+      renderProvider();
+
+      bluetooth.options?.onConnectSuccess?.('SERIAL-1');
+
+      expect(presence.resolveAndBindBoard).toHaveBeenCalledWith({
+        serial: 'SERIAL-1',
+        boardType: 'kilter',
+        layoutId: 1,
+        sizeId: 10,
+        setIds: '1,20',
+      });
+    });
+
+    it('does NOT resolve the board on connect when the flag is off', () => {
+      presence.enabled = false;
+      renderProvider();
+
+      bluetooth.options?.onConnectSuccess?.('SERIAL-1');
+
+      expect(presence.resolveAndBindBoard).not.toHaveBeenCalled();
+    });
+
+    it('uses config fallback when connect succeeds without a serial', () => {
+      presence.enabled = true;
+      renderProvider();
+
+      bluetooth.options?.onConnectSuccess?.(null);
+
+      expect(presence.resolveAndBindBoard).not.toHaveBeenCalled();
+      expect(presence.resolveAndBindBoardByConfig).toHaveBeenCalledWith({
+        boardType: 'kilter',
+        layoutId: 1,
+        sizeId: 10,
+        setIds: '1,20',
+      });
+      expect(queue.setSessionBoardSerial).not.toHaveBeenCalled();
+    });
+
+    it('reports the lit climb to the wall on wall-confirm, in a SOLO flow, then shows the Undo snackbar', async () => {
+      presence.enabled = true;
+      presence.boardId = 99;
+      presence.currentClimb = makePresenceClimb();
+      queue.sessionId = null;
+
+      renderProvider();
+
+      await waitFor(() => {
+        expect(presence.reportClimbForBoard).toHaveBeenCalledTimes(1);
+      });
+      expect(presence.reportClimbForBoard).toHaveBeenCalledWith(
+        99,
+        { uuid: 'queue-climb-1', climb: { uuid: 'climb-1' } },
+        40,
+      );
+      expect(queue.confirmClimbOnWall).not.toHaveBeenCalled();
+
+      await waitFor(() => {
+        expect(presence.showUndoWallChangeSnackbar).toHaveBeenCalledTimes(1);
+      });
+    });
+
+    it('does NOT report to the wall when no board is bound', async () => {
+      presence.enabled = true;
+      presence.boardId = null;
+
+      renderProvider();
+
+      await waitFor(() => {
+        expect(wallConfirm.emitWallConfirm).toHaveBeenCalled();
+      });
+      expect(presence.reportClimbForBoard).not.toHaveBeenCalled();
+      expect(presence.showUndoWallChangeSnackbar).not.toHaveBeenCalled();
+    });
+
+    it('does NOT report to the wall when the flag is off', async () => {
+      presence.enabled = false;
+      presence.boardId = 99;
+
+      renderProvider();
+
+      await waitFor(() => {
+        expect(wallConfirm.emitWallConfirm).toHaveBeenCalled();
+      });
+      expect(presence.reportClimbForBoard).not.toHaveBeenCalled();
+    });
+
+    it('buffers the first wall-confirm while connect board resolution is pending', async () => {
+      presence.enabled = true;
+      presence.boardId = null;
+      bluetooth.state.isConnected = false;
+      let resolveBoard: (value: { boardId: number }) => void = () => {};
+      presence.resolveAndBindBoard.mockReturnValue(
+        new Promise((resolve) => {
+          resolveBoard = resolve;
+        }),
+      );
+
+      const { rerender } = renderProvider();
+      bluetooth.options?.onConnectSuccess?.('SERIAL-PENDING');
+
+      bluetooth.state.isConnected = true;
+      rerender(
+        createElement(BluetoothProvider, {
+          boardName: 'kilter',
+          layoutId: 1,
+          sizeId: 10,
+          children: createElement('div', null),
+        }),
+      );
+
+      await waitFor(() => {
+        expect(wallConfirm.emitWallConfirm).toHaveBeenCalledWith('climb-1');
+      });
+      expect(presence.reportClimbForBoard).not.toHaveBeenCalled();
+
+      resolveBoard({ boardId: 123 });
+
+      await waitFor(() => {
+        expect(presence.reportClimbForBoard).toHaveBeenCalledWith(
+          123,
+          { uuid: 'queue-climb-1', climb: { uuid: 'climb-1' } },
+          40,
+        );
+      });
+    });
+
+    it('does not poison same-climb retries when a report is rejected', async () => {
+      presence.enabled = true;
+      presence.boardId = 99;
+      presence.reportClimbForBoard.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+      const firstItem = makeQueueItem('climb-1');
+      queue.currentClimbQueueItem = firstItem;
+      const { rerender } = renderProvider();
+
+      await waitFor(() => {
+        expect(presence.reportClimbForBoard).toHaveBeenCalledTimes(1);
+      });
+
+      queue.currentClimbQueueItem = { ...firstItem };
+      rerender(
+        createElement(BluetoothProvider, {
+          boardName: 'kilter',
+          layoutId: 1,
+          sizeId: 10,
+          children: createElement('div', null),
+        }),
+      );
+
+      await waitFor(() => {
+        expect(presence.reportClimbForBoard).toHaveBeenCalledTimes(2);
+      });
+      expect(presence.showUndoWallChangeSnackbar).not.toHaveBeenCalled();
+    });
+
+    it('re-reports the same uuid after an external wall change', async () => {
+      presence.enabled = true;
+      presence.boardId = 99;
+      const firstItem = makeQueueItem('climb-1');
+      queue.currentClimbQueueItem = firstItem;
+      const { rerender } = renderProvider();
+
+      await waitFor(() => {
+        expect(presence.reportClimbForBoard).toHaveBeenCalledTimes(1);
+      });
+
+      presence.currentClimb = makePresenceClimb({
+        climbUuid: 'other-phone-climb',
+        frames: 'p9r9',
+        seq: 2,
+      });
+      queue.currentClimbQueueItem = { ...firstItem };
+      rerender(
+        createElement(BluetoothProvider, {
+          boardName: 'kilter',
+          layoutId: 1,
+          sizeId: 10,
+          children: createElement('div', null),
+        }),
+      );
+
+      await waitFor(() => {
+        expect(presence.reportClimbForBoard).toHaveBeenCalledTimes(2);
+      });
+    });
+
+    it('undo resends the captured wall climb over BLE before re-reporting it', async () => {
+      presence.enabled = true;
+      presence.boardId = 99;
+      presence.currentClimb = makePresenceClimb();
+
+      renderProvider(createElement(BluetoothProbe));
+
+      await waitFor(() => {
+        expect(presence.reportClimbForBoard).toHaveBeenCalledTimes(1);
+      });
+
+      const undoResult = await capturedBluetooth?.undoWallChange();
+
+      expect(undoResult).toBe(true);
+      expect(bluetooth.state.sendFramesToBoard).toHaveBeenNthCalledWith(2, 'previous-frames', false);
+      expect(presence.reportClimbForBoard).toHaveBeenNthCalledWith(
+        2,
+        99,
+        {
+          uuid: 'queue-previous-climb',
+          climb: {
+            uuid: 'previous-climb',
+            setter_username: 'setter',
+            name: 'Previous climb',
+            frames: 'previous-frames',
+            angle: 35,
+            ascensionist_count: 0,
+            difficulty: 'V4',
+            quality_average: '',
+            stars: 0,
+            difficulty_error: '',
+          },
+        },
+        35,
+      );
+    });
+
+    it('does not include raw serial values in board-presence analytics', async () => {
+      presence.enabled = true;
+      presence.boardId = 99;
+      renderProvider();
+
+      bluetooth.options?.onConnectSuccess?.('SERIAL-SECRET-123');
+
+      await waitFor(() => {
+        expect(presence.reportClimbForBoard).toHaveBeenCalledTimes(1);
+      });
+
+      const allTrackedValues = analytics.track.mock.calls.flatMap(([, properties]) => Object.values(properties ?? {}));
+      expect(allTrackedValues).not.toContain('SERIAL-SECRET-123');
+    });
   });
 
   it('forwards picker selection immediately when the resolved board config matches', () => {

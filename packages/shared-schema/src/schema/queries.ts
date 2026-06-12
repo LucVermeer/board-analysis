@@ -385,6 +385,19 @@ export const queriesTypeDefs = /* GraphQL */ `
     newClimbFeed(input: NewClimbFeedInput!): NewClimbFeedResult!
 
     """
+    Backfill the recent "now on the wall" history for a board (last ~50, 24h
+    window) from the Redis FIFO. Used by late joiners before the live
+    \`boardNowPlaying\` subscription takes over.
+    """
+    boardRecentClimbs(boardId: Int!): [BoardPresenceClimb!]!
+
+    """
+    Lightweight stats for a board's wall feed — durable counts derived from
+    \`boardsesh_ticks\` stamped with this board_id, plus the live window.
+    """
+    boardPresenceStats(boardId: Int!): BoardPresenceStats!
+
+    """
     Get the current user's new climb subscriptions.
     Requires authentication.
     """

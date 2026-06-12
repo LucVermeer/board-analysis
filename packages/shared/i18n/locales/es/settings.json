@@ -406,8 +406,7 @@
       "connected": "Strava conectado",
       "connectFailed": "No se pudo conectar con Strava",
       "disconnected": "Strava desconectado",
-      "disconnectFailed": "No se pudo desconectar Strava. Inténtalo de nuevo.",
-      "syncFailed": "Error al subir. Inténtalo de nuevo."
+      "disconnectFailed": "No se pudo desconectar Strava. Inténtalo de nuevo."
     }
   }
 }

@@ -6,6 +6,8 @@ import type { ClimbQueueItem } from '@boardsesh/queue';
 import type { BoardName, UserBoard } from '@boardsesh/shared-schema';
 import { formatBoardDisplayName, toBoardName } from '@boardsesh/board-config';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
+import { useBoardPresenceCurrent } from '@boardsesh/board-presence-react';
+import type { BoardPresenceClimb, ClimbQueueItemInput } from '@boardsesh/shared-schema';
 import { emitWallConfirm } from '@boardsesh/play-view';
 import { useBoardBluetooth, boardConfigKey } from '../lib/ble/use-board-bluetooth';
 import { useResolvedBleDeviceBoards } from '../lib/ble/resolve-serials';
@@ -22,6 +24,9 @@ import type { GetBoardQueryResponse } from '../lib/graphql/operations';
 import { getBoardRenderData } from '../lib/board-details';
 import { registerBluetoothConnection } from '../lib/ble/bluetooth-status-store';
 import { useIsPartyPreviewOnly, useQueue, useQueueSessionControls } from './queue-provider';
+import { useBoardPresenceControls } from './board-presence-provider';
+import { useQueueSnackbar } from './queue-snackbar-provider';
+import { toClimbInput } from '../lib/climb-to-queue-item';
 import { hapticSuccess } from '../lib/haptics';
 import { DevicePickerSheet } from '../components/ble/DevicePickerSheet';
 import { track } from '../lib/analytics';
@@ -41,6 +46,11 @@ type BluetoothContextValue = {
    * failing write trips disconnect detection. No-op until called.
    */
   reassertWall: () => void;
+  /**
+   * Restore the climb captured before this device's latest accepted wall report.
+   * The platform relights it over BLE first, then reports it to board presence.
+   */
+  undoWallChange: () => Promise<boolean>;
   /**
    * Serial to silently reconnect to for the board currently in view, or null
    * when nothing is remembered or the user switched boards — in which case
@@ -62,6 +72,38 @@ function formatPickerBoardConfig(t: TFunction<'settings'>, config: BleBoardConfi
     sizeId: config.sizeId,
     setIds: config.setIds,
   });
+}
+
+type PendingWallReport = {
+  item: ClimbQueueItem;
+  undoTarget: BoardPresenceClimb | null;
+};
+
+function queueItemReportSignature(item: ClimbQueueItem): string {
+  return `${item.climb.uuid}:${item.climb.frames}:${item.climb.angle ?? ''}`;
+}
+
+function presenceClimbReportSignature(climb: BoardPresenceClimb | null): string | null {
+  if (!climb) return null;
+  return `${climb.climbUuid}:${climb.frames ?? ''}:${climb.angle ?? ''}`;
+}
+
+function presenceClimbToQueueInput(climb: BoardPresenceClimb): ClimbQueueItemInput {
+  return {
+    uuid: climb.queueItemUuid ?? `undo:${climb.climbUuid}:${climb.seq}`,
+    climb: {
+      uuid: climb.climbUuid,
+      setter_username: climb.setter ?? '',
+      name: climb.name ?? '',
+      frames: climb.frames ?? '',
+      angle: climb.angle ?? 0,
+      ascensionist_count: 0,
+      difficulty: climb.grade ?? '',
+      quality_average: '',
+      stars: 0,
+      difficulty_error: '',
+    },
+  };
 }
 
 /**
@@ -87,7 +129,12 @@ function BluetoothAutoSender({
   connectInitialSendRef,
 }: {
   sendFramesToBoard: (frames: string, mirrored?: boolean, signal?: AbortSignal) => Promise<boolean | undefined>;
-  onWallConfirmed: (climbUuid: string) => void;
+  /**
+   * Fired once a climb is on the wall (a fresh write or a deduped re-broadcast).
+   * Receives the full lit queue item so consumers can both emit the local
+   * confirm (uuid only) and report the climb to the board-presence channel.
+   */
+  onWallConfirmed: (item: ClimbQueueItem) => void;
   reassertNonce: number;
   // One-shot seed: what connect() already wrote as initialFrames, so the
   // freshly mounted AutoSender doesn't repeat a byte-identical first send.
@@ -190,7 +237,7 @@ function BluetoothAutoSender({
           // the signature and re-pushes.
           const sendSignature = `${item.climb.uuid}::${item.climb.frames}::${item.climb.mirrored ? 1 : 0}`;
           if (sendSignature === lastSentSignatureRef.current) {
-            onWallConfirmedRef.current(item.climb.uuid);
+            onWallConfirmedRef.current(item);
             toSend = pendingClimbRef.current;
             pendingClimbRef.current = null;
             continue;
@@ -205,7 +252,7 @@ function BluetoothAutoSender({
 
             if (result === true) {
               lastSentSignatureRef.current = sendSignature;
-              onWallConfirmedRef.current(item.climb.uuid);
+              onWallConfirmedRef.current(item);
               hapticSuccess();
             }
           } catch (error) {
@@ -247,6 +294,30 @@ export function BluetoothProvider({
   const { sessionId, confirmClimbOnWall, setSessionBoardSerial, lastConnectedBoardSerial } = useQueueSessionControls();
   const isPartyPreviewOnly = useIsPartyPreviewOnly();
   const { t } = useTranslation('settings');
+  // Board presence ("now on the wall"). All of these are inert when the
+  // `board-presence` flag is off: `enabled` is false, `boardId` is null, and the
+  // shared wall context's report/undo no-op for a null board — so the BLE flow
+  // below behaves exactly as today.
+  const {
+    enabled: presenceEnabled,
+    boardId: presenceBoardId,
+    resolveAndBindBoard,
+    resolveAndBindBoardByConfig,
+    reportClimbForBoard,
+  } = useBoardPresenceControls();
+  const { currentClimb: wallCurrentClimb } = useBoardPresenceCurrent();
+  const { showUndoWallChangeSnackbar } = useQueueSnackbar();
+
+  // Mirror the board config props so the empty-dep-ish connect callback resolves
+  // the serial against the board currently in view without churning identity.
+  const boardNameRef = useRef(boardName);
+  boardNameRef.current = boardName;
+  const layoutIdRef = useRef(layoutId);
+  layoutIdRef.current = layoutId;
+  const sizeIdRef = useRef(sizeId);
+  sizeIdRef.current = sizeId;
+  const setIdsRef = useRef(setIds);
+  setIdsRef.current = setIds;
   const sessionIdRef = useRef(sessionId);
   useEffect(() => {
     sessionIdRef.current = sessionId;
@@ -256,20 +327,162 @@ export function BluetoothProvider({
     lastConnectedBoardSerialRef.current = lastConnectedBoardSerial;
   }, [lastConnectedBoardSerial]);
 
-  const handleWallConfirmed = useCallback(
-    (climbUuid: string) => {
-      emitWallConfirm(climbUuid);
-      if (sessionIdRef.current) {
-        void confirmClimbOnWall(climbUuid);
+  // Live refs so handleWallConfirmed stays identity-stable while still reading
+  // the latest flag/board/report fn (it's mirrored into the AutoSender via a ref).
+  const presenceEnabledRef = useRef(presenceEnabled);
+  presenceEnabledRef.current = presenceEnabled;
+  const presenceBoardIdRef = useRef(presenceBoardId);
+  presenceBoardIdRef.current = presenceBoardId;
+  const reportClimbForBoardRef = useRef(reportClimbForBoard);
+  reportClimbForBoardRef.current = reportClimbForBoard;
+  const wallCurrentClimbRef = useRef<BoardPresenceClimb | null>(wallCurrentClimb);
+  wallCurrentClimbRef.current = wallCurrentClimb;
+  const showUndoWallChangeSnackbarRef = useRef(showUndoWallChangeSnackbar);
+  showUndoWallChangeSnackbarRef.current = showUndoWallChangeSnackbar;
+  // Last accepted report signature. Set only after the server accepts a report,
+  // and only used to skip a byte-identical local re-broadcast while the feed
+  // still shows that same signature.
+  const lastAcceptedReportSignatureRef = useRef<string | null>(null);
+  const pendingWallReportRef = useRef<PendingWallReport | null>(null);
+  const pendingPresenceResolveRef = useRef(false);
+  const resolvedPresenceBoardIdRef = useRef<number | null>(presenceBoardId);
+  const undoWallChangeTargetRef = useRef<BoardPresenceClimb | null>(null);
+  const previousPresenceBoardIdRef = useRef<number | null>(presenceBoardId);
+
+  useEffect(() => {
+    if (presenceBoardId !== null) {
+      resolvedPresenceBoardIdRef.current = presenceBoardId;
+    } else if (!pendingPresenceResolveRef.current) {
+      resolvedPresenceBoardIdRef.current = null;
+    }
+  }, [presenceBoardId]);
+
+  useEffect(() => {
+    const currentWallSignature = presenceClimbReportSignature(wallCurrentClimb);
+    if (currentWallSignature !== lastAcceptedReportSignatureRef.current) {
+      lastAcceptedReportSignatureRef.current = null;
+    }
+  }, [wallCurrentClimb]);
+
+  useEffect(() => {
+    const previousBoardId = previousPresenceBoardIdRef.current;
+    previousPresenceBoardIdRef.current = presenceBoardId;
+    if (previousBoardId === presenceBoardId) {
+      return;
+    }
+    if (previousBoardId !== null || presenceBoardId === null) {
+      lastAcceptedReportSignatureRef.current = null;
+      pendingWallReportRef.current = null;
+      undoWallChangeTargetRef.current = null;
+    }
+  }, [presenceBoardId]);
+
+  const reportWallClimb = useCallback(
+    async (item: ClimbQueueItem, boardId: number, undoTarget: BoardPresenceClimb | null) => {
+      const reportSignature = queueItemReportSignature(item);
+      if (
+        lastAcceptedReportSignatureRef.current === reportSignature &&
+        presenceClimbReportSignature(wallCurrentClimbRef.current) === reportSignature
+      ) {
+        return true;
       }
+
+      const climbInput = { uuid: item.uuid, climb: toClimbInput(item.climb) };
+      const angle = item.climb.angle ?? null;
+      const accepted = await reportClimbForBoardRef.current(boardId, climbInput, angle).catch((error: unknown) => {
+        console.warn('[board-presence] reportBoardClimb failed', error);
+        return false;
+      });
+
+      if (!accepted) {
+        lastAcceptedReportSignatureRef.current = null;
+        return false;
+      }
+
+      lastAcceptedReportSignatureRef.current = reportSignature;
+      undoWallChangeTargetRef.current = undoTarget;
+      track(SHARED_EVENTS.BoardClimbReported, {
+        boardId,
+        climbUuid: item.climb.uuid,
+        inSession: sessionIdRef.current != null,
+      });
+      if (undoTarget?.frames) {
+        showUndoWallChangeSnackbarRef.current();
+      }
+      return true;
     },
-    [confirmClimbOnWall],
+    [],
+  );
+
+  const replayPendingWallReport = useCallback(
+    (boardId: number) => {
+      const pendingReport = pendingWallReportRef.current;
+      if (!pendingReport) return;
+      pendingWallReportRef.current = null;
+      void reportWallClimb(pendingReport.item, boardId, pendingReport.undoTarget);
+    },
+    [reportWallClimb],
+  );
+
+  const handleWallConfirmed = useCallback(
+    (item: ClimbQueueItem) => {
+      emitWallConfirm(item.climb.uuid);
+      if (sessionIdRef.current) {
+        void confirmClimbOnWall(item.climb.uuid);
+      }
+      // Report the lit climb to the board-presence channel regardless of
+      // session. Dedup is feed/signature-aware and only arms after an accepted
+      // report, so failed reports and two-phone relights can retry.
+      if (!presenceEnabledRef.current) return;
+      const boardId = presenceBoardIdRef.current ?? resolvedPresenceBoardIdRef.current;
+      const undoTarget = wallCurrentClimbRef.current;
+      if (boardId === null) {
+        if (pendingPresenceResolveRef.current) {
+          pendingWallReportRef.current = { item, undoTarget };
+        }
+        return;
+      }
+      void reportWallClimb(item, boardId, undoTarget);
+    },
+    [confirmClimbOnWall, reportWallClimb],
   );
 
   const handleConnectSuccess = useCallback(
     (serial: string | null) => {
-      if (!serial) return;
-      if (!sessionIdRef.current) return;
+      lastAcceptedReportSignatureRef.current = null;
+      pendingWallReportRef.current = null;
+      undoWallChangeTargetRef.current = null;
+      resolvedPresenceBoardIdRef.current = null;
+
+      const boardType = boardNameRef.current;
+      const layoutId = layoutIdRef.current;
+      const sizeId = sizeIdRef.current;
+      const setIds = setIdsRef.current ?? '';
+
+      // Resolve+bind the shared board so the wall feed subscribes. Aurora uses
+      // its controller serial; serial-less boards use the per-config fallback
+      // when the backend supports it. This is independent of party sessions.
+      if (presenceEnabledRef.current && boardType && layoutId != null && layoutId > 0 && sizeId != null && sizeId > 0) {
+        pendingPresenceResolveRef.current = true;
+        const resolvePromise =
+          serial && serial.length > 0
+            ? resolveAndBindBoard({ serial, boardType, layoutId, sizeId, setIds })
+            : resolveAndBindBoardByConfig({ boardType, layoutId, sizeId, setIds });
+        void resolvePromise
+          .then((resolved) => {
+            if (!resolved) return;
+            resolvedPresenceBoardIdRef.current = resolved.boardId;
+            replayPendingWallReport(resolved.boardId);
+          })
+          .catch((error: unknown) => {
+            console.warn('[board-presence] board resolve failed', error);
+          })
+          .finally(() => {
+            pendingPresenceResolveRef.current = false;
+          });
+      }
+
+      if (!serial || !sessionIdRef.current) return;
       const previousSerial = lastConnectedBoardSerialRef.current;
       if (previousSerial === serial) return;
       lastConnectedBoardSerialRef.current = serial;
@@ -278,9 +491,10 @@ export function BluetoothProvider({
         mode: 'party',
         previousSerialKnown: previousSerial != null,
         boardLayout: boardName ?? '',
+        boardId: resolvedPresenceBoardIdRef.current ?? presenceBoardIdRef.current ?? undefined,
       });
     },
-    [boardName, setSessionBoardSerial],
+    [boardName, setSessionBoardSerial, resolveAndBindBoard, resolveAndBindBoardByConfig, replayPendingWallReport],
   );
 
   // Hold placements for the active board, required by the hook's
@@ -320,6 +534,7 @@ export function BluetoothProvider({
     setIds,
     boardUuid,
     holdsData,
+    analyticsBoardId: presenceBoardId,
     onConnectSuccess: handleConnectSuccess,
   });
 
@@ -508,6 +723,43 @@ export function BluetoothProvider({
     [handleMismatchSwitch, t],
   );
 
+  const undoWallChange = useCallback(async (): Promise<boolean> => {
+    const undoTarget = undoWallChangeTargetRef.current;
+    const boardId = presenceBoardIdRef.current ?? resolvedPresenceBoardIdRef.current;
+    const frames = undoTarget?.frames;
+    if (!presenceEnabledRef.current || !undoTarget || !frames || boardId === null) {
+      return false;
+    }
+
+    lastAcceptedReportSignatureRef.current = null;
+    const writeSucceeded = await sendFramesToBoard(frames, false).catch((error: unknown) => {
+      console.warn('[board-presence] undo BLE resend failed', error);
+      return false;
+    });
+    if (writeSucceeded !== true) {
+      return false;
+    }
+
+    const accepted = await reportClimbForBoardRef
+      .current(boardId, presenceClimbToQueueInput(undoTarget), undoTarget.angle ?? null)
+      .catch((error: unknown) => {
+        console.warn('[board-presence] undo report failed', error);
+        return false;
+      });
+    if (!accepted) {
+      return false;
+    }
+
+    lastAcceptedReportSignatureRef.current = presenceClimbReportSignature(undoTarget);
+    undoWallChangeTargetRef.current = null;
+    track(SHARED_EVENTS.BoardClimbReported, {
+      boardId,
+      climbUuid: undoTarget.climbUuid,
+      inSession: sessionIdRef.current != null,
+    });
+    return true;
+  }, [sendFramesToBoard]);
+
   const clearBoard = useCallback(() => sendFramesToBoard(''), [sendFramesToBoard]);
 
   // Bumped by `reassertWall()` to force the auto-sender to re-push the current
@@ -575,6 +827,7 @@ export function BluetoothProvider({
       sendFramesToBoard,
       clearBoard,
       reassertWall,
+      undoWallChange,
       reconnectSerialForCurrentBoard,
     }),
     [
@@ -585,6 +838,7 @@ export function BluetoothProvider({
       sendFramesToBoard,
       clearBoard,
       reassertWall,
+      undoWallChange,
       reconnectSerialForCurrentBoard,
     ],
   );

@@ -18,6 +18,28 @@
       "gradeRange": " from {{first}} to {{last}}"
     }
   },
+  "boardPresence": {
+    "title": "Now on the wall",
+    "open": "On the wall",
+    "openAria": "See what's on the wall",
+    "openAriaWithClimb": "See what's on the wall: {{name}}",
+    "nowOnWallAnnouncement": "Now on the wall: {{name}}",
+    "close": "Close",
+    "switchBoard": "Switch board",
+    "switchBoardAria": "Switch to a different board",
+    "setByLine": "Set by {{setter}}",
+    "litByLine": "Lit by {{name}}",
+    "emptyTitle": "Nobody's on this wall yet",
+    "emptyBody": "Connect and send a climb to kick off the history.",
+    "historyHeader": "Lit on this wall",
+    "statsHeader": "This wall",
+    "statSent": "sends",
+    "statClimbers": "climbers",
+    "statHardest": "hardest",
+    "statTopGrade": "most sent",
+    "wallChanged": "You changed the wall",
+    "undo": "Undo"
+  },
   "detail": {
     "subtitleSends_one": "{{count}} send",
     "subtitleSends_other": "{{count}} sends",
@@ -324,6 +346,25 @@
       "added": "Climb added to queue",
       "open": "Open",
       "openAria": "Open queue"
+    },
+    "boardPresence": {
+      "title": "Now on the wall",
+      "switchBoard": "Switch board",
+      "switchBoardAria": "Switch to a different board",
+      "close": "Close",
+      "setByLine": "Set by {{setter}}",
+      "litByLine": "Lit by {{name}}",
+      "emptyTitle": "Nobody's on this wall yet",
+      "emptyBody": "Connect and send a climb to kick off the history.",
+      "historyHeader": "Lit on this wall",
+      "statsHeader": "This wall",
+      "statSent": "sends",
+      "statClimbers": "climbers",
+      "statHardest": "hardest",
+      "statTopGrade": "most sent",
+      "wallChanged": "You changed the wall",
+      "undo": "Undo",
+      "undoAria": "Undo the wall change"
     },
     "toast": {
       "sessionEnded": "Session ended"

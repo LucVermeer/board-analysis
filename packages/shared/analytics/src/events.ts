@@ -88,6 +88,15 @@ export const SHARED_EVENTS = {
   OnboardingTourCompleted: 'Onboarding Tour Completed',
   OnboardingTourSkipped: 'Onboarding Tour Skipped',
   BetaVideoAdded: 'Beta Video Added',
+  // Board presence — "now on the wall" (board-level collaboration, keyed on the
+  // shared board_id resolved from the BLE serial). `boardId` is attached as an
+  // event PROPERTY at the call sites — never the raw serial. These self-instrument
+  // the previously-invisible "viewed the wall" / "reported to the wall" behaviour.
+  BoardClimbReported: 'Board Climb Reported',
+  BoardNowPlayingReceived: 'Board Now Playing Received',
+  BoardSheetOpened: 'Board Sheet Opened',
+  BoardHistoryViewed: 'Board History Viewed',
+  BoardSwapInvokedFromSheet: 'Board Swap Invoked From Sheet',
   // External platform integrations (Apple Health, Strava). Props:
   // { integration: 'apple_health' | 'strava', trigger?: 'auto' | 'manual',
   //   enabled?: boolean }

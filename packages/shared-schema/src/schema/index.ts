@@ -19,6 +19,7 @@ import { queriesTypeDefs } from './queries';
 import { mutationsTypeDefs } from './mutations';
 import { subscriptionsTypeDefs } from './subscriptions';
 import { eventsTypeDefs } from './events';
+import { boardPresenceTypeDefs } from './board-presence';
 import { controllerTypeDefs } from './controller';
 import { feedbackTypeDefs } from './feedback';
 import { betaLinksTypeDefs } from './beta-links';
@@ -50,4 +51,5 @@ export const typeDefs = [
   eventsTypeDefs,
   controllerTypeDefs,
   feedbackTypeDefs,
+  boardPresenceTypeDefs,
 ];

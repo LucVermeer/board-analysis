@@ -9,6 +9,7 @@ const cfg = vi.hoisted(() => ({
   onClimbsTab: true,
   insideTabs: true,
   currentClimbQueueItem: { climb: { uuid: 'c1', angle: 40 } } as unknown as ClimbQueueItem | null,
+  wallClimb: null as null | { uuid: string; angle: number },
   variant: 'liquidGlass' as 'liquidGlass' | 'material',
   measuredTabBarHeight: null as number | null,
   nativeAccessoryActive: false,
@@ -96,9 +97,17 @@ vi.mock('../ClimbCapsule', () => ({
       endAction,
     ),
 }));
-vi.mock('../LogAscentFab', () => ({ LogAscentFab: () => createElement('div', { 'data-tick': 'true' }) }));
+vi.mock('../use-wall-or-queue-climb', () => ({
+  useWallOrQueueCurrentClimb: (localClimb: { uuid: string; angle: number } | null) => cfg.wallClimb ?? localClimb,
+  useIsWallPinned: () => cfg.wallClimb != null,
+}));
+vi.mock('../LogAscentFab', () => ({
+  LogAscentFab: ({ climb }: { climb: { uuid: string } }) =>
+    createElement('div', { 'data-tick': 'true', 'data-climb-uuid': climb.uuid }),
+}));
 vi.mock('../LogAscentToolbarButton', () => ({
-  LogAscentToolbarButton: () => createElement('div', { 'data-tick-inline': 'true' }),
+  LogAscentToolbarButton: ({ climb }: { climb: { uuid: string } }) =>
+    createElement('div', { 'data-tick-inline': 'true', 'data-climb-uuid': climb.uuid }),
 }));
 
 import { PersistentQueueBar } from '../persistent-queue-bar';
@@ -108,6 +117,7 @@ describe('PersistentQueueBar', () => {
     cfg.onClimbsTab = true;
     cfg.insideTabs = true;
     cfg.currentClimbQueueItem = { climb: { uuid: 'c1', angle: 40 } } as unknown as ClimbQueueItem;
+    cfg.wallClimb = null;
     cfg.variant = 'liquidGlass';
     cfg.measuredTabBarHeight = null;
     cfg.nativeAccessoryActive = false;
@@ -166,6 +176,14 @@ describe('PersistentQueueBar', () => {
     expect(container.querySelector('[data-animated]')?.getAttribute('data-style')).toContain('"right":0');
     expect(container.querySelector('[data-tick-inline]')).not.toBeNull();
     expect(container.querySelector('[data-tick]')).toBeNull();
+  });
+
+  it('uses the wall climb for the fallback tick when the local queue is empty', () => {
+    cfg.currentClimbQueueItem = null;
+    cfg.wallClimb = { uuid: 'wall-climb', angle: 40 };
+    const { container } = render(<PersistentQueueBar />);
+    expect(container.querySelector('[data-capsule]')).not.toBeNull();
+    expect(container.querySelector('[data-tick]')?.getAttribute('data-climb-uuid')).toBe('wall-climb');
   });
 
   it('docks the Material bar on the measured tab-bar top, tucked under the hairline', () => {

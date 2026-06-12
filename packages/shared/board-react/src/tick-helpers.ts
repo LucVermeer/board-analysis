@@ -19,11 +19,14 @@ export type SaveTickOptions = {
   sizeId?: number;
   setIds?: string;
   /**
-   * Specific board entity this tick is on. When provided, takes precedence
-   * over `(layoutId, sizeId, setIds)` resolution and lets ticks attach to a
-   * board the climber doesn't own (e.g. a seeded gym board).
+   * Specific board entity this tick is on, by uuid. When provided, takes
+   * precedence over `(layoutId, sizeId, setIds)` resolution and lets ticks
+   * attach to a board the climber doesn't own (e.g. a seeded gym board).
    */
   boardUuid?: string;
+  // Resolved shared board id (from resolveBoardForSerial) for the BLE-connected
+  // wall; used when no boardUuid is given.
+  boardId?: number | null;
   videoUrl?: string;
 };
 

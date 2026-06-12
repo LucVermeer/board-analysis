@@ -32,6 +32,7 @@ export const SaveTickInputSchema = z
     sizeId: z.number().int().positive().optional(),
     setIds: z.string().min(1).optional(),
     boardUuid: UUIDSchema.optional(),
+    boardId: z.number().int().positive().optional().nullable(),
     videoUrl: z.string().max(500).regex(BETA_VIDEO_URL_REGEX, BETA_VIDEO_URL_VALIDATION_MESSAGE).optional().nullable(),
   })
   .refine(

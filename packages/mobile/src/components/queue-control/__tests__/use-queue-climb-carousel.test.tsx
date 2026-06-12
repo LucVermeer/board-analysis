@@ -30,6 +30,10 @@ const nav = vi.hoisted(() => ({
 // gated canSwipeNext/canSwipePrevious flags fed into the pan gesture.
 const gestureCalls = vi.hoisted(() => ({ last: null as Record<string, unknown> | null }));
 
+// Board-presence override state: when pinned, the accessory shows the wall climb,
+// so the carousel must suppress prev/next stepping and route tap to that climb.
+const wall = vi.hoisted(() => ({ pinned: false, climb: null as ClimbQueueItem['climb'] | null }));
+
 vi.mock('../../../providers/queue-provider', () => ({
   useQueue: () => ({ state: queue.state, nextClimb: queue.nextClimb, previousClimb: queue.previousClimb }),
   usePlaylistSuggestionSource: () => null,
@@ -71,6 +75,10 @@ vi.mock('../../play-drawer/use-carousel-gesture', () => ({
 
 vi.mock('../../../hooks/use-reduce-motion', () => ({ useReduceMotion: () => false }));
 vi.mock('../../../lib/haptics', () => ({ hapticLight: vi.fn(), hapticSelection: vi.fn() }));
+vi.mock('../use-wall-or-queue-climb', () => ({
+  useWallOrQueueCurrentClimb: (localClimb: unknown) => wall.climb ?? localClimb,
+  useIsWallPinned: () => wall.pinned,
+}));
 
 import { useQueueClimbCarousel } from '../use-queue-climb-carousel';
 
@@ -105,6 +113,8 @@ describe('useQueueClimbCarousel party-preview gating', () => {
     queue.previousClimb.mockClear();
     queue.isPartyPreviewOnly = false;
     gestureCalls.last = null;
+    wall.pinned = false;
+    wall.climb = null;
     const current = makeItem('current');
     const next = makeItem('next');
     queue.state.currentClimbQueueItem = current;
@@ -124,6 +134,19 @@ describe('useQueueClimbCarousel party-preview gating', () => {
     expect(result.current.canNext).toBe(true);
     expect(result.current.canPrevious).toBe(true);
     expect(result.current.swipeAccessibilityActions.map((action) => action.name)).toEqual(['previous', 'next']);
+  });
+
+  it('suppresses prev/next stepping while the accessory is pinned to the wall feed', () => {
+    wall.pinned = true;
+    const { result } = renderHook(() => useQueueClimbCarousel());
+
+    // Swipe would step the invisible local queue while the pinned label never
+    // moves (looks dead), so prev/next + the a11y actions are disabled.
+    expect(result.current.canNext).toBe(false);
+    expect(result.current.canPrevious).toBe(false);
+    expect(result.current.swipeAccessibilityActions).toHaveLength(0);
+    expect(gestureCalls.last?.canSwipeNext).toBe(false);
+    expect(gestureCalls.last?.canSwipePrevious).toBe(false);
   });
 
   it('routes VoiceOver prev/next actions through the shared step handlers', () => {
@@ -183,7 +206,7 @@ describe('useQueueClimbCarousel party-preview gating', () => {
       result.current.onLayout({ nativeEvent: { layout: { width: 0 } } } as LayoutChangeEvent);
     });
 
-    expect(result.current.canPeek).toBe(true);      // configuredWidth=320 still in effect
+    expect(result.current.canPeek).toBe(true); // configuredWidth=320 still in effect
     expect(gestureCalls.last?.boardWidth).toBe(320); // widthSV not overwritten to 0
   });
 

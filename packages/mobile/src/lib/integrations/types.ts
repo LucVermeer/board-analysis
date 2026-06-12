@@ -21,8 +21,6 @@ export type IntegrationDefinition = {
   kind: 'device' | 'platform';
   // Whether this integration can run on the current platform/device at all.
   isSupported: () => boolean;
-  // i18n key the UI uses for the card title. The lib never renders it.
-  titleKey: string;
   // Fire-and-forget export hook invoked when a session ends. Only device
   // integrations define it — platform uploads run server-side, so Strava omits
   // it. A rejection here must never surface to the user (the registry wraps it).

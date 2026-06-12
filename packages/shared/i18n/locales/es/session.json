@@ -18,6 +18,28 @@
       "gradeRange": " de {{first}} a {{last}}"
     }
   },
+  "boardPresence": {
+    "title": "Ahora en el muro",
+    "open": "En el muro",
+    "openAria": "Ver qué hay en el muro",
+    "openAriaWithClimb": "Ver qué hay en el muro: {{name}}",
+    "nowOnWallAnnouncement": "Ahora en el muro: {{name}}",
+    "close": "Cerrar",
+    "switchBoard": "Cambiar de muro",
+    "switchBoardAria": "Cambiar a otro muro",
+    "setByLine": "Abierto por {{setter}}",
+    "litByLine": "Encendido por {{name}}",
+    "emptyTitle": "Aún no hay nadie en este muro",
+    "emptyBody": "Conéctate y envía un bloque para empezar el historial.",
+    "historyHeader": "Encendidos en este muro",
+    "statsHeader": "Este muro",
+    "statSent": "encadenes",
+    "statClimbers": "escaladores",
+    "statHardest": "más difícil",
+    "statTopGrade": "más repetido",
+    "wallChanged": "Has cambiado el muro",
+    "undo": "Deshacer"
+  },
   "detail": {
     "subtitleSends_one": "{{count}} encadene",
     "subtitleSends_other": "{{count}} encadenes",
@@ -324,6 +346,25 @@
       "added": "Bloque añadido a la cola",
       "open": "Abrir",
       "openAria": "Abrir cola"
+    },
+    "boardPresence": {
+      "title": "Ahora en el muro",
+      "switchBoard": "Cambiar de muro",
+      "switchBoardAria": "Cambiar a otro muro",
+      "close": "Cerrar",
+      "setByLine": "Abierto por {{setter}}",
+      "litByLine": "Encendido por {{name}}",
+      "emptyTitle": "Aún no hay nadie en este muro",
+      "emptyBody": "Conéctate y envía un bloque para empezar el historial.",
+      "historyHeader": "Encendidos en este muro",
+      "statsHeader": "Este muro",
+      "statSent": "encadenes",
+      "statClimbers": "escaladores",
+      "statHardest": "más difícil",
+      "statTopGrade": "más repetido",
+      "wallChanged": "Has cambiado el muro",
+      "undo": "Deshacer",
+      "undoAria": "Deshacer el cambio del muro"
     },
     "toast": {
       "sessionEnded": "Sesión terminada"

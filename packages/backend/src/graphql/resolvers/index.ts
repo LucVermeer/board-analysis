@@ -48,6 +48,7 @@ import { socialRoleQueries, socialRoleMutations } from './social/roles';
 import { socialCommunitySettingsQueries, socialCommunitySettingsMutations } from './social/community-settings';
 import { newClimbSubscriptionResolvers } from './social/new-climb-subscriptions';
 import { newClimbFeedSubscription } from './social/new-climb-feed-subscription';
+import { boardPresenceResolvers } from './board-presence';
 import { feedbackMutations } from './feedback/mutations';
 import { integrationQueries } from './integrations/queries';
 import { integrationMutations } from './integrations/mutations';
@@ -85,6 +86,7 @@ export const resolvers = {
     ...socialCommunitySettingsQueries,
     ...newClimbSubscriptionResolvers.Query,
     ...betaLinkQueries,
+    ...boardPresenceResolvers.Query,
     ...integrationQueries,
   },
 
@@ -111,6 +113,7 @@ export const resolvers = {
     ...newClimbSubscriptionResolvers.Mutation,
     ...sessionEditMutations,
     ...feedbackMutations,
+    ...boardPresenceResolvers.Mutation,
     ...integrationMutations,
   },
 
@@ -121,6 +124,7 @@ export const resolvers = {
     ...socialNotificationSubscriptions,
     ...socialCommentSubscriptions,
     ...newClimbFeedSubscription,
+    ...boardPresenceResolvers.Subscription,
   },
 
   // Field-level resolvers
@@ -140,4 +144,5 @@ export const resolvers = {
       return obj.__typename;
     },
   },
+  BoardPresenceEvent: boardPresenceResolvers.BoardPresenceEvent,
 };

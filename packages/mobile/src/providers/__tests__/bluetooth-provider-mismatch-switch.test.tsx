@@ -126,12 +126,36 @@ vi.mock('../queue-provider', () => ({
     confirmClimbOnWall: queue.confirmClimbOnWall,
     setSessionBoardSerial: queue.setSessionBoardSerial,
   }),
+  useIsPartyPreviewOnly: () => false,
 }));
 
 vi.mock('../../lib/board-details', () => ({
   getBoardRenderData: vi.fn(() => ({
     holdsData: [{ id: 100, mirroredHoldId: 200, cx: 0, cy: 0, r: 1 }],
   })),
+}));
+
+// BluetoothProvider now reads board presence; mock it (and the wall context +
+// undo snackbar) so the test doesn't pull in the ws-client → expo-secure-store
+// chain. This suite doesn't exercise board presence.
+vi.mock('@boardsesh/board-presence-react', () => ({
+  useBoardPresenceCurrent: () => ({ currentClimb: null, previousClimb: null, undoTarget: null, isLive: false }),
+}));
+vi.mock('../board-presence-provider', () => ({
+  useBoardPresenceControls: () => ({
+    enabled: false,
+    boardId: null,
+    resolveAndBindBoard: vi.fn(async () => null),
+    resolveAndBindBoardByConfig: vi.fn(async () => null),
+    reportClimbForBoard: vi.fn(async () => true),
+  }),
+}));
+vi.mock('../queue-snackbar-provider', () => ({
+  useQueueSnackbar: () => ({ showUndoWallChangeSnackbar: vi.fn() }),
+}));
+// toClimbInput pulls in expo-crypto (randomUUID); stub it (board presence is off here).
+vi.mock('../../lib/climb-to-queue-item', () => ({
+  toClimbInput: (climb: { uuid: string }) => ({ uuid: climb.uuid }),
 }));
 
 import { BluetoothProvider } from '../bluetooth-provider';

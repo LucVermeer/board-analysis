@@ -281,6 +281,13 @@ vi.mock('../LogAscentToolbarButton', () => ({
     }),
 }));
 
+// Board-presence source flip: identity passthrough (flag off / no wall feed) so
+// the row renders the local queue head exactly as today.
+vi.mock('../use-wall-or-queue-climb', () => ({
+  useWallOrQueueCurrentClimb: (localClimb: unknown) => localClimb,
+  useIsWallPinned: () => false,
+}));
+
 import { NativeAccessoryClimbRow } from '../NativeAccessoryClimbRow';
 
 function makeClimb(overrides: Partial<Climb> = {}): Climb {

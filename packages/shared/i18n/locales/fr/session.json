@@ -18,6 +18,28 @@
       "gradeRange": " de {{first}} à {{last}}"
     }
   },
+  "boardPresence": {
+    "title": "Sur le mur maintenant",
+    "open": "Sur le mur",
+    "openAria": "Voir ce qui est sur le mur",
+    "openAriaWithClimb": "Voir ce qui est sur le mur : {{name}}",
+    "nowOnWallAnnouncement": "Sur le mur maintenant : {{name}}",
+    "close": "Fermer",
+    "switchBoard": "Changer de mur",
+    "switchBoardAria": "Passer à un autre mur",
+    "setByLine": "Ouvert par {{setter}}",
+    "litByLine": "Allumé par {{name}}",
+    "emptyTitle": "Personne sur ce mur pour l'instant",
+    "emptyBody": "Connecte-toi et envoie un bloc pour lancer l'historique.",
+    "historyHeader": "Allumés sur ce mur",
+    "statsHeader": "Ce mur",
+    "statSent": "enchaînements",
+    "statClimbers": "grimpeurs",
+    "statHardest": "le plus dur",
+    "statTopGrade": "la plus fréquente",
+    "wallChanged": "Tu as changé le mur",
+    "undo": "Annuler"
+  },
   "detail": {
     "subtitleSends_one": "{{count}} enchaînement",
     "subtitleSends_other": "{{count}} enchaînements",
@@ -324,6 +346,25 @@
       "added": "Bloc ajouté à la file",
       "open": "Ouvrir",
       "openAria": "Ouvrir la file"
+    },
+    "boardPresence": {
+      "title": "Sur le mur maintenant",
+      "switchBoard": "Changer de mur",
+      "switchBoardAria": "Passer à un autre mur",
+      "close": "Fermer",
+      "setByLine": "Ouvert par {{setter}}",
+      "litByLine": "Allumé par {{name}}",
+      "emptyTitle": "Personne sur ce mur pour l'instant",
+      "emptyBody": "Connecte-toi et envoie un bloc pour lancer l'historique.",
+      "historyHeader": "Allumés sur ce mur",
+      "statsHeader": "Ce mur",
+      "statSent": "enchaînements",
+      "statClimbers": "grimpeurs",
+      "statHardest": "le plus dur",
+      "statTopGrade": "la plus fréquente",
+      "wallChanged": "Tu as changé le mur",
+      "undo": "Annuler",
+      "undoAria": "Annuler le changement du mur"
     },
     "toast": {
       "sessionEnded": "Session terminée"

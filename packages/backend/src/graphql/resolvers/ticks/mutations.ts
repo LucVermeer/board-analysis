@@ -9,6 +9,8 @@ import { applyRateLimit, requireAuthenticated, validateInput, isNoMatchClimb } f
 import { getConsensusDifficultyName } from '../shared/sql-expressions';
 import { SaveTickInputSchema, UpdateTickInputSchema, AttachBetaLinkInputSchema } from '../../../validation/schemas';
 import { resolveBoardFromPath } from '../social/boards';
+import { findActiveBoardById, isBoardPresenceEnabled, normalizeSetIds } from '../board-presence/shared';
+import { queueBoardStatsPublish } from '../board-presence/stats';
 import { publishSocialEvent } from '../../../events';
 import { publishDebouncedSessionStats } from '../sessions/debounced-stats-publisher';
 import { queueClimbStatsRecompute } from './debounced-climb-stats-publisher';
@@ -36,21 +38,6 @@ export function videoUrlForTickStatus(status: TickStatus, videoUrl: string | nul
     case 'attempt':
       return null;
   }
-}
-
-// Hold-set IDs are stored and transported as a comma-separated string but the
-// order isn't part of the identity — `15,20` and `20,15` describe the same
-// configuration. Normalize before comparing so a client serializing in a
-// different order doesn't trip the boardUuid consistency check.
-export function normalizeSetIds(setIds: string): string {
-  return setIds
-    .split(',')
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0)
-    .map(Number)
-    .filter((n) => Number.isFinite(n))
-    .sort((a, b) => a - b)
-    .join(',');
 }
 
 export type ShortcodeConflict = { kind: 'none' } | { kind: 'same-climb' } | { kind: 'cross-climb'; climbName: string };
@@ -319,12 +306,17 @@ export const tickMutations = {
     const now = new Date().toISOString();
     const climbedAt = new Date(validatedInput.climbedAt).toISOString();
 
-    // Resolve board ID. Prefer the explicit boardUuid coming from a named-board
-    // route (`/b/<slug>/...`) so ticks attach to that exact board entity even
-    // when the climber doesn't own it (e.g. a seeded gym board owned by the
-    // system user). Fall back to the user-owned config lookup for the legacy
-    // `/[board_name]/[layout_id]/...` route, which doesn't reference a
-    // specific board entity.
+    // Resolve the tick's board_id. Two explicit-board inputs feed the same FK,
+    // each from a different surface:
+    //  1. boardUuid — a named-board route (`/b/<slug>/...`); attaches to that
+    //     exact board entity even when the climber doesn't own it (e.g. a
+    //     seeded gym board owned by the system user). Best-effort: a deleted or
+    //     stale uuid records the tick unassociated rather than rejecting it, and
+    //     does NOT fall back to config resolution.
+    //  2. boardId — the board-presence connected wall (resolveBoardForSerial),
+    //     flag-gated. On a stale/mismatched id we warn and fall back to the
+    //     config lookup rather than surfacing a raw FK/type mismatch.
+    // Absent both, the legacy `/[board_name]/[layout_id]/...` config lookup runs.
     let boardId: number | null = null;
     if (validatedInput.boardUuid) {
       const [board] = await db
@@ -345,7 +337,39 @@ export const tickMutations = {
       if (board) {
         boardId = board.id;
       }
-    } else if (validatedInput.layoutId && validatedInput.sizeId && validatedInput.setIds) {
+    } else if (validatedInput.boardId != null && isBoardPresenceEnabled()) {
+      const explicitBoard = await findActiveBoardById(validatedInput.boardId);
+      // Accept the explicit wall board only when its FULL config matches the
+      // tick's target (type + layout + size + set). A stale presence boardId
+      // from a different layout/size/set would otherwise stamp this tick onto
+      // the wrong wall and corrupt that board's presence stats. Set ids are
+      // compared normalized so order/format differences don't reject a match.
+      const configMatches =
+        explicitBoard != null &&
+        explicitBoard.boardType === validatedInput.boardType &&
+        explicitBoard.layoutId === validatedInput.layoutId &&
+        explicitBoard.sizeId === validatedInput.sizeId &&
+        normalizeSetIds(explicitBoard.setIds) === normalizeSetIds(validatedInput.setIds);
+      if (configMatches) {
+        boardId = explicitBoard.id;
+      } else {
+        logger.warn(
+          `[board-presence] Ignoring tick boardId ${validatedInput.boardId} — config mismatch for ${validatedInput.boardType}`,
+        );
+      }
+    }
+
+    // Legacy `/[board_name]/[layout_id]/...` route (no specific board entity),
+    // plus the fallback when a board-presence boardId didn't match. A
+    // best-effort boardUuid that resolved to nothing is intentionally left
+    // unassociated (handled above), so it does not fall through to here.
+    if (
+      boardId == null &&
+      !validatedInput.boardUuid &&
+      validatedInput.layoutId &&
+      validatedInput.sizeId &&
+      validatedInput.setIds
+    ) {
       boardId = await resolveBoardFromPath(
         userId,
         validatedInput.boardType,
@@ -489,6 +513,18 @@ export const tickMutations = {
     // fields stay in sync with boardsesh_ticks. Debounced so a burst of saves
     // on the same climb collapses into one recompute.
     queueClimbStatsRecompute(tick.boardType, tick.climbUuid, tick.angle);
+
+    // Board presence: a tick on a connected wall changes that wall's durable
+    // stats (sends / climbers / hardest / top grade). Push the freshly
+    // recomputed snapshot over the board's live `boardNowPlaying` feed so every
+    // watcher's stat tiles update without re-fetching. Debounced per board so a
+    // burst of logs collapses into one recompute+publish and so concurrent
+    // ticks can't pair a stale snapshot with a higher seq. Runs after the tick
+    // has committed (the recompute sees it) and self-guards, so a presence push
+    // can never fail the tick that triggered it.
+    if (boardId != null && isBoardPresenceEnabled()) {
+      queueBoardStatsPublish(boardId, tick.boardType);
+    }
 
     logger.info(
       `[saveTick] saved tick=${tick.uuid} user=${userId} ` +

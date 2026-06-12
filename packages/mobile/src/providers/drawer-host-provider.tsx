@@ -13,6 +13,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { randomUUID } from 'expo-crypto';
+import { router } from 'expo-router';
 import type { BoardName, Climb } from '@boardsesh/shared-schema';
 import { buildBoardPath } from '@boardsesh/board-config';
 import type { Climb as QueueClimb, ClimbQueueItem, PlaylistSuggestionSource } from '@boardsesh/queue';
@@ -21,8 +22,11 @@ import { PlayDrawer, type PlayDrawerHandle, type PlayDrawerOpenOptions } from '.
 import { LogAscentSheet } from '../components/LogAscentSheet';
 import { QueueSheet, type QueueSheetHandle } from '../components/play-drawer/QueueSheet';
 import { QueueAddedSnackbar } from '../components/QueueAddedSnackbar';
+import { UndoWallChangeSnackbar } from '../components/board-presence/UndoWallChangeSnackbar';
+import { BoardSheet, type BoardSheetHandle } from '../components/board-presence/BoardSheet';
 import type { QueueItemRowBoard } from '../components/QueueItemRow';
 import { useActiveBoard, useSetActiveBoard } from '../lib/graphql/use-active-board';
+import { formatActiveBoardLabel } from '../lib/boards/active-board-label';
 import { track } from '../lib/analytics';
 import { ClimbActionsSheet } from '../components/ClimbActionsSheet';
 import { AddToPlaylistSheet } from '../components/AddToPlaylistSheet';
@@ -31,6 +35,8 @@ import { favoritesStore } from '@boardsesh/climb-actions';
 import { climbToQueueItem } from '../lib/climb-to-queue-item';
 import { useIsPartyPreviewOnly, useQueueActions, useQueueSessionControls } from './queue-provider';
 import { useQueueSnackbar } from './queue-snackbar-provider';
+import { useBoardPresenceControls } from './board-presence-provider';
+import { useOptionalBluetoothContext } from './bluetooth-provider';
 
 export type BoardConfig = {
   boardName: string;
@@ -81,6 +87,10 @@ type DrawerHostValue = {
   /** Opens the queue list sheet (from the play-drawer queue button or the
    *  "Climb added to queue" snackbar's Open action). */
   openQueueSheet: () => void;
+  /** Opens the board sheet ("now on the wall" — wall feed, history, stats, and a
+   *  separate Switch-board control). Wired to the BoardPill when the
+   *  `board-presence` flag is on. */
+  openBoardSheet: () => void;
 };
 
 const DrawerHostContext = createContext<DrawerHostValue | null>(null);
@@ -98,6 +108,7 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
   // a silent no-op in this app, so we present/dismiss synchronously from the
   // handler — the same pattern PlayDrawer uses.
   const queueSheetRef = useRef<QueueSheetHandle>(null);
+  const boardSheetRef = useRef<BoardSheetHandle>(null);
   const { data: activeBoard } = useActiveBoard();
   const [boardConfigOverride, setBoardConfigOverride] = useState<BoardConfig | null>(null);
   const [logAscentInput, setLogAscentInput] = useState<LogAscentInput | null>(null);
@@ -107,7 +118,18 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
   const { sessionId } = useQueueSessionControls();
   const isPartyPreviewOnly = useIsPartyPreviewOnly();
   const setActiveBoard = useSetActiveBoard();
-  const { visible: snackbarVisible, nonce: snackbarNonce, dismissSnackbar } = useQueueSnackbar();
+  const {
+    visible: snackbarVisible,
+    nonce: snackbarNonce,
+    dismissSnackbar,
+    undoWallChangeVisible,
+    undoWallChangeNonce,
+    dismissUndoWallChangeSnackbar,
+  } = useQueueSnackbar();
+  const bluetooth = useOptionalBluetoothContext();
+  const { boardId: boardPresenceBoardId } = useBoardPresenceControls();
+  const boardPresenceBoardIdRef = useRef(boardPresenceBoardId);
+  boardPresenceBoardIdRef.current = boardPresenceBoardId;
   const { mutate: toggleFavoriteMutate } = useToggleFavorite();
   const { data: profile } = useProfile();
 
@@ -291,6 +313,18 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
   const requestCloseQueueSheet = useCallback(() => {
     queueSheetRef.current?.dismiss();
   }, []);
+
+  // Board sheet: present imperatively via the ref, exactly like the queue sheet
+  // and Play Drawer. gorhom's present() from a `visible`-prop effect is a silent
+  // no-op in this build.
+  const openBoardSheet = useCallback(() => {
+    track(SHARED_EVENTS.BoardSheetOpened, {
+      boardId: boardPresenceBoardIdRef.current ?? undefined,
+      source: 'board_pill',
+    });
+    boardSheetRef.current?.present();
+  }, []);
+  const requestCloseBoardSheet = useCallback(() => boardSheetRef.current?.dismiss(), []);
   // Snackbar "Open": dismiss the snackbar, then open the queue sheet.
   const handleSnackbarOpen = useCallback(() => {
     dismissSnackbar();
@@ -371,6 +405,29 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
     [sessionId],
   );
 
+  // Switch-board control inside the board sheet: dismiss the sheet, then open
+  // the existing board switcher (today's BoardPill destination).
+  const handleSwitchBoardFromSheet = useCallback(() => {
+    track(SHARED_EVENTS.BoardSwapInvokedFromSheet, { boardId: boardPresenceBoardIdRef.current ?? undefined });
+    requestCloseBoardSheet();
+    router.push('/boards');
+  }, [requestCloseBoardSheet]);
+
+  // Undo a wall change YOU just caused. Queue navigation is untouched; the
+  // Bluetooth provider re-lights the captured target over BLE first, then
+  // re-reports it to board presence.
+  const handleUndoWallChange = useCallback(() => {
+    if (!bluetooth) {
+      dismissUndoWallChangeSnackbar();
+      return;
+    }
+    void bluetooth.undoWallChange().finally(() => {
+      dismissUndoWallChangeSnackbar();
+    });
+  }, [bluetooth, dismissUndoWallChangeSnackbar]);
+
+  const boardSheetLabel = useMemo(() => formatActiveBoardLabel(activeBoard), [activeBoard]);
+
   const value = useMemo<DrawerHostValue>(
     () => ({
       boardConfig: activeBoardConfig,
@@ -380,6 +437,7 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
       closeClimbActions,
       openAddToPlaylist,
       openQueueSheet,
+      openBoardSheet,
     }),
     [
       activeBoardConfig,
@@ -389,6 +447,7 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
       closeClimbActions,
       openAddToPlaylist,
       openQueueSheet,
+      openBoardSheet,
     ],
   );
 
@@ -458,11 +517,24 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
           onTickHistory={handleQueueTickHistory}
         />
       ) : null}
+      <BoardSheet
+        ref={boardSheetRef}
+        boardLabel={boardSheetLabel}
+        boardConfig={activeBoardConfig}
+        onClose={requestCloseBoardSheet}
+        onSwitchBoard={handleSwitchBoardFromSheet}
+      />
       <QueueAddedSnackbar
         visible={snackbarVisible}
         nonce={snackbarNonce}
         onDismiss={dismissSnackbar}
         onOpen={handleSnackbarOpen}
+      />
+      <UndoWallChangeSnackbar
+        visible={undoWallChangeVisible}
+        nonce={undoWallChangeNonce}
+        onDismiss={dismissUndoWallChangeSnackbar}
+        onUndo={handleUndoWallChange}
       />
     </DrawerHostContext.Provider>
   );

@@ -20,6 +20,7 @@ import { useDrawerHost, type BoardConfig } from '../../providers/drawer-host-pro
 import { AccessoryBarSurface, type AccessoryBarSurfaceTreatment } from './AccessoryBarSurface';
 import { AccessoryClimbThumbnail } from './AccessoryClimbThumbnail';
 import { useQueueClimbCarousel } from './use-queue-climb-carousel';
+import { useWallOrQueueCurrentClimb } from './use-wall-or-queue-climb';
 
 type ClimbLabelProps = {
   climb: Climb;
@@ -93,7 +94,10 @@ export function ClimbCapsule({
     onAccessibilityAction,
   } = useQueueClimbCarousel();
 
-  const currentClimb = currentItem?.climb ?? null;
+  // Source-of-truth flip: show the wall's lit climb when a board feed is live
+  // (flag-gated), else the local queue head. Display + tick only — the carousel
+  // gesture/peek keep stepping the local queue, so swipe is unchanged.
+  const currentClimb = useWallOrQueueCurrentClimb(currentItem?.climb ?? null);
   const previousClimb = previousItem?.climb ?? null;
   const nextClimb = nextItem?.climb ?? null;
   // Board art needs the active board config; matches the iOS 26 native accessory.

@@ -11,7 +11,6 @@ export const INTEGRATIONS: IntegrationDefinition[] = [
     id: 'apple-health',
     kind: 'device',
     isSupported: () => Platform.OS === 'ios',
-    titleKey: 'integrations.appleHealth.title',
     autoExportOnSessionEnd: async (summary, ctx) => {
       await autoSaveToAppleHealth(summary, ctx);
     },
@@ -21,7 +20,6 @@ export const INTEGRATIONS: IntegrationDefinition[] = [
     kind: 'platform',
     // Strava is a server-side OAuth upload, available on every platform.
     isSupported: () => true,
-    titleKey: 'integrations.strava.title',
     // No autoExportOnSessionEnd: the backend performs the upload when auto-sync
     // is enabled server-side. Nothing to run on-device at session end.
   },

@@ -41,6 +41,11 @@ vi.mock('../../../lib/graphql/hooks', () => ({ useGrades: () => ({ data: [] }) }
 vi.mock('@boardsesh/board-config', () => ({ toBoardName: (name: string) => name }));
 vi.mock('@boardsesh/analytics', () => ({ SHARED_EVENTS: {} }));
 vi.mock('../../../providers/toast-provider', () => ({ useToast: () => ({ showToast: vi.fn() }) }));
+// QuickTickBar reads board-presence flags; mock the provider so the test doesn't
+// pull in its ws-client → expo-secure-store chain (un-mockable native module).
+vi.mock('../../../providers/board-presence-provider', () => ({
+  useBoardPresenceControls: () => ({ enabled: false, boardId: null }),
+}));
 vi.mock('../../../lib/analytics', () => ({ track: vi.fn() }));
 vi.mock('../../../lib/haptics', () => ({ hapticSuccess: vi.fn(), hapticError: vi.fn() }));
 vi.mock('../../../theme/colors', () => ({ brandColors: { success: '#047857' } }));

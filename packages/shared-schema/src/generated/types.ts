@@ -331,6 +331,25 @@ export type BetaLinkPreview = {
   username?: Maybe<Scalars['String']['output']>;
 };
 
+/**
+ * Event: the wall was cleared (best-effort — only emitted on a deliberate
+ * disconnect; an involuntary BLE drop leaves the last climb sticky).
+ */
+export type BoardClimbCleared = {
+  __typename?: 'BoardClimbCleared';
+  /** ISO 8601 timestamp when the wall was cleared */
+  clearedAt: Scalars['String']['output'];
+  /** Monotonic per-board sequence number */
+  seq: Scalars['Int']['output'];
+};
+
+/** Event: a climb was set (lit) on the wall. */
+export type BoardClimbSet = {
+  __typename?: 'BoardClimbSet';
+  /** The climb now on the wall */
+  climb: BoardPresenceClimb;
+};
+
 /** Board leaderboard result. */
 export type BoardLeaderboard = {
   __typename?: 'BoardLeaderboard';
@@ -382,6 +401,60 @@ export type BoardLeaderboardInput = {
 };
 
 /**
+ * A climb reported as lit on a physical board. Denormalised for display (mirrors
+ * the ESP32 LedUpdate payload) plus server-derived attribution and ordering.
+ */
+export type BoardPresenceClimb = {
+  __typename?: 'BoardPresenceClimb';
+  /** Board angle in degrees. Null means unspecified (0 is a valid angle). */
+  angle?: Maybe<Scalars['Int']['output']>;
+  /** UUID of the climb lit on the wall */
+  climbUuid: Scalars['String']['output'];
+  /** Aurora frames string for rendering a thumbnail */
+  frames?: Maybe<Scalars['String']['output']>;
+  /** Grade name (e.g. V6 / 7A+) at the reported angle */
+  grade?: Maybe<Scalars['String']['output']>;
+  /** Grade colour as a hex string */
+  gradeColor?: Maybe<Scalars['String']['output']>;
+  /** Climb name */
+  name?: Maybe<Scalars['String']['output']>;
+  /** Queue item UUID that triggered the send, if any (disambiguates duplicates) */
+  queueItemUuid?: Maybe<Scalars['String']['output']>;
+  /** ISO 8601 timestamp when the report was received (server-stamped) */
+  sentAt: Scalars['String']['output'];
+  /** Avatar URL of the user who lit it. Server-derived. */
+  sentByAvatarUrl?: Maybe<Scalars['String']['output']>;
+  /** Display name of the Boardsesh user who lit it. Server-derived from the caller; never client-supplied. */
+  sentByDisplayName?: Maybe<Scalars['String']['output']>;
+  /** Monotonic per-board sequence number for ordering and late-joiner dedup */
+  seq: Scalars['Int']['output'];
+  /** Catalog route setter display name (who set the climb) */
+  setter?: Maybe<Scalars['String']['output']>;
+};
+
+/** Union of board-presence events streamed by `boardNowPlaying`. */
+export type BoardPresenceEvent = BoardClimbCleared | BoardClimbSet | BoardStatsUpdated;
+
+/**
+ * Lightweight live + durable stats for a board's wall feed. Durable counts are
+ * derived from `boardsesh_ticks` stamped with this board_id; "right now" comes
+ * from the live Redis window.
+ */
+export type BoardPresenceStats = {
+  __typename?: 'BoardPresenceStats';
+  /** Distinct climbs sent/logged on this wall */
+  climbsSentCount: Scalars['Int']['output'];
+  /** Distinct climbers seen on this wall */
+  distinctClimbersCount: Scalars['Int']['output'];
+  /** Hardest grade sent on this wall (name), if any */
+  hardestGrade?: Maybe<Scalars['String']['output']>;
+  /** ISO 8601 timestamp of the most recent send on this wall */
+  lastSentAt?: Maybe<Scalars['String']['output']>;
+  /** Most-sent grade on this wall (name), if any */
+  topGrade?: Maybe<Scalars['String']['output']>;
+};
+
+/**
  * Auto-recorded board configuration that the current user was on the last time
  * they connected to a controller with the given serial. Acts as a fallback for
  * serial→board lookups when no deliberately-saved `UserBoard` matches.
@@ -406,6 +479,19 @@ export type BoardSerialConfig = {
   sizeId: Scalars['Int']['output'];
   /** When the recording was last updated */
   updatedAt: Scalars['String']['output'];
+};
+
+/**
+ * Event: this board's durable stats changed (a tick was logged on the wall).
+ * Carries the freshly recomputed snapshot so subscribers update their tiles live
+ * instead of re-fetching — the stat counterpart of `BoardClimbSet`.
+ */
+export type BoardStatsUpdated = {
+  __typename?: 'BoardStatsUpdated';
+  /** Monotonic per-board sequence number (shared counter with climb events) */
+  seq: Scalars['Int']['output'];
+  /** Recomputed stats snapshot for the board */
+  stats: BoardPresenceStats;
 };
 
 export type BrowseProposalsInput = {
@@ -2002,6 +2088,28 @@ export type Mutation = {
   reorderQueueItem: Scalars['Boolean']['output'];
   /** Replace a queue item with a new one (same UUID). */
   replaceQueueItem: ClimbQueueItem;
+  /**
+   * Report the climb a connected phone just lit on the wall to the board's live
+   * "now on the wall" feed. Requires auth; the sender's identity is derived
+   * server-side (never client-supplied). Fire-and-forget after the BLE write
+   * succeeded — no confirm/timeout handshake. `angle` is the wall angle the
+   * climb was sent at (null = unspecified).
+   */
+  reportBoardClimb: Scalars['Boolean']['output'];
+  /**
+   * Resolve the shared board feed for boards without a BLE serial. This is a
+   * per-config fallback in v1: every caller with the same board type, layout,
+   * size, and set IDs gets the same shared board id.
+   */
+  resolveBoardForConfig: ResolvedBoard;
+  /**
+   * Resolve (and bind) the shared board for a BLE serial. Returns the one board
+   * everyone at this physical wall shares; find-or-creates on first sighting
+   * (owned by the first connector) and enforces serial → exactly one board.
+   * Called once on BLE connect; supplies the board name the UI shows. The board
+   * config args are used only to create the board the first time a serial is seen.
+   */
+  resolveBoardForSerial: ResolvedBoard;
   /** Resolve a proposal (admin/leader only). */
   resolveProposal: Proposal;
   /** Revoke a community role from a user (admin only). */
@@ -2415,6 +2523,30 @@ export type MutationReorderQueueItemArgs = {
 export type MutationReplaceQueueItemArgs = {
   item: ClimbQueueItemInput;
   uuid: Scalars['ID']['input'];
+};
+
+/** Root mutation type for all write operations. */
+export type MutationReportBoardClimbArgs = {
+  angle?: InputMaybe<Scalars['Int']['input']>;
+  boardId: Scalars['Int']['input'];
+  climb: ClimbQueueItemInput;
+};
+
+/** Root mutation type for all write operations. */
+export type MutationResolveBoardForConfigArgs = {
+  boardType: Scalars['String']['input'];
+  layoutId: Scalars['Int']['input'];
+  setIds: Scalars['String']['input'];
+  sizeId: Scalars['Int']['input'];
+};
+
+/** Root mutation type for all write operations. */
+export type MutationResolveBoardForSerialArgs = {
+  boardType: Scalars['String']['input'];
+  layoutId: Scalars['Int']['input'];
+  serial: Scalars['String']['input'];
+  setIds: Scalars['String']['input'];
+  sizeId: Scalars['Int']['input'];
 };
 
 /** Root mutation type for all write operations. */
@@ -3084,6 +3216,17 @@ export type Query = {
   /** Get leaderboard for a board. */
   boardLeaderboard: BoardLeaderboard;
   /**
+   * Lightweight stats for a board's wall feed — durable counts derived from
+   * `boardsesh_ticks` stamped with this board_id, plus the live window.
+   */
+  boardPresenceStats: BoardPresenceStats;
+  /**
+   * Backfill the recent "now on the wall" history for a board (last ~50, 24h
+   * window) from the Redis FIFO. Used by late joiners before the live
+   * `boardNowPlaying` subscription takes over.
+   */
+  boardRecentClimbs: Array<BoardPresenceClimb>;
+  /**
    * Look up boards by controller serial numbers.
    * Searches all boards (including unlisted/non-public).
    * Capped at 20 serials per request — exceeding this throws a validation
@@ -3450,6 +3593,16 @@ export type QueryBoardBySlugArgs = {
 /** Root query type for all read operations. */
 export type QueryBoardLeaderboardArgs = {
   input: BoardLeaderboardInput;
+};
+
+/** Root query type for all read operations. */
+export type QueryBoardPresenceStatsArgs = {
+  boardId: Scalars['Int']['input'];
+};
+
+/** Root query type for all read operations. */
+export type QueryBoardRecentClimbsArgs = {
+  boardId: Scalars['Int']['input'];
 };
 
 /** Root query type for all read operations. */
@@ -4013,6 +4166,26 @@ export type ResolveProposalInput = {
   status: ProposalStatus;
 };
 
+/**
+ * A board resolved from a BLE serial — the one shared board everyone at this
+ * physical wall sees. `boardId` is the shared key for the presence channel.
+ */
+export type ResolvedBoard = {
+  __typename?: 'ResolvedBoard';
+  /** Shared board id (userBoards.id), keyed 1:1 to the serial */
+  boardId: Scalars['Int']['output'];
+  /** Display name of the board (e.g. 'Garage Kilter') */
+  boardName: Scalars['String']['output'];
+  /** Board type (kilter, tension, ...) */
+  boardType: Scalars['String']['output'];
+  /** Layout id */
+  layoutId: Scalars['Int']['output'];
+  /** Comma-separated set ids */
+  setIds: Scalars['String']['output'];
+  /** Size id */
+  sizeId: Scalars['Int']['output'];
+};
+
 export type RevokeRoleInput = {
   boardType?: InputMaybe<Scalars['String']['input']>;
   role: CommunityRoleType;
@@ -4070,9 +4243,11 @@ export type SaveTickInput = {
   angle: Scalars['Int']['input'];
   /** Number of attempts */
   attemptCount: Scalars['Int']['input'];
+  /** Resolved shared board id (from resolveBoardForSerial) for the BLE-connected wall everyone is logging to. Used when no boardUuid is given; falls back to board-config resolution if it doesn't match the payload. */
+  boardId?: InputMaybe<Scalars['Int']['input']>;
   /** Board type */
   boardType: Scalars['String']['input'];
-  /** Specific board entity this tick is on. When provided, takes precedence over (layoutId, sizeId, setIds) resolution and lets ticks attach to a board the climber doesn't own (e.g. a seeded gym board). */
+  /** Specific board entity this tick is on, by uuid. When provided, takes precedence over (layoutId, sizeId, setIds) resolution and lets ticks attach to a board the climber doesn't own (e.g. a seeded gym board). */
   boardUuid?: InputMaybe<Scalars['String']['input']>;
   /** Climb UUID */
   climbUuid: Scalars['String']['input'];
@@ -4831,6 +5006,12 @@ export type SubmitAppFeedbackInput = {
 /** Root subscription type for real-time updates. */
 export type Subscription = {
   __typename?: 'Subscription';
+  /**
+   * Subscribe to the live "now on the wall" feed for a shared board (board_id
+   * resolved from the BLE serial). Membership-free: any authenticated user who
+   * has connected to the board can watch. Sessions are not involved.
+   */
+  boardNowPlaying: BoardPresenceEvent;
   /** Subscribe to real-time comment updates on an entity. */
   commentUpdates: CommentEvent;
   controllerEvents: ControllerEvent;
@@ -4845,6 +5026,11 @@ export type Subscription = {
   queueUpdates: QueueEvent;
   /** Subscribe to real-time session events (membership, lifecycle, and live stats). */
   sessionUpdates: SessionEvent;
+};
+
+/** Root subscription type for real-time updates. */
+export type SubscriptionBoardNowPlayingArgs = {
+  boardId: Scalars['Int']['input'];
 };
 
 /** Root subscription type for real-time updates. */
@@ -5441,6 +5627,7 @@ export type DirectiveResolverFn<TResult = {}, TParent = {}, TContext = {}, TArgs
 
 /** Mapping of union types */
 export type ResolversUnionTypes<_RefType extends Record<string, unknown>> = ResolversObject<{
+  BoardPresenceEvent: BoardClimbCleared | BoardClimbSet | BoardStatsUpdated;
   CommentEvent: CommentAdded | CommentDeleted | CommentUpdated;
   ControllerEvent: ControllerPing | ControllerQueueSync | LedUpdate;
   QueueEvent:
@@ -5483,10 +5670,16 @@ export type ResolversTypes = ResolversObject<{
   AuroraCredentialStatus: ResolverTypeWrapper<AuroraCredentialStatus>;
   BetaLink: ResolverTypeWrapper<BetaLink>;
   BetaLinkPreview: ResolverTypeWrapper<BetaLinkPreview>;
+  BoardClimbCleared: ResolverTypeWrapper<BoardClimbCleared>;
+  BoardClimbSet: ResolverTypeWrapper<BoardClimbSet>;
   BoardLeaderboard: ResolverTypeWrapper<BoardLeaderboard>;
   BoardLeaderboardEntry: ResolverTypeWrapper<BoardLeaderboardEntry>;
   BoardLeaderboardInput: BoardLeaderboardInput;
+  BoardPresenceClimb: ResolverTypeWrapper<BoardPresenceClimb>;
+  BoardPresenceEvent: ResolverTypeWrapper<ResolversUnionTypes<ResolversTypes>['BoardPresenceEvent']>;
+  BoardPresenceStats: ResolverTypeWrapper<BoardPresenceStats>;
   BoardSerialConfig: ResolverTypeWrapper<BoardSerialConfig>;
+  BoardStatsUpdated: ResolverTypeWrapper<BoardStatsUpdated>;
   Boolean: ResolverTypeWrapper<Scalars['Boolean']['output']>;
   BrowseProposalsInput: BrowseProposalsInput;
   BulkVoteSummaryInput: BulkVoteSummaryInput;
@@ -5643,6 +5836,7 @@ export type ResolversTypes = ResolversObject<{
   RemoveGymMemberInput: RemoveGymMemberInput;
   ReorderPlaylistClimbInput: ReorderPlaylistClimbInput;
   ResolveProposalInput: ResolveProposalInput;
+  ResolvedBoard: ResolverTypeWrapper<ResolvedBoard>;
   RevokeRoleInput: RevokeRoleInput;
   SaveAuroraCredentialInput: SaveAuroraCredentialInput;
   SaveClimbInput: SaveClimbInput;
@@ -5748,10 +5942,16 @@ export type ResolversParentTypes = ResolversObject<{
   AuroraCredentialStatus: AuroraCredentialStatus;
   BetaLink: BetaLink;
   BetaLinkPreview: BetaLinkPreview;
+  BoardClimbCleared: BoardClimbCleared;
+  BoardClimbSet: BoardClimbSet;
   BoardLeaderboard: BoardLeaderboard;
   BoardLeaderboardEntry: BoardLeaderboardEntry;
   BoardLeaderboardInput: BoardLeaderboardInput;
+  BoardPresenceClimb: BoardPresenceClimb;
+  BoardPresenceEvent: ResolversUnionTypes<ResolversParentTypes>['BoardPresenceEvent'];
+  BoardPresenceStats: BoardPresenceStats;
   BoardSerialConfig: BoardSerialConfig;
+  BoardStatsUpdated: BoardStatsUpdated;
   Boolean: Scalars['Boolean']['output'];
   BrowseProposalsInput: BrowseProposalsInput;
   BulkVoteSummaryInput: BulkVoteSummaryInput;
@@ -5900,6 +6100,7 @@ export type ResolversParentTypes = ResolversObject<{
   RemoveGymMemberInput: RemoveGymMemberInput;
   ReorderPlaylistClimbInput: ReorderPlaylistClimbInput;
   ResolveProposalInput: ResolveProposalInput;
+  ResolvedBoard: ResolvedBoard;
   RevokeRoleInput: RevokeRoleInput;
   SaveAuroraCredentialInput: SaveAuroraCredentialInput;
   SaveClimbInput: SaveClimbInput;
@@ -6129,6 +6330,23 @@ export type BetaLinkPreviewResolvers<
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
+export type BoardClimbClearedResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['BoardClimbCleared'] = ResolversParentTypes['BoardClimbCleared'],
+> = ResolversObject<{
+  clearedAt?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  seq?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
+}>;
+
+export type BoardClimbSetResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['BoardClimbSet'] = ResolversParentTypes['BoardClimbSet'],
+> = ResolversObject<{
+  climb?: Resolver<ResolversTypes['BoardPresenceClimb'], ParentType, ContextType>;
+  __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
+}>;
+
 export type BoardLeaderboardResolvers<
   ContextType = ConnectionContext,
   ParentType extends ResolversParentTypes['BoardLeaderboard'] = ResolversParentTypes['BoardLeaderboard'],
@@ -6157,6 +6375,44 @@ export type BoardLeaderboardEntryResolvers<
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
+export type BoardPresenceClimbResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['BoardPresenceClimb'] = ResolversParentTypes['BoardPresenceClimb'],
+> = ResolversObject<{
+  angle?: Resolver<Maybe<ResolversTypes['Int']>, ParentType, ContextType>;
+  climbUuid?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  frames?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  grade?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  gradeColor?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  name?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  queueItemUuid?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  sentAt?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  sentByAvatarUrl?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  sentByDisplayName?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  seq?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  setter?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
+}>;
+
+export type BoardPresenceEventResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['BoardPresenceEvent'] = ResolversParentTypes['BoardPresenceEvent'],
+> = ResolversObject<{
+  __resolveType: TypeResolveFn<'BoardClimbCleared' | 'BoardClimbSet' | 'BoardStatsUpdated', ParentType, ContextType>;
+}>;
+
+export type BoardPresenceStatsResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['BoardPresenceStats'] = ResolversParentTypes['BoardPresenceStats'],
+> = ResolversObject<{
+  climbsSentCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  distinctClimbersCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  hardestGrade?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  lastSentAt?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  topGrade?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
+}>;
+
 export type BoardSerialConfigResolvers<
   ContextType = ConnectionContext,
   ParentType extends ResolversParentTypes['BoardSerialConfig'] = ResolversParentTypes['BoardSerialConfig'],
@@ -6170,6 +6426,15 @@ export type BoardSerialConfigResolvers<
   setIds?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   sizeId?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   updatedAt?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
+}>;
+
+export type BoardStatsUpdatedResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['BoardStatsUpdated'] = ResolversParentTypes['BoardStatsUpdated'],
+> = ResolversObject<{
+  seq?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  stats?: Resolver<ResolversTypes['BoardPresenceStats'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
@@ -7182,6 +7447,24 @@ export type MutationResolvers<
     ContextType,
     RequireFields<MutationReplaceQueueItemArgs, 'item' | 'uuid'>
   >;
+  reportBoardClimb?: Resolver<
+    ResolversTypes['Boolean'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationReportBoardClimbArgs, 'boardId' | 'climb'>
+  >;
+  resolveBoardForConfig?: Resolver<
+    ResolversTypes['ResolvedBoard'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationResolveBoardForConfigArgs, 'boardType' | 'layoutId' | 'setIds' | 'sizeId'>
+  >;
+  resolveBoardForSerial?: Resolver<
+    ResolversTypes['ResolvedBoard'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationResolveBoardForSerialArgs, 'boardType' | 'layoutId' | 'serial' | 'setIds' | 'sizeId'>
+  >;
   resolveProposal?: Resolver<
     ResolversTypes['Proposal'],
     ParentType,
@@ -7743,6 +8026,18 @@ export type QueryResolvers<
     ContextType,
     RequireFields<QueryBoardLeaderboardArgs, 'input'>
   >;
+  boardPresenceStats?: Resolver<
+    ResolversTypes['BoardPresenceStats'],
+    ParentType,
+    ContextType,
+    RequireFields<QueryBoardPresenceStatsArgs, 'boardId'>
+  >;
+  boardRecentClimbs?: Resolver<
+    Array<ResolversTypes['BoardPresenceClimb']>,
+    ParentType,
+    ContextType,
+    RequireFields<QueryBoardRecentClimbsArgs, 'boardId'>
+  >;
   boardsBySerialNumbers?: Resolver<
     Array<ResolversTypes['UserBoard']>,
     ParentType,
@@ -8272,6 +8567,19 @@ export type RecentBetaLinkResolvers<
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
+export type ResolvedBoardResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['ResolvedBoard'] = ResolversParentTypes['ResolvedBoard'],
+> = ResolversObject<{
+  boardId?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  boardName?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  boardType?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  layoutId?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  setIds?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  sizeId?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
+}>;
+
 export type SaveClimbResultResolvers<
   ContextType = ConnectionContext,
   ParentType extends ResolversParentTypes['SaveClimbResult'] = ResolversParentTypes['SaveClimbResult'],
@@ -8689,6 +8997,13 @@ export type SubscriptionResolvers<
   ContextType = ConnectionContext,
   ParentType extends ResolversParentTypes['Subscription'] = ResolversParentTypes['Subscription'],
 > = ResolversObject<{
+  boardNowPlaying?: SubscriptionResolver<
+    ResolversTypes['BoardPresenceEvent'],
+    'boardNowPlaying',
+    ParentType,
+    ContextType,
+    RequireFields<SubscriptionBoardNowPlayingArgs, 'boardId'>
+  >;
   commentUpdates?: SubscriptionResolver<
     ResolversTypes['CommentEvent'],
     'commentUpdates',
@@ -8956,9 +9271,15 @@ export type Resolvers<ContextType = ConnectionContext> = ResolversObject<{
   AuroraCredentialStatus?: AuroraCredentialStatusResolvers<ContextType>;
   BetaLink?: BetaLinkResolvers<ContextType>;
   BetaLinkPreview?: BetaLinkPreviewResolvers<ContextType>;
+  BoardClimbCleared?: BoardClimbClearedResolvers<ContextType>;
+  BoardClimbSet?: BoardClimbSetResolvers<ContextType>;
   BoardLeaderboard?: BoardLeaderboardResolvers<ContextType>;
   BoardLeaderboardEntry?: BoardLeaderboardEntryResolvers<ContextType>;
+  BoardPresenceClimb?: BoardPresenceClimbResolvers<ContextType>;
+  BoardPresenceEvent?: BoardPresenceEventResolvers<ContextType>;
+  BoardPresenceStats?: BoardPresenceStatsResolvers<ContextType>;
   BoardSerialConfig?: BoardSerialConfigResolvers<ContextType>;
+  BoardStatsUpdated?: BoardStatsUpdatedResolvers<ContextType>;
   Climb?: ClimbResolvers<ContextType>;
   ClimbClassicStatus?: ClimbClassicStatusResolvers<ContextType>;
   ClimbCommunityStatus?: ClimbCommunityStatusResolvers<ContextType>;
@@ -9045,6 +9366,7 @@ export type Resolvers<ContextType = ConnectionContext> = ResolversObject<{
   QueueReordered?: QueueReorderedResolvers<ContextType>;
   QueueState?: QueueStateResolvers<ContextType>;
   RecentBetaLink?: RecentBetaLinkResolvers<ContextType>;
+  ResolvedBoard?: ResolvedBoardResolvers<ContextType>;
   SaveClimbResult?: SaveClimbResultResolvers<ContextType>;
   SearchPlaylistsResult?: SearchPlaylistsResultResolvers<ContextType>;
   SendDeviceLogsResponse?: SendDeviceLogsResponseResolvers<ContextType>;

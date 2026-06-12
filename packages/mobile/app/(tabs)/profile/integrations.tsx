@@ -18,17 +18,25 @@ export default function IntegrationsScreen() {
   const { t } = useTranslation('settings');
   const integrations = getSupportedIntegrations();
 
+  // Per-id card title. A static switch (not a dynamic `t(integration.titleKey)`)
+  // so the i18n checker can see every concrete key — adding an integration adds
+  // a case here alongside its INTEGRATION_CARDS entry.
+  const titleFor = (id: IntegrationId): string => {
+    switch (id) {
+      case 'apple-health':
+        return t('integrations.appleHealth.title');
+      case 'strava':
+        return t('integrations.strava.title');
+    }
+  };
+
   return (
     <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.container}>
       {integrations.map((integration) => {
         const Card = INTEGRATION_CARDS[integration.id];
         return (
           <View key={integration.id} style={styles.section}>
-            {/* titleKey is a registry-driven dynamic lookup; the concrete keys are
-                static and present in every locale.
-                i18n-keep integrations.appleHealth.title
-                i18n-keep integrations.strava.title */}
-            <SectionHeader title={t(integration.titleKey)} />
+            <SectionHeader title={titleFor(integration.id)} />
             <Card />
           </View>
         );

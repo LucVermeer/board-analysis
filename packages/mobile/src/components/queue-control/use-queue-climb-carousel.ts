@@ -10,6 +10,7 @@ import { useIsPartyPreviewOnly, usePlaylistSuggestionSource, useQueue } from '..
 import { useDrawerHost } from '../../providers/drawer-host-provider';
 import { hapticLight, hapticSelection } from '../../lib/haptics';
 import { useCarouselGesture } from '../play-drawer/use-carousel-gesture';
+import { useWallOrQueueCurrentClimb, useIsWallPinned } from './use-wall-or-queue-climb';
 
 /**
  * The shared "current climb" carousel behind the floating queue capsule
@@ -102,12 +103,21 @@ export function useQueueClimbCarousel(
     [queue, currentClimbQueueItem, playlistSuggestionSource],
   );
   const { nextItem, prevItem } = nav;
+
+  // Board presence: when the accessory is pinned to a live wall feed, the leading
+  // slot shows the wall's lit climb, not the local head. Tap must open THAT climb,
+  // and the prev/next swipe is suppressed — stepping the invisible local queue
+  // while the pinned label never moves looks dead (PR #2660 review, blockers 2/3).
+  const localHeadClimb = currentClimbQueueItem?.climb ?? null;
+  const accessoryClimb = useWallOrQueueCurrentClimb(localHeadClimb);
+  const isWallPinned = useIsWallPinned();
+
   // Preview-only members can't step the shared current climb, so the swipe and
   // a11y prev/next actions are disabled for them (matching the queue sheet's
   // precedent). The peek labels still render — non-drivers may *see* what's
-  // next, they just can't commit it.
-  const canPrevious = nav.canPrevious && !isPartyPreviewOnly;
-  const canNext = nav.canNext && !isPartyPreviewOnly;
+  // next, they just can't commit it. Wall-pinned also disables prev/next.
+  const canPrevious = nav.canPrevious && !isPartyPreviewOnly && !isWallPinned;
+  const canNext = nav.canNext && !isPartyPreviewOnly && !isWallPinned;
 
   const handleNext = useCallback(() => {
     if (isPartyPreviewOnly) return;
@@ -122,12 +132,14 @@ export function useQueueClimbCarousel(
   }, [isPartyPreviewOnly, previousClimb]);
 
   const handleOpenPlay = useCallback(() => {
-    if (!currentClimbQueueItem?.climb) return;
+    // Open whatever the accessory is showing: the wall's lit climb when pinned,
+    // else the local queue head. setAsCurrent stays false so opening the head
+    // doesn't duplicate it at the end of the queue.
+    const climbToOpen = accessoryClimb ?? currentClimbQueueItem?.climb;
+    if (!climbToOpen) return;
     hapticLight();
-    // Opening the drawer for the already-current climb; opting out of
-    // setAsCurrent avoids duplicating it at the end of the queue.
-    openPlayDrawer(currentClimbQueueItem.climb, { setAsCurrent: false });
-  }, [openPlayDrawer, currentClimbQueueItem]);
+    openPlayDrawer(climbToOpen, { setAsCurrent: false });
+  }, [openPlayDrawer, accessoryClimb, currentClimbQueueItem]);
 
   const { gesture: panGesture, translateX } = useCarouselGesture({
     onSwipeNext: handleNext,

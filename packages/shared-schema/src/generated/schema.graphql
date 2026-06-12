@@ -777,8 +777,10 @@ input SaveTickInput {
   sizeId: Int
   "Set IDs for board resolution"
   setIds: String
-  "Specific board entity this tick is on. When provided, takes precedence over (layoutId, sizeId, setIds) resolution and lets ticks attach to a board the climber doesn't own (e.g. a seeded gym board)."
+  "Specific board entity this tick is on, by uuid. When provided, takes precedence over (layoutId, sizeId, setIds) resolution and lets ticks attach to a board the climber doesn't own (e.g. a seeded gym board)."
   boardUuid: String
+  "Resolved shared board id (from resolveBoardForSerial) for the BLE-connected wall everyone is logging to. Used when no boardUuid is given; falls back to board-config resolution if it doesn't match the payload."
+  boardId: Int
   "Optional Instagram post or reel URL to attach as beta for the climb"
   videoUrl: String
 }
@@ -3981,6 +3983,19 @@ type Query {
   newClimbFeed(input: NewClimbFeedInput!): NewClimbFeedResult!
 
   """
+  Backfill the recent "now on the wall" history for a board (last ~50, 24h
+  window) from the Redis FIFO. Used by late joiners before the live
+  `boardNowPlaying` subscription takes over.
+  """
+  boardRecentClimbs(boardId: Int!): [BoardPresenceClimb!]!
+
+  """
+  Lightweight stats for a board's wall feed — durable counts derived from
+  `boardsesh_ticks` stamped with this board_id, plus the live window.
+  """
+  boardPresenceStats(boardId: Int!): BoardPresenceStats!
+
+  """
   Get the current user's new climb subscriptions.
   Requires authentication.
   """
@@ -4339,6 +4354,41 @@ type Mutation {
   context — no `sessionId` argument is required.
   """
   setSessionBoardPath(boardPath: String!): Session!
+
+  # ============================================
+  # Board Presence Mutations ("now on the wall")
+  # ============================================
+
+  """
+  Resolve (and bind) the shared board for a BLE serial. Returns the one board
+  everyone at this physical wall shares; find-or-creates on first sighting
+  (owned by the first connector) and enforces serial → exactly one board.
+  Called once on BLE connect; supplies the board name the UI shows. The board
+  config args are used only to create the board the first time a serial is seen.
+  """
+  resolveBoardForSerial(
+    serial: String!
+    boardType: String!
+    layoutId: Int!
+    sizeId: Int!
+    setIds: String!
+  ): ResolvedBoard!
+
+  """
+  Resolve the shared board feed for boards without a BLE serial. This is a
+  per-config fallback in v1: every caller with the same board type, layout,
+  size, and set IDs gets the same shared board id.
+  """
+  resolveBoardForConfig(boardType: String!, layoutId: Int!, sizeId: Int!, setIds: String!): ResolvedBoard!
+
+  """
+  Report the climb a connected phone just lit on the wall to the board's live
+  "now on the wall" feed. Requires auth; the sender's identity is derived
+  server-side (never client-supplied). Fire-and-forget after the BLE write
+  succeeded — no confirm/timeout handshake. `angle` is the wall angle the
+  climb was sent at (null = unspecified).
+  """
+  reportBoardClimb(boardId: Int!, climb: ClimbQueueItemInput!, angle: Int): Boolean!
 
   # ============================================
   # User Management Mutations (require auth)
@@ -4828,6 +4878,13 @@ type Subscription {
   Subscribe to new climbs for a board type and layout.
   """
   newClimbCreated(boardType: String!, layoutId: Int!): NewClimbCreatedEvent!
+
+  """
+  Subscribe to the live "now on the wall" feed for a shared board (board_id
+  resolved from the BLE serial). Membership-free: any authenticated user who
+  has connected to the board can watch. Sessions are not involved.
+  """
+  boardNowPlaying(boardId: Int!): BoardPresenceEvent!
 
   # ESP32 subscribes to receive LED commands - uses API key auth via connectionParams
   controllerEvents(sessionId: ID!): ControllerEvent!
@@ -5335,4 +5392,117 @@ input SubmitAppFeedbackInput {
   Optional debug context (current climb, party session, URL, user agent).
   """
   context: FeedbackContextInput
+}
+
+# ============================================
+# Board Presence — "now on the wall"
+#
+# Real-time view of the climb currently lit on a shared physical board,
+# keyed on a shared board_id (userBoards.id, resolved from the BLE serial).
+# Decoupled from sessions: anyone who has connected to the board can watch
+# its live feed. Membership-free, no driver. See docs / the board-presence epic.
+# ============================================
+
+"""
+A climb reported as lit on a physical board. Denormalised for display (mirrors
+the ESP32 LedUpdate payload) plus server-derived attribution and ordering.
+"""
+type BoardPresenceClimb {
+  "UUID of the climb lit on the wall"
+  climbUuid: String!
+  "Queue item UUID that triggered the send, if any (disambiguates duplicates)"
+  queueItemUuid: String
+  "Climb name"
+  name: String
+  "Grade name (e.g. V6 / 7A+) at the reported angle"
+  grade: String
+  "Grade colour as a hex string"
+  gradeColor: String
+  "Aurora frames string for rendering a thumbnail"
+  frames: String
+  "Board angle in degrees. Null means unspecified (0 is a valid angle)."
+  angle: Int
+  "Catalog route setter display name (who set the climb)"
+  setter: String
+  "Display name of the Boardsesh user who lit it. Server-derived from the caller; never client-supplied."
+  sentByDisplayName: String
+  "Avatar URL of the user who lit it. Server-derived."
+  sentByAvatarUrl: String
+  "ISO 8601 timestamp when the report was received (server-stamped)"
+  sentAt: String!
+  "Monotonic per-board sequence number for ordering and late-joiner dedup"
+  seq: Int!
+}
+
+"""
+Event: a climb was set (lit) on the wall.
+"""
+type BoardClimbSet {
+  "The climb now on the wall"
+  climb: BoardPresenceClimb!
+}
+
+"""
+Event: the wall was cleared (best-effort — only emitted on a deliberate
+disconnect; an involuntary BLE drop leaves the last climb sticky).
+"""
+type BoardClimbCleared {
+  "ISO 8601 timestamp when the wall was cleared"
+  clearedAt: String!
+  "Monotonic per-board sequence number"
+  seq: Int!
+}
+
+"""
+Event: this board's durable stats changed (a tick was logged on the wall).
+Carries the freshly recomputed snapshot so subscribers update their tiles live
+instead of re-fetching — the stat counterpart of `BoardClimbSet`.
+"""
+type BoardStatsUpdated {
+  "Recomputed stats snapshot for the board"
+  stats: BoardPresenceStats!
+  "Monotonic per-board sequence number (shared counter with climb events)"
+  seq: Int!
+}
+
+"""
+Union of board-presence events streamed by `boardNowPlaying`.
+"""
+union BoardPresenceEvent = BoardClimbSet | BoardClimbCleared | BoardStatsUpdated
+
+"""
+A board resolved from a BLE serial — the one shared board everyone at this
+physical wall sees. `boardId` is the shared key for the presence channel.
+"""
+type ResolvedBoard {
+  "Shared board id (userBoards.id), keyed 1:1 to the serial"
+  boardId: Int!
+  "Display name of the board (e.g. 'Garage Kilter')"
+  boardName: String!
+  "Board type (kilter, tension, ...)"
+  boardType: String!
+  "Layout id"
+  layoutId: Int!
+  "Size id"
+  sizeId: Int!
+  "Comma-separated set ids"
+  setIds: String!
+}
+
+"""
+Lightweight live + durable stats for a board's wall feed. Durable counts are
+derived from `boardsesh_ticks` stamped with this board_id; "right now" comes
+from the live Redis window.
+"""
+type BoardPresenceStats {
+  "Distinct climbs sent/logged on this wall"
+  climbsSentCount: Int!
+  "Distinct climbers seen on this wall"
+  distinctClimbersCount: Int!
+  "Hardest grade sent on this wall (name), if any"
+  hardestGrade: String
+  "Most-sent grade on this wall (name), if any"
+  topGrade: String
+  "ISO 8601 timestamp of the most recent send on this wall"
+  lastSentAt: String
 }
