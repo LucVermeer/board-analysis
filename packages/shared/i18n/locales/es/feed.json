@@ -160,6 +160,11 @@
   "sessionSummary": {
     "completed": "Sesión completada"
   },
+  "socialActions": {
+    "upvote": "Me gusta",
+    "removeUpvote": "Quitar me gusta",
+    "openComments": "Abrir comentarios"
+  },
   "socialFeedItem": {
     "climbed": "escaló"
   },

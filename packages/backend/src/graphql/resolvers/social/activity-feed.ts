@@ -194,23 +194,31 @@ export const activityFeedQueries = {
     // Build conditions - only successful ascents for trending
     const conditions = [sql`${dbSchema.boardseshTicks.status} IN ('flash', 'send')`];
 
-    // Board filter: look up board config and filter by boardType + layoutId
+    // Board filter: require an active board and scope to ticks recorded for it.
     let layoutIdFilter: number | null = null;
     if (validatedInput.boardUuid) {
       const board = await db
         .select({
+          id: dbSchema.userBoards.id,
           boardType: dbSchema.userBoards.boardType,
           layoutId: dbSchema.userBoards.layoutId,
         })
         .from(dbSchema.userBoards)
-        .where(eq(dbSchema.userBoards.uuid, validatedInput.boardUuid))
+        .where(and(eq(dbSchema.userBoards.uuid, validatedInput.boardUuid), isNull(dbSchema.userBoards.deletedAt)))
         .limit(1)
         .then((rows) => rows[0]);
 
-      if (board) {
-        conditions.push(eq(dbSchema.boardseshTicks.boardType, board.boardType));
-        layoutIdFilter = board.layoutId;
+      if (!board) {
+        return { items: [], cursor: null, hasMore: false };
       }
+
+      conditions.push(eq(dbSchema.boardseshTicks.boardId, board.id));
+      conditions.push(eq(dbSchema.boardseshTicks.boardType, board.boardType));
+      layoutIdFilter = board.layoutId;
+    }
+
+    if (layoutIdFilter !== null) {
+      conditions.push(eq(dbSchema.boardClimbs.layoutId, layoutIdFilter));
     }
 
     // Keyset pagination for chronological sort
@@ -223,11 +231,6 @@ export const activityFeedQueries = {
                 AND ${dbSchema.boardseshTicks.id} < ${cursor.id}))`,
         );
       }
-    }
-
-    // Apply layoutId filter from board config lookup
-    if (layoutIdFilter !== null) {
-      conditions.push(eq(dbSchema.boardClimbs.layoutId, layoutIdFilter));
     }
 
     const whereClause = and(...conditions);
@@ -262,11 +265,13 @@ export const activityFeedQueries = {
           eq(dbSchema.boardseshTicks.boardType, dbSchema.boardClimbAliases.boardType),
         ),
       )
-      .leftJoin(
+      .innerJoin(
         dbSchema.boardClimbs,
         and(
           sql`COALESCE(${dbSchema.boardClimbAliases.canonicalUuid}, ${dbSchema.boardseshTicks.climbUuid}) = ${dbSchema.boardClimbs.uuid}`,
           eq(dbSchema.boardseshTicks.boardType, dbSchema.boardClimbs.boardType),
+          sql`${dbSchema.boardClimbs.isDraft} IS NOT TRUE`,
+          sql`${dbSchema.boardClimbs.isListed} IS NOT FALSE`,
         ),
       )
       .leftJoin(

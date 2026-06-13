@@ -160,6 +160,11 @@
   "sessionSummary": {
     "completed": "Session terminée"
   },
+  "socialActions": {
+    "upvote": "Aimer",
+    "removeUpvote": "Retirer le j'aime",
+    "openComments": "Ouvrir les commentaires"
+  },
   "socialFeedItem": {
     "climbed": "a enchaîné"
   },

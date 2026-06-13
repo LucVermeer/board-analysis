@@ -6,11 +6,11 @@
  */
 
 export const INSTAGRAM_URL_REGEX =
-  /^https?:\/\/(?:www\.)?(?:instagram\.com|instagr\.am)\/(?:p|reel|tv)\/([\w-]+)\/?(?:[?#].*)?$/i;
+  /^https:\/\/(?:www\.)?(?:instagram\.com|instagr\.am)\/(?:p|reel|tv)\/([\w-]+)\/?(?:[?#].*)?$/i;
 
-export const TIKTOK_URL_REGEX = /^https?:\/\/(?:[a-z0-9-]+\.)*tiktok\.com\//i;
+export const TIKTOK_URL_REGEX = /^https:\/\/(?:[a-z0-9-]+\.)*tiktok\.com\//i;
 
-const TIKTOK_LONG_FORM_VIDEO_ID = /^https?:\/\/(?:[a-z0-9-]+\.)*tiktok\.com\/@[\w.-]+\/video\/(\d+)/i;
+const TIKTOK_LONG_FORM_VIDEO_ID = /^https:\/\/(?:[a-z0-9-]+\.)*tiktok\.com\/@[\w.-]+\/video\/(\d+)/i;
 
 /**
  * Combined accept regex for the attach mutation + tick `videoUrl` validation.

@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { Linking, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { FlatList, Linking, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
 import { useQueryClient } from '@tanstack/react-query';
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import { Image } from 'expo-image';
@@ -8,7 +8,13 @@ import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import type BottomSheet from '@gorhom/bottom-sheet';
 import type { ActivityFeedItem, SocialEntityType } from '@boardsesh/shared-schema';
-import { betaLinkIdentity, isInstagramUrl, isTikTokUrl, type BoardName } from '@boardsesh/shared-schema';
+import {
+  betaLinkIdentity,
+  isBetaVideoUrl,
+  isInstagramUrl,
+  isTikTokUrl,
+  type BoardName,
+} from '@boardsesh/shared-schema';
 import { Text } from '../../../src/components/Text';
 import { Icon } from '../../../src/components/Icon';
 import type { IconName } from '../../../src/components/icon-map';
@@ -20,7 +26,7 @@ import { FeedSocialRow } from '../../../src/components/you/FeedSocialRow';
 import { CommentSheet } from '../../../src/components/you/CommentSheet';
 import {
   useActivityFeed,
-  useChunkedBulkVoteSummaries,
+  useGroupedBulkVoteSummaries,
   useRecentBetaLinks,
   type RecentBetaVideo,
 } from '../../../src/lib/graphql/hooks';
@@ -37,6 +43,7 @@ import { BETA_CARD_HEIGHT, BETA_CARD_WIDTH } from '../../../src/components/play-
 
 const RECENT_BETA_LIMIT = 20;
 const SHELF_GAP = spacing[3];
+const BETA_SKELETON_KEYS = ['beta-skeleton-1', 'beta-skeleton-2', 'beta-skeleton-3'];
 const INITIAL_FEED_SKELETON_KEYS = ['home-feed-skeleton-1', 'home-feed-skeleton-2', 'home-feed-skeleton-3'];
 const NEXT_PAGE_FEED_SKELETON_KEYS = ['home-feed-footer-skeleton-1', 'home-feed-footer-skeleton-2'];
 
@@ -100,26 +107,43 @@ function detectPlatform(url: string): { name: 'instagram' | 'tiktok'; icon: Icon
   return null;
 }
 
-function useActivitySummaries(items: ActivityFeedItem[], enabled: boolean): ActivityEntitySummaryMap {
-  const tickEntityIds = useMemo(
-    () =>
-      items
-        .filter((item) => item.entityType === 'tick')
-        .map((item) => item.entityId)
-        .filter((entityId, index, allEntityIds) => allEntityIds.indexOf(entityId) === index),
-    [items],
-  );
-  const climbEntityIds = useMemo(
-    () =>
-      items
-        .filter((item) => item.entityType === 'climb')
-        .map((item) => item.entityId)
-        .filter((entityId, index, allEntityIds) => allEntityIds.indexOf(entityId) === index),
-    [items],
-  );
+function isSafeBetaVideoUrl(url: string): boolean {
+  try {
+    return new URL(url).protocol === 'https:' && isBetaVideoUrl(url);
+  } catch {
+    return false;
+  }
+}
 
-  const tickSummaries = useChunkedBulkVoteSummaries('tick', tickEntityIds, enabled && tickEntityIds.length > 0);
-  const climbSummaries = useChunkedBulkVoteSummaries('climb', climbEntityIds, enabled && climbEntityIds.length > 0);
+function groupEntityIdsByFeedPage(pages: ActivityFeedItem[][], entityType: 'tick' | 'climb'): string[][] {
+  const seenEntityIds = new Set<string>();
+  return pages
+    .map((page) => {
+      const pageEntityIds: string[] = [];
+      for (const item of page) {
+        if (item.entityType !== entityType || seenEntityIds.has(item.entityId)) continue;
+        seenEntityIds.add(item.entityId);
+        pageEntityIds.push(item.entityId);
+      }
+      return pageEntityIds;
+    })
+    .filter((pageEntityIds) => pageEntityIds.length > 0);
+}
+
+function useActivitySummaries(pages: ActivityFeedItem[][], enabled: boolean): ActivityEntitySummaryMap {
+  const tickEntityIdGroups = useMemo(() => groupEntityIdsByFeedPage(pages, 'tick'), [pages]);
+  const climbEntityIdGroups = useMemo(() => groupEntityIdsByFeedPage(pages, 'climb'), [pages]);
+
+  const tickSummaries = useGroupedBulkVoteSummaries(
+    'tick',
+    tickEntityIdGroups,
+    enabled && tickEntityIdGroups.length > 0,
+  );
+  const climbSummaries = useGroupedBulkVoteSummaries(
+    'climb',
+    climbEntityIdGroups,
+    enabled && climbEntityIdGroups.length > 0,
+  );
 
   return useMemo(() => {
     const ticks = new Map<string, VoteSummary>();
@@ -151,18 +175,22 @@ export default function HomeTab() {
   const betaVideos = useRecentBetaLinks(RECENT_BETA_LIMIT);
   const feed = useActivityFeed(undefined, isAuthenticated);
 
+  const activityPages = useMemo(() => feed.data?.pages.map((page) => page.activityFeed.items) ?? [], [feed.data]);
+
   const activityItems = useMemo(() => {
     const seenIds = new Set<string>();
     const dedupedItems: ActivityFeedItem[] = [];
-    for (const item of feed.data?.pages.flatMap((page) => page.activityFeed.items) ?? []) {
-      if (seenIds.has(item.id)) continue;
-      seenIds.add(item.id);
-      dedupedItems.push(item);
+    for (const page of activityPages) {
+      for (const item of page) {
+        if (seenIds.has(item.id)) continue;
+        seenIds.add(item.id);
+        dedupedItems.push(item);
+      }
     }
     return dedupedItems;
-  }, [feed.data]);
+  }, [activityPages]);
 
-  const summaries = useActivitySummaries(activityItems, isAuthenticated);
+  const summaries = useActivitySummaries(activityPages, isAuthenticated);
 
   const handleOpenComments = useCallback((entityId: string, entityType: SocialEntityType) => {
     setCommentTarget({ entityId, entityType });
@@ -363,16 +391,16 @@ function RecentBetaShelf({
         <Text variant="title3">{t('mobile.home.betaTitle')}</Text>
       </View>
       {isLoading ? (
-        <ScrollView
+        <FlatList
           horizontal
+          data={BETA_SKELETON_KEYS}
+          renderItem={({ item }) => <View key={item} style={styles.betaSkeleton} />}
+          keyExtractor={(item) => item}
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.shelfContent}
+          ItemSeparatorComponent={BetaShelfSeparator}
           scrollEnabled={false}
-        >
-          {Array.from({ length: 3 }).map((_, index) => (
-            <View key={`beta-skeleton-${index}`} style={styles.betaSkeleton} />
-          ))}
-        </ScrollView>
+        />
       ) : isError ? (
         <View style={[styles.shelfState, { borderColor: systemColors.separator }]}>
           <Icon name="error" size={20} color={iosSystemColors.systemRed} />
@@ -401,21 +429,34 @@ function RecentBetaShelf({
           </Text>
         </View>
       ) : (
-        <ScrollView
+        <FlatList
           horizontal
+          data={videos}
+          renderItem={({ item }) => <RecentBetaCard video={item} onOpenClimb={onOpenClimb} />}
+          keyExtractor={(video) => betaLinkIdentity(video.betaLink.link)}
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.shelfContent}
+          ItemSeparatorComponent={BetaShelfSeparator}
           snapToInterval={BETA_CARD_WIDTH + SHELF_GAP}
           decelerationRate="fast"
           snapToAlignment="start"
-        >
-          {videos.map((video) => (
-            <RecentBetaCard key={betaLinkIdentity(video.betaLink.link)} video={video} onOpenClimb={onOpenClimb} />
-          ))}
-        </ScrollView>
+          initialNumToRender={5}
+          maxToRenderPerBatch={5}
+          windowSize={3}
+          removeClippedSubviews
+          getItemLayout={(_data, index) => ({
+            length: BETA_CARD_WIDTH + SHELF_GAP,
+            offset: (BETA_CARD_WIDTH + SHELF_GAP) * index,
+            index,
+          })}
+        />
       )}
     </View>
   );
+}
+
+function BetaShelfSeparator() {
+  return <View style={styles.shelfSeparator} />;
 }
 
 function RecentBetaCard({
@@ -434,6 +475,10 @@ function RecentBetaCard({
   const handleOpenVideo = useCallback(async () => {
     hapticLight();
     try {
+      if (!isSafeBetaVideoUrl(video.betaLink.link)) {
+        showToast(t('mobile.home.betaOpenError'), 'error');
+        return;
+      }
       const canOpen = await Linking.canOpenURL(video.betaLink.link);
       if (!canOpen) {
         showToast(t('mobile.home.betaOpenError'), 'error');
@@ -462,7 +507,6 @@ function RecentBetaCard({
             recyclingKey={video.betaLink.thumbnail}
             onError={() => setImageFailed(true)}
             accessibilityIgnoresInvertColors
-            allowDownscaling={false}
           />
         ) : (
           <View style={[styles.betaThumbnail, styles.thumbnailFallback]}>
@@ -649,9 +693,11 @@ const styles = StyleSheet.create({
     paddingBottom: spacing[2],
   },
   shelfContent: {
-    gap: SHELF_GAP,
     paddingHorizontal: spacing[4],
     paddingVertical: spacing[1],
+  },
+  shelfSeparator: {
+    width: SHELF_GAP,
   },
   betaCard: {
     width: BETA_CARD_WIDTH,

@@ -160,6 +160,11 @@
   "sessionSummary": {
     "completed": "Session completed"
   },
+  "socialActions": {
+    "upvote": "Like",
+    "removeUpvote": "Remove like",
+    "openComments": "Open comments"
+  },
   "socialFeedItem": {
     "climbed": "climbed"
   },

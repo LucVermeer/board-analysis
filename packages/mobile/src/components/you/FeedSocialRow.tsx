@@ -1,4 +1,5 @@
 import { View, Pressable, StyleSheet } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import type { SocialEntityType } from '@boardsesh/shared-schema';
 import { Text } from '../Text';
 import { Icon } from '../Icon';
@@ -32,6 +33,7 @@ export function FeedSocialRow({
   onOpenComments,
   compact = false,
 }: FeedSocialRowProps) {
+  const { t } = useTranslation('feed');
   const { systemColors, brandColors } = useTheme();
   const { voted, count, toggle, isPending } = useOptimisticVote(entityId, upvotes, userVote, entityType);
 
@@ -50,7 +52,8 @@ export function FeedSocialRow({
         onPress={handleVote}
         disabled={isPending}
         accessibilityRole="button"
-        accessibilityState={{ selected: voted }}
+        accessibilityLabel={voted ? t('socialActions.removeUpvote') : t('socialActions.upvote')}
+        accessibilityState={{ selected: voted, disabled: isPending }}
         hitSlop={6}
       >
         <Icon
@@ -64,7 +67,13 @@ export function FeedSocialRow({
           </Text>
         )}
       </Pressable>
-      <Pressable style={styles.button} onPress={() => onOpenComments(entityId)} accessibilityRole="button" hitSlop={6}>
+      <Pressable
+        style={styles.button}
+        onPress={() => onOpenComments(entityId)}
+        accessibilityRole="button"
+        accessibilityLabel={t('socialActions.openComments')}
+        hitSlop={6}
+      >
         <Icon name="comment" size={iconSize} color={systemColors.secondaryLabel} />
         {commentCount > 0 && (
           <Text variant="footnote" color={systemColors.secondaryLabel}>

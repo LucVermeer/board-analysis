@@ -357,7 +357,7 @@ import {
   type AttachBetaLinkMutationVariables,
   type AttachBetaLinkMutationResponse,
 } from '@boardsesh/graphql/operations/beta-links';
-import { betaLinkIdentity, dedupeBetaLinks, type BetaLink } from '@boardsesh/shared-schema';
+import { betaLinkIdentity, dedupeBetaLinks, isBetaVideoUrl, type BetaLink } from '@boardsesh/shared-schema';
 import { mapBetaLink, mapBetaLinks } from '../../beta-video-url';
 
 export type RecentBetaVideo = Omit<RecentBetaLinkGqlRow, 'betaLink'> & {
@@ -395,6 +395,7 @@ export function useRecentBetaLinks(limit = 20, boardType?: string | null, enable
 
       for (const row of data.recentBetaLinks) {
         const betaLink = mapBetaLink(row.betaLink);
+        if (!isBetaVideoUrl(betaLink.link)) continue;
         const identity = betaLinkIdentity(betaLink.link);
         if (seenIdentities.has(identity)) continue;
         seenIdentities.add(identity);
@@ -484,7 +485,14 @@ export {
   useSessionGroupedFeed,
 } from './use-you-data';
 export { useYouProfileData } from './use-you-profile-data';
-export { useVote, useBulkVoteSummaries, useChunkedBulkVoteSummaries, useComments, useAddComment } from './use-social';
+export {
+  useVote,
+  useBulkVoteSummaries,
+  useChunkedBulkVoteSummaries,
+  useGroupedBulkVoteSummaries,
+  useComments,
+  useAddComment,
+} from './use-social';
 export { useSessionDetail, useSessionPreview } from './use-session-detail';
 export { useDeleteAccountInfo, useDeleteAccount } from './use-delete-account';
 export {
