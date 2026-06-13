@@ -338,6 +338,39 @@ export type BetaLinkPreview = {
 };
 
 /**
+ * One board sharing a (non-unique) BLE serial, shown to the user when a serial
+ * maps to more than one board so they can pick which wall they're at. Location
+ * fields are redacted for non-public boards the caller doesn't own.
+ */
+export type BoardCandidate = {
+  __typename?: 'BoardCandidate';
+  /** Shared board id (userBoards.id) */
+  boardId: Scalars['Int']['output'];
+  /** Display name of the board */
+  boardName: Scalars['String']['output'];
+  /** Board type (kilter, tension, ...) */
+  boardType: Scalars['String']['output'];
+  /** Board uuid */
+  boardUuid: Scalars['ID']['output'];
+  /** Linked gym name (null when redacted or no gym) */
+  gymName?: Maybe<Scalars['String']['output']>;
+  /** True when the calling user owns this board */
+  isOwnedByMe: Scalars['Boolean']['output'];
+  /** Whether the board is publicly listed */
+  isPublic: Scalars['Boolean']['output'];
+  /** ISO 8601 of the most recent tick on this board, if any */
+  lastSentAt?: Maybe<Scalars['String']['output']>;
+  /** Layout id */
+  layoutId: Scalars['Int']['output'];
+  /** Human-readable location (null when redacted) */
+  locationName?: Maybe<Scalars['String']['output']>;
+  /** Comma-separated set ids */
+  setIds: Scalars['String']['output'];
+  /** Size id */
+  sizeId: Scalars['Int']['output'];
+};
+
+/**
  * Event: the wall was cleared (best-effort — only emitted on a deliberate
  * disconnect; an involuntary BLE drop leaves the last climb sticky).
  */
@@ -1972,6 +2005,13 @@ export type Mutation = {
   attachBetaLink: Scalars['Boolean']['output'];
   authorizeControllerForSession: Scalars['Boolean']['output'];
   /**
+   * Confirm which board a (non-unique) serial routes to after the user picks
+   * from a disambiguation prompt. Remembers the choice per user so the prompt
+   * doesn't reappear, and returns the bound board. The board must be active and
+   * actually carry the serial.
+   */
+  chooseBoardForSerial: ResolvedBoard;
+  /**
    * Confirm to all session participants that a climb was successfully relayed to the wall
    * over BLE from this client's phone. Any session participant may call (no driver
    * requirement) — the BLE-capable phone that handled the send is the source of truth for
@@ -2124,17 +2164,27 @@ export type Mutation = {
    */
   reportBoardClimb: Scalars['Boolean']['output'];
   /**
+   * Resolve a BLE serial for clients that can disambiguate. Returns a single
+   * `board` when the serial is unambiguous (remembered choice, only one match,
+   * or freshly created), or a list of `candidates` when several boards share
+   * the serial and the user must pick which wall they're at. Confirm the pick
+   * with `chooseBoardForSerial`. The config args create the board the first
+   * time a serial is seen.
+   */
+  resolveBoardCandidatesForSerial: ResolveBoardResult;
+  /**
    * Resolve the shared board feed for boards without a BLE serial. This is a
    * per-config fallback in v1: every caller with the same board type, layout,
    * size, and set IDs gets the same shared board id.
    */
   resolveBoardForConfig: ResolvedBoard;
   /**
-   * Resolve (and bind) the shared board for a BLE serial. Returns the one board
-   * everyone at this physical wall shares; find-or-creates on first sighting
-   * (owned by the first connector) and enforces serial → exactly one board.
-   * Called once on BLE connect; supplies the board name the UI shows. The board
-   * config args are used only to create the board the first time a serial is seen.
+   * Legacy serial resolver, kept for already-shipped clients that can't render
+   * a disambiguation prompt: always returns a single board. Serials are no
+   * longer globally unique, so when several boards share one this auto-picks
+   * (the caller's own board if present, else the oldest) and remembers it.
+   * New clients should call `resolveBoardCandidatesForSerial`. The board config
+   * args are used only to create the board the first time a serial is seen.
    */
   resolveBoardForSerial: ResolvedBoard;
   /**
@@ -2317,6 +2367,12 @@ export type MutationAttachBetaLinkArgs = {
 export type MutationAuthorizeControllerForSessionArgs = {
   controllerId: Scalars['ID']['input'];
   sessionId: Scalars['ID']['input'];
+};
+
+/** Root mutation type for all write operations. */
+export type MutationChooseBoardForSerialArgs = {
+  boardId: Scalars['Int']['input'];
+  serial: Scalars['String']['input'];
 };
 
 /** Root mutation type for all write operations. */
@@ -2563,6 +2619,15 @@ export type MutationReportBoardClimbArgs = {
   angle?: InputMaybe<Scalars['Int']['input']>;
   boardId: Scalars['Int']['input'];
   climb: ClimbQueueItemInput;
+};
+
+/** Root mutation type for all write operations. */
+export type MutationResolveBoardCandidatesForSerialArgs = {
+  boardType: Scalars['String']['input'];
+  layoutId: Scalars['Int']['input'];
+  serial: Scalars['String']['input'];
+  setIds: Scalars['String']['input'];
+  sizeId: Scalars['Int']['input'];
 };
 
 /** Root mutation type for all write operations. */
@@ -4208,6 +4273,20 @@ export type ReorderPlaylistClimbInput = {
   playlistId: Scalars['ID']['input'];
 };
 
+/**
+ * Result of resolving a BLE serial that may map to several boards. Exactly one
+ * of `board` / `candidates` is set: `board` when the serial is unambiguous
+ * (remembered choice, only one match, or freshly created), `candidates` when
+ * the user must pick which wall they're at (confirm with `chooseBoardForSerial`).
+ */
+export type ResolveBoardResult = {
+  __typename?: 'ResolveBoardResult';
+  /** Set when the serial resolves to a single board */
+  board?: Maybe<ResolvedBoard>;
+  /** Set when several boards share the serial and the user must choose */
+  candidates?: Maybe<Array<BoardCandidate>>;
+};
+
 export type ResolveProposalInput = {
   proposalUuid: Scalars['ID']['input'];
   reason?: InputMaybe<Scalars['String']['input']>;
@@ -5769,6 +5848,7 @@ export type ResolversTypes = ResolversObject<{
   AuroraCredentialStatus: ResolverTypeWrapper<AuroraCredentialStatus>;
   BetaLink: ResolverTypeWrapper<BetaLink>;
   BetaLinkPreview: ResolverTypeWrapper<BetaLinkPreview>;
+  BoardCandidate: ResolverTypeWrapper<BoardCandidate>;
   BoardClimbCleared: ResolverTypeWrapper<BoardClimbCleared>;
   BoardClimbSet: ResolverTypeWrapper<BoardClimbSet>;
   BoardLeaderboard: ResolverTypeWrapper<BoardLeaderboard>;
@@ -5935,6 +6015,7 @@ export type ResolversTypes = ResolversObject<{
   RemoveClimbFromPlaylistInput: RemoveClimbFromPlaylistInput;
   RemoveGymMemberInput: RemoveGymMemberInput;
   ReorderPlaylistClimbInput: ReorderPlaylistClimbInput;
+  ResolveBoardResult: ResolverTypeWrapper<ResolveBoardResult>;
   ResolveProposalInput: ResolveProposalInput;
   ResolvedBoard: ResolverTypeWrapper<ResolvedBoard>;
   RevokeRoleInput: RevokeRoleInput;
@@ -6044,6 +6125,7 @@ export type ResolversParentTypes = ResolversObject<{
   AuroraCredentialStatus: AuroraCredentialStatus;
   BetaLink: BetaLink;
   BetaLinkPreview: BetaLinkPreview;
+  BoardCandidate: BoardCandidate;
   BoardClimbCleared: BoardClimbCleared;
   BoardClimbSet: BoardClimbSet;
   BoardLeaderboard: BoardLeaderboard;
@@ -6202,6 +6284,7 @@ export type ResolversParentTypes = ResolversObject<{
   RemoveClimbFromPlaylistInput: RemoveClimbFromPlaylistInput;
   RemoveGymMemberInput: RemoveGymMemberInput;
   ReorderPlaylistClimbInput: ReorderPlaylistClimbInput;
+  ResolveBoardResult: ResolveBoardResult;
   ResolveProposalInput: ResolveProposalInput;
   ResolvedBoard: ResolvedBoard;
   RevokeRoleInput: RevokeRoleInput;
@@ -6435,6 +6518,25 @@ export type BetaLinkPreviewResolvers<
   link?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   thumbnail?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   username?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
+}>;
+
+export type BoardCandidateResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['BoardCandidate'] = ResolversParentTypes['BoardCandidate'],
+> = ResolversObject<{
+  boardId?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  boardName?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  boardType?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  boardUuid?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
+  gymName?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  isOwnedByMe?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
+  isPublic?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
+  lastSentAt?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  layoutId?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  locationName?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  setIds?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  sizeId?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
@@ -7309,6 +7411,12 @@ export type MutationResolvers<
     ContextType,
     RequireFields<MutationAuthorizeControllerForSessionArgs, 'controllerId' | 'sessionId'>
   >;
+  chooseBoardForSerial?: Resolver<
+    ResolversTypes['ResolvedBoard'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationChooseBoardForSerialArgs, 'boardId' | 'serial'>
+  >;
   confirmClimbOnWall?: Resolver<
     ResolversTypes['Session'],
     ParentType,
@@ -7576,6 +7684,15 @@ export type MutationResolvers<
     ParentType,
     ContextType,
     RequireFields<MutationReportBoardClimbArgs, 'boardId' | 'climb'>
+  >;
+  resolveBoardCandidatesForSerial?: Resolver<
+    ResolversTypes['ResolveBoardResult'],
+    ParentType,
+    ContextType,
+    RequireFields<
+      MutationResolveBoardCandidatesForSerialArgs,
+      'boardType' | 'layoutId' | 'serial' | 'setIds' | 'sizeId'
+    >
   >;
   resolveBoardForConfig?: Resolver<
     ResolversTypes['ResolvedBoard'],
@@ -8703,6 +8820,15 @@ export type RecentBetaLinkResolvers<
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
+export type ResolveBoardResultResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['ResolveBoardResult'] = ResolversParentTypes['ResolveBoardResult'],
+> = ResolversObject<{
+  board?: Resolver<Maybe<ResolversTypes['ResolvedBoard']>, ParentType, ContextType>;
+  candidates?: Resolver<Maybe<Array<ResolversTypes['BoardCandidate']>>, ParentType, ContextType>;
+  __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
+}>;
+
 export type ResolvedBoardResolvers<
   ContextType = ConnectionContext,
   ParentType extends ResolversParentTypes['ResolvedBoard'] = ResolversParentTypes['ResolvedBoard'],
@@ -9440,6 +9566,7 @@ export type Resolvers<ContextType = ConnectionContext> = ResolversObject<{
   AuroraCredentialStatus?: AuroraCredentialStatusResolvers<ContextType>;
   BetaLink?: BetaLinkResolvers<ContextType>;
   BetaLinkPreview?: BetaLinkPreviewResolvers<ContextType>;
+  BoardCandidate?: BoardCandidateResolvers<ContextType>;
   BoardClimbCleared?: BoardClimbClearedResolvers<ContextType>;
   BoardClimbSet?: BoardClimbSetResolvers<ContextType>;
   BoardLeaderboard?: BoardLeaderboardResolvers<ContextType>;
@@ -9536,6 +9663,7 @@ export type Resolvers<ContextType = ConnectionContext> = ResolversObject<{
   QueueReordered?: QueueReorderedResolvers<ContextType>;
   QueueState?: QueueStateResolvers<ContextType>;
   RecentBetaLink?: RecentBetaLinkResolvers<ContextType>;
+  ResolveBoardResult?: ResolveBoardResultResolvers<ContextType>;
   ResolvedBoard?: ResolvedBoardResolvers<ContextType>;
   SaveClimbResult?: SaveClimbResultResolvers<ContextType>;
   SearchPlaylistsResult?: SearchPlaylistsResultResolvers<ContextType>;

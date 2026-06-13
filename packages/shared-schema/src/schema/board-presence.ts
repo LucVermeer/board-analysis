@@ -115,6 +115,51 @@ export const boardPresenceTypeDefs = /* GraphQL */ `
   }
 
   """
+  One board sharing a (non-unique) BLE serial, shown to the user when a serial
+  maps to more than one board so they can pick which wall they're at. Location
+  fields are redacted for non-public boards the caller doesn't own.
+  """
+  type BoardCandidate {
+    "Shared board id (userBoards.id)"
+    boardId: Int!
+    "Board uuid"
+    boardUuid: ID!
+    "Display name of the board"
+    boardName: String!
+    "Board type (kilter, tension, ...)"
+    boardType: String!
+    "Layout id"
+    layoutId: Int!
+    "Size id"
+    sizeId: Int!
+    "Comma-separated set ids"
+    setIds: String!
+    "Human-readable location (null when redacted)"
+    locationName: String
+    "Linked gym name (null when redacted or no gym)"
+    gymName: String
+    "True when the calling user owns this board"
+    isOwnedByMe: Boolean!
+    "Whether the board is publicly listed"
+    isPublic: Boolean!
+    "ISO 8601 of the most recent tick on this board, if any"
+    lastSentAt: String
+  }
+
+  """
+  Result of resolving a BLE serial that may map to several boards. Exactly one
+  of \`board\` / \`candidates\` is set: \`board\` when the serial is unambiguous
+  (remembered choice, only one match, or freshly created), \`candidates\` when
+  the user must pick which wall they're at (confirm with \`chooseBoardForSerial\`).
+  """
+  type ResolveBoardResult {
+    "Set when the serial resolves to a single board"
+    board: ResolvedBoard
+    "Set when several boards share the serial and the user must choose"
+    candidates: [BoardCandidate!]
+  }
+
+  """
   Lightweight live + durable stats for a board's wall feed. Durable counts are
   derived from \`boardsesh_ticks\` stamped with this board_id; "right now" comes
   from the live Redis window.

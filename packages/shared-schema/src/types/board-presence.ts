@@ -58,6 +58,32 @@ export type ResolvedBoard = {
   setIds: string;
 };
 
+/**
+ * One board sharing a non-unique BLE serial, for the disambiguation prompt.
+ * Location fields are redacted server-side for non-public boards the caller
+ * doesn't own.
+ */
+export type BoardCandidate = {
+  boardId: number;
+  boardUuid: string;
+  boardName: string;
+  boardType: string;
+  layoutId: number;
+  sizeId: number;
+  setIds: string;
+  locationName?: string | null;
+  gymName?: string | null;
+  isOwnedByMe: boolean;
+  isPublic: boolean;
+  lastSentAt?: string | null;
+};
+
+/** Result of `resolveBoardCandidatesForSerial`: exactly one field is set. */
+export type ResolveBoardResult = {
+  board?: ResolvedBoard | null;
+  candidates?: BoardCandidate[] | null;
+};
+
 export type BoardPresenceStats = {
   climbsSentCount: number;
   distinctClimbersCount: number;

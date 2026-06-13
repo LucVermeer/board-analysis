@@ -142,11 +142,12 @@ export const mutationsTypeDefs = /* GraphQL */ `
     # ============================================
 
     """
-    Resolve (and bind) the shared board for a BLE serial. Returns the one board
-    everyone at this physical wall shares; find-or-creates on first sighting
-    (owned by the first connector) and enforces serial → exactly one board.
-    Called once on BLE connect; supplies the board name the UI shows. The board
-    config args are used only to create the board the first time a serial is seen.
+    Legacy serial resolver, kept for already-shipped clients that can't render
+    a disambiguation prompt: always returns a single board. Serials are no
+    longer globally unique, so when several boards share one this auto-picks
+    (the caller's own board if present, else the oldest) and remembers it.
+    New clients should call \`resolveBoardCandidatesForSerial\`. The board config
+    args are used only to create the board the first time a serial is seen.
     """
     resolveBoardForSerial(
       serial: String!
@@ -155,6 +156,30 @@ export const mutationsTypeDefs = /* GraphQL */ `
       sizeId: Int!
       setIds: String!
     ): ResolvedBoard!
+
+    """
+    Resolve a BLE serial for clients that can disambiguate. Returns a single
+    \`board\` when the serial is unambiguous (remembered choice, only one match,
+    or freshly created), or a list of \`candidates\` when several boards share
+    the serial and the user must pick which wall they're at. Confirm the pick
+    with \`chooseBoardForSerial\`. The config args create the board the first
+    time a serial is seen.
+    """
+    resolveBoardCandidatesForSerial(
+      serial: String!
+      boardType: String!
+      layoutId: Int!
+      sizeId: Int!
+      setIds: String!
+    ): ResolveBoardResult!
+
+    """
+    Confirm which board a (non-unique) serial routes to after the user picks
+    from a disambiguation prompt. Remembers the choice per user so the prompt
+    doesn't reappear, and returns the bound board. The board must be active and
+    actually carry the serial.
+    """
+    chooseBoardForSerial(boardId: Int!, serial: String!): ResolvedBoard!
 
     """
     Resolve the wall feed for the selected named board. This binds to the actual

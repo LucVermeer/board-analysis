@@ -522,6 +522,202 @@ describe('board-presence resolvers', () => {
     });
   });
 
+  describe('resolveBoardCandidatesForSerial + chooseBoardForSerial (serial disambiguation)', () => {
+    async function insertBoard(opts: {
+      ownerId: string;
+      serial: string | null;
+      layoutId: number;
+      sizeId: number;
+      setIds: string;
+      name: string;
+      isPublic?: boolean;
+      locationName?: string | null;
+    }): Promise<{ id: number; uuid: string }> {
+      const uuid = `uuid-${Math.random().toString(36).slice(2)}`;
+      const slug = `slug-${Math.random().toString(36).slice(2)}`;
+      const [row] = await db.execute(sql`
+        INSERT INTO user_boards
+          (uuid, slug, owner_id, board_type, layout_id, size_id, set_ids, name, serial_number, is_public, location_name)
+        VALUES (${uuid}, ${slug}, ${opts.ownerId}, 'kilter', ${opts.layoutId}, ${opts.sizeId}, ${opts.setIds},
+                ${opts.name}, ${opts.serial}, ${opts.isPublic ?? true}, ${opts.locationName ?? null})
+        RETURNING id, uuid
+      `);
+      return { id: Number((row as { id: number }).id), uuid: (row as { uuid: string }).uuid };
+    }
+
+    it('returns candidates when several boards share a serial, with private boards still listed but location redacted', async () => {
+      const serial = `DUP-${Date.now()}`;
+      const mine = await insertBoard({
+        ownerId: TEST_USER_ID,
+        serial,
+        layoutId: 1,
+        sizeId: 10,
+        setIds: '1,2',
+        name: 'My Wall',
+        isPublic: true,
+        locationName: 'My Garage',
+      });
+      const theirsPrivate = await insertBoard({
+        ownerId: SECOND_USER_ID,
+        serial,
+        layoutId: 1,
+        sizeId: 10,
+        setIds: '1,2',
+        name: 'Their Wall',
+        isPublic: false,
+        locationName: 'Secret Spot',
+      });
+
+      const result = await boardPresenceMutations.resolveBoardCandidatesForSerial(
+        undefined,
+        { serial, boardType: 'kilter', layoutId: 1, sizeId: 10, setIds: '1,2' },
+        authCtx(),
+      );
+
+      expect(result.board).toBeNull();
+      expect(result.candidates).toHaveLength(2);
+      const byId = new Map((result.candidates ?? []).map((candidate) => [candidate.boardId, candidate]));
+      const mineCandidate = byId.get(mine.id)!;
+      const theirsCandidate = byId.get(theirsPrivate.id)!;
+      expect(mineCandidate.isOwnedByMe).toBe(true);
+      expect(mineCandidate.locationName).toBe('My Garage');
+      // A private board owned by someone else is still findable by serial...
+      expect(theirsCandidate).toBeDefined();
+      expect(theirsCandidate.isOwnedByMe).toBe(false);
+      // ...but we don't leak its location.
+      expect(theirsCandidate.locationName).toBeNull();
+    });
+
+    it('does not auto-pick the caller-owned board when another board shares the serial — it prompts', async () => {
+      const serial = `OWN-${Date.now()}`;
+      await insertBoard({ ownerId: TEST_USER_ID, serial, layoutId: 3, sizeId: 10, setIds: '1', name: 'Home' });
+      await insertBoard({ ownerId: SECOND_USER_ID, serial, layoutId: 3, sizeId: 10, setIds: '1', name: 'Gym' });
+
+      const result = await boardPresenceMutations.resolveBoardCandidatesForSerial(
+        undefined,
+        { serial, boardType: 'kilter', layoutId: 3, sizeId: 10, setIds: '1' },
+        authCtx(),
+      );
+      expect(result.board).toBeNull();
+      expect(result.candidates).toHaveLength(2);
+    });
+
+    it('auto-resolves (no prompt) and remembers when exactly one board carries the serial', async () => {
+      const serial = `ONE-${Date.now()}`;
+      const only = await insertBoard({
+        ownerId: SECOND_USER_ID,
+        serial,
+        layoutId: 4,
+        sizeId: 10,
+        setIds: '1',
+        name: 'Only Wall',
+      });
+
+      const result = await boardPresenceMutations.resolveBoardCandidatesForSerial(
+        undefined,
+        { serial, boardType: 'kilter', layoutId: 4, sizeId: 10, setIds: '1' },
+        authCtx(),
+      );
+      expect(result.candidates).toBeNull();
+      expect(result.board?.boardId).toBe(only.id);
+
+      const [row] = await db.execute(
+        sql`SELECT board_uuid FROM user_board_serials WHERE user_id = ${TEST_USER_ID} AND serial_number = ${serial}`,
+      );
+      expect((row as { board_uuid: string }).board_uuid).toBe(only.uuid);
+    });
+
+    it('chooseBoardForSerial remembers the pick so a later resolve no longer prompts', async () => {
+      const serial = `PICK-${Date.now()}`;
+      await insertBoard({ ownerId: TEST_USER_ID, serial, layoutId: 5, sizeId: 10, setIds: '1', name: 'Mine' });
+      const theirs = await insertBoard({
+        ownerId: SECOND_USER_ID,
+        serial,
+        layoutId: 5,
+        sizeId: 10,
+        setIds: '1',
+        name: 'Theirs',
+      });
+
+      const ambiguous = await boardPresenceMutations.resolveBoardCandidatesForSerial(
+        undefined,
+        { serial, boardType: 'kilter', layoutId: 5, sizeId: 10, setIds: '1' },
+        authCtx(),
+      );
+      expect(ambiguous.candidates).toHaveLength(2);
+
+      const chosen = await boardPresenceMutations.chooseBoardForSerial(
+        undefined,
+        { boardId: theirs.id, serial },
+        authCtx(),
+      );
+      expect(chosen.boardId).toBe(theirs.id);
+
+      const after = await boardPresenceMutations.resolveBoardCandidatesForSerial(
+        undefined,
+        { serial, boardType: 'kilter', layoutId: 5, sizeId: 10, setIds: '1' },
+        authCtx(),
+      );
+      expect(after.candidates).toBeNull();
+      expect(after.board?.boardId).toBe(theirs.id);
+    });
+
+    it('chooseBoardForSerial rejects a board not linked to the serial', async () => {
+      const serial = `BAD-${Date.now()}`;
+      await insertBoard({ ownerId: SECOND_USER_ID, serial, layoutId: 6, sizeId: 10, setIds: '1', name: 'Real' });
+      const unrelated = await insertBoard({
+        ownerId: TEST_USER_ID,
+        serial: null,
+        layoutId: 6,
+        sizeId: 11,
+        setIds: '1',
+        name: 'Unrelated',
+      });
+
+      await expect(
+        boardPresenceMutations.chooseBoardForSerial(undefined, { boardId: unrelated.id, serial }, authCtx()),
+      ).rejects.toMatchObject({ extensions: { code: 'NOT_FOUND' } });
+    });
+
+    it('legacy resolveBoardForSerial auto-picks the caller-owned board among duplicates', async () => {
+      const serial = `LEGACY-${Date.now()}`;
+      const mine = await insertBoard({
+        ownerId: TEST_USER_ID,
+        serial,
+        layoutId: 7,
+        sizeId: 10,
+        setIds: '1',
+        name: 'Mine Legacy',
+      });
+      await insertBoard({
+        ownerId: SECOND_USER_ID,
+        serial,
+        layoutId: 7,
+        sizeId: 10,
+        setIds: '1',
+        name: 'Theirs Legacy',
+      });
+
+      const resolved = await boardPresenceMutations.resolveBoardForSerial(
+        undefined,
+        { serial, boardType: 'kilter', layoutId: 7, sizeId: 10, setIds: '1' },
+        authCtx(),
+      );
+      expect(resolved.boardId).toBe(mine.id);
+    });
+
+    it('allows the same serial across two owners but blocks a second board for one owner', async () => {
+      const serial = `CONSTRAINT-${Date.now()}`;
+      await insertBoard({ ownerId: TEST_USER_ID, serial, layoutId: 8, sizeId: 10, setIds: '1', name: 'A' });
+      // Different owner, same serial — allowed now that serials aren't globally unique.
+      await insertBoard({ ownerId: SECOND_USER_ID, serial, layoutId: 8, sizeId: 10, setIds: '1', name: 'B' });
+      // Same owner, second board, same serial — still rejected by the per-owner unique index.
+      await expect(
+        insertBoard({ ownerId: TEST_USER_ID, serial, layoutId: 9, sizeId: 10, setIds: '1', name: 'C' }),
+      ).rejects.toThrow();
+    });
+  });
+
   describe('resolveBoardForUuid', () => {
     it('resolves the selected named board and stamps proof-of-presence', async () => {
       const boardUuid = uuidv4();
