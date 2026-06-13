@@ -3477,6 +3477,11 @@ export type Query = {
    */
   sessionGroupedFeed: SessionFeedResult;
   /**
+   * Get viewer-specific session data for an Apple Health workout export.
+   * Requires authentication and returns only the requesting user's ticks.
+   */
+  sessionHealthExport?: Maybe<SessionHealthExport>;
+  /**
    * Lightweight, presence-independent lifecycle check for a session.
    * Reads the durable session row (not live Redis presence), so it tells an
    * ended session apart from one that is merely empty. Returns null when the
@@ -3917,6 +3922,11 @@ export type QuerySessionDetailArgs = {
 /** Root query type for all read operations. */
 export type QuerySessionGroupedFeedArgs = {
   input?: InputMaybe<ActivityFeedInput>;
+};
+
+/** Root query type for all read operations. */
+export type QuerySessionHealthExportArgs = {
+  sessionId: Scalars['ID']['input'];
 };
 
 /** Root query type for all read operations. */
@@ -4605,6 +4615,57 @@ export type SessionHardestClimb = {
   climbUuid: Scalars['String']['output'];
   /** Grade name */
   grade: Scalars['String']['output'];
+};
+
+/**
+ * Viewer-specific export payload for writing a finished session to Apple Health.
+ * It intentionally contains only the requesting user's ticks and saved workout id.
+ */
+export type SessionHealthExport = {
+  __typename?: 'SessionHealthExport';
+  /** Primary board type for this viewer's workout */
+  boardType: Scalars['String']['output'];
+  /** Duration in minutes */
+  durationMinutes?: Maybe<Scalars['Int']['output']>;
+  /** When the session ended */
+  endedAt?: Maybe<Scalars['String']['output']>;
+  /** Hardest climb the viewer sent during the session */
+  hardestClimb?: Maybe<SessionHardestClimb>;
+  /** Existing Apple Health workout id saved for this viewer/session */
+  healthKitWorkoutId?: Maybe<Scalars['String']['output']>;
+  /** Viewer-owned lap events */
+  laps: Array<SessionHealthExportLap>;
+  /** Session ID */
+  sessionId: Scalars['ID']['output'];
+  /** When the session started */
+  startedAt?: Maybe<Scalars['String']['output']>;
+  /** Viewer-owned attempts, including the successful attempt on sends */
+  totalAttempts: Scalars['Int']['output'];
+  /** Viewer-owned sends */
+  totalSends: Scalars['Int']['output'];
+};
+
+/** One viewer-owned lap/event included in an Apple Health workout export. */
+export type SessionHealthExportLap = {
+  __typename?: 'SessionHealthExportLap';
+  /** Climb angle */
+  angle?: Maybe<Scalars['Int']['output']>;
+  /** Number of attempts represented by this tick */
+  attemptCount: Scalars['Int']['output'];
+  /** Board type */
+  boardType: Scalars['String']['output'];
+  /** Climb name */
+  climbName?: Maybe<Scalars['String']['output']>;
+  /** Climb UUID */
+  climbUuid: Scalars['String']['output'];
+  /** When the lap was logged */
+  climbedAt: Scalars['String']['output'];
+  /** Grade name */
+  grade?: Maybe<Scalars['String']['output']>;
+  /** Tick status (flash, send, attempt) */
+  status: Scalars['String']['output'];
+  /** Tick UUID */
+  tickUuid: Scalars['ID']['output'];
 };
 
 /** Participant stats in a session summary. */

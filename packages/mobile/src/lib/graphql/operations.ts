@@ -22,6 +22,7 @@ import type {
   SessionStatus,
   SessionFeedParticipant,
   SessionGradeDistributionItem,
+  SessionHealthExport,
 } from '@boardsesh/shared-schema';
 import type { SubscriptionQueueItem } from '../queue-conversion';
 
@@ -441,6 +442,33 @@ const SESSION_SUMMARY_FIELDS = `
   goal
 `;
 
+const SESSION_HEALTH_EXPORT_FIELDS = `
+  sessionId
+  startedAt
+  endedAt
+  durationMinutes
+  boardType
+  totalSends
+  totalAttempts
+  hardestClimb {
+    climbUuid
+    climbName
+    grade
+  }
+  laps {
+    tickUuid
+    climbedAt
+    climbUuid
+    climbName
+    grade
+    status
+    attemptCount
+    boardType
+    angle
+  }
+  healthKitWorkoutId
+`;
+
 export const CREATE_SESSION = gql`
   mutation CreateSession($input: CreateSessionInput!) {
     createSession(input: $input) {
@@ -515,6 +543,22 @@ export type GetSessionSummaryQueryVariables = {
 
 export type GetSessionSummaryQueryResponse = {
   sessionSummary: SessionSummary | null;
+};
+
+export const GET_SESSION_HEALTH_EXPORT = gql`
+  query GetSessionHealthExport($sessionId: ID!) {
+    sessionHealthExport(sessionId: $sessionId) {
+      ${SESSION_HEALTH_EXPORT_FIELDS}
+    }
+  }
+`;
+
+export type GetSessionHealthExportQueryVariables = {
+  sessionId: string;
+};
+
+export type GetSessionHealthExportQueryResponse = {
+  sessionHealthExport: SessionHealthExport | null;
 };
 
 export const GET_NEARBY_SESSIONS = gql`

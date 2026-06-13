@@ -13,6 +13,7 @@ import type {
   SetterStatsInput,
   UserProfile,
   SessionSummary,
+  SessionHealthExport,
 } from '@boardsesh/shared-schema';
 import {
   SIMILAR_CLIMBS_QUERY,
@@ -47,6 +48,7 @@ import {
   GET_SETTER_STATS,
   GET_CLIMB,
   GET_SESSION_SUMMARY,
+  GET_SESSION_HEALTH_EXPORT,
   END_SESSION,
   TOGGLE_FAVORITE,
   type GetProfileQueryResponse,
@@ -65,6 +67,8 @@ import {
   type GetClimbQueryVariables,
   type GetSessionSummaryQueryResponse,
   type GetSessionSummaryQueryVariables,
+  type GetSessionHealthExportQueryResponse,
+  type GetSessionHealthExportQueryVariables,
   type EndSessionMutationVariables,
   type EndSessionMutationResponse,
   type ToggleFavoriteMutationVariables,
@@ -277,6 +281,22 @@ export function useSessionSummary(sessionId: string | null) {
         sessionId,
       } as GetSessionSummaryQueryVariables),
     select: (data) => data.sessionSummary,
+    enabled: !!sessionId,
+  });
+}
+
+export function useSessionHealthExport(sessionId: string | null) {
+  return useQuery<SessionHealthExport | null>({
+    queryKey: ['sessionHealthExport', sessionId],
+    queryFn: async () => {
+      const response = await getHttpClient().request<
+        GetSessionHealthExportQueryResponse,
+        GetSessionHealthExportQueryVariables
+      >(GET_SESSION_HEALTH_EXPORT, {
+        sessionId: sessionId!,
+      });
+      return response.sessionHealthExport;
+    },
     enabled: !!sessionId,
   });
 }

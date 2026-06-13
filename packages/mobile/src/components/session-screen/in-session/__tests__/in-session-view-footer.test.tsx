@@ -243,11 +243,6 @@ describe('InSessionView footer', () => {
       await Promise.resolve();
     });
 
-    // Mocked session detail has no ticks and no active board, so the export
-    // context is empty — the assertion pins the handoff, not the contents.
-    expect(integrations.runSessionEndExports).toHaveBeenCalledWith(summary, {
-      boardType: '',
-      lapTimestamps: [],
-    });
+    expect(integrations.runSessionEndExports).toHaveBeenCalledWith(summary, {});
   });
 });

@@ -37,7 +37,7 @@ const summary: SessionSummary = {
   goal: null,
 };
 
-const ctx = { boardType: 'kilter', lapTimestamps: [] };
+const ctx = {};
 
 describe('integration registry', () => {
   beforeEach(() => {

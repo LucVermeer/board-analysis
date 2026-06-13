@@ -8,7 +8,8 @@ Two integration kinds exist, with different trust models:
   disconnect / toggle UI over GraphQL.
 - **Device integrations** (Apple Health today): device-local. The phone writes
   workouts through a native module; the server never holds credentials and
-  only stores a workout id for dedupe (`board_sessions.health_kit_workout_id`).
+  only stores a per-user workout id for dedupe
+  (`session_health_kit_workouts.workout_id`).
 
 v1 exports explicit (party/recorded) sessions only. `integration_exports.
 session_type` already accommodates inferred solo sessions for later.
@@ -110,14 +111,21 @@ within 5 minutes, and is concurrency-safe:
 `runSessionEndExports` fires after `endSession` resolves on the phone. The
 auto-save orchestration (`apple-health.ts`) mirrors the legacy web
 `healthkit-auto-save.ts` semantics: a module-level per-session state map
-(`saving`/`saved`/`failed`) doubles as the dedupe guard and powers the summary
-button UI. Authorization is probed with the read-only
+(`saving`/`saved`/`savedWithoutEnergy`/`failed`) doubles as the dedupe guard
+and powers the summary button UI. Authorization is probed with the read-only
 `getAuthorizationStatus` native call; the consent sheet only ever appears for
 a never-decided user (first session end, or an explicit toggle/button tap).
-The workout itself (`HealthWorkoutsModule.swift`) writes an `HKWorkout`
-(.climbing) with MET-estimated active energy (latest HealthKit body mass,
-70 kg fallback) and per-climb `.lap` events. Workout ids persist via
-`setInferredSessionHealthKitWorkoutId` for dedupe.
+Before it writes, mobile loads `sessionHealthExport(sessionId)`, which is
+filtered to the authenticated viewer's own ticks and includes any existing
+per-user workout id. That keeps party sessions from exporting another
+climber's sends into a personal Apple Health workout and lets manual saves
+after app restart keep lap data. The native module also checks HealthKit for
+an existing workout with `HKMetadataKeyExternalUUID = sessionId` before
+creating one. The workout itself (`HealthWorkoutsModule.swift`) writes an
+`HKWorkout` (.climbing) with indoor + Boardsesh brand metadata, MET-estimated
+active energy (latest HealthKit body mass, 70 kg fallback), and per-climb
+`.lap` events carrying climb name, grade, status, attempt count, board type,
+and angle. Workout ids persist via `setSessionHealthKitWorkoutId` for dedupe.
 
 ## Adding a provider
 

@@ -171,6 +171,7 @@
     "saveToAppleHealth": "Save to Apple Health",
     "savingToAppleHealth": "Saving to Apple Health…",
     "savedToAppleHealth": "Saved to Apple Health",
+    "savedToAppleHealthWithoutCalories": "Saved without calories",
     "saveToAppleHealthRetry": "Save to Apple Health (retry)",
     "loadErrorTitle": "Couldn't load your session",
     "loadErrorMessage": "Your climbs are saved — the recap just didn't load. Try again or head back.",
