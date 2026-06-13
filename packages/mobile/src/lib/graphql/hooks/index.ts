@@ -147,24 +147,37 @@ export function usePopularBoardConfigs(input?: PopularBoardConfigsInput, options
  * until coordinates resolve, so callers can pass `null` while awaiting a
  * location permission/fix.
  */
-export function useNearbyBoards(coords: { latitude: number; longitude: number } | null, radiusKm = 1) {
+export function useNearbyBoards(
+  coords: { latitude: number; longitude: number } | null,
+  radiusKm = 1,
+  query?: string,
+  // Backend caps this at 50. The gym finder needs the higher ceiling so a dense
+  // metro's gym-attached + standalone boards don't share a 20-row budget (which
+  // would falsely show "no boards" for a gym whose boards fell outside the top
+  // 20). The "Near you" carousel keeps the small default.
+  limit = 20,
+) {
+  // Empty string means "no name filter" to the resolver; normalise to undefined
+  // so the cache key and the request payload stay clean.
+  const nameFilter = query && query.trim().length > 0 ? query.trim() : undefined;
   return useQuery({
-    queryKey: ['nearbyBoards', coords, radiusKm],
+    queryKey: ['nearbyBoards', coords, radiusKm, nameFilter, limit],
     queryFn: () =>
       getHttpClient().request<SearchBoardsQueryResponse>(SEARCH_BOARDS, {
-        input: { latitude: coords?.latitude, longitude: coords?.longitude, radiusKm, limit: 20 },
+        input: { latitude: coords?.latitude, longitude: coords?.longitude, radiusKm, limit, query: nameFilter },
       }),
     select: (data) => data.searchBoards,
     enabled: coords !== null,
   });
 }
 
-export function useNearbyGyms(coords: { latitude: number; longitude: number } | null, radiusKm = 50) {
+export function useNearbyGyms(coords: { latitude: number; longitude: number } | null, radiusKm = 50, query?: string) {
+  const nameFilter = query && query.trim().length > 0 ? query.trim() : undefined;
   return useQuery({
-    queryKey: ['nearbyGyms', coords, radiusKm],
+    queryKey: ['nearbyGyms', coords, radiusKm, nameFilter],
     queryFn: () =>
       getHttpClient().request<SearchGymsQueryResponse>(SEARCH_GYMS, {
-        input: { latitude: coords?.latitude, longitude: coords?.longitude, radiusKm, limit: 50 },
+        input: { latitude: coords?.latitude, longitude: coords?.longitude, radiusKm, limit: 50, query: nameFilter },
       }),
     select: (data) => data.searchGyms,
     enabled: coords !== null,

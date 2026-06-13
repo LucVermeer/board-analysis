@@ -265,11 +265,6 @@ export default function BoardSelection() {
           <BoardModeCard icon="bluetooth" label={t('mobile.discovery.bluetooth')} onPress={onModeBluetooth} />
           <BoardModeCard icon="pin" label={t('mobile.discovery.findGym')} onPress={onModeFindGym} />
           <BoardModeCard icon="plus" label={t('mobile.discovery.custom')} onPress={onModeCustom} />
-          <BoardModeCard
-            icon="search"
-            label={t('mobile.discovery.search')}
-            onPress={() => router.push({ pathname: '/boards/search', params: { returnTo: boardReturnTo } })}
-          />
         </View>
 
         {shouldFocusMyBoards ? myBoardsSection : nearbySection}

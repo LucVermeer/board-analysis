@@ -47,7 +47,6 @@
       "nearbyShowing": "Showing nearby",
       "yourBoardsTitle": "Your boards",
       "popularTitle": "Popular setups",
-      "search": "Search",
       "findGym": "Find gym"
     },
     "custom": {
@@ -67,10 +66,6 @@
       "resolving": "Loading boards…",
       "noResults": "No boards in range",
       "unavailable": "Turn on Bluetooth to scan"
-    },
-    "search": {
-      "placeholder": "Search by name or place",
-      "mapUnavailable": "Update the app to see the map. You can still search by name."
     },
     "boardDetail": {
       "setActive": "Set as active board",
@@ -101,7 +96,11 @@
       "grantLocation": "Use my location",
       "empty": "No gyms nearby yet",
       "noBoards": "No boards here yet",
-      "boardCount": "{{count}} boards"
+      "boardCount": "{{count}} boards",
+      "searchPlaceholder": "Search a city, gym, or board",
+      "showingPlace": "Showing {{place}}",
+      "clearSearch": "Clear search",
+      "otherBoardsTitle": "Boards nearby"
     }
   },
   "boardEntity": {

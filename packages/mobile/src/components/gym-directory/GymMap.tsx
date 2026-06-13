@@ -1,4 +1,4 @@
-import { Component, type ReactNode } from 'react';
+import { Component, memo, type ReactNode } from 'react';
 import { Platform, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 
 export type GymMapMarker = {
@@ -70,13 +70,13 @@ function NativeGymMap({ center, markers, style }: GymMapProps) {
  * flow works identically whether or not the map renders, and a missing/broken
  * native map never crashes the screen.
  */
-export function GymMap({ center, markers, style }: GymMapProps) {
+export const GymMap = memo(function GymMap({ center, markers, style }: GymMapProps) {
   return (
     <MapErrorBoundary>
       <NativeGymMap center={center} markers={markers} style={style} />
     </MapErrorBoundary>
   );
-}
+});
 
 const styles = StyleSheet.create({
   map: {

@@ -47,7 +47,6 @@
       "nearbyShowing": "À proximité affichés",
       "yourBoardsTitle": "Tes boards",
       "popularTitle": "Configurations populaires",
-      "search": "Rechercher",
       "findGym": "Trouver une salle"
     },
     "custom": {
@@ -67,10 +66,6 @@
       "resolving": "Chargement des boards…",
       "noResults": "Aucun board à portée",
       "unavailable": "Active le Bluetooth pour rechercher"
-    },
-    "search": {
-      "placeholder": "Cherche par nom ou lieu",
-      "mapUnavailable": "Mets à jour l'app pour voir la carte. Tu peux chercher par nom."
     },
     "boardDetail": {
       "setActive": "Utiliser ce board",
@@ -101,7 +96,11 @@
       "grantLocation": "Utiliser ma position",
       "empty": "Aucune salle à proximité pour l'instant",
       "noBoards": "Aucun tableau ici pour l'instant",
-      "boardCount": "{{count}} tableaux"
+      "boardCount": "{{count}} tableaux",
+      "searchPlaceholder": "Rechercher une ville, une salle ou un mur",
+      "showingPlace": "Résultats pour {{place}}",
+      "clearSearch": "Effacer la recherche",
+      "otherBoardsTitle": "Murs à proximité"
     }
   },
   "boardEntity": {

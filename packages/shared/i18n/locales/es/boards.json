@@ -47,7 +47,6 @@
       "nearbyShowing": "Mostrando cercanos",
       "yourBoardsTitle": "Tus boards",
       "popularTitle": "Configuraciones populares",
-      "search": "Buscar",
       "findGym": "Buscar gimnasio"
     },
     "custom": {
@@ -67,10 +66,6 @@
       "resolving": "Cargando boards…",
       "noResults": "Ningún board al alcance",
       "unavailable": "Activa el Bluetooth para buscar"
-    },
-    "search": {
-      "placeholder": "Busca por nombre o lugar",
-      "mapUnavailable": "Actualiza la app para ver el mapa. Puedes buscar por nombre."
     },
     "boardDetail": {
       "setActive": "Usar esta tabla",
@@ -101,7 +96,11 @@
       "grantLocation": "Usar mi ubicación",
       "empty": "Aún no hay gimnasios cerca",
       "noBoards": "Aún no hay tableros aquí",
-      "boardCount": "{{count}} tableros"
+      "boardCount": "{{count}} tableros",
+      "searchPlaceholder": "Busca una ciudad, gimnasio o tabla",
+      "showingPlace": "Mostrando {{place}}",
+      "clearSearch": "Borrar búsqueda",
+      "otherBoardsTitle": "Tablas cercanas"
     }
   },
   "boardEntity": {
