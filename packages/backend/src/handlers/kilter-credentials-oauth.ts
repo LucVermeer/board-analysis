@@ -6,7 +6,7 @@ import {
   KILTER_OAUTH_AUTH_URL,
   verifyKeycloakToken,
 } from '@boardsesh/kilter-sync/api';
-import { applyCorsHeaders } from './cors';
+import { applyCorsHeaders, isOriginAllowed, isSameOriginUpgrade } from './cors';
 import { validateToken } from '../middleware/auth';
 import { redisClientManager } from '../redis/client';
 import {
@@ -27,6 +27,7 @@ const VERIFIER_COOKIE_NAME = 'kilter_oauth_verifier';
 const NONCE_COOKIE_NAME = 'kilter_oauth_nonce';
 const HANDSHAKE_COOKIE_PATH = '/board-credentials/kilter';
 const COOKIE_MAX_AGE_SECONDS = 600;
+const MAX_JSON_BODY_BYTES = 16 * 1024;
 
 const REFLECTABLE_OAUTH_ERRORS = new Set<string>([
   'access_denied',
@@ -58,6 +59,24 @@ function deepLinkBase(): string {
   return 'com.boardsesh.app://board-credentials/kilter';
 }
 
+function completionUrl(returnUrl: string | undefined, status: 'connected' | 'error', reason?: string): string {
+  if (!returnUrl) {
+    const nativeUrl = new URL(deepLinkBase());
+    nativeUrl.searchParams.set('status', status);
+    if (reason) nativeUrl.searchParams.set('reason', reason);
+    return nativeUrl.toString();
+  }
+
+  const webUrl = new URL(returnUrl);
+  webUrl.searchParams.set('kilter', status);
+  if (reason) {
+    webUrl.searchParams.set('reason', reason);
+  } else {
+    webUrl.searchParams.delete('reason');
+  }
+  return webUrl.toString();
+}
+
 function redirectTo(res: ServerResponse, location: string, cookies: string[] = []): void {
   res.writeHead(302, {
     Location: location,
@@ -67,12 +86,17 @@ function redirectTo(res: ServerResponse, location: string, cookies: string[] = [
   res.end();
 }
 
-function redirectSuccess(res: ServerResponse, cookies: string[] = []): void {
-  redirectTo(res, `${deepLinkBase()}?status=connected`, cookies);
+function redirectSuccess(res: ServerResponse, returnUrl: string | undefined, cookies: string[] = []): void {
+  redirectTo(res, completionUrl(returnUrl, 'connected'), cookies);
 }
 
-function redirectError(res: ServerResponse, reason: string, cookies: string[] = []): void {
-  redirectTo(res, `${deepLinkBase()}?status=error&reason=${encodeURIComponent(reason)}`, cookies);
+function redirectError(
+  res: ServerResponse,
+  returnUrl: string | undefined,
+  reason: string,
+  cookies: string[] = [],
+): void {
+  redirectTo(res, completionUrl(returnUrl, 'error', reason), cookies);
 }
 
 function sendText(res: ServerResponse, statusCode: number, message: string): void {
@@ -113,11 +137,59 @@ async function authenticate(req: IncomingMessage, res: ServerResponse): Promise<
   return authResult.userId;
 }
 
+async function readJsonBody(req: IncomingMessage): Promise<unknown> {
+  let body = '';
+  let bytesRead = 0;
+
+  for await (const chunk of req) {
+    const chunkText = typeof chunk === 'string' ? chunk : chunk.toString('utf8');
+    bytesRead += Buffer.byteLength(chunkText);
+    if (bytesRead > MAX_JSON_BODY_BYTES) {
+      throw new Error('Request body too large');
+    }
+    body += chunkText;
+  }
+
+  if (!body.trim()) return {};
+
+  try {
+    return JSON.parse(body) as unknown;
+  } catch {
+    throw new Error('Invalid JSON body');
+  }
+}
+
 function requestOrigin(req: IncomingMessage): string {
   const forwardedProto = req.headers['x-forwarded-proto'];
   const proto = Array.isArray(forwardedProto) ? forwardedProto[0] : forwardedProto;
   const scheme = proto || (process.env.NODE_ENV === 'production' ? 'https' : 'http');
   return `${scheme}://${req.headers.host ?? 'localhost'}`;
+}
+
+function requestAllowedOrigin(req: IncomingMessage): string | null {
+  const rawOrigin = req.headers.origin;
+  const origin = Array.isArray(rawOrigin) ? rawOrigin[0] : rawOrigin;
+  if (!origin) return null;
+  if (isOriginAllowed(origin) || isSameOriginUpgrade(origin, req.headers.host)) {
+    return origin;
+  }
+  return null;
+}
+
+function normalizeReturnUrl(req: IncomingMessage, rawReturnUrl: unknown): string | undefined | null {
+  if (rawReturnUrl == null) return undefined;
+  if (typeof rawReturnUrl !== 'string' || rawReturnUrl.length > 2048) return null;
+
+  const origin = requestAllowedOrigin(req);
+  if (!origin) return null;
+
+  try {
+    const returnUrl = new URL(rawReturnUrl, origin);
+    if (returnUrl.origin !== origin) return null;
+    return returnUrl.toString();
+  } catch {
+    return null;
+  }
 }
 
 function cookieSecure(req: IncomingMessage): boolean {
@@ -207,7 +279,30 @@ export async function handleKilterCredentialsHandoff(req: IncomingMessage, res: 
     return;
   }
 
-  const handoff = signBoardCredentialHandoff({ userId, provider: KILTER_BOARD_TYPE });
+  let body: unknown;
+  try {
+    body = await readJsonBody(req);
+  } catch (error) {
+    sendJson(res, error instanceof Error && error.message === 'Request body too large' ? 413 : 400, {
+      error: error instanceof Error ? error.message : 'Invalid request body',
+    });
+    return;
+  }
+
+  const returnUrl = normalizeReturnUrl(
+    req,
+    body && typeof body === 'object' && !Array.isArray(body) ? (body as { returnUrl?: unknown }).returnUrl : undefined,
+  );
+  if (returnUrl === null) {
+    sendJson(res, 400, { error: 'Invalid returnUrl' });
+    return;
+  }
+
+  const handoff = signBoardCredentialHandoff({
+    userId,
+    provider: KILTER_BOARD_TYPE,
+    ...(returnUrl ? { returnUrl } : {}),
+  });
   const startUrl = new URL('/board-credentials/kilter/start', requestOrigin(req));
   startUrl.searchParams.set('handoff', handoff);
 
@@ -246,7 +341,11 @@ export async function handleKilterCredentialsStart(req: IncomingMessage, res: Se
   const verifier = generateVerifier();
   const challenge = challengeFor(verifier);
   const nonce = base64url(randomBytes(16));
-  const state = signBoardCredentialState({ userId: verifiedHandoff.userId, provider: KILTER_BOARD_TYPE });
+  const state = signBoardCredentialState({
+    userId: verifiedHandoff.userId,
+    provider: KILTER_BOARD_TYPE,
+    ...(verifiedHandoff.returnUrl ? { returnUrl: verifiedHandoff.returnUrl } : {}),
+  });
 
   const authorize = new URL(KILTER_OAUTH_AUTH_URL);
   authorize.searchParams.set('response_type', 'code');
@@ -281,31 +380,32 @@ export async function handleKilterCredentialsCallback(
 ): Promise<void> {
   const clearCookies = clearHandshakeCookies(req);
   const providerError = url.searchParams.get('error');
+  const state = url.searchParams.get('state');
+  const verifiedStateFromUrl = state ? verifyBoardCredentialState(state) : null;
   if (providerError) {
-    redirectError(res, safeOauthErrorReason(providerError), clearCookies);
+    redirectError(res, verifiedStateFromUrl?.returnUrl, safeOauthErrorReason(providerError), clearCookies);
     return;
   }
 
   const code = url.searchParams.get('code');
-  const state = url.searchParams.get('state');
   if (!code || !state) {
-    redirectError(res, 'missing_params', clearCookies);
+    redirectError(res, verifiedStateFromUrl?.returnUrl, 'missing_params', clearCookies);
     return;
   }
 
-  const verifiedState = verifyBoardCredentialState(state);
+  const verifiedState = verifiedStateFromUrl;
   if (!verifiedState || verifiedState.provider !== KILTER_BOARD_TYPE) {
-    redirectError(res, 'state_invalid', clearCookies);
+    redirectError(res, verifiedState?.returnUrl, 'state_invalid', clearCookies);
     return;
   }
 
   if (!isKilterSyncAllowed(verifiedState.userId)) {
-    redirectError(res, 'not_allowed', clearCookies);
+    redirectError(res, verifiedState.returnUrl, 'not_allowed', clearCookies);
     return;
   }
 
   if (!KILTER_OAUTH_CLIENT_ID || !KILTER_OAUTH_REDIRECT_URI) {
-    redirectError(res, 'server_error', clearCookies);
+    redirectError(res, verifiedState.returnUrl, 'server_error', clearCookies);
     return;
   }
 
@@ -314,7 +414,7 @@ export async function handleKilterCredentialsCallback(
   const verifier = cookies.get(VERIFIER_COOKIE_NAME);
   const nonceCookie = cookies.get(NONCE_COOKIE_NAME);
   if (!stateCookie || !verifier || !nonceCookie || stateCookie !== state) {
-    redirectError(res, 'state_invalid', clearCookies);
+    redirectError(res, verifiedState.returnUrl, 'state_invalid', clearCookies);
     return;
   }
 
@@ -331,17 +431,17 @@ export async function handleKilterCredentialsCallback(
     });
   } catch (error) {
     logger.warn('[BoardCredentials] Kilter OAuth code exchange failed:', error);
-    redirectError(res, 'exchange_failed', clearCookies);
+    redirectError(res, verifiedState.returnUrl, 'exchange_failed', clearCookies);
     return;
   }
 
   if (!tokens || typeof tokens !== 'object' || typeof tokens.access_token !== 'string') {
-    redirectError(res, 'malformed_tokens', clearCookies);
+    redirectError(res, verifiedState.returnUrl, 'malformed_tokens', clearCookies);
     return;
   }
 
   if (!tokens.refresh_token) {
-    redirectError(res, 'no_refresh_token', clearCookies);
+    redirectError(res, verifiedState.returnUrl, 'no_refresh_token', clearCookies);
     return;
   }
 
@@ -355,7 +455,7 @@ export async function handleKilterCredentialsCallback(
     }));
   } catch (error) {
     logger.warn('[BoardCredentials] Kilter id_token verification failed:', error);
-    redirectError(res, 'id_token', clearCookies);
+    redirectError(res, verifiedState.returnUrl, 'id_token', clearCookies);
     return;
   }
 
@@ -368,9 +468,9 @@ export async function handleKilterCredentialsCallback(
     });
   } catch (error) {
     logger.warn('[BoardCredentials] Failed to persist Kilter credential:', error);
-    redirectError(res, 'persist_failed', clearCookies);
+    redirectError(res, verifiedState.returnUrl, 'persist_failed', clearCookies);
     return;
   }
 
-  redirectSuccess(res, clearCookies);
+  redirectSuccess(res, verifiedState.returnUrl, clearCookies);
 }

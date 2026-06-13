@@ -272,9 +272,7 @@
       "connectedAs": "Connected as {{name}}",
       "connected": "Connected",
       "notConnected": "Not connected",
-      "importJson": "Import JSON",
       "kilterConnected": "Kilter connected",
-      "kilterCancelled": "Kilter sign-in cancelled",
       "kilterNotAllowed": "Kilter sync is not enabled for this account yet.",
       "kilterConnectFailed": "Couldn't connect Kilter. Try again.",
       "linkSuccess": "{{boardName}} linked",
@@ -287,11 +285,9 @@
       "importMissingUser": "Pick an Aurora JSON export file.",
       "importBoardWarning": "This looks like {{layoutName}}. Import to {{boardName}} only if that's right.",
       "importPreviewIntro": "Import data from {{username}} to {{boardName}}:",
-      "importComplete": "Import finished",
       "importPartial": "Import partially finished. Re-importing the file is safe.",
       "importFailed": "Import failed. Try again.",
       "importInterrupted": "Import stopped before it finished. Re-importing the file is safe.",
-      "pickFileFailed": "Couldn't open that file. Try again.",
       "requestDataFailed": "Couldn't open email. Try again.",
       "passwordHelp": "Your credentials are encrypted before they are stored."
     }

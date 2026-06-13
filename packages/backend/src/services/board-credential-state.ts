@@ -15,6 +15,7 @@ type SignedPayload = {
   userId: string;
   provider: BoardCredentialProvider;
   nonce: string;
+  returnUrl?: string;
   iat: number;
   exp: number;
 };
@@ -23,6 +24,7 @@ export type VerifiedBoardCredentialToken = {
   userId: string;
   provider: BoardCredentialProvider;
   nonce: string;
+  returnUrl?: string;
 };
 
 let cachedSigningKey: { secret: string; key: Buffer } | null = null;
@@ -42,7 +44,7 @@ function isSupportedBoardCredentialProvider(provider: string): provider is Board
 }
 
 function signPayload(
-  input: { userId: string; provider: BoardCredentialProvider },
+  input: { userId: string; provider: BoardCredentialProvider; returnUrl?: string },
   purpose: TokenPurpose,
   lifetimeSeconds: number,
 ): string {
@@ -57,6 +59,7 @@ function signPayload(
     userId: input.userId,
     provider: input.provider,
     nonce: crypto.randomBytes(16).toString('base64url'),
+    ...(input.returnUrl ? { returnUrl: input.returnUrl } : {}),
     iat: now,
     exp: now + lifetimeSeconds,
   };
@@ -124,10 +127,20 @@ function verifySignedPayload(
     return null;
   }
 
-  return { userId: payload.userId, provider: payload.provider, nonce: payload.nonce };
+  const verifiedToken: VerifiedBoardCredentialToken = {
+    userId: payload.userId,
+    provider: payload.provider,
+    nonce: payload.nonce,
+  };
+
+  return typeof payload.returnUrl === 'string' ? { ...verifiedToken, returnUrl: payload.returnUrl } : verifiedToken;
 }
 
-export function signBoardCredentialState(input: { userId: string; provider: BoardCredentialProvider }): string {
+export function signBoardCredentialState(input: {
+  userId: string;
+  provider: BoardCredentialProvider;
+  returnUrl?: string;
+}): string {
   return signPayload(input, 'board-credential-oauth-state', STATE_LIFETIME_SECONDS);
 }
 
@@ -135,7 +148,11 @@ export function verifyBoardCredentialState(state: string): VerifiedBoardCredenti
   return verifySignedPayload(state, 'board-credential-oauth-state', STATE_LIFETIME_SECONDS);
 }
 
-export function signBoardCredentialHandoff(input: { userId: string; provider: BoardCredentialProvider }): string {
+export function signBoardCredentialHandoff(input: {
+  userId: string;
+  provider: BoardCredentialProvider;
+  returnUrl?: string;
+}): string {
   return signPayload(input, 'board-credential-oauth-handoff', HANDOFF_LIFETIME_SECONDS);
 }
 

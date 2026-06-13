@@ -44,7 +44,6 @@
     "@boardsesh/graphql": "*",
     "@boardsesh/graphql-client": "*",
     "@boardsesh/i18n": "*",
-    "@boardsesh/kilter-sync": "*",
     "@boardsesh/moonboard-ocr": "*",
     "@boardsesh/party-profile": "*",
     "@boardsesh/play-view": "*",
