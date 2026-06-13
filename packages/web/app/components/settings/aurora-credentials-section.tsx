@@ -35,11 +35,13 @@ import EmailOutlined from '@mui/icons-material/EmailOutlined';
 import FileUploadOutlined from '@mui/icons-material/FileUploadOutlined';
 import RadioButtonUncheckedOutlined from '@mui/icons-material/RadioButtonUncheckedOutlined';
 import { useSession } from 'next-auth/react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Trans, useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import {
   createKilterHandoffStartUrl,
   deleteAuroraCredential,
+  finalizeKilterCredential,
   getAuroraCredentials,
   getAuroraUnsyncedCounts,
   resolveAuroraBackendTransport,
@@ -347,11 +349,15 @@ export function ImportProgressSteps({ progress }: { progress: ImportProgress | n
 export default function AuroraCredentialsSection() {
   const { t } = useTranslation('settings');
   const { data: session } = useSession();
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { token: authToken, isLoading: authTokenLoading } = useWsAuthToken();
   const { showMessage } = useSnackbar();
   const [credentials, setCredentials] = useState<AuroraCredentialStatus[]>([]);
   const [unsyncedCounts, setUnsyncedCounts] = useState<UnsyncedCounts | null>(null);
   const [loading, setLoading] = useState(true);
+  const [credentialsLoadError, setCredentialsLoadError] = useState(false);
   const [kilterSyncAllowed, setKilterSyncAllowed] = useState(false);
   const [connectingKilter, setConnectingKilter] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -370,10 +376,13 @@ export default function AuroraCredentialsSection() {
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
   const receivedCompleteRef = useRef(false);
+  const handledKilterCompletionRef = useRef<string | null>(null);
 
   const fetchCredentials = async () => {
+    setCredentialsLoadError(false);
     const transport = resolveAuroraBackendTransport(authToken);
     if (!transport) {
+      setCredentialsLoadError(true);
       setLoading(false);
       return;
     }
@@ -384,6 +393,7 @@ export default function AuroraCredentialsSection() {
       setKilterSyncAllowed(data.kilterSyncAllowed);
     } catch (error) {
       console.error('Failed to fetch credentials:', error);
+      setCredentialsLoadError(true);
     } finally {
       setLoading(false);
     }
@@ -402,10 +412,61 @@ export default function AuroraCredentialsSection() {
 
   useEffect(() => {
     if (authTokenLoading) return;
+    setLoading(true);
     void fetchCredentials();
     void fetchUnsyncedCounts();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authToken, authTokenLoading]);
+
+  const clearKilterSearchParams = () => {
+    const nextParams = new URLSearchParams(searchParams.toString());
+    nextParams.delete('kilter');
+    nextParams.delete('reason');
+    nextParams.delete('completion');
+    const query = nextParams.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  };
+
+  useEffect(() => {
+    if (authTokenLoading) return;
+
+    const kilterStatus = searchParams.get('kilter');
+    if (!kilterStatus) return;
+
+    if (kilterStatus === 'error') {
+      showMessage(t('aurora.mobile.kilterConnectFailed'), 'error');
+      clearKilterSearchParams();
+      return;
+    }
+
+    if (kilterStatus !== 'connected') return;
+
+    const completion = searchParams.get('completion');
+    if (!completion) {
+      showMessage(t('aurora.mobile.kilterConnectFailed'), 'error');
+      clearKilterSearchParams();
+      return;
+    }
+    if (handledKilterCompletionRef.current === completion) return;
+    handledKilterCompletionRef.current = completion;
+
+    void (async () => {
+      try {
+        const transport = resolveAuroraBackendTransport(authToken);
+        if (!transport) throw new Error(t('aurora.mobile.kilterConnectFailed'));
+
+        await finalizeKilterCredential(transport, completion);
+        showMessage(t('aurora.mobile.kilterConnected'), 'success');
+        await Promise.all([fetchCredentials(), fetchUnsyncedCounts()]);
+      } catch (error) {
+        handledKilterCompletionRef.current = null;
+        showMessage(error instanceof Error ? error.message : t('aurora.mobile.kilterConnectFailed'), 'error');
+      } finally {
+        clearKilterSearchParams();
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authToken, authTokenLoading, searchParams]);
 
   const handleAddClick = (boardType: AuroraBoardName) => {
     setSelectedBoard(boardType);
@@ -573,7 +634,11 @@ export default function AuroraCredentialsSection() {
                   event.results.ascents.imported +
                   event.results.attempts.imported +
                   event.results.circuits.imported;
-                showMessage(t('aurora.import.successCount', { count: totalImported }), 'success');
+                if (event.results.partialError) {
+                  showMessage(t('aurora.import.partialWarning'), 'warning');
+                } else {
+                  showMessage(t('aurora.import.successCount', { count: totalImported }), 'success');
+                }
               }
               break;
             case 'error':
@@ -643,6 +708,33 @@ export default function AuroraCredentialsSection() {
           <div className={styles.loadingContainer}>
             <LoadingSpinner />
           </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (credentialsLoadError) {
+    return (
+      <Card>
+        <CardContent>
+          <MuiAlert
+            severity="error"
+            action={
+              <Button
+                color="inherit"
+                size="small"
+                onClick={() => {
+                  setLoading(true);
+                  void fetchCredentials();
+                  void fetchUnsyncedCounts();
+                }}
+              >
+                {t('aurora.loadRetry')}
+              </Button>
+            }
+          >
+            {t('aurora.mobile.loadFailed')}
+          </MuiAlert>
         </CardContent>
       </Card>
     );
@@ -801,6 +893,12 @@ export default function AuroraCredentialsSection() {
           {/* Complete phase */}
           {importPhase === 'complete' && importResult && (
             <>
+              {importResult.partialError && (
+                <MuiAlert severity="warning" className={styles.unsyncedAlert}>
+                  <AlertTitle>{t('aurora.import.results.partialTitle')}</AlertTitle>
+                  {t('aurora.import.results.partialBody')}
+                </MuiAlert>
+              )}
               <List dense>
                 {(importResult.climbs.imported > 0 || importResult.climbs.failed > 0) && (
                   <ListItem>

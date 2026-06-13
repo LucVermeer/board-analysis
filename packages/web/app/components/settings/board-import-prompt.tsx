@@ -56,6 +56,7 @@ export default function BoardImportPrompt({ boardType, onImportComplete }: Board
   // Credential state
   const [credential, setCredential] = useState<AuroraCredentialStatus | null>(null);
   const [loadingCredential, setLoadingCredential] = useState(true);
+  const [credentialLoadError, setCredentialLoadError] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isRemoving, setIsRemoving] = useState(false);
@@ -71,8 +72,10 @@ export default function BoardImportPrompt({ boardType, onImportComplete }: Board
   const [importError, setImportError] = useState<string | null>(null);
 
   const fetchCredential = async () => {
+    setCredentialLoadError(false);
     const transport = resolveAuroraBackendTransport(authToken);
     if (!transport) {
+      setCredentialLoadError(true);
       setLoadingCredential(false);
       return;
     }
@@ -83,6 +86,7 @@ export default function BoardImportPrompt({ boardType, onImportComplete }: Board
       setCredential(cred ?? null);
     } catch (error) {
       console.error('Failed to fetch credentials:', error);
+      setCredentialLoadError(true);
     } finally {
       setLoadingCredential(false);
     }
@@ -90,6 +94,7 @@ export default function BoardImportPrompt({ boardType, onImportComplete }: Board
 
   useEffect(() => {
     if (authTokenLoading) return;
+    setLoadingCredential(true);
     void fetchCredential();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authToken, authTokenLoading, boardType]);
@@ -295,6 +300,28 @@ export default function BoardImportPrompt({ boardType, onImportComplete }: Board
   };
 
   if (loadingCredential) return null;
+
+  if (credentialLoadError) {
+    return (
+      <MuiAlert
+        severity="error"
+        action={
+          <Button
+            color="inherit"
+            size="small"
+            onClick={() => {
+              setLoadingCredential(true);
+              void fetchCredential();
+            }}
+          >
+            {t('aurora.loadRetry')}
+          </Button>
+        }
+      >
+        {t('aurora.mobile.loadFailed')}
+      </MuiAlert>
+    );
+  }
 
   return (
     <>

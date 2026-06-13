@@ -12,8 +12,8 @@ models:
   workouts through a native module; the server never holds credentials and
   only stores a workout id for dedupe (`board_sessions.health_kit_workout_id`).
 - **Board account integrations** (Aurora-family boards): server-side credential
-  storage plus manual JSON import. Mobile talks to backend REST endpoints;
-  web uses matching Next internal routes.
+  storage plus manual JSON import. Web and mobile talk to the same backend
+  REST endpoints.
 
 v1 exports explicit (party/recorded) sessions only. `integration_exports.
 session_type` already accommodates inferred solo sessions for later.
@@ -147,8 +147,10 @@ Next internal routes:
 - `GET /api/aurora-credentials/unsynced` returns pending local ticks/climbs
   that have not synced back to the upstream board account.
 - `POST /api/board-credentials/kilter/handoff` creates a short-lived signed
-  OAuth handoff, then `/board-credentials/kilter/start` and `/callback` finish
-  the Kilter OAuth flow and deep-link back to the app.
+  OAuth handoff, then `/board-credentials/kilter/start` and
+  `/board-credentials/kilter/callback` return a completion token to the app.
+- `POST /api/board-credentials/kilter/finalize` verifies that completion token
+  against the signed-in user and saves the Kilter account link.
 - `POST /api/aurora-import` streams newline-delimited progress events while
   importing Aurora JSON export chunks through the shared importer.
 

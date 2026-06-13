@@ -220,9 +220,9 @@ Card for each board type (iterates `AURORA_BOARDS`: kilter, tension).
 
 - `profile` -- REST `GET /api/internal/profile`.
 - `updateProfile` -- REST `PUT /api/internal/profile`.
-- `auroraCredentials` -- REST `GET/POST/DELETE /api/internal/aurora-credentials` on web, `GET/POST/DELETE /api/aurora-credentials` on mobile.
-- `auroraImport` -- REST `POST /api/internal/aurora-import` on web, streaming `POST /api/aurora-import` on mobile.
-- `kilterCredentialHandoff` -- REST `POST /api/board-credentials/kilter/handoff`, then browser redirects through `/board-credentials/kilter/start` and `/board-credentials/kilter/callback`.
+- `auroraCredentials` -- REST `GET/POST/DELETE /api/aurora-credentials`.
+- `auroraImport` -- streaming REST `POST /api/aurora-import`.
+- `kilterCredentialHandoff` -- REST `POST /api/board-credentials/kilter/handoff`, then browser redirects through `/board-credentials/kilter/start` and `/board-credentials/kilter/callback`, then the app finalizes with `POST /api/board-credentials/kilter/finalize`.
 - `myControllers` -- REST `GET/POST/DELETE /api/internal/controllers`.
 - `deleteAccountInfo` / `GET_DELETE_ACCOUNT_INFO` -- GraphQL query for published climb count.
 - `deleteAccount` / `DELETE_ACCOUNT` -- GraphQL mutation.

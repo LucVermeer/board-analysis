@@ -84,6 +84,19 @@ describe('BoardImportPrompt', () => {
       expect(screen.getByText('Import')).toBeTruthy();
     });
 
+    it('renders a load error instead of a disconnected card when credentials fail to load', async () => {
+      mockFetch.mockRejectedValue(new Error('network down'));
+
+      render(<BoardImportPrompt boardType="tension" />);
+
+      await waitFor(() => {
+        expect(screen.getByText("Couldn't load your board accounts.")).toBeTruthy();
+      });
+
+      expect(screen.queryByText('Link')).toBeNull();
+      expect(screen.queryByText('Import')).toBeNull();
+    });
+
     it('renders card with Unlink button when credential exists', async () => {
       mockFetch.mockResolvedValue(mockCredentialsResponse([tensionCredential]));
 

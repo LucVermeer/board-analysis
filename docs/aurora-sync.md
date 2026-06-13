@@ -324,18 +324,18 @@ Since the Kilter backend has been shut down, API-based sync is no longer availab
 
 ### Technical Details
 
-- **Web endpoint**: `POST /api/internal/aurora-import`
-- **Backend endpoint**: `POST /api/aurora-import` streams progress events for mobile
+- **Backend endpoint**: `POST /api/aurora-import` streams progress events for web and mobile
 - **Implementation**: `packages/aurora-sync/src/sync/json-import.ts`
 - **Preview parser**: `packages/shared-schema/src/aurora-import.ts`
 - **Web UI**: `packages/web/app/components/settings/aurora-credentials-section.tsx`
 - **Mobile UI**: `packages/mobile/src/components/integrations/BoardAccountsSection.tsx`
 
-Mobile credential management uses backend REST endpoints instead of Next
-internal routes: `GET/POST/DELETE /api/aurora-credentials` for credential
-state, `GET /api/aurora-credentials/unsynced` for pending local changes, and
-the `/api/board-credentials/kilter/handoff` +
-`/board-credentials/kilter/{start,callback}` OAuth handoff for Kilter.
+Web and mobile credential management use backend REST endpoints instead of
+Backend REST routes: `GET/POST/DELETE /api/aurora-credentials` for
+credential state, `GET /api/aurora-credentials/unsynced` for pending local
+changes, and the `/api/board-credentials/kilter/handoff` +
+`/board-credentials/kilter/{start,callback}` OAuth handoff followed by
+`POST /api/board-credentials/kilter/finalize` for Kilter.
 
 ### Key Differences from API Sync
 

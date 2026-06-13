@@ -132,3 +132,13 @@ export async function createKilterHandoffStartUrl(
   });
   return response.startUrl;
 }
+
+export async function finalizeKilterCredential(
+  transport: AuroraBackendTransport,
+  completion: string,
+): Promise<{ success: true }> {
+  return requestBackendJson<{ success: true }>(transport, '/api/board-credentials/kilter/finalize', {
+    method: 'POST',
+    body: JSON.stringify({ completion }),
+  });
+}

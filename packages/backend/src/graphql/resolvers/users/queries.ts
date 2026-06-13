@@ -9,6 +9,7 @@ import { db } from '../../../db/client';
 import * as dbSchema from '@boardsesh/db/schema';
 import { requireAuthenticated, validateInput } from '../shared/helpers';
 import { BoardNameSchema } from '../../../validation/schemas';
+import { getAuroraCredentialStatuses } from '../../../services/aurora-credentials';
 
 export const userQueries = {
   /**
@@ -53,17 +54,14 @@ export const userQueries = {
       return [];
     }
 
-    const credentials = await db
-      .select()
-      .from(dbSchema.auroraCredentials)
-      .where(eq(dbSchema.auroraCredentials.userId, ctx.userId));
+    const credentials = await getAuroraCredentialStatuses(ctx.userId);
 
-    return credentials.map((c) => ({
-      boardType: c.boardType,
-      username: c.encryptedUsername ?? '', // Username is stored as-is (not encrypted); empty for non-username boards (e.g. Kilter OIDC)
-      userId: c.auroraUserId || undefined,
-      syncedAt: c.lastSyncAt?.toISOString() || undefined,
-      hasToken: !!c.auroraToken,
+    return credentials.map((credential) => ({
+      boardType: credential.boardType,
+      username: credential.auroraUsername,
+      userId: credential.auroraUserId ?? undefined,
+      syncedAt: credential.lastSyncAt ?? undefined,
+      hasToken: credential.syncStatus !== 'linked',
     }));
   },
 
@@ -77,26 +75,15 @@ export const userQueries = {
 
     validateInput(BoardNameSchema, boardType, 'boardType');
 
-    const credentials = await db
-      .select()
-      .from(dbSchema.auroraCredentials)
-      .where(
-        and(eq(dbSchema.auroraCredentials.userId, ctx.userId), eq(dbSchema.auroraCredentials.boardType, boardType)),
-      )
-      .limit(1);
+    const credential = (await getAuroraCredentialStatuses(ctx.userId)).find((status) => status.boardType === boardType);
+    if (!credential) return null;
 
-    if (credentials.length === 0) {
-      return null;
-    }
-
-    const c = credentials[0];
     return {
-      boardType: c.boardType,
-      username: c.encryptedUsername ?? '', // Username is stored as-is (not encrypted); empty for non-username boards (e.g. Kilter OIDC)
-      userId: c.auroraUserId || undefined,
-      syncedAt: c.lastSyncAt?.toISOString() || undefined,
-      // Note: We don't expose the actual token for security
-      token: c.auroraToken ? '[ENCRYPTED]' : undefined,
+      boardType: credential.boardType,
+      username: credential.auroraUsername,
+      userId: credential.auroraUserId ?? undefined,
+      syncedAt: credential.lastSyncAt ?? undefined,
+      token: credential.syncStatus !== 'linked' ? '[ENCRYPTED]' : undefined,
     };
   },
 

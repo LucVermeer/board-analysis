@@ -19,6 +19,7 @@ import { handleAuroraCredentials, handleAuroraCredentialsUnsynced } from './hand
 import { handleAuroraImport } from './handlers/aurora-import';
 import {
   handleKilterCredentialsCallback,
+  handleKilterCredentialsFinalize,
   handleKilterCredentialsHandoff,
   handleKilterCredentialsStart,
 } from './handlers/kilter-credentials-oauth';
@@ -330,6 +331,14 @@ export async function startServer(): Promise<ServerResources> {
 
       if (pathname === '/api/board-credentials/kilter/handoff' && (req.method === 'POST' || req.method === 'OPTIONS')) {
         await handleKilterCredentialsHandoff(req, res);
+        return;
+      }
+
+      if (
+        pathname === '/api/board-credentials/kilter/finalize' &&
+        (req.method === 'POST' || req.method === 'OPTIONS')
+      ) {
+        await handleKilterCredentialsFinalize(req, res);
         return;
       }
 

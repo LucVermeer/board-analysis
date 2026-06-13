@@ -5,10 +5,14 @@ import { logger } from '../utils/logger';
 const HKDF_INFO = 'boardsesh-board-credential-oauth-tokens-v1';
 const STATE_LIFETIME_SECONDS = 10 * 60;
 const HANDOFF_LIFETIME_SECONDS = 60;
+const COMPLETION_LIFETIME_SECONDS = 5 * 60;
 const CLOCK_SKEW_TOLERANCE_SECONDS = 5;
 
 type BoardCredentialProvider = typeof KILTER_BOARD_TYPE;
-type TokenPurpose = 'board-credential-oauth-state' | 'board-credential-oauth-handoff';
+type TokenPurpose =
+  | 'board-credential-oauth-state'
+  | 'board-credential-oauth-handoff'
+  | 'board-credential-oauth-completion';
 
 type SignedPayload = {
   purpose: TokenPurpose;
@@ -16,6 +20,9 @@ type SignedPayload = {
   provider: BoardCredentialProvider;
   nonce: string;
   returnUrl?: string;
+  encryptedRefreshToken?: string;
+  kilterUserId?: string;
+  username?: string;
   iat: number;
   exp: number;
 };
@@ -25,6 +32,12 @@ export type VerifiedBoardCredentialToken = {
   provider: BoardCredentialProvider;
   nonce: string;
   returnUrl?: string;
+};
+
+export type VerifiedBoardCredentialCompletion = VerifiedBoardCredentialToken & {
+  encryptedRefreshToken: string;
+  kilterUserId: string;
+  username?: string;
 };
 
 let cachedSigningKey: { secret: string; key: Buffer } | null = null;
@@ -44,7 +57,14 @@ function isSupportedBoardCredentialProvider(provider: string): provider is Board
 }
 
 function signPayload(
-  input: { userId: string; provider: BoardCredentialProvider; returnUrl?: string },
+  input: {
+    userId: string;
+    provider: BoardCredentialProvider;
+    returnUrl?: string;
+    encryptedRefreshToken?: string;
+    kilterUserId?: string;
+    username?: string;
+  },
   purpose: TokenPurpose,
   lifetimeSeconds: number,
 ): string {
@@ -60,6 +80,9 @@ function signPayload(
     provider: input.provider,
     nonce: crypto.randomBytes(16).toString('base64url'),
     ...(input.returnUrl ? { returnUrl: input.returnUrl } : {}),
+    ...(input.encryptedRefreshToken ? { encryptedRefreshToken: input.encryptedRefreshToken } : {}),
+    ...(input.kilterUserId ? { kilterUserId: input.kilterUserId } : {}),
+    ...(input.username ? { username: input.username } : {}),
     iat: now,
     exp: now + lifetimeSeconds,
   };
@@ -69,11 +92,7 @@ function signPayload(
   return `${encodedPayload}.${signature}`;
 }
 
-function verifySignedPayload(
-  token: string,
-  expectedPurpose: TokenPurpose,
-  lifetimeSeconds: number,
-): VerifiedBoardCredentialToken | null {
+function verifyPayload(token: string, expectedPurpose: TokenPurpose, lifetimeSeconds: number): SignedPayload | null {
   const signingKey = getSigningKey();
   if (!signingKey) {
     logger.warn('[BoardCredentials] NEXTAUTH_SECRET not configured');
@@ -127,6 +146,10 @@ function verifySignedPayload(
     return null;
   }
 
+  return payload;
+}
+
+function basicVerifiedToken(payload: SignedPayload): VerifiedBoardCredentialToken {
   const verifiedToken: VerifiedBoardCredentialToken = {
     userId: payload.userId,
     provider: payload.provider,
@@ -134,6 +157,15 @@ function verifySignedPayload(
   };
 
   return typeof payload.returnUrl === 'string' ? { ...verifiedToken, returnUrl: payload.returnUrl } : verifiedToken;
+}
+
+function verifySignedPayload(
+  token: string,
+  expectedPurpose: TokenPurpose,
+  lifetimeSeconds: number,
+): VerifiedBoardCredentialToken | null {
+  const payload = verifyPayload(token, expectedPurpose, lifetimeSeconds);
+  return payload ? basicVerifiedToken(payload) : null;
 }
 
 export function signBoardCredentialState(input: {
@@ -158,4 +190,29 @@ export function signBoardCredentialHandoff(input: {
 
 export function verifyBoardCredentialHandoff(handoff: string): VerifiedBoardCredentialToken | null {
   return verifySignedPayload(handoff, 'board-credential-oauth-handoff', HANDOFF_LIFETIME_SECONDS);
+}
+
+export function signBoardCredentialCompletion(input: {
+  userId: string;
+  provider: BoardCredentialProvider;
+  encryptedRefreshToken: string;
+  kilterUserId: string;
+  username?: string;
+}): string {
+  return signPayload(input, 'board-credential-oauth-completion', COMPLETION_LIFETIME_SECONDS);
+}
+
+export function verifyBoardCredentialCompletion(completion: string): VerifiedBoardCredentialCompletion | null {
+  const payload = verifyPayload(completion, 'board-credential-oauth-completion', COMPLETION_LIFETIME_SECONDS);
+  if (!payload || typeof payload.encryptedRefreshToken !== 'string' || typeof payload.kilterUserId !== 'string') {
+    return null;
+  }
+
+  const verifiedToken = {
+    ...basicVerifiedToken(payload),
+    encryptedRefreshToken: payload.encryptedRefreshToken,
+    kilterUserId: payload.kilterUserId,
+  };
+
+  return typeof payload.username === 'string' ? { ...verifiedToken, username: payload.username } : verifiedToken;
 }

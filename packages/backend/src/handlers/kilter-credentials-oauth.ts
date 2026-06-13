@@ -6,12 +6,15 @@ import {
   KILTER_OAUTH_AUTH_URL,
   verifyKeycloakToken,
 } from '@boardsesh/kilter-sync/api';
+import { decrypt, encrypt } from '@boardsesh/crypto';
 import { applyCorsHeaders, isOriginAllowed, isSameOriginUpgrade } from './cors';
 import { validateToken } from '../middleware/auth';
 import { redisClientManager } from '../redis/client';
 import {
+  signBoardCredentialCompletion,
   signBoardCredentialHandoff,
   signBoardCredentialState,
+  verifyBoardCredentialCompletion,
   verifyBoardCredentialHandoff,
   verifyBoardCredentialState,
 } from '../services/board-credential-state';
@@ -27,6 +30,8 @@ const VERIFIER_COOKIE_NAME = 'kilter_oauth_verifier';
 const NONCE_COOKIE_NAME = 'kilter_oauth_nonce';
 const HANDSHAKE_COOKIE_PATH = '/board-credentials/kilter';
 const COOKIE_MAX_AGE_SECONDS = 600;
+const HANDOFF_NONCE_MAX_AGE_SECONDS = 120;
+const COMPLETION_NONCE_MAX_AGE_SECONDS = 300;
 const MAX_JSON_BODY_BYTES = 16 * 1024;
 
 const REFLECTABLE_OAUTH_ERRORS = new Set<string>([
@@ -59,11 +64,19 @@ function deepLinkBase(): string {
   return 'com.boardsesh.app://board-credentials/kilter';
 }
 
-function completionUrl(returnUrl: string | undefined, status: 'connected' | 'error', reason?: string): string {
+const localConsumedNonces = new Map<string, number>();
+
+function completionUrl(
+  returnUrl: string | undefined,
+  status: 'connected' | 'error',
+  reason?: string,
+  completion?: string,
+): string {
   if (!returnUrl) {
     const nativeUrl = new URL(deepLinkBase());
     nativeUrl.searchParams.set('status', status);
     if (reason) nativeUrl.searchParams.set('reason', reason);
+    if (completion) nativeUrl.searchParams.set('completion', completion);
     return nativeUrl.toString();
   }
 
@@ -73,6 +86,11 @@ function completionUrl(returnUrl: string | undefined, status: 'connected' | 'err
     webUrl.searchParams.set('reason', reason);
   } else {
     webUrl.searchParams.delete('reason');
+  }
+  if (completion) {
+    webUrl.searchParams.set('completion', completion);
+  } else {
+    webUrl.searchParams.delete('completion');
   }
   return webUrl.toString();
 }
@@ -86,8 +104,13 @@ function redirectTo(res: ServerResponse, location: string, cookies: string[] = [
   res.end();
 }
 
-function redirectSuccess(res: ServerResponse, returnUrl: string | undefined, cookies: string[] = []): void {
-  redirectTo(res, completionUrl(returnUrl, 'connected'), cookies);
+function redirectSuccess(
+  res: ServerResponse,
+  returnUrl: string | undefined,
+  completion: string,
+  cookies: string[] = [],
+): void {
+  redirectTo(res, completionUrl(returnUrl, 'connected', undefined, completion), cookies);
 }
 
 function redirectError(
@@ -248,19 +271,50 @@ function parseCookies(req: IncomingMessage): Map<string, string> {
   return cookies;
 }
 
-async function consumeHandoffNonce(nonce: string): Promise<boolean> {
+function consumeLocalNonce(key: string, lifetimeSeconds: number): boolean {
+  const now = Date.now();
+  for (const [nonceKey, expiresAt] of localConsumedNonces.entries()) {
+    if (expiresAt <= now) {
+      localConsumedNonces.delete(nonceKey);
+    }
+  }
+
+  if (localConsumedNonces.has(key)) return false;
+  localConsumedNonces.set(key, now + lifetimeSeconds * 1000);
+  return true;
+}
+
+async function consumeOneTimeNonce(
+  kind: 'handoff' | 'completion',
+  nonce: string,
+  lifetimeSeconds: number,
+): Promise<boolean> {
+  const redisKey = `board-credentials:${kind}:${nonce}`;
+
   if (!redisClientManager.isRedisConnected()) {
-    return true;
+    if (redisClientManager.isRedisConfigured() || process.env.NODE_ENV === 'production') {
+      logger.warn(`[BoardCredentials] Redis unavailable, rejecting ${kind} nonce`);
+      return false;
+    }
+    return consumeLocalNonce(redisKey, lifetimeSeconds);
   }
 
   try {
     const { publisher } = redisClientManager.getClients();
-    const setResult = await publisher.set(`board-credentials:handoff:${nonce}`, '1', 'EX', 120, 'NX');
+    const setResult = await publisher.set(redisKey, '1', 'EX', lifetimeSeconds, 'NX');
     return setResult === 'OK';
   } catch (error) {
-    logger.warn('[BoardCredentials] Redis handoff-nonce check failed, rejecting handoff:', error);
+    logger.warn(`[BoardCredentials] Redis ${kind}-nonce check failed, rejecting token:`, error);
     return false;
   }
+}
+
+async function consumeHandoffNonce(nonce: string): Promise<boolean> {
+  return consumeOneTimeNonce('handoff', nonce, HANDOFF_NONCE_MAX_AGE_SECONDS);
+}
+
+async function consumeCompletionNonce(nonce: string): Promise<boolean> {
+  return consumeOneTimeNonce('completion', nonce, COMPLETION_NONCE_MAX_AGE_SECONDS);
 }
 
 export async function handleKilterCredentialsHandoff(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -459,18 +513,94 @@ export async function handleKilterCredentialsCallback(
     return;
   }
 
+  let completion: string;
   try {
-    await saveKilterCredential({
+    completion = signBoardCredentialCompletion({
       userId: verifiedState.userId,
-      refreshToken: tokens.refresh_token,
+      provider: KILTER_BOARD_TYPE,
+      encryptedRefreshToken: encrypt(tokens.refresh_token),
       kilterUserId,
-      username: preferredUsername,
+      ...(preferredUsername ? { username: preferredUsername } : {}),
     });
   } catch (error) {
-    logger.warn('[BoardCredentials] Failed to persist Kilter credential:', error);
-    redirectError(res, verifiedState.returnUrl, 'persist_failed', clearCookies);
+    logger.warn('[BoardCredentials] Failed to create Kilter completion token:', error);
+    redirectError(res, verifiedState.returnUrl, 'completion_failed', clearCookies);
     return;
   }
 
-  redirectSuccess(res, verifiedState.returnUrl, clearCookies);
+  redirectSuccess(res, verifiedState.returnUrl, completion, clearCookies);
+}
+
+export async function handleKilterCredentialsFinalize(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  if (!applyCorsHeaders(req, res)) return;
+
+  if (req.method !== 'POST') {
+    sendJson(res, 405, { error: 'Method not allowed' });
+    return;
+  }
+
+  const userId = await authenticate(req, res);
+  if (!userId) return;
+
+  let body: unknown;
+  try {
+    body = await readJsonBody(req);
+  } catch (error) {
+    sendJson(res, error instanceof Error && error.message === 'Request body too large' ? 413 : 400, {
+      error: error instanceof Error ? error.message : 'Invalid request body',
+    });
+    return;
+  }
+
+  const completion =
+    body && typeof body === 'object' && !Array.isArray(body) ? (body as { completion?: unknown }).completion : null;
+  if (typeof completion !== 'string') {
+    sendJson(res, 400, { error: 'Invalid completion token' });
+    return;
+  }
+
+  const verifiedCompletion = verifyBoardCredentialCompletion(completion);
+  if (!verifiedCompletion || verifiedCompletion.provider !== KILTER_BOARD_TYPE) {
+    sendJson(res, 400, { error: 'Invalid or expired completion token' });
+    return;
+  }
+
+  if (verifiedCompletion.userId !== userId) {
+    sendJson(res, 403, { error: 'Completion token does not belong to this account' });
+    return;
+  }
+
+  if (!isKilterSyncAllowed(userId)) {
+    sendJson(res, 403, { error: 'Kilter sync is not enabled for this account' });
+    return;
+  }
+
+  if (!(await consumeCompletionNonce(verifiedCompletion.nonce))) {
+    sendJson(res, 401, { error: 'Completion token already used or unavailable' });
+    return;
+  }
+
+  let refreshToken: string;
+  try {
+    refreshToken = decrypt(verifiedCompletion.encryptedRefreshToken);
+  } catch (error) {
+    logger.warn('[BoardCredentials] Failed to decrypt Kilter completion token:', error);
+    sendJson(res, 400, { error: 'Invalid completion token' });
+    return;
+  }
+
+  try {
+    await saveKilterCredential({
+      userId,
+      refreshToken,
+      kilterUserId: verifiedCompletion.kilterUserId,
+      ...(verifiedCompletion.username ? { username: verifiedCompletion.username } : {}),
+    });
+  } catch (error) {
+    logger.warn('[BoardCredentials] Failed to persist Kilter credential:', error);
+    sendJson(res, 500, { error: 'Failed to save Kilter credential' });
+    return;
+  }
+
+  sendJson(res, 200, { success: true });
 }

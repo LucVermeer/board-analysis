@@ -1137,17 +1137,27 @@ Currently, both the Next.js frontend (via API routes) and the backend need `DATA
 2. A branch backend
 3. A preview frontend configured to use both
 
-If API routes move to the backend's GraphQL layer, the frontend only needs `NEXT_PUBLIC_WS_URL` - no direct database access. Branch deploys simplify to: branch database + branch backend. The frontend preview "just works" by pointing at the branch backend.
+If API routes move to the backend, the frontend only needs `NEXT_PUBLIC_WS_URL` - no direct database access. Branch deploys simplify to: branch database + branch backend. The frontend preview "just works" by pointing at the branch backend.
 
 ### What Stays in Next.js
 
 These routes are tightly coupled to Next.js auth/middleware and should remain:
 
-| Route                              | Reason                                                     |
-| ---------------------------------- | ---------------------------------------------------------- |
-| `/api/internal/ws-auth`            | Issues JWT tokens for WebSocket auth, uses Next.js session |
-| `/api/internal/aurora-credentials` | Manages Aurora API tokens, auth-gated                      |
-| `/api/internal/controllers`        | Board controller registration, auth-gated                  |
+| Route                       | Reason                                                     |
+| --------------------------- | ---------------------------------------------------------- |
+| `/api/internal/ws-auth`     | Issues JWT tokens for WebSocket auth, uses Next.js session |
+| `/api/internal/controllers` | Board controller registration, auth-gated                  |
+
+Aurora credential management has moved to backend REST endpoints:
+
+| Backend Route                            | Reason                                                        |
+| ---------------------------------------- | ------------------------------------------------------------- |
+| `/api/aurora-credentials`                | Reads, saves, and deletes Aurora credentials                  |
+| `/api/aurora-credentials/unsynced`       | Reports pending local board data before import                |
+| `/api/board-credentials/kilter/handoff`  | Starts authenticated Kilter OAuth handoff                     |
+| `/api/board-credentials/kilter/finalize` | Finalizes Kilter linking with the signed-in user's bearer JWT |
+| `/board-credentials/kilter/start`        | Browser-facing Kilter OAuth redirect start                    |
+| `/board-credentials/kilter/callback`     | Browser-facing Kilter OAuth callback                          |
 
 ### What Moves to Backend GraphQL
 

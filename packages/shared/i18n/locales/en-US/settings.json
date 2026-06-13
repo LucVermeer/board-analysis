@@ -210,6 +210,7 @@
     "unlinkSuccess": "Account unlinked successfully",
     "unlinkError": "Failed to unlink account",
     "unlinkPartial": "We disconnected on our side, but the Kilter app may still be signed in. Sign out of Kilter there too if you want to fully cut the link.",
+    "loadRetry": "Try again",
     "import": {
       "steps": {
         "climbs": "Importing draft climbs",

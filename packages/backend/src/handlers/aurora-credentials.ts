@@ -2,6 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import { z } from 'zod';
 import { isAuroraRequestError } from '@boardsesh/aurora-sync/api';
 import { AURORA_BOARDS } from '@boardsesh/shared-schema';
+import { KILTER_BOARD_TYPE } from '@boardsesh/kilter-sync/api';
 import { applyCorsHeaders } from './cors';
 import { validateToken } from '../middleware/auth';
 import {
@@ -132,6 +133,11 @@ export async function handleAuroraCredentials(req: IncomingMessage, res: ServerR
     }
 
     const { boardType, username, password } = validationResult.data;
+    if (boardType === KILTER_BOARD_TYPE) {
+      sendJson(res, 400, { error: 'Kilter accounts use OAuth' });
+      return;
+    }
+
     try {
       const credential = await saveAuroraCredential({ userId, boardType, username, password });
       sendJson(res, 200, { success: true, credential });

@@ -15,15 +15,19 @@ type ShareToStravaButtonProps = {
  * user has a connected Strava account.
  */
 export function ShareToStravaButton({ sessionId }: ShareToStravaButtonProps) {
+  const stravaEnabled = useFeatureFlag('strava-integration') === true;
+  if (!stravaEnabled) return null;
+
+  return <EnabledShareToStravaButton sessionId={sessionId} />;
+}
+
+function EnabledShareToStravaButton({ sessionId }: ShareToStravaButtonProps) {
   const { t } = useTranslation('session');
   const { showToast } = useToast();
-  const stravaEnabled = useFeatureFlag('strava-integration') === true;
   const { data: statuses, isLoading: statusesLoading } = useIntegrationStatuses();
   const syncSession = useSyncSessionToIntegration();
 
-  const stravaConnected = stravaEnabled
-    ? (statuses?.some((status) => status.provider === 'STRAVA' && status.connected) ?? false)
-    : false;
+  const stravaConnected = statuses?.some((status) => status.provider === 'STRAVA' && status.connected) ?? false;
 
   const handlePress = useCallback(() => {
     syncSession.mutate(

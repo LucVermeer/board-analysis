@@ -137,6 +137,13 @@ async function createKilterHandoffStartUrl(): Promise<string> {
   return response.startUrl;
 }
 
+async function finalizeKilterCredential(completion: string): Promise<void> {
+  await requestJson<{ success: true }>('/api/board-credentials/kilter/finalize', {
+    method: 'POST',
+    body: JSON.stringify({ completion }),
+  });
+}
+
 export async function connectKilterAccount(): Promise<KilterConnectResult> {
   let startUrl: string;
   try {
@@ -155,8 +162,19 @@ export async function connectKilterAccount(): Promise<KilterConnectResult> {
 
   if (result.type !== 'success') return 'cancelled';
 
-  const status = parseDeepLinkQueryParams(result.url).get('status');
-  if (status === 'connected') return 'connected';
+  const params = parseDeepLinkQueryParams(result.url);
+  const status = params.get('status');
+  if (status === 'connected') {
+    const completion = params.get('completion');
+    if (!completion) return 'error';
+    try {
+      await finalizeKilterCredential(completion);
+      return 'connected';
+    } catch (error) {
+      if (error instanceof BoardAccountError && error.code === 'not_allowed') return 'not_allowed';
+      return 'error';
+    }
+  }
   return 'error';
 }
 
@@ -361,6 +379,7 @@ export async function streamAuroraImport(
   chunks[chunks.length - 1].skipFinalization = false;
 
   let merged = emptyImportResult();
+  let successfulChunks = 0;
   for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex += 1) {
     onEvent({
       type: 'progress',
@@ -371,7 +390,11 @@ export async function streamAuroraImport(
     try {
       const result = await sendImportChunk(chunks[chunkIndex], onEvent);
       merged = mergeResults(merged, result);
+      successfulChunks += 1;
     } catch (error) {
+      if (successfulChunks === 0) {
+        throw error;
+      }
       const message = error instanceof Error ? error.message : 'import_failed';
       merged = {
         ...merged,
