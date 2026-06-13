@@ -33,6 +33,7 @@
         "aurora-sync": "./dist/cli/index.js",
       },
       "dependencies": {
+        "@boardsesh/board-config": "*",
         "@boardsesh/board-constants": "*",
         "@boardsesh/crypto": "*",
         "@boardsesh/db": "*",
@@ -42,6 +43,7 @@
         "dotenv": "^17.3.1",
         "drizzle-orm": "^0.45.1",
         "postgres": "^3.4.8",
+        "zod": "^4.3.6",
       },
       "devDependencies": {
         "@types/node": "^25.3.3",
@@ -54,11 +56,13 @@
       "version": "1.0.0",
       "dependencies": {
         "@aws-sdk/client-s3": "^3.1000.0",
+        "@boardsesh/aurora-sync": "*",
         "@boardsesh/board-config": "*",
         "@boardsesh/board-constants": "*",
         "@boardsesh/crypto": "*",
         "@boardsesh/db": "*",
         "@boardsesh/graphql": "*",
+        "@boardsesh/kilter-sync": "*",
         "@boardsesh/queue": "*",
         "@boardsesh/shared-schema": "*",
         "@escape.tech/graphql-armor-cost-limit": "^2.4.3",
@@ -235,6 +239,7 @@
         "expo-crypto": "~56.0.4",
         "expo-dev-client": "~56.0.18",
         "expo-device": "~56.0.4",
+        "expo-document-picker": "~56.0.4",
         "expo-file-system": "~56.0.7",
         "expo-font": "~56.0.5",
         "expo-glass-effect": "~56.0.4",
@@ -634,6 +639,7 @@
         "@auth/drizzle-adapter": "^1.11.1",
         "@aws-sdk/client-s3": "^3.1000.0",
         "@boardsesh/analytics": "*",
+        "@boardsesh/aurora-sync": "*",
         "@boardsesh/ble-protocol": "*",
         "@boardsesh/board-config": "*",
         "@boardsesh/board-constants": "*",
@@ -2749,6 +2755,8 @@
     "expo-dev-menu-interface": ["expo-dev-menu-interface@56.0.1", "", { "peerDependencies": { "expo": "*" } }, "sha512-odATx0ZL/Kis10sKSBiKiGQxAB6coSi/KQtKcMhnQVNno6FkRh5/4e5BqcEvpq2rNMTiQp4ytNAQHtdwbPXvGA=="],
 
     "expo-device": ["expo-device@56.0.4", "", { "dependencies": { "ua-parser-js": "^0.7.33" }, "peerDependencies": { "expo": "*" } }, "sha512-ucVcGPkvBrl2QHuy7XcYex2Y6BETvJ6TREutZrwLGUDnlvbpKS8KfQoNZOpvkyo5Nmm9RrasYQ0CrXmBHho2mg=="],
+
+    "expo-document-picker": ["expo-document-picker@56.0.4", "", { "peerDependencies": { "expo": "*" } }, "sha512-75Apf74XNkYYohObIH19VZw42xpe0gmEnPccuzGXKVAzlvTYCfibSgW17F+6vt4paOfZEnAoZ1QFZM6dmaujRA=="],
 
     "expo-eas-client": ["expo-eas-client@56.0.1", "", {}, "sha512-r8h0ZIExacCrSRgY+ARfhMvFqosLHLJt1L7jyhvabfr1DN/ZDKDsYbovss2tzkpEUZGxZ3BPcB5epCwUsBBdOA=="],
 

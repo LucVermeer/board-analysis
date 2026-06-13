@@ -3,12 +3,13 @@ import { type NextRequest, NextResponse } from 'next/server';
 import * as Sentry from '@sentry/nextjs';
 import { z } from 'zod';
 import { authOptions } from '@/app/lib/auth/auth-options';
+import { getDb } from '@/app/lib/db/db';
 import {
   auroraExportSchema,
   importJsonExportData,
   type ImportResult,
   type ImportProgressEvent,
-} from '@/app/lib/data-sync/aurora/json-import';
+} from '@boardsesh/aurora-sync/json-import';
 import { AURORA_BOARDS } from '@boardsesh/shared-schema';
 
 export const maxDuration = 300;
@@ -50,7 +51,7 @@ export async function POST(request: NextRequest) {
         };
 
         try {
-          const results = await importJsonExportData(session.user.id, boardType, data, send, {
+          const results = await importJsonExportData(getDb(), session.user.id, boardType, data, send, {
             skipFinalization,
           });
 

@@ -15,6 +15,13 @@ import { parseSizeParam } from './lib/image-resize';
 import { handleOcrTestDataUpload } from './handlers/ocr-test-data';
 import { handlePosthogProxy } from './handlers/posthog';
 import { handleUserDataExport, handleUserDataExportDownload } from './handlers/user-data-export';
+import { handleAuroraCredentials, handleAuroraCredentialsUnsynced } from './handlers/aurora-credentials';
+import { handleAuroraImport } from './handlers/aurora-import';
+import {
+  handleKilterCredentialsCallback,
+  handleKilterCredentialsHandoff,
+  handleKilterCredentialsStart,
+} from './handlers/kilter-credentials-oauth';
 import { handleWidgetNavigate } from './handlers/widget-navigate';
 import { handleWidgetTakeControl } from './handlers/widget-take-control';
 import {
@@ -303,6 +310,39 @@ export async function startServer(): Promise<ServerResources> {
         return;
       }
 
+      if (
+        pathname === '/api/aurora-credentials' &&
+        (req.method === 'GET' || req.method === 'POST' || req.method === 'DELETE' || req.method === 'OPTIONS')
+      ) {
+        await handleAuroraCredentials(req, res);
+        return;
+      }
+
+      if (pathname === '/api/aurora-credentials/unsynced' && (req.method === 'GET' || req.method === 'OPTIONS')) {
+        await handleAuroraCredentialsUnsynced(req, res);
+        return;
+      }
+
+      if (pathname === '/api/aurora-import' && (req.method === 'POST' || req.method === 'OPTIONS')) {
+        await handleAuroraImport(req, res);
+        return;
+      }
+
+      if (pathname === '/api/board-credentials/kilter/handoff' && (req.method === 'POST' || req.method === 'OPTIONS')) {
+        await handleKilterCredentialsHandoff(req, res);
+        return;
+      }
+
+      if (pathname === '/board-credentials/kilter/start' && req.method === 'GET') {
+        await handleKilterCredentialsStart(req, res, url);
+        return;
+      }
+
+      if (pathname === '/board-credentials/kilter/callback' && req.method === 'GET') {
+        await handleKilterCredentialsCallback(req, res, url);
+        return;
+      }
+
       // Static avatar files (optional ?size= for a resized variant)
       if (pathname.startsWith('/static/avatars/')) {
         const fileName = pathname.slice('/static/avatars/'.length);
@@ -454,6 +494,9 @@ export async function startServer(): Promise<ServerResources> {
     logger.info(`  OCR test data: ${httpScheme}://0.0.0.0:${PORT}/api/ocr-test-data`);
     logger.info(`  PostHog proxy: ${httpScheme}://0.0.0.0:${PORT}/api/posthog/*`);
     logger.info(`  User data export: ${httpScheme}://0.0.0.0:${PORT}/api/user-data-export`);
+    logger.info(`  Aurora credentials: ${httpScheme}://0.0.0.0:${PORT}/api/aurora-credentials`);
+    logger.info(`  Aurora import: ${httpScheme}://0.0.0.0:${PORT}/api/aurora-import`);
+    logger.info(`  Kilter credential OAuth: ${httpScheme}://0.0.0.0:${PORT}/board-credentials/kilter/start`);
     logger.info(`  Widget navigate: ${httpScheme}://0.0.0.0:${PORT}/api/widget/navigate`);
     logger.info(`  Widget take-control: ${httpScheme}://0.0.0.0:${PORT}/api/widget/take-control`);
     logger.info(`  Native auth exchange: ${httpScheme}://0.0.0.0:${PORT}/auth/native/exchange`);

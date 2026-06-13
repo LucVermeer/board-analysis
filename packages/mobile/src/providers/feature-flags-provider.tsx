@@ -15,7 +15,7 @@ import { readPosthogFeatureFlags, subscribePosthogFeatureFlags } from '../lib/an
 export type FeatureFlags = Record<string, boolean | undefined>;
 
 const DEFAULT_FEATURE_FLAGS: FeatureFlags = {};
-const FEATURE_FLAG_KEYS = ['board-presence'] as const;
+const FEATURE_FLAG_KEYS = ['board-presence', 'strava-integration'] as const;
 
 const FeatureFlagsContext = createContext<FeatureFlags>(DEFAULT_FEATURE_FLAGS);
 

@@ -22,7 +22,7 @@ vi.mock('@/app/lib/db/db', () => ({
   getDb: vi.fn(),
   getPool: vi.fn(),
 }));
-vi.mock('@/app/lib/db/schema', () => ({
+vi.mock('@boardsesh/db/schema', () => ({
   boardseshTicks: {},
   boardClimbs: {
     uuid: 'uuid',
@@ -42,12 +42,15 @@ vi.mock('@/app/lib/db/schema', () => ({
   playlistClimbs: {},
   playlistOwnership: {},
 }));
-vi.mock('@/app/lib/board-data', () => ({
+vi.mock('@boardsesh/db/queries', () => ({
+  populateDenormalizedColumns: vi.fn(),
+}));
+vi.mock('@boardsesh/board-config', () => ({
   fontGradeToDifficultyId: vi.fn(),
   BOARD_IMAGE_DIMENSIONS: {},
   SUPPORTED_BOARDS: ['kilter', 'tension'],
 }));
-vi.mock('@/app/lib/board-constants', () => ({
+vi.mock('@boardsesh/board-constants/product-sizes', () => ({
   LAYOUTS: {
     kilter: {
       1: { id: 1, name: 'Kilter Board Original', productId: 1 },

@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Button } from '../Button';
 import { useToast } from '../../providers/toast-provider';
 import { useIntegrationStatuses, useSyncSessionToIntegration } from '../../lib/graphql/hooks';
+import { useFeatureFlag } from '../../providers/feature-flags-provider';
 import { STRAVA_ORANGE } from './strava-brand';
 
 type ShareToStravaButtonProps = {
@@ -16,10 +17,13 @@ type ShareToStravaButtonProps = {
 export function ShareToStravaButton({ sessionId }: ShareToStravaButtonProps) {
   const { t } = useTranslation('session');
   const { showToast } = useToast();
+  const stravaEnabled = useFeatureFlag('strava-integration') === true;
   const { data: statuses, isLoading: statusesLoading } = useIntegrationStatuses();
   const syncSession = useSyncSessionToIntegration();
 
-  const stravaConnected = statuses?.some((status) => status.provider === 'STRAVA' && status.connected) ?? false;
+  const stravaConnected = stravaEnabled
+    ? (statuses?.some((status) => status.provider === 'STRAVA' && status.connected) ?? false)
+    : false;
 
   const handlePress = useCallback(() => {
     syncSession.mutate(

@@ -22,6 +22,7 @@ import { isPreviewBuild } from '../../../src/lib/eas-api';
 import { useGradeFormat } from '../../../src/hooks/use-grade-format';
 import { useGlassCapability } from '../../../src/hooks/use-glass-capability';
 import { useToast } from '../../../src/providers/toast-provider';
+import { useFeatureFlag } from '../../../src/providers/feature-flags-provider';
 import { replayOnboarding } from '../../../src/lib/onboarding/onboarding-storage';
 import { reportError } from '../../../src/lib/error-reporting';
 
@@ -37,6 +38,7 @@ export default function MoreScreen() {
   const glassCapable = useGlassCapability();
   const { localePreference, setLocalePreference } = useLocalePreference();
   const { showToast } = useToast();
+  const stravaEnabled = useFeatureFlag('strava-integration') === true;
 
   // 'System' follows the device language; the rest are the supported locales,
   // labelled in their own script (English / Español / Français) from
@@ -109,7 +111,9 @@ export default function MoreScreen() {
         <View style={[styles.card, { backgroundColor: systemColors.secondaryBackground }]}>
           <ListRow
             title={t('mobile.more.integrations.title')}
-            subtitle={t('mobile.more.integrations.subtitle')}
+            subtitle={t(
+              stravaEnabled ? 'mobile.more.integrations.subtitleWithStrava' : 'mobile.more.integrations.subtitle',
+            )}
             leading={<Icon name="favorite" size={22} color={systemColors.secondaryLabel} />}
             showChevron
             showSeparator={false}

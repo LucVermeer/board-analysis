@@ -1,7 +1,9 @@
-# External platform integrations (Strava, Apple Health)
+# External platform and board account integrations
 
 Boardsesh exports finished climbing sessions to external fitness platforms.
-Two integration kinds exist, with different trust models:
+The mobile Connected apps screen also manages board account links used for
+Aurora-family data sync/import. These integration kinds have different trust
+models:
 
 - **Platform integrations** (Strava today): server-side OAuth. The backend
   holds encrypted tokens and uploads activities; mobile only drives connect /
@@ -9,6 +11,9 @@ Two integration kinds exist, with different trust models:
 - **Device integrations** (Apple Health today): device-local. The phone writes
   workouts through a native module; the server never holds credentials and
   only stores a workout id for dedupe (`board_sessions.health_kit_workout_id`).
+- **Board account integrations** (Aurora-family boards): server-side credential
+  storage plus manual JSON import. Mobile talks to backend REST endpoints;
+  web uses matching Next internal routes.
 
 v1 exports explicit (party/recorded) sessions only. `integration_exports.
 session_type` already accommodates inferred solo sessions for later.
@@ -27,6 +32,19 @@ session_type` already accommodates inferred solo sessions for later.
 | Mobile registry + orchestration    | `packages/mobile/src/lib/integrations/`                                                                       |
 | HealthKit native module            | `packages/mobile/modules/health-workouts/` (+ `plugins/with-healthkit.js`)                                    |
 | Mobile UI                          | `packages/mobile/src/components/integrations/`, `app/(tabs)/profile/integrations.tsx`                         |
+| Board account REST handlers        | `packages/backend/src/handlers/aurora-{credentials,import}.ts`, `kilter-credentials-oauth.ts`                 |
+| Board account services             | `packages/backend/src/services/aurora-credentials.ts`, `board-credential-state.ts`                            |
+| Shared Aurora JSON importer        | `packages/aurora-sync/src/sync/json-import.ts`, `packages/shared-schema/src/aurora-import.ts`                 |
+| Mobile board account UI/client     | `packages/mobile/src/components/integrations/BoardAccountsSection.tsx`, `src/lib/aurora-credentials.ts`       |
+
+## Mobile availability and flags
+
+The mobile Connected apps route always shows board account cards for signed-in
+users. Strava is hidden until the `strava-integration` feature flag is enabled;
+static app builds can force it on with `EXPO_PUBLIC_STRAVA_INTEGRATION=true`.
+The More tab subtitle follows the same flag so unreleased Strava copy does not
+appear when the card is hidden. Apple Health remains device-gated by native
+availability checks.
 
 ## OAuth connect flow (mobile, cookie-less)
 
@@ -118,6 +136,24 @@ The workout itself (`HealthWorkoutsModule.swift`) writes an `HKWorkout`
 (.climbing) with MET-estimated active energy (latest HealthKit body mass,
 70 kg fallback) and per-climb `.lap` events. Workout ids persist via
 `setInferredSessionHealthKitWorkoutId` for dedupe.
+
+## Board account links and imports
+
+Mobile board account linking uses backend REST endpoints because it cannot call
+Next internal routes:
+
+- `GET/POST/DELETE /api/aurora-credentials` reads, saves, and deletes
+  per-board credentials. Non-Kilter boards use Aurora username/password login.
+- `GET /api/aurora-credentials/unsynced` returns pending local ticks/climbs
+  that have not synced back to the upstream board account.
+- `POST /api/board-credentials/kilter/handoff` creates a short-lived signed
+  OAuth handoff, then `/board-credentials/kilter/start` and `/callback` finish
+  the Kilter OAuth flow and deep-link back to the app.
+- `POST /api/aurora-import` streams newline-delimited progress events while
+  importing Aurora JSON export chunks through the shared importer.
+
+The JSON import parser is shared with web so mobile previews and server-side
+validation agree on board mismatches, missing users, and item counts.
 
 ## Adding a provider
 

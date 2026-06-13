@@ -41,6 +41,8 @@ export const iconMap = {
   'more.actions.fill': { ios: 'ellipsis.circle.fill', android: 'dots-horizontal-circle' },
   copy: { ios: 'doc.on.doc', android: 'content-copy' },
   flag: { ios: 'flag', android: 'flag-outline' },
+  link: { ios: 'link', android: 'link-variant' },
+  upload: { ios: 'square.and.arrow.up', android: 'upload-outline' },
   delete: { ios: 'trash', android: 'delete-outline' },
   'delete.fill': { ios: 'trash.fill', android: 'delete' },
   edit: { ios: 'pencil', android: 'pencil-outline' },

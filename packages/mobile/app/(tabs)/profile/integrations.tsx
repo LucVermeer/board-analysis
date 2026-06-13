@@ -2,9 +2,11 @@ import type { ComponentType } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { SectionHeader } from '../../../src/components/SectionHeader';
+import { BoardAccountsSection } from '../../../src/components/integrations/BoardAccountsSection';
 import { AppleHealthCard } from '../../../src/components/integrations/AppleHealthCard';
 import { StravaCard } from '../../../src/components/integrations/StravaCard';
 import { getSupportedIntegrations, type IntegrationId } from '../../../src/lib/integrations';
+import { useFeatureFlag } from '../../../src/providers/feature-flags-provider';
 import { spacing } from '../../../src/theme/tokens';
 
 // One card per supported integration. The registry decides which integrations
@@ -16,7 +18,8 @@ const INTEGRATION_CARDS: Record<IntegrationId, ComponentType> = {
 
 export default function IntegrationsScreen() {
   const { t } = useTranslation('settings');
-  const integrations = getSupportedIntegrations();
+  const stravaEnabled = useFeatureFlag('strava-integration') === true;
+  const integrations = getSupportedIntegrations().filter((integration) => integration.id !== 'strava' || stravaEnabled);
 
   // Per-id card title. A static switch (not a dynamic `t(integration.titleKey)`)
   // so the i18n checker can see every concrete key — adding an integration adds
@@ -32,6 +35,7 @@ export default function IntegrationsScreen() {
 
   return (
     <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.container}>
+      <BoardAccountsSection />
       {integrations.map((integration) => {
         const Card = INTEGRATION_CARDS[integration.id];
         return (

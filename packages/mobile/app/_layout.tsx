@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useMemo, useState, type ReactNode } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 // Navigation theme comes from expo-router's vendored React Navigation. Expo
 // SDK 56's expo-router is not compatible with a separately-installed
 // @react-navigation/* package, so import these from `expo-router` directly.
@@ -42,7 +42,6 @@ import { UserDrawerProvider } from '../src/components/user-drawer/UserDrawerProv
 import { useMobileClimbActionsData } from '../src/lib/graphql/hooks';
 import { useActiveBoard } from '../src/lib/graphql/use-active-board';
 import { Text } from '../src/components/Text';
-import { Button } from '../src/components/Button';
 import { Icon } from '../src/components/Icon';
 import { brandColors } from '../src/theme/colors';
 import { iosDarkColors } from '../src/theme/ios-colors';
@@ -59,8 +58,20 @@ const layoutStyles = StyleSheet.create({
   root: { flex: 1 },
 });
 
-const STATIC_FEATURE_FLAGS: FeatureFlags | undefined =
-  process.env.EXPO_PUBLIC_BOARD_PRESENCE === 'true' ? { 'board-presence': true } : undefined;
+function buildStaticFeatureFlags(): FeatureFlags | undefined {
+  const flags: FeatureFlags = {};
+
+  if (process.env.EXPO_PUBLIC_BOARD_PRESENCE === 'true') {
+    flags['board-presence'] = true;
+  }
+  if (process.env.EXPO_PUBLIC_STRAVA_INTEGRATION === 'true') {
+    flags['strava-integration'] = true;
+  }
+
+  return Object.keys(flags).length > 0 ? flags : undefined;
+}
+
+const STATIC_FEATURE_FLAGS = buildStaticFeatureFlags();
 
 const errorStyles = StyleSheet.create({
   container: {
@@ -85,6 +96,29 @@ const errorStyles = StyleSheet.create({
     gap: spacing[3],
     width: '100%',
     maxWidth: 280,
+  },
+  primaryButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 52,
+    borderRadius: 12,
+    backgroundColor: brandColors.primaryFill,
+    paddingHorizontal: spacing[5],
+  },
+  secondaryButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 52,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 12,
+    borderColor: brandColors.primary,
+    paddingHorizontal: spacing[5],
+  },
+  pressedButton: {
+    opacity: 0.72,
+  },
+  buttonLabel: {
+    fontWeight: '700',
   },
 });
 
@@ -126,8 +160,26 @@ export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
         The app hit an unexpected error. You can try again or head back home.
       </Text>
       <View style={errorStyles.buttonRow}>
-        <Button title="Try again" onPress={retry} variant="filled" size="large" />
-        <Button title="Go home" onPress={handleGoHome} variant="outlined" size="large" />
+        <Pressable
+          onPress={retry}
+          accessibilityRole="button"
+          accessibilityLabel="Try again"
+          style={({ pressed }) => [errorStyles.primaryButton, pressed && errorStyles.pressedButton]}
+        >
+          <Text variant="body" color={brandColors.onPrimary} style={errorStyles.buttonLabel}>
+            Try again
+          </Text>
+        </Pressable>
+        <Pressable
+          onPress={handleGoHome}
+          accessibilityRole="button"
+          accessibilityLabel="Go home"
+          style={({ pressed }) => [errorStyles.secondaryButton, pressed && errorStyles.pressedButton]}
+        >
+          <Text variant="body" color={brandColors.primary} style={errorStyles.buttonLabel}>
+            Go home
+          </Text>
+        </Pressable>
       </View>
     </View>
   );
