@@ -15,7 +15,6 @@ import type { IconName } from '../../../src/components/icon-map';
 import { Avatar } from '../../../src/components/Avatar';
 import { Card } from '../../../src/components/Card';
 import { Button } from '../../../src/components/Button';
-import { ActivityIndicator } from '../../../src/components/ActivityIndicator';
 import { ClimbListThumbnail } from '../../../src/components/ClimbListThumbnail';
 import { FeedSocialRow } from '../../../src/components/you/FeedSocialRow';
 import { CommentSheet } from '../../../src/components/you/CommentSheet';
@@ -38,6 +37,8 @@ import { BETA_CARD_HEIGHT, BETA_CARD_WIDTH } from '../../../src/components/play-
 
 const RECENT_BETA_LIMIT = 20;
 const SHELF_GAP = spacing[3];
+const INITIAL_FEED_SKELETON_KEYS = ['home-feed-skeleton-1', 'home-feed-skeleton-2', 'home-feed-skeleton-3'];
+const NEXT_PAGE_FEED_SKELETON_KEYS = ['home-feed-footer-skeleton-1', 'home-feed-footer-skeleton-2'];
 
 type CommentTarget = {
   entityId: string;
@@ -254,9 +255,7 @@ export default function HomeTab() {
         }
         ListEmptyComponent={
           feed.isLoading ? (
-            <View style={styles.feedState}>
-              <ActivityIndicator size="large" />
-            </View>
+            <ActivitySkeletonList skeletonKeys={INITIAL_FEED_SKELETON_KEYS} />
           ) : feed.isError ? (
             <View style={styles.feedState}>
               <Icon name="error" size={32} color={iosSystemColors.systemRed} />
@@ -280,11 +279,7 @@ export default function HomeTab() {
           )
         }
         ListFooterComponent={
-          feed.isFetchingNextPage ? (
-            <View style={styles.footer}>
-              <ActivityIndicator size="small" />
-            </View>
-          ) : null
+          feed.isFetchingNextPage ? <ActivitySkeletonList skeletonKeys={NEXT_PAGE_FEED_SKELETON_KEYS} /> : null
         }
       />
       <CommentSheet
@@ -293,6 +288,54 @@ export default function HomeTab() {
         entityType={commentTarget?.entityType ?? 'tick'}
         onClose={() => setCommentTarget(null)}
       />
+    </View>
+  );
+}
+
+function ActivitySkeletonList({ skeletonKeys }: { skeletonKeys: string[] }) {
+  return (
+    <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+      {skeletonKeys.map((skeletonKey) => (
+        <ActivityCardSkeleton key={skeletonKey} />
+      ))}
+    </View>
+  );
+}
+
+function ActivityCardSkeleton() {
+  const { systemColors } = useTheme();
+  const blockStyle = { backgroundColor: systemColors.fill };
+
+  return (
+    <View style={styles.cardOuter}>
+      <Card>
+        <View style={styles.skeletonHeader}>
+          <View style={[styles.skeletonAvatar, blockStyle]} />
+          <View style={styles.skeletonHeaderText}>
+            <View style={[styles.skeletonTitleLine, blockStyle]} />
+            <View style={[styles.skeletonSmallLine, blockStyle]} />
+          </View>
+        </View>
+
+        <View style={styles.skeletonBody}>
+          <View style={[styles.skeletonThumbnail, blockStyle]} />
+          <View style={styles.skeletonDetails}>
+            <View style={[styles.skeletonClimbName, blockStyle]} />
+            <View style={styles.skeletonChipRow}>
+              <View style={[styles.skeletonChip, blockStyle]} />
+              <View style={[styles.skeletonChip, blockStyle]} />
+              <View style={[styles.skeletonShortChip, blockStyle]} />
+            </View>
+            <View style={[styles.skeletonCommentLine, blockStyle]} />
+            <View style={[styles.skeletonCommentShortLine, blockStyle]} />
+          </View>
+        </View>
+
+        <View style={[styles.skeletonSocialRow, { borderTopColor: systemColors.separator }]}>
+          <View style={[styles.skeletonSocialPill, blockStyle]} />
+          <View style={[styles.skeletonSocialPill, blockStyle]} />
+        </View>
+      </Card>
     </View>
   );
 }
@@ -702,6 +745,95 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[4],
     paddingVertical: spacing[2],
   },
+  skeletonHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[3],
+  },
+  skeletonAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: borderRadius.full,
+    opacity: 0.5,
+  },
+  skeletonHeaderText: {
+    flex: 1,
+    gap: spacing[2],
+  },
+  skeletonTitleLine: {
+    width: '44%',
+    height: 18,
+    borderRadius: borderRadius.full,
+    opacity: 0.55,
+  },
+  skeletonSmallLine: {
+    width: '34%',
+    height: 12,
+    borderRadius: borderRadius.full,
+    opacity: 0.4,
+  },
+  skeletonBody: {
+    flexDirection: 'row',
+    gap: spacing[3],
+    paddingTop: spacing[3],
+  },
+  skeletonThumbnail: {
+    width: 76,
+    height: 96,
+    borderRadius: borderRadius.md,
+    opacity: 0.55,
+  },
+  skeletonDetails: {
+    flex: 1,
+    gap: spacing[2],
+  },
+  skeletonClimbName: {
+    width: '74%',
+    height: 20,
+    borderRadius: borderRadius.full,
+    opacity: 0.55,
+  },
+  skeletonChipRow: {
+    flexDirection: 'row',
+    gap: spacing[1],
+  },
+  skeletonChip: {
+    width: 54,
+    height: 20,
+    borderRadius: borderRadius.full,
+    opacity: 0.45,
+  },
+  skeletonShortChip: {
+    width: 38,
+    height: 20,
+    borderRadius: borderRadius.full,
+    opacity: 0.4,
+  },
+  skeletonCommentLine: {
+    width: '92%',
+    height: 12,
+    borderRadius: borderRadius.full,
+    opacity: 0.35,
+  },
+  skeletonCommentShortLine: {
+    width: '58%',
+    height: 12,
+    borderRadius: borderRadius.full,
+    opacity: 0.32,
+  },
+  skeletonSocialRow: {
+    flexDirection: 'row',
+    gap: spacing[6],
+    marginTop: spacing[3],
+    paddingTop: spacing[3],
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  skeletonSocialPill: {
+    width: 42,
+    height: 18,
+    borderRadius: borderRadius.full,
+    opacity: 0.42,
+  },
   activityHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -755,9 +887,5 @@ const styles = StyleSheet.create({
   },
   emptyCta: {
     marginTop: spacing[4],
-  },
-  footer: {
-    alignItems: 'center',
-    paddingVertical: spacing[5],
   },
 });
