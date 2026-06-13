@@ -57,7 +57,8 @@
       "sets": "Sets",
       "angle": "Ángulo",
       "start": "Empezar a escalar",
-      "createError": "No se pudo crear ese board. Inténtalo de nuevo."
+      "createError": "No se pudo crear ese board. Inténtalo de nuevo.",
+      "name": "Nombre del tablero"
     },
     "bluetooth": {
       "title": "Boards cerca de ti",

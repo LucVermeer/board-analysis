@@ -57,7 +57,8 @@
       "sets": "Sets",
       "angle": "Angle",
       "start": "Start climbing",
-      "createError": "Couldn't create that board. Try again."
+      "createError": "Couldn't create that board. Try again.",
+      "name": "Board name"
     },
     "bluetooth": {
       "title": "Boards near you",

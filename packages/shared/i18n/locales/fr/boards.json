@@ -57,7 +57,8 @@
       "sets": "Sets",
       "angle": "Angle",
       "start": "Commencer à grimper",
-      "createError": "Impossible de créer ce board. Réessaie."
+      "createError": "Impossible de créer ce board. Réessaie.",
+      "name": "Nom du tableau"
     },
     "bluetooth": {
       "title": "Boards près de toi",
