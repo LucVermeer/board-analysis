@@ -8,9 +8,10 @@ import { Text } from '../Text';
 import { Icon } from '../Icon';
 import { useTheme } from '../../providers/theme-provider';
 import { hapticSelection } from '../../lib/haptics';
-import { useHoldColorOverrides } from '../../lib/hold-color-overrides';
+import { getEffectiveHoldStateShape, useHoldColorOverrides } from '../../lib/hold-color-overrides';
 import { spacing, borderRadius } from '../../theme/tokens';
 import { brushRoleColor, getPaintRoles, useBrushRoleLabels, type BrushRole } from './brush-roles';
+import { HoldMarkerShapeSvg } from '../board-renderer/HoldMarkerShape';
 
 type HoldRoleSheetProps = {
   /** The long-pressed hold, or null when the sheet is closed. */
@@ -41,7 +42,12 @@ export function HoldRoleSheet({
   const { t } = useTranslation('climbs');
   const { systemColors } = useTheme();
   const roleLabels = useBrushRoleLabels();
-  const { overrides: holdColorOverrides } = useHoldColorOverrides();
+  const {
+    overrides: holdColorOverrides,
+    shapes: holdShapeOverrides,
+    brushThickness,
+    shapeSize,
+  } = useHoldColorOverrides();
   const sheetRef = useRef<BottomSheet>(null);
 
   useEffect(() => {
@@ -54,7 +60,7 @@ export function HoldRoleSheet({
 
   const currentState: HoldState | undefined = holdId != null ? litUpHoldsMap[holdId]?.state : undefined;
 
-  const snapPoints = useMemo(() => ['38%'], []);
+  const snapPoints = useMemo(() => ['52%', '90%'], []);
   const paintRoles = useMemo(() => getPaintRoles(boardName), [boardName]);
 
   const handleSelect = (role: BrushRole) => {
@@ -65,7 +71,7 @@ export function HoldRoleSheet({
   };
 
   return (
-    <Sheet ref={sheetRef} snapPoints={snapPoints} onClose={onClose} enablePanDownToClose fullWindowOverlay>
+    <Sheet ref={sheetRef} snapPoints={snapPoints} onClose={onClose} enablePanDownToClose fullWindowOverlay scrollable>
       <View style={styles.content}>
         <Text variant="headline" style={styles.title}>
           {t('mobile.create.holdRole.title')}
@@ -76,6 +82,7 @@ export function HoldRoleSheet({
             const atCap = (role === 'STARTING' && startingCount >= 2) || (role === 'FINISH' && finishCount >= 2);
             const disabled = atCap && !isCurrent;
             const color = brushRoleColor(boardName, role, holdColorOverrides);
+            const markerDiameter = 20 * shapeSize;
             return (
               <Pressable
                 key={role}
@@ -91,7 +98,15 @@ export function HoldRoleSheet({
                   disabled && styles.cellDisabled,
                 ]}
               >
-                <View style={[styles.swatch, { backgroundColor: color }]} />
+                <View style={styles.swatch}>
+                  <HoldMarkerShapeSvg
+                    shape={getEffectiveHoldStateShape(role, holdShapeOverrides)}
+                    color={color}
+                    diameter={markerDiameter}
+                    strokeWidth={Math.max(2, 2 * brushThickness)}
+                    fillOpacity={isCurrent ? 0.32 : 0}
+                  />
+                </View>
                 <Text variant="subheadline" style={styles.cellLabel}>
                   {roleLabels[role]}
                 </Text>
@@ -144,9 +159,10 @@ const styles = StyleSheet.create({
     opacity: 0.4,
   },
   swatch: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   cellLabel: {
     fontWeight: '600',

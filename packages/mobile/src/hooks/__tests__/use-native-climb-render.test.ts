@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { HOLD_STATE_MAP } from '@boardsesh/board-constants/hold-states';
 
 // expo-file-system: stub Directory/Paths so the eager warm-up's
 // `new Directory(Paths.cache, 'board-thumbnails').list()` runs without
@@ -6,6 +7,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // Entries expose a `delete` spy so the warm-up's opportunistic cleanup
 // of stale-version PNGs can be observed.
 type MockEntry = { uri: string; name: string; delete: ReturnType<typeof vi.fn> };
+type MockBoardRenderData = {
+  boardWidth: number;
+  boardHeight: number;
+  holdsData: { id: number; mirroredHoldId: number | null; cx: number; cy: number; r: number }[];
+};
+const getBoardRenderDataMock = vi.hoisted(() => vi.fn<() => MockBoardRenderData | null>(() => null));
 const directoryListSpy = vi.fn<() => MockEntry[]>(() => []);
 class MockDirectory {
   uri: string;
@@ -24,7 +31,7 @@ vi.mock('expo-file-system', () => ({
 }));
 
 vi.mock('../../lib/board-details', () => ({
-  getBoardRenderData: () => null,
+  getBoardRenderData: getBoardRenderDataMock,
 }));
 
 vi.mock('../../lib/background-image-cache', () => ({
@@ -52,7 +59,22 @@ const {
   _renderedOverlaysForTests,
   _resetWarmupForTests,
   _runWarmupForTests,
+  _getBoardConfigForTests,
 } = await import('../use-native-climb-render');
+
+function asRecord(value: unknown): Record<string, unknown> {
+  expect(value && typeof value === 'object' && !Array.isArray(value)).toBe(true);
+  return value as Record<string, unknown>;
+}
+
+function getStateInfoByName(
+  holdStateMap: Record<string, unknown>,
+  stateName: string,
+): Record<string, unknown> | undefined {
+  const stateCode = Object.entries(HOLD_STATE_MAP.kilter).find(([, stateInfo]) => stateInfo.name === stateName)?.[0];
+  if (!stateCode) return undefined;
+  return asRecord(holdStateMap[stateCode]);
+}
 
 describe('buildCacheKey', () => {
   it('hashes the frames component so the key fits in a filename', () => {
@@ -77,11 +99,10 @@ describe('buildCacheKey', () => {
     expect(small).not.toBe(full);
   });
 
-  it('uses RENDERER_VERSION v2 to invalidate v1 composited PNGs', () => {
-    // v1 produced backgrounds-baked-in PNGs; v2 produces transparent
-    // holds-only overlays. The version prefix guarantees no v1 file is
-    // reused as a v2 overlay (which would double-paint backgrounds).
-    expect(buildCacheKey('kilter', 1, 10, '24', 'p1r42')).toMatch(/^v2_/);
+  it('uses RENDERER_VERSION v3 to invalidate stale overlay PNGs', () => {
+    // v3 marks marker shape, brush, and size override support. The version
+    // prefix guarantees rollout-era custom-marker cache files cannot be reused.
+    expect(buildCacheKey('kilter', 1, 10, '24', 'p1r42')).toMatch(/^v3_/);
   });
 
   it('uses a distinct style token so filled (list) and stroke (play view) never collide', () => {
@@ -105,6 +126,37 @@ describe('buildCacheKey', () => {
     const customKey = buildCacheKey('kilter', 1, 10, '24', 'p1r42', false, undefined, 'hand-123456');
     expect(customKey).not.toBe(defaultKey);
     expect(customKey).toMatch(/^v\d+_s_wfull_kilter_1_10_24_[0-9a-f]{8}$/);
+  });
+
+  it('uses shape and brush render signatures in the frame hash', () => {
+    const defaultKey = buildCacheKey('kilter', 1, 10, '24', 'p1r42');
+    const customKey = buildCacheKey(
+      'kilter',
+      1,
+      10,
+      '24',
+      'p1r42',
+      false,
+      undefined,
+      'colors-hand-123456.foot-diamond.brush-1.5.size-1.8',
+    );
+    expect(customKey).not.toBe(defaultKey);
+    expect(customKey).toMatch(/^v\d+_s_wfull_kilter_1_10_24_[0-9a-f]{8}$/);
+  });
+
+  it('ignores custom render signatures for empty frames', () => {
+    const defaultKey = buildCacheKey('kilter', 1, 10, '24', '');
+    const customKey = buildCacheKey(
+      'kilter',
+      1,
+      10,
+      '24',
+      '',
+      false,
+      undefined,
+      'colors-hand-123456.foot-diamond.brush-1.5.size-1.8',
+    );
+    expect(customKey).toBe(defaultKey);
   });
 
   it('produces different keys for different boards', () => {
@@ -140,6 +192,41 @@ describe('buildCacheKey', () => {
     // Mirrors getBoardConfig's split(',').map(Number).filter(Boolean) so the
     // cache key matches the config the renderer actually uses.
     expect(buildCacheKey('kilter', 1, 10, '0,24,25', 'p1r42')).toBe(buildCacheKey('kilter', 1, 10, '24,25', 'p1r42'));
+  });
+});
+
+describe('_getBoardConfigForTests', () => {
+  beforeEach(() => {
+    getBoardRenderDataMock.mockReturnValue({
+      boardWidth: 1000,
+      boardHeight: 1200,
+      holdsData: [{ id: 1, mirroredHoldId: null, cx: 100, cy: 200, r: 20 }],
+    });
+  });
+
+  it('includes marker shapes, brush thickness, and shape size in the native config payload', () => {
+    const boardConfig = _getBoardConfigForTests(
+      'kilter',
+      1,
+      10,
+      '24',
+      false,
+      undefined,
+      { HAND: '#123456' },
+      { FOOT: 'diamond' },
+      1.5,
+      1.8,
+      'colors-hand-123456.foot-diamond.brush-1.5.size-1.8',
+    );
+
+    expect(boardConfig).not.toBeNull();
+    const configBase = asRecord(boardConfig?.configBase);
+    expect(configBase.stroke_width_multiplier).toBe(1.5);
+    expect(configBase.shape_size_multiplier).toBe(1.8);
+
+    const holdStateMap = asRecord(configBase.hold_state_map);
+    expect(getStateInfoByName(holdStateMap, 'HAND')?.color).toBe('#123456');
+    expect(getStateInfoByName(holdStateMap, 'FOOT')?.shape).toBe('diamond');
   });
 });
 
@@ -248,13 +335,13 @@ describe('getOrStartInflightRender', () => {
     const neverResolves = () => new Promise<string>(() => {});
 
     for (let entryIndex = 0; entryIndex < 50; entryIndex++) {
-      getOrStartInflightRender(`key-${entryIndex}`, neverResolves);
+      void getOrStartInflightRender(`key-${entryIndex}`, neverResolves);
     }
     expect(_inflightRendersForTests.size).toBe(50);
     expect(_inflightRendersForTests.has('key-0')).toBe(true);
 
     // Inserting one more should evict key-0 (insertion order = oldest).
-    getOrStartInflightRender('key-50', neverResolves);
+    void getOrStartInflightRender('key-50', neverResolves);
     expect(_inflightRendersForTests.size).toBe(50);
     expect(_inflightRendersForTests.has('key-0')).toBe(false);
     expect(_inflightRendersForTests.has('key-50')).toBe(true);
@@ -273,29 +360,29 @@ describe('renderedOverlays warm-up from disk cache', () => {
 
   it('exposes the populated map so a fresh hook init can hit it synchronously', () => {
     expect(_renderedOverlaysForTests).toBeInstanceOf(Map);
-    _renderedOverlaysForTests.set('v2_kilter_1_10_24_deadbeef', 'file:///prior/session.png');
-    expect(_renderedOverlaysForTests.get('v2_kilter_1_10_24_deadbeef')).toBe('file:///prior/session.png');
-    _renderedOverlaysForTests.delete('v2_kilter_1_10_24_deadbeef');
+    _renderedOverlaysForTests.set('v3_kilter_1_10_24_deadbeef', 'file:///prior/session.png');
+    expect(_renderedOverlaysForTests.get('v3_kilter_1_10_24_deadbeef')).toBe('file:///prior/session.png');
+    _renderedOverlaysForTests.delete('v3_kilter_1_10_24_deadbeef');
   });
 
   it('only loads PNGs whose name starts with the current RENDERER_VERSION prefix', () => {
-    // Mix of v1 leftovers from a previous app session and current v2
-    // entries. The warm-up should only surface v2 keys; v1 keys would
-    // never match any cacheKey lookup (all current keys are v2_*) so
+    // Mix of v1/v2 leftovers from previous app sessions and current v3
+    // entries. The warm-up should only surface v3 keys; older keys would
+    // never match any cacheKey lookup (all current keys are v3_*) so
     // loading them just bloats memory.
     const v1Entry = makeMockEntry('v1_kilter_1_10_24_aaaaaaaa.png');
-    const v2EntryA = makeMockEntry('v2_kilter_1_10_24_bbbbbbbb.png');
-    const v2EntryB = makeMockEntry('v2_tension_2_8_15_cccccccc.png');
-    const v1Other = makeMockEntry('v1_tension_2_8_15_dddddddd.png');
-    directoryListSpy.mockReturnValue([v1Entry, v2EntryA, v2EntryB, v1Other]);
+    const v2Entry = makeMockEntry('v2_kilter_1_10_24_bbbbbbbb.png');
+    const v3EntryA = makeMockEntry('v3_kilter_1_10_24_cccccccc.png');
+    const v3EntryB = makeMockEntry('v3_tension_2_8_15_dddddddd.png');
+    directoryListSpy.mockReturnValue([v1Entry, v2Entry, v3EntryA, v3EntryB]);
 
     _runWarmupForTests();
 
-    expect(_renderedOverlaysForTests.has('v2_kilter_1_10_24_bbbbbbbb')).toBe(true);
-    expect(_renderedOverlaysForTests.has('v2_tension_2_8_15_cccccccc')).toBe(true);
+    expect(_renderedOverlaysForTests.has('v3_kilter_1_10_24_cccccccc')).toBe(true);
+    expect(_renderedOverlaysForTests.has('v3_tension_2_8_15_dddddddd')).toBe(true);
     expect(_renderedOverlaysForTests.has('v1_kilter_1_10_24_aaaaaaaa')).toBe(false);
-    expect(_renderedOverlaysForTests.has('v1_tension_2_8_15_dddddddd')).toBe(false);
-    // Only the two v2 entries should be present — no stragglers from
+    expect(_renderedOverlaysForTests.has('v2_kilter_1_10_24_bbbbbbbb')).toBe(false);
+    // Only the two v3 entries should be present — no stragglers from
     // future-version PNGs slipping in either.
     expect(_renderedOverlaysForTests.size).toBe(2);
   });
@@ -303,14 +390,16 @@ describe('renderedOverlays warm-up from disk cache', () => {
   it('opportunistically deletes stale-version PNG files to reclaim disk', () => {
     const v1Entry = makeMockEntry('v1_kilter_1_10_24_aaaaaaaa.png');
     const v2Entry = makeMockEntry('v2_kilter_1_10_24_bbbbbbbb.png');
-    directoryListSpy.mockReturnValue([v1Entry, v2Entry]);
+    const v3Entry = makeMockEntry('v3_kilter_1_10_24_cccccccc.png');
+    directoryListSpy.mockReturnValue([v1Entry, v2Entry, v3Entry]);
 
     _runWarmupForTests();
 
     expect(v1Entry.delete).toHaveBeenCalledTimes(1);
+    expect(v2Entry.delete).toHaveBeenCalledTimes(1);
     // Current-version files must never be deleted — they're the cache hits
     // the warm-up exists to surface.
-    expect(v2Entry.delete).not.toHaveBeenCalled();
+    expect(v3Entry.delete).not.toHaveBeenCalled();
   });
 
   it('keeps loading remaining entries when a delete throws', () => {
@@ -320,10 +409,10 @@ describe('renderedOverlays warm-up from disk cache', () => {
     v1Entry.delete.mockImplementation(() => {
       throw new Error('EACCES');
     });
-    const v2Entry = makeMockEntry('v2_kilter_1_10_24_bbbbbbbb.png');
-    directoryListSpy.mockReturnValue([v1Entry, v2Entry]);
+    const v3Entry = makeMockEntry('v3_kilter_1_10_24_bbbbbbbb.png');
+    directoryListSpy.mockReturnValue([v1Entry, v3Entry]);
 
     expect(() => _runWarmupForTests()).not.toThrow();
-    expect(_renderedOverlaysForTests.has('v2_kilter_1_10_24_bbbbbbbb')).toBe(true);
+    expect(_renderedOverlaysForTests.has('v3_kilter_1_10_24_bbbbbbbb')).toBe(true);
   });
 });

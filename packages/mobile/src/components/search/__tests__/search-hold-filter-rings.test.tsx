@@ -6,9 +6,7 @@ import type { HoldsFilter } from '@boardsesh/shared-schema';
 import type { BoardHoldTarget } from '../../../lib/create-board-holds';
 
 // Mock the RN host components down to plain DOM so the ring markers are
-// queryable. Each ring/scrim is a <View>, which we surface as a <div> tagging
-// its border colour + background so the test can count rings and detect the
-// exclude scrim. `holdGeometry` is a pure function and runs for real.
+// queryable. `holdGeometry` is a pure function and runs for real.
 type ViewMockProps = {
   children?: ReactNode;
   pointerEvents?: string;
@@ -43,6 +41,32 @@ vi.mock('react-native', () => ({
   },
 }));
 
+type SvgMockProps = {
+  children?: ReactNode;
+  stroke?: string;
+  fill?: string;
+  fillOpacity?: number;
+  strokeWidth?: number;
+};
+
+function svgShape(name: string) {
+  return ({ stroke, fill, fillOpacity, strokeWidth }: SvgMockProps) =>
+    createElement(name, {
+      'data-svg-shape': name,
+      'data-stroke': stroke ?? '',
+      'data-fill': fill ?? '',
+      'data-fill-opacity': fillOpacity ?? '',
+      'data-stroke-width': strokeWidth ?? '',
+    });
+}
+
+vi.mock('react-native-svg', () => ({
+  default: ({ children }: SvgMockProps) => createElement('svg', { 'data-svg': 'true' }, children),
+  Circle: svgShape('circle'),
+  Polygon: svgShape('polygon'),
+  Rect: svgShape('rect'),
+}));
+
 import { SearchHoldFilterRings } from '../SearchHoldFilterRings';
 
 const holdTargets: BoardHoldTarget[] = [
@@ -65,18 +89,27 @@ function renderRings(holdsFilter: HoldsFilter, measuredWidth = 400) {
   );
 }
 
-// A "ring" is a View carrying a non-empty borderColor; the wrapper + scrim have
-// no border colour, so this isolates the concentric type rings.
+// A "ring" is either a circle View or an SVG marker with a non-zero stroke
+// width; the exclude scrim has a fill and no stroke, so this isolates the
+// concentric type rings.
 function ringCount(container: HTMLElement): number {
-  return Array.from(container.querySelectorAll('[data-view="true"]')).filter(
-    (node) => (node.getAttribute('data-border-color') ?? '') !== '',
+  const svgRingCount = Array.from(container.querySelectorAll('[data-svg-shape]')).filter(
+    (node) => Number(node.getAttribute('data-stroke-width') ?? 0) > 0,
   ).length;
+  const viewRingCount = Array.from(container.querySelectorAll('[data-view]')).filter(
+    (node) => Number(node.getAttribute('data-border-width') ?? 0) > 0 && !!node.getAttribute('data-border-color'),
+  ).length;
+  return svgRingCount + viewRingCount;
 }
 
 function hasExcludeScrim(container: HTMLElement): boolean {
-  return Array.from(container.querySelectorAll('[data-view="true"]')).some((node) =>
-    (node.getAttribute('data-bg') ?? '').startsWith('rgba(0,0,0'),
+  const hasSvgScrim = Array.from(container.querySelectorAll('[data-svg-shape]')).some(
+    (node) => node.getAttribute('data-fill') === '#000000' && node.getAttribute('data-fill-opacity') === '0.55',
   );
+  const hasViewScrim = Array.from(container.querySelectorAll('[data-view]')).some(
+    (node) => node.getAttribute('data-bg') === 'rgba(0, 0, 0, 0.55)',
+  );
+  return hasSvgScrim || hasViewScrim;
 }
 
 describe('SearchHoldFilterRings', () => {

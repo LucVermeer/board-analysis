@@ -332,7 +332,13 @@ export function BluetoothProvider({
   const { currentClimb: wallCurrentClimb } = useBoardPresenceCurrent();
   const { showUndoWallChangeSnackbar } = useQueueSnackbar();
   const { overrides: holdColorOverrides, signature: holdColorSignature } = useHoldColorOverrides();
-  const bluetoothColorOverrides = useMemo(() => getBluetoothColorOverrides(holdColorOverrides), [holdColorOverrides]);
+  const bluetoothColorOverrides = useMemo(
+    () => getBluetoothColorOverrides(holdColorOverrides),
+    // Marker-only accessibility edits must not churn the BLE sender.
+    // The color signature is the complete BLE-visible override identity.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [holdColorSignature],
+  );
 
   // Mirror the board config props so the empty-dep-ish connect callback resolves
   // the serial against the board currently in view without churning identity.

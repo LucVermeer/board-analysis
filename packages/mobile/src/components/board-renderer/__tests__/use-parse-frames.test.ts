@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, it, expect } from 'vitest';
 import { renderHook } from '@testing-library/react';
-import { setHoldColorOverridesPreference } from '../../../lib/hold-color-overrides';
+import { setHoldColorOverridesPreference, setHoldMarkerOverridesPreference } from '../../../lib/hold-color-overrides';
 import { useParseFrames } from '../use-parse-frames';
 import type { HoldPlacement } from '../types';
 
@@ -15,7 +15,7 @@ const HOLD_NO_MIRROR: HoldPlacement = { id: 300, mirroredHoldId: null, cx: 500, 
 
 describe('useParseFrames mirroring', () => {
   afterEach(async () => {
-    await setHoldColorOverridesPreference({});
+    await setHoldMarkerOverridesPreference({ colors: {}, shapes: {}, brushThickness: 1, shapeSize: 1 });
   });
 
   it('returns original position when mirrored=false', () => {
@@ -67,5 +67,22 @@ describe('useParseFrames mirroring', () => {
     const { result } = renderHook(() => useParseFrames('p100r12', 'kilter', [HOLD_LEFT], false));
 
     expect(result.current[0]?.color).toBe('#123456');
+  });
+
+  it('applies configured marker overrides to parsed holds', async () => {
+    await setHoldMarkerOverridesPreference({
+      colors: {},
+      shapes: { STARTING: 'triangle-up' },
+      brushThickness: 1.6,
+      shapeSize: 1.7,
+    });
+
+    const { result } = renderHook(() => useParseFrames('p100r12', 'kilter', [HOLD_LEFT], false));
+
+    expect(result.current[0]).toMatchObject({
+      shape: 'triangle-up',
+      brushThickness: 1.6,
+      shapeSize: 1.7,
+    });
   });
 });

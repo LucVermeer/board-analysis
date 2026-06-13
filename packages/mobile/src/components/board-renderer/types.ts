@@ -1,5 +1,6 @@
 import type { HoldState } from '@boardsesh/shared-schema';
 import type { HoldRenderStyle } from '@boardsesh/board-constants/hold-states';
+import type { HoldMarkerShape } from '../../lib/hold-color-overrides';
 
 /**
  * A single hold to render on the board, with position, size, and visual properties
@@ -20,6 +21,12 @@ export type BoardHold = {
   role: HoldState;
   /** Render style hint — 'circle' (default) or 'above-marker' */
   renderStyle: HoldRenderStyle;
+  /** Accessibility marker shape for circle-style holds. */
+  shape: HoldMarkerShape;
+  /** Accessibility brush thickness multiplier. */
+  brushThickness: number;
+  /** Accessibility shape size multiplier. */
+  shapeSize: number;
 };
 
 /**
