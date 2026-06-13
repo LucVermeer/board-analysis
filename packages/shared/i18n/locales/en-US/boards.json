@@ -85,6 +85,12 @@
         "angle": "Angle",
         "adjustable": "adjustable"
       }
+    },
+    "disambiguation": {
+      "title": "Which board are you on?",
+      "subtitle": "This serial is shared by more than one board. Pick the wall you're at.",
+      "yourBoard": "Your board",
+      "cancel": "Not now"
     }
   },
   "boardEntity": {

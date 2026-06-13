@@ -85,6 +85,12 @@
         "angle": "Angle",
         "adjustable": "ajustable"
       }
+    },
+    "disambiguation": {
+      "title": "Sur quel mur es-tu ?",
+      "subtitle": "Ce numéro de série est partagé par plusieurs tableaux. Choisis le mur où tu te trouves.",
+      "yourBoard": "Ton tableau",
+      "cancel": "Pas maintenant"
     }
   },
   "boardEntity": {

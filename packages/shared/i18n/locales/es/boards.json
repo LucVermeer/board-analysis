@@ -85,6 +85,12 @@
         "angle": "Ángulo",
         "adjustable": "ajustable"
       }
+    },
+    "disambiguation": {
+      "title": "¿En qué tablero estás?",
+      "subtitle": "Este número de serie lo comparten varios tableros. Elige el muro en el que estás.",
+      "yourBoard": "Tu tablero",
+      "cancel": "Ahora no"
     }
   },
   "boardEntity": {
