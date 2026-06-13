@@ -34,6 +34,12 @@ export const queriesTypeDefs = /* GraphQL */ `
     sessionSummary(sessionId: ID!): SessionSummary
 
     """
+    Get viewer-specific session data for an Apple Health workout export.
+    Requires authentication and returns only the requesting user's ticks.
+    """
+    sessionHealthExport(sessionId: ID!): SessionHealthExport
+
+    """
     Lightweight, presence-independent lifecycle check for a session.
     Reads the durable session row (not live Redis presence), so it tells an
     ended session apart from one that is merely empty. Returns null when the

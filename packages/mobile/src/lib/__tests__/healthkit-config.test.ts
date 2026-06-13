@@ -30,7 +30,7 @@ describe('mobile HealthKit native config', () => {
     expect(config.ios?.infoPlist).toMatchObject({
       NSHealthUpdateUsageDescription: 'Boardsesh saves your finished climbing sessions to Apple Health as workouts.',
       NSHealthShareUsageDescription:
-        'Boardsesh reads your body weight to estimate calories burned during climbing sessions.',
+        'Boardsesh reads your body weight to estimate calories and your saved Boardsesh workouts to prevent duplicates.',
     });
   });
 

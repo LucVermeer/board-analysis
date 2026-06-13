@@ -171,6 +171,7 @@
     "saveToAppleHealth": "Enregistrer dans Apple Santé",
     "savingToAppleHealth": "Enregistrement dans Apple Santé…",
     "savedToAppleHealth": "Enregistré dans Apple Santé",
+    "savedToAppleHealthWithoutCalories": "Enregistré sans calories",
     "saveToAppleHealthRetry": "Enregistrer dans Apple Santé (réessayer)",
     "loadErrorTitle": "Impossible de charger ta session",
     "loadErrorMessage": "Tes voies sont enregistrées, seul le récap n'a pas chargé. Réessaie ou reviens en arrière.",

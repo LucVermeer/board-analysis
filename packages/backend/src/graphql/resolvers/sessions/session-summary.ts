@@ -2,8 +2,9 @@ import { db } from '../../../db/client';
 import { sessions } from '../../../db/schema';
 import * as dbSchema from '@boardsesh/db/schema';
 import { eq, and, inArray, sql, count, desc, isNotNull } from 'drizzle-orm';
-import type { SessionSummary } from '@boardsesh/shared-schema';
+import type { SessionHealthExport, SessionSummary } from '@boardsesh/shared-schema';
 import { rowsFromResult } from '@boardsesh/db/client';
+import { getSessionHealthExport } from '@boardsesh/db/queries';
 import { logger } from '../../../utils/logger';
 
 /**
@@ -173,5 +174,32 @@ export async function generateSessionSummary(sessionId: string): Promise<Session
     endedAt: session.endedAt?.toISOString() || null,
     durationMinutes,
     goal: session.goal || null,
+  };
+}
+
+/**
+ * Generate a viewer-specific Apple Health export payload. Unlike
+ * generateSessionSummary, this intentionally filters to the authenticated
+ * viewer so a personal Health workout never includes another climber's stats.
+ */
+export async function generateSessionHealthExport(
+  sessionId: string,
+  viewerUserId: string,
+): Promise<SessionHealthExport | null> {
+  const exportRecord = await getSessionHealthExport(db, { sessionId, viewerUserId });
+  if (!exportRecord) return null;
+  if (exportRecord.createdByUserId !== viewerUserId && exportRecord.laps.length === 0) return null;
+
+  return {
+    sessionId: exportRecord.sessionId,
+    startedAt: exportRecord.startedAt,
+    endedAt: exportRecord.endedAt,
+    durationMinutes: exportRecord.durationMinutes,
+    boardType: exportRecord.boardType,
+    totalSends: exportRecord.totalSends,
+    totalAttempts: exportRecord.totalAttempts,
+    hardestClimb: exportRecord.hardestClimb,
+    laps: exportRecord.laps,
+    healthKitWorkoutId: exportRecord.healthKitWorkoutId,
   };
 }

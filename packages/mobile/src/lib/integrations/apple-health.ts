@@ -11,7 +11,7 @@
 // surface.
 
 import { useCallback, useEffect, useSyncExternalStore } from 'react';
-import type { SessionSummary } from '@boardsesh/shared-schema';
+import type { SessionHealthExport, SessionSummary } from '@boardsesh/shared-schema';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { SET_SESSION_HEALTHKIT_WORKOUT_ID } from '@boardsesh/graphql/operations/activity-feed';
 // Imported by relative path (not the package name) to match the live-activity
@@ -19,9 +19,14 @@ import { SET_SESSION_HEALTHKIT_WORKOUT_ID } from '@boardsesh/graphql/operations/
 // via modules/health-workouts/expo-module.config.json, while the JS wrapper is
 // pulled in directly from its source so Metro + vitest resolve it without the
 // package needing a dependency entry.
-import { healthWorkoutsNative } from '../../../modules/health-workouts/src/index';
+import { healthWorkoutsNative, type SaveWorkoutResult } from '../../../modules/health-workouts/src/index';
 import { track } from '../analytics';
 import { getHttpClient } from '../graphql/client';
+import {
+  GET_SESSION_HEALTH_EXPORT,
+  type GetSessionHealthExportQueryResponse,
+  type GetSessionHealthExportQueryVariables,
+} from '../graphql/operations';
 import { getPreference, setPreference } from '../preference-store';
 import type { SessionExportContext } from './types';
 
@@ -157,15 +162,15 @@ export function useHealthKitAutoSavePreference(): {
 }
 
 // ============================================
-// Per-session save state (saving / saved / failed)
+// Per-session save state (saving / saved / savedWithoutEnergy / failed)
 // ============================================
 
-export type HealthKitSaveState = 'saving' | 'saved' | 'failed';
+export type HealthKitSaveState = 'saving' | 'saved' | 'savedWithoutEnergy' | 'failed';
 
 // Module-level Map doubles as the dedup guard (the web file's
 // `savedOrInFlight` Set) AND the source for the per-session save-state UI. A
-// sessionId present with 'saving' or 'saved' means a save is claimed; 'failed'
-// is releasable so a manual retry can overwrite it.
+// sessionId present with 'saving' or a saved state means a save is claimed;
+// 'failed' is releasable so a manual retry can overwrite it.
 const saveStateBySession = new Map<string, HealthKitSaveState>();
 const saveStateListeners = new Set<() => void>();
 
@@ -223,20 +228,36 @@ async function persistWorkoutId(sessionId: string, workoutId: string): Promise<v
   }
 }
 
-/** Map a SessionSummary + context to the native saveWorkout options, or null
+async function loadSessionHealthExport(
+  sessionId: string,
+  ctx: SessionExportContext,
+): Promise<SessionHealthExport | null> {
+  if (ctx.healthExport !== undefined) return ctx.healthExport;
+  const response = await getHttpClient().request<
+    GetSessionHealthExportQueryResponse,
+    GetSessionHealthExportQueryVariables
+  >(GET_SESSION_HEALTH_EXPORT, { sessionId });
+  return response.sessionHealthExport;
+}
+
+/** Map a viewer-specific export payload to the native saveWorkout options, or null
  *  when the session lacks the start/end timestamps the workout requires. */
-function buildSaveOptions(summary: SessionSummary, ctx: SessionExportContext) {
-  if (!summary.startedAt || !summary.endedAt) return null;
+function buildSaveOptions(healthExport: SessionHealthExport) {
+  if (!healthExport.startedAt || !healthExport.endedAt) return null;
   return {
-    sessionId: summary.sessionId,
-    startDate: summary.startedAt,
-    endDate: summary.endedAt,
-    totalSends: summary.totalSends,
-    totalAttempts: summary.totalAttempts,
-    hardestGrade: summary.hardestClimb?.grade,
-    boardType: ctx.boardType,
-    lapTimestamps: ctx.lapTimestamps,
+    sessionId: healthExport.sessionId,
+    startDate: healthExport.startedAt,
+    endDate: healthExport.endedAt,
+    totalSends: healthExport.totalSends,
+    totalAttempts: healthExport.totalAttempts,
+    hardestGrade: healthExport.hardestClimb?.grade,
+    boardType: healthExport.boardType,
+    laps: healthExport.laps,
   };
+}
+
+function setSavedStateFromResult(sessionId: string, result: SaveWorkoutResult): void {
+  setSaveState(sessionId, result.created && !result.energySaved ? 'savedWithoutEnergy' : 'saved');
 }
 
 /**
@@ -244,12 +265,12 @@ function buildSaveOptions(summary: SessionSummary, ctx: SessionExportContext) {
  * `autoSaveToHealthKit`:
  *
  * - Claims the dedup guard synchronously at entry (sets 'saving'); a session
- *   already 'saving' or 'saved' returns null without a second native call.
+ *   already 'saving' or saved returns null without a second native call.
  * - Auto-save preference off / unavailable / authorization denied / missing
  *   timestamps all RELEASE the guard (delete the entry) and return null, so the
  *   manual save button still works.
- * - On success: marks 'saved', best-effort persists the workout id, tracks the
- *   export, returns the workout id.
+ * - On success: marks a saved state, best-effort persists the workout id,
+ *   tracks the export, returns the workout id.
  * - On a thrown native error: marks 'failed' and returns null (a manual retry
  *   can overwrite the 'failed' entry).
  *
@@ -264,7 +285,7 @@ export async function autoSaveToAppleHealth(
   // Claim synchronously — prevents a concurrent auto + manual save from both
   // reaching the native bridge.
   const existing = saveStateBySession.get(sessionId);
-  if (existing === 'saving' || existing === 'saved') return null;
+  if (existing === 'saving' || existing === 'saved' || existing === 'savedWithoutEnergy') return null;
   setSaveState(sessionId, 'saving');
 
   try {
@@ -272,6 +293,16 @@ export async function autoSaveToAppleHealth(
     if (!enabled) {
       clearSaveState(sessionId);
       return null;
+    }
+
+    const healthExport = await loadSessionHealthExport(sessionId, ctx);
+    if (!healthExport) {
+      clearSaveState(sessionId);
+      return null;
+    }
+    if (healthExport.healthKitWorkoutId) {
+      setSaveState(sessionId, 'saved');
+      return healthExport.healthKitWorkoutId;
     }
 
     const available = await isAppleHealthAvailable();
@@ -292,7 +323,7 @@ export async function autoSaveToAppleHealth(
       return null;
     }
 
-    const options = buildSaveOptions(summary, ctx);
+    const options = buildSaveOptions(healthExport);
     // `!healthWorkoutsNative` is unreachable at runtime (isAppleHealthAvailable
     // above already bailed when the module is null) — it's here purely to
     // narrow the type for the call below.
@@ -301,11 +332,11 @@ export async function autoSaveToAppleHealth(
       return null;
     }
 
-    const { workoutId } = await healthWorkoutsNative.saveWorkout(options);
-    setSaveState(sessionId, 'saved');
-    await persistWorkoutId(sessionId, workoutId);
+    const result = await healthWorkoutsNative.saveWorkout(options);
+    setSavedStateFromResult(sessionId, result);
+    await persistWorkoutId(sessionId, result.workoutId);
     track(SHARED_EVENTS.SessionExportedToIntegration, { integration: 'apple_health', trigger: 'auto' });
-    return workoutId;
+    return result.workoutId;
   } catch (error) {
     setSaveState(sessionId, 'failed');
     console.warn('[AppleHealth] Auto-save failed:', error);
@@ -318,29 +349,40 @@ export async function autoSaveToAppleHealth(
  * screen). Like the auto path but skips the preference check and reports a
  * coarse outcome the UI can render.
  *
- * - Already 'saved' → returns 'saved'. A save still in flight ('saving') →
- *   returns 'inFlight' — NOT 'saved', the running task may yet fail; the
- *   button keeps rendering the store's live state. Either way no second
+ * - Already saved → returns that saved state. A save still in flight
+ *   ('saving') returns 'inFlight' — NOT 'saved', the running task may yet fail;
+ *   the button keeps rendering the store's live state. Either way no second
  *   native write starts: whoever claims 'saving' first wins.
  * - A previous 'failed' (retryable) or no prior entry → claims 'saving' and
  *   proceeds, so a manual retry after a failed save works.
  * - unavailable / denied delete the entry and return that outcome.
- * - success marks 'saved', persists the workout id, tracks (trigger 'manual').
+ * - success marks a saved state, persists the workout id, tracks (trigger
+ *   'manual').
  * - a thrown native error marks 'failed' and returns 'failed'.
  */
 export async function manualSaveToAppleHealth(
   summary: SessionSummary,
   ctx: SessionExportContext,
-): Promise<'saved' | 'inFlight' | 'denied' | 'unavailable' | 'failed'> {
+): Promise<'saved' | 'savedWithoutEnergy' | 'inFlight' | 'denied' | 'unavailable' | 'failed'> {
   const { sessionId } = summary;
 
   const existing = saveStateBySession.get(sessionId);
-  if (existing === 'saved') return 'saved';
+  if (existing === 'saved' || existing === 'savedWithoutEnergy') return existing;
   if (existing === 'saving') return 'inFlight';
   // 'failed' (retryable) or no entry proceed by claiming.
   setSaveState(sessionId, 'saving');
 
   try {
+    const healthExport = await loadSessionHealthExport(sessionId, ctx);
+    if (!healthExport) {
+      setSaveState(sessionId, 'failed');
+      return 'failed';
+    }
+    if (healthExport.healthKitWorkoutId) {
+      setSaveState(sessionId, 'saved');
+      return 'saved';
+    }
+
     const available = await isAppleHealthAvailable();
     if (!available) {
       clearSaveState(sessionId);
@@ -358,7 +400,7 @@ export async function manualSaveToAppleHealth(
       return 'denied';
     }
 
-    const options = buildSaveOptions(summary, ctx);
+    const options = buildSaveOptions(healthExport);
     // `!healthWorkoutsNative` is unreachable at runtime (isAppleHealthAvailable
     // above already bailed when the module is null) — it's here purely to
     // narrow the type for the call below.
@@ -367,11 +409,11 @@ export async function manualSaveToAppleHealth(
       return 'failed';
     }
 
-    const { workoutId } = await healthWorkoutsNative.saveWorkout(options);
-    setSaveState(sessionId, 'saved');
-    await persistWorkoutId(sessionId, workoutId);
+    const result = await healthWorkoutsNative.saveWorkout(options);
+    setSavedStateFromResult(sessionId, result);
+    await persistWorkoutId(sessionId, result.workoutId);
     track(SHARED_EVENTS.SessionExportedToIntegration, { integration: 'apple_health', trigger: 'manual' });
-    return 'saved';
+    return result.created && !result.energySaved ? 'savedWithoutEnergy' : 'saved';
   } catch (error) {
     setSaveState(sessionId, 'failed');
     console.warn('[AppleHealth] Manual save failed:', error);

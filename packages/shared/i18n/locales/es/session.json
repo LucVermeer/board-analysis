@@ -171,6 +171,7 @@
     "saveToAppleHealth": "Guardar en Apple Health",
     "savingToAppleHealth": "Guardando en Apple Health…",
     "savedToAppleHealth": "Guardado en Apple Health",
+    "savedToAppleHealthWithoutCalories": "Guardado sin calorías",
     "saveToAppleHealthRetry": "Guardar en Apple Health (reintentar)",
     "loadErrorTitle": "No se pudo cargar tu sesión",
     "loadErrorMessage": "Tus vías están guardadas, solo falló el resumen. Inténtalo de nuevo o vuelve atrás.",
