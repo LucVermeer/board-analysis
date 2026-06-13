@@ -314,6 +314,7 @@ We are using next.js app router, it's important we try to use server side compon
 - Always use CSS media queries for mobile/responsive design
 - For rendering avoid JavaScript breakpoint detection & Grid.useBreakpoint()
 - While we work together, be careful to remove any code you no longer use, so we dont end up with lots of deadcode
+- Prefer skeleton or shadow content for loading states. Use spinners only when representative placeholder content is not reasonably possible, such as a single indeterminate action with no stable content shape.
 - **Dark mode uses white input fields** — This is intentional for contrast. All input components (TextField, Select, Autocomplete, etc.) have white backgrounds in dark mode via `darkTokens.semantic.inputSurface`. Do not change them to dark backgrounds.
 - **Never use `any` type** - The `no-explicit-any` lint rule is set to `deny` across all packages. Use `unknown`, proper types, or `as unknown as SpecificType` for type assertions. No exceptions - `any` defeats the purpose of TypeScript
 - **Never hardcode user-facing strings** - All visible text must come from the i18n catalogs in `packages/web/i18n/locales/`. See the Internationalisation section below for the call-site pattern. CI runs `vp run check:i18n` on every PR, which fails the build if a `.tsx` file under `packages/web/app/` introduces a hardcoded English string. Pre-existing violations are silenced with `// i18n-ignore-next-line` (or `{/* i18n-ignore-next-line */}`) comments — chip away at these by translating them and removing the marker.

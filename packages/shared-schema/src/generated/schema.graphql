@@ -1168,6 +1168,8 @@ type ActivityFeedItem {
   attemptCount: Int
   "User comment on the ascent"
   comment: String
+  "Number of comments on the social entity"
+  commentCount: Int
   "When this feed item was created (ISO 8601)"
   createdAt: String!
   "JSON-encoded metadata for type-specific data (e.g., session summary stats)"

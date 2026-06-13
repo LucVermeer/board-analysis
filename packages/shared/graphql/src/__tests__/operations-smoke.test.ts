@@ -58,3 +58,11 @@ describe('beta-links operations export the expected names', () => {
     expect(mod).toHaveProperty('ATTACH_BETA_LINK');
   });
 });
+
+describe('activity-feed operations export the expected names', () => {
+  it('exposes GET_ACTIVITY_FEED and GET_SESSION_GROUPED_FEED', async () => {
+    const mod = await import('../operations/activity-feed');
+    expect(mod).toHaveProperty('GET_ACTIVITY_FEED');
+    expect(mod).toHaveProperty('GET_SESSION_GROUPED_FEED');
+  });
+});

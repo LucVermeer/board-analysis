@@ -75,6 +75,18 @@
       }
     },
     "about": {
+      "title": "À propos de Boardsesh",
+      "heroTitle": "Boardsesh",
+      "heroBody": "Pilotez votre board depuis votre téléphone : trouvez des blocs, préparez les runs, allumez le mur et gardez la session en mouvement.",
+      "sectionTitle": "À quoi sert Boardsesh",
+      "whatItDoesTitle": "Grimpez sans changer d'app",
+      "whatItDoesBody": "Cherchez, mettez en file, allumez, enregistrez et partagez des blocs depuis un seul endroit pendant que vous restez concentré sur le mur.",
+      "boardsTitle": "Pour vos boards",
+      "boardsBody": "Boardsesh prend en charge les sessions sur vos setups Kilter, Tension et MoonBoard sans se présenter comme une app officielle.",
+      "openTitle": "Construit en public",
+      "openBody": "Le projet est open source pour que les grimpeurs puissent signaler les accrocs, demander des fonctions et aider à choisir la suite.",
+      "independentTitle": "Projet indépendant",
+      "independentBody": "Boardsesh n'est ni affilié ni approuvé par Aurora Climbing, Kilter, Tension, Moon Climbing ou un fabricant de boards.",
       "joinDiscord": "Rejoindre Discord"
     },
     "onboarding": {
@@ -106,6 +118,7 @@
       }
     },
     "nav": {
+      "home": "Accueil",
       "boards": "Boards",
       "climbs": "Blocs",
       "climb": "Bloc",

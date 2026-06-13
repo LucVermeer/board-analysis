@@ -1,5 +1,48 @@
 import { gql } from 'graphql-request';
-import type { ActivityFeedInput, SessionFeedResult, SessionDetail } from '@boardsesh/shared-schema';
+import type { ActivityFeedInput, ActivityFeedResult, SessionFeedResult, SessionDetail } from '@boardsesh/shared-schema';
+
+// ============================================
+// Activity Feed Queries
+// ============================================
+
+export const GET_ACTIVITY_FEED = gql`
+  query GetActivityFeed($input: ActivityFeedInput) {
+    activityFeed(input: $input) {
+      items {
+        id
+        type
+        entityType
+        entityId
+        boardUuid
+        actorId
+        actorDisplayName
+        actorAvatarUrl
+        climbName
+        climbUuid
+        boardType
+        layoutId
+        gradeName
+        status
+        angle
+        frames
+        setterUsername
+        commentBody
+        isMirror
+        isBenchmark
+        isNoMatch
+        difficulty
+        difficultyName
+        quality
+        attemptCount
+        comment
+        commentCount
+        createdAt
+      }
+      cursor
+      hasMore
+    }
+  }
+`;
 
 // ============================================
 // Session-Grouped Feed Queries
@@ -96,6 +139,14 @@ export const SET_SESSION_HEALTHKIT_WORKOUT_ID = gql`
 
 export type GetSessionGroupedFeedQueryVariables = {
   input?: ActivityFeedInput;
+};
+
+export type GetActivityFeedQueryVariables = {
+  input?: ActivityFeedInput;
+};
+
+export type GetActivityFeedQueryResponse = {
+  activityFeed: ActivityFeedResult;
 };
 
 export type GetSessionGroupedFeedQueryResponse = {

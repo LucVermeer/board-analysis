@@ -15,6 +15,39 @@
   "activityFeed": {
     "signInPrompt": "Connectez-vous pour suivre les grimpeurs de votre crew."
   },
+  "mobile": {
+    "home": {
+      "title": "Accueil",
+      "betaTitle": "Beta récente",
+      "betaEmpty": "Aucune vidéo beta pour le moment",
+      "betaError": "Impossible de charger les vidéos beta.",
+      "betaOpenError": "Impossible d'ouvrir cette vidéo beta.",
+      "betaCardLabel": "Ouvrir la vidéo beta",
+      "feedTitle": "De votre crew",
+      "signInTitle": "Connectez-vous pour voir votre fil",
+      "signInBody": "Suivez des grimpeurs et des ouvreurs pour voir leurs enchaînements et nouveaux blocs ici.",
+      "emptyTitle": "Aucune activité pour le moment",
+      "emptyBody": "Suivez des grimpeurs et des ouvreurs pour remplir ce fil.",
+      "unknownClimb": "Bloc inconnu",
+      "unknownClimber": "Grimpeur",
+      "activityLine": "{{action}} - {{time}}",
+      "angle": "{{angle}}°",
+      "boards": {
+        "kilter": "Kilter",
+        "tension": "Tension",
+        "moonboard": "MoonBoard"
+      },
+      "activity": {
+        "ascent": "a enregistré une ascension",
+        "flash": "a flashé",
+        "send": "a enchaîné",
+        "attempt": "a essayé",
+        "newClimb": "a ouvert un nouveau bloc",
+        "comment": "a commenté",
+        "proposalApproved": "a eu une proposition approuvée"
+      }
+    }
+  },
   "ascentsFeed": {
     "mirrored": "Miroir",
     "benchmark": "Référence",

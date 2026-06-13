@@ -141,8 +141,31 @@ describe('TabLayout', () => {
     cfg.materialScreens = [];
   });
 
-  it('lands on the climbs tab by default', () => {
-    expect(unstable_settings.initialRouteName).toBe('climbs');
+  it('lands on the home tab by default', () => {
+    expect(unstable_settings.initialRouteName).toBe('home');
+  });
+
+  it('renders Home as the leftmost native tab', () => {
+    const { container } = render(<TabLayout />);
+    const triggerNames = Array.from(container.querySelectorAll('[data-trigger]')).map((trigger) =>
+      trigger.getAttribute('data-trigger'),
+    );
+
+    expect(triggerNames).toEqual(['home', 'climbs', 'record', 'discover', 'profile']);
+  });
+
+  it('registers Home as the leftmost material tab', () => {
+    cfg.variant = 'material';
+
+    render(<TabLayout />);
+
+    expect(cfg.materialScreens.map((screen) => screen.name)).toEqual([
+      'home',
+      'climbs',
+      'record',
+      'discover',
+      'profile',
+    ]);
   });
 
   it('does not render the Record badge when no status is active', () => {

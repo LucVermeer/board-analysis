@@ -4,7 +4,12 @@ import { pubsub } from '../pubsub/index';
 import { db } from '../db/client';
 import * as dbSchema from '@boardsesh/db/schema';
 import { eq, and, sql } from 'drizzle-orm';
-import { fanoutFeedItems, fanoutNewClimbFeedItems } from './feed-fanout';
+import {
+  fanoutCommentFeedItems,
+  fanoutFeedItems,
+  fanoutNewClimbFeedItems,
+  fanoutProposalApprovedFeedItems,
+} from './feed-fanout';
 import crypto from 'crypto';
 import {
   resolveClimbCreatedFollowerRecipients,
@@ -34,6 +39,8 @@ export async function publishSocialEvent(event: SocialEvent): Promise<void> {
  */
 async function createInlineNotification(event: SocialEvent): Promise<void> {
   try {
+    await fanoutInlineActivity(event);
+
     let recipientId: string | null = null;
     let notificationType: dbSchema.NotificationType | null = null;
 
@@ -319,6 +326,21 @@ async function createInlineNotification(event: SocialEvent): Promise<void> {
     });
   } catch (error) {
     logger.error('[Events] Inline notification failed:', error);
+  }
+}
+
+async function fanoutInlineActivity(event: SocialEvent): Promise<void> {
+  try {
+    if (event.type === 'comment.created' || event.type === 'comment.reply') {
+      await fanoutCommentFeedItems(event);
+      return;
+    }
+
+    if (event.type === 'proposal.approved') {
+      await fanoutProposalApprovedFeedItems(event);
+    }
+  } catch (error) {
+    logger.error('[Events] Inline feed fanout failed:', error);
   }
 }
 

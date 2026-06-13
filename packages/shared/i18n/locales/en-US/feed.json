@@ -15,6 +15,39 @@
   "activityFeed": {
     "signInPrompt": "Sign in to see a personalized feed from climbers you follow."
   },
+  "mobile": {
+    "home": {
+      "title": "Home",
+      "betaTitle": "Fresh beta",
+      "betaEmpty": "No beta videos yet",
+      "betaError": "Couldn't load beta videos.",
+      "betaOpenError": "Couldn't open that beta video.",
+      "betaCardLabel": "Open beta video",
+      "feedTitle": "From your crew",
+      "signInTitle": "Sign in to see your feed",
+      "signInBody": "Follow climbers and setters to see their sends and new climbs here.",
+      "emptyTitle": "No activity yet",
+      "emptyBody": "Follow climbers and setters to fill this up.",
+      "unknownClimb": "Unknown climb",
+      "unknownClimber": "Climber",
+      "activityLine": "{{action}} - {{time}}",
+      "angle": "{{angle}}°",
+      "boards": {
+        "kilter": "Kilter",
+        "tension": "Tension",
+        "moonboard": "MoonBoard"
+      },
+      "activity": {
+        "ascent": "logged an ascent",
+        "flash": "flashed",
+        "send": "sent",
+        "attempt": "tried",
+        "newClimb": "set a new climb",
+        "comment": "commented",
+        "proposalApproved": "got a proposal approved"
+      }
+    }
+  },
   "ascentsFeed": {
     "mirrored": "Mirrored",
     "benchmark": "Benchmark",

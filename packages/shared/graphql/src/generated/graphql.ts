@@ -55,6 +55,8 @@ export type ActivityFeedItem = {
   comment?: Maybe<Scalars['String']['output']>;
   /** Comment body preview */
   commentBody?: Maybe<Scalars['String']['output']>;
+  /** Number of comments on the social entity */
+  commentCount?: Maybe<Scalars['Int']['output']>;
   /** When this feed item was created (ISO 8601) */
   createdAt: Scalars['String']['output'];
   /** Difficulty rating */

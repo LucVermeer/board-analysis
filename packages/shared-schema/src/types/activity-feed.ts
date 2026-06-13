@@ -133,6 +133,7 @@ export type ActivityFeedItem = {
   quality?: number | null;
   attemptCount?: number | null;
   comment?: string | null;
+  commentCount?: number | null;
   createdAt: string;
   metadata?: Record<string, unknown> | null;
 };
