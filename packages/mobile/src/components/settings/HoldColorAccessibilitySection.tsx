@@ -1,10 +1,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, StyleSheet, View, type StyleProp, type TextStyle } from 'react-native';
+import {
+  PanResponder,
+  Pressable,
+  StyleSheet,
+  View,
+  type ColorValue,
+  type GestureResponderEvent,
+  type StyleProp,
+  type TextStyle,
+} from 'react-native';
 import { BottomSheetModal, BottomSheetTextInput } from '@gorhom/bottom-sheet';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import { toBoardName } from '@boardsesh/board-config';
 import type { BoardName } from '@boardsesh/shared-schema';
+import Svg, { Circle, Polygon, Rect } from 'react-native-svg';
 import { Button } from '../Button';
 import { Icon } from '../Icon';
 import { ListRow } from '../ListRow';
@@ -16,16 +26,28 @@ import { useTheme } from '../../providers/theme-provider';
 import { useActiveBoard } from '../../lib/graphql/use-active-board';
 import {
   DEFAULT_HOLD_COLOR_SIGNATURE,
+  DEFAULT_HOLD_BRUSH_THICKNESS,
+  DEFAULT_HOLD_MARKER_SHAPE,
+  DEFAULT_HOLD_SHAPE_SIZE,
+  HOLD_MARKER_SHAPES,
+  MAX_HOLD_BRUSH_THICKNESS,
+  MAX_HOLD_SHAPE_SIZE,
+  MIN_HOLD_BRUSH_THICKNESS,
+  MIN_HOLD_SHAPE_SIZE,
   HOLD_COLOR_OVERRIDE_ROLES,
   getDefaultHoldRoleColor,
   getEffectiveHoldRoleColor,
-  hasHoldColorOverrides,
+  getEffectiveHoldRoleShape,
+  hasHoldMarkerOverrides,
   hexToRgb,
   normalizeHexColor,
+  normalizeBrushThickness,
+  normalizeHoldShapeSize,
   parseRgbChannel,
   rgbToHex,
   useHoldColorOverrides,
   type HoldColorOverrideRole,
+  type HoldMarkerShape,
   type RgbColor,
 } from '../../lib/hold-color-overrides';
 import { borderRadius, spacing } from '../../theme/tokens';
@@ -42,6 +64,21 @@ function labelForRole(t: TFunction<'common'>, role: HoldColorOverrideRole): stri
       return t('mobile.more.accessibility.roles.finish');
     case 'FOOT':
       return t('mobile.more.accessibility.roles.foot');
+  }
+}
+
+function labelForShape(t: TFunction<'common'>, shape: HoldMarkerShape): string {
+  switch (shape) {
+    case 'circle':
+      return t('mobile.more.accessibility.shapes.circle');
+    case 'triangle-up':
+      return t('mobile.more.accessibility.shapes.triangleUp');
+    case 'triangle-down':
+      return t('mobile.more.accessibility.shapes.triangleDown');
+    case 'square':
+      return t('mobile.more.accessibility.shapes.square');
+    case 'diamond':
+      return t('mobile.more.accessibility.shapes.diamond');
   }
 }
 
@@ -77,16 +114,29 @@ export function HoldColorAccessibilitySection() {
   const { systemColors } = useTheme();
   const { data: activeBoard } = useActiveBoard();
   const boardName = boardNameFromActiveBoard(activeBoard?.boardType);
-  const { overrides, setRoleOverride, resetOverrides, signature } = useHoldColorOverrides();
+  const {
+    overrides,
+    markerOverrides,
+    shapes,
+    brushThickness,
+    shapeSize,
+    setRoleMarkerOverride,
+    setBrushThickness,
+    setShapeSize,
+    resetOverrides,
+    renderSignature,
+  } = useHoldColorOverrides();
   const [selectedRole, setSelectedRole] = useState<HoldColorOverrideRole | null>(null);
-  const hasOverrides = signature !== DEFAULT_HOLD_COLOR_SIGNATURE && hasHoldColorOverrides(overrides);
+  const [thicknessSheetOpen, setThicknessSheetOpen] = useState(false);
+  const [sizeSheetOpen, setSizeSheetOpen] = useState(false);
+  const hasOverrides = renderSignature !== DEFAULT_HOLD_COLOR_SIGNATURE && hasHoldMarkerOverrides(markerOverrides);
 
   const handleSaveRole = useCallback(
-    (role: HoldColorOverrideRole, color: string | null) => {
-      setRoleOverride(role, color);
+    (role: HoldColorOverrideRole, color: string | null, shape: HoldMarkerShape) => {
+      setRoleMarkerOverride(role, color, shape);
       setSelectedRole(null);
     },
-    [setRoleOverride],
+    [setRoleMarkerOverride],
   );
 
   return (
@@ -107,48 +157,182 @@ export function HoldColorAccessibilitySection() {
         </View>
         {HOLD_COLOR_OVERRIDE_ROLES.map((role, index) => {
           const roleOverride = overrides[role];
+          const roleShape = getEffectiveHoldRoleShape(role, shapes);
           const roleLabel = labelForRole(t, role);
           const modeLabel = roleOverride
             ? t('mobile.more.accessibility.mode.user')
             : t('mobile.more.accessibility.mode.default');
+          const shapeLabel = labelForShape(t, roleShape);
+          const subtitle = t('mobile.more.accessibility.rowSubtitle', { colorMode: modeLabel, shape: shapeLabel });
           const swatchColor = getEffectiveHoldRoleColor(boardName, role, overrides);
+          const hasRoleOverride = !!roleOverride || roleShape !== DEFAULT_HOLD_MARKER_SHAPE;
           return (
             <ListRow
               key={role}
               title={roleLabel}
-              subtitle={modeLabel}
+              subtitle={subtitle}
               accessibilityLabel={t('mobile.more.accessibility.rowAccessibility', {
                 role: roleLabel,
-                mode: modeLabel,
+                mode: subtitle,
               })}
-              leading={<ColorSwatch color={swatchColor} />}
-              trailing={roleOverride ? <Icon name="check.small" size={20} color={systemColors.accent} /> : undefined}
+              leading={<MarkerSwatch color={swatchColor} shape={roleShape} size={shapeSize} />}
+              trailing={hasRoleOverride ? <Icon name="check.small" size={20} color={systemColors.accent} /> : undefined}
               showChevron
-              showSeparator={index < HOLD_COLOR_OVERRIDE_ROLES.length - 1}
+              showSeparator={index < HOLD_COLOR_OVERRIDE_ROLES.length}
               onPress={() => setSelectedRole(role)}
             />
           );
         })}
+        <ListRow
+          title={t('mobile.more.accessibility.brush.title')}
+          subtitle={t('mobile.more.accessibility.brush.value', { value: brushThickness.toFixed(1) })}
+          accessibilityLabel={t('mobile.more.accessibility.brush.rowAccessibility', {
+            value: brushThickness.toFixed(1),
+          })}
+          leading={
+            <MarkerSwatch color={systemColors.accent} shape="circle" thickness={brushThickness} size={shapeSize} />
+          }
+          trailing={
+            brushThickness !== DEFAULT_HOLD_BRUSH_THICKNESS ? (
+              <Icon name="check.small" size={20} color={systemColors.accent} />
+            ) : undefined
+          }
+          showChevron
+          showSeparator
+          onPress={() => setThicknessSheetOpen(true)}
+        />
+        <ListRow
+          title={t('mobile.more.accessibility.size.title')}
+          subtitle={t('mobile.more.accessibility.size.value', { value: shapeSize.toFixed(1) })}
+          accessibilityLabel={t('mobile.more.accessibility.size.rowAccessibility', {
+            value: shapeSize.toFixed(1),
+          })}
+          leading={<MarkerSwatch color={systemColors.accent} shape="diamond" size={shapeSize} />}
+          trailing={
+            shapeSize !== DEFAULT_HOLD_SHAPE_SIZE ? (
+              <Icon name="check.small" size={20} color={systemColors.accent} />
+            ) : undefined
+          }
+          showChevron
+          showSeparator={false}
+          onPress={() => setSizeSheetOpen(true)}
+        />
       </View>
       <HoldColorPickerSheet
         role={selectedRole}
         boardName={boardName}
         currentColor={selectedRole ? (overrides[selectedRole] ?? null) : null}
+        currentShape={selectedRole ? getEffectiveHoldRoleShape(selectedRole, shapes) : DEFAULT_HOLD_MARKER_SHAPE}
+        shapeSize={shapeSize}
         onSave={handleSaveRole}
         onClose={() => setSelectedRole(null)}
+      />
+      <BrushThicknessSheet
+        open={thicknessSheetOpen}
+        value={brushThickness}
+        shapeSize={shapeSize}
+        onSave={setBrushThickness}
+        onClose={() => setThicknessSheetOpen(false)}
+      />
+      <ShapeSizeSheet
+        open={sizeSheetOpen}
+        value={shapeSize}
+        brushThickness={brushThickness}
+        onSave={setShapeSize}
+        onClose={() => setSizeSheetOpen(false)}
       />
     </View>
   );
 }
 
-function ColorSwatch({ color }: { color: string }) {
+function MarkerSwatch({
+  color,
+  shape,
+  thickness = DEFAULT_HOLD_BRUSH_THICKNESS,
+  size = DEFAULT_HOLD_SHAPE_SIZE,
+}: {
+  color: ColorValue;
+  shape: HoldMarkerShape;
+  thickness?: number;
+  size?: number;
+}) {
   const { systemColors } = useTheme();
+  const strokeWidth = Math.max(1.5, 2.25 * thickness);
+  const shapeSize = normalizeHoldShapeSize(size);
+  const center = 21;
+  const radius = 9 * shapeSize;
+  const triangleUpPoints = `${center},${center - radius} ${center + radius * 0.866},${center + radius * 0.5} ${
+    center - radius * 0.866
+  },${center + radius * 0.5}`;
+  const triangleDownPoints = `${center - radius * 0.866},${center - radius * 0.5} ${center + radius * 0.866},${
+    center - radius * 0.5
+  } ${center},${center + radius}`;
+  const squareHalfSide = radius * 0.82;
   return (
     <View
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"
-      style={[styles.swatch, { backgroundColor: color, borderColor: systemColors.separator }]}
-    />
+      style={[styles.swatch, { borderColor: systemColors.separator }]}
+    >
+      <Svg width="30" height="30" viewBox="0 0 42 42">
+        {shape === 'circle' ? (
+          <Circle
+            cx={center}
+            cy={center}
+            r={radius}
+            fill={color}
+            fillOpacity={0.25}
+            stroke={color}
+            strokeWidth={strokeWidth}
+          />
+        ) : null}
+        {shape === 'triangle-up' ? (
+          <Polygon
+            points={triangleUpPoints}
+            fill={color}
+            fillOpacity={0.25}
+            stroke={color}
+            strokeLinejoin="round"
+            strokeWidth={strokeWidth}
+          />
+        ) : null}
+        {shape === 'triangle-down' ? (
+          <Polygon
+            points={triangleDownPoints}
+            fill={color}
+            fillOpacity={0.25}
+            stroke={color}
+            strokeLinejoin="round"
+            strokeWidth={strokeWidth}
+          />
+        ) : null}
+        {shape === 'square' ? (
+          <Rect
+            x={center - squareHalfSide}
+            y={center - squareHalfSide}
+            width={squareHalfSide * 2}
+            height={squareHalfSide * 2}
+            fill={color}
+            fillOpacity={0.25}
+            stroke={color}
+            strokeLinejoin="round"
+            strokeWidth={strokeWidth}
+          />
+        ) : null}
+        {shape === 'diamond' ? (
+          <Polygon
+            points={`${center},${center - radius} ${center + radius},${center} ${center},${center + radius} ${
+              center - radius
+            },${center}`}
+            fill={color}
+            fillOpacity={0.25}
+            stroke={color}
+            strokeLinejoin="round"
+            strokeWidth={strokeWidth}
+          />
+        ) : null}
+      </Svg>
+    </View>
   );
 }
 
@@ -156,16 +340,27 @@ type HoldColorPickerSheetProps = {
   role: HoldColorOverrideRole | null;
   boardName: BoardName;
   currentColor: string | null;
-  onSave: (role: HoldColorOverrideRole, color: string | null) => void;
+  currentShape: HoldMarkerShape;
+  shapeSize: number;
+  onSave: (role: HoldColorOverrideRole, color: string | null, shape: HoldMarkerShape) => void;
   onClose: () => void;
 };
 
-function HoldColorPickerSheet({ role, boardName, currentColor, onSave, onClose }: HoldColorPickerSheetProps) {
+function HoldColorPickerSheet({
+  role,
+  boardName,
+  currentColor,
+  currentShape,
+  shapeSize,
+  onSave,
+  onClose,
+}: HoldColorPickerSheetProps) {
   const { t } = useTranslation('common');
   const { systemColors } = useTheme();
   const sheetRef = useRef<BottomSheetModal>(null);
   const [mode, setMode] = useState<ColorMode>('default');
   const [rgbText, setRgbText] = useState<RgbColorText>({ red: '0', green: '0', blue: '0' });
+  const [shape, setShape] = useState<HoldMarkerShape>(DEFAULT_HOLD_MARKER_SHAPE);
   const isPresentedRef = useRef(false);
 
   const modeOptions = useMemo<{ key: ColorMode; label: string }[]>(
@@ -181,13 +376,14 @@ function HoldColorPickerSheet({ role, boardName, currentColor, onSave, onClose }
       const seedColor = currentColor ?? getDefaultHoldRoleColor(boardName, role, 'led');
       setMode(currentColor ? 'user' : 'default');
       setRgbText(rgbTextFromHex(seedColor));
+      setShape(currentShape);
       sheetRef.current?.present();
       isPresentedRef.current = true;
     } else if (!role && isPresentedRef.current) {
       sheetRef.current?.dismiss();
       isPresentedRef.current = false;
     }
-  }, [boardName, currentColor, role]);
+  }, [boardName, currentColor, currentShape, role]);
 
   const resolvedRgb = mode === 'user' ? rgbFromText(rgbText) : null;
   const resolvedHex = resolvedRgb ? rgbToHex(resolvedRgb) : null;
@@ -215,12 +411,12 @@ function HoldColorPickerSheet({ role, boardName, currentColor, onSave, onClose }
   const handleSave = useCallback(() => {
     if (!role) return;
     if (mode === 'default') {
-      onSave(role, null);
+      onSave(role, null, shape);
       return;
     }
     if (!resolvedHex) return;
-    onSave(role, resolvedHex);
-  }, [mode, onSave, resolvedHex, role]);
+    onSave(role, resolvedHex, shape);
+  }, [mode, onSave, resolvedHex, role, shape]);
 
   const footer = (
     <Button
@@ -241,10 +437,17 @@ function HoldColorPickerSheet({ role, boardName, currentColor, onSave, onClose }
   ];
 
   return (
-    <ModalSheet ref={sheetRef} snapPoints={['58%']} onDismiss={handleDismiss} footer={footer} stackBehavior="push">
+    <ModalSheet
+      ref={sheetRef}
+      snapPoints={['82%', '94%']}
+      onDismiss={handleDismiss}
+      footer={footer}
+      stackBehavior="push"
+      scrollable
+    >
       <View style={styles.pickerBody}>
         <View style={styles.pickerHeader}>
-          <ColorSwatch color={previewColor} />
+          <MarkerSwatch color={previewColor} shape={shape} size={shapeSize} />
           <View style={styles.pickerTitleColumn}>
             <Text variant="headline">{role ? labelForRole(t, role) : t('mobile.more.accessibility.title')}</Text>
             <Text variant="footnote" color={systemColors.secondaryLabel}>
@@ -296,8 +499,309 @@ function HoldColorPickerSheet({ role, boardName, currentColor, onSave, onClose }
             {t('mobile.more.accessibility.invalidRgb')}
           </Text>
         ) : null}
+
+        <View style={styles.shapeSection}>
+          <Text variant="subheadline" color={systemColors.label}>
+            {t('mobile.more.accessibility.shapeLabel')}
+          </Text>
+          <View style={styles.shapeGrid}>
+            {HOLD_MARKER_SHAPES.map((option) => {
+              const selected = shape === option;
+              return (
+                <Pressable
+                  key={option}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected }}
+                  accessibilityLabel={labelForShape(t, option)}
+                  onPress={() => setShape(option)}
+                  style={[
+                    styles.shapeButton,
+                    {
+                      backgroundColor: systemColors.fill,
+                      borderColor: selected ? systemColors.accent : systemColors.separator,
+                    },
+                    selected && styles.shapeButtonSelected,
+                  ]}
+                >
+                  <MarkerSwatch color={previewColor} shape={option} size={shapeSize} />
+                  <Text variant="caption1" color={systemColors.label} style={styles.shapeLabel} numberOfLines={2}>
+                    {labelForShape(t, option)}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
       </View>
     </ModalSheet>
+  );
+}
+
+type BrushThicknessSheetProps = {
+  open: boolean;
+  value: number;
+  shapeSize: number;
+  onSave: (brushThickness: number) => void;
+  onClose: () => void;
+};
+
+function BrushThicknessSheet({ open, value, shapeSize, onSave, onClose }: BrushThicknessSheetProps) {
+  const { t } = useTranslation('common');
+  const { systemColors } = useTheme();
+  const sheetRef = useRef<BottomSheetModal>(null);
+  const isPresentedRef = useRef(false);
+  const [draftValue, setDraftValue] = useState(value);
+
+  useEffect(() => {
+    if (open && !isPresentedRef.current) {
+      setDraftValue(value);
+      sheetRef.current?.present();
+      isPresentedRef.current = true;
+    } else if (!open && isPresentedRef.current) {
+      sheetRef.current?.dismiss();
+      isPresentedRef.current = false;
+    }
+  }, [open, value]);
+
+  const handleDismiss = useCallback(() => {
+    isPresentedRef.current = false;
+    onClose();
+  }, [onClose]);
+
+  const handleSave = useCallback(() => {
+    onSave(draftValue);
+    onClose();
+  }, [draftValue, onClose, onSave]);
+
+  const footer = <Button title={t('mobile.more.accessibility.brush.save')} onPress={handleSave} size="large" />;
+
+  return (
+    <ModalSheet
+      ref={sheetRef}
+      snapPoints={['48%', '80%']}
+      onDismiss={handleDismiss}
+      footer={footer}
+      stackBehavior="push"
+      scrollable
+    >
+      <View style={styles.pickerBody}>
+        <View style={styles.pickerHeader}>
+          <MarkerSwatch color={systemColors.accent} shape="circle" thickness={draftValue} size={shapeSize} />
+          <View style={styles.pickerTitleColumn}>
+            <Text variant="headline">{t('mobile.more.accessibility.brush.title')}</Text>
+            <Text variant="footnote" color={systemColors.secondaryLabel}>
+              {t('mobile.more.accessibility.brush.subtitle')}
+            </Text>
+          </View>
+        </View>
+        <MarkerMultiplierSlider
+          accessibilityLabel={t('mobile.more.accessibility.brush.title')}
+          value={draftValue}
+          valueText={t('mobile.more.accessibility.brush.value', { value: draftValue.toFixed(1) })}
+          min={MIN_HOLD_BRUSH_THICKNESS}
+          max={MAX_HOLD_BRUSH_THICKNESS}
+          normalizeValue={normalizeBrushThickness}
+          onChange={setDraftValue}
+        />
+      </View>
+    </ModalSheet>
+  );
+}
+
+type ShapeSizeSheetProps = {
+  open: boolean;
+  value: number;
+  brushThickness: number;
+  onSave: (shapeSize: number) => void;
+  onClose: () => void;
+};
+
+function ShapeSizeSheet({ open, value, brushThickness, onSave, onClose }: ShapeSizeSheetProps) {
+  const { t } = useTranslation('common');
+  const { systemColors } = useTheme();
+  const sheetRef = useRef<BottomSheetModal>(null);
+  const isPresentedRef = useRef(false);
+  const [draftValue, setDraftValue] = useState(value);
+
+  useEffect(() => {
+    if (open && !isPresentedRef.current) {
+      setDraftValue(value);
+      sheetRef.current?.present();
+      isPresentedRef.current = true;
+    } else if (!open && isPresentedRef.current) {
+      sheetRef.current?.dismiss();
+      isPresentedRef.current = false;
+    }
+  }, [open, value]);
+
+  const handleDismiss = useCallback(() => {
+    isPresentedRef.current = false;
+    onClose();
+  }, [onClose]);
+
+  const handleSave = useCallback(() => {
+    onSave(draftValue);
+    onClose();
+  }, [draftValue, onClose, onSave]);
+
+  const footer = <Button title={t('mobile.more.accessibility.size.save')} onPress={handleSave} size="large" />;
+
+  return (
+    <ModalSheet
+      ref={sheetRef}
+      snapPoints={['48%', '80%']}
+      onDismiss={handleDismiss}
+      footer={footer}
+      stackBehavior="push"
+      scrollable
+    >
+      <View style={styles.pickerBody}>
+        <View style={styles.pickerHeader}>
+          <MarkerSwatch color={systemColors.accent} shape="diamond" thickness={brushThickness} size={draftValue} />
+          <View style={styles.pickerTitleColumn}>
+            <Text variant="headline">{t('mobile.more.accessibility.size.title')}</Text>
+            <Text variant="footnote" color={systemColors.secondaryLabel}>
+              {t('mobile.more.accessibility.size.subtitle')}
+            </Text>
+          </View>
+        </View>
+        <MarkerMultiplierSlider
+          accessibilityLabel={t('mobile.more.accessibility.size.title')}
+          value={draftValue}
+          valueText={t('mobile.more.accessibility.size.value', { value: draftValue.toFixed(1) })}
+          min={MIN_HOLD_SHAPE_SIZE}
+          max={MAX_HOLD_SHAPE_SIZE}
+          normalizeValue={normalizeHoldShapeSize}
+          onChange={setDraftValue}
+        />
+      </View>
+    </ModalSheet>
+  );
+}
+
+function MarkerMultiplierSlider({
+  accessibilityLabel,
+  value,
+  valueText,
+  min,
+  max,
+  normalizeValue,
+  onChange,
+}: {
+  accessibilityLabel: string;
+  value: number;
+  valueText: string;
+  min: number;
+  max: number;
+  normalizeValue: (value: unknown) => number;
+  onChange: (multiplier: number) => void;
+}) {
+  const { systemColors } = useTheme();
+  const trackRef = useRef<View>(null);
+  const trackLayoutRef = useRef<{ pageLeft: number; width: number } | null>(null);
+  const ratio = (value - min) / (max - min);
+
+  const applyPageX = useCallback(
+    (pageX: number, trackLayout: { pageLeft: number; width: number }) => {
+      if (trackLayout.width <= 0) return;
+      const nextRatio = Math.max(0, Math.min(1, (pageX - trackLayout.pageLeft) / trackLayout.width));
+      const nextValue = min + nextRatio * (max - min);
+      onChange(normalizeValue(nextValue));
+    },
+    [max, min, normalizeValue, onChange],
+  );
+
+  const measureTrackAndSetFromPageX = useCallback(
+    (pageX: number) => {
+      trackRef.current?.measure((_x, _y, width, _height, pageLeft) => {
+        if (width <= 0) return;
+        const trackLayout = { pageLeft, width };
+        trackLayoutRef.current = trackLayout;
+        applyPageX(pageX, trackLayout);
+      });
+    },
+    [applyPageX],
+  );
+
+  const setFromPageX = useCallback(
+    (pageX: number) => {
+      const trackLayout = trackLayoutRef.current;
+      if (trackLayout) {
+        applyPageX(pageX, trackLayout);
+        return;
+      }
+      measureTrackAndSetFromPageX(pageX);
+    },
+    [applyPageX, measureTrackAndSetFromPageX],
+  );
+
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponder: () => true,
+        onPanResponderGrant: (event: GestureResponderEvent) => measureTrackAndSetFromPageX(event.nativeEvent.pageX),
+        onPanResponderMove: (_event, gestureState) => setFromPageX(gestureState.moveX),
+      }),
+    [measureTrackAndSetFromPageX, setFromPageX],
+  );
+
+  const handleAccessibilityAction = useCallback(
+    (event: { nativeEvent: { actionName: string } }) => {
+      const delta = event.nativeEvent.actionName === 'increment' ? 0.1 : -0.1;
+      onChange(normalizeValue(value + delta));
+    },
+    [normalizeValue, onChange, value],
+  );
+
+  return (
+    <View
+      accessible
+      accessibilityRole="adjustable"
+      accessibilityLabel={accessibilityLabel}
+      accessibilityValue={{ text: valueText }}
+      accessibilityActions={accessibilityActions}
+      onAccessibilityAction={handleAccessibilityAction}
+      style={styles.sliderContainer}
+      {...panResponder.panHandlers}
+    >
+      <View style={styles.sliderLabels}>
+        <Text variant="caption1" color={systemColors.secondaryLabel}>
+          {min.toFixed(1)}
+        </Text>
+        <Text variant="headline">{valueText}</Text>
+        <Text variant="caption1" color={systemColors.secondaryLabel}>
+          {max.toFixed(1)}
+        </Text>
+      </View>
+      <View
+        ref={trackRef}
+        onLayout={() => {
+          trackLayoutRef.current = null;
+        }}
+        style={[styles.sliderTrack, { backgroundColor: systemColors.separator }]}
+      >
+        <View
+          style={[
+            styles.sliderFill,
+            {
+              backgroundColor: systemColors.accent,
+              width: `${Math.max(0, Math.min(1, ratio)) * 100}%`,
+            },
+          ]}
+        />
+        <View
+          style={[
+            styles.sliderThumb,
+            {
+              backgroundColor: systemColors.background,
+              borderColor: systemColors.accent,
+              left: `${Math.max(0, Math.min(1, ratio)) * 100}%`,
+            },
+          ]}
+        />
+      </View>
+    </View>
   );
 }
 
@@ -358,10 +862,12 @@ const styles = StyleSheet.create({
     paddingVertical: spacing[1],
   },
   swatch: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     borderWidth: StyleSheet.hairlineWidth,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   pickerBody: {
     paddingHorizontal: spacing[4],
@@ -400,4 +906,57 @@ const styles = StyleSheet.create({
   defaultCopy: {
     lineHeight: 18,
   },
+  shapeSection: {
+    gap: spacing[2],
+  },
+  shapeGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing[2],
+  },
+  shapeButton: {
+    width: '31%',
+    minHeight: 86,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: borderRadius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing[1],
+    padding: spacing[2],
+  },
+  shapeButtonSelected: {
+    borderWidth: 2,
+  },
+  shapeLabel: {
+    textAlign: 'center',
+  },
+  sliderContainer: {
+    gap: spacing[3],
+    paddingVertical: spacing[2],
+  },
+  sliderLabels: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing[2],
+  },
+  sliderTrack: {
+    height: 6,
+    borderRadius: 3,
+  },
+  sliderFill: {
+    height: 6,
+    borderRadius: 3,
+  },
+  sliderThumb: {
+    position: 'absolute',
+    top: -9,
+    width: 24,
+    height: 24,
+    marginLeft: -12,
+    borderRadius: 12,
+    borderWidth: 2,
+  },
 });
+
+const accessibilityActions = [{ name: 'increment' }, { name: 'decrement' }] as const;

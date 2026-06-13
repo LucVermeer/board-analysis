@@ -11,19 +11,26 @@ import {
 import { reportError } from '../lib/error-reporting';
 import {
   DEFAULT_HOLD_COLOR_SIGNATURE,
+  DEFAULT_HOLD_BRUSH_THICKNESS,
+  DEFAULT_HOLD_MARKER_SHAPE,
+  DEFAULT_HOLD_SHAPE_SIZE,
   getEffectiveHoldStateColor,
+  getEffectiveHoldStateShape,
   useHoldColorOverrides,
   type HoldColorOverrides,
+  type HoldShapeOverrides,
 } from '../lib/hold-color-overrides';
 
 /**
- * Bump when the Rust renderer output format changes. v2 marks the
- * switch from composited PNGs (backgrounds baked in) to overlay-only
- * PNGs (transparent background, holds only) — old v1 files in the
- * cache directory are stale and the layered RN component would
- * double-paint backgrounds if it loaded them.
+ * Bump when the native overlay output/cache contract changes. v2 marks
+ * the switch from composited PNGs (backgrounds baked in) to overlay-only
+ * PNGs (transparent background, holds only). v3 marks marker shape,
+ * brush, and size override support, and drops any wrong custom-marker
+ * PNGs written by overlay-only dev binaries during rollout.
  */
-const RENDERER_VERSION = 2;
+const RENDERER_VERSION = 3;
+const MARKER_RENDERER_UNAVAILABLE_MESSAGE =
+  'Marker shape, size, and brush overrides require a rebuilt BoardRenderer native binary';
 
 /** Subset of expo-file-system's `File`: its synchronous `delete()`. */
 type DeletableFsEntry = { delete?: () => void };
@@ -103,6 +110,7 @@ type NativeClimbRenderResult = {
  */
 const inflightRenders = new Map<string, Promise<string>>();
 const INFLIGHT_RENDERS_MAX = 50;
+const unsupportedRenderSignatures = new Set<string>();
 
 const BOARD_CONFIG_CACHE_MAX = 20;
 
@@ -271,10 +279,13 @@ export function buildCacheKey(
   frames: string,
   filledStyle = false,
   renderWidth?: number,
-  colorSignature = DEFAULT_HOLD_COLOR_SIGNATURE,
+  renderSignature = DEFAULT_HOLD_COLOR_SIGNATURE,
 ): string {
+  const effectiveRenderSignature = frames.length === 0 ? DEFAULT_HOLD_COLOR_SIGNATURE : renderSignature;
   const framesHash =
-    colorSignature === DEFAULT_HOLD_COLOR_SIGNATURE ? fnv1aHex(frames) : fnv1aHex(`${frames}|${colorSignature}`);
+    effectiveRenderSignature === DEFAULT_HOLD_COLOR_SIGNATURE
+      ? fnv1aHex(frames)
+      : fnv1aHex(`${frames}|${effectiveRenderSignature}`);
   const canonicalSetIds = canonicalizeSetIds(setIds);
   // Style token sits right after the version prefix so the warm-up scan
   // (which matches on `v${RENDERER_VERSION}_`) still loads both styles and
@@ -321,10 +332,13 @@ function getBoardConfig(
   filledStyle: boolean,
   renderWidth?: number,
   colorOverrides: HoldColorOverrides = {},
-  colorSignature = DEFAULT_HOLD_COLOR_SIGNATURE,
+  shapeOverrides: HoldShapeOverrides = {},
+  brushThickness = DEFAULT_HOLD_BRUSH_THICKNESS,
+  shapeSize = DEFAULT_HOLD_SHAPE_SIZE,
+  renderSignature = DEFAULT_HOLD_COLOR_SIGNATURE,
 ) {
   const widthKey = renderWidth != null ? `${renderWidth}` : 'full';
-  const configKey = `${boardName}-${layoutId}-${sizeId}-${setIds}-${filledStyle ? 'f' : 's'}-w${widthKey}-${colorSignature}`;
+  const configKey = `${boardName}-${layoutId}-${sizeId}-${setIds}-${filledStyle ? 'f' : 's'}-w${widthKey}-${renderSignature}`;
   const cached = boardConfigCache.get(configKey);
   if (cached) return cached;
 
@@ -335,11 +349,13 @@ function getBoardConfig(
   // Build hold_state_map in the format the Rust renderer expects:
   // Record<number, { color: string, render_style?: string }>
   const stateMap = HOLD_STATE_MAP[boardName];
-  const holdStateMap: Record<number, { color: string; render_style?: string }> = {};
+  const holdStateMap: Record<number, { color: string; render_style?: string; shape?: string }> = {};
   for (const [codeStr, stateInfo] of Object.entries(stateMap)) {
+    const shape = getEffectiveHoldStateShape(stateInfo.name, shapeOverrides);
     holdStateMap[Number(codeStr)] = {
       color: getEffectiveHoldStateColor(stateInfo.name, stateInfo.color, colorOverrides),
       ...(stateInfo.renderStyle ? { render_style: stateInfo.renderStyle } : {}),
+      ...(shape !== DEFAULT_HOLD_MARKER_SHAPE ? { shape } : {}),
     };
   }
 
@@ -354,6 +370,8 @@ function getBoardConfig(
     board_height: renderData.boardHeight,
     output_width: outputWidth,
     thumbnail: filledStyle,
+    stroke_width_multiplier: brushThickness,
+    shape_size_multiplier: shapeSize,
     holds: renderData.holdsData.map((hold) => ({
       id: hold.id,
       mirroredHoldId: hold.mirroredHoldId,
@@ -375,6 +393,34 @@ function getBoardConfig(
   const boardConfig = { configBase, setIdsArray };
   boardConfigCache.set(configKey, boardConfig);
   return boardConfig;
+}
+
+export function _getBoardConfigForTests(
+  boardName: BoardName,
+  layoutId: number,
+  sizeId: number,
+  setIds: string,
+  filledStyle: boolean,
+  renderWidth?: number,
+  colorOverrides: HoldColorOverrides = {},
+  shapeOverrides: HoldShapeOverrides = {},
+  brushThickness = DEFAULT_HOLD_BRUSH_THICKNESS,
+  shapeSize = DEFAULT_HOLD_SHAPE_SIZE,
+  renderSignature = DEFAULT_HOLD_COLOR_SIGNATURE,
+): ReturnType<typeof getBoardConfig> {
+  return getBoardConfig(
+    boardName,
+    layoutId,
+    sizeId,
+    setIds,
+    filledStyle,
+    renderWidth,
+    colorOverrides,
+    shapeOverrides,
+    brushThickness,
+    shapeSize,
+    renderSignature,
+  );
 }
 
 /**
@@ -435,7 +481,13 @@ function getNativeModule() {
  */
 export function useNativeClimbRender(params: NativeClimbRenderParams): NativeClimbRenderResult {
   const { frames, boardName, layoutId, sizeId, setIds, filledStyle = false, renderWidth } = params;
-  const { overrides: holdColorOverrides, signature: holdColorSignature } = useHoldColorOverrides();
+  const {
+    overrides: holdColorOverrides,
+    shapes: holdShapeOverrides,
+    brushThickness,
+    shapeSize,
+    renderSignature: holdRenderSignature,
+  } = useHoldColorOverrides();
 
   // Small surfaces that pass a renderWidth want the bundled thumb-sized
   // background too, so neither the overlay nor the photo is a large source
@@ -454,7 +506,7 @@ export function useNativeClimbRender(params: NativeClimbRenderParams): NativeCli
     frames,
     filledStyle,
     renderWidth,
-    holdColorSignature,
+    holdRenderSignature,
   );
   const currentBoardKey = buildBoardKey(boardName, layoutId, sizeId, setIds, variant);
 
@@ -579,6 +631,8 @@ export function useNativeClimbRender(params: NativeClimbRenderParams): NativeCli
   // Overlay-render effect: kick off the native render if we don't already
   // have one for this cache key in the sync map.
   useEffect(() => {
+    if (!frames || unsupportedRenderSignatures.has(holdRenderSignature)) return;
+
     if (renderedOverlays.has(currentCacheKey)) {
       // Sync map already has it — make sure local state reflects that
       // (covers prop changes mid-mount that pick up a previously rendered
@@ -601,7 +655,10 @@ export function useNativeClimbRender(params: NativeClimbRenderParams): NativeCli
       filledStyle,
       renderWidth,
       holdColorOverrides,
-      holdColorSignature,
+      holdShapeOverrides,
+      brushThickness,
+      shapeSize,
+      holdRenderSignature,
     );
     if (!boardConfig) return;
 
@@ -619,15 +676,19 @@ export function useNativeClimbRender(params: NativeClimbRenderParams): NativeCli
         if (mountedRef.current) setNativeRender({ key: currentCacheKey, uri: fileUri });
       })
       .catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error);
+        if (
+          holdRenderSignature !== DEFAULT_HOLD_COLOR_SIGNATURE &&
+          message.includes(MARKER_RENDERER_UNAVAILABLE_MESSAGE)
+        ) {
+          unsupportedRenderSignatures.add(holdRenderSignature);
+        }
         // Native render failed -- overlay stays null, backgrounds still show.
         // Surface the cause in Metro logs so we can diagnose; without this
         // the silent catch masked every binary/ABI mismatch behind a blank
         // overlay layer.
         // eslint-disable-next-line no-console
-        console.warn(
-          `[useNativeClimbRender] render failed for ${currentCacheKey}:`,
-          error instanceof Error ? error.message : String(error),
-        );
+        console.warn(`[useNativeClimbRender] render failed for ${currentCacheKey}:`, message);
         reportError(error, {
           tags: {
             feature: 'mobile_board_renderer',
@@ -657,12 +718,15 @@ export function useNativeClimbRender(params: NativeClimbRenderParams): NativeCli
     filledStyle,
     renderWidth,
     holdColorOverrides,
-    holdColorSignature,
+    holdShapeOverrides,
+    brushThickness,
+    shapeSize,
+    holdRenderSignature,
   ]);
 
   // Only surface the native URI if it matches the *current* cache key —
   // a stale render (from before a prop change) would otherwise show.
-  const overlayUri = nativeRender?.key === currentCacheKey ? nativeRender.uri : null;
+  const overlayUri = frames && nativeRender?.key === currentCacheKey ? nativeRender.uri : null;
   // Same guard for backgrounds: a stored entry from a prior boardKey
   // (FlashList row recycle case) must not bleed through to the new climb.
   const backgroundPaths = storedBackgrounds?.key === currentBoardKey ? storedBackgrounds.paths : [];

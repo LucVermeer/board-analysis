@@ -10,8 +10,10 @@ import { Icon } from '../Icon';
 import { SegmentedControl } from '../SegmentedControl';
 import { useTheme } from '../../providers/theme-provider';
 import { hapticSelection } from '../../lib/haptics';
-import { useHoldColorOverrides } from '../../lib/hold-color-overrides';
+import { useHoldColorOverrides, type HoldMarkerShape } from '../../lib/hold-color-overrides';
 import { spacing, borderRadius } from '../../theme/tokens';
+import { HoldMarkerShapeSvg } from '../board-renderer/HoldMarkerShape';
+import { getHoldFilterTypeShape } from './hold-filter-visuals';
 
 type HoldFilterPickerProps = {
   /** The hold being edited, or null when the picker is closed. */
@@ -46,7 +48,12 @@ export function HoldFilterPicker({
 }: HoldFilterPickerProps) {
   const { t } = useTranslation('climbs');
   const { systemColors } = useTheme();
-  const { overrides: holdColorOverrides } = useHoldColorOverrides();
+  const {
+    overrides: holdColorOverrides,
+    shapes: holdShapeOverrides,
+    brushThickness,
+    shapeSize,
+  } = useHoldColorOverrides();
   const sheetRef = useRef<BottomSheetModal>(null);
 
   useEffect(() => {
@@ -58,7 +65,14 @@ export function HoldFilterPicker({
   }, [holdId]);
 
   const options = useMemo(() => buildHoldFilterOptions(boardName, holdColorOverrides), [boardName, holdColorOverrides]);
-  const snapPoints = useMemo(() => ['42%'], []);
+  const shapeByType = useMemo(() => {
+    const map = new Map<HoldFilterType, HoldMarkerShape>();
+    for (const option of options) {
+      map.set(option.type, getHoldFilterTypeShape(option.type, holdShapeOverrides));
+    }
+    return map;
+  }, [options, holdShapeOverrides]);
+  const snapPoints = useMemo(() => ['62%', '90%'], []);
 
   const typeLabels = useMemo<Record<HoldFilterType, string>>(
     () => ({
@@ -90,7 +104,14 @@ export function HoldFilterPicker({
   );
 
   return (
-    <ModalSheet ref={sheetRef} snapPoints={snapPoints} onDismiss={onClose} enablePanDownToClose stackBehavior="push">
+    <ModalSheet
+      ref={sheetRef}
+      snapPoints={snapPoints}
+      onDismiss={onClose}
+      enablePanDownToClose
+      stackBehavior="push"
+      scrollable
+    >
       <View style={styles.content}>
         <Text variant="headline" style={styles.title}>
           {t('mobile.holdFilter.pickerTitle')}
@@ -116,6 +137,9 @@ export function HoldFilterPicker({
                 ? t('mobile.holdFilter.includedSuffix')
                 : '';
             const swatchColor = option.color;
+            const swatchShape = shapeByType.get(option.type) ?? 'circle';
+            const markerDiameter = 20 * shapeSize;
+            const markerStrokeWidth = Math.max(2, 2 * brushThickness);
             return (
               <Pressable
                 key={option.type}
@@ -135,12 +159,22 @@ export function HoldFilterPicker({
                   style={[
                     styles.swatch,
                     {
-                      borderColor: swatchColor,
-                      backgroundColor: excluded ? 'rgba(0,0,0,0.55)' : isActive ? swatchColor : 'transparent',
+                      backgroundColor: systemColors.secondaryBackground,
                     },
                   ]}
                 >
-                  {excluded ? <Icon name="close" size={12} color="#FFFFFF" /> : null}
+                  <HoldMarkerShapeSvg
+                    shape={swatchShape}
+                    color={excluded ? '#000000' : swatchColor}
+                    diameter={markerDiameter}
+                    strokeWidth={excluded ? 0 : markerStrokeWidth}
+                    fillOpacity={excluded ? 0.55 : isActive ? 0.32 : 0}
+                  />
+                  {excluded ? (
+                    <View style={styles.excludeIcon}>
+                      <Icon name="close" size={12} color="#FFFFFF" />
+                    </View>
+                  ) : null}
                 </View>
                 <Text variant="subheadline" style={styles.cellLabel}>
                   {typeLabels[option.type]}
@@ -207,12 +241,13 @@ const styles = StyleSheet.create({
     minHeight: 48,
   },
   swatch: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    borderWidth: 2,
+    width: 42,
+    height: 42,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  excludeIcon: {
+    position: 'absolute',
   },
   cellLabel: {
     fontWeight: '600',
