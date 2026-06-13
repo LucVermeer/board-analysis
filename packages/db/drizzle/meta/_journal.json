@@ -883,6 +883,13 @@
       "when": 1781344692204,
       "tag": "0125_board_serial_non_unique",
       "breakpoints": true
+    },
+    {
+      "idx": 126,
+      "version": "7",
+      "when": 1781357877930,
+      "tag": "0126_board_climb_events",
+      "breakpoints": true
     }
   ]
 }

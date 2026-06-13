@@ -428,6 +428,29 @@ export const schemaSQL = `
   CREATE INDEX IF NOT EXISTS "user_board_serials_serial_idx" ON "user_board_serials" ("serial_number");
   CREATE INDEX IF NOT EXISTS "user_board_serials_board_uuid_idx" ON "user_board_serials" ("board_uuid");
 
+  -- Durable per-board send log (dwell-gated). Distinct from boardsesh_ticks: the
+  -- raw wall-push stream, no flash/send/attempt status.
+  CREATE TABLE IF NOT EXISTS "board_climb_events" (
+    "id" bigserial PRIMARY KEY NOT NULL,
+    "board_id" bigint NOT NULL REFERENCES "user_boards"("id") ON DELETE CASCADE,
+    "board_type" text NOT NULL,
+    "climb_uuid" text NOT NULL,
+    "angle" integer NOT NULL,
+    "user_id" text REFERENCES "users"("id") ON DELETE SET NULL,
+    "session_id" text REFERENCES "board_sessions"("id") ON DELETE SET NULL,
+    "seq" bigint NOT NULL,
+    "frames" text,
+    "name" text,
+    "grade" text,
+    "setter" text,
+    "confirmed_at" timestamp NOT NULL,
+    "created_at" timestamp DEFAULT now() NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS "board_climb_events_board_confirmed_at_idx" ON "board_climb_events" ("board_id", "confirmed_at");
+  CREATE UNIQUE INDEX IF NOT EXISTS "board_climb_events_board_seq_unique" ON "board_climb_events" ("board_id", "seq");
+  CREATE INDEX IF NOT EXISTS "board_climb_events_session_idx" ON "board_climb_events" ("session_id");
+  CREATE INDEX IF NOT EXISTS "board_climb_events_board_climb_idx" ON "board_climb_events" ("board_id", "climb_uuid");
+
   DROP TABLE IF EXISTS "integration_exports" CASCADE;
   DROP TABLE IF EXISTS "integration_credentials" CASCADE;
 

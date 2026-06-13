@@ -4053,6 +4053,14 @@ type Query {
   boardRecentClimbs(boardId: Int!): [BoardPresenceClimb!]!
 
   """
+  Durable history of what was pushed to a board (survives past the 24h Redis
+  window), newest-first. `before` is an ISO 8601 confirmedAt cursor for
+  keyset paging; `limit` is capped at 100. This is the lasting "what was on
+  the wall" record; `boardRecentClimbs` is the hot 24h cache.
+  """
+  boardHistory(boardId: Int!, limit: Int, before: String): [BoardPresenceClimb!]!
+
+  """
   Lightweight stats for a board's wall feed — durable counts derived from
   `boardsesh_ticks` stamped with this board_id, plus the live window.
   """

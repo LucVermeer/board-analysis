@@ -3313,6 +3313,13 @@ export type Query = {
   board?: Maybe<UserBoard>;
   /** Get a board by slug (for URL routing). */
   boardBySlug?: Maybe<UserBoard>;
+  /**
+   * Durable history of what was pushed to a board (survives past the 24h Redis
+   * window), newest-first. `before` is an ISO 8601 confirmedAt cursor for
+   * keyset paging; `limit` is capped at 100. This is the lasting "what was on
+   * the wall" record; `boardRecentClimbs` is the hot 24h cache.
+   */
+  boardHistory: Array<BoardPresenceClimb>;
   /** Get leaderboard for a board. */
   boardLeaderboard: BoardLeaderboard;
   /**
@@ -3693,6 +3700,13 @@ export type QueryBoardArgs = {
 /** Root query type for all read operations. */
 export type QueryBoardBySlugArgs = {
   slug: Scalars['String']['input'];
+};
+
+/** Root query type for all read operations. */
+export type QueryBoardHistoryArgs = {
+  before?: InputMaybe<Scalars['String']['input']>;
+  boardId: Scalars['Int']['input'];
+  limit?: InputMaybe<Scalars['Int']['input']>;
 };
 
 /** Root query type for all read operations. */
