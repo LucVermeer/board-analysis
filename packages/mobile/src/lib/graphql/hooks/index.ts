@@ -32,6 +32,7 @@ import {
   type DeleteDraftClimbMutationVariables,
   type DeleteDraftClimbMutationResponse,
 } from '@boardsesh/graphql/operations/new-climb-feed';
+import { SEARCH_GYMS, type SearchGymsQueryResponse } from '@boardsesh/graphql/operations/gyms';
 import { getHttpClient } from '../client';
 import {
   GET_PROFILE,
@@ -154,6 +155,18 @@ export function useNearbyBoards(coords: { latitude: number; longitude: number } 
         input: { latitude: coords?.latitude, longitude: coords?.longitude, radiusKm, limit: 20 },
       }),
     select: (data) => data.searchBoards,
+    enabled: coords !== null,
+  });
+}
+
+export function useNearbyGyms(coords: { latitude: number; longitude: number } | null, radiusKm = 50) {
+  return useQuery({
+    queryKey: ['nearbyGyms', coords, radiusKm],
+    queryFn: () =>
+      getHttpClient().request<SearchGymsQueryResponse>(SEARCH_GYMS, {
+        input: { latitude: coords?.latitude, longitude: coords?.longitude, radiusKm, limit: 50 },
+      }),
+    select: (data) => data.searchGyms,
     enabled: coords !== null,
   });
 }

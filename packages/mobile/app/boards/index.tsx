@@ -156,6 +156,10 @@ export default function BoardSelection() {
     customSheetRef.current?.expand();
   }, []);
 
+  const onModeFindGym = useCallback(() => {
+    router.push({ pathname: '/gyms', params: { returnTo: boardReturnTo } });
+  }, [router, boardReturnTo]);
+
   // Both the created-board and already-owned paths close the sheet and activate.
   const onCustomBoardResolved = useCallback(
     (board: UserBoard) => {
@@ -259,6 +263,7 @@ export default function BoardSelection() {
             onPress={onModeFindNearby}
           />
           <BoardModeCard icon="bluetooth" label={t('mobile.discovery.bluetooth')} onPress={onModeBluetooth} />
+          <BoardModeCard icon="pin" label={t('mobile.discovery.findGym')} onPress={onModeFindGym} />
           <BoardModeCard icon="plus" label={t('mobile.discovery.custom')} onPress={onModeCustom} />
           <BoardModeCard
             icon="search"

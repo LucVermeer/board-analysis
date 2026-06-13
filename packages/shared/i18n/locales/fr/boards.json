@@ -47,7 +47,8 @@
       "nearbyShowing": "À proximité affichés",
       "yourBoardsTitle": "Tes boards",
       "popularTitle": "Configurations populaires",
-      "search": "Rechercher"
+      "search": "Rechercher",
+      "findGym": "Trouver une salle"
     },
     "custom": {
       "title": "Crée un board",
@@ -92,6 +93,15 @@
       "subtitle": "Ce numéro de série est partagé par plusieurs tableaux. Choisis le mur où tu te trouves.",
       "yourBoard": "Ton tableau",
       "cancel": "Pas maintenant"
+    },
+    "gyms": {
+      "title": "Salles près de toi",
+      "subtitle": "Touche une salle pour utiliser son tableau",
+      "locationNeeded": "Partage ta position pour trouver des salles à proximité",
+      "grantLocation": "Utiliser ma position",
+      "empty": "Aucune salle à proximité pour l'instant",
+      "noBoards": "Aucun tableau ici pour l'instant",
+      "boardCount": "{{count}} tableaux"
     }
   },
   "boardEntity": {

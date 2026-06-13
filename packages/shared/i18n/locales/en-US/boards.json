@@ -47,7 +47,8 @@
       "nearbyShowing": "Showing nearby",
       "yourBoardsTitle": "Your boards",
       "popularTitle": "Popular setups",
-      "search": "Search"
+      "search": "Search",
+      "findGym": "Find gym"
     },
     "custom": {
       "title": "Build a board",
@@ -92,6 +93,15 @@
       "subtitle": "This serial is shared by more than one board. Pick the wall you're at.",
       "yourBoard": "Your board",
       "cancel": "Not now"
+    },
+    "gyms": {
+      "title": "Gyms near you",
+      "subtitle": "Tap a gym to use its board",
+      "locationNeeded": "Share your location to find gyms nearby",
+      "grantLocation": "Use my location",
+      "empty": "No gyms nearby yet",
+      "noBoards": "No boards here yet",
+      "boardCount": "{{count}} boards"
     }
   },
   "boardEntity": {
