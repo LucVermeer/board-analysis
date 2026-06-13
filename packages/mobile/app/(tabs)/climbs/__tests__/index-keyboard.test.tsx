@@ -210,7 +210,16 @@ vi.mock('../../../../src/lib/graphql/operations', () => ({ SEARCH_CLIMBS: 'SEARC
 vi.mock('../../../../src/lib/graphql/client', () => ({ getHttpClient: () => ({ request: vi.fn() }) }));
 
 vi.mock('../../../../src/lib/playlists/use-playlist-activation', () => ({
-  usePlaylistActivation: () => mocks.activateClimb,
+  usePlaylistActivation: () => ({
+    activate: mocks.activateClimb,
+    queueReplaceSheet: {
+      visible: false,
+      futureQueueCount: 0,
+      isReplacing: false,
+      onCancel: vi.fn(),
+      onConfirm: vi.fn(),
+    },
+  }),
 }));
 
 vi.mock('../../../../src/lib/climb-types', () => ({

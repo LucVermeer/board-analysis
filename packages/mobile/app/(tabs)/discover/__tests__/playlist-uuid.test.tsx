@@ -101,7 +101,16 @@ vi.mock('../../../../src/providers/toast-provider', () => ({ useToast: () => ({ 
 vi.mock('../../../../src/lib/playlists/use-playlist-activation', () => ({
   usePlaylistActivation: (options: CapturedActivationOptions) => {
     playlistMocks.activationOptions = options;
-    return vi.fn();
+    return {
+      activate: vi.fn(),
+      queueReplaceSheet: {
+        visible: false,
+        futureQueueCount: 0,
+        isReplacing: false,
+        onCancel: vi.fn(),
+        onConfirm: vi.fn(),
+      },
+    };
   },
 }));
 vi.mock('../../../../src/lib/playlists/use-playlist-render-board', () => ({
@@ -146,6 +155,7 @@ vi.mock('../../../../src/components/playlist', () => ({
   PlaylistEditDoneButton: () => null,
   PlaylistOwnerToolbar: () => null,
   PlaylistBackFab: () => createElement('div', { 'data-back-fab': 'true' }),
+  PlaylistQueueReplaceSheet: () => null,
 }));
 
 import PlaylistDetail from '../[playlist_uuid]';

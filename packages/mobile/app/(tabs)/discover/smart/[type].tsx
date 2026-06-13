@@ -16,6 +16,7 @@ import {
   PlaylistDetailView,
   SKELETON_PLACEHOLDERS,
   PlaylistBackFab,
+  PlaylistQueueReplaceSheet,
   type PlaylistDetailEmptyState,
 } from '../../../../src/components/playlist';
 import { getHttpClient } from '../../../../src/lib/graphql/client';
@@ -70,11 +71,12 @@ export default function SmartPlaylistDetail() {
     [smartType, userId],
   );
 
-  const activate = usePlaylistActivation({
+  const playlistActivation = usePlaylistActivation({
     sourceId: `smart:${smartType}:${userId}`,
     allClimbs,
     fetchPage,
     refreshErrorMessage: 'Failed to refresh smart playlist suggestions:',
+    replaceQueueOnActivate: true,
   });
 
   // Smart playlists are computed relative to the active board, so they always
@@ -135,18 +137,21 @@ export default function SmartPlaylistDetail() {
   }
 
   return (
-    <PlaylistDetailView
-      hero={hero}
-      climbs={allClimbs}
-      renderBoard={renderBoard}
-      isLoading={query.isLoading}
-      isFetchingNextPage={query.isFetchingNextPage}
-      hasNextPage={query.hasNextPage ?? false}
-      fetchNextPage={query.fetchNextPage}
-      onActivateClimb={activate}
-      emptyMessage={t('library.smart.empty')}
-      emptyState={emptyState}
-    />
+    <>
+      <PlaylistDetailView
+        hero={hero}
+        climbs={allClimbs}
+        renderBoard={renderBoard}
+        isLoading={query.isLoading}
+        isFetchingNextPage={query.isFetchingNextPage}
+        hasNextPage={query.hasNextPage ?? false}
+        fetchNextPage={query.fetchNextPage}
+        onActivateClimb={playlistActivation.activate}
+        emptyMessage={t('library.smart.empty')}
+        emptyState={emptyState}
+      />
+      <PlaylistQueueReplaceSheet {...playlistActivation.queueReplaceSheet} />
+    </>
   );
 }
 

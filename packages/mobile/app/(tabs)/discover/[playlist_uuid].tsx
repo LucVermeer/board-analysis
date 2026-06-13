@@ -31,6 +31,7 @@ import {
   PlaylistEditDoneButton,
   PlaylistOwnerToolbar,
   PlaylistBackFab,
+  PlaylistQueueReplaceSheet,
   type PlaylistFormValues,
 } from '../../../src/components/playlist';
 import { GlassIconButton } from '../../../src/components/GlassIconButton';
@@ -154,12 +155,13 @@ export default function PlaylistDetail() {
     [shouldOpenViewOnly, renderBoard],
   );
 
-  const activate = usePlaylistActivation({
+  const playlistActivation = usePlaylistActivation({
     sourceId: `playlist:${playlistUuid}`,
     allClimbs,
     fetchPage,
     viewOnlyBoard: resolveViewOnlyBoard,
     refreshErrorMessage: 'Failed to refresh playlist suggestions:',
+    replaceQueueOnActivate: true,
   });
 
   const isOwner = playlist?.userRole === 'owner';
@@ -616,7 +618,7 @@ export default function PlaylistDetail() {
         isFetchingNextPage={editMode ? false : query.isFetchingNextPage}
         hasNextPage={editMode ? false : (query.hasNextPage ?? false)}
         fetchNextPage={query.fetchNextPage}
-        onActivateClimb={activate}
+        onActivateClimb={playlistActivation.activate}
         emptyMessage={t('detail.empty')}
         actions={renderActions}
         editMode={editMode}
@@ -642,6 +644,8 @@ export default function PlaylistDetail() {
         onSubmit={handleEditSubmit}
         onClose={() => setEditVisible(false)}
       />
+
+      <PlaylistQueueReplaceSheet {...playlistActivation.queueReplaceSheet} />
     </>
   );
 }

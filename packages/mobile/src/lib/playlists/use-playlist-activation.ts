@@ -10,12 +10,24 @@
 // board climb list and swaps in a richer suggestion source so swiping through
 // the play drawer walks the whole playlist. Wrong-board playlists use a
 // view-only drawer path so they can be inspected without mutating the queue.
+//
+// Playlist-detail screens additionally opt into `replaceQueueOnActivate`: a tap
+// replaces the whole queue with the playlist order (tapped climb active) so
+// previous/next walk the circuit. Because that clears any future queue items, a
+// confirmation sheet warns first whenever the queue has items after the current.
 
-import { useCallback, useMemo, useRef } from 'react';
-import { usePlaylistClimbActivation, fetchPlaylistSuggestionClimbs } from '@boardsesh/playlists-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import {
+  usePlaylistClimbActivation,
+  fetchPlaylistSuggestionClimbs,
+  isAbortError,
+  PLAYLIST_SUGGESTION_REFRESH_PAGE_SIZE,
+} from '@boardsesh/playlists-react';
 import { createPlaylistSuggestionSource, getQueueBoardKey, type Climb, type ClimbQueueItem } from '@boardsesh/queue';
 import { useActiveClimbUuid, usePlaylistSuggestionSource, useQueueActions } from '../../providers/queue-provider';
 import { useDrawerHost } from '../../providers/drawer-host-provider';
+import { useToast } from '../../providers/toast-provider';
 import { useActiveBoard } from '../graphql/use-active-board';
 import { climbToQueueItem } from '../climb-to-queue-item';
 import { reportHandledError } from '../error-reporting';
@@ -56,19 +68,99 @@ export type UsePlaylistActivationOptions = {
   viewOnlyBoard?: PlaylistRenderBoard | ViewOnlyBoardResolver | null;
   /** Logged when the async suggestion refresh fails (non-abort). */
   refreshErrorMessage: string;
+  /** Replace the user's queue with the playlist order instead of suggestion-fallback navigation. */
+  replaceQueueOnActivate?: boolean;
 };
 
-/** Returns an `activate(climb)` callback to wire onto a climb row tap. */
+type PendingQueueReplacement = {
+  climb: Climb;
+  futureQueueCount: number;
+  loadedClimbs?: Climb[];
+  previewQueueItem?: ClimbQueueItem | null;
+};
+
+export type PlaylistQueueReplaceSheetState = {
+  visible: boolean;
+  futureQueueCount: number;
+  isReplacing: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+};
+
+export type PlaylistActivationResult = {
+  /** Callback to wire onto a climb row tap. */
+  activate: (climb: Climb) => Promise<void>;
+  /** Props for PlaylistQueueReplaceSheet. */
+  queueReplaceSheet: PlaylistQueueReplaceSheetState;
+};
+
+function countFutureQueueItems(queue: ClimbQueueItem[], currentClimbQueueItem: ClimbQueueItem | null): number {
+  const currentIndex = currentClimbQueueItem
+    ? queue.findIndex((queueItem) => queueItem.uuid === currentClimbQueueItem.uuid)
+    : -1;
+  const futureQueue = currentIndex >= 0 ? queue.slice(currentIndex + 1) : queue;
+  // Count every future item, suggestion-origin included: a whole-queue
+  // replacement clears them all, so the user must be warned about all of them.
+  return futureQueue.length;
+}
+
+function buildPlaylistQueue(
+  climbs: Climb[],
+  activatedClimb: Climb,
+  activatedQueueItem?: ClimbQueueItem | null,
+): { queue: ClimbQueueItem[]; currentItem: ClimbQueueItem } {
+  const queue: ClimbQueueItem[] = [];
+  let currentItem: ClimbQueueItem | null = null;
+  let includesActivatedClimb = false;
+  const reusableCurrentItem = activatedQueueItem?.climb.uuid === activatedClimb.uuid ? activatedQueueItem : null;
+  const seen = new Set<string>();
+
+  for (const climb of climbs) {
+    if (seen.has(climb.uuid)) continue;
+    seen.add(climb.uuid);
+    const item =
+      reusableCurrentItem && climb.uuid === activatedClimb.uuid
+        ? reusableCurrentItem
+        : climbToQueueItem(toSchemaClimb(climb));
+    queue.push(item);
+    if (climb.uuid === activatedClimb.uuid) {
+      includesActivatedClimb = true;
+      currentItem = item;
+    }
+  }
+
+  if (!includesActivatedClimb) {
+    currentItem = reusableCurrentItem ?? climbToQueueItem(toSchemaClimb(activatedClimb));
+    queue.push(currentItem);
+  }
+
+  if (!currentItem) {
+    currentItem = queue[0] ?? climbToQueueItem(toSchemaClimb(activatedClimb));
+    if (queue.length === 0) queue.push(currentItem);
+  }
+
+  return { queue, currentItem };
+}
+
+/** Returns playlist activation controls to wire onto a climb row tap. */
 export function usePlaylistActivation({
   sourceId,
   allClimbs,
   fetchPage,
   viewOnlyBoard,
   refreshErrorMessage,
-}: UsePlaylistActivationOptions): (climb: Climb) => Promise<void> {
-  const { setCurrentClimb, setPlaylistSuggestionSource, refreshPlaylistSuggestionSource } = useQueueActions();
+  replaceQueueOnActivate = false,
+}: UsePlaylistActivationOptions): PlaylistActivationResult {
+  const { setCurrentClimb, setPlaylistSuggestionSource, refreshPlaylistSuggestionSource, setQueue, getQueueSnapshot } =
+    useQueueActions();
   const { openPlayDrawer } = useDrawerHost();
+  const { showToast } = useToast();
+  const { t } = useTranslation('playlists');
   const activeBoard = useActiveBoard().data ?? null;
+
+  const [pendingReplacement, setPendingReplacement] = useState<PendingQueueReplacement | null>(null);
+  const [isReplacingQueue, setIsReplacingQueue] = useState(false);
+  const replacementAbortRef = useRef<AbortController | null>(null);
 
   // Mirror the active climb uuid + the live suggestion source into refs so the
   // returned callback can decide how to handle a re-tap of the already-active
@@ -161,6 +253,43 @@ export function usePlaylistActivation({
     [activeBoard, fetchPage],
   );
 
+  const fetchAllClimbsForBoard = useCallback(
+    async ({ signal }: { signal: AbortSignal }) => {
+      if (!activeBoard) return [];
+      const board = {
+        boardName: activeBoard.boardType,
+        layoutId: activeBoard.layoutId,
+        sizeId: activeBoard.sizeId,
+        setIds: activeBoard.setIds,
+        angle: activeBoard.angle,
+      };
+      const climbs: Climb[] = [];
+      let page = 0;
+      let hasMore = true;
+
+      while (hasMore && !signal.aborted) {
+        const pageResult = await fetchPage({
+          page,
+          pageSize: PLAYLIST_SUGGESTION_REFRESH_PAGE_SIZE,
+          board,
+          signal,
+        });
+        climbs.push(...pageResult.climbs);
+        hasMore = pageResult.hasMore;
+        page += 1;
+      }
+
+      return climbs;
+    },
+    [activeBoard, fetchPage],
+  );
+
+  useEffect(() => {
+    return () => {
+      replacementAbortRef.current?.abort();
+    };
+  }, []);
+
   const activate = usePlaylistClimbActivation({
     queueApi,
     sourceId,
@@ -173,13 +302,91 @@ export function usePlaylistActivation({
     refreshErrorMessage,
   });
 
+  const replaceQueueWithPlaylist = useCallback(
+    async (
+      climb: Climb,
+      options: {
+        allowClearingManualFuture?: boolean;
+        loadedClimbs?: Climb[];
+        previewQueueItem?: ClimbQueueItem | null;
+      } = {},
+    ) => {
+      replacementAbortRef.current?.abort();
+      const abortController = new AbortController();
+      replacementAbortRef.current = abortController;
+      setIsReplacingQueue(true);
+      try {
+        const climbs = options.loadedClimbs ?? (await fetchAllClimbsForBoard({ signal: abortController.signal }));
+        if (abortController.signal.aborted) return;
+        // Re-check live queue state after the async load: new future items may
+        // have landed while the ordered list streamed in, and replacement still
+        // clears them — so warn instead of clearing silently. Skipped once the
+        // user has confirmed (allowClearingManualFuture).
+        const { queue: latestQueue, currentClimbQueueItem: latestCurrent } = getQueueSnapshot();
+        const latestFutureQueueCount = countFutureQueueItems(latestQueue, latestCurrent);
+        if (!options.allowClearingManualFuture && latestFutureQueueCount > 0) {
+          setPendingReplacement({
+            climb,
+            futureQueueCount: latestFutureQueueCount,
+            loadedClimbs: climbs,
+            previewQueueItem: options.previewQueueItem ?? null,
+          });
+          return;
+        }
+        const { queue, currentItem } = buildPlaylistQueue(climbs, climb, options.previewQueueItem);
+        setQueue(queue, currentItem);
+        // The activate path already opened the drawer (committedExternally) on the
+        // seed queue; the confirm path opens it now that the climb is current.
+        if (!options.previewQueueItem) {
+          openPlayDrawer(toSchemaClimb(climb), { committedExternally: true });
+        }
+        setPendingReplacement(null);
+      } catch (error) {
+        if (isAbortError(error)) return;
+        console.error('Playlist queue replacement failed:', error);
+        reportHandledError(error, { tags: { source: 'playlist', op: 'replace-queue' } });
+        showToast(t('detail.queueReplace.loadFailed'), 'error');
+      } finally {
+        if (replacementAbortRef.current === abortController) {
+          replacementAbortRef.current = null;
+        }
+        setIsReplacingQueue(false);
+      }
+    },
+    [fetchAllClimbsForBoard, getQueueSnapshot, openPlayDrawer, setQueue, showToast, t],
+  );
+
+  const cancelQueueReplacement = useCallback(() => {
+    replacementAbortRef.current?.abort();
+    setPendingReplacement(null);
+    setIsReplacingQueue(false);
+  }, []);
+
+  const confirmQueueReplacement = useCallback(() => {
+    if (!pendingReplacement || isReplacingQueue) return;
+    // The queue can grow between opening the sheet and confirming. Re-read it and,
+    // if more future items appeared, bump the warning count and require another
+    // confirm so the user never clears items they haven't seen counted.
+    const { queue, currentClimbQueueItem } = getQueueSnapshot();
+    const latestFutureQueueCount = countFutureQueueItems(queue, currentClimbQueueItem);
+    if (latestFutureQueueCount > pendingReplacement.futureQueueCount) {
+      setPendingReplacement({ ...pendingReplacement, futureQueueCount: latestFutureQueueCount });
+      return;
+    }
+    void replaceQueueWithPlaylist(pendingReplacement.climb, {
+      allowClearingManualFuture: true,
+      loadedClimbs: pendingReplacement.loadedClimbs,
+      previewQueueItem: pendingReplacement.previewQueueItem,
+    });
+  }, [getQueueSnapshot, isReplacingQueue, pendingReplacement, replaceQueueWithPlaylist]);
+
   // Open the drawer immediately, then let the shared hook commit the climb. The
   // open and the synchronous setCurrentClimb dispatch land in the same React
   // batch, so the drawer (rendering from currentClimbQueueItem) paints the
   // activated climb on the first frame. `committedExternally` tells the drawer
   // the caller already dispatched, so it doesn't re-commit or treat this as a
   // preview.
-  return useCallback(
+  const activatePlaylistClimb = useCallback(
     (climb: Climb) => {
       const schemaClimb = toSchemaClimb(climb);
 
@@ -214,6 +421,28 @@ export function usePlaylistActivation({
         return Promise.resolve();
       }
 
+      // Replace-on-activate (playlist/circuit detail): swap the whole queue for the
+      // playlist order so previous/next walk the circuit. Replacement clears future
+      // queue items, so warn first when any exist; otherwise seed the queue with the
+      // tapped climb (committed, so the drawer renders it immediately) and expand to
+      // the full ordered list once it loads.
+      if (replaceQueueOnActivate) {
+        const target = resolveTarget(climb);
+        if (target) {
+          const { queue, currentClimbQueueItem } = getQueueSnapshot();
+          const futureQueueCount = countFutureQueueItems(queue, currentClimbQueueItem);
+          if (futureQueueCount > 0) {
+            replacementAbortRef.current?.abort();
+            setPendingReplacement({ climb, futureQueueCount });
+            return Promise.resolve();
+          }
+          const item = climbToQueueItem(schemaClimb);
+          setQueue([item], item);
+          openPlayDrawer(schemaClimb, { committedExternally: true });
+          return replaceQueueWithPlaylist(climb, { previewQueueItem: item });
+        }
+      }
+
       const isAlreadyActive = activeClimbUuidRef.current === climb.uuid;
       const source = playlistSuggestionSourceRef.current;
       const suggestionsAlreadyFollowThisList =
@@ -245,6 +474,31 @@ export function usePlaylistActivation({
         reportHandledError(error, { tags: { source: 'playlist', op: 'activate-climb' } });
       });
     },
-    [activate, allClimbs, openPlayDrawer, sourceId, viewOnlyBoard],
+    [
+      activate,
+      allClimbs,
+      getQueueSnapshot,
+      openPlayDrawer,
+      replaceQueueOnActivate,
+      replaceQueueWithPlaylist,
+      resolveTarget,
+      setQueue,
+      sourceId,
+      viewOnlyBoard,
+    ],
+  );
+
+  return useMemo(
+    () => ({
+      activate: activatePlaylistClimb,
+      queueReplaceSheet: {
+        visible: pendingReplacement !== null,
+        futureQueueCount: pendingReplacement?.futureQueueCount ?? 0,
+        isReplacing: isReplacingQueue,
+        onCancel: cancelQueueReplacement,
+        onConfirm: confirmQueueReplacement,
+      },
+    }),
+    [activatePlaylistClimb, cancelQueueReplacement, confirmQueueReplacement, isReplacingQueue, pendingReplacement],
   );
 }
