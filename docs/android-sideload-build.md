@@ -151,6 +151,45 @@ consequences:
   app doesn't yet declare `autoVerify` App Link intent filters — that needs
   deep-link route handling first; tracked separately.)
 
+### Google Sign-In requires SHA-1 registration (per signing key)
+
+Native Google Sign-In (`@react-native-google-signin`, used by the login screen)
+resolves the Android OAuth client by **package name + signing-certificate
+SHA-1**, _not_ by the `androidClientId` string. So the `EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID`
+baked into the build is never consulted by the native flow (it exists only for
+backend-audience parity) — what matters is that the **SHA-1 of the key that
+signed the running APK** is registered as an Android OAuth client, in the same
+Google Cloud project as the `webClientId` the app ships
+(`401523882502-…`, project **401523882502**).
+
+If it isn't, `GoogleSignin.signIn()` fails **before any network call** — so the
+backend never logs anything, and the login screen shows the generic "Sign in
+didn't complete." (The classic Play Services flow reported this as
+`DEVELOPER_ERROR` / status 10; the Credential Manager flow in current
+`@react-native-google-signin` surfaces an unmapped error instead, which is why
+the code below keys off "not a known status code" rather than a specific code.)
+`login.tsx` forwards the native `.code` to PostHog as `failure_detail` /
+`native_error_code`, and a local dev build prints a hint — see
+`nativeSignInErrorCode` in `packages/mobile/src/lib/native-auth-analytics.ts`.
+
+`com.boardsesh.app` is signed by up to three different keys, each needing its own
+Android OAuth client (same package, different SHA-1 — they coexist):
+
+| Where it runs                                                        | Signing key                         | How to get the SHA-1                                                                                                                |
+| -------------------------------------------------------------------- | ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Sideload GitHub Release APK (this workflow)                          | upload key (`ANDROID_KEYSTORE_*`)   | `apksigner verify --print-certs <apk>` — currently `12:21:33:D0:1B:E4:B0:05:0C:62:6D:ED:27:74:46:AD:D4:EC:CC:B2`                    |
+| Play internal-track install                                          | Play app-signing key (Google holds) | Play Console → Setup → App signing → **App signing key certificate** → SHA-1                                                        |
+| Local `expo run:android` / debug-signed PR APK (`android-pr-rn.yml`) | Expo debug keystore                 | after a prebuild: `keytool -list -v -keystore packages/mobile/android/app/debug.keystore -alias androiddebugkey -storepass android` |
+
+To register: GCP Console → **APIs & Services → Credentials → Create credentials →
+OAuth client ID → Android**, package `com.boardsesh.app`, paste the SHA-1.
+Propagation takes a few minutes; no rebuild is needed — the registration is
+server-side, so an already-installed APK starts working once it lands.
+
+Use `apksigner verify --print-certs` to read an APK's signer — `keytool -printcert
+-jarfile` only understands the legacy v1/JAR signature and prints nothing for
+these v2/v3-signed release APKs.
+
 ### versionCode
 
 No separate version source: the app version is read from

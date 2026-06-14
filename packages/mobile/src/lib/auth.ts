@@ -4,6 +4,7 @@ import { getRandomBytes, digestStringAsync, CryptoDigestAlgorithm, CryptoEncodin
 import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 import { createTimeoutSignal } from './abort-timeout';
 import { storeTokens, clearTokens, getRefreshToken } from './auth-store';
+import { nativeSignInErrorCode } from './native-auth-analytics';
 import { BACKEND_URL } from './env';
 
 export type AuthProvider = 'google' | 'apple';
@@ -134,6 +135,13 @@ function configureGoogleSignin(): void {
   if (googleConfigured) return;
   // webClientId is required to receive an idToken; iosClientId scopes the
   // native flow on iOS. Both are inlined at build time (EXPO_PUBLIC_*).
+  //
+  // No androidClientId on purpose: @react-native-google-signin resolves the
+  // Android OAuth client by package name + signing-certificate SHA-1 (registered
+  // in the webClientId's Google Cloud project), not by an id string — passing one
+  // is ignored. EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID exists only for backend-
+  // audience parity. If Android sign-in fails before any network call, the
+  // running build's SHA-1 likely isn't registered (see docs/android-sideload-build.md).
   GoogleSignin.configure({
     webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
     iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
@@ -163,6 +171,24 @@ export async function signInWithGoogle(): Promise<OAuthSignInResult> {
     return oauthNativeSignIn('google', idToken);
   } catch (error) {
     if (isGoogleCancellation(error)) return { success: false, cancelled: true };
+    // An error that isn't one of the library's known status codes is, on Android,
+    // almost always a config problem: the running build's signing-cert SHA-1 isn't
+    // registered as an Android OAuth client for the package (the classic Play
+    // Services flow called this DEVELOPER_ERROR; the newer Credential Manager flow
+    // surfaces an unmapped error). It's a Google Cloud fix, not a code one — spell
+    // it out for local dev. Release builds carry the code into PostHog via
+    // login.tsx's failure_detail/tag.
+    if (__DEV__) {
+      const errorCode = nativeSignInErrorCode(error);
+      const isKnownStatus = errorCode !== undefined && Object.values(statusCodes).includes(errorCode);
+      if (!isKnownStatus)
+        console.warn(
+          `[auth] Google sign-in failed with an unmapped error (code: ${errorCode ?? 'none'}). On Android ` +
+            "this is typically a config issue — the build's signing-certificate SHA-1 isn't registered as an " +
+            "Android OAuth client for com.boardsesh.app in the webClientId's Google Cloud project. Get the " +
+            'SHA-1 via `apksigner verify --print-certs <apk>` (see docs/android-sideload-build.md).',
+        );
+    }
     throw error;
   }
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { classifyNativeAuthFailureReason } from '../native-auth-analytics';
+import { classifyNativeAuthFailureReason, nativeSignInErrorCode } from '../native-auth-analytics';
 
 describe('classifyNativeAuthFailureReason', () => {
   it('maps native credential and OAuth failures to low-cardinality analytics reasons', () => {
@@ -52,5 +52,27 @@ describe('classifyNativeAuthFailureReason', () => {
     expect(classifyNativeAuthFailureReason({ success: false, status: 401, error: 'Unauthorized' }, 'oauth')).toBe(
       'invalid_oauth_token',
     );
+  });
+});
+
+describe('nativeSignInErrorCode', () => {
+  it('returns the string `.code` from a thrown native CodedError', () => {
+    // The most important one: a signing-SHA-1 / OAuth-client mismatch on Android.
+    expect(nativeSignInErrorCode({ code: 'DEVELOPER_ERROR', message: 'opaque' })).toBe('DEVELOPER_ERROR');
+    expect(nativeSignInErrorCode({ code: 'SIGN_IN_CANCELLED' })).toBe('SIGN_IN_CANCELLED');
+  });
+
+  it('stringifies a numeric `.code` (older google-signin uses numeric status codes)', () => {
+    expect(nativeSignInErrorCode({ code: 10 })).toBe('10');
+    expect(nativeSignInErrorCode({ code: 0 })).toBe('0');
+  });
+
+  it('returns undefined when there is no usable code, so the caller falls back to the message', () => {
+    expect(nativeSignInErrorCode(new Error('boom'))).toBeUndefined();
+    expect(nativeSignInErrorCode({ code: null })).toBeUndefined();
+    expect(nativeSignInErrorCode({ code: { nested: true } })).toBeUndefined();
+    expect(nativeSignInErrorCode(undefined)).toBeUndefined();
+    expect(nativeSignInErrorCode(null)).toBeUndefined();
+    expect(nativeSignInErrorCode('DEVELOPER_ERROR')).toBeUndefined();
   });
 });
