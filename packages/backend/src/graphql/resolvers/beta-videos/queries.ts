@@ -2,7 +2,12 @@ import { db } from '../../../db/client';
 import * as dbSchema from '@boardsesh/db/schema';
 import { eq, and, desc, isNotNull, like, or, sql } from 'drizzle-orm';
 import { rowsFromResult } from '@boardsesh/db/client';
-import { fetchInstagramMeta, getInstagramMediaId, isInstagramUrl } from '../../../lib/instagram-meta';
+import {
+  fetchInstagramMeta,
+  getInstagramMediaId,
+  isInstagramUrl,
+  normalizeBetaVideoUrl,
+} from '../../../lib/instagram-meta';
 import { fetchTikTokMeta, getTikTokCacheId, isTikTokUrl } from '../../../lib/tiktok-meta';
 import {
   cacheInstagramThumbnail,
@@ -124,7 +129,7 @@ const ENRICH_CONCURRENCY = 5;
 function passthroughResult(row: Row): BetaLinkResult {
   return {
     climbUuid: row.climbUuid,
-    link: row.link,
+    link: normalizeBetaVideoUrl(row.link),
     foreignUsername: row.foreignUsername,
     angle: row.angle,
     thumbnail: isOurS3Url(row.thumbnail) ? row.thumbnail : null,
@@ -181,7 +186,7 @@ async function enrichRow(row: Row, cfg: EnrichConfig): Promise<BetaLinkResult | 
   if (haveCachedThumbnail) {
     return {
       climbUuid: row.climbUuid,
-      link: row.link,
+      link: normalizeBetaVideoUrl(row.link),
       foreignUsername: row.foreignUsername,
       angle: row.angle,
       thumbnail: row.thumbnail,
@@ -221,7 +226,7 @@ async function enrichRow(row: Row, cfg: EnrichConfig): Promise<BetaLinkResult | 
 
   return {
     climbUuid: row.climbUuid,
-    link: row.link,
+    link: normalizeBetaVideoUrl(row.link),
     foreignUsername: newUsername,
     angle: row.angle,
     thumbnail,
@@ -448,7 +453,7 @@ export const betaLinkQueries = {
     await applyRateLimit(ctx, 30, 'beta-link-preview');
 
     const preview: BetaLinkPreviewResult = {
-      link,
+      link: normalizeBetaVideoUrl(link),
       thumbnail: null,
       username: null,
       caption: null,
@@ -509,7 +514,7 @@ export const betaLinkQueries = {
       filtered.push({
         betaLink: {
           climbUuid: r.climb_uuid,
-          link: r.link,
+          link: normalizeBetaVideoUrl(r.link),
           foreignUsername: r.foreign_username,
           angle: r.angle,
           thumbnail: r.thumbnail,

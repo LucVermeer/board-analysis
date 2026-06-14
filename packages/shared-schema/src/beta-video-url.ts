@@ -38,6 +38,17 @@ export function getInstagramMediaId(url: string): string | null {
 }
 
 /**
+ * Canonical storage/display form for a beta-video URL. Strips the query string
+ * and fragment from Instagram URLs so the `?igsh=...` share-attribution param
+ * doesn't trigger Instagram's "X shared this reel, follow them?" interstitial.
+ * Non-Instagram URLs (TikTok et al.) are returned unchanged. Idempotent.
+ */
+export function normalizeBetaVideoUrl(url: string): string {
+  if (!isInstagramUrl(url)) return url;
+  return url.replace(/[?#].*$/, '');
+}
+
+/**
  * Numeric video id for long-form `/@user/video/<id>` TikTok URLs. Short links
  * (`vm.tiktok.com/<short>`, `t.tiktok.com/<short>`) return null — we don't
  * unfold them.
