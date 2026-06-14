@@ -13,7 +13,7 @@ import * as AppleAuthentication from 'expo-apple-authentication';
 import { GoogleSigninButton } from '@react-native-google-signin/google-signin';
 import { useTranslation } from 'react-i18next';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
-import { classifyNativeAuthFailureReason } from '../../src/lib/native-auth-analytics';
+import { classifyNativeAuthFailureReason, nativeSignInErrorCode } from '../../src/lib/native-auth-analytics';
 import { isGoogleSignInConfigured } from '../../src/lib/auth';
 import { validateRegisterFields, isValid, type RegisterFieldErrors } from '../../src/lib/auth-validation';
 import { useAuth } from '../../src/providers/auth-provider';
@@ -161,16 +161,25 @@ export default function RegisterScreen() {
       });
       setFormError(result.error === 'network' ? t('nativeStart.networkError') : t('nativeStart.oauthError'));
     } catch (oauthError) {
+      // Prefer the native `.code` (e.g. an Android signing/client-id mismatch)
+      // over the opaque message — far more actionable in telemetry. Mirrors login.
+      const nativeErrorCode = nativeSignInErrorCode(oauthError);
       track(SHARED_EVENTS.LoginFailed, {
         auth_method: provider,
         flow: 'native',
         failure_reason: 'exception',
-        failure_detail: oauthError instanceof Error ? oauthError.message : undefined,
+        failure_detail: nativeErrorCode ?? (oauthError instanceof Error ? oauthError.message : undefined),
         duration_ms: Date.now() - attemptStartedAt,
         is_registration: true,
       });
       reportError(oauthError, {
-        tags: { source: 'native-auth', provider, flow: 'native', mechanism: 'exception' },
+        tags: {
+          source: 'native-auth',
+          provider,
+          flow: 'native',
+          mechanism: 'exception',
+          native_error_code: nativeErrorCode,
+        },
       });
       setFormError(t('nativeStart.oauthError'));
     } finally {
@@ -337,7 +346,12 @@ export default function RegisterScreen() {
             </Text>
             {/* replace (not back) so a deep-link straight to /auth/register still
                 lands on login rather than no-op'ing on an empty back stack. */}
-            <Pressable onPress={() => router.replace('/auth/login')} hitSlop={8} accessibilityRole="link">
+            <Pressable
+              onPress={() => router.replace('/auth/login')}
+              hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
+              style={styles.footerLinkHit}
+              accessibilityRole="link"
+            >
               <Text variant="subheadline" color={theme.systemColors.accent} style={styles.footerLink}>
                 {t('login.submit.signIn')}
               </Text>
@@ -377,4 +391,6 @@ const styles = StyleSheet.create({
     marginTop: 24,
   },
   footerLink: { fontWeight: '600' },
+  // Keeps the tappable area at the 44pt/48dp minimum.
+  footerLinkHit: { minHeight: 44, justifyContent: 'center' },
 });

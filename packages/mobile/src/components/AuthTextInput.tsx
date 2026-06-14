@@ -148,6 +148,8 @@ export const AuthTextInput = forwardRef<RNTextInput, AuthTextInputProps>(functio
           style={[
             styles.glassInput,
             secureTextEntry && styles.glassInputWithToggle,
+            // A hairline red is a weak error signal; thicken the errored border.
+            error ? styles.glassInputErrored : null,
             { backgroundColor: inputBackground, borderColor: inputBorder, color: inputTextColor },
           ]}
           placeholder={placeholder}
@@ -162,7 +164,7 @@ export const AuthTextInput = forwardRef<RNTextInput, AuthTextInputProps>(functio
             style={styles.glassToggle}
             accessibilityRole="button"
             accessibilityLabel={revealed ? hideLabel : showLabel}
-            accessibilityState={{ expanded: revealed }}
+            accessibilityState={{ selected: revealed }}
           >
             <Icon name={revealed ? 'visibility.off' : 'visibility'} size={20} color={inputPlaceholderColor} />
           </Pressable>
@@ -196,6 +198,7 @@ const styles = StyleSheet.create({
   },
   // Leave room for the eye toggle so long values don't run under it.
   glassInputWithToggle: { paddingRight: 48 },
+  glassInputErrored: { borderWidth: 1 },
   glassToggle: {
     position: 'absolute',
     right: 12,

@@ -306,7 +306,8 @@ export default function LoginScreen() {
               hapticLight();
               router.push('/auth/register');
             }}
-            hitSlop={8}
+            hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
+            style={styles.footerLinkHit}
             accessibilityRole="link"
           >
             <Text style={[styles.footerLink, { color: theme.systemColors.accent }]}>{t('login.submit.signUp')}</Text>
@@ -357,4 +358,6 @@ const styles = StyleSheet.create({
   },
   footerText: { fontSize: 15 },
   footerLink: { fontSize: 15, fontWeight: '600' },
+  // Keeps the tappable area at the 44pt/48dp minimum.
+  footerLinkHit: { minHeight: 44, justifyContent: 'center' },
 });
