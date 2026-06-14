@@ -73,6 +73,61 @@ const SESSION_FEED_ITEM_FIELDS = `
   }
   boardTypes
   hardestGrade
+  hardestSend {
+    uuid
+    userId
+    climbUuid
+    climbName
+    boardType
+    layoutId
+    angle
+    status
+    attemptCount
+    difficulty
+    difficultyName
+    quality
+    isMirror
+    isBenchmark
+    isNoMatch
+    comment
+    frames
+    setterUsername
+    climbedAt
+  }
+  featuredBeta {
+    tick {
+      uuid
+      userId
+      climbUuid
+      climbName
+      boardType
+      layoutId
+      angle
+      status
+      attemptCount
+      difficulty
+      difficultyName
+      quality
+      isMirror
+      isBenchmark
+      isNoMatch
+      comment
+      frames
+      setterUsername
+      climbedAt
+    }
+    betaLink {
+      climbUuid
+      link
+      foreignUsername
+      angle
+      thumbnail
+      isListed
+      createdAt
+    }
+  }
+  socialEntityType
+  socialEntityId
   firstTickAt
   lastTickAt
   durationMinutes

@@ -71,6 +71,12 @@ describe('sessionGroupedFeed user filtering', () => {
           vote_up: 5,
           vote_down: 1,
           comment_count: 2,
+          daily_user_id: null,
+          daily_date: null,
+          daily_display_name: null,
+          daily_avatar_url: null,
+          daily_board_types: null,
+          highlight_tick_uuid: null,
         },
       ])
       .mockResolvedValueOnce([
@@ -107,7 +113,9 @@ describe('sessionGroupedFeed user filtering', () => {
           session_id: 'party-1',
           board_types: ['kilter'],
         },
-      ]);
+      ])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
 
     sessionFeedTestState.selectWhereMock.mockResolvedValue([
       {
@@ -135,10 +143,15 @@ describe('sessionGroupedFeed user filtering', () => {
     expect(result.sessions).toHaveLength(1);
     expect(result.sessions[0]).toMatchObject({
       sessionId: 'party-1',
+      sessionType: 'party',
       totalSends: 5,
       totalFlashes: 2,
       totalAttempts: 6,
       hardestGrade: '4a/V0',
+      hardestSend: null,
+      featuredBeta: null,
+      socialEntityType: 'session',
+      socialEntityId: 'party-1',
       participants: [
         expect.objectContaining({ userId: 'user-1', sends: 3 }),
         expect.objectContaining({ userId: 'user-2', sends: 2 }),

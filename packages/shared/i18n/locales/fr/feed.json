@@ -28,24 +28,7 @@
       "signInBody": "Suivez des grimpeurs et des ouvreurs pour voir leurs enchaînements et nouveaux blocs ici.",
       "emptyTitle": "Aucune activité pour le moment",
       "emptyBody": "Suivez des grimpeurs et des ouvreurs pour remplir ce fil.",
-      "unknownClimb": "Bloc inconnu",
-      "unknownClimber": "Grimpeur",
-      "activityLine": "{{action}} - {{time}}",
-      "angle": "{{angle}}°",
-      "boards": {
-        "kilter": "Kilter",
-        "tension": "Tension",
-        "moonboard": "MoonBoard"
-      },
-      "activity": {
-        "ascent": "a enregistré une ascension",
-        "flash": "a flashé",
-        "send": "a enchaîné",
-        "attempt": "a essayé",
-        "newClimb": "a ouvert un nouveau bloc",
-        "comment": "a commenté",
-        "proposalApproved": "a eu une proposition approuvée"
-      }
+      "unknownClimb": "Bloc inconnu"
     }
   },
   "ascentsFeed": {
@@ -154,16 +137,41 @@
   "sessionFeedCard": {
     "climbCount_one": "{{count}} bloc",
     "climbCount_other": "{{count}} blocs",
+    "sendsCount_one": "{{count}} réussite",
+    "sendsCount_other": "{{count}} réussites",
+    "flashesCount_one": "{{count}} flash",
+    "flashesCount_other": "{{count}} flashs",
+    "hardestGrade": "{{grade}} plus dur",
+    "status": {
+      "flash": "Flash",
+      "send": "Réussite",
+      "attempt": "Essai"
+    },
     "hardest": "Plus dur",
-    "sendsLabel": "réussites"
+    "betaCaption": "Bêta de cette session",
+    "hardestSend": "Réussite la plus dure",
+    "unknownClimb": "Bloc inconnu",
+    "attempts_one": "{{count}} essai",
+    "attempts_other": "{{count}} essais",
+    "chartEmpty": "Aucune cotation pour l'instant",
+    "chartLabel": "Graphique des cotations",
+    "pageIndicator": "Page {{current}} sur {{total}} de la carte de session",
+    "previousPage": "Page précédente de la carte de session",
+    "nextPage": "Page suivante de la carte de session",
+    "openHint": "Ouvre la session",
+    "openSessionPage": "Ouvrir la session",
+    "openHardestClimb": "Ouvrir {{climb}}"
   },
   "sessionSummary": {
     "completed": "Session terminée"
   },
   "socialActions": {
-    "upvote": "Aimer",
-    "removeUpvote": "Retirer le j'aime",
-    "openComments": "Ouvrir les commentaires"
+    "upvoteWithCount_one": "Aimer, {{count}} j'aime",
+    "upvoteWithCount_other": "Aimer, {{count}} j'aime",
+    "removeUpvoteWithCount_one": "Retirer le j'aime, {{count}} j'aime",
+    "removeUpvoteWithCount_other": "Retirer le j'aime, {{count}} j'aime",
+    "openCommentsWithCount_one": "Ouvrir les commentaires, {{count}} commentaire",
+    "openCommentsWithCount_other": "Ouvrir les commentaires, {{count}} commentaires"
   },
   "socialFeedItem": {
     "climbed": "a enchaîné"

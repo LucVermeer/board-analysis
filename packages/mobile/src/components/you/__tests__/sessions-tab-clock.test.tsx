@@ -14,7 +14,33 @@ const captured = vi.hoisted(() => ({
 
 const feed = vi.hoisted(() => ({
   data: {
-    pages: [{ sessionGroupedFeed: { sessions: [{ sessionId: 's1', lastTickAt: '2026-06-04T09:00:00.000Z' }] } }],
+    pages: [
+      {
+        sessionGroupedFeed: {
+          sessions: [
+            {
+              sessionId: 's1',
+              sessionType: 'party',
+              participants: [],
+              totalSends: 1,
+              totalFlashes: 0,
+              totalAttempts: 0,
+              tickCount: 1,
+              gradeDistribution: [],
+              boardTypes: [],
+              socialEntityType: 'session',
+              socialEntityId: 's1',
+              firstTickAt: '2026-06-04T09:00:00.000Z',
+              lastTickAt: '2026-06-04T09:00:00.000Z',
+              upvotes: 0,
+              downvotes: 0,
+              voteScore: 0,
+              commentCount: 0,
+            },
+          ],
+        },
+      },
+    ],
   },
   isPending: false,
   isRefetching: false,
@@ -66,6 +92,7 @@ vi.mock('../CommentSheet', () => ({ CommentSheet: () => null }));
 vi.mock('../../Text', () => ({ Text: () => null }));
 vi.mock('../../Icon', () => ({ Icon: () => null }));
 vi.mock('../../Button', () => ({ Button: () => null }));
+vi.mock('../../Card', () => ({ Card: ({ children }: { children?: ReactNode }) => createElement('div', null, children) }));
 vi.mock('../../ActivityIndicator', () => ({ ActivityIndicator: () => null }));
 vi.mock('../../../lib/graphql/hooks', () => ({
   useSessionGroupedFeed: () => feed,
@@ -74,7 +101,7 @@ vi.mock('../../../lib/graphql/hooks', () => ({
 vi.mock('../../../hooks/use-bottom-chrome-metrics', () => ({
   useBottomChromeMetrics: () => ({ scrollBottomPadding: 0 }),
 }));
-vi.mock('../../../theme/tokens', () => ({ spacing: {}, borderRadius: {} }));
+vi.mock('../../../theme/tokens', () => ({ spacing: { 2: 8, 3: 12, 4: 16, 5: 20 }, borderRadius: { full: 999, md: 8 } }));
 vi.mock('../../../providers/theme-provider', () => ({
   useTheme: () => ({ systemColors: {}, brandColors: {} }),
 }));

@@ -27,6 +27,10 @@ export type ActivityFeedInput = {
   boardUuid?: InputMaybe<Scalars['String']['input']>;
   /** Cursor from previous page */
   cursor?: InputMaybe<Scalars['String']['input']>;
+  /** Restrict results to users followed by the authenticated viewer */
+  followingOnly?: InputMaybe<Scalars['Boolean']['input']>;
+  /** Include one daily hardest-send card for followed/user-filtered days without explicit sessions */
+  includeDailyHighlights?: InputMaybe<Scalars['Boolean']['input']>;
   /** Maximum number of items to return */
   limit?: InputMaybe<Scalars['Int']['input']>;
   /** Filter sessions where this user is a participant */
@@ -4539,6 +4543,13 @@ export type SessionEvent =
   | UserPresenceChanged
   | WallConfirmedClimb;
 
+/** A beta video paired with the tick it represents in a session feed card. */
+export type SessionFeedBetaHighlight = {
+  __typename?: 'SessionFeedBetaHighlight';
+  betaLink: BetaLink;
+  tick: SessionFeedTickHighlight;
+};
+
 /** A session feed card representing a group of ticks from a climbing session. */
 export type SessionFeedItem = {
   __typename?: 'SessionFeedItem';
@@ -4546,16 +4557,20 @@ export type SessionFeedItem = {
   commentCount: Scalars['Int']['output'];
   downvotes: Scalars['Int']['output'];
   durationMinutes?: Maybe<Scalars['Int']['output']>;
+  featuredBeta?: Maybe<SessionFeedBetaHighlight>;
   firstTickAt: Scalars['String']['output'];
   goal?: Maybe<Scalars['String']['output']>;
   gradeDistribution: Array<SessionGradeDistributionItem>;
   hardestGrade?: Maybe<Scalars['String']['output']>;
+  hardestSend?: Maybe<SessionFeedTickHighlight>;
   lastTickAt: Scalars['String']['output'];
   ownerUserId?: Maybe<Scalars['ID']['output']>;
   participants: Array<SessionFeedParticipant>;
   sessionId: Scalars['ID']['output'];
   sessionName?: Maybe<Scalars['String']['output']>;
   sessionType: Scalars['String']['output'];
+  socialEntityId: Scalars['String']['output'];
+  socialEntityType: SocialEntityType;
   tickCount: Scalars['Int']['output'];
   totalAttempts: Scalars['Int']['output'];
   totalFlashes: Scalars['Int']['output'];
@@ -4581,6 +4596,30 @@ export type SessionFeedResult = {
   cursor?: Maybe<Scalars['String']['output']>;
   hasMore: Scalars['Boolean']['output'];
   sessions: Array<SessionFeedItem>;
+};
+
+/** A highlighted tick used by session feed cards. */
+export type SessionFeedTickHighlight = {
+  __typename?: 'SessionFeedTickHighlight';
+  angle: Scalars['Int']['output'];
+  attemptCount: Scalars['Int']['output'];
+  boardType: Scalars['String']['output'];
+  climbName?: Maybe<Scalars['String']['output']>;
+  climbUuid: Scalars['String']['output'];
+  climbedAt: Scalars['String']['output'];
+  comment?: Maybe<Scalars['String']['output']>;
+  difficulty?: Maybe<Scalars['Int']['output']>;
+  difficultyName?: Maybe<Scalars['String']['output']>;
+  frames?: Maybe<Scalars['String']['output']>;
+  isBenchmark: Scalars['Boolean']['output'];
+  isMirror: Scalars['Boolean']['output'];
+  isNoMatch: Scalars['Boolean']['output'];
+  layoutId?: Maybe<Scalars['Int']['output']>;
+  quality?: Maybe<Scalars['Int']['output']>;
+  setterUsername?: Maybe<Scalars['String']['output']>;
+  status: Scalars['String']['output'];
+  userId: Scalars['String']['output'];
+  uuid: Scalars['ID']['output'];
 };
 
 /** Grade count for session summary grade distribution. */
@@ -5897,9 +5936,11 @@ export type ResolversTypes = ResolversObject<{
   SessionDetailTick: ResolverTypeWrapper<SessionDetailTick>;
   SessionEnded: ResolverTypeWrapper<SessionEnded>;
   SessionEvent: ResolverTypeWrapper<ResolversUnionTypes<ResolversTypes>['SessionEvent']>;
+  SessionFeedBetaHighlight: ResolverTypeWrapper<SessionFeedBetaHighlight>;
   SessionFeedItem: ResolverTypeWrapper<SessionFeedItem>;
   SessionFeedParticipant: ResolverTypeWrapper<SessionFeedParticipant>;
   SessionFeedResult: ResolverTypeWrapper<SessionFeedResult>;
+  SessionFeedTickHighlight: ResolverTypeWrapper<SessionFeedTickHighlight>;
   SessionGradeCount: ResolverTypeWrapper<SessionGradeCount>;
   SessionGradeDistributionItem: ResolverTypeWrapper<SessionGradeDistributionItem>;
   SessionHardestClimb: ResolverTypeWrapper<SessionHardestClimb>;
@@ -6161,9 +6202,11 @@ export type ResolversParentTypes = ResolversObject<{
   SessionDetailTick: SessionDetailTick;
   SessionEnded: SessionEnded;
   SessionEvent: ResolversUnionTypes<ResolversParentTypes>['SessionEvent'];
+  SessionFeedBetaHighlight: SessionFeedBetaHighlight;
   SessionFeedItem: SessionFeedItem;
   SessionFeedParticipant: SessionFeedParticipant;
   SessionFeedResult: SessionFeedResult;
+  SessionFeedTickHighlight: SessionFeedTickHighlight;
   SessionGradeCount: SessionGradeCount;
   SessionGradeDistributionItem: SessionGradeDistributionItem;
   SessionHardestClimb: SessionHardestClimb;
@@ -8802,6 +8845,16 @@ export type SessionEventResolvers<
   >;
 }>;
 
+export type SessionFeedBetaHighlightResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['SessionFeedBetaHighlight'] =
+    ResolversParentTypes['SessionFeedBetaHighlight'],
+> = ResolversObject<{
+  betaLink?: Resolver<ResolversTypes['BetaLink'], ParentType, ContextType>;
+  tick?: Resolver<ResolversTypes['SessionFeedTickHighlight'], ParentType, ContextType>;
+  __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
+}>;
+
 export type SessionFeedItemResolvers<
   ContextType = ConnectionContext,
   ParentType extends ResolversParentTypes['SessionFeedItem'] = ResolversParentTypes['SessionFeedItem'],
@@ -8810,16 +8863,20 @@ export type SessionFeedItemResolvers<
   commentCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   downvotes?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   durationMinutes?: Resolver<Maybe<ResolversTypes['Int']>, ParentType, ContextType>;
+  featuredBeta?: Resolver<Maybe<ResolversTypes['SessionFeedBetaHighlight']>, ParentType, ContextType>;
   firstTickAt?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   goal?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   gradeDistribution?: Resolver<Array<ResolversTypes['SessionGradeDistributionItem']>, ParentType, ContextType>;
   hardestGrade?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  hardestSend?: Resolver<Maybe<ResolversTypes['SessionFeedTickHighlight']>, ParentType, ContextType>;
   lastTickAt?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   ownerUserId?: Resolver<Maybe<ResolversTypes['ID']>, ParentType, ContextType>;
   participants?: Resolver<Array<ResolversTypes['SessionFeedParticipant']>, ParentType, ContextType>;
   sessionId?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
   sessionName?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   sessionType?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  socialEntityId?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  socialEntityType?: Resolver<ResolversTypes['SocialEntityType'], ParentType, ContextType>;
   tickCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   totalAttempts?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   totalFlashes?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
@@ -8849,6 +8906,33 @@ export type SessionFeedResultResolvers<
   cursor?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   hasMore?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
   sessions?: Resolver<Array<ResolversTypes['SessionFeedItem']>, ParentType, ContextType>;
+  __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
+}>;
+
+export type SessionFeedTickHighlightResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['SessionFeedTickHighlight'] =
+    ResolversParentTypes['SessionFeedTickHighlight'],
+> = ResolversObject<{
+  angle?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  attemptCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  boardType?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  climbName?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  climbUuid?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  climbedAt?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  comment?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  difficulty?: Resolver<Maybe<ResolversTypes['Int']>, ParentType, ContextType>;
+  difficultyName?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  frames?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  isBenchmark?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
+  isMirror?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
+  isNoMatch?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
+  layoutId?: Resolver<Maybe<ResolversTypes['Int']>, ParentType, ContextType>;
+  quality?: Resolver<Maybe<ResolversTypes['Int']>, ParentType, ContextType>;
+  setterUsername?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  status?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  userId?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  uuid?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
@@ -9443,9 +9527,11 @@ export type Resolvers<ContextType = ConnectionContext> = ResolversObject<{
   SessionDetailTick?: SessionDetailTickResolvers<ContextType>;
   SessionEnded?: SessionEndedResolvers<ContextType>;
   SessionEvent?: SessionEventResolvers<ContextType>;
+  SessionFeedBetaHighlight?: SessionFeedBetaHighlightResolvers<ContextType>;
   SessionFeedItem?: SessionFeedItemResolvers<ContextType>;
   SessionFeedParticipant?: SessionFeedParticipantResolvers<ContextType>;
   SessionFeedResult?: SessionFeedResultResolvers<ContextType>;
+  SessionFeedTickHighlight?: SessionFeedTickHighlightResolvers<ContextType>;
   SessionGradeCount?: SessionGradeCountResolvers<ContextType>;
   SessionGradeDistributionItem?: SessionGradeDistributionItemResolvers<ContextType>;
   SessionHardestClimb?: SessionHardestClimbResolvers<ContextType>;
