@@ -24,18 +24,6 @@ const boardRender = vi.hoisted(() => ({
   boardHeight: 1920,
 }));
 
-// Injectable navigation result so tests can drive the suggestion-aware
-// canNext/nextItem the component reads from computeNavigationStateWithSuggestions.
-const nav = vi.hoisted(() => ({
-  result: {
-    canNext: false,
-    canPrevious: false,
-    nextItem: null as ClimbQueueItem | null,
-    prevItem: null as ClimbQueueItem | null,
-    remainingCount: 0,
-  },
-}));
-
 function styleDataValue(styleValue: unknown): string {
   if (styleValue == null) return '';
   if (typeof styleValue === 'string' || typeof styleValue === 'number' || typeof styleValue === 'boolean') {
@@ -113,12 +101,9 @@ vi.mock('react-native', () => ({
   },
 }));
 
+// The tap hook wraps its open handler in runOnJS — return it as-is.
 vi.mock('react-native-reanimated', () => ({
-  default: { View: ({ children }: { children?: ReactNode }) => createElement('div', null, children) },
   runOnJS: (fn: (...args: unknown[]) => unknown) => fn,
-  useAnimatedStyle: () => ({}),
-  useDerivedValue: () => ({ value: 0 }),
-  useSharedValue: (initial: number) => ({ value: initial }),
 }));
 
 vi.mock('react-native-gesture-handler', () => {
@@ -127,16 +112,11 @@ vi.mock('react-native-gesture-handler', () => {
   return {
     GestureDetector: ({ children }: { children?: ReactNode }) =>
       createElement('div', { 'data-gesture': 'true' }, children),
-    Gesture: { Tap: () => builder, Pan: () => builder, Race: () => builder },
+    Gesture: { Tap: () => builder },
   };
 });
 
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
-
-vi.mock('@boardsesh/play-view', () => ({
-  computePeekOffset: () => 0,
-  computeNavigationStateWithSuggestions: () => nav.result,
-}));
 
 type TextMockProps = {
   children?: ReactNode;
@@ -186,10 +166,6 @@ vi.mock('../../../providers/queue-provider', () => ({
     nextClimb: queue.nextClimb,
     previousClimb: queue.previousClimb,
   }),
-  usePlaylistSuggestionSource: () => null,
-  // Default to driver (not preview-only); these tests encode the bar's wiring,
-  // not party gating — that is covered in use-queue-climb-carousel.test.tsx.
-  useIsPartyPreviewOnly: () => false,
 }));
 
 vi.mock('../../../providers/drawer-host-provider', () => ({
@@ -200,12 +176,9 @@ vi.mock('../../../hooks/use-grade-format', () => ({
   useGradeFormat: () => ({ formatGrade: (difficulty: string | null | undefined) => difficulty }),
 }));
 
-vi.mock('../../../hooks/use-reduce-motion', () => ({ useReduceMotion: () => false }));
-
-vi.mock('../../../lib/haptics', () => ({ hapticLight: vi.fn(), hapticSelection: vi.fn() }));
+vi.mock('../../../lib/haptics', () => ({ hapticLight: vi.fn() }));
 
 vi.mock('../../../theme/tokens', () => ({
-  opacity: { peek: 0.62 },
   spacing: { 1: 4, 2: 8, 3: 12, 10: 40 },
   borderRadius: { md: 8 },
 }));
@@ -269,10 +242,6 @@ vi.mock('../../BoardImageNative', () => ({
   },
 }));
 
-vi.mock('../../play-drawer/use-carousel-gesture', () => ({
-  useCarouselGesture: () => ({ gesture: {}, translateX: { value: 0 } }),
-}));
-
 vi.mock('../LogAscentToolbarButton', () => ({
   LogAscentToolbarButton: ({ size, iconSize }: { size?: number; iconSize?: number }) =>
     createElement('button', {
@@ -286,7 +255,6 @@ vi.mock('../LogAscentToolbarButton', () => ({
 // the row renders the local queue head exactly as today.
 vi.mock('../use-wall-or-queue-climb', () => ({
   useWallOrQueueCurrentClimb: (localClimb: unknown) => localClimb,
-  useIsWallPinned: () => false,
 }));
 
 import { NativeAccessoryClimbRow } from '../NativeAccessoryClimbRow';
@@ -328,7 +296,6 @@ function expectNumericAttribute(element: HTMLElement, attributeName: string, exp
 
 describe('NativeAccessoryClimbRow', () => {
   beforeEach(() => {
-    nav.result = { canNext: false, canPrevious: false, nextItem: null, prevItem: null, remainingCount: 0 };
     const currentItem = makeItem(makeClimb());
     queue.state.currentClimbQueueItem = currentItem;
     queue.state.queue = [currentItem];
@@ -453,34 +420,22 @@ describe('NativeAccessoryClimbRow', () => {
     expect(tick?.closest('[data-gesture="true"]')).toBeNull();
   });
 
-  it('surfaces the suggestion-aware next item as a peek and a "next" accessibility action', () => {
+  it('renders a single climb label with no swipe peek or prev/next actions', () => {
+    // The swipe carousel + peeking neighbours were removed: the row shows only the
+    // current climb, the gesture target is tap-to-open (no prev/next a11y actions),
+    // and exactly one name node renders.
     const currentItem = makeItem(makeClimb({ uuid: 'current', name: 'Current Climb' }));
     queue.state.currentClimbQueueItem = currentItem;
     queue.state.queue = [currentItem];
-    // Navigation reports a next item even though only one climb is queued — i.e.
-    // a playlist suggestion peek past the tail. The carousel must reflect it
-    // rather than dead-ending, and expose a VoiceOver "next" action.
-    nav.result = {
-      canNext: true,
-      canPrevious: false,
-      nextItem: makeItem(makeClimb({ uuid: 'peek', name: 'Playlist Next', difficulty: 'V9' })),
-      prevItem: null,
-      remainingCount: 0,
-    };
 
     const { container } = render(<NativeAccessoryClimbRow placement="regular" width={344} />);
 
-    expect(container.textContent).toContain('Current Climb');
-    expect(container.textContent).toContain('Playlist Next');
-    const swipeTarget = container.querySelector('[data-role="button"]');
-    expect(swipeTarget?.getAttribute('data-actions')).toContain('next');
-  });
+    const nameNodes = Array.from(container.querySelectorAll('[data-text]')).filter(
+      (textNode) => textNode.textContent === 'Current Climb',
+    );
+    expect(nameNodes).toHaveLength(1);
 
-  it('exposes no "next" action and no peek at the navigation tail', () => {
-    // Default nav.result (set in beforeEach) reports no next/previous item.
-    const { container } = render(<NativeAccessoryClimbRow placement="regular" width={344} />);
-
-    const swipeTarget = container.querySelector('[data-role="button"]');
-    expect(swipeTarget?.getAttribute('data-actions')).toBe('');
+    const tapTarget = container.querySelector('[data-role="button"]');
+    expect(tapTarget?.getAttribute('data-actions')).toBe('');
   });
 });

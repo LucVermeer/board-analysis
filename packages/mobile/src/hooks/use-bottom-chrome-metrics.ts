@@ -1,9 +1,9 @@
 import { useMemo } from 'react';
 import { useSegments } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useHasActiveClimb } from '../providers/queue-provider';
 import { useTheme } from '../providers/theme-provider';
 import { isTabsRoute } from '../lib/route-segments';
+import { useHasAccessoryClimb } from './use-has-accessory-climb';
 import { useNativeAccessoryActive, useNativeTabBar } from './use-bottom-accessory';
 import { computeBottomChromeMetrics } from './bottom-chrome-metrics';
 
@@ -18,8 +18,10 @@ export function useBottomChromeMetrics() {
   // Only the *presence* of a current climb matters here — subscribe to the
   // presence-only selector, which flips solely when a climb appears/disappears.
   // This keeps bottom chrome from re-rendering on queue mutations OR on
-  // climb-to-climb navigation across every screen that floats it.
-  const hasCurrentClimb = useHasActiveClimb();
+  // climb-to-climb navigation across every screen that floats it. Wall-aware so a
+  // board-presence ("on the wall") climb counts too, keeping the JS-vs-native
+  // arbitration consistent with what the accessory actually renders.
+  const hasCurrentClimb = useHasAccessoryClimb();
   const { variant } = useTheme();
   const insideTabs = isTabsRoute(segments);
   const nativeAccessoryActive = useNativeAccessoryActive();

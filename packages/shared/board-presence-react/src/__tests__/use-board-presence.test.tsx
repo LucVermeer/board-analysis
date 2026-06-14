@@ -7,6 +7,7 @@ import {
   useBoardPresenceActions,
   useBoardPresenceCurrent,
   useBoardPresenceFeed,
+  useBoardPresenceHasClimb,
 } from '../board-presence-provider';
 import type { BoardPresenceClient } from '../types';
 
@@ -462,5 +463,48 @@ describe('BoardPresenceProvider — split contexts', () => {
     expect(renderCounts.actions).toBe(actionRenderCountAfterAttach);
     expect(renderCounts.current).toBeGreaterThan(1);
     expect(renderCounts.feed).toBeGreaterThan(1);
+  });
+
+  it('exposes a presence-only hasClimb that flips on appear/disappear, not on climb identity', async () => {
+    const harness = makeClient();
+    let hasClimbRenderCount = 0;
+    const hasClimbSnapshots: boolean[] = [];
+
+    function HasClimbConsumer() {
+      hasClimbRenderCount += 1;
+      hasClimbSnapshots.push(useBoardPresenceHasClimb());
+      return null;
+    }
+
+    render(
+      <BoardPresenceProvider boardId={1} client={harness.client}>
+        <HasClimbConsumer />
+      </BoardPresenceProvider>,
+    );
+
+    // Live feed, no climb yet → false.
+    await waitFor(() => expect(hasClimbSnapshots.at(-1)).toBe(false));
+
+    // A climb appears → flips true (one re-render of the hasClimb consumer).
+    act(() => {
+      harness.emit(setEvent(climb('first', 1)));
+    });
+    await waitFor(() => expect(hasClimbSnapshots.at(-1)).toBe(true));
+    const rendersAfterAppear = hasClimbRenderCount;
+
+    // The climb CHANGES identity (board-level climb change). hasClimb stays true,
+    // so the presence-only consumer must NOT re-render — this is what keeps the
+    // accessory host mounted across a change (no doubled snapshot).
+    act(() => {
+      harness.emit(setEvent(climb('second', 2)));
+    });
+    expect(hasClimbSnapshots.at(-1)).toBe(true);
+    expect(hasClimbRenderCount).toBe(rendersAfterAppear);
+
+    // Clearing the wall flips it back to false.
+    act(() => {
+      harness.emit(clearEvent(3));
+    });
+    await waitFor(() => expect(hasClimbSnapshots.at(-1)).toBe(false));
   });
 });
