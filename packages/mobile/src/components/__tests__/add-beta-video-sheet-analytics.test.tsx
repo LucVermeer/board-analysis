@@ -31,13 +31,19 @@ vi.mock('../../lib/analytics', () => ({ track: analytics.track }));
 vi.mock('react-native', () => ({
   View: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
   StyleSheet: { create: (styles: unknown) => styles, hairlineWidth: 1 },
-  TextInput: ({ onChangeText }: { onChangeText?: (text: string) => void }) => {
-    captured.onChangeText = onChangeText ?? null;
-    return createElement('input');
-  },
   Pressable: ({ onPress, children }: { onPress?: () => void; children?: ReactNode }) => {
     captured.onPress = onPress ?? null;
     return createElement('button', null, typeof children === 'function' ? null : children);
+  },
+}));
+
+// The paste field is a gorhom `BottomSheetTextInput` (so the host sheet lifts it
+// above the keyboard). Mock it here to capture onChangeText and to keep the real
+// module — which pulls in reanimated — out of the jsdom run.
+vi.mock('@gorhom/bottom-sheet', () => ({
+  BottomSheetTextInput: ({ onChangeText }: { onChangeText?: (text: string) => void }) => {
+    captured.onChangeText = onChangeText ?? null;
+    return createElement('input');
   },
 }));
 
