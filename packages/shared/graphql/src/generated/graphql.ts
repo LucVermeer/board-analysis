@@ -3315,9 +3315,12 @@ export type Query = {
   boardBySlug?: Maybe<UserBoard>;
   /**
    * Durable history of what was pushed to a board (survives past the 24h Redis
-   * window), newest-first. `before` is an ISO 8601 confirmedAt cursor for
-   * keyset paging; `limit` is capped at 100. This is the lasting "what was on
-   * the wall" record; `boardRecentClimbs` is the hot 24h cache.
+   * window), newest-first by `seq`. For keyset paging pass the `seq` of the
+   * last item from the previous page as `before` (not `sentAt`) — `seq` is
+   * unique and monotonic per board, so paging never repeats or skips even when
+   * several sends share a `sentAt` second. A non-integer `before` is rejected
+   * with BAD_USER_INPUT. `limit` is capped at 100. This is the lasting "what
+   * was on the wall" record; `boardRecentClimbs` is the hot 24h cache.
    */
   boardHistory: Array<BoardPresenceClimb>;
   /** Get leaderboard for a board. */
