@@ -187,6 +187,48 @@ class RoomManager {
     return this.clients.get(clientId);
   }
 
+  /**
+   * Record that this connection is the board-presence holder of `boardId` (set
+   * from reportBoardClimb after setBoardWriter). The WS-close backstop
+   * (clearBoardWriterForConnection) reads this to free the wall if the holder
+   * crashes without an explicit reportBoardDisconnect. No-op if the connection
+   * isn't registered (e.g. an internal/controller transport without a client).
+   */
+  noteBoardWriter(connectionId: string, boardId: number, emitterId: string): void {
+    const client = this.clients.get(connectionId);
+    if (client) {
+      client.boardWriterEmitter = { boardId, emitterId };
+    }
+  }
+
+  /**
+   * Crash backstop: when a connection closes, free the board it held — but only
+   * if it still holds it. `clearBoardWriterIf` is an atomic compare-and-delete
+   * keyed by emitter, so this is a no-op when another emitter has since taken
+   * over (always-take) or when this connection never held a board. On a real
+   * clear, broadcast `BoardConnectionChanged { holder: null }` so watchers see
+   * the wall go free. Non-fatal: a Redis hiccup must never block disconnect
+   * cleanup. Must be called while the client record still exists (before
+   * disconnectClient/removeClient delete it).
+   */
+  async clearBoardWriterForConnection(connectionId: string): Promise<void> {
+    const note = this.clients.get(connectionId)?.boardWriterEmitter;
+    if (!note) return;
+    try {
+      const cleared = await pubsub.clearBoardWriterIf(String(note.boardId), note.emitterId);
+      if (cleared) {
+        const seq = await pubsub.nextBoardSeq(String(note.boardId));
+        pubsub.publishBoardPresenceEvent(String(note.boardId), {
+          __typename: 'BoardConnectionChanged',
+          holder: null,
+          seq,
+        });
+      }
+    } catch (error) {
+      logger.warn(`[board-presence] backstop clear failed for ${connectionId.slice(0, 8)}: ${String(error)}`);
+    }
+  }
+
   async joinSession(
     connectionId: string,
     sessionId: string,

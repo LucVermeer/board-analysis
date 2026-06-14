@@ -3,7 +3,6 @@ import { render, act, waitFor } from '@testing-library/react';
 import React, { createElement, useEffect, type ReactNode } from 'react';
 import type { ResolvedBoard } from '@boardsesh/shared-schema';
 
-const flags = vi.hoisted(() => ({ value: false as boolean }));
 const transport = vi.hoisted(() => ({
   resolveBoardForSerial: vi.fn(async () => ({ boardId: 42, boardName: 'Garage Wall' }) as unknown as ResolvedBoard),
   resolveBoardForConfig: vi.fn(async () => ({ boardId: 43, boardName: 'MoonBoard 2019' }) as unknown as ResolvedBoard),
@@ -15,10 +14,6 @@ const sharedProvider = vi.hoisted(() => ({
   clientHistory: [] as unknown[],
 }));
 const wsClient = vi.hoisted(() => ({ created: 0, disposed: 0, lastId: 0 }));
-
-vi.mock('../../providers/feature-flags-provider', () => ({
-  useFeatureFlag: () => flags.value,
-}));
 
 vi.mock('@/app/hooks/use-ws-auth-token', () => ({
   useWsAuthToken: () => ({ token: auth.token, isAuthenticated: true, isLoading: false, error: null }),
@@ -96,7 +91,6 @@ function renderProvider() {
 
 describe('WebBoardPresenceProvider', () => {
   beforeEach(() => {
-    flags.value = false;
     auth.token = 'tok';
     transport.resolveBoardForSerial.mockClear();
     transport.resolveBoardForConfig.mockClear();
@@ -109,28 +103,15 @@ describe('WebBoardPresenceProvider', () => {
     wsClient.lastId = 0;
   });
 
-  it('is inert when the flag is off: null boardId, resolve no-ops, no WS client', async () => {
+  it('is always-on: enabled, builds a WS client, null boardId until a board is bound', async () => {
     renderProvider();
-    expect(sharedProvider.lastBoardId).toBeNull();
-    expect(capturedControls?.enabled).toBe(false);
-    expect(wsClient.created).toBe(0);
-
-    await act(async () => {
-      const resolved = await capturedControls?.resolveAndBindBoard({
-        serial: 'SERIAL-1',
-        boardType: 'kilter',
-        layoutId: 1,
-        sizeId: 10,
-        setIds: '1,2',
-      });
-      expect(resolved).toBeNull();
-    });
-    expect(transport.resolveBoardForSerial).not.toHaveBeenCalled();
+    expect(capturedControls?.enabled).toBe(true);
+    expect(wsClient.created).toBe(1);
+    // No board bound yet, so the shared provider collapses to its empty state.
     expect(sharedProvider.lastBoardId).toBeNull();
   });
 
-  it('resolves+binds the board and feeds its id to the shared provider when the flag is on', async () => {
-    flags.value = true;
+  it('resolves+binds the board and feeds its id to the shared provider', async () => {
     renderProvider();
     expect(capturedControls?.enabled).toBe(true);
     expect(wsClient.created).toBe(1);
@@ -159,7 +140,6 @@ describe('WebBoardPresenceProvider', () => {
   });
 
   it('does not re-resolve an unchanged serial once bound', async () => {
-    flags.value = true;
     renderProvider();
 
     const args = { serial: 'SERIAL-1', boardType: 'kilter', layoutId: 1, sizeId: 10, setIds: '1,2' };
@@ -173,7 +153,6 @@ describe('WebBoardPresenceProvider', () => {
   });
 
   it('resolves serial-less boards through the config fallback', async () => {
-    flags.value = true;
     renderProvider();
 
     await act(async () => {
@@ -200,7 +179,6 @@ describe('WebBoardPresenceProvider', () => {
   });
 
   it('replaces the injected presence client when the auth token rebuilds the websocket', async () => {
-    flags.value = true;
     const rendered = renderProvider();
     await waitFor(() => {
       expect(sharedProvider.lastClient).not.toBeNull();

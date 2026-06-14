@@ -1,14 +1,16 @@
 import type { ConnectionContext, BoardPresenceEvent } from '@boardsesh/shared-schema';
 import { pubsub } from '../../../pubsub/index';
 import { createEagerAsyncIterator } from '../shared/async-iterators';
-import { requireAuthenticated, applyRateLimit } from '../shared/helpers';
-import { requireBoardPresenceEnabled, assertValidBoardId } from './shared';
+import { applyRateLimit } from '../shared/helpers';
+import { assertValidBoardId, requireAnonReadableBoard } from './shared';
 
 export const boardPresenceSubscriptions = {
   /**
-   * Live "now on the wall" feed for a shared board. Requires auth + a rate
-   * limit (so an anonymous client can't loop board ids and grow the subscriber
-   * set unbounded), but is otherwise membership-free: any authenticated user who
+   * Live "now on the wall" feed for a shared board. Auth-optional: board
+   * presence is universal, so anonymous viewers are first-class (they need to
+   * watch to see the holder + who's connected). A rate limit (so an anonymous
+   * client can't loop board ids and grow the subscriber set unbounded) plus
+   * `assertValidBoardId` bound it; it is otherwise membership-free — anyone who
    * can name the board_id may watch. Keyed on the shared board_id; no driver.
    *
    * Eager subscribe: `createEagerAsyncIterator` awaits the Redis channel
@@ -17,10 +19,11 @@ export const boardPresenceSubscriptions = {
    */
   boardNowPlaying: {
     subscribe: async function* (_: unknown, { boardId }: { boardId: number }, ctx: ConnectionContext) {
-      requireBoardPresenceEnabled();
-      requireAuthenticated(ctx);
       await applyRateLimit(ctx, 30, 'boardNowPlaying');
       assertValidBoardId(boardId);
+      // Anonymous viewers can only watch public / system-shared boards (not a
+      // private wall reached by enumerating ids); logged-in callers are unbounded.
+      await requireAnonReadableBoard(boardId, ctx.userId);
 
       const boardKey = String(boardId);
 

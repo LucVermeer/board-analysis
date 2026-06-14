@@ -9,17 +9,18 @@
 //      (subscribe + backfill + reducer) and exposes the wall's now-playing
 //      state via the split board-presence contexts.
 //
-// Everything is gated behind the `board-presence` PostHog flag. When the flag is
-// off the provider is inert: `boardId` stays null (so the shared hook collapses
-// to its empty state) and `resolveAndBindBoard` is a no-op, so the BLE flow and
-// every wall surface behave exactly as today.
+// Board presence is always-on (the `board-presence` flag was removed when the
+// feature went GA). `enabled` now just reports whether this provider is mounted:
+// it is `true` inside the provider and `false` only for the outside-provider
+// fallback (DISABLED_CONTROLS), so BLE-flow callers that may render before the
+// provider mounts still degrade safely.
 //
 // The bluetooth provider (mounted inside this one) calls
 // `useBoardPresenceControls()` to (a) resolve+store the boardId on connect and
 // (b) report a freshly-lit climb on wall-confirm. Reads of the wall's current
 // climb go through `@boardsesh/board-presence-react`'s split contexts.
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from 'react';
 import { BoardPresenceProvider } from '@boardsesh/board-presence-react';
 import type { BoardCandidate, ClimbQueueItemInput, ResolvedBoard } from '@boardsesh/shared-schema';
 import {
@@ -28,7 +29,6 @@ import {
 } from '../lib/board-presence/board-presence-client';
 import { getWsClient } from '../lib/graphql/ws-client';
 import { BoardDisambiguationSheet } from '../components/board-discovery/BoardDisambiguationSheet';
-import { useFeatureFlag } from './feature-flags-provider';
 
 /** Board config needed to find-or-bind the shared board on first sighting. */
 export type ResolveBoardArgs = {
@@ -50,7 +50,8 @@ function boardConfigResolveKey({ boardType, layoutId, sizeId, setIds }: ResolveB
 }
 
 type BoardPresenceControlsValue = {
-  /** True when the `board-presence` flag is on. All wall surfaces gate on this. */
+  /** True when the provider is mounted (always-on); false only for the
+   * outside-provider fallback. */
   enabled: boolean;
   /** The board currently bound to the connected serial, or null when none. */
   boardId: number | null;
@@ -75,6 +76,13 @@ type BoardPresenceControlsValue = {
    * resolve when the React boardId context has not re-rendered yet.
    */
   reportClimbForBoard: (boardId: number, climb: ClimbQueueItemInput, angle: number | null) => Promise<boolean>;
+  /**
+   * Tell the backend this client released its board hold (explicit lightbulb-off
+   * or a detected BLE drop) so the "who's connected" indicator frees. No-op when
+   * someone else already took over (atomic compare-and-delete server-side).
+   * Resolves false when no transport is available.
+   */
+  reportDisconnectForBoard: (boardId: number) => Promise<boolean>;
   /** Clear the current board binding and force the shared presence hook inert. */
   resetPresence: () => void;
 };
@@ -82,7 +90,10 @@ type BoardPresenceControlsValue = {
 const BoardPresenceControlsContext = createContext<BoardPresenceControlsValue | null>(null);
 
 export function MobileBoardPresenceProvider({ children }: { children: ReactNode }) {
-  const enabled = useFeatureFlag('board-presence') === true;
+  // Always-on: presence shipped GA, so the provider is never inert. `enabled` is
+  // kept (constant true here) so consumers and the outside-provider fallback can
+  // still branch on provider availability.
+  const enabled = true;
   const [boardId, setBoardId] = useState<number | null>(null);
   // When a serial maps to several boards the user must pick which wall they're
   // at. We hold the candidates + serial here and surface a picker; binding waits
@@ -92,12 +103,9 @@ export function MobileBoardPresenceProvider({ children }: { children: ReactNode 
     candidates: BoardCandidate[];
   } | null>(null);
 
-  // The injected transport. Built once and only while the flag is on, so the
-  // shared hook never attaches a subscription when the feature is disabled.
-  const client = useMemo<MobileBoardPresenceClient | null>(
-    () => (enabled ? createMobileBoardPresenceClient(getWsClient) : null),
-    [enabled],
-  );
+  // The injected transport, built once. Presence is always-on, so the shared
+  // hook always has a client to attach its subscription to.
+  const client = useMemo<MobileBoardPresenceClient | null>(() => createMobileBoardPresenceClient(getWsClient), []);
   const clientRef = useRef(client);
   clientRef.current = client;
 
@@ -125,12 +133,6 @@ export function MobileBoardPresenceProvider({ children }: { children: ReactNode 
     setPendingDisambiguation(null);
     setBoardId(null);
   }, []);
-
-  useEffect(() => {
-    if (!enabled) {
-      resetPresence();
-    }
-  }, [enabled, resetPresence]);
 
   const resolveAndBindBoard = useCallback(async (args: ResolveBoardArgs): Promise<ResolvedBoard | null> => {
     const activeClient = clientRef.current;
@@ -255,6 +257,19 @@ export function MobileBoardPresenceProvider({ children }: { children: ReactNode 
     [],
   );
 
+  const reportDisconnectForBoard = useCallback(async (targetBoardId: number): Promise<boolean> => {
+    const activeClient = clientRef.current;
+    if (!enabledRef.current || activeClient?.reportDisconnect == null) {
+      return false;
+    }
+    try {
+      return await activeClient.reportDisconnect(targetBoardId);
+    } catch (error) {
+      console.warn('[board-presence] reportBoardDisconnect failed', error);
+      return false;
+    }
+  }, []);
+
   // Confirm the board the user picked from the disambiguation prompt: remember
   // the choice server-side and bind it as the active wall.
   const chooseDisambiguatedBoard = useCallback(async (chosenBoardId: number): Promise<void> => {
@@ -290,6 +305,7 @@ export function MobileBoardPresenceProvider({ children }: { children: ReactNode 
       resolveAndBindBoardByConfig,
       resolveAndBindBoardByUuid,
       reportClimbForBoard,
+      reportDisconnectForBoard,
       resetPresence,
     }),
     [
@@ -299,13 +315,14 @@ export function MobileBoardPresenceProvider({ children }: { children: ReactNode 
       resolveAndBindBoardByConfig,
       resolveAndBindBoardByUuid,
       reportClimbForBoard,
+      reportDisconnectForBoard,
       resetPresence,
     ],
   );
 
   return (
     <BoardPresenceControlsContext.Provider value={controls}>
-      <BoardPresenceProvider boardId={enabled ? boardId : null} client={client}>
+      <BoardPresenceProvider boardId={boardId} client={client}>
         {children}
       </BoardPresenceProvider>
       <BoardDisambiguationSheet
@@ -336,6 +353,7 @@ const DISABLED_CONTROLS: BoardPresenceControlsValue = {
   resolveAndBindBoardByConfig: async () => null,
   resolveAndBindBoardByUuid: async () => null,
   reportClimbForBoard: async () => false,
+  reportDisconnectForBoard: async () => false,
   resetPresence: () => {},
 };
 

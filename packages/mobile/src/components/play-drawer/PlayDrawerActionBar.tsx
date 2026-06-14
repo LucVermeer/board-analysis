@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { Icon } from '../Icon';
 import { Text } from '../Text';
 import { BleLightbulbButton } from '../ble/BleLightbulbButton';
+import { BoardConnectionBadge } from './BoardConnectionBadge';
 import { ActionButton, SIZES, type ButtonSize, drawerActionBarStyles } from '../drawer-action-bar/DrawerActionBar';
 import { useTheme } from '../../providers/theme-provider';
 // Aliased: foregrounds in this file read scheme-aware brand from `useTheme()`.
@@ -181,6 +182,12 @@ export const PlayDrawerActionBar = memo(function PlayDrawerActionBar({
             size={SIZES.lg.icon}
             containerSize={SIZES.lg.dim}
           />
+          {/* "Who's connected" badge — the board-presence holder's avatar overlaid
+              on the lightbulb's top-right. Self-reads board presence and renders
+              nothing when the wall is free, so it never disturbs the slot's layout. */}
+          <View style={styles.connectionBadge} pointerEvents="none">
+            <BoardConnectionBadge size={18} />
+          </View>
         </View>
       </View>
 
@@ -307,6 +314,12 @@ function TickButton({ size, ascentCount, onPress, onLongPress, accessibilityLabe
 }
 
 const styles = StyleSheet.create({
+  // Holder avatar overlaid on the lightbulb's top-right corner.
+  connectionBadge: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+  },
   // A neutral, label-only outlined capsule (no colour fill) — the mini inline tier.
   anglePill: {
     height: glassSize.mini,

@@ -29,6 +29,11 @@ export function mapBoardPresenceEnvelopeToAction(event: BoardPresenceEvent): Boa
         type: 'APPLY_STATS_UPDATED',
         payload: { stats: event.stats, seq: event.seq },
       };
+    case 'BoardConnectionChanged':
+      return {
+        type: 'APPLY_CONNECTION_CHANGED',
+        payload: { holder: event.holder, seq: event.seq },
+      };
     default:
       return null;
   }

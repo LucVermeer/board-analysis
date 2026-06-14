@@ -31,18 +31,20 @@ export function BoardPresenceProvider({
     () => ({
       reportClimb: value.reportClimb,
       reportClimbWithUndoTarget: value.reportClimbWithUndoTarget,
+      reportDisconnect: value.reportDisconnect,
       getUndoTarget: value.getUndoTarget,
     }),
-    [value.reportClimb, value.reportClimbWithUndoTarget, value.getUndoTarget],
+    [value.reportClimb, value.reportClimbWithUndoTarget, value.reportDisconnect, value.getUndoTarget],
   );
   const current = useMemo<BoardPresenceCurrentState>(
     () => ({
       currentClimb: value.currentClimb,
       previousClimb: value.previousClimb,
       undoTarget: value.undoTarget,
+      holder: value.holder,
       isLive: value.isLive,
     }),
-    [value.currentClimb, value.previousClimb, value.undoTarget, value.isLive],
+    [value.currentClimb, value.previousClimb, value.undoTarget, value.holder, value.isLive],
   );
   const feed = useMemo<BoardPresenceFeedState>(
     () => ({

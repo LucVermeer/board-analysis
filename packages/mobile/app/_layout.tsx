@@ -61,9 +61,6 @@ const layoutStyles = StyleSheet.create({
 function buildStaticFeatureFlags(): FeatureFlags | undefined {
   const flags: FeatureFlags = {};
 
-  if (process.env.EXPO_PUBLIC_BOARD_PRESENCE === 'true') {
-    flags['board-presence'] = true;
-  }
   if (process.env.EXPO_PUBLIC_STRAVA_INTEGRATION === 'true') {
     flags['strava-integration'] = true;
   }

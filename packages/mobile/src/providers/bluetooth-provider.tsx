@@ -332,6 +332,7 @@ export function BluetoothProvider({
     resolveAndBindBoard,
     resolveAndBindBoardByConfig,
     reportClimbForBoard,
+    reportDisconnectForBoard,
   } = useBoardPresenceControls();
   const { currentClimb: wallCurrentClimb } = useBoardPresenceCurrent();
   const { showUndoWallChangeSnackbar } = useQueueSnackbar();
@@ -371,6 +372,8 @@ export function BluetoothProvider({
   presenceBoardIdRef.current = presenceBoardId;
   const reportClimbForBoardRef = useRef(reportClimbForBoard);
   reportClimbForBoardRef.current = reportClimbForBoard;
+  const reportDisconnectForBoardRef = useRef(reportDisconnectForBoard);
+  reportDisconnectForBoardRef.current = reportDisconnectForBoard;
   const wallCurrentClimbRef = useRef<BoardPresenceClimb | null>(wallCurrentClimb);
   wallCurrentClimbRef.current = wallCurrentClimb;
   const showUndoWallChangeSnackbarRef = useRef(showUndoWallChangeSnackbar);
@@ -910,9 +913,21 @@ export function BluetoothProvider({
   const wasConnectedRef = useRef(false);
   const isUserDisconnectRef = useRef(false);
 
+  // Free this client's board-connection hold when the BLE link goes down (the
+  // holder = last sender, so a disconnect means we're no longer writing the
+  // wall). Best-effort and idempotent: the server clear is a compare-and-delete,
+  // so it's a no-op once another phone took over (last-connection-wins). The
+  // binding stays so a reconnect re-takes.
+  const releaseBoardHolder = useCallback(() => {
+    const boardId = resolvedPresenceBoardIdRef.current ?? presenceBoardIdRef.current;
+    if (boardId === null) return;
+    void reportDisconnectForBoardRef.current(boardId);
+  }, []);
+
   // Wrap disconnect to track user-initiated disconnects
   const wrappedDisconnect = useCallback(async () => {
     clearPendingWallReportAndUndoToastArm();
+    releaseBoardHolder();
     isUserDisconnectRef.current = true;
     track(SHARED_EVENTS.BluetoothDisconnected, { boardName, reason: 'user', inSession: sessionIdRef.current != null });
     try {
@@ -926,7 +941,7 @@ export function BluetoothProvider({
     } finally {
       isUserDisconnectRef.current = false;
     }
-  }, [clearPendingWallReportAndUndoToastArm, disconnect, boardName]);
+  }, [clearPendingWallReportAndUndoToastArm, releaseBoardHolder, disconnect, boardName]);
 
   // Register with the module-level status store so consumers rendered outside
   // this provider (e.g. the root tab bar, the long-press BLE controls sheet) can
@@ -949,6 +964,10 @@ export function BluetoothProvider({
   useEffect(() => {
     if (wasConnectedRef.current && !isConnected && !isUserDisconnectRef.current) {
       clearPendingWallReportAndUndoToastArm();
+      // An unexpected drop also frees our board hold (the booted phone is no
+      // longer writing the wall). Compare-and-delete server-side, so if another
+      // phone already took over this is a no-op.
+      releaseBoardHolder();
       track(SHARED_EVENTS.BluetoothDisconnected, {
         boardName,
         reason: 'unexpected',
@@ -956,7 +975,7 @@ export function BluetoothProvider({
       });
     }
     wasConnectedRef.current = isConnected;
-  }, [clearPendingWallReportAndUndoToastArm, isConnected, boardName]);
+  }, [clearPendingWallReportAndUndoToastArm, releaseBoardHolder, isConnected, boardName]);
 
   const value = useMemo<BluetoothContextValue>(
     () => ({

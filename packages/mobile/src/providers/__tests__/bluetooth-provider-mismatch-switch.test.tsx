@@ -55,6 +55,7 @@ const presence = vi.hoisted(() => ({
   boardId: null as number | null,
   currentClimb: null as BoardPresenceClimb | null,
   reportClimbForBoard: vi.fn(async () => true),
+  reportDisconnectForBoard: vi.fn(async () => true),
   showUndoWallChangeSnackbar: vi.fn(),
 }));
 
@@ -163,6 +164,7 @@ vi.mock('../board-presence-provider', () => ({
     resolveAndBindBoard: vi.fn(async () => null),
     resolveAndBindBoardByConfig: vi.fn(async () => null),
     reportClimbForBoard: presence.reportClimbForBoard,
+    reportDisconnectForBoard: presence.reportDisconnectForBoard,
   }),
 }));
 vi.mock('../queue-snackbar-provider', () => ({

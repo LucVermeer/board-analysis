@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import type { BoardPresenceClimb, BoardPresenceEvent, BoardPresenceStats } from '@boardsesh/shared-schema';
+import type {
+  BoardConnectionHolder,
+  BoardPresenceClimb,
+  BoardPresenceEvent,
+  BoardPresenceStats,
+} from '@boardsesh/shared-schema';
 import { boardPresenceReducer, initialBoardPresenceState, HISTORY_CAP } from '../reducer';
 import { mapBoardPresenceEnvelopeToAction } from '../map-envelope';
 import type { BoardPresenceState } from '../types';
@@ -32,6 +37,16 @@ function makeStats(overrides: Partial<BoardPresenceStats> = {}): BoardPresenceSt
   };
 }
 
+function makeHolder(overrides: Partial<BoardConnectionHolder> = {}): BoardConnectionHolder {
+  return {
+    userId: 'user-1',
+    displayName: 'Climber',
+    avatarUrl: null,
+    lastSentAt: null,
+    ...overrides,
+  };
+}
+
 describe('initialBoardPresenceState', () => {
   it('starts empty with seq 0', () => {
     expect(initialBoardPresenceState).toEqual({
@@ -41,6 +56,8 @@ describe('initialBoardPresenceState', () => {
       lastSeq: 0,
       stats: null,
       lastStatsSeq: 0,
+      holder: null,
+      lastConnectionSeq: 0,
     });
   });
 });
@@ -361,14 +378,121 @@ describe('SEED_STATS', () => {
   });
 });
 
+describe('APPLY_CONNECTION_CHANGED', () => {
+  it('sets the holder and advances lastConnectionSeq', () => {
+    const holder = makeHolder({ userId: 'alice', displayName: 'Alice' });
+    const result = boardPresenceReducer(initialBoardPresenceState, {
+      type: 'APPLY_CONNECTION_CHANGED',
+      payload: { holder, seq: 3 },
+    });
+
+    expect(result.holder).toEqual(holder);
+    expect(result.lastConnectionSeq).toBe(3);
+  });
+
+  it('a higher seq replaces the current holder', () => {
+    const first = makeHolder({ userId: 'alice' });
+    const state = makeState({ holder: first, lastConnectionSeq: 3 });
+
+    const second = makeHolder({ userId: 'bob' });
+    const result = boardPresenceReducer(state, {
+      type: 'APPLY_CONNECTION_CHANGED',
+      payload: { holder: second, seq: 4 },
+    });
+
+    expect(result.holder).toEqual(second);
+    expect(result.lastConnectionSeq).toBe(4);
+  });
+
+  it('frees the board when the holder is null', () => {
+    const state = makeState({ holder: makeHolder(), lastConnectionSeq: 5 });
+
+    const result = boardPresenceReducer(state, {
+      type: 'APPLY_CONNECTION_CHANGED',
+      payload: { holder: null, seq: 6 },
+    });
+
+    expect(result.holder).toBeNull();
+    expect(result.lastConnectionSeq).toBe(6);
+  });
+
+  it('ignores a stale or duplicate push (seq <= lastConnectionSeq) so out-of-order fan-out cannot regress', () => {
+    const current = makeHolder({ userId: 'alice' });
+    const state = makeState({ holder: current, lastConnectionSeq: 10 });
+
+    const stale = boardPresenceReducer(state, {
+      type: 'APPLY_CONNECTION_CHANGED',
+      payload: { holder: makeHolder({ userId: 'bob' }), seq: 9 },
+    });
+    expect(stale).toBe(state);
+
+    const duplicate = boardPresenceReducer(state, {
+      type: 'APPLY_CONNECTION_CHANGED',
+      payload: { holder: makeHolder({ userId: 'bob' }), seq: 10 },
+    });
+    expect(duplicate).toBe(state);
+  });
+
+  it('does not touch climb-ordering or stats state', () => {
+    const current = makeClimb({ seq: 4 });
+    const stats = makeStats({ climbsSentCount: 2 });
+    const state = makeState({ currentClimb: current, history: [current], lastSeq: 4, stats, lastStatsSeq: 5 });
+
+    const result = boardPresenceReducer(state, {
+      type: 'APPLY_CONNECTION_CHANGED',
+      payload: { holder: makeHolder(), seq: 6 },
+    });
+
+    expect(result.currentClimb).toEqual(current);
+    expect(result.lastSeq).toBe(4);
+    expect(result.stats).toBe(stats);
+    expect(result.lastStatsSeq).toBe(5);
+    expect(result.lastConnectionSeq).toBe(6);
+  });
+});
+
+describe('SEED_CONNECTION', () => {
+  it('fills the holder when no connection event has landed yet, leaving lastConnectionSeq at 0 so a live push still wins', () => {
+    const seeded = makeHolder({ userId: 'alice' });
+    const afterSeed = boardPresenceReducer(initialBoardPresenceState, { type: 'SEED_CONNECTION', payload: seeded });
+    expect(afterSeed.holder).toEqual(seeded);
+    expect(afterSeed.lastConnectionSeq).toBe(0);
+
+    // A subsequent live push (any seq > 0) overrides the seed.
+    const live = makeHolder({ userId: 'bob' });
+    const afterLive = boardPresenceReducer(afterSeed, {
+      type: 'APPLY_CONNECTION_CHANGED',
+      payload: { holder: live, seq: 1 },
+    });
+    expect(afterLive.holder).toEqual(live);
+    expect(afterLive.lastConnectionSeq).toBe(1);
+  });
+
+  it('seeds a null holder (board free) without advancing lastConnectionSeq', () => {
+    const result = boardPresenceReducer(initialBoardPresenceState, { type: 'SEED_CONNECTION', payload: null });
+    expect(result.holder).toBeNull();
+    expect(result.lastConnectionSeq).toBe(0);
+  });
+
+  it('is a no-op once a live connection event has landed, so a late cold fetch cannot clobber a fresher push', () => {
+    const live = makeHolder({ userId: 'bob' });
+    const state = makeState({ holder: live, lastConnectionSeq: 3 });
+
+    const result = boardPresenceReducer(state, { type: 'SEED_CONNECTION', payload: makeHolder({ userId: 'alice' }) });
+    expect(result).toBe(state);
+  });
+});
+
 describe('RESET', () => {
-  it('returns the initial state, clearing stats and lastStatsSeq', () => {
+  it('returns the initial state, clearing stats, holder and the seq cursors', () => {
     const state = makeState({
       currentClimb: makeClimb({ seq: 9 }),
       history: [makeClimb({ seq: 9 })],
       lastSeq: 9,
       stats: makeStats({ climbsSentCount: 4 }),
       lastStatsSeq: 9,
+      holder: makeHolder({ userId: 'alice' }),
+      lastConnectionSeq: 9,
     });
 
     expect(boardPresenceReducer(state, { type: 'RESET' })).toEqual(initialBoardPresenceState);
@@ -403,6 +527,25 @@ describe('mapBoardPresenceEnvelopeToAction', () => {
     expect(mapBoardPresenceEnvelopeToAction(event)).toEqual({
       type: 'APPLY_STATS_UPDATED',
       payload: { stats, seq: 21 },
+    });
+  });
+
+  it('maps BoardConnectionChanged to APPLY_CONNECTION_CHANGED with the holder + seq', () => {
+    const holder = makeHolder({ userId: 'alice', displayName: 'Alice' });
+    const event: BoardPresenceEvent = { __typename: 'BoardConnectionChanged', holder, seq: 14 };
+
+    expect(mapBoardPresenceEnvelopeToAction(event)).toEqual({
+      type: 'APPLY_CONNECTION_CHANGED',
+      payload: { holder, seq: 14 },
+    });
+  });
+
+  it('maps a BoardConnectionChanged with a null holder (board freed)', () => {
+    const event: BoardPresenceEvent = { __typename: 'BoardConnectionChanged', holder: null, seq: 15 };
+
+    expect(mapBoardPresenceEnvelopeToAction(event)).toEqual({
+      type: 'APPLY_CONNECTION_CHANGED',
+      payload: { holder: null, seq: 15 },
     });
   });
 

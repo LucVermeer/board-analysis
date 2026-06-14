@@ -16,11 +16,13 @@
 
 import { type Client, execute, subscribe } from '@boardsesh/graphql-client';
 import {
+  BOARD_CONNECTION,
   BOARD_NOW_PLAYING,
   BOARD_PRESENCE_STATS,
   BOARD_RECENT_CLIMBS,
   CHOOSE_BOARD_FOR_SERIAL,
   REPORT_BOARD_CLIMB,
+  REPORT_BOARD_DISCONNECT,
   RESOLVE_BOARD_CANDIDATES_FOR_SERIAL,
   RESOLVE_BOARD_FOR_CONFIG,
   RESOLVE_BOARD_FOR_SERIAL,
@@ -28,6 +30,7 @@ import {
 } from '@boardsesh/graphql/operations/board-presence';
 import type { BoardPresenceClient } from '@boardsesh/board-presence-react';
 import type {
+  BoardConnectionHolder,
   BoardPresenceClimb,
   BoardPresenceEvent,
   BoardPresenceStats,
@@ -39,7 +42,9 @@ import type {
 type BoardNowPlayingData = { boardNowPlaying: BoardPresenceEvent };
 type BoardRecentClimbsData = { boardRecentClimbs: BoardPresenceClimb[] };
 type BoardPresenceStatsData = { boardPresenceStats: BoardPresenceStats };
+type BoardConnectionData = { boardConnection: BoardConnectionHolder | null };
 type ReportBoardClimbData = { reportBoardClimb: boolean };
+type ReportBoardDisconnectData = { reportBoardDisconnect: boolean };
 type ResolveBoardForSerialData = { resolveBoardForSerial: ResolvedBoard };
 type ResolveBoardForUuidData = { resolveBoardForUuid: ResolvedBoard };
 type ResolveBoardForConfigData = { resolveBoardForConfig: ResolvedBoard };
@@ -115,6 +120,22 @@ export function createMobileBoardPresenceClient(getClient: () => Client): Mobile
         variables: { boardId, climb, angle },
       });
       return data.reportBoardClimb === true;
+    },
+
+    async fetchConnection(boardId) {
+      const data = await execute<BoardConnectionData>(getClient(), {
+        query: BOARD_CONNECTION,
+        variables: { boardId },
+      });
+      return data.boardConnection ?? null;
+    },
+
+    async reportDisconnect(boardId) {
+      const data = await execute<ReportBoardDisconnectData>(getClient(), {
+        query: REPORT_BOARD_DISCONNECT,
+        variables: { boardId },
+      });
+      return data.reportBoardDisconnect === true;
     },
 
     async resolveBoardForSerial(args) {

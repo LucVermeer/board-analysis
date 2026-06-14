@@ -51,6 +51,11 @@ vi.mock('../../ble/BleLightbulbButton', () => ({
       'data-long-press-enabled': onLongPress ? 'true' : 'false',
     }),
 }));
+// The holder badge self-reads board presence; stub it so the row renders without
+// the presence provider. It renders nothing when the wall is free anyway.
+vi.mock('../BoardConnectionBadge', () => ({
+  BoardConnectionBadge: () => createElement('div', { 'data-board-connection-badge': 'true' }),
+}));
 vi.mock('../../drawer-action-bar/DrawerActionBar', () => ({
   SIZES: { lg: { dim: 48, icon: 28 }, sm: { dim: 44, icon: 22 } },
   ActionButton: ({ iconName }: { iconName?: string }) => createElement('div', { 'data-action': iconName }),

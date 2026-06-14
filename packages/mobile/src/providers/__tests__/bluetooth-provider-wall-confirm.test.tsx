@@ -73,6 +73,7 @@ const presence = vi.hoisted(() => ({
   resolveAndBindBoardByConfig: vi.fn(async (): Promise<TestResolvedBoard | null> => null),
   resolveAndBindBoardByUuid: vi.fn(async (): Promise<TestResolvedBoard | null> => null),
   reportClimbForBoard: vi.fn(async () => true),
+  reportDisconnectForBoard: vi.fn(async () => true),
   showUndoWallChangeSnackbar: vi.fn(),
 }));
 
@@ -113,6 +114,7 @@ vi.mock('../board-presence-provider', () => ({
     resolveAndBindBoardByConfig: presence.resolveAndBindBoardByConfig,
     resolveAndBindBoardByUuid: presence.resolveAndBindBoardByUuid,
     reportClimbForBoard: presence.reportClimbForBoard,
+    reportDisconnectForBoard: presence.reportDisconnectForBoard,
   }),
 }));
 

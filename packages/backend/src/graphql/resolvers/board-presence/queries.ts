@@ -10,7 +10,7 @@ import { db } from '../../../db/client';
 import * as dbSchema from '@boardsesh/db/schema';
 import { pubsub } from '../../../pubsub/index';
 import { applyRateLimit, requireAuthenticated } from '../shared/helpers';
-import { requireActiveBoardById, requireBoardPresenceEnabled } from './shared';
+import { assertValidBoardId, requireActiveBoardById, requireAnonReadableBoard } from './shared';
 import { computeBoardPresenceStats } from './stats';
 
 export const boardPresenceQueries = {
@@ -18,16 +18,21 @@ export const boardPresenceQueries = {
    * Backfill the recent "now on the wall" history for a board from the Redis
    * FIFO (last ~50, 24h window). Used by late joiners before the live
    * `boardNowPlaying` subscription takes over. Empty without Redis.
+   *
+   * Auth-optional: this is the backfill half of the live "now on the wall" feed,
+   * which anonymous viewers are first-class for (same surface as
+   * `boardNowPlaying` / `boardConnection`). Rate-limited and bounded to an
+   * existing board; reads only the shared live feed, never private data.
    */
   boardRecentClimbs: async (
     _: unknown,
     { boardId }: { boardId: number },
     ctx: ConnectionContext,
   ): Promise<BoardPresenceClimb[]> => {
-    requireBoardPresenceEnabled();
-    requireAuthenticated(ctx);
     await applyRateLimit(ctx, 60, 'boardRecentClimbs');
     await requireActiveBoardById(boardId);
+    // Anonymous viewers only backfill public / system-shared boards.
+    await requireAnonReadableBoard(boardId, ctx.userId);
     return pubsub.getRecentBoardClimbs(String(boardId));
   },
 
@@ -53,7 +58,6 @@ export const boardPresenceQueries = {
     { boardId, limit, before }: { boardId: number; limit?: number | null; before?: string | null },
     ctx: ConnectionContext,
   ): Promise<BoardPresenceClimb[]> => {
-    requireBoardPresenceEnabled();
     requireAuthenticated(ctx);
     await applyRateLimit(ctx, 60, 'boardHistory');
     await requireActiveBoardById(boardId);
@@ -109,7 +113,6 @@ export const boardPresenceQueries = {
     { boardId }: { boardId: number },
     ctx: ConnectionContext,
   ): Promise<BoardPresenceStats> => {
-    requireBoardPresenceEnabled();
     requireAuthenticated(ctx);
     await applyRateLimit(ctx, 30, 'boardPresenceStats');
     const board = await requireActiveBoardById(boardId);
@@ -129,8 +132,10 @@ export const boardPresenceQueries = {
     { boardId }: { boardId: number },
     ctx: ConnectionContext,
   ): Promise<BoardConnectionHolder | null> => {
-    requireBoardPresenceEnabled();
     await applyRateLimit(ctx, 30, 'boardConnection');
+    assertValidBoardId(boardId);
+    // Anonymous viewers only read the holder of public / system-shared boards.
+    await requireAnonReadableBoard(boardId, ctx.userId);
     const emitterId = await pubsub.getBoardWriter(String(boardId));
     if (emitterId === null) return null;
     const recent = await pubsub.getRecentBoardClimbs(String(boardId));

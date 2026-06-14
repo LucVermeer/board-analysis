@@ -19,6 +19,7 @@ import {
 import { generateUniqueSlug } from '../social/boards';
 import { logger } from '../../../utils/logger';
 import { pubsub } from '../../../pubsub/index';
+import { roomManager } from '../../../services/room-manager';
 import {
   assertValidBoardId,
   candidateToActiveBoard,
@@ -32,7 +33,6 @@ import {
   normalizeSetIds,
   rememberBoardForSerial,
   requireActiveBoardById,
-  requireBoardPresenceEnabled,
   resolveSharedBoardForConfig,
   serialAlreadyBoundError,
   throwIfDuplicateBoardSerial,
@@ -232,7 +232,6 @@ export const boardPresenceMutations = {
     }: { serial: string; boardType: string; layoutId: number; sizeId: number; setIds: string },
     ctx: ConnectionContext,
   ): Promise<ResolvedBoard> => {
-    requireBoardPresenceEnabled();
     requireAuthenticated(ctx);
     await applyRateLimit(ctx, 30, 'resolveBoardForSerial');
 
@@ -270,7 +269,6 @@ export const boardPresenceMutations = {
     }: { serial: string; boardType: string; layoutId: number; sizeId: number; setIds: string },
     ctx: ConnectionContext,
   ): Promise<{ board: ResolvedBoard | null; candidates: BoardCandidatePayload[] | null }> => {
-    requireBoardPresenceEnabled();
     requireAuthenticated(ctx);
     await applyRateLimit(ctx, 30, 'resolveBoardCandidatesForSerial');
 
@@ -304,7 +302,6 @@ export const boardPresenceMutations = {
     { boardId, serial }: { boardId: number; serial: string },
     ctx: ConnectionContext,
   ): Promise<ResolvedBoard> => {
-    requireBoardPresenceEnabled();
     requireAuthenticated(ctx);
     await applyRateLimit(ctx, 30, 'chooseBoardForSerial');
 
@@ -326,23 +323,27 @@ export const boardPresenceMutations = {
    * Resolve the board-presence feed for a selected named board. Unlike the
    * per-config fallback, this binds to the actual UserBoard row so durable board
    * stats and live presence share the same board_id before any BLE connection.
+   *
+   * Auth-optional: board presence is universal, so an anonymous viewer can bind
+   * a public board and become a member (keyed by `conn:{connectionId}`). Owned
+   * boards stay reachable only to their logged-in owner (see
+   * findReachableActiveBoardByUuid).
    */
   resolveBoardForUuid: async (
     _: unknown,
     { boardUuid }: { boardUuid: string },
     ctx: ConnectionContext,
   ): Promise<ResolvedBoard> => {
-    requireBoardPresenceEnabled();
-    requireAuthenticated(ctx);
     await applyRateLimit(ctx, 30, 'resolveBoardForUuid');
 
+    const emitterId = ctx.userId ?? `conn:${ctx.connectionId}`;
     const validBoardUuid = validateInput(UUIDSchema, boardUuid, 'boardUuid');
-    const board = await findReachableActiveBoardByUuid(ctx.userId!, validBoardUuid);
+    const board = await findReachableActiveBoardByUuid(ctx.userId ?? null, validBoardUuid);
     if (!board) {
       throw new GraphQLError('Board not found', { extensions: { code: 'NOT_FOUND' } });
     }
     const resolved = toResolvedBoard(board);
-    await pubsub.stampBoardMembership(String(resolved.boardId), ctx.userId!);
+    await pubsub.stampBoardMembership(String(resolved.boardId), emitterId);
     return resolved;
   },
 
@@ -352,19 +353,23 @@ export const boardPresenceMutations = {
    * every caller with the same board config converges on the same hidden,
    * system-owned board_id. Aurora callers should continue using the serial
    * resolver above.
+   *
+   * Auth-optional: the per-config board is a shared, system-owned channel, so an
+   * anonymous caller can converge on it and be stamped as a member (keyed by
+   * `conn:{connectionId}`). It only ever reads/binds an existing shared board —
+   * never creates or owns a user board.
    */
   resolveBoardForConfig: async (
     _: unknown,
     { boardType, layoutId, sizeId, setIds }: { boardType: string; layoutId: number; sizeId: number; setIds: string },
     ctx: ConnectionContext,
   ): Promise<ResolvedBoard> => {
-    requireBoardPresenceEnabled();
-    requireAuthenticated(ctx);
     await applyRateLimit(ctx, 30, 'resolveBoardForConfig');
 
+    const emitterId = ctx.userId ?? `conn:${ctx.connectionId}`;
     const config = validateInput(BoardPresenceConfigInputSchema, { boardType, layoutId, sizeId, setIds }, 'input');
     const resolved = await resolveSharedBoardForConfig(config.boardType, config.layoutId, config.sizeId, config.setIds);
-    await pubsub.stampBoardMembership(String(resolved.boardId), ctx.userId!);
+    await pubsub.stampBoardMembership(String(resolved.boardId), emitterId);
     return resolved;
   },
 
@@ -382,7 +387,6 @@ export const boardPresenceMutations = {
     { boardId, climb, angle }: { boardId: number; climb: ClimbQueueItemInput; angle?: number | null },
     ctx: ConnectionContext,
   ): Promise<boolean> => {
-    requireBoardPresenceEnabled();
     await applyRateLimit(ctx, 60, 'reportBoardClimb');
     const board = await requireActiveBoardById(boardId);
 
@@ -490,6 +494,9 @@ export const boardPresenceMutations = {
     // hand-off (the holder changed), not on every frame. Non-fatal.
     try {
       const previousHolder = await pubsub.setBoardWriter(String(boardId), emitterId);
+      // Record the hold on this connection so the WS-close backstop can free the
+      // wall if the holder crashes without an explicit reportBoardDisconnect.
+      roomManager.noteBoardWriter(ctx.connectionId, boardId, emitterId);
       if (previousHolder !== emitterId) {
         pubsub.publishBoardPresenceEvent(String(boardId), {
           __typename: 'BoardConnectionChanged',
@@ -560,8 +567,8 @@ export const boardPresenceMutations = {
     { boardId }: { boardId: number },
     ctx: ConnectionContext,
   ): Promise<boolean> => {
-    requireBoardPresenceEnabled();
     await applyRateLimit(ctx, 60, 'reportBoardDisconnect');
+    assertValidBoardId(boardId);
     const emitterId = ctx.userId ?? `conn:${ctx.connectionId}`;
     const cleared = await pubsub.clearBoardWriterIf(String(boardId), emitterId);
     if (cleared) {

@@ -1,6 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { act, render, renderHook, waitFor } from '@testing-library/react';
-import type { BoardPresenceClimb, BoardPresenceEvent, BoardPresenceStats } from '@boardsesh/shared-schema';
+import type {
+  BoardConnectionHolder,
+  BoardPresenceClimb,
+  BoardPresenceEvent,
+  BoardPresenceStats,
+} from '@boardsesh/shared-schema';
 import { useBoardPresence } from '../use-board-presence';
 import {
   BoardPresenceProvider,
@@ -45,6 +50,20 @@ const statsEvent = (seq: number, stats: Partial<BoardPresenceStats>): BoardPrese
   seq,
 });
 
+const holder = (overrides: Partial<BoardConnectionHolder> = {}): BoardConnectionHolder => ({
+  userId: 'user-1',
+  displayName: 'Climber',
+  avatarUrl: null,
+  lastSentAt: null,
+  ...overrides,
+});
+
+const connectionEvent = (seq: number, nextHolder: BoardConnectionHolder | null): BoardPresenceEvent => ({
+  __typename: 'BoardConnectionChanged',
+  holder: nextHolder,
+  seq,
+});
+
 type Deferred<T> = { promise: Promise<T>; resolve: (value: T) => void };
 function deferred<T>(): Deferred<T> {
   let resolve: (value: T) => void = () => {};
@@ -67,6 +86,7 @@ function makeClient() {
 
   const recentByBoard = new Map<number, Deferred<BoardPresenceClimb[]>>();
   const statsByBoard = new Map<number, Deferred<BoardPresenceStats>>();
+  const connectionByBoard = new Map<number, Deferred<BoardConnectionHolder | null>>();
   const recentFor = (boardId: number) => {
     const existing = recentByBoard.get(boardId);
     if (existing) {
@@ -85,12 +105,23 @@ function makeClient() {
     statsByBoard.set(boardId, next);
     return next;
   };
+  const connectionFor = (boardId: number) => {
+    const existing = connectionByBoard.get(boardId);
+    if (existing) {
+      return existing;
+    }
+    const next = deferred<BoardConnectionHolder | null>();
+    connectionByBoard.set(boardId, next);
+    return next;
+  };
 
   const reportClimb = vi.fn(async () => true);
+  const reportDisconnect = vi.fn(async () => true);
   // Captured separately so assertions reference the bound mock directly
   // (referencing `client.fetchX` trips the unbound-method lint).
   const fetchRecentClimbs = vi.fn((boardId: number) => recentFor(boardId).promise);
   const fetchStats = vi.fn((boardId: number) => statsFor(boardId).promise);
+  const fetchConnection = vi.fn((boardId: number) => connectionFor(boardId).promise);
   const subscribeNowPlaying = vi.fn(
     (
       boardId: number,
@@ -110,7 +141,9 @@ function makeClient() {
     subscribeNowPlaying,
     fetchRecentClimbs,
     fetchStats,
+    fetchConnection,
     reportClimb,
+    reportDisconnect,
     resolveBoardForSerial: vi.fn(),
   };
 
@@ -118,8 +151,10 @@ function makeClient() {
     client,
     unsubscribe,
     reportClimb,
+    reportDisconnect,
     fetchRecentClimbs,
     fetchStats,
+    fetchConnection,
     subscribeNowPlaying,
     emit: (event: BoardPresenceEvent) => onEvent?.(event),
     emitError: (err: unknown) => onError?.(err),
@@ -133,6 +168,11 @@ function makeClient() {
     resolveStats: (boardId: number, stats: BoardPresenceStats) => {
       const target = statsFor(boardId);
       target.resolve(stats);
+      return target.promise;
+    },
+    resolveConnection: (boardId: number, nextHolder: BoardConnectionHolder | null) => {
+      const target = connectionFor(boardId);
+      target.resolve(nextHolder);
       return target.promise;
     },
   };
@@ -406,6 +446,85 @@ describe('useBoardPresence — actions', () => {
     expect(reportResult.undoTarget?.climbUuid).toBe('restore-me');
     expect(result.current.undoTarget?.climbUuid).toBe('restore-me');
     expect(result.current.getUndoTarget()?.climbUuid).toBe('restore-me');
+  });
+
+  it('reportDisconnect forwards the active boardId to the client', async () => {
+    const harness = makeClient();
+    const { result } = renderHook(() => useBoardPresence(3, harness.client));
+
+    let accepted = false;
+    await act(async () => {
+      accepted = await result.current.reportDisconnect();
+    });
+
+    expect(accepted).toBe(true);
+    expect(harness.reportDisconnect).toHaveBeenCalledWith(3);
+  });
+
+  it('reportDisconnect resolves false when inert', async () => {
+    const { result } = renderHook(() => useBoardPresence(null, null));
+    await expect(result.current.reportDisconnect()).resolves.toBe(false);
+  });
+});
+
+describe('useBoardPresence — connection holder', () => {
+  it('seeds the holder from fetchConnection for a late joiner', async () => {
+    const harness = makeClient();
+    const { result } = renderHook(() => useBoardPresence(1, harness.client));
+    expect(harness.fetchConnection).toHaveBeenCalledWith(1);
+    expect(result.current.holder).toBeNull();
+
+    await act(async () => {
+      await harness.resolveConnection(1, holder({ userId: 'alice', displayName: 'Alice' }));
+    });
+    expect(result.current.holder?.userId).toBe('alice');
+    expect(result.current.holder?.displayName).toBe('Alice');
+  });
+
+  it('updates the holder live from a BoardConnectionChanged push', async () => {
+    const harness = makeClient();
+    const { result } = renderHook(() => useBoardPresence(1, harness.client));
+
+    act(() => {
+      harness.emit(connectionEvent(2, holder({ userId: 'bob', displayName: 'Bob' })));
+    });
+    expect(result.current.holder?.userId).toBe('bob');
+
+    // A later push frees the board.
+    act(() => {
+      harness.emit(connectionEvent(3, null));
+    });
+    expect(result.current.holder).toBeNull();
+  });
+
+  it('a live push that arrives before the seed wins; the late seed cannot clobber it', async () => {
+    const harness = makeClient();
+    const { result } = renderHook(() => useBoardPresence(1, harness.client));
+
+    act(() => {
+      harness.emit(connectionEvent(4, holder({ userId: 'live' })));
+    });
+    expect(result.current.holder?.userId).toBe('live');
+
+    await act(async () => {
+      await harness.resolveConnection(1, holder({ userId: 'stale-seed' }));
+    });
+    expect(result.current.holder?.userId).toBe('live');
+  });
+
+  it('resets the holder on board switch', async () => {
+    const harness = makeClient();
+    const { result, rerender } = renderHook(({ boardId }) => useBoardPresence(boardId, harness.client), {
+      initialProps: { boardId: 1 },
+    });
+
+    act(() => {
+      harness.emit(connectionEvent(2, holder({ userId: 'board1-holder' })));
+    });
+    expect(result.current.holder?.userId).toBe('board1-holder');
+
+    rerender({ boardId: 2 });
+    expect(result.current.holder).toBeNull();
   });
 });
 

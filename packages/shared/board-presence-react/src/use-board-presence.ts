@@ -21,18 +21,25 @@ import {
   mapBoardPresenceEnvelopeToAction,
   type BoardPresenceState,
 } from '@boardsesh/board-presence';
-import type { BoardPresenceClimb, BoardPresenceStats, ClimbQueueItemInput } from '@boardsesh/shared-schema';
+import type {
+  BoardConnectionHolder,
+  BoardPresenceClimb,
+  BoardPresenceStats,
+  ClimbQueueItemInput,
+} from '@boardsesh/shared-schema';
 import type { BoardPresenceClient } from './types';
 
 export type UseBoardPresenceResult = {
   currentClimb: BoardPresenceCurrentState['currentClimb'];
   previousClimb: BoardPresenceCurrentState['previousClimb'];
   undoTarget: BoardPresenceCurrentState['undoTarget'];
+  holder: BoardPresenceCurrentState['holder'];
   history: BoardPresenceFeedState['history'];
   stats: BoardPresenceFeedState['stats'];
   isLive: BoardPresenceCurrentState['isLive'];
   reportClimb: BoardPresenceActions['reportClimb'];
   reportClimbWithUndoTarget: BoardPresenceActions['reportClimbWithUndoTarget'];
+  reportDisconnect: BoardPresenceActions['reportDisconnect'];
   getUndoTarget: BoardPresenceActions['getUndoTarget'];
 };
 
@@ -50,6 +57,12 @@ export type BoardPresenceCurrentState = {
    * climb after the BLE write succeeds.
    */
   undoTarget: BoardPresenceClimb | null;
+  /**
+   * Who is currently connected to (and writing to) the board, or `null` when the
+   * board is free. Distinct from `currentClimb`: the holder is the live
+   * connection owner, the climb is whatever LEDs are lit.
+   */
+  holder: BoardConnectionHolder | null;
   /** True while a live subscription is attached for the active board. */
   isLive: boolean;
 };
@@ -69,6 +82,12 @@ export type BoardPresenceActions = {
    * not round-tripped yet.
    */
   reportClimbWithUndoTarget: (climb: ClimbQueueItemInput, angle: number | null) => Promise<BoardPresenceReportResult>;
+  /**
+   * Release this client's hold on the active board (e.g. on BLE disconnect).
+   * Resolves to the accepted flag; resolves `false` when inert or when the
+   * injected client does not implement `reportDisconnect`.
+   */
+  reportDisconnect: () => Promise<boolean>;
   /** Latest captured undo target for action-only consumers that need a ref-like read. */
   getUndoTarget: () => BoardPresenceClimb | null;
 };
@@ -165,6 +184,22 @@ export function useBoardPresence(boardId: number | null, client: BoardPresenceCl
         // Stats are best-effort; absence renders as "no stats yet".
       });
 
+    // 4) Seed the current connection holder for a late joiner. `fetchConnection`
+    //    is optional — `?.` skips clients that don't implement it (returns
+    //    undefined; we skip). Same unmount/board-switch guard as the seeds above.
+    //    SEED_CONNECTION is a no-op once any live BoardConnectionChanged has
+    //    landed, so it can't clobber a fresher holder.
+    void client
+      .fetchConnection?.(boardId)
+      .then((holder) => {
+        if (isActive && boardIdRef.current === subscribedBoardId) {
+          dispatch({ type: 'SEED_CONNECTION', payload: holder });
+        }
+      })
+      .catch(() => {
+        // Holder seed is best-effort; absence renders as "board free" until a push.
+      });
+
     return () => {
       isActive = false;
       setIsLive(false);
@@ -203,27 +238,40 @@ export function useBoardPresence(boardId: number | null, client: BoardPresenceCl
 
   const getUndoTarget = useCallback((): BoardPresenceClimb | null => undoTargetRef.current, []);
 
+  const reportDisconnect = useCallback(async (): Promise<boolean> => {
+    const activeBoardId = boardIdRef.current;
+    const activeClient = clientRef.current;
+    if (activeBoardId === null || activeClient?.reportDisconnect == null) {
+      return false;
+    }
+    return activeClient.reportDisconnect(activeBoardId);
+  }, []);
+
   return useMemo<UseBoardPresenceResult>(
     () => ({
       currentClimb: state.currentClimb,
       previousClimb: state.previousClimb,
       undoTarget,
+      holder: state.holder,
       history: state.history,
       stats: state.stats,
       isLive,
       reportClimb,
       reportClimbWithUndoTarget,
+      reportDisconnect,
       getUndoTarget,
     }),
     [
       state.currentClimb,
       state.previousClimb,
       undoTarget,
+      state.holder,
       state.history,
       state.stats,
       isLive,
       reportClimb,
       reportClimbWithUndoTarget,
+      reportDisconnect,
       getUndoTarget,
     ],
   );

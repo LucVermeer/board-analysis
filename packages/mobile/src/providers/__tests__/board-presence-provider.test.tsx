@@ -4,7 +4,6 @@ import { render, act, waitFor } from '@testing-library/react';
 import { createElement, useEffect, type ReactNode } from 'react';
 import type { ClimbQueueItemInput, ResolvedBoard } from '@boardsesh/shared-schema';
 
-const flags = vi.hoisted(() => ({ value: false as boolean }));
 const transport = vi.hoisted(() => ({
   resolveBoardForSerial: vi.fn(
     async (_args: unknown) => ({ boardId: 42, boardName: 'Garage Wall' }) as unknown as ResolvedBoard,
@@ -23,8 +22,11 @@ const transport = vi.hoisted(() => ({
 }));
 const sharedProvider = vi.hoisted(() => ({ lastBoardId: undefined as number | null | undefined }));
 
+// Board presence is always-on (the flag was removed); the provider no longer
+// reads useFeatureFlag, but stub the module so nothing transitively loads the
+// real PostHog-backed provider in jsdom.
 vi.mock('../feature-flags-provider', () => ({
-  useFeatureFlag: () => flags.value,
+  useFeatureFlag: () => undefined,
 }));
 
 vi.mock('../../lib/board-presence/board-presence-client', () => ({
@@ -75,7 +77,6 @@ function renderProvider() {
 
 describe('MobileBoardPresenceProvider', () => {
   beforeEach(() => {
-    flags.value = false;
     transport.resolveBoardForSerial.mockClear();
     transport.resolveBoardForSerial.mockResolvedValue({
       boardId: 42,
@@ -107,27 +108,19 @@ describe('MobileBoardPresenceProvider', () => {
     capturedControls = null;
   });
 
-  it('is inert when the flag is off: null boardId, resolve no-ops', async () => {
-    renderProvider();
-    expect(sharedProvider.lastBoardId).toBeNull();
+  it('falls back to inert disabled controls when used outside the provider', () => {
+    // No MobileBoardPresenceProvider in the tree → DISABLED_CONTROLS.
+    render(createElement(Probe));
     expect(capturedControls?.enabled).toBe(false);
-
-    await act(async () => {
-      const resolved = await capturedControls?.resolveAndBindBoard({
-        serial: 'SERIAL-1',
-        boardType: 'kilter',
-        layoutId: 1,
-        sizeId: 10,
-        setIds: '1,2',
-      });
-      expect(resolved).toBeNull();
-    });
-    expect(transport.resolveBoardCandidatesForSerial).not.toHaveBeenCalled();
-    expect(sharedProvider.lastBoardId).toBeNull();
   });
 
-  it('resolves+binds the board and feeds its id to the shared provider when the flag is on', async () => {
-    flags.value = true;
+  it('starts with a null boardId and enabled controls until a board is bound', () => {
+    renderProvider();
+    expect(sharedProvider.lastBoardId).toBeNull();
+    expect(capturedControls?.enabled).toBe(true);
+  });
+
+  it('resolves+binds the board and feeds its id to the shared provider', async () => {
     renderProvider();
     expect(capturedControls?.enabled).toBe(true);
 
@@ -155,7 +148,6 @@ describe('MobileBoardPresenceProvider', () => {
   });
 
   it('does not re-resolve an unchanged serial once bound', async () => {
-    flags.value = true;
     renderProvider();
 
     const args = { serial: 'SERIAL-1', boardType: 'kilter', layoutId: 1, sizeId: 10, setIds: '1,2' };
@@ -169,7 +161,6 @@ describe('MobileBoardPresenceProvider', () => {
   });
 
   it('does not bind a board when the serial maps to several candidates (awaits the pick)', async () => {
-    flags.value = true;
     transport.resolveBoardCandidatesForSerial.mockResolvedValue({
       board: null,
       candidates: [
@@ -194,7 +185,6 @@ describe('MobileBoardPresenceProvider', () => {
   });
 
   it('resolves+binds by config when no serial is available', async () => {
-    flags.value = true;
     renderProvider();
 
     await act(async () => {
@@ -219,7 +209,6 @@ describe('MobileBoardPresenceProvider', () => {
   });
 
   it('resolves+binds by board uuid for selected named boards', async () => {
-    flags.value = true;
     renderProvider();
 
     await act(async () => {
@@ -238,7 +227,6 @@ describe('MobileBoardPresenceProvider', () => {
   });
 
   it('does not start a second uuid resolve while the same uuid is pending', async () => {
-    flags.value = true;
     let resolveBoard: ((value: ResolvedBoard) => void) | null = null;
     transport.resolveBoardForUuid.mockImplementationOnce(
       () =>
@@ -275,7 +263,6 @@ describe('MobileBoardPresenceProvider', () => {
   });
 
   it('does not re-resolve an unchanged config once bound', async () => {
-    flags.value = true;
     renderProvider();
 
     const args = {
@@ -299,7 +286,6 @@ describe('MobileBoardPresenceProvider', () => {
   });
 
   it('ignores stale config resolve results after a newer selected config resolves', async () => {
-    flags.value = true;
     let resolveFirst: ((value: ResolvedBoard) => void) | null = null;
     let resolveSecond: ((value: ResolvedBoard) => void) | null = null;
     transport.resolveBoardForConfig.mockImplementation(
@@ -351,7 +337,6 @@ describe('MobileBoardPresenceProvider', () => {
   });
 
   it('clears the bound board while a different uuid resolve is pending', async () => {
-    flags.value = true;
     let resolveNext: ((value: ResolvedBoard) => void) | null = null;
     renderProvider();
 
@@ -389,7 +374,6 @@ describe('MobileBoardPresenceProvider', () => {
   });
 
   it('ignores stale serial resolve results after a newer uuid resolve wins', async () => {
-    flags.value = true;
     let resolveSerial: ((value: ResolvedBoard) => void) | null = null;
     transport.resolveBoardForSerial.mockImplementationOnce(
       () =>
@@ -427,7 +411,6 @@ describe('MobileBoardPresenceProvider', () => {
   });
 
   it('returns null instead of leaking a rejected serial resolve', async () => {
-    flags.value = true;
     transport.resolveBoardCandidatesForSerial.mockRejectedValue(new Error('backend disabled'));
     renderProvider();
 
@@ -446,7 +429,6 @@ describe('MobileBoardPresenceProvider', () => {
   });
 
   it('reports directly to a resolved board id', async () => {
-    flags.value = true;
     renderProvider();
 
     await act(async () => {

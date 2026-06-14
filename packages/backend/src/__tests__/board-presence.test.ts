@@ -7,30 +7,23 @@ import type {
   ConnectionContext,
   BoardPresenceEvent,
   BoardClimbSet,
+  BoardConnectionChanged,
   BoardStatsUpdated,
   BoardPresenceClimb,
   ClimbQueueItemInput,
 } from '@boardsesh/shared-schema';
 import { db } from '../db/client';
 import { pubsub } from '../pubsub';
+import { redisClientManager } from '../redis/client';
+import { roomManager } from '../services/room-manager';
 import { boardPresenceMutations } from '../graphql/resolvers/board-presence/mutations';
 import { boardPresenceQueries } from '../graphql/resolvers/board-presence/queries';
 import { boardPresenceSubscriptions } from '../graphql/resolvers/board-presence/subscription';
 import { tickMutations } from '../graphql/resolvers/ticks/mutations';
 
-// Board presence is env-gated. Every test in this file exercises the enabled
-// path, so flip it on for the suite.
-const ORIGINAL_FLAG = process.env.BOARD_PRESENCE_ENABLED;
-beforeAll(() => {
-  process.env.BOARD_PRESENCE_ENABLED = 'true';
-});
-afterAll(() => {
-  if (ORIGINAL_FLAG === undefined) {
-    delete process.env.BOARD_PRESENCE_ENABLED;
-  } else {
-    process.env.BOARD_PRESENCE_ENABLED = ORIGINAL_FLAG;
-  }
-});
+// Board presence is always-on (the BOARD_PRESENCE_ENABLED env gate and the
+// PostHog flag were removed when the feature went GA), so the suite needs no
+// flag setup.
 
 const TEST_USER_ID = 'board-presence-test-user';
 const SECOND_USER_ID = 'board-presence-second-user';
@@ -294,19 +287,6 @@ describe('board-presence resolvers', () => {
   afterEach(async () => {
     await cleanup();
     vi.restoreAllMocks();
-  });
-
-  describe('feature gate', () => {
-    it('throws when BOARD_PRESENCE_ENABLED is not "true"', async () => {
-      process.env.BOARD_PRESENCE_ENABLED = 'false';
-      try {
-        await expect(boardPresenceQueries.boardPresenceStats(undefined, { boardId: 1 }, authCtx())).rejects.toThrow(
-          'Board presence is not enabled',
-        );
-      } finally {
-        process.env.BOARD_PRESENCE_ENABLED = 'true';
-      }
-    });
   });
 
   describe('resolveBoardForSerial', () => {
@@ -790,8 +770,12 @@ describe('board-presence resolvers', () => {
       );
       expect(ok).toBe(true);
 
-      expect(received).toHaveLength(1);
-      const event = received[0] as BoardClimbSet;
+      // The first send also hands off the connection holder, so the feed carries
+      // a BoardConnectionChanged alongside the BoardClimbSet — assert on the
+      // climb event specifically.
+      const climbSets = received.filter((event): event is BoardClimbSet => event.__typename === 'BoardClimbSet');
+      expect(climbSets).toHaveLength(1);
+      const event = climbSets[0];
       expect(event.__typename).toBe('BoardClimbSet');
       expect(event.climb.sentByDisplayName).toBe(SENDER_DISPLAY_NAME);
       expect(event.climb.sentByAvatarUrl).toBe(SENDER_AVATAR_URL);
@@ -851,14 +835,72 @@ describe('board-presence resolvers', () => {
       ).rejects.toThrow('Not connected to this board');
     });
 
-    it('requires authentication', async () => {
+    it('accepts an anonymous report once the anon emitter is a board member', async () => {
+      // Board presence is auth-optional: an anonymous client resolves a board
+      // (stamping its conn:-keyed membership) and may then report. Identity is
+      // null (no profile to derive from) — clients render a "?".
+      const anonCtx = authCtx({ isAuthenticated: false, userId: undefined });
+      const resolved = await boardPresenceMutations.resolveBoardForConfig(
+        undefined,
+        { boardType: 'kilter', layoutId: 1, sizeId: 10, setIds: '1,2' },
+        anonCtx,
+      );
+      const received: BoardPresenceEvent[] = [];
+      const unsubscribe = await pubsub.subscribeBoardPresence(String(resolved.boardId), (event) =>
+        received.push(event),
+      );
+
+      const ok = await boardPresenceMutations.reportBoardClimb(
+        undefined,
+        { boardId: resolved.boardId, climb: makeQueueItemInput(), angle: 40 },
+        anonCtx,
+      );
+      expect(ok).toBe(true);
+
+      const climbSet = received.find((event): event is BoardClimbSet => event.__typename === 'BoardClimbSet');
+      expect(climbSet).toBeDefined();
+      expect(climbSet!.climb.climbUuid).toBe(TEST_CLIMB_UUID);
+      // Anonymous emitter → null attribution (no user profile).
+      expect(climbSet!.climb.sentByDisplayName).toBeNull();
+      expect(climbSet!.climb.sentByAvatarUrl).toBeNull();
+      unsubscribe();
+    });
+
+    it('rejects an anonymous report when the anon emitter never resolved the board', async () => {
+      // A different anon connection (no membership stamp) can't inject onto a
+      // board it never resolved, even if it guesses the id.
+      const boardId = await makeBoard();
       await expect(
         boardPresenceMutations.reportBoardClimb(
           undefined,
-          { boardId: 1, climb: makeQueueItemInput(), angle: 40 },
+          { boardId, climb: makeQueueItemInput(), angle: 40 },
           authCtx({ isAuthenticated: false, userId: undefined }),
         ),
-      ).rejects.toThrow('Authentication required');
+      ).rejects.toThrow('Not connected to this board');
+    });
+
+    it('broadcasts BoardConnectionChanged carrying the holder identity on the first send', async () => {
+      // The first send to a free board always hands the wall off (previous
+      // holder was null), so it broadcasts the new holder with the server-derived
+      // identity — regardless of Redis vs local-only mode.
+      const boardId = await makeBoard();
+      const received: BoardPresenceEvent[] = [];
+      const unsubscribe = await pubsub.subscribeBoardPresence(String(boardId), (event) => received.push(event));
+
+      await boardPresenceMutations.reportBoardClimb(
+        undefined,
+        { boardId, climb: makeQueueItemInput(), angle: 40 },
+        authCtx(),
+      );
+
+      const holderChange = received.find(
+        (event): event is BoardConnectionChanged => event.__typename === 'BoardConnectionChanged',
+      );
+      expect(holderChange).toBeDefined();
+      expect(holderChange!.holder?.userId).toBe(TEST_USER_ID);
+      expect(holderChange!.holder?.displayName).toBe(SENDER_DISPLAY_NAME);
+      expect(holderChange!.holder?.lastSentAt).toBeTruthy();
+      unsubscribe();
     });
   });
 
@@ -975,19 +1017,6 @@ describe('board-presence resolvers', () => {
 
       await db.execute(sql`DELETE FROM boardsesh_ticks WHERE user_id = ${TEST_USER_ID}`);
       await tickMutations.saveTick(undefined, { input: baseTickInput({ boardId: tensionBoard.boardId }) }, authCtx());
-      expect(await latestTickBoardId()).toBe(ownBoardId);
-    });
-
-    it('ignores explicit boardId while board presence is disabled', async () => {
-      const sharedBoardId = await createSecondUserSharedBoard();
-      const ownBoardId = await createOwnConfigBoard();
-      process.env.BOARD_PRESENCE_ENABLED = 'false';
-      try {
-        await tickMutations.saveTick(undefined, { input: baseTickInput({ boardId: sharedBoardId }) }, authCtx());
-      } finally {
-        process.env.BOARD_PRESENCE_ENABLED = 'true';
-      }
-
       expect(await latestTickBoardId()).toBe(ownBoardId);
     });
 
@@ -1370,5 +1399,238 @@ describe('board-presence durable history (board_climb_events)', () => {
     // Number(' ') is 0, so without the trim guard this returned an empty page.
     const page = await boardPresenceQueries.boardHistory(undefined, { boardId, before: '   ' }, authCtx());
     expect(page.map((row) => row.seq)).toEqual([2, 1]);
+  });
+});
+
+// ============================================================
+// Connection holder ("who's connected" / "writing to the wall")
+// Appended at the END so it never perturbs the timing-sensitive concurrent
+// config-create test earlier in the file.
+// ============================================================
+describe('board-presence connection holder', () => {
+  beforeEach(async () => {
+    await cleanup();
+    await seedUser();
+    await seedCatalogClimb();
+  });
+
+  afterEach(async () => {
+    await cleanup();
+    vi.restoreAllMocks();
+  });
+
+  let holderSerialCounter = 0;
+  async function makeHolderBoard(ctx: ConnectionContext = authCtx()): Promise<number> {
+    const serial = `HOLD-${Date.now().toString(36)}-${holderSerialCounter++}`;
+    const resolved = await boardPresenceMutations.resolveBoardForSerial(
+      undefined,
+      { serial, boardType: 'kilter', layoutId: 1, sizeId: 10, setIds: '1,2' },
+      ctx,
+    );
+    return resolved.boardId;
+  }
+
+  // Anonymous read-access gate (pure DB reachability check — no Redis needed).
+  describe('anonymous read access', () => {
+    const anon = () => authCtx({ isAuthenticated: false, userId: undefined });
+
+    async function makePrivateBoard(): Promise<number> {
+      const slug = `private-${Date.now().toString(36)}-${holderSerialCounter++}`;
+      const [row] = await db.execute(sql`
+        INSERT INTO user_boards (uuid, slug, owner_id, board_type, layout_id, size_id, set_ids, name, serial_number, is_public)
+        VALUES (${`uuid-${slug}`}, ${slug}, ${TEST_USER_ID}, 'kilter', 1, 10, '1,2', 'Private Wall', null, false)
+        RETURNING id
+      `);
+      return Number((row as { id: number }).id);
+    }
+
+    it("hides a private board's live feed from anonymous viewers but not logged-in ones", async () => {
+      const boardId = await makePrivateBoard();
+
+      await expect(boardPresenceQueries.boardConnection(undefined, { boardId }, anon())).rejects.toThrow(
+        'Board not found',
+      );
+      await expect(boardPresenceQueries.boardRecentClimbs(undefined, { boardId }, anon())).rejects.toThrow(
+        'Board not found',
+      );
+      const iterator = boardPresenceSubscriptions.boardNowPlaying.subscribe(undefined, { boardId }, anon());
+      await expect(iterator.next()).rejects.toThrow('Board not found');
+      await iterator.return?.(undefined);
+
+      // A logged-in viewer still reads it (the feed is membership-free for them).
+      await expect(boardPresenceQueries.boardConnection(undefined, { boardId }, authCtx())).resolves.toBeNull();
+    });
+
+    it('lets anonymous viewers read a shared system per-config board', async () => {
+      const resolved = await boardPresenceMutations.resolveBoardForConfig(
+        undefined,
+        { boardType: 'kilter', layoutId: 1, sizeId: 10, setIds: '1,2' },
+        anon(),
+      );
+      await expect(
+        boardPresenceQueries.boardConnection(undefined, { boardId: resolved.boardId }, anon()),
+      ).resolves.toBeNull();
+      await expect(
+        boardPresenceQueries.boardRecentClimbs(undefined, { boardId: resolved.boardId }, anon()),
+      ).resolves.toEqual([]);
+    });
+  });
+
+  // Per-connection backstop bookkeeping is pure in-memory roomManager state, so
+  // these run without Redis.
+  describe('crash backstop bookkeeping', () => {
+    it('records the holding connection and is a safe no-op when nothing was held', async () => {
+      const connectionId = `conn-backstop-${Date.now()}`;
+      await roomManager.registerClient(connectionId);
+      try {
+        // A disconnect with no recorded hold must not throw or broadcast.
+        await expect(roomManager.clearBoardWriterForConnection(connectionId)).resolves.toBeUndefined();
+
+        roomManager.noteBoardWriter(connectionId, 4242, TEST_USER_ID);
+        expect(roomManager.getClient(connectionId)?.boardWriterEmitter).toEqual({
+          boardId: 4242,
+          emitterId: TEST_USER_ID,
+        });
+      } finally {
+        await roomManager.removeClient(connectionId);
+      }
+    });
+  });
+
+  // The holder lives in Redis (setBoardWriter / clearBoardWriterIf are Redis-only).
+  // pubsub connects only when REDIS_URL is configured (CI sets it); skip cleanly
+  // otherwise, mirroring the FIFO-history test above.
+  describe('holder state + hand-off (Redis)', () => {
+    let redisOn = false;
+    beforeAll(async () => {
+      await pubsub.initialize().catch(() => {});
+      redisOn = pubsub.isRedisConnected();
+      if (!redisOn) {
+        console.warn('[board-presence] pubsub Redis unavailable — skipping holder integration tests');
+      }
+    });
+
+    afterAll(async () => {
+      if (redisOn) await redisClientManager.disconnect().catch(() => {});
+    });
+
+    it('hands off to a new emitter and dedups same-emitter repeats', async () => {
+      if (!redisOn) return;
+      const boardId = await makeHolderBoard(authCtx());
+      await pubsub.stampBoardMembership(String(boardId), SECOND_USER_ID);
+
+      const changes: BoardConnectionChanged[] = [];
+      const unsubscribe = await pubsub.subscribeBoardPresence(String(boardId), (event) => {
+        if (event.__typename === 'BoardConnectionChanged') changes.push(event);
+      });
+
+      // First send takes the free board → one hand-off.
+      await boardPresenceMutations.reportBoardClimb(
+        undefined,
+        { boardId, climb: makeQueueItemInput(), angle: 40 },
+        authCtx(),
+      );
+      // Same emitter again → no re-broadcast.
+      await boardPresenceMutations.reportBoardClimb(
+        undefined,
+        { boardId, climb: makeQueueItemInput(), angle: 40 },
+        authCtx(),
+      );
+      expect(changes).toHaveLength(1);
+      expect(changes[0].holder?.userId).toBe(TEST_USER_ID);
+      expect(await pubsub.getBoardWriter(String(boardId))).toBe(TEST_USER_ID);
+
+      // A different emitter takes over (always-take) → second hand-off.
+      await boardPresenceMutations.reportBoardClimb(
+        undefined,
+        { boardId, climb: makeQueueItemInput(), angle: 40 },
+        authCtx({ userId: SECOND_USER_ID }),
+      );
+      expect(changes).toHaveLength(2);
+      expect(changes[1].holder?.userId).toBe(SECOND_USER_ID);
+      expect(await pubsub.getBoardWriter(String(boardId))).toBe(SECOND_USER_ID);
+
+      unsubscribe();
+    });
+
+    it('boardConnection reflects the current holder, null once cleared', async () => {
+      if (!redisOn) return;
+      const boardId = await makeHolderBoard(authCtx());
+      await boardPresenceMutations.reportBoardClimb(
+        undefined,
+        { boardId, climb: makeQueueItemInput(), angle: 40 },
+        authCtx(),
+      );
+
+      const holder = await boardPresenceQueries.boardConnection(undefined, { boardId }, authCtx());
+      expect(holder?.userId).toBe(TEST_USER_ID);
+
+      expect(await boardPresenceMutations.reportBoardDisconnect(undefined, { boardId }, authCtx())).toBe(true);
+      expect(await boardPresenceQueries.boardConnection(undefined, { boardId }, authCtx())).toBeNull();
+    });
+
+    it('reportBoardDisconnect only clears when the caller still holds the board', async () => {
+      if (!redisOn) return;
+      const boardId = await makeHolderBoard(authCtx());
+      await pubsub.stampBoardMembership(String(boardId), SECOND_USER_ID);
+      await boardPresenceMutations.reportBoardClimb(
+        undefined,
+        { boardId, climb: makeQueueItemInput(), angle: 40 },
+        authCtx(),
+      );
+
+      // A non-holder's disconnect is a no-op (atomic compare-and-delete).
+      expect(
+        await boardPresenceMutations.reportBoardDisconnect(undefined, { boardId }, authCtx({ userId: SECOND_USER_ID })),
+      ).toBe(false);
+      expect(await pubsub.getBoardWriter(String(boardId))).toBe(TEST_USER_ID);
+
+      // The holder's disconnect frees it and broadcasts holder: null.
+      const changes: BoardConnectionChanged[] = [];
+      const unsubscribe = await pubsub.subscribeBoardPresence(String(boardId), (event) => {
+        if (event.__typename === 'BoardConnectionChanged') changes.push(event);
+      });
+      expect(await boardPresenceMutations.reportBoardDisconnect(undefined, { boardId }, authCtx())).toBe(true);
+      expect(await pubsub.getBoardWriter(String(boardId))).toBeNull();
+      expect(changes).toHaveLength(1);
+      expect(changes[0].holder).toBeNull();
+      unsubscribe();
+    });
+
+    it('crash backstop frees the wall on the holder connection drop, not another connection', async () => {
+      if (!redisOn) return;
+      const boardId = await makeHolderBoard(authCtx());
+      const holderConnectionId = `conn-holder-${Date.now()}`;
+      const otherConnectionId = `conn-other-${Date.now()}`;
+      await roomManager.registerClient(holderConnectionId, undefined, TEST_USER_ID);
+      await roomManager.registerClient(otherConnectionId, undefined, TEST_USER_ID);
+      try {
+        // Report from the holder connection so noteBoardWriter records the hold.
+        await boardPresenceMutations.reportBoardClimb(
+          undefined,
+          { boardId, climb: makeQueueItemInput(), angle: 40 },
+          authCtx({ connectionId: holderConnectionId }),
+        );
+        expect(await pubsub.getBoardWriter(String(boardId))).toBe(TEST_USER_ID);
+
+        // A non-holder connection dropping does nothing.
+        await roomManager.clearBoardWriterForConnection(otherConnectionId);
+        expect(await pubsub.getBoardWriter(String(boardId))).toBe(TEST_USER_ID);
+
+        // The holder connection dropping frees the wall + broadcasts holder: null.
+        const changes: BoardConnectionChanged[] = [];
+        const unsubscribe = await pubsub.subscribeBoardPresence(String(boardId), (event) => {
+          if (event.__typename === 'BoardConnectionChanged') changes.push(event);
+        });
+        await roomManager.clearBoardWriterForConnection(holderConnectionId);
+        expect(await pubsub.getBoardWriter(String(boardId))).toBeNull();
+        expect(changes).toHaveLength(1);
+        expect(changes[0].holder).toBeNull();
+        unsubscribe();
+      } finally {
+        await roomManager.removeClient(holderConnectionId);
+        await roomManager.removeClient(otherConnectionId);
+      }
+    });
   });
 });
