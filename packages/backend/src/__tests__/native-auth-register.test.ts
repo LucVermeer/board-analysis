@@ -25,6 +25,10 @@ process.env.NEXTAUTH_SECRET = 'test-secret-for-native-auth-register-tests';
 
 const mockDbSelectQueue: unknown[][] = [];
 const insertCalls: { table: unknown; values: unknown }[] = [];
+// When set, the NEXT insert(...).values(...) rejects with this error (and then
+// clears) — lets tests drive the transaction's catch path (23505 race → 409,
+// any other throw → 500).
+let nextInsertError: unknown = null;
 
 function makeAwaitableInsert(): Promise<unknown[]> & { onConflictDoNothing: () => Promise<unknown[]> } {
   const promise = Promise.resolve([]) as Promise<unknown[]> & { onConflictDoNothing: () => Promise<unknown[]> };
@@ -51,6 +55,11 @@ function makeChain() {
       return {
         values(values: unknown) {
           insertCalls.push({ table, values });
+          if (nextInsertError) {
+            const error = nextInsertError;
+            nextInsertError = null;
+            return Promise.reject(error);
+          }
           return makeAwaitableInsert();
         },
       };
@@ -173,6 +182,7 @@ describe('handleNativeAuthRegister', () => {
     __resetNativeAuthStateForTests();
     mockDbSelectQueue.length = 0;
     insertCalls.length = 0;
+    nextInsertError = null;
   });
 
   it('creates the account and returns a JWT + refresh token (auto-login)', async () => {
@@ -284,6 +294,36 @@ describe('handleNativeAuthRegister', () => {
     );
     // No rows written when the email is taken.
     expect(insertsFor(users)).toHaveLength(0);
+  });
+
+  it('maps a 23505 unique-violation race to 409 (no token pair)', async () => {
+    queueSelect([]); // pre-check passes…
+    nextInsertError = { code: '23505' }; // …but the users insert loses the race
+    const req = makeRequest({
+      method: 'POST',
+      body: { email: 'racer@example.com', password: 'longenough' },
+    });
+    const res = makeResponse();
+    await callHandler(req, res);
+
+    expect(res.statusCode).toBe(409);
+    expect(parseBody(res).error).toBe('An account with this email already exists');
+    expect(parseBody(res).jwt).toBeUndefined();
+  });
+
+  it('rolls back and returns 500 when a transaction insert throws', async () => {
+    queueSelect([]);
+    nextInsertError = new Error('db exploded');
+    const req = makeRequest({
+      method: 'POST',
+      body: { email: 'boom@example.com', password: 'longenough' },
+    });
+    const res = makeResponse();
+    await callHandler(req, res);
+
+    expect(res.statusCode).toBe(500);
+    expect(parseBody(res).error).toBe('Internal server error');
+    expect(parseBody(res).jwt).toBeUndefined();
   });
 
   it('returns 400 for an invalid email', async () => {
