@@ -2,6 +2,7 @@ import { Platform } from 'react-native';
 import { isLiquidGlassAvailable } from 'expo-glass-effect';
 import { NativeTabs } from 'expo-router/unstable-native-tabs';
 import { useTheme } from '../providers/theme-provider';
+import { useGlassCapability } from './use-glass-capability';
 
 /**
  * Whether the device *can* host `NativeTabs.BottomAccessory` — the pure
@@ -21,4 +22,18 @@ export function isBottomAccessoryAvailable(): boolean {
 export function useNativeAccessoryActive(): boolean {
   const { variant } = useTheme();
   return variant === 'liquidGlass' && isBottomAccessoryAvailable();
+}
+
+/**
+ * Whether the native iOS 26 Liquid Glass tab bar (`NativeTabs`) is in use right
+ * now: the Liquid Glass variant on a glass-capable device. The single canonical
+ * predicate for "the native tab bar renders" — everything else (Material, plus
+ * Liquid Glass on iOS < 26 / Android) falls back to the JS `Tabs` + `MaterialTabBar`.
+ * Drives the tab-bar choice in `_layout` and the tab-bar geometry in
+ * `useBottomChromeMetrics`, so the two never disagree about which bar is on screen.
+ */
+export function useNativeTabBar(): boolean {
+  const { variant } = useTheme();
+  const glassCapable = useGlassCapability();
+  return variant === 'liquidGlass' && glassCapable;
 }

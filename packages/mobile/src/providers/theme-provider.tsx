@@ -30,7 +30,6 @@ import {
 } from '../theme/tokens';
 import { springs, timing } from '../theme/animations';
 import { resolveUiVariant, type UiVariant } from '../theme/resolve-ui-variant';
-import { useGlassCapability } from '../hooks/use-glass-capability';
 import { secureStorePreferences } from '../lib/preferences/secure-store-adapter';
 
 type ColorScheme = 'light' | 'dark';
@@ -246,12 +245,15 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
     }
   }, []);
 
-  // Synchronous native check — lets the first paint resolve 'auto' to the right
-  // variant without waiting on the async SecureStore read.
-  const glassCapable = useGlassCapability();
+  // 'auto' follows the platform aesthetic: Liquid Glass on every iPhone (the blur
+  // fallback covers iOS < 26), Material on Android. This is a synchronous check, so
+  // the first paint resolves 'auto' without waiting on the async SecureStore read.
+  // Whether real iOS 26 glass chrome renders is a separate, downstream concern
+  // (useGlassCapability / useEffectiveSurfaceMode).
+  const autoPrefersGlass = Platform.OS === 'ios';
   const variant = useMemo<UiVariant>(
-    () => resolveUiVariant(uiVariantPreference, glassCapable),
-    [uiVariantPreference, glassCapable],
+    () => resolveUiVariant(uiVariantPreference, autoPrefersGlass),
+    [uiVariantPreference, autoPrefersGlass],
   );
 
   // MD3 colour roles for the current scheme, memoized so the Paper theme is built

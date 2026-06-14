@@ -4,7 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useHasActiveClimb } from '../providers/queue-provider';
 import { useTheme } from '../providers/theme-provider';
 import { isTabsRoute } from '../lib/route-segments';
-import { useNativeAccessoryActive } from './use-bottom-accessory';
+import { useNativeAccessoryActive, useNativeTabBar } from './use-bottom-accessory';
 import { computeBottomChromeMetrics } from './bottom-chrome-metrics';
 
 /**
@@ -24,16 +24,19 @@ export function useBottomChromeMetrics() {
   const insideTabs = isTabsRoute(segments);
   const nativeAccessoryActive = useNativeAccessoryActive();
   const nativeAccessoryMounted = insideTabs && nativeAccessoryActive;
+  const nativeTabBar = useNativeTabBar();
+  const usesNativeTabBar = insideTabs && nativeTabBar;
 
   return useMemo(
     () =>
       computeBottomChromeMetrics({
         uiVariant: variant,
+        usesNativeTabBar,
         insetsBottom: insets.bottom,
         insideTabs,
         hasCurrentClimb,
         nativeAccessoryMounted,
       }),
-    [variant, insets.bottom, insideTabs, hasCurrentClimb, nativeAccessoryMounted],
+    [variant, usesNativeTabBar, insets.bottom, insideTabs, hasCurrentClimb, nativeAccessoryMounted],
   );
 }

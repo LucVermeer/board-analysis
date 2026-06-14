@@ -32,8 +32,9 @@ vi.mock('react-native', () => ({
   Appearance: { setColorScheme: vi.fn() },
 }));
 
-// useGlassCapability imports these; under jsdom (Platform.OS='android') the
-// capability is false regardless, but the import must resolve.
+// The provider resolves 'auto' off Platform.OS ('android' here → Material), not
+// glass capability. Other modules in the import graph still pull expo-glass-effect,
+// so mock it defensively; the values don't affect the provider's variant choice.
 vi.mock('expo-glass-effect', () => ({
   isLiquidGlassAvailable: () => false,
   isGlassEffectAPIAvailable: () => false,
@@ -141,7 +142,7 @@ describe('ThemeProvider', () => {
   });
 
   describe('uiVariant', () => {
-    it("defaults to the Material variant on a non-glass device ('auto' → material)", async () => {
+    it("defaults to the Material variant on Android ('auto' → material)", async () => {
       const { result } = renderHook(() => useTheme(), { wrapper });
       await waitFor(() => expect(getMock).toHaveBeenCalledWith(UI_VARIANT_KEY));
       expect(result.current.uiVariantPreference).toBe('auto');

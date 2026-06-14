@@ -72,8 +72,8 @@
         "auto": "Auto",
         "liquidGlass": "Liquid Glass",
         "material": "Material",
-        "description": "Auto picks Liquid Glass where your device can render it, Material everywhere else.",
-        "glassUnavailable": "Liquid Glass needs iOS 26. Your device runs Material."
+        "description": "Auto uses Liquid Glass on iPhone and Material on Android. Pick one to override.",
+        "glassFallback": "Liquid Glass uses a simpler fallback here. The full glass effect needs iOS 26."
       },
       "gradeFormat": {
         "title": "Grade format",

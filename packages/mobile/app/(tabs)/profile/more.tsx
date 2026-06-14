@@ -59,9 +59,6 @@ export default function MoreScreen() {
     { key: 'liquidGlass', label: t('mobile.more.uiStyle.liquidGlass') },
     { key: 'material', label: t('mobile.more.uiStyle.material') },
   ];
-  // Liquid Glass can't render on Android / iOS < 26, so show it disabled there
-  // rather than hide it — more honest than a no-op control.
-  const disabledUiStyles = glassCapable ? undefined : new Set<UiVariantPreference>(['liquidGlass']);
 
   const gradeFormatOptions: { key: GradeDisplayFormat; label: string }[] = [
     { key: 'v-grade', label: t('mobile.more.gradeFormat.vGrade') },
@@ -142,12 +139,11 @@ export default function MoreScreen() {
             options={uiStyleOptions}
             selectedKey={uiVariantPreference}
             onSelect={(key) => void setUiVariant(key)}
-            disabledKeys={disabledUiStyles}
             trackColor={systemColors.fill}
             accessibilityLabel={t('mobile.more.uiStyle.title')}
           />
           <Text variant="footnote" color={systemColors.secondaryLabel} style={styles.settingHint}>
-            {glassCapable ? t('mobile.more.uiStyle.description') : t('mobile.more.uiStyle.glassUnavailable')}
+            {glassCapable ? t('mobile.more.uiStyle.description') : t('mobile.more.uiStyle.glassFallback')}
           </Text>
         </View>
       </View>

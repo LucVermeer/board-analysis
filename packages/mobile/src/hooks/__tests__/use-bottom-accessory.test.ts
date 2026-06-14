@@ -25,6 +25,9 @@ vi.mock('react-native', () => ({
 
 vi.mock('expo-glass-effect', () => ({
   isLiquidGlassAvailable: () => cfg.liquidGlassAvailable,
+  // useGlassCapability (via useNativeTabBar) also checks the GlassView API; gate it
+  // on the same flag so a single switch models a fully (in)capable device.
+  isGlassEffectAPIAvailable: () => cfg.liquidGlassAvailable,
 }));
 
 vi.mock('expo-router/unstable-native-tabs', () => ({
@@ -43,7 +46,7 @@ vi.mock('../../providers/theme-provider', () => ({
   useTheme: () => ({ variant: cfg.variant }),
 }));
 
-import { isBottomAccessoryAvailable, useNativeAccessoryActive } from '../use-bottom-accessory';
+import { isBottomAccessoryAvailable, useNativeAccessoryActive, useNativeTabBar } from '../use-bottom-accessory';
 
 describe('use-bottom-accessory', () => {
   beforeEach(() => {
@@ -118,5 +121,35 @@ describe('use-bottom-accessory', () => {
     const { result } = renderHook(() => useNativeAccessoryActive());
 
     expect(result.current).toBe(false);
+  });
+
+  describe('useNativeTabBar', () => {
+    it('is true only for the Liquid Glass variant on a glass-capable device', () => {
+      const { result, rerender } = renderHook(() => useNativeTabBar());
+
+      expect(result.current).toBe(true);
+
+      cfg.variant = 'material';
+      rerender();
+
+      expect(result.current).toBe(false);
+    });
+
+    it('is false on the Liquid Glass variant when the device is not glass-capable', () => {
+      // Older iPhone / Android on Liquid Glass: the JS MaterialTabBar renders instead.
+      cfg.liquidGlassAvailable = false;
+
+      const { result } = renderHook(() => useNativeTabBar());
+
+      expect(result.current).toBe(false);
+    });
+
+    it('is false off iOS even on the Liquid Glass variant', () => {
+      cfg.platformOS = 'android';
+
+      const { result } = renderHook(() => useNativeTabBar());
+
+      expect(result.current).toBe(false);
+    });
   });
 });

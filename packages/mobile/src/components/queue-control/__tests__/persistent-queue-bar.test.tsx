@@ -73,6 +73,9 @@ vi.mock('../../../providers/theme-provider', () => ({ useTheme: () => ({ variant
 vi.mock('../../../hooks/use-bottom-accessory', () => ({
   isBottomAccessoryAvailable: () => false,
   useNativeAccessoryActive: () => cfg.nativeAccessoryActive,
+  // Native tab bar and native accessory share the same capability gate (iOS 26 +
+  // Liquid Glass), so the accessory flag doubles as the tab-bar signal here.
+  useNativeTabBar: () => cfg.nativeAccessoryActive,
 }));
 vi.mock('../ClimbCapsule', () => ({
   ClimbCapsule: ({
