@@ -1241,3 +1241,78 @@ describe('board-presence resolvers', () => {
     });
   });
 });
+
+// ============================================================
+// Durable history + 60s dwell gate (Redis + DB)
+// ============================================================
+describe('board-presence durable history (board_climb_events)', () => {
+  beforeEach(async () => {
+    await cleanup();
+    await seedUser();
+    await seedCatalogClimb();
+  });
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    await cleanup();
+  });
+
+  async function resolveBoardId(serial: string): Promise<number> {
+    const resolved = await boardPresenceMutations.resolveBoardForSerial(
+      undefined,
+      { serial, boardType: 'kilter', layoutId: 1, sizeId: 10, setIds: '1,2' },
+      authCtx(),
+    );
+    return resolved.boardId;
+  }
+
+  async function countEvents(boardId: number): Promise<number> {
+    const [row] = await db.execute(
+      sql`SELECT count(*)::int AS count FROM board_climb_events WHERE board_id = ${boardId}`,
+    );
+    return Number((row as { count: number }).count);
+  }
+
+  it('does not persist a send before the 60s dwell gate, but still accepts the live report', async () => {
+    const boardId = await resolveBoardId(`DWELL-A-${Date.now()}`);
+    // First-seen = now → < 60s dwell → no durable persist.
+    vi.spyOn(pubsub, 'getBoardMembershipFirstSeen').mockResolvedValue(Date.now());
+    const accepted = await boardPresenceMutations.reportBoardClimb(
+      undefined,
+      { boardId, climb: makeQueueItemInput(), angle: 40 },
+      authCtx(),
+    );
+    expect(accepted).toBe(true);
+    expect(await countEvents(boardId)).toBe(0);
+  });
+
+  it('drops a send when first-seen is unknown (fail-closed)', async () => {
+    const boardId = await resolveBoardId(`DWELL-C-${Date.now()}`);
+    vi.spyOn(pubsub, 'getBoardMembershipFirstSeen').mockResolvedValue(null);
+    await boardPresenceMutations.reportBoardClimb(
+      undefined,
+      { boardId, climb: makeQueueItemInput(), angle: 40 },
+      authCtx(),
+    );
+    expect(await countEvents(boardId)).toBe(0);
+  });
+
+  it('persists once the member has >= 60s of presence, and boardHistory returns it', async () => {
+    const boardId = await resolveBoardId(`DWELL-B-${Date.now()}`);
+    // Simulate sustained presence: first-seen 2 minutes ago → dwell met.
+    vi.spyOn(pubsub, 'getBoardMembershipFirstSeen').mockResolvedValue(Date.now() - 120_000);
+
+    const accepted = await boardPresenceMutations.reportBoardClimb(
+      undefined,
+      { boardId, climb: makeQueueItemInput(), angle: 40 },
+      authCtx(),
+    );
+    expect(accepted).toBe(true);
+    expect(await countEvents(boardId)).toBe(1);
+
+    const history = await boardPresenceQueries.boardHistory(undefined, { boardId }, authCtx());
+    expect(history).toHaveLength(1);
+    expect(history[0].climbUuid).toBe(TEST_CLIMB_UUID);
+    expect(history[0].name).toBe('Real Catalog Climb');
+    expect(history[0].sentAt).toBeTruthy();
+  });
+});

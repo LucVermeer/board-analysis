@@ -809,7 +809,12 @@ class PubSub {
     if (this.redisAdapter && this.isRedisConnected()) {
       try {
         const { publisher } = redisClientManager.getClients();
-        await publisher.set(key, '1', 'EX', BOARD_MEMBERSHIP_TTL);
+        // Store the first-seen epoch-ms (NX preserves it across reconnects) so
+        // the durable-history dwell gate can tell how long this member has been
+        // on the board. A separate EXPIRE keeps the key alive while they're
+        // active without resetting first-seen. EXISTS still answers presence.
+        await publisher.set(key, String(Date.now()), 'EX', BOARD_MEMBERSHIP_TTL, 'NX');
+        await publisher.expire(key, BOARD_MEMBERSHIP_TTL);
         return;
       } catch (error) {
         if (this.redisRequired) {
@@ -845,6 +850,34 @@ class PubSub {
       return false;
     }
     return true;
+  }
+
+  /**
+   * First-seen epoch-ms for a member's presence on a board, or null when
+   * unknown. Drives the durable-history dwell gate (persist only after ~60s on
+   * the board). Redis-only: the single-instance local fallback returns null
+   * (durable history degrades to off without Redis, like the live feed).
+   * Fails closed on legacy '1' / non-plausible values so they can't bypass the
+   * gate.
+   */
+  async getBoardMembershipFirstSeen(boardId: string, userId: string): Promise<number | null> {
+    if (this.redisAdapter && this.isRedisConnected()) {
+      try {
+        const { publisher } = redisClientManager.getClients();
+        const raw = await publisher.get(`presence:board:${boardId}:user:${userId}`);
+        if (raw === null) return null;
+        const firstSeen = Number(raw);
+        if (!Number.isFinite(firstSeen) || firstSeen < 1_600_000_000_000) return null;
+        return firstSeen;
+      } catch (error) {
+        if (this.redisRequired) {
+          logger.error('[PubSub] Failed to read board membership first-seen in required Redis:', error);
+          throw error;
+        }
+        logger.error('[PubSub] Failed to read board membership first-seen, treating as unknown:', error);
+      }
+    }
+    return null;
   }
 
   private setLocalBoardMembership(localKey: string, expiry: number): void {

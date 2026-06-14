@@ -479,6 +479,38 @@ export const boardPresenceMutations = {
       climb: presenceClimb,
     });
 
+    // Durable history (dwell-gated): persist this push to board_climb_events
+    // only once the sender has had sustained presence on the board (>= 60s), so
+    // app-swiping noise stays out of the lasting log. The live feed above
+    // already showed everything; only the Postgres write is gated. Non-fatal —
+    // a failed durable insert never fails the accepted report.
+    const DURABLE_DWELL_MS = 60_000;
+    try {
+      const firstSeen = await pubsub.getBoardMembershipFirstSeen(String(boardId), ctx.userId!);
+      if (firstSeen !== null && Date.parse(sentAt) - firstSeen >= DURABLE_DWELL_MS) {
+        await db
+          .insert(dbSchema.boardClimbEvents)
+          .values({
+            boardId,
+            boardType: board.boardType,
+            climbUuid,
+            angle: effectiveAngle,
+            userId: ctx.userId!,
+            sessionId: null,
+            seq,
+            frames: catalogClimb.frames ?? null,
+            name: catalogClimb.name ?? null,
+            grade: catalogClimb.grade ?? null,
+            setter: catalogClimb.setterUsername ?? null,
+            confirmedAt: sentAt,
+          })
+          // (boardId, seq) is unique — makes a multi-instance double-flush a no-op.
+          .onConflictDoNothing();
+      }
+    } catch (error) {
+      logger.warn(`[board-presence] durable board_climb_events insert failed: ${String(error)}`);
+    }
+
     return true;
   },
 };
