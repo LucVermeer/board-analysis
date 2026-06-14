@@ -455,7 +455,11 @@ function HardestSendPage({
         </Text>
         <View style={styles.inlineMeta}>
           {displayGrade ? (
-            <Text variant="footnote" color={gradeBadgeColor(tick.difficultyName ?? displayGrade)} style={styles.gradeText}>
+            <Text
+              variant="footnote"
+              color={gradeBadgeColor(tick.difficultyName ?? displayGrade)}
+              style={styles.gradeText}
+            >
               {displayGrade}
             </Text>
           ) : null}

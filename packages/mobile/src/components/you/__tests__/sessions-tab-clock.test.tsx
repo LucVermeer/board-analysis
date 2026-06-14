@@ -92,7 +92,9 @@ vi.mock('../CommentSheet', () => ({ CommentSheet: () => null }));
 vi.mock('../../Text', () => ({ Text: () => null }));
 vi.mock('../../Icon', () => ({ Icon: () => null }));
 vi.mock('../../Button', () => ({ Button: () => null }));
-vi.mock('../../Card', () => ({ Card: ({ children }: { children?: ReactNode }) => createElement('div', null, children) }));
+vi.mock('../../Card', () => ({
+  Card: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
+}));
 vi.mock('../../ActivityIndicator', () => ({ ActivityIndicator: () => null }));
 vi.mock('../../../lib/graphql/hooks', () => ({
   useSessionGroupedFeed: () => feed,
@@ -101,7 +103,10 @@ vi.mock('../../../lib/graphql/hooks', () => ({
 vi.mock('../../../hooks/use-bottom-chrome-metrics', () => ({
   useBottomChromeMetrics: () => ({ scrollBottomPadding: 0 }),
 }));
-vi.mock('../../../theme/tokens', () => ({ spacing: { 2: 8, 3: 12, 4: 16, 5: 20 }, borderRadius: { full: 999, md: 8 } }));
+vi.mock('../../../theme/tokens', () => ({
+  spacing: { 2: 8, 3: 12, 4: 16, 5: 20 },
+  borderRadius: { full: 999, md: 8 },
+}));
 vi.mock('../../../providers/theme-provider', () => ({
   useTheme: () => ({ systemColors: {}, brandColors: {} }),
 }));

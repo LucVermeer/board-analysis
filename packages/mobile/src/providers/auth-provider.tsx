@@ -49,6 +49,15 @@ export function AuthProvider({ children, onReady }: AuthProviderProps) {
   const [isLoading, setIsLoading] = useState(true);
   const segments = useSegments();
   const queryClient = useQueryClient();
+  const authStateRef = useRef({ isAuthenticated: false, isLoading: true });
+  authStateRef.current = { isAuthenticated, isLoading };
+
+  const resetAnalyticsForSignedOutTransition = useCallback(() => {
+    const authState = authStateRef.current;
+    if (authState.isLoading || authState.isAuthenticated) {
+      resetAnalytics();
+    }
+  }, []);
 
   // Persisted (SecureStore/AsyncStorage-backed) per-user state that outlives a
   // relaunch. allSettled (not all) so one failing delete can't abort the rest.
@@ -84,13 +93,22 @@ export function AuthProvider({ children, onReady }: AuthProviderProps) {
     setIsAuthenticated(false);
   }, [clearPersistedUserStores, queryClient]);
 
-  // checkAuth lands here when a token read/refresh shows the session is gone or
-  // temporarily unreadable. Always clear user-scoped caches at this boundary:
-  // React Query keys are not viewer-scoped, so a keychain read failure must not
-  // leave previous-account feed data visible while the UI is signed out.
+  // checkAuth lands here when a token read/refresh shows the session is gone. If
+  // we were authenticated this session, run the full cleanup (cache + clients are
+  // live). Otherwise — a logged-out cold start / relaunch — the cache is empty
+  // and the clients are null, so only the persisted stores can carry a prior
+  // user forward; clear those. Gating the heavy cleanup on the transition keeps a
+  // normal logged-out launch from churning an empty cache. Both branches flip
+  // isAuthenticated → false, so checkAuth doesn't repeat it.
   const handleSignedOutTransition = useCallback(async () => {
-    await runSignedOutCleanup();
-  }, [runSignedOutCleanup]);
+    if (authStateRef.current.isAuthenticated) {
+      await runSignedOutCleanup();
+    } else {
+      resetAnalyticsForSignedOutTransition();
+      await clearPersistedUserStores();
+      setIsAuthenticated(false);
+    }
+  }, [runSignedOutCleanup, clearPersistedUserStores, resetAnalyticsForSignedOutTransition]);
 
   const checkAuth = useCallback(async () => {
     try {
@@ -118,7 +136,7 @@ export function AuthProvider({ children, onReady }: AuthProviderProps) {
       // the loading gate always releases. Do NOT clear tokens: a later
       // successful read (the AppState 'active' re-check below) restores auth.
       reportError(authCheckError);
-      await handleSignedOutTransition();
+      setIsAuthenticated(false);
     } finally {
       setIsLoading(false);
     }

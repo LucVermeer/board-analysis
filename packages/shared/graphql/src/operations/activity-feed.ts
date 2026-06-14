@@ -48,7 +48,7 @@ export const GET_ACTIVITY_FEED = gql`
 // Session-Grouped Feed Queries
 // ============================================
 
-const SESSION_FEED_ITEM_FIELDS = `
+const SESSION_SUMMARY_FIELDS = `
   sessionId
   sessionType
   sessionName
@@ -73,6 +73,18 @@ const SESSION_FEED_ITEM_FIELDS = `
   }
   boardTypes
   hardestGrade
+  firstTickAt
+  lastTickAt
+  durationMinutes
+  goal
+  upvotes
+  downvotes
+  voteScore
+  commentCount
+`;
+
+const SESSION_FEED_ITEM_FIELDS = `
+  ${SESSION_SUMMARY_FIELDS}
   hardestSend {
     uuid
     userId
@@ -128,14 +140,6 @@ const SESSION_FEED_ITEM_FIELDS = `
   }
   socialEntityType
   socialEntityId
-  firstTickAt
-  lastTickAt
-  durationMinutes
-  goal
-  upvotes
-  downvotes
-  voteScore
-  commentCount
 `;
 
 export const GET_SESSION_GROUPED_FEED = gql`
@@ -153,7 +157,7 @@ export const GET_SESSION_GROUPED_FEED = gql`
 export const GET_SESSION_DETAIL = gql`
   query GetSessionDetail($sessionId: ID!) {
     sessionDetail(sessionId: $sessionId) {
-      ${SESSION_FEED_ITEM_FIELDS}
+      ${SESSION_SUMMARY_FIELDS}
       healthKitWorkoutId
       ticks {
         uuid

@@ -477,11 +477,7 @@ export const sessionFeedQueries = {
 
     const [partySession] = dailySession
       ? []
-      : await dbRead
-          .select()
-          .from(dbSchema.boardSessions)
-          .where(eq(dbSchema.boardSessions.id, sessionId))
-          .limit(1);
+      : await dbRead.select().from(dbSchema.boardSessions).where(eq(dbSchema.boardSessions.id, sessionId)).limit(1);
 
     const tickWhere = dailySession
       ? and(
@@ -753,18 +749,19 @@ export const sessionFeedQueries = {
     const goal = dailySession ? null : partySession?.goal || null;
     const ownerUserId = dailySession ? dailySession.userId : partySession?.createdByUserId || null;
     const viewerUserId = ctx?.isAuthenticated ? (ctx.userId ?? null) : null;
-    const [healthKitWorkout] = viewerUserId && !dailySession
-      ? await dbRead
-          .select({ workoutId: dbSchema.sessionHealthKitWorkouts.workoutId })
-          .from(dbSchema.sessionHealthKitWorkouts)
-          .where(
-            and(
-              eq(dbSchema.sessionHealthKitWorkouts.sessionId, sessionId),
-              eq(dbSchema.sessionHealthKitWorkouts.userId, viewerUserId),
-            ),
-          )
-          .limit(1)
-      : [];
+    const [healthKitWorkout] =
+      viewerUserId && !dailySession
+        ? await dbRead
+            .select({ workoutId: dbSchema.sessionHealthKitWorkouts.workoutId })
+            .from(dbSchema.sessionHealthKitWorkouts)
+            .where(
+              and(
+                eq(dbSchema.sessionHealthKitWorkouts.sessionId, sessionId),
+                eq(dbSchema.sessionHealthKitWorkouts.userId, viewerUserId),
+              ),
+            )
+            .limit(1)
+        : [];
 
     return {
       sessionId,
