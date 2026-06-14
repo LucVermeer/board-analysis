@@ -132,7 +132,7 @@ export function groupPhysicalGymCandidates<T extends CanonicalGymCandidate>(
 
     for (const candidate of sortedCandidates) {
       const existingCluster = nameClusters.find((cluster) =>
-        cluster.gyms.some((clusterCandidate) => distanceMeters(candidate, clusterCandidate) <= maxDistanceMeters),
+        cluster.gyms.every((clusterCandidate) => distanceMeters(candidate, clusterCandidate) <= maxDistanceMeters),
       );
 
       if (existingCluster) {

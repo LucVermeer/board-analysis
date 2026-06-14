@@ -89,4 +89,18 @@ void describe('groupPhysicalGymCandidates', () => {
     assert.equal(groupPhysicalGymCandidates([sandboxGym, anotherGymName]).length, 0);
     assert.equal(groupPhysicalGymCandidates([sandboxGym, farSandboxGym]).length, 0);
   });
+
+  void it('does not merge transitive chains that exceed the max cluster diameter', () => {
+    const firstGym = candidate({ id: 1, uuid: 'first', latitude: 0, longitude: 0 });
+    const middleGym = candidate({ id: 2, uuid: 'middle', latitude: 0, longitude: 0.00017 });
+    const lastGym = candidate({ id: 3, uuid: 'last', latitude: 0, longitude: 0.00034 });
+
+    const clusters = groupPhysicalGymCandidates([firstGym, middleGym, lastGym]);
+
+    assert.equal(clusters.length, 1);
+    assert.deepEqual(
+      clusters[0]?.gyms.map((gym) => gym.id).sort((firstId, secondId) => firstId - secondId),
+      [1, 2],
+    );
+  });
 });

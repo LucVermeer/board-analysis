@@ -141,6 +141,31 @@ async function findAliasedGymId(db: DrizzleDb, sourceKey: string): Promise<numbe
 async function findPhysicalGymMatch(db: DrizzleDb, record: ValidBoardLocation): Promise<CanonicalGymCandidate | null> {
   const normalizedGymName = normalizeGymName(record.gymName);
   const result = await db.execute(sql`
+    WITH candidate_gyms AS (
+      SELECT
+        g.id,
+        g.uuid,
+        g.name,
+        g.address,
+        g.contact_email,
+        g.contact_phone,
+        g.description,
+        g.image_url,
+        g.latitude,
+        g.longitude,
+        g.created_at
+      FROM gyms g
+      WHERE g.owner_id = ${SYSTEM_USER_ID}
+        AND g.is_public = true
+        AND g.deleted_at IS NULL
+        AND g.location IS NOT NULL
+        AND lower(regexp_replace(trim(g.name), '[[:space:]]+', ' ', 'g')) = ${normalizedGymName}
+        AND ST_DWithin(
+          g.location,
+          ST_MakePoint(${record.longitude}, ${record.latitude})::geography,
+          ${PHYSICAL_GYM_MATCH_DISTANCE_METERS}
+        )
+    )
     SELECT
       g.id AS "id",
       g.uuid AS "uuid",
@@ -153,43 +178,29 @@ async function findPhysicalGymMatch(db: DrizzleDb, record: ValidBoardLocation): 
       g.latitude AS "latitude",
       g.longitude AS "longitude",
       g.created_at AS "createdAt",
-      COALESCE(board_counts.count, 0)::int AS "boardCount",
-      COALESCE(member_counts.count, 0)::int AS "memberCount",
-      COALESCE(follower_counts.count, 0)::int AS "followerCount",
-      COALESCE(comment_counts.count, 0)::int AS "commentCount"
-    FROM gyms g
-    LEFT JOIN (
-      SELECT gym_id, count(*) AS count
-      FROM user_boards
-      WHERE deleted_at IS NULL
-      GROUP BY gym_id
-    ) board_counts ON board_counts.gym_id = g.id
-    LEFT JOIN (
-      SELECT gym_id, count(*) AS count
-      FROM gym_members
-      GROUP BY gym_id
-    ) member_counts ON member_counts.gym_id = g.id
-    LEFT JOIN (
-      SELECT gym_id, count(*) AS count
-      FROM gym_follows
-      GROUP BY gym_id
-    ) follower_counts ON follower_counts.gym_id = g.id
-    LEFT JOIN (
-      SELECT entity_id, count(*) AS count
-      FROM comments
-      WHERE entity_type = 'gym' AND deleted_at IS NULL
-      GROUP BY entity_id
-    ) comment_counts ON comment_counts.entity_id = g.uuid
-    WHERE g.owner_id = ${SYSTEM_USER_ID}
-      AND g.is_public = true
-      AND g.deleted_at IS NULL
-      AND g.location IS NOT NULL
-      AND lower(regexp_replace(trim(g.name), '[[:space:]]+', ' ', 'g')) = ${normalizedGymName}
-      AND ST_DWithin(
-        g.location,
-        ST_MakePoint(${record.longitude}, ${record.latitude})::geography,
-        ${PHYSICAL_GYM_MATCH_DISTANCE_METERS}
-      )
+      (
+        SELECT count(*)::int
+        FROM user_boards board
+        WHERE board.gym_id = g.id AND board.deleted_at IS NULL
+      ) AS "boardCount",
+      (
+        SELECT count(*)::int
+        FROM gym_members gym_member
+        WHERE gym_member.gym_id = g.id
+      ) AS "memberCount",
+      (
+        SELECT count(*)::int
+        FROM gym_follows gym_follow
+        WHERE gym_follow.gym_id = g.id
+      ) AS "followerCount",
+      (
+        SELECT count(*)::int
+        FROM comments gym_comment
+        WHERE gym_comment.entity_type = 'gym'
+          AND gym_comment.deleted_at IS NULL
+          AND gym_comment.entity_id = g.uuid
+      ) AS "commentCount"
+    FROM candidate_gyms g
   `);
 
   const candidates = rowsFromResult<CanonicalGymCandidate>(result).map((candidate) => ({
@@ -267,6 +278,24 @@ async function resolveGymIdForSource(
   return createOrUpdateSourceGym(db, sourceKey, record);
 }
 
+async function resolveGymIdForSourceWithLock(
+  db: DrizzleDb,
+  sourceKey: string,
+  record: ValidBoardLocation,
+): Promise<number | null> {
+  const normalizedGymName = normalizeGymName(record.gymName);
+  return db.transaction(async (transaction) => {
+    const transactionDb = transaction as unknown as DrizzleDb;
+    await transactionDb.execute(sql`
+      SELECT pg_advisory_xact_lock(
+        hashtext('boardsesh:location-sync:gym-name'),
+        hashtext(${normalizedGymName})
+      )
+    `);
+    return resolveGymIdForSource(transactionDb, sourceKey, record);
+  });
+}
+
 /**
  * Upserts public gym + board locations from a sync source.
  *
@@ -288,7 +317,7 @@ export async function upsertPublicBoardLocations(
 
   const gymIdBySource = new Map<string, number>();
   for (const [sourceKey, record] of gymsBySource) {
-    const gymId = await resolveGymIdForSource(db, sourceKey, record);
+    const gymId = await resolveGymIdForSourceWithLock(db, sourceKey, record);
     if (gymId !== null) {
       // The PostGIS `location` geography is derived from lat/lng by the
       // gyms_set_location trigger (migration 0127), so resolving the gym row

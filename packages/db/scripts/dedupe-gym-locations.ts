@@ -63,7 +63,7 @@ type MergeCounts = {
   commentsMoved: number;
   feedItemsMoved: number;
   notificationsMoved: number;
-  votesInserted: number;
+  votesUpserted: number;
   votesDeleted: number;
   duplicateGymsSoftDeleted: number;
 };
@@ -175,6 +175,12 @@ function idsFromCandidates(candidates: CanonicalGymCandidate[]): number[] {
 
 function uuidsFromCandidates(candidates: CanonicalGymCandidate[]): string[] {
   return candidates.map((candidate) => candidate.uuid);
+}
+
+function candidateIdsKey(candidates: CanonicalGymCandidate[]): string {
+  return idsFromCandidates(candidates)
+    .sort((firstId, secondId) => firstId - secondId)
+    .join(',');
 }
 
 function sqlNumberList(values: number[]): SQLWrapper {
@@ -307,6 +313,101 @@ async function fetchCandidates(commandDb: ExecuteDb, onlyName: string | null): P
   return rows.map(coerceCandidate);
 }
 
+async function fetchCandidatesForApply(commandDb: ExecuteDb, gymIds: number[]): Promise<CanonicalGymCandidate[]> {
+  const gymIdList = sqlNumberList(gymIds);
+  const rows = await executeRows<CandidateDatabaseRow>(
+    commandDb,
+    sql`
+      WITH locked_gyms AS (
+        SELECT
+          g.id,
+          g.uuid,
+          g.name,
+          g.address,
+          g.contact_email,
+          g.contact_phone,
+          g.description,
+          g.image_url,
+          g.latitude,
+          g.longitude,
+          g.created_at
+        FROM gyms g
+        WHERE g.id IN (${gymIdList})
+          AND g.owner_id = ${SYSTEM_USER_ID}
+          AND g.is_public = true
+          AND g.deleted_at IS NULL
+          AND g.latitude IS NOT NULL
+          AND g.longitude IS NOT NULL
+          AND g.location IS NOT NULL
+        FOR UPDATE
+      )
+      SELECT
+        g.id AS "id",
+        g.uuid AS "uuid",
+        g.name AS "name",
+        g.address AS "address",
+        g.contact_email AS "contactEmail",
+        g.contact_phone AS "contactPhone",
+        g.description AS "description",
+        g.image_url AS "imageUrl",
+        g.latitude AS "latitude",
+        g.longitude AS "longitude",
+        g.created_at AS "createdAt",
+        (
+          SELECT count(*)::int
+          FROM user_boards board
+          WHERE board.gym_id = g.id AND board.deleted_at IS NULL
+        ) AS "boardCount",
+        (
+          SELECT count(*)::int
+          FROM gym_members gym_member
+          WHERE gym_member.gym_id = g.id
+        ) AS "memberCount",
+        (
+          SELECT count(*)::int
+          FROM gym_follows gym_follow
+          WHERE gym_follow.gym_id = g.id
+        ) AS "followerCount",
+        (
+          SELECT count(*)::int
+          FROM comments gym_comment
+          WHERE gym_comment.entity_type = 'gym'
+            AND gym_comment.deleted_at IS NULL
+            AND gym_comment.entity_id = g.uuid
+        ) AS "commentCount"
+      FROM locked_gyms g
+      ORDER BY lower(g.name), g.id
+    `,
+  );
+
+  return rows.map(coerceCandidate);
+}
+
+async function refetchClusterForApply(
+  commandDb: ExecuteDb,
+  cluster: PhysicalGymCluster<CanonicalGymCandidate>,
+): Promise<PhysicalGymCluster<CanonicalGymCandidate>> {
+  const originalGymIds = idsFromCandidates(cluster.gyms);
+  const originalKey = candidateIdsKey(cluster.gyms);
+  const lockedCandidates = await fetchCandidatesForApply(commandDb, originalGymIds);
+
+  if (lockedCandidates.length !== originalGymIds.length) {
+    throw new Error(
+      `Cluster ${originalKey} changed before apply: expected ${originalGymIds.length} active system-owned rows, got ${lockedCandidates.length}.`,
+    );
+  }
+
+  const matchingCluster = groupPhysicalGymCandidates(lockedCandidates, PHYSICAL_GYM_MATCH_DISTANCE_METERS).find(
+    (candidateCluster) => candidateIdsKey(candidateCluster.gyms) === originalKey,
+  );
+
+  if (!matchingCluster) {
+    throw new Error(`Cluster ${originalKey} no longer passes conservative physical matching checks.`);
+  }
+
+  return matchingCluster;
+}
+
 async function mergeGymCluster(
   commandDb: ExecuteDb,
   cluster: PhysicalGymCluster<CanonicalGymCandidate>,
@@ -317,6 +418,7 @@ async function mergeGymCluster(
   const duplicateGymUuids = uuidsFromCandidates(duplicateGyms);
   const duplicateGymIdList = sqlNumberList(duplicateGymIds);
   const duplicateGymUuidList = sqlTextList(duplicateGymUuids);
+  const allGymUuidList = sqlTextList([canonicalGym.uuid, ...duplicateGymUuids]);
 
   await commandDb.execute(sql`
     UPDATE gyms
@@ -469,25 +571,33 @@ async function mergeGymCluster(
     `,
   );
 
-  const votesInserted = await executeCount(
+  const votesUpserted = await executeCount(
     commandDb,
     sql`
-      WITH inserted AS (
-        INSERT INTO votes (user_id, entity_type, entity_id, value, created_at)
+      WITH latest_votes AS (
         SELECT DISTINCT ON (user_id)
                user_id,
-               'gym'::social_entity_type,
-               ${canonicalGym.uuid},
                value,
                created_at
           FROM votes
          WHERE entity_type = 'gym'::social_entity_type
-           AND entity_id IN (${duplicateGymUuidList})
+           AND entity_id IN (${allGymUuidList})
          ORDER BY user_id, created_at DESC, id DESC
-        ON CONFLICT (user_id, entity_type, entity_id) DO NOTHING
+      ),
+      upserted AS (
+        INSERT INTO votes (user_id, entity_type, entity_id, value, created_at)
+        SELECT user_id,
+               'gym'::social_entity_type,
+               ${canonicalGym.uuid},
+               value,
+               created_at
+          FROM latest_votes
+        ON CONFLICT (user_id, entity_type, entity_id) DO UPDATE
+          SET value = excluded.value,
+              created_at = excluded.created_at
         RETURNING 1
       )
-      SELECT count(*)::int AS count FROM inserted
+      SELECT count(*)::int AS count FROM upserted
     `,
   );
 
@@ -535,7 +645,7 @@ async function mergeGymCluster(
     commentsMoved,
     feedItemsMoved,
     notificationsMoved,
-    votesInserted,
+    votesUpserted,
     votesDeleted,
     duplicateGymsSoftDeleted,
   };
@@ -552,7 +662,7 @@ function emptyMergeCounts(): MergeCounts {
     commentsMoved: 0,
     feedItemsMoved: 0,
     notificationsMoved: 0,
-    votesInserted: 0,
+    votesUpserted: 0,
     votesDeleted: 0,
     duplicateGymsSoftDeleted: 0,
   };
@@ -569,7 +679,7 @@ function addMergeCounts(firstCounts: MergeCounts, secondCounts: MergeCounts): Me
     commentsMoved: firstCounts.commentsMoved + secondCounts.commentsMoved,
     feedItemsMoved: firstCounts.feedItemsMoved + secondCounts.feedItemsMoved,
     notificationsMoved: firstCounts.notificationsMoved + secondCounts.notificationsMoved,
-    votesInserted: firstCounts.votesInserted + secondCounts.votesInserted,
+    votesUpserted: firstCounts.votesUpserted + secondCounts.votesUpserted,
     votesDeleted: firstCounts.votesDeleted + secondCounts.votesDeleted,
     duplicateGymsSoftDeleted: firstCounts.duplicateGymsSoftDeleted + secondCounts.duplicateGymsSoftDeleted,
   };
@@ -587,7 +697,7 @@ function printMergeCounts(totalCounts: MergeCounts): void {
   console.info(`  comments moved: ${totalCounts.commentsMoved}`);
   console.info(`  feed items moved: ${totalCounts.feedItemsMoved}`);
   console.info(`  notifications moved: ${totalCounts.notificationsMoved}`);
-  console.info(`  votes inserted/deleted: ${totalCounts.votesInserted}/${totalCounts.votesDeleted}`);
+  console.info(`  votes upserted/deleted: ${totalCounts.votesUpserted}/${totalCounts.votesDeleted}`);
   console.info(`  duplicate gyms soft-deleted: ${totalCounts.duplicateGymsSoftDeleted}`);
 }
 
@@ -616,7 +726,8 @@ async function main(): Promise<void> {
 
       let aggregateCounts = emptyMergeCounts();
       for (const cluster of selectedClusters) {
-        const clusterCounts = await mergeGymCluster(transaction, cluster);
+        const lockedCluster = await refetchClusterForApply(transaction, cluster);
+        const clusterCounts = await mergeGymCluster(transaction, lockedCluster);
         aggregateCounts = addMergeCounts(aggregateCounts, clusterCounts);
       }
       return aggregateCounts;
