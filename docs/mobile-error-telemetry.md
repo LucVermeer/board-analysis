@@ -37,7 +37,10 @@ PostHog: `react-query`, `native-auth`, `queue-mutation`, `queue-sync`,
 - **React Query** (`providers/query-provider.tsx`) — `QueryCache` / `MutationCache`
   `onError` report every query/mutation failure once `retry` is exhausted. This is
   the chokepoint for API / GraphQL-HTTP / REST failures; don't re-report at
-  individual `useQuery`/`useMutation` call sites.
+  individual `useQuery`/`useMutation` call sites. Known gap: a query that keeps
+  failing for a non-network reason re-reports on each refetch (focus / remount /
+  reconnect) — same `queryHash`, so it groups, but watch event volume in PostHog
+  after rollout; add short-TTL dedup keyed on `queryHash` if it's noisy.
 - Direct **GraphQL-WS** ops (`@boardsesh/queue-react`, `@boardsesh/playlists-react`)
   bypass React Query, so their catch sites report explicitly.
 
@@ -45,8 +48,12 @@ PostHog: `react-query`, `native-auth`, `queue-mutation`, `queue-sync`,
 
 - Cancellations and expected-empty paths (e.g. a parser returning `null` for a URL
   that isn't a deep link).
-- Best-effort key/value store reads/writes that fall back to a default
-  (`last-search-store`, `recent-filter-store`, `session-store`, image cache, …).
+- Best-effort key/value store reads/writes whose failure is invisible and
+  self-recovering — search filters, recents, image cache, preferences
+  (`last-search-store`, `recent-filter-store`, `session-store`, …). Exception: a
+  store write that loses a **pending user action** is reported — the deep-link /
+  share-target stashes, where a dropped `AsyncStorage.setItem` silently loses a
+  tapped invite link or a shared video after login.
 - Rate-limit responses — that's expected user pacing, not a bug.
 - `__DEV__`-only diagnostics (keep the `console.warn`; report only if the failure
   is user-affecting in production too).

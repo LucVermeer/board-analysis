@@ -29,7 +29,6 @@ import { AngleSelectorSheet } from './AngleSelectorSheet';
 import { ClimbActionsSheet } from '../ClimbActionsSheet';
 import { BleControlSheet } from '../ble/BleControlSheet';
 import { disconnectAllBluetooth } from '../../lib/ble/bluetooth-status-store';
-import { reportHandledError } from '../../lib/error-reporting';
 import { GlassSheetBackground } from '../GlassSheetBackground';
 import { Icon } from '../Icon';
 import { useIsPartyPreviewOnly, usePlaylistSuggestionSource, useQueue } from '../../providers/queue-provider';
@@ -523,8 +522,10 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
           });
         })
         .catch((error: unknown) => {
+          // takeControl/releaseControl already report via the queue-provider
+          // chokepoint (showQueueMutationErrorToast) before rethrowing, so don't
+          // report again here — it would double-count and leak rate-limited ops.
           console.error('[playDrawer] failed to release wall control:', error);
-          reportHandledError(error, { tags: { source: 'wall-control', op: 'release' } });
         });
       return;
     }
@@ -610,7 +611,6 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
         const shouldHandleFailure = wallControlPressOperationRef.current === operationId;
         if (!shouldHandleFailure) return;
         console.error('[playDrawer] failed to take wall control:', error);
-        reportHandledError(error, { tags: { source: 'wall-control', op: 'take' } });
         cancelWallConfirmWatcher();
         setPendingClimbUuid((currentClimbUuid) => (currentClimbUuid === displayedClimb.uuid ? null : currentClimbUuid));
         if (

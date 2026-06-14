@@ -959,7 +959,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
               await clearStoredQueueSnapshot();
             } catch (seedError) {
               if (__DEV__) console.warn('[queue] session queue seed failed', seedError);
-              reportError(seedError, { tags: { source: 'startSessionSeed' } });
+              reportHandledError(seedError, { tags: { source: 'startSessionSeed' } });
             }
           }
           setSessionId(newId);

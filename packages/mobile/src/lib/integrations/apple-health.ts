@@ -21,6 +21,7 @@ import { SET_SESSION_HEALTHKIT_WORKOUT_ID } from '@boardsesh/graphql/operations/
 // package needing a dependency entry.
 import { healthWorkoutsNative, type SaveWorkoutResult } from '../../../modules/health-workouts/src/index';
 import { track } from '../analytics';
+import { reportHandledError } from '../error-reporting';
 import { getHttpClient } from '../graphql/client';
 import {
   GET_SESSION_HEALTH_EXPORT,
@@ -417,6 +418,7 @@ export async function manualSaveToAppleHealth(
   } catch (error) {
     setSaveState(sessionId, 'failed');
     console.warn('[AppleHealth] Manual save failed:', error);
+    reportHandledError(error, { tags: { source: 'integration', op: 'apple-health-save' } });
     return 'failed';
   }
 }

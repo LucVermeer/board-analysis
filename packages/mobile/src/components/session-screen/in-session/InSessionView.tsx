@@ -42,7 +42,7 @@ import { springs } from '../../../theme/animations';
 import { borderRadius, spacing } from '../../../theme/tokens';
 import { gradeBadgeColor } from '../../you/profile-chart-colors';
 import { hapticSelection } from '../../../lib/haptics';
-import { reportError } from '../../../lib/error-reporting';
+import { reportHandledError } from '../../../lib/error-reporting';
 import { RecordTopChrome } from '../RecordTopChrome';
 import { SessionAnalytics } from './SessionAnalytics';
 import { SessionLeaderboard } from './SessionLeaderboard';
@@ -506,7 +506,7 @@ export function InSessionView({
     } catch (error) {
       // Surface the failure (the sheet stays open so the user can retry) rather than
       // leaving a thrown endSession() as a silent unhandled rejection.
-      reportError(error, { tags: { source: 'endSession' } });
+      reportHandledError(error, { tags: { source: 'endSession' } });
     } finally {
       // Always clear the spinner — without this a thrown endSession() would leave the
       // confirm button spinning forever and the sheet undismissable.

@@ -5,6 +5,7 @@ import {
   type CreateIntegrationOAuthHandoffResponse,
 } from '@boardsesh/graphql/operations/integrations';
 import { track } from '../analytics';
+import { reportHandledError } from '../error-reporting';
 import { parseDeepLinkQueryParams } from '../deep-link-query';
 import { BACKEND_URL } from '../env';
 import { getHttpClient } from '../graphql/client';
@@ -34,7 +35,8 @@ export async function connectStrava(): Promise<StravaConnectResult> {
       { provider: 'STRAVA' },
     );
     handoff = response.createIntegrationOAuthHandoff;
-  } catch {
+  } catch (error) {
+    reportHandledError(error, { tags: { source: 'integration', op: 'strava-connect', step: 'handoff' } });
     return 'error';
   }
   if (!handoff) return 'error';
@@ -44,7 +46,8 @@ export async function connectStrava(): Promise<StravaConnectResult> {
   let result: WebBrowser.WebBrowserAuthSessionResult;
   try {
     result = await WebBrowser.openAuthSessionAsync(startUrl, STRAVA_REDIRECT_URL);
-  } catch {
+  } catch (error) {
+    reportHandledError(error, { tags: { source: 'integration', op: 'strava-connect', step: 'auth-session' } });
     return 'error';
   }
 

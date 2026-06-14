@@ -90,6 +90,7 @@ const queueSnapshotStore = vi.hoisted(() => ({
 
 const errorReporter = vi.hoisted(() => ({
   reportError: vi.fn(),
+  reportHandledError: vi.fn(),
 }));
 
 const toast = vi.hoisted(() => ({
@@ -126,7 +127,10 @@ vi.mock('../../lib/graphql/use-active-board', () => ({
 }));
 vi.mock('../../lib/graphql/client', () => ({ getHttpClient: () => ({ request: http.request }) }));
 vi.mock('../../lib/analytics', () => ({ track: vi.fn() }));
-vi.mock('../../lib/error-reporting', () => ({ reportError: errorReporter.reportError }));
+vi.mock('../../lib/error-reporting', () => ({
+  reportError: errorReporter.reportError,
+  reportHandledError: errorReporter.reportHandledError,
+}));
 vi.mock('../toast-provider', () => ({ useToast: () => ({ showToast: toast.showToast }) }));
 vi.mock('../queue-snackbar-provider', () => ({ useQueueSnackbar: () => ({ showQueueAddedSnackbar: vi.fn() }) }));
 
