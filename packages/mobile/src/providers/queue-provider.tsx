@@ -32,7 +32,6 @@ import {
   createJoinSessionTracker,
   createReleaseControlOptimisticPlan,
   createTakeControlOptimisticPlan,
-  derivePreviewOnly,
   mapSubscriptionEnvelopeToAction,
   shouldRollbackReleaseControlDriver,
   shouldRollbackTakeControlDriver,
@@ -1804,17 +1803,13 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     [playlistSuggestionSource],
   );
 
-  // Preview-only selector — the single queue-mutation gate (play drawer, queue
-  // sheet, activation taps, widget nav all consume this hook). Roster-aware:
-  // a solo occupant of a session always keeps full control of the queue; with
-  // 2+ live participants, a released driver (driverParticipantId null) leaves
-  // everyone preview-only until someone takes wall control.
-  const isPartyPreviewOnly = derivePreviewOnly({
-    isSessionActive: sessionId !== null,
-    participantId,
-    driverParticipantId,
-    sessionUserCount: sessionUsers.length,
-  });
+  // No driver mechanics: every session participant controls the shared queue and
+  // wall instantly. The backend accepts queue/current-climb mutations from any
+  // participant (last write wins), so there is no preview-only gate — navigation,
+  // activation, and queue edits drive the shared wall for everyone, the same as
+  // solo. (Kept as a hook so the many consumers don't all need touching; retiring
+  // the driver/preview concept end-to-end is a follow-up.)
+  const isPartyPreviewOnly = false;
   const partyPreviewOnlyValue = useMemo<QueuePartyPreviewOnlyContextValue>(
     () => ({ isPartyPreviewOnly }),
     [isPartyPreviewOnly],
