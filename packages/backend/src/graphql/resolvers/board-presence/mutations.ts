@@ -414,7 +414,11 @@ export const boardPresenceMutations = {
 
     const validatedClimb = validateInput(ReportBoardClimbInputSchema, climb, 'climb');
     const validatedAngle = validateInput(BoardPresenceAngleSchema, angle, 'angle');
-    const effectiveAngle = validatedAngle ?? validatedClimb.climb.angle ?? Number(board.angle);
+    // The explicit `angle` arg is int-validated, but the `climb.angle` / board
+    // fallbacks aren't — round so a fractional angle can't break the `Int` event
+    // serialization, the durable insert, or the grade join (defensive; real
+    // clients always send integer wall angles).
+    const effectiveAngle = Math.round(validatedAngle ?? validatedClimb.climb.angle ?? Number(board.angle));
     const climbUuid = validatedClimb.climb.uuid;
 
     const [catalogClimbRows, sender] = await Promise.all([
@@ -527,19 +531,22 @@ export const boardPresenceMutations = {
       }
     }
 
-    // Durable history (dwell-gated): persist this push to board_climb_events
-    // only once the sender has had sustained presence on the board (>= 60s), so
-    // app-swiping noise stays out of the lasting log. The live feed above
-    // already showed everything; only the Postgres write is gated. Non-fatal —
-    // a failed durable insert never fails the accepted report.
+    // Durable history (logged-in + dwell-gated): persist this push to
+    // board_climb_events only for an authenticated sender who has had sustained
+    // presence on the board (>= 60s). Anonymous sends drive the live feed + holder
+    // but never the durable, leaderboard-backing log — they're unattributable
+    // (userId null) and otherwise let an anon spam null rows into a public board's
+    // history. App-swiping noise is filtered by the dwell gate. The live feed
+    // already showed everything; only the Postgres write is gated. Non-fatal — a
+    // failed durable insert never fails the accepted report.
     const DURABLE_DWELL_MS = 60_000;
     try {
       // `sentAt` is the server-generated ISO timestamp from above, so
       // `Date.parse(sentAt)` is always valid; `firstSeen` is already guarded to
       // a plausible epoch-ms or null in getBoardMembershipFirstSeen. A null
       // firstSeen correctly skips the insert (presence not yet proven for 60s).
-      const firstSeen = await pubsub.getBoardMembershipFirstSeen(String(boardId), emitterId);
-      if (firstSeen !== null && Date.parse(sentAt) - firstSeen >= DURABLE_DWELL_MS) {
+      const firstSeen = ctx.userId ? await pubsub.getBoardMembershipFirstSeen(String(boardId), emitterId) : null;
+      if (ctx.userId && firstSeen !== null && Date.parse(sentAt) - firstSeen >= DURABLE_DWELL_MS) {
         await db
           .insert(dbSchema.boardClimbEvents)
           .values({
@@ -547,8 +554,7 @@ export const boardPresenceMutations = {
             boardType: board.boardType,
             climbUuid,
             angle: effectiveAngle,
-            // Null for anonymous emitters (board_climb_events.userId is nullable).
-            userId: ctx.userId ?? null,
+            userId: ctx.userId,
             // Reserved for session recaps. reportBoardClimb has no sessionId arg
             // yet, so every durable row is solo-attributed until the
             // session-attribution follow-up threads the active session through.

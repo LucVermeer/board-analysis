@@ -451,8 +451,11 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
       return;
     }
 
-    // connect — relight the remembered board for the current config.
-    track('Wall Control Taken', {
+    // connect — relight the remembered board for the current config. Distinct
+    // from the BLE adapter's own BluetoothConnectionSuccess event: this records
+    // the drawer-lightbulb intent (there's no "wall control" to take in the
+    // holder model). connect() emits the success event, so don't double-count.
+    track('Board Lightbulb Connect', {
       source: 'lightbulb_drawer',
       mode: sessionId !== null ? 'party' : 'solo',
       boardLayout,

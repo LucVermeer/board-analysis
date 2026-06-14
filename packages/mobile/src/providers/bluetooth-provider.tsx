@@ -321,10 +321,11 @@ export function BluetoothProvider({
 }: BluetoothProviderProps) {
   const { sessionId, confirmClimbOnWall, setSessionBoardSerial, lastConnectedBoardSerial } = useQueueSessionControls();
   const { t } = useTranslation('settings');
-  // Board presence ("now on the wall"). All of these are inert when the
-  // `board-presence` flag is off: `enabled` is false, `boardId` is null, and the
-  // shared wall context's report/undo no-op for a null board — so the BLE flow
-  // below behaves exactly as today.
+  // Board presence ("now on the wall"). Always-on now (the board-presence flag
+  // was removed). `enabled` is true while the provider is mounted and false only
+  // for the outside-provider DISABLED_CONTROLS fallback, where `boardId` is null
+  // and the shared wall context's report/undo no-op — so a pre-provider render
+  // still behaves safely.
   const {
     enabled: presenceEnabled,
     boardId: presenceBoardId,

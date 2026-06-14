@@ -57,8 +57,9 @@ type BoardPresenceControlsValue = {
   boardId: number | null;
   /**
    * Resolve (and bind) the shared board for a just-connected serial, then store
-   * its boardId so the wall feed subscribes. No-op (resolves null) when the flag
-   * is off or no client is available. Idempotent for an unchanged serial.
+   * its boardId so the wall feed subscribes. No-op (resolves null) when no
+   * transport/client is available (e.g. the outside-provider fallback).
+   * Idempotent for an unchanged serial.
    */
   resolveAndBindBoard: (args: ResolveBoardArgs) => Promise<ResolvedBoard | null>;
   /**
