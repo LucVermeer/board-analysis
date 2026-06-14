@@ -71,7 +71,11 @@ export function getActiveFilterTokens({
       formatGradeByDifficultyId(difficultyId) ?? getGradeName(difficultyId, grades);
     let label: string;
     if (filters.minGrade != null && filters.maxGrade != null) {
-      label = labels.gradeRange(gradeName(filters.minGrade), gradeName(filters.maxGrade));
+      // A single selected grade (min == max) reads as the bare grade name, not a range.
+      label =
+        filters.minGrade === filters.maxGrade
+          ? gradeName(filters.minGrade)
+          : labels.gradeRange(gradeName(filters.minGrade), gradeName(filters.maxGrade));
     } else if (filters.minGrade != null) {
       label = labels.gradeMin(gradeName(filters.minGrade));
     } else {

@@ -58,7 +58,13 @@ export function getBaseFilterParts(
   }
 
   if (filters.minGrade != null && filters.maxGrade != null) {
-    parts.push(labels.gradeRange(getGradeName(filters.minGrade, grades), getGradeName(filters.maxGrade, grades)));
+    // A single selected grade (min == max) reads as the bare grade name ("V6"),
+    // not a "V6–V6" range. The grade name is scale text, so it needs no label.
+    if (filters.minGrade === filters.maxGrade) {
+      parts.push(getGradeName(filters.minGrade, grades));
+    } else {
+      parts.push(labels.gradeRange(getGradeName(filters.minGrade, grades), getGradeName(filters.maxGrade, grades)));
+    }
   } else if (filters.minGrade != null) {
     parts.push(labels.gradeMin(getGradeName(filters.minGrade, grades)));
   } else if (filters.maxGrade != null) {
