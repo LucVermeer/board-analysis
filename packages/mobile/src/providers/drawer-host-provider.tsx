@@ -348,6 +348,10 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
 
   const handleClimbActionsAddBetaVideo = useCallback(() => {
     if (!climbActions) return;
+    // ClimbActionsSheet fires this then calls onClose (which clears climbActions).
+    // We snapshot climb + boardConfig into betaVideoClimb here, so the beta-video
+    // sheet holds its own copy and never reads from climbActions after it's null —
+    // the open-then-close ordering in ClimbActionsSheet stays incidental, not load-bearing.
     setBetaVideoClimb({
       climb: climbActions.climb,
       boardConfig: climbActions.boardConfig,

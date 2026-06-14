@@ -8,8 +8,8 @@
 // Driven by a `visible` prop (mirrors ClimbActionsSheet / LogAscentSheet) so it
 // can present above the play drawer's own modal via stackBehavior="push".
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { View, StyleSheet, TextInput, Pressable } from 'react-native';
-import type { BottomSheetModal } from '@gorhom/bottom-sheet';
+import { View, StyleSheet, Pressable } from 'react-native';
+import { BottomSheetTextInput, type BottomSheetModal } from '@gorhom/bottom-sheet';
 import { useTranslation } from 'react-i18next';
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
@@ -28,6 +28,7 @@ import { useToast } from '../providers/toast-provider';
 import { useTheme } from '../providers/theme-provider';
 import { iosSystemColors } from '../theme/ios-colors';
 import { spacing, borderRadius } from '../theme/tokens';
+import { textStyles } from '../theme/typography';
 
 type AddBetaVideoSheetProps = {
   visible: boolean;
@@ -181,7 +182,11 @@ export function AddBetaVideoSheet({ visible, climb, boardName, layoutId, angle, 
           <View style={[styles.dividerLine, { backgroundColor: systemColors.separator }]} />
         </View>
 
-        <TextInput
+        {/* `BottomSheetTextInput` (vs the bare `TextInput`) is what makes the host
+            sheet stay above the keyboard — paired with ModalSheet's
+            keyboardBehavior="interactive" it lifts the input clear of the
+            software keyboard instead of letting it cover this bottom field. */}
+        <BottomSheetTextInput
           value={url}
           onChangeText={setUrl}
           placeholder={t('mobile.betaVideos.urlPlaceholder')}
@@ -298,7 +303,7 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.md,
     paddingHorizontal: spacing[3],
     paddingVertical: spacing[3],
-    fontSize: 16,
+    fontSize: textStyles.callout.fontSize,
   },
   errorText: {
     marginTop: -spacing[2],
