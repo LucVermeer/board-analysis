@@ -61,7 +61,7 @@ vi.mock('../Button', () => ({
     return createElement('button', null, title);
   },
 }));
-vi.mock('../../lib/instagram', () => ({ openInstagram: vi.fn(async () => true) }));
+vi.mock('../../lib/instagram', () => ({ openInstagram: vi.fn(async () => ({ opened: true, usedFallback: false })) }));
 vi.mock('../../lib/graphql/hooks', () => ({ useAttachBetaLink: () => attach }));
 vi.mock('../../lib/graphql/extract-error-message', () => ({ extractGraphqlMessage: () => null }));
 vi.mock('../../providers/toast-provider', () => ({ useToast: () => ({ showToast: vi.fn() }) }));
@@ -160,6 +160,7 @@ describe('AddBetaVideoSheet attach analytics', () => {
       boardType: 'kilter',
       climbUuid: 'climb-1',
       opened: true,
+      usedFallback: false,
     });
   });
 });

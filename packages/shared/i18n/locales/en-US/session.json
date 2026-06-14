@@ -288,7 +288,6 @@
       "videoCount_one": "{{count}} video",
       "videoCount_other": "{{count}} videos",
       "addButton": "Attach a beta video",
-      "addTitle": "Attach a beta video",
       "urlPlaceholder": "Paste TikTok or Instagram URL",
       "submitButton": "Attach",
       "submitting": "Attaching...",
@@ -318,7 +317,8 @@
       "copyCaption": "Copy caption",
       "captionCopied": "Caption copied — paste it in your reel",
       "openInstagram": "Open Instagram",
-      "instagramNotInstalled": "Couldn't open Instagram",
+      "instagramNotInstalled": "Instagram isn't installed — opened the website instead",
+      "instagramOpenFailed": "Couldn't open Instagram",
       "shareBackInstructions": "Two ways back: on your reel tap Share and pick Boardsesh (it may be hiding under More), or copy the reel's link and paste it below. Either way, we'll match it to this climb.",
       "pasteSectionLabel": "Already have a link?"
     },

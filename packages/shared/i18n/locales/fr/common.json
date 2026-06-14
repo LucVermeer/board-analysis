@@ -26,6 +26,29 @@
           "default": "Par défaut",
           "user": "Couleur personnalisée"
         },
+        "rowSubtitle": "{{colorMode}}, {{shape}}",
+        "shapeLabel": "Forme",
+        "shapes": {
+          "circle": "Cercle",
+          "triangleUp": "Triangle vers le haut",
+          "triangleDown": "Triangle vers le bas",
+          "square": "Carré",
+          "diamond": "Losange"
+        },
+        "brush": {
+          "title": "Épaisseur du trait",
+          "subtitle": "Modifie l'épaisseur des contours des marqueurs.",
+          "value": "{{value}}x",
+          "save": "Enregistrer l'épaisseur",
+          "rowAccessibility": "Épaisseur du trait, {{value}}x"
+        },
+        "size": {
+          "title": "Taille du marqueur",
+          "subtitle": "Modifie la taille des formes des marqueurs.",
+          "value": "{{value}}x",
+          "save": "Enregistrer la taille",
+          "rowAccessibility": "Taille du marqueur, {{value}}x"
+        },
         "channels": {
           "red": "Rouge",
           "green": "Vert",

@@ -94,9 +94,10 @@ export function AddBetaVideoSheet({ visible, climb, boardName, layoutId, angle, 
     // "Copy caption" still lands in the camera with it on the clipboard. The old
     // web flow copied + opened atomically; keep that guarantee here.
     if (caption) await Clipboard.setStringAsync(caption);
-    const opened = await openInstagram();
-    track(SHARED_EVENTS.BetaInstagramOpened, { boardType: boardName, climbUuid: climb.uuid, opened });
-    if (!opened) showToast(t('mobile.betaVideos.instagramNotInstalled'), 'error');
+    const { opened, usedFallback } = await openInstagram();
+    track(SHARED_EVENTS.BetaInstagramOpened, { boardType: boardName, climbUuid: climb.uuid, opened, usedFallback });
+    if (!opened) showToast(t('mobile.betaVideos.instagramOpenFailed'), 'error');
+    else if (usedFallback) showToast(t('mobile.betaVideos.instagramNotInstalled'), 'info');
   }, [caption, climb, boardName, showToast, t]);
 
   const trimmed = url.trim();

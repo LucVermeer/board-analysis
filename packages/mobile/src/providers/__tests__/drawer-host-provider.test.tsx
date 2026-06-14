@@ -192,6 +192,10 @@ vi.mock('../board-presence-provider', () => ({
   }),
 }));
 
+vi.mock('../auth-provider', () => ({
+  useAuth: () => ({ isAuthenticated: true }),
+}));
+
 vi.mock('../bluetooth-provider', () => ({
   useOptionalBluetoothContext: () => ({ undoWallChange: vi.fn(async () => true) }),
 }));
