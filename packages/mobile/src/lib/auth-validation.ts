@@ -8,6 +8,7 @@
 
 export const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export const PASSWORD_MIN_LENGTH = 8;
+export const PASSWORD_MAX_LENGTH = 128;
 export const NAME_MAX_LENGTH = 100;
 
 export type LoginFieldErrors = { email?: string; password?: string };
@@ -54,6 +55,8 @@ export function validateRegisterFields(values: {
     errors.password = 'login.validation.passwordRequiredCreate';
   } else if (values.password.length < PASSWORD_MIN_LENGTH) {
     errors.password = 'login.validation.passwordTooShort';
+  } else if (values.password.length > PASSWORD_MAX_LENGTH) {
+    errors.password = 'login.validation.passwordTooLong';
   }
   if (!values.confirmPassword) {
     errors.confirmPassword = 'login.validation.confirmPasswordRequired';

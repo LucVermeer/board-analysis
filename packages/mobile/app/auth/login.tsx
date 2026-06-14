@@ -15,11 +15,12 @@ import * as AppleAuthentication from 'expo-apple-authentication';
 import { GoogleSigninButton } from '@react-native-google-signin/google-signin';
 import { useTranslation } from 'react-i18next';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
-import { classifyNativeAuthFailureReason, nativeSignInErrorCode } from '../../src/lib/native-auth-analytics';
+import { classifyNativeAuthFailureReason } from '../../src/lib/native-auth-analytics';
 import { isGoogleSignInConfigured } from '../../src/lib/auth';
 import { EMAIL_REGEX } from '../../src/lib/auth-validation';
 import { useAuth } from '../../src/providers/auth-provider';
 import { useTheme } from '../../src/providers/theme-provider';
+import { useNativeOAuthSignIn } from '../../src/hooks/use-native-oauth-sign-in';
 import { AuthTextInput } from '../../src/components/AuthTextInput';
 import { Button } from '../../src/components/Button';
 import { track } from '../../src/lib/analytics';
@@ -27,7 +28,7 @@ import { reportError } from '../../src/lib/error-reporting';
 import { hapticLight } from '../../src/lib/haptics';
 
 export default function LoginScreen() {
-  const { signInWithApple, signInWithGoogle, signInWithCredentials } = useAuth();
+  const { signInWithCredentials } = useAuth();
   const { t } = useTranslation('auth');
   const theme = useTheme();
   const router = useRouter();
@@ -37,7 +38,8 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [oauthInProgress, setOauthInProgress] = useState(false);
+  // Shared Apple/Google flow; errors land in the same region as credentials sign-in.
+  const { signIn: handleOAuthSignIn, inProgress: oauthInProgress } = useNativeOAuthSignIn({ setError });
 
   const trimmedEmail = email.trim();
   const canSubmit = !submitting && trimmedEmail.length > 0 && password.length > 0;
@@ -93,79 +95,6 @@ export default function LoginScreen() {
       throw signInError;
     } finally {
       setSubmitting(false);
-    }
-  }
-
-  async function handleOAuthSignIn(provider: 'apple' | 'google') {
-    // A rapid double-tap would open two concurrent native sheets.
-    if (oauthInProgress) return;
-    setOauthInProgress(true);
-    setError(null);
-    track(SHARED_EVENTS.LoginAttempted, { auth_method: provider, flow: 'native' });
-    // duration_ms separates a human dismissing the system sheet (seconds) from
-    // the flow dying programmatically (sub-second).
-    const attemptStartedAt = Date.now();
-    try {
-      const result = provider === 'apple' ? await signInWithApple() : await signInWithGoogle();
-      if (result.success) {
-        track(SHARED_EVENTS.LoginSucceeded, { auth_method: provider, flow: 'native' });
-        // AuthProvider flips isAuthenticated and the redirect handles navigation.
-        return;
-      }
-      if ('cancelled' in result) {
-        // The user dismissed the provider sheet — not an error, no message shown.
-        track(SHARED_EVENTS.LoginFailed, {
-          auth_method: provider,
-          flow: 'native',
-          failure_reason: 'cancel',
-          duration_ms: Date.now() - attemptStartedAt,
-        });
-        return;
-      }
-      // A real backend/token failure carrying the server's status + error.
-      const oauthFailureReason = classifyNativeAuthFailureReason(result, 'oauth');
-      track(SHARED_EVENTS.LoginFailed, {
-        auth_method: provider,
-        flow: 'native',
-        failure_reason: oauthFailureReason,
-        failure_detail: result.error,
-        duration_ms: Date.now() - attemptStartedAt,
-      });
-      // Surface to error tracking too: an OAuth 401 / no_id_token is a config
-      // bug (client-id audience mismatch, unconfigured backend) rather than a
-      // user typo, so it's worth a $exception carrying the status + server
-      // message. Network blips downgrade to a warning (handled by report level).
-      reportError(new Error(`Native ${provider} sign-in failed: ${result.error}`), {
-        level: result.error === 'network' ? 'warning' : 'error',
-        tags: { source: 'native-auth', provider, flow: 'native', failure_reason: oauthFailureReason },
-        extra: { status: result.status, server_error: result.error },
-      });
-      setError(result.error === 'network' ? t('nativeStart.networkError') : t('nativeStart.oauthError'));
-    } catch (oauthError) {
-      // The native module threw (Play Services missing, no presenter,
-      // DEVELOPER_ERROR for a signing/client-id mismatch, …). The native `.code`
-      // (e.g. DEVELOPER_ERROR) is far more actionable than the opaque message, so
-      // prefer it for failure_detail and tag it for filtering.
-      const nativeErrorCode = nativeSignInErrorCode(oauthError);
-      track(SHARED_EVENTS.LoginFailed, {
-        auth_method: provider,
-        flow: 'native',
-        failure_reason: 'exception',
-        failure_detail: nativeErrorCode ?? (oauthError instanceof Error ? oauthError.message : undefined),
-        duration_ms: Date.now() - attemptStartedAt,
-      });
-      reportError(oauthError, {
-        tags: {
-          source: 'native-auth',
-          provider,
-          flow: 'native',
-          mechanism: 'exception',
-          native_error_code: nativeErrorCode,
-        },
-      });
-      setError(t('nativeStart.oauthError'));
-    } finally {
-      setOauthInProgress(false);
     }
   }
 
@@ -254,9 +183,9 @@ export default function LoginScreen() {
         {showSocialSignIn && (
           <>
             <View style={styles.dividerRow}>
-              <View style={styles.dividerLine} />
+              <View style={[styles.dividerLine, { backgroundColor: theme.systemColors.separator }]} />
               <Text style={styles.dividerLabel}>{t('nativeStart.orContinueWith')}</Text>
-              <View style={styles.dividerLine} />
+              <View style={[styles.dividerLine, { backgroundColor: theme.systemColors.separator }]} />
             </View>
 
             <View style={styles.buttons}>
@@ -340,7 +269,6 @@ const styles = StyleSheet.create({
   dividerLine: {
     flex: 1,
     height: StyleSheet.hairlineWidth,
-    backgroundColor: 'rgba(60, 60, 67, 0.36)',
   },
   dividerLabel: {
     fontSize: 13,

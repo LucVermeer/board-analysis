@@ -13,11 +13,12 @@ import * as AppleAuthentication from 'expo-apple-authentication';
 import { GoogleSigninButton } from '@react-native-google-signin/google-signin';
 import { useTranslation } from 'react-i18next';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
-import { classifyNativeAuthFailureReason, nativeSignInErrorCode } from '../../src/lib/native-auth-analytics';
+import { classifyNativeAuthFailureReason } from '../../src/lib/native-auth-analytics';
 import { isGoogleSignInConfigured } from '../../src/lib/auth';
 import { validateRegisterFields, isValid, type RegisterFieldErrors } from '../../src/lib/auth-validation';
 import { useAuth } from '../../src/providers/auth-provider';
 import { useTheme } from '../../src/providers/theme-provider';
+import { useNativeOAuthSignIn } from '../../src/hooks/use-native-oauth-sign-in';
 import { AuthTextInput } from '../../src/components/AuthTextInput';
 import { Button } from '../../src/components/Button';
 import { Text } from '../../src/components/Text';
@@ -28,7 +29,7 @@ import { hapticLight } from '../../src/lib/haptics';
 type FieldKey = 'name' | 'email' | 'password' | 'confirmPassword';
 
 export default function RegisterScreen() {
-  const { register, signInWithApple, signInWithGoogle } = useAuth();
+  const { register } = useAuth();
   const { t } = useTranslation('auth');
   const theme = useTheme();
   const router = useRouter();
@@ -40,7 +41,11 @@ export default function RegisterScreen() {
   const [fieldErrors, setFieldErrors] = useState<RegisterFieldErrors>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [oauthInProgress, setOauthInProgress] = useState(false);
+  // Shared Apple/Google flow; OAuth errors land in the same region as the form.
+  const { signIn: handleOAuthSignIn, inProgress: oauthInProgress } = useNativeOAuthSignIn({
+    isRegistration: true,
+    setError: setFormError,
+  });
 
   // Editing a field clears its inline error so a fixed field stops shouting.
   const setField = (key: FieldKey) => (text: string) => {
@@ -119,74 +124,6 @@ export default function RegisterScreen() {
     }
   }
 
-  // Mirrors login.tsx's handleOAuthSignIn — Apple/Google "sign up" is the same
-  // find-or-create flow as sign-in, tagged is_registration so the funnel can
-  // tell signup OAuth from login OAuth. (Kept local rather than shared to leave
-  // login's working flow untouched; a shared hook is a sensible follow-up.)
-  async function handleOAuthSignIn(provider: 'apple' | 'google') {
-    if (oauthInProgress) return;
-    setOauthInProgress(true);
-    setFormError(null);
-    track(SHARED_EVENTS.LoginAttempted, { auth_method: provider, flow: 'native', is_registration: true });
-    const attemptStartedAt = Date.now();
-    try {
-      const result = provider === 'apple' ? await signInWithApple() : await signInWithGoogle();
-      if (result.success) {
-        track(SHARED_EVENTS.LoginSucceeded, { auth_method: provider, flow: 'native', is_registration: true });
-        return;
-      }
-      if ('cancelled' in result) {
-        track(SHARED_EVENTS.LoginFailed, {
-          auth_method: provider,
-          flow: 'native',
-          failure_reason: 'cancel',
-          duration_ms: Date.now() - attemptStartedAt,
-          is_registration: true,
-        });
-        return;
-      }
-      const oauthFailureReason = classifyNativeAuthFailureReason(result, 'oauth');
-      track(SHARED_EVENTS.LoginFailed, {
-        auth_method: provider,
-        flow: 'native',
-        failure_reason: oauthFailureReason,
-        failure_detail: result.error,
-        duration_ms: Date.now() - attemptStartedAt,
-        is_registration: true,
-      });
-      reportError(new Error(`Native ${provider} sign-in failed: ${result.error}`), {
-        level: result.error === 'network' ? 'warning' : 'error',
-        tags: { source: 'native-auth', provider, flow: 'native', failure_reason: oauthFailureReason },
-        extra: { status: result.status, server_error: result.error },
-      });
-      setFormError(result.error === 'network' ? t('nativeStart.networkError') : t('nativeStart.oauthError'));
-    } catch (oauthError) {
-      // Prefer the native `.code` (e.g. an Android signing/client-id mismatch)
-      // over the opaque message — far more actionable in telemetry. Mirrors login.
-      const nativeErrorCode = nativeSignInErrorCode(oauthError);
-      track(SHARED_EVENTS.LoginFailed, {
-        auth_method: provider,
-        flow: 'native',
-        failure_reason: 'exception',
-        failure_detail: nativeErrorCode ?? (oauthError instanceof Error ? oauthError.message : undefined),
-        duration_ms: Date.now() - attemptStartedAt,
-        is_registration: true,
-      });
-      reportError(oauthError, {
-        tags: {
-          source: 'native-auth',
-          provider,
-          flow: 'native',
-          mechanism: 'exception',
-          native_error_code: nativeErrorCode,
-        },
-      });
-      setFormError(t('nativeStart.oauthError'));
-    } finally {
-      setOauthInProgress(false);
-    }
-  }
-
   const isDark = theme.colorScheme === 'dark';
   const showAppleSignIn = Platform.OS === 'ios';
   const showGoogleSignIn = isGoogleSignInConfigured();
@@ -240,11 +177,11 @@ export default function RegisterScreen() {
               </View>
 
               <View style={styles.dividerRow}>
-                <View style={styles.dividerLine} />
+                <View style={[styles.dividerLine, { backgroundColor: theme.systemColors.separator }]} />
                 <Text variant="footnote" color={theme.systemColors.secondaryLabel}>
                   {t('login.divider')}
                 </Text>
-                <View style={styles.dividerLine} />
+                <View style={[styles.dividerLine, { backgroundColor: theme.systemColors.separator }]} />
               </View>
             </>
           )}
@@ -379,7 +316,6 @@ const styles = StyleSheet.create({
   dividerLine: {
     flex: 1,
     height: StyleSheet.hairlineWidth,
-    backgroundColor: 'rgba(60, 60, 67, 0.36)',
   },
   form: { gap: 12 },
   submitButton: { alignSelf: 'stretch', marginTop: 4 },
