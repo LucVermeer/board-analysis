@@ -342,8 +342,6 @@
       "climbCount_one": "{{count}} bloque",
       "climbCount_other": "{{count}} bloques",
       "logAscent": "Registrar ascenso",
-      "nextClimb": "Siguiente bloque",
-      "previousClimb": "Bloque anterior",
       "alreadyLogged": "Registrado",
       "dragHandleAria": "Arrastra para reordenar {{name}}"
     },

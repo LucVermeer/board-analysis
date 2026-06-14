@@ -15,18 +15,6 @@ const queue = vi.hoisted(() => ({
 }));
 const drawer = vi.hoisted(() => ({ openPlayDrawer: vi.fn() }));
 
-// Injectable navigation result so tests drive the suggestion-aware canNext/nextItem
-// the capsule reads from computeNavigationStateWithSuggestions.
-const nav = vi.hoisted(() => ({
-  result: {
-    canNext: false,
-    canPrevious: false,
-    nextItem: null as ClimbQueueItem | null,
-    prevItem: null as ClimbQueueItem | null,
-    remainingCount: 0,
-  },
-}));
-
 // --- RN surface: View → div ---------------------------------------------------
 // Forward testID and the resolved backgroundColor so a test can assert the leading
 // grade-accent stripe paints the current climb's grade colour.
@@ -65,13 +53,9 @@ vi.mock('react-native', () => ({
   },
 }));
 
-// Animated.View → div; the layout/derived hooks return inert values.
+// The tap hook wraps its open handler in runOnJS — return it as-is.
 vi.mock('react-native-reanimated', () => ({
-  default: { View: ({ children }: { children?: ReactNode }) => createElement('div', null, children) },
   runOnJS: (fn: (...args: unknown[]) => unknown) => fn,
-  useAnimatedStyle: () => ({}),
-  useDerivedValue: () => ({ value: 0 }),
-  useSharedValue: (initial: number) => ({ value: initial }),
 }));
 
 // GestureDetector just renders its child; Gesture is a fluent no-op builder so
@@ -82,16 +66,11 @@ vi.mock('react-native-gesture-handler', () => {
   return {
     GestureDetector: ({ children }: { children?: ReactNode }) =>
       createElement('div', { 'data-gesture': 'true' }, children),
-    Gesture: { Tap: () => builder, Pan: () => builder, Race: () => builder },
+    Gesture: { Tap: () => builder },
   };
 });
 
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
-
-vi.mock('@boardsesh/play-view', () => ({
-  computePeekOffset: () => 0,
-  computeNavigationStateWithSuggestions: () => nav.result,
-}));
 
 // getGradeColor returns a distinct hue for V6 so we can assert the grade text
 // carries the grade colour (not a generic white-on-pill style).
@@ -137,10 +116,6 @@ vi.mock('../../../providers/theme-provider', () => ({
 
 vi.mock('../../../providers/queue-provider', () => ({
   useQueue: () => ({ state: queue.state, nextClimb: queue.nextClimb, previousClimb: queue.previousClimb }),
-  usePlaylistSuggestionSource: () => null,
-  // Default to driver (not preview-only); these tests encode the bar's wiring,
-  // not party gating — that is covered in use-queue-climb-carousel.test.tsx.
-  useIsPartyPreviewOnly: () => false,
 }));
 
 vi.mock('../../../providers/drawer-host-provider', () => ({
@@ -159,14 +134,11 @@ vi.mock('../../../hooks/use-grade-format', () => ({
   }),
 }));
 
-vi.mock('../../../hooks/use-reduce-motion', () => ({ useReduceMotion: () => false }));
-
-vi.mock('../../../lib/haptics', () => ({ hapticLight: vi.fn(), hapticSelection: vi.fn() }));
+vi.mock('../../../lib/haptics', () => ({ hapticLight: vi.fn() }));
 
 vi.mock('../../../theme/colors', () => ({ withAlpha: (color: string) => `${color}29` }));
 vi.mock('../../../theme/layout', () => ({ TOOLBAR_CAPSULE_HEIGHT: 52, TOOLBAR_CAPSULE_MAX_WIDTH: 260 }));
 vi.mock('../../../theme/tokens', () => ({
-  opacity: { peek: 0.62 },
   shadows: { sm: {} },
   spacing: { 1: 4, 2: 8, 4: 16 },
 }));
@@ -176,18 +148,10 @@ vi.mock('../../../hooks/use-native-glass', () => ({ useNativeGlass: () => false 
 // assertions hold.
 vi.mock('../../../hooks/use-effective-surface-mode', () => ({ useEffectiveSurfaceMode: () => 'glass' }));
 
-// useCarouselGesture is mocked: in jsdom we cannot drive the RNGH worklets, so
-// the hook just returns an inert gesture + a translateX shared value.
-const carousel = vi.hoisted(() => ({ gesture: {}, translateX: { value: 0 } }));
-vi.mock('../../play-drawer/use-carousel-gesture', () => ({
-  useCarouselGesture: () => ({ gesture: carousel.gesture, translateX: carousel.translateX }),
-}));
-
 // Board-presence source flip: default identity passthrough (flag off / no wall
 // feed) so the capsule renders the local queue head exactly as today.
 vi.mock('../use-wall-or-queue-climb', () => ({
   useWallOrQueueCurrentClimb: (localClimb: unknown) => localClimb,
-  useIsWallPinned: () => false,
 }));
 
 import { ClimbCapsule } from '../ClimbCapsule';
@@ -215,7 +179,6 @@ function makeItem(climb: Climb): ClimbQueueItem {
 
 describe('ClimbCapsule', () => {
   beforeEach(() => {
-    nav.result = { canNext: false, canPrevious: false, nextItem: null, prevItem: null, remainingCount: 0 };
     queue.state.currentClimbQueueItem = null;
     queue.state.queue = [];
     drawer.openPlayDrawer.mockClear();
@@ -340,23 +303,17 @@ describe('ClimbCapsule', () => {
     expect(container.querySelector('[data-testid="grade-accent"]')).toBeNull();
   });
 
-  it('peeks the suggestion-aware next climb past the queue tail', () => {
-    const item = makeItem(makeClimb({ uuid: 'current', name: 'Current Route' }));
+  it('renders a single climb label (no peek neighbours)', () => {
+    // The swipe carousel + peeking neighbours were removed; the capsule shows the
+    // current climb only. Exactly one name node renders.
+    const item = makeItem(makeClimb({ name: 'Lonely Route' }));
     queue.state.currentClimbQueueItem = item;
     queue.state.queue = [item];
-    // Only one climb queued, yet navigation reports a next item — a playlist
-    // suggestion peek. The capsule must render it instead of stopping at the tail.
-    nav.result = {
-      canNext: true,
-      canPrevious: false,
-      nextItem: makeItem(makeClimb({ uuid: 'peek', name: 'Suggested Next', difficulty: 'V7' })),
-      prevItem: null,
-      remainingCount: 0,
-    };
 
     const { container } = render(<ClimbCapsule />);
-
-    expect(container.textContent).toContain('Current Route');
-    expect(container.textContent).toContain('Suggested Next');
+    const nameNodes = Array.from(container.querySelectorAll('[data-text]')).filter((node) =>
+      (node.textContent ?? '').includes('Lonely Route'),
+    );
+    expect(nameNodes).toHaveLength(1);
   });
 });

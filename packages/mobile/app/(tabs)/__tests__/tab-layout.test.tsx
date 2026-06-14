@@ -35,7 +35,13 @@ vi.mock('../../../src/lib/ble/bluetooth-status-store', () => ({
 
 vi.mock('../../../src/providers/queue-provider', () => ({
   useQueueSessionId: () => ({ sessionId: cfg.sessionId }),
-  useHasActiveClimb: () => cfg.hasCurrentClimb,
+}));
+
+// Wall-aware presence gate: true for a local OR a live wall (board-presence)
+// climb. The layout only sees the combined boolean — the local-vs-wall split is
+// unit-tested in use-has-accessory-climb / board-presence-react.
+vi.mock('../../../src/hooks/use-has-accessory-climb', () => ({
+  useHasAccessoryClimb: () => cfg.hasCurrentClimb,
 }));
 
 vi.mock('../../../src/components/queue-control/QueueBottomAccessory', () => ({

@@ -105,6 +105,9 @@ vi.mock('../ClimbCapsule', () => ({
 vi.mock('../use-wall-or-queue-climb', () => ({
   useWallOrQueueCurrentClimb: (localClimb: { uuid: string; angle: number } | null) => cfg.wallClimb ?? localClimb,
   useIsWallPinned: () => cfg.wallClimb != null,
+  // Presence-only wall signal fed into the real useBottomChromeMetrics →
+  // useHasAccessoryClimb, so the JS-vs-native arbitration is wall-aware here too.
+  useHasWallClimb: () => cfg.wallClimb != null,
 }));
 vi.mock('../LogAscentFab', () => ({
   LogAscentFab: ({ climb }: { climb: { uuid: string } }) =>
@@ -192,6 +195,21 @@ describe('PersistentQueueBar', () => {
     const { container } = render(<PersistentQueueBar />);
     expect(container.querySelector('[data-capsule]')).not.toBeNull();
     expect(container.querySelector('[data-tick]')?.getAttribute('data-climb-uuid')).toBe('wall-climb');
+  });
+
+  it('defers to the native accessory for a wall-only climb on glass + tabs', () => {
+    // Wall climb, no local queue: the native accessory owns the slot (it mounts on
+    // the same wall-aware presence gate), so the JS bar must stay hidden — no
+    // doubling with the native pill.
+    cfg.currentClimbQueueItem = null;
+    cfg.wallClimb = { uuid: 'wall-climb', angle: 40 };
+    cfg.nativeAccessoryActive = true;
+    cfg.insideTabs = true;
+
+    const { container } = render(<PersistentQueueBar />);
+
+    expect(container.querySelector('[data-capsule]')).toBeNull();
+    expect(container.querySelector('[data-tick]')).toBeNull();
   });
 
   it('docks the Material bar on the measured tab-bar top, tucked under the hairline', () => {
