@@ -126,7 +126,7 @@ export function ClimbCapsule({
       ) : null}
       <GestureDetector gesture={openGesture}>
         <View
-          style={[styles.swipeArea, { height, borderRadius: capsuleRadius }]}
+          style={[styles.tapArea, { height, borderRadius: capsuleRadius }]}
           accessibilityRole="button"
           accessibilityLabel={currentClimb.name}
         >
@@ -165,7 +165,7 @@ const styles = StyleSheet.create({
   capsuleCap: {
     maxWidth: TOOLBAR_CAPSULE_MAX_WIDTH,
   },
-  swipeArea: {
+  tapArea: {
     flex: 1,
     overflow: 'hidden',
     justifyContent: 'center',

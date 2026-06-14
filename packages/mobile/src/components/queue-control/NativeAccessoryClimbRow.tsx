@@ -91,7 +91,7 @@ export function NativeAccessoryClimbRow({ placement, width }: NativeAccessoryCli
   return (
     <View style={[styles.row, { width, height: rowHeight }]}>
       <GestureDetector gesture={openGesture}>
-        <View style={styles.swipeClip} accessibilityRole="button" accessibilityLabel={currentClimb.name}>
+        <View style={styles.tapClip} accessibilityRole="button" accessibilityLabel={currentClimb.name}>
           <View style={styles.labelSlot}>
             <ClimbLabel
               climb={currentClimb}
@@ -117,7 +117,7 @@ const styles = StyleSheet.create({
     paddingLeft: ACCESSORY_LEADING_INSET,
     paddingRight: ACCESSORY_TRAILING_INSET,
   },
-  swipeClip: {
+  tapClip: {
     flex: 1,
     minWidth: 0,
     height: '100%',
