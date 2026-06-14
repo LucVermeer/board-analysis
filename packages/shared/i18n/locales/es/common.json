@@ -224,6 +224,29 @@
           "default": "Predeterminado",
           "user": "Color personalizado"
         },
+        "rowSubtitle": "{{colorMode}}, {{shape}}",
+        "shapeLabel": "Forma",
+        "shapes": {
+          "circle": "Círculo",
+          "triangleUp": "Triángulo arriba",
+          "triangleDown": "Triángulo abajo",
+          "square": "Cuadrado",
+          "diamond": "Rombo"
+        },
+        "brush": {
+          "title": "Grosor del trazo",
+          "subtitle": "Cambia el grosor de los contornos de los marcadores.",
+          "value": "{{value}}x",
+          "save": "Guardar grosor",
+          "rowAccessibility": "Grosor del trazo, {{value}}x"
+        },
+        "size": {
+          "title": "Tamaño del marcador",
+          "subtitle": "Cambia el tamaño de las formas de los marcadores.",
+          "value": "{{value}}x",
+          "save": "Guardar tamaño",
+          "rowAccessibility": "Tamaño del marcador, {{value}}x"
+        },
         "channels": {
           "red": "Rojo",
           "green": "Verde",

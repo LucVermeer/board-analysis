@@ -152,6 +152,9 @@ vi.mock('../../components/AddToPlaylistSheet', () => ({
     return createElement('div', { 'data-add-to-playlist': 'true' });
   },
 }));
+vi.mock('../../components/AddBetaVideoSheet', () => ({
+  AddBetaVideoSheet: () => createElement('div', { 'data-add-beta-video': 'true' }),
+}));
 vi.mock('../../components/QueueAddedSnackbar', () => ({
   QueueAddedSnackbar: () => createElement('div', { 'data-queue-snackbar': 'true' }),
 }));
@@ -187,6 +190,10 @@ vi.mock('../board-presence-provider', () => ({
     resolveAndBindBoardByUuid: presence.resolveAndBindBoardByUuid,
     resetPresence: presence.resetPresence,
   }),
+}));
+
+vi.mock('../auth-provider', () => ({
+  useAuth: () => ({ isAuthenticated: true }),
 }));
 
 vi.mock('../bluetooth-provider', () => ({

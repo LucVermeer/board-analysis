@@ -29,8 +29,10 @@ import { useActiveBoard, useSetActiveBoard } from '../lib/graphql/use-active-boa
 import { formatActiveBoardLabel } from '../lib/boards/active-board-label';
 import { track } from '../lib/analytics';
 import { ClimbActionsSheet } from '../components/ClimbActionsSheet';
+import { AddBetaVideoSheet } from '../components/AddBetaVideoSheet';
 import { AddToPlaylistSheet } from '../components/AddToPlaylistSheet';
 import { useToggleFavorite, useProfile } from '../lib/graphql/hooks';
+import { useAuth } from './auth-provider';
 import { favoritesStore } from '@boardsesh/climb-actions';
 import { climbToQueueItem } from '../lib/climb-to-queue-item';
 import { useIsPartyPreviewOnly, useQueueActions, useQueueSessionControls } from './queue-provider';
@@ -125,6 +127,7 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
   const [logAscentInput, setLogAscentInput] = useState<LogAscentInput | null>(null);
   const [climbActions, setClimbActions] = useState<{ climb: Climb; boardConfig: BoardConfig } | null>(null);
   const [playlistClimb, setPlaylistClimb] = useState<{ climb: Climb; boardConfig: BoardConfig } | null>(null);
+  const [betaVideoClimb, setBetaVideoClimb] = useState<{ climb: Climb; boardConfig: BoardConfig } | null>(null);
   const { addToQueue, setSessionBoardPath, setCurrentClimb } = useQueueActions();
   const { sessionId } = useQueueSessionControls();
   const isPartyPreviewOnly = useIsPartyPreviewOnly();
@@ -148,6 +151,10 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
   boardPresenceBoardIdRef.current = boardPresenceBoardId;
   const { mutate: toggleFavoriteMutate } = useToggleFavorite();
   const { data: profile } = useProfile();
+  // Gate "Add beta video" on auth state, not profile?.id — the latter can lag
+  // behind a fresh sign-in (profile query still resolving), which would show the
+  // action in the play drawer but not here. PlayDrawer uses the same predicate.
+  const { isAuthenticated } = useAuth();
 
   // Climb to open after the boardConfig override has committed. We can't
   // open synchronously inside openPlayDrawer when an override is supplied
@@ -338,6 +345,18 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
       boardConfig: climbActions.boardConfig,
     });
   }, [climbActions]);
+
+  const handleClimbActionsAddBetaVideo = useCallback(() => {
+    if (!climbActions) return;
+    setBetaVideoClimb({
+      climb: climbActions.climb,
+      boardConfig: climbActions.boardConfig,
+    });
+  }, [climbActions]);
+
+  const closeAddBetaVideo = useCallback(() => {
+    setBetaVideoClimb(null);
+  }, []);
 
   // Present the always-mounted queue sheet imperatively. Calling `present()`
   // synchronously from the handler (rather than from a `visible`-prop effect)
@@ -576,7 +595,18 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
           onOpenPlaylist={handleClimbActionsOpenPlaylist}
           onToggleFavorite={handleClimbActionsToggleFavorite}
           onTick={handleClimbActionsTick}
+          onAddBetaVideo={isAuthenticated ? handleClimbActionsAddBetaVideo : undefined}
           onClose={closeClimbActions}
+        />
+      ) : null}
+      {betaVideoClimb ? (
+        <AddBetaVideoSheet
+          visible
+          climb={betaVideoClimb.climb}
+          boardName={betaVideoClimb.boardConfig.boardName as BoardName}
+          layoutId={betaVideoClimb.boardConfig.layoutId}
+          angle={betaVideoClimb.boardConfig.angle}
+          onClose={closeAddBetaVideo}
         />
       ) : null}
       {playlistClimb ? (

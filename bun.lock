@@ -426,6 +426,9 @@
     "packages/shared/climb-actions": {
       "name": "@boardsesh/climb-actions",
       "version": "1.0.0",
+      "dependencies": {
+        "@boardsesh/board-config": "*",
+      },
       "devDependencies": {
         "typescript": "^5.9.3",
       },

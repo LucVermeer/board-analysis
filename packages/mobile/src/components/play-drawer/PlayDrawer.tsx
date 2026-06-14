@@ -27,12 +27,14 @@ import { DeferredSections } from './DeferredSections';
 import { computeFirstScreenHeight } from './play-drawer-layout';
 import { AngleSelectorSheet } from './AngleSelectorSheet';
 import { ClimbActionsSheet } from '../ClimbActionsSheet';
+import { AddBetaVideoSheet } from '../AddBetaVideoSheet';
 import { BleControlSheet } from '../ble/BleControlSheet';
 import { disconnectAllBluetooth } from '../../lib/ble/bluetooth-status-store';
 import { GlassSheetBackground } from '../GlassSheetBackground';
 import { Icon } from '../Icon';
 import { useIsPartyPreviewOnly, usePlaylistSuggestionSource, useQueue } from '../../providers/queue-provider';
 import { useOptionalBluetoothContext } from '../../providers/bluetooth-provider';
+import { useAuth } from '../../providers/auth-provider';
 import { useToast } from '../../providers/toast-provider';
 import { useToggleFavorite, useFavoriteStatus } from '../../lib/graphql/hooks';
 import { useGradeFormat } from '../../hooks/use-grade-format';
@@ -134,6 +136,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [activeSubDrawer, setActiveSubDrawer] = useState<ActiveSubDrawer>('none');
   const [bleControlOpen, setBleControlOpen] = useState(false);
+  const [addBetaVideoOpen, setAddBetaVideoOpen] = useState(false);
   const [pendingClimbUuid, setPendingClimbUuid] = useState<string | null>(null);
   const [belowFoldContentRequested, setBelowFoldContentRequested] = useState(false);
   const wallControlPressOperationRef = useRef(0);
@@ -164,6 +167,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   const bluetooth = useOptionalBluetoothContext();
   const { mutate: toggleFavoriteMutate } = useToggleFavorite();
   const { formatGrade } = useGradeFormat();
+  const { isAuthenticated } = useAuth();
 
   const { boardName, layoutId, sizeId, setIds, angle } = boardConfig;
   const bluetoothConnected = bluetooth?.isConnected ?? false;
@@ -685,6 +689,14 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
     setActiveSubDrawer('actions');
   }, []);
 
+  const handleOpenAddBetaVideo = useCallback(() => {
+    setAddBetaVideoOpen(true);
+  }, []);
+
+  const handleCloseAddBetaVideo = useCallback(() => {
+    setAddBetaVideoOpen(false);
+  }, []);
+
   const handleScrollTowardBelowFold = useCallback(() => {
     setBelowFoldContentRequested(true);
   }, []);
@@ -917,6 +929,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
                 contentEnabled={belowFoldContentRequested}
                 onSimilarClimbPress={handleSimilarClimbPress}
                 onBetaHeaderLayout={handleBetaHeaderLayout}
+                onAddBetaVideo={isAuthenticated ? handleOpenAddBetaVideo : undefined}
               />
             </>
           )}
@@ -945,7 +958,20 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
           }
         }}
         onToggleFavorite={handleToggleFavorite}
+        onAddBetaVideo={isAuthenticated ? handleOpenAddBetaVideo : undefined}
         onClose={handleCloseSubDrawer}
+      />
+
+      {/* Sub-drawer: Share your beta. Sibling modal (stackBehavior=push) so it
+          stacks above the play drawer, opened from the action sheet's "Add beta
+          video" row or the Beta Videos section "+" button. */}
+      <AddBetaVideoSheet
+        visible={addBetaVideoOpen}
+        climb={displayedClimb ?? null}
+        boardName={boardName as BoardName}
+        layoutId={layoutId}
+        angle={angle}
+        onClose={handleCloseAddBetaVideo}
       />
 
       {/* Sub-drawer: Angle selector. Always mounted and toggled via `visible`

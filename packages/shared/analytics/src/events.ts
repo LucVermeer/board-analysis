@@ -79,6 +79,11 @@ export const SHARED_EVENTS = {
   // Beta videos
   BetaVideoLinkClicked: 'Beta Video Link Clicked',
   BetaVideoClimbClicked: 'Beta Video Climb Clicked',
+  // "Share your beta" outbound flow: caption copied to clipboard, and Instagram
+  // launched to post the reel. Web fires the matching raw-string names today, so
+  // both platforms land in one funnel.
+  BetaCaptionCopied: 'Beta Caption Copied',
+  BetaInstagramOpened: 'Beta Instagram Opened',
   // Onboarding tour (first-run walkthrough). Web fires the same names from its
   // step-based guided tour; the mobile welcome carousel reuses them so both
   // platforms land in one PostHog funnel.
