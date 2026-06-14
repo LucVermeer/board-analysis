@@ -13,6 +13,7 @@ import type {
   ClimbQueueItemInput,
 } from '@boardsesh/shared-schema';
 import { db } from '../db/client';
+import * as dbSchema from '@boardsesh/db/schema';
 import { pubsub } from '../pubsub';
 import { redisClientManager } from '../redis/client';
 import { roomManager } from '../services/room-manager';
@@ -878,29 +879,10 @@ describe('board-presence resolvers', () => {
       ).rejects.toThrow('Not connected to this board');
     });
 
-    it('broadcasts BoardConnectionChanged carrying the holder identity on the first send', async () => {
-      // The first send to a free board always hands the wall off (previous
-      // holder was null), so it broadcasts the new holder with the server-derived
-      // identity — regardless of Redis vs local-only mode.
-      const boardId = await makeBoard();
-      const received: BoardPresenceEvent[] = [];
-      const unsubscribe = await pubsub.subscribeBoardPresence(String(boardId), (event) => received.push(event));
-
-      await boardPresenceMutations.reportBoardClimb(
-        undefined,
-        { boardId, climb: makeQueueItemInput(), angle: 40 },
-        authCtx(),
-      );
-
-      const holderChange = received.find(
-        (event): event is BoardConnectionChanged => event.__typename === 'BoardConnectionChanged',
-      );
-      expect(holderChange).toBeDefined();
-      expect(holderChange!.holder?.userId).toBe(TEST_USER_ID);
-      expect(holderChange!.holder?.displayName).toBe(SENDER_DISPLAY_NAME);
-      expect(holderChange!.holder?.lastSentAt).toBeTruthy();
-      unsubscribe();
-    });
+    // The connection-holder hand-off broadcast is Redis-only (see the
+    // "board-presence connection holder" describe at the end of the file, which
+    // initialises pubsub Redis and asserts the BoardConnectionChanged payload).
+    // In the local-only mode this describe runs in, holder events don't fire.
   });
 
   describe('boardNowPlaying subscription', () => {
@@ -1442,12 +1424,22 @@ describe('board-presence connection holder', () => {
 
     async function makePrivateBoard(): Promise<number> {
       const slug = `private-${Date.now().toString(36)}-${holderSerialCounter++}`;
-      const [row] = await db.execute(sql`
-        INSERT INTO user_boards (uuid, slug, owner_id, board_type, layout_id, size_id, set_ids, name, serial_number, is_public)
-        VALUES (${`uuid-${slug}`}, ${slug}, ${TEST_USER_ID}, 'kilter', 1, 10, '1,2', 'Private Wall', null, false)
-        RETURNING id
-      `);
-      return Number((row as { id: number }).id);
+      const [row] = await db
+        .insert(dbSchema.userBoards)
+        .values({
+          uuid: `uuid-${slug}`,
+          slug,
+          ownerId: TEST_USER_ID,
+          boardType: 'kilter',
+          layoutId: 1,
+          sizeId: 10,
+          setIds: '1,2',
+          name: 'Private Wall',
+          serialNumber: null,
+          isPublic: false,
+        })
+        .returning({ id: dbSchema.userBoards.id });
+      return Number(row.id);
     }
 
     it("hides a private board's live feed from anonymous viewers but not logged-in ones", async () => {
@@ -1552,7 +1544,10 @@ describe('board-presence connection holder', () => {
         authCtx(),
       );
       expect(changes).toHaveLength(1);
+      // The broadcast carries the server-derived holder identity.
       expect(changes[0].holder?.userId).toBe(TEST_USER_ID);
+      expect(changes[0].holder?.displayName).toBe(SENDER_DISPLAY_NAME);
+      expect(changes[0].holder?.lastSentAt).toBeTruthy();
       expect(await pubsub.getBoardWriter(String(boardId))).toBe(TEST_USER_ID);
 
       // A different emitter takes over (always-take) → second hand-off.

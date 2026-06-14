@@ -498,27 +498,33 @@ export const boardPresenceMutations = {
       climb: presenceClimb,
     });
 
-    // This emitter is now the board's connection holder. Broadcast only on a real
-    // hand-off (the holder changed), not on every frame. Non-fatal.
-    try {
-      const previousHolder = await pubsub.setBoardWriter(String(boardId), emitterId);
-      // Record the hold on this connection so the WS-close backstop can free the
-      // wall if the holder crashes without an explicit reportBoardDisconnect.
-      roomManager.noteBoardWriter(ctx.connectionId, boardId, emitterId);
-      if (previousHolder !== emitterId) {
-        pubsub.publishBoardPresenceEvent(String(boardId), {
-          __typename: 'BoardConnectionChanged',
-          holder: {
-            userId: ctx.userId ?? null,
-            displayName: presenceClimb.sentByDisplayName,
-            avatarUrl: presenceClimb.sentByAvatarUrl,
-            lastSentAt: sentAt,
-          },
-          seq,
-        });
+    // Record the hold on this connection (in-memory) so the WS-close backstop can
+    // free the wall if the holder crashes without an explicit reportBoardDisconnect.
+    // Outside the Redis try below since it can't fail and must not be swallowed.
+    roomManager.noteBoardWriter(ctx.connectionId, boardId, emitterId);
+
+    // This emitter is now the board's connection holder. The holder is Redis-only
+    // (degrades to "no holder" without Redis), so only broadcast a hand-off when
+    // Redis actually backs the writer — otherwise setBoardWriter returns null and
+    // `null !== emitterId` would spuriously broadcast on every send. Non-fatal.
+    if (pubsub.isRedisConnected()) {
+      try {
+        const previousHolder = await pubsub.setBoardWriter(String(boardId), emitterId);
+        if (previousHolder !== emitterId) {
+          pubsub.publishBoardPresenceEvent(String(boardId), {
+            __typename: 'BoardConnectionChanged',
+            holder: {
+              userId: ctx.userId ?? null,
+              displayName: presenceClimb.sentByDisplayName,
+              avatarUrl: presenceClimb.sentByAvatarUrl,
+              lastSentAt: sentAt,
+            },
+            seq,
+          });
+        }
+      } catch (error) {
+        logger.warn(`[board-presence] board writer update failed: ${String(error)}`);
       }
-    } catch (error) {
-      logger.warn(`[board-presence] board writer update failed: ${String(error)}`);
     }
 
     // Durable history (dwell-gated): persist this push to board_climb_events
