@@ -49,10 +49,12 @@ function SheetContainer({ children }: { children?: ReactNode }) {
 
 type HomeClimberSearchSheetProps = {
   currentUserId: string | undefined;
+  isIdentityError?: boolean;
+  onRetryIdentity?: () => void;
 };
 
 export const HomeClimberSearchSheet = forwardRef<BottomSheetModal, HomeClimberSearchSheetProps>(
-  function HomeClimberSearchSheet({ currentUserId }, ref) {
+  function HomeClimberSearchSheet({ currentUserId, isIdentityError = false, onRetryIdentity }, ref) {
     const { t } = useTranslation('feed');
     const { systemColors, sheet } = useTheme();
     const insets = useSafeAreaInsets();
@@ -82,8 +84,12 @@ export const HomeClimberSearchSheet = forwardRef<BottomSheetModal, HomeClimberSe
     }, []);
 
     const handleRetry = useCallback(() => {
+      if (isIdentityError) {
+        onRetryIdentity?.();
+        return;
+      }
       if (canSearch) void search.refetch();
-    }, [canSearch, search]);
+    }, [canSearch, isIdentityError, onRetryIdentity, search]);
 
     const handleEndReached = useCallback(() => {
       if (canSearch && search.hasNextPage && !search.isFetchingNextPage) {
@@ -130,9 +136,13 @@ export const HomeClimberSearchSheet = forwardRef<BottomSheetModal, HomeClimberSe
     const searchInputComponent = BottomSheetTextInput as ComponentProps<typeof ClimberSearchField>['inputComponent'];
     const showHint = trimmedSearchQuery.length < 2;
     const showIdentityLoading = isIdentityLoading && !showHint;
+    const showIdentityError = isIdentityError && !showHint;
     const showInitialSpinner =
-      showIdentityLoading || searchIsDebouncing || (!showHint && search.isPending && people.length === 0);
-    const showError = !showHint && !showIdentityLoading && !searchIsDebouncing && search.isError && people.length === 0;
+      !showIdentityError &&
+      (showIdentityLoading || searchIsDebouncing || (!showHint && search.isPending && people.length === 0));
+    const showError =
+      showIdentityError ||
+      (!showHint && !showIdentityLoading && !searchIsDebouncing && search.isError && people.length === 0);
     const visiblePeople = showInitialSpinner || showHint || showError ? EMPTY_PEOPLE : people;
 
     const backgroundStyle = {

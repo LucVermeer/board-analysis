@@ -143,6 +143,7 @@ describe('useToggleUserFollow', () => {
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['followers'] });
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['following'] });
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['searchUsers'] });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['activityFeed'] });
   });
 
   it('unfollows users with the unfollow mutation', async () => {

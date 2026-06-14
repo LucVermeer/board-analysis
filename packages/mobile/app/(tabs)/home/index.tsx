@@ -91,7 +91,7 @@ export default function HomeTab() {
   const commentSheetRef = useRef<BottomSheet | null>(null);
   const searchSheetRef = useRef<BottomSheetModal | null>(null);
   const [commentTarget, setCommentTarget] = useState<CommentTarget | null>(null);
-  const { data: profile } = useProfile({ enabled: isAuthenticated });
+  const profile = useProfile({ enabled: isAuthenticated });
 
   // Feed scope. `mode` chooses the view — `crew` (people you follow) is the
   // default; `gym` is everyone on the selected board. `selectedBoard` is the
@@ -449,7 +449,12 @@ export default function HomeTab() {
           </GlassActionToolbar>
         </View>
       </View>
-      <HomeClimberSearchSheet ref={searchSheetRef} currentUserId={profile?.id} />
+      <HomeClimberSearchSheet
+        ref={searchSheetRef}
+        currentUserId={profile.data?.id}
+        isIdentityError={profile.isError}
+        onRetryIdentity={() => void profile.refetch()}
+      />
       <CommentSheet
         sheetRef={commentSheetRef}
         entityId={commentTarget?.entityId ?? null}

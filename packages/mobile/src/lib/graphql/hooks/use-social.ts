@@ -168,6 +168,7 @@ export function useToggleUserFollow(currentUserId: string | undefined) {
       void queryClient.invalidateQueries({ queryKey: ['followers'] });
       void queryClient.invalidateQueries({ queryKey: ['following'] });
       void queryClient.invalidateQueries({ queryKey: ['searchUsers'] });
+      void queryClient.invalidateQueries({ queryKey: ['activityFeed'] });
     },
   });
 }

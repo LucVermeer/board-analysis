@@ -297,4 +297,24 @@ describe('HomeClimberSearchSheet', () => {
     expect(queryByText('Marco')).toBeNull();
     expect(queryByText('Follow')).toBeNull();
   });
+
+  it('shows a retryable error when identity loading fails', () => {
+    const retryIdentity = vi.fn();
+    const { container, getByPlaceholderText, getByText, queryByText } = render(
+      <HomeClimberSearchSheet currentUserId={undefined} isIdentityError onRetryIdentity={retryIdentity} />,
+    );
+
+    fireEvent.change(getByPlaceholderText('Search climbers'), { target: { value: 'ma' } });
+    act(() => {
+      vi.advanceTimersByTime(300);
+    });
+
+    expect(container.querySelector('[data-spinner="true"]')).toBeNull();
+    expect(getByText("Couldn't load climbers")).toBeTruthy();
+    expect(queryByText('Marco')).toBeNull();
+
+    fireEvent.click(getByText('Try again'));
+    expect(retryIdentity).toHaveBeenCalledOnce();
+    expect(searchState.searchRefetch).not.toHaveBeenCalled();
+  });
 });
