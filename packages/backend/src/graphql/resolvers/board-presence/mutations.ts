@@ -368,7 +368,15 @@ export const boardPresenceMutations = {
 
     const emitterId = ctx.userId ?? `conn:${ctx.connectionId}`;
     const config = validateInput(BoardPresenceConfigInputSchema, { boardType, layoutId, sizeId, setIds }, 'input');
-    const resolved = await resolveSharedBoardForConfig(config.boardType, config.layoutId, config.sizeId, config.setIds);
+    // Anonymous callers bind an existing shared feed only; a logged-in caller
+    // creates it on first sighting (anon can't mint system boards).
+    const resolved = await resolveSharedBoardForConfig(
+      config.boardType,
+      config.layoutId,
+      config.sizeId,
+      config.setIds,
+      ctx.userId != null,
+    );
     await pubsub.stampBoardMembership(String(resolved.boardId), emitterId);
     return resolved;
   },

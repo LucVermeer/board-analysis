@@ -24,7 +24,7 @@ import type { GetBoardQueryResponse } from '../lib/graphql/operations';
 import { getBoardRenderData } from '../lib/board-details';
 import { registerBluetoothConnection } from '../lib/ble/bluetooth-status-store';
 import { reportHandledError } from '../lib/error-reporting';
-import { useIsPartyPreviewOnly, useQueue, useQueueSessionControls } from './queue-provider';
+import { useQueue, useQueueSessionControls } from './queue-provider';
 import { useBoardPresenceControls } from './board-presence-provider';
 import { useQueueSnackbar } from './queue-snackbar-provider';
 import { toClimbInput } from '../lib/climb-to-queue-item';
@@ -320,7 +320,6 @@ export function BluetoothProvider({
   children,
 }: BluetoothProviderProps) {
   const { sessionId, confirmClimbOnWall, setSessionBoardSerial, lastConnectedBoardSerial } = useQueueSessionControls();
-  const isPartyPreviewOnly = useIsPartyPreviewOnly();
   const { t } = useTranslation('settings');
   // Board presence ("now on the wall"). All of these are inert when the
   // `board-presence` flag is off: `enabled` is false, `boardId` is null, and the
@@ -1006,7 +1005,10 @@ export function BluetoothProvider({
 
   return (
     <BluetoothContext.Provider value={value}>
-      {isConnected && !isPartyPreviewOnly && (
+      {/* Holder model: anyone connected writes the wall (always-take), so the
+          auto-sender mounts on isConnected alone — no driver/preview write-gate.
+          Aurora is last-connection-wins, so one phone is physically connected. */}
+      {isConnected && (
         <BluetoothAutoSender
           sendFramesToBoard={sendFramesToBoard}
           onWallConfirmed={handleWallConfirmed}

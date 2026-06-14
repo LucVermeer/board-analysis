@@ -416,6 +416,11 @@ export async function resolveSharedBoardForConfig(
   layoutId: number,
   sizeId: number,
   setIds: string,
+  // Anonymous callers may only BIND an existing shared feed, never create one:
+  // create-on-miss is the abuse vector (an unauthenticated client could vary
+  // layoutId/sizeId/setIds to mint arbitrary system boards). A logged-in caller
+  // creates the feed the first time a config is seen; anon then joins it.
+  allowCreate = true,
 ): Promise<ResolvedBoard> {
   const normalizedSetIds = normalizeSetIds(setIds);
   const slug = boardConfigPresenceSlug(boardType, layoutId, sizeId, normalizedSetIds);
@@ -427,6 +432,10 @@ export async function resolveSharedBoardForConfig(
     .limit(1);
   if (existing) {
     return toResolvedBoard(existing);
+  }
+
+  if (!allowCreate) {
+    throw new GraphQLError('Board not found', { extensions: { code: 'NOT_FOUND' } });
   }
 
   await ensureSystemBoardOwner();

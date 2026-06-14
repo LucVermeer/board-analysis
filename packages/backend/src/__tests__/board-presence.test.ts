@@ -836,15 +836,14 @@ describe('board-presence resolvers', () => {
     });
 
     it('accepts an anonymous report once the anon emitter is a board member', async () => {
-      // Board presence is auth-optional: an anonymous client resolves a board
-      // (stamping its conn:-keyed membership) and may then report. Identity is
-      // null (no profile to derive from) — clients render a "?".
+      // Board presence is auth-optional: an anonymous client binds an existing
+      // shared board (stamping its conn:-keyed membership) and may then report.
+      // Identity is null (no profile to derive from) — clients render a "?".
+      const config = { boardType: 'kilter', layoutId: 1, sizeId: 10, setIds: '1,2' };
+      // A logged-in user creates the shared feed first (anon can't mint boards).
+      await boardPresenceMutations.resolveBoardForConfig(undefined, config, authCtx());
       const anonCtx = authCtx({ isAuthenticated: false, userId: undefined });
-      const resolved = await boardPresenceMutations.resolveBoardForConfig(
-        undefined,
-        { boardType: 'kilter', layoutId: 1, sizeId: 10, setIds: '1,2' },
-        anonCtx,
-      );
+      const resolved = await boardPresenceMutations.resolveBoardForConfig(undefined, config, anonCtx);
       const received: BoardPresenceEvent[] = [];
       const unsubscribe = await pubsub.subscribeBoardPresence(String(resolved.boardId), (event) =>
         received.push(event),
@@ -1462,17 +1461,26 @@ describe('board-presence connection holder', () => {
     });
 
     it('lets anonymous viewers read a shared system per-config board', async () => {
-      const resolved = await boardPresenceMutations.resolveBoardForConfig(
-        undefined,
-        { boardType: 'kilter', layoutId: 1, sizeId: 10, setIds: '1,2' },
-        anon(),
-      );
+      const config = { boardType: 'kilter', layoutId: 1, sizeId: 10, setIds: '1,2' };
+      // A logged-in user creates the shared feed; anon may then read it.
+      const resolved = await boardPresenceMutations.resolveBoardForConfig(undefined, config, authCtx());
       await expect(
         boardPresenceQueries.boardConnection(undefined, { boardId: resolved.boardId }, anon()),
       ).resolves.toBeNull();
       await expect(
         boardPresenceQueries.boardRecentClimbs(undefined, { boardId: resolved.boardId }, anon()),
       ).resolves.toEqual([]);
+    });
+
+    it('refuses to mint a shared board for an anonymous caller (bind-only)', async () => {
+      // Anon can't create-on-miss; a brand-new config has no board to bind.
+      await expect(
+        boardPresenceMutations.resolveBoardForConfig(
+          undefined,
+          { boardType: 'kilter', layoutId: 1, sizeId: 10, setIds: '7,8' },
+          anon(),
+        ),
+      ).rejects.toThrow('Board not found');
     });
   });
 
