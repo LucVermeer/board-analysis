@@ -71,9 +71,38 @@ export const boardPresenceTypeDefs = /* GraphQL */ `
   }
 
   """
+  The current "who's connected / writing" holder for a board. The holder is the
+  emitter of the most recent confirmed send (\`reportBoardClimb\`). A logged-in
+  holder carries name + avatar; an anonymous holder carries only nulls (clients
+  render a "?"). A null holder means the board is free.
+  """
+  type BoardConnectionHolder {
+    "Logged-in user id; null for an anonymous holder."
+    userId: ID
+    "Display name; null for an anonymous holder."
+    displayName: String
+    "Avatar URL; null for an anonymous holder."
+    avatarUrl: String
+    "ISO 8601 timestamp of the holder's most recent confirmed send."
+    lastSentAt: String
+  }
+
+  """
+  Event: the board's connection holder changed (a different emitter took the wall
+  via a confirmed send, or the holder disconnected). \`holder\` is null when the
+  board went free.
+  """
+  type BoardConnectionChanged {
+    "The current holder, or null when the board is free."
+    holder: BoardConnectionHolder
+    "Monotonic per-board sequence number (shared counter with climb events)."
+    seq: Int!
+  }
+
+  """
   Union of board-presence events streamed by \`boardNowPlaying\`.
   """
-  union BoardPresenceEvent = BoardClimbSet | BoardClimbCleared | BoardStatsUpdated
+  union BoardPresenceEvent = BoardClimbSet | BoardClimbCleared | BoardStatsUpdated | BoardConnectionChanged
 
   """
   The first climber to send the hardest grade logged on this wall.

@@ -383,15 +383,19 @@ export const boardPresenceMutations = {
     ctx: ConnectionContext,
   ): Promise<boolean> => {
     requireBoardPresenceEnabled();
-    requireAuthenticated(ctx);
     await applyRateLimit(ctx, 60, 'reportBoardClimb');
     const board = await requireActiveBoardById(boardId);
 
-    // Proof-of-presence: only a user who selected or connected to this board
+    // Auth-optional: anyone connected to the board emits (logged-in or
+    // anonymous). The emitter id is the userId, or `conn:{connectionId}` for an
+    // anonymous client — both are stamped as board members on resolve/connect.
+    const emitterId = ctx.userId ?? `conn:${ctx.connectionId}`;
+
+    // Proof-of-presence: only an emitter that selected or connected to this board
     // (stamped in resolveBoardForUuid / resolveBoardForSerial /
-    // resolveBoardForConfig) may post to its feed. This stops a logged-in user
-    // from injecting climbs onto any board id they guess.
-    const isConnected = await pubsub.hasBoardMembership(String(boardId), ctx.userId!);
+    // resolveBoardForConfig) may post to its feed. Stops anyone injecting climbs
+    // onto a board id they guess.
+    const isConnected = await pubsub.hasBoardMembership(String(boardId), emitterId);
     if (!isConnected) {
       throw new GraphQLError('Not connected to this board');
     }
@@ -434,18 +438,21 @@ export const boardPresenceMutations = {
           ),
         )
         .limit(1),
-      db
-        .select({
-          name: dbSchema.users.name,
-          image: dbSchema.users.image,
-          displayName: dbSchema.userProfiles.displayName,
-          avatarUrl: dbSchema.userProfiles.avatarUrl,
-        })
-        .from(dbSchema.users)
-        .leftJoin(dbSchema.userProfiles, eq(dbSchema.users.id, dbSchema.userProfiles.userId))
-        .where(eq(dbSchema.users.id, ctx.userId!))
-        .limit(1)
-        .then((rows) => rows[0]),
+      // Anonymous emitters have no profile — leave the attribution null.
+      ctx.userId
+        ? db
+            .select({
+              name: dbSchema.users.name,
+              image: dbSchema.users.image,
+              displayName: dbSchema.userProfiles.displayName,
+              avatarUrl: dbSchema.userProfiles.avatarUrl,
+            })
+            .from(dbSchema.users)
+            .leftJoin(dbSchema.userProfiles, eq(dbSchema.users.id, dbSchema.userProfiles.userId))
+            .where(eq(dbSchema.users.id, ctx.userId))
+            .limit(1)
+            .then((rows) => rows[0])
+        : Promise.resolve(undefined),
     ]);
 
     const catalogClimb = catalogClimbRows[0];
@@ -479,6 +486,26 @@ export const boardPresenceMutations = {
       climb: presenceClimb,
     });
 
+    // This emitter is now the board's connection holder. Broadcast only on a real
+    // hand-off (the holder changed), not on every frame. Non-fatal.
+    try {
+      const previousHolder = await pubsub.setBoardWriter(String(boardId), emitterId);
+      if (previousHolder !== emitterId) {
+        pubsub.publishBoardPresenceEvent(String(boardId), {
+          __typename: 'BoardConnectionChanged',
+          holder: {
+            userId: ctx.userId ?? null,
+            displayName: presenceClimb.sentByDisplayName,
+            avatarUrl: presenceClimb.sentByAvatarUrl,
+            lastSentAt: sentAt,
+          },
+          seq,
+        });
+      }
+    } catch (error) {
+      logger.warn(`[board-presence] board writer update failed: ${String(error)}`);
+    }
+
     // Durable history (dwell-gated): persist this push to board_climb_events
     // only once the sender has had sustained presence on the board (>= 60s), so
     // app-swiping noise stays out of the lasting log. The live feed above
@@ -490,7 +517,7 @@ export const boardPresenceMutations = {
       // `Date.parse(sentAt)` is always valid; `firstSeen` is already guarded to
       // a plausible epoch-ms or null in getBoardMembershipFirstSeen. A null
       // firstSeen correctly skips the insert (presence not yet proven for 60s).
-      const firstSeen = await pubsub.getBoardMembershipFirstSeen(String(boardId), ctx.userId!);
+      const firstSeen = await pubsub.getBoardMembershipFirstSeen(String(boardId), emitterId);
       if (firstSeen !== null && Date.parse(sentAt) - firstSeen >= DURABLE_DWELL_MS) {
         await db
           .insert(dbSchema.boardClimbEvents)
@@ -499,7 +526,8 @@ export const boardPresenceMutations = {
             boardType: board.boardType,
             climbUuid,
             angle: effectiveAngle,
-            userId: ctx.userId!,
+            // Null for anonymous emitters (board_climb_events.userId is nullable).
+            userId: ctx.userId ?? null,
             // Reserved for session recaps. reportBoardClimb has no sessionId arg
             // yet, so every durable row is solo-attributed until the
             // session-attribution follow-up threads the active session through.
@@ -519,5 +547,31 @@ export const boardPresenceMutations = {
     }
 
     return true;
+  },
+
+  /**
+   * Clear this emitter's board-connection hold (explicit lightbulb-off or a
+   * detected BLE drop), so the "who's connected" indicator goes free. No-op when
+   * someone else now holds it (always-take means a later emitter already took
+   * over). Auth-optional, keyed by the same emitter id as reportBoardClimb.
+   */
+  reportBoardDisconnect: async (
+    _: unknown,
+    { boardId }: { boardId: number },
+    ctx: ConnectionContext,
+  ): Promise<boolean> => {
+    requireBoardPresenceEnabled();
+    await applyRateLimit(ctx, 60, 'reportBoardDisconnect');
+    const emitterId = ctx.userId ?? `conn:${ctx.connectionId}`;
+    const cleared = await pubsub.clearBoardWriterIf(String(boardId), emitterId);
+    if (cleared) {
+      const seq = await pubsub.nextBoardSeq(String(boardId));
+      pubsub.publishBoardPresenceEvent(String(boardId), {
+        __typename: 'BoardConnectionChanged',
+        holder: null,
+        seq,
+      });
+    }
+    return cleared;
   },
 };

@@ -37,7 +37,22 @@ export type BoardStatsUpdated = {
   seq: number;
 };
 
-export type BoardPresenceEvent = BoardClimbSet | BoardClimbCleared | BoardStatsUpdated;
+/** Who's connected + writing to a board now. Anonymous holders carry nulls. */
+export type BoardConnectionHolder = {
+  userId?: string | null;
+  displayName?: string | null;
+  avatarUrl?: string | null;
+  lastSentAt?: string | null;
+};
+
+export type BoardConnectionChanged = {
+  __typename: 'BoardConnectionChanged';
+  /** Current holder, or null when the board went free. */
+  holder: BoardConnectionHolder | null;
+  seq: number;
+};
+
+export type BoardPresenceEvent = BoardClimbSet | BoardClimbCleared | BoardStatsUpdated | BoardConnectionChanged;
 
 export type BoardPresenceHardestSend = {
   climbUuid: string;

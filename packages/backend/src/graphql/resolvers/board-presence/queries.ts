@@ -1,6 +1,11 @@
 import { and, desc, eq, lt } from 'drizzle-orm';
 import { GraphQLError } from 'graphql';
-import type { ConnectionContext, BoardPresenceClimb, BoardPresenceStats } from '@boardsesh/shared-schema';
+import type {
+  ConnectionContext,
+  BoardPresenceClimb,
+  BoardPresenceStats,
+  BoardConnectionHolder,
+} from '@boardsesh/shared-schema';
 import { db } from '../../../db/client';
 import * as dbSchema from '@boardsesh/db/schema';
 import { pubsub } from '../../../pubsub/index';
@@ -109,5 +114,32 @@ export const boardPresenceQueries = {
     await applyRateLimit(ctx, 30, 'boardPresenceStats');
     const board = await requireActiveBoardById(boardId);
     return computeBoardPresenceStats(boardId, board.boardType);
+  },
+
+  /**
+   * The board's current connection holder (who's connected + writing now), or
+   * null when free. Late-joiner initial state before the `boardNowPlaying` /
+   * `BoardConnectionChanged` stream warms up. Auth-optional. The holder is the
+   * last sender, so the newest live climb carries their display identity +
+   * last-send time; an anonymous holder (a `conn:` emitter) has a null userId
+   * and null attribution (clients render a "?").
+   */
+  boardConnection: async (
+    _: unknown,
+    { boardId }: { boardId: number },
+    ctx: ConnectionContext,
+  ): Promise<BoardConnectionHolder | null> => {
+    requireBoardPresenceEnabled();
+    await applyRateLimit(ctx, 30, 'boardConnection');
+    const emitterId = await pubsub.getBoardWriter(String(boardId));
+    if (emitterId === null) return null;
+    const recent = await pubsub.getRecentBoardClimbs(String(boardId));
+    const last = recent[0];
+    return {
+      userId: emitterId.startsWith('conn:') ? null : emitterId,
+      displayName: last?.sentByDisplayName ?? null,
+      avatarUrl: last?.sentByAvatarUrl ?? null,
+      lastSentAt: last?.sentAt ?? null,
+    };
   },
 };
