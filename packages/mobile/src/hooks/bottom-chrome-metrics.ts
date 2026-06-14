@@ -21,6 +21,13 @@ import {
 export type BottomChromeInputs = {
   /** Resolved UI variant; controls the JS toolbar shape/reserve. */
   uiVariant: UiVariant;
+  /**
+   * Whether the native iOS 26 tab bar (`NativeTabs`) is the one on screen, as
+   * opposed to the JS `MaterialTabBar`. This is the *rendered tab bar*, which can
+   * differ from `uiVariant`: Liquid Glass on iOS < 26 / Android falls back to the
+   * JS bar. Drives tab-bar height + whether the bar overlays content.
+   */
+  usesNativeTabBar: boolean;
   /** Bottom safe-area inset. */
   insetsBottom: number;
   /** Whether the current route is inside the (tabs) group (tab bar present). */
@@ -67,6 +74,7 @@ export type BottomChromeMetrics = {
  */
 export function computeBottomChromeMetrics({
   uiVariant,
+  usesNativeTabBar,
   insetsBottom,
   insideTabs,
   hasCurrentClimb,
@@ -74,12 +82,15 @@ export function computeBottomChromeMetrics({
 }: BottomChromeInputs): BottomChromeMetrics {
   const nativeAccessoryVisible = nativeAccessoryMounted && hasCurrentClimb;
   const jsQueueToolbarVisible = hasCurrentClimb && !nativeAccessoryMounted;
-  // The Material variant renders the taller M3 JS nav bar; Liquid Glass uses the
-  // native 49pt iOS tab bar. Floating overlays (FAB, snackbar) and scroll padding
-  // clear this height, so it has to track the real bar per variant.
-  const tabBarConstant = uiVariant === 'material' ? MATERIAL_TAB_BAR_HEIGHT : TAB_BAR_HEIGHT;
+  // The native iOS tab bar is 49pt; the JS M3 `MaterialTabBar` is taller. Key this
+  // on the *rendered* bar, not the variant — Liquid Glass on iOS < 26 / Android
+  // falls back to the JS bar. Floating overlays (FAB, snackbar) and scroll padding
+  // clear this height, so it has to track the real bar on screen.
+  const tabBarConstant = usesNativeTabBar ? TAB_BAR_HEIGHT : MATERIAL_TAB_BAR_HEIGHT;
   const tabBarHeight = insideTabs ? tabBarConstant : 0;
-  const tabBarOverlaysContent = insideTabs && uiVariant !== 'material';
+  // Only the native tab bar overlays content (UIKit draws it over the scroll view);
+  // the JS `MaterialTabBar` sits in flow.
+  const tabBarOverlaysContent = insideTabs && usesNativeTabBar;
   // The Material bar reserves its full height even though it's tucked ~2px into the
   // tab bar (MATERIAL_TABBAR_OVERLAP in persistent-queue-bar), so its visible height
   // above the tab bar is ~2px less. The resulting 2px of extra scroll padding is

@@ -35,7 +35,10 @@ type BoardCaptionConfig = SimpleBoardCaptionConfig | CustomBoardCaptionConfig;
 
 function findMoonBoardLayoutName(layoutId: number | null | undefined): string | null {
   if (layoutId == null) return null;
-  return getLayoutById(layoutId)?.[1]?.name ?? null;
+  // getLayoutById returns the matched Object.entries() pair [key, layout] (or
+  // undefined). Destructure the layout out of the tuple instead of indexing [1].
+  const [, layout] = getLayoutById(layoutId) ?? [];
+  return layout?.name ?? null;
 }
 
 function buildMoonBoardCaption({ climbName, angle, grade, setter, layoutId }: InstagramCaptionInput): string {

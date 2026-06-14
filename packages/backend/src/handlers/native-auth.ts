@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import crypto from 'crypto';
 import { SignJWT, createRemoteJWKSet, jwtVerify } from 'jose';
-import { compare } from 'bcryptjs';
+import { compare, hash } from 'bcryptjs';
 import { eq, and, isNull, lt, or, isNotNull } from 'drizzle-orm';
 import { mobileRefreshTokens, users, userCredentials, accounts, userProfiles } from '@boardsesh/db/schema/auth';
 import { db } from '../db/client';
@@ -19,6 +19,19 @@ const DUMMY_PASSWORD_HASH = '$2b$10$CwTycUXWue0Thq9StjUM0uJ8/oQbk1Ec7T0p/7K8nXfR
 
 /** Generic error returned for all credential validation failures. */
 const INVALID_CREDENTIALS_ERROR = 'Invalid email or password';
+
+/**
+ * Registration field bounds — mirror the web register route's Zod schema
+ * (packages/web/app/api/auth/register/route.ts) so both signup paths accept
+ * exactly the same inputs. The email regex is the same lax shape the web/mobile
+ * client validators use: it rejects nothing the server would otherwise accept.
+ */
+const REGISTER_EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const PASSWORD_MIN_LENGTH = 8;
+const PASSWORD_MAX_LENGTH = 128;
+const NAME_MAX_LENGTH = 100;
+/** bcrypt cost factor — matches the web register route. */
+const BCRYPT_COST = 12;
 
 // Transfer tokens are short-lived (120s) and exchanged between our own
 // servers, so 5s tolerance is sufficient. Long-lived JWTs use 60s in
@@ -544,6 +557,152 @@ export async function handleNativeAuthCredentials(req: IncomingMessage, res: Ser
     sendJson(res, 200, tokenPair);
   } catch (error) {
     logger.error('[NativeAuth] Credentials sign-in failed:', error);
+    sendJson(res, 500, { error: 'Internal server error' });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// POST /auth/native/register — create a Boardsesh account from the mobile app
+//
+// Mirrors the web register route (packages/web/app/api/auth/register/route.ts):
+// it creates the same users + userCredentials + userProfiles rows. The
+// difference is that on success we mint a mobile JWT pair and return it, so the
+// app logs the user straight in (no web browser, no email round-trip) — the same
+// auto-login behaviour the native OAuth and credentials handlers already have.
+//
+// Email verification: the backend can't send a verification email, and
+// handleNativeAuthCredentials never checks emailVerified, so the new user is
+// auto-logged-in on the device regardless. We still honour
+// EMAIL_VERIFICATION_ENABLED for the stored emailVerified value, mirroring the
+// web register route: when the flag is on, accounts are created UNVERIFIED
+// (emailVerified: null) so this native path can't mint verified accounts for
+// arbitrary emails and thereby bypass web's verification gate
+// (auth-options.ts blocks unverified credentials login when the flag is on).
+// When the flag is off (the default), accounts are created verified.
+// ---------------------------------------------------------------------------
+
+export async function handleNativeAuthRegister(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  if (!applyCorsHeaders(req, res)) return;
+
+  if (req.method !== 'POST') {
+    sendJson(res, 405, { error: 'Method not allowed' });
+    return;
+  }
+
+  // Rate limit by IP (shared limiter with the other native-auth endpoints)
+  const clientIp = getClientIp(req);
+  const retryAfter = checkAuthRateLimit(clientIp);
+  if (retryAfter === -1) {
+    sendJson(res, 503, { error: 'Service temporarily overloaded' });
+    return;
+  }
+  if (retryAfter !== null) {
+    res.setHeader('Retry-After', String(retryAfter));
+    sendJson(res, 429, { error: `Rate limit exceeded. Try again in ${retryAfter} seconds.` });
+    return;
+  }
+
+  let body: unknown;
+  try {
+    const raw = await readBody(req);
+    body = JSON.parse(raw);
+  } catch {
+    sendJson(res, 400, { error: 'Invalid JSON body' });
+    return;
+  }
+
+  if (typeof body !== 'object' || body === null) {
+    sendJson(res, 400, { error: 'Request body must be a JSON object' });
+    return;
+  }
+
+  const { email, password, name } = body as Record<string, unknown>;
+
+  // Email: present, a string, and matching the lax client-side shape. Validate
+  // against the trimmed/lowercased form so a trailing space can't sneak past.
+  if (typeof email !== 'string' || email.trim().length === 0) {
+    sendJson(res, 400, { error: 'email and password are required' });
+    return;
+  }
+  const normalizedEmail = email.trim().toLowerCase();
+  if (!REGISTER_EMAIL_REGEX.test(normalizedEmail)) {
+    sendJson(res, 400, { error: 'Invalid email address' });
+    return;
+  }
+
+  // Password: present, a string, within bounds (mirrors the web Zod schema).
+  if (typeof password !== 'string' || password.length === 0) {
+    sendJson(res, 400, { error: 'email and password are required' });
+    return;
+  }
+  if (password.length < PASSWORD_MIN_LENGTH) {
+    sendJson(res, 400, { error: 'Password must be at least 8 characters' });
+    return;
+  }
+  if (password.length > PASSWORD_MAX_LENGTH) {
+    sendJson(res, 400, { error: 'Password must be less than 128 characters' });
+    return;
+  }
+
+  // Name: optional. An empty/whitespace-only string is treated as absent; the
+  // display name then falls back to the email local-part (matches web).
+  let trimmedName: string | undefined;
+  if (name !== undefined && name !== null) {
+    if (typeof name !== 'string') {
+      sendJson(res, 400, { error: 'name must be a string' });
+      return;
+    }
+    const candidate = name.trim();
+    if (candidate.length > NAME_MAX_LENGTH) {
+      sendJson(res, 400, { error: 'Name must be less than 100 characters' });
+      return;
+    }
+    if (candidate.length > 0) trimmedName = candidate;
+  }
+
+  try {
+    // Pre-check keeps the clean 409 message without relying on a DB constraint
+    // (users.email currently has no unique index — see the catch below).
+    const existingRows = await db.select().from(users).where(eq(users.email, normalizedEmail)).limit(1);
+    if (existingRows[0]) {
+      sendJson(res, 409, {
+        error: 'An account with this email already exists. Please sign in with your existing account.',
+      });
+      return;
+    }
+
+    const passwordHash = await hash(password, BCRYPT_COST);
+    // Mirror web: unverified when the verification gate is on, verified otherwise.
+    const emailVerificationEnabled = process.env.EMAIL_VERIFICATION_ENABLED === 'true';
+
+    const result = await db.transaction(async (tx) => {
+      const newUserId = crypto.randomUUID();
+      await tx.insert(users).values({
+        id: newUserId,
+        email: normalizedEmail,
+        name: trimmedName ?? normalizedEmail.split('@')[0],
+        emailVerified: emailVerificationEnabled ? null : new Date(),
+      });
+      await tx.insert(userCredentials).values({ userId: newUserId, passwordHash });
+      // Mirror the web createUser event: every user gets a profile row.
+      await tx.insert(userProfiles).values({ userId: newUserId }).onConflictDoNothing();
+      const tokenPair = await generateTokenPair(newUserId, tx);
+      return { userId: newUserId, tokenPair };
+    });
+
+    logger.info(`[NativeAuth] Registration successful for user ${result.userId}`);
+    sendJson(res, 201, result.tokenPair);
+  } catch (error) {
+    // Race: a concurrent request created this email between the pre-check and
+    // insert. PostgreSQL unique-violation code is '23505'. NOTE: users.email has
+    // no unique index today, so this won't fire from the email column yet — the
+    // pre-check above is the real guard. The handler stays correct once a
+    // uniqueIndex on lower-cased users.email is added (tracked as follow-up).
+    if (error && typeof error === 'object' && 'code' in error && error.code === '23505') {
+      sendJson(res, 409, { error: 'An account with this email already exists' });
+      return;
+    }
+    logger.error('[NativeAuth] Registration failed:', error);
     sendJson(res, 500, { error: 'Internal server error' });
   }
 }

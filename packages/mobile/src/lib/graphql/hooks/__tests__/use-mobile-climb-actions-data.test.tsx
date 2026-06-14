@@ -86,6 +86,7 @@ function signedIn() {
     signInWithApple: vi.fn(),
     signInWithGoogle: vi.fn(),
     signInWithCredentials: vi.fn(),
+    register: vi.fn(),
     signOut: vi.fn(),
     refreshAuthState: vi.fn(),
   });
@@ -98,6 +99,7 @@ function signedOut() {
     signInWithApple: vi.fn(),
     signInWithGoogle: vi.fn(),
     signInWithCredentials: vi.fn(),
+    register: vi.fn(),
     signOut: vi.fn(),
     refreshAuthState: vi.fn(),
   });

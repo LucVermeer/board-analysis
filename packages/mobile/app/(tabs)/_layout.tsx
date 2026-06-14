@@ -11,7 +11,7 @@ import { QueueBottomAccessory } from '../../src/components/queue-control/QueueBo
 import { MaterialTabBar } from '../../src/components/navigation/MaterialTabBar';
 import { useTheme } from '../../src/providers/theme-provider';
 import { brandColors } from '../../src/theme/colors';
-import { useNativeAccessoryActive } from '../../src/hooks/use-bottom-accessory';
+import { useNativeAccessoryActive, useNativeTabBar } from '../../src/hooks/use-bottom-accessory';
 
 // Cold-start on Home: the leftmost tab carries the beta shelf and followed
 // activity feed, while Climbs remains the search surface one tab over. Drives
@@ -31,17 +31,19 @@ const materialTabIcon =
   );
 
 /**
- * Bottom tabs. The Liquid Glass variant uses the system Liquid Glass tab bar
- * (`expo-router/unstable-native-tabs`) with a native `BottomAccessory` platter
- * for the current climb + tick. The Material variant uses a JS `Tabs` navigator
- * with the Material 3 `MaterialTabBar`; its climb/tick chrome rides the floating
- * `PersistentQueueBar` (the native accessory is Liquid-Glass-only).
+ * Bottom tabs. The system Liquid Glass tab bar (`expo-router/unstable-native-tabs`)
+ * — with a native `BottomAccessory` platter for the current climb + tick — is used
+ * only on the Liquid Glass variant AND a glass-capable device (iOS 26). Everywhere
+ * else (Material, plus Liquid Glass on iOS < 26 / Android) falls back to a JS `Tabs`
+ * navigator with the Material 3 `MaterialTabBar`; its climb/tick chrome rides the
+ * floating `PersistentQueueBar` (the native accessory is iOS-26-only).
  */
 export default function TabLayout() {
   const { t } = useTranslation('common');
   const { t: tPlaylists } = useTranslation('playlists');
   const { t: tSession } = useTranslation('session');
-  const { variant, systemColors } = useTheme();
+  const { systemColors } = useTheme();
+  const nativeTabBar = useNativeTabBar();
   const nativeAccessoryActive = useNativeAccessoryActive();
 
   // Record-tab status cue: a badge when a board is connected over Bluetooth or a
@@ -61,7 +63,7 @@ export default function TabLayout() {
   const showRecordBadge = isBluetoothConnected || sessionId !== null;
   const eagerMountRecord = Platform.OS === 'android';
 
-  if (variant === 'material') {
+  if (!nativeTabBar) {
     return (
       <Tabs tabBar={(props) => <MaterialTabBar {...props} />} screenOptions={{ headerShown: false }}>
         <Tabs.Screen

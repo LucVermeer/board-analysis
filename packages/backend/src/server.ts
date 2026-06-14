@@ -30,6 +30,7 @@ import {
   handleNativeAuthExchange,
   handleNativeAuthOAuth,
   handleNativeAuthRefresh,
+  handleNativeAuthRegister,
   handleNativeAuthRevoke,
   startRefreshTokenCleanup,
   stopRefreshTokenCleanup,
@@ -405,6 +406,11 @@ export async function startServer(): Promise<ServerResources> {
         return;
       }
 
+      if (pathname === '/auth/native/register' && (req.method === 'POST' || req.method === 'OPTIONS')) {
+        await handleNativeAuthRegister(req, res);
+        return;
+      }
+
       if (pathname === '/auth/native/oauth' && (req.method === 'POST' || req.method === 'OPTIONS')) {
         await handleNativeAuthOAuth(req, res);
         return;
@@ -510,6 +516,7 @@ export async function startServer(): Promise<ServerResources> {
     logger.info(`  Widget take-control: ${httpScheme}://0.0.0.0:${PORT}/api/widget/take-control`);
     logger.info(`  Native auth exchange: ${httpScheme}://0.0.0.0:${PORT}/auth/native/exchange`);
     logger.info(`  Native auth credentials: ${httpScheme}://0.0.0.0:${PORT}/auth/native/credentials`);
+    logger.info(`  Native auth register: ${httpScheme}://0.0.0.0:${PORT}/auth/native/register`);
     logger.info(`  Native auth oauth: ${httpScheme}://0.0.0.0:${PORT}/auth/native/oauth`);
     logger.info(`  Native auth refresh: ${httpScheme}://0.0.0.0:${PORT}/auth/native/refresh`);
     logger.info(`  Native auth revoke: ${httpScheme}://0.0.0.0:${PORT}/auth/native/revoke`);

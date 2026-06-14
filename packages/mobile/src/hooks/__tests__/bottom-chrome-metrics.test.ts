@@ -17,6 +17,7 @@ describe('computeBottomChromeMetrics', () => {
   it('reserves nothing extra outside the tabs group', () => {
     const metrics = computeBottomChromeMetrics({
       uiVariant: 'liquidGlass',
+      usesNativeTabBar: false,
       insetsBottom: 34,
       insideTabs: false,
       hasCurrentClimb: false,
@@ -34,6 +35,7 @@ describe('computeBottomChromeMetrics', () => {
   it('reserves the JS toolbar when a climb is set and the native accessory is unavailable', () => {
     const metrics = computeBottomChromeMetrics({
       uiVariant: 'liquidGlass',
+      usesNativeTabBar: true,
       insetsBottom: 0,
       insideTabs: true,
       hasCurrentClimb: true,
@@ -46,9 +48,31 @@ describe('computeBottomChromeMetrics', () => {
     expect(metrics.fixedFooterBottom).toBe(TAB_BAR_HEIGHT + TOOLBAR_RESERVE);
   });
 
+  it('clears the JS Material tab bar for Liquid Glass on a non-capable device', () => {
+    // Older iPhone / Android on Liquid Glass: the variant is liquidGlass (floating
+    // island queue chrome → TOOLBAR_RESERVE) but the rendered bar is the 80dp JS
+    // MaterialTabBar, which sits in flow rather than overlaying content.
+    const metrics = computeBottomChromeMetrics({
+      uiVariant: 'liquidGlass',
+      usesNativeTabBar: false,
+      insetsBottom: 0,
+      insideTabs: true,
+      hasCurrentClimb: true,
+      nativeAccessoryMounted: false,
+    });
+    expect(metrics.jsQueueToolbarVisible).toBe(true);
+    expect(metrics.jsQueueReserve).toBe(TOOLBAR_RESERVE);
+    expect(metrics.tabBarHeight).toBe(MATERIAL_TAB_BAR_HEIGHT);
+    expect(metrics.scrollBottomPadding).toBe(MATERIAL_TAB_BAR_HEIGHT + TOOLBAR_RESERVE);
+    expect(metrics.floatingControlBottom).toBe(MATERIAL_TAB_BAR_HEIGHT + TOOLBAR_RESERVE);
+    // JS bar is in flow, so a fixed footer clears only the queue chrome, not the bar.
+    expect(metrics.fixedFooterBottom).toBe(TOOLBAR_RESERVE);
+  });
+
   it('reserves the docked Material bar when the JS toolbar is visible', () => {
     const metrics = computeBottomChromeMetrics({
       uiVariant: 'material',
+      usesNativeTabBar: false,
       insetsBottom: 0,
       insideTabs: true,
       hasCurrentClimb: true,
@@ -65,6 +89,7 @@ describe('computeBottomChromeMetrics', () => {
   it('does not pad scroll content for the UIKit-owned native accessory', () => {
     const metrics = computeBottomChromeMetrics({
       uiVariant: 'liquidGlass',
+      usesNativeTabBar: true,
       insetsBottom: 0,
       insideTabs: true,
       hasCurrentClimb: true,
@@ -84,6 +109,7 @@ describe('computeBottomChromeMetrics', () => {
   it('reserves queue chrome for fixed footers outside the tabs group', () => {
     const metrics = computeBottomChromeMetrics({
       uiVariant: 'liquidGlass',
+      usesNativeTabBar: false,
       insetsBottom: 34,
       insideTabs: false,
       hasCurrentClimb: true,
@@ -98,6 +124,7 @@ describe('computeBottomChromeMetrics', () => {
   it('keeps the tab bar but no toolbar reserve when no climb is set, even if the accessory is mounted', () => {
     const metrics = computeBottomChromeMetrics({
       uiVariant: 'liquidGlass',
+      usesNativeTabBar: true,
       insetsBottom: 34,
       insideTabs: true,
       hasCurrentClimb: false,
@@ -113,6 +140,7 @@ describe('computeBottomChromeMetrics', () => {
   it('keeps scroll tab clearance but not fixed-footer tab clearance inside Material tabs', () => {
     const metrics = computeBottomChromeMetrics({
       uiVariant: 'material',
+      usesNativeTabBar: false,
       insetsBottom: 24,
       insideTabs: true,
       hasCurrentClimb: false,
@@ -130,6 +158,7 @@ describe('computeBottomChromeMetrics', () => {
     // accessory on glass — exactly like a local climb, never both.
     const metrics = computeBottomChromeMetrics({
       uiVariant: 'liquidGlass',
+      usesNativeTabBar: true,
       insetsBottom: 0,
       insideTabs: true,
       hasCurrentClimb: true,
@@ -144,6 +173,7 @@ describe('computeBottomChromeMetrics', () => {
       for (const nativeAccessoryMounted of [true, false]) {
         const metrics = computeBottomChromeMetrics({
           uiVariant: 'liquidGlass',
+          usesNativeTabBar: true,
           insetsBottom: 0,
           insideTabs: true,
           hasCurrentClimb,
