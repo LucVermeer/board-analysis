@@ -26,17 +26,18 @@ export function useAccessoryClimbTap(): AccessoryClimbTap {
   const { openPlayDrawer } = useDrawerHost();
   const { currentClimbQueueItem } = state;
 
-  // Open whatever the accessory is showing: the wall's lit climb when pinned, else
-  // the local queue head. setAsCurrent stays false so opening the head doesn't
-  // duplicate it at the end of the queue.
+  // Open whatever the accessory is showing: the wall's lit climb when a feed is
+  // live, else the local queue head — useWallOrQueueCurrentClimb already folds the
+  // local head in as its fallback, so this is the single source of truth for the
+  // open target. setAsCurrent stays false so opening the head doesn't duplicate it
+  // at the end of the queue.
   const accessoryClimb = useWallOrQueueCurrentClimb(currentClimbQueueItem?.climb ?? null);
 
   const handleOpenPlay = useCallback(() => {
-    const climbToOpen = accessoryClimb ?? currentClimbQueueItem?.climb;
-    if (!climbToOpen) return;
+    if (!accessoryClimb) return;
     hapticLight();
-    openPlayDrawer(climbToOpen, { setAsCurrent: false });
-  }, [openPlayDrawer, accessoryClimb, currentClimbQueueItem]);
+    openPlayDrawer(accessoryClimb, { setAsCurrent: false });
+  }, [openPlayDrawer, accessoryClimb]);
 
   const openGesture = useMemo(
     () =>

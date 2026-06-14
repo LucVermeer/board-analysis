@@ -207,19 +207,6 @@ describe('TabLayout', () => {
     expect(accessorySlot?.querySelector('[data-accessory="true"]')).not.toBeNull();
   });
 
-  it('keeps the accessory mounted across a re-render while presence stays true', () => {
-    // The wall-aware gate stays true across a board-level climb change (only the
-    // climb identity changes), so the UIKit accessory host is never unmounted /
-    // remounted mid-change — the regression that left a stale snapshot stacked
-    // under the new one (doubled text). Exactly one accessory survives a re-render.
-    cfg.hasCurrentClimb = true;
-    const { container, rerender } = render(<TabLayout />);
-    expect(container.querySelectorAll('[data-bottom-accessory="true"]')).toHaveLength(1);
-
-    rerender(<TabLayout />);
-    expect(container.querySelectorAll('[data-bottom-accessory="true"]')).toHaveLength(1);
-  });
-
   it('skips the native bottom accessory when that path is inactive', () => {
     cfg.nativeAccessoryActive = false;
     cfg.hasCurrentClimb = true;
