@@ -70,6 +70,9 @@ export function useBulkVoteSummaries(entityType: SocialEntityType, entityIds: st
   return useQuery({
     queryKey: ['bulkVoteSummaries', entityType, sortedIds],
     queryFn: async () => {
+      // `enabled` gates automatic fetches, but a manual `refetch()` (e.g. pull-to-refresh)
+      // bypasses it — short-circuit here so we never send the backend an empty list.
+      if (entityIds.length === 0) return [];
       const response = await getHttpClient().request<GetBulkVoteSummariesQueryResponse>(GET_BULK_VOTE_SUMMARIES, {
         input: { entityType, entityIds },
       });
@@ -88,6 +91,7 @@ export function useChunkedBulkVoteSummaries(entityType: SocialEntityType, entity
       return {
         queryKey: ['bulkVoteSummaries', entityType, sortedIds],
         queryFn: async () => {
+          if (chunk.length === 0) return [];
           const response = await getHttpClient().request<GetBulkVoteSummariesQueryResponse>(GET_BULK_VOTE_SUMMARIES, {
             input: { entityType, entityIds: chunk },
           });
@@ -110,6 +114,7 @@ export function useGroupedBulkVoteSummaries(entityType: SocialEntityType, entity
       return {
         queryKey: ['bulkVoteSummaries', entityType, sortedIds],
         queryFn: async () => {
+          if (chunk.length === 0) return [];
           const response = await getHttpClient().request<GetBulkVoteSummariesQueryResponse>(GET_BULK_VOTE_SUMMARIES, {
             input: { entityType, entityIds: chunk },
           });
