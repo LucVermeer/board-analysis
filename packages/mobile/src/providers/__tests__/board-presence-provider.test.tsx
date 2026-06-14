@@ -9,6 +9,10 @@ const transport = vi.hoisted(() => ({
   resolveBoardForSerial: vi.fn(
     async (_args: unknown) => ({ boardId: 42, boardName: 'Garage Wall' }) as unknown as ResolvedBoard,
   ),
+  // No base implementation: the resolved value is set in `beforeEach`, so a
+  // per-test `mockResolvedValue` actually overrides it (a base impl would win).
+  resolveBoardCandidatesForSerial: vi.fn(),
+  chooseBoardForSerial: vi.fn(),
   resolveBoardForUuid: vi.fn(
     async (_args: unknown) => ({ boardId: 44, boardName: 'Named Board' }) as unknown as ResolvedBoard,
   ),
@@ -26,6 +30,8 @@ vi.mock('../feature-flags-provider', () => ({
 vi.mock('../../lib/board-presence/board-presence-client', () => ({
   createMobileBoardPresenceClient: () => ({
     resolveBoardForSerial: transport.resolveBoardForSerial,
+    resolveBoardCandidatesForSerial: transport.resolveBoardCandidatesForSerial,
+    chooseBoardForSerial: transport.chooseBoardForSerial,
     resolveBoardForUuid: transport.resolveBoardForUuid,
     resolveBoardForConfig: transport.resolveBoardForConfig,
     subscribeNowPlaying: () => () => {},
@@ -36,6 +42,12 @@ vi.mock('../../lib/board-presence/board-presence-client', () => ({
 }));
 
 vi.mock('../../lib/graphql/ws-client', () => ({ getWsClient: () => ({}) }));
+
+// Keep react-native host components (the disambiguation Modal) out of this
+// jsdom suite — it asserts provider logic, not the picker UI.
+vi.mock('../../components/board-discovery/BoardDisambiguationSheet', () => ({
+  BoardDisambiguationSheet: () => null,
+}));
 
 // Capture the boardId handed to the shared provider so we can assert it updates
 // after resolve.
@@ -69,6 +81,16 @@ describe('MobileBoardPresenceProvider', () => {
       boardId: 42,
       boardName: 'Garage Wall',
     } as unknown as ResolvedBoard);
+    transport.resolveBoardCandidatesForSerial.mockClear();
+    transport.resolveBoardCandidatesForSerial.mockResolvedValue({
+      board: { boardId: 42, boardName: 'Garage Wall' },
+      candidates: null,
+    } as unknown as { board: ResolvedBoard | null; candidates: unknown[] | null });
+    transport.chooseBoardForSerial.mockClear();
+    transport.chooseBoardForSerial.mockResolvedValue({
+      boardId: 77,
+      boardName: 'Picked Wall',
+    } as unknown as ResolvedBoard);
     transport.resolveBoardForConfig.mockClear();
     transport.resolveBoardForConfig.mockResolvedValue({
       boardId: 43,
@@ -100,7 +122,7 @@ describe('MobileBoardPresenceProvider', () => {
       });
       expect(resolved).toBeNull();
     });
-    expect(transport.resolveBoardForSerial).not.toHaveBeenCalled();
+    expect(transport.resolveBoardCandidatesForSerial).not.toHaveBeenCalled();
     expect(sharedProvider.lastBoardId).toBeNull();
   });
 
@@ -120,7 +142,7 @@ describe('MobileBoardPresenceProvider', () => {
       expect(resolved?.boardId).toBe(42);
     });
 
-    expect(transport.resolveBoardForSerial).toHaveBeenCalledWith({
+    expect(transport.resolveBoardCandidatesForSerial).toHaveBeenCalledWith({
       serial: 'SERIAL-1',
       boardType: 'kilter',
       layoutId: 1,
@@ -143,7 +165,32 @@ describe('MobileBoardPresenceProvider', () => {
     await act(async () => {
       await capturedControls?.resolveAndBindBoard(args);
     });
-    expect(transport.resolveBoardForSerial).toHaveBeenCalledTimes(1);
+    expect(transport.resolveBoardCandidatesForSerial).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not bind a board when the serial maps to several candidates (awaits the pick)', async () => {
+    flags.value = true;
+    transport.resolveBoardCandidatesForSerial.mockResolvedValue({
+      board: null,
+      candidates: [
+        { boardId: 1, boardUuid: 'a', boardName: 'Home', boardType: 'kilter', isOwnedByMe: true, isPublic: false },
+        { boardId: 2, boardUuid: 'b', boardName: 'Gym', boardType: 'kilter', isOwnedByMe: false, isPublic: true },
+      ],
+    } as unknown as { board: ResolvedBoard | null; candidates: unknown[] | null });
+    renderProvider();
+
+    await act(async () => {
+      const resolved = await capturedControls?.resolveAndBindBoard({
+        serial: 'SHARED-SERIAL',
+        boardType: 'kilter',
+        layoutId: 1,
+        sizeId: 10,
+        setIds: '1,2',
+      });
+      // Ambiguous → no board bound yet; the user must pick via the prompt.
+      expect(resolved).toBeNull();
+    });
+    expect(sharedProvider.lastBoardId).toBeNull();
   });
 
   it('resolves+binds by config when no serial is available', async () => {
@@ -381,7 +428,7 @@ describe('MobileBoardPresenceProvider', () => {
 
   it('returns null instead of leaking a rejected serial resolve', async () => {
     flags.value = true;
-    transport.resolveBoardForSerial.mockRejectedValue(new Error('backend disabled'));
+    transport.resolveBoardCandidatesForSerial.mockRejectedValue(new Error('backend disabled'));
     renderProvider();
 
     await act(async () => {

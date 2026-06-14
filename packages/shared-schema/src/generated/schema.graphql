@@ -4423,11 +4423,12 @@ type Mutation {
   # ============================================
 
   """
-  Resolve (and bind) the shared board for a BLE serial. Returns the one board
-  everyone at this physical wall shares; find-or-creates on first sighting
-  (owned by the first connector) and enforces serial → exactly one board.
-  Called once on BLE connect; supplies the board name the UI shows. The board
-  config args are used only to create the board the first time a serial is seen.
+  Legacy serial resolver, kept for already-shipped clients that can't render
+  a disambiguation prompt: always returns a single board. Serials are no
+  longer globally unique, so when several boards share one this auto-picks
+  (the caller's own board if present, else the oldest) and remembers it.
+  New clients should call `resolveBoardCandidatesForSerial`. The board config
+  args are used only to create the board the first time a serial is seen.
   """
   resolveBoardForSerial(
     serial: String!
@@ -4436,6 +4437,30 @@ type Mutation {
     sizeId: Int!
     setIds: String!
   ): ResolvedBoard!
+
+  """
+  Resolve a BLE serial for clients that can disambiguate. Returns a single
+  `board` when the serial is unambiguous (remembered choice, only one match,
+  or freshly created), or a list of `candidates` when several boards share
+  the serial and the user must pick which wall they're at. Confirm the pick
+  with `chooseBoardForSerial`. The config args create the board the first
+  time a serial is seen.
+  """
+  resolveBoardCandidatesForSerial(
+    serial: String!
+    boardType: String!
+    layoutId: Int!
+    sizeId: Int!
+    setIds: String!
+  ): ResolveBoardResult!
+
+  """
+  Confirm which board a (non-unique) serial routes to after the user picks
+  from a disambiguation prompt. Remembers the choice per user so the prompt
+  doesn't reappear, and returns the bound board. The board must be active and
+  actually carry the serial.
+  """
+  chooseBoardForSerial(boardId: Int!, serial: String!): ResolvedBoard!
 
   """
   Resolve the wall feed for the selected named board. This binds to the actual
@@ -5577,6 +5602,51 @@ type ResolvedBoard {
   sizeId: Int!
   "Comma-separated set ids"
   setIds: String!
+}
+
+"""
+One board sharing a (non-unique) BLE serial, shown to the user when a serial
+maps to more than one board so they can pick which wall they're at. Location
+fields are redacted for non-public boards the caller doesn't own.
+"""
+type BoardCandidate {
+  "Shared board id (userBoards.id)"
+  boardId: Int!
+  "Board uuid"
+  boardUuid: ID!
+  "Display name of the board"
+  boardName: String!
+  "Board type (kilter, tension, ...)"
+  boardType: String!
+  "Layout id"
+  layoutId: Int!
+  "Size id"
+  sizeId: Int!
+  "Comma-separated set ids"
+  setIds: String!
+  "Human-readable location (null when redacted)"
+  locationName: String
+  "Linked gym name (null when redacted or no gym)"
+  gymName: String
+  "True when the calling user owns this board"
+  isOwnedByMe: Boolean!
+  "Whether the board is publicly listed"
+  isPublic: Boolean!
+  "ISO 8601 of the most recent tick on this board, if any"
+  lastSentAt: String
+}
+
+"""
+Result of resolving a BLE serial that may map to several boards. Exactly one
+of `board` / `candidates` is set: `board` when the serial is unambiguous
+(remembered choice, only one match, or freshly created), `candidates` when
+the user must pick which wall they're at (confirm with `chooseBoardForSerial`).
+"""
+type ResolveBoardResult {
+  "Set when the serial resolves to a single board"
+  board: ResolvedBoard
+  "Set when several boards share the serial and the user must choose"
+  candidates: [BoardCandidate!]
 }
 
 """

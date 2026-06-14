@@ -30,8 +30,8 @@ import { isUniqueViolation } from '../../../utils/postgres-errors';
 // ============================================
 
 function throwIfBoardSerialConflict(error: unknown): void {
-  if (isUniqueViolation(error, 'user_boards_unique_serial')) {
-    throw new GraphQLError('That serial is already linked to another board', {
+  if (isUniqueViolation(error, 'user_boards_unique_owner_serial')) {
+    throw new GraphQLError('You already have another board linked to that serial', {
       extensions: { code: 'BOARD_SERIAL_ALREADY_LINKED' },
     });
   }

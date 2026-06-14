@@ -19,7 +19,9 @@ import {
   BOARD_NOW_PLAYING,
   BOARD_PRESENCE_STATS,
   BOARD_RECENT_CLIMBS,
+  CHOOSE_BOARD_FOR_SERIAL,
   REPORT_BOARD_CLIMB,
+  RESOLVE_BOARD_CANDIDATES_FOR_SERIAL,
   RESOLVE_BOARD_FOR_CONFIG,
   RESOLVE_BOARD_FOR_SERIAL,
   RESOLVE_BOARD_FOR_UUID,
@@ -30,6 +32,7 @@ import type {
   BoardPresenceEvent,
   BoardPresenceStats,
   ClimbQueueItemInput,
+  ResolveBoardResult,
   ResolvedBoard,
 } from '@boardsesh/shared-schema';
 
@@ -40,14 +43,35 @@ type ReportBoardClimbData = { reportBoardClimb: boolean };
 type ResolveBoardForSerialData = { resolveBoardForSerial: ResolvedBoard };
 type ResolveBoardForUuidData = { resolveBoardForUuid: ResolvedBoard };
 type ResolveBoardForConfigData = { resolveBoardForConfig: ResolvedBoard };
+type ResolveBoardCandidatesData = { resolveBoardCandidatesForSerial: ResolveBoardResult };
+type ChooseBoardForSerialData = { chooseBoardForSerial: ResolvedBoard };
+
+/** Config + serial needed to resolve a board (with possible disambiguation). */
+export type SerialResolveArgs = {
+  serial: string;
+  boardType: string;
+  layoutId: number;
+  sizeId: number;
+  setIds: string;
+};
 
 /**
- * Build a `BoardPresenceClient` over a mobile graphql-ws client. Pass a getter
- * (not the client itself) so the live client — which graphql-ws may dispose and
- * recreate — is read at call time, matching `getClient: () => getWsClient()` in
- * the queue provider.
+ * The mobile board-presence client extends the shared `BoardPresenceClient`
+ * with serial disambiguation (the shared interface stays minimal so web can
+ * keep using the legacy single-board resolver).
  */
-export function createMobileBoardPresenceClient(getClient: () => Client): BoardPresenceClient {
+export type MobileBoardPresenceClient = BoardPresenceClient & {
+  resolveBoardCandidatesForSerial(args: SerialResolveArgs): Promise<ResolveBoardResult>;
+  chooseBoardForSerial(args: { boardId: number; serial: string }): Promise<ResolvedBoard>;
+};
+
+/**
+ * Build a `MobileBoardPresenceClient` over a mobile graphql-ws client. Pass a
+ * getter (not the client itself) so the live client — which graphql-ws may
+ * dispose and recreate — is read at call time, matching
+ * `getClient: () => getWsClient()` in the queue provider.
+ */
+export function createMobileBoardPresenceClient(getClient: () => Client): MobileBoardPresenceClient {
   return {
     subscribeNowPlaying(boardId, onEvent, onError, onComplete) {
       return subscribe<BoardNowPlayingData>(
@@ -115,6 +139,22 @@ export function createMobileBoardPresenceClient(getClient: () => Client): BoardP
         variables: args,
       });
       return data.resolveBoardForConfig;
+    },
+
+    async resolveBoardCandidatesForSerial(args) {
+      const data = await execute<ResolveBoardCandidatesData>(getClient(), {
+        query: RESOLVE_BOARD_CANDIDATES_FOR_SERIAL,
+        variables: args,
+      });
+      return data.resolveBoardCandidatesForSerial;
+    },
+
+    async chooseBoardForSerial(args) {
+      const data = await execute<ChooseBoardForSerialData>(getClient(), {
+        query: CHOOSE_BOARD_FOR_SERIAL,
+        variables: args,
+      });
+      return data.chooseBoardForSerial;
     },
   };
 }

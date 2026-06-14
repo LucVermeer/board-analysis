@@ -110,6 +110,67 @@ export const RESOLVE_BOARD_FOR_SERIAL = `
   }
 `;
 
+// Mutation — resolve a BLE serial for clients that can disambiguate. Returns a
+// single `board` when the serial is unambiguous (remembered choice, only one
+// match, or freshly created), or `candidates` when several boards share the
+// serial and the user must pick. Confirm the pick with CHOOSE_BOARD_FOR_SERIAL.
+export const RESOLVE_BOARD_CANDIDATES_FOR_SERIAL = `
+  mutation ResolveBoardCandidatesForSerial(
+    $serial: String!
+    $boardType: String!
+    $layoutId: Int!
+    $sizeId: Int!
+    $setIds: String!
+  ) {
+    resolveBoardCandidatesForSerial(
+      serial: $serial
+      boardType: $boardType
+      layoutId: $layoutId
+      sizeId: $sizeId
+      setIds: $setIds
+    ) {
+      board {
+        boardId
+        boardName
+        boardType
+        layoutId
+        sizeId
+        setIds
+      }
+      candidates {
+        boardId
+        boardUuid
+        boardName
+        boardType
+        layoutId
+        sizeId
+        setIds
+        locationName
+        gymName
+        isOwnedByMe
+        isPublic
+        lastSentAt
+      }
+    }
+  }
+`;
+
+// Mutation — confirm which board a (non-unique) serial routes to after the user
+// picks from a disambiguation prompt. Remembers the choice per user so the
+// prompt doesn't reappear.
+export const CHOOSE_BOARD_FOR_SERIAL = `
+  mutation ChooseBoardForSerial($boardId: Int!, $serial: String!) {
+    chooseBoardForSerial(boardId: $boardId, serial: $serial) {
+      boardId
+      boardName
+      boardType
+      layoutId
+      sizeId
+      setIds
+    }
+  }
+`;
+
 // Mutation — resolve the selected named board's wall feed before BLE connects.
 // Unlike the per-config fallback, this uses the actual UserBoard row so durable
 // board stats and live presence stay on the same board_id.

@@ -21,10 +21,13 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { BoardPresenceProvider } from '@boardsesh/board-presence-react';
-import type { BoardPresenceClient } from '@boardsesh/board-presence-react';
-import type { ClimbQueueItemInput, ResolvedBoard } from '@boardsesh/shared-schema';
-import { createMobileBoardPresenceClient } from '../lib/board-presence/board-presence-client';
+import type { BoardCandidate, ClimbQueueItemInput, ResolvedBoard } from '@boardsesh/shared-schema';
+import {
+  createMobileBoardPresenceClient,
+  type MobileBoardPresenceClient,
+} from '../lib/board-presence/board-presence-client';
 import { getWsClient } from '../lib/graphql/ws-client';
+import { BoardDisambiguationSheet } from '../components/board-discovery/BoardDisambiguationSheet';
 import { useFeatureFlag } from './feature-flags-provider';
 
 /** Board config needed to find-or-bind the shared board on first sighting. */
@@ -81,10 +84,17 @@ const BoardPresenceControlsContext = createContext<BoardPresenceControlsValue | 
 export function MobileBoardPresenceProvider({ children }: { children: ReactNode }) {
   const enabled = useFeatureFlag('board-presence') === true;
   const [boardId, setBoardId] = useState<number | null>(null);
+  // When a serial maps to several boards the user must pick which wall they're
+  // at. We hold the candidates + serial here and surface a picker; binding waits
+  // for the choice.
+  const [pendingDisambiguation, setPendingDisambiguation] = useState<{
+    serial: string;
+    candidates: BoardCandidate[];
+  } | null>(null);
 
   // The injected transport. Built once and only while the flag is on, so the
   // shared hook never attaches a subscription when the feature is disabled.
-  const client = useMemo<BoardPresenceClient | null>(
+  const client = useMemo<MobileBoardPresenceClient | null>(
     () => (enabled ? createMobileBoardPresenceClient(getWsClient) : null),
     [enabled],
   );
@@ -102,12 +112,17 @@ export function MobileBoardPresenceProvider({ children }: { children: ReactNode 
   // re-resolving an already-bound serial.
   const boardIdRef = useRef(boardId);
   boardIdRef.current = boardId;
+  // Mirror the pending disambiguation so the empty-dep `chooseBoard` callback
+  // reads the serial it must confirm against.
+  const pendingDisambiguationRef = useRef(pendingDisambiguation);
+  pendingDisambiguationRef.current = pendingDisambiguation;
 
   const resetPresence = useCallback(() => {
     lastResolvedSerialRef.current = null;
     lastResolvedConfigKeyRef.current = null;
     lastResolvedBoardUuidRef.current = null;
     resolveGenerationRef.current += 1;
+    setPendingDisambiguation(null);
     setBoardId(null);
   }, []);
 
@@ -132,17 +147,30 @@ export function MobileBoardPresenceProvider({ children }: { children: ReactNode 
     lastResolvedSerialRef.current = args.serial;
     setBoardId(null);
     try {
-      const resolved = await activeClient.resolveBoardForSerial(args);
+      const result = await activeClient.resolveBoardCandidatesForSerial(args);
       if (resolveGenerationRef.current !== resolveGeneration) {
         return null;
       }
-      setBoardId(resolved.boardId);
-      return resolved;
+      if (result.board) {
+        setPendingDisambiguation(null);
+        setBoardId(result.board.boardId);
+        return result.board;
+      }
+      if (result.candidates && result.candidates.length > 0) {
+        // Several boards share this serial — ask the user which wall they're at.
+        // Binding waits for `chooseBoard`; leave boardId null so the wall feed
+        // stays inert until then.
+        setPendingDisambiguation({ serial: args.serial, candidates: result.candidates });
+        // Allow a later reconnect to re-prompt if they dismiss without picking.
+        lastResolvedSerialRef.current = null;
+        return null;
+      }
+      return null;
     } catch (error) {
       if (resolveGenerationRef.current === resolveGeneration) {
         lastResolvedSerialRef.current = null;
       }
-      console.warn('[board-presence] resolveBoardForSerial failed', error);
+      console.warn('[board-presence] resolveBoardCandidatesForSerial failed', error);
       return null;
     }
   }, []);
@@ -227,6 +255,33 @@ export function MobileBoardPresenceProvider({ children }: { children: ReactNode 
     [],
   );
 
+  // Confirm the board the user picked from the disambiguation prompt: remember
+  // the choice server-side and bind it as the active wall.
+  const chooseDisambiguatedBoard = useCallback(async (chosenBoardId: number): Promise<void> => {
+    const activeClient = clientRef.current;
+    const pending = pendingDisambiguationRef.current;
+    if (!enabledRef.current || activeClient === null || pending === null) {
+      return;
+    }
+    const resolveGeneration = resolveGenerationRef.current + 1;
+    resolveGenerationRef.current = resolveGeneration;
+    try {
+      const resolved = await activeClient.chooseBoardForSerial({ boardId: chosenBoardId, serial: pending.serial });
+      if (resolveGenerationRef.current !== resolveGeneration) {
+        return;
+      }
+      lastResolvedSerialRef.current = pending.serial;
+      setPendingDisambiguation(null);
+      setBoardId(resolved.boardId);
+    } catch (error) {
+      console.warn('[board-presence] chooseBoardForSerial failed', error);
+    }
+  }, []);
+
+  const cancelDisambiguation = useCallback(() => {
+    setPendingDisambiguation(null);
+  }, []);
+
   const controls = useMemo<BoardPresenceControlsValue>(
     () => ({
       enabled,
@@ -253,6 +308,12 @@ export function MobileBoardPresenceProvider({ children }: { children: ReactNode 
       <BoardPresenceProvider boardId={enabled ? boardId : null} client={client}>
         {children}
       </BoardPresenceProvider>
+      <BoardDisambiguationSheet
+        visible={pendingDisambiguation !== null}
+        candidates={pendingDisambiguation?.candidates ?? []}
+        onPick={chooseDisambiguatedBoard}
+        onCancel={cancelDisambiguation}
+      />
     </BoardPresenceControlsContext.Provider>
   );
 }

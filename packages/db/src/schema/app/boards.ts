@@ -70,12 +70,18 @@ export const userBoards = pgTable(
       .where(sql`${table.deletedAt} IS NULL`),
     // UUID lookup
     uuidIdx: index('user_boards_uuid_idx').on(table.uuid),
-    // Board presence: a BLE serial maps to exactly one active board (the
-    // shared physical wall). `resolveBoardForSerial` find-or-creates against
-    // this; the unique partial index makes the create race fail-safe (the
-    // loser re-reads the winner). Partial so the many serial-less or blank
-    // boards (manually created configs) and soft-deleted rows don't collide.
-    uniqueSerialIdx: uniqueIndex('user_boards_unique_serial')
+    // Board presence: the LED supplier can't be trusted to keep serials
+    // unique, so a serial may map to MANY active boards (e.g. the same serial
+    // shipped to two gyms). We only forbid a single owner from binding the
+    // same serial to two of their own boards. `resolveBoardForSerial` returns
+    // the candidates and the user picks; the per-owner unique partial index
+    // still makes a same-owner bind race fail-safe (the loser re-reads).
+    // Partial so serial-less/blank and soft-deleted rows don't collide.
+    uniqueOwnerSerialIdx: uniqueIndex('user_boards_unique_owner_serial')
+      .on(table.ownerId, table.serialNumber)
+      .where(sql`${table.serialNumber} IS NOT NULL AND ${table.serialNumber} <> '' AND ${table.deletedAt} IS NULL`),
+    // Serial lookups now return many rows; keep them indexed.
+    serialLookupIdx: index('user_boards_serial_idx')
       .on(table.serialNumber)
       .where(sql`${table.serialNumber} IS NOT NULL AND ${table.serialNumber} <> '' AND ${table.deletedAt} IS NULL`),
   }),

@@ -876,6 +876,13 @@
       "when": 1781224128814,
       "tag": "0124_majestic_pixie",
       "breakpoints": true
+    },
+    {
+      "idx": 125,
+      "version": "7",
+      "when": 1781344692204,
+      "tag": "0125_board_serial_non_unique",
+      "breakpoints": true
     }
   ]
 }

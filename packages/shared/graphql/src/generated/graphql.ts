@@ -335,6 +335,39 @@ export type BetaLinkPreview = {
 };
 
 /**
+ * One board sharing a (non-unique) BLE serial, shown to the user when a serial
+ * maps to more than one board so they can pick which wall they're at. Location
+ * fields are redacted for non-public boards the caller doesn't own.
+ */
+export type BoardCandidate = {
+  __typename?: 'BoardCandidate';
+  /** Shared board id (userBoards.id) */
+  boardId: Scalars['Int']['output'];
+  /** Display name of the board */
+  boardName: Scalars['String']['output'];
+  /** Board type (kilter, tension, ...) */
+  boardType: Scalars['String']['output'];
+  /** Board uuid */
+  boardUuid: Scalars['ID']['output'];
+  /** Linked gym name (null when redacted or no gym) */
+  gymName?: Maybe<Scalars['String']['output']>;
+  /** True when the calling user owns this board */
+  isOwnedByMe: Scalars['Boolean']['output'];
+  /** Whether the board is publicly listed */
+  isPublic: Scalars['Boolean']['output'];
+  /** ISO 8601 of the most recent tick on this board, if any */
+  lastSentAt?: Maybe<Scalars['String']['output']>;
+  /** Layout id */
+  layoutId: Scalars['Int']['output'];
+  /** Human-readable location (null when redacted) */
+  locationName?: Maybe<Scalars['String']['output']>;
+  /** Comma-separated set ids */
+  setIds: Scalars['String']['output'];
+  /** Size id */
+  sizeId: Scalars['Int']['output'];
+};
+
+/**
  * Event: the wall was cleared (best-effort — only emitted on a deliberate
  * disconnect; an involuntary BLE drop leaves the last climb sticky).
  */
@@ -1969,6 +2002,13 @@ export type Mutation = {
   attachBetaLink: Scalars['Boolean']['output'];
   authorizeControllerForSession: Scalars['Boolean']['output'];
   /**
+   * Confirm which board a (non-unique) serial routes to after the user picks
+   * from a disambiguation prompt. Remembers the choice per user so the prompt
+   * doesn't reappear, and returns the bound board. The board must be active and
+   * actually carry the serial.
+   */
+  chooseBoardForSerial: ResolvedBoard;
+  /**
    * Confirm to all session participants that a climb was successfully relayed to the wall
    * over BLE from this client's phone. Any session participant may call (no driver
    * requirement) — the BLE-capable phone that handled the send is the source of truth for
@@ -2121,17 +2161,27 @@ export type Mutation = {
    */
   reportBoardClimb: Scalars['Boolean']['output'];
   /**
+   * Resolve a BLE serial for clients that can disambiguate. Returns a single
+   * `board` when the serial is unambiguous (remembered choice, only one match,
+   * or freshly created), or a list of `candidates` when several boards share
+   * the serial and the user must pick which wall they're at. Confirm the pick
+   * with `chooseBoardForSerial`. The config args create the board the first
+   * time a serial is seen.
+   */
+  resolveBoardCandidatesForSerial: ResolveBoardResult;
+  /**
    * Resolve the shared board feed for boards without a BLE serial. This is a
    * per-config fallback in v1: every caller with the same board type, layout,
    * size, and set IDs gets the same shared board id.
    */
   resolveBoardForConfig: ResolvedBoard;
   /**
-   * Resolve (and bind) the shared board for a BLE serial. Returns the one board
-   * everyone at this physical wall shares; find-or-creates on first sighting
-   * (owned by the first connector) and enforces serial → exactly one board.
-   * Called once on BLE connect; supplies the board name the UI shows. The board
-   * config args are used only to create the board the first time a serial is seen.
+   * Legacy serial resolver, kept for already-shipped clients that can't render
+   * a disambiguation prompt: always returns a single board. Serials are no
+   * longer globally unique, so when several boards share one this auto-picks
+   * (the caller's own board if present, else the oldest) and remembers it.
+   * New clients should call `resolveBoardCandidatesForSerial`. The board config
+   * args are used only to create the board the first time a serial is seen.
    */
   resolveBoardForSerial: ResolvedBoard;
   /**
@@ -2314,6 +2364,12 @@ export type MutationAttachBetaLinkArgs = {
 export type MutationAuthorizeControllerForSessionArgs = {
   controllerId: Scalars['ID']['input'];
   sessionId: Scalars['ID']['input'];
+};
+
+/** Root mutation type for all write operations. */
+export type MutationChooseBoardForSerialArgs = {
+  boardId: Scalars['Int']['input'];
+  serial: Scalars['String']['input'];
 };
 
 /** Root mutation type for all write operations. */
@@ -2560,6 +2616,15 @@ export type MutationReportBoardClimbArgs = {
   angle?: InputMaybe<Scalars['Int']['input']>;
   boardId: Scalars['Int']['input'];
   climb: ClimbQueueItemInput;
+};
+
+/** Root mutation type for all write operations. */
+export type MutationResolveBoardCandidatesForSerialArgs = {
+  boardType: Scalars['String']['input'];
+  layoutId: Scalars['Int']['input'];
+  serial: Scalars['String']['input'];
+  setIds: Scalars['String']['input'];
+  sizeId: Scalars['Int']['input'];
 };
 
 /** Root mutation type for all write operations. */
@@ -4203,6 +4268,20 @@ export type ReorderPlaylistClimbInput = {
   newIndex: Scalars['Int']['input'];
   /** Playlist ID */
   playlistId: Scalars['ID']['input'];
+};
+
+/**
+ * Result of resolving a BLE serial that may map to several boards. Exactly one
+ * of `board` / `candidates` is set: `board` when the serial is unambiguous
+ * (remembered choice, only one match, or freshly created), `candidates` when
+ * the user must pick which wall they're at (confirm with `chooseBoardForSerial`).
+ */
+export type ResolveBoardResult = {
+  __typename?: 'ResolveBoardResult';
+  /** Set when the serial resolves to a single board */
+  board?: Maybe<ResolvedBoard>;
+  /** Set when several boards share the serial and the user must choose */
+  candidates?: Maybe<Array<BoardCandidate>>;
 };
 
 export type ResolveProposalInput = {
