@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import type { GradeDisplayFormat } from '@boardsesh/play-view';
 import type { ThemeOverride, UiVariantPreference } from '@boardsesh/key-value-storage';
@@ -59,9 +59,14 @@ export default function MoreScreen() {
     { key: 'liquidGlass', label: t('mobile.more.uiStyle.liquidGlass') },
     { key: 'material', label: t('mobile.more.uiStyle.material') },
   ];
-  // Liquid Glass can't render on Android / iOS < 26, so show it disabled there
-  // rather than hide it — more honest than a no-op control.
-  const disabledUiStyles = glassCapable ? undefined : new Set<UiVariantPreference>(['liquidGlass']);
+  // Hint copy: capable iPhones explain the Auto behaviour; older iPhones get the
+  // iOS-26 upgrade note; Android gets a glass-fallback note without the (irrelevant)
+  // iOS-26 reference.
+  const uiStyleHint = glassCapable
+    ? t('mobile.more.uiStyle.description')
+    : Platform.OS === 'ios'
+      ? t('mobile.more.uiStyle.glassFallback')
+      : t('mobile.more.uiStyle.glassFallbackAndroid');
 
   const gradeFormatOptions: { key: GradeDisplayFormat; label: string }[] = [
     { key: 'v-grade', label: t('mobile.more.gradeFormat.vGrade') },
@@ -142,12 +147,11 @@ export default function MoreScreen() {
             options={uiStyleOptions}
             selectedKey={uiVariantPreference}
             onSelect={(key) => void setUiVariant(key)}
-            disabledKeys={disabledUiStyles}
             trackColor={systemColors.fill}
             accessibilityLabel={t('mobile.more.uiStyle.title')}
           />
           <Text variant="footnote" color={systemColors.secondaryLabel} style={styles.settingHint}>
-            {glassCapable ? t('mobile.more.uiStyle.description') : t('mobile.more.uiStyle.glassUnavailable')}
+            {uiStyleHint}
           </Text>
         </View>
       </View>

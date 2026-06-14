@@ -9,6 +9,10 @@ const cfg = vi.hoisted(() => ({
   nativeAccessoryActive: true,
   hasCurrentClimb: false,
   variant: 'liquidGlass' as 'liquidGlass' | 'material',
+  // Whether the device can render real iOS 26 glass chrome. The native tab bar
+  // mounts only for the Liquid Glass variant on a capable device; everything else
+  // (Material, plus Liquid Glass on iOS < 26 / Android) takes the JS tab bar.
+  glassCapable: true,
   platformOS: 'ios' as 'ios' | 'android',
   materialScreens: [] as Array<{ name: string; options?: { lazy?: boolean } }>,
 }));
@@ -54,6 +58,7 @@ vi.mock('../../../src/providers/theme-provider', () => ({
 
 vi.mock('../../../src/hooks/use-bottom-accessory', () => ({
   useNativeAccessoryActive: () => cfg.nativeAccessoryActive,
+  useNativeTabBar: () => cfg.variant === 'liquidGlass' && cfg.glassCapable,
 }));
 
 // Stub the Material-variant path so it doesn't pull in native modules.
@@ -137,6 +142,7 @@ describe('TabLayout', () => {
     cfg.nativeAccessoryActive = true;
     cfg.hasCurrentClimb = false;
     cfg.variant = 'liquidGlass';
+    cfg.glassCapable = true;
     cfg.platformOS = 'ios';
     cfg.materialScreens = [];
   });
@@ -159,6 +165,25 @@ describe('TabLayout', () => {
 
     render(<TabLayout />);
 
+    expect(cfg.materialScreens.map((screen) => screen.name)).toEqual([
+      'home',
+      'climbs',
+      'record',
+      'discover',
+      'profile',
+    ]);
+  });
+
+  it('falls back to the JS Material tab bar for Liquid Glass on a non-capable device', () => {
+    // Older iPhone / Android on the Liquid Glass variant: the native iOS 26 tab bar
+    // can't render, so the JS Tabs + MaterialTabBar carry the navigation instead.
+    cfg.variant = 'liquidGlass';
+    cfg.glassCapable = false;
+
+    const { container } = render(<TabLayout />);
+
+    expect(container.querySelector('[data-tabs-material="true"]')).not.toBeNull();
+    expect(container.querySelector('[data-tabs="true"]')).toBeNull();
     expect(cfg.materialScreens.map((screen) => screen.name)).toEqual([
       'home',
       'climbs',
