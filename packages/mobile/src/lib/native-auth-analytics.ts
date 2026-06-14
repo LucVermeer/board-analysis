@@ -32,3 +32,21 @@ export function classifyNativeAuthFailureReason(
   if (failure.status != null && failure.status >= 500) return 'server_error';
   return 'http_error';
 }
+
+/**
+ * Extract the status code from a thrown native sign-in error. The Google
+ * (@react-native-google-signin) and Apple (expo-apple-authentication) modules
+ * reject with a CodedError whose `.code` names the failure — most importantly
+ * `DEVELOPER_ERROR`, which on Android means the running build's signing-cert
+ * SHA-1 isn't registered as an Android OAuth client for this package in the
+ * webClientId's Google Cloud project (the #1 native-sign-in misconfig, and one
+ * that never reaches our backend). The message for these is usually opaque, so
+ * surfacing the code turns a generic "sign in failed" into an actionable
+ * telemetry property. Returns undefined for anything without a string/number
+ * `code` (the caller falls back to the error message).
+ */
+export function nativeSignInErrorCode(error: unknown): string | undefined {
+  if (typeof error !== 'object' || error === null) return undefined;
+  const code = (error as { code?: unknown }).code;
+  return typeof code === 'string' || typeof code === 'number' ? String(code) : undefined;
+}

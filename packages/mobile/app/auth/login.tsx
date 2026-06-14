@@ -16,7 +16,7 @@ import * as AppleAuthentication from 'expo-apple-authentication';
 import { GoogleSigninButton } from '@react-native-google-signin/google-signin';
 import { useTranslation } from 'react-i18next';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
-import { classifyNativeAuthFailureReason } from '../../src/lib/native-auth-analytics';
+import { classifyNativeAuthFailureReason, nativeSignInErrorCode } from '../../src/lib/native-auth-analytics';
 import { isGoogleSignInConfigured } from '../../src/lib/auth';
 import { useAuth } from '../../src/providers/auth-provider';
 import { useTheme } from '../../src/providers/theme-provider';
@@ -185,16 +185,25 @@ export default function LoginScreen() {
       setError(result.error === 'network' ? t('nativeStart.networkError') : t('nativeStart.oauthError'));
     } catch (oauthError) {
       // The native module threw (Play Services missing, no presenter,
-      // DEVELOPER_ERROR for a signing/client-id mismatch, …).
+      // DEVELOPER_ERROR for a signing/client-id mismatch, …). The native `.code`
+      // (e.g. DEVELOPER_ERROR) is far more actionable than the opaque message, so
+      // prefer it for failure_detail and tag it for filtering.
+      const nativeErrorCode = nativeSignInErrorCode(oauthError);
       track(SHARED_EVENTS.LoginFailed, {
         auth_method: provider,
         flow: 'native',
         failure_reason: 'exception',
-        failure_detail: oauthError instanceof Error ? oauthError.message : undefined,
+        failure_detail: nativeErrorCode ?? (oauthError instanceof Error ? oauthError.message : undefined),
         duration_ms: Date.now() - attemptStartedAt,
       });
       reportError(oauthError, {
-        tags: { source: 'native-auth', provider, flow: 'native', mechanism: 'exception' },
+        tags: {
+          source: 'native-auth',
+          provider,
+          flow: 'native',
+          mechanism: 'exception',
+          native_error_code: nativeErrorCode,
+        },
       });
       setError(t('nativeStart.oauthError'));
     } finally {
