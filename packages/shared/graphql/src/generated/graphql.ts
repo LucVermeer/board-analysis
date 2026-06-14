@@ -24,6 +24,10 @@ export type ActivityFeedInput = {
   boardUuid?: InputMaybe<Scalars['String']['input']>;
   /** Cursor from previous page */
   cursor?: InputMaybe<Scalars['String']['input']>;
+  /** Restrict results to users followed by the authenticated viewer */
+  followingOnly?: InputMaybe<Scalars['Boolean']['input']>;
+  /** Include one daily hardest-send card for followed/user-filtered days without explicit sessions */
+  includeDailyHighlights?: InputMaybe<Scalars['Boolean']['input']>;
   /** Maximum number of items to return */
   limit?: InputMaybe<Scalars['Int']['input']>;
   /** Filter sessions where this user is a participant */
@@ -4642,6 +4646,13 @@ export type SessionEvent =
   | UserPresenceChanged
   | WallConfirmedClimb;
 
+/** A beta video paired with the tick it represents in a session feed card. */
+export type SessionFeedBetaHighlight = {
+  __typename?: 'SessionFeedBetaHighlight';
+  betaLink: BetaLink;
+  tick: SessionFeedTickHighlight;
+};
+
 /** A session feed card representing a group of ticks from a climbing session. */
 export type SessionFeedItem = {
   __typename?: 'SessionFeedItem';
@@ -4649,16 +4660,20 @@ export type SessionFeedItem = {
   commentCount: Scalars['Int']['output'];
   downvotes: Scalars['Int']['output'];
   durationMinutes?: Maybe<Scalars['Int']['output']>;
+  featuredBeta?: Maybe<SessionFeedBetaHighlight>;
   firstTickAt: Scalars['String']['output'];
   goal?: Maybe<Scalars['String']['output']>;
   gradeDistribution: Array<SessionGradeDistributionItem>;
   hardestGrade?: Maybe<Scalars['String']['output']>;
+  hardestSend?: Maybe<SessionFeedTickHighlight>;
   lastTickAt: Scalars['String']['output'];
   ownerUserId?: Maybe<Scalars['ID']['output']>;
   participants: Array<SessionFeedParticipant>;
   sessionId: Scalars['ID']['output'];
   sessionName?: Maybe<Scalars['String']['output']>;
   sessionType: Scalars['String']['output'];
+  socialEntityId: Scalars['String']['output'];
+  socialEntityType: SocialEntityType;
   tickCount: Scalars['Int']['output'];
   totalAttempts: Scalars['Int']['output'];
   totalFlashes: Scalars['Int']['output'];
@@ -4684,6 +4699,30 @@ export type SessionFeedResult = {
   cursor?: Maybe<Scalars['String']['output']>;
   hasMore: Scalars['Boolean']['output'];
   sessions: Array<SessionFeedItem>;
+};
+
+/** A highlighted tick used by session feed cards. */
+export type SessionFeedTickHighlight = {
+  __typename?: 'SessionFeedTickHighlight';
+  angle: Scalars['Int']['output'];
+  attemptCount: Scalars['Int']['output'];
+  boardType: Scalars['String']['output'];
+  climbName?: Maybe<Scalars['String']['output']>;
+  climbUuid: Scalars['String']['output'];
+  climbedAt: Scalars['String']['output'];
+  comment?: Maybe<Scalars['String']['output']>;
+  difficulty?: Maybe<Scalars['Int']['output']>;
+  difficultyName?: Maybe<Scalars['String']['output']>;
+  frames?: Maybe<Scalars['String']['output']>;
+  isBenchmark: Scalars['Boolean']['output'];
+  isMirror: Scalars['Boolean']['output'];
+  isNoMatch: Scalars['Boolean']['output'];
+  layoutId?: Maybe<Scalars['Int']['output']>;
+  quality?: Maybe<Scalars['Int']['output']>;
+  setterUsername?: Maybe<Scalars['String']['output']>;
+  status: Scalars['String']['output'];
+  userId: Scalars['String']['output'];
+  uuid: Scalars['ID']['output'];
 };
 
 /** Grade count for session summary grade distribution. */

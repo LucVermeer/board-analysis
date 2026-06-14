@@ -28,24 +28,7 @@
       "signInBody": "Sigue a escaladores y equipadores para ver sus encadenes y bloques nuevos aquí.",
       "emptyTitle": "Aún no hay actividad",
       "emptyBody": "Sigue a escaladores y equipadores para llenar esto.",
-      "unknownClimb": "Bloque desconocido",
-      "unknownClimber": "Escalador",
-      "activityLine": "{{action}} - {{time}}",
-      "angle": "{{angle}}°",
-      "boards": {
-        "kilter": "Kilter",
-        "tension": "Tension",
-        "moonboard": "MoonBoard"
-      },
-      "activity": {
-        "ascent": "registró un ascenso",
-        "flash": "hizo flash",
-        "send": "encadenó",
-        "attempt": "probó",
-        "newClimb": "equipó un bloque nuevo",
-        "comment": "comentó",
-        "proposalApproved": "consiguió una propuesta aprobada"
-      }
+      "unknownClimb": "Bloque desconocido"
     }
   },
   "ascentsFeed": {
@@ -154,11 +137,41 @@
   "sessionFeedCard": {
     "climbCount_one": "{{count}} bloque",
     "climbCount_other": "{{count}} bloques",
+    "sendsCount_one": "{{count}} encadene",
+    "sendsCount_other": "{{count}} encadenes",
+    "flashesCount_one": "{{count}} flash",
+    "flashesCount_other": "{{count}} flashes",
+    "hardestGrade": "{{grade}} más difícil",
+    "status": {
+      "flash": "Flash",
+      "send": "Encadene",
+      "attempt": "Intento"
+    },
     "hardest": "Más difícil",
-    "sendsLabel": "encadenes"
+    "betaCaption": "Beta de esta sesión",
+    "hardestSend": "Encadene más difícil",
+    "unknownClimb": "Bloque desconocido",
+    "attempts_one": "{{count}} intento",
+    "attempts_other": "{{count}} intentos",
+    "chartEmpty": "Aún no hay grados",
+    "chartLabel": "Gráfico de grados",
+    "pageIndicator": "Página {{current}} de {{total}} de la tarjeta de sesión",
+    "previousPage": "Página anterior de la tarjeta de sesión",
+    "nextPage": "Página siguiente de la tarjeta de sesión",
+    "openHint": "Abre la sesión",
+    "openSessionPage": "Abrir sesión",
+    "openHardestClimb": "Abrir {{climb}}"
   },
   "sessionSummary": {
     "completed": "Sesión completada"
+  },
+  "socialActions": {
+    "upvoteWithCount_one": "Me gusta, {{count}} me gusta",
+    "upvoteWithCount_other": "Me gusta, {{count}} me gusta",
+    "removeUpvoteWithCount_one": "Quitar me gusta, {{count}} me gusta",
+    "removeUpvoteWithCount_other": "Quitar me gusta, {{count}} me gusta",
+    "openCommentsWithCount_one": "Abrir comentarios, {{count}} comentario",
+    "openCommentsWithCount_other": "Abrir comentarios, {{count}} comentarios"
   },
   "socialFeedItem": {
     "climbed": "escaló"

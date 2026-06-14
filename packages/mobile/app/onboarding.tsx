@@ -43,9 +43,9 @@ export default function OnboardingScreen() {
     });
   }, []);
 
-  const dismissToClimbs = useCallback(() => {
+  const dismissToHome = useCallback(() => {
     persistSeen();
-    router.replace('/(tabs)/climbs');
+    router.replace('/(tabs)/home');
   }, [persistSeen]);
 
   const goToBoards = useCallback(() => {
@@ -60,7 +60,7 @@ export default function OnboardingScreen() {
       inactiveDotColor={inactiveDotColor}
       bodyColor={bodyColor}
       backgroundColor={backgroundColor}
-      onDone={dismissToClimbs}
+      onDone={dismissToHome}
       onFinish={goToBoards}
     />
   );

@@ -7,15 +7,27 @@ import type { SocialEntityType } from '@boardsesh/shared-schema';
  * Validates that a target entity exists before allowing a comment or vote.
  * Performs minimal SELECT ... LIMIT 1 existence checks.
  */
-export async function validateEntityExists(entityType: SocialEntityType, entityId: string): Promise<void> {
+export async function validateEntityExists(
+  entityType: SocialEntityType,
+  entityId: string,
+  viewerUserId?: string,
+): Promise<void> {
   switch (entityType) {
     case 'climb': {
       const [climb] = await db
-        .select({ uuid: dbSchema.boardClimbs.uuid })
+        .select({
+          uuid: dbSchema.boardClimbs.uuid,
+          userId: dbSchema.boardClimbs.userId,
+          isDraft: dbSchema.boardClimbs.isDraft,
+          isListed: dbSchema.boardClimbs.isListed,
+        })
         .from(dbSchema.boardClimbs)
         .where(eq(dbSchema.boardClimbs.uuid, entityId))
         .limit(1);
       if (!climb) {
+        throw new Error('Climb not found');
+      }
+      if ((climb.isDraft === true || climb.isListed === false) && climb.userId !== viewerUserId) {
         throw new Error('Climb not found');
       }
       break;

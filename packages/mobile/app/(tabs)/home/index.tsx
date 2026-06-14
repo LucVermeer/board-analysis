@@ -1,27 +1,23 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { Linking, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
-import { useQueryClient } from '@tanstack/react-query';
+import { FlatList, Linking, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import type { TFunction } from 'i18next';
 import type BottomSheet from '@gorhom/bottom-sheet';
-import type { ActivityFeedItem, SocialEntityType } from '@boardsesh/shared-schema';
-import { betaLinkIdentity, isInstagramUrl, isTikTokUrl, type BoardName } from '@boardsesh/shared-schema';
+import type { SessionFeedItem, SocialEntityType } from '@boardsesh/shared-schema';
+import { betaLinkIdentity, isBetaVideoUrl, isInstagramUrl, isTikTokUrl } from '@boardsesh/shared-schema';
 import { Text } from '../../../src/components/Text';
 import { Icon } from '../../../src/components/Icon';
 import type { IconName } from '../../../src/components/icon-map';
-import { Avatar } from '../../../src/components/Avatar';
 import { Card } from '../../../src/components/Card';
 import { Button } from '../../../src/components/Button';
-import { ClimbListThumbnail } from '../../../src/components/ClimbListThumbnail';
-import { FeedSocialRow } from '../../../src/components/you/FeedSocialRow';
+import { SessionFeedCard } from '../../../src/components/you/SessionFeedCard';
 import { CommentSheet } from '../../../src/components/you/CommentSheet';
 import {
-  useActivityFeed,
-  useChunkedBulkVoteSummaries,
+  useBulkVoteSummaries,
   useRecentBetaLinks,
+  useSessionGroupedFeed,
   type RecentBetaVideo,
 } from '../../../src/lib/graphql/hooks';
 import { useAuth } from '../../../src/providers/auth-provider';
@@ -29,14 +25,16 @@ import { useTheme } from '../../../src/providers/theme-provider';
 import { useToast } from '../../../src/providers/toast-provider';
 import { useBottomChromeMetrics } from '../../../src/hooks/use-bottom-chrome-metrics';
 import { getBoardConfigForPlaylist } from '../../../src/lib/playlists/board-details-for-playlist';
-import { formatRelativeTime } from '../../../src/lib/format-relative-time';
+import { dedupeSessionsById } from '../../../src/lib/feed-time-buckets';
 import { hapticLight } from '../../../src/lib/haptics';
+import { navigateToSessionFeedItem, navigateToSessionFeedTick } from '../../../src/lib/session-feed-navigation';
 import { iosSystemColors } from '../../../src/theme/ios-colors';
 import { borderRadius, spacing } from '../../../src/theme/tokens';
 import { BETA_CARD_HEIGHT, BETA_CARD_WIDTH } from '../../../src/components/play-drawer/BetaVideoCard';
 
 const RECENT_BETA_LIMIT = 20;
 const SHELF_GAP = spacing[3];
+const BETA_SKELETON_KEYS = ['beta-skeleton-1', 'beta-skeleton-2', 'beta-skeleton-3'];
 const INITIAL_FEED_SKELETON_KEYS = ['home-feed-skeleton-1', 'home-feed-skeleton-2', 'home-feed-skeleton-3'];
 const NEXT_PAGE_FEED_SKELETON_KEYS = ['home-feed-footer-skeleton-1', 'home-feed-footer-skeleton-2'];
 
@@ -51,11 +49,6 @@ type VoteSummary = {
 };
 
 type AppRouter = ReturnType<typeof useRouter>;
-
-type ActivityEntitySummaryMap = {
-  ticks: Map<string, VoteSummary>;
-  climbs: Map<string, VoteSummary>;
-};
 
 function navigateToClimb(
   router: AppRouter,
@@ -81,88 +74,63 @@ function navigateToClimb(
   });
 }
 
-function displayBoardName(boardType: string | null | undefined, t: TFunction<'feed'>): string | null {
-  if (boardType === 'kilter') return t('mobile.home.boards.kilter');
-  if (boardType === 'tension') return t('mobile.home.boards.tension');
-  if (boardType === 'moonboard') return t('mobile.home.boards.moonboard');
-  return null;
-}
-
-function getSummaryForItem(item: ActivityFeedItem, summaries: ActivityEntitySummaryMap): VoteSummary | undefined {
-  if (item.entityType === 'tick') return summaries.ticks.get(item.entityId);
-  if (item.entityType === 'climb') return summaries.climbs.get(item.entityId);
-  return undefined;
-}
-
 function detectPlatform(url: string): { name: 'instagram' | 'tiktok'; icon: IconName } | null {
   if (isInstagramUrl(url)) return { name: 'instagram', icon: 'instagram' };
   if (isTikTokUrl(url)) return { name: 'tiktok', icon: 'tiktok' };
   return null;
 }
 
-function useActivitySummaries(items: ActivityFeedItem[], enabled: boolean): ActivityEntitySummaryMap {
-  const tickEntityIds = useMemo(
-    () =>
-      items
-        .filter((item) => item.entityType === 'tick')
-        .map((item) => item.entityId)
-        .filter((entityId, index, allEntityIds) => allEntityIds.indexOf(entityId) === index),
-    [items],
-  );
-  const climbEntityIds = useMemo(
-    () =>
-      items
-        .filter((item) => item.entityType === 'climb')
-        .map((item) => item.entityId)
-        .filter((entityId, index, allEntityIds) => allEntityIds.indexOf(entityId) === index),
-    [items],
-  );
-
-  const tickSummaries = useChunkedBulkVoteSummaries('tick', tickEntityIds, enabled && tickEntityIds.length > 0);
-  const climbSummaries = useChunkedBulkVoteSummaries('climb', climbEntityIds, enabled && climbEntityIds.length > 0);
-
-  return useMemo(() => {
-    const ticks = new Map<string, VoteSummary>();
-    const climbs = new Map<string, VoteSummary>();
-
-    for (const summary of tickSummaries) {
-      ticks.set(summary.entityId, { upvotes: summary.upvotes, userVote: summary.userVote });
-    }
-    for (const summary of climbSummaries) {
-      climbs.set(summary.entityId, { upvotes: summary.upvotes, userVote: summary.userVote });
-    }
-
-    return { ticks, climbs };
-  }, [tickSummaries, climbSummaries]);
+function isSafeBetaVideoUrl(url: string): boolean {
+  try {
+    return new URL(url).protocol === 'https:' && isBetaVideoUrl(url);
+  } catch {
+    return false;
+  }
 }
 
 export default function HomeTab() {
   const { t } = useTranslation('feed');
   const { t: tCommon } = useTranslation('common');
   const router = useRouter();
-  const queryClient = useQueryClient();
   const { isAuthenticated } = useAuth();
   const { systemColors, brandColors } = useTheme();
   const bottomChrome = useBottomChromeMetrics();
-  const listRef = useRef<FlashListRef<ActivityFeedItem>>(null);
+  const listRef = useRef<FlashListRef<SessionFeedItem>>(null);
   const commentSheetRef = useRef<BottomSheet | null>(null);
   const [commentTarget, setCommentTarget] = useState<CommentTarget | null>(null);
 
   const betaVideos = useRecentBetaLinks(RECENT_BETA_LIMIT);
-  const feed = useActivityFeed(undefined, isAuthenticated);
+  const feed = useSessionGroupedFeed({ followingOnly: true }, isAuthenticated);
 
-  const activityItems = useMemo(() => {
-    const seenIds = new Set<string>();
-    const dedupedItems: ActivityFeedItem[] = [];
-    for (const item of feed.data?.pages.flatMap((page) => page.activityFeed.items) ?? []) {
-      if (seenIds.has(item.id)) continue;
-      seenIds.add(item.id);
-      dedupedItems.push(item);
+  const sessions = useMemo(
+    () => dedupeSessionsById(feed.data?.pages.flatMap((page) => page.sessionGroupedFeed.sessions) ?? []),
+    [feed.data],
+  );
+
+  const sessionEntityIds = useMemo(
+    () => sessions.filter((session) => session.socialEntityType === 'session').map((session) => session.socialEntityId),
+    [sessions],
+  );
+  const tickEntityIds = useMemo(
+    () => sessions.filter((session) => session.socialEntityType === 'tick').map((session) => session.socialEntityId),
+    [sessions],
+  );
+  const sessionVoteSummaries = useBulkVoteSummaries(
+    'session',
+    sessionEntityIds,
+    isAuthenticated && sessionEntityIds.length > 0,
+  );
+  const tickVoteSummaries = useBulkVoteSummaries('tick', tickEntityIds, isAuthenticated && tickEntityIds.length > 0);
+  const summaryMap = useMemo(() => {
+    const map = new Map<string, VoteSummary>();
+    for (const summary of sessionVoteSummaries.data ?? []) {
+      map.set(`session:${summary.entityId}`, { upvotes: summary.upvotes, userVote: summary.userVote });
     }
-    return dedupedItems;
-  }, [feed.data]);
-
-  const summaries = useActivitySummaries(activityItems, isAuthenticated);
+    for (const summary of tickVoteSummaries.data ?? []) {
+      map.set(`tick:${summary.entityId}`, { upvotes: summary.upvotes, userVote: summary.userVote });
+    }
+    return map;
+  }, [sessionVoteSummaries.data, tickVoteSummaries.data]);
 
   const handleOpenComments = useCallback((entityId: string, entityType: SocialEntityType) => {
     setCommentTarget({ entityId, entityType });
@@ -175,22 +143,22 @@ export default function HomeTab() {
 
   const handleRefresh = useCallback(() => {
     void betaVideos.refetch();
-    void queryClient.invalidateQueries({ queryKey: ['bulkVoteSummaries'] });
+    void sessionVoteSummaries.refetch();
+    void tickVoteSummaries.refetch();
     if (isAuthenticated) void feed.refetch();
-  }, [betaVideos, feed, isAuthenticated, queryClient]);
+  }, [betaVideos, feed, isAuthenticated, sessionVoteSummaries, tickVoteSummaries]);
 
   const renderItem = useCallback(
-    ({ item }: { item: ActivityFeedItem }) => (
-      <ActivityCard
-        item={item}
-        summaries={summaries}
+    ({ item }: { item: SessionFeedItem }) => (
+      <SessionFeedCard
+        session={item}
+        voteSummary={summaryMap.get(`${item.socialEntityType}:${item.socialEntityId}`)}
         onOpenComments={handleOpenComments}
-        onOpenClimb={(feedItem) =>
-          navigateToClimb(router, feedItem.climbUuid, feedItem.boardType, feedItem.layoutId, feedItem.angle)
-        }
+        onPress={(session) => navigateToSessionFeedItem(router, session)}
+        onOpenClimb={(tick) => navigateToSessionFeedTick(router, tick)}
       />
     ),
-    [handleOpenComments, router, summaries],
+    [handleOpenComments, router, summaryMap],
   );
 
   const header = useMemo(
@@ -237,10 +205,10 @@ export default function HomeTab() {
     <View style={[styles.flex, { backgroundColor: systemColors.background }]}>
       <FlashList
         ref={listRef}
-        data={activityItems}
-        extraData={summaries}
+        data={sessions}
+        extraData={summaryMap}
         renderItem={renderItem}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item) => item.sessionId}
         contentInsetAdjustmentBehavior="automatic"
         contentContainerStyle={{ paddingBottom: bottomChrome.scrollBottomPadding + spacing[5] }}
         onEndReached={handleEndReached}
@@ -321,11 +289,7 @@ function ActivityCardSkeleton() {
           <View style={[styles.skeletonThumbnail, blockStyle]} />
           <View style={styles.skeletonDetails}>
             <View style={[styles.skeletonClimbName, blockStyle]} />
-            <View style={styles.skeletonChipRow}>
-              <View style={[styles.skeletonChip, blockStyle]} />
-              <View style={[styles.skeletonChip, blockStyle]} />
-              <View style={[styles.skeletonShortChip, blockStyle]} />
-            </View>
+            <View style={[styles.skeletonMetaLine, blockStyle]} />
             <View style={[styles.skeletonCommentLine, blockStyle]} />
             <View style={[styles.skeletonCommentShortLine, blockStyle]} />
           </View>
@@ -363,16 +327,16 @@ function RecentBetaShelf({
         <Text variant="title3">{t('mobile.home.betaTitle')}</Text>
       </View>
       {isLoading ? (
-        <ScrollView
+        <FlatList
           horizontal
+          data={BETA_SKELETON_KEYS}
+          renderItem={({ item }) => <View key={item} style={styles.betaSkeleton} />}
+          keyExtractor={(item) => item}
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.shelfContent}
+          ItemSeparatorComponent={BetaShelfSeparator}
           scrollEnabled={false}
-        >
-          {Array.from({ length: 3 }).map((_, index) => (
-            <View key={`beta-skeleton-${index}`} style={styles.betaSkeleton} />
-          ))}
-        </ScrollView>
+        />
       ) : isError ? (
         <View style={[styles.shelfState, { borderColor: systemColors.separator }]}>
           <Icon name="error" size={20} color={iosSystemColors.systemRed} />
@@ -401,21 +365,34 @@ function RecentBetaShelf({
           </Text>
         </View>
       ) : (
-        <ScrollView
+        <FlatList
           horizontal
+          data={videos}
+          renderItem={({ item }) => <RecentBetaCard video={item} onOpenClimb={onOpenClimb} />}
+          keyExtractor={(video) => betaLinkIdentity(video.betaLink.link)}
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.shelfContent}
+          ItemSeparatorComponent={BetaShelfSeparator}
           snapToInterval={BETA_CARD_WIDTH + SHELF_GAP}
           decelerationRate="fast"
           snapToAlignment="start"
-        >
-          {videos.map((video) => (
-            <RecentBetaCard key={betaLinkIdentity(video.betaLink.link)} video={video} onOpenClimb={onOpenClimb} />
-          ))}
-        </ScrollView>
+          initialNumToRender={5}
+          maxToRenderPerBatch={5}
+          windowSize={3}
+          removeClippedSubviews
+          getItemLayout={(_data, index) => ({
+            length: BETA_CARD_WIDTH + SHELF_GAP,
+            offset: (BETA_CARD_WIDTH + SHELF_GAP) * index,
+            index,
+          })}
+        />
       )}
     </View>
   );
+}
+
+function BetaShelfSeparator() {
+  return <View style={styles.shelfSeparator} />;
 }
 
 function RecentBetaCard({
@@ -434,6 +411,10 @@ function RecentBetaCard({
   const handleOpenVideo = useCallback(async () => {
     hapticLight();
     try {
+      if (!isSafeBetaVideoUrl(video.betaLink.link)) {
+        showToast(t('mobile.home.betaOpenError'), 'error');
+        return;
+      }
       const canOpen = await Linking.canOpenURL(video.betaLink.link);
       if (!canOpen) {
         showToast(t('mobile.home.betaOpenError'), 'error');
@@ -462,7 +443,6 @@ function RecentBetaCard({
             recyclingKey={video.betaLink.thumbnail}
             onError={() => setImageFailed(true)}
             accessibilityIgnoresInvertColors
-            allowDownscaling={false}
           />
         ) : (
           <View style={[styles.betaThumbnail, styles.thumbnailFallback]}>
@@ -498,133 +478,6 @@ function RecentBetaCard({
   );
 }
 
-function ActivityCard({
-  item,
-  summaries,
-  onOpenComments,
-  onOpenClimb,
-}: {
-  item: ActivityFeedItem;
-  summaries: ActivityEntitySummaryMap;
-  onOpenComments: (entityId: string, entityType: SocialEntityType) => void;
-  onOpenClimb: (item: ActivityFeedItem) => void;
-}) {
-  const { t } = useTranslation('feed');
-  const { systemColors } = useTheme();
-  const boardConfig =
-    item.boardType && item.layoutId != null ? getBoardConfigForPlaylist(item.boardType, item.layoutId) : null;
-  const canOpenClimb = !!item.climbUuid && item.angle != null && !!boardConfig;
-  const activityText = activityCopy(item, t);
-  const relativeTime = formatRelativeTime(item.createdAt);
-  const activityLine = relativeTime
-    ? t('mobile.home.activityLine', { action: activityText, time: relativeTime })
-    : activityText;
-  const climbName = item.climbName ?? t('mobile.home.unknownClimb');
-  const actorName = item.actorDisplayName ?? item.setterUsername ?? t('mobile.home.unknownClimber');
-  const summary = getSummaryForItem(item, summaries);
-
-  return (
-    <View style={styles.cardOuter}>
-      <Card>
-        <Pressable
-          onPress={canOpenClimb ? () => onOpenClimb(item) : undefined}
-          disabled={!canOpenClimb}
-          accessibilityRole={canOpenClimb ? 'button' : undefined}
-        >
-          <View style={styles.activityHeader}>
-            <Avatar uri={item.actorAvatarUrl} name={actorName} size={40} />
-            <View style={styles.activityHeaderText}>
-              <Text variant="headline" numberOfLines={1}>
-                {actorName}
-              </Text>
-              <Text variant="footnote" color={systemColors.secondaryLabel} numberOfLines={1}>
-                {activityLine}
-              </Text>
-            </View>
-          </View>
-
-          <View style={styles.activityBody}>
-            {boardConfig && item.frames ? (
-              <ClimbListThumbnail
-                frames={item.frames}
-                boardName={boardConfig.boardName as unknown as BoardName}
-                layoutId={boardConfig.layoutId}
-                sizeId={boardConfig.sizeId}
-                setIds={boardConfig.setIds.join(',')}
-                mirrored={item.isMirror === true}
-              />
-            ) : (
-              <View style={[styles.activityThumbnailFallback, { backgroundColor: systemColors.fill }]}>
-                <Icon name="lightbulb" size={24} color={systemColors.tertiaryLabel} />
-              </View>
-            )}
-            <View style={styles.activityDetails}>
-              <Text variant="headline" numberOfLines={2}>
-                {climbName}
-              </Text>
-              <ActivityMeta item={item} />
-              {item.commentBody ? (
-                <Text variant="subheadline" color={systemColors.secondaryLabel} numberOfLines={3} style={styles.quote}>
-                  {item.commentBody}
-                </Text>
-              ) : item.comment ? (
-                <Text variant="subheadline" color={systemColors.secondaryLabel} numberOfLines={3} style={styles.quote}>
-                  {item.comment}
-                </Text>
-              ) : null}
-            </View>
-          </View>
-        </Pressable>
-
-        {item.entityType === 'tick' || item.entityType === 'climb' ? (
-          <FeedSocialRow
-            entityId={item.entityId}
-            entityType={item.entityType}
-            upvotes={summary?.upvotes ?? 0}
-            userVote={summary?.userVote ?? null}
-            commentCount={item.commentCount ?? 0}
-            onOpenComments={(entityId) => onOpenComments(entityId, item.entityType)}
-          />
-        ) : null}
-      </Card>
-    </View>
-  );
-}
-
-function activityCopy(item: ActivityFeedItem, t: TFunction<'feed'>): string {
-  if (item.type === 'new_climb') return t('mobile.home.activity.newClimb');
-  if (item.type === 'comment') return t('mobile.home.activity.comment');
-  if (item.type === 'proposal_approved') return t('mobile.home.activity.proposalApproved');
-  if (item.status === 'flash') return t('mobile.home.activity.flash');
-  if (item.status === 'send') return t('mobile.home.activity.send');
-  if (item.status === 'attempt') return t('mobile.home.activity.attempt');
-  return t('mobile.home.activity.ascent');
-}
-
-function ActivityMeta({ item }: { item: ActivityFeedItem }) {
-  const { t } = useTranslation('feed');
-  const { systemColors } = useTheme();
-  const chips = [
-    item.difficultyName ?? item.gradeName ?? null,
-    item.angle != null ? t('mobile.home.angle', { angle: item.angle }) : null,
-    displayBoardName(item.boardType, t),
-  ].filter((chip): chip is string => !!chip);
-
-  if (chips.length === 0) return null;
-
-  return (
-    <View style={styles.metaRow}>
-      {chips.map((chip) => (
-        <View key={chip} style={[styles.metaChip, { backgroundColor: systemColors.fill }]}>
-          <Text variant="caption1" color={systemColors.secondaryLabel}>
-            {chip}
-          </Text>
-        </View>
-      ))}
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   centered: {
@@ -649,9 +502,11 @@ const styles = StyleSheet.create({
     paddingBottom: spacing[2],
   },
   shelfContent: {
-    gap: SHELF_GAP,
     paddingHorizontal: spacing[4],
     paddingVertical: spacing[1],
+  },
+  shelfSeparator: {
+    width: SHELF_GAP,
   },
   betaCard: {
     width: BETA_CARD_WIDTH,
@@ -793,19 +648,9 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.full,
     opacity: 0.55,
   },
-  skeletonChipRow: {
-    flexDirection: 'row',
-    gap: spacing[1],
-  },
-  skeletonChip: {
-    width: 54,
-    height: 20,
-    borderRadius: borderRadius.full,
-    opacity: 0.45,
-  },
-  skeletonShortChip: {
-    width: 38,
-    height: 20,
+  skeletonMetaLine: {
+    width: '64%',
+    height: 14,
     borderRadius: borderRadius.full,
     opacity: 0.4,
   },
@@ -823,14 +668,14 @@ const styles = StyleSheet.create({
   },
   skeletonSocialRow: {
     flexDirection: 'row',
-    gap: spacing[6],
+    gap: spacing[2],
     marginTop: spacing[3],
-    paddingTop: spacing[3],
+    paddingTop: spacing[2],
     borderTopWidth: StyleSheet.hairlineWidth,
   },
   skeletonSocialPill: {
-    width: 42,
-    height: 18,
+    width: 52,
+    height: 28,
     borderRadius: borderRadius.full,
     opacity: 0.42,
   },

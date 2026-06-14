@@ -2,7 +2,10 @@ import { describe, it, expect } from 'vite-plus/test';
 import { readFileSync } from 'fs';
 import { buildSchema, parse, validate, type DocumentNode, type GraphQLSchema } from 'graphql';
 import { typeDefs } from '@boardsesh/shared-schema';
-import * as operations from '@boardsesh/graphql/operations/queue-session';
+import * as publicOperations from '@boardsesh/graphql/operations';
+import * as accountOperations from '@boardsesh/graphql/operations/account';
+import * as proposalOperations from '@boardsesh/graphql/operations/proposals';
+import * as queueSessionOperations from '@boardsesh/graphql/operations/queue-session';
 
 // Build a fresh schema from the raw typeDefs inside this test's `graphql`
 // instance. Importing the backend's `schema` object crosses the boundary
@@ -56,10 +59,19 @@ describe('shared-schema operations validate against the executable schema', () =
   // duck-type by checking it starts with `mutation`/`query`/`subscription`
   // after optional whitespace.
   const operationEntries: Array<[string, string]> = [];
-  for (const [name, value] of Object.entries(operations)) {
-    if (typeof value !== 'string') continue;
-    if (!/^\s*(query|mutation|subscription)\b/i.test(value)) continue;
-    operationEntries.push([name, value]);
+  const operationModules = [
+    ['operations', publicOperations],
+    ['operations/account', accountOperations],
+    ['operations/proposals', proposalOperations],
+    ['operations/queue-session', queueSessionOperations],
+  ] as const;
+
+  for (const [moduleName, moduleOperations] of operationModules) {
+    for (const [name, value] of Object.entries(moduleOperations)) {
+      if (typeof value !== 'string') continue;
+      if (!/^\s*(query|mutation|subscription)\b/i.test(value)) continue;
+      operationEntries.push([`${moduleName}.${name}`, value]);
+    }
   }
 
   it('found at least one exported operation to validate', () => {
@@ -89,7 +101,7 @@ describe('native iOS queue subscription drift guard', () => {
     const nativeOperation = readNativeIosQueueUpdatesOperation();
 
     expect(normalizeGraphQLOperation(nativeOperation)).toBe(
-      normalizeGraphQLOperation(operations.NATIVE_IOS_QUEUE_UPDATES),
+      normalizeGraphQLOperation(queueSessionOperations.NATIVE_IOS_QUEUE_UPDATES),
     );
   });
 });

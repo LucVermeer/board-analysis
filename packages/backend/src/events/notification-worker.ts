@@ -77,6 +77,7 @@ export class NotificationWorker {
       }
     } catch (error) {
       logger.error(`[NotificationWorker] Error processing event ${event.type}:`, error);
+      throw error;
     }
   }
 

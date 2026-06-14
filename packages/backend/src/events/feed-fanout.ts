@@ -2,7 +2,7 @@ import type { SocialEvent } from '@boardsesh/shared-schema';
 import type { SocialEntityType } from '@boardsesh/db/schema';
 import { db } from '../db/client';
 import * as dbSchema from '@boardsesh/db/schema';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, or } from 'drizzle-orm';
 import { buildFeedItemMetadata } from './feed-metadata';
 import { isNoMatchClimb } from '../graphql/resolvers/shared/helpers';
 
@@ -11,14 +11,51 @@ export { buildFeedItemMetadata } from './feed-metadata';
 const FANOUT_BATCH_SIZE = 1000;
 const COMMENT_PREVIEW_LENGTH = 180;
 
-type FeedInsertRow = typeof dbSchema.feedItems.$inferInsert;
+type FeedInsertRow = typeof dbSchema.feedItems.$inferInsert & {
+  recipientId: string;
+  type: dbSchema.FeedItemType;
+  entityType: SocialEntityType;
+  entityId: string;
+};
+
+function feedRowIdentityKey(row: Pick<FeedInsertRow, 'recipientId' | 'type' | 'entityType' | 'entityId'>): string {
+  return JSON.stringify([row.recipientId, row.type, row.entityType, row.entityId]);
+}
 
 async function insertFeedRows(rows: FeedInsertRow[]): Promise<void> {
   for (let rowIndex = 0; rowIndex < rows.length; rowIndex += FANOUT_BATCH_SIZE) {
-    const batch = rows.slice(rowIndex, rowIndex + FANOUT_BATCH_SIZE);
-    if (batch.length > 0) {
-      await db.insert(dbSchema.feedItems).values(batch);
+    const batchByIdentity = new Map<string, FeedInsertRow>();
+    for (const row of rows.slice(rowIndex, rowIndex + FANOUT_BATCH_SIZE)) {
+      batchByIdentity.set(feedRowIdentityKey(row), row);
     }
+
+    const batch = [...batchByIdentity.values()];
+    if (batch.length === 0) continue;
+
+    const existingRows = await db
+      .select({
+        recipientId: dbSchema.feedItems.recipientId,
+        type: dbSchema.feedItems.type,
+        entityType: dbSchema.feedItems.entityType,
+        entityId: dbSchema.feedItems.entityId,
+      })
+      .from(dbSchema.feedItems)
+      .where(
+        or(
+          ...batch.map((row) =>
+            and(
+              eq(dbSchema.feedItems.recipientId, row.recipientId),
+              eq(dbSchema.feedItems.type, row.type),
+              eq(dbSchema.feedItems.entityType, row.entityType),
+              eq(dbSchema.feedItems.entityId, row.entityId),
+            ),
+          ),
+        ),
+      );
+
+    const existingKeys = new Set(existingRows.map(feedRowIdentityKey));
+    const insertRows = batch.filter((row) => !existingKeys.has(feedRowIdentityKey(row)));
+    if (insertRows.length > 0) await db.insert(dbSchema.feedItems).values(insertRows);
   }
 }
 
@@ -141,7 +178,10 @@ async function buildNewClimbMetadata(event: SocialEvent): Promise<Record<string,
   };
 }
 
-async function getCommentContextMetadata(entityType: string, entityId: string): Promise<Record<string, unknown>> {
+async function getCommentContextMetadata(
+  entityType: string,
+  entityId: string,
+): Promise<Record<string, unknown> | null> {
   if (entityType === 'tick') {
     const [tickContext] = await db
       .select({
@@ -161,6 +201,8 @@ async function getCommentContextMetadata(entityType: string, entityId: string): 
         frames: dbSchema.boardClimbs.frames,
         setterUsername: dbSchema.boardClimbs.setterUsername,
         climbDescription: dbSchema.boardClimbs.description,
+        climbIsDraft: dbSchema.boardClimbs.isDraft,
+        climbIsListed: dbSchema.boardClimbs.isListed,
         difficultyName: dbSchema.boardDifficultyGrades.boulderName,
       })
       .from(dbSchema.boardseshTicks)
@@ -183,6 +225,7 @@ async function getCommentContextMetadata(entityType: string, entityId: string): 
       .limit(1);
 
     if (!tickContext) return {};
+    if (tickContext.climbIsDraft === true || tickContext.climbIsListed === false) return null;
 
     return {
       climbUuid: tickContext.climbUuid,
@@ -216,12 +259,15 @@ async function getCommentContextMetadata(entityType: string, entityId: string): 
         setterUsername: dbSchema.boardClimbs.setterUsername,
         angle: dbSchema.boardClimbs.angle,
         description: dbSchema.boardClimbs.description,
+        isDraft: dbSchema.boardClimbs.isDraft,
+        isListed: dbSchema.boardClimbs.isListed,
       })
       .from(dbSchema.boardClimbs)
       .where(eq(dbSchema.boardClimbs.uuid, entityId))
       .limit(1);
 
     if (!climbContext) return {};
+    if (climbContext.isDraft === true || climbContext.isListed === false) return null;
 
     return {
       climbName: climbContext.climbName,
@@ -262,6 +308,7 @@ async function buildCommentMetadata(event: SocialEvent): Promise<Record<string, 
     getActorMetadata(event.actorId),
     getCommentContextMetadata(comment.entityType, comment.entityId),
   ]);
+  if (contextMetadata === null) return null;
 
   return {
     ...buildFeedItemMetadata(event),

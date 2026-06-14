@@ -148,6 +148,44 @@ async function createInlineNotification(event: SocialEvent): Promise<void> {
         const layoutId = parseInt(event.metadata.layoutId || '0', 10);
         if (!boardType || !layoutId) return;
 
+        const [climb] = await db
+          .select({
+            uuid: dbSchema.boardClimbs.uuid,
+            name: dbSchema.boardClimbs.name,
+            description: dbSchema.boardClimbs.description,
+            layoutId: dbSchema.boardClimbs.layoutId,
+            angle: dbSchema.boardClimbs.angle,
+            frames: dbSchema.boardClimbs.frames,
+            createdAt: dbSchema.boardClimbs.createdAt,
+            isDraft: dbSchema.boardClimbs.isDraft,
+            isListed: dbSchema.boardClimbs.isListed,
+            setterDisplayName: dbSchema.userProfiles.displayName,
+            setterAvatarUrl: dbSchema.userProfiles.avatarUrl,
+            difficultyName: dbSchema.boardDifficultyGrades.boulderName,
+          })
+          .from(dbSchema.boardClimbs)
+          .leftJoin(dbSchema.users, eq(dbSchema.boardClimbs.userId, dbSchema.users.id))
+          .leftJoin(dbSchema.userProfiles, eq(dbSchema.users.id, dbSchema.userProfiles.userId))
+          .leftJoin(
+            dbSchema.boardClimbStats,
+            and(
+              eq(dbSchema.boardClimbStats.boardType, dbSchema.boardClimbs.boardType),
+              eq(dbSchema.boardClimbStats.climbUuid, dbSchema.boardClimbs.uuid),
+              eq(dbSchema.boardClimbStats.angle, dbSchema.boardClimbs.angle),
+            ),
+          )
+          .leftJoin(
+            dbSchema.boardDifficultyGrades,
+            and(
+              eq(dbSchema.boardDifficultyGrades.boardType, dbSchema.boardClimbs.boardType),
+              eq(dbSchema.boardDifficultyGrades.difficulty, dbSchema.boardClimbStats.displayDifficulty),
+            ),
+          )
+          .where(and(eq(dbSchema.boardClimbs.uuid, event.entityId), eq(dbSchema.boardClimbs.boardType, boardType)))
+          .limit(1);
+
+        if (!climb || climb.isDraft === true || climb.isListed === false) return;
+
         const followerRecipients = await resolveClimbCreatedFollowerRecipients(event.actorId);
         const subscriberRecipients = await resolveClimbCreatedSubscriptionRecipients(
           boardType,
@@ -209,58 +247,22 @@ async function createInlineNotification(event: SocialEvent): Promise<void> {
 
         await fanoutNewClimbFeedItems(event);
 
-        const [climb] = await db
-          .select({
-            uuid: dbSchema.boardClimbs.uuid,
-            name: dbSchema.boardClimbs.name,
-            description: dbSchema.boardClimbs.description,
-            layoutId: dbSchema.boardClimbs.layoutId,
-            angle: dbSchema.boardClimbs.angle,
-            frames: dbSchema.boardClimbs.frames,
-            createdAt: dbSchema.boardClimbs.createdAt,
-            setterDisplayName: dbSchema.userProfiles.displayName,
-            setterAvatarUrl: dbSchema.userProfiles.avatarUrl,
-            difficultyName: dbSchema.boardDifficultyGrades.boulderName,
-          })
-          .from(dbSchema.boardClimbs)
-          .leftJoin(dbSchema.users, eq(dbSchema.boardClimbs.userId, dbSchema.users.id))
-          .leftJoin(dbSchema.userProfiles, eq(dbSchema.users.id, dbSchema.userProfiles.userId))
-          .leftJoin(
-            dbSchema.boardClimbStats,
-            and(
-              eq(dbSchema.boardClimbStats.boardType, dbSchema.boardClimbs.boardType),
-              eq(dbSchema.boardClimbStats.climbUuid, dbSchema.boardClimbs.uuid),
-              eq(dbSchema.boardClimbStats.angle, dbSchema.boardClimbs.angle),
-            ),
-          )
-          .leftJoin(
-            dbSchema.boardDifficultyGrades,
-            and(
-              eq(dbSchema.boardDifficultyGrades.boardType, dbSchema.boardClimbs.boardType),
-              eq(dbSchema.boardDifficultyGrades.difficulty, dbSchema.boardClimbStats.displayDifficulty),
-            ),
-          )
-          .where(and(eq(dbSchema.boardClimbs.uuid, event.entityId), eq(dbSchema.boardClimbs.boardType, boardType)))
-          .limit(1);
-
-        if (climb) {
-          const channelKey = `${boardType}:${climb.layoutId}`;
-          pubsub.publishNewClimbEvent(channelKey, {
-            climb: {
-              uuid: climb.uuid,
-              name: climb.name ?? event.metadata.climbName,
-              boardType,
-              layoutId: climb.layoutId,
-              setterDisplayName: climb.setterDisplayName ?? actor?.displayName ?? actor?.name ?? undefined,
-              setterAvatarUrl: climb.setterAvatarUrl ?? actor?.avatarUrl ?? actor?.image ?? undefined,
-              angle: climb.angle ?? null,
-              frames: climb.frames ?? null,
-              difficultyName: climb.difficultyName ?? event.metadata.difficultyName ?? null,
-              isNoMatch: isNoMatchClimb(climb.description),
-              createdAt: climb.createdAt ?? new Date().toISOString(),
-            },
-          });
-        }
+        const channelKey = `${boardType}:${climb.layoutId}`;
+        pubsub.publishNewClimbEvent(channelKey, {
+          climb: {
+            uuid: climb.uuid,
+            name: climb.name ?? event.metadata.climbName,
+            boardType,
+            layoutId: climb.layoutId,
+            setterDisplayName: climb.setterDisplayName ?? actor?.displayName ?? actor?.name ?? undefined,
+            setterAvatarUrl: climb.setterAvatarUrl ?? actor?.avatarUrl ?? actor?.image ?? undefined,
+            angle: climb.angle ?? null,
+            frames: climb.frames ?? null,
+            difficultyName: climb.difficultyName ?? event.metadata.difficultyName ?? null,
+            isNoMatch: isNoMatchClimb(climb.description),
+            createdAt: climb.createdAt ?? new Date().toISOString(),
+          },
+        });
         return;
       }
       case 'ascent.logged': {

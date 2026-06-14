@@ -48,7 +48,7 @@ export const GET_ACTIVITY_FEED = gql`
 // Session-Grouped Feed Queries
 // ============================================
 
-const SESSION_FEED_ITEM_FIELDS = `
+const SESSION_SUMMARY_FIELDS = `
   sessionId
   sessionType
   sessionName
@@ -83,6 +83,65 @@ const SESSION_FEED_ITEM_FIELDS = `
   commentCount
 `;
 
+const SESSION_FEED_ITEM_FIELDS = `
+  ${SESSION_SUMMARY_FIELDS}
+  hardestSend {
+    uuid
+    userId
+    climbUuid
+    climbName
+    boardType
+    layoutId
+    angle
+    status
+    attemptCount
+    difficulty
+    difficultyName
+    quality
+    isMirror
+    isBenchmark
+    isNoMatch
+    comment
+    frames
+    setterUsername
+    climbedAt
+  }
+  featuredBeta {
+    tick {
+      uuid
+      userId
+      climbUuid
+      climbName
+      boardType
+      layoutId
+      angle
+      status
+      attemptCount
+      difficulty
+      difficultyName
+      quality
+      isMirror
+      isBenchmark
+      isNoMatch
+      comment
+      frames
+      setterUsername
+      climbedAt
+    }
+    betaLink {
+      climbUuid
+      link
+      foreignUsername
+      angle
+      thumbnail
+      isListed
+      createdAt
+    }
+  }
+  socialEntityType
+  socialEntityId
+`;
+
 export const GET_SESSION_GROUPED_FEED = gql`
   query GetSessionGroupedFeed($input: ActivityFeedInput) {
     sessionGroupedFeed(input: $input) {
@@ -98,7 +157,7 @@ export const GET_SESSION_GROUPED_FEED = gql`
 export const GET_SESSION_DETAIL = gql`
   query GetSessionDetail($sessionId: ID!) {
     sessionDetail(sessionId: $sessionId) {
-      ${SESSION_FEED_ITEM_FIELDS}
+      ${SESSION_SUMMARY_FIELDS}
       healthKitWorkoutId
       ticks {
         uuid

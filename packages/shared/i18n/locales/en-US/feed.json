@@ -25,27 +25,10 @@
       "betaCardLabel": "Open beta video",
       "feedTitle": "From your crew",
       "signInTitle": "Sign in to see your feed",
-      "signInBody": "Follow climbers and setters to see their sends and new climbs here.",
-      "emptyTitle": "No activity yet",
-      "emptyBody": "Follow climbers and setters to fill this up.",
-      "unknownClimb": "Unknown climb",
-      "unknownClimber": "Climber",
-      "activityLine": "{{action}} - {{time}}",
-      "angle": "{{angle}}°",
-      "boards": {
-        "kilter": "Kilter",
-        "tension": "Tension",
-        "moonboard": "MoonBoard"
-      },
-      "activity": {
-        "ascent": "logged an ascent",
-        "flash": "flashed",
-        "send": "sent",
-        "attempt": "tried",
-        "newClimb": "set a new climb",
-        "comment": "commented",
-        "proposalApproved": "got a proposal approved"
-      }
+      "signInBody": "Follow climbers to see their sessions and daily sends here.",
+      "emptyTitle": "No sessions yet",
+      "emptyBody": "Follow climbers to fill this with sessions and daily sends.",
+      "unknownClimb": "Unknown climb"
     }
   },
   "ascentsFeed": {
@@ -154,11 +137,41 @@
   "sessionFeedCard": {
     "climbCount_one": "{{count}} climb",
     "climbCount_other": "{{count}} climbs",
+    "sendsCount_one": "{{count}} send",
+    "sendsCount_other": "{{count}} sends",
+    "flashesCount_one": "{{count}} flash",
+    "flashesCount_other": "{{count}} flashes",
+    "hardestGrade": "{{grade}} hardest",
+    "status": {
+      "flash": "Flash",
+      "send": "Send",
+      "attempt": "Attempt"
+    },
     "hardest": "Hardest",
-    "sendsLabel": "sends"
+    "betaCaption": "Beta from this session",
+    "hardestSend": "Hardest send",
+    "unknownClimb": "Unknown climb",
+    "attempts_one": "{{count}} try",
+    "attempts_other": "{{count}} tries",
+    "chartEmpty": "No grades yet",
+    "chartLabel": "Grade chart",
+    "pageIndicator": "Session card page {{current}} of {{total}}",
+    "previousPage": "Previous session card page",
+    "nextPage": "Next session card page",
+    "openHint": "Opens the session",
+    "openSessionPage": "Open session",
+    "openHardestClimb": "Open {{climb}}"
   },
   "sessionSummary": {
     "completed": "Session completed"
+  },
+  "socialActions": {
+    "upvoteWithCount_one": "Like, {{count}} like",
+    "upvoteWithCount_other": "Like, {{count}} likes",
+    "removeUpvoteWithCount_one": "Remove like, {{count}} like",
+    "removeUpvoteWithCount_other": "Remove like, {{count}} likes",
+    "openCommentsWithCount_one": "Open comments, {{count}} comment",
+    "openCommentsWithCount_other": "Open comments, {{count}} comments"
   },
   "socialFeedItem": {
     "climbed": "climbed"

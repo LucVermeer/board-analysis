@@ -334,7 +334,7 @@ export const socialCommentMutations = {
     const { entityType, entityId, parentCommentUuid, body } = validated;
     const userId = ctx.userId!;
 
-    await validateEntityExists(entityType, entityId);
+    await validateEntityExists(entityType, entityId, userId);
 
     let parentCommentId: number | null = null;
     if (parentCommentUuid) {
