@@ -4,12 +4,14 @@ import {
   GET_USER_PROFILE_STATS,
   GET_USER_CLIMB_PERCENTILE,
   GET_USER_ASCENTS_FEED,
+  GET_ACTIVITY_FEED,
   GET_SESSION_GROUPED_FEED,
   type GetUserTicksQueryResponse,
   type GetUserProfileStatsQueryResponse,
   type GetUserClimbPercentileQueryResponse,
   type GetUserAscentsFeedQueryResponse,
   type GetUserAscentsFeedQueryVariables,
+  type GetActivityFeedQueryResponse,
   type GetSessionGroupedFeedQueryResponse,
 } from '@boardsesh/graphql/operations';
 import { BOARD_TYPES, type LogbookEntry } from '@boardsesh/profile-stats';
@@ -117,6 +119,21 @@ export function useSessionGroupedFeed(input?: ActivityFeedInput, enabled = true)
       }),
     getNextPageParam: (lastPage) =>
       lastPage.sessionGroupedFeed.hasMore ? (lastPage.sessionGroupedFeed.cursor ?? undefined) : undefined,
+    enabled,
+  });
+}
+
+/** Itemized home activity feed for people and setters the viewer follows. */
+export function useActivityFeed(input?: ActivityFeedInput, enabled = true) {
+  return useInfiniteQuery({
+    queryKey: ['activityFeed', input],
+    initialPageParam: null as string | null,
+    queryFn: ({ pageParam }) =>
+      getHttpClient().request<GetActivityFeedQueryResponse>(GET_ACTIVITY_FEED, {
+        input: { limit: FEED_PAGE_SIZE, ...input, cursor: pageParam },
+      }),
+    getNextPageParam: (lastPage) =>
+      lastPage.activityFeed.hasMore ? (lastPage.activityFeed.cursor ?? undefined) : undefined,
     enabled,
   });
 }

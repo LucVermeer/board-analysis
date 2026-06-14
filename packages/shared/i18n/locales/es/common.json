@@ -76,6 +76,7 @@
     "about": "Sobre",
     "rateBoardsesh": "Valorar Boardsesh",
     "reportBug": "Reportar un bug",
+    "joinDiscord": "Únete a Discord",
     "logout": "Cerrar sesión",
     "devBuild": "Build de dev",
     "branch": "Rama",
@@ -271,6 +272,21 @@
         "subtitle": "Apple Health y Strava"
       }
     },
+    "about": {
+      "title": "Sobre Boardsesh",
+      "heroTitle": "Boardsesh",
+      "heroBody": "Controla tu tabla desde el móvil: encuentra bloques, prepara encadenes, ilumina el muro y mantén la sesión en marcha.",
+      "sectionTitle": "Para qué sirve Boardsesh",
+      "whatItDoesTitle": "Escala sin saltar entre apps",
+      "whatItDoesBody": "Busca, encola, ilumina, registra y comparte bloques desde un solo sitio mientras te concentras en el muro.",
+      "boardsTitle": "Para tus tablas",
+      "boardsBody": "Boardsesh soporta sesiones en tus setups Kilter, Tension y MoonBoard sin presentarse como app oficial.",
+      "openTitle": "Construido en abierto",
+      "openBody": "El proyecto es open source para que los escaladores puedan reportar fallos, pedir funciones y ayudar a decidir lo siguiente.",
+      "independentTitle": "Proyecto independiente",
+      "independentBody": "Boardsesh no está afiliado ni respaldado por Aurora Climbing, Kilter, Tension, Moon Climbing ni ningún fabricante de tablas.",
+      "joinDiscord": "Únete a Discord"
+    },
     "onboarding": {
       "skip": "Omitir",
       "next": "Siguiente",
@@ -300,6 +316,7 @@
       }
     },
     "nav": {
+      "home": "Inicio",
       "boards": "Tablas",
       "climbs": "Bloques",
       "climb": "Bloque",

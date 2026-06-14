@@ -205,6 +205,7 @@ vi.mock('../../../hooks/use-reduce-motion', () => ({ useReduceMotion: () => fals
 vi.mock('../../../lib/haptics', () => ({ hapticLight: vi.fn(), hapticSelection: vi.fn() }));
 
 vi.mock('../../../theme/tokens', () => ({
+  opacity: { peek: 0.62 },
   spacing: { 1: 4, 2: 8, 3: 12, 10: 40 },
   borderRadius: { md: 8 },
 }));

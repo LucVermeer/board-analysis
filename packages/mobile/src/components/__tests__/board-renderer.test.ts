@@ -15,6 +15,9 @@ describe('BoardHold type structure', () => {
       color: '#FF0000',
       role: 'STARTING',
       renderStyle: 'circle',
+      shape: 'circle',
+      brushThickness: 1,
+      shapeSize: 1,
     };
 
     expect(hold.id).toBe(1);
@@ -35,6 +38,9 @@ describe('BoardHold type structure', () => {
       color: '#00FF00',
       role: 'FINISH',
       renderStyle: 'above-marker',
+      shape: 'circle',
+      brushThickness: 1,
+      shapeSize: 1,
     };
 
     expect(hold.renderStyle).toBe('above-marker');

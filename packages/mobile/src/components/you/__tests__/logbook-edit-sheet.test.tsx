@@ -149,6 +149,8 @@ function makeAscent(overrides: Partial<AscentFeedItem> = {}): AscentFeedItem {
     climbName: 'Moon Patrol',
     setterUsername: null,
     boardType: 'kilter',
+    boardId: null,
+    boardDisplayName: null,
     layoutId: 1,
     angle: 40,
     isMirror: false,

@@ -55,21 +55,26 @@ public class HealthWorkoutsModule: Module {
 
         AsyncFunction("getAuthorizationStatus") { () -> [String: Any] in
             guard HKHealthStore.isHealthDataAvailable() else {
-                return ["status": "denied"]
+                return [
+                    "status": "denied",
+                    "workoutStatus": "denied",
+                    "activeEnergyStatus": "denied",
+                ]
             }
             // Read-only probe — never presents the consent sheet. UI uses this
             // on mount; requestAuthorization is reserved for explicit user
             // intent (it prompts undecided users).
-            switch self.healthStore.authorizationStatus(for: HKObjectType.workoutType()) {
-            case .sharingAuthorized:
-                return ["status": "authorized"]
-            case .sharingDenied:
-                return ["status": "denied"]
-            case .notDetermined:
-                return ["status": "notDetermined"]
-            @unknown default:
-                return ["status": "notDetermined"]
-            }
+            let workoutStatus = Self.statusString(
+                self.healthStore.authorizationStatus(for: HKObjectType.workoutType())
+            )
+            let activeEnergyStatus = Self.statusString(
+                self.healthStore.authorizationStatus(for: HKQuantityType(.activeEnergyBurned))
+            )
+            return [
+                "status": workoutStatus,
+                "workoutStatus": workoutStatus,
+                "activeEnergyStatus": activeEnergyStatus,
+            ]
         }
 
         AsyncFunction("requestAuthorization") { (promise: Promise) in
@@ -95,6 +100,7 @@ public class HealthWorkoutsModule: Module {
             HKQuantityType(.activeEnergyBurned),
         ]
         let read: Set<HKObjectType> = [
+            workoutType,
             HKQuantityType(.bodyMass),
         ]
 
@@ -119,7 +125,9 @@ public class HealthWorkoutsModule: Module {
                     "HealthKit auth not granted. success=\(success), status=\(String(describing: status.rawValue))"
                 )
             }
-            promise.resolve(["granted": granted])
+            let activeEnergyGranted =
+                self.healthStore.authorizationStatus(for: HKQuantityType(.activeEnergyBurned)) == .sharingAuthorized
+            promise.resolve(["granted": granted, "activeEnergyGranted": activeEnergyGranted])
         }
     }
 
@@ -151,6 +159,8 @@ public class HealthWorkoutsModule: Module {
 
         var metadata: [String: Any] = [
             HKMetadataKeyExternalUUID: options.sessionId,
+            HKMetadataKeyIndoorWorkout: true,
+            HKMetadataKeyWorkoutBrandName: "Boardsesh",
             "BoardseshSessionId": options.sessionId,
             "BoardseshTotalSends": options.totalSends,
             "BoardseshTotalAttempts": options.totalAttempts,
@@ -160,19 +170,35 @@ public class HealthWorkoutsModule: Module {
             metadata["BoardseshHardestGrade"] = hardestGrade
         }
 
-        // Parse lap timestamps up front; keep only those strictly inside the
+        // Parse lap events up front; keep only those strictly inside the
         // session window. Out-of-range or unparseable entries are dropped.
-        let lapDates: [Date] = options.lapTimestamps
-            .compactMap { Self.parseISO8601($0) }
-            .filter { $0 > startDate && $0 < endDate }
+        let laps: [WorkoutLap] = options.laps.filter { lap in
+            guard let lapDate = Self.parseISO8601(lap.climbedAt) else { return false }
+            return lapDate > startDate && lapDate < endDate
+        }
 
         Task {
             do {
+                if let existingWorkout = await self.findExistingWorkout(sessionId: options.sessionId) {
+                    self.logger.info(
+                        "Found existing climbing workout for session \(options.sessionId, privacy: .public)"
+                    )
+                    promise.resolve([
+                        "workoutId": existingWorkout.uuid.uuidString,
+                        "created": false,
+                        "energyKilocalories": NSNull(),
+                        "energySaved": false,
+                        "lapCount": 0,
+                    ])
+                    return
+                }
+
                 let bodyMassKg = await self.latestBodyMassKilograms()
                 let energyKilocalories = self.estimatedActiveEnergyKilocalories(
                     durationSeconds: durationSeconds,
                     bodyMassKg: bodyMassKg
                 )
+                var energySaved = false
 
                 let configuration = HKWorkoutConfiguration()
                 configuration.activityType = .climbing
@@ -197,18 +223,36 @@ public class HealthWorkoutsModule: Module {
                 )
                 do {
                     try await builder.addSamples([energySample])
+                    energySaved = true
                 } catch {
                     self.logger.warning(
                         "Skipping active-energy sample (not authorized?): \(error.localizedDescription, privacy: .public)"
                     )
                 }
 
-                if !lapDates.isEmpty {
-                    let lapEvents = lapDates.map { lapDate in
-                        HKWorkoutEvent(
+                if !laps.isEmpty {
+                    let lapEvents = laps.compactMap { lap -> HKWorkoutEvent? in
+                        guard let lapDate = Self.parseISO8601(lap.climbedAt) else { return nil }
+                        var lapMetadata: [String: Any] = [
+                            "BoardseshTickUuid": lap.tickUuid,
+                            "BoardseshClimbUuid": lap.climbUuid,
+                            "BoardseshStatus": lap.status,
+                            "BoardseshAttemptCount": lap.attemptCount,
+                            "BoardseshBoardType": lap.boardType,
+                        ]
+                        if let climbName = lap.climbName, !climbName.isEmpty {
+                            lapMetadata["BoardseshClimbName"] = climbName
+                        }
+                        if let grade = lap.grade, !grade.isEmpty {
+                            lapMetadata["BoardseshGrade"] = grade
+                        }
+                        if let angle = lap.angle {
+                            lapMetadata["BoardseshAngle"] = angle
+                        }
+                        return HKWorkoutEvent(
                             type: .lap,
                             dateInterval: DateInterval(start: lapDate, duration: 0),
-                            metadata: nil
+                            metadata: lapMetadata
                         )
                     }
                     try await builder.addWorkoutEvents(lapEvents)
@@ -222,11 +266,54 @@ public class HealthWorkoutsModule: Module {
                 }
 
                 self.logger.info("Saved climbing workout for session \(options.sessionId, privacy: .public)")
-                promise.resolve(["workoutId": workout.uuid.uuidString])
+                promise.resolve([
+                    "workoutId": workout.uuid.uuidString,
+                    "created": true,
+                    "energyKilocalories": energyKilocalories,
+                    "energySaved": energySaved,
+                    "lapCount": laps.count,
+                ])
             } catch {
                 self.logger.error("Failed to save workout: \(error.localizedDescription, privacy: .public)")
                 promise.reject("E_SAVE_FAILED", "Failed to save workout: \(error.localizedDescription)")
             }
+        }
+    }
+
+    private static func statusString(_ status: HKAuthorizationStatus) -> String {
+        switch status {
+        case .sharingAuthorized:
+            return "authorized"
+        case .sharingDenied:
+            return "denied"
+        case .notDetermined:
+            return "notDetermined"
+        @unknown default:
+            return "notDetermined"
+        }
+    }
+
+    private func findExistingWorkout(sessionId: String) async -> HKWorkout? {
+        await withCheckedContinuation { continuation in
+            let predicate = HKQuery.predicateForObjects(
+                withMetadataKey: HKMetadataKeyExternalUUID,
+                allowedValues: [sessionId]
+            )
+            let sortByStartDate = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: false)
+            let query = HKSampleQuery(
+                sampleType: HKObjectType.workoutType(),
+                predicate: predicate,
+                limit: 1,
+                sortDescriptors: [sortByStartDate]
+            ) { [weak self] _, samples, error in
+                if let error {
+                    self?.logger.warning(
+                        "Existing workout lookup failed: \(error.localizedDescription, privacy: .public)"
+                    )
+                }
+                continuation.resume(returning: samples?.first as? HKWorkout)
+            }
+            healthStore.execute(query)
         }
     }
 
@@ -297,5 +384,17 @@ struct SaveWorkoutOptions: Record {
     @Field var totalAttempts: Int = 0
     @Field var hardestGrade: String?
     @Field var boardType: String = ""
-    @Field var lapTimestamps: [String] = []
+    @Field var laps: [WorkoutLap] = []
+}
+
+struct WorkoutLap: Record {
+    @Field var tickUuid: String = ""
+    @Field var climbedAt: String = ""
+    @Field var climbUuid: String = ""
+    @Field var climbName: String?
+    @Field var grade: String?
+    @Field var status: String = ""
+    @Field var attemptCount: Int = 0
+    @Field var boardType: String = ""
+    @Field var angle: Int?
 }

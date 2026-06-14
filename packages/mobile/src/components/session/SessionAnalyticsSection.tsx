@@ -42,9 +42,9 @@ export function SessionAnalyticsSection({ ticks }: { ticks: SessionDetailTick[] 
     () =>
       viewModel?.aggregatedStackedBars?.legend.map((entry) => ({
         label: entry.label,
-        color: layoutChartColor(entry.key),
+        color: layoutChartColor(entry.key, colorScheme),
       })),
-    [viewModel],
+    [colorScheme, viewModel],
   );
   const flashRedpointLegend = useMemo<ChartLegendItem[] | undefined>(
     () =>
@@ -65,6 +65,7 @@ export function SessionAnalyticsSection({ ticks }: { ticks: SessionDetailTick[] 
           bars={viewModel.aggregatedStackedBars?.bars ?? null}
           colorBy="layout"
           legend={gradeDistLegend}
+          fitYAxisToData
         />
       </Card>
 
@@ -72,7 +73,7 @@ export function SessionAnalyticsSection({ ticks }: { ticks: SessionDetailTick[] 
         <>
           <SectionHeader title={t('stats.flashVsRedpoint')} />
           <Card style={styles.chartCard}>
-            <GroupedBarChart bars={viewModel.aggregatedFlashRedpointBars} legend={flashRedpointLegend} />
+            <GroupedBarChart bars={viewModel.aggregatedFlashRedpointBars} legend={flashRedpointLegend} fitYAxisToData />
           </Card>
         </>
       )}

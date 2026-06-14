@@ -266,7 +266,7 @@ export function LogbookEditSheet({ sheetRef, ascent, onClose }: LogbookEditSheet
   return (
     <Sheet
       ref={sheetRef}
-      snapPoints={['75%']}
+      snapPoints={['75%', '92%']}
       scrollable
       fullWindowOverlay
       onClose={onClose}

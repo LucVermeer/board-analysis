@@ -20,29 +20,206 @@ import { generateUniqueSlug } from '../social/boards';
 import { logger } from '../../../utils/logger';
 import { pubsub } from '../../../pubsub/index';
 import {
+  assertValidBoardId,
+  candidateToActiveBoard,
   defaultBoardName,
-  findActiveBoardBySerial,
+  findActiveBoardsBySerial,
+  findChosenBoardForSerial,
   findOwnActiveBoardByConfig,
   findReachableActiveBoardByUuid,
   isDuplicateBoardSerialError,
+  lastSentAtByBoardIds,
   normalizeSetIds,
+  rememberBoardForSerial,
   requireActiveBoardById,
   requireBoardPresenceEnabled,
   resolveSharedBoardForConfig,
   serialAlreadyBoundError,
   throwIfDuplicateBoardSerial,
   toResolvedBoard,
+  type ActivePresenceBoard,
+  type SerialCandidateBoard,
 } from './shared';
+
+type SerialResolution =
+  | { kind: 'board'; board: ActivePresenceBoard }
+  | { kind: 'candidates'; candidates: SerialCandidateBoard[] };
+
+type BoardCandidatePayload = {
+  boardId: number;
+  boardUuid: string;
+  boardName: string;
+  boardType: string;
+  layoutId: number;
+  sizeId: number;
+  setIds: string;
+  locationName: string | null;
+  gymName: string | null;
+  isOwnedByMe: boolean;
+  isPublic: boolean;
+  lastSentAt: string | null;
+};
+
+function toBoardCandidate(
+  candidate: SerialCandidateBoard,
+  userId: string,
+  lastSentAt: string | null,
+): BoardCandidatePayload {
+  const isOwnedByMe = candidate.ownerId === userId;
+  // Private boards are still findable by serial, but we don't leak their
+  // location to people who neither own them nor would see them publicly.
+  const showLocation = candidate.isPublic || isOwnedByMe;
+  return {
+    boardId: candidate.id,
+    boardUuid: candidate.uuid,
+    boardName: candidate.name,
+    boardType: candidate.boardType,
+    layoutId: candidate.layoutId,
+    sizeId: candidate.sizeId,
+    setIds: candidate.setIds,
+    locationName: showLocation ? candidate.locationName : null,
+    gymName: showLocation ? candidate.gymName : null,
+    isOwnedByMe,
+    isPublic: candidate.isPublic,
+    lastSentAt,
+  };
+}
+
+/**
+ * No board carries this serial yet: bind it onto the caller's own board for
+ * this config, or create a fresh owned board. (Branches (b)+(c) of the old
+ * resolver; the per-owner unique index keeps a same-owner bind race fail-safe.)
+ */
+async function bindOrCreateOwnBoardForSerial(
+  userId: string,
+  serial: string,
+  config: { boardType: string; layoutId: number; sizeId: number; setIds: string },
+): Promise<ActivePresenceBoard> {
+  const ownBoard = await findOwnActiveBoardByConfig(
+    userId,
+    config.boardType,
+    config.layoutId,
+    config.sizeId,
+    config.setIds,
+  );
+  if (ownBoard) {
+    if (ownBoard.serialNumber && ownBoard.serialNumber !== serial) {
+      throw serialAlreadyBoundError();
+    }
+    try {
+      const [updated] = await db
+        .update(dbSchema.userBoards)
+        .set({ serialNumber: serial, updatedAt: new Date() })
+        .where(and(eq(dbSchema.userBoards.id, ownBoard.id), isNull(dbSchema.userBoards.serialNumber)))
+        .returning();
+      if (updated) {
+        return updated;
+      }
+    } catch (error) {
+      if (isDuplicateBoardSerialError(error)) {
+        logger.warn(`[board-presence] bind race on own board: ${String(error)}`);
+        const winner = await findOwnActiveBoardByConfig(
+          userId,
+          config.boardType,
+          config.layoutId,
+          config.sizeId,
+          config.setIds,
+        );
+        if (winner?.serialNumber === serial) {
+          return winner;
+        }
+      }
+      throw error;
+    }
+    const refreshed = await findOwnActiveBoardByConfig(
+      userId,
+      config.boardType,
+      config.layoutId,
+      config.sizeId,
+      config.setIds,
+    );
+    if (refreshed?.serialNumber === serial) {
+      return refreshed;
+    }
+    if (refreshed?.serialNumber) {
+      throw serialAlreadyBoundError();
+    }
+  }
+
+  const uuid = uuidv4();
+  const name = defaultBoardName(config.boardType);
+  const slug = await generateUniqueSlug(name);
+  try {
+    const [created] = await db
+      .insert(dbSchema.userBoards)
+      .values({
+        uuid,
+        slug,
+        ownerId: userId,
+        boardType: config.boardType,
+        layoutId: config.layoutId,
+        sizeId: config.sizeId,
+        setIds: normalizeSetIds(config.setIds),
+        name,
+        serialNumber: serial,
+      })
+      .returning();
+    return created;
+  } catch (error) {
+    if (isDuplicateBoardSerialError(error)) {
+      logger.warn(`[board-presence] create race on own board: ${String(error)}`);
+      const winner = await findOwnActiveBoardByConfig(
+        userId,
+        config.boardType,
+        config.layoutId,
+        config.sizeId,
+        config.setIds,
+      );
+      if (winner?.serialNumber === serial) {
+        return winner;
+      }
+    }
+    throwIfDuplicateBoardSerial(error);
+    throw error;
+  }
+}
+
+/**
+ * Decide which board a serial routes to for this user:
+ *  - a previously-remembered choice wins (no prompt);
+ *  - no board carries the serial yet → bind/create the caller's own board;
+ *  - exactly one board carries it → route there (and remember);
+ *  - several boards carry it → return the candidates for the user to pick.
+ */
+async function resolveSerialForUser(
+  userId: string,
+  serial: string,
+  config: { boardType: string; layoutId: number; sizeId: number; setIds: string },
+): Promise<SerialResolution> {
+  const chosen = await findChosenBoardForSerial(userId, serial);
+  if (chosen) {
+    return { kind: 'board', board: chosen };
+  }
+
+  const candidates = await findActiveBoardsBySerial(serial);
+  if (candidates.length === 0) {
+    const board = await bindOrCreateOwnBoardForSerial(userId, serial, config);
+    return { kind: 'board', board };
+  }
+  if (candidates.length === 1) {
+    await rememberBoardForSerial(userId, serial, candidates[0]);
+    return { kind: 'board', board: candidateToActiveBoard(candidates[0]) };
+  }
+  return { kind: 'candidates', candidates };
+}
 
 export const boardPresenceMutations = {
   /**
-   * Resolve (and bind) the shared board for a BLE serial. Find-or-creates so
-   * everyone at the same physical wall converges on a single board_id:
-   *   (a) a board already bound to this serial → return it (the shared board);
-   *   (b) else the caller's own board for this config → stamp the serial onto it;
-   *   (c) else create a fresh board owned by the caller, bound to the serial.
-   * Enforces serial → exactly one board via the unique partial index; the
-   * insert race is resolved by re-reading the winner.
+   * Legacy serial resolver, kept for backward-compat with already-shipped
+   * (OTA) mobile clients that can't render a disambiguation prompt: it always
+   * returns a single board. When several boards share a serial it auto-picks
+   * (the caller's own board if present, else the oldest) and remembers the
+   * choice. New clients should call `resolveBoardCandidatesForSerial`.
    */
   resolveBoardForSerial: async (
     _: unknown,
@@ -61,108 +238,88 @@ export const boardPresenceMutations = {
 
     const validSerial = validateInput(BoardSerialSchema, serial, 'serial');
     const config = validateInput(BoardPresenceConfigInputSchema, { boardType, layoutId, sizeId, setIds }, 'input');
-    const normalizedSetIds = normalizeSetIds(config.setIds);
-
     const userId = ctx.userId!;
 
-    // Stamp proof-of-presence on whichever board we resolve to: the user is
-    // connected to this physical wall (they had its serial), which is what
-    // reportBoardClimb later requires before accepting a report.
-    const stampAndReturn = async (resolved: ResolvedBoard): Promise<ResolvedBoard> => {
-      await pubsub.stampBoardMembership(String(resolved.boardId), userId);
-      return resolved;
+    const resolution = await resolveSerialForUser(userId, validSerial, config);
+    if (resolution.kind === 'board') {
+      await pubsub.stampBoardMembership(String(resolution.board.id), userId);
+      return toResolvedBoard(resolution.board);
+    }
+    // Old clients can't prompt — auto-pick (owned first, else oldest) and remember.
+    const owned = resolution.candidates.find((candidate) => candidate.ownerId === userId);
+    const pick = owned ?? resolution.candidates[0];
+    await rememberBoardForSerial(userId, validSerial, pick);
+    await pubsub.stampBoardMembership(String(pick.id), userId);
+    return toResolvedBoard(candidateToActiveBoard(pick));
+  },
+
+  /**
+   * Serial resolver for clients that can disambiguate. Returns either a single
+   * resolved `board` (remembered choice / only-one-match / freshly created) or,
+   * when several boards share this serial, the `candidates` for the user to
+   * pick from. The pick is confirmed via `chooseBoardForSerial`.
+   */
+  resolveBoardCandidatesForSerial: async (
+    _: unknown,
+    {
+      serial,
+      boardType,
+      layoutId,
+      sizeId,
+      setIds,
+    }: { serial: string; boardType: string; layoutId: number; sizeId: number; setIds: string },
+    ctx: ConnectionContext,
+  ): Promise<{ board: ResolvedBoard | null; candidates: BoardCandidatePayload[] | null }> => {
+    requireBoardPresenceEnabled();
+    requireAuthenticated(ctx);
+    await applyRateLimit(ctx, 30, 'resolveBoardCandidatesForSerial');
+
+    const validSerial = validateInput(BoardSerialSchema, serial, 'serial');
+    const config = validateInput(BoardPresenceConfigInputSchema, { boardType, layoutId, sizeId, setIds }, 'input');
+    const userId = ctx.userId!;
+
+    const resolution = await resolveSerialForUser(userId, validSerial, config);
+    if (resolution.kind === 'board') {
+      await pubsub.stampBoardMembership(String(resolution.board.id), userId);
+      return { board: toResolvedBoard(resolution.board), candidates: null };
+    }
+
+    const lastSent = await lastSentAtByBoardIds(resolution.candidates.map((candidate) => candidate.id));
+    return {
+      board: null,
+      candidates: resolution.candidates.map((candidate) =>
+        toBoardCandidate(candidate, userId, lastSent.get(candidate.id) ?? null),
+      ),
     };
+  },
 
-    // (a) An existing board already owns this serial — that's the shared board.
-    const existingBySerial = await findActiveBoardBySerial(validSerial);
-    if (existingBySerial) {
-      return stampAndReturn(toResolvedBoard(existingBySerial));
+  /**
+   * Confirm the board the user picked from a disambiguation prompt. Remembers
+   * the choice (so we don't ask again), stamps proof-of-presence, and returns
+   * the bound board. The chosen board must be active and actually carry the
+   * serial — a serial can't be redirected onto an unrelated board.
+   */
+  chooseBoardForSerial: async (
+    _: unknown,
+    { boardId, serial }: { boardId: number; serial: string },
+    ctx: ConnectionContext,
+  ): Promise<ResolvedBoard> => {
+    requireBoardPresenceEnabled();
+    requireAuthenticated(ctx);
+    await applyRateLimit(ctx, 30, 'chooseBoardForSerial');
+
+    assertValidBoardId(boardId);
+    const validSerial = validateInput(BoardSerialSchema, serial, 'serial');
+    const userId = ctx.userId!;
+
+    const candidate = (await findActiveBoardsBySerial(validSerial)).find((board) => board.id === boardId);
+    if (!candidate) {
+      throw new GraphQLError('That board is not linked to this serial', { extensions: { code: 'NOT_FOUND' } });
     }
 
-    // (b) The caller already has a board for this exact config — bind the
-    // serial onto it instead of creating a duplicate, but only if it is not
-    // already bound to a different physical wall.
-    const ownBoard = await findOwnActiveBoardByConfig(
-      userId,
-      config.boardType,
-      config.layoutId,
-      config.sizeId,
-      config.setIds,
-    );
-    if (ownBoard) {
-      if (ownBoard.serialNumber && ownBoard.serialNumber !== validSerial) {
-        throw serialAlreadyBoundError();
-      }
-
-      try {
-        const [updated] = await db
-          .update(dbSchema.userBoards)
-          .set({ serialNumber: validSerial, updatedAt: new Date() })
-          .where(and(eq(dbSchema.userBoards.id, ownBoard.id), isNull(dbSchema.userBoards.serialNumber)))
-          .returning();
-        if (updated) {
-          return stampAndReturn(toResolvedBoard(updated));
-        }
-      } catch (error) {
-        // Unique-serial race: another connector bound this serial between our
-        // SELECT and UPDATE. Re-read the winner.
-        if (isDuplicateBoardSerialError(error)) {
-          logger.warn(`[board-presence] resolveBoardForSerial bind race on own board: ${String(error)}`);
-          const winner = await findActiveBoardBySerial(validSerial);
-          if (winner) {
-            return stampAndReturn(toResolvedBoard(winner));
-          }
-        }
-        throw error;
-      }
-
-      const refreshedOwnBoard = await findOwnActiveBoardByConfig(
-        userId,
-        config.boardType,
-        config.layoutId,
-        config.sizeId,
-        config.setIds,
-      );
-      if (refreshedOwnBoard?.serialNumber === validSerial) {
-        return stampAndReturn(toResolvedBoard(refreshedOwnBoard));
-      }
-      if (refreshedOwnBoard?.serialNumber) {
-        throw serialAlreadyBoundError();
-      }
-    }
-
-    // (c) Create a fresh board owned by the caller, bound to the serial.
-    const uuid = uuidv4();
-    const name = defaultBoardName(config.boardType);
-    const slug = await generateUniqueSlug(name);
-    try {
-      const [created] = await db
-        .insert(dbSchema.userBoards)
-        .values({
-          uuid,
-          slug,
-          ownerId: userId,
-          boardType: config.boardType,
-          layoutId: config.layoutId,
-          sizeId: config.sizeId,
-          setIds: normalizedSetIds,
-          name,
-          serialNumber: validSerial,
-        })
-        .returning();
-      return stampAndReturn(toResolvedBoard(created));
-    } catch (error) {
-      // Unique-serial race: someone else created the shared board first.
-      if (isDuplicateBoardSerialError(error)) {
-        logger.warn(`[board-presence] resolveBoardForSerial create race: ${String(error)}`);
-        const winner = await findActiveBoardBySerial(validSerial);
-        if (winner) {
-          return stampAndReturn(toResolvedBoard(winner));
-        }
-      }
-      throwIfDuplicateBoardSerial(error);
-      throw error;
-    }
+    await rememberBoardForSerial(userId, validSerial, candidate);
+    await pubsub.stampBoardMembership(String(candidate.id), userId);
+    return toResolvedBoard(candidateToActiveBoard(candidate));
   },
 
   /**
@@ -321,6 +478,45 @@ export const boardPresenceMutations = {
       __typename: 'BoardClimbSet',
       climb: presenceClimb,
     });
+
+    // Durable history (dwell-gated): persist this push to board_climb_events
+    // only once the sender has had sustained presence on the board (>= 60s), so
+    // app-swiping noise stays out of the lasting log. The live feed above
+    // already showed everything; only the Postgres write is gated. Non-fatal —
+    // a failed durable insert never fails the accepted report.
+    const DURABLE_DWELL_MS = 60_000;
+    try {
+      // `sentAt` is the server-generated ISO timestamp from above, so
+      // `Date.parse(sentAt)` is always valid; `firstSeen` is already guarded to
+      // a plausible epoch-ms or null in getBoardMembershipFirstSeen. A null
+      // firstSeen correctly skips the insert (presence not yet proven for 60s).
+      const firstSeen = await pubsub.getBoardMembershipFirstSeen(String(boardId), ctx.userId!);
+      if (firstSeen !== null && Date.parse(sentAt) - firstSeen >= DURABLE_DWELL_MS) {
+        await db
+          .insert(dbSchema.boardClimbEvents)
+          .values({
+            boardId,
+            boardType: board.boardType,
+            climbUuid,
+            angle: effectiveAngle,
+            userId: ctx.userId!,
+            // Reserved for session recaps. reportBoardClimb has no sessionId arg
+            // yet, so every durable row is solo-attributed until the
+            // session-attribution follow-up threads the active session through.
+            sessionId: null,
+            seq,
+            frames: catalogClimb.frames ?? null,
+            name: catalogClimb.name ?? null,
+            grade: catalogClimb.grade ?? null,
+            setter: catalogClimb.setterUsername ?? null,
+            confirmedAt: sentAt,
+          })
+          // (boardId, seq) is unique — makes a multi-instance double-flush a no-op.
+          .onConflictDoNothing();
+      }
+    } catch (error) {
+      logger.warn(`[board-presence] durable board_climb_events insert failed: ${String(error)}`);
+    }
 
     return true;
   },

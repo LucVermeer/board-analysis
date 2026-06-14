@@ -2,12 +2,13 @@ import { useMemo } from 'react';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import { NativeTabs } from 'expo-router/unstable-native-tabs';
 import { useQueue } from '../../providers/queue-provider';
-import { glassSize } from '../../theme/layout';
+import {
+  glassSize,
+  NATIVE_BOTTOM_ACCESSORY_MAX_WIDTH,
+  NATIVE_BOTTOM_ACCESSORY_SCREEN_GUTTER,
+} from '../../theme/layout';
 import { NativeAccessoryClimbRow } from './NativeAccessoryClimbRow';
 import { useWallOrQueueCurrentClimb } from './use-wall-or-queue-climb';
-
-const ACCESSORY_MAX_WIDTH = 344;
-const ACCESSORY_SCREEN_GUTTER = 32;
 
 /**
  * iOS 26 tab-bar bottom accessory content. UIKit supplies the outer Liquid Glass
@@ -24,7 +25,10 @@ export function QueueBottomAccessory() {
   const currentClimb = useWallOrQueueCurrentClimb(state.currentClimbQueueItem?.climb ?? null);
 
   const accessoryWidth = useMemo(() => {
-    return Math.max(glassSize.standard * 2, Math.min(ACCESSORY_MAX_WIDTH, screenWidth - ACCESSORY_SCREEN_GUTTER));
+    return Math.max(
+      glassSize.standard * 2,
+      Math.min(NATIVE_BOTTOM_ACCESSORY_MAX_WIDTH, screenWidth - NATIVE_BOTTOM_ACCESSORY_SCREEN_GUTTER),
+    );
   }, [screenWidth]);
 
   if (!currentClimb) return null;

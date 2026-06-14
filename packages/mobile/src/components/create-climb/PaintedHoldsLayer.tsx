@@ -2,7 +2,11 @@ import React, { useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
 import type { LitUpHoldsMap } from '@boardsesh/shared-schema';
 import type { BoardHoldTarget } from '../../lib/create-board-holds';
-import { getEffectiveHoldStateColor, useHoldColorOverrides } from '../../lib/hold-color-overrides';
+import {
+  getEffectiveHoldStateColor,
+  getEffectiveHoldStateShape,
+  useHoldColorOverrides,
+} from '../../lib/hold-color-overrides';
 import { holdGeometry } from './holdLayout';
 import { PaintedRing } from './PaintedRing';
 
@@ -28,7 +32,12 @@ export const PaintedHoldsLayer = React.memo(function PaintedHoldsLayer({
   measuredWidth,
   mirrored,
 }: PaintedHoldsLayerProps) {
-  const { overrides: holdColorOverrides } = useHoldColorOverrides();
+  const {
+    overrides: holdColorOverrides,
+    shapes: holdShapeOverrides,
+    brushThickness,
+    shapeSize,
+  } = useHoldColorOverrides();
 
   const rings = useMemo(() => {
     if (measuredWidth <= 0) return [];
@@ -45,11 +54,25 @@ export const PaintedHoldsLayer = React.memo(function PaintedHoldsLayer({
             topPct={geometry.topPct}
             diameter={geometry.ringDiameter}
             color={getEffectiveHoldStateColor(hold.state, hold.displayColor || hold.color, holdColorOverrides)}
+            shape={getEffectiveHoldStateShape(hold.state, holdShapeOverrides)}
+            brushThickness={brushThickness}
+            shapeSize={shapeSize}
           />
         );
       })
       .filter(Boolean);
-  }, [litUpHoldsMap, holdById, boardWidth, boardHeight, measuredWidth, mirrored, holdColorOverrides]);
+  }, [
+    litUpHoldsMap,
+    holdById,
+    boardWidth,
+    boardHeight,
+    measuredWidth,
+    mirrored,
+    holdColorOverrides,
+    holdShapeOverrides,
+    brushThickness,
+    shapeSize,
+  ]);
 
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>

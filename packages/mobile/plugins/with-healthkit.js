@@ -6,7 +6,8 @@ const { createRunOncePlugin, withEntitlementsPlist, withInfoPlist } = require('e
 // (or a double-registered plugin) leaves both plists unchanged because we set
 // the same keys to the same values.
 const HEALTH_UPDATE_USAGE = 'Boardsesh saves your finished climbing sessions to Apple Health as workouts.';
-const HEALTH_SHARE_USAGE = 'Boardsesh reads your body weight to estimate calories burned during climbing sessions.';
+const HEALTH_SHARE_USAGE =
+  'Boardsesh reads your body weight to estimate calories and your saved Boardsesh workouts to prevent duplicates.';
 
 function withHealthKitEntitlement(config) {
   return withEntitlementsPlist(config, (modConfig) => {

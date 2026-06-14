@@ -224,23 +224,26 @@ export const climbMutations = {
       }
     });
 
-    await publishSocialEvent({
-      type: 'climb.created',
-      actorId: ctx.userId!,
-      entityType: 'climb',
-      entityId: uuid,
-      timestamp: Date.now(),
-      metadata: {
-        boardType: validated.boardType,
-        layoutId: String(validated.layoutId),
-        climbName: validated.name,
-        climbUuid: uuid,
-        angle: String(validated.angle),
-        frames: validated.frames,
-        setterDisplayName: preferredSetter || '',
-        setterAvatarUrl: avatarUrl || '',
-      },
-    });
+    if (!validated.isDraft) {
+      await publishSocialEvent({
+        type: 'climb.created',
+        actorId: ctx.userId!,
+        entityType: 'climb',
+        entityId: uuid,
+        timestamp: Date.now(),
+        metadata: {
+          boardType: validated.boardType,
+          layoutId: String(validated.layoutId),
+          climbName: validated.name,
+          climbUuid: uuid,
+          angle: String(validated.angle),
+          frames: validated.frames,
+          setterUsername: preferredSetter || '',
+          setterDisplayName: preferredSetter || '',
+          setterAvatarUrl: avatarUrl || '',
+        },
+      });
+    }
 
     return { uuid, synced: false, createdAt: now, publishedAt };
   },
@@ -376,24 +379,27 @@ export const climbMutations = {
         });
     }
 
-    await publishSocialEvent({
-      type: 'climb.created',
-      actorId: ctx.userId!,
-      entityType: 'climb',
-      entityId: uuid,
-      timestamp: Date.now(),
-      metadata: {
-        boardType: validated.boardType,
-        layoutId: String(validated.layoutId),
-        climbName: validated.name,
-        climbUuid: uuid,
-        angle: String(validated.angle),
-        frames,
-        setterDisplayName: preferredSetter || '',
-        setterAvatarUrl: avatarUrl || '',
-        difficultyName: validated.userGrade || '',
-      },
-    });
+    if (!isDraft) {
+      await publishSocialEvent({
+        type: 'climb.created',
+        actorId: ctx.userId!,
+        entityType: 'climb',
+        entityId: uuid,
+        timestamp: Date.now(),
+        metadata: {
+          boardType: validated.boardType,
+          layoutId: String(validated.layoutId),
+          climbName: validated.name,
+          climbUuid: uuid,
+          angle: String(validated.angle),
+          frames,
+          setterUsername: preferredSetter || '',
+          setterDisplayName: preferredSetter || '',
+          setterAvatarUrl: avatarUrl || '',
+          difficultyName: validated.userGrade || '',
+        },
+      });
+    }
 
     return { uuid, synced: false, createdAt: now, publishedAt };
   },
@@ -642,6 +648,7 @@ export const climbMutations = {
           climbUuid: validated.uuid,
           angle: validated.angle !== undefined ? String(validated.angle) : '',
           frames: validated.frames ?? '',
+          setterUsername: existing.setterUsername ?? preferredSetter ?? '',
           setterDisplayName: preferredSetter || '',
           setterAvatarUrl: avatarUrl || '',
         },

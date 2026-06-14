@@ -38,6 +38,11 @@ describe('getBaseFilterParts', () => {
     expect(getBaseFilterParts(filters, mockGrades, labels)).toEqual(['V2–V6']);
   });
 
+  it('shows a single grade name when min and max are the same grade', () => {
+    const filters: BaseFilters = { minGrade: 15, maxGrade: 15 };
+    expect(getBaseFilterParts(filters, mockGrades, labels)).toEqual(['V6']);
+  });
+
   it('shows min grade with plus', () => {
     expect(getBaseFilterParts({ minGrade: 10 }, mockGrades, labels)).toEqual(['V4+']);
   });

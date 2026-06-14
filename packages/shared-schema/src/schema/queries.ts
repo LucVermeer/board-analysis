@@ -34,6 +34,12 @@ export const queriesTypeDefs = /* GraphQL */ `
     sessionSummary(sessionId: ID!): SessionSummary
 
     """
+    Get viewer-specific session data for an Apple Health workout export.
+    Requires authentication and returns only the requesting user's ticks.
+    """
+    sessionHealthExport(sessionId: ID!): SessionHealthExport
+
+    """
     Lightweight, presence-independent lifecycle check for a session.
     Reads the durable session row (not live Redis presence), so it tells an
     ended session apart from one that is merely empty. Returns null when the
@@ -390,6 +396,17 @@ export const queriesTypeDefs = /* GraphQL */ `
     \`boardNowPlaying\` subscription takes over.
     """
     boardRecentClimbs(boardId: Int!): [BoardPresenceClimb!]!
+
+    """
+    Durable history of what was pushed to a board (survives past the 24h Redis
+    window), newest-first by \`seq\`. For keyset paging pass the \`seq\` of the
+    last item from the previous page as \`before\` (not \`sentAt\`) — \`seq\` is
+    unique and monotonic per board, so paging never repeats or skips even when
+    several sends share a \`sentAt\` second. A non-integer \`before\` is rejected
+    with BAD_USER_INPUT. \`limit\` is capped at 100. This is the lasting "what
+    was on the wall" record; \`boardRecentClimbs\` is the hot 24h cache.
+    """
+    boardHistory(boardId: Int!, limit: Int, before: String): [BoardPresenceClimb!]!
 
     """
     Lightweight stats for a board's wall feed — durable counts derived from

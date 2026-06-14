@@ -9,6 +9,10 @@ type ViewProps = {
   pointerEvents?: string;
 };
 
+const chartProps = vi.hoisted(() => ({
+  latest: null as Record<string, unknown> | null,
+}));
+
 vi.mock('react-native', () => ({
   View: ({ children, pointerEvents }: ViewProps) =>
     createElement('div', { 'data-pointer-events': pointerEvents ?? '' }, children),
@@ -33,7 +37,10 @@ vi.mock('../../../Icon', () => ({
 }));
 
 vi.mock('../../../you/YouCharts', () => ({
-  StackedBarChart: () => createElement('div', { 'data-testid': 'chart' }),
+  StackedBarChart: (props: Record<string, unknown>) => {
+    chartProps.latest = props;
+    return createElement('div', { 'data-testid': 'chart' });
+  },
 }));
 
 vi.mock('../../../../providers/theme-provider', () => ({
@@ -80,5 +87,8 @@ describe('WorkoutTypeShelf', () => {
     const { getByTestId } = render(createElement(WorkoutTypeShelf, { items: [item()] }));
 
     expect(getByTestId('chart').parentElement?.getAttribute('data-pointer-events')).toBe('none');
+    expect(chartProps.latest?.fitYAxisToData).toBe(true);
+    expect(chartProps.latest?.interactive).toBe(false);
+    expect(chartProps.latest?.zoomable).toBe(false);
   });
 });

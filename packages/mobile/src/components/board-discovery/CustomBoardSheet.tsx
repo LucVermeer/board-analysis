@@ -1,6 +1,7 @@
 import { forwardRef, useEffect, useMemo, useState } from 'react';
-import { View, ScrollView, Pressable, StyleSheet } from 'react-native';
+import { ScrollView, Pressable, StyleSheet } from 'react-native';
 import type BottomSheet from '@gorhom/bottom-sheet';
+import { BottomSheetTextInput } from '@gorhom/bottom-sheet';
 import { useTranslation } from 'react-i18next';
 import type { BoardName, UserBoard } from '@boardsesh/shared-schema';
 import { SUPPORTED_BOARDS, ANGLES, normaliseSetIds } from '@boardsesh/board-config';
@@ -64,6 +65,9 @@ export const CustomBoardSheet = forwardRef<BottomSheet, CustomBoardSheetProps>(f
   const [sizeId, setSizeId] = useState<number | null>(null);
   const [setIds, setSetIds] = useState<number[]>([]);
   const [angle, setAngle] = useState<number>(40);
+  // Optional display name. When blank we fall back to the layout name on create,
+  // so naming stays optional but a user with several boards can tell them apart.
+  const [name, setName] = useState('');
 
   // Start fresh on each open: dismissing a half-configured builder and
   // reopening it should present a clean slate, not stale selections.
@@ -73,6 +77,7 @@ export const CustomBoardSheet = forwardRef<BottomSheet, CustomBoardSheetProps>(f
     setSizeId(null);
     setSetIds([]);
     setAngle(40);
+    setName('');
   };
 
   // Pre-fill from a seed (e.g. a tapped Popular config). Applied whenever the
@@ -97,6 +102,7 @@ export const CustomBoardSheet = forwardRef<BottomSheet, CustomBoardSheetProps>(f
     [boardName, layoutId, sizeId],
   );
   const angles = ANGLES[boardName] ?? [];
+  const layoutName = layouts.find((layout) => layout.id === layoutId)?.name ?? boardName;
 
   // Reset everything below a changed level so the cascade stays consistent.
   const selectBoard = (next: BoardName) => {
@@ -143,14 +149,13 @@ export const CustomBoardSheet = forwardRef<BottomSheet, CustomBoardSheetProps>(f
       return;
     }
 
-    const layoutName = layouts.find((l) => l.id === layoutId)?.name ?? boardName;
     try {
       const board = await createBoard.mutateAsync({
         boardType: boardName,
         layoutId,
         sizeId,
         setIds: wireSetIds,
-        name: layoutName,
+        name: name.trim() || layoutName,
         angle,
         isOwned: true,
       });
@@ -268,6 +273,30 @@ export const CustomBoardSheet = forwardRef<BottomSheet, CustomBoardSheetProps>(f
           </>
         ) : null}
 
+        {layoutId != null ? (
+          <>
+            <Text variant="footnote" color={systemColors.secondaryLabel} style={styles.sectionLabel}>
+              {t('mobile.custom.name')}
+            </Text>
+            <BottomSheetTextInput
+              value={name}
+              onChangeText={setName}
+              placeholder={layoutName}
+              placeholderTextColor={systemColors.tertiaryLabel}
+              maxLength={100}
+              returnKeyType="done"
+              style={[
+                styles.input,
+                {
+                  color: systemColors.label,
+                  borderColor: systemColors.separator,
+                  backgroundColor: systemColors.secondaryBackground,
+                },
+              ]}
+            />
+          </>
+        ) : null}
+
         <Button
           title={t('mobile.custom.start')}
           onPress={() => void handleCreate()}
@@ -305,6 +334,14 @@ const styles = StyleSheet.create({
     paddingVertical: spacing[2],
     borderRadius: borderRadius.full,
     borderWidth: StyleSheet.hairlineWidth,
+  },
+  input: {
+    marginTop: spacing[1],
+    paddingHorizontal: spacing[3],
+    paddingVertical: spacing[3],
+    borderRadius: borderRadius.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    fontSize: 17,
   },
   cta: {
     marginTop: spacing[6],

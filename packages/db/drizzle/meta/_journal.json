@@ -876,6 +876,27 @@
       "when": 1781224128814,
       "tag": "0124_majestic_pixie",
       "breakpoints": true
+    },
+    {
+      "idx": 125,
+      "version": "7",
+      "when": 1781344692204,
+      "tag": "0125_board_serial_non_unique",
+      "breakpoints": true
+    },
+    {
+      "idx": 126,
+      "version": "7",
+      "when": 1781357877930,
+      "tag": "0126_board_climb_events",
+      "breakpoints": true
+    },
+    {
+      "idx": 127,
+      "version": "7",
+      "when": 1781398035290,
+      "tag": "0127_backfill_gym_location_trigger",
+      "breakpoints": true
     }
   ]
 }

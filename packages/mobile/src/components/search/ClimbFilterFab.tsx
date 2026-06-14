@@ -1,7 +1,10 @@
-import { Pressable, StyleSheet, View } from 'react-native';
+import { useEffect } from 'react';
+import { Pressable, StyleSheet } from 'react-native';
+import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import type { Grade } from '@boardsesh/shared-schema';
 import type { GradeBound } from '@boardsesh/climb-filters';
 import { spacing } from '../../theme/tokens';
+import { timing } from '../../theme/animations';
 import { FILTER_FAB_SIZE, FilterButton } from './FilterButton';
 import { GradeRangeRail } from '../grade';
 
@@ -28,6 +31,17 @@ export function ClimbFilterFab({
   onCloseGrade,
   onGradeChange,
 }: ClimbFilterFabProps) {
+  const animatedBottom = useSharedValue(bottom);
+
+  useEffect(() => {
+    animatedBottom.value = withTiming(bottom, { duration: timing.normal });
+  }, [animatedBottom, bottom]);
+
+  const fabSlotStyle = useAnimatedStyle(() => ({ bottom: animatedBottom.value }));
+  const gradeRailSlotStyle = useAnimatedStyle(() => ({
+    bottom: animatedBottom.value + FILTER_FAB_SIZE + spacing[2],
+  }));
+
   return (
     <>
       {gradeRailVisible ? (
@@ -39,16 +53,13 @@ export function ClimbFilterFab({
         />
       ) : null}
       {gradeRailVisible ? (
-        <View
-          pointerEvents="box-none"
-          style={[styles.gradeRailSlot, { bottom: bottom + FILTER_FAB_SIZE + spacing[2] }]}
-        >
+        <Animated.View pointerEvents="box-none" style={[styles.gradeRailSlot, gradeRailSlotStyle]}>
           <GradeRangeRail grades={grades} bound={bound} onChange={onGradeChange} onRequestClose={onCloseGrade} />
-        </View>
+        </Animated.View>
       ) : null}
-      <View pointerEvents="box-none" style={[styles.fabSlot, { bottom }]}>
+      <Animated.View pointerEvents="box-none" style={[styles.fabSlot, fabSlotStyle]}>
         <FilterButton activeFilterCount={activeFilterCount} onPress={onOpenFilters} onLongPress={onOpenGrade} />
-      </View>
+      </Animated.View>
     </>
   );
 }
@@ -66,6 +77,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: spacing[4],
     right: spacing[4],
+    bottom: 0,
     zIndex: 20,
   },
   fabSlot: {

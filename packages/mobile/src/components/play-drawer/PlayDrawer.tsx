@@ -522,6 +522,9 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
           });
         })
         .catch((error: unknown) => {
+          // takeControl/releaseControl already report via the queue-provider
+          // chokepoint (showQueueMutationErrorToast) before rethrowing, so don't
+          // report again here — it would double-count and leak rate-limited ops.
           console.error('[playDrawer] failed to release wall control:', error);
         });
       return;

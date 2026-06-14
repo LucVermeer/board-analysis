@@ -5,7 +5,7 @@ const DEFAULT_EAS_PROJECT_ID = '87499648-655e-4fb8-9856-65da37e55fb1';
 const EAS_PROJECT_ID = process.env.EXPO_PUBLIC_EAS_PROJECT_ID ?? DEFAULT_EAS_PROJECT_ID;
 const HEALTH_UPDATE_USAGE_DESCRIPTION = 'Boardsesh saves your finished climbing sessions to Apple Health as workouts.';
 const HEALTH_SHARE_USAGE_DESCRIPTION =
-  'Boardsesh reads your body weight to estimate calories burned during climbing sessions.';
+  'Boardsesh reads your body weight to estimate calories and your saved Boardsesh workouts to prevent duplicates.';
 
 function resolveDevMetadata(): {
   branchName: string | null;

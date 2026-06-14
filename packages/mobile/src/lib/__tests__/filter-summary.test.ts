@@ -51,6 +51,11 @@ describe('getFilterSummary', () => {
     expect(getFilterSummary(filters, '', mockGrades, mockT)).toBe('V2–V6');
   });
 
+  it('shows a single grade name when min and max are the same grade', () => {
+    const filters: ClimbFilters = { ...DEFAULT_FILTERS, minGrade: 15, maxGrade: 15 };
+    expect(getFilterSummary(filters, '', mockGrades, mockT)).toBe('V6');
+  });
+
   it('shows min grade with plus sign', () => {
     const filters: ClimbFilters = { ...DEFAULT_FILTERS, minGrade: 10 };
     expect(getFilterSummary(filters, '', mockGrades, mockT)).toBe('V4+');

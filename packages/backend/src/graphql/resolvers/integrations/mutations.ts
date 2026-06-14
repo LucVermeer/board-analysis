@@ -118,8 +118,8 @@ export const integrationMutations = {
     const providerName = providerEnumToDb(provider);
 
     // Authorize: the caller must be the session creator or have logged at least
-    // one tick in it (the creator-or-has-ticks rule from
-    // setInferredSessionHealthKitWorkoutId, adapted to party ticks). The tick
+    // one tick in it (the same creator-or-has-ticks rule used by
+    // setSessionHealthKitWorkoutId, adapted to party ticks). The tick
     // check rides the session SELECT as an EXISTS so authorization reads one
     // consistent snapshot — two sequential queries would leave a window where
     // membership changes between them.

@@ -95,6 +95,17 @@ export function buildBoardWriteIdentifiers(record: ValidBoardLocation): {
   };
 }
 
+/**
+ * Upserts public gym + board locations from a sync source.
+ *
+ * HARD DEPENDENCY on migration 0127: the PostGIS `location` geography is no
+ * longer written here — it's derived from lat/lng by the gyms_set_location /
+ * user_boards_set_location triggers. Run against a pre-0127 database (a stale
+ * snapshot, a developer volume that never migrated) the upserts succeed but
+ * `location` stays NULL and proximity search silently returns nothing. Always
+ * migrate to >= 0127 before running a location sync. Covered by
+ * packages/db's location-trigger integration test.
+ */
 export async function upsertPublicBoardLocations(
   db: DrizzleDb,
   records: PublicBoardLocationInput[],
@@ -134,9 +145,9 @@ export async function upsertPublicBoardLocations(
       .returning({ id: gyms.id });
 
     if (upsertedGym) {
-      await db.execute(
-        sql`UPDATE gyms SET location = ST_MakePoint(${record.longitude}, ${record.latitude})::geography WHERE id = ${upsertedGym.id}`,
-      );
+      // The PostGIS `location` geography is derived from lat/lng by the
+      // gyms_set_location trigger (migration 0127), so the upsert above already
+      // populated it — no separate geography write needed.
       gymIdBySource.set(sourceKey, upsertedGym.id);
     }
   }
@@ -196,9 +207,8 @@ export async function upsertPublicBoardLocations(
       .returning({ id: userBoards.id });
 
     if (upsertedBoard) {
-      await db.execute(
-        sql`UPDATE user_boards SET location = ST_MakePoint(${record.longitude}, ${record.latitude})::geography WHERE id = ${upsertedBoard.id}`,
-      );
+      // `location` is maintained by the user_boards_set_location trigger
+      // (migration 0127); the upsert's lat/lng write already set it.
       boardsUpserted += 1;
     }
   }

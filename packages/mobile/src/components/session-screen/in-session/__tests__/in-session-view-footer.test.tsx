@@ -102,7 +102,7 @@ vi.mock('../../../EndSessionSheet', () => ({
     return null;
   },
 }));
-vi.mock('../../../../lib/error-reporting', () => ({ reportError: vi.fn() }));
+vi.mock('../../../../lib/error-reporting', () => ({ reportError: vi.fn(), reportHandledError: vi.fn() }));
 vi.mock('../../../Icon', () => ({ Icon: () => null }));
 vi.mock('../../../Text', () => ({
   Text: ({ children }: { children?: ReactNode }) => createElement('span', null, children),
@@ -243,11 +243,6 @@ describe('InSessionView footer', () => {
       await Promise.resolve();
     });
 
-    // Mocked session detail has no ticks and no active board, so the export
-    // context is empty — the assertion pins the handoff, not the contents.
-    expect(integrations.runSessionEndExports).toHaveBeenCalledWith(summary, {
-      boardType: '',
-      lapTimestamps: [],
-    });
+    expect(integrations.runSessionEndExports).toHaveBeenCalledWith(summary, {});
   });
 });

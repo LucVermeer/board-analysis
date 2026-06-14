@@ -75,7 +75,7 @@ import { toClimbQueueItem, type SubscriptionQueueItem } from '../lib/queue-conve
 import { toMobileSessionRuntimeEvent } from '../lib/session-runtime-event';
 import { climbToQueueItem, toClimbInput } from '../lib/climb-to-queue-item';
 import { track } from '../lib/analytics';
-import { reportError } from '../lib/error-reporting';
+import { reportError, reportHandledError } from '../lib/error-reporting';
 import { extractGraphqlMessage, isGraphqlRateLimitedError } from '../lib/graphql/extract-error-message';
 import { useToast } from './toast-provider';
 import { useQueueSnackbar } from './queue-snackbar-provider';
@@ -102,9 +102,13 @@ function showQueueMutationErrorToast(
   showToast: (message: string, variant: 'error') => void,
 ): void {
   if (error instanceof GraphQLOperationError && isRateLimitedExtension(error.extensions)) {
+    // Rate-limiting is expected user-pacing, not a bug — toast only, no report.
     showToast(t('mobile.queue.rateLimited'), 'error');
   } else {
     showToast(t('mobile.queue.actionFailed'), 'error');
+    // These mutations are direct GraphQL-WS ops (@boardsesh/queue-react), so the
+    // React Query MutationCache doesn't see them — report here instead.
+    reportHandledError(error, { tags: { source: 'queue-mutation' } });
   }
 }
 
@@ -631,6 +635,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
         logJoinFailure(joinError);
         if (joinRetryCount === 0) {
           showToastRef.current(tRef.current('mobile.queue.syncError'), 'error');
+          reportHandledError(joinError, { tags: { source: 'queue-sync', op: 'join' } });
         }
         scheduleJoinRetry(currentStartToken);
         return;
@@ -954,7 +959,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
               await clearStoredQueueSnapshot();
             } catch (seedError) {
               if (__DEV__) console.warn('[queue] session queue seed failed', seedError);
-              reportError(seedError, { tags: { source: 'startSessionSeed' } });
+              reportHandledError(seedError, { tags: { source: 'startSessionSeed' } });
             }
           }
           setSessionId(newId);
@@ -1131,6 +1136,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       return true;
     } catch (error) {
       if (__DEV__) console.warn('[queue] resyncQueueFromServer failed', error);
+      reportHandledError(error, { tags: { source: 'queue-sync', op: 'resync' } });
       return false;
     } finally {
       resyncInFlightRef.current = false;

@@ -27,6 +27,10 @@ export type ActivityFeedInput = {
   boardUuid?: InputMaybe<Scalars['String']['input']>;
   /** Cursor from previous page */
   cursor?: InputMaybe<Scalars['String']['input']>;
+  /** Restrict results to users followed by the authenticated viewer */
+  followingOnly?: InputMaybe<Scalars['Boolean']['input']>;
+  /** Include one daily hardest-send card for followed/user-filtered days without explicit sessions */
+  includeDailyHighlights?: InputMaybe<Scalars['Boolean']['input']>;
   /** Maximum number of items to return */
   limit?: InputMaybe<Scalars['Int']['input']>;
   /** Filter sessions where this user is a participant */
@@ -58,6 +62,8 @@ export type ActivityFeedItem = {
   comment?: Maybe<Scalars['String']['output']>;
   /** Comment body preview */
   commentBody?: Maybe<Scalars['String']['output']>;
+  /** Number of comments on the social entity */
+  commentCount?: Maybe<Scalars['Int']['output']>;
   /** When this feed item was created (ISO 8601) */
   createdAt: Scalars['String']['output'];
   /** Difficulty rating */
@@ -208,6 +214,10 @@ export type AscentFeedItem = {
   angle: Scalars['Int']['output'];
   /** Number of attempts */
   attemptCount: Scalars['Int']['output'];
+  /** Specific board display name, when this ascent is safe to associate with a named board */
+  boardDisplayName?: Maybe<Scalars['String']['output']>;
+  /** Specific board entity id, when this ascent is safe to associate with a named board */
+  boardId?: Maybe<Scalars['Int']['output']>;
   /** Board type */
   boardType: Scalars['String']['output'];
   /** Name of the climb */
@@ -329,6 +339,39 @@ export type BetaLinkPreview = {
   link: Scalars['String']['output'];
   thumbnail?: Maybe<Scalars['String']['output']>;
   username?: Maybe<Scalars['String']['output']>;
+};
+
+/**
+ * One board sharing a (non-unique) BLE serial, shown to the user when a serial
+ * maps to more than one board so they can pick which wall they're at. Location
+ * fields are redacted for non-public boards the caller doesn't own.
+ */
+export type BoardCandidate = {
+  __typename?: 'BoardCandidate';
+  /** Shared board id (userBoards.id) */
+  boardId: Scalars['Int']['output'];
+  /** Display name of the board */
+  boardName: Scalars['String']['output'];
+  /** Board type (kilter, tension, ...) */
+  boardType: Scalars['String']['output'];
+  /** Board uuid */
+  boardUuid: Scalars['ID']['output'];
+  /** Linked gym name (null when redacted or no gym) */
+  gymName?: Maybe<Scalars['String']['output']>;
+  /** True when the calling user owns this board */
+  isOwnedByMe: Scalars['Boolean']['output'];
+  /** Whether the board is publicly listed */
+  isPublic: Scalars['Boolean']['output'];
+  /** ISO 8601 of the most recent tick on this board, if any */
+  lastSentAt?: Maybe<Scalars['String']['output']>;
+  /** Layout id */
+  layoutId: Scalars['Int']['output'];
+  /** Human-readable location (null when redacted) */
+  locationName?: Maybe<Scalars['String']['output']>;
+  /** Comma-separated set ids */
+  setIds: Scalars['String']['output'];
+  /** Size id */
+  sizeId: Scalars['Int']['output'];
 };
 
 /**
@@ -1966,6 +2009,13 @@ export type Mutation = {
   attachBetaLink: Scalars['Boolean']['output'];
   authorizeControllerForSession: Scalars['Boolean']['output'];
   /**
+   * Confirm which board a (non-unique) serial routes to after the user picks
+   * from a disambiguation prompt. Remembers the choice per user so the prompt
+   * doesn't reappear, and returns the bound board. The board must be active and
+   * actually carry the serial.
+   */
+  chooseBoardForSerial: ResolvedBoard;
+  /**
    * Confirm to all session participants that a climb was successfully relayed to the wall
    * over BLE from this client's phone. Any session participant may call (no driver
    * requirement) — the BLE-capable phone that handled the send is the source of truth for
@@ -2118,17 +2168,27 @@ export type Mutation = {
    */
   reportBoardClimb: Scalars['Boolean']['output'];
   /**
+   * Resolve a BLE serial for clients that can disambiguate. Returns a single
+   * `board` when the serial is unambiguous (remembered choice, only one match,
+   * or freshly created), or a list of `candidates` when several boards share
+   * the serial and the user must pick which wall they're at. Confirm the pick
+   * with `chooseBoardForSerial`. The config args create the board the first
+   * time a serial is seen.
+   */
+  resolveBoardCandidatesForSerial: ResolveBoardResult;
+  /**
    * Resolve the shared board feed for boards without a BLE serial. This is a
    * per-config fallback in v1: every caller with the same board type, layout,
    * size, and set IDs gets the same shared board id.
    */
   resolveBoardForConfig: ResolvedBoard;
   /**
-   * Resolve (and bind) the shared board for a BLE serial. Returns the one board
-   * everyone at this physical wall shares; find-or-creates on first sighting
-   * (owned by the first connector) and enforces serial → exactly one board.
-   * Called once on BLE connect; supplies the board name the UI shows. The board
-   * config args are used only to create the board the first time a serial is seen.
+   * Legacy serial resolver, kept for already-shipped clients that can't render
+   * a disambiguation prompt: always returns a single board. Serials are no
+   * longer globally unique, so when several boards share one this auto-picks
+   * (the caller's own board if present, else the oldest) and remembers it.
+   * New clients should call `resolveBoardCandidatesForSerial`. The board config
+   * args are used only to create the board the first time a serial is seen.
    */
   resolveBoardForSerial: ResolvedBoard;
   /**
@@ -2311,6 +2371,12 @@ export type MutationAttachBetaLinkArgs = {
 export type MutationAuthorizeControllerForSessionArgs = {
   controllerId: Scalars['ID']['input'];
   sessionId: Scalars['ID']['input'];
+};
+
+/** Root mutation type for all write operations. */
+export type MutationChooseBoardForSerialArgs = {
+  boardId: Scalars['Int']['input'];
+  serial: Scalars['String']['input'];
 };
 
 /** Root mutation type for all write operations. */
@@ -2557,6 +2623,15 @@ export type MutationReportBoardClimbArgs = {
   angle?: InputMaybe<Scalars['Int']['input']>;
   boardId: Scalars['Int']['input'];
   climb: ClimbQueueItemInput;
+};
+
+/** Root mutation type for all write operations. */
+export type MutationResolveBoardCandidatesForSerialArgs = {
+  boardType: Scalars['String']['input'];
+  layoutId: Scalars['Int']['input'];
+  serial: Scalars['String']['input'];
+  setIds: Scalars['String']['input'];
+  sizeId: Scalars['Int']['input'];
 };
 
 /** Root mutation type for all write operations. */
@@ -3245,6 +3320,16 @@ export type Query = {
   board?: Maybe<UserBoard>;
   /** Get a board by slug (for URL routing). */
   boardBySlug?: Maybe<UserBoard>;
+  /**
+   * Durable history of what was pushed to a board (survives past the 24h Redis
+   * window), newest-first by `seq`. For keyset paging pass the `seq` of the
+   * last item from the previous page as `before` (not `sentAt`) — `seq` is
+   * unique and monotonic per board, so paging never repeats or skips even when
+   * several sends share a `sentAt` second. A non-integer `before` is rejected
+   * with BAD_USER_INPUT. `limit` is capped at 100. This is the lasting "what
+   * was on the wall" record; `boardRecentClimbs` is the hot 24h cache.
+   */
+  boardHistory: Array<BoardPresenceClimb>;
   /** Get leaderboard for a board. */
   boardLeaderboard: BoardLeaderboard;
   /**
@@ -3476,6 +3561,11 @@ export type Query = {
    */
   sessionGroupedFeed: SessionFeedResult;
   /**
+   * Get viewer-specific session data for an Apple Health workout export.
+   * Requires authentication and returns only the requesting user's ticks.
+   */
+  sessionHealthExport?: Maybe<SessionHealthExport>;
+  /**
    * Lightweight, presence-independent lifecycle check for a session.
    * Reads the durable session row (not live Redis presence), so it tells an
    * ended session apart from one that is merely empty. Returns null when the
@@ -3620,6 +3710,13 @@ export type QueryBoardArgs = {
 /** Root query type for all read operations. */
 export type QueryBoardBySlugArgs = {
   slug: Scalars['String']['input'];
+};
+
+/** Root query type for all read operations. */
+export type QueryBoardHistoryArgs = {
+  before?: InputMaybe<Scalars['String']['input']>;
+  boardId: Scalars['Int']['input'];
+  limit?: InputMaybe<Scalars['Int']['input']>;
 };
 
 /** Root query type for all read operations. */
@@ -3919,6 +4016,11 @@ export type QuerySessionGroupedFeedArgs = {
 };
 
 /** Root query type for all read operations. */
+export type QuerySessionHealthExportArgs = {
+  sessionId: Scalars['ID']['input'];
+};
+
+/** Root query type for all read operations. */
 export type QuerySessionStatusArgs = {
   sessionId: Scalars['ID']['input'];
 };
@@ -4190,6 +4292,20 @@ export type ReorderPlaylistClimbInput = {
   newIndex: Scalars['Int']['input'];
   /** Playlist ID */
   playlistId: Scalars['ID']['input'];
+};
+
+/**
+ * Result of resolving a BLE serial that may map to several boards. Exactly one
+ * of `board` / `candidates` is set: `board` when the serial is unambiguous
+ * (remembered choice, only one match, or freshly created), `candidates` when
+ * the user must pick which wall they're at (confirm with `chooseBoardForSerial`).
+ */
+export type ResolveBoardResult = {
+  __typename?: 'ResolveBoardResult';
+  /** Set when the serial resolves to a single board */
+  board?: Maybe<ResolvedBoard>;
+  /** Set when several boards share the serial and the user must choose */
+  candidates?: Maybe<Array<BoardCandidate>>;
 };
 
 export type ResolveProposalInput = {
@@ -4533,6 +4649,13 @@ export type SessionEvent =
   | UserPresenceChanged
   | WallConfirmedClimb;
 
+/** A beta video paired with the tick it represents in a session feed card. */
+export type SessionFeedBetaHighlight = {
+  __typename?: 'SessionFeedBetaHighlight';
+  betaLink: BetaLink;
+  tick: SessionFeedTickHighlight;
+};
+
 /** A session feed card representing a group of ticks from a climbing session. */
 export type SessionFeedItem = {
   __typename?: 'SessionFeedItem';
@@ -4540,16 +4663,20 @@ export type SessionFeedItem = {
   commentCount: Scalars['Int']['output'];
   downvotes: Scalars['Int']['output'];
   durationMinutes?: Maybe<Scalars['Int']['output']>;
+  featuredBeta?: Maybe<SessionFeedBetaHighlight>;
   firstTickAt: Scalars['String']['output'];
   goal?: Maybe<Scalars['String']['output']>;
   gradeDistribution: Array<SessionGradeDistributionItem>;
   hardestGrade?: Maybe<Scalars['String']['output']>;
+  hardestSend?: Maybe<SessionFeedTickHighlight>;
   lastTickAt: Scalars['String']['output'];
   ownerUserId?: Maybe<Scalars['ID']['output']>;
   participants: Array<SessionFeedParticipant>;
   sessionId: Scalars['ID']['output'];
   sessionName?: Maybe<Scalars['String']['output']>;
   sessionType: Scalars['String']['output'];
+  socialEntityId: Scalars['String']['output'];
+  socialEntityType: SocialEntityType;
   tickCount: Scalars['Int']['output'];
   totalAttempts: Scalars['Int']['output'];
   totalFlashes: Scalars['Int']['output'];
@@ -4575,6 +4702,30 @@ export type SessionFeedResult = {
   cursor?: Maybe<Scalars['String']['output']>;
   hasMore: Scalars['Boolean']['output'];
   sessions: Array<SessionFeedItem>;
+};
+
+/** A highlighted tick used by session feed cards. */
+export type SessionFeedTickHighlight = {
+  __typename?: 'SessionFeedTickHighlight';
+  angle: Scalars['Int']['output'];
+  attemptCount: Scalars['Int']['output'];
+  boardType: Scalars['String']['output'];
+  climbName?: Maybe<Scalars['String']['output']>;
+  climbUuid: Scalars['String']['output'];
+  climbedAt: Scalars['String']['output'];
+  comment?: Maybe<Scalars['String']['output']>;
+  difficulty?: Maybe<Scalars['Int']['output']>;
+  difficultyName?: Maybe<Scalars['String']['output']>;
+  frames?: Maybe<Scalars['String']['output']>;
+  isBenchmark: Scalars['Boolean']['output'];
+  isMirror: Scalars['Boolean']['output'];
+  isNoMatch: Scalars['Boolean']['output'];
+  layoutId?: Maybe<Scalars['Int']['output']>;
+  quality?: Maybe<Scalars['Int']['output']>;
+  setterUsername?: Maybe<Scalars['String']['output']>;
+  status: Scalars['String']['output'];
+  userId: Scalars['String']['output'];
+  uuid: Scalars['ID']['output'];
 };
 
 /** Grade count for session summary grade distribution. */
@@ -4604,6 +4755,57 @@ export type SessionHardestClimb = {
   climbUuid: Scalars['String']['output'];
   /** Grade name */
   grade: Scalars['String']['output'];
+};
+
+/**
+ * Viewer-specific export payload for writing a finished session to Apple Health.
+ * It intentionally contains only the requesting user's ticks and saved workout id.
+ */
+export type SessionHealthExport = {
+  __typename?: 'SessionHealthExport';
+  /** Primary board type for this viewer's workout */
+  boardType: Scalars['String']['output'];
+  /** Duration in minutes */
+  durationMinutes?: Maybe<Scalars['Int']['output']>;
+  /** When the session ended */
+  endedAt?: Maybe<Scalars['String']['output']>;
+  /** Hardest climb the viewer sent during the session */
+  hardestClimb?: Maybe<SessionHardestClimb>;
+  /** Existing Apple Health workout id saved for this viewer/session */
+  healthKitWorkoutId?: Maybe<Scalars['String']['output']>;
+  /** Viewer-owned lap events */
+  laps: Array<SessionHealthExportLap>;
+  /** Session ID */
+  sessionId: Scalars['ID']['output'];
+  /** When the session started */
+  startedAt?: Maybe<Scalars['String']['output']>;
+  /** Viewer-owned attempts, including the successful attempt on sends */
+  totalAttempts: Scalars['Int']['output'];
+  /** Viewer-owned sends */
+  totalSends: Scalars['Int']['output'];
+};
+
+/** One viewer-owned lap/event included in an Apple Health workout export. */
+export type SessionHealthExportLap = {
+  __typename?: 'SessionHealthExportLap';
+  /** Climb angle */
+  angle?: Maybe<Scalars['Int']['output']>;
+  /** Number of attempts represented by this tick */
+  attemptCount: Scalars['Int']['output'];
+  /** Board type */
+  boardType: Scalars['String']['output'];
+  /** Climb name */
+  climbName?: Maybe<Scalars['String']['output']>;
+  /** Climb UUID */
+  climbUuid: Scalars['String']['output'];
+  /** When the lap was logged */
+  climbedAt: Scalars['String']['output'];
+  /** Grade name */
+  grade?: Maybe<Scalars['String']['output']>;
+  /** Tick status (flash, send, attempt) */
+  status: Scalars['String']['output'];
+  /** Tick UUID */
+  tickUuid: Scalars['ID']['output'];
 };
 
 /** Participant stats in a session summary. */
@@ -5702,6 +5904,7 @@ export type ResolversTypes = ResolversObject<{
   AuroraCredentialStatus: ResolverTypeWrapper<AuroraCredentialStatus>;
   BetaLink: ResolverTypeWrapper<BetaLink>;
   BetaLinkPreview: ResolverTypeWrapper<BetaLinkPreview>;
+  BoardCandidate: ResolverTypeWrapper<BoardCandidate>;
   BoardClimbCleared: ResolverTypeWrapper<BoardClimbCleared>;
   BoardClimbSet: ResolverTypeWrapper<BoardClimbSet>;
   BoardLeaderboard: ResolverTypeWrapper<BoardLeaderboard>;
@@ -5868,6 +6071,7 @@ export type ResolversTypes = ResolversObject<{
   RemoveClimbFromPlaylistInput: RemoveClimbFromPlaylistInput;
   RemoveGymMemberInput: RemoveGymMemberInput;
   ReorderPlaylistClimbInput: ReorderPlaylistClimbInput;
+  ResolveBoardResult: ResolverTypeWrapper<ResolveBoardResult>;
   ResolveProposalInput: ResolveProposalInput;
   ResolvedBoard: ResolverTypeWrapper<ResolvedBoard>;
   RevokeRoleInput: RevokeRoleInput;
@@ -5891,12 +6095,16 @@ export type ResolversTypes = ResolversObject<{
   SessionDetailTick: ResolverTypeWrapper<SessionDetailTick>;
   SessionEnded: ResolverTypeWrapper<SessionEnded>;
   SessionEvent: ResolverTypeWrapper<ResolversUnionTypes<ResolversTypes>['SessionEvent']>;
+  SessionFeedBetaHighlight: ResolverTypeWrapper<SessionFeedBetaHighlight>;
   SessionFeedItem: ResolverTypeWrapper<SessionFeedItem>;
   SessionFeedParticipant: ResolverTypeWrapper<SessionFeedParticipant>;
   SessionFeedResult: ResolverTypeWrapper<SessionFeedResult>;
+  SessionFeedTickHighlight: ResolverTypeWrapper<SessionFeedTickHighlight>;
   SessionGradeCount: ResolverTypeWrapper<SessionGradeCount>;
   SessionGradeDistributionItem: ResolverTypeWrapper<SessionGradeDistributionItem>;
   SessionHardestClimb: ResolverTypeWrapper<SessionHardestClimb>;
+  SessionHealthExport: ResolverTypeWrapper<SessionHealthExport>;
+  SessionHealthExportLap: ResolverTypeWrapper<SessionHealthExportLap>;
   SessionParticipant: ResolverTypeWrapper<SessionParticipant>;
   SessionStatsUpdated: ResolverTypeWrapper<SessionStatsUpdated>;
   SessionStatus: SessionStatus;
@@ -5975,6 +6183,7 @@ export type ResolversParentTypes = ResolversObject<{
   AuroraCredentialStatus: AuroraCredentialStatus;
   BetaLink: BetaLink;
   BetaLinkPreview: BetaLinkPreview;
+  BoardCandidate: BoardCandidate;
   BoardClimbCleared: BoardClimbCleared;
   BoardClimbSet: BoardClimbSet;
   BoardLeaderboard: BoardLeaderboard;
@@ -6133,6 +6342,7 @@ export type ResolversParentTypes = ResolversObject<{
   RemoveClimbFromPlaylistInput: RemoveClimbFromPlaylistInput;
   RemoveGymMemberInput: RemoveGymMemberInput;
   ReorderPlaylistClimbInput: ReorderPlaylistClimbInput;
+  ResolveBoardResult: ResolveBoardResult;
   ResolveProposalInput: ResolveProposalInput;
   ResolvedBoard: ResolvedBoard;
   RevokeRoleInput: RevokeRoleInput;
@@ -6155,12 +6365,16 @@ export type ResolversParentTypes = ResolversObject<{
   SessionDetailTick: SessionDetailTick;
   SessionEnded: SessionEnded;
   SessionEvent: ResolversUnionTypes<ResolversParentTypes>['SessionEvent'];
+  SessionFeedBetaHighlight: SessionFeedBetaHighlight;
   SessionFeedItem: SessionFeedItem;
   SessionFeedParticipant: SessionFeedParticipant;
   SessionFeedResult: SessionFeedResult;
+  SessionFeedTickHighlight: SessionFeedTickHighlight;
   SessionGradeCount: SessionGradeCount;
   SessionGradeDistributionItem: SessionGradeDistributionItem;
   SessionHardestClimb: SessionHardestClimb;
+  SessionHealthExport: SessionHealthExport;
+  SessionHealthExportLap: SessionHealthExportLap;
   SessionParticipant: SessionParticipant;
   SessionStatsUpdated: SessionStatsUpdated;
   SessionSummary: SessionSummary;
@@ -6229,6 +6443,7 @@ export type ActivityFeedItemResolvers<
   climbUuid?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   comment?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   commentBody?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  commentCount?: Resolver<Maybe<ResolversTypes['Int']>, ParentType, ContextType>;
   createdAt?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   difficulty?: Resolver<Maybe<ResolversTypes['Int']>, ParentType, ContextType>;
   difficultyName?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
@@ -6283,6 +6498,8 @@ export type AscentFeedItemResolvers<
 > = ResolversObject<{
   angle?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   attemptCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  boardDisplayName?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  boardId?: Resolver<Maybe<ResolversTypes['Int']>, ParentType, ContextType>;
   boardType?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   climbName?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   climbUuid?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
@@ -6361,6 +6578,25 @@ export type BetaLinkPreviewResolvers<
   link?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   thumbnail?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   username?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
+}>;
+
+export type BoardCandidateResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['BoardCandidate'] = ResolversParentTypes['BoardCandidate'],
+> = ResolversObject<{
+  boardId?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  boardName?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  boardType?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  boardUuid?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
+  gymName?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  isOwnedByMe?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
+  isPublic?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
+  lastSentAt?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  layoutId?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  locationName?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  setIds?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  sizeId?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
@@ -7235,6 +7471,12 @@ export type MutationResolvers<
     ContextType,
     RequireFields<MutationAuthorizeControllerForSessionArgs, 'controllerId' | 'sessionId'>
   >;
+  chooseBoardForSerial?: Resolver<
+    ResolversTypes['ResolvedBoard'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationChooseBoardForSerialArgs, 'boardId' | 'serial'>
+  >;
   confirmClimbOnWall?: Resolver<
     ResolversTypes['Session'],
     ParentType,
@@ -7502,6 +7744,15 @@ export type MutationResolvers<
     ParentType,
     ContextType,
     RequireFields<MutationReportBoardClimbArgs, 'boardId' | 'climb'>
+  >;
+  resolveBoardCandidatesForSerial?: Resolver<
+    ResolversTypes['ResolveBoardResult'],
+    ParentType,
+    ContextType,
+    RequireFields<
+      MutationResolveBoardCandidatesForSerialArgs,
+      'boardType' | 'layoutId' | 'serial' | 'setIds' | 'sizeId'
+    >
   >;
   resolveBoardForConfig?: Resolver<
     ResolversTypes['ResolvedBoard'],
@@ -8076,6 +8327,12 @@ export type QueryResolvers<
     ContextType,
     RequireFields<QueryBoardBySlugArgs, 'slug'>
   >;
+  boardHistory?: Resolver<
+    Array<ResolversTypes['BoardPresenceClimb']>,
+    ParentType,
+    ContextType,
+    RequireFields<QueryBoardHistoryArgs, 'boardId'>
+  >;
   boardLeaderboard?: Resolver<
     ResolversTypes['BoardLeaderboard'],
     ParentType,
@@ -8400,6 +8657,12 @@ export type QueryResolvers<
     ContextType,
     Partial<QuerySessionGroupedFeedArgs>
   >;
+  sessionHealthExport?: Resolver<
+    Maybe<ResolversTypes['SessionHealthExport']>,
+    ParentType,
+    ContextType,
+    RequireFields<QuerySessionHealthExportArgs, 'sessionId'>
+  >;
   sessionStatus?: Resolver<
     Maybe<ResolversTypes['SessionStatus']>,
     ParentType,
@@ -8623,6 +8886,15 @@ export type RecentBetaLinkResolvers<
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
+export type ResolveBoardResultResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['ResolveBoardResult'] = ResolversParentTypes['ResolveBoardResult'],
+> = ResolversObject<{
+  board?: Resolver<Maybe<ResolversTypes['ResolvedBoard']>, ParentType, ContextType>;
+  candidates?: Resolver<Maybe<Array<ResolversTypes['BoardCandidate']>>, ParentType, ContextType>;
+  __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
+}>;
+
 export type ResolvedBoardResolvers<
   ContextType = ConnectionContext,
   ParentType extends ResolversParentTypes['ResolvedBoard'] = ResolversParentTypes['ResolvedBoard'],
@@ -8793,6 +9065,16 @@ export type SessionEventResolvers<
   >;
 }>;
 
+export type SessionFeedBetaHighlightResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['SessionFeedBetaHighlight'] =
+    ResolversParentTypes['SessionFeedBetaHighlight'],
+> = ResolversObject<{
+  betaLink?: Resolver<ResolversTypes['BetaLink'], ParentType, ContextType>;
+  tick?: Resolver<ResolversTypes['SessionFeedTickHighlight'], ParentType, ContextType>;
+  __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
+}>;
+
 export type SessionFeedItemResolvers<
   ContextType = ConnectionContext,
   ParentType extends ResolversParentTypes['SessionFeedItem'] = ResolversParentTypes['SessionFeedItem'],
@@ -8801,16 +9083,20 @@ export type SessionFeedItemResolvers<
   commentCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   downvotes?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   durationMinutes?: Resolver<Maybe<ResolversTypes['Int']>, ParentType, ContextType>;
+  featuredBeta?: Resolver<Maybe<ResolversTypes['SessionFeedBetaHighlight']>, ParentType, ContextType>;
   firstTickAt?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   goal?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   gradeDistribution?: Resolver<Array<ResolversTypes['SessionGradeDistributionItem']>, ParentType, ContextType>;
   hardestGrade?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  hardestSend?: Resolver<Maybe<ResolversTypes['SessionFeedTickHighlight']>, ParentType, ContextType>;
   lastTickAt?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   ownerUserId?: Resolver<Maybe<ResolversTypes['ID']>, ParentType, ContextType>;
   participants?: Resolver<Array<ResolversTypes['SessionFeedParticipant']>, ParentType, ContextType>;
   sessionId?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
   sessionName?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   sessionType?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  socialEntityId?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  socialEntityType?: Resolver<ResolversTypes['SocialEntityType'], ParentType, ContextType>;
   tickCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   totalAttempts?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   totalFlashes?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
@@ -8843,6 +9129,33 @@ export type SessionFeedResultResolvers<
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
+export type SessionFeedTickHighlightResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['SessionFeedTickHighlight'] =
+    ResolversParentTypes['SessionFeedTickHighlight'],
+> = ResolversObject<{
+  angle?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  attemptCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  boardType?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  climbName?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  climbUuid?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  climbedAt?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  comment?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  difficulty?: Resolver<Maybe<ResolversTypes['Int']>, ParentType, ContextType>;
+  difficultyName?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  frames?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  isBenchmark?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
+  isMirror?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
+  isNoMatch?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
+  layoutId?: Resolver<Maybe<ResolversTypes['Int']>, ParentType, ContextType>;
+  quality?: Resolver<Maybe<ResolversTypes['Int']>, ParentType, ContextType>;
+  setterUsername?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  status?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  userId?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  uuid?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
+  __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
+}>;
+
 export type SessionGradeCountResolvers<
   ContextType = ConnectionContext,
   ParentType extends ResolversParentTypes['SessionGradeCount'] = ResolversParentTypes['SessionGradeCount'],
@@ -8871,6 +9184,39 @@ export type SessionHardestClimbResolvers<
   climbName?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   climbUuid?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   grade?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
+}>;
+
+export type SessionHealthExportResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['SessionHealthExport'] = ResolversParentTypes['SessionHealthExport'],
+> = ResolversObject<{
+  boardType?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  durationMinutes?: Resolver<Maybe<ResolversTypes['Int']>, ParentType, ContextType>;
+  endedAt?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  hardestClimb?: Resolver<Maybe<ResolversTypes['SessionHardestClimb']>, ParentType, ContextType>;
+  healthKitWorkoutId?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  laps?: Resolver<Array<ResolversTypes['SessionHealthExportLap']>, ParentType, ContextType>;
+  sessionId?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
+  startedAt?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  totalAttempts?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  totalSends?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
+}>;
+
+export type SessionHealthExportLapResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['SessionHealthExportLap'] = ResolversParentTypes['SessionHealthExportLap'],
+> = ResolversObject<{
+  angle?: Resolver<Maybe<ResolversTypes['Int']>, ParentType, ContextType>;
+  attemptCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  boardType?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  climbName?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  climbUuid?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  climbedAt?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  grade?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  status?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  tickUuid?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
@@ -9327,6 +9673,7 @@ export type Resolvers<ContextType = ConnectionContext> = ResolversObject<{
   AuroraCredentialStatus?: AuroraCredentialStatusResolvers<ContextType>;
   BetaLink?: BetaLinkResolvers<ContextType>;
   BetaLinkPreview?: BetaLinkPreviewResolvers<ContextType>;
+  BoardCandidate?: BoardCandidateResolvers<ContextType>;
   BoardClimbCleared?: BoardClimbClearedResolvers<ContextType>;
   BoardClimbSet?: BoardClimbSetResolvers<ContextType>;
   BoardLeaderboard?: BoardLeaderboardResolvers<ContextType>;
@@ -9423,6 +9770,7 @@ export type Resolvers<ContextType = ConnectionContext> = ResolversObject<{
   QueueReordered?: QueueReorderedResolvers<ContextType>;
   QueueState?: QueueStateResolvers<ContextType>;
   RecentBetaLink?: RecentBetaLinkResolvers<ContextType>;
+  ResolveBoardResult?: ResolveBoardResultResolvers<ContextType>;
   ResolvedBoard?: ResolvedBoardResolvers<ContextType>;
   SaveClimbResult?: SaveClimbResultResolvers<ContextType>;
   SearchPlaylistsResult?: SearchPlaylistsResultResolvers<ContextType>;
@@ -9434,12 +9782,16 @@ export type Resolvers<ContextType = ConnectionContext> = ResolversObject<{
   SessionDetailTick?: SessionDetailTickResolvers<ContextType>;
   SessionEnded?: SessionEndedResolvers<ContextType>;
   SessionEvent?: SessionEventResolvers<ContextType>;
+  SessionFeedBetaHighlight?: SessionFeedBetaHighlightResolvers<ContextType>;
   SessionFeedItem?: SessionFeedItemResolvers<ContextType>;
   SessionFeedParticipant?: SessionFeedParticipantResolvers<ContextType>;
   SessionFeedResult?: SessionFeedResultResolvers<ContextType>;
+  SessionFeedTickHighlight?: SessionFeedTickHighlightResolvers<ContextType>;
   SessionGradeCount?: SessionGradeCountResolvers<ContextType>;
   SessionGradeDistributionItem?: SessionGradeDistributionItemResolvers<ContextType>;
   SessionHardestClimb?: SessionHardestClimbResolvers<ContextType>;
+  SessionHealthExport?: SessionHealthExportResolvers<ContextType>;
+  SessionHealthExportLap?: SessionHealthExportLapResolvers<ContextType>;
   SessionParticipant?: SessionParticipantResolvers<ContextType>;
   SessionStatsUpdated?: SessionStatsUpdatedResolvers<ContextType>;
   SessionSummary?: SessionSummaryResolvers<ContextType>;

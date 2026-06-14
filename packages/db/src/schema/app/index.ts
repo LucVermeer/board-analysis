@@ -4,6 +4,7 @@ export * from './board-serials';
 export * from './sessions';
 export * from './favorites';
 export * from './ascents';
+export * from './board-climb-events';
 export * from './playlists';
 export * from './hold-classifications';
 export * from './controllers';

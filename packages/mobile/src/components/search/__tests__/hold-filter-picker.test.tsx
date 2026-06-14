@@ -29,6 +29,17 @@ vi.mock('react-native', () => ({
   StyleSheet: { create: (styles: Record<string, unknown>) => styles },
 }));
 
+type SvgMockProps = {
+  children?: ReactNode;
+};
+
+vi.mock('react-native-svg', () => ({
+  default: ({ children }: SvgMockProps) => createElement('svg', { 'data-svg': 'true' }, children),
+  Circle: () => createElement('circle', { 'data-svg-shape': 'circle' }),
+  Polygon: () => createElement('polygon', { 'data-svg-shape': 'polygon' }),
+  Rect: () => createElement('rect', { 'data-svg-shape': 'rect' }),
+}));
+
 // ModalSheet wraps gorhom; render children inline so the swatches are queryable.
 vi.mock('../../ModalSheet', () => ({
   ModalSheet: forwardRef<unknown, { children?: ReactNode }>(function ModalSheetMock({ children }, _ref) {

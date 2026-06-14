@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   VOTE,
   GET_COMMENTS,
@@ -13,6 +13,29 @@ import {
 } from '@boardsesh/graphql/operations';
 import type { SocialEntityType } from '@boardsesh/shared-schema';
 import { getHttpClient } from '../client';
+
+const BULK_VOTE_SUMMARY_CHUNK_SIZE = 100;
+
+function dedupeEntityIds(entityIds: string[]): string[] {
+  const seenIds = new Set<string>();
+  const dedupedIds: string[] = [];
+
+  for (const entityId of entityIds) {
+    if (seenIds.has(entityId)) continue;
+    seenIds.add(entityId);
+    dedupedIds.push(entityId);
+  }
+
+  return dedupedIds;
+}
+
+function chunkEntityIds(entityIds: string[]): string[][] {
+  const chunks: string[][] = [];
+  for (let startIndex = 0; startIndex < entityIds.length; startIndex += BULK_VOTE_SUMMARY_CHUNK_SIZE) {
+    chunks.push(entityIds.slice(startIndex, startIndex + BULK_VOTE_SUMMARY_CHUNK_SIZE));
+  }
+  return chunks;
+}
 
 /**
  * Cast a vote on a social entity (e.g. a session). Returns the updated
@@ -56,6 +79,50 @@ export function useBulkVoteSummaries(entityType: SocialEntityType, entityIds: st
   });
 }
 
+/** Accurate vote state for more than one backend-safe batch of entities. */
+export function useChunkedBulkVoteSummaries(entityType: SocialEntityType, entityIds: string[], enabled = true) {
+  const chunks = chunkEntityIds(dedupeEntityIds(entityIds));
+  const results = useQueries({
+    queries: chunks.map((chunk) => {
+      const sortedIds = [...chunk].sort();
+      return {
+        queryKey: ['bulkVoteSummaries', entityType, sortedIds],
+        queryFn: async () => {
+          const response = await getHttpClient().request<GetBulkVoteSummariesQueryResponse>(GET_BULK_VOTE_SUMMARIES, {
+            input: { entityType, entityIds: chunk },
+          });
+          return response.bulkVoteSummaries;
+        },
+        enabled: enabled && chunk.length > 0,
+      };
+    }),
+  });
+
+  return results.flatMap((result) => result.data ?? []);
+}
+
+/** Accurate vote state for stable groups, such as individual feed pages. */
+export function useGroupedBulkVoteSummaries(entityType: SocialEntityType, entityIdGroups: string[][], enabled = true) {
+  const chunks = entityIdGroups.flatMap((entityIds) => chunkEntityIds(dedupeEntityIds(entityIds)));
+  const results = useQueries({
+    queries: chunks.map((chunk) => {
+      const sortedIds = [...chunk].sort();
+      return {
+        queryKey: ['bulkVoteSummaries', entityType, sortedIds],
+        queryFn: async () => {
+          const response = await getHttpClient().request<GetBulkVoteSummariesQueryResponse>(GET_BULK_VOTE_SUMMARIES, {
+            input: { entityType, entityIds: chunk },
+          });
+          return response.bulkVoteSummaries;
+        },
+        enabled: enabled && chunk.length > 0,
+      };
+    }),
+  });
+
+  return results.flatMap((result) => result.data ?? []);
+}
+
 /** Comment thread for a social entity. */
 export function useComments(entityType: SocialEntityType, entityId: string | undefined, enabled = true) {
   return useQuery({
@@ -80,6 +147,7 @@ export function useAddComment() {
     },
     onSuccess: (_data, variables) => {
       void queryClient.invalidateQueries({ queryKey: ['comments', variables.entityType, variables.entityId] });
+      void queryClient.invalidateQueries({ queryKey: ['activityFeed'] });
       void queryClient.invalidateQueries({ queryKey: ['sessionGroupedFeed'] });
     },
   });

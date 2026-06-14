@@ -7,11 +7,18 @@ import type { GradeBound } from '@boardsesh/climb-filters';
 vi.mock('react-native', () => ({
   Pressable: ({ onPress }: { onPress?: () => void }) =>
     createElement('button', { onClick: onPress, 'data-dismiss': 'true' }),
-  View: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
   StyleSheet: { create: (styles: Record<string, unknown>) => styles },
 }));
 
+vi.mock('react-native-reanimated', () => ({
+  default: { View: ({ children }: { children?: ReactNode }) => createElement('div', null, children) },
+  useAnimatedStyle: () => ({}),
+  useSharedValue: (initial: number) => ({ value: initial }),
+  withTiming: (value: number) => value,
+}));
+
 vi.mock('../../../theme/tokens', () => ({ spacing: { 2: 8, 4: 16 } }));
+vi.mock('../../../theme/animations', () => ({ timing: { normal: 250 } }));
 vi.mock('../FilterButton', () => ({
   FILTER_FAB_SIZE: 48,
   FilterButton: ({

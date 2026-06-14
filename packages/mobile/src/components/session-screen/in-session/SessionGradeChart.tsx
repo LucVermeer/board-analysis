@@ -21,5 +21,5 @@ export function SessionGradeChart({ distribution }: SessionGradeChartProps) {
 
   if (!bars) return null;
 
-  return <StackedBarChart bars={bars} colorBy="grade" height={120} />;
+  return <StackedBarChart bars={bars} colorBy="grade" height={120} fitYAxisToData />;
 }

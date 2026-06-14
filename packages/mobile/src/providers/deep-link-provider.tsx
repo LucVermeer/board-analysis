@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, type ReactNode } from 'react';
 import * as Linking from 'expo-linking';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { reportHandledError } from '../lib/error-reporting';
 import { useAuth } from './auth-provider';
 
 // Stash for a join that arrived before the user was signed in. The auth gate
@@ -104,6 +105,7 @@ export function DeepLinkProvider({ children }: { children: ReactNode }) {
         await AsyncStorage.setItem(PENDING_JOIN_KEY, sessionId);
       } catch (error) {
         if (__DEV__) console.warn('[deep-link] failed to stash pending join', error);
+        reportHandledError(error, { tags: { source: 'deep-link', op: 'stash-pending-join' } });
       }
     },
     [navigateToJoin],
@@ -147,6 +149,7 @@ export function DeepLinkProvider({ children }: { children: ReactNode }) {
         }
       } catch (error) {
         if (__DEV__) console.warn('[deep-link] failed to consume pending join', error);
+        reportHandledError(error, { tags: { source: 'deep-link', op: 'consume-pending-join' } });
       }
     })();
     return () => {

@@ -1,9 +1,13 @@
+import { useCallback } from 'react';
 import { Stack } from 'expo-router';
 import { Platform, ScrollView, StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
+import { Button } from '../src/components/Button';
 import { Icon } from '../src/components/Icon';
 import { SectionHeader } from '../src/components/SectionHeader';
 import { Text } from '../src/components/Text';
+import { useBottomChromeMetrics } from '../src/hooks/use-bottom-chrome-metrics';
+import { openDiscordInvite } from '../src/lib/discord';
 import { useTheme } from '../src/providers/theme-provider';
 import { borderRadius, spacing } from '../src/theme/tokens';
 import type { IconName } from '../src/components/icon-map';
@@ -17,6 +21,10 @@ type AboutCard = {
 export default function AboutScreen() {
   const { t } = useTranslation('common');
   const { systemColors, brandColors } = useTheme();
+  const bottomChrome = useBottomChromeMetrics();
+  const handleJoinDiscord = useCallback(() => {
+    void openDiscordInvite('about');
+  }, []);
   const cards: AboutCard[] = [
     {
       icon: 'lightbulb',
@@ -47,7 +55,10 @@ export default function AboutScreen() {
           contentStyle: { backgroundColor: 'transparent' },
         }}
       />
-      <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.container}>
+      <ScrollView
+        contentInsetAdjustmentBehavior="automatic"
+        contentContainerStyle={[styles.container, { paddingBottom: bottomChrome.scrollBottomPadding + spacing[6] }]}
+      >
         <View style={[styles.hero, { backgroundColor: systemColors.secondaryBackground }]}>
           <View style={[styles.heroIcon, { backgroundColor: brandColors.primaryFill }]}>
             <Icon name="boards.fill" size={32} color={brandColors.onPrimary} />
@@ -89,6 +100,7 @@ export default function AboutScreen() {
             {t('mobile.about.independentBody')}
           </Text>
         </View>
+        <Button title={t('mobile.about.joinDiscord')} icon="open.external" size="large" onPress={handleJoinDiscord} />
       </ScrollView>
     </>
   );
@@ -99,7 +111,6 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     paddingHorizontal: spacing[4],
     paddingTop: spacing[4],
-    paddingBottom: spacing[8],
     gap: spacing[6],
   },
   hero: {

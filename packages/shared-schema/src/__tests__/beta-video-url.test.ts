@@ -26,9 +26,12 @@ describe('isInstagramUrl', () => {
     expect(isInstagramUrl(url)).toBe(true);
   });
 
-  it.each(['https://example.com/p/xyz', 'https://youtube.com/watch?v=abc', ''])('rejects %s', (url) => {
-    expect(isInstagramUrl(url)).toBe(false);
-  });
+  it.each(['http://instagram.com/reel/abc/', 'https://example.com/p/xyz', 'https://youtube.com/watch?v=abc', ''])(
+    'rejects %s',
+    (url) => {
+      expect(isInstagramUrl(url)).toBe(false);
+    },
+  );
 
   it('preserves anchoring (no prefix slip-through)', () => {
     expect(isInstagramUrl('javascript:alert(1);https://instagram.com/p/abc/')).toBe(false);
@@ -40,15 +43,23 @@ describe('isTikTokUrl', () => {
     expect(isTikTokUrl(url)).toBe(true);
   });
 
-  it.each(['https://example.com/tiktok', ''])('rejects %s', (url) => {
-    expect(isTikTokUrl(url)).toBe(false);
-  });
+  it.each(['http://www.tiktok.com/@some.user/video/7359000000000000000', 'https://example.com/tiktok', ''])(
+    'rejects %s',
+    (url) => {
+      expect(isTikTokUrl(url)).toBe(false);
+    },
+  );
 });
 
 describe('isBetaVideoUrl', () => {
   it('accepts both platforms', () => {
     expect(isBetaVideoUrl(IG_REEL)).toBe(true);
     expect(isBetaVideoUrl(TIKTOK_LONG)).toBe(true);
+  });
+
+  it('rejects insecure platform urls', () => {
+    expect(isBetaVideoUrl('http://instagram.com/p/abc/')).toBe(false);
+    expect(isBetaVideoUrl('http://vm.tiktok.com/ZShortcode/')).toBe(false);
   });
 
   it('rejects other hosts', () => {

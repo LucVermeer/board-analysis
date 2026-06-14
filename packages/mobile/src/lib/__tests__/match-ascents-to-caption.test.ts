@@ -9,6 +9,8 @@ function makeAscent(climbName: string, climbUuid = climbName.toLowerCase().repla
     climbName,
     setterUsername: null,
     boardType: 'kilter',
+    boardId: null,
+    boardDisplayName: null,
     layoutId: 1,
     angle: 40,
     isMirror: false,

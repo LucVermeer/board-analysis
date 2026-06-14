@@ -297,6 +297,8 @@
     "remainingChars": "Faltan {{count}} caracteres",
     "starRating_one": "{{count}} estrella",
     "starRating_other": "{{count}} estrellas",
+    "sessionRecordingLabel": "Activar grabación de sesión",
+    "sessionRecordingDescription": "Ayúdanos a corregir tu error más rápido activando la grabación de sesión y reproduciendo el problema. Puedes desactivarla después.",
     "nextAria": "Siguiente"
   },
   "feedbackBanner": {

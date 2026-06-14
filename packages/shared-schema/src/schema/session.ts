@@ -202,4 +202,55 @@ export const sessionTypeDefs = /* GraphQL */ `
     "Session goal text"
     goal: String
   }
+
+  """
+  One viewer-owned lap/event included in an Apple Health workout export.
+  """
+  type SessionHealthExportLap {
+    "Tick UUID"
+    tickUuid: ID!
+    "Climb UUID"
+    climbUuid: String!
+    "Climb name"
+    climbName: String
+    "Grade name"
+    grade: String
+    "Tick status (flash, send, attempt)"
+    status: String!
+    "Number of attempts represented by this tick"
+    attemptCount: Int!
+    "Board type"
+    boardType: String!
+    "Climb angle"
+    angle: Int
+    "When the lap was logged"
+    climbedAt: String!
+  }
+
+  """
+  Viewer-specific export payload for writing a finished session to Apple Health.
+  It intentionally contains only the requesting user's ticks and saved workout id.
+  """
+  type SessionHealthExport {
+    "Session ID"
+    sessionId: ID!
+    "When the session started"
+    startedAt: String
+    "When the session ended"
+    endedAt: String
+    "Duration in minutes"
+    durationMinutes: Int
+    "Primary board type for this viewer's workout"
+    boardType: String!
+    "Viewer-owned sends"
+    totalSends: Int!
+    "Viewer-owned attempts, including the successful attempt on sends"
+    totalAttempts: Int!
+    "Hardest climb the viewer sent during the session"
+    hardestClimb: SessionHardestClimb
+    "Viewer-owned lap events"
+    laps: [SessionHealthExportLap!]!
+    "Existing Apple Health workout id saved for this viewer/session"
+    healthKitWorkoutId: String
+  }
 `;

@@ -349,6 +349,21 @@ export const schemaSQL = `
     "updated_at" timestamp DEFAULT now() NOT NULL
   );
 
+  CREATE TABLE IF NOT EXISTS "gyms" (
+    "id" bigserial PRIMARY KEY NOT NULL,
+    "uuid" text NOT NULL UNIQUE,
+    "name" text NOT NULL,
+    "slug" text,
+    "owner_id" text NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+    "address" text,
+    "latitude" double precision,
+    "longitude" double precision,
+    "is_public" boolean DEFAULT true NOT NULL,
+    "created_at" timestamp DEFAULT now() NOT NULL,
+    "updated_at" timestamp DEFAULT now() NOT NULL,
+    "deleted_at" timestamp
+  );
+
   DROP TABLE IF EXISTS "user_boards" CASCADE;
   CREATE TABLE IF NOT EXISTS "user_boards" (
     "id" bigserial PRIMARY KEY NOT NULL,
@@ -376,8 +391,13 @@ export const schemaSQL = `
     "gym_id" bigint,
     "deleted_at" timestamp
   );
-  -- Board presence: a BLE serial maps to exactly one active board.
-  CREATE UNIQUE INDEX IF NOT EXISTS "user_boards_unique_serial"
+  -- Board presence: serials are not globally unique (the supplier reuses them),
+  -- so a serial may map to many active boards. We only forbid one owner binding
+  -- the same serial to two of their own boards; the user disambiguates the rest.
+  CREATE UNIQUE INDEX IF NOT EXISTS "user_boards_unique_owner_serial"
+    ON "user_boards" ("owner_id", "serial_number")
+    WHERE "serial_number" IS NOT NULL AND "serial_number" <> '' AND "deleted_at" IS NULL;
+  CREATE INDEX IF NOT EXISTS "user_boards_serial_idx"
     ON "user_boards" ("serial_number")
     WHERE "serial_number" IS NOT NULL AND "serial_number" <> '' AND "deleted_at" IS NULL;
   -- One active board per owner per config (mirrors the prod partial unique index).
@@ -387,6 +407,49 @@ export const schemaSQL = `
   CREATE UNIQUE INDEX IF NOT EXISTS "user_boards_unique_slug"
     ON "user_boards" ("slug")
     WHERE "deleted_at" IS NULL;
+
+  -- Auto-recorded serial→config rows + the user's remembered board choice for a
+  -- serial (board_uuid). Resolver reads this to skip the disambiguation prompt.
+  CREATE TABLE IF NOT EXISTS "user_board_serials" (
+    "id" bigserial PRIMARY KEY NOT NULL,
+    "user_id" text NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+    "serial_number" text NOT NULL,
+    "board_name" text NOT NULL,
+    "layout_id" bigint NOT NULL,
+    "size_id" bigint NOT NULL,
+    "set_ids" text NOT NULL,
+    "api_level" integer,
+    "board_uuid" text REFERENCES "user_boards"("uuid") ON DELETE SET NULL,
+    "created_at" timestamp DEFAULT now() NOT NULL,
+    "updated_at" timestamp DEFAULT now() NOT NULL
+  );
+  CREATE UNIQUE INDEX IF NOT EXISTS "user_board_serials_unique_user_serial"
+    ON "user_board_serials" ("user_id", "serial_number");
+  CREATE INDEX IF NOT EXISTS "user_board_serials_serial_idx" ON "user_board_serials" ("serial_number");
+  CREATE INDEX IF NOT EXISTS "user_board_serials_board_uuid_idx" ON "user_board_serials" ("board_uuid");
+
+  -- Durable per-board send log (dwell-gated). Distinct from boardsesh_ticks: the
+  -- raw wall-push stream, no flash/send/attempt status.
+  CREATE TABLE IF NOT EXISTS "board_climb_events" (
+    "id" bigserial PRIMARY KEY NOT NULL,
+    "board_id" bigint NOT NULL REFERENCES "user_boards"("id") ON DELETE CASCADE,
+    "board_type" text NOT NULL,
+    "climb_uuid" text NOT NULL,
+    "angle" integer NOT NULL,
+    "user_id" text REFERENCES "users"("id") ON DELETE SET NULL,
+    "session_id" text REFERENCES "board_sessions"("id") ON DELETE SET NULL,
+    "seq" bigint NOT NULL,
+    "frames" text,
+    "name" text,
+    "grade" text,
+    "setter" text,
+    "confirmed_at" timestamp NOT NULL,
+    "created_at" timestamp DEFAULT now() NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS "board_climb_events_board_confirmed_at_idx" ON "board_climb_events" ("board_id", "confirmed_at");
+  CREATE UNIQUE INDEX IF NOT EXISTS "board_climb_events_board_seq_unique" ON "board_climb_events" ("board_id", "seq");
+  CREATE INDEX IF NOT EXISTS "board_climb_events_session_idx" ON "board_climb_events" ("session_id");
+  CREATE INDEX IF NOT EXISTS "board_climb_events_board_climb_idx" ON "board_climb_events" ("board_id", "climb_uuid");
 
   DROP TABLE IF EXISTS "integration_exports" CASCADE;
   DROP TABLE IF EXISTS "integration_credentials" CASCADE;

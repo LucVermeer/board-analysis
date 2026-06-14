@@ -1,5 +1,14 @@
 import { type ReactNode } from 'react';
-import { View, StyleSheet, Platform, type ViewStyle } from 'react-native';
+import {
+  View,
+  StyleSheet,
+  Platform,
+  type AccessibilityActionEvent,
+  type AccessibilityActionInfo,
+  type AccessibilityState,
+  type StyleProp,
+  type ViewStyle,
+} from 'react-native';
 import { Card as PaperCard } from 'react-native-paper';
 import { PressableSurface } from './PressableSurface';
 import { hapticLight } from '../lib/haptics';
@@ -10,7 +19,12 @@ type CardProps = {
   children: ReactNode;
   onPress?: () => void;
   haptic?: boolean;
-  style?: ViewStyle;
+  style?: StyleProp<ViewStyle>;
+  accessibilityLabel?: string;
+  accessibilityHint?: string;
+  accessibilityState?: AccessibilityState;
+  accessibilityActions?: ReadonlyArray<AccessibilityActionInfo>;
+  onAccessibilityAction?: (event: AccessibilityActionEvent) => void;
 };
 
 /**
@@ -23,7 +37,17 @@ export function Card(props: CardProps) {
   return uiVariant === 'material' ? <CardMaterial {...props} /> : <CardGlass {...props} />;
 }
 
-function CardMaterial({ children, onPress, haptic = true, style }: CardProps) {
+function CardMaterial({
+  children,
+  onPress,
+  haptic = true,
+  style,
+  accessibilityLabel,
+  accessibilityHint,
+  accessibilityState,
+  accessibilityActions,
+  onAccessibilityAction,
+}: CardProps) {
   const handlePress = () => {
     if (haptic) hapticLight();
     onPress?.();
@@ -38,6 +62,11 @@ function CardMaterial({ children, onPress, haptic = true, style }: CardProps) {
       mode="elevated"
       onPress={onPress ? handlePress : undefined}
       accessibilityRole={onPress ? 'button' : undefined}
+      accessibilityLabel={accessibilityLabel}
+      accessibilityHint={accessibilityHint}
+      accessibilityState={accessibilityState}
+      accessibilityActions={accessibilityActions}
+      onAccessibilityAction={onAccessibilityAction}
       style={style}
     >
       <PaperCard.Content style={styles.materialContent}>{children}</PaperCard.Content>
@@ -46,7 +75,17 @@ function CardMaterial({ children, onPress, haptic = true, style }: CardProps) {
 }
 
 // Liquid Glass card — the original implementation, unchanged.
-function CardGlass({ children, onPress, haptic = true, style }: CardProps) {
+function CardGlass({
+  children,
+  onPress,
+  haptic = true,
+  style,
+  accessibilityLabel,
+  accessibilityHint,
+  accessibilityState,
+  accessibilityActions,
+  onAccessibilityAction,
+}: CardProps) {
   const { systemColors } = useTheme();
 
   const handlePress = () => {
@@ -63,6 +102,11 @@ function CardGlass({ children, onPress, haptic = true, style }: CardProps) {
         feedback="scale"
         scaleTo={0.98}
         accessibilityRole="button"
+        accessibilityLabel={accessibilityLabel}
+        accessibilityHint={accessibilityHint}
+        accessibilityState={accessibilityState}
+        accessibilityActions={accessibilityActions}
+        onAccessibilityAction={onAccessibilityAction}
         style={[styles.card, backgroundStyle, style]}
       >
         {children}

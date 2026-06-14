@@ -27,6 +27,7 @@ import { requestBleRuntimePermissions } from './use-ble-permissions';
 import type { BluetoothAdapter, DevicePickerFn, DiscoveredDevice } from './types';
 import type { HoldPlacement } from '../../components/board-renderer/types';
 import { track } from '../analytics';
+import { reportHandledError } from '../error-reporting';
 import { buildHoldColorOverrideSignature, type HoldColorOverrides } from '../hold-color-overrides';
 
 // Exported for testing — isolates the .packet extraction so regressions are caught.
@@ -493,10 +494,19 @@ export function useBoardBluetooth({
           if (combinedSignal.aborted || (error instanceof DOMException && error.name === 'AbortError')) {
             return;
           }
+          const bleFailureReason = classifyBleFailureReason(error);
           console.error('Error sending frames to board:', error);
           track(SHARED_EVENTS.ClimbSentToBoardFailure, {
             ...boardAnalyticsProperties,
-            failureReason: classifyBleFailureReason(error),
+            failureReason: bleFailureReason,
+          });
+          // A dropped link is routine on these last-connection-wins boards
+          // (another climber grabbed it, or it disconnected mid-session), so keep
+          // it a filterable warning rather than a full error that drowns real
+          // write bugs. Already tracked above via ClimbSentToBoardFailure.
+          reportHandledError(error, {
+            level: bleFailureReason === 'disconnected' ? 'warning' : 'error',
+            tags: { source: 'ble-send', failure_reason: bleFailureReason },
           });
           // A write that fails because the link is gone (the board dropped or
           // another device grabbed it — these boards are last-connection-wins) is
@@ -685,6 +695,7 @@ export function useBoardBluetooth({
         return true;
       } catch (error) {
         console.error('Error connecting to Bluetooth:', error);
+        reportHandledError(error, { tags: { source: 'ble-connect' } });
         setIsConnected(false);
 
         // Dismiss the picker sheet if it's still showing. When a reconnect-by-

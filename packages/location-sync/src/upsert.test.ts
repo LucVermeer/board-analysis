@@ -1,3 +1,8 @@
+// These cover the pure planning/identity helpers (no DB). The behavioural half
+// of upsertPublicBoardLocations — that the PostGIS `location` geography ends up
+// populated from lat/lng without a manual UPDATE — depends on the migration
+// 0127 triggers and is exercised by packages/db's
+// location-trigger.integration.test.ts (opt-in, needs a PostGIS dev DB).
 import { describe, expect, it } from 'vitest';
 import type { PublicBoardLocationInput } from './types';
 import {

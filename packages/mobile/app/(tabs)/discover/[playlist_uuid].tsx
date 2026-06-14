@@ -33,6 +33,7 @@ import { getHttpClient } from '../../../src/lib/graphql/client';
 import { usePlaylistActivation } from '../../../src/lib/playlists/use-playlist-activation';
 import { usePlaylistRenderBoard } from '../../../src/lib/playlists/use-playlist-render-board';
 import { recordPlaylistOpen } from '../../../src/lib/playlists/recents-store';
+import { reportHandledError } from '../../../src/lib/error-reporting';
 import { toQueueClimbs } from '../../../src/lib/climb-types';
 import { hapticSelection } from '../../../src/lib/haptics';
 import { useAuth } from '../../../src/providers/auth-provider';
@@ -188,6 +189,7 @@ export default function PlaylistDetail() {
         await reorderPlaylistClimb({ playlistId: playlistUuid, climbUuid, newIndex: target });
       } catch (err) {
         console.error('Failed to reorder playlist climb:', err);
+        reportHandledError(err, { tags: { source: 'playlist', op: 'reorder-climb' } });
         // Only wholesale-restore the pre-move snapshot if no other edit landed in
         // the meantime; otherwise a concurrent op's optimistic state would be
         // clobbered, so reconcile from the server instead.
@@ -226,6 +228,7 @@ export default function PlaylistDetail() {
                 await removeClimbFromPlaylist({ playlistId: playlistUuid, climbUuid });
               } catch (err) {
                 console.error('Failed to remove playlist climb:', err);
+                reportHandledError(err, { tags: { source: 'playlist', op: 'remove-climb' } });
                 // Restore only if no concurrent edit landed since; otherwise
                 // reconcile from the server so we don't clobber it.
                 if (editClimbsRef.current === next) {
@@ -290,6 +293,7 @@ export default function PlaylistDetail() {
       else await unpinPlaylist(playlist.uuid);
     } catch (err) {
       console.error('Failed to toggle pin:', err);
+      reportHandledError(err, { tags: { source: 'playlist', op: 'toggle-pin' } });
       setIsPinned(!next);
       queryClient.setQueryData<Playlist | null>(['playlist', playlistUuid], (prev) =>
         prev ? { ...prev, isPinnedByMe: !next } : prev,
@@ -315,6 +319,7 @@ export default function PlaylistDetail() {
       else await unfollowPlaylist(playlist.uuid);
     } catch (err) {
       console.error('Failed to toggle follow:', err);
+      reportHandledError(err, { tags: { source: 'playlist', op: 'toggle-follow' } });
       setIsFollowing(!next);
       setFollowerCount((count) => count - delta);
       queryClient.setQueryData<Playlist | null>(['playlist', playlistUuid], (prev) =>
@@ -346,6 +351,7 @@ export default function PlaylistDetail() {
         showToast(t('edit.messages.updated'), 'success');
       } catch (err) {
         console.error('Failed to update playlist:', err);
+        reportHandledError(err, { tags: { source: 'playlist', op: 'update' } });
         showToast(t('edit.messages.updateFailed'), 'error');
       } finally {
         setSavingEdit(false);
@@ -369,6 +375,7 @@ export default function PlaylistDetail() {
             navigation.goBack();
           } catch (err) {
             console.error('Failed to delete playlist:', err);
+            reportHandledError(err, { tags: { source: 'playlist', op: 'delete' } });
             showToast(t('detail.deleteFailed'), 'error');
           }
         },

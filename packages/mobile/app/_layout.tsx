@@ -142,7 +142,7 @@ export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
   }, [error]);
 
   const handleGoHome = () => {
-    router.replace('/(tabs)/climbs');
+    router.replace('/(tabs)/home');
   };
 
   return (

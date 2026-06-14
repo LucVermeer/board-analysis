@@ -13,6 +13,7 @@ import type {
   SetterStatsInput,
   UserProfile,
   SessionSummary,
+  SessionHealthExport,
 } from '@boardsesh/shared-schema';
 import {
   SIMILAR_CLIMBS_QUERY,
@@ -31,6 +32,7 @@ import {
   type DeleteDraftClimbMutationVariables,
   type DeleteDraftClimbMutationResponse,
 } from '@boardsesh/graphql/operations/new-climb-feed';
+import { SEARCH_GYMS, type SearchGymsQueryResponse } from '@boardsesh/graphql/operations/gyms';
 import { getHttpClient } from '../client';
 import {
   GET_PROFILE,
@@ -47,6 +49,7 @@ import {
   GET_SETTER_STATS,
   GET_CLIMB,
   GET_SESSION_SUMMARY,
+  GET_SESSION_HEALTH_EXPORT,
   END_SESSION,
   TOGGLE_FAVORITE,
   type GetProfileQueryResponse,
@@ -65,6 +68,8 @@ import {
   type GetClimbQueryVariables,
   type GetSessionSummaryQueryResponse,
   type GetSessionSummaryQueryVariables,
+  type GetSessionHealthExportQueryResponse,
+  type GetSessionHealthExportQueryVariables,
   type EndSessionMutationVariables,
   type EndSessionMutationResponse,
   type ToggleFavoriteMutationVariables,
@@ -142,14 +147,39 @@ export function usePopularBoardConfigs(input?: PopularBoardConfigsInput, options
  * until coordinates resolve, so callers can pass `null` while awaiting a
  * location permission/fix.
  */
-export function useNearbyBoards(coords: { latitude: number; longitude: number } | null, radiusKm = 1) {
+export function useNearbyBoards(
+  coords: { latitude: number; longitude: number } | null,
+  radiusKm = 1,
+  query?: string,
+  // Backend caps this at 50. The gym finder needs the higher ceiling so a dense
+  // metro's gym-attached + standalone boards don't share a 20-row budget (which
+  // would falsely show "no boards" for a gym whose boards fell outside the top
+  // 20). The "Near you" carousel keeps the small default.
+  limit = 20,
+) {
+  // Empty string means "no name filter" to the resolver; normalise to undefined
+  // so the cache key and the request payload stay clean.
+  const nameFilter = query && query.trim().length > 0 ? query.trim() : undefined;
   return useQuery({
-    queryKey: ['nearbyBoards', coords, radiusKm],
+    queryKey: ['nearbyBoards', coords, radiusKm, nameFilter, limit],
     queryFn: () =>
       getHttpClient().request<SearchBoardsQueryResponse>(SEARCH_BOARDS, {
-        input: { latitude: coords?.latitude, longitude: coords?.longitude, radiusKm, limit: 20 },
+        input: { latitude: coords?.latitude, longitude: coords?.longitude, radiusKm, limit, query: nameFilter },
       }),
     select: (data) => data.searchBoards,
+    enabled: coords !== null,
+  });
+}
+
+export function useNearbyGyms(coords: { latitude: number; longitude: number } | null, radiusKm = 50, query?: string) {
+  const nameFilter = query && query.trim().length > 0 ? query.trim() : undefined;
+  return useQuery({
+    queryKey: ['nearbyGyms', coords, radiusKm, nameFilter],
+    queryFn: () =>
+      getHttpClient().request<SearchGymsQueryResponse>(SEARCH_GYMS, {
+        input: { latitude: coords?.latitude, longitude: coords?.longitude, radiusKm, limit: 50, query: nameFilter },
+      }),
+    select: (data) => data.searchGyms,
     enabled: coords !== null,
   });
 }
@@ -281,6 +311,22 @@ export function useSessionSummary(sessionId: string | null) {
   });
 }
 
+export function useSessionHealthExport(sessionId: string | null) {
+  return useQuery<SessionHealthExport | null>({
+    queryKey: ['sessionHealthExport', sessionId],
+    queryFn: async () => {
+      const response = await getHttpClient().request<
+        GetSessionHealthExportQueryResponse,
+        GetSessionHealthExportQueryVariables
+      >(GET_SESSION_HEALTH_EXPORT, {
+        sessionId: sessionId!,
+      });
+      return response.sessionHealthExport;
+    },
+    enabled: !!sessionId,
+  });
+}
+
 export function useEndSession() {
   return useMutation({
     mutationFn: async (variables: EndSessionMutationVariables) => {
@@ -347,14 +393,22 @@ export function useFavoriteStatus(
 
 import {
   GET_BETA_LINKS,
+  GET_RECENT_BETA_LINKS,
   ATTACH_BETA_LINK,
   type GetBetaLinksQueryResponse,
   type GetBetaLinksQueryVariables,
+  type GetRecentBetaLinksQueryResponse,
+  type GetRecentBetaLinksQueryVariables,
+  type RecentBetaLinkGqlRow,
   type AttachBetaLinkMutationVariables,
   type AttachBetaLinkMutationResponse,
 } from '@boardsesh/graphql/operations/beta-links';
-import { dedupeBetaLinks } from '@boardsesh/shared-schema';
-import { mapBetaLinks } from '../../beta-video-url';
+import { betaLinkIdentity, dedupeBetaLinks, isBetaVideoUrl, type BetaLink } from '@boardsesh/shared-schema';
+import { mapBetaLink, mapBetaLinks } from '../../beta-video-url';
+
+export type RecentBetaVideo = Omit<RecentBetaLinkGqlRow, 'betaLink'> & {
+  betaLink: BetaLink;
+};
 
 export function useBetaLinks(boardType: string, climbUuid: string, enabled = true) {
   return useQuery({
@@ -365,6 +419,37 @@ export function useBetaLinks(boardType: string, climbUuid: string, enabled = tru
         climbUuid,
       }),
     select: (data) => dedupeBetaLinks(mapBetaLinks(data.betaLinks)),
+    enabled,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useRecentBetaLinks(limit = 20, boardType?: string | null, enabled = true) {
+  return useQuery({
+    queryKey: ['recentBetaLinks', limit, boardType ?? null],
+    queryFn: () =>
+      getHttpClient().request<GetRecentBetaLinksQueryResponse, GetRecentBetaLinksQueryVariables>(
+        GET_RECENT_BETA_LINKS,
+        {
+          limit,
+          boardType,
+        },
+      ),
+    select: (data) => {
+      const seenIdentities = new Set<string>();
+      const videos: RecentBetaVideo[] = [];
+
+      for (const row of data.recentBetaLinks) {
+        const betaLink = mapBetaLink(row.betaLink);
+        if (!isBetaVideoUrl(betaLink.link)) continue;
+        const identity = betaLinkIdentity(betaLink.link);
+        if (seenIdentities.has(identity)) continue;
+        seenIdentities.add(identity);
+        videos.push({ ...row, betaLink });
+      }
+
+      return videos;
+    },
     enabled,
     staleTime: 5 * 60 * 1000,
   });
@@ -426,7 +511,8 @@ export function useAttachBetaLink() {
         input,
       }),
     onSuccess: (_data, vars) => {
-      queryClient.invalidateQueries({ queryKey: ['betaLinks', vars.boardType, vars.climbUuid] });
+      void queryClient.invalidateQueries({ queryKey: ['betaLinks', vars.boardType, vars.climbUuid] });
+      void queryClient.invalidateQueries({ queryKey: ['recentBetaLinks'] });
     },
   });
 }
@@ -441,10 +527,18 @@ export {
   useUserProfileStats,
   useUserClimbPercentile,
   useUserAscentsFeed,
+  useActivityFeed,
   useSessionGroupedFeed,
 } from './use-you-data';
 export { useYouProfileData } from './use-you-profile-data';
-export { useVote, useBulkVoteSummaries, useComments, useAddComment } from './use-social';
+export {
+  useVote,
+  useBulkVoteSummaries,
+  useChunkedBulkVoteSummaries,
+  useGroupedBulkVoteSummaries,
+  useComments,
+  useAddComment,
+} from './use-social';
 export { useSessionDetail, useSessionPreview } from './use-session-detail';
 export { useDeleteAccountInfo, useDeleteAccount } from './use-delete-account';
 export {

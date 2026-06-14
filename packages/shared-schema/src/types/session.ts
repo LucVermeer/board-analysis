@@ -44,6 +44,31 @@ export type SessionSummary = {
   goal?: string | null;
 };
 
+export type SessionHealthExportLap = {
+  tickUuid: string;
+  climbUuid: string;
+  climbName?: string | null;
+  grade?: string | null;
+  status: string;
+  attemptCount: number;
+  boardType: string;
+  angle?: number | null;
+  climbedAt: string;
+};
+
+export type SessionHealthExport = {
+  sessionId: string;
+  startedAt?: string | null;
+  endedAt?: string | null;
+  durationMinutes?: number | null;
+  boardType: string;
+  totalSends: number;
+  totalAttempts: number;
+  hardestClimb?: SessionHardestClimb | null;
+  laps: SessionHealthExportLap[];
+  healthKitWorkoutId?: string | null;
+};
+
 /**
  * Durable session lifecycle status. Only 'active' and 'ended' are ever
  * written: live presence moved to Redis, so the abandoned 'inactive' value

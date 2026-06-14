@@ -8,7 +8,7 @@ import {
   type NativeSyntheticEvent,
 } from 'react-native';
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
-import { useSharedValue } from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -68,6 +68,7 @@ import { track } from '../../../src/lib/analytics';
 import { iosSystemColors } from '../../../src/theme/ios-colors';
 import { spacing } from '../../../src/theme/tokens';
 import { glassSize } from '../../../src/theme/layout';
+import { timing } from '../../../src/theme/animations';
 
 const PAGE_SIZE = 30;
 // Soft character budget for the glass filter-summary title: include whole filter
@@ -183,6 +184,11 @@ function ClimbListInner() {
   const useNativeSearch = useNativeAccessoryActive();
 
   const listPaddingBottom = bottomChrome.scrollBottomPadding;
+  const listBottomSpacerHeight = useSharedValue(listPaddingBottom);
+  useEffect(() => {
+    listBottomSpacerHeight.value = withTiming(listPaddingBottom, { duration: timing.normal });
+  }, [listBottomSpacerHeight, listPaddingBottom]);
+  const listBottomSpacerStyle = useAnimatedStyle(() => ({ height: listBottomSpacerHeight.value }));
   const filterFabNativeAccessoryDrop = bottomChrome.nativeAccessoryVisible ? glassSize.standard * 2 : 0;
   const filterFabMinimumBottom = bottomChrome.nativeAccessoryVisible
     ? insets.bottom + spacing[2]
@@ -349,6 +355,7 @@ function ClimbListInner() {
         setRestoredKey(boardKey);
       })
       .catch(() => {
+        if (cancelled) return;
         replaceSearch(DEFAULT_CLIMB_FILTER_STATE, '', DEFAULT_CLIMB_BOARD_FILTER_STATE);
         visibleSearchTextRef.current = '';
         applyVisibleSearchText('');
@@ -735,6 +742,16 @@ function ClimbListInner() {
     ],
   );
 
+  const listFooter = useMemo(
+    () => (
+      <View>
+        {isFetchingNextPage ? <ClimbListSkeletonRows count={FOOTER_SKELETON_ROW_COUNT} /> : null}
+        <Animated.View pointerEvents="none" style={listBottomSpacerStyle} />
+      </View>
+    ),
+    [isFetchingNextPage, listBottomSpacerStyle],
+  );
+
   const stackOptions = useMemo(
     () =>
       useNativeSearch
@@ -852,7 +869,7 @@ function ClimbListInner() {
         // inset and the list pads manually by the measured chrome height. Leaving
         // this 'automatic' would double-inset under the (invisible) native header.
         contentInsetAdjustmentBehavior="never"
-        contentContainerStyle={{ paddingTop: searchBarHeight, paddingBottom: listPaddingBottom }}
+        contentContainerStyle={{ paddingTop: searchBarHeight }}
         scrollIndicatorInsets={{ top: searchBarHeight }}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="interactive"
@@ -860,7 +877,7 @@ function ClimbListInner() {
           <RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor={brandColors.primary} />
         }
         ListHeaderComponent={listHeader}
-        ListFooterComponent={isFetchingNextPage ? <ClimbListSkeletonRows count={FOOTER_SKELETON_ROW_COUNT} /> : null}
+        ListFooterComponent={listFooter}
         ListEmptyComponent={
           showInitialSkeletons ? (
             <ClimbListSkeletonRows count={INITIAL_SKELETON_ROW_COUNT} />

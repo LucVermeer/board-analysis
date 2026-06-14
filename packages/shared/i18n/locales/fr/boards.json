@@ -47,7 +47,7 @@
       "nearbyShowing": "À proximité affichés",
       "yourBoardsTitle": "Tes boards",
       "popularTitle": "Configurations populaires",
-      "search": "Rechercher"
+      "findGym": "Trouver une salle"
     },
     "custom": {
       "title": "Crée un board",
@@ -57,7 +57,8 @@
       "sets": "Sets",
       "angle": "Angle",
       "start": "Commencer à grimper",
-      "createError": "Impossible de créer ce board. Réessaie."
+      "createError": "Impossible de créer ce board. Réessaie.",
+      "name": "Nom du tableau"
     },
     "bluetooth": {
       "title": "Boards près de toi",
@@ -65,10 +66,6 @@
       "resolving": "Chargement des boards…",
       "noResults": "Aucun board à portée",
       "unavailable": "Active le Bluetooth pour rechercher"
-    },
-    "search": {
-      "placeholder": "Cherche par nom ou lieu",
-      "mapUnavailable": "Mets à jour l'app pour voir la carte. Tu peux chercher par nom."
     },
     "boardDetail": {
       "setActive": "Utiliser ce board",
@@ -85,6 +82,25 @@
         "angle": "Angle",
         "adjustable": "ajustable"
       }
+    },
+    "disambiguation": {
+      "title": "Sur quel mur es-tu ?",
+      "subtitle": "Ce numéro de série est partagé par plusieurs tableaux. Choisis le mur où tu te trouves.",
+      "yourBoard": "Ton tableau",
+      "cancel": "Pas maintenant"
+    },
+    "gyms": {
+      "title": "Salles près de toi",
+      "subtitle": "Touche une salle pour utiliser son tableau",
+      "locationNeeded": "Partage ta position pour trouver des salles à proximité",
+      "grantLocation": "Utiliser ma position",
+      "empty": "Aucune salle à proximité pour l'instant",
+      "noBoards": "Aucun tableau ici pour l'instant",
+      "boardCount": "{{count}} tableaux",
+      "searchPlaceholder": "Rechercher une ville, une salle ou un mur",
+      "showingPlace": "Résultats pour {{place}}",
+      "clearSearch": "Effacer la recherche",
+      "otherBoardsTitle": "Murs à proximité"
     }
   },
   "boardEntity": {

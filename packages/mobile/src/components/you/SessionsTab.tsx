@@ -4,10 +4,11 @@ import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import type BottomSheet from '@gorhom/bottom-sheet';
-import type { SessionFeedItem } from '@boardsesh/shared-schema';
+import type { SessionFeedItem, SocialEntityType } from '@boardsesh/shared-schema';
 import { Text } from '../Text';
 import { Icon } from '../Icon';
 import { Button } from '../Button';
+import { Card } from '../Card';
 import { ActivityIndicator } from '../ActivityIndicator';
 import { SessionFeedCard } from './SessionFeedCard';
 import { SessionsFeedHeader } from './SessionsFeedHeader';
@@ -15,13 +16,16 @@ import { FeedSectionLabel } from './FeedSectionLabel';
 import { CommentSheet } from './CommentSheet';
 import { bucketSessionsByRecency, dedupeSessionsById, type FeedRecencyBucket } from '../../lib/feed-time-buckets';
 import { useSessionGroupedFeed, useBulkVoteSummaries } from '../../lib/graphql/hooks';
+import { navigateToSessionFeedItem, navigateToSessionFeedTick } from '../../lib/session-feed-navigation';
 import { useBottomChromeMetrics } from '../../hooks/use-bottom-chrome-metrics';
-import { spacing } from '../../theme/tokens';
+import { spacing, borderRadius } from '../../theme/tokens';
 import { useTheme } from '../../providers/theme-provider';
 
 type FeedRow = { type: 'header'; bucket: FeedRecencyBucket } | { type: 'session'; item: SessionFeedItem };
+type CommentTarget = { entityId: string; entityType: SocialEntityType };
 
 type TFunc = (key: string) => string;
+const PENDING_SKELETON_KEYS = ['session-skeleton-1', 'session-skeleton-2'];
 
 type SessionsTabProps = {
   userId: string | undefined;
@@ -42,6 +46,49 @@ function sectionLabel(bucket: FeedRecencyBucket, t: TFunc): string {
   return t('mobile.sessions.sectionEarlier');
 }
 
+function SessionsPendingSkeleton({ topInset }: { topInset: number }) {
+  return (
+    <View
+      style={[styles.pendingSkeleton, { paddingTop: topInset + spacing[3] }]}
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+    >
+      {PENDING_SKELETON_KEYS.map((skeletonKey) => (
+        <SessionCardSkeleton key={skeletonKey} />
+      ))}
+    </View>
+  );
+}
+
+function SessionCardSkeleton() {
+  const { systemColors } = useTheme();
+  const blockStyle = { backgroundColor: systemColors.fill };
+
+  return (
+    <View style={styles.skeletonOuter}>
+      <Card>
+        <View style={styles.skeletonHeader}>
+          <View style={[styles.skeletonAvatar, blockStyle]} />
+          <View style={styles.skeletonHeaderText}>
+            <View style={[styles.skeletonTitleLine, blockStyle]} />
+            <View style={[styles.skeletonSmallLine, blockStyle]} />
+          </View>
+        </View>
+        <View style={[styles.skeletonStatLine, blockStyle]} />
+        <View style={styles.skeletonBody}>
+          <View style={[styles.skeletonThumbnail, blockStyle]} />
+          <View style={styles.skeletonDetails}>
+            <View style={[styles.skeletonClimbName, blockStyle]} />
+            <View style={[styles.skeletonMetaLine, blockStyle]} />
+            <View style={[styles.skeletonCommentLine, blockStyle]} />
+            <View style={[styles.skeletonCommentShortLine, blockStyle]} />
+          </View>
+        </View>
+      </Card>
+    </View>
+  );
+}
+
 export function SessionsTab({ userId, onScroll, topInset = 0, registerScrollToTop }: SessionsTabProps) {
   const { t } = useTranslation('you');
   const { systemColors, brandColors, variant } = useTheme();
@@ -57,7 +104,7 @@ export function SessionsTab({ userId, onScroll, topInset = 0, registerScrollToTo
   }, [registerScrollToTop]);
 
   const commentSheetRef = useRef<BottomSheet | null>(null);
-  const [commentSessionId, setCommentSessionId] = useState<string | null>(null);
+  const [commentTarget, setCommentTarget] = useState<CommentTarget | null>(null);
 
   const feed = useSessionGroupedFeed({ userId }, !!userId);
   // De-dupe across pages: the OFFSET-paginated feed can return the same session
@@ -93,24 +140,39 @@ export function SessionsTab({ userId, onScroll, topInset = 0, registerScrollToTo
 
   // Per-viewer vote state for the visible sessions (the feed item carries
   // counts but not the viewer's own vote). Refetches as more pages load.
-  const sessionIds = useMemo(() => sessions.map((session) => session.sessionId), [sessions]);
-  const voteSummaries = useBulkVoteSummaries('session', sessionIds, !!userId && sessionIds.length > 0);
+  const sessionEntityIds = useMemo(
+    () => sessions.filter((session) => session.socialEntityType === 'session').map((session) => session.socialEntityId),
+    [sessions],
+  );
+  const tickEntityIds = useMemo(
+    () => sessions.filter((session) => session.socialEntityType === 'tick').map((session) => session.socialEntityId),
+    [sessions],
+  );
+  const sessionVoteSummaries = useBulkVoteSummaries(
+    'session',
+    sessionEntityIds,
+    !!userId && sessionEntityIds.length > 0,
+  );
+  const tickVoteSummaries = useBulkVoteSummaries('tick', tickEntityIds, !!userId && tickEntityIds.length > 0);
   const summaryMap = useMemo(() => {
     const map = new Map<string, { upvotes: number; userVote: number | null }>();
-    for (const summary of voteSummaries.data ?? []) {
-      map.set(summary.entityId, { upvotes: summary.upvotes, userVote: summary.userVote });
+    for (const summary of sessionVoteSummaries.data ?? []) {
+      map.set(`session:${summary.entityId}`, { upvotes: summary.upvotes, userVote: summary.userVote });
+    }
+    for (const summary of tickVoteSummaries.data ?? []) {
+      map.set(`tick:${summary.entityId}`, { upvotes: summary.upvotes, userVote: summary.userVote });
     }
     return map;
-  }, [voteSummaries.data]);
+  }, [sessionVoteSummaries.data, tickVoteSummaries.data]);
 
-  const handleOpenComments = useCallback((sessionId: string) => {
-    setCommentSessionId(sessionId);
+  const handleOpenComments = useCallback((entityId: string, entityType: SocialEntityType) => {
+    setCommentTarget({ entityId, entityType });
     commentSheetRef.current?.snapToIndex(0);
   }, []);
 
   const handleOpenSession = useCallback(
-    (sessionId: string) => {
-      router.push({ pathname: '/session/[sessionId]', params: { sessionId } });
+    (session: SessionFeedItem) => {
+      navigateToSessionFeedItem(router, session);
     },
     [router],
   );
@@ -127,9 +189,10 @@ export function SessionsTab({ userId, onScroll, topInset = 0, registerScrollToTo
       return (
         <SessionFeedCard
           session={row.item}
-          voteSummary={summaryMap.get(row.item.sessionId)}
+          voteSummary={summaryMap.get(`${row.item.socialEntityType}:${row.item.socialEntityId}`)}
           onOpenComments={handleOpenComments}
           onPress={handleOpenSession}
+          onOpenClimb={(tick) => navigateToSessionFeedTick(router, tick)}
         />
       );
     },
@@ -157,12 +220,16 @@ export function SessionsTab({ userId, onScroll, topInset = 0, registerScrollToTo
     [t, sessions, now, variant],
   );
 
-  if (!userId || feed.isPending) {
+  if (!userId) {
     return (
       <View style={[styles.centered, { paddingTop: topInset }]}>
         <ActivityIndicator size="large" />
       </View>
     );
+  }
+
+  if (feed.isPending) {
+    return <SessionsPendingSkeleton topInset={topInset} />;
   }
 
   return (
@@ -216,7 +283,12 @@ export function SessionsTab({ userId, onScroll, topInset = 0, registerScrollToTo
           </View>
         }
       />
-      <CommentSheet sheetRef={commentSheetRef} entityId={commentSessionId} onClose={() => setCommentSessionId(null)} />
+      <CommentSheet
+        sheetRef={commentSheetRef}
+        entityId={commentTarget?.entityId ?? null}
+        entityType={commentTarget?.entityType ?? 'session'}
+        onClose={() => setCommentTarget(null)}
+      />
     </View>
   );
 }
@@ -225,6 +297,86 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   footer: { paddingVertical: spacing[5], alignItems: 'center' },
+  pendingSkeleton: {
+    flex: 1,
+  },
+  skeletonOuter: {
+    paddingHorizontal: spacing[4],
+    paddingVertical: spacing[2],
+  },
+  skeletonHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[3],
+  },
+  skeletonAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: borderRadius.full,
+    opacity: 0.5,
+  },
+  skeletonHeaderText: {
+    flex: 1,
+    gap: spacing[2],
+  },
+  skeletonTitleLine: {
+    width: '44%',
+    height: 18,
+    borderRadius: borderRadius.full,
+    opacity: 0.55,
+  },
+  skeletonSmallLine: {
+    width: '34%',
+    height: 12,
+    borderRadius: borderRadius.full,
+    opacity: 0.4,
+  },
+  skeletonStatLine: {
+    width: '68%',
+    height: 14,
+    borderRadius: borderRadius.full,
+    marginTop: spacing[3],
+    opacity: 0.42,
+  },
+  skeletonBody: {
+    flexDirection: 'row',
+    gap: spacing[3],
+    paddingTop: spacing[3],
+  },
+  skeletonThumbnail: {
+    width: 76,
+    height: 96,
+    borderRadius: borderRadius.md,
+    opacity: 0.55,
+  },
+  skeletonDetails: {
+    flex: 1,
+    gap: spacing[2],
+  },
+  skeletonClimbName: {
+    width: '74%',
+    height: 20,
+    borderRadius: borderRadius.full,
+    opacity: 0.55,
+  },
+  skeletonMetaLine: {
+    width: '64%',
+    height: 14,
+    borderRadius: borderRadius.full,
+    opacity: 0.4,
+  },
+  skeletonCommentLine: {
+    width: '92%',
+    height: 12,
+    borderRadius: borderRadius.full,
+    opacity: 0.35,
+  },
+  skeletonCommentShortLine: {
+    width: '58%',
+    height: 12,
+    borderRadius: borderRadius.full,
+    opacity: 0.32,
+  },
   screenTitle: {
     paddingHorizontal: spacing[4],
     paddingTop: 0,

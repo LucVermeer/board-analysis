@@ -1,10 +1,15 @@
-import type { ConnectionContext, EventsReplayResponse, SessionStatus } from '@boardsesh/shared-schema';
+import type {
+  ConnectionContext,
+  EventsReplayResponse,
+  SessionHealthExport,
+  SessionStatus,
+} from '@boardsesh/shared-schema';
 import { eq } from 'drizzle-orm';
 import { roomManager, type DiscoverableSession } from '../../../services/room-manager';
 import { pubsub } from '../../../pubsub/index';
 import { validateInput, requireSessionMember, requireAuthenticated } from '../shared/helpers';
 import { SessionIdSchema, LatitudeSchema, LongitudeSchema, RadiusMetersSchema } from '../../../validation/schemas';
-import { generateSessionSummary } from './session-summary';
+import { generateSessionHealthExport, generateSessionSummary } from './session-summary';
 import { getDistributedState } from '../../../services/distributed-state';
 import { buildSessionPayload } from './helpers';
 import { dbRead } from '../../../db/client';
@@ -130,6 +135,21 @@ export const sessionQueries = {
     requireAuthenticated(ctx);
     validateInput(SessionIdSchema, sessionId, 'sessionId');
     return generateSessionSummary(sessionId);
+  },
+
+  /**
+   * Get viewer-specific session data for Apple Health. This is narrower than
+   * sessionSummary by design: Health workouts are personal records.
+   */
+  sessionHealthExport: async (
+    _: unknown,
+    { sessionId }: { sessionId: string },
+    ctx: ConnectionContext,
+  ): Promise<SessionHealthExport | null> => {
+    requireAuthenticated(ctx);
+    validateInput(SessionIdSchema, sessionId, 'sessionId');
+    if (!ctx.userId) throw new Error('Authentication required to perform this operation');
+    return generateSessionHealthExport(sessionId, ctx.userId);
   },
 
   /**

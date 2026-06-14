@@ -60,6 +60,7 @@
     "flashVsRedpoint": "Flash vs après-travail",
     "vPoints": "V-Points",
     "vPointsTotal": "{{value}} au total",
+    "chartTooltipTotal": "Total",
     "gradeDistributionAria": "Répartition par cotation sur tous les boards",
     "weeklyAttemptsAria": "Essais hebdo par difficulté",
     "flashRedpointAria": "Flash vs après-travail par cotation",

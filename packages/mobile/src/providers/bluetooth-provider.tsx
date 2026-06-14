@@ -23,6 +23,7 @@ import { GET_BOARD } from '../lib/graphql/operations';
 import type { GetBoardQueryResponse } from '../lib/graphql/operations';
 import { getBoardRenderData } from '../lib/board-details';
 import { registerBluetoothConnection } from '../lib/ble/bluetooth-status-store';
+import { reportHandledError } from '../lib/error-reporting';
 import { useIsPartyPreviewOnly, useQueue, useQueueSessionControls } from './queue-provider';
 import { useBoardPresenceControls } from './board-presence-provider';
 import { useQueueSnackbar } from './queue-snackbar-provider';
@@ -282,6 +283,9 @@ function BluetoothAutoSender({
           } catch (error) {
             if (signal?.aborted) return;
             console.error('Error sending climb to board:', error);
+            // Distinct from the manual lightbulb send (`ble-send`) so PostHog can
+            // tell auto-sender failures (climb-change drain loop) apart.
+            reportHandledError(error, { tags: { source: 'ble-auto-send' } });
           }
 
           toSend = pendingSendRef.current;
@@ -332,7 +336,13 @@ export function BluetoothProvider({
   const { currentClimb: wallCurrentClimb } = useBoardPresenceCurrent();
   const { showUndoWallChangeSnackbar } = useQueueSnackbar();
   const { overrides: holdColorOverrides, signature: holdColorSignature } = useHoldColorOverrides();
-  const bluetoothColorOverrides = useMemo(() => getBluetoothColorOverrides(holdColorOverrides), [holdColorOverrides]);
+  const bluetoothColorOverrides = useMemo(
+    () => getBluetoothColorOverrides(holdColorOverrides),
+    // Marker-only accessibility edits must not churn the BLE sender.
+    // The color signature is the complete BLE-visible override identity.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [holdColorSignature],
+  );
 
   // Mirror the board config props so the empty-dep-ish connect callback resolves
   // the serial against the board currently in view without churning identity.
@@ -792,6 +802,7 @@ export function BluetoothProvider({
         });
       } catch (error) {
         console.error('Failed to switch to correct board config:', error);
+        reportHandledError(error, { tags: { source: 'board-config', op: 'switch' } });
         Alert.alert(t('boardConfigMismatch.title'), t('boardConfigMismatch.mobileSwitchFailed'));
       }
     },

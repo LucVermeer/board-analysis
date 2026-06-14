@@ -1,4 +1,4 @@
-import type { SessionSummary } from '@boardsesh/shared-schema';
+import type { SessionHealthExport, SessionSummary } from '@boardsesh/shared-schema';
 
 // Stable identifier for an integration surface. Distinct from the GraphQL
 // `IntegrationProvider` ('STRAVA'): device-local integrations (Apple Health)
@@ -6,12 +6,12 @@ import type { SessionSummary } from '@boardsesh/shared-schema';
 // enum value. This id is what the UI and the registry key off.
 export type IntegrationId = 'apple-health' | 'strava';
 
-// Per-session context the session-end trigger gathers that isn't carried on the
-// `SessionSummary` itself: the active board type and the climbedAt timestamps of
-// the current user's ascents (mapped to HealthKit `.lap` events).
+// Optional per-session context gathered by the session-end trigger. Apple
+// Health now loads the viewer-specific export payload from GraphQL so manual
+// saves after app restart have the same lap data as auto-saves.
 export type SessionExportContext = {
-  boardType: string;
-  lapTimestamps: string[];
+  boardType?: string;
+  healthExport?: SessionHealthExport | null;
 };
 
 export type IntegrationDefinition = {

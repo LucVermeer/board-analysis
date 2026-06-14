@@ -297,6 +297,8 @@
     "remainingChars": "Encore {{count}} caractères à écrire",
     "starRating_one": "{{count}} étoile",
     "starRating_other": "{{count}} étoiles",
+    "sessionRecordingLabel": "Activer l'enregistrement de session",
+    "sessionRecordingDescription": "Aidez-nous à corriger votre bug plus vite en activant l'enregistrement de session et en reproduisant le problème. Vous pourrez le désactiver ensuite.",
     "nextAria": "Suivant"
   },
   "feedbackBanner": {

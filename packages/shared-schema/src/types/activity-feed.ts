@@ -1,3 +1,5 @@
+import type { BetaLinksGqlRow } from '../beta-video-url';
+
 // Activity feed types
 
 import type { SocialEntityType } from './comments';
@@ -38,6 +40,8 @@ export type AscentFeedItem = {
   climbName: string;
   setterUsername?: string | null;
   boardType: string;
+  boardId?: number | null;
+  boardDisplayName?: string | null;
   layoutId?: number | null;
   angle: number;
   isMirror: boolean;
@@ -131,6 +135,7 @@ export type ActivityFeedItem = {
   quality?: number | null;
   attemptCount?: number | null;
   comment?: string | null;
+  commentCount?: number | null;
   createdAt: string;
   metadata?: Record<string, unknown> | null;
 };
@@ -146,6 +151,8 @@ export type ActivityFeedInput = {
   limit?: number;
   boardUuid?: string | null;
   userId?: string | null;
+  followingOnly?: boolean | null;
+  includeDailyHighlights?: boolean | null;
 };
 
 export type GlobalCommentFeedInput = {
@@ -172,9 +179,36 @@ export type SessionGradeDistributionItem = {
   attempt: number;
 };
 
+export type SessionFeedTickHighlight = {
+  uuid: string;
+  userId: string;
+  climbUuid: string;
+  climbName?: string | null;
+  boardType: string;
+  layoutId?: number | null;
+  angle: number;
+  status: string;
+  attemptCount: number;
+  difficulty?: number | null;
+  difficultyName?: string | null;
+  quality?: number | null;
+  isMirror: boolean;
+  isBenchmark: boolean;
+  isNoMatch: boolean;
+  comment?: string | null;
+  frames?: string | null;
+  setterUsername?: string | null;
+  climbedAt: string;
+};
+
+export type SessionFeedBetaHighlight = {
+  tick: SessionFeedTickHighlight;
+  betaLink: BetaLinksGqlRow;
+};
+
 export type SessionFeedItem = {
   sessionId: string;
-  sessionType: 'party';
+  sessionType: 'party' | 'daily_highlight';
   sessionName?: string | null;
   ownerUserId?: string | null;
   participants: SessionFeedParticipant[];
@@ -185,6 +219,10 @@ export type SessionFeedItem = {
   gradeDistribution: SessionGradeDistributionItem[];
   boardTypes: string[];
   hardestGrade?: string | null;
+  hardestSend?: SessionFeedTickHighlight | null;
+  featuredBeta?: SessionFeedBetaHighlight | null;
+  socialEntityType: 'session' | 'tick';
+  socialEntityId: string;
   firstTickAt: string;
   lastTickAt: string;
   durationMinutes?: number | null;
@@ -227,7 +265,7 @@ export type SessionDetailTick = {
 
 export type SessionDetail = {
   sessionId: string;
-  sessionType: 'party';
+  sessionType: 'party' | 'daily_highlight';
   sessionName?: string | null;
   ownerUserId?: string | null;
   participants: SessionFeedParticipant[];

@@ -8,7 +8,7 @@ import { manualSaveToAppleHealth, useHealthKitSaveState, type SessionExportConte
 
 type SaveToAppleHealthButtonProps = {
   summary: SessionSummary;
-  exportContext: SessionExportContext;
+  exportContext?: SessionExportContext;
 };
 
 /**
@@ -19,7 +19,7 @@ type SaveToAppleHealthButtonProps = {
  * manual button stay in sync — pressing the button while an auto-save is
  * running shows the same "Saving…" state.
  */
-export function SaveToAppleHealthButton({ summary, exportContext }: SaveToAppleHealthButtonProps) {
+export function SaveToAppleHealthButton({ summary, exportContext = {} }: SaveToAppleHealthButtonProps) {
   const { t } = useTranslation('session');
   const { t: tSettings } = useTranslation('settings');
   const { showToast } = useToast();
@@ -46,10 +46,14 @@ export function SaveToAppleHealthButton({ summary, exportContext }: SaveToAppleH
     );
   }
 
-  if (saveState === 'saved') {
+  if (saveState === 'saved' || saveState === 'savedWithoutEnergy') {
     return (
       <Button
-        title={t('summary.savedToAppleHealth')}
+        title={
+          saveState === 'savedWithoutEnergy'
+            ? t('summary.savedToAppleHealthWithoutCalories')
+            : t('summary.savedToAppleHealth')
+        }
         variant="outlined"
         icon="check.small"
         onPress={handlePress}

@@ -47,7 +47,7 @@
       "nearbyShowing": "Mostrando cercanos",
       "yourBoardsTitle": "Tus boards",
       "popularTitle": "Configuraciones populares",
-      "search": "Buscar"
+      "findGym": "Buscar gimnasio"
     },
     "custom": {
       "title": "Crea un board",
@@ -57,7 +57,8 @@
       "sets": "Sets",
       "angle": "Ángulo",
       "start": "Empezar a escalar",
-      "createError": "No se pudo crear ese board. Inténtalo de nuevo."
+      "createError": "No se pudo crear ese board. Inténtalo de nuevo.",
+      "name": "Nombre del tablero"
     },
     "bluetooth": {
       "title": "Boards cerca de ti",
@@ -65,10 +66,6 @@
       "resolving": "Cargando boards…",
       "noResults": "Ningún board al alcance",
       "unavailable": "Activa el Bluetooth para buscar"
-    },
-    "search": {
-      "placeholder": "Busca por nombre o lugar",
-      "mapUnavailable": "Actualiza la app para ver el mapa. Puedes buscar por nombre."
     },
     "boardDetail": {
       "setActive": "Usar esta tabla",
@@ -85,6 +82,25 @@
         "angle": "Ángulo",
         "adjustable": "ajustable"
       }
+    },
+    "disambiguation": {
+      "title": "¿En qué tablero estás?",
+      "subtitle": "Este número de serie lo comparten varios tableros. Elige el muro en el que estás.",
+      "yourBoard": "Tu tablero",
+      "cancel": "Ahora no"
+    },
+    "gyms": {
+      "title": "Gimnasios cerca de ti",
+      "subtitle": "Toca un gimnasio para usar su tablero",
+      "locationNeeded": "Comparte tu ubicación para encontrar gimnasios cerca",
+      "grantLocation": "Usar mi ubicación",
+      "empty": "Aún no hay gimnasios cerca",
+      "noBoards": "Aún no hay tableros aquí",
+      "boardCount": "{{count}} tableros",
+      "searchPlaceholder": "Busca una ciudad, gimnasio o tabla",
+      "showingPlace": "Mostrando {{place}}",
+      "clearSearch": "Borrar búsqueda",
+      "otherBoardsTitle": "Tablas cercanas"
     }
   },
   "boardEntity": {
