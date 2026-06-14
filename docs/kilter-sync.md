@@ -260,19 +260,30 @@ The catalog-relevant schema (`board_climbs.hold_fingerprint` + index, `board_cli
 
 ## OAuth handshake
 
-The web app exposes three routes under `/api/internal/board-credentials/kilter/` (mirrors the `/api/internal/aurora-credentials/` layout — these are third-party board credential flows, not NextAuth providers, so they intentionally live outside `/api/auth/*`):
+The backend owns the Kilter credential flow. Web and mobile both start with
+`POST /api/board-credentials/kilter/handoff`, then send the user through the
+browser-facing `/board-credentials/kilter/start` and
+`/board-credentials/kilter/callback` routes. The callback returns only a
+short-lived completion token; the app must finish linking with
+`POST /api/board-credentials/kilter/finalize` using the signed-in user's bearer
+JWT.
 
-- `start` — generates a PKCE verifier + state, sets HttpOnly cookies scoped to `/api/internal/board-credentials/kilter`, redirects to Keycloak's authorize endpoint with `scope=openid offline_access`.
-- `callback` — validates state, exchanges the code for `{access_token, refresh_token, id_token}`, decodes the `sub` + `preferred_username` from the id_token (no signature verification — we just received it over TLS from Keycloak, and we never accept id_tokens via client redirects), encrypts the refresh token via `@boardsesh/crypto`, and upserts:
+- `handoff` - creates a short-lived signed handoff for the authenticated Boardsesh user and records a one-time nonce.
+- `start` - verifies the handoff, generates a PKCE verifier + state, sets HttpOnly cookies scoped to `/board-credentials/kilter`, and redirects to Keycloak's authorize endpoint with `scope=openid offline_access`.
+- `callback` - validates state, exchanges the code for `{access_token, refresh_token, id_token}`, decodes the `sub` + `preferred_username` from the id_token (no signature verification - we just received it over TLS from Keycloak, and we never accept id_tokens via client redirects), encrypts the refresh token via `@boardsesh/crypto`, and redirects back with a signed completion token.
+- `finalize` - requires the bearer JWT for the active Boardsesh session, verifies that the completion token belongs to the same user, consumes a one-time nonce, decrypts the refresh token, and upserts:
   - `aurora_credentials` (`board_type = 'kilter'`, `encrypted_refresh_token`, `username/password = NULL`).
-  - `user_board_mappings` (`board_user_id_text = sub`, `board_user_id = NULL` — kilter sub is a UUID, not an integer).
-- `disconnect` — revokes locally (clears the credential row + mapping).
+  - `user_board_mappings` (`board_user_id_text = sub`, `board_user_id = NULL` - kilter sub is a UUID, not an integer).
+- `DELETE /api/aurora-credentials` - revokes locally (clears the credential row + mapping).
 
-The callback is **account-linking only**. It never creates a NextAuth session — the user must already be signed in. If `offline_access` doesn't return a `refresh_token`, the handshake fails closed with `reason=no-refresh-token` rather than persisting an unrenewable credential.
+The callback is **account-linking only**. It never creates a NextAuth session and
+never saves credentials directly. If `offline_access` doesn't return a
+`refresh_token`, the handshake fails closed with `reason=no-refresh-token` rather
+than persisting an unrenewable credential.
 
 ### Access gate
 
-Account linking is gated by `KILTER_SYNC_ALLOWED_USER_IDS` (comma-separated NextAuth user IDs) — see [`packages/web/app/lib/kilter-sync/access.ts`](../packages/web/app/lib/kilter-sync/access.ts). Empty/unset means the feature is off for everyone. Both `start` and `callback` enforce the gate, and the settings UI hides the Connect button when it returns false. The allowlist is parsed once at module load; flipping it requires a redeploy. PR 15 removes the gate.
+Account linking is gated by `KILTER_SYNC_ALLOWED_USER_IDS` (comma-separated NextAuth user IDs) - see [`packages/web/app/lib/kilter-sync/access.ts`](../packages/web/app/lib/kilter-sync/access.ts). Empty/unset means the feature is off for everyone. Handoff, start, callback, and finalize enforce the gate, and the settings UI hides the Connect button when it returns false. The allowlist is parsed once at module load; flipping it requires a redeploy. PR 15 removes the gate.
 
 ## Daemon
 

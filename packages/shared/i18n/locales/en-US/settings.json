@@ -210,6 +210,7 @@
     "unlinkSuccess": "Account unlinked successfully",
     "unlinkError": "Failed to unlink account",
     "unlinkPartial": "We disconnected on our side, but the Kilter app may still be signed in. Sign out of Kilter there too if you want to fully cut the link.",
+    "loadRetry": "Try again",
     "import": {
       "steps": {
         "climbs": "Importing draft climbs",
@@ -267,6 +268,29 @@
       "namePlaceholder": "[YOUR NAME]",
       "emailPlaceholder": "[YOUR EMAIL]",
       "body": "Hey there!\n\nEx-app user here. I was wondering if I could get a copy of my data so I can save my logbooks and other data for personal tracking records.\n\nMy username is {{name}}, and this should be under this email ({{email}}).\n\nThanks!\n\n{{name}}"
+    },
+    "mobile": {
+      "connectedAs": "Connected as {{name}}",
+      "connected": "Connected",
+      "notConnected": "Not connected",
+      "kilterConnected": "Kilter connected",
+      "kilterNotAllowed": "Kilter sync is not enabled for this account yet.",
+      "kilterConnectFailed": "Couldn't connect Kilter. Try again.",
+      "linkSuccess": "{{boardName}} linked",
+      "unlinkSuccess": "{{boardName}} unlinked",
+      "unlinkPartial": "{{boardName}} was removed here, but the provider session may still be live.",
+      "invalidCredentials": "That username or password didn't work.",
+      "rateLimited": "Too many attempts. Try again later.",
+      "requestFailed": "Couldn't save that link. Try again.",
+      "loadFailed": "Couldn't load your board accounts.",
+      "importMissingUser": "Pick an Aurora JSON export file.",
+      "importBoardWarning": "This looks like {{layoutName}}. Import to {{boardName}} only if that's right.",
+      "importPreviewIntro": "Import data from {{username}} to {{boardName}}:",
+      "importPartial": "Import partially finished. Re-importing the file is safe.",
+      "importFailed": "Import failed. Try again.",
+      "importInterrupted": "Import stopped before it finished. Re-importing the file is safe.",
+      "requestDataFailed": "Couldn't open email. Try again.",
+      "passwordHelp": "Your credentials are encrypted before they are stored."
     }
   },
   "healthkit": {

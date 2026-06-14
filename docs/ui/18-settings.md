@@ -104,7 +104,8 @@ The mobile More tab contains appearance and UI-style controls that have no direc
 
 ### 11.4 Aurora Account Linking
 
-**Component:** `AuroraCredentialsSection`
+**Web component:** `AuroraCredentialsSection`
+**Mobile component:** `BoardAccountsSection` on Connected apps
 
 Card for each board type (iterates `AURORA_BOARDS`: kilter, tension).
 
@@ -144,6 +145,23 @@ Card for each board type (iterates `AURORA_BOARDS`: kilter, tension).
    - Active step shows progress bar with count (e.g., "142 / 500").
 3. **Complete phase**: Results summary per category (imported/skipped/failed counts). Unresolved climbs warning (shows up to 20 names).
 4. **Error phase**: Error alert with message.
+
+**Mobile Connected apps differences:**
+
+- Route: `packages/mobile/app/(tabs)/profile/integrations.tsx`.
+- Board account cards render above platform/device integration cards.
+- Uses backend REST endpoints instead of Next internal routes.
+- Kilter can connect through OAuth only when `KILTER_SYNC_ALLOWED_USER_IDS`
+  allows the current user; otherwise the card offers JSON import and data
+  request actions.
+- Non-Kilter boards use the same username/password link dialog semantics as
+  web.
+- JSON import reads a local file with `expo-document-picker`, previews the
+  shared parsed counts, streams import progress from the backend, and surfaces
+  partial/unresolved results in the same phase model as web.
+- Strava cards are hidden unless the `strava-integration` feature flag is on;
+  static mobile builds can enable it with
+  `EXPO_PUBLIC_STRAVA_INTEGRATION=true`.
 
 ---
 
@@ -202,7 +220,9 @@ Card for each board type (iterates `AURORA_BOARDS`: kilter, tension).
 
 - `profile` -- REST `GET /api/internal/profile`.
 - `updateProfile` -- REST `PUT /api/internal/profile`.
-- `auroraCredentials` -- REST `GET/POST/DELETE /api/internal/aurora-credentials`.
+- `auroraCredentials` -- REST `GET/POST/DELETE /api/aurora-credentials`.
+- `auroraImport` -- streaming REST `POST /api/aurora-import`.
+- `kilterCredentialHandoff` -- REST `POST /api/board-credentials/kilter/handoff`, then browser redirects through `/board-credentials/kilter/start` and `/board-credentials/kilter/callback`, then the app finalizes with `POST /api/board-credentials/kilter/finalize`.
 - `myControllers` -- REST `GET/POST/DELETE /api/internal/controllers`.
 - `deleteAccountInfo` / `GET_DELETE_ACCOUNT_INFO` -- GraphQL query for published climb count.
 - `deleteAccount` / `DELETE_ACCOUNT` -- GraphQL mutation.

@@ -71,7 +71,11 @@ describe('streamImport', () => {
   beforeEach(async () => {
     vi.restoreAllMocks();
     const mod = await import('../json-import-stream');
-    streamImport = mod.streamImport;
+    streamImport = ((boardType, data, onEvent) =>
+      mod.streamImport(boardType, data, onEvent, {
+        backendUrl: 'https://backend.test',
+        authToken: 'test-token',
+      })) as typeof _streamImportType;
   });
 
   describe('basic streaming', () => {

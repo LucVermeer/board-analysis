@@ -9,4 +9,5 @@ export {
   syncAuroraBoardLocations,
   type AuroraLocationBoardName,
 } from './locations-sync';
+export * from './json-import';
 export { convertQuality } from '@boardsesh/shared-schema';

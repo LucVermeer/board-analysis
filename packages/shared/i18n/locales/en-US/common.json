@@ -94,7 +94,8 @@
       },
       "integrations": {
         "title": "Connected apps",
-        "subtitle": "Apple Health, Strava"
+        "subtitle": "Board accounts, Apple Health",
+        "subtitleWithStrava": "Board accounts, Apple Health, Strava"
       }
     },
     "about": {

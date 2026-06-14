@@ -317,15 +317,25 @@ Since the Kilter backend has been shut down, API-based sync is no longer availab
 ### How It Works
 
 1. User downloads their data export from Aurora (a `.json` file)
-2. In Boardsesh Settings > Board Accounts, click **Import JSON** on the relevant board card
+2. In Boardsesh Settings > Board Accounts on web, or Connected apps on mobile,
+   click **Import JSON** on the relevant board card
 3. Select the export file — a preview shows the number of ascents, attempts, and circuits
 4. Confirm — the server resolves climb names to UUIDs, maps grades, and imports the data
 
 ### Technical Details
 
-- **Endpoint**: `POST /api/internal/aurora-import`
-- **Implementation**: `packages/web/app/lib/data-sync/aurora/json-import.ts`
-- **UI**: Import button in `packages/web/app/components/settings/aurora-credentials-section.tsx`
+- **Backend endpoint**: `POST /api/aurora-import` streams progress events for web and mobile
+- **Implementation**: `packages/aurora-sync/src/sync/json-import.ts`
+- **Preview parser**: `packages/shared-schema/src/aurora-import.ts`
+- **Web UI**: `packages/web/app/components/settings/aurora-credentials-section.tsx`
+- **Mobile UI**: `packages/mobile/src/components/integrations/BoardAccountsSection.tsx`
+
+Web and mobile credential management use backend REST endpoints instead of
+Backend REST routes: `GET/POST/DELETE /api/aurora-credentials` for
+credential state, `GET /api/aurora-credentials/unsynced` for pending local
+changes, and the `/api/board-credentials/kilter/handoff` +
+`/board-credentials/kilter/{start,callback}` OAuth handoff followed by
+`POST /api/board-credentials/kilter/finalize` for Kilter.
 
 ### Key Differences from API Sync
 

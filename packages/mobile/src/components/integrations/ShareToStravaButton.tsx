@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Button } from '../Button';
 import { useToast } from '../../providers/toast-provider';
 import { useIntegrationStatuses, useSyncSessionToIntegration } from '../../lib/graphql/hooks';
+import { useFeatureFlag } from '../../providers/feature-flags-provider';
 import { STRAVA_ORANGE } from './strava-brand';
 
 type ShareToStravaButtonProps = {
@@ -14,6 +15,13 @@ type ShareToStravaButtonProps = {
  * user has a connected Strava account.
  */
 export function ShareToStravaButton({ sessionId }: ShareToStravaButtonProps) {
+  const stravaEnabled = useFeatureFlag('strava-integration') === true;
+  if (!stravaEnabled) return null;
+
+  return <EnabledShareToStravaButton sessionId={sessionId} />;
+}
+
+function EnabledShareToStravaButton({ sessionId }: ShareToStravaButtonProps) {
   const { t } = useTranslation('session');
   const { showToast } = useToast();
   const { data: statuses, isLoading: statusesLoading } = useIntegrationStatuses();
