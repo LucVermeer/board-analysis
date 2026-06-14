@@ -88,7 +88,7 @@ export function WebBoardPresenceProvider({ children }: { children: ReactNode }) 
   const clientRef = useRef<Client | null>(null);
 
   const presenceClient = useMemo<WebBoardPresenceClient | null>(() => {
-    if (!enabled || activeWsClient === null) return null;
+    if (activeWsClient === null) return null;
     return createWebBoardPresenceClient(() => {
       const client = clientRef.current;
       if (!client) {
@@ -96,19 +96,9 @@ export function WebBoardPresenceProvider({ children }: { children: ReactNode }) 
       }
       return client;
     });
-  }, [enabled, activeWsClient]);
+  }, [activeWsClient]);
 
   useEffect(() => {
-    if (!enabled) {
-      // Flag off: ensure no client lingers and the wall collapses to empty.
-      if (clientRef.current) {
-        void clientRef.current.dispose();
-        clientRef.current = null;
-      }
-      setActiveWsClient(null);
-      setBoardId(null);
-      return;
-    }
     const wsUrl = getBackendWsUrl();
     if (!wsUrl) {
       setActiveWsClient(null);
@@ -124,14 +114,12 @@ export function WebBoardPresenceProvider({ children }: { children: ReactNode }) 
       }
       setActiveWsClient((currentClient) => (currentClient === client ? null : currentClient));
     };
-  }, [enabled, token]);
+  }, [token]);
 
   // The wall/config key last resolved, so a reconnect to the same board doesn't
   // re-resolve. Serial boards use the physical serial. Serial-less boards
   // (MoonBoard in v1) use the route config for a shared per-config feed.
   const lastResolvedKeyRef = useRef<string | null>(null);
-  const enabledRef = useRef(enabled);
-  enabledRef.current = enabled;
   // Mirror boardId into a ref so the empty-dep callback can read it without
   // re-resolving an already-bound serial.
   const boardIdRef = useRef(boardId);
@@ -141,7 +129,7 @@ export function WebBoardPresenceProvider({ children }: { children: ReactNode }) 
 
   const resolveAndBindBoard = useCallback(async (args: ResolveBoardArgs): Promise<ResolvedBoard | null> => {
     const activeClient = presenceClientRef.current;
-    if (!enabledRef.current || activeClient === null) {
+    if (activeClient === null) {
       return null;
     }
     const resolveKey =
@@ -178,8 +166,8 @@ export function WebBoardPresenceProvider({ children }: { children: ReactNode }) 
 
   return (
     <BoardPresenceControlsContext.Provider value={controls}>
-      <BoardPresenceProvider boardId={enabled ? boardId : null} client={presenceClient}>
-        <BoardNowPlayingInstrument boardId={enabled ? boardId : null} />
+      <BoardPresenceProvider boardId={boardId} client={presenceClient}>
+        <BoardNowPlayingInstrument boardId={boardId} />
         {children}
       </BoardPresenceProvider>
     </BoardPresenceControlsContext.Provider>

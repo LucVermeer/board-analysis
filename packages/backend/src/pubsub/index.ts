@@ -893,9 +893,12 @@ class PubSub {
     try {
       const { publisher } = redisClientManager.getClients();
       const key = `board:${boardId}:writer`;
-      const previous = await publisher.get(key);
-      await publisher.set(key, emitterId, 'EX', BOARD_MEMBERSHIP_TTL);
-      return previous;
+      // Atomic set-and-return-previous (`SET key val EX ttl GET`, Redis 6.2+) so
+      // two concurrent reports can't both read the same previous holder and both
+      // broadcast a hand-off — only the real change is detected. The writer key
+      // only ever holds a string, so GET can't hit a WRONGTYPE.
+      const previous = await publisher.set(key, emitterId, 'EX', BOARD_MEMBERSHIP_TTL, 'GET');
+      return (previous as string | null) ?? null;
     } catch (error) {
       if (this.redisRequired) throw error;
       logger.error('[PubSub] Failed to set board writer:', error);

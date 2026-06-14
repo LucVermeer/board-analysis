@@ -10,7 +10,7 @@ import { db } from '../../../db/client';
 import * as dbSchema from '@boardsesh/db/schema';
 import { pubsub } from '../../../pubsub/index';
 import { applyRateLimit, requireAuthenticated } from '../shared/helpers';
-import { assertValidBoardId, requireActiveBoardById, requireAnonReadableBoard } from './shared';
+import { requireActiveBoardById, requireAnonReadableBoard } from './shared';
 import { computeBoardPresenceStats } from './stats';
 
 export const boardPresenceQueries = {
@@ -133,8 +133,8 @@ export const boardPresenceQueries = {
     ctx: ConnectionContext,
   ): Promise<BoardConnectionHolder | null> => {
     await applyRateLimit(ctx, 30, 'boardConnection');
-    assertValidBoardId(boardId);
-    // Anonymous viewers only read the holder of public / system-shared boards.
+    // Validates the id and, for anonymous viewers, restricts to public /
+    // system-shared boards.
     await requireAnonReadableBoard(boardId, ctx.userId);
     const emitterId = await pubsub.getBoardWriter(String(boardId));
     if (emitterId === null) return null;

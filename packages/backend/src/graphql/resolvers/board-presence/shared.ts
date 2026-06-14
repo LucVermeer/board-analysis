@@ -311,8 +311,8 @@ export async function requireAnonReadableBoard(
   boardId: number,
   viewerUserId: string | null | undefined,
 ): Promise<void> {
-  if (viewerUserId) return;
   assertValidBoardId(boardId);
+  if (viewerUserId) return;
   const [board] = await db
     .select({ isPublic: dbSchema.userBoards.isPublic, ownerId: dbSchema.userBoards.ownerId })
     .from(dbSchema.userBoards)

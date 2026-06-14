@@ -1429,6 +1429,13 @@ describe('board-presence connection holder', () => {
     return resolved.boardId;
   }
 
+  it('reportBoardDisconnect returns false (no throw) for a valid but unheld board', async () => {
+    // No holder set → atomic compare-and-delete is a no-op; the mutation must
+    // resolve false, not error.
+    const result = await boardPresenceMutations.reportBoardDisconnect(undefined, { boardId: 999_999_999 }, authCtx());
+    expect(result).toBe(false);
+  });
+
   // Anonymous read-access gate (pure DB reachability check — no Redis needed).
   describe('anonymous read access', () => {
     const anon = () => authCtx({ isAuthenticated: false, userId: undefined });

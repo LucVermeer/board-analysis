@@ -2,7 +2,7 @@ import type { ConnectionContext, BoardPresenceEvent } from '@boardsesh/shared-sc
 import { pubsub } from '../../../pubsub/index';
 import { createEagerAsyncIterator } from '../shared/async-iterators';
 import { applyRateLimit } from '../shared/helpers';
-import { assertValidBoardId, requireAnonReadableBoard } from './shared';
+import { requireAnonReadableBoard } from './shared';
 
 export const boardPresenceSubscriptions = {
   /**
@@ -20,9 +20,9 @@ export const boardPresenceSubscriptions = {
   boardNowPlaying: {
     subscribe: async function* (_: unknown, { boardId }: { boardId: number }, ctx: ConnectionContext) {
       await applyRateLimit(ctx, 30, 'boardNowPlaying');
-      assertValidBoardId(boardId);
-      // Anonymous viewers can only watch public / system-shared boards (not a
-      // private wall reached by enumerating ids); logged-in callers are unbounded.
+      // Validates the id and, for anonymous viewers, restricts to public /
+      // system-shared boards (not a private wall reached by enumerating ids);
+      // logged-in callers are unbounded.
       await requireAnonReadableBoard(boardId, ctx.userId);
 
       const boardKey = String(boardId);
