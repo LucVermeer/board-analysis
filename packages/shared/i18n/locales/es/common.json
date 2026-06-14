@@ -292,7 +292,8 @@
       },
       "integrations": {
         "title": "Aplicaciones conectadas",
-        "subtitle": "Apple Health y Strava"
+        "subtitle": "Apple Health y Strava",
+        "subtitleWithStrava": "Cuentas de tabla, Apple Health, Strava"
       }
     },
     "about": {
