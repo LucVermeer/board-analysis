@@ -20,10 +20,11 @@ from the Boardsesh logo (built from the V11–V16 climbing-grade purples); the s
 each platform's own design system.
 
 - **Platform-native, not lowest-common-denominator.** The app renders in one of two variants —
-  **Liquid Glass** (Apple's iOS 26 look) or **Material 3** (everywhere else). The brand palette and
-  the component APIs are identical across both; the silhouettes, elevation, motion and type scale
-  follow whichever platform you're on. A control is the same product in both variants, drawn the way
-  that platform draws controls.
+  **Liquid Glass** (Apple's look) or **Material 3**. The variant is the _aesthetic_; it is distinct
+  from whether the device can render real iOS 26 glass _chrome_ (see "Aesthetic vs. capability"
+  below). The brand palette and the component APIs are identical across both; the silhouettes,
+  elevation, motion and type scale follow whichever variant you're in. A control is the same product
+  in both variants, drawn the way that platform draws controls.
 - **One violet across light and dark.** The brand reads violet in every scheme. Dark mode lifts the
   tint and brightens fills so the same identity stays legible on near-black — it is not a different
   palette.
@@ -42,25 +43,42 @@ Source: `packages/mobile/src/theme/resolve-ui-variant.ts`, `providers/theme-prov
 
 The whole app renders in one resolved `variant`:
 
-| Variant       | When                                                          | Look                                                                                     |
-| ------------- | ------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| `liquidGlass` | iOS 26 hardware (preferred, primary)                          | Apple Liquid Glass — floating glass capsules, soft corners, HIG type, reanimated springs |
-| `material`    | Everywhere else (Android, older iOS, or explicit user choice) | Material 3 — elevation, ripple, nav active-indicator pill, M3 type and corners           |
+| Variant       | When                                                  | Look                                                                                     |
+| ------------- | ----------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `liquidGlass` | Every iPhone by default; opt-in on Android            | Apple Liquid Glass — floating glass capsules, soft corners, HIG type, reanimated springs |
+| `material`    | Android by default; explicit user choice any platform | Material 3 — elevation, ripple, nav active-indicator pill, M3 type and corners           |
 
 The user's stored preference is `UiVariantPreference` = `'auto' | 'liquidGlass' | 'material'`.
-`'auto'` resolves against a synchronous native capability check (`useGlassCapability()` → iOS 26):
+`'auto'` resolves against the **platform**, not glass capability — Liquid Glass on every iPhone
+(including iOS < 26), Material on Android:
 
 ```ts
-export function resolveUiVariant(preference: UiVariantPreference, glassCapable: boolean): UiVariant {
+export function resolveUiVariant(preference: UiVariantPreference, autoPrefersGlass: boolean): UiVariant {
   if (preference === 'liquidGlass') return 'liquidGlass';
   if (preference === 'material') return 'material';
-  return glassCapable ? 'liquidGlass' : 'material'; // 'auto'
+  return autoPrefersGlass ? 'liquidGlass' : 'material'; // 'auto'; caller passes Platform.OS === 'ios'
 }
 ```
 
-Change it with `theme.setUiVariant(next)`. Material is drawn opaque (M3 tonal surfaces) on **every**
-platform when chosen — including iOS 26 hardware — so a user who picks Material gets a real M3 app,
-not a glass app with the blur turned off.
+Change it with `theme.setUiVariant(next)`. Every option is selectable on every platform — any phone
+can opt into Liquid Glass. Material is drawn opaque (M3 tonal surfaces) on **every** platform when
+chosen, so a user who picks Material gets a real M3 app, not a glass app with the blur turned off.
+
+### Aesthetic vs. capability
+
+The `variant` chooses the _aesthetic_; a separate, synchronous **capability** check decides whether
+real iOS 26 glass _chrome_ is used or a fallback stands in. Keep the two apart — Liquid Glass on an
+older iPhone is the variant with the chrome degraded, not Material.
+
+- `useGlassCapability()` → iOS 26 only (the native `GlassView` / `GlassContainer` API is present).
+- `useNativeTabBar()` (= `liquidGlass && useGlassCapability()`) gates the native `NativeTabs` glass
+  tab bar + `BottomAccessory`. When it's false — Material, **or** Liquid Glass on a non-capable
+  device — the JS `Tabs` + `MaterialTabBar` carry navigation and the floating `PersistentQueueBar`
+  carries the current climb. This is the canonical predicate; `useBottomChromeMetrics` keys tab-bar
+  geometry on it so the layout math matches the bar actually on screen.
+- Surfaces degrade in `GlassSurface` via `useEffectiveSurfaceMode()`: `glass` (iOS 26) → `blur`
+  (iOS < 26 frosted) → `material`/`solid` (Android, Reduce Transparency). Buttons stay JS
+  (`PressableSurface`) on every path, so any phone on Liquid Glass falls back to JS buttons safely.
 
 **Component routing rule.** Cross-variant components expose one public prop API and branch internally
 on `theme.variant`. Call sites never change. The canonical shape (`Button.tsx`, `Card.tsx`):
