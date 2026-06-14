@@ -7,6 +7,9 @@ const cfg = vi.hoisted(() => ({
   platformOS: 'ios' as 'ios' | 'android',
   reactNativeMinor: 82 as number | undefined,
   liquidGlassAvailable: true,
+  // The two expo-glass-effect probes are tracked separately so a test can model
+  // them diverging (Liquid Glass available, GlassView API not).
+  glassEffectApiAvailable: true,
   nativeTabs: {} as unknown,
   bottomAccessory: {} as unknown,
   variant: 'liquidGlass' as 'liquidGlass' | 'material',
@@ -25,9 +28,7 @@ vi.mock('react-native', () => ({
 
 vi.mock('expo-glass-effect', () => ({
   isLiquidGlassAvailable: () => cfg.liquidGlassAvailable,
-  // useGlassCapability (via useNativeTabBar) also checks the GlassView API; gate it
-  // on the same flag so a single switch models a fully (in)capable device.
-  isGlassEffectAPIAvailable: () => cfg.liquidGlassAvailable,
+  isGlassEffectAPIAvailable: () => cfg.glassEffectApiAvailable,
 }));
 
 vi.mock('expo-router/unstable-native-tabs', () => ({
@@ -53,6 +54,7 @@ describe('use-bottom-accessory', () => {
     cfg.platformOS = 'ios';
     cfg.reactNativeMinor = 82;
     cfg.liquidGlassAvailable = true;
+    cfg.glassEffectApiAvailable = true;
     cfg.nativeTabs = {};
     cfg.bottomAccessory = {};
     cfg.variant = 'liquidGlass';
@@ -151,5 +153,19 @@ describe('use-bottom-accessory', () => {
 
       expect(result.current).toBe(false);
     });
+  });
+
+  it('keeps the accessory and the native tab bar consistent when the glass APIs diverge', () => {
+    // Liquid Glass reports available but the GlassView API does not: the native tab
+    // bar falls back to JS, and the accessory (which lives inside NativeTabs) must
+    // agree and stay inactive — otherwise the JS queue toolbar gets suppressed for an
+    // accessory that never mounts. Both predicates share useGlassCapability() now.
+    cfg.glassEffectApiAvailable = false;
+
+    const tabBar = renderHook(() => useNativeTabBar());
+    const accessory = renderHook(() => useNativeAccessoryActive());
+
+    expect(tabBar.result.current).toBe(false);
+    expect(accessory.result.current).toBe(false);
   });
 });
