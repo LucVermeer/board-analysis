@@ -310,7 +310,17 @@
       "shareClose": "Cerrar",
       "shareReadingCaption": "Leyendo la descripción…",
       "shareSuggestedTitle": "Encontrado en la descripción",
-      "shareOtherAscents": "Tus otros ascensos"
+      "shareOtherAscents": "Tus otros ascensos",
+      "shareTitle": "Comparte tu beta",
+      "step1Title": "Copia tu descripción",
+      "step2Title": "Publícalo como reel",
+      "step3Title": "Envíalo de vuelta a Boardsesh",
+      "copyCaption": "Copiar descripción",
+      "captionCopied": "Descripción copiada — pégala en tu reel",
+      "openInstagram": "Abrir Instagram",
+      "instagramNotInstalled": "No se pudo abrir Instagram",
+      "shareBackInstructions": "Dos formas de traerlo: en tu reel toca Compartir y elige Boardsesh (puede estar en Más), o copia el enlace del reel y pégalo abajo. En ambos casos lo emparejaremos con esta vía.",
+      "pasteSectionLabel": "¿Ya tienes el enlace?"
     },
     "angleSelector": {
       "title": "Elegir ángulo",

@@ -29,6 +29,7 @@ import { useActiveBoard, useSetActiveBoard } from '../lib/graphql/use-active-boa
 import { formatActiveBoardLabel } from '../lib/boards/active-board-label';
 import { track } from '../lib/analytics';
 import { ClimbActionsSheet } from '../components/ClimbActionsSheet';
+import { AddBetaVideoSheet } from '../components/AddBetaVideoSheet';
 import { AddToPlaylistSheet } from '../components/AddToPlaylistSheet';
 import { useToggleFavorite, useProfile } from '../lib/graphql/hooks';
 import { favoritesStore } from '@boardsesh/climb-actions';
@@ -125,6 +126,7 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
   const [logAscentInput, setLogAscentInput] = useState<LogAscentInput | null>(null);
   const [climbActions, setClimbActions] = useState<{ climb: Climb; boardConfig: BoardConfig } | null>(null);
   const [playlistClimb, setPlaylistClimb] = useState<{ climb: Climb; boardConfig: BoardConfig } | null>(null);
+  const [betaVideoClimb, setBetaVideoClimb] = useState<{ climb: Climb; boardConfig: BoardConfig } | null>(null);
   const { addToQueue, setSessionBoardPath, setCurrentClimb } = useQueueActions();
   const { sessionId } = useQueueSessionControls();
   const isPartyPreviewOnly = useIsPartyPreviewOnly();
@@ -338,6 +340,18 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
       boardConfig: climbActions.boardConfig,
     });
   }, [climbActions]);
+
+  const handleClimbActionsAddBetaVideo = useCallback(() => {
+    if (!climbActions) return;
+    setBetaVideoClimb({
+      climb: climbActions.climb,
+      boardConfig: climbActions.boardConfig,
+    });
+  }, [climbActions]);
+
+  const closeAddBetaVideo = useCallback(() => {
+    setBetaVideoClimb(null);
+  }, []);
 
   // Present the always-mounted queue sheet imperatively. Calling `present()`
   // synchronously from the handler (rather than from a `visible`-prop effect)
@@ -576,7 +590,18 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
           onOpenPlaylist={handleClimbActionsOpenPlaylist}
           onToggleFavorite={handleClimbActionsToggleFavorite}
           onTick={handleClimbActionsTick}
+          onAddBetaVideo={profile?.id ? handleClimbActionsAddBetaVideo : undefined}
           onClose={closeClimbActions}
+        />
+      ) : null}
+      {betaVideoClimb ? (
+        <AddBetaVideoSheet
+          visible
+          climb={betaVideoClimb.climb}
+          boardName={betaVideoClimb.boardConfig.boardName as BoardName}
+          layoutId={betaVideoClimb.boardConfig.layoutId}
+          angle={betaVideoClimb.boardConfig.angle}
+          onClose={closeAddBetaVideo}
         />
       ) : null}
       {playlistClimb ? (

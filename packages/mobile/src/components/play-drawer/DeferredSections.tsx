@@ -1,13 +1,17 @@
-import { memo, useMemo } from 'react';
-import { View, StyleSheet } from 'react-native';
+import { memo, useCallback, useMemo } from 'react';
+import { View, Pressable, StyleSheet } from 'react-native';
 import { useTranslation } from 'react-i18next';
+import * as Haptics from 'expo-haptics';
 import type { Climb } from '@boardsesh/shared-schema';
 import { CollapsibleSection } from '../CollapsibleSection';
+import { Icon } from '../Icon';
 import { LogbookSection } from './LogbookSection';
 import { SimilarClimbsSection } from './SimilarClimbsSection';
 import { CommunitySection } from './CommunitySection';
 import { BetaVideosSection } from './BetaVideosSection';
-import { spacing } from '../../theme/tokens';
+import { useAuth } from '../../providers/auth-provider';
+import { useTheme } from '../../providers/theme-provider';
+import { spacing, borderRadius } from '../../theme/tokens';
 import { useDeferredAfterInteractions } from '../../hooks/use-deferred-after-interactions';
 
 type DeferredSectionsProps = {
@@ -23,6 +27,9 @@ type DeferredSectionsProps = {
   /** Reports the measured height of the Beta Videos section header (drives the play
    *  drawer's first-screen reserve so the header teases at the bottom of the fold). */
   onBetaHeaderLayout?: (height: number) => void;
+  /** Opens the "share your beta" sheet. Rendered as the Beta Videos header "+" for
+   *  signed-in users; absent (undefined) hides it. */
+  onAddBetaVideo?: () => void;
 };
 
 /**
@@ -41,8 +48,16 @@ export const DeferredSections = memo(function DeferredSections({
   contentEnabled,
   onSimilarClimbPress,
   onBetaHeaderLayout,
+  onAddBetaVideo,
 }: DeferredSectionsProps) {
   const { t } = useTranslation('session');
+  const { isAuthenticated } = useAuth();
+  const { brandColors } = useTheme();
+
+  const handleAddBetaVideoPress = useCallback(() => {
+    void Haptics.selectionAsync();
+    onAddBetaVideo?.();
+  }, [onAddBetaVideo]);
   // Defer the JS-heavy below-fold sections until just after the drawer's open
   // animation and only after the user has started scrolling below the fold.
   // Beta videos stay eager below because their header/body is the user's first
@@ -72,8 +87,25 @@ export const DeferredSections = memo(function DeferredSections({
   // sections still wait for scroll + the interaction queue.
   return (
     <View style={styles.container}>
-      <CollapsibleSection title={t('mobile.betaVideos.title')} keepExpanded onHeaderLayout={onBetaHeaderLayout}>
-        <BetaVideosSection climbUuid={climb.uuid} boardName={boardName} angle={angle} />
+      <CollapsibleSection
+        title={t('mobile.betaVideos.title')}
+        keepExpanded
+        onHeaderLayout={onBetaHeaderLayout}
+        headerAction={
+          isAuthenticated && onAddBetaVideo ? (
+            <Pressable
+              onPress={handleAddBetaVideoPress}
+              accessibilityRole="button"
+              accessibilityLabel={t('mobile.betaVideos.addButton')}
+              hitSlop={8}
+              style={({ pressed }) => [styles.addButton, pressed && { backgroundColor: `${brandColors.primary}1A` }]}
+            >
+              <Icon name="add" size={22} color={brandColors.primary} />
+            </Pressable>
+          ) : undefined
+        }
+      >
+        <BetaVideosSection climbUuid={climb.uuid} boardName={boardName} />
       </CollapsibleSection>
 
       {readyToRender && (
@@ -119,5 +151,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[4],
     paddingTop: spacing[3],
     paddingBottom: spacing[4],
+  },
+  addButton: {
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: borderRadius.full,
   },
 });

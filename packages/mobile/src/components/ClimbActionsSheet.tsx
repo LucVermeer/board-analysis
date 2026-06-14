@@ -35,6 +35,8 @@ type ClimbActionsSheetProps = {
   onToggleFavorite?: () => void;
   /** When provided, shows a "Log a tick" row that opens the LogAscent sheet. */
   onTick?: () => void;
+  /** When provided, shows an "Add beta video" row that opens the share-your-beta sheet. */
+  onAddBetaVideo?: () => void;
   onClose: () => void;
 };
 
@@ -58,6 +60,7 @@ function ClimbActionsSheet({
   onOpenPlaylist,
   onToggleFavorite,
   onTick,
+  onAddBetaVideo,
   onClose,
 }: ClimbActionsSheetProps) {
   const { t } = useTranslation('climbs');
@@ -100,6 +103,11 @@ function ClimbActionsSheet({
     onTick?.();
     onClose();
   }, [onTick, onClose]);
+
+  const handleAddBetaVideo = useCallback(() => {
+    onAddBetaVideo?.();
+    onClose();
+  }, [onAddBetaVideo, onClose]);
 
   const auroraAppUrl = climb ? buildAuroraAppUrl(boardName, climb.uuid) : null;
 
@@ -231,6 +239,14 @@ function ClimbActionsSheet({
             title={t('mobile.climbActions.tick')}
             leading={<Icon name="tick" size={22} color={successActionIconColor} />}
             onPress={handleTick}
+            showSeparator
+          />
+        )}
+        {onAddBetaVideo && (
+          <ListRow
+            title={t('mobile.climbActions.addBetaVideo')}
+            leading={<Icon name="video" size={22} color={accentActionIconColor} />}
+            onPress={handleAddBetaVideo}
             showSeparator
           />
         )}

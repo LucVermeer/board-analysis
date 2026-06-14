@@ -310,7 +310,17 @@
       "shareClose": "Fermer",
       "shareReadingCaption": "Lecture de la description...",
       "shareSuggestedTitle": "Trouve dans la description",
-      "shareOtherAscents": "Tes autres ascensions"
+      "shareOtherAscents": "Tes autres ascensions",
+      "shareTitle": "Partage ton beta",
+      "step1Title": "Copie ta légende",
+      "step2Title": "Publie-le en reel",
+      "step3Title": "Renvoie-le vers Boardsesh",
+      "copyCaption": "Copier la légende",
+      "captionCopied": "Légende copiée — colle-la dans ton reel",
+      "openInstagram": "Ouvrir Instagram",
+      "instagramNotInstalled": "Impossible d'ouvrir Instagram",
+      "shareBackInstructions": "Deux façons de le récupérer : sur ton reel appuie sur Partager et choisis Boardsesh (peut-être sous Plus), ou copie le lien du reel et colle-le ci-dessous. Dans les deux cas, on l'associera à cette voie.",
+      "pasteSectionLabel": "Tu as déjà un lien ?"
     },
     "angleSelector": {
       "title": "Choisir l'angle",

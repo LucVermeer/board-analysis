@@ -152,6 +152,9 @@ vi.mock('../../components/AddToPlaylistSheet', () => ({
     return createElement('div', { 'data-add-to-playlist': 'true' });
   },
 }));
+vi.mock('../../components/AddBetaVideoSheet', () => ({
+  AddBetaVideoSheet: () => createElement('div', { 'data-add-beta-video': 'true' }),
+}));
 vi.mock('../../components/QueueAddedSnackbar', () => ({
   QueueAddedSnackbar: () => createElement('div', { 'data-queue-snackbar': 'true' }),
 }));

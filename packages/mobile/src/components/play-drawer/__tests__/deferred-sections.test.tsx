@@ -13,10 +13,15 @@ vi.mock('react-native', () => ({
   Platform: { OS: 'ios' },
   PlatformColor: (name: string) => name,
   View: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
+  Pressable: ({ children }: { children?: ReactNode }) => createElement('button', null, children),
   StyleSheet: { create: (styles: unknown) => styles },
 }));
 
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
+vi.mock('expo-haptics', () => ({ selectionAsync: vi.fn() }));
+vi.mock('../../Icon', () => ({ Icon: () => null }));
+vi.mock('../../../providers/auth-provider', () => ({ useAuth: () => ({ isAuthenticated: false }) }));
+vi.mock('../../../providers/theme-provider', () => ({ useTheme: () => ({ brandColors: { primary: '#000' } }) }));
 
 vi.mock('../../../hooks/use-deferred-after-interactions', () => ({
   useDeferredAfterInteractions: (active: boolean, resetKey?: string | number) => {
