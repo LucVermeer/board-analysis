@@ -23,6 +23,7 @@ import { GET_BOARD } from '../lib/graphql/operations';
 import type { GetBoardQueryResponse } from '../lib/graphql/operations';
 import { getBoardRenderData } from '../lib/board-details';
 import { registerBluetoothConnection } from '../lib/ble/bluetooth-status-store';
+import { reportHandledError } from '../lib/error-reporting';
 import { useIsPartyPreviewOnly, useQueue, useQueueSessionControls } from './queue-provider';
 import { useBoardPresenceControls } from './board-presence-provider';
 import { useQueueSnackbar } from './queue-snackbar-provider';
@@ -282,6 +283,7 @@ function BluetoothAutoSender({
           } catch (error) {
             if (signal?.aborted) return;
             console.error('Error sending climb to board:', error);
+            reportHandledError(error, { tags: { source: 'ble-send' } });
           }
 
           toSend = pendingSendRef.current;
@@ -798,6 +800,7 @@ export function BluetoothProvider({
         });
       } catch (error) {
         console.error('Failed to switch to correct board config:', error);
+        reportHandledError(error, { tags: { source: 'board-config', op: 'switch' } });
         Alert.alert(t('boardConfigMismatch.title'), t('boardConfigMismatch.mobileSwitchFailed'));
       }
     },

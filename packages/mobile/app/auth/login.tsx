@@ -21,6 +21,7 @@ import { isGoogleSignInConfigured } from '../../src/lib/auth';
 import { useAuth } from '../../src/providers/auth-provider';
 import { useTheme } from '../../src/providers/theme-provider';
 import { track } from '../../src/lib/analytics';
+import { reportError } from '../../src/lib/error-reporting';
 import { hapticLight } from '../../src/lib/haptics';
 import { brandColors } from '../../src/theme/colors';
 import { iosSystemColors } from '../../src/theme/ios-colors';
@@ -97,15 +98,29 @@ export default function LoginScreen() {
     try {
       const result = await signInWithCredentials(trimmedEmail, password);
       if (!result.success) {
+        const credentialsFailureReason = classifyNativeAuthFailureReason(result, 'credentials');
         track(SHARED_EVENTS.LoginFailed, {
           auth_method: 'credentials',
-          failure_reason: classifyNativeAuthFailureReason(result, 'credentials'),
+          failure_reason: credentialsFailureReason,
+          failure_detail: result.error,
         });
         if (result.error === 'network') {
           setError(t('nativeStart.networkError'));
         } else if (result.status === 401) {
+          // Wrong email/password is a normal user error, not telemetry-worthy.
           setError(t('login.toasts.invalidCredentials'));
         } else {
+          // An unexpected backend failure (5xx, malformed response, …) — report
+          // it so a broken credentials endpoint is visible, not just a red toast.
+          reportError(new Error(`Credentials sign-in failed: ${result.error}`), {
+            tags: {
+              source: 'native-auth',
+              provider: 'credentials',
+              flow: 'native',
+              failure_reason: credentialsFailureReason,
+            },
+            extra: { status: result.status, server_error: result.error },
+          });
           setError(result.error);
         }
       } else {
@@ -150,21 +165,36 @@ export default function LoginScreen() {
         return;
       }
       // A real backend/token failure carrying the server's status + error.
+      const oauthFailureReason = classifyNativeAuthFailureReason(result, 'oauth');
       track(SHARED_EVENTS.LoginFailed, {
         auth_method: provider,
         flow: 'native',
-        failure_reason: classifyNativeAuthFailureReason(result, 'oauth'),
+        failure_reason: oauthFailureReason,
+        failure_detail: result.error,
         duration_ms: Date.now() - attemptStartedAt,
+      });
+      // Surface to error tracking too: an OAuth 401 / no_id_token is a config
+      // bug (client-id audience mismatch, unconfigured backend) rather than a
+      // user typo, so it's worth a $exception carrying the status + server
+      // message. Network blips downgrade to a warning (handled by report level).
+      reportError(new Error(`Native ${provider} sign-in failed: ${result.error}`), {
+        level: result.error === 'network' ? 'warning' : 'error',
+        tags: { source: 'native-auth', provider, flow: 'native', failure_reason: oauthFailureReason },
+        extra: { status: result.status, server_error: result.error },
       });
       setError(result.error === 'network' ? t('nativeStart.networkError') : t('nativeStart.oauthError'));
     } catch (oauthError) {
-      // The native module threw (Play Services missing, no presenter, …).
+      // The native module threw (Play Services missing, no presenter,
+      // DEVELOPER_ERROR for a signing/client-id mismatch, …).
       track(SHARED_EVENTS.LoginFailed, {
         auth_method: provider,
         flow: 'native',
         failure_reason: 'exception',
         failure_detail: oauthError instanceof Error ? oauthError.message : undefined,
         duration_ms: Date.now() - attemptStartedAt,
+      });
+      reportError(oauthError, {
+        tags: { source: 'native-auth', provider, flow: 'native', mechanism: 'exception' },
       });
       setError(t('nativeStart.oauthError'));
     } finally {

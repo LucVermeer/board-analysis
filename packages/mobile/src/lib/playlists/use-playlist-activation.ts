@@ -17,6 +17,7 @@ import { useIsPartyPreviewOnly, useQueueActions } from '../../providers/queue-pr
 import { useDrawerHost } from '../../providers/drawer-host-provider';
 import { useActiveBoard } from '../graphql/use-active-board';
 import { climbToQueueItem } from '../climb-to-queue-item';
+import { reportHandledError } from '../error-reporting';
 import { toSchemaClimb } from '../climb-types';
 
 /** A single page of the suggestion-refresh fetch. */
@@ -182,6 +183,7 @@ export function usePlaylistActivation({
       openPlayDrawer(toSchemaClimb(climb), { setAsCurrent: false, previewQueueItem: item });
       return activate(climb).catch((error: unknown) => {
         console.error('Playlist climb activation failed:', error);
+        reportHandledError(error, { tags: { source: 'playlist', op: 'activate-climb' } });
       });
     },
     [activate, openPlayDrawer, isPartyPreviewOnly, resolveTarget, sourceId, allClimbs],

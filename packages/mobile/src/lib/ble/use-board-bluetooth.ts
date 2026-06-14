@@ -27,6 +27,7 @@ import { requestBleRuntimePermissions } from './use-ble-permissions';
 import type { BluetoothAdapter, DevicePickerFn, DiscoveredDevice } from './types';
 import type { HoldPlacement } from '../../components/board-renderer/types';
 import { track } from '../analytics';
+import { reportHandledError } from '../error-reporting';
 import { buildHoldColorOverrideSignature, type HoldColorOverrides } from '../hold-color-overrides';
 
 // Exported for testing — isolates the .packet extraction so regressions are caught.
@@ -498,6 +499,9 @@ export function useBoardBluetooth({
             ...boardAnalyticsProperties,
             failureReason: classifyBleFailureReason(error),
           });
+          reportHandledError(error, {
+            tags: { source: 'ble-send', failure_reason: classifyBleFailureReason(error) },
+          });
           // A write that fails because the link is gone (the board dropped or
           // another device grabbed it — these boards are last-connection-wins) is
           // often the only signal we get: the adapter's disconnect event may never
@@ -685,6 +689,7 @@ export function useBoardBluetooth({
         return true;
       } catch (error) {
         console.error('Error connecting to Bluetooth:', error);
+        reportHandledError(error, { tags: { source: 'ble-connect' } });
         setIsConnected(false);
 
         // Dismiss the picker sheet if it's still showing. When a reconnect-by-

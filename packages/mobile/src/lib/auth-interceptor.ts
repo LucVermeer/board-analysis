@@ -1,6 +1,7 @@
 import { getAuthToken, getRefreshToken, storeTokens, isTokenExpiringSoon } from './auth-store';
 import { signOut } from './auth';
 import { BACKEND_URL } from './env';
+import { reportError, reportHandledError } from './error-reporting';
 
 let refreshPromise: Promise<boolean> | null = null;
 
@@ -29,6 +30,15 @@ async function refreshTokens(): Promise<boolean> {
 
     if (!response.ok) {
       console.warn(`[Auth] Token refresh failed: HTTP ${response.status}`);
+      // A 401/403 is an expired/revoked refresh token — routine, the user just
+      // signs in again. A 5xx means our refresh endpoint is broken for everyone,
+      // which we do want to see.
+      if (response.status >= 500) {
+        reportError(new Error(`Token refresh failed: HTTP ${response.status}`), {
+          tags: { source: 'auth-refresh' },
+          extra: { status: response.status },
+        });
+      }
       return false;
     }
 
@@ -37,6 +47,8 @@ async function refreshTokens(): Promise<boolean> {
     return true;
   } catch (error) {
     console.warn('[Auth] Token refresh error:', error instanceof Error ? error.message : 'unknown');
+    // Offline/aborted refreshes downgrade to a warning; a real throw reports.
+    reportHandledError(error, { tags: { source: 'auth-refresh' } });
     return false;
   }
 }

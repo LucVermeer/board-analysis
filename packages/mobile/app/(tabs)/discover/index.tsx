@@ -29,6 +29,7 @@ import { SMART_PLAYLISTS, type SmartPlaylistPresentation } from '../../../src/li
 import { useAuth } from '../../../src/providers/auth-provider';
 import { useTheme } from '../../../src/providers/theme-provider';
 import { useToast } from '../../../src/providers/toast-provider';
+import { reportHandledError } from '../../../src/lib/error-reporting';
 import { useAuthToken } from '../../../src/lib/graphql/use-auth-token';
 import { useProfile } from '../../../src/lib/graphql/hooks';
 import { useActiveBoard } from '../../../src/lib/graphql/use-active-board';
@@ -341,6 +342,7 @@ export default function DiscoverLibrary() {
         router.push(`/(tabs)/discover/${created.uuid}`);
       } catch (err) {
         console.error('Failed to create playlist:', err);
+        reportHandledError(err, { tags: { source: 'playlist', op: 'create' } });
         showToast(t('bottomTabBar.createPlaylistFailed'), 'error');
       } finally {
         setCreating(false);

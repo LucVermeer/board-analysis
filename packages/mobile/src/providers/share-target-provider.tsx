@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, type ReactNode } from 'react';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { reportHandledError } from '../lib/error-reporting';
 import { useShareIntent, type ShareIntent } from 'expo-share-intent';
 import { useTranslation } from 'react-i18next';
 import { isBetaVideoUrl } from '@boardsesh/shared-schema';
@@ -82,6 +83,7 @@ export function ShareTargetProvider({ children }: { children: ReactNode }) {
         await AsyncStorage.setItem(PENDING_SHARE_KEY, link);
       } catch (error) {
         if (__DEV__) console.warn('[share-target] failed to stash pending share', error);
+        reportHandledError(error, { tags: { source: 'share-target', op: 'stash-pending-share' } });
       }
     },
     [navigateToShare],
@@ -115,6 +117,7 @@ export function ShareTargetProvider({ children }: { children: ReactNode }) {
         if (isBetaVideoUrl(pendingLink)) navigateToShare(pendingLink);
       } catch (error) {
         if (__DEV__) console.warn('[share-target] failed to consume pending share', error);
+        reportHandledError(error, { tags: { source: 'share-target', op: 'consume-pending-share' } });
       }
     })();
     return () => {
