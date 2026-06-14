@@ -545,7 +545,7 @@ export const tickMutations = {
     const validated = validateInput(AttachBetaLinkInputSchema, input, 'input');
     // Strip Instagram share-attribution params (`?igsh=...`) before the dedup
     // probe and insert so the stored `link` opens straight to the reel.
-    validated.link = normalizeBetaVideoUrl(validated.link);
+    const normalizedLink = normalizeBetaVideoUrl(validated.link);
     const userId = ctx.userId!;
     const now = new Date().toISOString();
 
@@ -560,7 +560,7 @@ export const tickMutations = {
       ctx,
       validated.boardType,
       validated.climbUuid,
-      validated.link,
+      normalizedLink,
       { onSameClimbDup: 'throw' },
     );
     // With onSameClimbDup: 'throw' the helper either returns 'insert' or
@@ -577,8 +577,8 @@ export const tickMutations = {
         .values({
           boardType: validated.boardType,
           climbUuid: validated.climbUuid,
-          link: validated.link,
-          shortcode: getInstagramMediaId(validated.link),
+          link: normalizedLink,
+          shortcode: getInstagramMediaId(normalizedLink),
           angle: validated.angle ?? null,
           isListed: true,
           thumbnail: betaPlan.thumbnail,

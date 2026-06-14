@@ -689,6 +689,23 @@ describe('betaLinkPreview resolver', () => {
     });
   });
 
+  it('strips the Instagram share-attribution param from the echoed link', async () => {
+    fetchInstagramMetaMock.mockResolvedValueOnce({
+      status: 'ok',
+      thumbnail: 'https://scontent.cdninstagram.com/raw.jpg',
+      username: 'climber',
+      caption: 'Sent it',
+    });
+
+    const result = await betaLinkQueries.betaLinkPreview(
+      undefined,
+      { link: 'https://www.instagram.com/reel/ABC123/?igsh=NHB5ZXljZjV3bzB3' },
+      ctx(true),
+    );
+
+    expect(result.link).toBe('https://www.instagram.com/reel/ABC123/');
+  });
+
   it('throws when unauthenticated and never calls out to Instagram', async () => {
     await expect(
       betaLinkQueries.betaLinkPreview(undefined, { link: 'https://www.instagram.com/reel/ABC123/' }, ctx(false)),
