@@ -23,8 +23,18 @@ vi.mock('../../lib/preferences/secure-store-adapter', () => ({
 // module doesn't blow up. PlatformColor is still mocked as a passthrough for
 // belt-and-braces in case some other module reaches for it.
 const useColorSchemeMock = vi.fn();
+// Platform.OS is a getter so a test can flip it to 'ios' and exercise the
+// platform-driven 'auto' → liquidGlass resolution. Default 'android' keeps the
+// colour assertions below on the Android fallback path; iosSystemColors is
+// computed at module import (null here), so the iOS path degrades to that
+// fallback rather than touching native PlatformColor.
+const platform = vi.hoisted(() => ({ os: 'android' as 'ios' | 'android' }));
 vi.mock('react-native', () => ({
-  Platform: { OS: 'android' },
+  Platform: {
+    get OS() {
+      return platform.os;
+    },
+  },
   useColorScheme: () => useColorSchemeMock(),
   PlatformColor: (name: string) => name,
   // The provider drives Appearance.setColorScheme so the override flips native
@@ -32,8 +42,9 @@ vi.mock('react-native', () => ({
   Appearance: { setColorScheme: vi.fn() },
 }));
 
-// useGlassCapability imports these; under jsdom (Platform.OS='android') the
-// capability is false regardless, but the import must resolve.
+// The provider resolves 'auto' off Platform.OS ('android' here → Material), not
+// glass capability. Other modules in the import graph still pull expo-glass-effect,
+// so mock it defensively; the values don't affect the provider's variant choice.
 vi.mock('expo-glass-effect', () => ({
   isLiquidGlassAvailable: () => false,
   isGlassEffectAPIAvailable: () => false,
@@ -50,10 +61,11 @@ describe('ThemeProvider', () => {
     setMock.mockReset();
     removeMock.mockReset();
     useColorSchemeMock.mockReset();
-    // Defaults: no stored preference, OS in light mode.
+    // Defaults: no stored preference, OS in light mode, Android platform.
     getMock.mockResolvedValue(null);
     setMock.mockResolvedValue(undefined);
     useColorSchemeMock.mockReturnValue('light');
+    platform.os = 'android';
   });
 
   describe('resolved colorScheme (without persistence)', () => {
@@ -141,7 +153,7 @@ describe('ThemeProvider', () => {
   });
 
   describe('uiVariant', () => {
-    it("defaults to the Material variant on a non-glass device ('auto' → material)", async () => {
+    it("defaults to the Material variant on Android ('auto' → material)", async () => {
       const { result } = renderHook(() => useTheme(), { wrapper });
       await waitFor(() => expect(getMock).toHaveBeenCalledWith(UI_VARIANT_KEY));
       expect(result.current.uiVariantPreference).toBe('auto');
@@ -149,6 +161,18 @@ describe('ThemeProvider', () => {
       // Material maps M3 tonal surfaces + the 20dp button radius.
       expect(result.current.radii.button).toBe(20);
       expect(result.current.systemColors.background).toBe('#F3EFFA');
+    });
+
+    it("defaults to the Liquid Glass variant on iPhone ('auto' → liquidGlass), incl. iOS < 26", async () => {
+      // The provider keys 'auto' on Platform.OS, not glass capability — so every
+      // iPhone (older ones degrade their surfaces downstream) lands on liquidGlass.
+      platform.os = 'ios';
+      const { result } = renderHook(() => useTheme(), { wrapper });
+      await waitFor(() => expect(getMock).toHaveBeenCalledWith(UI_VARIANT_KEY));
+      expect(result.current.uiVariantPreference).toBe('auto');
+      expect(result.current.variant).toBe('liquidGlass');
+      // Liquid Glass keeps the soft 10dp button radius, not the Material 20dp.
+      expect(result.current.radii.button).toBe(10);
     });
 
     it('setUiVariant persists to SecureStore and flips the resolved variant + tokens', async () => {

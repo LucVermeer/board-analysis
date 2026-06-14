@@ -12,15 +12,20 @@ import type { UiVariantPreference } from '@boardsesh/key-value-storage';
 export type UiVariant = 'liquidGlass' | 'material';
 
 /**
- * Resolve the effective variant from the user's preference and whether the
- * device can render Liquid Glass. An explicit choice always wins; `'auto'`
- * follows capability (glass on iOS 26, Material everywhere else).
+ * Resolve the effective variant from the user's preference and whether this
+ * platform prefers the glass aesthetic by default. An explicit choice always
+ * wins; `'auto'` follows the platform — Liquid Glass on every iPhone (including
+ * iOS < 26, where it renders via the blur fallback) and Material on Android.
+ *
+ * Note this is the *aesthetic* decision, separate from whether the device can
+ * render real iOS 26 glass chrome (`useGlassCapability`): an older iPhone resolves
+ * to `liquidGlass` here and degrades its surfaces/tab bar downstream.
  *
  * Pure and synchronous so the first paint can pick the right variant without
- * waiting on async storage — `glassCapable` is a synchronous native check.
+ * waiting on async storage — `autoPrefersGlass` is a synchronous platform check.
  */
-export function resolveUiVariant(preference: UiVariantPreference, glassCapable: boolean): UiVariant {
+export function resolveUiVariant(preference: UiVariantPreference, autoPrefersGlass: boolean): UiVariant {
   if (preference === 'liquidGlass') return 'liquidGlass';
   if (preference === 'material') return 'material';
-  return glassCapable ? 'liquidGlass' : 'material';
+  return autoPrefersGlass ? 'liquidGlass' : 'material';
 }

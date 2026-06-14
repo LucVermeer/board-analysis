@@ -40,6 +40,10 @@ const playlistSheet = vi.hoisted(() => ({
   props: null as null | Record<string, unknown>,
 }));
 
+const betaVideoSheet = vi.hoisted(() => ({
+  props: null as null | Record<string, unknown>,
+}));
+
 const boardSheet = vi.hoisted(() => ({
   props: null as null | Record<string, unknown>,
   present: vi.fn(),
@@ -153,7 +157,10 @@ vi.mock('../../components/AddToPlaylistSheet', () => ({
   },
 }));
 vi.mock('../../components/AddBetaVideoSheet', () => ({
-  AddBetaVideoSheet: () => createElement('div', { 'data-add-beta-video': 'true' }),
+  AddBetaVideoSheet: (props: Record<string, unknown>) => {
+    betaVideoSheet.props = props;
+    return createElement('div', { 'data-add-beta-video': 'true' });
+  },
 }));
 vi.mock('../../components/QueueAddedSnackbar', () => ({
   QueueAddedSnackbar: () => createElement('div', { 'data-queue-snackbar': 'true' }),
@@ -712,6 +719,7 @@ describe('DrawerHostProvider climb actions', () => {
     queueSheet.props = null;
     climbActions.props = null;
     playlistSheet.props = null;
+    betaVideoSheet.props = null;
     boardSheet.props = null;
     boardSheet.present.mockClear();
     boardSheet.dismiss.mockClear();
@@ -771,6 +779,36 @@ describe('DrawerHostProvider climb actions', () => {
       layoutId: 1,
       sizeId: 10,
       setIds: '1,2',
+      angle: 40,
+    });
+  });
+
+  it('opens add beta video from climb actions, snapshotting the climb even as the actions sheet closes', async () => {
+    const hosts: Array<ReturnType<typeof useDrawerHost>> = [];
+    const { container } = renderHost((host) => hosts.push(host));
+    await waitFor(() => expect(hosts.at(-1)).toBeDefined());
+
+    const climb = makeQueueItem('queue-x', 'climb-x').climb as unknown as Climb;
+    act(() => {
+      hosts.at(-1)?.openClimbActions(climb);
+    });
+    await waitFor(() => expect(climbActions.props).not.toBeNull());
+
+    // Mirror ClimbActionsSheet.handleAddBetaVideo: fire onAddBetaVideo, then
+    // onClose (which clears climbActions). The beta-video sheet must still receive
+    // the snapshotted climb + board config — the ordering must not be load-bearing.
+    act(() => {
+      (climbActions.props?.onAddBetaVideo as (() => void) | undefined)?.();
+      (climbActions.props?.onClose as (() => void) | undefined)?.();
+    });
+
+    await waitFor(() => expect(container.querySelector('[data-add-beta-video]')).not.toBeNull());
+    expect(container.querySelector('[data-climb-actions]')).toBeNull();
+    expect(betaVideoSheet.props).toMatchObject({
+      visible: true,
+      climb,
+      boardName: 'kilter',
+      layoutId: 1,
       angle: 40,
     });
   });
