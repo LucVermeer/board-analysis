@@ -164,6 +164,13 @@ export default defineConfig({
         dependsOn: ['locations:aurora', 'locations:kilter', 'locations:moonboard'],
         cache: false,
       },
+      'db:dedupe-gyms': {
+        command: 'bun run --filter=@boardsesh/db db:dedupe-gyms',
+        cache: false,
+      },
+      'test:db': {
+        command: 'bun run --filter=@boardsesh/db test',
+      },
       'locations:aurora': {
         command: 'bun run --filter=@boardsesh/aurora-sync sync:locations',
         dependsOn: ['db:up'],
