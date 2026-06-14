@@ -28,13 +28,14 @@ $$ LANGUAGE plpgsql;
 --> statement-breakpoint
 
 -- Fire only when the source coordinates are part of the write, so name-only
--- updates don't pay for a geography recompute.
-CREATE TRIGGER gyms_set_location
+-- updates don't pay for a geography recompute. CREATE OR REPLACE (Postgres 14+,
+-- safe on postgres:17) keeps the statement idempotent alongside the function.
+CREATE OR REPLACE TRIGGER gyms_set_location
   BEFORE INSERT OR UPDATE OF latitude, longitude ON gyms
   FOR EACH ROW EXECUTE FUNCTION set_location_from_coordinates();
 --> statement-breakpoint
 
-CREATE TRIGGER user_boards_set_location
+CREATE OR REPLACE TRIGGER user_boards_set_location
   BEFORE INSERT OR UPDATE OF latitude, longitude ON user_boards
   FOR EACH ROW EXECUTE FUNCTION set_location_from_coordinates();
 --> statement-breakpoint

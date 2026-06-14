@@ -95,6 +95,17 @@ export function buildBoardWriteIdentifiers(record: ValidBoardLocation): {
   };
 }
 
+/**
+ * Upserts public gym + board locations from a sync source.
+ *
+ * HARD DEPENDENCY on migration 0127: the PostGIS `location` geography is no
+ * longer written here — it's derived from lat/lng by the gyms_set_location /
+ * user_boards_set_location triggers. Run against a pre-0127 database (a stale
+ * snapshot, a developer volume that never migrated) the upserts succeed but
+ * `location` stays NULL and proximity search silently returns nothing. Always
+ * migrate to >= 0127 before running a location sync. Covered by
+ * packages/db's location-trigger integration test.
+ */
 export async function upsertPublicBoardLocations(
   db: DrizzleDb,
   records: PublicBoardLocationInput[],
