@@ -79,6 +79,8 @@ export const iconMap = {
   // Create climb
   flame: { ios: 'flame', android: 'fire' },
   lock: { ios: 'lock', android: 'lock-outline' },
+  visibility: { ios: 'eye', android: 'eye-outline' },
+  'visibility.off': { ios: 'eye.slash', android: 'eye-off-outline' },
   'play.circle': { ios: 'play.circle', android: 'play-circle-outline' },
   'square.and.arrow.up.on.square': { ios: 'square.and.arrow.up.on.square', android: 'tray-arrow-up' },
   eraser: { ios: 'eraser', android: 'eraser' },

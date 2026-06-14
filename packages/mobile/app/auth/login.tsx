@@ -6,73 +6,31 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
   type TextInput as RNTextInput,
 } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { Image } from 'expo-image';
+import { useRouter } from 'expo-router';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { GoogleSigninButton } from '@react-native-google-signin/google-signin';
 import { useTranslation } from 'react-i18next';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { classifyNativeAuthFailureReason, nativeSignInErrorCode } from '../../src/lib/native-auth-analytics';
 import { isGoogleSignInConfigured } from '../../src/lib/auth';
+import { EMAIL_REGEX } from '../../src/lib/auth-validation';
 import { useAuth } from '../../src/providers/auth-provider';
 import { useTheme } from '../../src/providers/theme-provider';
+import { AuthTextInput } from '../../src/components/AuthTextInput';
+import { Button } from '../../src/components/Button';
 import { track } from '../../src/lib/analytics';
 import { reportError } from '../../src/lib/error-reporting';
 import { hapticLight } from '../../src/lib/haptics';
-import { brandColors } from '../../src/theme/colors';
-import { iosSystemColors } from '../../src/theme/ios-colors';
-
-const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
-
-// Minimal email regex — same shape as the web validator, intentionally lax
-// so we don't reject anything the server would accept.
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-function SignInButton({
-  title,
-  onPress,
-  disabled = false,
-}: {
-  title: string;
-  onPress: () => void;
-  disabled?: boolean;
-}) {
-  const scale = useSharedValue(1);
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
-  }));
-
-  return (
-    <AnimatedPressable
-      onPress={() => {
-        if (disabled) return;
-        hapticLight();
-        onPress();
-      }}
-      onPressIn={() => {
-        if (disabled) return;
-        scale.value = withSpring(0.97, { damping: 20, stiffness: 300, mass: 0.7 });
-      }}
-      onPressOut={() => {
-        if (disabled) return;
-        scale.value = withSpring(1, { damping: 20, stiffness: 300, mass: 0.7 });
-      }}
-      style={[animatedStyle, styles.button, disabled && styles.buttonDisabled]}
-    >
-      <Text style={styles.buttonText}>{title}</Text>
-    </AnimatedPressable>
-  );
-}
 
 export default function LoginScreen() {
   const { signInWithApple, signInWithGoogle, signInWithCredentials } = useAuth();
   const { t } = useTranslation('auth');
   const theme = useTheme();
+  const router = useRouter();
   const passwordRef = useRef<RNTextInput>(null);
 
   const [email, setEmail] = useState('');
@@ -211,17 +169,7 @@ export default function LoginScreen() {
     }
   }
 
-  // Input styling — dark-mode input fields are intentionally white (matches web).
   const isDark = theme.colorScheme === 'dark';
-  const inputBackground = isDark ? iosSystemColors.white : '#FFFFFF';
-  const inputBorder = isDark ? 'rgba(60, 60, 67, 0.36)' : 'rgba(60, 60, 67, 0.18)';
-  const inputTextColor = '#000000';
-  const inputPlaceholderColor = 'rgba(60, 60, 67, 0.6)';
-
-  const inputStyle = [
-    styles.input,
-    { backgroundColor: inputBackground, borderColor: inputBorder, color: inputTextColor },
-  ];
 
   // Sign in with Apple is iOS-only; Google only when the build shipped its
   // native config (an Apple-only / misconfigured build hides it rather than
@@ -246,33 +194,32 @@ export default function LoginScreen() {
             accessible={false}
           />
           <Text style={[styles.title, { color: theme.brandColors.primary }]}>Boardsesh</Text>
-          <Text style={styles.subtitle}>{t('nativeStart.tagline')}</Text>
+          <Text style={[styles.subtitle, { color: theme.systemColors.secondaryLabel }]}>
+            {t('nativeStart.tagline')}
+          </Text>
         </View>
 
         <View style={styles.form}>
-          <TextInput
-            style={inputStyle}
+          <AuthTextInput
+            label={t('login.fields.email')}
             value={email}
             onChangeText={setEmail}
             placeholder={t('login.placeholders.email')}
-            placeholderTextColor={inputPlaceholderColor}
+            keyboardType="email-address"
             autoCapitalize="none"
             autoCorrect={false}
-            keyboardType="email-address"
             textContentType="emailAddress"
             autoComplete="email"
             returnKeyType="next"
             onSubmitEditing={() => passwordRef.current?.focus()}
             editable={!submitting}
-            accessibilityLabel={t('login.fields.email')}
           />
-          <TextInput
+          <AuthTextInput
             ref={passwordRef}
-            style={inputStyle}
+            label={t('login.fields.password')}
             value={password}
             onChangeText={setPassword}
             placeholder={t('login.placeholders.password')}
-            placeholderTextColor={inputPlaceholderColor}
             secureTextEntry
             autoCapitalize="none"
             autoCorrect={false}
@@ -283,14 +230,19 @@ export default function LoginScreen() {
               void onSubmit();
             }}
             editable={!submitting}
-            accessibilityLabel={t('login.fields.password')}
+            showLabel={t('login.a11y.showPassword')}
+            hideLabel={t('login.a11y.hidePassword')}
           />
-          <SignInButton
-            title={submitting ? t('nativeStart.signingIn') : t('nativeStart.signIn')}
+          <Button
+            title={t('nativeStart.signIn')}
             onPress={() => {
               void onSubmit();
             }}
+            variant="filled"
+            size="large"
+            loading={submitting}
             disabled={!canSubmit}
+            style={styles.submitButton}
           />
           {error ? (
             <Text style={styles.errorText} accessibilityLiveRegion="polite">
@@ -344,6 +296,22 @@ export default function LoginScreen() {
             </View>
           </>
         )}
+
+        <View style={styles.footer}>
+          <Text style={[styles.footerText, { color: theme.systemColors.secondaryLabel }]}>
+            {t('login.links.noAccount')}{' '}
+          </Text>
+          <Pressable
+            onPress={() => {
+              hapticLight();
+              router.push('/auth/register');
+            }}
+            hitSlop={8}
+            accessibilityRole="link"
+          >
+            <Text style={[styles.footerLink, { color: theme.systemColors.accent }]}>{t('login.submit.signUp')}</Text>
+          </Pressable>
+        </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -354,15 +322,9 @@ const styles = StyleSheet.create({
   header: { alignItems: 'center', marginBottom: 32 },
   logo: { width: 96, height: 96, marginBottom: 16 },
   title: { fontSize: 34, fontWeight: '700', marginBottom: 8 },
-  subtitle: { fontSize: 17, opacity: 0.7 },
+  subtitle: { fontSize: 17 },
   form: { gap: 12 },
-  input: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    fontSize: 17,
-  },
+  submitButton: { alignSelf: 'stretch', marginTop: 4 },
   errorText: {
     color: '#FF3B30',
     fontSize: 15,
@@ -387,18 +349,12 @@ const styles = StyleSheet.create({
   // Apple's native button needs explicit height + width or it renders nothing.
   appleButton: { width: '100%', height: 50 },
   googleButton: { width: '100%', height: 50 },
-  button: {
-    backgroundColor: brandColors.primary,
-    paddingVertical: 16,
-    borderRadius: 12,
+  footer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
     alignItems: 'center',
+    marginTop: 24,
   },
-  buttonDisabled: {
-    opacity: 0.5,
-  },
-  buttonText: {
-    color: iosSystemColors.white,
-    fontSize: 17,
-    fontWeight: '600',
-  },
+  footerText: { fontSize: 15 },
+  footerLink: { fontSize: 15, fontWeight: '600' },
 });

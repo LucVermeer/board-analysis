@@ -9,6 +9,7 @@ import {
   signInWithGoogle as authSignInWithGoogle,
   signOut as authSignOut,
   signInWithCredentials as authSignInWithCredentials,
+  registerWithCredentials as authRegisterWithCredentials,
   type CredentialsSignInResult,
   type OAuthSignInResult,
 } from '../lib/auth';
@@ -27,6 +28,7 @@ type AuthState = {
   signInWithApple: () => Promise<OAuthSignInResult>;
   signInWithGoogle: () => Promise<OAuthSignInResult>;
   signInWithCredentials: (email: string, password: string) => Promise<CredentialsSignInResult>;
+  register: (email: string, password: string, name?: string) => Promise<CredentialsSignInResult>;
   signOut: (method?: 'manual' | 'account_deleted') => Promise<void>;
   refreshAuthState: () => Promise<void>;
 };
@@ -187,6 +189,20 @@ export function AuthProvider({ children, onReady }: AuthProviderProps) {
     [checkAuth],
   );
 
+  // Registration auto-logs-in: the backend returns a JWT pair, so on success we
+  // re-run checkAuth — which flips isAuthenticated and lets the auth-group
+  // Redirect carry the user into the app, exactly like signInWithCredentials.
+  const register = useCallback(
+    async (email: string, password: string, name?: string): Promise<CredentialsSignInResult> => {
+      const result = await authRegisterWithCredentials(email, password, name);
+      if (result.success) {
+        await checkAuth();
+      }
+      return result;
+    },
+    [checkAuth],
+  );
+
   // `method` distinguishes a plain Sign Out ('manual') from an account deletion
   // ('account_deleted') in analytics, matching web. The cleanup is identical:
   // authSignOut()'s revoke is best-effort (src/lib/auth.ts), so revoking a token
@@ -236,10 +252,20 @@ export function AuthProvider({ children, onReady }: AuthProviderProps) {
       signInWithApple,
       signInWithGoogle,
       signInWithCredentials,
+      register,
       signOut,
       refreshAuthState: checkAuth,
     }),
-    [isAuthenticated, isLoading, signInWithApple, signInWithGoogle, signInWithCredentials, signOut, checkAuth],
+    [
+      isAuthenticated,
+      isLoading,
+      signInWithApple,
+      signInWithGoogle,
+      signInWithCredentials,
+      register,
+      signOut,
+      checkAuth,
+    ],
   );
 
   if (isLoading) {

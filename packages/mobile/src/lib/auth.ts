@@ -227,6 +227,49 @@ export async function signInWithCredentials(email: string, password: string): Pr
   return { success: true };
 }
 
+/**
+ * Create a Boardsesh account and sign the new user straight in. Mirrors
+ * signInWithCredentials: the backend's /auth/native/register returns the same
+ * JWT pair, so a 2xx response means the account exists AND the device is
+ * authenticated. A 409 (preserved in `status`) is how the UI tells "this email
+ * already has an account" apart from a real failure. `name` is optional.
+ */
+export async function registerWithCredentials(
+  email: string,
+  password: string,
+  name?: string,
+): Promise<CredentialsSignInResult> {
+  let response: Response;
+  try {
+    response = await fetch(`${BACKEND_URL}/auth/native/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password, ...(name ? { name } : {}) }),
+      signal: createTimeoutSignal(15_000),
+    });
+  } catch {
+    // Network failure / timeout. The caller maps this to a translated message.
+    return { success: false, status: null, error: 'network' };
+  }
+
+  if (!response.ok) {
+    let serverError = `HTTP ${response.status}`;
+    try {
+      const parsed = (await response.json()) as { error?: unknown };
+      if (typeof parsed.error === 'string' && parsed.error.length > 0) {
+        serverError = parsed.error;
+      }
+    } catch {
+      // Body wasn't JSON; fall back to the HTTP status string above.
+    }
+    return { success: false, status: response.status, error: serverError };
+  }
+
+  const data = (await response.json()) as { jwt: string; refreshToken: string; expiresAt: string };
+  await storeTokens(data.jwt, data.refreshToken, data.expiresAt);
+  return { success: true };
+}
+
 export async function signOut(): Promise<void> {
   const refreshToken = await getRefreshToken();
   if (refreshToken) {
