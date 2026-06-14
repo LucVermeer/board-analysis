@@ -249,7 +249,7 @@ public class HealthWorkoutsModule: Module {
                         if let angle = lap.angle {
                             lapMetadata["BoardseshAngle"] = angle
                         }
-                        HKWorkoutEvent(
+                        return HKWorkoutEvent(
                             type: .lap,
                             dateInterval: DateInterval(start: lapDate, duration: 0),
                             metadata: lapMetadata
