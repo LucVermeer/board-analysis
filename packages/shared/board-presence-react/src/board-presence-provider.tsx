@@ -58,6 +58,9 @@ export function BoardPresenceProvider({
     }),
     [value.history, value.stats],
   );
+  // Bare primitive on purpose — no useMemo. A boolean is compared by value, so
+  // the context only re-renders consumers when it actually flips (not on every
+  // currentClimb identity change). Wrapping it in useMemo would add nothing.
   const hasClimb = value.isLive && value.currentClimb !== null;
 
   return (
