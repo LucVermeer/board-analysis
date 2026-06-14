@@ -2,7 +2,12 @@ import { db } from '../../../db/client';
 import * as dbSchema from '@boardsesh/db/schema';
 import { eq, and, desc, isNotNull, like, or, sql } from 'drizzle-orm';
 import { rowsFromResult } from '@boardsesh/db/client';
-import { fetchInstagramMeta, getInstagramMediaId, isInstagramUrl } from '../../../lib/instagram-meta';
+import {
+  fetchInstagramMeta,
+  getInstagramMediaId,
+  isInstagramUrl,
+  normalizeBetaVideoUrl,
+} from '../../../lib/instagram-meta';
 import { fetchTikTokMeta, getTikTokCacheId, isTikTokUrl } from '../../../lib/tiktok-meta';
 import {
   cacheInstagramThumbnail,
@@ -124,7 +129,7 @@ const ENRICH_CONCURRENCY = 5;
 function passthroughResult(row: Row): BetaLinkResult {
   return {
     climbUuid: row.climbUuid,
-    link: row.link,
+    link: normalizeBetaVideoUrl(row.link),
     foreignUsername: row.foreignUsername,
     angle: row.angle,
     thumbnail: isOurS3Url(row.thumbnail) ? row.thumbnail : null,
@@ -181,7 +186,7 @@ async function enrichRow(row: Row, cfg: EnrichConfig): Promise<BetaLinkResult | 
   if (haveCachedThumbnail) {
     return {
       climbUuid: row.climbUuid,
-      link: row.link,
+      link: normalizeBetaVideoUrl(row.link),
       foreignUsername: row.foreignUsername,
       angle: row.angle,
       thumbnail: row.thumbnail,
@@ -221,7 +226,7 @@ async function enrichRow(row: Row, cfg: EnrichConfig): Promise<BetaLinkResult | 
 
   return {
     climbUuid: row.climbUuid,
-    link: row.link,
+    link: normalizeBetaVideoUrl(row.link),
     foreignUsername: newUsername,
     angle: row.angle,
     thumbnail,
@@ -447,15 +452,18 @@ export const betaLinkQueries = {
     requireAuthenticated(ctx);
     await applyRateLimit(ctx, 30, 'beta-link-preview');
 
+    // Strip Instagram share-attribution params so the preview echoes the same
+    // clean URL we'd store, and the meta fetch keys off the canonical form.
+    const normalizedLink = normalizeBetaVideoUrl(link);
     const preview: BetaLinkPreviewResult = {
-      link,
+      link: normalizedLink,
       thumbnail: null,
       username: null,
       caption: null,
     };
 
-    if (isInstagramUrl(link)) {
-      const meta = await fetchInstagramMeta(link);
+    if (isInstagramUrl(normalizedLink)) {
+      const meta = await fetchInstagramMeta(normalizedLink);
       if (meta.status === 'ok') {
         preview.thumbnail = meta.thumbnail;
         preview.username = meta.username;
@@ -464,8 +472,8 @@ export const betaLinkQueries = {
       return preview;
     }
 
-    if (isTikTokUrl(link)) {
-      const meta = await fetchTikTokMeta(link);
+    if (isTikTokUrl(normalizedLink)) {
+      const meta = await fetchTikTokMeta(normalizedLink);
       if (meta.status === 'ok') {
         preview.thumbnail = meta.thumbnail;
         preview.username = meta.username;
@@ -509,7 +517,7 @@ export const betaLinkQueries = {
       filtered.push({
         betaLink: {
           climbUuid: r.climb_uuid,
-          link: r.link,
+          link: normalizeBetaVideoUrl(r.link),
           foreignUsername: r.foreign_username,
           angle: r.angle,
           thumbnail: r.thumbnail,

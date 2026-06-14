@@ -14,7 +14,7 @@ import { queueBoardStatsPublish } from '../board-presence/stats';
 import { publishSocialEvent } from '../../../events';
 import { publishDebouncedSessionStats } from '../sessions/debounced-stats-publisher';
 import { queueClimbStatsRecompute } from './debounced-climb-stats-publisher';
-import { getInstagramMediaId, isInstagramUrl } from '../../../lib/instagram-meta';
+import { getInstagramMediaId, isInstagramUrl, normalizeBetaVideoUrl } from '../../../lib/instagram-meta';
 import {
   InstagramBetaValidationError,
   validateInstagramBetaLink,
@@ -391,7 +391,8 @@ export const tickMutations = {
     // to leave the video URL in the form. Cross-climb dup is still fatal:
     // the user explicitly chose this video URL and we want to surface the
     // friendly "post a separate reel" message.
-    const attachedVideoUrl = videoUrlForTickStatus(validatedInput.status, validatedInput.videoUrl);
+    const tickVideoUrl = videoUrlForTickStatus(validatedInput.status, validatedInput.videoUrl);
+    const attachedVideoUrl = tickVideoUrl ? normalizeBetaVideoUrl(tickVideoUrl) : tickVideoUrl;
     const betaPlan: BetaLinkInsertPlan = attachedVideoUrl
       ? await validateAndEnrichBetaLinkInsert(
           ctx,
@@ -542,6 +543,9 @@ export const tickMutations = {
     requireAuthenticated(ctx);
 
     const validated = validateInput(AttachBetaLinkInputSchema, input, 'input');
+    // Strip Instagram share-attribution params (`?igsh=...`) before the dedup
+    // probe and insert so the stored `link` opens straight to the reel.
+    const normalizedLink = normalizeBetaVideoUrl(validated.link);
     const userId = ctx.userId!;
     const now = new Date().toISOString();
 
@@ -556,7 +560,7 @@ export const tickMutations = {
       ctx,
       validated.boardType,
       validated.climbUuid,
-      validated.link,
+      normalizedLink,
       { onSameClimbDup: 'throw' },
     );
     // With onSameClimbDup: 'throw' the helper either returns 'insert' or
@@ -573,8 +577,8 @@ export const tickMutations = {
         .values({
           boardType: validated.boardType,
           climbUuid: validated.climbUuid,
-          link: validated.link,
-          shortcode: getInstagramMediaId(validated.link),
+          link: normalizedLink,
+          shortcode: getInstagramMediaId(normalizedLink),
           angle: validated.angle ?? null,
           isListed: true,
           thumbnail: betaPlan.thumbnail,

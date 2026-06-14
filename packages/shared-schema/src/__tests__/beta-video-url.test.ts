@@ -9,6 +9,7 @@ import {
   isBetaVideoUrl,
   isInstagramUrl,
   isTikTokUrl,
+  normalizeBetaVideoUrl,
   mapBetaLinkRow,
   mapBetaLinksResponse,
   type BetaLink,
@@ -113,6 +114,46 @@ describe('getTikTokVideoId', () => {
 
   it('returns null for non-tiktok url', () => {
     expect(getTikTokVideoId(IG_REEL)).toBeNull();
+  });
+});
+
+describe('normalizeBetaVideoUrl', () => {
+  it('strips the igsh share-attribution param from a reel url', () => {
+    expect(normalizeBetaVideoUrl('https://www.instagram.com/reel/DZlVfVhxKJZ/?igsh=NHB5ZXljZjV3bzB3')).toBe(
+      'https://www.instagram.com/reel/DZlVfVhxKJZ/',
+    );
+  });
+
+  it('strips any query string and fragment from Instagram urls', () => {
+    expect(normalizeBetaVideoUrl('https://instagram.com/p/Xyz123/?utm_source=share')).toBe(
+      'https://instagram.com/p/Xyz123/',
+    );
+    expect(normalizeBetaVideoUrl('https://www.instagram.com/tv/AbCdE12/#comments')).toBe(
+      'https://www.instagram.com/tv/AbCdE12/',
+    );
+  });
+
+  it('handles the instagr.am host and the no-trailing-slash form', () => {
+    expect(normalizeBetaVideoUrl('https://instagr.am/reel/abc/?igsh=x')).toBe('https://instagr.am/reel/abc/');
+    expect(normalizeBetaVideoUrl('https://www.instagram.com/reel/DZlVfVhxKJZ?igsh=x')).toBe(
+      'https://www.instagram.com/reel/DZlVfVhxKJZ',
+    );
+  });
+
+  it('leaves clean Instagram urls unchanged and is idempotent', () => {
+    expect(normalizeBetaVideoUrl(IG_REEL)).toBe(IG_REEL);
+    expect(normalizeBetaVideoUrl(normalizeBetaVideoUrl('https://instagram.com/p/Xyz123/?utm=a'))).toBe(
+      'https://instagram.com/p/Xyz123/',
+    );
+  });
+
+  it('leaves TikTok and unknown urls unchanged', () => {
+    expect(normalizeBetaVideoUrl(TIKTOK_LONG)).toBe(TIKTOK_LONG);
+    expect(normalizeBetaVideoUrl('https://www.tiktok.com/@u/video/123?is_from_webapp=1')).toBe(
+      'https://www.tiktok.com/@u/video/123?is_from_webapp=1',
+    );
+    expect(normalizeBetaVideoUrl('https://example.com/x?y=1')).toBe('https://example.com/x?y=1');
+    expect(normalizeBetaVideoUrl('')).toBe('');
   });
 });
 

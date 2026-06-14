@@ -1,8 +1,13 @@
-import { getInstagramMediaId, INSTAGRAM_URL_REGEX, isInstagramUrl } from '@boardsesh/shared-schema';
+import {
+  getInstagramMediaId,
+  INSTAGRAM_URL_REGEX,
+  isInstagramUrl,
+  normalizeBetaVideoUrl,
+} from '@boardsesh/shared-schema';
 import { createCircuitBreaker } from './circuit-breaker';
 import { logger } from '../utils/logger';
 
-export { INSTAGRAM_URL_REGEX, isInstagramUrl, getInstagramMediaId };
+export { INSTAGRAM_URL_REGEX, isInstagramUrl, getInstagramMediaId, normalizeBetaVideoUrl };
 
 const FETCH_TIMEOUT_MS = 4000;
 const USER_AGENT =
