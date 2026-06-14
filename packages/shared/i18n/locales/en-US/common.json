@@ -73,7 +73,8 @@
         "liquidGlass": "Liquid Glass",
         "material": "Material",
         "description": "Auto uses Liquid Glass on iPhone and Material on Android. Pick one to override.",
-        "glassFallback": "Liquid Glass uses a simpler fallback here. The full glass effect needs iOS 26."
+        "glassFallback": "Liquid Glass uses a simpler fallback here. The full glass effect needs iOS 26.",
+        "glassFallbackAndroid": "Liquid Glass uses a simpler, solid-surface look on Android."
       },
       "gradeFormat": {
         "title": "Grade format",

@@ -13,6 +13,7 @@ const cfg = vi.hoisted(() => ({
   variant: 'liquidGlass' as 'liquidGlass' | 'material',
   measuredTabBarHeight: null as number | null,
   nativeAccessoryActive: false,
+  nativeTabBar: false,
 }));
 
 vi.mock('react-native', () => ({
@@ -72,10 +73,11 @@ vi.mock('../../../providers/theme-provider', () => ({ useTheme: () => ({ variant
 // reads now (variant-aware); the capability function stays for other callers.
 vi.mock('../../../hooks/use-bottom-accessory', () => ({
   isBottomAccessoryAvailable: () => false,
+  // Drive each hook from its own flag: the native tab bar and the native accessory
+  // can diverge (e.g. a capable device with no current climb mounts the bar but not
+  // the accessory), so the tests keep them independent.
   useNativeAccessoryActive: () => cfg.nativeAccessoryActive,
-  // Native tab bar and native accessory share the same capability gate (iOS 26 +
-  // Liquid Glass), so the accessory flag doubles as the tab-bar signal here.
-  useNativeTabBar: () => cfg.nativeAccessoryActive,
+  useNativeTabBar: () => cfg.nativeTabBar,
 }));
 vi.mock('../ClimbCapsule', () => ({
   ClimbCapsule: ({
@@ -124,6 +126,7 @@ describe('PersistentQueueBar', () => {
     cfg.variant = 'liquidGlass';
     cfg.measuredTabBarHeight = null;
     cfg.nativeAccessoryActive = false;
+    cfg.nativeTabBar = false;
   });
 
   it('renders nothing when no climb is current', () => {
@@ -140,6 +143,7 @@ describe('PersistentQueueBar', () => {
 
   it('does not render the JS toolbar when the native bottom accessory is active', () => {
     cfg.nativeAccessoryActive = true;
+    cfg.nativeTabBar = true;
     cfg.insideTabs = true;
 
     const { container } = render(<PersistentQueueBar />);
@@ -150,6 +154,7 @@ describe('PersistentQueueBar', () => {
 
   it('keeps the JS toolbar fallback outside tabs when the native accessory path is active', () => {
     cfg.nativeAccessoryActive = true;
+    cfg.nativeTabBar = true;
     cfg.insideTabs = false;
 
     const { container } = render(<PersistentQueueBar />);

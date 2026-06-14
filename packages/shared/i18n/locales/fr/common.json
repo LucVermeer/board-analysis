@@ -73,7 +73,8 @@
         "liquidGlass": "Liquid Glass",
         "material": "Material",
         "description": "Automatique utilise Liquid Glass sur iPhone et Material sur Android. Choisis-en un pour passer outre.",
-        "glassFallback": "Liquid Glass utilise un rendu simplifié ici. L'effet de verre complet nécessite iOS 26."
+        "glassFallback": "Liquid Glass utilise un rendu simplifié ici. L'effet de verre complet nécessite iOS 26.",
+        "glassFallbackAndroid": "Liquid Glass utilise un rendu simplifié à surfaces pleines sur Android."
       },
       "gradeFormat": {
         "title": "Format de cotation",
