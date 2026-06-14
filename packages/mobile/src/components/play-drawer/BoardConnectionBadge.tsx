@@ -12,9 +12,9 @@
 // The idle check is a single threshold re-evaluated about once a minute (no
 // per-second ticking), matching the product decision to avoid a live countdown.
 
-import { memo, useEffect, useState } from 'react';
+import { memo, useContext, useEffect, useState } from 'react';
 import { View, StyleSheet } from 'react-native';
-import { useBoardPresenceCurrent } from '@boardsesh/board-presence-react';
+import { BoardPresenceCurrentContext } from '@boardsesh/board-presence-react';
 import { Avatar } from '../Avatar';
 import { Text } from '../Text';
 import { iosSystemColors } from '../../theme/ios-colors';
@@ -25,7 +25,13 @@ const IDLE_THRESHOLD_MS = 15 * 60 * 1000;
 const IDLE_RECHECK_MS = 60 * 1000;
 
 function BoardConnectionBadgeComponent({ size = 24 }: { size?: number }) {
-  const { holder, currentClimb } = useBoardPresenceCurrent();
+  // Read the context directly rather than via useBoardPresenceCurrent(), which
+  // throws when no provider is in scope. gorhom portals the play drawer to a
+  // modal host, so a consumer can render outside the provider subtree — degrade
+  // to nothing instead of crashing the screen.
+  const current = useContext(BoardPresenceCurrentContext);
+  const holder = current?.holder ?? null;
+  const currentClimb = current?.currentClimb ?? null;
   const [now, setNow] = useState(() => Date.now());
 
   const held = holder !== null;

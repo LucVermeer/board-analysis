@@ -303,15 +303,17 @@ function RootLayout() {
                                     exist before the picker mounts or gorhom
                                     throws "BottomSheetModalInternalContext
                                     cannot be null". */}
-                                      <BottomSheetModalProvider>
-                                        {/* Board presence ("now on the wall") owns the
-                                    connected boardId + the wall feed. Mounted
-                                    OUTSIDE BluetoothProviderWrapper so the BLE
-                                    flow can resolve+report through it, and
-                                    OUTSIDE DrawerHostProvider so the Board sheet
-                                    can read the wall state. Inert (boardId null)
-                                    until the `board-presence` flag is on. */}
-                                        <MobileBoardPresenceProvider>
+                                      {/* Board presence ("now on the wall") owns the
+                                    connected boardId + the wall feed. Wraps
+                                    BottomSheetModalProvider so gorhom-portaled
+                                    sheets (PlayDrawer, BoardSheet) — which render
+                                    at the modal host, not their declaration site —
+                                    can still read the wall state through context.
+                                    Also OUTSIDE BluetoothProviderWrapper /
+                                    DrawerHostProvider so the BLE flow + Board sheet
+                                    can use it. */}
+                                      <MobileBoardPresenceProvider>
+                                        <BottomSheetModalProvider>
                                           <BluetoothProviderWrapper>
                                             <DrawerHostProvider>
                                               <DeepLinkProvider>
@@ -369,8 +371,8 @@ function RootLayout() {
                                               </DeepLinkProvider>
                                             </DrawerHostProvider>
                                           </BluetoothProviderWrapper>
-                                        </MobileBoardPresenceProvider>
-                                      </BottomSheetModalProvider>
+                                        </BottomSheetModalProvider>
+                                      </MobileBoardPresenceProvider>
                                     </BoardProviderWrapper>
                                   </PlaylistsAdapterWrapper>
                                 </BoardAdapterWrapper>

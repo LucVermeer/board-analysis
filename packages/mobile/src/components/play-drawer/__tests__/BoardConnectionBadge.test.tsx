@@ -4,24 +4,17 @@ import { render, cleanup } from '@testing-library/react';
 import { createElement, type ReactNode } from 'react';
 import type { BoardConnectionHolder, BoardPresenceClimb } from '@boardsesh/shared-schema';
 
-// useBoardPresenceCurrent is the only data source; drive it from a hoisted bag.
-const presence = vi.hoisted(() => ({
-  holder: null as BoardConnectionHolder | null,
-  currentClimb: null as BoardPresenceClimb | null,
-}));
+// The badge reads BoardPresenceCurrentContext directly (not useBoardPresenceCurrent,
+// which throws outside a provider) so it can never crash a screen. Mock the package
+// to expose a real context the tests drive via its Provider.
+vi.mock('@boardsesh/board-presence-react', async () => {
+  const react = await import('react');
+  return { BoardPresenceCurrentContext: react.createContext(undefined) };
+});
 
 vi.mock('react-native', () => ({
   View: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
   StyleSheet: { create: (styles: Record<string, unknown>) => styles, hairlineWidth: 1 },
-}));
-vi.mock('@boardsesh/board-presence-react', () => ({
-  useBoardPresenceCurrent: () => ({
-    holder: presence.holder,
-    currentClimb: presence.currentClimb,
-    previousClimb: null,
-    undoTarget: null,
-    isLive: true,
-  }),
 }));
 // Avatar → expose the uri/name it was handed so we can assert identity selection.
 vi.mock('../../Avatar', () => ({
@@ -36,6 +29,7 @@ vi.mock('../../../theme/ios-colors', () => ({
 }));
 
 import { BoardConnectionBadge } from '../BoardConnectionBadge';
+import { BoardPresenceCurrentContext } from '@boardsesh/board-presence-react';
 
 function holder(overrides: Partial<BoardConnectionHolder> = {}): BoardConnectionHolder {
   return { userId: 'u1', displayName: 'Crusher Carla', avatarUrl: 'https://x/c.jpg', lastSentAt: null, ...overrides };
@@ -51,23 +45,33 @@ function climb(sentAt: string, overrides: Partial<BoardPresenceClimb> = {}): Boa
   };
 }
 
-describe('BoardConnectionBadge', () => {
-  beforeEach(() => {
-    presence.holder = null;
-    presence.currentClimb = null;
-    cleanup();
-  });
+function renderBadge(value: { holder: BoardConnectionHolder | null; currentClimb: BoardPresenceClimb | null }) {
+  return render(
+    createElement(
+      BoardPresenceCurrentContext.Provider,
+      { value: { ...value, previousClimb: null, undoTarget: null, isLive: true } },
+      createElement(BoardConnectionBadge),
+    ),
+  );
+}
 
-  it('renders nothing when the wall is free', () => {
+describe('BoardConnectionBadge', () => {
+  beforeEach(() => cleanup());
+
+  it('renders nothing (no crash) when rendered outside the board-presence provider', () => {
     const { container } = render(createElement(BoardConnectionBadge));
     expect(container.querySelector('[data-testid="avatar"]')).toBeNull();
     expect(container.textContent).toBe('');
   });
 
+  it('renders nothing when the wall is free', () => {
+    const { container } = renderBadge({ holder: null, currentClimb: null });
+    expect(container.querySelector('[data-testid="avatar"]')).toBeNull();
+    expect(container.textContent).toBe('');
+  });
+
   it('shows the holder avatar from the live climb identity when held and recent', () => {
-    presence.holder = holder();
-    presence.currentClimb = climb(new Date().toISOString());
-    const { container } = render(createElement(BoardConnectionBadge));
+    const { container } = renderBadge({ holder: holder(), currentClimb: climb(new Date().toISOString()) });
     const avatar = container.querySelector('[data-testid="avatar"]');
     expect(avatar).not.toBeNull();
     expect(avatar?.getAttribute('data-name')).toBe('Crusher Carla');
@@ -77,9 +81,10 @@ describe('BoardConnectionBadge', () => {
   });
 
   it('passes null identity through for an anonymous holder (Avatar renders "?")', () => {
-    presence.holder = holder({ userId: null, displayName: null, avatarUrl: null });
-    presence.currentClimb = null;
-    const { container } = render(createElement(BoardConnectionBadge));
+    const { container } = renderBadge({
+      holder: holder({ userId: null, displayName: null, avatarUrl: null }),
+      currentClimb: null,
+    });
     const avatar = container.querySelector('[data-testid="avatar"]');
     expect(avatar).not.toBeNull();
     expect(avatar?.getAttribute('data-name')).toBe('');
@@ -88,17 +93,16 @@ describe('BoardConnectionBadge', () => {
 
   it('adds the idle "?" overlay once the last send is older than 15 minutes', () => {
     const twentyMinAgo = new Date(Date.now() - 20 * 60 * 1000).toISOString();
-    presence.holder = holder();
-    presence.currentClimb = climb(twentyMinAgo);
-    const { container } = render(createElement(BoardConnectionBadge));
+    const { container } = renderBadge({ holder: holder(), currentClimb: climb(twentyMinAgo) });
     expect(container.querySelector('[data-testid="avatar"]')).not.toBeNull();
     expect(container.textContent).toContain('?');
   });
 
   it('falls back to the holder lastSentAt for idle when no current climb', () => {
-    presence.holder = holder({ lastSentAt: new Date(Date.now() - 20 * 60 * 1000).toISOString() });
-    presence.currentClimb = null;
-    const { container } = render(createElement(BoardConnectionBadge));
+    const { container } = renderBadge({
+      holder: holder({ lastSentAt: new Date(Date.now() - 20 * 60 * 1000).toISOString() }),
+      currentClimb: null,
+    });
     expect(container.textContent).toContain('?');
   });
 });
