@@ -11,12 +11,14 @@
  */
 
 import { sql, type SQLWrapper } from 'drizzle-orm';
+import { pathToFileURL } from 'node:url';
 import { createScriptDb } from './db-connection.js';
 import { executeRows } from '../src/client/index.js';
 import {
   chooseCanonicalGymCandidate,
   compareCanonicalGymCandidates,
   groupPhysicalGymCandidates,
+  hasText,
   normalizeGymName,
   PHYSICAL_GYM_MATCH_DISTANCE_METERS,
   type CanonicalGymCandidate,
@@ -150,10 +152,6 @@ function coerceCandidate(row: CandidateDatabaseRow): CanonicalGymCandidate {
     followerCount: Number(row.followerCount),
     commentCount: Number(row.commentCount),
   };
-}
-
-function hasText(value: string | null): boolean {
-  return value !== null && value.trim().length > 0;
 }
 
 function pickTextField(
@@ -408,7 +406,64 @@ async function refetchClusterForApply(
   return matchingCluster;
 }
 
-async function mergeGymCluster(
+async function disableVoteCountTrigger(commandDb: ExecuteDb): Promise<void> {
+  await commandDb.execute(sql`ALTER TABLE votes DISABLE TRIGGER votes_count_trigger`);
+}
+
+async function enableVoteCountTrigger(commandDb: ExecuteDb): Promise<void> {
+  await commandDb.execute(sql`ALTER TABLE votes ENABLE TRIGGER votes_count_trigger`);
+}
+
+async function rebuildGymVoteCounts(commandDb: ExecuteDb, gymUuids: string[]): Promise<void> {
+  const gymUuidList = sqlTextList(gymUuids);
+  await commandDb.execute(sql`
+    DELETE FROM vote_counts
+     WHERE entity_type = 'gym'::social_entity_type
+       AND entity_id IN (${gymUuidList})
+  `);
+
+  await commandDb.execute(sql`
+    INSERT INTO vote_counts (entity_type, entity_id, upvotes, downvotes, score, hot_score, created_at)
+    SELECT
+      vote_totals.entity_type,
+      vote_totals.entity_id,
+      vote_totals.upvotes,
+      vote_totals.downvotes,
+      vote_totals.score,
+      SIGN(vote_totals.score) * LN(GREATEST(ABS(vote_totals.score), 1))
+        + EXTRACT(EPOCH FROM COALESCE(feed_created_at.created_at, vote_totals.first_vote_created_at, NOW())) / 45000.0,
+      COALESCE(feed_created_at.created_at, vote_totals.first_vote_created_at, NOW())
+    FROM (
+      SELECT
+        votes.entity_type,
+        votes.entity_id,
+        SUM(CASE WHEN votes.value = 1 THEN 1 ELSE 0 END)::int AS upvotes,
+        SUM(CASE WHEN votes.value = -1 THEN 1 ELSE 0 END)::int AS downvotes,
+        SUM(votes.value)::int AS score,
+        MIN(votes.created_at) AS first_vote_created_at
+      FROM votes
+      WHERE votes.entity_type = 'gym'::social_entity_type
+        AND votes.entity_id IN (${gymUuidList})
+      GROUP BY votes.entity_type, votes.entity_id
+    ) vote_totals
+    LEFT JOIN LATERAL (
+      SELECT feed_items.created_at
+      FROM feed_items
+      WHERE feed_items.entity_type = vote_totals.entity_type
+        AND feed_items.entity_id = vote_totals.entity_id
+      ORDER BY feed_items.created_at ASC, feed_items.id ASC
+      LIMIT 1
+    ) feed_created_at ON true
+    ON CONFLICT (entity_type, entity_id) DO UPDATE SET
+      upvotes = excluded.upvotes,
+      downvotes = excluded.downvotes,
+      score = excluded.score,
+      hot_score = excluded.hot_score,
+      created_at = excluded.created_at
+  `);
+}
+
+export async function mergeGymCluster(
   commandDb: ExecuteDb,
   cluster: PhysicalGymCluster<CanonicalGymCandidate>,
 ): Promise<MergeCounts> {
@@ -571,54 +626,58 @@ async function mergeGymCluster(
     `,
   );
 
-  const votesUpserted = await executeCount(
-    commandDb,
-    sql`
-      WITH latest_votes AS (
-        SELECT DISTINCT ON (user_id)
-               user_id,
-               value,
-               created_at
-          FROM votes
-         WHERE entity_type = 'gym'::social_entity_type
-           AND entity_id IN (${allGymUuidList})
-         ORDER BY user_id, created_at DESC, id DESC
-      ),
-      upserted AS (
-        INSERT INTO votes (user_id, entity_type, entity_id, value, created_at)
-        SELECT user_id,
-               'gym'::social_entity_type,
-               ${canonicalGym.uuid},
-               value,
-               created_at
-          FROM latest_votes
-        ON CONFLICT (user_id, entity_type, entity_id) DO UPDATE
-          SET value = excluded.value,
-              created_at = excluded.created_at
-        RETURNING 1
-      )
-      SELECT count(*)::int AS count FROM upserted
-    `,
-  );
+  let votesUpserted = 0;
+  let votesDeleted = 0;
+  await disableVoteCountTrigger(commandDb);
+  try {
+    votesUpserted = await executeCount(
+      commandDb,
+      sql`
+        WITH latest_votes AS (
+          SELECT DISTINCT ON (user_id)
+                 user_id,
+                 value,
+                 created_at
+            FROM votes
+           WHERE entity_type = 'gym'::social_entity_type
+             AND entity_id IN (${allGymUuidList})
+           ORDER BY user_id, created_at DESC, id DESC
+        ),
+        upserted AS (
+          INSERT INTO votes (user_id, entity_type, entity_id, value, created_at)
+          SELECT user_id,
+                 'gym'::social_entity_type,
+                 ${canonicalGym.uuid},
+                 value,
+                 created_at
+            FROM latest_votes
+          ON CONFLICT (user_id, entity_type, entity_id) DO UPDATE
+            SET value = excluded.value,
+                created_at = excluded.created_at
+          RETURNING 1
+        )
+        SELECT count(*)::int AS count FROM upserted
+      `,
+    );
 
-  const votesDeleted = await executeCount(
-    commandDb,
-    sql`
-      WITH deleted AS (
-        DELETE FROM votes
-         WHERE entity_type = 'gym'::social_entity_type
-           AND entity_id IN (${duplicateGymUuidList})
-         RETURNING 1
-      )
-      SELECT count(*)::int AS count FROM deleted
-    `,
-  );
-
-  await commandDb.execute(sql`
-    DELETE FROM vote_counts
-     WHERE entity_type = 'gym'::social_entity_type
-       AND entity_id IN (${duplicateGymUuidList})
-  `);
+    votesDeleted = await executeCount(
+      commandDb,
+      sql`
+        WITH deleted AS (
+          DELETE FROM votes
+           WHERE entity_type = 'gym'::social_entity_type
+             AND entity_id IN (${duplicateGymUuidList})
+           RETURNING 1
+        )
+        SELECT count(*)::int AS count FROM deleted
+      `,
+    );
+    await rebuildGymVoteCounts(commandDb, [canonicalGym.uuid, ...duplicateGymUuids]);
+  } catch (error: unknown) {
+    await enableVoteCountTrigger(commandDb).catch(() => {});
+    throw error;
+  }
+  await enableVoteCountTrigger(commandDb);
 
   const duplicateGymsSoftDeleted = await executeCount(
     commandDb,
@@ -739,7 +798,11 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch((error: unknown) => {
-  console.error('[dedupe-gyms] failed:', error);
-  process.exit(1);
-});
+const isDirectRun = process.argv[1] ? import.meta.url === pathToFileURL(process.argv[1]).href : false;
+
+if (isDirectRun) {
+  main().catch((error: unknown) => {
+    console.error('[dedupe-gyms] failed:', error);
+    process.exit(1);
+  });
+}

@@ -30,7 +30,7 @@ export function normalizeGymName(name: string): string {
   return name.trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
-function hasText(value: string | null): boolean {
+export function hasText(value: string | null): boolean {
   return value !== null && value.trim().length > 0;
 }
 

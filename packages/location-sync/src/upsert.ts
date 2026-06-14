@@ -165,6 +165,33 @@ async function findPhysicalGymMatch(db: DrizzleDb, record: ValidBoardLocation): 
           ST_MakePoint(${record.longitude}, ${record.latitude})::geography,
           ${PHYSICAL_GYM_MATCH_DISTANCE_METERS}
         )
+    ),
+    board_counts AS (
+      SELECT board.gym_id, count(*)::int AS count
+      FROM user_boards board
+      INNER JOIN candidate_gyms candidate_gym ON candidate_gym.id = board.gym_id
+      WHERE board.deleted_at IS NULL
+      GROUP BY board.gym_id
+    ),
+    member_counts AS (
+      SELECT gym_member.gym_id, count(*)::int AS count
+      FROM gym_members gym_member
+      INNER JOIN candidate_gyms candidate_gym ON candidate_gym.id = gym_member.gym_id
+      GROUP BY gym_member.gym_id
+    ),
+    follower_counts AS (
+      SELECT gym_follow.gym_id, count(*)::int AS count
+      FROM gym_follows gym_follow
+      INNER JOIN candidate_gyms candidate_gym ON candidate_gym.id = gym_follow.gym_id
+      GROUP BY gym_follow.gym_id
+    ),
+    comment_counts AS (
+      SELECT gym_comment.entity_id, count(*)::int AS count
+      FROM comments gym_comment
+      INNER JOIN candidate_gyms candidate_gym ON candidate_gym.uuid = gym_comment.entity_id
+      WHERE gym_comment.entity_type = 'gym'
+        AND gym_comment.deleted_at IS NULL
+      GROUP BY gym_comment.entity_id
     )
     SELECT
       g.id AS "id",
@@ -178,29 +205,15 @@ async function findPhysicalGymMatch(db: DrizzleDb, record: ValidBoardLocation): 
       g.latitude AS "latitude",
       g.longitude AS "longitude",
       g.created_at AS "createdAt",
-      (
-        SELECT count(*)::int
-        FROM user_boards board
-        WHERE board.gym_id = g.id AND board.deleted_at IS NULL
-      ) AS "boardCount",
-      (
-        SELECT count(*)::int
-        FROM gym_members gym_member
-        WHERE gym_member.gym_id = g.id
-      ) AS "memberCount",
-      (
-        SELECT count(*)::int
-        FROM gym_follows gym_follow
-        WHERE gym_follow.gym_id = g.id
-      ) AS "followerCount",
-      (
-        SELECT count(*)::int
-        FROM comments gym_comment
-        WHERE gym_comment.entity_type = 'gym'
-          AND gym_comment.deleted_at IS NULL
-          AND gym_comment.entity_id = g.uuid
-      ) AS "commentCount"
+      COALESCE(board_counts.count, 0)::int AS "boardCount",
+      COALESCE(member_counts.count, 0)::int AS "memberCount",
+      COALESCE(follower_counts.count, 0)::int AS "followerCount",
+      COALESCE(comment_counts.count, 0)::int AS "commentCount"
     FROM candidate_gyms g
+    LEFT JOIN board_counts ON board_counts.gym_id = g.id
+    LEFT JOIN member_counts ON member_counts.gym_id = g.id
+    LEFT JOIN follower_counts ON follower_counts.gym_id = g.id
+    LEFT JOIN comment_counts ON comment_counts.entity_id = g.uuid
   `);
 
   const candidates = rowsFromResult<CanonicalGymCandidate>(result).map((candidate) => ({
