@@ -325,6 +325,17 @@ describe('SocialTab', () => {
     expect(social.searchRefetch).not.toHaveBeenCalled();
   });
 
+  it('does not show search debounce state after switching back to followers', () => {
+    const { getAllByText, getByText, getByPlaceholderText } = render(<SocialTab userId="me" />);
+
+    fireEvent.click(getByText('Find'));
+    fireEvent.change(getByPlaceholderText('Search climbers'), { target: { value: 'ma' } });
+    fireEvent.click(getAllByText('Followers').at(-1)!);
+
+    expect(getByText('Ada Lovelace')).toBeTruthy();
+    expect(getByText('1 follower · 2 following')).toBeTruthy();
+  });
+
   it('does not refetch a stale debounced search after the live query becomes too short', () => {
     const { getByText, getByPlaceholderText } = render(<SocialTab userId="me" />);
 

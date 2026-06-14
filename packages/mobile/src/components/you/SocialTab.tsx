@@ -3,21 +3,26 @@ import {
   Pressable,
   RefreshControl,
   StyleSheet,
-  TextInput,
   View,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from 'react-native';
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import { useTranslation } from 'react-i18next';
-import type { PublicUserProfile, UserSearchResult } from '@boardsesh/shared-schema';
+import type { PublicUserProfile } from '@boardsesh/shared-schema';
 import { Text } from '../Text';
 import { Icon } from '../Icon';
-import { Avatar } from '../Avatar';
-import { ListRow } from '../ListRow';
-import { Button } from '../Button';
 import { ActivityIndicator } from '../ActivityIndicator';
 import { SegmentedControl } from '../SegmentedControl';
+import {
+  ClimberSearchEmptyState,
+  ClimberSearchErrorState,
+  ClimberSearchField,
+  ClimberSearchPersonRow,
+  mapSearchResults,
+  useDebouncedClimberSearch,
+  type SocialPerson,
+} from './ClimberSearch';
 import {
   useFollowers,
   useFollowing,
@@ -26,15 +31,10 @@ import {
   useToggleUserFollow,
 } from '../../lib/graphql/hooks';
 import { useBottomChromeMetrics } from '../../hooks/use-bottom-chrome-metrics';
-import { iosSystemColors } from '../../theme/ios-colors';
 import { borderRadius, spacing } from '../../theme/tokens';
 import { useTheme } from '../../providers/theme-provider';
 
 type SocialMode = 'followers' | 'following' | 'search';
-
-type SocialPerson = PublicUserProfile & {
-  recentAscentCount?: number;
-};
 
 type SocialTabProps = {
   userId: string | undefined;
@@ -44,7 +44,6 @@ type SocialTabProps = {
 };
 
 const EMPTY_PEOPLE: SocialPerson[] = [];
-const SEARCH_DEBOUNCE_MS = 300;
 
 export function SocialTab({ userId, onScroll, topInset = 0, registerScrollToTop }: SocialTabProps) {
   const { t } = useTranslation('you');
@@ -54,18 +53,8 @@ export function SocialTab({ userId, onScroll, topInset = 0, registerScrollToTop 
 
   const [mode, setMode] = useState<SocialMode>('followers');
   const [searchQuery, setSearchQuery] = useState('');
-  const trimmedSearchQuery = searchQuery.trim();
-  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
-
-  useEffect(() => {
-    if (trimmedSearchQuery.length < 2) {
-      setDebouncedSearchQuery('');
-      return;
-    }
-
-    const handle = setTimeout(() => setDebouncedSearchQuery(trimmedSearchQuery), SEARCH_DEBOUNCE_MS);
-    return () => clearTimeout(handle);
-  }, [trimmedSearchQuery]);
+  const { trimmedSearchQuery, debouncedSearchQuery, searchIsDebouncing, canUseSearchQuery } =
+    useDebouncedClimberSearch(searchQuery);
 
   const listRef = useRef<FlashListRef<SocialPerson>>(null);
   useEffect(() => {
@@ -77,7 +66,7 @@ export function SocialTab({ userId, onScroll, topInset = 0, registerScrollToTop 
   const publicProfile = usePublicProfile(userId);
   const followers = useFollowers(userId, mode === 'followers');
   const following = useFollowing(userId, mode === 'following');
-  const search = useSearchUsers(debouncedSearchQuery, mode === 'search');
+  const search = useSearchUsers(debouncedSearchQuery, mode === 'search' && canUseSearchQuery);
   const toggleFollow = useToggleUserFollow(userId);
 
   const followerCount = publicProfile.data?.followerCount ?? 0;
@@ -92,24 +81,15 @@ export function SocialTab({ userId, onScroll, topInset = 0, registerScrollToTop 
       return following.data?.pages.flatMap((page) => page.users) ?? EMPTY_PEOPLE;
     }
 
-    return (
-      search.data?.pages.flatMap((page) =>
-        page.results.map((result: UserSearchResult) => ({
-          ...result.user,
-          recentAscentCount: result.recentAscentCount,
-        })),
-      ) ?? EMPTY_PEOPLE
-    );
+    return search.data?.pages.flatMap((page) => mapSearchResults(page.results)) ?? EMPTY_PEOPLE;
   }, [followers.data, following.data, mode, search.data]);
 
   const activeQuery = mode === 'followers' ? followers : mode === 'following' ? following : search;
   const showSearchHint = mode === 'search' && trimmedSearchQuery.length < 2;
-  const searchIsDebouncing =
-    mode === 'search' && trimmedSearchQuery.length >= 2 && debouncedSearchQuery !== trimmedSearchQuery;
-  const canRefetchActiveQuery =
-    mode !== 'search' || (trimmedSearchQuery.length >= 2 && debouncedSearchQuery === trimmedSearchQuery);
-  const showInitialSpinner = searchIsDebouncing || (!showSearchHint && activeQuery.isPending && people.length === 0);
-  const showError = !showSearchHint && !searchIsDebouncing && activeQuery.isError && people.length === 0;
+  const canRefetchActiveQuery = mode !== 'search' || canUseSearchQuery;
+  const isSearchDebouncing = mode === 'search' && searchIsDebouncing;
+  const showInitialSpinner = isSearchDebouncing || (!showSearchHint && activeQuery.isPending && people.length === 0);
+  const showError = !showSearchHint && !isSearchDebouncing && activeQuery.isError && people.length === 0;
   const isRefreshing = publicProfile.isRefetching || (canRefetchActiveQuery && activeQuery.isRefetching);
 
   const segmentOptions = useMemo(
@@ -142,48 +122,18 @@ export function SocialTab({ userId, onScroll, topInset = 0, registerScrollToTop 
 
   const renderItem = useCallback(
     ({ item }: { item: SocialPerson }) => {
-      const isCurrentUser = item.id === userId;
       const isRowMutating = toggleFollow.isPending && toggleFollow.variables?.userId === item.id;
-      const displayName = item.displayName || t('mobile.unknownName');
 
       return (
-        <ListRow
-          title={displayName}
-          subtitle={personSubtitle(item, t)}
-          leading={<Avatar uri={item.avatarUrl} name={item.displayName} size={36} />}
-          trailing={
-            isCurrentUser ? (
-              <Text variant="footnote" color={systemColors.secondaryLabel}>
-                {t('mobile.social.you')}
-              </Text>
-            ) : (
-              <Button
-                title={item.isFollowedByMe ? t('mobile.social.unfollowAction') : t('mobile.social.followAction')}
-                accessibilityLabel={
-                  item.isFollowedByMe
-                    ? t('mobile.social.unfollowUser', { name: displayName })
-                    : t('mobile.social.followUser', { name: displayName })
-                }
-                size="small"
-                variant={item.isFollowedByMe ? 'outlined' : 'filled'}
-                loading={isRowMutating}
-                disabled={isRowMutating}
-                style={styles.followButton}
-                onPress={() => handleToggleFollow(item)}
-              />
-            )
-          }
+        <ClimberSearchPersonRow
+          person={item}
+          currentUserId={userId}
+          isMutating={isRowMutating}
+          onToggleFollow={handleToggleFollow}
         />
       );
     },
-    [
-      handleToggleFollow,
-      systemColors.secondaryLabel,
-      t,
-      toggleFollow.isPending,
-      toggleFollow.variables?.userId,
-      userId,
-    ],
+    [handleToggleFollow, toggleFollow.isPending, toggleFollow.variables?.userId, userId],
   );
 
   const header = useMemo(
@@ -224,47 +174,12 @@ export function SocialTab({ userId, onScroll, topInset = 0, registerScrollToTop 
 
         {mode === 'search' ? (
           <View style={styles.searchWrap}>
-            <View style={[styles.searchField, { backgroundColor: systemColors.fill }]}>
-              <Icon name="search" size={18} color={systemColors.secondaryLabel} />
-              <TextInput
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-                placeholder={t('mobile.social.searchPlaceholder')}
-                placeholderTextColor={iosSystemColors.systemGray}
-                autoCapitalize="none"
-                autoCorrect={false}
-                returnKeyType="search"
-                accessibilityLabel={t('mobile.social.searchPlaceholder')}
-                style={[styles.searchInput, { color: systemColors.label }]}
-              />
-              {searchQuery.length > 0 ? (
-                <Pressable
-                  onPress={() => setSearchQuery('')}
-                  hitSlop={8}
-                  accessibilityRole="button"
-                  accessibilityLabel={t('mobile.social.clearSearch')}
-                  style={styles.clearButton}
-                >
-                  <Icon name="close" size={16} color={systemColors.secondaryLabel} />
-                </Pressable>
-              ) : null}
-            </View>
+            <ClimberSearchField value={searchQuery} onChangeText={setSearchQuery} />
           </View>
         ) : null}
       </View>
     ),
-    [
-      followerCount,
-      followingCount,
-      mode,
-      searchQuery,
-      segmentOptions,
-      systemColors.fill,
-      systemColors.label,
-      systemColors.secondaryLabel,
-      t,
-      variant,
-    ],
+    [followerCount, followingCount, mode, searchQuery, segmentOptions, systemColors.fill, t, variant],
   );
 
   if (!userId) {
@@ -299,9 +214,11 @@ export function SocialTab({ userId, onScroll, topInset = 0, registerScrollToTop 
               <ActivityIndicator size="large" />
             </View>
           ) : showError ? (
-            <SocialErrorState onRetry={handleRefresh} />
+            <ClimberSearchErrorState onRetry={handleRefresh} />
+          ) : mode === 'search' ? (
+            <ClimberSearchEmptyState query={trimmedSearchQuery} />
           ) : (
-            <SocialEmptyState mode={mode} query={trimmedSearchQuery} />
+            <SocialEmptyState mode={mode === 'followers' ? 'followers' : 'following'} />
           )
         }
         ListFooterComponent={
@@ -314,17 +231,6 @@ export function SocialTab({ userId, onScroll, topInset = 0, registerScrollToTop 
       />
     </View>
   );
-}
-
-function personSubtitle(person: SocialPerson, t: (key: string, options?: Record<string, unknown>) => string) {
-  if (person.recentAscentCount != null) {
-    return t('mobile.social.recentAscents', { count: person.recentAscentCount });
-  }
-
-  return [
-    t('mobile.social.followerCount', { count: person.followerCount }),
-    t('mobile.social.followingCount', { count: person.followingCount }),
-  ].join(' · ');
 }
 
 function SocialStatCard({
@@ -368,58 +274,18 @@ function SocialStatCard({
   );
 }
 
-function SocialEmptyState({ mode, query }: { mode: SocialMode; query: string }) {
+function SocialEmptyState({ mode }: { mode: Exclude<SocialMode, 'search'> }) {
   const { t } = useTranslation('you');
   const { systemColors } = useTheme();
 
-  const title =
-    mode === 'followers'
-      ? t('mobile.social.emptyFollowers')
-      : mode === 'following'
-        ? t('mobile.social.emptyFollowing')
-        : query.length < 2
-          ? t('mobile.social.searchHint')
-          : t('mobile.social.emptySearch');
+  const title = mode === 'followers' ? t('mobile.social.emptyFollowers') : t('mobile.social.emptyFollowing');
 
   return (
     <View style={styles.stateBlock}>
-      <Icon name={mode === 'search' ? 'search' : 'people'} size={48} color={systemColors.tertiaryLabel} />
+      <Icon name="people" size={48} color={systemColors.tertiaryLabel} />
       <Text variant="headline" style={styles.stateTitle}>
         {title}
       </Text>
-      {mode === 'search' && query.length >= 2 ? (
-        <Text variant="subheadline" color={systemColors.secondaryLabel} style={styles.stateSubtitle}>
-          {t('mobile.social.emptySearchBody', { query })}
-        </Text>
-      ) : null}
-    </View>
-  );
-}
-
-function SocialErrorState({ onRetry }: { onRetry: () => void }) {
-  const { t } = useTranslation('you');
-  const { systemColors, brandColors } = useTheme();
-
-  return (
-    <View style={styles.stateBlock}>
-      <Icon name="error" size={48} color={systemColors.tertiaryLabel} />
-      <Text variant="headline" style={styles.stateTitle}>
-        {t('mobile.social.loadError')}
-      </Text>
-      <Pressable
-        onPress={onRetry}
-        accessibilityRole="button"
-        accessibilityLabel={t('mobile.social.retry')}
-        style={({ pressed }) => [
-          styles.retryButton,
-          { borderColor: brandColors.primary },
-          pressed && { backgroundColor: `${brandColors.primary}1A` },
-        ]}
-      >
-        <Text variant="footnote" color={brandColors.primary}>
-          {t('mobile.social.retry')}
-        </Text>
-      </Pressable>
     </View>
   );
 }
@@ -457,30 +323,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[4],
     paddingBottom: spacing[2],
   },
-  searchField: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing[2],
-    minHeight: 42,
-    borderRadius: 10,
-    paddingHorizontal: spacing[3],
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 17,
-    paddingVertical: 0,
-  },
-  clearButton: {
-    minWidth: 44,
-    minHeight: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: -spacing[3],
-  },
-  followButton: {
-    minWidth: 84,
-    minHeight: 44,
-  },
   stateBlock: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -493,18 +335,8 @@ const styles = StyleSheet.create({
     opacity: 0.65,
     textAlign: 'center',
   },
-  stateSubtitle: {
-    textAlign: 'center',
-  },
   footer: {
     paddingVertical: spacing[5],
     alignItems: 'center',
-  },
-  retryButton: {
-    marginTop: spacing[3],
-    paddingHorizontal: spacing[4],
-    paddingVertical: spacing[2],
-    borderRadius: borderRadius.full,
-    borderWidth: StyleSheet.hairlineWidth,
   },
 });

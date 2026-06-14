@@ -6,6 +6,7 @@ import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import type BottomSheet from '@gorhom/bottom-sheet';
+import type { BottomSheetModal } from '@gorhom/bottom-sheet';
 import { type ContextMenuAction } from 'react-native-context-menu-view';
 import type { SessionFeedItem, SessionFeedTickHighlight, SocialEntityType, UserBoard } from '@boardsesh/shared-schema';
 import { betaLinkIdentity, isBetaVideoUrl, isInstagramUrl, isTikTokUrl } from '@boardsesh/shared-schema';
@@ -16,9 +17,11 @@ import { Card } from '../../../src/components/Card';
 import { Button } from '../../../src/components/Button';
 import { SessionFeedCard } from '../../../src/components/you/SessionFeedCard';
 import { CommentSheet } from '../../../src/components/you/CommentSheet';
+import { HomeClimberSearchSheet } from '../../../src/components/you/HomeClimberSearchSheet';
 import { FeedScopeTitle } from '../../../src/components/feed/FeedScopeTitle';
 import {
   useBulkVoteSummaries,
+  useProfile,
   useRecentBetaLinks,
   useSessionGroupedFeed,
   type RecentBetaVideo,
@@ -30,7 +33,7 @@ import { useToast } from '../../../src/providers/toast-provider';
 import { useDrawerHost } from '../../../src/providers/drawer-host-provider';
 import { useBottomChromeMetrics } from '../../../src/hooks/use-bottom-chrome-metrics';
 import { ProgressiveBlur } from '../../../src/components/ProgressiveBlur';
-import { GlassActionToolbar, TOP_ACTION_SIZE } from '../../../src/components/chrome';
+import { GlassActionToolbar, GlassToolbarAction, TOP_ACTION_SIZE } from '../../../src/components/chrome';
 import { UserAvatarToolbarAction } from '../../../src/components/user-drawer/UserAvatarToolbarAction';
 import { dedupeSessionsById } from '../../../src/lib/feed-time-buckets';
 import { deriveFeedScopeInput, type FeedMode } from '../../../src/lib/feed/feed-scope';
@@ -86,7 +89,9 @@ export default function HomeTab() {
   const insets = useSafeAreaInsets();
   const listRef = useRef<FlashListRef<SessionFeedItem>>(null);
   const commentSheetRef = useRef<BottomSheet | null>(null);
+  const searchSheetRef = useRef<BottomSheetModal | null>(null);
   const [commentTarget, setCommentTarget] = useState<CommentTarget | null>(null);
+  const { data: profile } = useProfile({ enabled: isAuthenticated });
 
   // Feed scope. `mode` chooses the view — `crew` (people you follow) is the
   // default; `gym` is everyone on the selected board. `selectedBoard` is the
@@ -152,6 +157,10 @@ export default function HomeTab() {
   const handleOpenComments = useCallback((entityId: string, entityType: SocialEntityType) => {
     setCommentTarget({ entityId, entityType });
     commentSheetRef.current?.snapToIndex(0);
+  }, []);
+
+  const handleOpenSearch = useCallback(() => {
+    searchSheetRef.current?.present();
   }, []);
 
   const handleSessionPress = useCallback(
@@ -431,10 +440,16 @@ export default function HomeTab() {
               onSelectIndex={scopeMenu.onSelectIndex}
             />
           </View>
-          {/* Balance the avatar so the scope menu reads centred. */}
-          <View style={styles.headerRightSpacer} />
+          {/* Search action: balances the avatar so the scope menu reads centred,
+              and opens the climber search sheet. */}
+          <GlassActionToolbar actionCount={1}>
+            <GlassToolbarAction onPress={handleOpenSearch} accessibilityLabel={t('mobile.home.searchAction')}>
+              <Icon name="search" size={22} color={systemColors.label} />
+            </GlassToolbarAction>
+          </GlassActionToolbar>
         </View>
       </View>
+      <HomeClimberSearchSheet ref={searchSheetRef} currentUserId={profile?.id} />
       <CommentSheet
         sheetRef={commentSheetRef}
         entityId={commentTarget?.entityId ?? null}
@@ -691,9 +706,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: spacing[2],
-  },
-  headerRightSpacer: {
-    width: TOP_ACTION_SIZE,
   },
   centered: {
     flex: 1,
