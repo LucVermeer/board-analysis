@@ -7,6 +7,8 @@ import type { BoardName, Climb } from '@boardsesh/shared-schema';
 import { Text } from '../Text';
 import { Icon } from '../Icon';
 import { useTheme } from '../../providers/theme-provider';
+import { useDrawerHost } from '../../providers/drawer-host-provider';
+import { openClimbInPlayDrawer } from '../../lib/open-climb-in-play-drawer';
 import { getCreateBoardHolds } from '../../lib/create-board-holds';
 import { spacing } from '../../theme/tokens';
 import { iosSystemColors } from '../../theme/ios-colors';
@@ -39,6 +41,7 @@ export function CreateClimbScreen({
   const { t } = useTranslation('climbs');
   const { systemColors } = useTheme();
   const router = useRouter();
+  const { openPlayDrawer } = useDrawerHost();
 
   const controller = useCreateClimbScreen({
     board,
@@ -87,19 +90,23 @@ export function CreateClimbScreen({
 
   const handleViewDuplicate = useCallback(
     (uuid: string) => {
-      router.push({
-        pathname: '/(tabs)/climbs/[climbUuid]',
-        params: {
+      // Only a uuid + the active board config is on hand here (no climb frames),
+      // so open via the `ref` branch — it loads the full climb by uuid, then
+      // hands off to the play drawer.
+      openClimbInPlayDrawer(
+        {
+          kind: 'ref',
           climbUuid: uuid,
-          boardName: board.boardName,
-          layoutId: String(board.layoutId),
-          sizeId: String(board.sizeId),
+          boardType: board.boardName,
+          layoutId: board.layoutId,
+          angle: board.angle,
+          sizeId: board.sizeId,
           setIds: board.setIds,
-          angle: String(board.angle),
         },
-      });
+        { openPlayDrawer, router },
+      );
     },
-    [router, board],
+    [openPlayDrawer, router, board],
   );
 
   if (!boardHolds) {

@@ -234,6 +234,7 @@ vi.mock('../../lib/graphql/use-active-board', () => ({
 vi.mock('../../lib/graphql/hooks', () => ({
   useToggleFavorite: () => ({ mutate: vi.fn() }),
   useProfile: () => ({ data: null }),
+  useMyBoards: () => ({ data: { boards: [], totalCount: 0, hasMore: false } }),
 }));
 
 vi.mock('../../lib/analytics', () => ({

@@ -31,7 +31,10 @@ export default function ClimbsLayout() {
       <Stack.Screen
         name="[climbUuid]"
         options={{
-          title: t('mobile.nav.climb'),
+          // The climb page is now a thin redirector: it loads the climb by uuid,
+          // opens it in the play drawer, then pops. It only ever flashes a
+          // spinner, so it has no header.
+          headerShown: false,
         }}
       />
       <Stack.Screen

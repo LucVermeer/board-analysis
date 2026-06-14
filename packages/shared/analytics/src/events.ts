@@ -27,7 +27,6 @@ export const SHARED_EVENTS = {
   SessionEnded: 'Session Ended',
   AngleChanged: 'Angle Changed',
   // Climb actions
-  ClimbInfoViewed: 'Climb Info Viewed',
   FavoriteToggle: 'Favorite Toggle',
   MirrorClimb: 'Mirror Climb',
   ClimbShared: 'Climb Shared',

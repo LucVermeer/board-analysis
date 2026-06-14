@@ -28,7 +28,24 @@
       "signInBody": "Sigue a escaladores y equipadores para ver sus encadenes y bloques nuevos aquí.",
       "emptyTitle": "Aún no hay actividad",
       "emptyBody": "Sigue a escaladores y equipadores para llenar esto.",
-      "unknownClimb": "Bloque desconocido"
+      "unknownClimb": "Bloque desconocido",
+      "sessionsTitle": "Sesiones recientes",
+      "betaTitleBoard": "Beta reciente en esta tabla",
+      "boardEmptyTitle": "Tranquilo en {{board}} ahora mismo",
+      "boardEmptyBody": "Sé el primero en registrar una sesión, o mira qué está escalando el resto.",
+      "boardEmptyCta": "Ver a todos",
+      "scope": {
+        "myGym": "Mi gimnasio",
+        "myCrew": "Mi crew",
+        "everyone": "Todos",
+        "everyoneSubtitle": "Todas las tablas · feed global",
+        "switcherTitle": "Mostrar actividad de",
+        "homeBoardSection": "Tu tabla principal",
+        "otherBoardsSection": "Tus otras tablas",
+        "findGym": "Busca un gimnasio cerca",
+        "climbersActive_one": "{{count}} escalador activo",
+        "climbersActive_other": "{{count}} escaladores activos"
+      }
     }
   },
   "ascentsFeed": {
@@ -155,11 +172,7 @@
     "attempts_other": "{{count}} intentos",
     "chartEmpty": "Aún no hay grados",
     "chartLabel": "Gráfico de grados",
-    "pageIndicator": "Página {{current}} de {{total}} de la tarjeta de sesión",
-    "previousPage": "Página anterior de la tarjeta de sesión",
-    "nextPage": "Página siguiente de la tarjeta de sesión",
     "openHint": "Abre la sesión",
-    "openSessionPage": "Abrir sesión",
     "openHardestClimb": "Abrir {{climb}}"
   },
   "sessionSummary": {

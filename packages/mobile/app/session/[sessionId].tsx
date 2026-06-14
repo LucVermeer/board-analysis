@@ -19,8 +19,9 @@ import { SessionBetaCarousel } from '../../src/components/session/SessionBetaCar
 import { SessionParticipantBreakdown } from '../../src/components/session/SessionParticipantBreakdown';
 import { SessionTickRow } from '../../src/components/session/SessionTickRow';
 import { useSessionDetail } from '../../src/lib/graphql/hooks';
-import { navigateToSessionClimb } from '../../src/lib/session-tick-mapping';
+import { openClimbInPlayDrawer } from '../../src/lib/open-climb-in-play-drawer';
 import { useBottomChromeMetrics } from '../../src/hooks/use-bottom-chrome-metrics';
+import { useDrawerHost } from '../../src/providers/drawer-host-provider';
 import { spacing } from '../../src/theme/tokens';
 import { useTheme } from '../../src/providers/theme-provider';
 
@@ -33,6 +34,7 @@ export default function SessionDetailScreen() {
   const { systemColors } = useTheme();
   const navigation = useNavigation();
   const router = useRouter();
+  const { openPlayDrawer } = useDrawerHost();
   const bottomChrome = useBottomChromeMetrics();
   const paddingBottom = bottomChrome.scrollBottomPadding + spacing[6];
 
@@ -63,7 +65,10 @@ export default function SessionDetailScreen() {
   const handleOpenSessionComments = useCallback((id: string) => openComments(id, 'session'), [openComments]);
   const handleOpenTickComments = useCallback((tickUuid: string) => openComments(tickUuid, 'tick'), [openComments]);
 
-  const handleTickPress = useCallback((tick: SessionDetailTick) => navigateToSessionClimb(router, tick), [router]);
+  const handleTickPress = useCallback(
+    (tick: SessionDetailTick) => openClimbInPlayDrawer({ kind: 'tick', tick }, { openPlayDrawer, router }),
+    [openPlayDrawer, router],
+  );
 
   // Stable per-row factory so the memoized `SessionTickRow`s keep their identity
   // across re-renders — a fresh inline arrow would force FlashList to re-evaluate

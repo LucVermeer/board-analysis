@@ -15,7 +15,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { randomUUID } from 'expo-crypto';
 import { router } from 'expo-router';
 import type { BoardName, Climb } from '@boardsesh/shared-schema';
-import { buildBoardPath } from '@boardsesh/board-config';
+import { buildBoardPath, formatBoardDisplayName } from '@boardsesh/board-config';
 import type { Climb as QueueClimb, ClimbQueueItem, PlaylistSuggestionSource } from '@boardsesh/queue';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { PlayDrawer, type PlayDrawerHandle, type PlayDrawerOpenOptions } from '../components/play-drawer';
@@ -31,7 +31,8 @@ import { track } from '../lib/analytics';
 import { ClimbActionsSheet } from '../components/ClimbActionsSheet';
 import { AddBetaVideoSheet } from '../components/AddBetaVideoSheet';
 import { AddToPlaylistSheet } from '../components/AddToPlaylistSheet';
-import { useToggleFavorite, useProfile } from '../lib/graphql/hooks';
+import { useToggleFavorite, useProfile, useMyBoards } from '../lib/graphql/hooks';
+import { boardLooselyMatches } from '../lib/boards/board-matches';
 import { useAuth } from './auth-provider';
 import { favoritesStore } from '@boardsesh/climb-actions';
 import { climbToQueueItem } from '../lib/climb-to-queue-item';
@@ -123,6 +124,7 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
   const queueSheetRef = useRef<QueueSheetHandle>(null);
   const boardSheetRef = useRef<BoardSheetHandle>(null);
   const { data: activeBoard } = useActiveBoard();
+  const { data: myBoardsConn } = useMyBoards();
   const [boardConfigOverride, setBoardConfigOverride] = useState<BoardConfig | null>(null);
   const [logAscentInput, setLogAscentInput] = useState<LogAscentInput | null>(null);
   const [climbActions, setClimbActions] = useState<{ climb: Climb; boardConfig: BoardConfig } | null>(null);
@@ -195,6 +197,25 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
   const activeBoardConfigRef = useRef(activeBoardConfig);
   activeBoardConfigRef.current = activeBoardConfig;
 
+  // The user's STORED active board as a BoardConfig (never the override). Used
+  // to decide whether a climb opened with a board override is genuinely a
+  // different board (→ switch-board gate) or the same board (→ drop the override
+  // and render against the user's precise board).
+  const storedActiveBoardConfig = useMemo<BoardConfig | null>(() => {
+    if (!activeBoard) return null;
+    return {
+      boardName: activeBoard.boardType,
+      layoutId: activeBoard.layoutId,
+      sizeId: activeBoard.sizeId,
+      setIds: activeBoard.setIds,
+      angle: activeBoard.angle,
+    };
+  }, [activeBoard]);
+  const boardConfigOverrideRef = useRef(boardConfigOverride);
+  boardConfigOverrideRef.current = boardConfigOverride;
+  const myBoardsRef = useRef(myBoardsConn);
+  myBoardsRef.current = myBoardsConn;
+
   const openPlayDrawer = useCallback((climb: Climb, options?: OpenPlayDrawerOptions) => {
     const { boardConfig: override, ...openOptions } = options ?? {};
     const boardConfig = override ?? activeBoardConfigRef.current;
@@ -234,8 +255,9 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
         // The drawer is showing a climb from a board other than the user's
         // stored active board. Update only the override (so the drawer reflects
         // the change) — do NOT rewrite the stored active board's angle, which
-        // belongs to a different board. (No caller wires an override today, but
-        // keep the angle write targeting the board actually shown.)
+        // belongs to a different board. Tick/feed climbs opened via
+        // openClimbInPlayDrawer routinely set an override, so this is the live
+        // path for them; keep the angle write targeting the board actually shown.
         setBoardConfigOverride((prev) => (prev ? { ...prev, angle: newAngle } : prev));
       } else {
         if (cfg && newAngle === cfg.angle) return;
@@ -460,6 +482,38 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
     router.push('/boards');
   }, [requestCloseBoardSheet]);
 
+  // Switch-board control inside the play drawer's mismatch overlay. One-tap when
+  // the user already owns the climb's board (set it active and clear the override
+  // so the drawer shows the now-active board and the overlay clears); otherwise
+  // route to the board picker, mirroring the playlist mismatch banner.
+  const handleSwitchBoardFromDrawer = useCallback(() => {
+    const override = boardConfigOverrideRef.current;
+    if (!override) return;
+    const owned = myBoardsRef.current?.boards.find((board) =>
+      boardLooselyMatches({ boardName: board.boardType, layoutId: board.layoutId }, override),
+    );
+    if (owned) {
+      void setActiveBoard(owned);
+      setBoardConfigOverride(null);
+      return;
+    }
+    playDrawerRef.current?.close();
+    router.push({ pathname: '/boards', params: { returnTo: '/(tabs)/home' } });
+  }, [setActiveBoard]);
+
+  // The switch-board gate fires only when the drawer is showing a climb from a
+  // genuinely DIFFERENT board model (board name + layout) than the user's stored
+  // active board — not merely a different size/sets/angle on the same board
+  // (e.g. a board-sheet climb logged at another angle keeps its override without
+  // a gate). A null stored board (user hasn't picked one) also counts as a
+  // mismatch, prompting them to choose a board to control.
+  const boardMismatch =
+    boardConfigOverride != null && !boardLooselyMatches(boardConfigOverride, storedActiveBoardConfig);
+  const mismatchBoardLabel = useMemo(
+    () => (boardConfigOverride ? formatBoardDisplayName(boardConfigOverride.boardName) : undefined),
+    [boardConfigOverride],
+  );
+
   const handleBoardSheetClimbPress = useCallback(
     (action: BoardSheetClimbAction) => {
       const item = climbToQueueItem(action.climb, { uuid: action.queueItemUuid ?? undefined });
@@ -545,6 +599,9 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
           onAngleChange={handleAngleChange}
           isAngleAdjustable={activeBoard?.isAngleAdjustable ?? true}
           onOpenQueue={openQueueSheet}
+          boardMismatch={boardMismatch}
+          mismatchBoardLabel={mismatchBoardLabel}
+          onSwitchBoard={handleSwitchBoardFromDrawer}
         />
       ) : null}
       {logAscentInput ? (

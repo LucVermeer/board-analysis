@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { createElement, useEffect, type ReactNode } from 'react';
-import { render, waitFor } from '@testing-library/react';
+import { createElement, type ReactNode } from 'react';
+import { render, fireEvent, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { SessionFeedItem, SessionFeedTickHighlight } from '@boardsesh/shared-schema';
 import { SessionFeedCard } from '../SessionFeedCard';
@@ -8,50 +8,33 @@ import { SessionFeedCard } from '../SessionFeedCard';
 type ViewProps = {
   children?: ReactNode;
   pointerEvents?: string;
-  onLayout?: (event: { nativeEvent: { layout: { width: number } } }) => void;
 };
 
-type FlatListProps<T> = {
-  data: T[];
-  renderItem: (args: { item: T; index: number }) => ReactNode;
-  keyExtractor?: (item: T, index: number) => string;
+type PressableProps = {
+  children?: ReactNode;
+  onPress?: () => void;
+  accessibilityLabel?: string;
 };
 
-const chartProps = vi.hoisted(() => ({
-  latest: null as Record<string, unknown> | null,
-  pageKeys: [] as string[],
-}));
+const chartProps = vi.hoisted(() => ({ latest: {} as Record<string, unknown>, renderCount: 0 }));
 
 vi.mock('react-native', () => ({
-  View: ({ children, pointerEvents, onLayout }: ViewProps) => {
-    useEffect(() => {
-      onLayout?.({ nativeEvent: { layout: { width: 320 } } });
-    }, [onLayout]);
-    return createElement('div', { 'data-pointer-events': pointerEvents ?? '' }, children);
-  },
-  FlatList: <T,>({ data, renderItem, keyExtractor }: FlatListProps<T>) => {
-    chartProps.pageKeys = data.map((item) => (item as { key?: string }).key ?? '');
-    return createElement(
-      'div',
-      null,
-      data.map((item, index) =>
-        createElement('div', { key: keyExtractor ? keyExtractor(item, index) : index }, renderItem({ item, index })),
-      ),
-    );
-  },
+  View: ({ children, pointerEvents }: ViewProps) =>
+    createElement('div', { 'data-pointer-events': pointerEvents ?? '' }, children),
   StyleSheet: { create: (styles: unknown) => styles, hairlineWidth: 1 },
+  Linking: { canOpenURL: vi.fn().mockResolvedValue(true), openURL: vi.fn().mockResolvedValue(undefined) },
 }));
 vi.mock('expo-image', () => ({ Image: () => createElement('img') }));
 
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock('@boardsesh/profile-stats', () => ({ formatTickRelativeTime: () => 'now' }));
-vi.mock('@boardsesh/play-view', () => ({ getGradeTextColor: () => '#000000' }));
+vi.mock('@boardsesh/shared-schema', () => ({ isBetaVideoUrl: () => true }));
 vi.mock('../../Card', () => ({
   Card: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
 }));
 vi.mock('../../PressableSurface', () => ({
-  PressableSurface: ({ children, onPress }: { children?: ReactNode; onPress?: () => void }) =>
-    createElement('button', { onClick: onPress }, children),
+  PressableSurface: ({ children, onPress, accessibilityLabel }: PressableProps) =>
+    createElement('button', { onClick: onPress, 'aria-label': accessibilityLabel }, children),
 }));
 vi.mock('../../Text', () => ({
   Text: ({ children }: { children?: ReactNode }) => createElement('span', null, children),
@@ -64,9 +47,12 @@ vi.mock('../../ClimbListThumbnail', () => ({
 }));
 vi.mock('../AvatarGroup', () => ({ AvatarGroup: () => createElement('span', null) }));
 vi.mock('../FeedSocialRow', () => ({ FeedSocialRow: () => createElement('span', null) }));
+vi.mock('../GradeChip', () => ({ GradeChip: () => createElement('span', null) }));
+vi.mock('../MetricChip', () => ({ MetricChip: () => createElement('span', null) }));
 vi.mock('../YouCharts', () => ({
   StackedBarChart: (props: Record<string, unknown>) => {
     chartProps.latest = props;
+    chartProps.renderCount += 1;
     return createElement('div', { 'data-testid': 'session-chart' });
   },
 }));
@@ -80,46 +66,25 @@ vi.mock('../../../hooks/use-grade-format', () => ({
 vi.mock('../../../providers/theme-provider', () => ({
   useTheme: () => ({
     systemColors: {
+      label: '#111111',
       secondaryLabel: '#666666',
       tertiaryLabel: '#888888',
       separator: '#dddddd',
       fill: '#eeeeee',
     },
-    brandColors: {
-      primary: '#2563eb',
-      success: '#047857',
-      warning: '#B45309',
-      error: '#DC2626',
-    },
+    brandColors: { primary: '#2563eb', success: '#047857', warning: '#B45309', error: '#DC2626' },
   }),
 }));
+vi.mock('../../../providers/toast-provider', () => ({ useToast: () => ({ showToast: vi.fn() }) }));
 vi.mock('../../../theme/tokens', () => ({
   spacing: { 1: 4, 2: 8, 3: 12, 4: 16, 5: 20, 6: 24 },
   borderRadius: { full: 999, md: 8 },
-  overlays: { scrim: 'rgba(0,0,0,0.6)', onScrim: '#ffffff' },
 }));
-vi.mock('../../../hooks/use-reduce-motion', () => ({ useReduceMotion: () => true }));
 vi.mock('../../../lib/haptics', () => ({ hapticLight: vi.fn() }));
 vi.mock('../../../lib/beta-video-url', () => ({
   isInstagramUrl: (url: string) => url.includes('instagram.com'),
   isTikTokUrl: (url: string) => url.includes('tiktok.com'),
-  mapBetaLink: (row: {
-    climbUuid: string;
-    link: string;
-    foreignUsername: string | null;
-    angle: number | null;
-    thumbnail: string | null;
-    isListed: boolean | null;
-    createdAt: string;
-  }) => ({
-    climb_uuid: row.climbUuid,
-    link: row.link,
-    foreign_username: row.foreignUsername,
-    angle: row.angle,
-    thumbnail: row.thumbnail,
-    is_listed: row.isListed ?? false,
-    created_at: row.createdAt,
-  }),
+  mapBetaLink: (row: { link: string }) => ({ link: row.link }),
 }));
 vi.mock('../../../lib/playlists/board-details-for-playlist', () => ({ getBoardConfigForPlaylist: () => null }));
 
@@ -170,9 +135,10 @@ function session(overrides?: Partial<SessionFeedItem>): SessionFeedItem {
 }
 
 describe('SessionFeedCard chart', () => {
-  it('keeps the embedded chart from stealing the card press target', async () => {
-    chartProps.pageKeys = [];
-    const { getByTestId } = render(
+  it('keeps the grade chart collapsed until the chart chip is pressed', async () => {
+    chartProps.latest = {};
+    chartProps.renderCount = 0;
+    const { queryByTestId, getByLabelText } = render(
       createElement(SessionFeedCard, {
         session: session(),
         onOpenComments: vi.fn(),
@@ -180,37 +146,29 @@ describe('SessionFeedCard chart', () => {
       }),
     );
 
-    await waitFor(() => expect(getByTestId('session-chart')).toBeTruthy());
-    expect(getByTestId('session-chart').parentElement?.getAttribute('data-pointer-events')).toBe('none');
+    expect(queryByTestId('session-chart')).toBeNull();
+
+    fireEvent.click(getByLabelText('sessionFeedCard.chartLabel'));
+
+    await waitFor(() => expect(queryByTestId('session-chart')).not.toBeNull());
     expect(chartProps.latest?.fitYAxisToData).toBe(true);
     expect(chartProps.latest?.interactive).toBe(false);
     expect(chartProps.latest?.zoomable).toBe(false);
   });
 
-  it('orders the session story as hardest send, beta, then chart', async () => {
-    chartProps.pageKeys = [];
-    render(
+  it('opens the hardest send via onOpenClimb when the hero is pressed', () => {
+    const onOpenClimb = vi.fn();
+    const hardest = tick();
+    const { getByLabelText } = render(
       createElement(SessionFeedCard, {
-        session: session({
-          hardestSend: tick(),
-          featuredBeta: {
-            tick: tick({ uuid: 'tick-2', climbName: 'Beta Climb' }),
-            betaLink: {
-              climbUuid: 'climb-2',
-              link: 'https://www.instagram.com/reel/demo/',
-              foreignUsername: 'setter',
-              angle: 40,
-              thumbnail: null,
-              isListed: true,
-              createdAt: '2026-06-12T00:00:00.000Z',
-            },
-          },
-        }),
+        session: session({ hardestSend: hardest }),
         onOpenComments: vi.fn(),
         onPress: vi.fn(),
+        onOpenClimb,
       }),
     );
 
-    await waitFor(() => expect(chartProps.pageKeys).toEqual(['hardest', 'beta', 'chart']));
+    fireEvent.click(getByLabelText('sessionFeedCard.openHardestClimb'));
+    expect(onOpenClimb).toHaveBeenCalledWith(hardest);
   });
 });

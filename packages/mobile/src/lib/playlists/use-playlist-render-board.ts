@@ -14,6 +14,7 @@ import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { formatBoardDisplayName } from '@boardsesh/board-config';
 import { useDrawerHost, type BoardConfig } from '../../providers/drawer-host-provider';
+import { boardLooselyMatches } from '../boards/board-matches';
 import { getBoardConfigForPlaylist } from './board-details-for-playlist';
 
 /** The board a playlist's rows render against — same shape as the active board
@@ -63,8 +64,7 @@ export function usePlaylistRenderBoard(
     // Smart playlists (no board): always the active board, no mismatch concept.
     if (boardType == null) return { renderBoard: activeBoard, mismatch: false };
 
-    const matchesActive =
-      !!activeBoard && activeBoard.boardName === boardType && (layoutId == null || activeBoard.layoutId === layoutId);
+    const matchesActive = boardLooselyMatches({ boardName: boardType, layoutId }, activeBoard);
     if (matchesActive) return { renderBoard: activeBoard, mismatch: false };
 
     // Mismatch or no active board → read-only against the playlist's own board

@@ -22,6 +22,7 @@ import { PlaybackControls } from './PlaybackControls';
 import { useMobilePlayback } from './use-mobile-playback';
 import { PlayDrawerHeader } from './PlayDrawerHeader';
 import { PlayDrawerActionBar } from './PlayDrawerActionBar';
+import { SwitchBoardOverlay } from './SwitchBoardOverlay';
 import { LogAscentSheet } from '../LogAscentSheet';
 import { DeferredSections } from './DeferredSections';
 import { computeFirstScreenHeight } from './play-drawer-layout';
@@ -95,6 +96,13 @@ type PlayDrawerProps = {
   /** Open the queue list sheet (provided by DrawerHostProvider; passed as a prop
    *  rather than read via useDrawerHost to avoid a host↔PlayDrawer require cycle). */
   onOpenQueue: () => void;
+  /** When true, the displayed climb belongs to a board other than the user's
+   *  active board — render the switch-board overlay over the controls. */
+  boardMismatch?: boolean;
+  /** Human-readable name of the climb's board, shown in the overlay message. */
+  mismatchBoardLabel?: string;
+  /** Switch to the climb's board (one-tap if owned, else the board picker). */
+  onSwitchBoard?: () => void;
 };
 
 // Full-screen now-playing takeover: a single 100% snap, no peek detent. The
@@ -109,7 +117,15 @@ const DEFAULT_BETA_HEADER_HEIGHT = 52;
 const renderNoHandle = () => null;
 
 export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function PlayDrawer(
-  { boardConfig, onAngleChange, isAngleAdjustable = true, onOpenQueue },
+  {
+    boardConfig,
+    onAngleChange,
+    isAngleAdjustable = true,
+    onOpenQueue,
+    boardMismatch = false,
+    mismatchBoardLabel,
+    onSwitchBoard,
+  },
   ref,
 ) {
   const { t } = useTranslation('session');
@@ -600,46 +616,64 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
                   )}
                 </View>
 
-                {playback.isAnimatable && (
-                  <PlaybackControls
-                    frameIndex={playback.frameIndex}
-                    frameCount={playback.frameCount}
-                    isPlaying={playback.isPlaying}
-                    speed={playback.speed}
-                    paceMs={playback.paceMs}
-                    onPlay={playback.play}
-                    onPause={playback.pause}
-                    onSeek={playback.seek}
-                    onSpeedChange={playback.setSpeed}
-                  />
-                )}
+                {/* Controls region — gated by the switch-board overlay when the
+                    displayed climb is on a board the user isn't currently on.
+                    Board art + swipe above stay interactive for viewing. The
+                    controls are wrapped so assistive tech can't reach them while
+                    gated (on BOTH platforms — the scrim's accessibilityViewIsModal
+                    is iOS-only); the overlay itself stays a sibling so its
+                    "Switch board" action remains focusable. */}
+                <View style={styles.controlsRegion}>
+                  <View
+                    accessibilityElementsHidden={boardMismatch}
+                    importantForAccessibility={boardMismatch ? 'no-hide-descendants' : 'auto'}
+                  >
+                    {playback.isAnimatable && (
+                      <PlaybackControls
+                        frameIndex={playback.frameIndex}
+                        frameCount={playback.frameCount}
+                        isPlaying={playback.isPlaying}
+                        speed={playback.speed}
+                        paceMs={playback.paceMs}
+                        onPlay={playback.play}
+                        onPause={playback.pause}
+                        onSeek={playback.seek}
+                        onSpeedChange={playback.setSpeed}
+                      />
+                    )}
 
-                <PlayDrawerActionBar
-                  canSwipePrevious={navigationState.canPrevious}
-                  canSwipeNext={navigationState.canNext}
-                  isMirrored={isMirrored}
-                  supportsMirroring={supportsMirroring}
-                  isFavorited={isFavorited}
-                  remainingQueueCount={navigationState.remainingCount}
-                  lightbulbActive={lightbulbActive}
-                  lightbulbConnected={bluetoothConnected}
-                  lightbulbPending={lightbulbPending}
-                  lightbulbLongPressEnabled={bluetoothConnected}
-                  ascentCount={ascentCount}
-                  onPrevClick={handlePrev}
-                  onNextClick={handleNext}
-                  onMirror={handleMirror}
-                  onToggleFavorite={handleToggleFavorite}
-                  onLightbulb={handleLightbulb}
-                  onLightbulbLongPress={handleLightbulbLongPress}
-                  onOpenActions={handleOpenActions}
-                  onOpenQueue={onOpenQueue}
-                  onShare={handleShare}
-                  onTickPress={handleTickFabPress}
-                  onTickLongPress={handleTickFabLongPress}
-                  currentAngle={angle}
-                  onOpenAngleSelector={isAngleAdjustable ? handleOpenAngleSelector : undefined}
-                />
+                    <PlayDrawerActionBar
+                      canSwipePrevious={navigationState.canPrevious}
+                      canSwipeNext={navigationState.canNext}
+                      isMirrored={isMirrored}
+                      supportsMirroring={supportsMirroring}
+                      isFavorited={isFavorited}
+                      remainingQueueCount={navigationState.remainingCount}
+                      lightbulbActive={lightbulbActive}
+                      lightbulbConnected={bluetoothConnected}
+                      lightbulbPending={lightbulbPending}
+                      lightbulbLongPressEnabled={bluetoothConnected}
+                      ascentCount={ascentCount}
+                      onPrevClick={handlePrev}
+                      onNextClick={handleNext}
+                      onMirror={handleMirror}
+                      onToggleFavorite={handleToggleFavorite}
+                      onLightbulb={handleLightbulb}
+                      onLightbulbLongPress={handleLightbulbLongPress}
+                      onOpenActions={handleOpenActions}
+                      onOpenQueue={onOpenQueue}
+                      onShare={handleShare}
+                      onTickPress={handleTickFabPress}
+                      onTickLongPress={handleTickFabLongPress}
+                      currentAngle={angle}
+                      onOpenAngleSelector={isAngleAdjustable ? handleOpenAngleSelector : undefined}
+                    />
+                  </View>
+
+                  {boardMismatch && onSwitchBoard ? (
+                    <SwitchBoardOverlay boardLabel={mismatchBoardLabel ?? ''} onSwitchBoard={onSwitchBoard} />
+                  ) : null}
+                </View>
               </View>
 
               {/* Below-fold deferred sections */}
@@ -780,5 +814,10 @@ const styles = StyleSheet.create({
     flex: 1,
     position: 'relative',
     marginHorizontal: spacing[4],
+  },
+  // Anchors the switch-board overlay so its scrim covers exactly the playback +
+  // action controls, leaving the board art and header above it interactive.
+  controlsRegion: {
+    position: 'relative',
   },
 });
