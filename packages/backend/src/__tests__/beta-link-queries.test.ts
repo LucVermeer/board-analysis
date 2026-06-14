@@ -267,13 +267,28 @@ describe('betaLinks resolver', () => {
     expect(fetchInstagramMetaMock).not.toHaveBeenCalled();
   });
 
-  it('strips the Instagram share-attribution param from the returned link', async () => {
+  it('strips the Instagram share-attribution param on the cached-thumbnail (short-circuit) path', async () => {
     selectMock.mockReturnValueOnce([
       row({ link: 'https://www.instagram.com/reel/ABC/?igsh=NHB5ZXljZjV3bzB3', thumbnail: OUR_S3_THUMB }),
     ]);
 
     const result = await betaLinkQueries.betaLinks(undefined, { boardType: 'kilter', climbUuid: 'climb-1' });
     expect(result[0]?.link).toBe('https://www.instagram.com/reel/ABC/');
+    expect(fetchInstagramMetaMock).not.toHaveBeenCalled();
+  });
+
+  it('strips the Instagram share-attribution param on the fresh-fetch path', async () => {
+    selectMock.mockReturnValueOnce([row({ link: 'https://www.instagram.com/reel/ABC/?igsh=x', thumbnail: null })]);
+    fetchInstagramMetaMock.mockResolvedValueOnce({
+      status: 'ok',
+      thumbnail: 'https://scontent.cdninstagram.com/raw.jpg',
+      username: 'climber',
+    });
+    cacheInstagramMock.mockResolvedValueOnce(OUR_S3_THUMB);
+
+    const result = await betaLinkQueries.betaLinks(undefined, { boardType: 'kilter', climbUuid: 'climb-1' });
+    expect(result[0]?.link).toBe('https://www.instagram.com/reel/ABC/');
+    expect(fetchInstagramMetaMock).toHaveBeenCalled();
   });
 
   it('routes TikTok URLs through the TikTok enricher', async () => {

@@ -452,15 +452,18 @@ export const betaLinkQueries = {
     requireAuthenticated(ctx);
     await applyRateLimit(ctx, 30, 'beta-link-preview');
 
+    // Strip Instagram share-attribution params so the preview echoes the same
+    // clean URL we'd store, and the meta fetch keys off the canonical form.
+    const normalizedLink = normalizeBetaVideoUrl(link);
     const preview: BetaLinkPreviewResult = {
-      link: normalizeBetaVideoUrl(link),
+      link: normalizedLink,
       thumbnail: null,
       username: null,
       caption: null,
     };
 
-    if (isInstagramUrl(link)) {
-      const meta = await fetchInstagramMeta(link);
+    if (isInstagramUrl(normalizedLink)) {
+      const meta = await fetchInstagramMeta(normalizedLink);
       if (meta.status === 'ok') {
         preview.thumbnail = meta.thumbnail;
         preview.username = meta.username;
@@ -469,8 +472,8 @@ export const betaLinkQueries = {
       return preview;
     }
 
-    if (isTikTokUrl(link)) {
-      const meta = await fetchTikTokMeta(link);
+    if (isTikTokUrl(normalizedLink)) {
+      const meta = await fetchTikTokMeta(normalizedLink);
       if (meta.status === 'ok') {
         preview.thumbnail = meta.thumbnail;
         preview.username = meta.username;
