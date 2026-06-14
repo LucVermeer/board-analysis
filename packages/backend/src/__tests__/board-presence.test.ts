@@ -1315,4 +1315,37 @@ describe('board-presence durable history (board_climb_events)', () => {
     expect(history[0].name).toBe('Real Catalog Climb');
     expect(history[0].sentAt).toBeTruthy();
   });
+
+  it('keyset-paginates by seq with no repeats or skips when sends share a confirmedAt', async () => {
+    const boardId = await resolveBoardId(`PAGE-${Date.now()}`);
+    // Five rows at the SAME confirmed_at second with distinct monotonic seq —
+    // exactly the case a confirmedAt-only cursor would repeat or skip across
+    // pages.
+    const sameTs = '2026-01-01 00:00:00';
+    for (const seq of [10, 11, 12, 13, 14]) {
+      await db.execute(
+        sql`INSERT INTO board_climb_events (board_id, board_type, climb_uuid, angle, seq, confirmed_at)
+            VALUES (${boardId}, 'kilter', ${TEST_CLIMB_UUID}, 40, ${seq}, ${sameTs})`,
+      );
+    }
+
+    const page1 = await boardPresenceQueries.boardHistory(undefined, { boardId, limit: 3 }, authCtx());
+    expect(page1.map((row) => row.seq)).toEqual([14, 13, 12]);
+
+    const cursor = String(page1[page1.length - 1].seq);
+    const page2 = await boardPresenceQueries.boardHistory(undefined, { boardId, limit: 3, before: cursor }, authCtx());
+    expect(page2.map((row) => row.seq)).toEqual([11, 10]);
+
+    // Every row appears exactly once across the two pages.
+    const seen = [...page1, ...page2].map((row) => row.seq);
+    expect(seen).toEqual([14, 13, 12, 11, 10]);
+    expect(new Set(seen).size).toBe(5);
+  });
+
+  it('rejects a malformed history cursor with a clean error, not a leaked DB error', async () => {
+    const boardId = await resolveBoardId(`BADCUR-${Date.now()}`);
+    await expect(
+      boardPresenceQueries.boardHistory(undefined, { boardId, before: 'not-a-cursor' }, authCtx()),
+    ).rejects.toThrow(/Invalid history cursor/);
+  });
 });

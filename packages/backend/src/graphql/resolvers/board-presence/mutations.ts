@@ -486,6 +486,10 @@ export const boardPresenceMutations = {
     // a failed durable insert never fails the accepted report.
     const DURABLE_DWELL_MS = 60_000;
     try {
+      // `sentAt` is the server-generated ISO timestamp from above, so
+      // `Date.parse(sentAt)` is always valid; `firstSeen` is already guarded to
+      // a plausible epoch-ms or null in getBoardMembershipFirstSeen. A null
+      // firstSeen correctly skips the insert (presence not yet proven for 60s).
       const firstSeen = await pubsub.getBoardMembershipFirstSeen(String(boardId), ctx.userId!);
       if (firstSeen !== null && Date.parse(sentAt) - firstSeen >= DURABLE_DWELL_MS) {
         await db
@@ -496,6 +500,9 @@ export const boardPresenceMutations = {
             climbUuid,
             angle: effectiveAngle,
             userId: ctx.userId!,
+            // Reserved for session recaps. reportBoardClimb has no sessionId arg
+            // yet, so every durable row is solo-attributed until the
+            // session-attribution follow-up threads the active session through.
             sessionId: null,
             seq,
             frames: catalogClimb.frames ?? null,

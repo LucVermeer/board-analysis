@@ -31,7 +31,10 @@ export const boardClimbEvents = pgTable(
     // The member whose phone wrote the frames. Nullable so deleting a user
     // doesn't erase the board's history.
     userId: text('user_id').references(() => users.id, { onDelete: 'set null' }),
-    // Present for in-session pushes; null for solo. Powers session recaps.
+    // Reserved for session recaps: will hold the active session for in-session
+    // pushes. Not yet populated — reportBoardClimb writes null until the
+    // session-attribution follow-up threads the session through. Always null for
+    // solo pushes.
     sessionId: text('session_id').references(() => boardSessions.id, { onDelete: 'set null' }),
     // Per-board monotonic sequence (reused from the live Redis feed) — gives
     // cross-instance ordering and a natural idempotency key with boardId.
