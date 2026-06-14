@@ -54,14 +54,17 @@ export const boardPresenceQueries = {
     await requireActiveBoardById(boardId);
 
     // Parse + validate the cursor before it reaches SQL, so a malformed value
-    // returns a clean error instead of a leaked Postgres parse error.
+    // returns a clean error instead of a leaked Postgres parse error. Trim
+    // first and require digits only: `Number()` coerces whitespace/odd inputs
+    // (" " -> 0, "1e3" -> 1000, "0x10" -> 16), which would silently return a
+    // wrong/empty page. A blank/whitespace cursor is treated as "no cursor".
     let beforeSeq: number | null = null;
-    if (before != null && before !== '') {
-      const parsed = Number(before);
-      if (!Number.isInteger(parsed) || parsed < 0) {
+    const trimmedCursor = before?.trim();
+    if (trimmedCursor) {
+      if (!/^\d+$/.test(trimmedCursor)) {
         throw new GraphQLError('Invalid history cursor', { extensions: { code: 'BAD_USER_INPUT' } });
       }
-      beforeSeq = parsed;
+      beforeSeq = Number(trimmedCursor);
     }
 
     const cappedLimit = Math.min(Math.max(limit ?? 50, 1), 100);
