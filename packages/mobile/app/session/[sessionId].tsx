@@ -15,6 +15,7 @@ import { CommentSheet } from '../../src/components/you/CommentSheet';
 import { SessionDetailHero } from '../../src/components/session/SessionDetailHero';
 import { SessionStatTiles } from '../../src/components/session/SessionStatTiles';
 import { SessionAnalyticsSection } from '../../src/components/session/SessionAnalyticsSection';
+import { SessionBetaCarousel } from '../../src/components/session/SessionBetaCarousel';
 import { SessionParticipantBreakdown } from '../../src/components/session/SessionParticipantBreakdown';
 import { SessionTickRow } from '../../src/components/session/SessionTickRow';
 import { useSessionDetail } from '../../src/lib/graphql/hooks';
@@ -22,6 +23,9 @@ import { navigateToSessionClimb } from '../../src/lib/session-tick-mapping';
 import { useBottomChromeMetrics } from '../../src/hooks/use-bottom-chrome-metrics';
 import { spacing } from '../../src/theme/tokens';
 import { useTheme } from '../../src/providers/theme-provider';
+
+// Hoisted so FlashList gets a stable reference across renders.
+const keyExtractor = (tick: SessionDetailTick) => tick.uuid;
 
 export default function SessionDetailScreen() {
   const { sessionId } = useLocalSearchParams<{ sessionId: string }>();
@@ -114,7 +118,9 @@ export default function SessionDetailScreen() {
         hardestGrade={session.hardestGrade}
       />
 
-      <SessionAnalyticsSection ticks={session.ticks} />
+      <SessionAnalyticsSection ticks={session.ticks} gradeDistribution={session.gradeDistribution} />
+
+      <SessionBetaCarousel ticks={session.ticks} />
 
       <SessionParticipantBreakdown participants={session.participants} />
 
@@ -133,11 +139,11 @@ export default function SessionDetailScreen() {
   );
 
   return (
-    <View style={styles.flex}>
+    <View style={[styles.flex, { backgroundColor: systemColors.groupedBackground }]}>
       <FlashList
         data={session.ticks}
         renderItem={renderItem}
-        keyExtractor={(tick) => tick.uuid}
+        keyExtractor={keyExtractor}
         ListHeaderComponent={header}
         contentContainerStyle={{ paddingBottom }}
       />

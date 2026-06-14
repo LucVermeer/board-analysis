@@ -8,12 +8,18 @@ import { Icon } from '../Icon';
 import { type IconName } from '../icon-map';
 import { ListRow } from '../ListRow';
 import { Avatar } from '../Avatar';
+import { PressableSurface } from '../PressableSurface';
+import { ClimbListItemContent } from '../ClimbListItemContent';
 import { FeedSocialRow } from '../you/FeedSocialRow';
 import { gradeBadgeColor } from '../you/profile-chart-colors';
 import { useGradeFormat } from '../../hooks/use-grade-format';
-import { brandColors } from '../../theme/colors';
+import { useTheme } from '../../providers/theme-provider';
+import { brandColors, withAlpha } from '../../theme/colors';
 import { iosSystemColors } from '../../theme/ios-colors';
 import { spacing, borderRadius } from '../../theme/tokens';
+import { getBoardConfigForPlaylist } from '../../lib/playlists/board-details-for-playlist';
+import { sessionTickToClimb } from '../../lib/session-tick-mapping';
+import { hapticSelection } from '../../lib/haptics';
 
 type TickStatusMeta = { icon: IconName; color: string };
 
@@ -81,12 +87,67 @@ export const SessionTickRow = memo(function SessionTickRow({
   onOpenComments,
 }: SessionTickRowProps) {
   const { t } = useTranslation('session');
+  const { systemColors } = useTheme();
   const { formatGrade, formatGradeByDifficultyId } = useGradeFormat();
 
   const meta = statusMeta(tick.status);
   const attemptText = formatAttemptText(tick, t);
   const subtitleParts = [attemptText, tick.comment ?? null].filter((part): part is string => !!part);
   const subtitle = subtitleParts.length > 0 ? subtitleParts.join(' · ') : undefined;
+
+  const handlePress = () => {
+    hapticSelection();
+    onPress(tick);
+  };
+
+  const climb = sessionTickToClimb(tick);
+  const boardConfig = getBoardConfigForPlaylist(tick.boardType, tick.layoutId);
+
+  if (climb && boardConfig) {
+    return (
+      <View>
+        <PressableSurface
+          onPress={handlePress}
+          feedback="opacity"
+          opacityTo={0.7}
+          accessibilityRole="button"
+          accessibilityLabel={tick.climbName ?? t('detail.unknownClimb')}
+          style={[styles.row, { backgroundColor: systemColors.secondaryBackground }]}
+        >
+          {isMultiUser ? (
+            <Avatar uri={participant?.avatarUrl} name={participant?.displayName} size={28} />
+          ) : (
+            <View style={styles.statusSlot}>
+              <View style={[styles.statusIcon, { backgroundColor: withAlpha(meta.color, 0.15) }]}>
+                <Icon name={meta.icon} size={14} color={meta.color} />
+              </View>
+            </View>
+          )}
+          <ClimbListItemContent
+            climb={climb}
+            boardName={boardConfig.boardName}
+            layoutId={boardConfig.layoutId}
+            sizeId={boardConfig.sizeId}
+            setIds={boardConfig.setIds.join(',')}
+            angle={tick.angle}
+            subtitleDetailParts={subtitleParts}
+            showAscentStatus={false}
+          />
+          <FeedSocialRow
+            entityId={tick.uuid}
+            entityType="tick"
+            upvotes={tick.upvotes}
+            userVote={null}
+            commentCount={0}
+            onOpenComments={onOpenComments}
+            compact
+          />
+        </PressableSurface>
+        <View style={[styles.separator, { backgroundColor: systemColors.separator }]} />
+      </View>
+    );
+  }
+
   const gradeLabel =
     formatGradeByDifficultyId(tick.difficulty) ?? formatGrade(tick.difficultyName) ?? tick.difficultyName;
   const gradeColor = gradeLabel ? gradeBadgeColor(tick.difficultyName ?? gradeLabel) : undefined;
@@ -95,7 +156,7 @@ export const SessionTickRow = memo(function SessionTickRow({
     <ListRow
       title={tick.climbName ?? t('detail.unknownClimb')}
       subtitle={subtitle}
-      onPress={() => onPress(tick)}
+      onPress={handlePress}
       leading={
         isMultiUser ? (
           <Avatar uri={participant?.avatarUrl} name={participant?.displayName} size={28} />
@@ -130,6 +191,29 @@ export const SessionTickRow = memo(function SessionTickRow({
 });
 
 const styles = StyleSheet.create({
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    columnGap: spacing[3],
+    paddingVertical: spacing[2],
+    paddingHorizontal: spacing[3],
+  },
+  statusSlot: {
+    width: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  statusIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  separator: {
+    height: StyleSheet.hairlineWidth,
+    marginLeft: spacing[3] + 28 + spacing[3],
+  },
   badge: {
     width: 28,
     height: 28,

@@ -51,6 +51,7 @@
     "problems": "blocs",
     "send": "enchaînement",
     "flash": "flash",
+    "redpoint": "après-travail",
     "percentile": "Percentile",
     "topPercent": "Top {{value}} %",
     "moreSentThan": "Plus de blocs enchaînés que {{value}} % des grimpeurs",

@@ -1,4 +1,4 @@
-import { eq, and, desc, sql, count as drizzleCount, isNull, inArray, type SQL } from 'drizzle-orm';
+import { eq, and, or, desc, sql, count as drizzleCount, isNull, inArray, type SQL } from 'drizzle-orm';
 import { dbRead } from '../../../db/client';
 import * as dbSchema from '@boardsesh/db/schema';
 import { getGradeLabel } from '@boardsesh/db/queries';
@@ -14,6 +14,7 @@ import type {
   SessionFeedParticipant,
   SessionFeedTickHighlight,
   SessionDetailTick,
+  BetaLinksGqlRow,
   ConnectionContext,
 } from '@boardsesh/shared-schema';
 import { logger } from '../../../utils/logger';
@@ -561,6 +562,10 @@ export const sessionFeedQueries = {
         : [];
     const tickVoteMap = new Map(tickVoteCounts.map((v) => [v.entityId, Number(v.upvotes)]));
 
+    // Batch-fetch stored beta links for the session's climbs in one query.
+    // Keyed by `${boardType}:${climbUuid}` so each tick reads an O(1) Map entry.
+    const betaLinksByClimb = await fetchBetaLinksByClimb(tickRows);
+
     // Build ticks (totalAttempts added below)
     const ticks: SessionDetailTick[] = tickRows.map((row) => {
       const effectiveDifficulty =
@@ -589,6 +594,7 @@ export const sessionFeedQueries = {
         climbedAt: row.tick.climbedAt,
         upvotes: tickVoteMap.get(row.tick.uuid) ?? 0,
         totalAttempts: null,
+        betaLinks: betaLinksByClimb.get(`${row.tick.boardType}:${row.tick.climbUuid}`) ?? [],
       };
     });
 
@@ -1335,7 +1341,7 @@ async function fetchDailyGradeDistributionBatch(
   return map;
 }
 
-function mapBetaLinkRow(row: BetaLinkRow) {
+function mapBetaLinkRow(row: BetaLinkRow): BetaLinksGqlRow {
   return {
     climbUuid: row.climbUuid,
     link: row.link,
@@ -1345,6 +1351,83 @@ function mapBetaLinkRow(row: BetaLinkRow) {
     isListed: row.isListed,
     createdAt: row.createdAt,
   };
+}
+
+/**
+ * Batch-fetch stored beta links for the climbs ticked in a session, for the
+ * session-detail beta carousel.
+ *
+ * Runs ONE query against board_beta_links filtered to the unique
+ * (boardType, climbUuid) pairs from the session's ticks — the same direct
+ * climb-uuid lookup the per-climb `betaLinks` query (the play-drawer beta list)
+ * uses, so the carousel surfaces the same community beta a climber would see on
+ * each climb. It adds two gates appropriate to this aggregated public view:
+ * is_listed = true and the KayaClimb URL exclusion.
+ *
+ * This is deliberately NOT the featured-beta path (`betaCandidateJoinSql`),
+ * which additionally scopes to the ticking user's own beta, matches the tick
+ * angle, and resolves climb aliases to rank a single personal highlight — a
+ * different feature. Here we want every shareable clip for the climbs, not one.
+ *
+ * No live Instagram/TikTok enrichment — thumbnails are whatever is pre-cached.
+ * Returns a Map keyed `${boardType}:${climbUuid}`.
+ */
+async function fetchBetaLinksByClimb(
+  tickRows: Array<{ tick: { boardType: string; climbUuid: string } }>,
+): Promise<Map<string, BetaLinksGqlRow[]>> {
+  const map = new Map<string, BetaLinksGqlRow[]>();
+  if (tickRows.length === 0) return map;
+
+  // Unique (boardType, climbUuid) pairs so the IN-list stays bounded by the
+  // number of distinct climbs, not the number of ticks.
+  const pairSet = new Set<string>();
+  const pairPredicates: SQL[] = [];
+  for (const { tick } of tickRows) {
+    const key = `${tick.boardType}:${tick.climbUuid}`;
+    if (pairSet.has(key)) continue;
+    pairSet.add(key);
+    pairPredicates.push(
+      and(
+        eq(dbSchema.boardBetaLinks.boardType, tick.boardType),
+        eq(dbSchema.boardBetaLinks.climbUuid, tick.climbUuid),
+      ) as SQL,
+    );
+  }
+
+  const betaRows = await dbRead
+    .select({
+      boardType: dbSchema.boardBetaLinks.boardType,
+      climbUuid: dbSchema.boardBetaLinks.climbUuid,
+      link: dbSchema.boardBetaLinks.link,
+      foreignUsername: dbSchema.boardBetaLinks.foreignUsername,
+      angle: dbSchema.boardBetaLinks.angle,
+      thumbnail: dbSchema.boardBetaLinks.thumbnail,
+      isListed: dbSchema.boardBetaLinks.isListed,
+      createdAt: dbSchema.boardBetaLinks.createdAt,
+    })
+    .from(dbSchema.boardBetaLinks)
+    .where(
+      and(
+        or(...pairPredicates),
+        eq(dbSchema.boardBetaLinks.isListed, true),
+        // Match the featured-beta KayaClimb exclusion: drop links pointing at
+        // kayaclimb.com (and any subdomain), which aren't shareable video beta.
+        sql`${dbSchema.boardBetaLinks.link} !~* '^https?://([a-z0-9-]+\\.)*kayaclimb\\.com/'`,
+      ),
+    )
+    .orderBy(desc(dbSchema.boardBetaLinks.createdAt));
+
+  for (const row of betaRows) {
+    const key = `${row.boardType}:${row.climbUuid}`;
+    const existing = map.get(key);
+    const mapped = mapBetaLinkRow(row);
+    if (existing) {
+      existing.push(mapped);
+    } else {
+      map.set(key, [mapped]);
+    }
+  }
+  return map;
 }
 
 async function fetchFeaturedBetaBatch(
