@@ -6,6 +6,7 @@
 // The hook only sees these five methods.
 
 import type {
+  BoardConnectionHolder,
   BoardPresenceClimb,
   BoardPresenceEvent,
   BoardPresenceStats,
@@ -32,6 +33,21 @@ export interface BoardPresenceClient {
 
   /** Durable + live stats for the board's wall feed. */
   fetchStats(boardId: number): Promise<BoardPresenceStats>;
+
+  /**
+   * Current connection holder for the board, used to seed a late joiner before
+   * any live `BoardConnectionChanged` push lands. Resolves to `null` when the
+   * board is free. Optional so a client that doesn't track holders still
+   * satisfies the interface.
+   */
+  fetchConnection?(boardId: number): Promise<BoardConnectionHolder | null>;
+
+  /**
+   * Release this client's hold on the board (e.g. on BLE disconnect). Resolves
+   * to the server's accepted flag. Optional so a read-only client still
+   * satisfies the interface.
+   */
+  reportDisconnect?(boardId: number): Promise<boolean>;
 
   /**
    * Report the climb just lit on the wall. `angle` is the wall angle (null =

@@ -33,7 +33,6 @@ import { ClimbFilterSheet, hasActiveFilters, type ClimbFilters } from '../../../
 import { ClimbFilterFab } from '../../../src/components/search/ClimbFilterFab';
 import { ClimbTopChrome } from '../../../src/components/search/ClimbTopChrome';
 import { useDrawerHost } from '../../../src/providers/drawer-host-provider';
-import { useFeatureFlag } from '../../../src/providers/feature-flags-provider';
 import { useTheme } from '../../../src/providers/theme-provider';
 import { useActiveClimbUuid, useQueueActions } from '../../../src/providers/queue-provider';
 import { ClimbSearchProvider, useClimbSearch, type GradeBound } from '../../../src/providers/climb-search-provider';
@@ -131,17 +130,11 @@ function ClimbListInner() {
   const router = useRouter();
   const { t } = useTranslation('climbs');
   const { openClimbActions, openAddToPlaylist, openBoardSheet } = useDrawerHost();
-  const boardPresenceEnabled = useFeatureFlag('board-presence') === true;
-  // With board-presence on, the board capsule opens the wall's "now on the wall"
-  // sheet (the switcher moves inside it). Off → today's behaviour: open the
-  // board switcher directly.
+  // The board capsule opens the wall's "now on the wall" sheet (the board
+  // switcher lives inside it).
   const handleOpenBoardDetail = useCallback(() => {
-    if (boardPresenceEnabled) {
-      openBoardSheet();
-    } else {
-      router.push('/boards');
-    }
-  }, [boardPresenceEnabled, openBoardSheet, router]);
+    openBoardSheet();
+  }, [openBoardSheet]);
   const { systemColors, variant, brandColors } = useTheme();
   const { addToQueue } = useQueueActions();
   const {

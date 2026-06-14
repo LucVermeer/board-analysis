@@ -415,6 +415,15 @@ export const queriesTypeDefs = /* GraphQL */ `
     boardPresenceStats(boardId: Int!): BoardPresenceStats!
 
     """
+    The board's current connection holder — who's connected and writing right now
+    (the most recent confirmed sender), or null when the board is free. For
+    late-joiner initial state before the \`boardNowPlaying\` /
+    \`BoardConnectionChanged\` stream warms up. Anonymous holders carry null
+    user/name/avatar (clients render a "?").
+    """
+    boardConnection(boardId: Int!): BoardConnectionHolder
+
+    """
     Get the current user's new climb subscriptions.
     Requires authentication.
     """

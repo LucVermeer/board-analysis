@@ -19,6 +19,7 @@ import {
 import { generateUniqueSlug } from '../social/boards';
 import { logger } from '../../../utils/logger';
 import { pubsub } from '../../../pubsub/index';
+import { roomManager } from '../../../services/room-manager';
 import {
   assertValidBoardId,
   candidateToActiveBoard,
@@ -32,7 +33,6 @@ import {
   normalizeSetIds,
   rememberBoardForSerial,
   requireActiveBoardById,
-  requireBoardPresenceEnabled,
   resolveSharedBoardForConfig,
   serialAlreadyBoundError,
   throwIfDuplicateBoardSerial,
@@ -232,7 +232,6 @@ export const boardPresenceMutations = {
     }: { serial: string; boardType: string; layoutId: number; sizeId: number; setIds: string },
     ctx: ConnectionContext,
   ): Promise<ResolvedBoard> => {
-    requireBoardPresenceEnabled();
     requireAuthenticated(ctx);
     await applyRateLimit(ctx, 30, 'resolveBoardForSerial');
 
@@ -270,7 +269,6 @@ export const boardPresenceMutations = {
     }: { serial: string; boardType: string; layoutId: number; sizeId: number; setIds: string },
     ctx: ConnectionContext,
   ): Promise<{ board: ResolvedBoard | null; candidates: BoardCandidatePayload[] | null }> => {
-    requireBoardPresenceEnabled();
     requireAuthenticated(ctx);
     await applyRateLimit(ctx, 30, 'resolveBoardCandidatesForSerial');
 
@@ -304,7 +302,6 @@ export const boardPresenceMutations = {
     { boardId, serial }: { boardId: number; serial: string },
     ctx: ConnectionContext,
   ): Promise<ResolvedBoard> => {
-    requireBoardPresenceEnabled();
     requireAuthenticated(ctx);
     await applyRateLimit(ctx, 30, 'chooseBoardForSerial');
 
@@ -326,23 +323,27 @@ export const boardPresenceMutations = {
    * Resolve the board-presence feed for a selected named board. Unlike the
    * per-config fallback, this binds to the actual UserBoard row so durable board
    * stats and live presence share the same board_id before any BLE connection.
+   *
+   * Auth-optional: board presence is universal, so an anonymous viewer can bind
+   * a public board and become a member (keyed by `conn:{connectionId}`). Owned
+   * boards stay reachable only to their logged-in owner (see
+   * findReachableActiveBoardByUuid).
    */
   resolveBoardForUuid: async (
     _: unknown,
     { boardUuid }: { boardUuid: string },
     ctx: ConnectionContext,
   ): Promise<ResolvedBoard> => {
-    requireBoardPresenceEnabled();
-    requireAuthenticated(ctx);
     await applyRateLimit(ctx, 30, 'resolveBoardForUuid');
 
+    const emitterId = ctx.userId ?? `conn:${ctx.connectionId}`;
     const validBoardUuid = validateInput(UUIDSchema, boardUuid, 'boardUuid');
-    const board = await findReachableActiveBoardByUuid(ctx.userId!, validBoardUuid);
+    const board = await findReachableActiveBoardByUuid(ctx.userId ?? null, validBoardUuid);
     if (!board) {
       throw new GraphQLError('Board not found', { extensions: { code: 'NOT_FOUND' } });
     }
     const resolved = toResolvedBoard(board);
-    await pubsub.stampBoardMembership(String(resolved.boardId), ctx.userId!);
+    await pubsub.stampBoardMembership(String(resolved.boardId), emitterId);
     return resolved;
   },
 
@@ -352,19 +353,31 @@ export const boardPresenceMutations = {
    * every caller with the same board config converges on the same hidden,
    * system-owned board_id. Aurora callers should continue using the serial
    * resolver above.
+   *
+   * Auth-optional: the per-config board is a shared, system-owned channel, so an
+   * anonymous caller can converge on it and be stamped as a member (keyed by
+   * `conn:{connectionId}`). It only ever reads/binds an existing shared board —
+   * never creates or owns a user board.
    */
   resolveBoardForConfig: async (
     _: unknown,
     { boardType, layoutId, sizeId, setIds }: { boardType: string; layoutId: number; sizeId: number; setIds: string },
     ctx: ConnectionContext,
   ): Promise<ResolvedBoard> => {
-    requireBoardPresenceEnabled();
-    requireAuthenticated(ctx);
     await applyRateLimit(ctx, 30, 'resolveBoardForConfig');
 
+    const emitterId = ctx.userId ?? `conn:${ctx.connectionId}`;
     const config = validateInput(BoardPresenceConfigInputSchema, { boardType, layoutId, sizeId, setIds }, 'input');
-    const resolved = await resolveSharedBoardForConfig(config.boardType, config.layoutId, config.sizeId, config.setIds);
-    await pubsub.stampBoardMembership(String(resolved.boardId), ctx.userId!);
+    // Anonymous callers bind an existing shared feed only; a logged-in caller
+    // creates it on first sighting (anon can't mint system boards).
+    const resolved = await resolveSharedBoardForConfig(
+      config.boardType,
+      config.layoutId,
+      config.sizeId,
+      config.setIds,
+      ctx.userId != null,
+    );
+    await pubsub.stampBoardMembership(String(resolved.boardId), emitterId);
     return resolved;
   },
 
@@ -382,23 +395,30 @@ export const boardPresenceMutations = {
     { boardId, climb, angle }: { boardId: number; climb: ClimbQueueItemInput; angle?: number | null },
     ctx: ConnectionContext,
   ): Promise<boolean> => {
-    requireBoardPresenceEnabled();
-    requireAuthenticated(ctx);
     await applyRateLimit(ctx, 60, 'reportBoardClimb');
     const board = await requireActiveBoardById(boardId);
 
-    // Proof-of-presence: only a user who selected or connected to this board
+    // Auth-optional: anyone connected to the board emits (logged-in or
+    // anonymous). The emitter id is the userId, or `conn:{connectionId}` for an
+    // anonymous client — both are stamped as board members on resolve/connect.
+    const emitterId = ctx.userId ?? `conn:${ctx.connectionId}`;
+
+    // Proof-of-presence: only an emitter that selected or connected to this board
     // (stamped in resolveBoardForUuid / resolveBoardForSerial /
-    // resolveBoardForConfig) may post to its feed. This stops a logged-in user
-    // from injecting climbs onto any board id they guess.
-    const isConnected = await pubsub.hasBoardMembership(String(boardId), ctx.userId!);
+    // resolveBoardForConfig) may post to its feed. Stops anyone injecting climbs
+    // onto a board id they guess.
+    const isConnected = await pubsub.hasBoardMembership(String(boardId), emitterId);
     if (!isConnected) {
       throw new GraphQLError('Not connected to this board');
     }
 
     const validatedClimb = validateInput(ReportBoardClimbInputSchema, climb, 'climb');
     const validatedAngle = validateInput(BoardPresenceAngleSchema, angle, 'angle');
-    const effectiveAngle = validatedAngle ?? validatedClimb.climb.angle ?? Number(board.angle);
+    // The explicit `angle` arg is int-validated, but the `climb.angle` / board
+    // fallbacks aren't — round so a fractional angle can't break the `Int` event
+    // serialization, the durable insert, or the grade join (defensive; real
+    // clients always send integer wall angles).
+    const effectiveAngle = Math.round(validatedAngle ?? validatedClimb.climb.angle ?? Number(board.angle));
     const climbUuid = validatedClimb.climb.uuid;
 
     const [catalogClimbRows, sender] = await Promise.all([
@@ -434,18 +454,21 @@ export const boardPresenceMutations = {
           ),
         )
         .limit(1),
-      db
-        .select({
-          name: dbSchema.users.name,
-          image: dbSchema.users.image,
-          displayName: dbSchema.userProfiles.displayName,
-          avatarUrl: dbSchema.userProfiles.avatarUrl,
-        })
-        .from(dbSchema.users)
-        .leftJoin(dbSchema.userProfiles, eq(dbSchema.users.id, dbSchema.userProfiles.userId))
-        .where(eq(dbSchema.users.id, ctx.userId!))
-        .limit(1)
-        .then((rows) => rows[0]),
+      // Anonymous emitters have no profile — leave the attribution null.
+      ctx.userId
+        ? db
+            .select({
+              name: dbSchema.users.name,
+              image: dbSchema.users.image,
+              displayName: dbSchema.userProfiles.displayName,
+              avatarUrl: dbSchema.userProfiles.avatarUrl,
+            })
+            .from(dbSchema.users)
+            .leftJoin(dbSchema.userProfiles, eq(dbSchema.users.id, dbSchema.userProfiles.userId))
+            .where(eq(dbSchema.users.id, ctx.userId))
+            .limit(1)
+            .then((rows) => rows[0])
+        : Promise.resolve(undefined),
     ]);
 
     const catalogClimb = catalogClimbRows[0];
@@ -479,19 +502,51 @@ export const boardPresenceMutations = {
       climb: presenceClimb,
     });
 
-    // Durable history (dwell-gated): persist this push to board_climb_events
-    // only once the sender has had sustained presence on the board (>= 60s), so
-    // app-swiping noise stays out of the lasting log. The live feed above
-    // already showed everything; only the Postgres write is gated. Non-fatal —
-    // a failed durable insert never fails the accepted report.
+    // Record the hold on this connection (in-memory) so the WS-close backstop can
+    // free the wall if the holder crashes without an explicit reportBoardDisconnect.
+    // Outside the Redis try below since it can't fail and must not be swallowed.
+    roomManager.noteBoardWriter(ctx.connectionId, boardId, emitterId);
+
+    // This emitter is now the board's connection holder. The holder is Redis-only
+    // (degrades to "no holder" without Redis), so only broadcast a hand-off when
+    // Redis actually backs the writer — otherwise setBoardWriter returns null and
+    // `null !== emitterId` would spuriously broadcast on every send. Non-fatal.
+    if (pubsub.isRedisConnected()) {
+      try {
+        const previousHolder = await pubsub.setBoardWriter(String(boardId), emitterId);
+        if (previousHolder !== emitterId) {
+          pubsub.publishBoardPresenceEvent(String(boardId), {
+            __typename: 'BoardConnectionChanged',
+            holder: {
+              userId: ctx.userId ?? null,
+              displayName: presenceClimb.sentByDisplayName,
+              avatarUrl: presenceClimb.sentByAvatarUrl,
+              lastSentAt: sentAt,
+            },
+            seq,
+          });
+        }
+      } catch (error) {
+        logger.warn(`[board-presence] board writer update failed: ${String(error)}`);
+      }
+    }
+
+    // Durable history (logged-in + dwell-gated): persist this push to
+    // board_climb_events only for an authenticated sender who has had sustained
+    // presence on the board (>= 60s). Anonymous sends drive the live feed + holder
+    // but never the durable, leaderboard-backing log — they're unattributable
+    // (userId null) and otherwise let an anon spam null rows into a public board's
+    // history. App-swiping noise is filtered by the dwell gate. The live feed
+    // already showed everything; only the Postgres write is gated. Non-fatal — a
+    // failed durable insert never fails the accepted report.
     const DURABLE_DWELL_MS = 60_000;
     try {
       // `sentAt` is the server-generated ISO timestamp from above, so
       // `Date.parse(sentAt)` is always valid; `firstSeen` is already guarded to
       // a plausible epoch-ms or null in getBoardMembershipFirstSeen. A null
       // firstSeen correctly skips the insert (presence not yet proven for 60s).
-      const firstSeen = await pubsub.getBoardMembershipFirstSeen(String(boardId), ctx.userId!);
-      if (firstSeen !== null && Date.parse(sentAt) - firstSeen >= DURABLE_DWELL_MS) {
+      const firstSeen = ctx.userId ? await pubsub.getBoardMembershipFirstSeen(String(boardId), emitterId) : null;
+      if (ctx.userId && firstSeen !== null && Date.parse(sentAt) - firstSeen >= DURABLE_DWELL_MS) {
         await db
           .insert(dbSchema.boardClimbEvents)
           .values({
@@ -499,7 +554,7 @@ export const boardPresenceMutations = {
             boardType: board.boardType,
             climbUuid,
             angle: effectiveAngle,
-            userId: ctx.userId!,
+            userId: ctx.userId,
             // Reserved for session recaps. reportBoardClimb has no sessionId arg
             // yet, so every durable row is solo-attributed until the
             // session-attribution follow-up threads the active session through.
@@ -519,5 +574,31 @@ export const boardPresenceMutations = {
     }
 
     return true;
+  },
+
+  /**
+   * Clear this emitter's board-connection hold (explicit lightbulb-off or a
+   * detected BLE drop), so the "who's connected" indicator goes free. No-op when
+   * someone else now holds it (always-take means a later emitter already took
+   * over). Auth-optional, keyed by the same emitter id as reportBoardClimb.
+   */
+  reportBoardDisconnect: async (
+    _: unknown,
+    { boardId }: { boardId: number },
+    ctx: ConnectionContext,
+  ): Promise<boolean> => {
+    await applyRateLimit(ctx, 60, 'reportBoardDisconnect');
+    assertValidBoardId(boardId);
+    const emitterId = ctx.userId ?? `conn:${ctx.connectionId}`;
+    const cleared = await pubsub.clearBoardWriterIf(String(boardId), emitterId);
+    if (cleared) {
+      const seq = await pubsub.nextBoardSeq(String(boardId));
+      pubsub.publishBoardPresenceEvent(String(boardId), {
+        __typename: 'BoardConnectionChanged',
+        holder: null,
+        seq,
+      });
+    }
+    return cleared;
   },
 };

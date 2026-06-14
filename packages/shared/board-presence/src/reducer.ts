@@ -24,6 +24,8 @@ export const initialBoardPresenceState: BoardPresenceState = {
   lastSeq: 0,
   stats: null,
   lastStatsSeq: 0,
+  holder: null,
+  lastConnectionSeq: 0,
 };
 
 /** True when an entry with the same `(climbUuid, seq)` is already in history. */
@@ -138,6 +140,35 @@ export function boardPresenceReducer(state: BoardPresenceState, action: BoardPre
       return {
         ...state,
         stats: action.payload,
+      };
+    }
+
+    case 'APPLY_CONNECTION_CHANGED': {
+      // Live connection push. Connection events share the per-board seq counter
+      // with climb + stats events, so a stale/duplicate push (out-of-order Redis
+      // fan-out) is ignored. The highest-seq holder wins; `holder: null` frees
+      // the board.
+      if (action.payload.seq <= state.lastConnectionSeq) {
+        return state;
+      }
+      return {
+        ...state,
+        holder: action.payload.holder,
+        lastConnectionSeq: action.payload.seq,
+      };
+    }
+
+    case 'SEED_CONNECTION': {
+      // One-time initial fetch. Only fill the holder if no live connection event
+      // has landed yet; a live push that arrived during the fetch is fresher, so
+      // never clobber it. Leaves `lastConnectionSeq` at 0 so the next live push
+      // always applies.
+      if (state.lastConnectionSeq !== 0) {
+        return state;
+      }
+      return {
+        ...state,
+        holder: action.payload,
       };
     }
 

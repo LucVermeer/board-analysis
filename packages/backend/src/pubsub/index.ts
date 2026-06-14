@@ -880,6 +880,68 @@ class PubSub {
     return null;
   }
 
+  /**
+   * The board's current connection holder = the emitter id (a `userId`, or
+   * `conn:{connectionId}` for an anonymous client) of the most recent confirmed
+   * send. Set as a side-effect of reportBoardClimb; drives the "who's connected"
+   * indicator. Redis-only (degrades to "no holder" without Redis, like the
+   * durable feed). Returns the previous holder so the caller can detect a
+   * hand-off and only broadcast on a real change.
+   */
+  async setBoardWriter(boardId: string, emitterId: string): Promise<string | null> {
+    if (!this.redisAdapter || !this.isRedisConnected()) return null;
+    try {
+      const { publisher } = redisClientManager.getClients();
+      const key = `board:${boardId}:writer`;
+      // Atomic set-and-return-previous (`SET key val EX ttl GET`, Redis 6.2+) so
+      // two concurrent reports can't both read the same previous holder and both
+      // broadcast a hand-off — only the real change is detected. The writer key
+      // only ever holds a string, so GET can't hit a WRONGTYPE.
+      const previous = await publisher.set(key, emitterId, 'EX', BOARD_MEMBERSHIP_TTL, 'GET');
+      return (previous as string | null) ?? null;
+    } catch (error) {
+      if (this.redisRequired) throw error;
+      logger.error('[PubSub] Failed to set board writer:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Clear the board's holder only if `emitterId` still holds it (atomic
+   * compare-and-delete), so a holder who was already booted can't wipe the new
+   * one. Returns whether it was actually cleared.
+   */
+  async clearBoardWriterIf(boardId: string, emitterId: string): Promise<boolean> {
+    if (!this.redisAdapter || !this.isRedisConnected()) return false;
+    try {
+      const { publisher } = redisClientManager.getClients();
+      const cleared = await publisher.eval(
+        "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end",
+        1,
+        `board:${boardId}:writer`,
+        emitterId,
+      );
+      return cleared === 1;
+    } catch (error) {
+      if (this.redisRequired) throw error;
+      logger.error('[PubSub] Failed to clear board writer:', error);
+      return false;
+    }
+  }
+
+  /** The board's current connection holder emitter id, or null when free. */
+  async getBoardWriter(boardId: string): Promise<string | null> {
+    if (!this.redisAdapter || !this.isRedisConnected()) return null;
+    try {
+      const { publisher } = redisClientManager.getClients();
+      return await publisher.get(`board:${boardId}:writer`);
+    } catch (error) {
+      if (this.redisRequired) throw error;
+      logger.error('[PubSub] Failed to get board writer:', error);
+      return null;
+    }
+  }
+
   private setLocalBoardMembership(localKey: string, expiry: number): void {
     this.localBoardMembership.set(localKey, expiry);
     if (this.localBoardMembershipCleanupExpiry !== null && expiry >= this.localBoardMembershipCleanupExpiry) {

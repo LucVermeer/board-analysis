@@ -390,6 +390,37 @@ export type BoardClimbSet = {
   climb: BoardPresenceClimb;
 };
 
+/**
+ * Event: the board's connection holder changed (a different emitter took the wall
+ * via a confirmed send, or the holder disconnected). `holder` is null when the
+ * board went free.
+ */
+export type BoardConnectionChanged = {
+  __typename?: 'BoardConnectionChanged';
+  /** The current holder, or null when the board is free. */
+  holder?: Maybe<BoardConnectionHolder>;
+  /** Monotonic per-board sequence number (shared counter with climb events). */
+  seq: Scalars['Int']['output'];
+};
+
+/**
+ * The current "who's connected / writing" holder for a board. The holder is the
+ * emitter of the most recent confirmed send (`reportBoardClimb`). A logged-in
+ * holder carries name + avatar; an anonymous holder carries only nulls (clients
+ * render a "?"). A null holder means the board is free.
+ */
+export type BoardConnectionHolder = {
+  __typename?: 'BoardConnectionHolder';
+  /** Avatar URL; null for an anonymous holder. */
+  avatarUrl?: Maybe<Scalars['String']['output']>;
+  /** Display name; null for an anonymous holder. */
+  displayName?: Maybe<Scalars['String']['output']>;
+  /** ISO 8601 timestamp of the holder's most recent confirmed send. */
+  lastSentAt?: Maybe<Scalars['String']['output']>;
+  /** Logged-in user id; null for an anonymous holder. */
+  userId?: Maybe<Scalars['ID']['output']>;
+};
+
 /** Board leaderboard result. */
 export type BoardLeaderboard = {
   __typename?: 'BoardLeaderboard';
@@ -473,7 +504,7 @@ export type BoardPresenceClimb = {
 };
 
 /** Union of board-presence events streamed by `boardNowPlaying`. */
-export type BoardPresenceEvent = BoardClimbCleared | BoardClimbSet | BoardStatsUpdated;
+export type BoardPresenceEvent = BoardClimbCleared | BoardClimbSet | BoardConnectionChanged | BoardStatsUpdated;
 
 /** The first climber to send the hardest grade logged on this wall. */
 export type BoardPresenceHardestSend = {
@@ -2158,12 +2189,21 @@ export type Mutation = {
   replaceQueueItem: ClimbQueueItem;
   /**
    * Report the climb a connected phone just lit on the wall to the board's live
-   * "now on the wall" feed. Requires auth; the sender's identity is derived
-   * server-side (never client-supplied). Fire-and-forget after the BLE write
-   * succeeded — no confirm/timeout handshake. `angle` is the wall angle the
-   * climb was sent at (null = unspecified).
+   * "now on the wall" feed. Auth-optional — anyone connected to the board emits
+   * (logged-in or anonymous); a logged-in sender's identity is derived
+   * server-side (never client-supplied), an anonymous sender carries no name or
+   * avatar. Also makes the caller the board's current connection holder (the
+   * "who's connected" indicator). Fire-and-forget after the BLE write succeeded —
+   * no confirm/timeout handshake. `angle` is the wall angle (null = unspecified).
    */
   reportBoardClimb: Scalars['Boolean']['output'];
+  /**
+   * Report that this client disconnected its BLE link to `boardId` (the explicit
+   * lightbulb-off, or a detected drop). Clears the board's connection holder when
+   * this caller held it, so the "who's connected" indicator goes free. No-op when
+   * someone else now holds it. Auth-optional. Returns whether the slot was freed.
+   */
+  reportBoardDisconnect: Scalars['Boolean']['output'];
   /**
    * Resolve a BLE serial for clients that can disambiguate. Returns a single
    * `board` when the serial is unambiguous (remembered choice, only one match,
@@ -2620,6 +2660,11 @@ export type MutationReportBoardClimbArgs = {
   angle?: InputMaybe<Scalars['Int']['input']>;
   boardId: Scalars['Int']['input'];
   climb: ClimbQueueItemInput;
+};
+
+/** Root mutation type for all write operations. */
+export type MutationReportBoardDisconnectArgs = {
+  boardId: Scalars['Int']['input'];
 };
 
 /** Root mutation type for all write operations. */
@@ -3318,6 +3363,14 @@ export type Query = {
   /** Get a board by slug (for URL routing). */
   boardBySlug?: Maybe<UserBoard>;
   /**
+   * The board's current connection holder — who's connected and writing right now
+   * (the most recent confirmed sender), or null when the board is free. For
+   * late-joiner initial state before the `boardNowPlaying` /
+   * `BoardConnectionChanged` stream warms up. Anonymous holders carry null
+   * user/name/avatar (clients render a "?").
+   */
+  boardConnection?: Maybe<BoardConnectionHolder>;
+  /**
    * Durable history of what was pushed to a board (survives past the 24h Redis
    * window), newest-first by `seq`. For keyset paging pass the `seq` of the
    * last item from the previous page as `before` (not `sentAt`) — `seq` is
@@ -3707,6 +3760,11 @@ export type QueryBoardArgs = {
 /** Root query type for all read operations. */
 export type QueryBoardBySlugArgs = {
   slug: Scalars['String']['input'];
+};
+
+/** Root query type for all read operations. */
+export type QueryBoardConnectionArgs = {
+  boardId: Scalars['Int']['input'];
 };
 
 /** Root query type for all read operations. */

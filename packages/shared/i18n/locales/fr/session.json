@@ -342,8 +342,6 @@
       "climbCount_one": "{{count}} bloc",
       "climbCount_other": "{{count}} blocs",
       "logAscent": "Enregistrer l'ascension",
-      "nextClimb": "Bloc suivant",
-      "previousClimb": "Bloc précédent",
       "alreadyLogged": "Enregistré",
       "dragHandleAria": "Glisser pour réorganiser {{name}}"
     },
@@ -506,7 +504,6 @@
       "lightbulb": {
         "drivingNamed": "Tu contrôles «{{name}}». Touche pour relâcher.",
         "driving": "Tu contrôles. Touche pour relâcher.",
-        "reconnect": "Tableau déconnecté. Touche pour reconnecter.",
         "takeNamed": "Prendre le contrôle et envoyer «{{name}}»",
         "take": "Prendre le contrôle du mur",
         "coachmark": "Envoyer au mur"

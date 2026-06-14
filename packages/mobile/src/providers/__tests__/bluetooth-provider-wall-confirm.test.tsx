@@ -73,6 +73,7 @@ const presence = vi.hoisted(() => ({
   resolveAndBindBoardByConfig: vi.fn(async (): Promise<TestResolvedBoard | null> => null),
   resolveAndBindBoardByUuid: vi.fn(async (): Promise<TestResolvedBoard | null> => null),
   reportClimbForBoard: vi.fn(async () => true),
+  reportDisconnectForBoard: vi.fn(async () => true),
   showUndoWallChangeSnackbar: vi.fn(),
 }));
 
@@ -113,6 +114,7 @@ vi.mock('../board-presence-provider', () => ({
     resolveAndBindBoardByConfig: presence.resolveAndBindBoardByConfig,
     resolveAndBindBoardByUuid: presence.resolveAndBindBoardByUuid,
     reportClimbForBoard: presence.reportClimbForBoard,
+    reportDisconnectForBoard: presence.reportDisconnectForBoard,
   }),
 }));
 
@@ -368,88 +370,21 @@ describe('BluetoothProvider wall-confirm integration', () => {
     expect(queue.confirmClimbOnWall).not.toHaveBeenCalled();
   });
 
-  it('does not auto-send shared climb updates while connected as a party non-driver', async () => {
+  it('auto-sends shared climb updates while connected regardless of party role', async () => {
+    // Holder model (always-take): the auto-sender mounts on isConnected alone —
+    // there is no driver/preview write-gate. A connected party non-driver writes
+    // the wall and becomes the board's connection holder. (Replaces the old
+    // "non-driver does not auto-send" / "starts on becoming driver" / "aborts on
+    // losing wall control" driver-gated tests.)
     queue.driverParticipantId = 'participant-other';
 
     renderProvider();
-
-    await waitFor(() => {
-      expect(bluetooth.useBoardBluetooth).toHaveBeenCalledOnce();
-    });
-    await act(async () => {});
-
-    expect(bluetooth.state.sendFramesToBoard).not.toHaveBeenCalled();
-    expect(wallConfirm.emitWallConfirm).not.toHaveBeenCalled();
-    expect(queue.confirmClimbOnWall).not.toHaveBeenCalled();
-  });
-
-  it('starts auto-sending once a connected party participant becomes the driver', async () => {
-    queue.driverParticipantId = 'participant-other';
-    const { rerender } = renderProvider();
-
-    await waitFor(() => {
-      expect(bluetooth.useBoardBluetooth).toHaveBeenCalledOnce();
-    });
-    expect(bluetooth.state.sendFramesToBoard).not.toHaveBeenCalled();
-
-    await act(async () => {
-      queue.driverParticipantId = 'participant-self';
-      rerender(
-        createElement(BluetoothProvider, {
-          boardName: 'kilter',
-          layoutId: 1,
-          sizeId: 10,
-          setIds: '1,20',
-          children: createElement('div', null),
-        }),
-      );
-    });
 
     await waitFor(() => {
       expect(bluetooth.state.sendFramesToBoard).toHaveBeenCalledWith('p1r12', false, expect.any(AbortSignal));
     });
     expect(wallConfirm.emitWallConfirm).toHaveBeenCalledWith('climb-1');
     expect(queue.confirmClimbOnWall).toHaveBeenCalledWith('climb-1');
-  });
-
-  it('aborts an in-flight auto-send when the participant loses wall control', async () => {
-    let capturedSignal: AbortSignal | undefined;
-    let resolveWrite: ((value: boolean) => void) | undefined;
-    bluetooth.state.sendFramesToBoard.mockImplementationOnce((_frames, _mirrored, signal) => {
-      capturedSignal = signal;
-      return new Promise<boolean>((resolve) => {
-        resolveWrite = resolve;
-      });
-    });
-
-    const { rerender } = renderProvider();
-
-    await waitFor(() => {
-      expect(bluetooth.state.sendFramesToBoard).toHaveBeenCalledWith('p1r12', false, expect.any(AbortSignal));
-    });
-    expect(capturedSignal?.aborted).toBe(false);
-
-    await act(async () => {
-      queue.driverParticipantId = 'participant-other';
-      rerender(
-        createElement(BluetoothProvider, {
-          boardName: 'kilter',
-          layoutId: 1,
-          sizeId: 10,
-          setIds: '1,20',
-          children: createElement('div', null),
-        }),
-      );
-    });
-
-    expect(capturedSignal?.aborted).toBe(true);
-
-    await act(async () => {
-      resolveWrite?.(true);
-    });
-
-    expect(wallConfirm.emitWallConfirm).not.toHaveBeenCalled();
-    expect(queue.confirmClimbOnWall).not.toHaveBeenCalled();
   });
 
   it('re-sends the current climb when hold colours change during an in-flight auto-send', async () => {

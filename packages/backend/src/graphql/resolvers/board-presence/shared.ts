@@ -9,21 +9,6 @@ import { logger } from '../../../utils/logger';
 import { isUniqueViolation } from '../../../utils/postgres-errors';
 
 /**
- * Board presence is gated behind an env flag while the epic is in flight.
- * Every mutation, query, and subscribe entry point calls this first so the
- * feature is fully dark (not just hidden in the UI) until we flip it on.
- */
-export function isBoardPresenceEnabled(): boolean {
-  return process.env.BOARD_PRESENCE_ENABLED === 'true';
-}
-
-export function requireBoardPresenceEnabled(): void {
-  if (!isBoardPresenceEnabled()) {
-    throw new GraphQLError('Board presence is not enabled');
-  }
-}
-
-/**
  * Validate the `boardId` argument is a positive integer. The SDL types it as
  * `Int!`, but GraphQL won't reject 0/negative/float-coerced values, and a
  * bogus id would key a presence channel nobody else is on.
@@ -258,9 +243,14 @@ export async function findActiveBoardById(boardId: number): Promise<ActivePresen
 }
 
 export async function findReachableActiveBoardByUuid(
-  userId: string,
+  userId: string | null,
   boardUuid: string,
 ): Promise<ActivePresenceBoard | undefined> {
+  // Anonymous callers (board presence is auth-optional) can only reach public
+  // boards; a logged-in caller additionally reaches the boards they own.
+  const reachability = userId
+    ? or(eq(dbSchema.userBoards.ownerId, userId), eq(dbSchema.userBoards.isPublic, true))
+    : eq(dbSchema.userBoards.isPublic, true);
   const [board] = await db
     .select({
       id: dbSchema.userBoards.id,
@@ -273,13 +263,7 @@ export async function findReachableActiveBoardByUuid(
       angle: dbSchema.userBoards.angle,
     })
     .from(dbSchema.userBoards)
-    .where(
-      and(
-        eq(dbSchema.userBoards.uuid, boardUuid),
-        isNull(dbSchema.userBoards.deletedAt),
-        or(eq(dbSchema.userBoards.ownerId, userId), eq(dbSchema.userBoards.isPublic, true)),
-      ),
-    )
+    .where(and(eq(dbSchema.userBoards.uuid, boardUuid), isNull(dbSchema.userBoards.deletedAt), reachability))
     .limit(1);
   return board;
 }
@@ -310,6 +294,33 @@ export async function requireActiveBoardById(boardId: number): Promise<ActivePre
     throw new GraphQLError('Board not found');
   }
   return board;
+}
+
+/**
+ * Bound anonymous reads of the live "now on the wall" feed (boardNowPlaying /
+ * boardRecentClimbs / boardConnection) to boards an anonymous viewer is allowed
+ * to see. Logged-in callers keep the pre-existing membership-free access to any
+ * active board (a board's send feed is shared, leaderboard-style data among
+ * authenticated users). Anonymous callers — who could otherwise enumerate the
+ * sequential board ids — are restricted to **public** boards and the
+ * system-owned shared per-config boards (the serial-less MoonBoard-style feeds
+ * anon is first-class for). Throws the same `Board not found` as a missing board
+ * so a private board's existence isn't revealed to anon. No-op for logged-in.
+ */
+export async function requireAnonReadableBoard(
+  boardId: number,
+  viewerUserId: string | null | undefined,
+): Promise<void> {
+  assertValidBoardId(boardId);
+  if (viewerUserId) return;
+  const [board] = await db
+    .select({ isPublic: dbSchema.userBoards.isPublic, ownerId: dbSchema.userBoards.ownerId })
+    .from(dbSchema.userBoards)
+    .where(and(eq(dbSchema.userBoards.id, boardId), isNull(dbSchema.userBoards.deletedAt)))
+    .limit(1);
+  if (!board || (!board.isPublic && board.ownerId !== SYSTEM_BOARD_OWNER_ID)) {
+    throw new GraphQLError('Board not found', { extensions: { code: 'NOT_FOUND' } });
+  }
 }
 
 export async function findOwnActiveBoardByConfig(
@@ -405,6 +416,11 @@ export async function resolveSharedBoardForConfig(
   layoutId: number,
   sizeId: number,
   setIds: string,
+  // Anonymous callers may only BIND an existing shared feed, never create one:
+  // create-on-miss is the abuse vector (an unauthenticated client could vary
+  // layoutId/sizeId/setIds to mint arbitrary system boards). A logged-in caller
+  // creates the feed the first time a config is seen; anon then joins it.
+  allowCreate = true,
 ): Promise<ResolvedBoard> {
   const normalizedSetIds = normalizeSetIds(setIds);
   const slug = boardConfigPresenceSlug(boardType, layoutId, sizeId, normalizedSetIds);
@@ -416,6 +432,10 @@ export async function resolveSharedBoardForConfig(
     .limit(1);
   if (existing) {
     return toResolvedBoard(existing);
+  }
+
+  if (!allowCreate) {
+    throw new GraphQLError('Board not found', { extensions: { code: 'NOT_FOUND' } });
   }
 
   await ensureSystemBoardOwner();

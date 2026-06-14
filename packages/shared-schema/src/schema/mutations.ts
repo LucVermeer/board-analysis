@@ -197,12 +197,22 @@ export const mutationsTypeDefs = /* GraphQL */ `
 
     """
     Report the climb a connected phone just lit on the wall to the board's live
-    "now on the wall" feed. Requires auth; the sender's identity is derived
-    server-side (never client-supplied). Fire-and-forget after the BLE write
-    succeeded — no confirm/timeout handshake. \`angle\` is the wall angle the
-    climb was sent at (null = unspecified).
+    "now on the wall" feed. Auth-optional — anyone connected to the board emits
+    (logged-in or anonymous); a logged-in sender's identity is derived
+    server-side (never client-supplied), an anonymous sender carries no name or
+    avatar. Also makes the caller the board's current connection holder (the
+    "who's connected" indicator). Fire-and-forget after the BLE write succeeded —
+    no confirm/timeout handshake. \`angle\` is the wall angle (null = unspecified).
     """
     reportBoardClimb(boardId: Int!, climb: ClimbQueueItemInput!, angle: Int): Boolean!
+
+    """
+    Report that this client disconnected its BLE link to \`boardId\` (the explicit
+    lightbulb-off, or a detected drop). Clears the board's connection holder when
+    this caller held it, so the "who's connected" indicator goes free. No-op when
+    someone else now holds it. Auth-optional. Returns whether the slot was freed.
+    """
+    reportBoardDisconnect(boardId: Int!): Boolean!
 
     # ============================================
     # User Management Mutations (require auth)

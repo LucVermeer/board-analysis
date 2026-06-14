@@ -62,12 +62,40 @@ export default function RegisterScreen() {
 
     const errorKeys = validateRegisterFields(values);
     if (!isValid(errorKeys)) {
-      // Map the validator's i18n keys to translated, per-field messages.
+      // Map the validator's i18n keys to translated, per-field messages. The
+      // keys come from validateRegisterFields, so translate via a static switch
+      // (not `t(variable)`, which the i18n orphan-checker can't analyse and which
+      // would leave these keys looking unreferenced). Every key it can return is
+      // a string-literal t() call below, so all stay statically discoverable.
+      const translateValidationKey = (key: string | undefined): string | undefined => {
+        switch (key) {
+          case 'login.validation.nameTooLong':
+            return t('login.validation.nameTooLong');
+          case 'login.validation.emailRequired':
+            return t('login.validation.emailRequired');
+          case 'login.validation.emailInvalid':
+            return t('login.validation.emailInvalid');
+          case 'login.validation.passwordRequired':
+            return t('login.validation.passwordRequired');
+          case 'login.validation.passwordRequiredCreate':
+            return t('login.validation.passwordRequiredCreate');
+          case 'login.validation.passwordTooShort':
+            return t('login.validation.passwordTooShort');
+          case 'login.validation.passwordTooLong':
+            return t('login.validation.passwordTooLong');
+          case 'login.validation.passwordsMismatch':
+            return t('login.validation.passwordsMismatch');
+          case 'login.validation.confirmPasswordRequired':
+            return t('login.validation.confirmPasswordRequired');
+          default:
+            return undefined;
+        }
+      };
       setFieldErrors({
-        name: errorKeys.name ? t(errorKeys.name) : undefined,
-        email: errorKeys.email ? t(errorKeys.email) : undefined,
-        password: errorKeys.password ? t(errorKeys.password) : undefined,
-        confirmPassword: errorKeys.confirmPassword ? t(errorKeys.confirmPassword) : undefined,
+        name: translateValidationKey(errorKeys.name),
+        email: translateValidationKey(errorKeys.email),
+        password: translateValidationKey(errorKeys.password),
+        confirmPassword: translateValidationKey(errorKeys.confirmPassword),
       });
       return;
     }

@@ -16,10 +16,9 @@
 //      which runs `useBoardPresence(boardId)` (subscribe + backfill + reducer)
 //      and exposes the wall's now-playing state via split presence contexts.
 //
-// Everything is gated behind the `board-presence` PostHog flag. When the flag is
-// off the provider is inert: `boardId` stays null (so the shared hook collapses
-// to its empty state), no WS client is built, and `resolveAndBindBoard` is a
-// no-op — so the BLE flow and every wall surface behave exactly as today.
+// Board presence is always-on. The provider stays inert until a board is bound:
+// `boardId` is null (so the shared hook collapses to its empty state) and the WS
+// client only resolves once `resolveAndBindBoard` runs on first sighting.
 //
 // The bluetooth provider (mounted inside this one) calls
 // `useBoardPresenceControls()` to (a) resolve+store the boardId on connect and
@@ -47,7 +46,6 @@ import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { createGraphQLClient, type Client } from '../graphql-queue/graphql-client';
 import { getBackendWsUrl } from '@/app/lib/backend-url';
 import { useWsAuthToken } from '@/app/hooks/use-ws-auth-token';
-import { useFeatureFlag } from '../providers/feature-flags-provider';
 import { track } from '@/app/lib/analytics';
 import { createWebBoardPresenceClient, type WebBoardPresenceClient } from './board-presence-client';
 
@@ -61,14 +59,14 @@ export type ResolveBoardArgs = {
 };
 
 type BoardPresenceControlsValue = {
-  /** True when the `board-presence` flag is on. All wall surfaces gate on this. */
+  /** Always true — board presence is on for everyone. Wall surfaces still read this. */
   enabled: boolean;
   /** The board currently bound to the connected serial, or null when none. */
   boardId: number | null;
   /**
    * Resolve (and bind) the shared board for a just-connected serial, then store
-   * its boardId so the wall feed subscribes. No-op (resolves null) when the flag
-   * is off or no client is available. Idempotent for an unchanged serial.
+   * its boardId so the wall feed subscribes. No-op (resolves null) when no client
+   * is available. Idempotent for an unchanged serial.
    */
   resolveAndBindBoard: (args: ResolveBoardArgs) => Promise<ResolvedBoard | null>;
 };
@@ -76,7 +74,8 @@ type BoardPresenceControlsValue = {
 const BoardPresenceControlsContext = createContext<BoardPresenceControlsValue | null>(null);
 
 export function WebBoardPresenceProvider({ children }: { children: ReactNode }) {
-  const enabled = useFeatureFlag('board-presence') === true;
+  // Board presence is always-on (no feature flag).
+  const enabled = true;
   const { token } = useWsAuthToken();
   const [boardId, setBoardId] = useState<number | null>(null);
 
@@ -89,7 +88,7 @@ export function WebBoardPresenceProvider({ children }: { children: ReactNode }) 
   const clientRef = useRef<Client | null>(null);
 
   const presenceClient = useMemo<WebBoardPresenceClient | null>(() => {
-    if (!enabled || activeWsClient === null) return null;
+    if (activeWsClient === null) return null;
     return createWebBoardPresenceClient(() => {
       const client = clientRef.current;
       if (!client) {
@@ -97,19 +96,9 @@ export function WebBoardPresenceProvider({ children }: { children: ReactNode }) 
       }
       return client;
     });
-  }, [enabled, activeWsClient]);
+  }, [activeWsClient]);
 
   useEffect(() => {
-    if (!enabled) {
-      // Flag off: ensure no client lingers and the wall collapses to empty.
-      if (clientRef.current) {
-        void clientRef.current.dispose();
-        clientRef.current = null;
-      }
-      setActiveWsClient(null);
-      setBoardId(null);
-      return;
-    }
     const wsUrl = getBackendWsUrl();
     if (!wsUrl) {
       setActiveWsClient(null);
@@ -125,14 +114,12 @@ export function WebBoardPresenceProvider({ children }: { children: ReactNode }) 
       }
       setActiveWsClient((currentClient) => (currentClient === client ? null : currentClient));
     };
-  }, [enabled, token]);
+  }, [token]);
 
   // The wall/config key last resolved, so a reconnect to the same board doesn't
   // re-resolve. Serial boards use the physical serial. Serial-less boards
   // (MoonBoard in v1) use the route config for a shared per-config feed.
   const lastResolvedKeyRef = useRef<string | null>(null);
-  const enabledRef = useRef(enabled);
-  enabledRef.current = enabled;
   // Mirror boardId into a ref so the empty-dep callback can read it without
   // re-resolving an already-bound serial.
   const boardIdRef = useRef(boardId);
@@ -142,7 +129,7 @@ export function WebBoardPresenceProvider({ children }: { children: ReactNode }) 
 
   const resolveAndBindBoard = useCallback(async (args: ResolveBoardArgs): Promise<ResolvedBoard | null> => {
     const activeClient = presenceClientRef.current;
-    if (!enabledRef.current || activeClient === null) {
+    if (activeClient === null) {
       return null;
     }
     const resolveKey =
@@ -179,8 +166,8 @@ export function WebBoardPresenceProvider({ children }: { children: ReactNode }) 
 
   return (
     <BoardPresenceControlsContext.Provider value={controls}>
-      <BoardPresenceProvider boardId={enabled ? boardId : null} client={presenceClient}>
-        <BoardNowPlayingInstrument boardId={enabled ? boardId : null} />
+      <BoardPresenceProvider boardId={boardId} client={presenceClient}>
+        <BoardNowPlayingInstrument boardId={boardId} />
         {children}
       </BoardPresenceProvider>
     </BoardPresenceControlsContext.Provider>

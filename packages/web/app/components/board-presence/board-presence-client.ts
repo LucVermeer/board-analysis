@@ -3,13 +3,11 @@
 // `@boardsesh/board-presence-react` is renderer-agnostic: it never imports a
 // GraphQL client. This factory adapts the web graphql-ws `Client` (the same
 // one the persistent-session provider uses) to the injected
-// `BoardPresenceClient` interface, running the five board-presence operations
-// over the wire:
-//   - BOARD_NOW_PLAYING        → live subscription (returns an unsubscribe fn)
-//   - BOARD_RECENT_CLIMBS      → query (late-joiner backfill)
-//   - BOARD_PRESENCE_STATS     → query
-//   - REPORT_BOARD_CLIMB       → mutation
-//   - RESOLVE_BOARD_FOR_SERIAL → mutation
+// `BoardPresenceClient` interface, running the board-presence operations over
+// the wire: the live subscription (BOARD_NOW_PLAYING), the late-joiner backfill
+// + stats queries, REPORT_BOARD_CLIMB, and the serial/config/uuid resolvers. It
+// deliberately omits the optional holder ops (fetchConnection / reportDisconnect)
+// — web degrades to "no holder", which the optional interface methods model.
 //
 // Mirrors the mobile `createMobileBoardPresenceClient` (and how the
 // persistent-session provider runs its subscriptions / mutations), reusing the

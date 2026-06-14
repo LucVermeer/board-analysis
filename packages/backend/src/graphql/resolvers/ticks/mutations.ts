@@ -9,7 +9,7 @@ import { applyRateLimit, requireAuthenticated, validateInput, isNoMatchClimb } f
 import { getConsensusDifficultyName } from '../shared/sql-expressions';
 import { SaveTickInputSchema, UpdateTickInputSchema, AttachBetaLinkInputSchema } from '../../../validation/schemas';
 import { resolveBoardFromPath } from '../social/boards';
-import { findActiveBoardById, isBoardPresenceEnabled, normalizeSetIds } from '../board-presence/shared';
+import { findActiveBoardById, normalizeSetIds } from '../board-presence/shared';
 import { queueBoardStatsPublish } from '../board-presence/stats';
 import { publishSocialEvent } from '../../../events';
 import { publishDebouncedSessionStats } from '../sessions/debounced-stats-publisher';
@@ -337,7 +337,7 @@ export const tickMutations = {
       if (board) {
         boardId = board.id;
       }
-    } else if (validatedInput.boardId != null && isBoardPresenceEnabled()) {
+    } else if (validatedInput.boardId != null) {
       const explicitBoard = await findActiveBoardById(validatedInput.boardId);
       // Accept the explicit wall board only when its FULL config matches the
       // tick's target (type + layout + size + set). A stale presence boardId
@@ -522,7 +522,7 @@ export const tickMutations = {
     // ticks can't pair a stale snapshot with a higher seq. Runs after the tick
     // has committed (the recompute sees it) and self-guards, so a presence push
     // can never fail the tick that triggered it.
-    if (boardId != null && isBoardPresenceEnabled()) {
+    if (boardId != null) {
       queueBoardStatsPublish(boardId, tick.boardType);
     }
 

@@ -342,8 +342,6 @@
       "climbCount_one": "{{count}} climb",
       "climbCount_other": "{{count}} climbs",
       "logAscent": "Log ascent",
-      "nextClimb": "Next climb",
-      "previousClimb": "Previous climb",
       "alreadyLogged": "Logged",
       "dragHandleAria": "Drag to reorder {{name}}"
     },
@@ -506,7 +504,6 @@
       "lightbulb": {
         "drivingNamed": "You’re driving “{{name}}”. Tap to release control.",
         "driving": "You’re driving. Tap to release control.",
-        "reconnect": "Board disconnected. Tap to reconnect.",
         "takeNamed": "Take wall control and send “{{name}}”",
         "take": "Take wall control",
         "coachmark": "Send to the wall"

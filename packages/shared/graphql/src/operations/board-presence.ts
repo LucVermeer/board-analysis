@@ -48,8 +48,10 @@ const BOARD_PRESENCE_STATS_FIELDS = `
 // Subscription — the live "now on the wall" feed for a board. Emits a
 // BoardPresenceEvent union discriminated by __typename: a BoardClimbSet carries
 // the full climb, a BoardClimbCleared carries only the clear timestamp + seq,
-// and a BoardStatsUpdated carries the recomputed stat tiles (pushed when a tick
-// lands on the wall) so the tiles update live instead of re-fetching.
+// a BoardStatsUpdated carries the recomputed stat tiles (pushed when a tick
+// lands on the wall) so the tiles update live instead of re-fetching, and a
+// BoardConnectionChanged carries the current connection holder (or null when the
+// board goes free) so consumers can show held-vs-free distinct from the lit climb.
 export const BOARD_NOW_PLAYING = `
   subscription BoardNowPlaying($boardId: Int!) {
     boardNowPlaying(boardId: $boardId) {
@@ -66,6 +68,15 @@ export const BOARD_NOW_PLAYING = `
       ... on BoardStatsUpdated {
         stats {
           ${BOARD_PRESENCE_STATS_FIELDS}
+        }
+        seq
+      }
+      ... on BoardConnectionChanged {
+        holder {
+          userId
+          displayName
+          avatarUrl
+          lastSentAt
         }
         seq
       }
@@ -230,3 +241,12 @@ export const BOARD_PRESENCE_STATS = `
     }
   }
 `;
+
+// Query — the current connection holder for a board, used by a late joiner to
+// seed held-vs-free before the live BoardConnectionChanged subscription pushes.
+// Resolves null when the board is free.
+export const BOARD_CONNECTION = `query BoardConnection($boardId: Int!) { boardConnection(boardId: $boardId) { userId displayName avatarUrl lastSentAt } }`;
+
+// Mutation — release this client's hold on a board (e.g. on BLE disconnect).
+// Returns Boolean! (accepted).
+export const REPORT_BOARD_DISCONNECT = `mutation ReportBoardDisconnect($boardId: Int!) { reportBoardDisconnect(boardId: $boardId) }`;

@@ -48,12 +48,8 @@ import {
   buildPlayDrawerBoardLayout,
   derivePlayDrawerLightbulbPressAction,
   derivePlayDrawerLightbulbState,
-  derivePlayDrawerPreviousDriver,
-  resolvePlayDrawerWallControlQueueItem,
-  shouldRestoreFailedTakeControlPreview,
 } from './lightbulb-control';
 import { usePreviewOnlyExitCleanup } from './use-preview-only-exit-cleanup';
-import { useWallConfirmFallback } from './use-wall-confirm-fallback';
 import { track } from '../../lib/analytics';
 import { iosSystemColors } from '../../theme/ios-colors';
 import { spacing, sheetStyles } from '../../theme/tokens';
@@ -137,9 +133,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   const [activeSubDrawer, setActiveSubDrawer] = useState<ActiveSubDrawer>('none');
   const [bleControlOpen, setBleControlOpen] = useState(false);
   const [addBetaVideoOpen, setAddBetaVideoOpen] = useState(false);
-  const [pendingClimbUuid, setPendingClimbUuid] = useState<string | null>(null);
   const [belowFoldContentRequested, setBelowFoldContentRequested] = useState(false);
-  const wallControlPressOperationRef = useRef(0);
   const resetZoomRef = useRef<(() => void) | null>(null);
 
   // Beta Videos section-header height feeds the first-screen reserve so the
@@ -150,19 +144,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
     setBetaHeaderHeight((prev) => (Math.abs(prev - measured) > 2 ? Math.round(measured) : prev));
   }, []);
 
-  const {
-    state,
-    setCurrentClimb,
-    nextClimb,
-    previousClimb,
-    sessionId,
-    addToQueue,
-    takeControl,
-    releaseControl,
-    driverParticipantId,
-    participantId,
-    lastConnectedBoardSerial,
-  } = useQueue();
+  const { state, setCurrentClimb, nextClimb, previousClimb, sessionId, addToQueue } = useQueue();
   const playlistSuggestionSource = usePlaylistSuggestionSource();
   const bluetooth = useOptionalBluetoothContext();
   const { mutate: toggleFavoriteMutate } = useToggleFavorite();
@@ -199,8 +181,6 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
 
   const displayedQueueItem = drawerPreviewItem ?? state.currentClimbQueueItem;
   const displayedClimb = displayedQueueItem?.climb;
-  const displayedClimbUuidRef = useRef<string | null>(null);
-  displayedClimbUuidRef.current = displayedClimb?.uuid ?? null;
 
   // Real favorite status for the heart, keyed on (boardName, climbUuid, angle).
   // Gated on the sheet being open so it doesn't fetch while the drawer is closed.
@@ -215,18 +195,13 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   const lightbulbState = useMemo(
     () =>
       derivePlayDrawerLightbulbState({
-        sessionId,
-        driverParticipantId,
-        participantId,
         isBluetoothConnected: bluetoothConnected,
         isBluetoothLoading: bluetoothLoading,
-        pendingClimbUuid,
       }),
-    [sessionId, driverParticipantId, participantId, bluetoothConnected, bluetoothLoading, pendingClimbUuid],
+    [bluetoothConnected, bluetoothLoading],
   );
   // Queue-mutation gating comes from the provider's roster-aware selector (a
-  // solo occupant keeps full control); lightbulbState stays driver-based for
-  // the wall-control press semantics only.
+  // solo occupant keeps full control).
   const isPartyPreviewOnly = useIsPartyPreviewOnly();
   const navigationSuggestionSource = drawerPreviewSuggestionSource ?? playlistSuggestionSource;
   const navigationState = useMemo(
@@ -271,14 +246,12 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
     setDrawerPreviewSuggestionSource(null);
   }, [angle]);
 
-  // When this client stops being preview-only (took control, or the session
-  // ended), drop the drawer-local preview state: commits now go through the
-  // provider, and a lingering drawerPreviewSuggestionSource would keep shadowing
-  // the provider's source for displayed peeks while nextClimb() commits against
-  // the provider source. Transition-gated (true→false only) so entering preview
-  // mode or mounting never clears a fresh preview. Safe for the lightbulb flow:
-  // handleLightbulb reads drawerPreviewSuggestionSource synchronously at press
-  // time and hands it to takeControl before the driver flip lands here.
+  // When this client stops being preview-only (e.g. the session ended), drop the
+  // drawer-local preview state: commits now go through the provider, and a
+  // lingering drawerPreviewSuggestionSource would keep shadowing the provider's
+  // source for displayed peeks while nextClimb() commits against the provider
+  // source. Transition-gated (true→false only) so entering preview mode or
+  // mounting never clears a fresh preview.
   usePreviewOnlyExitCleanup(isPartyPreviewOnly, () => {
     setDrawerPreviewItem(null);
     setDrawerPreviewSuggestionSource(null);
@@ -304,48 +277,8 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
     });
   }, [shareClimb, showToast, t]);
 
-  const bluetoothConnect = useCallback(
-    (frames?: string, mirrored?: boolean, targetSerial?: string) =>
-      bluetooth?.connect(frames, mirrored, targetSerial) ?? Promise.resolve(false),
-    [bluetooth],
-  );
-
-  const handleWallConfirmed = useCallback((info: { climbUuid: string }) => {
-    setPendingClimbUuid((currentClimbUuid) => (currentClimbUuid === info.climbUuid ? null : currentClimbUuid));
-  }, []);
-  const handleWallConfirmTimeout = useCallback((info: { climbUuid: string }) => {
-    setPendingClimbUuid((currentClimbUuid) => (currentClimbUuid === info.climbUuid ? null : currentClimbUuid));
-  }, []);
-  const { armWatcher: armWallConfirmWatcher, cancelWatcher: cancelWallConfirmWatcher } = useWallConfirmFallback(
-    {
-      sessionId,
-      isBluetoothConnected: bluetoothConnected,
-      isBluetoothSupported: bluetooth !== null,
-      lastConnectedBoardSerial,
-      isPersistentSessionActive: lightbulbState.isPersistentSessionActive,
-      bluetoothConnect,
-    },
-    { onConfirmed: handleWallConfirmed, onTimeout: handleWallConfirmTimeout },
-  );
-
-  const cancelPendingWallControlAttempt = useCallback(() => {
-    wallControlPressOperationRef.current += 1;
-    cancelWallConfirmWatcher();
-    setPendingClimbUuid(null);
-  }, [cancelWallConfirmWatcher]);
-
-  const pendingSessionIdRef = useRef(sessionId);
-  useEffect(() => {
-    const didSessionChange = pendingSessionIdRef.current !== sessionId;
-    pendingSessionIdRef.current = sessionId;
-    if (pendingClimbUuid !== null && (!lightbulbState.isPersistentSessionActive || didSessionChange)) {
-      cancelPendingWallControlAttempt();
-    }
-  }, [cancelPendingWallControlAttempt, lightbulbState.isPersistentSessionActive, pendingClimbUuid, sessionId]);
-
   const openDrawer = useCallback(
     (selectedClimb: Climb, options?: PlayDrawerOpenOptions) => {
-      cancelPendingWallControlAttempt();
       const previewPlaylistSuggestionSource = options?.previewPlaylistSuggestionSource ?? null;
       const shouldShowCurrentQueueItem =
         options?.setAsCurrent === false &&
@@ -372,7 +305,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
       }
       sheetRef.current?.present();
     },
-    [cancelPendingWallControlAttempt, state.currentClimbQueueItem, isPartyPreviewOnly, setCurrentClimb],
+    [state.currentClimbQueueItem, isPartyPreviewOnly, setCurrentClimb],
   );
 
   // Serialize open() against the sheet's dismiss animation: presenting
@@ -407,7 +340,6 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   );
 
   const handleClose = useCallback(() => {
-    cancelPendingWallControlAttempt();
     setDrawerPreviewItem(null);
     setDrawerPreviewSuggestionSource(null);
     setIsMirrored(false);
@@ -417,10 +349,9 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
     // Replay an open() that arrived while this dismissal was animating — the
     // modal is now fully dismissed, so the re-present is clean.
     flushOnDismiss();
-  }, [cancelPendingWallControlAttempt, flushOnDismiss]);
+  }, [flushOnDismiss]);
 
   const handlePrev = useCallback(() => {
-    cancelPendingWallControlAttempt();
     if (isPartyPreviewOnly) {
       if (navigationState.prevItem) {
         setDrawerPreviewItem(navigationState.prevItem);
@@ -431,10 +362,9 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
     }
     setIsMirrored(false);
     // The favorite override is cleared by the climb-change effect.
-  }, [cancelPendingWallControlAttempt, isPartyPreviewOnly, navigationState.prevItem, previousClimb]);
+  }, [isPartyPreviewOnly, navigationState.prevItem, previousClimb]);
 
   const handleNext = useCallback(() => {
-    cancelPendingWallControlAttempt();
     if (isPartyPreviewOnly) {
       if (navigationState.nextItem) {
         setDrawerPreviewItem(navigationState.nextItem);
@@ -445,7 +375,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
     }
     setIsMirrored(false);
     // The favorite override is cleared by the climb-change effect.
-  }, [cancelPendingWallControlAttempt, isPartyPreviewOnly, navigationState.nextItem, nextClimb]);
+  }, [isPartyPreviewOnly, navigationState.nextItem, nextClimb]);
 
   const handleMirror = useCallback(() => {
     const nextMirrored = !isMirrored;
@@ -502,162 +432,38 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   }, [displayedClimb, isFavorited, favoriteOverride, boardName, layoutId, angle, toggleFavoriteMutate, showToast, t]);
 
   const handleLightbulb = useCallback(() => {
+    if (!bluetooth) return;
+    // Pure connect/disconnect BLE toggle (matches the climbs-list lightbulb in
+    // use-lightbulb-toggle.ts). On connect the board auto-pushes the displayed
+    // climb, which reports to board presence and makes this device the holder;
+    // on disconnect the bluetooth provider fires reportBoardDisconnect itself, so
+    // we don't report here. The toggle is gated on `loading` so an in-flight
+    // connect/disconnect isn't interrupted.
     const pressAction = derivePlayDrawerLightbulbPressAction({
       hasBluetooth,
-      hasDisplayedClimb: displayedClimb !== null,
-      isPersistentSessionActive: lightbulbState.isPersistentSessionActive,
-      isDriver: lightbulbState.isDriver,
       isBluetoothConnected: bluetoothConnected,
+      isBluetoothLoading: bluetoothLoading,
     });
     if (pressAction === 'noop') return;
 
-    const previousDriver = derivePlayDrawerPreviousDriver({ driverParticipantId, participantId });
-
-    if (pressAction === 'release_party') {
-      wallControlPressOperationRef.current += 1;
-      cancelWallConfirmWatcher();
-      setPendingClimbUuid(null);
-      void releaseControl()
-        .then(() => {
-          track('Wall Control Released', {
-            reason: 'manual',
-            mode: 'party',
-            boardLayout,
-          });
-        })
-        .catch((error: unknown) => {
-          // takeControl/releaseControl already report via the queue-provider
-          // chokepoint (showQueueMutationErrorToast) before rethrowing, so don't
-          // report again here — it would double-count and leak rate-limited ops.
-          console.error('[playDrawer] failed to release wall control:', error);
-        });
+    if (pressAction === 'disconnect') {
+      void bluetooth.disconnect();
       return;
     }
 
-    if (pressAction === 'reconnect_ble') {
-      if (!bluetooth) return;
-      // Ignore taps while a connect is already in flight, matching the climbs-list
-      // lightbulb (use-lightbulb-toggle.ts). The connect() in-flight ref also guards,
-      // but bailing here avoids a misleading haptic and a dead tap.
-      if (bluetoothLoading) return;
-      // Party driver whose BLE link was stolen — reconnect to the remembered board
-      // without releasing wall control, so it relights in one tap. No control
-      // changes hands here, and connect() already emits BluetoothConnectionSuccess,
-      // so we don't fire 'Wall Control Taken' (which would inflate party-take counts).
-      bluetooth.armUndoWallChangeToast();
-      void bluetooth.connect(undefined, undefined, bluetooth.reconnectSerialForCurrentBoard ?? undefined);
-      return;
-    }
-
-    if (pressAction === 'connect_solo') {
-      if (!bluetooth) return;
-      track('Wall Control Taken', {
-        source: 'lightbulb_drawer',
-        previousDriver,
-        mode: 'solo',
-        boardLayout,
-        climbUuid: displayedClimb?.uuid ?? null,
-      });
-      const reconnectSerialForBoard = bluetooth.reconnectSerialForCurrentBoard;
-      bluetooth.armUndoWallChangeToast();
-      if (reconnectSerialForBoard) {
-        void bluetooth.connect(undefined, undefined, reconnectSerialForBoard);
-      } else {
-        void bluetooth.connect();
-      }
-      return;
-    }
-
-    if (!displayedClimb) return;
-
-    if (pressAction === 'reassert_solo') {
-      if (!bluetooth) return;
-      // Already connected — re-light the current climb. Re-tapping the lightbulb
-      // re-pushes the wall (and trips disconnect detection if the link is dead).
-      bluetooth.armUndoWallChangeToast();
-      bluetooth.reassertWall();
-      setDrawerPreviewItem(null);
-      track('Wall Control Taken', {
-        source: 'lightbulb_drawer',
-        previousDriver,
-        mode: 'solo',
-        boardLayout,
-        climbUuid: displayedClimb.uuid,
-      });
-      return;
-    }
-
-    const queueItem = resolvePlayDrawerWallControlQueueItem({
-      displayedQueueItem,
-      displayedClimb,
-      createQueueItem: (queueItemClimb, options) =>
-        climbToQueueItem(queueItemClimb as unknown as Parameters<typeof climbToQueueItem>[0], options),
-    });
-    const operationId = wallControlPressOperationRef.current + 1;
-    wallControlPressOperationRef.current = operationId;
-    setDrawerPreviewItem(null);
-    setPendingClimbUuid(displayedClimb.uuid);
-    bluetooth?.armUndoWallChangeToast();
-    const takeControlOptions = drawerPreviewSuggestionSource
-      ? { playlistSuggestionSource: drawerPreviewSuggestionSource }
-      : undefined;
-    void takeControl(queueItem, takeControlOptions)
-      .then(() => {
-        track('Wall Control Taken', {
-          source: 'lightbulb_drawer',
-          previousDriver,
-          mode: 'party',
-          boardLayout,
-          climbUuid: displayedClimb.uuid,
-        });
-      })
-      .catch((error: unknown) => {
-        const shouldHandleFailure = wallControlPressOperationRef.current === operationId;
-        if (!shouldHandleFailure) return;
-        console.error('[playDrawer] failed to take wall control:', error);
-        cancelWallConfirmWatcher();
-        setPendingClimbUuid((currentClimbUuid) => (currentClimbUuid === displayedClimb.uuid ? null : currentClimbUuid));
-        if (
-          shouldRestoreFailedTakeControlPreview({
-            failedOperationId: operationId,
-            latestOperationId: wallControlPressOperationRef.current,
-            failedClimbUuid: displayedClimb.uuid,
-            displayedClimbUuid: displayedClimbUuidRef.current,
-          })
-        ) {
-          setDrawerPreviewItem((currentItem) => currentItem ?? queueItem);
-          // The optimistic driver flip cleared the drawer-local suggestion
-          // source (preview-only → driver transition effect above); the
-          // rollback restores preview-only, so restore the at-press source
-          // alongside the preview item to keep playlist peeks working.
-          if (drawerPreviewSuggestionSource) {
-            setDrawerPreviewSuggestionSource((currentSource) => currentSource ?? drawerPreviewSuggestionSource);
-          }
-        }
-      });
-    armWallConfirmWatcher({
-      climbUuid: displayedClimb.uuid,
-      mode: 'party',
+    // connect — relight the remembered board for the current config. Distinct
+    // from the BLE adapter's own BluetoothConnectionSuccess event: this records
+    // the drawer-lightbulb intent (there's no "wall control" to take in the
+    // holder model). connect() emits the success event, so don't double-count.
+    track('Board Lightbulb Connect', {
+      source: 'lightbulb_drawer',
+      mode: sessionId !== null ? 'party' : 'solo',
       boardLayout,
+      climbUuid: displayedClimb?.uuid ?? null,
     });
-  }, [
-    bluetooth,
-    hasBluetooth,
-    bluetoothLoading,
-    driverParticipantId,
-    participantId,
-    lightbulbState.isPersistentSessionActive,
-    lightbulbState.isDriver,
-    cancelWallConfirmWatcher,
-    releaseControl,
-    boardLayout,
-    bluetoothConnected,
-    displayedClimb,
-    displayedQueueItem,
-    takeControl,
-    drawerPreviewSuggestionSource,
-    armWallConfirmWatcher,
-  ]);
+    bluetooth.armUndoWallChangeToast();
+    void bluetooth.connect(undefined, undefined, bluetooth.reconnectSerialForCurrentBoard ?? undefined);
+  }, [bluetooth, hasBluetooth, bluetoothConnected, bluetoothLoading, sessionId, boardLayout, displayedClimb]);
 
   const handleLightbulbLongPress = useCallback(() => {
     if (!bluetooth?.isConnected) return;
@@ -731,7 +537,6 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
 
   const handleSimilarClimbPress = useCallback(
     (similarClimb: Climb) => {
-      cancelPendingWallControlAttempt();
       const queueItem = climbToQueueItem(similarClimb);
       setDrawerPreviewItem(queueItem);
       setDrawerPreviewSuggestionSource(null);
@@ -742,7 +547,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
       addToQueue(queueItem);
       setCurrentClimb(queueItem, { playlistSuggestionSource: null });
     },
-    [addToQueue, cancelPendingWallControlAttempt, isPartyPreviewOnly, setCurrentClimb],
+    [addToQueue, isPartyPreviewOnly, setCurrentClimb],
   );
 
   const renderBackdrop = useCallback(
@@ -773,26 +578,6 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   const ascentCount = displayedClimb?.userAscents ?? 0;
   const supportsMirroring = boardSupportsMirroring(boardName, layoutId);
   const subDrawerOpen = activeSubDrawer !== 'none';
-  const lightbulbAccessibilityLabel = useMemo(() => {
-    if (!lightbulbState.isPersistentSessionActive) return undefined;
-    if (lightbulbState.isDriver) {
-      // Still the driver but the board link dropped — the tap reconnects, not
-      // releases, so the label must match (see derivePlayDrawerLightbulbPressAction,
-      // which keys the reconnect action off this same hasBluetooth condition).
-      if (hasBluetooth && !bluetoothConnected) return t('playView.actionBar.lightbulb.reconnect');
-      if (!displayedClimb) return t('playView.actionBar.lightbulb.driving');
-      return t('playView.actionBar.lightbulb.drivingNamed', { name: displayedClimb.name });
-    }
-    if (!displayedClimb) return t('playView.actionBar.lightbulb.take');
-    return t('playView.actionBar.lightbulb.takeNamed', { name: displayedClimb.name });
-  }, [
-    displayedClimb,
-    lightbulbState.isDriver,
-    lightbulbState.isPersistentSessionActive,
-    hasBluetooth,
-    bluetoothConnected,
-    t,
-  ]);
 
   return (
     <>
@@ -898,7 +683,6 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
                   remainingQueueCount={navigationState.remainingCount}
                   lightbulbActive={lightbulbState.lightbulbActive}
                   lightbulbPending={lightbulbState.lightbulbPending}
-                  lightbulbAccessibilityLabel={lightbulbAccessibilityLabel}
                   lightbulbLongPressEnabled={bluetoothConnected}
                   ascentCount={ascentCount}
                   onPrevClick={handlePrev}
