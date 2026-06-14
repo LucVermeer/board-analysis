@@ -1645,7 +1645,7 @@ describe('QueueProvider preview-only roster gating', () => {
     });
   });
 
-  it('never gates a solo occupant, gates party non-drivers, releases for the driver', async () => {
+  it('never gates queue control — every session participant controls the wall instantly (no driver mechanics)', async () => {
     const previewOnlyValues: boolean[] = [];
     render(
       createElement(
@@ -1655,9 +1655,6 @@ describe('QueueProvider preview-only roster gating', () => {
       ),
     );
 
-    // Restored solo session: roster is just us, no driver claimed — a solo
-    // occupant keeps full queue control (the bug this guards against: a
-    // driverless session bricking every activation tap).
     await waitFor(() => {
       expect(ws.getSessionUpdatesSink()).not.toBeNull();
     });
@@ -1666,8 +1663,10 @@ describe('QueueProvider preview-only roster gating', () => {
     const sessionUpdatesSink = ws.getSessionUpdatesSink();
     if (!sessionUpdatesSink) throw new Error('session updates sink was not captured');
 
-    // A second participant joins with no driver: everyone is preview-only
-    // until someone takes wall control.
+    // A second participant joins and wall control changes hands between members.
+    // None of it gates: the driver / preview-only mechanics were removed, so
+    // every participant keeps full control of the shared queue + wall at all
+    // times (the backend accepts queue mutations from any participant).
     act(() => {
       sessionUpdatesSink.next({
         data: {
@@ -1678,41 +1677,23 @@ describe('QueueProvider preview-only roster gating', () => {
         },
       });
     });
-    await waitFor(() => {
-      expect(previewOnlyValues.at(-1)).toBe(true);
-    });
-
-    // We take control: gate releases for us.
-    act(() => {
-      sessionUpdatesSink.next({
-        data: {
-          sessionUpdates: {
-            __typename: 'DriverChanged',
-            driverParticipantId: 'participant-self',
-            previousDriverParticipantId: null,
-          },
-        },
-      });
-    });
-    await waitFor(() => {
-      expect(previewOnlyValues.at(-1)).toBe(false);
-    });
-
-    // The peer takes control: we're preview-only again.
     act(() => {
       sessionUpdatesSink.next({
         data: {
           sessionUpdates: {
             __typename: 'DriverChanged',
             driverParticipantId: 'participant-2',
-            previousDriverParticipantId: 'participant-self',
+            previousDriverParticipantId: null,
           },
         },
       });
     });
+
     await waitFor(() => {
-      expect(previewOnlyValues.at(-1)).toBe(true);
+      expect(previewOnlyValues.length).toBeGreaterThan(0);
     });
+    // Preview-only is never true — no member is ever locked out of control.
+    expect(previewOnlyValues.every((value) => value === false)).toBe(true);
   });
 
   it('does not restore or clear the stored session when the status check fails with a server response', async () => {
