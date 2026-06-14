@@ -40,6 +40,15 @@ describe('reportHandledError', () => {
     });
   });
 
+  it('forces warning for a network error even if the caller asked for a higher level', () => {
+    const offline = new TypeError('Network request failed');
+    reportHandledError(offline, { level: 'fatal', tags: { source: 'x' } });
+    expect(mockedCaptureError).toHaveBeenCalledWith(offline, {
+      level: 'warning',
+      tags: { source: 'x', network: true },
+    });
+  });
+
   it('reports a real server error (response with an HTTP status) at error level', () => {
     const serverError = Object.assign(new Error('Internal Server Error'), { response: { status: 500 } });
     reportHandledError(serverError, { tags: { source: 'react-query', kind: 'mutation' } });

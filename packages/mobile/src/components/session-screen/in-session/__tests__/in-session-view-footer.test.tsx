@@ -102,7 +102,7 @@ vi.mock('../../../EndSessionSheet', () => ({
     return null;
   },
 }));
-vi.mock('../../../../lib/error-reporting', () => ({ reportError: vi.fn() }));
+vi.mock('../../../../lib/error-reporting', () => ({ reportError: vi.fn(), reportHandledError: vi.fn() }));
 vi.mock('../../../Icon', () => ({ Icon: () => null }));
 vi.mock('../../../Text', () => ({
   Text: ({ children }: { children?: ReactNode }) => createElement('span', null, children),

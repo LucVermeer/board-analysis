@@ -283,7 +283,9 @@ function BluetoothAutoSender({
           } catch (error) {
             if (signal?.aborted) return;
             console.error('Error sending climb to board:', error);
-            reportHandledError(error, { tags: { source: 'ble-send' } });
+            // Distinct from the manual lightbulb send (`ble-send`) so PostHog can
+            // tell auto-sender failures (climb-change drain loop) apart.
+            reportHandledError(error, { tags: { source: 'ble-auto-send' } });
           }
 
           toSend = pendingSendRef.current;

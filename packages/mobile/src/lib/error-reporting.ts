@@ -34,12 +34,14 @@ function isCancellation(error: unknown): boolean {
  * a ClientError that carries no HTTP `response.status`.
  */
 function isNetworkError(error: unknown): boolean {
-  if (error instanceof TypeError && /network request failed|fetch failed/i.test(error.message)) return true;
   if (typeof error !== 'object' || error === null) return false;
   const response = (error as { response?: { status?: unknown } }).response;
   // A ClientError with a `response` but no numeric `status` is a transport
   // failure; one with a status is a real server error (4xx/5xx) we want to see.
   if (response !== undefined && typeof (response as { status?: unknown }).status !== 'number') return true;
+  // RN's fetch rejects offline with `TypeError: Network request failed` — a
+  // TypeError is an object with a `.message`, so the message check covers it
+  // without a separate instanceof branch.
   const message = (error as { message?: unknown }).message;
   return typeof message === 'string' && /network request failed|fetch failed/i.test(message);
 }
