@@ -1,14 +1,12 @@
 // The toolbar's center element: a floating pill showing the current climb's name
 // with the grade colorized on the right — the same treatment as the climb list
-// rows. Tap opens the PlayDrawer; horizontal swipe steps the queue (prev/next)
-// with the neighbouring climb peeking in. The pill's background adapts to the UI
-// variant (Liquid Glass / Material / fallback) via AccessoryBarSurface; the
-// swipe/peek/tap behaviour is shared with the native accessory via useQueueClimbCarousel.
+// rows. Tap opens the PlayDrawer. The pill's background adapts to the UI variant
+// (Liquid Glass / Material / fallback) via AccessoryBarSurface; the tap-to-open
+// behaviour is shared with the native accessory via useAccessoryClimbTap.
 
 import { useMemo, type ReactNode } from 'react';
 import { View, StyleSheet, type ColorValue } from 'react-native';
 import { GestureDetector } from 'react-native-gesture-handler';
-import Animated from 'react-native-reanimated';
 import { getGradeColor, DEFAULT_GRADE_COLOR } from '@boardsesh/board-constants/grade-colors';
 import type { Climb } from '@boardsesh/queue';
 import { TOOLBAR_CAPSULE_HEIGHT, TOOLBAR_CAPSULE_MAX_WIDTH } from '../../theme/layout';
@@ -20,7 +18,7 @@ import { useTheme } from '../../providers/theme-provider';
 import { useDrawerHost, type BoardConfig } from '../../providers/drawer-host-provider';
 import { AccessoryBarSurface, type AccessoryBarSurfaceTreatment } from './AccessoryBarSurface';
 import { AccessoryClimbThumbnail } from './AccessoryClimbThumbnail';
-import { useQueueClimbCarousel } from './use-queue-climb-carousel';
+import { useAccessoryClimbTap } from './use-accessory-climb-tap';
 import { useWallOrQueueCurrentClimb } from './use-wall-or-queue-climb';
 
 type ClimbLabelProps = {
@@ -81,41 +79,23 @@ export function ClimbCapsule({
   const { systemColors } = useTheme();
   const { boardConfig } = useDrawerHost();
   const { formatGrade } = useGradeFormat();
-  const {
-    onLayout,
-    composedGesture,
-    currentLabelStyle,
-    nextPeekStyle,
-    prevPeekStyle,
-    currentItem,
-    previousItem,
-    nextItem,
-    canPeek,
-    swipeAccessibilityActions,
-    onAccessibilityAction,
-  } = useQueueClimbCarousel();
+  const { openGesture, currentItem } = useAccessoryClimbTap();
 
   // Source-of-truth flip: show the wall's lit climb when a board feed is live
-  // (flag-gated), else the local queue head. Display + tick only — the carousel
-  // gesture/peek keep stepping the local queue, so swipe is unchanged.
+  // (flag-gated), else the local queue head.
   const currentClimb = useWallOrQueueCurrentClimb(currentItem?.climb ?? null);
-  const previousClimb = previousItem?.climb ?? null;
-  const nextClimb = nextItem?.climb ?? null;
   // Board art needs the active board config; matches the iOS 26 native accessory.
   const showThumbnail = boardConfig != null;
 
   const grades = useMemo(() => {
-    const color = (climb: Climb | null) =>
-      climb ? (getGradeColor(climb.difficulty) ?? DEFAULT_GRADE_COLOR) : DEFAULT_GRADE_COLOR;
+    const currentColor = currentClimb
+      ? (getGradeColor(currentClimb.difficulty) ?? DEFAULT_GRADE_COLOR)
+      : DEFAULT_GRADE_COLOR;
     return {
       current: currentClimb ? formatGrade(currentClimb.difficulty) : null,
-      previous: previousClimb ? formatGrade(previousClimb.difficulty) : null,
-      next: nextClimb ? formatGrade(nextClimb.difficulty) : null,
-      currentColor: color(currentClimb),
-      previousColor: color(previousClimb),
-      nextColor: color(nextClimb),
+      currentColor,
     };
-  }, [currentClimb, previousClimb, nextClimb, formatGrade]);
+  }, [currentClimb, formatGrade]);
 
   if (!currentClimb) return null;
 
@@ -144,16 +124,13 @@ export function ClimbCapsule({
           style={[styles.gradeAccent, { backgroundColor: grades.currentColor }]}
         />
       ) : null}
-      <GestureDetector gesture={composedGesture}>
+      <GestureDetector gesture={openGesture}>
         <View
           style={[styles.swipeArea, { height, borderRadius: capsuleRadius }]}
-          onLayout={onLayout}
           accessibilityRole="button"
           accessibilityLabel={currentClimb.name}
-          accessibilityActions={swipeAccessibilityActions}
-          onAccessibilityAction={onAccessibilityAction}
         >
-          <Animated.View style={[styles.labelSlot, { right: labelRight }, currentLabelStyle]}>
+          <View style={[styles.labelSlot, { right: labelRight }]}>
             <ClimbLabel
               climb={currentClimb}
               labelColor={systemColors.label}
@@ -162,31 +139,7 @@ export function ClimbCapsule({
               showThumbnail={showThumbnail}
               boardConfig={boardConfig}
             />
-          </Animated.View>
-          {nextClimb && canPeek ? (
-            <Animated.View style={[styles.peekSlot, { right: labelRight }, nextPeekStyle]} pointerEvents="none">
-              <ClimbLabel
-                climb={nextClimb}
-                labelColor={systemColors.label}
-                formattedGrade={grades.next}
-                gradeColor={grades.nextColor}
-                showThumbnail={showThumbnail}
-                boardConfig={boardConfig}
-              />
-            </Animated.View>
-          ) : null}
-          {previousClimb && canPeek ? (
-            <Animated.View style={[styles.peekSlot, { right: labelRight }, prevPeekStyle]} pointerEvents="none">
-              <ClimbLabel
-                climb={previousClimb}
-                labelColor={systemColors.label}
-                formattedGrade={grades.previous}
-                gradeColor={grades.previousColor}
-                showThumbnail={showThumbnail}
-                boardConfig={boardConfig}
-              />
-            </Animated.View>
-          ) : null}
+          </View>
         </View>
       </GestureDetector>
       {endAction ? <View style={[styles.endActionSlot, { width: endActionSize, height }]}>{endAction}</View> : null}
@@ -219,12 +172,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[4],
   },
   labelSlot: {
-    position: 'absolute',
-    left: spacing[4],
-    right: spacing[4],
-    justifyContent: 'center',
-  },
-  peekSlot: {
     position: 'absolute',
     left: spacing[4],
     right: spacing[4],

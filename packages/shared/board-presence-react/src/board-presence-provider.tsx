@@ -16,6 +16,13 @@ const BoardPresenceContext = createContext<UseBoardPresenceResult | undefined>(u
 const BoardPresenceActionsContext = createContext<BoardPresenceActions | undefined>(undefined);
 const BoardPresenceCurrentContext = createContext<BoardPresenceCurrentState | undefined>(undefined);
 const BoardPresenceFeedContext = createContext<BoardPresenceFeedState | undefined>(undefined);
+// Presence-only boolean: true iff a wall feed is live with a current climb. A
+// primitive, so consumers re-render only when the boolean flips (climb appears /
+// disappears), NOT on every climb-to-climb change like `BoardPresenceCurrentContext`
+// would. Mirrors how the mobile queue splits `useHasActiveClimb` from
+// `useActiveClimbUuid` — lets chrome (tab tree, bottom-chrome metrics) gate on
+// presence without re-rendering on every board-level climb change.
+const BoardPresenceHasClimbContext = createContext<boolean | undefined>(undefined);
 
 export function BoardPresenceProvider({
   boardId,
@@ -51,12 +58,15 @@ export function BoardPresenceProvider({
     }),
     [value.history, value.stats],
   );
+  const hasClimb = value.isLive && value.currentClimb !== null;
 
   return (
     <BoardPresenceContext.Provider value={value}>
       <BoardPresenceActionsContext.Provider value={actions}>
         <BoardPresenceCurrentContext.Provider value={current}>
-          <BoardPresenceFeedContext.Provider value={feed}>{children}</BoardPresenceFeedContext.Provider>
+          <BoardPresenceHasClimbContext.Provider value={hasClimb}>
+            <BoardPresenceFeedContext.Provider value={feed}>{children}</BoardPresenceFeedContext.Provider>
+          </BoardPresenceHasClimbContext.Provider>
         </BoardPresenceCurrentContext.Provider>
       </BoardPresenceActionsContext.Provider>
     </BoardPresenceContext.Provider>
@@ -95,4 +105,18 @@ export function useBoardPresenceFeed(): BoardPresenceFeedState {
   return context;
 }
 
-export { BoardPresenceContext, BoardPresenceActionsContext, BoardPresenceCurrentContext, BoardPresenceFeedContext };
+export function useBoardPresenceHasClimb(): boolean {
+  const context = useContext(BoardPresenceHasClimbContext);
+  if (context === undefined) {
+    throw new Error('useBoardPresenceHasClimb must be used within a BoardPresenceProvider');
+  }
+  return context;
+}
+
+export {
+  BoardPresenceContext,
+  BoardPresenceActionsContext,
+  BoardPresenceCurrentContext,
+  BoardPresenceFeedContext,
+  BoardPresenceHasClimbContext,
+};

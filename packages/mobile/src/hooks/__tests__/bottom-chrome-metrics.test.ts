@@ -124,6 +124,21 @@ describe('computeBottomChromeMetrics', () => {
     expect(metrics.fixedFooterBottom).toBe(0);
   });
 
+  it('treats a wall-only climb like any present climb (input is wall-aware)', () => {
+    // `hasCurrentClimb` is fed the wall-aware presence (local OR live wall climb)
+    // by use-bottom-chrome-metrics, so a wall-only climb routes to the native
+    // accessory on glass — exactly like a local climb, never both.
+    const metrics = computeBottomChromeMetrics({
+      uiVariant: 'liquidGlass',
+      insetsBottom: 0,
+      insideTabs: true,
+      hasCurrentClimb: true,
+      nativeAccessoryMounted: true,
+    });
+    expect(metrics.nativeAccessoryVisible).toBe(true);
+    expect(metrics.jsQueueToolbarVisible).toBe(false);
+  });
+
   it('never reports both the JS toolbar and the native accessory as visible at once', () => {
     for (const hasCurrentClimb of [true, false]) {
       for (const nativeAccessoryMounted of [true, false]) {

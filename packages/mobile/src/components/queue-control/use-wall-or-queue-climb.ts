@@ -10,7 +10,7 @@
 
 import { useMemo } from 'react';
 import type { Climb } from '@boardsesh/queue';
-import { useBoardPresenceCurrent } from '@boardsesh/board-presence-react';
+import { useBoardPresenceCurrent, useBoardPresenceHasClimb } from '@boardsesh/board-presence-react';
 import { useBoardPresenceControls } from '../../providers/board-presence-provider';
 import { boardPresenceClimbToClimb } from '../../lib/board-presence/presence-climb';
 
@@ -52,4 +52,17 @@ export function useIsWallPinned(): boolean {
   const { enabled, boardId } = useBoardPresenceControls();
   const { currentClimb: wallClimb, isLive } = useBoardPresenceCurrent();
   return enabled && boardId !== null && isLive && wallClimb !== null;
+}
+
+/**
+ * Presence-only sibling of {@link useIsWallPinned}: true when a live wall feed has
+ * a current climb. Reads the presence-only `useBoardPresenceHasClimb` boolean
+ * instead of `useBoardPresenceCurrent`, so consumers re-render only when wall
+ * presence appears/disappears — NOT on every board-level climb change. Use this
+ * (not `useIsWallPinned`) to gate chrome that mounts the accessory / tab tree.
+ */
+export function useHasWallClimb(): boolean {
+  const { enabled, boardId } = useBoardPresenceControls();
+  const hasWallClimb = useBoardPresenceHasClimb();
+  return enabled && boardId !== null && hasWallClimb;
 }

@@ -31,7 +31,13 @@ vi.mock('../../../src/lib/ble/bluetooth-status-store', () => ({
 
 vi.mock('../../../src/providers/queue-provider', () => ({
   useQueueSessionId: () => ({ sessionId: cfg.sessionId }),
-  useHasActiveClimb: () => cfg.hasCurrentClimb,
+}));
+
+// Wall-aware presence gate: true for a local OR a live wall (board-presence)
+// climb. The layout only sees the combined boolean — the local-vs-wall split is
+// unit-tested in use-has-accessory-climb / board-presence-react.
+vi.mock('../../../src/hooks/use-has-accessory-climb', () => ({
+  useHasAccessoryClimb: () => cfg.hasCurrentClimb,
 }));
 
 vi.mock('../../../src/components/queue-control/QueueBottomAccessory', () => ({
@@ -199,6 +205,19 @@ describe('TabLayout', () => {
     const accessorySlot = container.querySelector('[data-bottom-accessory="true"]');
     expect(accessorySlot).not.toBeNull();
     expect(accessorySlot?.querySelector('[data-accessory="true"]')).not.toBeNull();
+  });
+
+  it('keeps the accessory mounted across a re-render while presence stays true', () => {
+    // The wall-aware gate stays true across a board-level climb change (only the
+    // climb identity changes), so the UIKit accessory host is never unmounted /
+    // remounted mid-change — the regression that left a stale snapshot stacked
+    // under the new one (doubled text). Exactly one accessory survives a re-render.
+    cfg.hasCurrentClimb = true;
+    const { container, rerender } = render(<TabLayout />);
+    expect(container.querySelectorAll('[data-bottom-accessory="true"]')).toHaveLength(1);
+
+    rerender(<TabLayout />);
+    expect(container.querySelectorAll('[data-bottom-accessory="true"]')).toHaveLength(1);
   });
 
   it('skips the native bottom accessory when that path is inactive', () => {

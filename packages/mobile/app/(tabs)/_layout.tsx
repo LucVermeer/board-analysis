@@ -5,7 +5,8 @@ import { Tabs } from 'expo-router';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { useTranslation } from 'react-i18next';
 import { useBluetoothConnectedStatus } from '../../src/lib/ble/bluetooth-status-store';
-import { useHasActiveClimb, useQueueSessionId } from '../../src/providers/queue-provider';
+import { useQueueSessionId } from '../../src/providers/queue-provider';
+import { useHasAccessoryClimb } from '../../src/hooks/use-has-accessory-climb';
 import { QueueBottomAccessory } from '../../src/components/queue-control/QueueBottomAccessory';
 import { MaterialTabBar } from '../../src/components/navigation/MaterialTabBar';
 import { useTheme } from '../../src/providers/theme-provider';
@@ -52,8 +53,11 @@ export default function TabLayout() {
   const { sessionId } = useQueueSessionId();
   // Presence-only selector (flips just when a climb appears/disappears, not on
   // queue mutations or climb-to-climb nav), so gating the accessory mount on it
-  // doesn't re-render the tab tree on every queue change.
-  const hasCurrentClimb = useHasActiveClimb();
+  // doesn't re-render the tab tree on every queue change. Wall-aware: stays true
+  // across a board-level climb change (only the climb identity changes), so the
+  // UIKit accessory host is never unmounted/remounted mid-change — which is what
+  // left a stale snapshot stacked under the new one (doubled text).
+  const hasCurrentClimb = useHasAccessoryClimb();
   const showRecordBadge = isBluetoothConnected || sessionId !== null;
   const eagerMountRecord = Platform.OS === 'android';
 

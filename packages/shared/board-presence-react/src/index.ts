@@ -21,10 +21,12 @@ export {
   useBoardPresenceContext,
   useBoardPresenceCurrent,
   useBoardPresenceFeed,
+  useBoardPresenceHasClimb,
   BoardPresenceActionsContext,
   BoardPresenceContext,
   BoardPresenceCurrentContext,
   BoardPresenceFeedContext,
+  BoardPresenceHasClimbContext,
 } from './board-presence-provider';
 
 export type { BoardPresenceClient } from './types';
