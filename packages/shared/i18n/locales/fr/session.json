@@ -487,8 +487,7 @@
       "openQueueAria": "Ouvrir la file d'attente",
       "queueCountAria": "File, {{count}} blocs",
       "lightbulb": {
-        "litNamed": "«{{name}}» est sur le mur. Touche pour l’envoyer à nouveau.",
-        "lit": "Ta voie est sur le mur. Touche pour l’envoyer à nouveau.",
+        "turnOff": "Éteindre le mur",
         "sendNamed": "Envoyer «{{name}}» au mur",
         "send": "Envoyer la voie au mur",
         "coachmark": "Envoyer au mur"

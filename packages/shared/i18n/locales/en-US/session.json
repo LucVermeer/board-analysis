@@ -487,8 +487,7 @@
       "openQueueAria": "Open up next",
       "queueCountAria": "Queue, {{count}} climbs",
       "lightbulb": {
-        "litNamed": "“{{name}}” is on the wall. Tap to send it again.",
-        "lit": "Your climb is on the wall. Tap to send it again.",
+        "turnOff": "Turn off the board",
         "sendNamed": "Send “{{name}}” to the wall",
         "send": "Send the climb to the wall",
         "coachmark": "Send to the wall"

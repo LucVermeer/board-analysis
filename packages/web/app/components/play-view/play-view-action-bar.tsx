@@ -31,12 +31,17 @@ export type PlayViewActionBarProps = {
   onToggleFavorite: () => void;
   onOpenActions: () => void;
   onOpenQueue: () => void;
-  /** Whether the lightbulb should render as filled/lit. In party this is the
-   *  session-scoped `wallConfirmed` indicator (a member's phone has the wall
-   *  lit). In solo it's `isBluetoothConnected` (a paired board IS the wall —
-   *  when nothing's paired, the lightbulb is outlined to signal "tap to
-   *  connect"). */
+  /** Whether the lightbulb should render as filled/lit (the visual). In party
+   *  this is the session-scoped `wallConfirmed` indicator OR'd with this
+   *  device's BLE / the board-presence holder; in solo it's
+   *  `isBluetoothConnected`. Visual only — the tap action keys on
+   *  `lightbulbConnected` (this device's BLE), not this. */
   lightbulbActive: boolean;
+  /** Whether THIS device's BLE link is connected. Drives the tap action's
+   *  meaning (and its aria label): connected → tapping disconnects ("turn off");
+   *  not connected → tapping connects + sends ("send to the wall"). Distinct
+   *  from `lightbulbActive`, which can be lit by a peer/board-presence holder. */
+  lightbulbConnected: boolean;
   /** Pulse the lightbulb while a send press is in flight. Set between the
    *  press and the matching `WallConfirmedClimb` event (or the 2-second
    *  timeout fallback). Independent from `lightbulbActive`. */
@@ -79,6 +84,7 @@ export const PlayViewActionBar = React.memo(function PlayViewActionBar({
   onOpenActions,
   onOpenQueue,
   lightbulbActive,
+  lightbulbConnected,
   lightbulbPending = false,
   lightbulbCoachmark = false,
   lightbulbCoachmarkText,
@@ -89,16 +95,14 @@ export const PlayViewActionBar = React.memo(function PlayViewActionBar({
   angleSelector,
 }: PlayViewActionBarProps) {
   const { t } = useTranslation('session');
-  // Lightbulb aria label — active (filled) means our climb is lit on the wall
-  // (BLE-connected in solo, wall-confirmed in a party); tapping re-sends it.
-  // Inactive (outlined) means tapping sends the climb to the wall. No driver
-  // role exists anymore — the lightbulb is a send/re-assert affordance.
-  const lightbulbLabel = displayedClimbName
-    ? lightbulbActive
-      ? t('playView.actionBar.lightbulb.litNamed', { name: displayedClimbName })
-      : t('playView.actionBar.lightbulb.sendNamed', { name: displayedClimbName })
-    : lightbulbActive
-      ? t('playView.actionBar.lightbulb.lit')
+  // Lightbulb aria label — the lightbulb is a connect/disconnect toggle keyed on
+  // THIS device's BLE link (not the filled `lightbulbActive` visual, which a
+  // peer/board-presence holder can light). Connected → tapping disconnects
+  // ("turn off the board"); not connected → tapping connects + sends.
+  const lightbulbLabel = lightbulbConnected
+    ? t('playView.actionBar.lightbulb.turnOff')
+    : displayedClimbName
+      ? t('playView.actionBar.lightbulb.sendNamed', { name: displayedClimbName })
       : t('playView.actionBar.lightbulb.send');
   // Long-press the lightbulb to reach the light-control drawer (and the
   // manual BLE disconnect that lives inside it). Tap stays the send/connect

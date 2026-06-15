@@ -487,8 +487,7 @@
       "openQueueAria": "Abrir cola",
       "queueCountAria": "Cola, {{count}} bloques",
       "lightbulb": {
-        "litNamed": "“{{name}}” está en el muro. Toca para enviarla de nuevo.",
-        "lit": "Tu vía está en el muro. Toca para enviarla de nuevo.",
+        "turnOff": "Apagar el muro",
         "sendNamed": "Enviar “{{name}}” al muro",
         "send": "Enviar la vía al muro",
         "coachmark": "Enviar al muro"

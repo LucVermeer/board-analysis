@@ -182,18 +182,12 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
     participantId,
     users: sessionUsers,
   } = isOpen ? sessionData : deferredSession;
-  const {
-    mirrorClimb,
-    getNextClimbQueueItem,
-    getPreviousClimbQueueItem,
-    setCurrentClimbQueueItem,
-    previewClimbFromBrowse,
-  } = useQueueActions();
+  const { mirrorClimb, getNextClimbQueueItem, getPreviousClimbQueueItem, setCurrentClimbQueueItem } = useQueueActions();
   const {
     isConnected: isBluetoothConnected,
     isBluetoothSupported,
     connect: bluetoothConnect,
-    reassertWall,
+    disconnect: bluetoothDisconnect,
     reconnectSerialForCurrentBoard,
   } = useBluetoothContext();
 
@@ -421,78 +415,61 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
   }, [isPersistentSessionActive, pendingClimbUuid]);
 
   /**
-   * Lightbulb press: send / re-assert the current climb to the board,
-   * connecting first if needed. Always-live model — there is no driver role;
-   * pressing this just makes sure the wall shows what the drawer is showing.
+   * Lightbulb press: a plain connect/disconnect toggle (matches mobile).
+   * Always-live model — there is no driver role and no "re-send" gesture.
    *
+   *  - BLE-connected → disconnect (turn the board off). The drop path releases
+   *    the session wall + board-presence holder so every member's lightbulb
+   *    clears.
    *  - Not BLE-connected → connect (silent reconnect to the last board on
-   *    native shells, otherwise the device picker).
-   *  - BLE-connected → set the displayed climb as current (broadcasts in
-   *    party so every member follows) and force a re-push to the wall via
-   *    `reassertWall()`. In a party session, arm the 2-second wall-confirm
-   *    watcher so a peer being the BLE phone still resolves the pending pulse.
+   *    native shells, otherwise the device picker). The fresh AutoSender pushes
+   *    the current climb on mount; arm the 2-second wall-confirm watcher so the
+   *    bulb pulses until WallConfirmedClimb lands (the watcher no-ops once
+   *    connected).
    */
   const handleLightbulbClick = useCallback(() => {
     const boardLayout = boardDetails.layout_name ?? '';
 
-    if (!isBluetoothConnected) {
-      track('Wall Control Taken', {
-        source: 'lightbulb_drawer',
-        mode: isPersistentSessionActive ? 'party' : 'solo',
-        boardLayout,
-        climbUuid: currentClimb?.uuid ?? null,
-      });
-      // Silent reconnect to the board we were last on (native shells only —
-      // Web Bluetooth ignores a target serial and always shows the chooser).
-      // Null when nothing's remembered or the user switched boards, so we
-      // open the picker. Don't pass frames: the fresh AutoSender re-pushes
-      // the current climb on mount (passing them risks a double-write).
-      if (reconnectSerialForCurrentBoard && isNativeApp()) {
-        void bluetoothConnect(undefined, undefined, reconnectSerialForCurrentBoard);
-      } else {
-        void bluetoothConnect();
-      }
+    if (isBluetoothConnected) {
+      // Disconnect. BLE-layer + handleConnectionChange handle analytics and the
+      // session/board-presence holder release on the resulting drop.
+      bluetoothDisconnect();
       return;
     }
 
-    if (!currentClimb) return;
-    // Send the displayed climb to the wall. In party this broadcasts via the
-    // persistent-session subscription so every member follows; in solo it
-    // just drives the local BLE AutoSender. previewClimbFromBrowse is the
-    // always-live "set current + open drawer" path; the drawer is already
-    // open here, so the open-drawer event is a harmless no-op.
-    previewClimbFromBrowse(currentClimb);
-    // Force a re-push even when the climb is unchanged — re-tapping the
-    // lightbulb should re-light the wall. If the link is secretly dead (the
-    // board was grabbed but no disconnect event fired), the failing write
-    // trips disconnect detection and darkens the bulb so the next tap
-    // reconnects.
-    reassertWall();
-    setDrawerDisplayedItem?.(null);
     track('Wall Control Taken', {
       source: 'lightbulb_drawer',
       mode: isPersistentSessionActive ? 'party' : 'solo',
       boardLayout,
-      climbUuid: currentClimb.uuid,
+      climbUuid: currentClimb?.uuid ?? null,
     });
-    // In party, a peer's phone may be the BLE writer — arm the watcher so the
-    // pending pulse clears on their WallConfirmedClimb (or the 2s fallback).
-    if (isPersistentSessionActive) {
+    // Silent reconnect to the board we were last on (native shells only — Web
+    // Bluetooth ignores a target serial and always shows the chooser). Null
+    // when nothing's remembered or the user switched boards, so we open the
+    // picker. Don't pass frames: the fresh AutoSender re-pushes the current
+    // climb on mount (passing them risks a double-write).
+    if (reconnectSerialForCurrentBoard && isNativeApp()) {
+      void bluetoothConnect(undefined, undefined, reconnectSerialForCurrentBoard);
+    } else {
+      void bluetoothConnect();
+    }
+    // Pulse the bulb until the climb is confirmed on the wall (the 2s watcher is
+    // a no-op once connected — see wall-confirm-fallback's already_connected
+    // path — and a picker cancel resolves via timeout).
+    if (currentClimb) {
       setPendingClimbUuid(currentClimb.uuid);
       armWallConfirmWatcher({
         climbUuid: currentClimb.uuid,
-        mode: 'party',
+        mode: isPersistentSessionActive ? 'party' : 'solo',
         boardLayout,
       });
     }
   }, [
     currentClimb,
-    previewClimbFromBrowse,
-    setDrawerDisplayedItem,
     isPersistentSessionActive,
     isBluetoothConnected,
     bluetoothConnect,
-    reassertWall,
+    bluetoothDisconnect,
     reconnectSerialForCurrentBoard,
     armWallConfirmWatcher,
     boardDetails.layout_name,
@@ -773,6 +750,7 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
                 ? wallConfirmed || isBluetoothConnected || boardPresenceCurrent?.holder != null
                 : isBluetoothConnected
             }
+            lightbulbConnected={isBluetoothConnected}
             lightbulbPending={pendingClimbUuid != null}
             lightbulbCoachmark={showLightbulbCoachmark && !pendingClimbUuid}
             lightbulbCoachmarkText={t('playView.actionBar.lightbulb.coachmark')}
