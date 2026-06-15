@@ -1,15 +1,16 @@
-import { memo, useCallback, useState } from 'react';
+import { memo, useCallback, useEffect, useState } from 'react';
 import { Stack } from 'expo-router';
 import { Modal, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FlashList } from '@shopify/flash-list';
 import { useTranslation } from 'react-i18next';
+import { ActivityIndicator } from '../src/components/ActivityIndicator';
 import { Button } from '../src/components/Button';
 import { Icon } from '../src/components/Icon';
 import { PressableSurface } from '../src/components/PressableSurface';
 import { Text } from '../src/components/Text';
 import { useBottomChromeMetrics } from '../src/hooks/use-bottom-chrome-metrics';
-import { ossLicenses, type OssLicense } from '../src/lib/oss-licenses';
+import { loadOssLicenses, type OssLicense } from '../src/lib/oss-licenses';
 import { openExternalUrl } from '../src/lib/open-url';
 import { useTheme } from '../src/providers/theme-provider';
 import { spacing } from '../src/theme/tokens';
@@ -55,6 +56,17 @@ export default function LicensesScreen() {
   const insets = useSafeAreaInsets();
   const bottomChrome = useBottomChromeMetrics();
   const [selected, setSelected] = useState<OssLicense | null>(null);
+  // Lazily pull in the ~1 MB manifest only once this screen mounts.
+  const [licenses, setLicenses] = useState<OssLicense[] | null>(null);
+  useEffect(() => {
+    let active = true;
+    void loadOssLicenses().then((loaded) => {
+      if (active) setLicenses(loaded);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const handleSelect = useCallback((license: OssLicense) => setSelected(license), []);
   const handleClose = useCallback(() => setSelected(null), []);
@@ -80,21 +92,27 @@ export default function LicensesScreen() {
         }}
       />
       <View style={styles.flex}>
-        {/* FlashList v2 self-measures rows — `estimatedItemSize` was removed and
-            no longer typechecks (see BoardCarousel for the same note). */}
-        <FlashList
-          data={ossLicenses}
-          renderItem={renderItem}
-          keyExtractor={keyExtractor}
-          contentInsetAdjustmentBehavior="automatic"
-          contentContainerStyle={{ paddingBottom: bottomChrome.scrollBottomPadding + spacing[6] }}
-          ItemSeparatorComponent={Separator}
-          ListHeaderComponent={
-            <Text variant="subheadline" color={systemColors.secondaryLabel} style={styles.intro}>
-              {t('mobile.licenses.intro')}
-            </Text>
-          }
-        />
+        {licenses === null ? (
+          <View style={styles.loading}>
+            <ActivityIndicator size="large" />
+          </View>
+        ) : (
+          // FlashList v2 self-measures rows — `estimatedItemSize` was removed and
+          // no longer typechecks (see BoardCarousel for the same note).
+          <FlashList
+            data={licenses}
+            renderItem={renderItem}
+            keyExtractor={keyExtractor}
+            contentInsetAdjustmentBehavior="automatic"
+            contentContainerStyle={{ paddingBottom: bottomChrome.scrollBottomPadding + spacing[6] }}
+            ItemSeparatorComponent={Separator}
+            ListHeaderComponent={
+              <Text variant="subheadline" color={systemColors.secondaryLabel} style={styles.intro}>
+                {t('mobile.licenses.intro')}
+              </Text>
+            }
+          />
+        )}
       </View>
 
       <Modal
@@ -146,6 +164,7 @@ export default function LicensesScreen() {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
+  loading: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   intro: {
     paddingHorizontal: spacing[4],
     paddingTop: spacing[4],

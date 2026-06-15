@@ -1,10 +1,12 @@
 /**
  * App-facing accessor for the bundled third-party license attribution, generated
- * at build time by scripts/generate-oss-licenses.ts. Metro inlines this ~1 MB JSON
- * into the JS bundle; only the licenses screen imports it.
+ * at build time by scripts/generate-oss-licenses.ts.
+ *
+ * Loaded through a dynamic import() so the ~1 MB manifest's module factory only
+ * runs when the licenses screen mounts and calls this — app startup (and every
+ * user who never opens the screen) never parses it. The bytes still ship in the
+ * bundle; Metro doesn't code-split, but it does evaluate the module lazily.
  */
-import licenses from '../data/oss-licenses.generated.json';
-
 export type OssLicense = {
   name: string;
   version: string;
@@ -14,4 +16,7 @@ export type OssLicense = {
   licenseText: string | null;
 };
 
-export const ossLicenses = licenses as OssLicense[];
+export async function loadOssLicenses(): Promise<OssLicense[]> {
+  const imported = await import('../data/oss-licenses.generated.json');
+  return imported.default as unknown as OssLicense[];
+}

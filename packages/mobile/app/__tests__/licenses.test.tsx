@@ -61,19 +61,23 @@ vi.mock('react-i18next', () => ({
 }));
 
 vi.mock('../../src/lib/oss-licenses', () => ({
-  ossLicenses: [
-    {
-      name: 'react',
-      version: '19.0.0',
-      license: 'MIT',
-      repository: 'https://github.com/facebook/react',
-      publisher: 'Meta',
-      licenseText: 'MIT License — permission is hereby granted',
-    },
-    { name: 'zod', version: '3.0.0', license: 'MIT', repository: null, publisher: null, licenseText: null },
-  ],
+  loadOssLicenses: () =>
+    Promise.resolve([
+      {
+        name: 'react',
+        version: '19.0.0',
+        license: 'MIT',
+        repository: 'https://github.com/facebook/react',
+        publisher: 'Meta',
+        licenseText: 'MIT License — permission is hereby granted',
+      },
+      { name: 'zod', version: '3.0.0', license: 'MIT', repository: null, publisher: null, licenseText: null },
+    ]),
 }));
 vi.mock('../../src/lib/open-url', () => openUrl);
+vi.mock('../../src/components/ActivityIndicator', () => ({
+  ActivityIndicator: () => createElement('div', { 'data-testid': 'licenses-loading' }),
+}));
 
 vi.mock('../../src/components/Button', () => ({
   Button: ({ onPress, title }: { onPress: () => void; title: string }) =>
@@ -118,19 +122,20 @@ beforeEach(() => {
 });
 
 describe('LicensesScreen', () => {
-  it('lists each bundled package', () => {
+  it('lists each bundled package once the manifest loads', async () => {
     render(<LicensesScreen />);
 
-    expect(screen.getByText('react')).toBeTruthy();
+    // The list appears only after the lazy loadOssLicenses() resolves.
+    expect(await screen.findByText('react')).toBeTruthy();
     expect(screen.getByText('zod')).toBeTruthy();
   });
 
-  it('opens a package and shows its full license text, then opens the source', () => {
+  it('opens a package and shows its full license text, then opens the source', async () => {
     render(<LicensesScreen />);
 
     expect(screen.queryByTestId('license-modal')).toBeNull();
 
-    fireEvent.click(screen.getByRole('button', { name: 'react' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'react' }));
 
     expect(screen.getByTestId('license-modal')).toBeTruthy();
     expect(screen.getByText('MIT License — permission is hereby granted')).toBeTruthy();
@@ -140,10 +145,10 @@ describe('LicensesScreen', () => {
     expect(openUrl.openExternalUrl).toHaveBeenCalledWith('https://github.com/facebook/react', 'license-source');
   });
 
-  it('hides View source for a package with no repository', () => {
+  it('hides View source for a package with no repository', async () => {
     render(<LicensesScreen />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'zod' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'zod' }));
 
     expect(screen.getByTestId('license-modal')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'View source' })).toBeNull();
