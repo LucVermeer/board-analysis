@@ -108,8 +108,8 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
   /**
    * Lightbulb pending state (queue-control-bar pivot, Phase 3).
    *
-   * Set when the user presses the lightbulb to take control (party non-driver
-   * branch) — between the press and the matching `WallConfirmedClimb`, the
+   * Set when the user presses the lightbulb to connect + send the current climb
+   * to the board — between the press and the matching `WallConfirmedClimb`, the
    * lightbulb renders with a soft pulse so the user can see we're waiting.
    * Cleared either way when `useWallConfirmFallback` resolves (confirm,
    * timeout, or session-swap cancellation).

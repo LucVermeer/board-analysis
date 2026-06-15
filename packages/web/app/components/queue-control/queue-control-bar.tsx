@@ -127,8 +127,9 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
   // suggestions, queue items). When the event carries a climb payload, store
   // it as the drawer's locally-displayed item so the drawer can render the
   // requested climb. This matters in two cases:
-  //   - Party sessions: browse-doesn't-yank — `previewClimbFromBrowse` uses
-  //     this path so non-drivers don't change the wall climb for others.
+  //   - Browsing climbs: a board-page climb-list tap opens the drawer to
+  //     preview that climb without changing the shared wall climb. There's no
+  //     driver role — preview-vs-send applies to every member equally.
   //   - Solo direct hits to /view/{uuid}: the page dispatches with the SSR-
   //     fetched climb so the drawer has something to display before the queue
   //     context's `currentClimbQueueItem` is seeded.
@@ -136,10 +137,11 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
     const handler = (event: Event) => {
       const detail = readPlayDrawerEventDetail(event);
       const climb = detail?.climb;
-      // Always store a climb payload when present — both party mode
-      // (preview-doesn't-yank via previewClimbFromBrowse) and solo direct
-      // hits to /view/{uuid} depend on this so the drawer has something to
-      // display before the queue context's currentClimbQueueItem is seeded.
+      // Always store a climb payload when present — both browsing climbs (a
+      // board-page list tap previews the climb without yanking the wall) and
+      // solo direct hits to /view/{uuid} depend on this so the drawer has
+      // something to display before the queue context's currentClimbQueueItem
+      // is seeded.
       if (climb) {
         setDrawerDisplayedItem({ climb, uuid: uuidv4(), suggested: true });
       } else {
