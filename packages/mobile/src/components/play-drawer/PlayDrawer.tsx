@@ -1,6 +1,5 @@
-import { forwardRef, useCallback, useContext, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { View, Pressable, StyleSheet, useWindowDimensions } from 'react-native';
-import { BoardPresenceCurrentContext } from '@boardsesh/board-presence-react';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -33,7 +32,7 @@ import { BleControlSheet } from '../ble/BleControlSheet';
 import { disconnectAllBluetooth } from '../../lib/ble/bluetooth-status-store';
 import { GlassSheetBackground } from '../GlassSheetBackground';
 import { Icon } from '../Icon';
-import { usePlaylistSuggestionSource, useQueue, useQueueSessionControls } from '../../providers/queue-provider';
+import { usePlaylistSuggestionSource, useQueue } from '../../providers/queue-provider';
 import { useOptionalBluetoothContext } from '../../providers/bluetooth-provider';
 import { useAuth } from '../../providers/auth-provider';
 import { useToast } from '../../providers/toast-provider';
@@ -45,11 +44,8 @@ import { hapticSuccess } from '../../lib/haptics';
 import { usePlayDrawerWakeLock } from './use-play-drawer-wake-lock';
 import { useDeferredSheetOpen } from './use-deferred-sheet-open';
 import { resolveFavoriteRollback } from './favorite-rollback';
-import {
-  buildPlayDrawerBoardLayout,
-  derivePlayDrawerLightbulbPressAction,
-  derivePlayDrawerLightbulbState,
-} from './lightbulb-control';
+import { buildPlayDrawerBoardLayout } from './lightbulb-control';
+import { useLightbulbControl } from '../ble/use-lightbulb-control';
 import { track } from '../../lib/analytics';
 import { iosSystemColors } from '../../theme/ios-colors';
 import { spacing, sheetStyles } from '../../theme/tokens';
@@ -147,7 +143,6 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   }, []);
 
   const { state, setCurrentClimb, nextClimb, previousClimb, sessionId, addToQueue } = useQueue();
-  const { isSessionWallLit } = useQueueSessionControls();
   const playlistSuggestionSource = usePlaylistSuggestionSource();
   const bluetooth = useOptionalBluetoothContext();
   const { mutate: toggleFavoriteMutate } = useToggleFavorite();
@@ -156,14 +151,9 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
 
   const { boardName, layoutId, sizeId, setIds, angle } = boardConfig;
   const bluetoothConnected = bluetooth?.isConnected ?? false;
-  const bluetoothLoading = bluetooth?.loading ?? false;
   const bluetoothArmUndoWallChangeToast = bluetooth?.armUndoWallChangeToast;
   const bluetoothReassertWall = bluetooth?.reassertWall;
   const bluetoothClearBoard = bluetooth?.clearBoard;
-  // Single source for "is a board's BLE available at all" so the lightbulb's
-  // accessibility label and its press action stay in lockstep — both read this
-  // instead of one checking `bluetooth` and the other `bluetooth !== null`.
-  const hasBluetooth = bluetooth !== null;
 
   usePlayDrawerWakeLock(isSheetOpen);
 
@@ -195,24 +185,20 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
     enabled: isSheetOpen,
   });
   const isFavorited = favoriteOverride ?? serverFavorited ?? false;
-  const lightbulbState = useMemo(
-    () =>
-      derivePlayDrawerLightbulbState({
-        isBluetoothConnected: bluetoothConnected,
-        isBluetoothLoading: bluetoothLoading,
-      }),
-    [bluetoothConnected, bluetoothLoading],
-  );
-  // The lightbulb reads lit if *anyone* is connected to the board, not just this
-  // device: in a session every member shares the wall, so another member's
-  // connection (the board-presence holder) lights it too, and a session-scoped
-  // WallConfirmedClimb (isSessionWallLit) lights it for members who aren't
-  // holding the BLE link. A WallDisconnected event clears isSessionWallLit.
-  // Read the board-presence context directly (non-throwing) so the portaled
-  // drawer never crashes if it renders outside the provider. The press action
-  // still keys on THIS device's BLE.
-  const boardPresenceCurrent = useContext(BoardPresenceCurrentContext);
-  const lightbulbActive = lightbulbState.lightbulbActive || boardPresenceCurrent?.holder != null || isSessionWallLit;
+  // Lit visual, pending pulse, and the connect/disconnect tap — shared with the
+  // toolbar bulb via `useLightbulbControl`, so both light identically (this
+  // device, or a session peer driving the wall) and run one connect path. The
+  // press action keys on THIS device's BLE; `lightbulbConnected` (below) carries
+  // that to the action bar for the accessibility label.
+  const {
+    lit: lightbulbActive,
+    pending: lightbulbPending,
+    onPress: handleLightbulb,
+  } = useLightbulbControl({
+    source: 'lightbulb_drawer',
+    boardLayout,
+    climbUuid: displayedClimb?.uuid ?? null,
+  });
   const navigationSuggestionSource = drawerPreviewSuggestionSource ?? playlistSuggestionSource;
   const navigationState = useMemo(
     () => computeNavigationStateWithSuggestions(state.queue, displayedQueueItem, navigationSuggestionSource),
@@ -419,40 +405,6 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
       },
     );
   }, [displayedClimb, isFavorited, favoriteOverride, boardName, layoutId, angle, toggleFavoriteMutate, showToast, t]);
-
-  const handleLightbulb = useCallback(() => {
-    if (!bluetooth) return;
-    // Pure connect/disconnect BLE toggle (matches the climbs-list lightbulb in
-    // use-lightbulb-toggle.ts). On connect the board auto-pushes the displayed
-    // climb, which reports to board presence and makes this device the holder;
-    // on disconnect the bluetooth provider fires reportBoardDisconnect itself, so
-    // we don't report here. The toggle is gated on `loading` so an in-flight
-    // connect/disconnect isn't interrupted.
-    const pressAction = derivePlayDrawerLightbulbPressAction({
-      hasBluetooth,
-      isBluetoothConnected: bluetoothConnected,
-      isBluetoothLoading: bluetoothLoading,
-    });
-    if (pressAction === 'noop') return;
-
-    if (pressAction === 'disconnect') {
-      void bluetooth.disconnect();
-      return;
-    }
-
-    // connect — relight the remembered board for the current config. Distinct
-    // from the BLE adapter's own BluetoothConnectionSuccess event: this records
-    // the drawer-lightbulb intent (there's no "wall control" to take in the
-    // holder model). connect() emits the success event, so don't double-count.
-    track('Board Lightbulb Connect', {
-      source: 'lightbulb_drawer',
-      mode: sessionId !== null ? 'party' : 'solo',
-      boardLayout,
-      climbUuid: displayedClimb?.uuid ?? null,
-    });
-    bluetooth.armUndoWallChangeToast();
-    void bluetooth.connect(undefined, undefined, bluetooth.reconnectSerialForCurrentBoard ?? undefined);
-  }, [bluetooth, hasBluetooth, bluetoothConnected, bluetoothLoading, sessionId, boardLayout, displayedClimb]);
 
   const handleLightbulbLongPress = useCallback(() => {
     if (!bluetooth?.isConnected) return;
@@ -671,7 +623,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
                   remainingQueueCount={navigationState.remainingCount}
                   lightbulbActive={lightbulbActive}
                   lightbulbConnected={bluetoothConnected}
-                  lightbulbPending={lightbulbState.lightbulbPending}
+                  lightbulbPending={lightbulbPending}
                   lightbulbLongPressEnabled={bluetoothConnected}
                   ascentCount={ascentCount}
                   onPrevClick={handlePrev}

@@ -19,7 +19,7 @@ import { useTheme } from '../../providers/theme-provider';
 import { useActiveBoard, useSetActiveBoard } from '../../lib/graphql/use-active-board';
 import { spacing } from '../../theme/tokens';
 import { hapticLight } from '../../lib/haptics';
-import { useLightbulbToggle } from '../ble/use-lightbulb-toggle';
+import { useLightbulbControl } from '../ble/use-lightbulb-control';
 import { SearchHeader, type SearchHeaderHandle } from '../SearchHeader';
 import { Text } from '../Text';
 import { iconMap } from '../icon-map';
@@ -324,19 +324,26 @@ function MaterialLightbulbAction() {
   const { systemColors, brandColors } = useTheme();
   const { t: tCommon } = useTranslation('common');
   const { t: tSettings } = useTranslation('settings');
-  const { bluetooth, connected, handlePress } = useLightbulbToggle();
+  const { bluetooth, lit, localConnected, onPress } = useLightbulbControl({ source: 'lightbulb_toolbar' });
+
+  const handlePress = useCallback(() => {
+    hapticLight();
+    onPress();
+  }, [onPress]);
 
   if (!bluetooth) return null;
 
-  const iconName = connected ? iconMap['lightbulb.fill'].android : iconMap.lightbulb.android;
-  const iconColor = connected ? brandColors.warning : systemColors.label;
+  const iconName = lit ? iconMap['lightbulb.fill'].android : iconMap.lightbulb.android;
+  const iconColor = lit ? brandColors.warning : systemColors.label;
 
   return (
     <Appbar.Action
       icon={iconName}
       color={iconColor as string}
       onPress={handlePress}
-      accessibilityLabel={connected ? tCommon('lightControl.disconnect') : tSettings('ble.connectBoard')}
+      // The label reflects what tapping does (this device's link), not the fill —
+      // the bulb can read lit because a session peer holds the wall.
+      accessibilityLabel={localConnected ? tCommon('lightControl.disconnect') : tSettings('ble.connectBoard')}
     />
   );
 }
