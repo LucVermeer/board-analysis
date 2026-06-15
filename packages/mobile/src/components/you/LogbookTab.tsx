@@ -7,6 +7,7 @@ import type { AscentFeedItem } from '@boardsesh/graphql/operations';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { track } from '../../lib/analytics';
 import { Text } from '../Text';
+import { ScreenTitle } from '../ScreenTitle';
 import { Icon } from '../Icon';
 import { ActivityIndicator } from '../ActivityIndicator';
 import { LogbookRow } from './LogbookRow';
@@ -25,7 +26,7 @@ type LogbookTabProps = {
 
 export function LogbookTab({ userId, topInset = 0 }: LogbookTabProps) {
   const { t } = useTranslation('you');
-  const { systemColors, brandColors, variant } = useTheme();
+  const { systemColors, brandColors } = useTheme();
   const bottomChrome = useBottomChromeMetrics();
   const paddingBottom = bottomChrome.scrollBottomPadding + spacing[4];
 
@@ -57,17 +58,11 @@ export function LogbookTab({ userId, topInset = 0 }: LogbookTabProps) {
 
   // The screen's identity, in-body under the floating chrome. Memoized so
   // FlashList doesn't re-render the header on every LogbookTab render. Always
-  // present so it sits above the empty state too.
+  // present so it sits above the empty state too. ScreenTitle hides itself on
+  // Material (the M3 app bar owns the title).
   const listHeader = useMemo(
-    // On Material the M3 app bar owns the title, so the in-body large title is
-    // gated off there to avoid a doubled title.
-    () =>
-      variant === 'material' ? null : (
-        <Text variant="largeTitle" style={styles.screenTitle}>
-          {t('metadata.dashboard.title')}
-        </Text>
-      ),
-    [t, variant],
+    () => <ScreenTitle style={styles.screenTitle}>{t('metadata.dashboard.title')}</ScreenTitle>,
+    [t],
   );
 
   if (!userId || feed.isPending) {

@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { Text } from '../Text';
 import { borderRadius, spacing, shadowColor } from '../../theme/tokens';
 import { useTheme } from '../../providers/theme-provider';
+import { selectByVariant } from '../../theme/variants';
 import { useBottomChromeMetrics } from '../../hooks/use-bottom-chrome-metrics';
 
 // Held longer than the queue-added snackbar (someone may be mid-route on the
@@ -36,11 +37,10 @@ export function UndoWallChangeSnackbar(props: UndoWallChangeSnackbarProps) {
   const bottom = bottomChrome.floatingControlBottom + spacing[2];
   return (
     <Portal>
-      {uiVariant === 'material' ? (
-        <UndoWallChangeSnackbarMaterial {...props} bottom={bottom} />
-      ) : (
-        <UndoWallChangeSnackbarGlass {...props} bottom={bottom} />
-      )}
+      {selectByVariant(uiVariant, {
+        material: <UndoWallChangeSnackbarMaterial {...props} bottom={bottom} />,
+        liquidGlass: <UndoWallChangeSnackbarGlass {...props} bottom={bottom} />,
+      })}
     </Portal>
   );
 }

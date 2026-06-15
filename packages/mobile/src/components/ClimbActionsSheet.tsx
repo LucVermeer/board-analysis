@@ -15,7 +15,6 @@ import { ListRow } from './ListRow';
 import { Icon } from './Icon';
 import { useToast } from '../providers/toast-provider';
 import { useTheme } from '../providers/theme-provider';
-import { iosSystemColors } from '../theme/ios-colors';
 import { spacing } from '../theme/tokens';
 import { WEB_BASE_URL } from '../lib/env';
 import { track } from '../lib/analytics';
@@ -192,10 +191,12 @@ function ClimbActionsSheet({
   // Sized for the climb preview row plus the action list (a couple more rows show
   // for owners / Aurora-app climbs); the modal pans down to close.
   const snapPoints = useMemo(() => ['55%'], []);
-  const neutralActionIconColor = theme.systemColors.label;
-  const successActionIconColor = theme.variant === 'liquidGlass' ? neutralActionIconColor : theme.brandColors.success;
-  const favoriteActionIconColor = theme.variant === 'liquidGlass' ? neutralActionIconColor : iosSystemColors.systemRed;
-  const accentActionIconColor = theme.variant === 'liquidGlass' ? neutralActionIconColor : theme.systemColors.accent;
+  // Monochrome on Liquid Glass, semantic on Material — resolved once as a token.
+  const {
+    success: successActionIconColor,
+    favorite: favoriteActionIconColor,
+    accent: accentActionIconColor,
+  } = theme.actionColors;
 
   return (
     <ModalSheet ref={sheetRef} snapPoints={snapPoints} onDismiss={handleDismiss} enablePanDownToClose>

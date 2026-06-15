@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { Text } from './Text';
 import { borderRadius, spacing, shadowColor } from '../theme/tokens';
 import { useTheme } from '../providers/theme-provider';
+import { createVariantComponent } from '../theme/variants';
 import { useBottomChromeMetrics } from '../hooks/use-bottom-chrome-metrics';
 
 const DEFAULT_DURATION = 4000;
@@ -27,10 +28,10 @@ type QueueAddedSnackbarProps = {
  * variant and to the existing Liquid-Glass pill on the Liquid Glass variant; the
  * public prop API is identical for both.
  */
-export function QueueAddedSnackbar(props: QueueAddedSnackbarProps) {
-  const { variant: uiVariant } = useTheme();
-  return uiVariant === 'material' ? <QueueAddedSnackbarMaterial {...props} /> : <QueueAddedSnackbarGlass {...props} />;
-}
+export const QueueAddedSnackbar = createVariantComponent('QueueAddedSnackbar', {
+  liquidGlass: QueueAddedSnackbarGlass,
+  material: QueueAddedSnackbarMaterial,
+});
 
 function QueueAddedSnackbarMaterial({
   visible,

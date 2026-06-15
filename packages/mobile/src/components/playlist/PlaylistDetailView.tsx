@@ -43,6 +43,7 @@ import { withAlpha } from '../../theme/colors';
 import { toQueueClimb, toSchemaClimb } from '../../lib/climb-types';
 import type { PlaylistRenderBoard, PlaylistBoardBanner } from '../../lib/playlists/use-playlist-render-board';
 import { useTheme } from '../../providers/theme-provider';
+import { selectByVariant } from '../../theme/variants';
 import { useBottomChromeMetrics } from '../../hooks/use-bottom-chrome-metrics';
 import { glassSize } from '../../theme/layout';
 import { iosSystemColors } from '../../theme/ios-colors';
@@ -176,7 +177,7 @@ export function PlaylistDetailView({
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const listPaddingBottom = bottomChrome.scrollBottomPadding;
-  const isMaterial = variant === 'material';
+  const isMaterial = selectByVariant(variant, { material: true, liquidGlass: false });
   const heroEmojiIcon = resolvePlaylistEmojiIcon(hero.icon);
 
   // Scroll offset + measured hero-banner height drive the collapsed colour header

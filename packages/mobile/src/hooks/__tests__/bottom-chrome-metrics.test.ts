@@ -183,4 +183,50 @@ describe('computeBottomChromeMetrics', () => {
       }
     }
   });
+
+  describe('session list/footer bottoms (folded from InSessionView / PreSessionView)', () => {
+    it('docks both to the fixed-footer reserve on Material', () => {
+      const metrics = computeBottomChromeMetrics({
+        uiVariant: 'material',
+        usesNativeTabBar: false,
+        insetsBottom: 24,
+        insideTabs: true,
+        hasCurrentClimb: true,
+        nativeAccessoryMounted: false,
+      });
+      expect(metrics.inSessionListBottom).toBe(metrics.fixedFooterBottom);
+      expect(metrics.preSessionFooterBottom).toBe(metrics.fixedFooterBottom);
+    });
+
+    it('anchors Liquid Glass to the raw inset and never double-counts the tab bar', () => {
+      // iPhone 17 Pro / iOS 26: the glass tab bar already extends the inset, so the
+      // footer is the raw inset — NOT fixedFooterBottom, which would add the bar again.
+      const metrics = computeBottomChromeMetrics({
+        uiVariant: 'liquidGlass',
+        usesNativeTabBar: true,
+        insetsBottom: 139,
+        insideTabs: true,
+        hasCurrentClimb: true,
+        nativeAccessoryMounted: true,
+      });
+      expect(metrics.preSessionFooterBottom).toBe(139);
+      expect(metrics.preSessionFooterBottom).toBeLessThan(metrics.fixedFooterBottom);
+      // Native accessory mounted → no JS queue reserve, so the list also rides the raw inset.
+      expect(metrics.jsQueueReserve).toBe(0);
+      expect(metrics.inSessionListBottom).toBe(139);
+    });
+
+    it('adds only the JS queue reserve to the Liquid Glass in-session list when the accessory is unavailable', () => {
+      const metrics = computeBottomChromeMetrics({
+        uiVariant: 'liquidGlass',
+        usesNativeTabBar: false,
+        insetsBottom: 34,
+        insideTabs: true,
+        hasCurrentClimb: true,
+        nativeAccessoryMounted: false,
+      });
+      expect(metrics.inSessionListBottom).toBe(34 + TOOLBAR_RESERVE);
+      expect(metrics.preSessionFooterBottom).toBe(34);
+    });
+  });
 });

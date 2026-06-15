@@ -3,6 +3,7 @@ import { View, RefreshControl, ScrollView, StyleSheet } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import type { useYouProfileData } from '../../lib/graphql/hooks';
 import { Text } from '../Text';
+import { ScreenTitle } from '../ScreenTitle';
 import { Icon } from '../Icon';
 import { Card } from '../Card';
 import { SectionHeader } from '../SectionHeader';
@@ -26,7 +27,7 @@ type ProgressTabProps = {
 export const ProgressTab = memo(function ProgressTab({ data, topInset }: ProgressTabProps) {
   const { t } = useTranslation('profile');
   const { t: tYou } = useTranslation('you');
-  const { systemColors, colorScheme, brandColors, variant } = useTheme();
+  const { systemColors, colorScheme, brandColors } = useTheme();
   const bottomChrome = useBottomChromeMetrics();
   const paddingBottom = bottomChrome.scrollBottomPadding + spacing[6];
 
@@ -72,13 +73,9 @@ export const ProgressTab = memo(function ProgressTab({ data, topInset }: Progres
       }
     >
       {/* The screen's identity, in-body under the floating chrome — collapses into
-          the header capsule as it scrolls up behind the glass. On Material the M3
-          app bar owns the title, so it's gated off there to avoid a doubled title. */}
-      {variant === 'material' ? null : (
-        <Text variant="largeTitle" style={styles.screenTitle}>
-          {dashboardTitle}
-        </Text>
-      )}
+          the header capsule as it scrolls up behind the glass. ScreenTitle hides
+          itself on Material (the M3 app bar owns the title). */}
+      <ScreenTitle style={styles.screenTitle}>{dashboardTitle}</ScreenTitle>
 
       {totalAscents === 0 ? (
         <View style={styles.empty}>

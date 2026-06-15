@@ -5,6 +5,7 @@
 import { useTranslation } from 'react-i18next';
 import { GlassIconButton } from '../GlassIconButton';
 import { useTheme } from '../../providers/theme-provider';
+import { selectByVariant } from '../../theme/variants';
 import { withAlpha } from '../../theme/colors';
 import { iosSystemColors } from '../../theme/ios-colors';
 import { glassSize } from '../../theme/layout';
@@ -25,9 +26,7 @@ export function FilterButton({ activeFilterCount, onPress, onLongPress }: Filter
   // glyph is low-contrast — use white there. Material has no tint behind the
   // glyph, so it keeps the violet (white would vanish on the bare surface).
   const iconColor = active
-    ? variant === 'material'
-      ? brandColors.primary
-      : iosSystemColors.white
+    ? selectByVariant(variant, { liquidGlass: iosSystemColors.white, material: brandColors.primary })
     : systemColors.secondaryLabel;
 
   return (

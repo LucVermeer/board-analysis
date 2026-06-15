@@ -13,6 +13,7 @@ import { track } from '../../../lib/analytics';
 import { Card } from '../../Card';
 import { SectionHeader } from '../../SectionHeader';
 import { Text } from '../../Text';
+import { ScreenTitle } from '../../ScreenTitle';
 import type { QueueItemRowBoard } from '../../QueueItemRow';
 import { useTheme } from '../../../providers/theme-provider';
 import { spacing } from '../../../theme/tokens';
@@ -191,15 +192,10 @@ export function PreSessionView({ showChrome = false }: PreSessionViewProps) {
   const canStart = activeBoard != null && !isStarting && generatorPreviewReady;
   // The single source of the Start capsule's bottom offset: passed to SessionStartFab
   // AND used for the list reservation, so the FAB position and the last-row clearance
-  // can't drift. Liquid Glass anchors to the raw safe-area inset; Material uses the
-  // fixed-footer reserve.
-  //
-  // Verified on-device (iPhone 17 Pro / iOS 26): with the native tab bar + climb
-  // accessory present, `useSafeAreaInsets().bottom` is 139 = home indicator (34) +
-  // tab bar (49) + accessory (56) — i.e. the glass tab bar DOES extend the UIKit safe
-  // area. `bottomChrome.fixedFooterBottom` adds the tab bar + accessory a second time
-  // (246), which strands the control ~110px up the screen — hence the raw inset here.
-  const footerBottom = variant === 'material' ? bottomChrome.fixedFooterBottom : insets.bottom;
+  // can't drift. The Material-vs-glass arbitration — with the on-device iPhone 17 Pro
+  // evidence for why glass uses the raw inset — lives in computeBottomChromeMetrics
+  // (see `preSessionFooterBottom`).
+  const footerBottom = bottomChrome.preSessionFooterBottom;
 
   // Inline status copy shown above an empty preview (loading / no results /
   // error). When rows are already present a rebuild keeps them mounted, so these
@@ -220,13 +216,9 @@ export function PreSessionView({ showChrome = false }: PreSessionViewProps) {
     () => (
       <View style={styles.header}>
         {/* The screen's identity in-body under the floating chrome, collapsing
-            into the centred header capsule as it scrolls up. On Material the
-            app bar owns the title, so the in-body large title is gated off. */}
-        {variant === 'material' ? null : (
-          <Text variant="largeTitle" style={styles.screenTitle}>
-            {t('mobile.session.headerStart')}
-          </Text>
-        )}
+            into the centred header capsule as it scrolls up. ScreenTitle hides
+            itself on Material (the M3 app bar owns the title). */}
+        <ScreenTitle style={styles.screenTitle}>{t('mobile.session.headerStart')}</ScreenTitle>
 
         {/* The chrome pill owns board identity but collapses on scroll, so this
             keeps the full config (name · size · angle) persistently visible when a

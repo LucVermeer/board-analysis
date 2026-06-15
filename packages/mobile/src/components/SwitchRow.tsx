@@ -5,6 +5,7 @@ import { hapticSelection } from '../lib/haptics';
 import { iosSystemColors } from '../theme/ios-colors';
 import { spacing } from '../theme/tokens';
 import { useTheme } from '../providers/theme-provider';
+import { selectByVariant } from '../theme/variants';
 
 type SwitchRowProps = {
   label: string;
@@ -42,29 +43,32 @@ export function SwitchRow({ label, description, value, onValueChange, disabled =
           </Text>
         ) : null}
       </View>
-      {uiVariant === 'material' ? (
+      {selectByVariant(uiVariant, {
         // The outer Pressable owns the toggle for the whole row. Paper's Switch is
         // a non-interactive visual indicator here (pointerEvents none, no
         // onValueChange) so a tap on the switch passes through to the row instead
         // of double-firing the toggle (Paper's Switch wraps its own Pressable,
         // which doesn't reliably absorb the touch the way the native RN Switch
         // does on the Liquid Glass path). It picks up M3 colours from PaperProvider.
-        <View pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-          <PaperSwitch value={value} disabled={disabled} />
-        </View>
-      ) : (
-        <RNSwitch
-          value={value}
-          onValueChange={handleToggle}
-          disabled={disabled}
-          // Filled track behind a white thumb — use the scheme-aware brand FILL so
-          // dark mode gets the brighter #7C3AED (white thumb 5.70:1). The lighter
-          // track also reduces the contrast of iOS's native track-edge highlight,
-          // which is what reads as a "white rim" on a dark, saturated switch.
-          trackColor={{ false: undefined, true: brandColors.primaryFill }}
-          ios_backgroundColor={iosSystemColors.systemGray4 as string}
-        />
-      )}
+        material: (
+          <View pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+            <PaperSwitch value={value} disabled={disabled} />
+          </View>
+        ),
+        liquidGlass: (
+          <RNSwitch
+            value={value}
+            onValueChange={handleToggle}
+            disabled={disabled}
+            // Filled track behind a white thumb — use the scheme-aware brand FILL so
+            // dark mode gets the brighter #7C3AED (white thumb 5.70:1). The lighter
+            // track also reduces the contrast of iOS's native track-edge highlight,
+            // which is what reads as a "white rim" on a dark, saturated switch.
+            trackColor={{ false: undefined, true: brandColors.primaryFill }}
+            ios_backgroundColor={iosSystemColors.systemGray4 as string}
+          />
+        ),
+      })}
     </Pressable>
   );
 }

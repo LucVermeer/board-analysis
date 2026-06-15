@@ -19,6 +19,7 @@ import { Icon } from '../../Icon';
 import { PressableSurface } from '../../PressableSurface';
 import { SectionHeader } from '../../SectionHeader';
 import { Text } from '../../Text';
+import { ScreenTitle } from '../../ScreenTitle';
 import { type IconName } from '../../icon-map';
 import { useTheme } from '../../../providers/theme-provider';
 import { useQueueSessionControls, useQueueActions, useQueueLiveStats } from '../../../providers/queue-provider';
@@ -230,7 +231,7 @@ export function InSessionView({
   screenHeight,
 }: InSessionViewProps) {
   const { t } = useTranslation('session');
-  const { systemColors, brandColors, variant } = useTheme();
+  const { systemColors, brandColors } = useTheme();
   const insets = useSafeAreaInsets();
   const bottomChrome = useBottomChromeMetrics();
   const router = useRouter();
@@ -416,13 +417,10 @@ export function InSessionView({
 
   const [isEnding, setIsEnding] = useState(false);
   // End moved to the top chrome's trailing slot, so the bottom edge keeps only the
-  // global current-climb chrome + tab bar (no third glass band). NativeTabs/Liquid
-  // Glass anchors to the raw UIKit safe-area inset (on iOS 26 it already includes
-  // the tab bar + native accessory — see the on-device evidence in PreSessionView).
-  // When the native accessory is unavailable, the JS queue capsule still floats
-  // above that inset, so add only its reserve and avoid double-counting the tab bar.
-  const listBottomPadding =
-    variant === 'material' ? bottomChrome.fixedFooterBottom : insets.bottom + bottomChrome.jsQueueReserve;
+  // global current-climb chrome + tab bar (no third glass band). The Material-vs-glass
+  // arbitration — and the tab-bar double-count it avoids — lives in
+  // computeBottomChromeMetrics (see `inSessionListBottom`).
+  const listBottomPadding = bottomChrome.inSessionListBottom;
 
   const handleConfirmEnd = useCallback(async () => {
     setIsEnding(true);
@@ -487,11 +485,7 @@ export function InSessionView({
           overlay header strip already names the screen, so it's hidden there. On
           Material the app bar owns the title, so the in-body large title is gated
           off there too. */}
-      {showChrome && variant !== 'material' ? (
-        <Text variant="largeTitle" style={styles.screenTitle}>
-          {t('mobile.session.headerActive')}
-        </Text>
-      ) : null}
+      {showChrome ? <ScreenTitle style={styles.screenTitle}>{t('mobile.session.headerActive')}</ScreenTitle> : null}
 
       <SessionPresenceRow users={sessionUsers} />
 

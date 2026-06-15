@@ -58,6 +58,25 @@ export type BottomChromeMetrics = {
    * footers clear only active queue/accessory chrome.
    */
   fixedFooterBottom: number;
+  /**
+   * Bottom padding for the in-session climb list. Material docks a fixed footer
+   * (clears active queue/accessory chrome via `fixedFooterBottom`); Liquid Glass
+   * floats, so the list clears the raw safe-area inset plus only the JS queue
+   * reserve — the glass tab bar already extends the UIKit inset, so adding the
+   * tab bar height again would double-count it.
+   */
+  inSessionListBottom: number;
+  /**
+   * Bottom offset for the pre-session Start capsule / footer. Material uses the
+   * fixed-footer reserve; Liquid Glass anchors to the raw safe-area inset.
+   *
+   * Verified on-device (iPhone 17 Pro / iOS 26): with the native tab bar + climb
+   * accessory present, the safe-area bottom inset is 139 = home indicator (34) +
+   * tab bar (49) + accessory (56) — the glass tab bar extends the UIKit safe area.
+   * `fixedFooterBottom` would add the tab bar + accessory a second time (246),
+   * stranding the control ~110px up the screen — hence the raw inset on glass.
+   */
+  preSessionFooterBottom: number;
 };
 
 /**
@@ -117,5 +136,7 @@ export function computeBottomChromeMetrics({
     scrollBottomPadding: insetsBottom + tabBarHeight + jsQueueReserve,
     floatingControlBottom: insetsBottom + tabBarHeight + Math.max(jsQueueReserve, nativeAccessoryReserve),
     fixedFooterBottom,
+    inSessionListBottom: uiVariant === 'material' ? fixedFooterBottom : insetsBottom + jsQueueReserve,
+    preSessionFooterBottom: uiVariant === 'material' ? fixedFooterBottom : insetsBottom,
   };
 }

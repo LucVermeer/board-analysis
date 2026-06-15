@@ -39,6 +39,9 @@ vi.mock('../../lib/haptics', () => ({
 
 vi.mock('../../providers/theme-provider', () => ({
   useTheme: () => ({
+    // createVariantComponent indexes impls[variant]; the old ternary tolerated an
+    // absent variant (fell through to the glass path), so pin it explicitly.
+    variant: 'liquidGlass',
     colorScheme: 'light',
     brandColors: { success: '#047857', error: '#C81E1E', primary: '#6D28D9', warning: '#B45309' },
     systemColors: { secondaryBackground: '#fff' },

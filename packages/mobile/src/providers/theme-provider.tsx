@@ -30,7 +30,16 @@ import {
 } from '../theme/tokens';
 import { springs, timing } from '../theme/animations';
 import { resolveUiVariant, type UiVariant } from '../theme/resolve-ui-variant';
+import {
+  resolveActionColors,
+  resolveChartColors,
+  sectionCaptionByVariant,
+  type ActionColors,
+  type ChartColors,
+  type SectionCaption,
+} from '../theme/variants/variant-tokens';
 import { secureStorePreferences } from '../lib/preferences/secure-store-adapter';
+import { assertNever } from '../lib/assert-never';
 
 type ColorScheme = 'light' | 'dark';
 
@@ -103,6 +112,18 @@ type Theme = {
    * roles, so use the `elevation.levelN` ladder for surface-container surfaces.
    */
   m3: MD3Theme['colors'];
+  /**
+   * Semantic foregrounds for action rows / action FABs, resolved per variant:
+   * monochrome (`systemColors.label`) on Liquid Glass, tinted by role on Material.
+   */
+  actionColors: ActionColors;
+  /**
+   * Plain-string colour palette for chart libraries (gifted-charts) that reject
+   * PlatformColor. Mirrors `systemColors` but is always hex/rgba.
+   */
+  chartColors: ChartColors;
+  /** Section-caption treatment (uppercase / opacity / letter-spacing), per variant. */
+  sectionCaption: SectionCaption;
 };
 
 const ThemeContext = createContext<Theme | null>(null);
@@ -117,34 +138,37 @@ const ThemeContext = createContext<Theme | null>(null);
  * androidFallbackColors light/dark map.
  */
 function resolveSystemColors(colorScheme: ColorScheme, variant: UiVariant): ResolvedSystemColors {
-  // Material variant: M3 tonal surfaces on every platform — including iOS 26
-  // hardware when the user explicitly chose Material. Drawn opaque (no glass),
-  // so we don't use PlatformColor here.
-  if (variant === 'material') {
-    return { ...materialSurfaces[colorScheme] };
+  switch (variant) {
+    // Material variant: M3 tonal surfaces on every platform — including iOS 26
+    // hardware when the user explicitly chose Material. Drawn opaque (no glass),
+    // so we don't use PlatformColor here.
+    case 'material':
+      return { ...materialSurfaces[colorScheme] };
+    case 'liquidGlass': {
+      if (Platform.OS === 'ios' && iosSystemColors) {
+        // PlatformColor values adapt automatically on iOS — return as-is.
+        return iosSystemColors as ResolvedSystemColors;
+      }
+      // Android: resolve from the single source of truth for fallback colors.
+      const fallback = colorScheme === 'dark' ? androidFallbackColors.dark : androidFallbackColors.light;
+      return {
+        background: fallback.background,
+        secondaryBackground: fallback.secondaryBackground,
+        tertiaryBackground: fallback.tertiaryBackground,
+        groupedBackground: fallback.groupedBackground,
+        elevatedSurface: fallback.elevatedSurface,
+        label: fallback.label,
+        secondaryLabel: fallback.secondaryLabel,
+        tertiaryLabel: fallback.tertiaryLabel,
+        separator: fallback.separator,
+        fill: fallback.fill,
+        accent: fallback.accent,
+      };
+    }
+    // A new UiVariant must declare how its system colours resolve.
+    default:
+      return assertNever(variant);
   }
-
-  if (Platform.OS === 'ios' && iosSystemColors) {
-    // PlatformColor values adapt automatically on iOS — return as-is.
-    return iosSystemColors as ResolvedSystemColors;
-  }
-
-  // Android: resolve from the single source of truth for fallback colors.
-  const fallback = colorScheme === 'dark' ? androidFallbackColors.dark : androidFallbackColors.light;
-
-  return {
-    background: fallback.background,
-    secondaryBackground: fallback.secondaryBackground,
-    tertiaryBackground: fallback.tertiaryBackground,
-    groupedBackground: fallback.groupedBackground,
-    elevatedSurface: fallback.elevatedSurface,
-    label: fallback.label,
-    secondaryLabel: fallback.secondaryLabel,
-    tertiaryLabel: fallback.tertiaryLabel,
-    separator: fallback.separator,
-    fill: fallback.fill,
-    accent: fallback.accent,
-  };
 }
 
 /**
@@ -265,11 +289,12 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
 
   const theme = useMemo<Theme>(() => {
     const resolvedSystemColors = resolveSystemColors(colorScheme, variant);
+    const resolvedBrandColors = resolveBrandColors(colorScheme);
 
     return {
       colorScheme,
       systemColors: resolvedSystemColors,
-      brandColors: resolveBrandColors(colorScheme),
+      brandColors: resolvedBrandColors,
       textStyles: textStylesByVariant[variant],
       spacing,
       borderRadius,
@@ -285,6 +310,14 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
       radii: radiiByVariant[variant],
       sheet: sheetChromeByVariant[variant],
       m3: m3Colors,
+      actionColors: resolveActionColors(variant, {
+        label: resolvedSystemColors.label,
+        accent: resolvedSystemColors.accent,
+        brandSuccess: resolvedBrandColors.success,
+        brandPrimary: resolvedBrandColors.primary,
+      }),
+      chartColors: resolveChartColors(variant, colorScheme),
+      sectionCaption: sectionCaptionByVariant[variant],
     };
   }, [colorScheme, variant, themeOverride, setThemeOverride, uiVariantPreference, setUiVariant, m3Colors]);
 

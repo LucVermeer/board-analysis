@@ -3,6 +3,7 @@ import { Text } from './Text';
 import { Icon } from './Icon';
 import { PressableSurface } from './PressableSurface';
 import { useTheme } from '../providers/theme-provider';
+import { selectByVariant } from '../theme/variants';
 import { spacing, borderRadius } from '../theme/tokens';
 
 type StepperProps = {
@@ -26,7 +27,7 @@ function clampStepperValue(value: number, min: number, max: number): number {
  */
 export function Stepper({ label, value, min, max, onChange, decreaseLabel, increaseLabel }: StepperProps) {
   const { systemColors, brandColors, opacity: themeOpacity, variant, m3 } = useTheme();
-  const isMaterial = variant === 'material';
+  const isMaterial = selectByVariant(variant, { material: true, liquidGlass: false });
   const decrementDisabled = value <= min;
   const incrementDisabled = value >= max;
 

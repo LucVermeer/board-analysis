@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render } from '@testing-library/react';
 import { createElement, type ReactNode } from 'react';
 
-const ctrl = vi.hoisted(() => ({ variant: 'glass' as 'glass' | 'material', nativeGlass: true }));
+const ctrl = vi.hoisted(() => ({ variant: 'liquidGlass' as 'liquidGlass' | 'material', nativeGlass: true }));
 // Captures the props the Material FAB and the glass capsule's surface/pressable
 // receive so the test can assert variant routing + the tinted-glass contract.
 const fab = vi.hoisted(() => ({ props: null as Record<string, unknown> | null }));
@@ -99,7 +99,7 @@ function makeProps(over: Partial<Parameters<typeof SessionStartFab>[0]> = {}) {
 }
 
 beforeEach(() => {
-  ctrl.variant = 'glass';
+  ctrl.variant = 'liquidGlass';
   ctrl.nativeGlass = true;
   fab.props = null;
   glass.props = null;
