@@ -252,7 +252,7 @@ describe('findInstagramShortcodeConflict', () => {
       'climb-1',
       'https://www.instagram.com/reel/ABC123xyz/',
     );
-    expect(result).toEqual({ kind: 'cross-climb', climbName: 'The Project' });
+    expect(result).toEqual({ kind: 'cross-climb', climbName: 'The Project', existingBoardType: 'kilter' });
   });
 
   it('falls back to "another climb" if the conflicting row has a null climb name', async () => {
@@ -263,7 +263,7 @@ describe('findInstagramShortcodeConflict', () => {
       'climb-1',
       'https://www.instagram.com/reel/ABC123xyz/',
     );
-    expect(result).toEqual({ kind: 'cross-climb', climbName: 'another climb' });
+    expect(result).toEqual({ kind: 'cross-climb', climbName: 'another climb', existingBoardType: 'kilter' });
   });
 
   it('returns cross-climb when both same-climb and other-climb rows exist (order-independent)', async () => {
@@ -282,7 +282,7 @@ describe('findInstagramShortcodeConflict', () => {
       'climb-1',
       'https://www.instagram.com/reel/ABC123xyz/',
     );
-    expect(result).toEqual({ kind: 'cross-climb', climbName: 'Other Climb' });
+    expect(result).toEqual({ kind: 'cross-climb', climbName: 'Other Climb', existingBoardType: 'kilter' });
   });
 
   it('returns cross-climb for the same climb uuid on a different board type', async () => {
@@ -293,7 +293,7 @@ describe('findInstagramShortcodeConflict', () => {
       'climb-1',
       'https://www.instagram.com/reel/ABC123xyz/',
     );
-    expect(result).toEqual({ kind: 'cross-climb', climbName: 'Same UUID Elsewhere' });
+    expect(result).toEqual({ kind: 'cross-climb', climbName: 'Same UUID Elsewhere', existingBoardType: 'tension' });
   });
 
   it('returns none when no rows match', async () => {
@@ -311,7 +311,7 @@ describe('findInstagramShortcodeConflict', () => {
     const { findBetaLinkIdentityConflict } = await import('../graphql/resolvers/ticks/mutations');
     stubDbReturning([{ climbName: 'The Project', climbUuid: 'climb-other' }]);
     const result = await findBetaLinkIdentityConflict('kilter', 'climb-1', 'https://www.tiktok.com/@user/video/12345');
-    expect(result).toEqual({ kind: 'cross-climb', climbName: 'The Project' });
+    expect(result).toEqual({ kind: 'cross-climb', climbName: 'The Project', existingBoardType: 'kilter' });
   });
 
   it('returns none for TikTok URLs when no identity rows match', async () => {

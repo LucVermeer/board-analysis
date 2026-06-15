@@ -41,7 +41,10 @@ export function videoUrlForTickStatus(status: TickStatus, videoUrl: string | nul
   }
 }
 
-export type ShortcodeConflict = { kind: 'none' } | { kind: 'same-climb' } | { kind: 'cross-climb'; climbName: string };
+export type ShortcodeConflict =
+  | { kind: 'none' }
+  | { kind: 'same-climb' }
+  | { kind: 'cross-climb'; climbName: string; existingBoardType: string };
 
 // Looks up whether the same canonical video is already attached anywhere.
 // Returns a structured result so each caller can decide how to handle
@@ -98,15 +101,19 @@ export async function findBetaLinkIdentityConflict(
       sawSameClimb = true;
       continue;
     }
-    return { kind: 'cross-climb', climbName: entry.climbName ?? 'another climb' };
+    return { kind: 'cross-climb', climbName: entry.climbName ?? 'another climb', existingBoardType: entry.boardType };
   }
   if (sawSameClimb) return { kind: 'same-climb' };
   return { kind: 'none' };
 }
 
 const SAME_CLIMB_DUP_MESSAGE = 'We already have this video linked for this climb. Try a different post or reel.';
-const crossClimbDupMessage = (otherClimbName: string): string =>
-  `This video is already attached to "${otherClimbName}". Multi-climb videos are hard to navigate - please post a separate clip for this climb and share that one instead.`;
+const crossClimbDupMessage = (otherClimbName: string, existingBoardType: string, requestedBoardType: string): string => {
+  if (existingBoardType !== requestedBoardType) {
+    return `This video is already attached to "${otherClimbName}" on a different board. A video can only belong to one climb across all boards — please post a separate clip for this climb.`;
+  }
+  return `This video is already attached to "${otherClimbName}". Multi-climb videos are hard to navigate - please post a separate clip for this climb and share that one instead.`;
+};
 
 type EnrichedBetaInsert = {
   thumbnail: string | null;
@@ -194,7 +201,7 @@ export async function validateAndEnrichBetaLinkInsert(
 
   const conflict = await findBetaLinkIdentityConflict(boardType, climbUuid, url);
   if (conflict.kind === 'cross-climb') {
-    throw new InstagramBetaValidationError(crossClimbDupMessage(conflict.climbName));
+    throw new InstagramBetaValidationError(crossClimbDupMessage(conflict.climbName, conflict.existingBoardType, boardType));
   }
   if (conflict.kind === 'same-climb') {
     if (options.onSameClimbDup === 'throw') {
@@ -221,7 +228,7 @@ type BetaLinkTickContext = {
 const tickClimbAlias = aliasedTable(dbSchema.boardClimbAliases, 'beta_link_tick_climb_alias');
 const inputClimbAlias = aliasedTable(dbSchema.boardClimbAliases, 'beta_link_input_climb_alias');
 
-async function resolveBetaLinkTickContext(
+export async function resolveBetaLinkTickContext(
   input: { boardType: string; climbUuid: string; angle?: number | null; tickUuid?: string | null },
   userId: string,
 ): Promise<BetaLinkTickContext> {
@@ -642,6 +649,12 @@ export const tickMutations = {
     const normalizedLink = normalizeBetaVideoUrl(validated.link);
     const userId = ctx.userId!;
     const now = new Date().toISOString();
+
+    // Gate the tick-context DB probe with the write budget so an authenticated
+    // caller cannot enumerate tick UUIDs by watching error variants without
+    // consuming any budget. validateAndEnrichBetaLinkInsert also calls
+    // applyRateLimit (burning a second unit) — both burns are intentional.
+    await applyRateLimit(ctx, 30, 'beta-link-validation');
     const tickContext = await resolveBetaLinkTickContext(validated, userId);
 
     // Validation runs first — it's an outbound HTTP fetch we don't want to

@@ -649,17 +649,28 @@ export const boardBetaLinks = pgTable(
     // Optional direct ascent this beta was attached to. Legacy rows can stay
     // null and are still matched by climb/angle/user heuristics on read.
     //
-    // FK managed manually in migration `0128_direct_beta_tick_links.sql`:
-    // `board_beta_links_tick_uuid_boardsesh_ticks_uuid_fk` references
-    // `boardsesh_ticks(uuid) ON DELETE SET NULL`. It is not declared here
-    // because this boards schema avoids cross-package FKs to app tables.
+    // ⚠️ FK managed manually — there's a foreign key
+    //   `board_beta_links_tick_uuid_boardsesh_ticks_uuid_fk`
+    //   referencing `boardsesh_ticks(uuid) ON DELETE SET NULL`, added in
+    //   migration `0128_direct_beta_tick_links.sql`. It is NOT declared via
+    //   `.references()` here because this schema avoids cross-package FKs.
+    //   Drizzle-kit's snapshot does NOT know about this FK. The next
+    //   `drizzle-kit generate` run against this table may emit SQL that
+    //   drops it — always review generated migrations for this column.
     tickUuid: text('tick_uuid'),
     // Optional physical board this beta was recorded on. Set alongside
     // tickUuid when the ascent has a resolved user_boards row.
+    // Stored as bigint in Postgres; exposed as GraphQL Int (safe for
+    // auto-increment IDs that fit in 32 bits, but not the general case).
     //
-    // FK managed manually in migration `0128_direct_beta_tick_links.sql`:
-    // `board_beta_links_board_id_user_boards_id_fk` references
-    // `user_boards(id) ON DELETE SET NULL`.
+    // ⚠️ FK managed manually — there's a foreign key
+    //   `board_beta_links_board_id_user_boards_id_fk`
+    //   referencing `user_boards(id) ON DELETE SET NULL`, added in
+    //   migration `0128_direct_beta_tick_links.sql`. It is NOT declared via
+    //   `.references()` here to avoid cross-package FKs.
+    //   Drizzle-kit's snapshot does NOT know about this FK. The next
+    //   `drizzle-kit generate` run may emit SQL that drops it — always
+    //   review generated migrations for this column.
     boardId: bigint('board_id', { mode: 'number' }),
     // Platform-stable identifier extracted from `link` at write time.
     // Currently only populated for Instagram URLs (the post/reel shortcode);

@@ -63,6 +63,9 @@ export const AttachBetaLinkInputSchema = z.object({
   boardType: BoardNameSchema,
   climbUuid: ExternalUUIDSchema,
   link: z.string().max(500).regex(BETA_VIDEO_URL_REGEX, BETA_VIDEO_URL_VALIDATION_MESSAGE),
+  // When tickUuid is provided the stored angle comes from the resolved tick,
+  // not from this field. Clients may omit angle in that case. If both are
+  // supplied and disagree, the resolver throws BETA_LINK_TICK_MISMATCH.
   angle: z.number().int().min(0).max(90).optional().nullable(),
   tickUuid: UUIDSchema.optional().nullable(),
 });

@@ -180,6 +180,38 @@ describe('betaLinkIdentity', () => {
     const b = 'https://instagram.com/reel/SameId/?utm_source=share';
     expect(betaLinkIdentity(a)).toBe(betaLinkIdentity(b));
   });
+
+  // Alignment contract with migration 0128_direct_beta_tick_links.sql:
+  //   SQL Instagram regex: (www\.)?(instagram\.com|instagr\.am)/(p|reel|tv)/([[:alnum:]_-]+)/...
+  //     → shortcode is captured in SQL group 4; stored as 'instagram:' || match[4]
+  //   TS: non-capturing (?:www\.)?(?:...\.com)\/(?:p|reel|tv)\/([\w-]+)
+  //     → shortcode is group 1; identity = 'instagram:' + match[1]
+  //   Both extract the same shortcode string, so identities match.
+  //
+  //   SQL TikTok regex: ([a-z0-9-]+\.)*tiktok\.com/@...\/video\/([0-9]+)
+  //     → video id is captured in SQL group 2; stored as 'tiktok:' || match[2]
+  //   TS: non-capturing (?:[a-z0-9-]+\.)*tiktok\.com\/@[\w.-]+\/video\/(\d+)
+  //     → video id is group 1; identity = 'tiktok:' + match[1]
+  //   Both extract the same video id string, so identities match.
+  describe('SQL migration alignment', () => {
+    it('Instagram identity matches what SQL backfill group 4 would produce', () => {
+      expect(betaLinkIdentity('https://www.instagram.com/reel/CAbCdEfGhIj/')).toBe('instagram:CAbCdEfGhIj');
+      expect(betaLinkIdentity('https://instagr.am/p/Xyz123/')).toBe('instagram:Xyz123');
+      expect(betaLinkIdentity('https://www.instagram.com/tv/AbCdE12/')).toBe('instagram:AbCdE12');
+    });
+
+    it('TikTok identity matches what SQL backfill group 2 would produce', () => {
+      expect(betaLinkIdentity('https://www.tiktok.com/@some.user/video/7359000000000000000')).toBe(
+        'tiktok:7359000000000000000',
+      );
+      expect(betaLinkIdentity('https://tiktok.com/@climber/video/1234567890')).toBe('tiktok:1234567890');
+    });
+
+    it('raw: prefix matches what the SQL ELSE branch would produce', () => {
+      const url = 'https://vm.tiktok.com/ZShortcode/';
+      expect(betaLinkIdentity(url)).toBe(`raw:${url}`);
+    });
+  });
 });
 
 function makeLink(overrides: Partial<BetaLink> = {}): BetaLink {
