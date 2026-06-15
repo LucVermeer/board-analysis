@@ -63,13 +63,30 @@ const BOT_LOGINS = new Set([
   'allcontributors',
 ]);
 
+// AI coding assistants that author co-authored commits and so surface in the
+// contributor graph as plain users. They're the tools, not the crew — so they're
+// filtered out of the human thank-you list.
+const AI_LOGINS = new Set([
+  'claude',
+  'codex',
+  'devin',
+  'devin-ai-integration',
+  'copilot',
+  'github-copilot',
+  'cursor',
+  'cursoragent',
+  'chatgpt',
+  'openai',
+  'anthropic',
+]);
+
 export function isBotContributor(raw: RawContributor): boolean {
   if ((raw.type ?? '').toLowerCase() === 'bot') return true;
   const login = (raw.login ?? '').toLowerCase();
   if (!login) return true;
   if (login.endsWith('[bot]')) return true;
   if (login.endsWith('-bot')) return true;
-  return BOT_LOGINS.has(login);
+  return BOT_LOGINS.has(login) || AI_LOGINS.has(login);
 }
 
 export function transformContributors(raw: RawContributor[], names: Record<string, string | null> = {}): Contributor[] {

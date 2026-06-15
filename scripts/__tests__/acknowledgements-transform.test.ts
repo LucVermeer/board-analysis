@@ -18,6 +18,12 @@ describe('isBotContributor', () => {
     expect(isBotContributor({ login: 'some-bot', type: 'User' })).toBe(true);
   });
 
+  it('flags AI coding assistants that commit as users', () => {
+    expect(isBotContributor({ login: 'claude', type: 'User' })).toBe(true);
+    expect(isBotContributor({ login: 'Codex', type: 'User' })).toBe(true);
+    expect(isBotContributor({ login: 'devin-ai-integration', type: 'User' })).toBe(true);
+  });
+
   it('keeps real people', () => {
     expect(isBotContributor({ login: 'marcodejongh', type: 'User' })).toBe(false);
   });
