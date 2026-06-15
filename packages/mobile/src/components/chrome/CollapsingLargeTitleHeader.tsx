@@ -13,10 +13,15 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../providers/theme-provider';
 import { spacing } from '../../theme/tokens';
 import { Text } from '../Text';
+import { GlassSurface } from '../GlassSurface';
 import { ProgressiveBlur } from '../ProgressiveBlur';
 import { TOP_ACTION_SIZE } from './GlassActionToolbar';
 
 const ROW_GUTTER = spacing[4];
+// The inline title's own frosted backing — the progressive blur has faded by the
+// title band, so a small glass chip keeps the text legible over busy content.
+const INLINE_TITLE_HEIGHT = 30;
+const INLINE_TITLE_RADIUS = INLINE_TITLE_HEIGHT / 2;
 // The centre content hands off to the optional plain inline title over this
 // scroll distance: the centred content fades out, the inline title fades in.
 export const COLLAPSE_START = 6;
@@ -135,15 +140,26 @@ export function CollapsingLargeTitleHeader({
             scroll-to-top. */}
         {hasInlineTitle ? (
           <Animated.View pointerEvents="none" style={[styles.centerAnchor, inlineTitleStyle]}>
-            <Text
-              variant="headline"
-              numberOfLines={1}
-              ellipsizeMode="tail"
-              color={systemColors.label}
-              style={styles.inlineTitle}
-            >
-              {collapsedInlineTitle}
-            </Text>
+            <View style={styles.inlineTitleBacking}>
+              {/* A frosted chip behind the title keeps it legible — the progressive
+                  blur has faded to near-clear by this band. */}
+              <GlassSurface
+                glassEffectStyle="regular"
+                fallbackColor={systemColors.elevatedSurface}
+                borderRadius={INLINE_TITLE_RADIUS}
+                style={StyleSheet.absoluteFill}
+                pointerEvents="none"
+              />
+              <Text
+                variant="headline"
+                numberOfLines={1}
+                ellipsizeMode="tail"
+                color={systemColors.label}
+                style={styles.inlineTitle}
+              >
+                {collapsedInlineTitle}
+              </Text>
+            </View>
           </Animated.View>
         ) : null}
 
@@ -205,11 +221,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  inlineTitleBacking: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: INLINE_TITLE_HEIGHT,
+    borderRadius: INLINE_TITLE_RADIUS,
+    paddingHorizontal: spacing[3],
+    overflow: 'hidden',
+    // Keep a long title clear of the left/right islands.
+    maxWidth: 200,
+  },
   inlineTitle: {
     fontWeight: '600',
     flexShrink: 1,
-    // Keep a long title clear of the left/right islands.
-    maxWidth: 180,
     textAlign: 'center',
   },
 });
