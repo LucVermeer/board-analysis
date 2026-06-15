@@ -145,6 +145,23 @@ vi.mock('@/app/components/persistent-session', () => ({
   usePersistentSessionState: () => mockPersistentSessionState,
 }));
 
+// Board-presence controls. Default inert (boardId null), matching the real
+// DISABLED_CONTROLS fallback when no provider is mounted, so existing tests are
+// unaffected. A test can set mockPresenceBoardId to assert the BLE-drop holder
+// release. `useOptionalWallReport` stays inert (no wall reports in these tests).
+let mockPresenceBoardId: number | null = null;
+const mockReportBoardDisconnect = vi.fn().mockResolvedValue(true);
+const mockResolveAndBindBoard = vi.fn().mockResolvedValue(null);
+vi.mock('../../board-presence/board-presence-context', () => ({
+  useBoardPresenceControls: () => ({
+    enabled: false,
+    boardId: mockPresenceBoardId,
+    resolveAndBindBoard: mockResolveAndBindBoard,
+    reportDisconnect: mockReportBoardDisconnect,
+  }),
+  useOptionalWallReport: () => ({ currentClimb: null, previousClimb: null, reportClimb: vi.fn() }),
+}));
+
 let mockCurrentClimbQueueItem: {
   climb: { uuid: string; frames: string; mirrored: boolean };
 } | null = null;
@@ -204,6 +221,8 @@ describe('BluetoothProvider', () => {
     lastMismatchProps = null;
     mockAuth = { token: null, isAuthenticated: false };
     mockResolveSerialNumbers.mockResolvedValue(new Map());
+    mockPresenceBoardId = null;
+    mockReportBoardDisconnect.mockResolvedValue(true);
     mockPersistentSessionState = { session: null };
     mockConfirmClimbOnWall.mockResolvedValue(undefined);
     mockSetSessionBoardSerial.mockResolvedValue(undefined);
@@ -1114,6 +1133,35 @@ describe('BluetoothProvider', () => {
       });
 
       expect(mockReportWallDisconnect).not.toHaveBeenCalled();
+    });
+
+    it('releases the board-presence holder on BLE drop when bound to a board (even solo)', async () => {
+      // Independent of session membership: a dropped BLE link must free the
+      // board-presence holder, or the lightbulb's holder OR keeps it lit.
+      mockPersistentSessionState = { session: null };
+      mockPresenceBoardId = 123;
+
+      renderHook(() => useBluetoothContext(), { wrapper: createWrapper() });
+
+      await act(async () => {
+        lastUseBoardBluetoothOptions?.onConnectionChange?.(false);
+        await Promise.resolve();
+      });
+
+      expect(mockReportBoardDisconnect).toHaveBeenCalledWith(123);
+    });
+
+    it('does not release the board-presence holder when no board is bound', async () => {
+      mockPresenceBoardId = null;
+
+      renderHook(() => useBluetoothContext(), { wrapper: createWrapper() });
+
+      await act(async () => {
+        lastUseBoardBluetoothOptions?.onConnectionChange?.(false);
+        await Promise.resolve();
+      });
+
+      expect(mockReportBoardDisconnect).not.toHaveBeenCalled();
     });
   });
 

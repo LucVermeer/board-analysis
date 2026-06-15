@@ -5,9 +5,10 @@
 // one the persistent-session provider uses) to the injected
 // `BoardPresenceClient` interface, running the board-presence operations over
 // the wire: the live subscription (BOARD_NOW_PLAYING), the late-joiner backfill
-// + stats queries, REPORT_BOARD_CLIMB, and the serial/config/uuid resolvers. It
-// deliberately omits the optional holder ops (fetchConnection / reportDisconnect)
-// — web degrades to "no holder", which the optional interface methods model.
+// + stats queries, REPORT_BOARD_CLIMB, REPORT_BOARD_DISCONNECT (holder release
+// on BLE drop, matching mobile), and the serial/config/uuid resolvers. It still
+// omits the optional `fetchConnection` holder backfill — web degrades to "no
+// seeded holder on cold join", which the optional interface method models.
 //
 // Mirrors the mobile `createMobileBoardPresenceClient` (and how the
 // persistent-session provider runs its subscriptions / mutations), reusing the
@@ -20,6 +21,7 @@ import {
   BOARD_PRESENCE_STATS,
   BOARD_RECENT_CLIMBS,
   REPORT_BOARD_CLIMB,
+  REPORT_BOARD_DISCONNECT,
   RESOLVE_BOARD_FOR_CONFIG,
   RESOLVE_BOARD_FOR_SERIAL,
 } from '@boardsesh/graphql/operations/board-presence';
@@ -36,6 +38,7 @@ type BoardNowPlayingData = { boardNowPlaying: BoardPresenceEvent };
 type BoardRecentClimbsData = { boardRecentClimbs: BoardPresenceClimb[] };
 type BoardPresenceStatsData = { boardPresenceStats: BoardPresenceStats };
 type ReportBoardClimbData = { reportBoardClimb: boolean };
+type ReportBoardDisconnectData = { reportBoardDisconnect: boolean };
 type ResolveBoardForSerialData = { resolveBoardForSerial: ResolvedBoard };
 type ResolveBoardForConfigData = { resolveBoardForConfig: ResolvedBoard };
 
@@ -100,6 +103,14 @@ export function createWebBoardPresenceClient(getClient: () => Client): WebBoardP
         variables: { boardId, climb, angle },
       });
       return data.reportBoardClimb === true;
+    },
+
+    async reportDisconnect(boardId) {
+      const data = await execute<ReportBoardDisconnectData>(getClient(), {
+        query: REPORT_BOARD_DISCONNECT,
+        variables: { boardId },
+      });
+      return data.reportBoardDisconnect === true;
     },
 
     async resolveBoardForSerial(args) {

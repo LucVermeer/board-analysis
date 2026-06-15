@@ -367,23 +367,16 @@ export function BluetoothProvider({
   const reportWallDisconnectRef = useRef(reportWallDisconnect);
   reportWallDisconnectRef.current = reportWallDisconnect;
 
-  // When this client's own BLE link to the wall drops while in a session,
-  // tell the session so every member's wall-confirmed lightbulb clears. The
-  // `connected` flag is false on an involuntary drop (gattserverdisconnected)
-  // AND on an explicit user disconnect; both should clear the shared
-  // indicator, since either way this client is no longer driving the wall.
-  // No-op in solo (reportWallDisconnect short-circuits with no active session).
-  const handleConnectionChange = useCallback((connected: boolean) => {
-    if (connected) return;
-    if (!sessionIdRef.current) return;
-    void reportWallDisconnectRef.current();
-  }, []);
-
   // Board presence ("now on the wall"). All of these are inert when the
   // `board-presence` flag is off: `enabled` is false, `boardId` is null,
   // `resolveAndBindBoard` no-ops, and the safe wall-report no-ops for a null
   // board — so the BLE flow below behaves exactly as today.
-  const { enabled: presenceEnabled, boardId: presenceBoardId, resolveAndBindBoard } = useBoardPresenceControls();
+  const {
+    enabled: presenceEnabled,
+    boardId: presenceBoardId,
+    resolveAndBindBoard,
+    reportDisconnect: reportBoardDisconnect,
+  } = useBoardPresenceControls();
   const { currentClimb: currentWallClimb, reportClimb: reportWallClimb } = useOptionalWallReport();
   // Live refs so the connect / wall-confirm callbacks stay identity-stable while
   // still reading the latest flag / board / report fn.
@@ -393,6 +386,27 @@ export function BluetoothProvider({
   presenceBoardIdRef.current = presenceBoardId;
   const resolveAndBindBoardRef = useRef(resolveAndBindBoard);
   resolveAndBindBoardRef.current = resolveAndBindBoard;
+  const reportBoardDisconnectRef = useRef(reportBoardDisconnect);
+  reportBoardDisconnectRef.current = reportBoardDisconnect;
+
+  // When this client's own BLE link to the wall drops, release both signals,
+  // matching mobile's releaseBoardHolder: (1) the session-scoped
+  // `reportWallDisconnect` so every member's wall-confirmed lightbulb clears
+  // (no-op in solo), and (2) the board-presence holder via `reportDisconnect`
+  // so the "who's on the wall" holder doesn't go stale (else the lightbulb's
+  // board-presence-holder OR keeps it lit after we've dropped). The `connected`
+  // flag is false on an involuntary drop (gattserverdisconnected) AND an
+  // explicit user disconnect; both should release.
+  const handleConnectionChange = useCallback((connected: boolean) => {
+    if (connected) return;
+    if (sessionIdRef.current) {
+      void reportWallDisconnectRef.current();
+    }
+    const boardId = presenceBoardIdRef.current;
+    if (boardId !== null) {
+      void reportBoardDisconnectRef.current(boardId);
+    }
+  }, []);
   const reportWallClimbRef = useRef(reportWallClimb);
   reportWallClimbRef.current = reportWallClimb;
   const currentWallClimbRef = useRef<BoardPresenceClimb | null>(currentWallClimb);
