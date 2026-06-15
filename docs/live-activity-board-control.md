@@ -37,16 +37,16 @@ The widget extension **cannot** hold a CoreBluetooth connection (extensions have
 The flow for lock-screen LED control:
 
 ```
-Widget (lightbulb take-control tap)
+Widget (lightbulb tap)
   │ system invokes LiveActivityIntent
   ▼
 Main app process (background-launched if needed)
   │ LiveActivityIntent.perform() runs here, not in the widget
   │ POSTs to /api/widget/take-control with the registered Live Activity token
-  │ on success, saves local wall-control state in App Group UserDefaults
-  │ updates ActivityKit so the lightbulb turns on and navigation enables
+  │ the endpoint re-asserts the session's current climb (no driver to claim)
+  │ updates ActivityKit so the lightbulb turns on
   ▼
-Next/Previous taps are now allowed on this device
+Navigation is always available — sessions are always-live, any member may navigate
 
 Widget (Next/Previous tap)
   │ system invokes LiveActivityIntent

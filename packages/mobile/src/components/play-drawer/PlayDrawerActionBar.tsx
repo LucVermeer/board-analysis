@@ -22,7 +22,15 @@ type PlayDrawerActionBarProps = {
   supportsMirroring: boolean;
   isFavorited: boolean;
   remainingQueueCount: number;
+  /** Filled/lit visual — OR'd in the parent (this device's BLE, a board-presence
+   *  holder, or the session wall-lit signal). Visual only. */
   lightbulbActive: boolean;
+  /** Whether THIS device's BLE link is connected. Drives the tap action's
+   *  meaning, so it also drives the accessibility label + selected state:
+   *  connected → tapping disconnects ("turn off"); not connected → tapping
+   *  connects ("connect board"). Distinct from `lightbulbActive`, which a peer
+   *  can light. */
+  lightbulbConnected: boolean;
   lightbulbPending?: boolean;
   lightbulbAccessibilityLabel?: string;
   lightbulbLongPressAccessibilityHint?: string;
@@ -51,6 +59,7 @@ export const PlayDrawerActionBar = memo(function PlayDrawerActionBar({
   isFavorited,
   remainingQueueCount,
   lightbulbActive,
+  lightbulbConnected,
   lightbulbPending = false,
   lightbulbAccessibilityLabel,
   lightbulbLongPressAccessibilityHint,
@@ -165,12 +174,13 @@ export const PlayDrawerActionBar = memo(function PlayDrawerActionBar({
         <View style={drawerActionBarStyles.primarySlot}>
           <BleLightbulbButton
             isConnected={lightbulbActive}
+            accessibilitySelected={lightbulbConnected}
             isScanning={lightbulbPending}
             onPress={onLightbulb}
             onLongPress={lightbulbLongPressEnabled ? onLightbulbLongPress : undefined}
             accessibilityLabel={
               lightbulbAccessibilityLabel ??
-              (lightbulbActive ? tSettings('ble.relightBoard') : tSettings('ble.connectBoard'))
+              (lightbulbConnected ? tSettings('ble.turnOff') : tSettings('ble.connectBoard'))
             }
             scanningAccessibilityHint={tSettings('ble.scanning')}
             longPressAccessibilityHint={
