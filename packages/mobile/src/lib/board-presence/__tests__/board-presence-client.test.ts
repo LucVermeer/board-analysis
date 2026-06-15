@@ -93,6 +93,31 @@ describe('createMobileBoardPresenceClient', () => {
     expect(climbs).toEqual([]);
   });
 
+  it('fetches durable history, forwarding limit + before and unwrapping boardHistory', async () => {
+    const history = [makeClimb('h1'), makeClimb('h2')];
+    transport.execute.mockResolvedValue({ boardHistory: history });
+
+    const climbs = await createMobileBoardPresenceClient(getClient).fetchHistory?.(7, { limit: 25, before: '900' });
+
+    expect(climbs).toEqual(history);
+    const [passedClient, operation] = transport.execute.mock.calls[0];
+    expect(passedClient).toBe(fakeClient);
+    expect(operation.variables).toEqual({ boardId: 7, limit: 25, before: '900' });
+    expect(operation.query).toContain('boardHistory');
+  });
+
+  it('defaults history limit + before to null when no paging opts are given', async () => {
+    transport.execute.mockResolvedValue({ boardHistory: [] });
+    await createMobileBoardPresenceClient(getClient).fetchHistory?.(7);
+    expect(transport.execute.mock.calls[0][1].variables).toEqual({ boardId: 7, limit: null, before: null });
+  });
+
+  it('falls back to an empty array when boardHistory is missing', async () => {
+    transport.execute.mockResolvedValue({});
+    const climbs = await createMobileBoardPresenceClient(getClient).fetchHistory?.(7);
+    expect(climbs).toEqual([]);
+  });
+
   it('fetches stats and unwraps the boardPresenceStats field', async () => {
     const stats = {
       climbsSentCount: 3,
