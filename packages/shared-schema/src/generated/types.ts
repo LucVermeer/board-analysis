@@ -3335,6 +3335,8 @@ export type PublicUserProfile = {
   followingCount: Scalars['Int']['output'];
   /** User ID */
   id: Scalars['ID']['output'];
+  /** Instagram profile URL, if the user has set one */
+  instagramUrl?: Maybe<Scalars['String']['output']>;
   /** Whether the current user follows this user */
   isFollowedByMe: Scalars['Boolean']['output'];
 };
@@ -8399,6 +8401,7 @@ export type PublicUserProfileResolvers<
   followerCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   followingCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   id?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
+  instagramUrl?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   isFollowedByMe?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
