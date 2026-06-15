@@ -80,32 +80,31 @@ const participant = (overrides: Partial<SessionFeedParticipant>): SessionFeedPar
 });
 
 describe('SessionLeaderboard', () => {
-  it('marks the driver by database user id after participant id mapping', () => {
+  it('ranks climbers by sends and renders no driver badge (always-live, no driver)', () => {
     const participants = [
       participant({ userId: 'db-user-1', displayName: 'Ari', sends: 2 }),
       participant({ userId: 'db-user-2', displayName: 'Bo', sends: 1 }),
     ];
 
-    const { container } = render(
-      <SessionLeaderboard participants={participants} driverUserId="db-user-1" selfUserId={null} />,
-    );
+    const { container } = render(<SessionLeaderboard participants={participants} selfUserId={null} />);
 
     expect(container.textContent).toContain('Ari');
-    expect(container.textContent).toContain('mobile.session.inDriverLabel');
-    expect(container.querySelector('[data-icon="lightbulb.fill"]')).not.toBeNull();
+    expect(container.textContent).toContain('Bo');
+    // The driver concept is retired — no lightbulb badge or driver label.
+    expect(container.textContent).not.toContain('mobile.session.inDriverLabel');
+    expect(container.querySelector('[data-icon="lightbulb.fill"]')).toBeNull();
   });
 
-  it('does not mark a row when only the session participant id is provided', () => {
+  it('renders every climber even without a self highlight', () => {
     const participants = [
       participant({ userId: 'db-user-1', displayName: 'Ari', sends: 2 }),
       participant({ userId: 'db-user-2', displayName: 'Bo', sends: 1 }),
     ];
 
-    const { container } = render(
-      <SessionLeaderboard participants={participants} driverUserId="session-participant-1" selfUserId={null} />,
-    );
+    const { container } = render(<SessionLeaderboard participants={participants} selfUserId={null} />);
 
-    expect(container.textContent).not.toContain('mobile.session.inDriverLabel');
+    expect(container.textContent).toContain('Ari');
+    expect(container.textContent).toContain('Bo');
     expect(container.querySelector('[data-icon="lightbulb.fill"]')).toBeNull();
   });
 });

@@ -7,11 +7,7 @@ import type { Climb, UserBoard } from '@boardsesh/shared-schema';
 
 const queue = vi.hoisted(() => ({
   sessionId: 'session-1' as string | null,
-  driverParticipantId: 'participant-other' as string | null,
   participantId: 'participant-self' as string | null,
-  // Two live participants: preview-only is roster-aware (derivePreviewOnly),
-  // so a solo occupant is never gated — these fixtures model a real party.
-  sessionUserCount: 2,
   setCurrentClimb: vi.fn(),
   addToQueue: vi.fn(),
   setSessionBoardPath: vi.fn(async () => {}),
@@ -207,32 +203,17 @@ vi.mock('../bluetooth-provider', () => ({
   useOptionalBluetoothContext: () => ({ undoWallChange: vi.fn(async () => true) }),
 }));
 
-vi.mock('../queue-provider', async () => {
-  const { derivePreviewOnly } =
-    await vi.importActual<typeof import('@boardsesh/queue-runtime')>('@boardsesh/queue-runtime');
-  return {
-    useQueueActions: () => ({
-      addToQueue: queue.addToQueue,
-      setSessionBoardPath: queue.setSessionBoardPath,
-      setCurrentClimb: queue.setCurrentClimb,
-    }),
-    useQueueSessionControls: () => ({
-      sessionId: queue.sessionId,
-      driverParticipantId: queue.driverParticipantId,
-      participantId: queue.participantId,
-    }),
-    // Mirror the provider's real selector so the driver/participant/roster
-    // fixtures keep driving the preview-only branch after the handlers moved
-    // to the useIsPartyPreviewOnly hook.
-    useIsPartyPreviewOnly: () =>
-      derivePreviewOnly({
-        isSessionActive: queue.sessionId !== null,
-        participantId: queue.participantId,
-        driverParticipantId: queue.driverParticipantId,
-        sessionUserCount: queue.sessionUserCount,
-      }),
-  };
-});
+vi.mock('../queue-provider', () => ({
+  useQueueActions: () => ({
+    addToQueue: queue.addToQueue,
+    setSessionBoardPath: queue.setSessionBoardPath,
+    setCurrentClimb: queue.setCurrentClimb,
+  }),
+  useQueueSessionControls: () => ({
+    sessionId: queue.sessionId,
+    participantId: queue.participantId,
+  }),
+}));
 
 vi.mock('../queue-snackbar-provider', () => ({
   useQueueSnackbar: () => ({
@@ -410,10 +391,9 @@ function makeBoardSheetAction(climb: Climb, overrides: Partial<BoardSheetClimbAc
   };
 }
 
-describe('DrawerHostProvider queue sheet wall-control gating', () => {
+describe('DrawerHostProvider queue sheet (always-live, no driver gate)', () => {
   beforeEach(() => {
     queue.sessionId = 'session-1';
-    queue.driverParticipantId = 'participant-other';
     queue.participantId = 'participant-self';
     queue.setCurrentClimb.mockClear();
     queue.addToQueue.mockClear();
@@ -431,64 +411,7 @@ describe('DrawerHostProvider queue sheet wall-control gating', () => {
     boardSheet.dismiss.mockClear();
   });
 
-  it('opens a preview without broadcasting when a party non-driver taps a queued climb', async () => {
-    const hosts: Array<ReturnType<typeof useDrawerHost>> = [];
-    renderHost((host) => hosts.push(host));
-    await waitFor(() => expect(hosts.at(-1)).toBeDefined());
-
-    act(() => {
-      hosts.at(-1)?.openQueueSheet();
-    });
-    await waitFor(() => expect(queueSheet.props).not.toBeNull());
-
-    const item = makeQueueItem('queue-1', 'climb-1');
-    act(() => {
-      queueSheet.props?.onClimbPress(item);
-    });
-
-    expect(queue.setCurrentClimb).not.toHaveBeenCalled();
-    expect(playDrawer.open).toHaveBeenCalledWith(item.climb, { setAsCurrent: false, previewQueueItem: item });
-  });
-
-  it('opens a playlist preview without broadcasting when a party non-driver taps a suggestion', async () => {
-    const hosts: Array<ReturnType<typeof useDrawerHost>> = [];
-    renderHost((host) => hosts.push(host));
-    await waitFor(() => expect(hosts.at(-1)).toBeDefined());
-
-    act(() => {
-      hosts.at(-1)?.openQueueSheet();
-    });
-    await waitFor(() => expect(queueSheet.props).not.toBeNull());
-
-    const sourceItem = makeQueueItem('queue-source', 'climb-source');
-    const suggestion = makeQueueItem('queue-suggestion', 'climb-suggestion').climb;
-    const playlistSuggestionSource: PlaylistSuggestionSource = {
-      playlistUuid: 'playlist-1',
-      activatedClimbUuid: sourceItem.climb.uuid,
-      boardKey: 'kilter:1:10:1,2',
-      climbs: [sourceItem.climb, suggestion],
-    };
-
-    act(() => {
-      queueSheet.props?.onSuggestionPress(suggestion, playlistSuggestionSource);
-    });
-
-    expect(queue.setCurrentClimb).not.toHaveBeenCalled();
-    expect(playDrawer.open).toHaveBeenCalledWith(
-      suggestion,
-      expect.objectContaining({
-        setAsCurrent: false,
-        previewPlaylistSuggestionSource: playlistSuggestionSource,
-        previewQueueItem: expect.objectContaining({
-          climb: suggestion,
-          suggested: true,
-        }),
-      }),
-    );
-  });
-
-  it('broadcasts queued climb selection for the current party driver', async () => {
-    queue.driverParticipantId = 'participant-self';
+  it('broadcasts queued climb selection for every session member', async () => {
     const hosts: Array<ReturnType<typeof useDrawerHost>> = [];
     renderHost((host) => hosts.push(host));
     await waitFor(() => expect(hosts.at(-1)).toBeDefined());
@@ -507,8 +430,7 @@ describe('DrawerHostProvider queue sheet wall-control gating', () => {
     expect(playDrawer.open).toHaveBeenCalledWith(item.climb, { setAsCurrent: false, previewQueueItem: item });
   });
 
-  it('broadcasts suggestion selection for the current party driver while anchoring drawer navigation to that item', async () => {
-    queue.driverParticipantId = 'participant-self';
+  it('broadcasts suggestion selection for every session member while anchoring drawer navigation to that item', async () => {
     const hosts: Array<ReturnType<typeof useDrawerHost>> = [];
     renderHost((host) => hosts.push(host));
     await waitFor(() => expect(hosts.at(-1)).toBeDefined());
@@ -549,9 +471,7 @@ describe('DrawerHostProvider queue sheet wall-control gating', () => {
 describe('DrawerHostProvider board sheet climb actions', () => {
   beforeEach(() => {
     queue.sessionId = 'session-1';
-    queue.driverParticipantId = 'participant-other';
     queue.participantId = 'participant-self';
-    queue.sessionUserCount = 2;
     queue.setCurrentClimb.mockClear();
     queue.addToQueue.mockClear();
     playDrawer.open.mockClear();
@@ -562,37 +482,7 @@ describe('DrawerHostProvider board sheet climb actions', () => {
     boardSheet.dismiss.mockClear();
   });
 
-  it('opens a preview without broadcasting when a party non-driver taps a board-sheet climb', async () => {
-    const hosts: Array<ReturnType<typeof useDrawerHost>> = [];
-    renderHost((host) => hosts.push(host));
-    await waitFor(() => expect(boardSheet.props).not.toBeNull());
-
-    const climb = makeQueueItem('queue-x', 'climb-x').climb as unknown as Climb;
-    const action = makeBoardSheetAction(climb);
-    act(() => {
-      getBoardSheetProps().onClimbPress(action);
-    });
-
-    expect(queue.setCurrentClimb).not.toHaveBeenCalled();
-    await waitFor(() =>
-      expect(playDrawer.open).toHaveBeenCalledWith(climb, {
-        setAsCurrent: false,
-        previewQueueItem: expect.objectContaining({ uuid: 'wall-queue-x', climb }),
-      }),
-    );
-    await waitFor(() =>
-      expect(hosts.at(-1)?.boardConfig).toMatchObject({
-        boardName: 'kilter',
-        layoutId: 1,
-        sizeId: 10,
-        setIds: '1,2',
-        angle: 30,
-      }),
-    );
-  });
-
-  it('sets current and opens the drawer when the party driver taps a board-sheet climb', async () => {
-    queue.driverParticipantId = 'participant-self';
+  it('sets current and opens the drawer when any session member taps a board-sheet climb', async () => {
     const hosts: Array<ReturnType<typeof useDrawerHost>> = [];
     renderHost((host) => hosts.push(host));
     await waitFor(() => expect(boardSheet.props).not.toBeNull());
@@ -608,6 +498,15 @@ describe('DrawerHostProvider board sheet climb actions', () => {
       expect(playDrawer.open).toHaveBeenCalledWith(climb, {
         setAsCurrent: false,
         previewQueueItem: expect.objectContaining({ uuid: 'wall-queue-x', climb }),
+      }),
+    );
+    await waitFor(() =>
+      expect(hosts.at(-1)?.boardConfig).toMatchObject({
+        boardName: 'kilter',
+        layoutId: 1,
+        sizeId: 10,
+        setIds: '1,2',
+        angle: 30,
       }),
     );
   });
@@ -655,7 +554,6 @@ describe('DrawerHostProvider board sheet climb actions', () => {
 describe('DrawerHostProvider queue sheet open / re-open', () => {
   beforeEach(() => {
     queue.sessionId = 'session-1';
-    queue.driverParticipantId = 'participant-other';
     queue.participantId = 'participant-self';
     queueSheet.props = null;
     queueSheet.present.mockClear();

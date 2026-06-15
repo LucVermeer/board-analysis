@@ -319,7 +319,8 @@ export function BluetoothProvider({
   boardUuid,
   children,
 }: BluetoothProviderProps) {
-  const { sessionId, confirmClimbOnWall, setSessionBoardSerial, lastConnectedBoardSerial } = useQueueSessionControls();
+  const { sessionId, confirmClimbOnWall, reportWallDisconnect, setSessionBoardSerial, lastConnectedBoardSerial } =
+    useQueueSessionControls();
   const { t } = useTranslation('settings');
   // Board presence ("now on the wall"). Always-on now (the board-presence flag
   // was removed). `enabled` is true while the provider is mounted and false only
@@ -363,6 +364,11 @@ export function BluetoothProvider({
   useEffect(() => {
     lastConnectedBoardSerialRef.current = lastConnectedBoardSerial;
   }, [lastConnectedBoardSerial]);
+  // Mirror reportWallDisconnect into a ref so the empty-dep releaseBoardHolder
+  // callback can fire the session-scoped "wall went dark" broadcast on a BLE
+  // drop without churning its identity.
+  const reportWallDisconnectRef = useRef(reportWallDisconnect);
+  reportWallDisconnectRef.current = reportWallDisconnect;
 
   // Live refs so handleWallConfirmed stays identity-stable while still reading
   // the latest flag/board/report fn (it's mirrored into the AutoSender via a ref).
@@ -917,8 +923,12 @@ export function BluetoothProvider({
   // holder = last sender, so a disconnect means we're no longer writing the
   // wall). Best-effort and idempotent: the server clear is a compare-and-delete,
   // so it's a no-op once another phone took over (last-connection-wins). The
-  // binding stays so a reconnect re-takes.
+  // binding stays so a reconnect re-takes. Also broadcast the session-scoped
+  // WallDisconnected so every member's lightbulb clears (the current climb is
+  // preserved); a true no-op in solo (reportWallDisconnect no-ops without a
+  // session), so it's safe to fire unconditionally on any drop.
   const releaseBoardHolder = useCallback(() => {
+    void reportWallDisconnectRef.current();
     const boardId = resolvedPresenceBoardIdRef.current ?? presenceBoardIdRef.current;
     if (boardId === null) return;
     void reportDisconnectForBoardRef.current(boardId);

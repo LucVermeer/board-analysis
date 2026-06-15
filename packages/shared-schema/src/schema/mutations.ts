@@ -85,40 +85,54 @@ export const mutationsTypeDefs = /* GraphQL */ `
     setQueue(queue: [ClimbQueueItemInput!]!, currentClimbQueueItem: ClimbQueueItemInput): QueueState!
 
     """
-    Claim wall-control authority in the current session and optionally broadcast a climb.
-    Any session participant may call — yank-on-press by design. If \`climb\` is provided, also
-    appends it to the queue (when not already present) and sets it as the current climb,
-    mirroring \`setCurrentClimb\`'s side effects. Publishes \`DriverChanged\`.
+    Deprecated. Sessions are always-live, so there is no wall driver to claim. Kept one
+    release as an inert compat shim for stale clients (cached web bundles, un-OTA'd native
+    apps) that still call it: if \`climb\` is provided it is set as the current climb (so the
+    stale client's wall change still propagates), otherwise it is a no-op. Never publishes
+    \`DriverChanged\`. Remove after the rollout window.
     """
     takeControl(climb: ClimbQueueItemInput): Session!
+      @deprecated(
+        reason: "Always-live; no driver. Sets the climb (if given) and returns the session. Remove after rollout."
+      )
 
     """
-    Release wall-control authority. Clears the driver only when the caller is the current
-    driver (idempotent otherwise). Publishes \`DriverChanged { driverParticipantId: null }\`.
+    Deprecated. No wall driver exists; inert no-op kept one release for stale clients.
+    Returns the session unchanged and never publishes \`DriverChanged\`. Remove after rollout.
     """
-    releaseControl: Session!
+    releaseControl: Session! @deprecated(reason: "Always-live; no driver. No-op. Remove after rollout.")
 
     """
     Confirm to all session participants that a climb was successfully relayed to the wall
-    over BLE from this client's phone. Any session participant may call (no driver
-    requirement) — the BLE-capable phone that handled the send is the source of truth for
-    confirmation. The server stamps \`confirmedAt\` and \`confirmedByParticipantId\` from
-    the caller's identity; clients cannot forge either field. Publishes
-    \`WallConfirmedClimb\`. The optional \`queueItemUuid\` disambiguates the press when
-    the same climb is queued twice. Returns the resolved Session so optimistic-UI callers
-    can apply server-derived state without a follow-up query (symmetric with
-    \`takeControl\` / \`releaseControl\`). Session identity is resolved from the WebSocket
-    connection context — no \`sessionId\` argument is required.
+    over BLE from this client's phone. Any session participant may call — the BLE-capable
+    phone that handled the send is the source of truth for confirmation. The server stamps
+    \`confirmedAt\` and \`confirmedByParticipantId\` from the caller's identity; clients
+    cannot forge either field. Publishes \`WallConfirmedClimb\`. The optional
+    \`queueItemUuid\` disambiguates the press when the same climb is queued twice. Returns
+    the resolved Session so optimistic-UI callers can apply server-derived state without a
+    follow-up query. Session identity is resolved from the WebSocket connection context —
+    no \`sessionId\` argument is required.
     """
     confirmClimbOnWall(climbUuid: ID!, queueItemUuid: ID): Session!
+
+    """
+    Report that this client's BLE link to the wall dropped (explicit lightbulb-off or a
+    detected drop), so every session participant turns the queue-control-bar lightbulb off.
+    The current climb is unchanged — pressing the lightbulb re-asserts (re-sends) it.
+    Publishes \`WallDisconnected\`. The session-scoped counterpart to board-presence's
+    \`reportBoardDisconnect\`. Session identity is resolved from the WebSocket connection
+    context — no \`sessionId\` argument is required.
+    """
+    reportWallDisconnect: Session!
 
     """
     Record the BLE board serial that this client paired with so other (mobile)
     participants can auto-connect to the same physical board. Any session participant
     may call. Idempotent: when the stored serial already matches, no event fires.
-    Publishes \`SessionBoardSerialChanged\` on change. Returns the resolved Session for
-    optimistic-UI symmetry with \`takeControl\` / \`releaseControl\`. Session identity is
-    resolved from the WebSocket connection context — no \`sessionId\` argument is required.
+    Publishes \`SessionBoardSerialChanged\` on change. Returns the resolved Session so
+    optimistic-UI callers can apply server-derived state without a follow-up query.
+    Session identity is resolved from the WebSocket connection context — no
+    \`sessionId\` argument is required.
     """
     setSessionBoardSerial(serial: String!): Session!
 
@@ -128,11 +142,10 @@ export const mutationsTypeDefs = /* GraphQL */ `
     angle is the only route-level dimension that members observe as a group;
     climb URLs are managed by setCurrentClimb. Any participant may call —
     angle is presentational and doesn't drive BLE (hold positions are sent
-    per-climb), so the queue-control-bar pivot's "only driver moves the wall"
-    rule doesn't apply. Idempotent: when the stored boardPath already matches,
-    no event fires. Publishes \`SessionBoardPathChanged\` on change. Returns
-    the resolved Session for optimistic-UI symmetry with takeControl /
-    releaseControl. Session identity is resolved from the WebSocket connection
+    per-climb). Idempotent: when the stored boardPath already matches, no event
+    fires. Publishes \`SessionBoardPathChanged\` on change. Returns the resolved
+    Session so optimistic-UI callers can apply server-derived state without a
+    follow-up query. Session identity is resolved from the WebSocket connection
     context — no \`sessionId\` argument is required.
     """
     setSessionBoardPath(boardPath: String!): Session!

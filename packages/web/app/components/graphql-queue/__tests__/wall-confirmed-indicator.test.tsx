@@ -5,11 +5,11 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { Climb } from '@/app/lib/types';
 import type { ClimbQueueItem } from '../../queue-control/types';
 
-// Always-live model: the bar's prev/next button is reachable by every session
-// participant. The bar calls `setCurrentClimbQueueItem`, which routes to
-// `persistentSession.setCurrentClimb`. Backend `setCurrentClimb` is unrestricted
-// (no isLeader / driver gate). Test guards against a future regression where the
-// client path would start gating the mutation on a role.
+// Verifies the QueueContext surfaces the session-scoped wall-lit indicator
+// (`SessionDataType.wallConfirmed`) by reflecting the root persistent-session
+// `isSessionWallLit` value, and that toggling it never clears the current climb.
+// The event-driven state machine (WallConfirmedClimb -> on, WallDisconnected ->
+// off) is owned by, and tested at, the persistent-session provider.
 
 vi.mock('@/app/components/providers/snackbar-provider', () => ({
   useSnackbar: () => ({ showMessage: vi.fn() }),
@@ -34,10 +34,6 @@ vi.mock('../../queue-control/hooks/use-queue-data-fetching', () => ({
   }),
 }));
 
-const mockPersistentSessionSetCurrentClimb = vi.fn().mockResolvedValue(undefined);
-
-// Party session active. Local user is `participant-1`. Always-live: no driver
-// role; any participant can advance the wall climb.
 const mockPersistentSession = {
   activeSession: {
     sessionId: 'session-1',
@@ -64,6 +60,7 @@ const mockPersistentSession = {
   participantId: 'participant-1',
   isLeader: false,
   users: [],
+  isSessionWallLit: false,
   currentClimbQueueItem: null,
   queue: [],
   localQueue: [],
@@ -78,7 +75,7 @@ const mockPersistentSession = {
   setInitialQueueForSession: vi.fn(),
   addQueueItem: vi.fn().mockResolvedValue(undefined),
   removeQueueItem: vi.fn().mockResolvedValue(undefined),
-  setCurrentClimb: mockPersistentSessionSetCurrentClimb,
+  setCurrentClimb: vi.fn().mockResolvedValue(undefined),
   mirrorCurrentClimb: vi.fn().mockResolvedValue(undefined),
   setQueue: vi.fn().mockResolvedValue(undefined),
   replaceQueueItem: vi.fn().mockResolvedValue(undefined),
@@ -212,37 +209,38 @@ function createWrapper() {
   };
 }
 
-describe('Any-participant setCurrentClimbQueueItem (bar prev/next)', () => {
+describe('Session-scoped wall-confirmed indicator', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockPersistentSession.isSessionWallLit = false;
   });
 
-  it('routes through persistentSession.setCurrentClimb for any session participant', () => {
-    const { result } = renderHook(() => useQueueContext(), { wrapper: createWrapper() });
+  it('reflects the root persistent-session isSessionWallLit, and toggling it never clears the current climb', () => {
+    mockPersistentSession.isSessionWallLit = false;
+    const { result, rerender } = renderHook(() => useQueueContext(), { wrapper: createWrapper() });
 
-    // Sanity: this client is in a party session.
     expect(result.current.isPersistentSessionActive).toBe(true);
-    expect(result.current.participantId).toBe('participant-1');
+    expect(result.current.wallConfirmed).toBe(false);
 
-    const targetItem: ClimbQueueItem = {
-      uuid: 'queue-item-1',
-      climb: makeClimb('target-climb'),
-      suggested: false,
-    };
-
+    // Seed a current climb so we can assert it survives an indicator toggle.
+    const item: ClimbQueueItem = { uuid: 'queue-item-1', climb: makeClimb('climb-1'), suggested: false };
     act(() => {
-      result.current.setCurrentClimbQueueItem(targetItem);
+      result.current.setCurrentClimbQueueItem(item);
     });
+    expect(result.current.currentClimb?.uuid).toBe('climb-1');
 
-    // The mutation fires for any participant (always-live, no driver gate). If
-    // a regression re-added a role gate to setCurrentClimbQueueItem, this would
-    // fail. Backend `setCurrentClimb` resolver doesn't gate either, so the wire
-    // call goes through end-to-end.
-    expect(mockPersistentSessionSetCurrentClimb).toHaveBeenCalledTimes(1);
-    const [calledItem, shouldAddToQueue, correlationId] = mockPersistentSessionSetCurrentClimb.mock.calls[0];
-    expect(calledItem.uuid).toBe(targetItem.uuid);
-    expect(calledItem.climb.uuid).toBe(targetItem.climb.uuid);
-    expect(shouldAddToQueue).toBe(false); // suggested: false on the input
-    expect(correlationId).toMatch(/^client-1-\d+$/);
+    // Persistent-session reports the wall lit (a member relayed the climb) →
+    // wallConfirmed mirrors it; the current climb is untouched.
+    mockPersistentSession.isSessionWallLit = true;
+    rerender();
+    expect(result.current.wallConfirmed).toBe(true);
+    expect(result.current.currentClimb?.uuid).toBe('climb-1');
+
+    // Persistent-session reports the wall dark (a member's BLE dropped) →
+    // wallConfirmed mirrors it; the current climb is still preserved.
+    mockPersistentSession.isSessionWallLit = false;
+    rerender();
+    expect(result.current.wallConfirmed).toBe(false);
+    expect(result.current.currentClimb?.uuid).toBe('climb-1');
   });
 });

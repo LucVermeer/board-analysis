@@ -69,6 +69,12 @@ type BoardPresenceControlsValue = {
    * is available. Idempotent for an unchanged serial.
    */
   resolveAndBindBoard: (args: ResolveBoardArgs) => Promise<ResolvedBoard | null>;
+  /**
+   * Release this client's board-presence holder slot on BLE disconnect, so the
+   * "who's on the wall" holder doesn't go stale (mirrors mobile). No-op when no
+   * client/holder op is available. Best-effort: resolves false on failure.
+   */
+  reportDisconnect: (boardId: number) => Promise<boolean>;
 };
 
 const BoardPresenceControlsContext = createContext<BoardPresenceControlsValue | null>(null);
@@ -159,9 +165,21 @@ export function WebBoardPresenceProvider({ children }: { children: ReactNode }) 
     return resolved;
   }, []);
 
+  const reportDisconnect = useCallback(async (targetBoardId: number): Promise<boolean> => {
+    const activeClient = presenceClientRef.current;
+    if (activeClient?.reportDisconnect == null) return false;
+    try {
+      return await activeClient.reportDisconnect(targetBoardId);
+    } catch {
+      // Best-effort holder release — the BLE link is already gone; the WS-close
+      // crash backstop frees the holder server-side anyway.
+      return false;
+    }
+  }, []);
+
   const controls = useMemo<BoardPresenceControlsValue>(
-    () => ({ enabled, boardId, resolveAndBindBoard }),
-    [enabled, boardId, resolveAndBindBoard],
+    () => ({ enabled, boardId, resolveAndBindBoard, reportDisconnect }),
+    [enabled, boardId, resolveAndBindBoard, reportDisconnect],
   );
 
   return (
@@ -213,6 +231,7 @@ const DISABLED_CONTROLS: BoardPresenceControlsValue = {
   enabled: false,
   boardId: null,
   resolveAndBindBoard: async () => null,
+  reportDisconnect: async () => false,
 };
 
 /**

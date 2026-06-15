@@ -30,7 +30,6 @@ const session = (overrides: Partial<TestSession> = {}): TestSession => ({
   users: [user({ id: 'participant-1' })],
   isLeader: false,
   clientId: 'participant-1',
-  driverParticipantId: null,
   lastConnectedBoardSerial: null,
   boardPath: '/kilter/1/10/1,2/40/list',
   ...overrides,
@@ -78,10 +77,9 @@ describe('applySessionRuntimeEvent', () => {
     expect(next?.users.map((entry) => entry.id)).toEqual(['participant-2']);
   });
 
-  it('updates leader state without changing driver state', () => {
+  it('updates leader state', () => {
     const prev = session({
       users: [user({ id: 'participant-1', userId: null }), user({ id: 'participant-2', userId: 'db-user' })],
-      driverParticipantId: 'participant-1',
     });
 
     const next = applySessionRuntimeEvent(prev, {
@@ -91,19 +89,11 @@ describe('applySessionRuntimeEvent', () => {
     });
 
     expect(next?.isLeader).toBe(false);
-    expect(next?.driverParticipantId).toBe('participant-1');
     expect(next?.users.find((entry) => entry.id === 'participant-2')?.isLeader).toBe(true);
   });
 
-  it('tracks driver, board serial, and board path updates', () => {
-    const withDriver = applySessionRuntimeEvent(session(), {
-      __typename: 'DriverChanged',
-      driverParticipantId: 'participant-2',
-      previousDriverParticipantId: null,
-    });
-    expect(withDriver?.driverParticipantId).toBe('participant-2');
-
-    const withSerial = applySessionRuntimeEvent(withDriver, {
+  it('tracks board serial and board path updates', () => {
+    const withSerial = applySessionRuntimeEvent(session(), {
       __typename: 'SessionBoardSerialChanged',
       lastConnectedBoardSerial: 'AURORA-1',
     });
@@ -117,15 +107,24 @@ describe('applySessionRuntimeEvent', () => {
     expect(withPath?.boardPath).toBe('/kilter/1/10/1,2/30/list');
   });
 
+  it('leaves session state unchanged on wall disconnect (lightbulb is a UI concern)', () => {
+    const prev = session({ lastConnectedBoardSerial: 'AURORA-1' });
+    expect(
+      applySessionRuntimeEvent(prev, {
+        __typename: 'WallDisconnected',
+        disconnectedByParticipantId: 'participant-1',
+      }),
+    ).toBe(prev);
+  });
+
   it('leaves session-ended and null previous state unchanged', () => {
-    const prev = session({ driverParticipantId: 'participant-1' });
+    const prev = session();
 
     expect(applySessionRuntimeEvent(prev, { __typename: 'SessionEnded', reason: 'manual', newPath: null })).toBe(prev);
     expect(
       applySessionRuntimeEvent(null, {
-        __typename: 'DriverChanged',
-        driverParticipantId: 'participant-1',
-        previousDriverParticipantId: null,
+        __typename: 'WallDisconnected',
+        disconnectedByParticipantId: 'participant-1',
       }),
     ).toBeNull();
   });

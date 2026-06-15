@@ -140,14 +140,14 @@ export function createRedisPubSubAdapter(publisher: Redis, subscriber: Redis): R
         event,
         timestamp: Date.now(),
       };
-      // Drop high-frequency wall/driver events to debug to keep INFO useful.
-      // `WallConfirmedClimb` fires on every BLE confirm, `DriverChanged` on
-      // every lightbulb press, and `SessionBoardSerialChanged` on every
-      // reconnect — all noisy. Membership-level events stay at INFO since
-      // they're rare and useful for triage.
+      // Drop high-frequency wall events to debug to keep INFO useful.
+      // `WallConfirmedClimb` fires on every BLE confirm, `WallDisconnected` on
+      // every wall drop, and `SessionBoardSerialChanged` on every reconnect —
+      // all noisy. Membership-level events stay at INFO since they're rare and
+      // useful for triage.
       const isHighFrequency =
         event.__typename === 'WallConfirmedClimb' ||
-        event.__typename === 'DriverChanged' ||
+        event.__typename === 'WallDisconnected' ||
         event.__typename === 'SessionBoardSerialChanged';
       const logMessage = `[Redis] Publishing session event to channel: ${sessionId} (type: ${event.__typename})`;
       if (isHighFrequency) {

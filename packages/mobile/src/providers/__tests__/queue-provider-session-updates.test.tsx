@@ -4,7 +4,6 @@ import { createElement, useEffect } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ClimbQueueItem, PlaylistSuggestionSource } from '@boardsesh/queue';
 import type { SessionStatus, SessionUser, UserBoard } from '@boardsesh/shared-schema';
-import { GraphQLOperationError } from '@boardsesh/graphql-client';
 
 const ws = vi.hoisted(() => {
   type WsEventName = 'connected' | 'closed';
@@ -100,9 +99,8 @@ const queueMutations = vi.hoisted(() => ({
   publishPlaybackState: vi.fn(async () => {}),
   setQueue: vi.fn(async () => {}),
   replaceQueueItem: vi.fn(async () => {}),
-  takeControl: vi.fn(async () => {}),
-  releaseControl: vi.fn(async () => {}),
   confirmClimbOnWall: vi.fn(async () => {}),
+  reportWallDisconnect: vi.fn(async () => {}),
   setSessionBoardSerial: vi.fn(async () => {}),
   setSessionBoardPath: vi.fn(async () => {}),
 }));
@@ -174,10 +172,10 @@ vi.mock('../queue-snackbar-provider', () => ({
 import {
   QueueProvider,
   useHasActiveClimb,
-  useIsPartyPreviewOnly,
   usePlaylistSuggestionSource,
   useQueue,
   useQueueLiveStats,
+  useQueueSessionControls,
   useQueueSessionId,
 } from '../queue-provider';
 import { clearStoredSessionId } from '../../lib/session-store';
@@ -186,7 +184,7 @@ type Snapshot = {
   state: ReturnType<typeof useQueue>['state'];
   sessionId: string | null;
   users: SessionUser[];
-  driverParticipantId: string | null;
+  isSessionWallLit: boolean;
   lastConnectedBoardSerial: string | null;
   playlistSuggestionSource: PlaylistSuggestionSource | null;
   addToQueue: ReturnType<typeof useQueue>['addToQueue'];
@@ -196,9 +194,8 @@ type Snapshot = {
   setPlaylistSuggestionSource: ReturnType<typeof useQueue>['setPlaylistSuggestionSource'];
   joinSession: (sessionId: string, opts: Parameters<ReturnType<typeof useQueue>['joinSession']>[1]) => Promise<void>;
   endSession: () => Promise<unknown>;
-  takeControl: ReturnType<typeof useQueue>['takeControl'];
-  releaseControl: ReturnType<typeof useQueue>['releaseControl'];
   confirmClimbOnWall: ReturnType<typeof useQueue>['confirmClimbOnWall'];
+  reportWallDisconnect: ReturnType<typeof useQueue>['reportWallDisconnect'];
   setSessionBoardSerial: ReturnType<typeof useQueue>['setSessionBoardSerial'];
 };
 
@@ -259,7 +256,6 @@ function createJoinSessionResponse() {
       participantId: 'participant-self',
       clientId: 'client-self',
       isLeader: false,
-      driverParticipantId: null,
       lastConnectedBoardSerial: null,
       boardPath: '/kilter/1/10/1,2/40/list',
       users: [user({ id: 'participant-self', username: 'Self', userId: 'db-self' })],
@@ -273,12 +269,16 @@ function Probe({ onSnapshot }: { onSnapshot: (snapshot: Snapshot) => void }) {
   // sessionUsers moved out of useQueue() into its own live-stats context so the
   // ≤1/2s party push no longer re-renders every queue consumer; read it here.
   const { sessionUsers } = useQueueLiveStats();
+  // isSessionWallLit rides the session-controls context (flips on
+  // WallConfirmedClimb / off on WallDisconnected); it's also mirrored onto the
+  // full useQueue() value, which is what the snapshot reads.
+  const { isSessionWallLit } = useQueueSessionControls();
   useEffect(() => {
     onSnapshot({
       state: queue.state,
       sessionId: queue.sessionId,
       users: sessionUsers,
-      driverParticipantId: queue.driverParticipantId,
+      isSessionWallLit,
       lastConnectedBoardSerial: queue.lastConnectedBoardSerial,
       playlistSuggestionSource,
       addToQueue: queue.addToQueue,
@@ -288,16 +288,15 @@ function Probe({ onSnapshot }: { onSnapshot: (snapshot: Snapshot) => void }) {
       setPlaylistSuggestionSource: queue.setPlaylistSuggestionSource,
       joinSession: queue.joinSession,
       endSession: queue.endSession,
-      takeControl: queue.takeControl,
-      releaseControl: queue.releaseControl,
       confirmClimbOnWall: queue.confirmClimbOnWall,
+      reportWallDisconnect: queue.reportWallDisconnect,
       setSessionBoardSerial: queue.setSessionBoardSerial,
     });
   }, [
     queue.sessionId,
     queue.state,
     sessionUsers,
-    queue.driverParticipantId,
+    isSessionWallLit,
     queue.lastConnectedBoardSerial,
     playlistSuggestionSource,
     queue.addToQueue,
@@ -307,9 +306,8 @@ function Probe({ onSnapshot }: { onSnapshot: (snapshot: Snapshot) => void }) {
     queue.setPlaylistSuggestionSource,
     queue.joinSession,
     queue.endSession,
-    queue.takeControl,
-    queue.releaseControl,
     queue.confirmClimbOnWall,
+    queue.reportWallDisconnect,
     queue.setSessionBoardSerial,
     onSnapshot,
   ]);
@@ -598,7 +596,7 @@ describe('QueueProvider session update subscription', () => {
     expect(selectorSnapshots.at(-1)?.hasActiveClimb).toBe(true);
   });
 
-  it('applies roster and driver events to public context state', async () => {
+  it('applies roster events to public context state (no driver mechanics)', async () => {
     const snapshots: Snapshot[] = [];
     renderProvider((snapshot) => snapshots.push(snapshot));
 
@@ -619,26 +617,14 @@ describe('QueueProvider session update subscription', () => {
         },
       });
     });
-    act(() => {
-      sessionUpdatesSink.next({
-        data: {
-          sessionUpdates: {
-            __typename: 'DriverChanged',
-            driverParticipantId: 'participant-2',
-            previousDriverParticipantId: null,
-          },
-        },
-      });
-    });
 
     await waitFor(() => {
       const latestSnapshot = snapshots.at(-1);
       expect(latestSnapshot?.users.map((entry) => entry.id)).toEqual(['participant-self', 'participant-2']);
-      expect(latestSnapshot?.driverParticipantId).toBe('participant-2');
     });
   });
 
-  it('exposes shared party wall-control actions through the mobile queue context', async () => {
+  it('exposes the shared party wall actions through the mobile queue context', async () => {
     const snapshots: Snapshot[] = [];
     renderProvider((snapshot) => snapshots.push(snapshot));
 
@@ -649,335 +635,24 @@ describe('QueueProvider session update subscription', () => {
     const snapshot = snapshots.at(-1);
     if (!snapshot) throw new Error('queue snapshot was not captured');
 
-    await snapshot.takeControl(null);
-    await snapshot.releaseControl();
     await snapshot.confirmClimbOnWall('climb-1');
+    await snapshot.reportWallDisconnect();
     await snapshot.setSessionBoardSerial('SERIAL-1');
 
-    expect(queueMutations.takeControl).toHaveBeenCalledWith(null);
-    expect(queueMutations.releaseControl).toHaveBeenCalledOnce();
     expect(queueMutations.confirmClimbOnWall).toHaveBeenCalledWith('climb-1');
+    expect(queueMutations.reportWallDisconnect).toHaveBeenCalledOnce();
     expect(queueMutations.setSessionBoardSerial).toHaveBeenCalledWith('SERIAL-1');
   });
 
-  it('optimistically sets the driver and current climb while takeControl is in flight', async () => {
-    const snapshots: Snapshot[] = [];
-    renderProvider((snapshot) => snapshots.push(snapshot));
-
-    await waitFor(() => {
-      expect(snapshots.at(-1)?.sessionId).toBe('session-1');
-    });
-
-    queueMutations.takeControl.mockImplementationOnce(() => new Promise<void>(() => {}));
-    const queueItem = makeQueueItem('queue-new', 'climb-new');
-    const snapshot = snapshots.at(-1);
-    if (!snapshot) throw new Error('queue snapshot was not captured');
-
-    act(() => {
-      void snapshot.takeControl(queueItem).catch(() => {});
-    });
-
-    await waitFor(() => {
-      const latestSnapshot = snapshots.at(-1);
-      expect(latestSnapshot?.driverParticipantId).toBe('participant-self');
-      expect(latestSnapshot?.state.currentClimbQueueItem?.uuid).toBe('queue-new');
-      expect(latestSnapshot?.state.queue.map((item) => item.uuid)).toContain('queue-new');
-    });
-    expect(queueMutations.takeControl).toHaveBeenCalledWith(queueItem);
-  });
-
-  it('rolls back optimistic takeControl state when the mutation fails', async () => {
-    const snapshots: Snapshot[] = [];
-    renderProvider((snapshot) => snapshots.push(snapshot));
-
-    await waitFor(() => {
-      expect(snapshots.at(-1)?.sessionId).toBe('session-1');
-    });
-
-    const queueItem = makeQueueItem('queue-fail', 'climb-fail');
-    const failure = new Error('take failed');
-    queueMutations.takeControl.mockRejectedValueOnce(failure);
-    const snapshot = snapshots.at(-1);
-    if (!snapshot) throw new Error('queue snapshot was not captured');
-
-    await expect(snapshot.takeControl(queueItem)).rejects.toThrow('take failed');
-
-    await waitFor(() => {
-      const latestSnapshot = snapshots.at(-1);
-      expect(latestSnapshot?.driverParticipantId).toBeNull();
-      expect(latestSnapshot?.state.currentClimbQueueItem).toBeNull();
-      expect(latestSnapshot?.state.queue.map((item) => item.uuid)).not.toContain('queue-fail');
-    });
-    expect(toast.showToast).toHaveBeenCalledWith('mobile.queue.actionFailed', 'error');
-  });
-
-  it('shows the gentle rate-limit toast (not the generic failure) when takeControl is throttled (#2763)', async () => {
-    const snapshots: Snapshot[] = [];
-    renderProvider((snapshot) => snapshots.push(snapshot));
-
-    await waitFor(() => {
-      expect(snapshots.at(-1)?.sessionId).toBe('session-1');
-    });
-
-    const queueItem = makeQueueItem('queue-rl', 'climb-rl');
-    // The backend throttles interactive session mutations with this coded error
-    // when a burst (rapid boulder switching) trips a bucket.
-    const rateLimited = new GraphQLOperationError([
-      {
-        message: 'Rate limit exceeded. Try again in 22 seconds.',
-        extensions: { code: 'RATE_LIMITED', retryAfterSeconds: 22 },
-      },
-    ]);
-    queueMutations.takeControl.mockRejectedValueOnce(rateLimited);
-    const snapshot = snapshots.at(-1);
-    if (!snapshot) throw new Error('queue snapshot was not captured');
-
-    await expect(snapshot.takeControl(queueItem)).rejects.toBe(rateLimited);
-
-    // Optimistic driver/climb still rolls back to match the server.
-    await waitFor(() => {
-      const latestSnapshot = snapshots.at(-1);
-      expect(latestSnapshot?.driverParticipantId).toBeNull();
-      expect(latestSnapshot?.state.currentClimbQueueItem).toBeNull();
-      expect(latestSnapshot?.state.queue.map((item) => item.uuid)).not.toContain('queue-rl');
-    });
-    // Specific, gentle copy instead of the alarming generic "Action failed".
-    expect(toast.showToast).toHaveBeenCalledWith('mobile.queue.rateLimited', 'error');
-    expect(toast.showToast).not.toHaveBeenCalledWith('mobile.queue.actionFailed', 'error');
-  });
-
-  it('preserves suggested playlist items when takeControl rollback restores the queue', async () => {
-    const snapshots: Snapshot[] = [];
-    renderProvider((snapshot) => snapshots.push(snapshot));
-
-    await waitFor(() => {
-      expect(snapshots.at(-1)?.sessionId).toBe('session-1');
-    });
-
-    const currentItem = makeQueueItem('queue-current', 'climb-current');
-    const suggestedItem = makeQueueItem('queue-suggested', 'climb-suggested', { suggested: true });
-    const playlistSuggestionSource: PlaylistSuggestionSource = {
-      playlistUuid: 'playlist-1',
-      activatedClimbUuid: currentItem.climb.uuid,
-      boardKey: 'kilter:1:10:1,2',
-      climbs: [currentItem.climb, suggestedItem.climb],
-    };
-    const preparedSnapshot = snapshots.at(-1);
-    if (!preparedSnapshot) throw new Error('queue snapshot was not captured');
-
-    act(() => {
-      preparedSnapshot.setCurrentClimb(currentItem, { playlistSuggestionSource: null });
-      preparedSnapshot.addToQueue(suggestedItem);
-      preparedSnapshot.setPlaylistSuggestionSource(playlistSuggestionSource);
-    });
-
-    await waitFor(() => {
-      const latestSnapshot = snapshots.at(-1);
-      expect(latestSnapshot?.state.currentClimbQueueItem?.uuid).toBe('queue-current');
-      expect(latestSnapshot?.state.queue.map((item) => item.uuid)).toEqual(['queue-current', 'queue-suggested']);
-      expect(latestSnapshot?.playlistSuggestionSource).toEqual(playlistSuggestionSource);
-    });
-
-    const failingItem = makeQueueItem('queue-fail', 'climb-fail');
-    queueMutations.takeControl.mockRejectedValueOnce(new Error('take failed'));
-    const snapshotBeforeTake = snapshots.at(-1);
-    if (!snapshotBeforeTake) throw new Error('prepared queue snapshot was not captured');
-
-    await expect(snapshotBeforeTake.takeControl(failingItem)).rejects.toThrow('take failed');
-
-    await waitFor(() => {
-      const latestSnapshot = snapshots.at(-1);
-      expect(latestSnapshot?.driverParticipantId).toBeNull();
-      expect(latestSnapshot?.state.currentClimbQueueItem?.uuid).toBe('queue-current');
-      expect(latestSnapshot?.state.queue.map((item) => item.uuid)).toEqual(['queue-current', 'queue-suggested']);
-      expect(latestSnapshot?.playlistSuggestionSource).toEqual(playlistSuggestionSource);
-    });
-    expect(toast.showToast).toHaveBeenCalledWith('mobile.queue.actionFailed', 'error');
-  });
-
-  it('preserves playlist continuation when takeControl claims a suggested item', async () => {
-    const snapshots: Snapshot[] = [];
-    renderProvider((snapshot) => snapshots.push(snapshot));
-
-    await waitFor(() => {
-      expect(snapshots.at(-1)?.sessionId).toBe('session-1');
-    });
-
-    const currentItem = makeQueueItem('queue-current', 'climb-current');
-    const suggestedItem = makeQueueItem('queue-suggested', 'climb-suggested', { suggested: true });
-    const followingItem = makeQueueItem('queue-following-source', 'climb-following', { suggested: true });
-    const playlistSuggestionSource: PlaylistSuggestionSource = {
-      playlistUuid: 'playlist-1',
-      activatedClimbUuid: currentItem.climb.uuid,
-      boardKey: 'kilter:1:10:1,2',
-      climbs: [currentItem.climb, suggestedItem.climb, followingItem.climb],
-    };
-    const preparedSnapshot = snapshots.at(-1);
-    if (!preparedSnapshot) throw new Error('queue snapshot was not captured');
-
-    act(() => {
-      preparedSnapshot.setCurrentClimb(currentItem, { playlistSuggestionSource: null });
-      preparedSnapshot.setPlaylistSuggestionSource(playlistSuggestionSource);
-    });
-
-    await waitFor(() => {
-      expect(snapshots.at(-1)?.playlistSuggestionSource).toEqual(playlistSuggestionSource);
-    });
-
-    const snapshotBeforeTake = snapshots.at(-1);
-    if (!snapshotBeforeTake) throw new Error('prepared queue snapshot was not captured');
-    await act(async () => {
-      await snapshotBeforeTake.takeControl(suggestedItem);
-    });
-
-    await waitFor(() => {
-      const latestSnapshot = snapshots.at(-1);
-      expect(latestSnapshot?.state.currentClimbQueueItem?.uuid).toBe('queue-suggested');
-      expect(latestSnapshot?.playlistSuggestionSource).toEqual(playlistSuggestionSource);
-    });
-
-    const driverSnapshot = snapshots.at(-1);
-    if (!driverSnapshot) throw new Error('driver snapshot was not captured');
-    act(() => {
-      driverSnapshot.nextClimb();
-    });
-
-    await waitFor(() => {
-      const latestSnapshot = snapshots.at(-1);
-      expect(latestSnapshot?.state.currentClimbQueueItem?.climb.uuid).toBe('climb-following');
-      expect(latestSnapshot?.state.currentClimbQueueItem?.uuid).not.toBe('playlist-peek:climb-following');
-      expect(latestSnapshot?.playlistSuggestionSource).toEqual(playlistSuggestionSource);
-    });
-  });
-
-  it('rolls back optimistic releaseControl state when the mutation fails', async () => {
-    const snapshots: Snapshot[] = [];
-    renderProvider((snapshot) => snapshots.push(snapshot));
-
-    await waitFor(() => {
-      expect(snapshots.at(-1)?.sessionId).toBe('session-1');
-    });
-
-    const queueItem = makeQueueItem('queue-current', 'climb-current');
-    const snapshot = snapshots.at(-1);
-    if (!snapshot) throw new Error('queue snapshot was not captured');
-    await act(async () => {
-      await snapshot.takeControl(queueItem);
-    });
-    await waitFor(() => {
-      expect(snapshots.at(-1)?.driverParticipantId).toBe('participant-self');
-    });
-
-    const failure = new Error('release failed');
-    queueMutations.releaseControl.mockRejectedValueOnce(failure);
-    const driverSnapshot = snapshots.at(-1);
-    if (!driverSnapshot) throw new Error('driver snapshot was not captured');
-
-    await expect(driverSnapshot.releaseControl()).rejects.toThrow('release failed');
-
-    await waitFor(() => {
-      expect(snapshots.at(-1)?.driverParticipantId).toBe('participant-self');
-    });
-    expect(toast.showToast).toHaveBeenCalledWith('mobile.queue.actionFailed', 'error');
-  });
-
-  it('does not optimistically clear a remote driver when a non-driver release resolves', async () => {
+  it('lights the lightbulb on WallConfirmedClimb and republishes onto the wall-confirm bus', async () => {
     const snapshots: Snapshot[] = [];
     renderProvider((snapshot) => snapshots.push(snapshot));
 
     await waitFor(() => {
       expect(ws.getSessionUpdatesSink()).not.toBeNull();
     });
-
-    const sessionUpdatesSink = ws.getSessionUpdatesSink();
-    if (!sessionUpdatesSink) throw new Error('session updates sink was not captured');
-
-    act(() => {
-      sessionUpdatesSink.next({
-        data: {
-          sessionUpdates: {
-            __typename: 'DriverChanged',
-            driverParticipantId: 'participant-2',
-            previousDriverParticipantId: null,
-          },
-        },
-      });
-    });
-
-    await waitFor(() => {
-      expect(snapshots.at(-1)?.driverParticipantId).toBe('participant-2');
-    });
-
-    const nonDriverSnapshot = snapshots.at(-1);
-    if (!nonDriverSnapshot) throw new Error('non-driver snapshot was not captured');
-
-    await act(async () => {
-      await nonDriverSnapshot.releaseControl();
-    });
-
-    expect(queueMutations.releaseControl).toHaveBeenCalledOnce();
-    expect(snapshots.at(-1)?.driverParticipantId).toBe('participant-2');
-    expect(toast.showToast).not.toHaveBeenCalled();
-  });
-
-  it('does not let a stale takeControl failure roll back a newer local claim', async () => {
-    const snapshots: Snapshot[] = [];
-    renderProvider((snapshot) => snapshots.push(snapshot));
-
-    await waitFor(() => {
-      expect(snapshots.at(-1)?.sessionId).toBe('session-1');
-    });
-
-    const firstTake = createDeferred<void>();
-    queueMutations.takeControl.mockImplementationOnce(() => firstTake.promise).mockResolvedValueOnce(undefined);
-
-    const firstItem = makeQueueItem('queue-first', 'climb-first');
-    const secondItem = makeQueueItem('queue-second', 'climb-second');
-    const initialSnapshot = snapshots.at(-1);
-    if (!initialSnapshot) throw new Error('queue snapshot was not captured');
-
-    let firstTakePromise: Promise<void> | null = null;
-    act(() => {
-      firstTakePromise = initialSnapshot.takeControl(firstItem).catch(() => {});
-    });
-
-    await waitFor(() => {
-      expect(snapshots.at(-1)?.state.currentClimbQueueItem?.uuid).toBe('queue-first');
-    });
-
-    const firstOptimisticSnapshot = snapshots.at(-1);
-    if (!firstOptimisticSnapshot) throw new Error('first optimistic snapshot was not captured');
-    await act(async () => {
-      await firstOptimisticSnapshot.takeControl(secondItem);
-    });
-
-    await waitFor(() => {
-      const latestSnapshot = snapshots.at(-1);
-      expect(latestSnapshot?.driverParticipantId).toBe('participant-self');
-      expect(latestSnapshot?.state.currentClimbQueueItem?.uuid).toBe('queue-second');
-    });
-
-    act(() => {
-      firstTake.reject(new Error('first take failed'));
-    });
-    if (!firstTakePromise) throw new Error('first take promise was not captured');
-    await act(async () => {
-      await firstTakePromise;
-    });
-
-    const latestSnapshot = snapshots.at(-1);
-    expect(latestSnapshot?.driverParticipantId).toBe('participant-self');
-    expect(latestSnapshot?.state.currentClimbQueueItem?.uuid).toBe('queue-second');
-    expect(toast.showToast).not.toHaveBeenCalled();
-  });
-
-  it('republishes WallConfirmedClimb events onto the shared wall-confirm bus', async () => {
-    const snapshots: Snapshot[] = [];
-    renderProvider((snapshot) => snapshots.push(snapshot));
-
-    await waitFor(() => {
-      expect(ws.getSessionUpdatesSink()).not.toBeNull();
-    });
+    // Lightbulb starts off until a member confirms a climb on the wall.
+    expect(snapshots.at(-1)?.isSessionWallLit).toBe(false);
 
     const sessionUpdatesSink = ws.getSessionUpdatesSink();
     if (!sessionUpdatesSink) throw new Error('session updates sink was not captured');
@@ -997,6 +672,67 @@ describe('QueueProvider session update subscription', () => {
     });
 
     expect(wallConfirm.emitWallConfirm).toHaveBeenCalledWith('climb-1');
+    await waitFor(() => {
+      expect(snapshots.at(-1)?.isSessionWallLit).toBe(true);
+    });
+  });
+
+  it('turns the lightbulb off on WallDisconnected without clearing the current climb', async () => {
+    const snapshots: Snapshot[] = [];
+    renderProvider((snapshot) => snapshots.push(snapshot));
+
+    await waitFor(() => {
+      expect(snapshots.at(-1)?.sessionId).toBe('session-1');
+      expect(ws.getSessionUpdatesSink()).not.toBeNull();
+    });
+
+    const sessionUpdatesSink = ws.getSessionUpdatesSink();
+    if (!sessionUpdatesSink) throw new Error('session updates sink was not captured');
+
+    // Set a current climb, then light the wall via a confirm event.
+    const currentItem = makeQueueItem('queue-current', 'climb-current');
+    act(() => {
+      snapshots.at(-1)?.setCurrentClimb(currentItem);
+    });
+    act(() => {
+      sessionUpdatesSink.next({
+        data: {
+          sessionUpdates: {
+            __typename: 'WallConfirmedClimb',
+            climbUuid: 'climb-current',
+            confirmedAt: '2026-06-05T00:00:00.000Z',
+            confirmedByParticipantId: 'participant-2',
+            queueItemUuid: 'queue-current',
+          },
+        },
+      });
+    });
+
+    await waitFor(() => {
+      const latestSnapshot = snapshots.at(-1);
+      expect(latestSnapshot?.isSessionWallLit).toBe(true);
+      expect(latestSnapshot?.state.currentClimbQueueItem?.uuid).toBe('queue-current');
+    });
+
+    // A member's BLE link drops — the lightbulb clears for everyone, but the
+    // current climb is preserved (pressing the lightbulb re-asserts it).
+    act(() => {
+      sessionUpdatesSink.next({
+        data: {
+          sessionUpdates: {
+            __typename: 'WallDisconnected',
+            disconnectedByParticipantId: 'participant-2',
+          },
+        },
+      });
+    });
+
+    await waitFor(() => {
+      const latestSnapshot = snapshots.at(-1);
+      expect(latestSnapshot?.isSessionWallLit).toBe(false);
+      // Current climb is intentionally NOT cleared by WallDisconnected.
+      expect(latestSnapshot?.state.currentClimbQueueItem?.uuid).toBe('queue-current');
+    });
   });
 
   it('clears persisted session state when SessionEnded arrives', async () => {
@@ -1154,9 +890,11 @@ describe('QueueProvider session update subscription', () => {
       oldSessionUpdatesSink.next({
         data: {
           sessionUpdates: {
-            __typename: 'DriverChanged',
-            driverParticipantId: 'stale-driver',
-            previousDriverParticipantId: null,
+            __typename: 'WallConfirmedClimb',
+            climbUuid: 'stale-climb',
+            confirmedAt: '2026-06-05T00:00:00.000Z',
+            confirmedByParticipantId: 'participant-2',
+            queueItemUuid: 'stale-queue-item',
           },
         },
       });
@@ -1176,7 +914,9 @@ describe('QueueProvider session update subscription', () => {
     await waitFor(() => {
       expect(snapshots.at(-1)?.sessionId).toBe('session-2');
     });
-    expect(snapshots.at(-1)?.driverParticipantId).not.toBe('stale-driver');
+    // A stale WallConfirmedClimb from the previous session's sink must not light
+    // the new session's lightbulb, and a stale board-path must not be applied.
+    expect(snapshots.at(-1)?.isSessionWallLit).toBe(false);
     expect(activeBoard.setActiveBoard).not.toHaveBeenCalledWith({ ...activeBoard.stored, angle: 30 });
   });
 
@@ -1601,15 +1341,7 @@ describe('QueueProvider mutation-failure resync', () => {
   });
 });
 
-function PreviewOnlyProbe({ onValue }: { onValue: (value: boolean) => void }) {
-  const isPartyPreviewOnly = useIsPartyPreviewOnly();
-  useEffect(() => {
-    onValue(isPartyPreviewOnly);
-  }, [isPartyPreviewOnly, onValue]);
-  return null;
-}
-
-describe('QueueProvider preview-only roster gating', () => {
+describe('QueueProvider always-live wall control', () => {
   beforeEach(() => {
     ws.reset();
     ws.client.on.mockClear();
@@ -1637,7 +1369,6 @@ describe('QueueProvider preview-only roster gating', () => {
         participantId: 'participant-self',
         clientId: 'client-self',
         isLeader: false,
-        driverParticipantId: null,
         lastConnectedBoardSerial: null,
         boardPath: '/kilter/1/10/1,2/40/list',
         users: [user({ id: 'participant-self', username: 'Self', userId: 'db-self' })],
@@ -1645,28 +1376,22 @@ describe('QueueProvider preview-only roster gating', () => {
     });
   });
 
-  it('never gates queue control — every session participant controls the wall instantly (no driver mechanics)', async () => {
-    const previewOnlyValues: boolean[] = [];
-    render(
-      createElement(
-        QueueProvider,
-        null,
-        createElement(PreviewOnlyProbe, { onValue: (value) => previewOnlyValues.push(value) }),
-      ),
-    );
+  it('lets any participant drive the shared current climb after a second member joins (no driver gate)', async () => {
+    const snapshots: Snapshot[] = [];
+    renderProvider((snapshot) => snapshots.push(snapshot));
 
     await waitFor(() => {
       expect(ws.getSessionUpdatesSink()).not.toBeNull();
+      expect(snapshots.at(-1)?.sessionId).toBe('session-1');
     });
-    expect(previewOnlyValues.at(-1)).toBe(false);
 
     const sessionUpdatesSink = ws.getSessionUpdatesSink();
     if (!sessionUpdatesSink) throw new Error('session updates sink was not captured');
 
-    // A second participant joins and wall control changes hands between members.
-    // None of it gates: the driver / preview-only mechanics were removed, so
-    // every participant keeps full control of the shared queue + wall at all
-    // times (the backend accepts queue mutations from any participant).
+    // A second participant joins — making this a true multi-member party. With
+    // the driver/preview mechanics removed, every member (including us) keeps
+    // full control: setCurrentClimb still applies locally AND fires the server
+    // mutation that broadcasts to peers.
     act(() => {
       sessionUpdatesSink.next({
         data: {
@@ -1677,23 +1402,17 @@ describe('QueueProvider preview-only roster gating', () => {
         },
       });
     });
+
+    const item = makeQueueItem('queue-shared', 'climb-shared');
     act(() => {
-      sessionUpdatesSink.next({
-        data: {
-          sessionUpdates: {
-            __typename: 'DriverChanged',
-            driverParticipantId: 'participant-2',
-            previousDriverParticipantId: null,
-          },
-        },
-      });
+      snapshots.at(-1)?.setCurrentClimb(item);
     });
 
     await waitFor(() => {
-      expect(previewOnlyValues.length).toBeGreaterThan(0);
+      expect(snapshots.at(-1)?.state.currentClimbQueueItem?.uuid).toBe('queue-shared');
     });
-    // Preview-only is never true — no member is ever locked out of control.
-    expect(previewOnlyValues.every((value) => value === false)).toBe(true);
+    // The shared current-climb mutation broadcasts to peers — no member is gated.
+    expect(queueMutations.setCurrentClimb).toHaveBeenCalled();
   });
 
   it('does not restore or clear the stored session when the status check fails with a server response', async () => {

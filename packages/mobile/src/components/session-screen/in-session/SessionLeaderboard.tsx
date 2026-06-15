@@ -14,17 +14,15 @@ import { spacing, borderRadius } from '../../../theme/tokens';
 
 type SessionLeaderboardProps = {
   participants: SessionFeedParticipant[];
-  driverUserId?: string | null;
   selfUserId?: string | null;
 };
 
 /**
  * Ranked roster — the social heart of the live view. Climbers sort by sends,
- * then flashes; the driver gets a lightbulb badge and your own row is tinted.
- * Hidden when fewer than two climbers have logged anything (no leaderboard of
- * one).
+ * then flashes; your own row is tinted. Hidden when fewer than two climbers have
+ * logged anything (no leaderboard of one).
  */
-export function SessionLeaderboard({ participants, driverUserId, selfUserId }: SessionLeaderboardProps) {
+export function SessionLeaderboard({ participants, selfUserId }: SessionLeaderboardProps) {
   const { t } = useTranslation('session');
   const { systemColors, brandColors } = useTheme();
 
@@ -46,7 +44,6 @@ export function SessionLeaderboard({ participants, driverUserId, selfUserId }: S
       <View style={[styles.list, { backgroundColor: systemColors.secondaryBackground }]}>
         {ranked.map((participant, index) => {
           const isSelf = !!selfUserId && participant.userId === selfUserId;
-          const isDriver = !!driverUserId && participant.userId === driverUserId;
           return (
             <View
               key={participant.userId}
@@ -64,14 +61,6 @@ export function SessionLeaderboard({ participants, driverUserId, selfUserId }: S
                 <Text variant="subheadline" style={styles.name} numberOfLines={1}>
                   {participant.displayName ?? t('mobile.session.inLeaderboardClimber')}
                 </Text>
-                {isDriver ? (
-                  <View style={styles.driverRow}>
-                    <Icon name="lightbulb.fill" size={11} color={brandColors.warning} />
-                    <Text variant="caption2" color={systemColors.secondaryLabel}>
-                      {t('mobile.session.inDriverLabel')}
-                    </Text>
-                  </View>
-                ) : null}
               </View>
               <View style={styles.chips}>
                 {participant.sends > 0 ? (
@@ -129,11 +118,6 @@ const styles = StyleSheet.create({
   },
   name: {
     fontWeight: '600',
-  },
-  driverRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
   },
   chips: {
     flexDirection: 'row',

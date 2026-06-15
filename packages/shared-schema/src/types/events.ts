@@ -18,9 +18,8 @@ import type { ClimbQueueItem, QueueState } from './queue';
 
 // Re-export the canonical SessionEvent union from codegen so this file
 // never drifts from the GraphQL schema. The hand-written union previously
-// duplicated here was already going stale (it predated the additions of
-// previousDriverParticipantId on DriverChanged and queueItemUuid on
-// WallConfirmedClimb).
+// duplicated here was already going stale (it predated the addition of
+// queueItemUuid on WallConfirmedClimb).
 export type { SessionEvent } from '../generated/types';
 
 // Response for delta sync event replay (Phase 2). Backend resolvers publish

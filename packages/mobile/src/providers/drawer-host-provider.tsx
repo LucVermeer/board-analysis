@@ -35,7 +35,7 @@ import { useToggleFavorite, useProfile } from '../lib/graphql/hooks';
 import { useAuth } from './auth-provider';
 import { favoritesStore } from '@boardsesh/climb-actions';
 import { climbToQueueItem } from '../lib/climb-to-queue-item';
-import { useIsPartyPreviewOnly, useQueueActions, useQueueSessionControls } from './queue-provider';
+import { useQueueActions, useQueueSessionControls } from './queue-provider';
 import { useQueueSnackbar } from './queue-snackbar-provider';
 import { useBoardPresenceControls, type ResolveBoardUuidArgs } from './board-presence-provider';
 import { useOptionalBluetoothContext } from './bluetooth-provider';
@@ -130,7 +130,6 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
   const [betaVideoClimb, setBetaVideoClimb] = useState<{ climb: Climb; boardConfig: BoardConfig } | null>(null);
   const { addToQueue, setSessionBoardPath, setCurrentClimb } = useQueueActions();
   const { sessionId } = useQueueSessionControls();
-  const isPartyPreviewOnly = useIsPartyPreviewOnly();
   const setActiveBoard = useSetActiveBoard();
   const {
     visible: snackbarVisible,
@@ -404,19 +403,15 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
     };
   }, [activeBoardConfig]);
 
-  // Tap a queue item → make it current and show it in the play drawer.
+  // Tap a queue item → make it current (for the whole session, always-live) and
+  // show it in the play drawer.
   const handleQueueClimbPress = useCallback(
     (item: ClimbQueueItem) => {
-      if (isPartyPreviewOnly) {
-        openPlayDrawer(item.climb, { setAsCurrent: false, previewQueueItem: item });
-        requestCloseQueueSheet();
-        return;
-      }
       setCurrentClimb(item);
       openPlayDrawer(item.climb, { setAsCurrent: false, previewQueueItem: item });
       requestCloseQueueSheet();
     },
-    [isPartyPreviewOnly, setCurrentClimb, openPlayDrawer, requestCloseQueueSheet],
+    [setCurrentClimb, openPlayDrawer, requestCloseQueueSheet],
   );
 
   // Tap a suggestion → activate it with a suggestion source built from the
@@ -426,20 +421,11 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
     (climb: QueueClimb, source: PlaylistSuggestionSource) => {
       const item = climbToQueueItem(climb, { suggested: true });
       const schemaClimb = item.climb as Climb;
-      if (isPartyPreviewOnly) {
-        openPlayDrawer(schemaClimb, {
-          setAsCurrent: false,
-          previewQueueItem: item,
-          previewPlaylistSuggestionSource: source,
-        });
-        requestCloseQueueSheet();
-        return;
-      }
       setCurrentClimb(item, { playlistSuggestionSource: source });
       openPlayDrawer(schemaClimb, { setAsCurrent: false, previewQueueItem: item });
       requestCloseQueueSheet();
     },
-    [isPartyPreviewOnly, setCurrentClimb, openPlayDrawer, requestCloseQueueSheet],
+    [setCurrentClimb, openPlayDrawer, requestCloseQueueSheet],
   );
 
   // Tick a history climb → open the log-ascent sheet (stacks above the queue
@@ -480,14 +466,6 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
       const boardConfigOverride = boardConfigsMatch(action.boardConfig, activeBoardConfigRef.current)
         ? undefined
         : action.boardConfig;
-      if (isPartyPreviewOnly) {
-        openPlayDrawer(action.climb, {
-          setAsCurrent: false,
-          previewQueueItem: item,
-          boardConfig: boardConfigOverride,
-        });
-        return;
-      }
       setCurrentClimb(item);
       openPlayDrawer(action.climb, {
         setAsCurrent: false,
@@ -495,7 +473,7 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
         boardConfig: boardConfigOverride,
       });
     },
-    [isPartyPreviewOnly, openPlayDrawer, setCurrentClimb],
+    [openPlayDrawer, setCurrentClimb],
   );
 
   const handleBoardSheetAddToQueue = useCallback(

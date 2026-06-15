@@ -33,7 +33,7 @@ import { BleControlSheet } from '../ble/BleControlSheet';
 import { disconnectAllBluetooth } from '../../lib/ble/bluetooth-status-store';
 import { GlassSheetBackground } from '../GlassSheetBackground';
 import { Icon } from '../Icon';
-import { useIsPartyPreviewOnly, usePlaylistSuggestionSource, useQueue } from '../../providers/queue-provider';
+import { usePlaylistSuggestionSource, useQueue, useQueueSessionControls } from '../../providers/queue-provider';
 import { useOptionalBluetoothContext } from '../../providers/bluetooth-provider';
 import { useAuth } from '../../providers/auth-provider';
 import { useToast } from '../../providers/toast-provider';
@@ -50,7 +50,6 @@ import {
   derivePlayDrawerLightbulbPressAction,
   derivePlayDrawerLightbulbState,
 } from './lightbulb-control';
-import { usePreviewOnlyExitCleanup } from './use-preview-only-exit-cleanup';
 import { track } from '../../lib/analytics';
 import { iosSystemColors } from '../../theme/ios-colors';
 import { spacing, sheetStyles } from '../../theme/tokens';
@@ -75,13 +74,15 @@ export type PlayDrawerOpenOptions = {
    */
   setAsCurrent?: boolean;
   /**
-   * Local-only playlist source for party non-driver previews. It drives drawer
-   * next/previous suggestions without mutating the shared queue until the
-   * lightbulb promotes the preview to wall control.
+   * Playlist source that seeds the drawer's next/previous suggestions when a
+   * climb is opened with `setAsCurrent: false` (the suggestion source the
+   * activation builds isn't on the queue yet). Drives swipe-through-playlist in
+   * the drawer without re-dispatching.
    */
   previewPlaylistSuggestionSource?: PlaylistSuggestionSource | null;
-  /** Queue item to display locally without making it current. Used by
-   * preview-only queue-sheet opens so navigation has the right queue anchor. */
+  /** Queue item to display as the drawer's navigation anchor without
+   * re-dispatching it (used with `setAsCurrent: false` so prev/next anchor on
+   * the right queue entry). */
   previewQueueItem?: ClimbQueueItem | null;
 };
 
@@ -146,6 +147,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   }, []);
 
   const { state, setCurrentClimb, nextClimb, previousClimb, sessionId, addToQueue } = useQueue();
+  const { isSessionWallLit } = useQueueSessionControls();
   const playlistSuggestionSource = usePlaylistSuggestionSource();
   const bluetooth = useOptionalBluetoothContext();
   const { mutate: toggleFavoriteMutate } = useToggleFavorite();
@@ -203,14 +205,14 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   );
   // The lightbulb reads lit if *anyone* is connected to the board, not just this
   // device: in a session every member shares the wall, so another member's
-  // connection (the board-presence holder) lights it too. Read the context
-  // directly (non-throwing) so the portaled drawer never crashes if it renders
-  // outside the provider. The press action still keys on THIS device's BLE.
+  // connection (the board-presence holder) lights it too, and a session-scoped
+  // WallConfirmedClimb (isSessionWallLit) lights it for members who aren't
+  // holding the BLE link. A WallDisconnected event clears isSessionWallLit.
+  // Read the board-presence context directly (non-throwing) so the portaled
+  // drawer never crashes if it renders outside the provider. The press action
+  // still keys on THIS device's BLE.
   const boardPresenceCurrent = useContext(BoardPresenceCurrentContext);
-  const lightbulbActive = lightbulbState.lightbulbActive || boardPresenceCurrent?.holder != null;
-  // Queue-mutation gating comes from the provider's roster-aware selector (a
-  // solo occupant keeps full control).
-  const isPartyPreviewOnly = useIsPartyPreviewOnly();
+  const lightbulbActive = lightbulbState.lightbulbActive || boardPresenceCurrent?.holder != null || isSessionWallLit;
   const navigationSuggestionSource = drawerPreviewSuggestionSource ?? playlistSuggestionSource;
   const navigationState = useMemo(
     () => computeNavigationStateWithSuggestions(state.queue, displayedQueueItem, navigationSuggestionSource),
@@ -254,17 +256,6 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
     setDrawerPreviewSuggestionSource(null);
   }, [angle]);
 
-  // When this client stops being preview-only (e.g. the session ended), drop the
-  // drawer-local preview state: commits now go through the provider, and a
-  // lingering drawerPreviewSuggestionSource would keep shadowing the provider's
-  // source for displayed peeks while nextClimb() commits against the provider
-  // source. Transition-gated (true→false only) so entering preview mode or
-  // mounting never clears a fresh preview.
-  usePreviewOnlyExitCleanup(isPartyPreviewOnly, () => {
-    setDrawerPreviewItem(null);
-    setDrawerPreviewSuggestionSource(null);
-  });
-
   const { showToast } = useToast();
 
   const shareClimb = useShareClimb({
@@ -306,14 +297,14 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
       setIsTickBarActive(false);
       setIsSheetOpen(true);
       setActiveSubDrawer('none');
-      if (selectedItem && (options?.setAsCurrent ?? true) && !isPartyPreviewOnly) {
+      if (selectedItem && (options?.setAsCurrent ?? true)) {
         // Fresh activation from the list/search clears any playlist suggestion
         // source (web passes the same null option on every non-playlist set).
         setCurrentClimb(selectedItem, { playlistSuggestionSource: null });
       }
       sheetRef.current?.present();
     },
-    [state.currentClimbQueueItem, isPartyPreviewOnly, setCurrentClimb],
+    [state.currentClimbQueueItem, setCurrentClimb],
   );
 
   // Serialize open() against the sheet's dismiss animation: presenting
@@ -360,30 +351,20 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   }, [flushOnDismiss]);
 
   const handlePrev = useCallback(() => {
-    if (isPartyPreviewOnly) {
-      if (navigationState.prevItem) {
-        setDrawerPreviewItem(navigationState.prevItem);
-      }
-    } else {
-      setDrawerPreviewItem(null);
-      previousClimb();
-    }
+    // Always-live: navigation commits the shared current climb for everyone.
+    setDrawerPreviewItem(null);
+    previousClimb();
     setIsMirrored(false);
     // The favorite override is cleared by the climb-change effect.
-  }, [isPartyPreviewOnly, navigationState.prevItem, previousClimb]);
+  }, [previousClimb]);
 
   const handleNext = useCallback(() => {
-    if (isPartyPreviewOnly) {
-      if (navigationState.nextItem) {
-        setDrawerPreviewItem(navigationState.nextItem);
-      }
-    } else {
-      setDrawerPreviewItem(null);
-      nextClimb();
-    }
+    // Always-live: navigation commits the shared current climb for everyone.
+    setDrawerPreviewItem(null);
+    nextClimb();
     setIsMirrored(false);
     // The favorite override is cleared by the climb-change effect.
-  }, [isPartyPreviewOnly, navigationState.nextItem, nextClimb]);
+  }, [nextClimb]);
 
   const handleMirror = useCallback(() => {
     const nextMirrored = !isMirrored;
@@ -551,11 +532,10 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
       setIsMirrored(false);
       // The favorite override is cleared by the climb-change effect.
       setIsTickBarActive(false);
-      if (isPartyPreviewOnly) return;
       addToQueue(queueItem);
       setCurrentClimb(queueItem, { playlistSuggestionSource: null });
     },
-    [addToQueue, isPartyPreviewOnly, setCurrentClimb],
+    [addToQueue, setCurrentClimb],
   );
 
   const renderBackdrop = useCallback(

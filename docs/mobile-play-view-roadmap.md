@@ -40,7 +40,7 @@ The authoritative design spec for the play view lives at [`docs/ui/06-play-view.
 | Zoom/pan                                            | Done | Planned | Transform math                                | 4     |
 | Double-tap favorite                                 | Done | Planned | Favorite toggle logic                         | 4     |
 | Route/circuit playback (animate, speed, party-sync) | Done | Done    | @boardsesh/playback-react (usePlaybackEngine) | 5     |
-| Party mode (mini session bar, driver, drift)        | Done | Partial | Session state types                           | 5     |
+| Party mode (mini session bar, always-live wall)     | Done | Partial | Session state types                           | 5     |
 | BLE lightbulb integration                           | Done | Partial | Protocol (via @boardsesh/ble-protocol)        | 5     |
 | Coachmarks                                          | Done | Planned | Coachmark definitions                         | 6     |
 | Beta videos section                                 | Done | Planned | Video data types                              | 6     |
@@ -100,11 +100,10 @@ Adds real-time collaborative climbing sessions.
 
 **Still planned:**
 
-- **Mini session bar** -- persistent bar above the play drawer showing connected users, driver name, and session status
-- **Driver state and lightbulb behavior** -- driver controls which climb is displayed and sends lightbulb commands; non-drivers see the driver's selection in real time
-- **Drift state** -- non-driver users can browse ahead in the queue without affecting the session; a "return to session" button snaps back to the driver's current climb
-- **Wall-confirm watcher** -- listens for wall-confirm events from the board hardware and advances the session state
-- **BLE lightbulb** -- connect to the board via `@boardsesh/ble-protocol`, take control of the LEDs, release control on disconnect or session end
+- **Mini session bar** -- persistent bar above the play drawer showing connected users and session status (sessions are always-live; the original driver/preview design was retired)
+- **Lightbulb behavior** -- any participant's climb change broadcasts to everyone in real time and is relayed to the board by whoever holds a BLE connection. The lightbulb is a send/re-assert affordance: pressing it re-sends the current climb to the board
+- **Wall-confirm watcher** -- `WallConfirmedClimb` lights the lightbulb when a phone delivers the climb over BLE; `WallDisconnected` turns it off when the relaying link drops (the current climb is preserved)
+- **BLE lightbulb** -- connect to the board via `@boardsesh/ble-protocol`, send the current climb to the LEDs; report a disconnect on BLE drop or session end
 
 ### Phase 6: Polish
 

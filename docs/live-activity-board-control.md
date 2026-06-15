@@ -10,11 +10,11 @@ Two BLE layers exist in the codebase. The **React Native layer** (`packages/mobi
 
 **What works today:**
 
-- Single native `URLSessionWebSocketTask` owned by `SessionWebSocketManager`, shared between webview and Live Activity
+- A native `URLSessionWebSocketTask` owned by `SessionWebSocketManager` feeds the Live Activity while the app is backgrounded (the JS-side `graphql-ws` socket suspends on lock). The JS webview owns its own `graphql-ws` client — the same one web and Android use — separate from this native connection; they are not shared. See `docs/websocket-implementation.md` (iOS Live Activity Integration).
 - Widget shows current climb name, grade, angle, queue position, and board thumbnail
-- Widget shows whether this device currently owns wall control. In party sessions, non-drivers see the lightbulb off and the Previous/Next controls disabled.
-- Next/Previous buttons navigate the queue optimistically (App Group UserDefaults) and send `setCurrentClimb` mutation via native WS, but only after local driver state allows navigation. The backend `/api/widget/navigate` endpoint still rejects non-driver requests.
-- Non-drivers can tap the widget lightbulb to POST `/api/widget/take-control` with the registered Live Activity bearer token. The endpoint requires the token row to have a bound `userId`, claims that participant as driver, and then the widget enables navigation after the successful response.
+- Widget shows whether our session's climb is confirmed on the wall (lightbulb lit). Sessions are always-live, so any participant may navigate.
+- Next/Previous buttons navigate the queue optimistically (App Group UserDefaults) and POST the backend `/api/widget/navigate` REST endpoint (not the native WS) with the registered Live Activity bearer token. The endpoint accepts any current session member (no driver gate) and rejects a stale token whose session ended (410) or whose user is no longer a participant (403).
+- Tapping the widget lightbulb POSTs `/api/widget/take-control` with the registered Live Activity bearer token. The endpoint requires the token row to have a bound `userId` and re-asserts (re-broadcasts `CurrentClimbChanged` for) the current climb; it returns 200.
 - All queue delta events (FullSync, ItemAdded, ItemRemoved, CurrentClimbChanged, Reordered) are processed natively and persisted to App Group
 - Message buffering when webview is backgrounded, with flush or resync on foreground
 - Rust board renderer (`packages/board-renderer-wasm/`) compiles to WASM, used in both Node.js backend (server-rendered thumbnails) and web frontend (Web Worker). Already has `HoldData` types, frame string parsing (`p<hold_id>r<state_code>`), and Aurora hold state color mapping

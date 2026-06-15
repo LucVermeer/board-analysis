@@ -68,17 +68,17 @@ Device-to-server (widget buttons):
        |
   APNs push sent to all session tokens (other devices)
 
-  User taps the lightbulb while not the party driver
+  User taps the lightbulb to re-assert the current climb
        |
   iOS performs TakeControlIntent in the MAIN APP process
        |
   HTTP POST /api/widget/take-control
        - authenticated with the registered Live Activity bearer token
        - rejected unless the token row has a bound authenticated userId
-       - claims that participant as the wall driver
+       - re-asserts (re-broadcasts CurrentClimbChanged for) the current climb
        |
-  On success, the widget stores local wall-control state, shows the
-  lightbulb on, and enables Next/Previous.
+  On success (200), the widget shows the lightbulb on. Navigation is
+  always enabled — sessions are always-live, any member may navigate.
 ```
 
 Latency on the BLE side from a suspended-app cold-launch is ~1.5–2.5 s: background-launch (~0.5–1 s) + CoreBluetooth state restoration (~0.5–1 s) + UART chunk flush (~0.2–0.5 s). Subsequent taps inside the same wake window are faster because the peripheral stays connected.
@@ -91,7 +91,7 @@ Cross-device limitation: when _another_ user navigates and your phone is suspend
 - Apple Developer account (paid, $99/year) with the Boardsesh app registered
 - iPhone running iOS 17+ connected via USB or on the same network
 - Tailscale set up on both the Mac and iPhone
-- Local dev environment running (`bun run db:up`, `bun run dev`, `bun run backend:dev`)
+- Local dev environment running: `vp run dev` (starts the DB, backend, and web together; run `vp run db:up` first if you only need the database)
 
 ## Apple Developer Setup
 
@@ -358,16 +358,15 @@ Lock your iPhone. The Live Activity widget should update within a few seconds sh
 
 ## Testing Widget Navigation
 
-### Test Non-Driver Take Control
+### Test Lightbulb Re-Assert
 
 1. Start a party session with two signed-in participants and register Live Activities on both devices
-2. Make device A the wall driver
+2. Have device A's climb relayed to the board so its lightbulb is lit
 3. Lock device B
-4. Verify device B shows the lightbulb off and the Next/Previous buttons disabled
-5. Tap the lightbulb on device B
-6. Backend logs should show the `/api/widget/take-control` request
-7. Device B should show the lightbulb on and enable Next/Previous after the request succeeds
-8. Device A should show disabled navigation after its app/native state receives the driver update
+4. Tap the lightbulb on device B
+5. Backend logs should show the `/api/widget/take-control` request returning 200
+6. Device B re-asserts (re-broadcasts) the current climb; its lightbulb shows on after the request succeeds
+7. Navigation stays enabled on both devices — sessions are always-live, any member may navigate
 
 ### Test with App in Foreground
 

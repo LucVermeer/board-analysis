@@ -8,7 +8,13 @@ import {
   trackLiveActivityWidgetNavigation,
   trackLiveActivityWidgetNavigationAttributionGap,
 } from '../services/analytics/live-activity';
+import { checkWidgetRateLimit, ensureWidgetRateLimitPruner, __resetWidgetRateLimitForTests } from './widget-rate-limit';
+import { verifyWidgetSession } from './widget-session-guard';
 import { logger } from '../utils/logger';
+
+// Re-exported so existing callers/tests that import the reset from this module
+// keep working after the bucket moved to the shared widget-rate-limit module.
+export { __resetWidgetRateLimitForTests };
 
 interface WidgetNavigateBody {
   sessionId: string;
@@ -63,73 +69,6 @@ function readBody(req: IncomingMessage): Promise<string> {
   });
 }
 
-/**
- * Per-session token bucket for widget navigation.
- *
- * Threat model: an iOS widget can fire navigate requests rapidly (e.g. user
- * mashing the next button while the lock screen renders). Without a limit,
- * `navigateToQueueItem`'s internal MAX_RETRIES=3 retry loop can amplify a
- * burst of widget taps into a stampede on `roomManager.updateQueueState`.
- *
- * Bucket: 2 capacity, refills at 1 token / 1.5s. So 2 quick taps go through;
- * sustained taps are limited to ~40 req/min per session.
- *
- * In-memory only — the widget endpoint runs per-instance and the limit is a
- * defense-in-depth measure, not a hard quota. Across instances the limit is
- * looser, which is acceptable for this threat model.
- */
-const RATE_BUCKET_CAPACITY = 2;
-const RATE_REFILL_PER_SECOND = 1 / 1.5;
-
-interface RateBucket {
-  tokens: number;
-  lastRefillMs: number;
-}
-
-const rateBuckets = new Map<string, RateBucket>();
-
-function checkRateLimit(sessionId: string): boolean {
-  const now = Date.now();
-  const existing = rateBuckets.get(sessionId);
-
-  if (!existing) {
-    rateBuckets.set(sessionId, { tokens: RATE_BUCKET_CAPACITY - 1, lastRefillMs: now });
-    return true;
-  }
-
-  // Refill tokens based on elapsed time
-  const elapsedSeconds = (now - existing.lastRefillMs) / 1000;
-  const refilled = Math.min(RATE_BUCKET_CAPACITY, existing.tokens + elapsedSeconds * RATE_REFILL_PER_SECOND);
-  existing.lastRefillMs = now;
-
-  if (refilled < 1) {
-    existing.tokens = refilled;
-    return false;
-  }
-
-  existing.tokens = refilled - 1;
-  return true;
-}
-
-/** Periodically prune buckets that haven't been touched for 5 minutes. */
-const RATE_BUCKET_PRUNE_INTERVAL_MS = 5 * 60 * 1000;
-const RATE_BUCKET_TTL_MS = 5 * 60 * 1000;
-let pruneIntervalHandle: ReturnType<typeof setInterval> | null = null;
-
-function ensurePrunerRunning(): void {
-  if (pruneIntervalHandle !== null) return;
-  pruneIntervalHandle = setInterval(() => {
-    const cutoff = Date.now() - RATE_BUCKET_TTL_MS;
-    for (const [sessionId, bucket] of rateBuckets) {
-      if (bucket.lastRefillMs < cutoff) {
-        rateBuckets.delete(sessionId);
-      }
-    }
-  }, RATE_BUCKET_PRUNE_INTERVAL_MS);
-  // Don't keep the process alive solely for this timer.
-  if (typeof pruneIntervalHandle.unref === 'function') pruneIntervalHandle.unref();
-}
-
 type WidgetNavigationAnalyticsEvent = Parameters<typeof trackLiveActivityWidgetNavigation>[0];
 type WidgetNavigationAnalyticsPayload = Omit<WidgetNavigationAnalyticsEvent, 'userId'>;
 
@@ -166,7 +105,7 @@ function trackWidgetNavigation(userId: string | null, event: WidgetNavigationAna
  * 429 to absorb widget-button mashes.
  */
 export async function handleWidgetNavigate(req: IncomingMessage, res: ServerResponse): Promise<void> {
-  ensurePrunerRunning();
+  ensureWidgetRateLimitPruner();
 
   // CORS headers (allow the widget's URLSession to call this).
   // applyCorsHeaders already replies 200 for OPTIONS preflight and returns
@@ -248,26 +187,14 @@ export async function handleWidgetNavigate(req: IncomingMessage, res: ServerResp
   }
 
   try {
-    // The Live Activity token proves session membership, but wall navigation is
-    // driver-only. Authenticated users join with participantId === userId, so
-    // compare the token's bound user to the current driver before mutating the
-    // shared queue. Legacy rows without userId cannot prove driver ownership.
-    const driverParticipantId = await roomManager.getSessionDriverParticipantId(sessionId);
-    if (!authResult.userId || driverParticipantId !== authResult.userId) {
-      trackWidgetNavigation(authResult.userId, {
-        sessionId,
-        action,
-        outcome: 'not_driver',
-        statusCode: 403,
-      });
-      res.writeHead(403, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ success: false, error: 'Widget navigation requires the current driver' }));
-      return;
-    }
+    // Sessions are always-live: any current session member may navigate the
+    // wall (no driver gate). The Live Activity token proves the user joined at
+    // some point, but that row outlives session-end and leave — so re-check the
+    // durable session/membership below before mutating.
 
-    // Rate limit (per session) — apply *after* auth + driver check so a
-    // non-driver cannot poison the driver's bucket.
-    if (!checkRateLimit(sessionId)) {
+    // Rate limit (per session) — apply *after* auth so an unauthenticated
+    // caller can't poison a member's bucket.
+    if (!checkWidgetRateLimit(sessionId)) {
       trackWidgetNavigation(authResult.userId, {
         sessionId,
         action,
@@ -276,6 +203,22 @@ export async function handleWidgetNavigate(req: IncomingMessage, res: ServerResp
       });
       res.writeHead(429, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ success: false, error: 'Too many requests' }));
+      return;
+    }
+
+    // Reject stale tokens whose session has ended or whose user isn't a
+    // participant, before any queue read/mutation (else a stale token revives
+    // an ended session's persisted queue).
+    const guard = await verifyWidgetSession(sessionId, authResult.userId);
+    if (!guard.ok) {
+      trackWidgetNavigation(authResult.userId, {
+        sessionId,
+        action,
+        outcome: guard.status === 410 ? 'session_ended' : 'not_participant',
+        statusCode: guard.status,
+      });
+      res.writeHead(guard.status, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: false, error: guard.error }));
       return;
     }
 
@@ -367,17 +310,5 @@ export async function handleWidgetNavigate(req: IncomingMessage, res: ServerResp
     });
     res.writeHead(500, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ success: false, error: 'Internal server error' }));
-  }
-}
-
-/**
- * Test-only utility to clear in-memory rate-limit state between tests.
- * Not exported via the public module API; tests import directly.
- */
-export function __resetWidgetRateLimitForTests(): void {
-  rateBuckets.clear();
-  if (pruneIntervalHandle !== null) {
-    clearInterval(pruneIntervalHandle);
-    pruneIntervalHandle = null;
   }
 }

@@ -45,22 +45,20 @@ import { generateSessionSummary } from './session-summary';
 import { autoSyncSessionToIntegrations } from '../../../integrations/export-service';
 import { normalizeIanaTimezone } from '../../../utils/timezone';
 import { endLiveActivity } from '../../../services/apns';
-import { takeSessionDriverControl } from '../../../services/session-driver-control';
 import { buildSessionPayload } from './helpers';
+import { setCurrentClimbAndPublish } from '../../../services/queue-navigation';
 
 /**
- * Queue-control-bar pivot — `isLeader` audit (2026-05-23):
- * Confirmed that no `isLeader` / `leaderId` / `leaderConnectionId` /
- * `LeaderChanged` site in this file gates wall-control. The only
- * authorization use is `endSession` (line 870), which checks
- * `isCreator || isLeader` to authorize SESSION TERMINATION — not driver /
- * wall-control. Every other `isLeader` reference here is presentation:
- * passed back through the `Session.isLeader` field so clients can show the
- * legacy host-crown badge without a refetch. Wall-control authority lives
- * exclusively on `driverParticipantId` (added in PR #2198) and is gated by
- * `takeControl` / `releaseControl`. Web, iOS, and shared-schema searches
- * also turned up nothing wall-control-gated by `isLeader`. See
- * `docs/queue-control-bar-pivot.md` (What shipped vs spec) for details.
+ * `isLeader` audit (always-live sessions):
+ * No `isLeader` / `leaderId` / `leaderConnectionId` / `LeaderChanged` site
+ * in this file gates wall navigation. The only authorization use is
+ * `endSession`, which checks `isCreator || isLeader` to authorize SESSION
+ * TERMINATION. Every other `isLeader` reference here is presentation: passed
+ * back through the `Session.isLeader` field so clients can show the legacy
+ * host-crown badge without a refetch. Sessions are always-live — any member
+ * may navigate the wall (`setCurrentClimb` / `navigateToQueueItem` broadcast
+ * to all members with no gate). The session-scoped wall-disconnect signal is
+ * `reportWallDisconnect`, which publishes `WallDisconnected`.
  */
 
 /**
@@ -294,10 +292,6 @@ export const sessionMutations = {
             currentClimbQueueItem: result.currentClimbQueueItem,
           },
           isLeader: result.isLeader,
-          // Newly created sessions start with no driver — the creator must press
-          // the lightbulb to claim the wall. Null here lets the bar render the
-          // empty/outlined state in PR 2 onward.
-          driverParticipantId: null,
           // No board has been paired yet; gets set the first time anyone in the
           // session calls setSessionBoardSerial.
           lastConnectedBoardSerial: null,
@@ -322,7 +316,6 @@ export const sessionMutations = {
         users: [],
         queueState: null,
         isLeader: false,
-        driverParticipantId: null,
         lastConnectedBoardSerial: null,
         clientId: null,
         participantId: ctx.participantId || ctx.connectionId || '',
@@ -406,15 +399,50 @@ export const sessionMutations = {
   },
 
   /**
-   * Claim wall-control authority and optionally broadcast a climb to the wall.
-   *
-   * Mediates the queue-control-bar pivot's lightbulb gesture. Any session
-   * participant may call — yank-on-press by design (the previous driver's
-   * lightbulb releases automatically when the new driver claims). When `climb`
-   * is provided, the climb is also appended to the queue (if not already
-   * present) and broadcast as the current climb, matching `setCurrentClimb`'s
-   * side effects. Publishes `DriverChanged` regardless of whether a climb was
-   * provided.
+   * Report that the wall connection relaying this session's current climb has
+   * dropped. The session-scoped counterpart to board-presence's wall signal:
+   * the device that was sending climbs to the wall over BLE lost its link
+   * (manual disconnect, BLE drop), so peers should clear their "climb is lit"
+   * lightbulb state. The current climb is unchanged — pressing the lightbulb
+   * re-asserts (re-sends) it. Any session participant may call. The server
+   * derives `disconnectedByParticipantId` from the caller's identity so it
+   * cannot be forged. Publishes `WallDisconnected`. Returns the resolved
+   * `Session` so optimistic-UI callers can apply server-derived state without
+   * a follow-up query (symmetric with `confirmClimbOnWall`). Session identity
+   * comes from the WebSocket connection context — no `sessionId` argument.
+   */
+  reportWallDisconnect: async (_: unknown, __: unknown, ctx: ConnectionContext) => {
+    await applyRateLimit(ctx, RATE_LIMIT_SESSION, RATE_LIMIT_SESSION_OP);
+    const sessionId = requireSession(ctx);
+    await requireSessionMember(ctx, sessionId);
+
+    // Hard-error when ctx.participantId is missing — same reasoning as
+    // confirmClimbOnWall: connectionIds rotate on every reconnect, so falling
+    // back would leak the reporter's identity across reconnects and weaken the
+    // wire event.
+    if (!ctx.participantId) {
+      throw new Error('reportWallDisconnect requires ctx.participantId; refusing to fall back to connectionId.');
+    }
+    const participantId = ctx.participantId;
+
+    pubsub.publishSessionEvent(sessionId, {
+      __typename: 'WallDisconnected',
+      disconnectedByParticipantId: participantId,
+    });
+
+    // Mirror confirmClimbOnWall: return the resolved Session so optimistic-UI
+    // callers can apply server-derived state without a follow-up query.
+    return buildSessionPayload(sessionId, ctx, { participantId });
+  },
+
+  /**
+   * DEPRECATED compat shim — sessions are always-live, so there is no wall
+   * driver to claim. Kept one release for stale clients (cached web bundles,
+   * un-OTA'd native apps) that still call `takeControl`. If a climb is provided
+   * we set it as the current climb (so the stale client's wall change still
+   * propagates always-live, shouldAddToQueue=true mirrors setCurrentClimb);
+   * otherwise it's a no-op. NEVER publishes `DriverChanged`. Remove after the
+   * rollout window.
    */
   takeControl: async (_: unknown, { climb }: { climb?: ClimbQueueItem | null }, ctx: ConnectionContext) => {
     await applyRateLimit(ctx, RATE_LIMIT_SESSION, RATE_LIMIT_SESSION_OP);
@@ -422,46 +450,35 @@ export const sessionMutations = {
     await requireSessionMember(ctx, sessionId);
     if (climb !== null && climb !== undefined) {
       validateInput(ClimbQueueItemSchema, climb, 'climb');
+      await setCurrentClimbAndPublish(sessionId, climb, true, roomManager, pubsub, ctx.connectionId || null, null);
     }
+    return buildSessionPayload(sessionId, ctx, ctx.participantId ? { participantId: ctx.participantId } : {});
+  },
 
-    // Hard-error when ctx.participantId is missing rather than silently
-    // falling back to connectionId. The connectionId rotates on every
-    // reconnect, so any subsequent clearSessionDriverIf/releaseDriverIfMatches
-    // call (e.g. driver bounces wifi, reconnects with a fresh connectionId)
-    // would fail to match the prior key and leak the driver assignment.
-    // Surfacing the failure forces auth to publish a real participantId.
-    if (!ctx.participantId) {
-      throw new Error('takeControl requires ctx.participantId; refusing to fall back to connectionId.');
-    }
-    const participantId = ctx.participantId;
-
-    await takeSessionDriverControl({
-      sessionId,
-      participantId,
-      climb,
-      originConnectionId: ctx.connectionId || null,
-    });
-
-    // We already know the new driver from the atomic swap above; everything
-    // else fans out via the helper.
-    return buildSessionPayload(sessionId, ctx, {
-      driverParticipantId: participantId,
-      participantId,
-    });
+  /**
+   * DEPRECATED compat shim — no wall driver exists. Inert no-op kept one release
+   * for stale clients. NEVER publishes `DriverChanged`. Returns the session
+   * unchanged. Remove after the rollout window.
+   */
+  releaseControl: async (_: unknown, __: unknown, ctx: ConnectionContext) => {
+    await applyRateLimit(ctx, RATE_LIMIT_SESSION, RATE_LIMIT_SESSION_OP);
+    const sessionId = requireSession(ctx);
+    await requireSessionMember(ctx, sessionId);
+    return buildSessionPayload(sessionId, ctx, ctx.participantId ? { participantId: ctx.participantId } : {});
   },
 
   /**
    * Confirm to all session members that a climb was successfully sent to the
    * wall over BLE from this client's phone. Any session participant may call —
    * the BLE-capable phone that handled the send is the source of truth for
-   * confirmation, regardless of who holds the driver role. The server stamps
-   * `confirmedAt` and derives `confirmedByParticipantId` from the caller's
-   * identity so clients cannot forge either field. The optional
-   * `queueItemUuid` disambiguates the press when the same climb is queued
-   * twice. Publishes `WallConfirmedClimb`. Returns the resolved `Session` so
-   * optimistic-UI callers can apply server-derived state without a follow-up
-   * query (symmetric with `takeControl` / `releaseControl`). Session identity
-   * comes from the WebSocket connection context — no `sessionId` argument.
+   * confirmation. The server stamps `confirmedAt` and derives
+   * `confirmedByParticipantId` from the caller's identity so clients cannot
+   * forge either field. The optional `queueItemUuid` disambiguates the press
+   * when the same climb is queued twice. Publishes `WallConfirmedClimb`.
+   * Returns the resolved `Session` so optimistic-UI callers can apply
+   * server-derived state without a follow-up query (symmetric with
+   * `reportWallDisconnect`). Session identity comes from the WebSocket
+   * connection context — no `sessionId` argument.
    */
   confirmClimbOnWall: async (
     _: unknown,
@@ -478,16 +495,16 @@ export const sessionMutations = {
     // client.
     await applyRateLimit(ctx, RATE_LIMIT_CONFIRM_CLIMB_ON_WALL, RATE_LIMIT_CONFIRM_CLIMB_ON_WALL_OP);
     // Session identity comes from the WebSocket connection context (the
-    // "WS-implicit" pattern used by takeControl / releaseControl) — clients
-    // no longer pass `sessionId` as an argument.
+    // "WS-implicit" pattern) — clients no longer pass `sessionId` as an
+    // argument.
     const sessionId = requireSession(ctx);
     validateInput(ClimbUuidSchema, climbUuid, 'climbUuid');
     await requireSessionMember(ctx, sessionId);
 
     // Hard-error when ctx.participantId is missing. ConnectionIds rotate on
     // every reconnect, so falling back would leak the confirmer's identity
-    // across reconnects and weaken the wire event. See takeControl above for
-    // the full reasoning.
+    // across reconnects and weaken the wire event. See reportWallDisconnect
+    // above for the full reasoning.
     if (!ctx.participantId) {
       throw new Error('confirmClimbOnWall requires ctx.participantId; refusing to fall back to connectionId.');
     }
@@ -496,7 +513,7 @@ export const sessionMutations = {
     // Correlate the wire climb against the session's recent-climbs ring
     // buffer (last RECENT_CLIMBS_BUFFER_SIZE authoritative wall climbs, per
     // services/distributed-state/constants.ts). Strict equality against
-    // `currentClimbQueueItem` rejects legitimate confirms when the driver
+    // `currentClimbQueueItem` rejects legitimate confirms when a member
     // navigates on in the ~hundreds-of-ms window between BLE write and
     // mutation arrival — the buffer turns over every wall change, so it
     // still gates against arbitrary stale/forged UUIDs without the race.
@@ -515,7 +532,7 @@ export const sessionMutations = {
       queueItemUuid: queueItemUuid ?? null,
     });
 
-    // Mirror takeControl / releaseControl: return the resolved Session so
+    // Mirror reportWallDisconnect: return the resolved Session so
     // optimistic-UI callers can apply server-derived state without a
     // follow-up query.
     return buildSessionPayload(sessionId, ctx, { participantId });
@@ -528,9 +545,8 @@ export const sessionMutations = {
    * Idempotent: when the stored serial already equals the incoming value, no
    * `SessionBoardSerialChanged` event is emitted. Returns the resolved
    * `Session` so optimistic-UI callers can apply server-derived state without
-   * a follow-up query (symmetric with `takeControl` / `releaseControl`).
-   * Session identity comes from the WebSocket connection context — no
-   * `sessionId` argument.
+   * a follow-up query (symmetric with `confirmClimbOnWall`). Session identity
+   * comes from the WebSocket connection context — no `sessionId` argument.
    */
   setSessionBoardSerial: async (_: unknown, { serial }: { serial: string }, ctx: ConnectionContext) => {
     await applyRateLimit(ctx, RATE_LIMIT_SESSION, RATE_LIMIT_SESSION_OP);
@@ -541,7 +557,7 @@ export const sessionMutations = {
     await requireSessionMember(ctx, sessionId);
 
     // Hard-error when ctx.participantId is missing — same reasoning as
-    // takeControl / confirmClimbOnWall: connectionIds aren't stable across
+    // confirmClimbOnWall: connectionIds aren't stable across
     // reconnects. Must run BEFORE the roomManager write and event publish
     // below; otherwise an anonymous/unidentified caller would mutate Redis
     // and broadcast SessionBoardSerialChanged before we reject them.
@@ -558,7 +574,7 @@ export const sessionMutations = {
       });
     }
 
-    // Mirror takeControl / releaseControl: return the resolved Session.
+    // Mirror confirmClimbOnWall: return the resolved Session.
     // Re-read `lastConnectedBoardSerial` (via the helper's default lookup)
     // rather than echoing the input — another writer (different participant
     // on a different board) can land between our write and this read, and
@@ -570,13 +586,12 @@ export const sessionMutations = {
   /**
    * Broadcast a boardPath update (today: angle changes) to every session
    * participant. Any participant may call — angle is presentational and
-   * doesn't drive BLE (hold positions ride on the climb, not the
-   * boardPath), so the queue-control-bar pivot's "only driver moves the
-   * wall" rule doesn't apply. Idempotent: if the stored boardPath already
-   * matches, no event fires. Publishes `SessionBoardPathChanged` on
-   * change. Returns the resolved Session for optimistic-UI symmetry with
-   * takeControl / releaseControl. Session identity is resolved from the
-   * WebSocket connection context — no `sessionId` argument.
+   * doesn't drive BLE (hold positions ride on the climb, not the boardPath).
+   * Idempotent: if the stored boardPath already matches, no event fires.
+   * Publishes `SessionBoardPathChanged` on change. Returns the resolved
+   * Session for optimistic-UI symmetry with confirmClimbOnWall. Session
+   * identity is resolved from the WebSocket connection context — no
+   * `sessionId` argument.
    */
   setSessionBoardPath: async (_: unknown, { boardPath }: { boardPath: string }, ctx: ConnectionContext) => {
     await applyRateLimit(ctx, RATE_LIMIT_SESSION, RATE_LIMIT_SESSION_OP);
@@ -600,15 +615,13 @@ export const sessionMutations = {
 
     // Return the resolved Session. Fan independent reads in parallel —
     // matches setSessionBoardSerial's shape.
-    const [users, sessionData, queueState, driverParticipantId, lastConnectedBoardSerial, leaderConnectionId] =
-      await Promise.all([
-        roomManager.getSessionUsers(sessionId),
-        roomManager.getSessionById(sessionId),
-        roomManager.getQueueState(sessionId),
-        roomManager.getSessionDriverParticipantId(sessionId),
-        roomManager.getSessionBoardSerial(sessionId),
-        roomManager.getSessionLeaderConnectionId(sessionId),
-      ]);
+    const [users, sessionData, queueState, lastConnectedBoardSerial, leaderConnectionId] = await Promise.all([
+      roomManager.getSessionUsers(sessionId),
+      roomManager.getSessionById(sessionId),
+      roomManager.getQueueState(sessionId),
+      roomManager.getSessionBoardSerial(sessionId),
+      roomManager.getSessionLeaderConnectionId(sessionId),
+    ]);
 
     // `requireSessionMember` above already verified the session exists.
     // If the row vanished between membership check and this read we have
@@ -633,7 +646,6 @@ export const sessionMutations = {
         currentClimbQueueItem: queueState.currentClimbQueueItem,
       },
       isLeader: leaderConnectionId === ctx.connectionId,
-      driverParticipantId,
       lastConnectedBoardSerial,
       clientId: ctx.connectionId,
       participantId,
@@ -644,46 +656,6 @@ export const sessionMutations = {
       isPermanent: sessionData.isPermanent ?? false,
       color: sessionData.color || null,
     };
-  },
-
-  /**
-   * Release wall-control authority. Idempotent — when the caller is not the
-   * current driver, the mutation is a no-op (returns the current session state
-   * with `driverParticipantId` unchanged). Publishes `DriverChanged { null }`
-   * only when the clear actually happened.
-   */
-  releaseControl: async (_: unknown, __: unknown, ctx: ConnectionContext) => {
-    await applyRateLimit(ctx, RATE_LIMIT_SESSION, RATE_LIMIT_SESSION_OP);
-    const sessionId = requireSession(ctx);
-    await requireSessionMember(ctx, sessionId);
-
-    // Hard-error when ctx.participantId is missing. Falling back to
-    // connectionId would silently fail to clear the driver key after the
-    // user's connectionId rotated — the original takeControl wrote under
-    // their stable participantId, and a release under a rotated connectionId
-    // wouldn't match. See takeControl above for the full reasoning.
-    if (!ctx.participantId) {
-      throw new Error('releaseControl requires ctx.participantId; refusing to fall back to connectionId.');
-    }
-    const participantId = ctx.participantId;
-    const cleared = await roomManager.clearSessionDriverIf(sessionId, participantId);
-
-    if (cleared) {
-      // `cleared = true` means the caller was the driver, so they are also the
-      // previousDriverParticipantId carried on the event.
-      pubsub.publishSessionEvent(sessionId, {
-        __typename: 'DriverChanged',
-        driverParticipantId: null,
-        previousDriverParticipantId: participantId,
-      });
-    }
-
-    // Short-circuit the driver lookup when we just cleared (we already know
-    // it's null). Everything else fans out through the helper.
-    return buildSessionPayload(sessionId, ctx, {
-      participantId,
-      ...(cleared ? { driverParticipantId: null } : {}),
-    });
   },
 
   /**

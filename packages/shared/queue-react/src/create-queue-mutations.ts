@@ -18,7 +18,7 @@
 //     before mutating; returning null makes the action a silent no-op (mobile
 //     keeps the solo queue purely local — sessions are created only by the
 //     explicit Start button / an explicit join, never lazily here).
-// Party / best-effort actions (takeControl, releaseControl, confirmClimbOnWall,
+// Party / best-effort actions (confirmClimbOnWall, reportWallDisconnect,
 // setSessionBoardSerial, setSessionBoardPath) no-op on BOTH platforms when
 // there is no active session.
 
@@ -35,9 +35,8 @@ import {
   PUBLISH_PLAYBACK_STATE,
   SET_QUEUE,
   REPLACE_QUEUE_ITEM,
-  TAKE_CONTROL,
-  RELEASE_CONTROL,
   CONFIRM_CLIMB_ON_WALL,
+  REPORT_WALL_DISCONNECT,
   SET_SESSION_BOARD_SERIAL,
   SET_SESSION_BOARD_PATH,
 } from '@boardsesh/graphql/operations/queue-session';
@@ -99,24 +98,18 @@ export type QueueMutationsActions<TItem> = {
   setQueue: (queue: TItem[], currentClimbQueueItem?: TItem | null) => Promise<void>;
   replaceQueueItem: (uuid: string, item: TItem) => Promise<void>;
   /**
-   * Claim wall-control authority in the current party session, optionally
-   * broadcasting a climb. Yank-on-press server-side. In solo (no active
-   * session) it's a backend no-op that still resolves, so callers can use
-   * `takeControl(climb)` as a drop-in for `setCurrentClimb(climb)`.
-   */
-  takeControl: (climb?: TItem | null) => Promise<void>;
-  /**
-   * Release wall-control authority. Idempotent — no-op when the local user
-   * isn't the driver. Backend no-op in solo.
-   */
-  releaseControl: () => Promise<void>;
-  /**
    * Tell the backend this client just relayed `climbUuid` to the wall over BLE
    * so it can broadcast `WallConfirmedClimb` to the other party members.
    * Best-effort: transport errors are swallowed (the BLE send already
    * succeeded). No-op in solo.
    */
   confirmClimbOnWall: (climbUuid: string) => Promise<void>;
+  /**
+   * Tell the backend this client's BLE link to the wall dropped, so it can
+   * broadcast `WallDisconnected` and every party member turns the lightbulb
+   * off. The current climb is preserved. Best-effort; no-op in solo.
+   */
+  reportWallDisconnect: () => Promise<void>;
   /**
    * Record the BLE serial this client paired to as the session's
    * `lastConnectedBoardSerial` so other members can auto-connect to the same
@@ -297,21 +290,6 @@ export function createQueueMutations<TItem>(deps: QueueMutationsDeps<TItem>): Qu
       });
     },
 
-    takeControl: async (climb) => {
-      const ready = await resolveCurrent();
-      if (!ready) return;
-      await execute(ready.client, {
-        query: TAKE_CONTROL,
-        variables: { climb: climb ? toQueueItemInput(climb) : null },
-      });
-    },
-
-    releaseControl: async () => {
-      const ready = await resolveCurrent();
-      if (!ready) return;
-      await execute(ready.client, { query: RELEASE_CONTROL, variables: {} });
-    },
-
     confirmClimbOnWall: async (climbUuid) => {
       const ready = await resolveCurrent();
       if (!ready) return;
@@ -319,6 +297,16 @@ export function createQueueMutations<TItem>(deps: QueueMutationsDeps<TItem>): Qu
         await execute(ready.client, { query: CONFIRM_CLIMB_ON_WALL, variables: { climbUuid } });
       } catch (error) {
         onBestEffortError?.('confirmClimbOnWall', error);
+      }
+    },
+
+    reportWallDisconnect: async () => {
+      const ready = await resolveCurrent();
+      if (!ready) return;
+      try {
+        await execute(ready.client, { query: REPORT_WALL_DISCONNECT, variables: {} });
+      } catch (error) {
+        onBestEffortError?.('reportWallDisconnect', error);
       }
     },
 

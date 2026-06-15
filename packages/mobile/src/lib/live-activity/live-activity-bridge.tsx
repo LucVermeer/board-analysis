@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useIsPartyPreviewOnly, useQueue } from '../../providers/queue-provider';
+import { useQueue } from '../../providers/queue-provider';
 import { useLiveActivity } from './use-live-activity';
 import { addWidgetQueueNavigateListener } from './live-activity-plugin';
 
@@ -23,9 +23,8 @@ type LiveActivityBridgeProps = {
 export function LiveActivityBridge({ boardName, layoutId, sizeId, setIds }: LiveActivityBridgeProps) {
   const { state, sessionId, nextClimb, previousClimb } = useQueue();
   const { t } = useTranslation('session');
-  // Widget Next/Previous are queue mutations — gate them on the same
-  // roster-aware preview-only selector as every other mutation path.
-  const canNavigateFromWidget = !useIsPartyPreviewOnly();
+  // Always-live: widget Next/Previous drive the shared current climb for the
+  // whole session, just like in-app navigation — no driver/preview gate.
 
   // Localized strings for the Android foreground-service notification (channel +
   // Previous/Next actions). Built here because hooks need a component context;
@@ -49,7 +48,9 @@ export function LiveActivityBridge({ boardName, layoutId, sizeId, setIds }: Live
     // Session presence follows real (explicitly started/joined) sessions only —
     // a solo queue never raises the lock-screen widget / Dynamic Island.
     isSessionActive: sessionId !== null,
-    widgetNavigationAllowed: canNavigateFromWidget,
+    // Always-live: the widget navigate endpoint is no longer driver-gated, so
+    // every member (and solo) may navigate from the widget.
+    widgetNavigationAllowed: true,
     isPartySession: sessionId !== null,
     androidNotification,
   });
@@ -60,7 +61,6 @@ export function LiveActivityBridge({ boardName, layoutId, sizeId, setIds }: Live
   // when the app foregrounds, its currentClimbQueueItem matches the wall.
   useEffect(() => {
     const unsubscribe = addWidgetQueueNavigateListener((event) => {
-      if (!canNavigateFromWidget) return;
       if (event.action === 'next') {
         nextClimb();
       } else if (event.action === 'previous') {
@@ -68,7 +68,7 @@ export function LiveActivityBridge({ boardName, layoutId, sizeId, setIds }: Live
       }
     });
     return unsubscribe;
-  }, [canNavigateFromWidget, nextClimb, previousClimb]);
+  }, [nextClimb, previousClimb]);
 
   return null;
 }

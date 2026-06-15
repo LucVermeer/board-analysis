@@ -9,7 +9,6 @@ import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
 import type { ClimbQueueItem } from '@boardsesh/queue';
-import { deriveIsDriver } from '@boardsesh/queue-runtime';
 import type { Climb, SessionDetailTick, SessionFeedParticipant } from '@boardsesh/shared-schema';
 import { getGradeTextColor } from '@boardsesh/play-view';
 import { formatTickRelativeTime, tickTimeMs } from '@boardsesh/profile-stats';
@@ -22,12 +21,7 @@ import { SectionHeader } from '../../SectionHeader';
 import { Text } from '../../Text';
 import { type IconName } from '../../icon-map';
 import { useTheme } from '../../../providers/theme-provider';
-import {
-  useQueueSessionControls,
-  useQueueActions,
-  useQueueLiveStats,
-  useIsPartyPreviewOnly,
-} from '../../../providers/queue-provider';
+import { useQueueSessionControls, useQueueActions, useQueueLiveStats } from '../../../providers/queue-provider';
 import { useDrawerHost } from '../../../providers/drawer-host-provider';
 import { useSessionDetail, useSessionSummary } from '../../../lib/graphql/hooks';
 import { runSessionEndExports } from '../../../lib/integrations';
@@ -262,7 +256,7 @@ export function InSessionView({
   const router = useRouter();
   const queryClient = useQueryClient();
   const { openPlayDrawer } = useDrawerHost();
-  const { sessionId, driverParticipantId, participantId } = useQueueSessionControls();
+  const { sessionId, participantId } = useQueueSessionControls();
   const { setCurrentClimb, endSession } = useQueueActions();
   const { liveStats, sessionUsers } = useQueueLiveStats();
 
@@ -373,22 +367,6 @@ export function InSessionView({
     [sessionUsers, participantId],
   );
 
-  // History-tick taps mutate the shared queue (setCurrentClimb) — gate them on
-  // the provider's roster-aware preview-only selector, not on raw driver state,
-  // so a solo occupant keeps control of their own session.
-  const canControlWall = !useIsPartyPreviewOnly();
-  const driverUserId = useMemo(
-    () =>
-      sessionUsers.find((user) =>
-        deriveIsDriver({
-          isPersistentSessionActive: true,
-          participantId: user.id,
-          driverParticipantId,
-        }),
-      )?.userId ?? null,
-    [sessionUsers, driverParticipantId],
-  );
-
   const participantByUserId = useMemo(() => {
     const entries = new Map<string, SessionFeedParticipant>();
     for (const participant of participants) {
@@ -402,11 +380,11 @@ export function InSessionView({
       const climb = tickToClimb(tick);
       const boardConfig = getBoardConfigForPlaylist(tick.boardType, tick.layoutId);
 
-      if (canControlWall) {
-        const item = tickToQueueItem(tick);
-        if (item) {
-          setCurrentClimb(item);
-        }
+      // Always-live: tapping a history tick makes it the shared current climb for
+      // everyone in the session (no driver gate).
+      const item = tickToQueueItem(tick);
+      if (item) {
+        setCurrentClimb(item);
       }
 
       if (climb && boardConfig) {
@@ -425,7 +403,7 @@ export function InSessionView({
 
       navigateToSessionClimb(router, tick);
     },
-    [canControlWall, openPlayDrawer, router, setCurrentClimb],
+    [openPlayDrawer, router, setCurrentClimb],
   );
 
   // Swipe-down-to-dismiss from the body (overlay mode only). Drag the sheet only
@@ -558,11 +536,7 @@ export function InSessionView({
         </Text>
       ) : null}
 
-      <SessionPresenceRow
-        users={sessionUsers}
-        driverParticipantId={driverParticipantId}
-        selfParticipantId={participantId}
-      />
+      <SessionPresenceRow users={sessionUsers} />
 
       {/* Solo teaching row for the chrome's bare share glyph (tab mode). A glass
           square can't hold a label, so the affordance is explained here until a
@@ -614,7 +588,7 @@ export function InSessionView({
 
   const listFooter = (
     <View style={styles.footerContent}>
-      <SessionLeaderboard participants={participants} driverUserId={driverUserId} selfUserId={selfUserId} />
+      <SessionLeaderboard participants={participants} selfUserId={selfUserId} />
     </View>
   );
 

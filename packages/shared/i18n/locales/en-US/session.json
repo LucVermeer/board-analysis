@@ -218,10 +218,7 @@
       "logAttempt": "Log attempt",
       "showParticipants": "Show participants",
       "hideParticipants": "Hide participants",
-      "openPlayDrawer": "Open the wall climb",
-      "userIsDriving": "{{username}} is driving",
-      "returnToWallClimb": "Return to {{username}}'s wall climb",
-      "returnToWallClimbNoDriver": "Return to the wall climb"
+      "openPlayDrawer": "Open the wall climb"
     },
     "offline": {
       "idle": "Offline",
@@ -251,12 +248,6 @@
   },
   "queueProvider": {
     "offlineLimitReached": "You've hit the offline up-next limit. Reconnect to sync your climbs."
-  },
-  "driverToast": {
-    "firstDriver": "{{newDriver}} is driving the wall.",
-    "tookFromOther": "{{newDriver}} took the wall from {{previousDriver}}.",
-    "tookFromYou": "{{newDriver}} took the wall from you.",
-    "unknownDriver": "Someone"
   },
   "mobile": {
     "logbook": {
@@ -458,7 +449,6 @@
       "inLeaderboardTitle": "Who's climbing",
       "inLeaderboardClimber": "Climber",
       "inPresenceCount": "{{count}} climbing",
-      "inDriverLabel": "Driving",
       "invite": "Invite climbers",
       "inviteTitle": "Invite to this session",
       "inviteSubtitle": "Scan to join, or share the link",
@@ -476,13 +466,8 @@
     "pause": "Pause",
     "replay": "Replay",
     "speed": "Playback speed",
-    "onWallChip": "ON WALL · {{username}}",
-    "onWallChipNoDriver": "ON WALL",
-    "drivingChip": "DRIVING",
     "audienceCount_one": "{{count}} other watching",
     "audienceCount_other": "{{count}} others watching",
-    "returnToWallPill": "{{username}} · {{climbName}}",
-    "previewCoachmark": "Previewing. Tap the lightbulb to send it to the wall.",
     "yourAscents_one": "Your Ascent ({{count}})",
     "yourAscents_other": "Your Ascents ({{count}})",
     "triesCount_one": "{{count}} try",
@@ -502,10 +487,9 @@
       "openQueueAria": "Open up next",
       "queueCountAria": "Queue, {{count}} climbs",
       "lightbulb": {
-        "drivingNamed": "You’re driving “{{name}}”. Tap to release control.",
-        "driving": "You’re driving. Tap to release control.",
-        "takeNamed": "Take wall control and send “{{name}}”",
-        "take": "Take wall control",
+        "turnOff": "Turn off the board",
+        "sendNamed": "Send “{{name}}” to the wall",
+        "send": "Send the climb to the wall",
         "coachmark": "Send to the wall"
       }
     },

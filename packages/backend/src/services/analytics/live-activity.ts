@@ -4,7 +4,8 @@ type WidgetNavigationOutcome =
   | 'success'
   | 'rate_limited'
   | 'wrong_session'
-  | 'not_driver'
+  | 'session_ended'
+  | 'not_participant'
   | 'queue_empty'
   | 'target_out_of_bounds'
   | 'error';

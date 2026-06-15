@@ -43,9 +43,15 @@ let mockPickerState: PickerStateMock = null;
 // Capture the `onConnectSuccess` callback passed by BluetoothProvider so
 // tests can simulate "BLE connected with parsed serial" without rendering
 // the real adapter or stubbing every other useBoardBluetooth dependency.
-let lastUseBoardBluetoothOptions: { onConnectSuccess?: (serial: string | null) => void } | null = null;
+let lastUseBoardBluetoothOptions: {
+  onConnectSuccess?: (serial: string | null) => void;
+  onConnectionChange?: (connected: boolean) => void;
+} | null = null;
 vi.mock('../use-board-bluetooth', () => ({
-  useBoardBluetooth: (options: { onConnectSuccess?: (serial: string | null) => void }) => {
+  useBoardBluetooth: (options: {
+    onConnectSuccess?: (serial: string | null) => void;
+    onConnectionChange?: (connected: boolean) => void;
+  }) => {
     lastUseBoardBluetoothOptions = options;
     return { ...mockBluetoothState, pickerState: mockPickerState };
   },
@@ -126,6 +132,7 @@ vi.mock('@/app/lib/ble/capacitor-utils', () => ({
 
 const mockConfirmClimbOnWall = vi.fn().mockResolvedValue(undefined);
 const mockSetSessionBoardSerial = vi.fn().mockResolvedValue(undefined);
+const mockReportWallDisconnect = vi.fn().mockResolvedValue(undefined);
 let mockPersistentSessionState: { session: { id: string; lastConnectedBoardSerial?: string | null } | null } = {
   session: null,
 };
@@ -133,8 +140,26 @@ vi.mock('@/app/components/persistent-session', () => ({
   usePersistentSessionActions: () => ({
     confirmClimbOnWall: mockConfirmClimbOnWall,
     setSessionBoardSerial: mockSetSessionBoardSerial,
+    reportWallDisconnect: mockReportWallDisconnect,
   }),
   usePersistentSessionState: () => mockPersistentSessionState,
+}));
+
+// Board-presence controls. Default inert (boardId null), matching the real
+// DISABLED_CONTROLS fallback when no provider is mounted, so existing tests are
+// unaffected. A test can set mockPresenceBoardId to assert the BLE-drop holder
+// release. `useOptionalWallReport` stays inert (no wall reports in these tests).
+let mockPresenceBoardId: number | null = null;
+const mockReportBoardDisconnect = vi.fn().mockResolvedValue(true);
+const mockResolveAndBindBoard = vi.fn().mockResolvedValue(null);
+vi.mock('../../board-presence/board-presence-context', () => ({
+  useBoardPresenceControls: () => ({
+    enabled: false,
+    boardId: mockPresenceBoardId,
+    resolveAndBindBoard: mockResolveAndBindBoard,
+    reportDisconnect: mockReportBoardDisconnect,
+  }),
+  useOptionalWallReport: () => ({ currentClimb: null, previousClimb: null, reportClimb: vi.fn() }),
 }));
 
 let mockCurrentClimbQueueItem: {
@@ -196,9 +221,12 @@ describe('BluetoothProvider', () => {
     lastMismatchProps = null;
     mockAuth = { token: null, isAuthenticated: false };
     mockResolveSerialNumbers.mockResolvedValue(new Map());
+    mockPresenceBoardId = null;
+    mockReportBoardDisconnect.mockResolvedValue(true);
     mockPersistentSessionState = { session: null };
     mockConfirmClimbOnWall.mockResolvedValue(undefined);
     mockSetSessionBoardSerial.mockResolvedValue(undefined);
+    mockReportWallDisconnect.mockResolvedValue(undefined);
     lastUseBoardBluetoothOptions = null;
   });
 
@@ -1063,6 +1091,77 @@ describe('BluetoothProvider', () => {
         expect(mockConfirmClimbOnWall).toHaveBeenCalledTimes(1);
       });
       expect(mockConfirmClimbOnWall).toHaveBeenCalledWith('climb-1');
+    });
+  });
+
+  describe('wall disconnect on BLE drop', () => {
+    it('reports wall disconnect to the session when the BLE link drops in a party', async () => {
+      mockPersistentSessionState = { session: { id: 'session-1' } };
+
+      renderHook(() => useBluetoothContext(), { wrapper: createWrapper() });
+
+      expect(lastUseBoardBluetoothOptions?.onConnectionChange).toBeDefined();
+      await act(async () => {
+        lastUseBoardBluetoothOptions?.onConnectionChange?.(false);
+        await Promise.resolve();
+      });
+
+      expect(mockReportWallDisconnect).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not report wall disconnect on (re)connect', async () => {
+      mockPersistentSessionState = { session: { id: 'session-1' } };
+
+      renderHook(() => useBluetoothContext(), { wrapper: createWrapper() });
+
+      await act(async () => {
+        lastUseBoardBluetoothOptions?.onConnectionChange?.(true);
+        await Promise.resolve();
+      });
+
+      expect(mockReportWallDisconnect).not.toHaveBeenCalled();
+    });
+
+    it('does not report wall disconnect when solo (no session)', async () => {
+      mockPersistentSessionState = { session: null };
+
+      renderHook(() => useBluetoothContext(), { wrapper: createWrapper() });
+
+      await act(async () => {
+        lastUseBoardBluetoothOptions?.onConnectionChange?.(false);
+        await Promise.resolve();
+      });
+
+      expect(mockReportWallDisconnect).not.toHaveBeenCalled();
+    });
+
+    it('releases the board-presence holder on BLE drop when bound to a board (even solo)', async () => {
+      // Independent of session membership: a dropped BLE link must free the
+      // board-presence holder, or the lightbulb's holder OR keeps it lit.
+      mockPersistentSessionState = { session: null };
+      mockPresenceBoardId = 123;
+
+      renderHook(() => useBluetoothContext(), { wrapper: createWrapper() });
+
+      await act(async () => {
+        lastUseBoardBluetoothOptions?.onConnectionChange?.(false);
+        await Promise.resolve();
+      });
+
+      expect(mockReportBoardDisconnect).toHaveBeenCalledWith(123);
+    });
+
+    it('does not release the board-presence holder when no board is bound', async () => {
+      mockPresenceBoardId = null;
+
+      renderHook(() => useBluetoothContext(), { wrapper: createWrapper() });
+
+      await act(async () => {
+        lastUseBoardBluetoothOptions?.onConnectionChange?.(false);
+        await Promise.resolve();
+      });
+
+      expect(mockReportBoardDisconnect).not.toHaveBeenCalled();
     });
   });
 

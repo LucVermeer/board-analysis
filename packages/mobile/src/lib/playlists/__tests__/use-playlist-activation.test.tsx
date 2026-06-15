@@ -17,7 +17,6 @@ const mocks = vi.hoisted(() => ({
   refreshPlaylistSuggestionSource: vi.fn(),
   openPlayDrawer: vi.fn(),
   activeBoard: { boardType: 'kilter', layoutId: 1, sizeId: 2, setIds: '3', angle: 40 } as ActiveBoard,
-  isPartyPreviewOnly: false,
   activate: vi.fn<(climb: Climb) => Promise<void>>(),
   fetchSuggestion: vi.fn(),
   captured: undefined as UsePlaylistClimbActivationOptions | undefined,
@@ -36,7 +35,6 @@ vi.mock('../../../providers/queue-provider', () => ({
     setCurrentClimb: mocks.setCurrentClimb,
     refreshPlaylistSuggestionSource: mocks.refreshPlaylistSuggestionSource,
   }),
-  useIsPartyPreviewOnly: () => mocks.isPartyPreviewOnly,
 }));
 vi.mock('../../../providers/drawer-host-provider', () => ({
   useDrawerHost: () => ({ openPlayDrawer: mocks.openPlayDrawer }),
@@ -84,7 +82,6 @@ function captured(): UsePlaylistClimbActivationOptions {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.activeBoard = { boardType: 'kilter', layoutId: 1, sizeId: 2, setIds: '3', angle: 40 };
-  mocks.isPartyPreviewOnly = false;
   mocks.captured = undefined;
   mocks.activate.mockResolvedValue(undefined);
   mocks.queueItemCounter = 0;
@@ -169,66 +166,17 @@ describe('usePlaylistActivation (mobile wrapper)', () => {
     expect(item?.climb).toEqual(climbB);
   });
 
-  it('clears the pinned item when a preview-only tap intervenes', async () => {
-    const { result, rerender } = renderActivation();
+  it('activates through the shared queue on every tap (always-live, no preview gate)', async () => {
+    const { result } = renderActivation();
     const climb = makeClimb('a');
-
-    // Solo tap pins the ref. The mocked activation never reaches
-    // queueApi.setCurrentClimb, so the pinned item is left dangling.
-    await result.current(climb);
-    const soloPinnedItem = mocks.openPlayDrawer.mock.calls[0][1].previewQueueItem;
-
-    // A preview-only tap for the same uuid must drop the stale pin.
-    mocks.isPartyPreviewOnly = true;
-    rerender();
     await result.current(climb);
 
-    // Back to solo: a later dispatch for the same uuid builds a fresh item
-    // rather than reusing the instance the first solo tap pinned.
-    mocks.isPartyPreviewOnly = false;
-    rerender();
-    const item = await captured().queueApi!.setCurrentClimb(climb, { playlistSuggestionSource: null });
-    expect(item).not.toBe(soloPinnedItem);
-    expect(item?.uuid).not.toBe(soloPinnedItem.uuid);
-  });
-
-  describe('party preview-only mode', () => {
-    beforeEach(() => {
-      mocks.isPartyPreviewOnly = true;
-    });
-
-    it('never dispatches to the shared queue — opens a local preview instead', async () => {
-      const { result } = renderActivation();
-      const climb = makeClimb('a');
-      await result.current(climb);
-
-      // A non-driver tap must not change the session's current climb for peers.
-      expect(mocks.activate).not.toHaveBeenCalled();
-      expect(mocks.setCurrentClimb).not.toHaveBeenCalled();
-      expect(mocks.openPlayDrawer).toHaveBeenCalledWith(climb, {
-        setAsCurrent: false,
-        previewQueueItem: expect.objectContaining({ climb, suggested: true }),
-        previewPlaylistSuggestionSource: expect.objectContaining({
-          playlistUuid: 'pl-1',
-          activatedClimbUuid: 'a',
-          boardKey: expect.stringContaining('kilter'),
-          climbs: expect.arrayContaining([expect.objectContaining({ uuid: 'a' })]),
-        }),
-      });
-    });
-
-    it('opens with a null preview source when no board resolves', async () => {
-      mocks.activeBoard = null;
-      const { result } = renderActivation();
-      const climb = makeClimb('a');
-      await result.current(climb);
-
-      expect(mocks.setCurrentClimb).not.toHaveBeenCalled();
-      expect(mocks.openPlayDrawer).toHaveBeenCalledWith(climb, {
-        setAsCurrent: false,
-        previewQueueItem: expect.objectContaining({ climb }),
-        previewPlaylistSuggestionSource: null,
-      });
+    // Every tap drives the shared activation — there is no non-driver preview
+    // branch that skips it anymore.
+    expect(mocks.activate).toHaveBeenCalledWith(climb);
+    expect(mocks.openPlayDrawer).toHaveBeenCalledWith(climb, {
+      setAsCurrent: false,
+      previewQueueItem: expect.objectContaining({ climb }),
     });
   });
 

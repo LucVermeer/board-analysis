@@ -1,5 +1,7 @@
 # Queue Control Bar Pivot — Bar Mirrors the Wall, Lightbulb Controls the Driver
 
+> **Superseded (2026-06): the driver / preview-only model described below has been retired.** Group sessions are now always-live — any participant's climb change broadcasts to everyone and is relayed to the board by whoever holds a BLE connection. The lightbulb is now a send/re-assert affordance, not a driver claim; when the relaying connection drops, a `WallDisconnected` session event turns the lightbulb off for everyone while preserving the current climb. See docs/websocket-implementation.md for the current model.
+
 **Status:** Phases 1–3 + simplified Phase 4 shipped in #2198 on 2026-05-18. A follow-up PR (2026-05-23) closes the remaining gaps: Phase 3 queue-list 5-item history + center-on-open, Phase 5 `Wall Advance` + `Session Board Serial Set` events, bar prev/next "on the wall" aria-label polish, hand-off toast (Open Q2), stale board-serial defensive clear (Open Q5), `isLeader` audit. See the "What shipped vs spec" appendix at the bottom for the full divergence list. Earlier stack (#2188, #2195, #2197) collapsed into #2198 after the design simplification on 2026-05-17.
 **Decision date:** 2026-05-16 (original); simplified 2026-05-17
 **Driven by:** Observed user-testing pain in large-group party sessions, supported by 3 months of Vercel Analytics + 1 week of PostHog

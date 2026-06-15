@@ -17,11 +17,10 @@ export function toMobileSessionRuntimeEvent(event: SessionUpdateEvent): RuntimeS
             leaderConnectionId: event.leaderConnectionId ?? null,
           }
         : null;
-    case 'DriverChanged':
+    case 'WallDisconnected':
       return {
-        __typename: 'DriverChanged',
-        driverParticipantId: event.driverParticipantId ?? null,
-        previousDriverParticipantId: event.previousDriverParticipantId ?? null,
+        __typename: 'WallDisconnected',
+        disconnectedByParticipantId: event.disconnectedByParticipantId ?? null,
       };
     case 'SessionBoardSerialChanged':
       return {

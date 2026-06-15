@@ -26,6 +26,7 @@ const queue = vi.hoisted(() => ({
   sessionId: null as string | null,
   lastConnectedBoardSerial: null as string | null,
   confirmClimbOnWall: vi.fn(async () => {}),
+  reportWallDisconnect: vi.fn(async () => {}),
   setSessionBoardSerial: vi.fn(async () => {}),
 }));
 
@@ -134,9 +135,9 @@ vi.mock('../queue-provider', () => ({
     sessionId: queue.sessionId,
     lastConnectedBoardSerial: queue.lastConnectedBoardSerial,
     confirmClimbOnWall: queue.confirmClimbOnWall,
+    reportWallDisconnect: queue.reportWallDisconnect,
     setSessionBoardSerial: queue.setSessionBoardSerial,
   }),
-  useIsPartyPreviewOnly: () => false,
 }));
 
 vi.mock('../../lib/board-details', () => ({

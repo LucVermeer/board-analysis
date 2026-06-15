@@ -607,7 +607,6 @@ export const GET_SESSION = gql`
       goal
       startedAt
       endedAt
-      driverParticipantId
       users {
         id
         username
@@ -632,7 +631,6 @@ export type SessionPreview = {
   goal: string | null;
   startedAt: string | null;
   endedAt: string | null;
-  driverParticipantId: string | null;
   users: SessionUser[];
 };
 
@@ -945,15 +943,14 @@ export const SESSION_UPDATES_SUBSCRIPTION = `
         leaderId
         leaderConnectionId
       }
-      ... on DriverChanged {
-        driverParticipantId
-        previousDriverParticipantId
-      }
       ... on WallConfirmedClimb {
         climbUuid
         confirmedAt
         confirmedByParticipantId
         queueItemUuid
+      }
+      ... on WallDisconnected {
+        disconnectedByParticipantId
       }
       ... on SessionEnded {
         reason
@@ -1032,14 +1029,13 @@ export type SessionUpdateEvent = {
   // LeaderChanged
   leaderId?: string | null;
   leaderConnectionId?: string | null;
-  // DriverChanged
-  driverParticipantId?: string | null;
-  previousDriverParticipantId?: string | null;
   // WallConfirmedClimb
   climbUuid?: string;
   confirmedAt?: string;
   confirmedByParticipantId?: string | null;
   queueItemUuid?: string | null;
+  // WallDisconnected
+  disconnectedByParticipantId?: string | null;
   // SessionBoardSerialChanged
   lastConnectedBoardSerial?: string | null;
   // SessionEnded

@@ -11,7 +11,6 @@ export type RuntimeSessionState<TUser extends RuntimeSessionUser = RuntimeSessio
   users: TUser[];
   isLeader: boolean;
   clientId: string;
-  driverParticipantId: string | null;
   lastConnectedBoardSerial: string | null;
   boardPath: string;
 };
@@ -21,7 +20,7 @@ export type RuntimeSessionEvent<TUser extends RuntimeSessionUser = RuntimeSessio
   | { __typename: 'UserPresenceChanged'; user: TUser }
   | { __typename: 'UserLeft'; userId: string }
   | { __typename: 'LeaderChanged'; leaderId: string; leaderConnectionId?: string | null }
-  | { __typename: 'DriverChanged'; driverParticipantId?: string | null; previousDriverParticipantId?: string | null }
+  | { __typename: 'WallDisconnected'; disconnectedByParticipantId?: string | null }
   | { __typename: 'SessionBoardSerialChanged'; lastConnectedBoardSerial?: string | null }
   | { __typename: 'SessionBoardPathChanged'; boardPath: string; changedByParticipantId?: string | null }
   | { __typename: 'SessionEnded'; reason?: string | null; newPath?: string | null };
@@ -63,12 +62,15 @@ export function applySessionRuntimeEvent<
         })),
       };
     }
-    case 'DriverChanged':
-      return { ...prev, driverParticipantId: event.driverParticipantId ?? null };
     case 'SessionBoardSerialChanged':
       return { ...prev, lastConnectedBoardSerial: event.lastConnectedBoardSerial ?? null };
     case 'SessionBoardPathChanged':
       return { ...prev, boardPath: event.boardPath };
+    case 'WallDisconnected':
+      // Transient wall-control signal — turning the lightbulb off is handled by
+      // the client UI layer, not the durable session roster. No session-state
+      // change here (the current climb is intentionally preserved).
+      return prev;
     case 'SessionEnded':
       return prev;
   }

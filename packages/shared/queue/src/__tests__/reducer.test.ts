@@ -39,7 +39,6 @@ describe('initialState', () => {
     expect(state.lastReceivedSequence).toBeNull();
     expect(state.lastReceivedStateHash).toBeNull();
     expect(state.needsResync).toBe(false);
-    expect(state.optimisticDriverParticipantId).toBeNull();
   });
 
   it('preserves provided search params', () => {
@@ -355,40 +354,6 @@ describe('DELTA_UPDATE_CURRENT_CLIMB', () => {
     });
     expect(result.pendingCurrentClimbUpdates).toContain('local-corr-1');
     expect(result.currentClimbQueueItem?.uuid).toBe('new-climb');
-  });
-});
-
-describe('OPTIMISTIC_SET_DRIVER', () => {
-  it('sets the optimistic driver participant id', () => {
-    const state = makeState({ optimisticDriverParticipantId: null });
-    const result = queueReducer(state, {
-      type: 'OPTIMISTIC_SET_DRIVER',
-      payload: { participantId: 'user-42' },
-    });
-    expect(result.optimisticDriverParticipantId).toBe('user-42');
-  });
-
-  it('is idempotent for same participant id', () => {
-    const state = makeState({ optimisticDriverParticipantId: 'user-42' });
-    const result = queueReducer(state, {
-      type: 'OPTIMISTIC_SET_DRIVER',
-      payload: { participantId: 'user-42' },
-    });
-    expect(result).toBe(state);
-  });
-});
-
-describe('OPTIMISTIC_CLEAR_DRIVER', () => {
-  it('clears the optimistic driver', () => {
-    const state = makeState({ optimisticDriverParticipantId: 'user-42' });
-    const result = queueReducer(state, { type: 'OPTIMISTIC_CLEAR_DRIVER' });
-    expect(result.optimisticDriverParticipantId).toBeNull();
-  });
-
-  it('is idempotent when already null', () => {
-    const state = makeState({ optimisticDriverParticipantId: null });
-    const result = queueReducer(state, { type: 'OPTIMISTIC_CLEAR_DRIVER' });
-    expect(result).toBe(state);
   });
 });
 
