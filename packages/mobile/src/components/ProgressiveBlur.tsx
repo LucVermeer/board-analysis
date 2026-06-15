@@ -15,6 +15,12 @@ const MASK_COLORS = ['#000000', 'transparent'] as const;
 // Thin material is heavier than ultra-thin (closer to the native tab bar's chrome
 // glass), so fewer layers reach the target darkness — which also helps scroll perf.
 const DEFAULT_LAYERS = 3;
+// In dark mode the thin material frosts to a medium grey, so the status-bar /
+// dynamic-island band reads grey against the black island. A black wash, strongest
+// at the very top and gone before the islands row, sinks that band to black without
+// touching the grey frost lower down.
+const DARK_SCRIM_COLORS = ['rgba(0,0,0,0.6)', 'rgba(0,0,0,0)'] as const;
+const DARK_SCRIM_LOCATIONS = [0, 0.7] as const;
 
 type ProgressiveBlurProps = {
   /** Absolute position/size of the blur region (set by the caller). */
@@ -65,6 +71,17 @@ export function ProgressiveBlur({ style, blurAmount = 16, layers = DEFAULT_LAYER
           </MaskedView>
         );
       })}
+      {/* Dark-mode only: a black wash over the blur, strongest at the top, so the
+          dynamic-island / status-bar band reads black rather than grey. Sits above
+          the blur but below the floating islands (rendered later by the caller). */}
+      {isDark ? (
+        <LinearGradient
+          colors={DARK_SCRIM_COLORS}
+          locations={DARK_SCRIM_LOCATIONS}
+          pointerEvents="none"
+          style={StyleSheet.absoluteFill}
+        />
+      ) : null}
     </View>
   );
 }

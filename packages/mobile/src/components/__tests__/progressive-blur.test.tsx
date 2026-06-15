@@ -65,4 +65,21 @@ describe('ProgressiveBlur', () => {
       'thinMaterialLight',
     );
   });
+
+  const hasDarkScrim = (container: HTMLElement) =>
+    Array.from(container.querySelectorAll('[data-testid="mask-gradient"]')).some((gradient) =>
+      (gradient.getAttribute('data-colors') ?? '').includes('rgba(0,0,0'),
+    );
+
+  it('lays a black scrim over the blur in dark mode (sinks the dynamic-island band to black)', () => {
+    themeMock.colorScheme = 'dark';
+    const { container } = render(<ProgressiveBlur />);
+    expect(hasDarkScrim(container)).toBe(true);
+  });
+
+  it('omits the black scrim in light mode', () => {
+    themeMock.colorScheme = 'light';
+    const { container } = render(<ProgressiveBlur />);
+    expect(hasDarkScrim(container)).toBe(false);
+  });
 });
