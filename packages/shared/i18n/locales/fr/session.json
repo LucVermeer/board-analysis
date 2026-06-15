@@ -1,4 +1,9 @@
 {
+  "boardMismatch": {
+    "title": "Passez à {{board}} pour grimper cette voie",
+    "subtitle": "C'est une voie {{board}}. Changez de planche pour la mettre en file.",
+    "cta": "Changer de planche"
+  },
   "metadata": {
     "detail": {
       "notFoundTitle": "Session introuvable"

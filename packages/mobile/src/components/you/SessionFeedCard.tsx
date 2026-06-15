@@ -1,35 +1,34 @@
-import { memo, useMemo, useState, useCallback, useRef, type ReactNode } from 'react';
-import {
-  FlatList,
-  View,
-  StyleSheet,
-  type AccessibilityActionEvent,
-  type LayoutChangeEvent,
-  type ListRenderItemInfo,
-  type NativeScrollEvent,
-  type NativeSyntheticEvent,
-  type ColorValue,
-} from 'react-native';
+import { memo, useCallback, useMemo, useState } from 'react';
+import { View, StyleSheet, Linking } from 'react-native';
 import { Image } from 'expo-image';
 import { useTranslation } from 'react-i18next';
-import type { BoardName, SessionFeedItem, SessionFeedTickHighlight, SocialEntityType } from '@boardsesh/shared-schema';
+import { isBetaVideoUrl, isInstagramUrl, isTikTokUrl } from '@boardsesh/shared-schema';
+import type {
+  BetaLink,
+  BoardName,
+  SessionFeedItem,
+  SessionFeedTickHighlight,
+  SocialEntityType,
+} from '@boardsesh/shared-schema';
 import { formatTickRelativeTime } from '@boardsesh/profile-stats';
 import { Text } from '../Text';
 import { Icon } from '../Icon';
 import { type IconName } from '../icon-map';
 import { Card } from '../Card';
 import { PressableSurface } from '../PressableSurface';
-import { ClimbListThumbnail, THUMBNAIL_HEIGHT, THUMBNAIL_WIDTH } from '../ClimbListThumbnail';
+import { ClimbListThumbnail } from '../ClimbListThumbnail';
 import { AvatarGroup } from './AvatarGroup';
 import { FeedSocialRow } from './FeedSocialRow';
 import { StackedBarChart } from './YouCharts';
-import { gradeBadgeColor, buildSessionGradeBars } from './profile-chart-colors';
-import { isInstagramUrl, isTikTokUrl, mapBetaLink } from '../../lib/beta-video-url';
+import { MetricChip } from './MetricChip';
+import { buildSessionGradeBars, gradeBadgeColor } from './profile-chart-colors';
+import { nounFromCountLabel } from './noun-from-count-label';
+import { mapBetaLink } from '../../lib/beta-video-url';
 import { getBoardConfigForPlaylist } from '../../lib/playlists/board-details-for-playlist';
-import { spacing, borderRadius, overlays } from '../../theme/tokens';
+import { spacing, borderRadius } from '../../theme/tokens';
 import { useTheme } from '../../providers/theme-provider';
 import { useGradeFormat } from '../../hooks/use-grade-format';
-import { useReduceMotion } from '../../hooks/use-reduce-motion';
+import { useToast } from '../../providers/toast-provider';
 import { hapticLight } from '../../lib/haptics';
 
 type SessionFeedCardProps = {
@@ -41,10 +40,8 @@ type SessionFeedCardProps = {
   onOpenClimb?: (tick: SessionFeedTickHighlight) => void;
 };
 
-type CardPage = { key: 'beta' } | { key: 'hardest' } | { key: 'chart' };
-
-const CARD_BODY_HEIGHT = 188;
-const PAGE_DOT_SIZE = 5;
+/** Hero media cell — sized for a portrait beta thumbnail / enlarged board art. */
+const HERO_MEDIA = { width: 84, height: 104 } as const;
 
 function formatDuration(minutes: number): string {
   if (minutes < 60) return `${minutes}m`;
@@ -64,9 +61,17 @@ function compactJoin(parts: Array<string | null | undefined>): string {
   return parts.filter((part): part is string => !!part).join(' · ');
 }
 
-function betaPlatform(url: string): { label: string; icon: IconName } | null {
-  if (isInstagramUrl(url)) return { label: 'Instagram', icon: 'instagram' };
-  if (isTikTokUrl(url)) return { label: 'TikTok', icon: 'tiktok' };
+function isSafeBetaVideoUrl(url: string): boolean {
+  try {
+    return new URL(url).protocol === 'https:' && isBetaVideoUrl(url);
+  } catch {
+    return false;
+  }
+}
+
+function detectPlatform(url: string): { icon: IconName } | null {
+  if (isInstagramUrl(url)) return { icon: 'instagram' };
+  if (isTikTokUrl(url)) return { icon: 'tiktok' };
   return null;
 }
 
@@ -80,191 +85,111 @@ export const SessionFeedCard = memo(function SessionFeedCard({
   const { t } = useTranslation('feed');
   const { systemColors, brandColors } = useTheme();
   const { formatGrade } = useGradeFormat();
-  const reduceMotion = useReduceMotion();
-  const pagerRef = useRef<FlatList<CardPage>>(null);
-  const [pageWidth, setPageWidth] = useState(0);
-  const [activePageIndex, setActivePageIndex] = useState(0);
+  const { showToast } = useToast();
+  const [chartExpanded, setChartExpanded] = useState(false);
 
   const names = session.participants
     .map((participant) => participant.displayName)
     .filter((name): name is string => !!name)
     .join(', ');
+  const title = names || t('sessionFeedCard.climbCount', { count: session.tickCount });
 
   const gradeBars = useMemo(
     () => buildSessionGradeBars(session.gradeDistribution, formatGrade),
     [session.gradeDistribution, formatGrade],
   );
 
-  const pages = useMemo<CardPage[]>(() => {
-    const nextPages: CardPage[] = [];
-    if (session.hardestSend) nextPages.push({ key: 'hardest' });
-    if (session.featuredBeta) nextPages.push({ key: 'beta' });
-    nextPages.push({ key: 'chart' });
-    return nextPages;
-  }, [session.featuredBeta, session.hardestSend]);
-
-  const visibleActivePageIndex = Math.min(activePageIndex, Math.max(pages.length - 1, 0));
-  const displayHardestGrade = session.hardestGrade ? (formatGrade(session.hardestGrade) ?? session.hardestGrade) : null;
-  const boardSummary = session.boardTypes.length > 0 ? session.boardTypes.join(' · ') : null;
+  const primaryBoard = session.boardTypes[0] ?? null;
   const metaLine = compactJoin([
     formatTickRelativeTime(session.lastTickAt),
     session.durationMinutes != null && session.durationMinutes > 0 ? formatDuration(session.durationMinutes) : null,
-    boardSummary,
-    t('sessionFeedCard.climbCount', { count: session.tickCount }),
-  ]);
-  const statsLine = compactJoin([
-    t('sessionFeedCard.sendsCount', { count: session.totalSends }),
-    displayHardestGrade ? t('sessionFeedCard.hardestGrade', { grade: displayHardestGrade }) : null,
-    session.totalFlashes > 0 ? t('sessionFeedCard.flashesCount', { count: session.totalFlashes }) : null,
-    session.totalAttempts > 0 ? t('sessionFeedCard.attempts', { count: session.totalAttempts }) : null,
-  ]);
-  const activePage = pages[visibleActivePageIndex];
-  let activePageLabel = t('sessionFeedCard.chartLabel');
-  if (activePage?.key === 'hardest') {
-    activePageLabel = compactJoin([t('sessionFeedCard.hardestSend'), session.hardestSend?.climbName ?? undefined]);
-  } else if (activePage?.key === 'beta') {
-    activePageLabel = t('sessionFeedCard.betaCaption');
-  }
-  const accessibilityLabel = compactJoin([
-    names || t('sessionFeedCard.climbCount', { count: session.tickCount }),
-    metaLine,
-    statsLine,
-    activePageLabel,
+    primaryBoard,
   ]);
 
-  const handleLayout = useCallback((event: LayoutChangeEvent) => {
-    setPageWidth(event.nativeEvent.layout.width);
-  }, []);
+  const hardestSend = session.hardestSend ?? null;
+  const displayHardestGrade = session.hardestGrade ? (formatGrade(session.hardestGrade) ?? session.hardestGrade) : null;
 
-  const scrollToPage = useCallback(
-    (nextPageIndex: number) => {
-      const boundedIndex = Math.max(0, Math.min(nextPageIndex, pages.length - 1));
-      setActivePageIndex(boundedIndex);
-      if (pageWidth > 0) {
-        pagerRef.current?.scrollToIndex({ index: boundedIndex, animated: !reduceMotion });
-      }
-    },
-    [pageWidth, pages.length, reduceMotion],
-  );
+  // Beta video is the more engaging content, so it wins the hero when present —
+  // the climb's board art only takes the hero when there's no beta to show.
+  const featuredBeta = session.featuredBeta ?? null;
+  const betaLink = featuredBeta ? mapBetaLink(featuredBeta.betaLink) : null;
+  const betaUrl = betaLink?.link ?? null;
 
-  const handleMomentumEnd = useCallback(
-    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-      if (pageWidth <= 0) return;
-      setActivePageIndex(Math.round(event.nativeEvent.contentOffset.x / pageWidth));
-    },
-    [pageWidth],
-  );
+  // When the hero is the hardest send it already shows that grade, so the stats
+  // "hardest" chip would just repeat it. Keep the chip only when the hero is the
+  // beta video (its grade is the beta climb's, not necessarily the session
+  // hardest) or there's no hardest-send hero at all.
+  const heroIsHardestSend = !(featuredBeta && betaLink) && !!hardestSend;
 
   const handleCardPress = useCallback(() => {
     hapticLight();
     onPress(session);
   }, [onPress, session]);
 
-  const handleHardestSendPress = useCallback(
-    (tick: SessionFeedTickHighlight) => {
-      if (!onOpenClimb) {
-        handleCardPress();
-        return;
-      }
+  const handleHeroPress = useCallback(() => {
+    if (hardestSend && onOpenClimb) {
       hapticLight();
-      onOpenClimb(tick);
-    },
-    [handleCardPress, onOpenClimb],
-  );
+      onOpenClimb(hardestSend);
+      return;
+    }
+    handleCardPress();
+  }, [handleCardPress, hardestSend, onOpenClimb]);
 
-  const handleAccessibilityAction = useCallback(
-    (event: AccessibilityActionEvent) => {
-      if (event.nativeEvent.actionName === 'increment') {
-        scrollToPage(visibleActivePageIndex + 1);
+  const handleOpenBeta = useCallback(async () => {
+    if (!betaUrl) return;
+    hapticLight();
+    try {
+      if (!isSafeBetaVideoUrl(betaUrl) || !(await Linking.canOpenURL(betaUrl))) {
+        showToast(t('mobile.home.betaOpenError'), 'error');
         return;
       }
-      if (event.nativeEvent.actionName === 'decrement') {
-        scrollToPage(visibleActivePageIndex - 1);
-      }
-    },
-    [scrollToPage, visibleActivePageIndex],
-  );
+      await Linking.openURL(betaUrl);
+    } catch {
+      showToast(t('mobile.home.betaOpenError'), 'error');
+    }
+  }, [betaUrl, showToast, t]);
 
-  const renderPage = useCallback(
-    ({ item }: ListRenderItemInfo<CardPage>) => {
-      if (item.key === 'beta') {
-        return (
-          <SessionCardPage
-            width={pageWidth}
-            onPress={handleCardPress}
-            accessibilityLabel={t('sessionFeedCard.openSessionPage')}
-          >
-            <BetaPage session={session} />
-          </SessionCardPage>
-        );
-      }
-      if (item.key === 'hardest') {
-        const hardestSend = session.hardestSend;
-        return (
-          <SessionCardPage width={pageWidth}>
-            <HardestSendPage
-              tick={hardestSend}
-              onPress={hardestSend ? () => handleHardestSendPress(hardestSend) : undefined}
-            />
-          </SessionCardPage>
-        );
-      }
-      return (
-        <SessionCardPage
-          width={pageWidth}
-          onPress={handleCardPress}
-          accessibilityLabel={t('sessionFeedCard.openSessionPage')}
-        >
-          <ChartPage gradeBars={gradeBars} />
-        </SessionCardPage>
-      );
-    },
-    [gradeBars, handleCardPress, handleHardestSendPress, pageWidth, session, t],
-  );
+  const handleToggleChart = useCallback(() => {
+    hapticLight();
+    setChartExpanded((expanded) => !expanded);
+  }, []);
 
-  const getItemLayout = useCallback(
-    (_: ArrayLike<CardPage> | null | undefined, index: number) => ({
-      length: pageWidth,
-      offset: pageWidth * index,
-      index,
-    }),
-    [pageWidth],
-  );
+  const heroClimbLabel = hardestSend
+    ? t('sessionFeedCard.openHardestClimb', { climb: hardestSend.climbName ?? t('sessionFeedCard.unknownClimb') })
+    : compactJoin([title, metaLine]);
 
-  const carouselAccessibilityActions =
-    pages.length > 1
-      ? [
-          { name: 'decrement', label: t('sessionFeedCard.previousPage') },
-          { name: 'increment', label: t('sessionFeedCard.nextPage') },
-        ]
-      : undefined;
+  const cardAccessibilityLabel = compactJoin([
+    title,
+    metaLine,
+    t('sessionFeedCard.sendsCount', { count: session.totalSends }),
+    displayHardestGrade ? t('sessionFeedCard.hardestGrade', { grade: displayHardestGrade }) : null,
+  ]);
 
   return (
     <View style={styles.wrapper}>
       <Card>
+        {/* Header opens the SESSION; the hero opens the beta video (when present)
+            or the hardest-send CLIMB. Two tap targets so session detail stays
+            reachable. */}
         <PressableSurface
           onPress={handleCardPress}
           feedback="opacity"
           accessibilityRole="button"
-          accessibilityLabel={accessibilityLabel}
+          accessibilityLabel={cardAccessibilityLabel}
           accessibilityHint={t('sessionFeedCard.openHint')}
-          style={styles.summaryPressable}
+          style={styles.heroPressable}
         >
           <View style={styles.header}>
-            <AvatarGroup participants={session.participants} size={32} />
+            <AvatarGroup participants={session.participants} size={36} />
             <View style={styles.headerText}>
-              <Text variant="subheadline" style={styles.names} numberOfLines={1}>
-                {names || t('sessionFeedCard.climbCount', { count: session.tickCount })}
+              <Text variant="subheadline" style={styles.title} numberOfLines={1}>
+                {title}
               </Text>
               <Text variant="caption1" color={systemColors.tertiaryLabel} numberOfLines={1} style={styles.metaLine}>
                 {metaLine}
               </Text>
             </View>
           </View>
-
-          <Text variant="footnote" color={systemColors.secondaryLabel} numberOfLines={1} style={styles.statsLine}>
-            {statsLine}
-          </Text>
 
           {session.goal ? (
             <View style={styles.goal}>
@@ -276,48 +201,54 @@ export const SessionFeedCard = memo(function SessionFeedCard({
           ) : null}
         </PressableSurface>
 
-        <View
-          style={styles.pager}
-          onLayout={handleLayout}
-          accessible={pages.length > 1}
-          accessibilityRole={pages.length > 1 ? 'adjustable' : undefined}
-          accessibilityLabel={t('sessionFeedCard.pageIndicator', {
-            current: visibleActivePageIndex + 1,
-            total: pages.length,
-          })}
-          accessibilityActions={carouselAccessibilityActions}
-          onAccessibilityAction={handleAccessibilityAction}
-        >
-          {pageWidth > 0 ? (
-            <FlatList
-              ref={pagerRef}
-              data={pages}
-              renderItem={renderPage}
-              keyExtractor={(page) => page.key}
-              horizontal
-              pagingEnabled
-              directionalLockEnabled
-              scrollEnabled={pages.length > 1}
-              showsHorizontalScrollIndicator={false}
-              onMomentumScrollEnd={handleMomentumEnd}
-              getItemLayout={getItemLayout}
-              bounces={false}
-            />
-          ) : (
-            <View style={styles.pagePlaceholder} />
-          )}
-        </View>
-
-        {pages.length > 1 ? (
-          <SessionPageDots
-            total={pages.length}
-            activeIndex={visibleActivePageIndex}
-            activeColor={brandColors.primary}
-            inactiveColor={systemColors.separator}
-          />
+        {featuredBeta && betaLink ? (
+          <PressableSurface
+            onPress={handleOpenBeta}
+            feedback="opacity"
+            accessibilityRole="link"
+            accessibilityLabel={t('mobile.home.betaCardLabel')}
+            style={styles.heroPressable}
+          >
+            <BetaHero betaLink={betaLink} tick={featuredBeta.tick} />
+          </PressableSurface>
+        ) : hardestSend ? (
+          <PressableSurface
+            onPress={handleHeroPress}
+            feedback="opacity"
+            accessibilityRole="button"
+            accessibilityLabel={heroClimbLabel}
+            accessibilityHint={t('sessionFeedCard.openHint')}
+            style={styles.heroPressable}
+          >
+            <HeroSend tick={hardestSend} />
+          </PressableSurface>
         ) : null}
 
-        <View style={[styles.socialFooter, { borderTopColor: systemColors.separator }]}>
+        <View style={[styles.divider, { backgroundColor: systemColors.separator }]} />
+
+        <SessionStats
+          session={session}
+          displayHardestGrade={displayHardestGrade}
+          showHardestChip={!heroIsHardestSend}
+        />
+
+        {chartExpanded ? (
+          <View style={styles.chart} pointerEvents="none">
+            <StackedBarChart
+              bars={gradeBars}
+              colorBy="grade"
+              height={132}
+              fitYAxisToData
+              interactive={false}
+              zoomable={false}
+              emptyLabel={t('sessionFeedCard.chartEmpty')}
+            />
+          </View>
+        ) : null}
+
+        <View style={[styles.divider, { backgroundColor: systemColors.separator }]} />
+
+        <View style={styles.footer}>
           <FeedSocialRow
             entityId={session.socialEntityId}
             entityType={session.socialEntityType}
@@ -325,104 +256,101 @@ export const SessionFeedCard = memo(function SessionFeedCard({
             userVote={voteSummary?.userVote ?? null}
             commentCount={session.commentCount}
             onOpenComments={(entityId) => onOpenComments(entityId, session.socialEntityType)}
+            compact
           />
+          {/* Icon-only so a long label can't push the chip off-screen. */}
+          <PressableSurface
+            onPress={handleToggleChart}
+            feedback="opacity"
+            accessibilityRole="button"
+            accessibilityLabel={t('sessionFeedCard.chartLabel')}
+            accessibilityState={{ selected: chartExpanded }}
+            style={[styles.chartToggle, chartExpanded ? { backgroundColor: systemColors.fill } : null]}
+          >
+            <Icon
+              name="chart.bar"
+              size={18}
+              color={chartExpanded ? brandColors.primary : systemColors.secondaryLabel}
+            />
+          </PressableSurface>
         </View>
       </Card>
     </View>
   );
 });
 
-function SessionCardPage({
-  width,
-  children,
-  onPress,
-  accessibilityLabel,
-}: {
-  width: number;
-  children: ReactNode;
-  onPress?: () => void;
-  accessibilityLabel?: string;
-}) {
-  if (onPress) {
-    return (
-      <PressableSurface
-        onPress={onPress}
-        feedback="opacity"
-        accessibilityRole="button"
-        accessibilityLabel={accessibilityLabel}
-        style={[styles.page, { width }]}
-      >
-        {children}
-      </PressableSurface>
-    );
-  }
-
-  return <View style={[styles.page, { width }]}>{children}</View>;
-}
-
-function BetaPage({ session }: { session: SessionFeedItem }) {
+/** Beta-video hero: the Instagram/TikTok thumbnail + the climb it's beta for. */
+const BetaHero = memo(function BetaHero({ betaLink, tick }: { betaLink: BetaLink; tick: SessionFeedTickHighlight }) {
   const { t } = useTranslation('feed');
-  const { systemColors } = useTheme();
+  const { systemColors, brandColors } = useTheme();
+  const { formatGrade } = useGradeFormat();
   const [imageFailed, setImageFailed] = useState(false);
-  const betaLink = session.featuredBeta ? mapBetaLink(session.featuredBeta.betaLink) : null;
-  if (!betaLink) return null;
 
-  const platform = betaPlatform(betaLink.link);
+  const platform = detectPlatform(betaLink.link);
   const username = betaLink.foreign_username?.trim();
-  const climbName = session.featuredBeta?.tick.climbName ?? t('sessionFeedCard.unknownClimb');
-  const betaMeta = compactJoin([platform?.label, username ? `@${username}` : null]);
+  const displayGrade = tick.difficultyName ? (formatGrade(tick.difficultyName) ?? tick.difficultyName) : null;
 
   return (
-    <View style={styles.betaPage}>
-      <View style={[styles.betaPreviewImage, { backgroundColor: systemColors.fill }]}>
+    <View style={styles.hero}>
+      <View style={styles.betaMedia}>
         {betaLink.thumbnail && !imageFailed ? (
           <Image
             source={{ uri: betaLink.thumbnail }}
-            style={styles.betaThumbnail}
+            style={styles.media}
             contentFit="cover"
             transition={150}
             recyclingKey={betaLink.thumbnail}
             onError={() => setImageFailed(true)}
             accessibilityIgnoresInvertColors
-            allowDownscaling={false}
           />
         ) : (
-          <Icon name="video" size={22} color={systemColors.tertiaryLabel} />
+          <View style={[styles.media, styles.mediaFallback, { backgroundColor: systemColors.fill }]}>
+            <Icon name="video" size={26} color={systemColors.tertiaryLabel} />
+          </View>
         )}
+        <View style={styles.playOverlay} pointerEvents="none">
+          <View style={styles.playBadge}>
+            <Icon name="play.fill" size={22} color="#FFFFFF" />
+          </View>
+        </View>
         {platform ? (
-          <View style={styles.betaPlatform}>
-            <Icon name={platform.icon} size={11} color={overlays.onScrim} />
+          <View style={styles.platformBadge}>
+            <Icon name={platform.icon} size={13} color="#FFFFFF" />
           </View>
         ) : null}
       </View>
-      <View style={styles.betaDetails}>
-        <Text variant="caption1" color={systemColors.secondaryLabel}>
-          {t('sessionFeedCard.betaCaption')}
+      <View style={styles.heroDetails}>
+        <Text variant="caption1" color={brandColors.primary} style={styles.betaEyebrow}>
+          {t('sessionFeedCard.betaEyebrow').toUpperCase()}
         </Text>
-        <Text variant="headline" numberOfLines={2}>
-          {climbName}
-        </Text>
-        {betaMeta ? (
-          <Text variant="footnote" color={systemColors.tertiaryLabel} numberOfLines={1}>
-            {betaMeta}
+        <View style={styles.nameRow}>
+          <Text variant="title3" numberOfLines={2} style={styles.flex}>
+            {tick.climbName ?? t('sessionFeedCard.unknownClimb')}
+          </Text>
+          {displayGrade ? (
+            <Text
+              variant="title3"
+              style={[styles.gradeText, { color: gradeBadgeColor(tick.difficultyName ?? displayGrade) }]}
+            >
+              {displayGrade}
+            </Text>
+          ) : null}
+        </View>
+        {username ? (
+          <Text variant="footnote" color={systemColors.secondaryLabel} numberOfLines={1}>
+            @{username}
           </Text>
         ) : null}
       </View>
     </View>
   );
-}
+});
 
-function HardestSendPage({
-  tick,
-  onPress,
-}: {
-  tick: SessionFeedTickHighlight | null | undefined;
-  onPress?: () => void;
-}) {
+/** Hero for sessions with no beta: enlarged board art + the hardest send. */
+const HeroSend = memo(function HeroSend({ tick }: { tick: SessionFeedTickHighlight }) {
   const { t } = useTranslation('feed');
   const { systemColors, brandColors } = useTheme();
   const { formatGrade } = useGradeFormat();
-  if (!tick) return null;
 
   const boardConfig = getBoardConfigForPlaylist(tick.boardType, tick.layoutId);
   const displayGrade = tick.difficultyName ? (formatGrade(tick.difficultyName) ?? tick.difficultyName) : null;
@@ -430,8 +358,8 @@ function HardestSendPage({
   const statusIcon: IconName = tick.status === 'flash' ? 'flash' : 'check.small';
   const attemptLabel = tick.attemptCount > 1 ? t('sessionFeedCard.attempts', { count: tick.attemptCount }) : null;
 
-  const content = (
-    <View style={styles.hardestPage}>
+  return (
+    <View style={styles.hero}>
       {boardConfig && tick.frames ? (
         <ClimbListThumbnail
           frames={tick.frames}
@@ -440,206 +368,165 @@ function HardestSendPage({
           sizeId={boardConfig.sizeId}
           setIds={boardConfig.setIds.join(',')}
           mirrored={tick.isMirror}
+          size={HERO_MEDIA}
         />
       ) : (
-        <View style={[styles.thumbnailFallback, { backgroundColor: systemColors.fill }]}>
-          <Icon name="lightbulb" size={24} color={systemColors.tertiaryLabel} />
+        <View style={[styles.media, styles.mediaFallback, { backgroundColor: systemColors.fill }]}>
+          <Icon name="lightbulb" size={26} color={systemColors.tertiaryLabel} />
         </View>
       )}
-      <View style={styles.hardestDetails}>
-        <Text variant="caption1" color={systemColors.secondaryLabel}>
-          {t('sessionFeedCard.hardestSend')}
+      <View style={styles.heroDetails}>
+        <Text variant="caption2" color={systemColors.tertiaryLabel} style={styles.eyebrow}>
+          {t('sessionFeedCard.hardestSend').toUpperCase()}
         </Text>
-        <Text variant="headline" numberOfLines={2}>
-          {tick.climbName ?? t('sessionFeedCard.unknownClimb')}
-        </Text>
-        <View style={styles.inlineMeta}>
+        <View style={styles.nameRow}>
+          <Text variant="title3" numberOfLines={2} style={styles.flex}>
+            {tick.climbName ?? t('sessionFeedCard.unknownClimb')}
+          </Text>
           {displayGrade ? (
             <Text
-              variant="footnote"
-              color={gradeBadgeColor(tick.difficultyName ?? displayGrade)}
-              style={styles.gradeText}
+              variant="title3"
+              style={[styles.gradeText, { color: gradeBadgeColor(tick.difficultyName ?? displayGrade) }]}
             >
               {displayGrade}
             </Text>
           ) : null}
-          {displayGrade ? <MetaSeparator /> : null}
-          <View style={styles.statusMeta}>
-            <Icon name={statusIcon} size={12} color={brandColors.success} />
-            <Text variant="footnote" color={brandColors.success}>
-              {statusLabel}
-            </Text>
-          </View>
-          {attemptLabel ? <MetaSeparator /> : null}
+        </View>
+        <View style={styles.statusRow}>
+          <Icon name={statusIcon} size={13} color={brandColors.success} />
+          <Text variant="footnote" color={brandColors.success} style={styles.statusText}>
+            {statusLabel}
+          </Text>
           {attemptLabel ? (
-            <Text variant="footnote" color={systemColors.secondaryLabel}>
-              {attemptLabel}
-            </Text>
+            <>
+              <Text variant="footnote" color={systemColors.tertiaryLabel}>
+                ·
+              </Text>
+              <Text variant="footnote" color={systemColors.secondaryLabel}>
+                {attemptLabel}
+              </Text>
+            </>
           ) : null}
         </View>
-        {tick.comment ? (
-          <Text variant="subheadline" color={systemColors.secondaryLabel} numberOfLines={3} style={styles.quote}>
-            {tick.comment}
-          </Text>
-        ) : null}
       </View>
     </View>
   );
+});
 
-  if (!onPress) return content;
-
-  return (
-    <PressableSurface
-      onPress={onPress}
-      feedback="opacity"
-      accessibilityRole="button"
-      accessibilityLabel={t('sessionFeedCard.openHardestClimb', {
-        climb: tick.climbName ?? t('sessionFeedCard.unknownClimb'),
-      })}
-      style={styles.hardestPressable}
-    >
-      {content}
-    </PressableSurface>
-  );
-}
-
-function ChartPage({ gradeBars }: { gradeBars: ReturnType<typeof buildSessionGradeBars> }) {
-  const { t } = useTranslation('feed');
-  return (
-    <View pointerEvents="none" style={styles.chartPage}>
-      <StackedBarChart
-        bars={gradeBars}
-        colorBy="grade"
-        height={132}
-        fitYAxisToData
-        interactive={false}
-        zoomable={false}
-        emptyLabel={t('sessionFeedCard.chartEmpty')}
-      />
-    </View>
-  );
-}
-
-function MetaSeparator() {
-  const { systemColors } = useTheme();
-  return (
-    <Text variant="footnote" color={systemColors.tertiaryLabel}>
-      ·
-    </Text>
-  );
-}
-
-function SessionPageDots({
-  total,
-  activeIndex,
-  activeColor,
-  inactiveColor,
+/**
+ * Stats rail: sends / hardest / flashes / tries. Exactly one coloured chip —
+ * the grade-hued 'trophy' "hardest" chip — so the stats don't compete. Flashes
+ * and tries chips drop out when their count is 0. Plural labels stay
+ * grammatical (count passed for pluralisation, then the number is split off).
+ */
+const SessionStats = memo(function SessionStats({
+  session,
+  displayHardestGrade,
+  showHardestChip,
 }: {
-  total: number;
-  activeIndex: number;
-  activeColor: ColorValue;
-  inactiveColor: ColorValue;
+  session: SessionFeedItem;
+  displayHardestGrade: string | null;
+  showHardestChip: boolean;
 }) {
   const { t } = useTranslation('feed');
   return (
-    <View
-      style={styles.dots}
-      accessible
-      accessibilityRole="progressbar"
-      accessibilityLabel={t('sessionFeedCard.pageIndicator', { current: activeIndex + 1, total })}
-    >
-      {Array.from({ length: total }, (_, index) => (
-        <View
-          key={index}
-          importantForAccessibility="no"
-          style={[
-            styles.dot,
-            { backgroundColor: index === activeIndex ? activeColor : inactiveColor },
-            index === activeIndex ? styles.dotActive : null,
-          ]}
+    <View style={styles.stats}>
+      <MetricChip
+        value={String(session.totalSends)}
+        label={nounFromCountLabel(t('sessionFeedCard.sendsCount', { count: session.totalSends }))}
+      />
+      {displayHardestGrade && showHardestChip ? (
+        <MetricChip
+          value={displayHardestGrade}
+          label={t('sessionFeedCard.hardest')}
+          variant="trophy"
+          hueKey={session.hardestGrade ?? displayHardestGrade}
         />
-      ))}
+      ) : null}
+      {session.totalFlashes > 0 ? (
+        <MetricChip
+          value={String(session.totalFlashes)}
+          label={nounFromCountLabel(t('sessionFeedCard.flashesCount', { count: session.totalFlashes }))}
+        />
+      ) : null}
+      {session.totalAttempts > 0 ? (
+        <MetricChip
+          value={String(session.totalAttempts)}
+          label={nounFromCountLabel(t('sessionFeedCard.attempts', { count: session.totalAttempts }))}
+        />
+      ) : null}
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   wrapper: { marginHorizontal: spacing[4], marginTop: spacing[3] },
-  summaryPressable: {
+  heroPressable: {
     margin: -spacing[1],
     padding: spacing[1],
     borderRadius: borderRadius.md,
   },
   header: { flexDirection: 'row', alignItems: 'center', gap: spacing[3] },
   headerText: { flex: 1 },
-  names: { fontWeight: '600' },
+  title: { fontWeight: '600' },
   metaLine: { marginTop: 2 },
-  goal: { flexDirection: 'row', alignItems: 'center', gap: spacing[2], marginTop: spacing[3] },
-  statsLine: { marginTop: spacing[2], fontWeight: '600' },
-  pager: { minHeight: CARD_BODY_HEIGHT, marginTop: spacing[3] },
-  pagePlaceholder: { height: CARD_BODY_HEIGHT },
-  page: { minHeight: CARD_BODY_HEIGHT, justifyContent: 'center' },
-  betaPage: { flexDirection: 'row', alignItems: 'center', gap: spacing[3] },
-  betaPreviewImage: {
-    width: 68,
-    height: 88,
-    borderRadius: borderRadius.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-  },
-  betaThumbnail: {
-    width: '100%',
-    height: '100%',
-  },
-  betaPlatform: {
+  goal: { flexDirection: 'row', alignItems: 'center', gap: spacing[2], marginTop: spacing[2] },
+  hero: { flexDirection: 'row', gap: spacing[3], marginTop: spacing[2] },
+  media: { width: HERO_MEDIA.width, height: HERO_MEDIA.height, borderRadius: borderRadius.md },
+  mediaFallback: { alignItems: 'center', justifyContent: 'center' },
+  betaMedia: { width: HERO_MEDIA.width, height: HERO_MEDIA.height, borderRadius: borderRadius.md, overflow: 'hidden' },
+  playOverlay: {
     position: 'absolute',
-    top: spacing[1],
-    left: spacing[1],
-    width: 22,
-    height: 22,
-    borderRadius: borderRadius.full,
-    backgroundColor: overlays.scrim,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  betaDetails: { flex: 1, gap: spacing[1] },
-  hardestPressable: {
-    borderRadius: borderRadius.md,
-  },
-  hardestPage: { flexDirection: 'row', alignItems: 'center', gap: spacing[3] },
-  thumbnailFallback: {
-    width: THUMBNAIL_WIDTH,
-    height: THUMBNAIL_HEIGHT,
-    borderRadius: borderRadius.md,
+  playBadge: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  hardestDetails: { flex: 1, gap: spacing[2] },
-  inlineMeta: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing[1] },
+  platformBadge: {
+    position: 'absolute',
+    top: 4,
+    left: 4,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.9)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heroDetails: { flex: 1, gap: spacing[1], justifyContent: 'center' },
+  nameRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing[2] },
   gradeText: { fontWeight: '700' },
-  statusMeta: { flexDirection: 'row', alignItems: 'center', gap: 3 },
-  quote: { marginTop: spacing[1] },
-  chartPage: { minHeight: CARD_BODY_HEIGHT, justifyContent: 'center' },
-  dots: {
+  eyebrow: { fontWeight: '600', letterSpacing: 0.6 },
+  betaEyebrow: { fontWeight: '700', letterSpacing: 0.6 },
+  statusRow: { flexDirection: 'row', alignItems: 'center', gap: spacing[1] },
+  statusText: { fontWeight: '600' },
+  divider: { height: StyleSheet.hairlineWidth, marginTop: spacing[2] },
+  stats: { flexDirection: 'row', gap: spacing[2], marginTop: spacing[2] },
+  chart: { marginTop: spacing[2] },
+  footer: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: spacing[2],
+  },
+  chartToggle: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
     justifyContent: 'center',
-    gap: spacing[1],
-    marginTop: spacing[1],
-  },
-  dot: {
-    width: PAGE_DOT_SIZE,
-    height: PAGE_DOT_SIZE,
-    borderRadius: PAGE_DOT_SIZE / 2,
-  },
-  dotActive: {
-    width: PAGE_DOT_SIZE * 2.2,
-  },
-  socialFooter: {
-    marginTop: spacing[3],
-    paddingTop: spacing[2],
-    borderTopWidth: StyleSheet.hairlineWidth,
+    borderRadius: borderRadius.full,
   },
   flex: { flex: 1 },
 });

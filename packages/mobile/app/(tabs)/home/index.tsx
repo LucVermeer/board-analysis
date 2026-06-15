@@ -1,11 +1,12 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FlatList, Linking, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import type BottomSheet from '@gorhom/bottom-sheet';
-import type { SessionFeedItem, SocialEntityType } from '@boardsesh/shared-schema';
+import { type ContextMenuAction } from 'react-native-context-menu-view';
+import type { SessionFeedItem, SessionFeedTickHighlight, SocialEntityType, UserBoard } from '@boardsesh/shared-schema';
 import { betaLinkIdentity, isBetaVideoUrl, isInstagramUrl, isTikTokUrl } from '@boardsesh/shared-schema';
 import { Text } from '../../../src/components/Text';
 import { Icon } from '../../../src/components/Icon';
@@ -14,20 +15,24 @@ import { Card } from '../../../src/components/Card';
 import { Button } from '../../../src/components/Button';
 import { SessionFeedCard } from '../../../src/components/you/SessionFeedCard';
 import { CommentSheet } from '../../../src/components/you/CommentSheet';
+import { FeedScopeTitle } from '../../../src/components/feed/FeedScopeTitle';
 import {
   useBulkVoteSummaries,
   useRecentBetaLinks,
   useSessionGroupedFeed,
   type RecentBetaVideo,
 } from '../../../src/lib/graphql/hooks';
+import { useHomeBoard } from '../../../src/lib/graphql/hooks/use-home-board';
 import { useAuth } from '../../../src/providers/auth-provider';
 import { useTheme } from '../../../src/providers/theme-provider';
 import { useToast } from '../../../src/providers/toast-provider';
+import { useDrawerHost } from '../../../src/providers/drawer-host-provider';
 import { useBottomChromeMetrics } from '../../../src/hooks/use-bottom-chrome-metrics';
-import { getBoardConfigForPlaylist } from '../../../src/lib/playlists/board-details-for-playlist';
 import { dedupeSessionsById } from '../../../src/lib/feed-time-buckets';
+import { deriveFeedScopeInput, type FeedMode } from '../../../src/lib/feed/feed-scope';
+import { openClimbInPlayDrawer } from '../../../src/lib/open-climb-in-play-drawer';
 import { hapticLight } from '../../../src/lib/haptics';
-import { navigateToSessionFeedItem, navigateToSessionFeedTick } from '../../../src/lib/session-feed-navigation';
+import { navigateToSessionFeedItem } from '../../../src/lib/session-feed-navigation';
 import { iosSystemColors } from '../../../src/theme/ios-colors';
 import { borderRadius, spacing } from '../../../src/theme/tokens';
 import { BETA_CARD_HEIGHT, BETA_CARD_WIDTH } from '../../../src/components/play-drawer/BetaVideoCard';
@@ -47,32 +52,6 @@ type VoteSummary = {
   upvotes: number;
   userVote: number | null;
 };
-
-type AppRouter = ReturnType<typeof useRouter>;
-
-function navigateToClimb(
-  router: AppRouter,
-  climbUuid: string | null | undefined,
-  boardType: string | null | undefined,
-  layoutId: number | null | undefined,
-  angle: number | null | undefined,
-): void {
-  if (!climbUuid || !boardType || angle == null) return;
-  const boardConfig = getBoardConfigForPlaylist(boardType, layoutId);
-  if (!boardConfig) return;
-
-  router.push({
-    pathname: '/(tabs)/climbs/[climbUuid]',
-    params: {
-      climbUuid,
-      boardName: boardConfig.boardName,
-      layoutId: String(boardConfig.layoutId),
-      sizeId: String(boardConfig.sizeId),
-      setIds: boardConfig.setIds.join(','),
-      angle: String(angle),
-    },
-  });
-}
 
 function detectPlatform(url: string): { name: 'instagram' | 'tiktok'; icon: IconName } | null {
   if (isInstagramUrl(url)) return { name: 'instagram', icon: 'instagram' };
@@ -94,13 +73,42 @@ export default function HomeTab() {
   const router = useRouter();
   const { isAuthenticated } = useAuth();
   const { systemColors, brandColors } = useTheme();
+  const { openPlayDrawer } = useDrawerHost();
   const bottomChrome = useBottomChromeMetrics();
   const listRef = useRef<FlashListRef<SessionFeedItem>>(null);
   const commentSheetRef = useRef<BottomSheet | null>(null);
   const [commentTarget, setCommentTarget] = useState<CommentTarget | null>(null);
 
-  const betaVideos = useRecentBetaLinks(RECENT_BETA_LIMIT);
-  const feed = useSessionGroupedFeed({ followingOnly: true }, isAuthenticated);
+  // Feed scope. `mode` chooses the view — `crew` (people you follow) is the
+  // default; `gym` is everyone on the selected board. `selectedBoard` is the
+  // gym/board both views filter to (`null` = unscoped: crew across all boards,
+  // or the "Everyone" global feed). It defaults to the inferred home board once
+  // it resolves; the view stays on `crew`.
+  const { board: homeBoard, isResolving: isResolvingHomeBoard, boards: ownedBoards } = useHomeBoard();
+  const [mode, setMode] = useState<FeedMode>('crew');
+  const [selectedBoard, setSelectedBoard] = useState<UserBoard | null>(null);
+  // Once home-board inference settles, point the crew/gym filter at the home
+  // board. The view stays on `crew`; with no home board it's the unfiltered crew.
+  const hasDefaultedScope = useRef(false);
+  useEffect(() => {
+    if (hasDefaultedScope.current || isResolvingHomeBoard) return;
+    hasDefaultedScope.current = true;
+    if (homeBoard) setSelectedBoard(homeBoard);
+  }, [homeBoard, isResolvingHomeBoard]);
+
+  const feedInput = useMemo(() => deriveFeedScopeInput(mode, selectedBoard?.uuid ?? null), [mode, selectedBoard]);
+  // The beta shelf rescopes to the selected board's type + layout ("Fresh beta
+  // on this board"); with no board it stays global ("Fresh beta"). Layout
+  // matters — a Kilter Original beta is useless on a Kilter Homewall.
+  const betaBoardType = selectedBoard?.boardType ?? null;
+  const betaLayoutId = selectedBoard?.layoutId ?? null;
+
+  // Hold both queries until home-board inference settles, so a cold start never
+  // fires the unscoped global feed first (initial state is gym + no board) and
+  // then refetches the scoped/crew query — that double-fetch flickered the feed.
+  const scopeReady = !isResolvingHomeBoard;
+  const betaVideos = useRecentBetaLinks(RECENT_BETA_LIMIT, betaBoardType, betaLayoutId, scopeReady);
+  const feed = useSessionGroupedFeed(feedInput, isAuthenticated && scopeReady);
 
   const sessions = useMemo(
     () => dedupeSessionsById(feed.data?.pages.flatMap((page) => page.sessionGroupedFeed.sessions) ?? []),
@@ -137,6 +145,16 @@ export default function HomeTab() {
     commentSheetRef.current?.snapToIndex(0);
   }, []);
 
+  const handleSessionPress = useCallback(
+    (session: SessionFeedItem) => navigateToSessionFeedItem(router, session),
+    [router],
+  );
+
+  const handleOpenClimb = useCallback(
+    (tick: SessionFeedTickHighlight) => openClimbInPlayDrawer({ kind: 'tick', tick }, { openPlayDrawer, router }),
+    [openPlayDrawer, router],
+  );
+
   const handleEndReached = useCallback(() => {
     if (feed.hasNextPage && !feed.isFetchingNextPage) void feed.fetchNextPage();
   }, [feed]);
@@ -148,40 +166,162 @@ export default function HomeTab() {
     if (isAuthenticated) void feed.refetch();
   }, [betaVideos, feed, isAuthenticated, sessionVoteSummaries, tickVoteSummaries]);
 
+  const handleSelectCrew = useCallback(() => {
+    hapticLight();
+    setMode('crew');
+  }, []);
+
+  const handleSelectBoard = useCallback((board: UserBoard) => {
+    hapticLight();
+    setSelectedBoard(board);
+    setMode('gym');
+  }, []);
+
+  const handleSelectEveryone = useCallback(() => {
+    hapticLight();
+    setSelectedBoard(null);
+    setMode('gym');
+  }, []);
+
+  const handleFindGym = useCallback(() => {
+    router.push('/gyms');
+  }, [router]);
+
+  const handleBrowseEveryone = useCallback(() => {
+    setSelectedBoard(null);
+    setMode('gym');
+  }, []);
+
   const renderItem = useCallback(
     ({ item }: { item: SessionFeedItem }) => (
       <SessionFeedCard
         session={item}
         voteSummary={summaryMap.get(`${item.socialEntityType}:${item.socialEntityId}`)}
         onOpenComments={handleOpenComments}
-        onPress={(session) => navigateToSessionFeedItem(router, session)}
-        onOpenClimb={(tick) => navigateToSessionFeedTick(router, tick)}
+        onPress={handleSessionPress}
+        onOpenClimb={handleOpenClimb}
       />
     ),
-    [handleOpenComments, router, summaryMap],
+    [handleOpenComments, handleSessionPress, handleOpenClimb, summaryMap],
   );
+
+  // The scope menu: "My crew" (default), the home gym/board, any other owned
+  // boards, "Everyone", and "Find a gym". The active scope carries a checkmark
+  // and doubles as the large title. `onSelectIndex` runs the tapped item.
+  const scopeMenu = useMemo(() => {
+    const items: { action: ContextMenuAction; run: () => void }[] = [
+      {
+        action: { title: t('mobile.home.scope.myCrew'), systemIcon: 'person.2.fill', selected: mode === 'crew' },
+        run: handleSelectCrew,
+      },
+    ];
+    if (homeBoard) {
+      items.push({
+        action: {
+          title: homeBoard.gymName ?? homeBoard.name,
+          systemIcon: 'building.2.fill',
+          selected: mode === 'gym' && selectedBoard?.uuid === homeBoard.uuid,
+        },
+        run: () => handleSelectBoard(homeBoard),
+      });
+    }
+    for (const board of ownedBoards) {
+      if (homeBoard && board.uuid === homeBoard.uuid) continue;
+      items.push({
+        action: {
+          title: board.gymName ?? board.name,
+          systemIcon: 'building.2.fill',
+          selected: mode === 'gym' && selectedBoard?.uuid === board.uuid,
+        },
+        run: () => handleSelectBoard(board),
+      });
+    }
+    items.push({
+      action: {
+        title: t('mobile.home.scope.everyone'),
+        systemIcon: 'globe',
+        selected: mode === 'gym' && selectedBoard == null,
+      },
+      run: handleSelectEveryone,
+    });
+    items.push({
+      action: { title: t('mobile.home.scope.findGym'), systemIcon: 'mappin.and.ellipse' },
+      run: handleFindGym,
+    });
+
+    const title =
+      mode === 'crew'
+        ? t('mobile.home.scope.myCrew')
+        : selectedBoard == null
+          ? t('mobile.home.scope.everyone')
+          : (selectedBoard.gymName ?? selectedBoard.name);
+
+    return {
+      title,
+      actions: items.map((item) => item.action),
+      onSelectIndex: (index: number) => items[index]?.run(),
+    };
+  }, [
+    t,
+    mode,
+    homeBoard,
+    ownedBoards,
+    selectedBoard,
+    handleSelectCrew,
+    handleSelectBoard,
+    handleSelectEveryone,
+    handleFindGym,
+  ]);
+
+  const handleBetaOpenClimb = useCallback(
+    (video: RecentBetaVideo) => {
+      if (!video.betaLink.climb_uuid || !video.boardType || video.betaLink.angle == null) return;
+      openClimbInPlayDrawer(
+        {
+          kind: 'ref',
+          climbUuid: video.betaLink.climb_uuid,
+          boardType: video.boardType,
+          layoutId: video.layoutId,
+          angle: video.betaLink.angle,
+        },
+        { openPlayDrawer, router },
+      );
+    },
+    [openPlayDrawer, router],
+  );
+
+  const betaHeading = betaBoardType ? t('mobile.home.betaTitleBoard') : t('mobile.home.betaTitle');
+  const sessionsHeading = mode === 'gym' ? t('mobile.home.sessionsTitle') : t('mobile.home.feedTitle');
 
   const header = useMemo(
     () => (
       <View style={styles.header}>
-        <Text variant="largeTitle" style={styles.screenTitle}>
-          {t('mobile.home.title')}
-        </Text>
+        <View style={styles.scopeTitleWrap}>
+          <FeedScopeTitle title={scopeMenu.title} actions={scopeMenu.actions} onSelectIndex={scopeMenu.onSelectIndex} />
+        </View>
         <RecentBetaShelf
+          heading={betaHeading}
           videos={betaVideos.data ?? []}
           isLoading={betaVideos.isLoading}
           isError={betaVideos.isError}
           onRetry={() => void betaVideos.refetch()}
-          onOpenClimb={(video) =>
-            navigateToClimb(router, video.betaLink.climb_uuid, video.boardType, video.layoutId, video.betaLink.angle)
-          }
+          onOpenClimb={handleBetaOpenClimb}
         />
         <Text variant="title3" style={styles.feedHeading}>
-          {t('mobile.home.feedTitle')}
+          {sessionsHeading}
         </Text>
       </View>
     ),
-    [betaVideos.data, betaVideos.isError, betaVideos.isLoading, betaVideos.refetch, router, t],
+    [
+      scopeMenu,
+      betaHeading,
+      betaVideos.data,
+      betaVideos.isError,
+      betaVideos.isLoading,
+      betaVideos.refetch,
+      handleBetaOpenClimb,
+      sessionsHeading,
+    ],
   );
 
   if (!isAuthenticated) {
@@ -222,7 +362,7 @@ export default function HomeTab() {
           />
         }
         ListEmptyComponent={
-          feed.isLoading ? (
+          feed.isLoading || !scopeReady ? (
             <ActivitySkeletonList skeletonKeys={INITIAL_FEED_SKELETON_KEYS} />
           ) : feed.isError ? (
             <View style={styles.feedState}>
@@ -234,7 +374,20 @@ export default function HomeTab() {
                 <Button title={tCommon('actions.retry')} onPress={() => void feed.refetch()} />
               </View>
             </View>
-          ) : (
+          ) : mode === 'gym' && selectedBoard != null ? (
+            <View style={styles.feedState}>
+              <Icon name="boards" size={48} color={systemColors.tertiaryLabel} />
+              <Text variant="headline" style={styles.emptyTitle}>
+                {t('mobile.home.boardEmptyTitle', { board: selectedBoard.gymName ?? selectedBoard.name })}
+              </Text>
+              <Text variant="subheadline" color={systemColors.secondaryLabel} style={styles.emptyBody}>
+                {t('mobile.home.boardEmptyBody')}
+              </Text>
+              <View style={styles.emptyCta}>
+                <Button title={t('mobile.home.boardEmptyCta')} onPress={handleBrowseEveryone} />
+              </View>
+            </View>
+          ) : mode === 'crew' ? (
             <View style={styles.feedState}>
               <Icon name="people" size={48} color={systemColors.tertiaryLabel} />
               <Text variant="headline" style={styles.emptyTitle}>
@@ -242,6 +395,13 @@ export default function HomeTab() {
               </Text>
               <Text variant="subheadline" color={systemColors.secondaryLabel} style={styles.emptyBody}>
                 {t('mobile.home.emptyBody')}
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.feedState}>
+              <Icon name="people" size={48} color={systemColors.tertiaryLabel} />
+              <Text variant="headline" style={styles.emptyTitle}>
+                {t('emptyStates.noRecentActivity')}
               </Text>
             </View>
           )
@@ -305,12 +465,14 @@ function ActivityCardSkeleton() {
 }
 
 function RecentBetaShelf({
+  heading,
   videos,
   isLoading,
   isError,
   onRetry,
   onOpenClimb,
 }: {
+  heading: string;
   videos: RecentBetaVideo[];
   isLoading: boolean;
   isError: boolean;
@@ -324,7 +486,7 @@ function RecentBetaShelf({
   return (
     <View style={styles.shelfSection}>
       <View style={styles.sectionHeaderRow}>
-        <Text variant="title3">{t('mobile.home.betaTitle')}</Text>
+        <Text variant="title3">{heading}</Text>
       </View>
       {isLoading ? (
         <FlatList
@@ -490,9 +652,9 @@ const styles = StyleSheet.create({
   header: {
     paddingTop: spacing[3],
   },
-  screenTitle: {
+  scopeTitleWrap: {
     paddingHorizontal: spacing[4],
-    paddingBottom: spacing[4],
+    paddingBottom: spacing[3],
   },
   shelfSection: {
     paddingBottom: spacing[5],

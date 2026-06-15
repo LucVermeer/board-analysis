@@ -21,13 +21,19 @@ type ClimbListThumbnailProps = {
   sizeId: number;
   setIds: string;
   mirrored?: boolean;
+  /**
+   * Override the fixed 76×96 list cell. The session feed hero passes a larger
+   * size (~100×128); ClimbListRow omits it and keeps the default. The internal
+   * render width scales with `width` so the enlarged cell stays crisp.
+   */
+  size?: { width: number; height: number };
 };
 
 /**
  * Layered climb thumbnail for the list view. Wraps the shared
- * LayeredClimbImage stack in a fixed 76×96 portrait cell with rounded
- * corners, using the filled hold style so the lit climb reads as solid
- * dots against the board photo at this small size.
+ * LayeredClimbImage stack in a fixed 76×96 portrait cell (override via `size`)
+ * with rounded corners, using the filled hold style so the lit climb reads as
+ * solid dots against the board photo at this small size.
  *
  * Mirror via CSS only — passing `mirrored` to the Rust renderer too
  * would double-flip, and we'd cache two PNGs per climb instead of one.
@@ -41,7 +47,10 @@ const ClimbListThumbnail = React.memo(function ClimbListThumbnail({
   sizeId,
   setIds,
   mirrored,
+  size,
 }: ClimbListThumbnailProps) {
+  const cellWidth = size?.width ?? THUMBNAIL_WIDTH;
+  const cellHeight = size?.height ?? THUMBNAIL_HEIGHT;
   const { overlayUri, backgroundPaths, missingBackgroundCount } = useNativeClimbRender({
     frames,
     boardName,
@@ -49,14 +58,15 @@ const ClimbListThumbnail = React.memo(function ClimbListThumbnail({
     sizeId,
     setIds,
     filledStyle: true,
-    // Render the overlay + resolve the thumb-sized background at ~400px
-    // (covers the 76×96 cell at up to ~3× DPR) so expo-image never has to
-    // downscale a ~1080px source on the main thread while scrolling.
-    renderWidth: 400,
+    // Render the overlay + resolve the background at ~5× the cell width (≥400px,
+    // covering the default 76px cell at up to ~3× DPR and a ~100px hero cell at
+    // ~4×) so expo-image never has to downscale a ~1080px source on the main
+    // thread while scrolling.
+    renderWidth: Math.max(400, Math.round(cellWidth * 5)),
   });
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, size ? { width: cellWidth, height: cellHeight } : null]}>
       <LayeredClimbImage
         overlayUri={overlayUri}
         backgroundPaths={backgroundPaths}

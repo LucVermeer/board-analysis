@@ -28,7 +28,17 @@
       "signInBody": "Follow climbers to see their sessions and daily sends here.",
       "emptyTitle": "No sessions yet",
       "emptyBody": "Follow climbers to fill this with sessions and daily sends.",
-      "unknownClimb": "Unknown climb"
+      "unknownClimb": "Unknown climb",
+      "sessionsTitle": "Recent sessions",
+      "betaTitleBoard": "Fresh beta on this board",
+      "boardEmptyTitle": "Quiet on {{board}} right now",
+      "boardEmptyBody": "Be the first to log a session, or see what everyone else is climbing.",
+      "boardEmptyCta": "Browse everyone",
+      "scope": {
+        "myCrew": "My crew",
+        "everyone": "Everyone",
+        "findGym": "Find a gym near you"
+      }
     }
   },
   "ascentsFeed": {
@@ -148,18 +158,14 @@
       "attempt": "Attempt"
     },
     "hardest": "Hardest",
-    "betaCaption": "Beta from this session",
+    "betaEyebrow": "Beta",
     "hardestSend": "Hardest send",
     "unknownClimb": "Unknown climb",
     "attempts_one": "{{count}} try",
     "attempts_other": "{{count}} tries",
     "chartEmpty": "No grades yet",
     "chartLabel": "Grade chart",
-    "pageIndicator": "Session card page {{current}} of {{total}}",
-    "previousPage": "Previous session card page",
-    "nextPage": "Next session card page",
     "openHint": "Opens the session",
-    "openSessionPage": "Open session",
     "openHardestClimb": "Open {{climb}}"
   },
   "sessionSummary": {

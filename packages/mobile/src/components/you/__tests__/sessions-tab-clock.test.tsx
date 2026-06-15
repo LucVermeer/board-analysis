@@ -64,6 +64,14 @@ vi.mock('@shopify/flash-list', () => ({
   FlashList: ({ refreshControl }: { refreshControl?: ReactNode }) => createElement('div', null, refreshControl),
 }));
 
+// SessionsTab now opens climbs through the play drawer, so it imports the drawer
+// host (which transitively pulls expo-crypto / expo-modules-core — unavailable
+// once react-native is fully mocked above). Stub the host so the import graph
+// stays light and the clock behaviour under test is unaffected.
+vi.mock('../../../providers/drawer-host-provider', () => ({
+  useDrawerHost: () => ({ openPlayDrawer: vi.fn() }),
+}));
+
 // Capture the injected clock; return a single section so a header renders.
 vi.mock('../../../lib/feed-time-buckets', () => ({
   bucketSessionsByRecency: (sessions: Array<{ sessionId: string }>, now: number) => {

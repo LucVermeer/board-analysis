@@ -28,7 +28,17 @@
       "signInBody": "Suivez des grimpeurs et des ouvreurs pour voir leurs enchaînements et nouveaux blocs ici.",
       "emptyTitle": "Aucune activité pour le moment",
       "emptyBody": "Suivez des grimpeurs et des ouvreurs pour remplir ce fil.",
-      "unknownClimb": "Bloc inconnu"
+      "unknownClimb": "Bloc inconnu",
+      "sessionsTitle": "Sessions récentes",
+      "betaTitleBoard": "Beta récente sur ce board",
+      "boardEmptyTitle": "Calme sur {{board}} en ce moment",
+      "boardEmptyBody": "Sois le premier à enregistrer une session, ou regarde ce que grimpent les autres.",
+      "boardEmptyCta": "Voir tout le monde",
+      "scope": {
+        "myCrew": "Mon crew",
+        "everyone": "Tout le monde",
+        "findGym": "Trouver une salle près de toi"
+      }
     }
   },
   "ascentsFeed": {
@@ -148,18 +158,14 @@
       "attempt": "Essai"
     },
     "hardest": "Plus dur",
-    "betaCaption": "Bêta de cette session",
+    "betaEyebrow": "Bêta",
     "hardestSend": "Réussite la plus dure",
     "unknownClimb": "Bloc inconnu",
     "attempts_one": "{{count}} essai",
     "attempts_other": "{{count}} essais",
     "chartEmpty": "Aucune cotation pour l'instant",
     "chartLabel": "Graphique des cotations",
-    "pageIndicator": "Page {{current}} sur {{total}} de la carte de session",
-    "previousPage": "Page précédente de la carte de session",
-    "nextPage": "Page suivante de la carte de session",
     "openHint": "Ouvre la session",
-    "openSessionPage": "Ouvrir la session",
     "openHardestClimb": "Ouvrir {{climb}}"
   },
   "sessionSummary": {

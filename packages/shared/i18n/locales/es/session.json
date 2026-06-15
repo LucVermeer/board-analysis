@@ -1,4 +1,9 @@
 {
+  "boardMismatch": {
+    "title": "Cambia a {{board}} para escalar este bloque",
+    "subtitle": "Este es un bloque de {{board}}. Cambia de tablero para ponerlo en cola.",
+    "cta": "Cambiar de tablero"
+  },
   "metadata": {
     "detail": {
       "notFoundTitle": "Sesión no encontrada"

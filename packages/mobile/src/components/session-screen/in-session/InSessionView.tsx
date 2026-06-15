@@ -27,7 +27,8 @@ import { useSessionDetail, useSessionSummary } from '../../../lib/graphql/hooks'
 import { runSessionEndExports } from '../../../lib/integrations';
 import { climbToQueueItem } from '../../../lib/climb-to-queue-item';
 import { getBoardConfigForPlaylist } from '../../../lib/playlists/board-details-for-playlist';
-import { navigateToSessionClimb } from '../../../lib/session-tick-mapping';
+import { tickToClimb } from '../../../lib/tick-to-climb';
+import { openClimbInPlayDrawer } from '../../../lib/open-climb-in-play-drawer';
 import { useGradeFormat } from '../../../hooks/use-grade-format';
 import { useBottomChromeMetrics } from '../../../hooks/use-bottom-chrome-metrics';
 import { withAlpha } from '../../../theme/colors';
@@ -106,27 +107,6 @@ function statusTint(status: SessionHistoryStatus, brand: { warning: string; succ
     case 'attempt':
       return iosSystemColors.systemGray;
   }
-}
-
-function tickToClimb(tick: SessionDetailTick): Climb | null {
-  if (!tick.frames) return null;
-  return {
-    uuid: tick.climbUuid,
-    name: tick.climbName ?? tick.climbUuid,
-    frames: tick.frames,
-    angle: tick.angle,
-    ascensionist_count: 0,
-    difficulty: tick.difficultyName ?? '',
-    difficulty_error: '',
-    quality_average: tick.quality != null ? String(tick.quality) : '0',
-    setter_username: tick.setterUsername ?? '',
-    stars: tick.quality ?? 0,
-    benchmark_difficulty: tick.isBenchmark ? (tick.difficultyName ?? null) : null,
-    mirrored: tick.isMirror,
-    is_no_match: tick.isNoMatch,
-    boardType: tick.boardType,
-    layoutId: tick.layoutId,
-  };
 }
 
 function tickToQueueItem(tick: SessionDetailTick): ClimbQueueItem | null {
@@ -377,9 +357,6 @@ export function InSessionView({
 
   const handlePressHistoryTick = useCallback(
     (tick: SessionDetailTick) => {
-      const climb = tickToClimb(tick);
-      const boardConfig = getBoardConfigForPlaylist(tick.boardType, tick.layoutId);
-
       // Always-live: tapping a history tick makes it the shared current climb for
       // everyone in the session (no driver gate).
       const item = tickToQueueItem(tick);
@@ -387,21 +364,7 @@ export function InSessionView({
         setCurrentClimb(item);
       }
 
-      if (climb && boardConfig) {
-        openPlayDrawer(climb, {
-          setAsCurrent: false,
-          boardConfig: {
-            boardName: boardConfig.boardName,
-            layoutId: boardConfig.layoutId,
-            sizeId: boardConfig.sizeId,
-            setIds: boardConfig.setIds.join(','),
-            angle: tick.angle,
-          },
-        });
-        return;
-      }
-
-      navigateToSessionClimb(router, tick);
+      openClimbInPlayDrawer({ kind: 'tick', tick }, { openPlayDrawer, router });
     },
     [openPlayDrawer, router, setCurrentClimb],
   );

@@ -1,4 +1,9 @@
 {
+  "boardMismatch": {
+    "title": "Switch to {{board}} to climb this",
+    "subtitle": "This is a {{board}} climb. Switch boards to queue it.",
+    "cta": "Switch board"
+  },
   "metadata": {
     "detail": {
       "notFoundTitle": "Session Not Found"

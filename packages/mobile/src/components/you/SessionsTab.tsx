@@ -16,8 +16,10 @@ import { FeedSectionLabel } from './FeedSectionLabel';
 import { CommentSheet } from './CommentSheet';
 import { bucketSessionsByRecency, dedupeSessionsById, type FeedRecencyBucket } from '../../lib/feed-time-buckets';
 import { useSessionGroupedFeed, useBulkVoteSummaries } from '../../lib/graphql/hooks';
-import { navigateToSessionFeedItem, navigateToSessionFeedTick } from '../../lib/session-feed-navigation';
+import { navigateToSessionFeedItem } from '../../lib/session-feed-navigation';
+import { openClimbInPlayDrawer } from '../../lib/open-climb-in-play-drawer';
 import { useBottomChromeMetrics } from '../../hooks/use-bottom-chrome-metrics';
+import { useDrawerHost } from '../../providers/drawer-host-provider';
 import { spacing, borderRadius } from '../../theme/tokens';
 import { useTheme } from '../../providers/theme-provider';
 
@@ -93,6 +95,7 @@ export function SessionsTab({ userId, onScroll, topInset = 0, registerScrollToTo
   const { t } = useTranslation('you');
   const { systemColors, brandColors, variant } = useTheme();
   const router = useRouter();
+  const { openPlayDrawer } = useDrawerHost();
   const bottomChrome = useBottomChromeMetrics();
   const paddingBottom = bottomChrome.scrollBottomPadding + spacing[4];
 
@@ -192,11 +195,11 @@ export function SessionsTab({ userId, onScroll, topInset = 0, registerScrollToTo
           voteSummary={summaryMap.get(`${row.item.socialEntityType}:${row.item.socialEntityId}`)}
           onOpenComments={handleOpenComments}
           onPress={handleOpenSession}
-          onOpenClimb={(tick) => navigateToSessionFeedTick(router, tick)}
+          onOpenClimb={(tick) => openClimbInPlayDrawer({ kind: 'tick', tick }, { openPlayDrawer, router })}
         />
       );
     },
-    [handleOpenComments, handleOpenSession, summaryMap, t],
+    [handleOpenComments, handleOpenSession, summaryMap, t, openPlayDrawer, router],
   );
 
   // The screen's identity, in-body under the floating chrome, plus the feed

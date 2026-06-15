@@ -2,6 +2,7 @@
 import { act, render, waitFor } from '@testing-library/react';
 import { createElement, useEffect, type ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { SHARED_EVENTS } from '@boardsesh/analytics';
 import type { ClimbQueueItem, PlaylistSuggestionSource } from '@boardsesh/queue';
 import type { Climb, UserBoard } from '@boardsesh/shared-schema';
 
@@ -14,8 +15,13 @@ const queue = vi.hoisted(() => ({
 }));
 
 const playDrawer = vi.hoisted(() => ({
+  props: null as null | { onSwitchBoard?: () => void },
   open: vi.fn(),
   close: vi.fn(),
+}));
+
+const analytics = vi.hoisted(() => ({
+  track: vi.fn(),
 }));
 
 const queueSheet = vi.hoisted(() => ({
@@ -76,6 +82,12 @@ const activeBoard = vi.hoisted(() => {
   };
 });
 
+// Owned boards returned by useMyBoards. Empty by default; the switch-board tests
+// populate it with a board that loosely-matches an opened climb's override.
+const myBoards = vi.hoisted(() => ({
+  boards: [] as UserBoard[],
+}));
+
 const presence = vi.hoisted(() => ({
   enabled: false,
   boardId: null as number | null,
@@ -104,7 +116,8 @@ vi.mock('expo-crypto', () => ({
 vi.mock('../../components/play-drawer', async () => {
   const React = await vi.importActual<typeof import('react')>('react');
   return {
-    PlayDrawer: React.forwardRef((_props: unknown, ref) => {
+    PlayDrawer: React.forwardRef((props: { onSwitchBoard?: () => void }, ref) => {
+      playDrawer.props = props;
       React.useImperativeHandle(ref, () => ({
         open: playDrawer.open,
         close: playDrawer.close,
@@ -234,10 +247,11 @@ vi.mock('../../lib/graphql/use-active-board', () => ({
 vi.mock('../../lib/graphql/hooks', () => ({
   useToggleFavorite: () => ({ mutate: vi.fn() }),
   useProfile: () => ({ data: null }),
+  useMyBoards: () => ({ data: { boards: myBoards.boards, totalCount: myBoards.boards.length, hasMore: false } }),
 }));
 
 vi.mock('../../lib/analytics', () => ({
-  track: vi.fn(),
+  track: analytics.track,
 }));
 
 vi.mock('../../lib/climb-to-queue-item', () => ({
@@ -248,8 +262,11 @@ vi.mock('../../lib/climb-to-queue-item', () => ({
   }),
 }));
 
+import { router } from 'expo-router';
 import { DrawerHostProvider, useDrawerHost, type BoardConfig } from '../drawer-host-provider';
 import type { BoardSheetClimbAction } from '../../components/board-presence/BoardSheet';
+
+const routerPush = router.push as unknown as ReturnType<typeof vi.fn>;
 
 function makeQueueItem(uuid: string, climbUuid = uuid): ClimbQueueItem {
   return {
@@ -284,6 +301,12 @@ function renderHost(onHost: (host: ReturnType<typeof useDrawerHost>) => void) {
 
 beforeEach(() => {
   activeBoard.stored = { ...activeBoard.defaultStored };
+  activeBoard.setActiveBoard.mockClear();
+  myBoards.boards = [];
+  analytics.track.mockClear();
+  playDrawer.props = null;
+  playDrawer.open.mockClear();
+  playDrawer.close.mockClear();
   presence.enabled = false;
   presence.boardId = null;
   presence.resolveAndBindBoard.mockClear();
@@ -709,5 +732,181 @@ describe('DrawerHostProvider climb actions', () => {
       layoutId: 1,
       angle: 40,
     });
+  });
+});
+
+describe('DrawerHostProvider play drawer open analytics source', () => {
+  it('tags a climb-view open with source:climb_view', async () => {
+    const hosts: Array<ReturnType<typeof useDrawerHost>> = [];
+    renderHost((host) => hosts.push(host));
+    await waitFor(() => expect(hosts.at(-1)).toBeDefined());
+
+    const climb = makeQueueItem('queue-x', 'climb-view-1').climb as unknown as Climb;
+    act(() => {
+      hosts.at(-1)?.openPlayDrawer(climb, { setAsCurrent: false, source: 'climb_view' });
+    });
+
+    expect(analytics.track).toHaveBeenCalledWith(
+      SHARED_EVENTS.PlayDrawerOpened,
+      expect.objectContaining({ climbUuid: 'climb-view-1', source: 'climb_view' }),
+    );
+  });
+
+  it('defaults a queue-nav open (setAsCurrent:false, no source) to current_queue_item', async () => {
+    const hosts: Array<ReturnType<typeof useDrawerHost>> = [];
+    renderHost((host) => hosts.push(host));
+    await waitFor(() => expect(hosts.at(-1)).toBeDefined());
+
+    const climb = makeQueueItem('queue-x', 'queue-nav-1').climb as unknown as Climb;
+    act(() => {
+      hosts.at(-1)?.openPlayDrawer(climb, { setAsCurrent: false });
+    });
+
+    expect(analytics.track).toHaveBeenCalledWith(
+      SHARED_EVENTS.PlayDrawerOpened,
+      expect.objectContaining({ climbUuid: 'queue-nav-1', source: 'current_queue_item' }),
+    );
+  });
+
+  it('does not leak source into PlayDrawer.open', async () => {
+    const hosts: Array<ReturnType<typeof useDrawerHost>> = [];
+    renderHost((host) => hosts.push(host));
+    await waitFor(() => expect(hosts.at(-1)).toBeDefined());
+
+    const climb = makeQueueItem('queue-x', 'climb-view-2').climb as unknown as Climb;
+    act(() => {
+      hosts.at(-1)?.openPlayDrawer(climb, { setAsCurrent: false, source: 'climb_view' });
+    });
+
+    // No board override → the drawer opens synchronously with only the queue
+    // options; `source` was pulled out and must not reach PlayDrawer.open.
+    expect(playDrawer.open).toHaveBeenCalledWith(climb, { setAsCurrent: false });
+  });
+});
+
+describe('DrawerHostProvider switch board keeps the climb angle', () => {
+  beforeEach(() => {
+    activeBoard.setActiveBoard.mockClear();
+    playDrawer.open.mockClear();
+    playDrawer.close.mockClear();
+    routerPush.mockClear();
+  });
+
+  function getOnSwitchBoard(): () => void {
+    const onSwitchBoard = playDrawer.props?.onSwitchBoard;
+    if (!onSwitchBoard) throw new Error('PlayDrawer.onSwitchBoard was not provided');
+    return onSwitchBoard;
+  }
+
+  // Owned board loosely-matches the opened climb (same board name + layout) but
+  // boardLooselyMatches IGNORES angle — the owned board sits at a different angle
+  // than the climb's override.
+  const ownedAdjustable: UserBoard = {
+    ...activeBoard.defaultStored,
+    uuid: 'board-tension',
+    slug: 'board-tension',
+    name: 'Tension board',
+    boardType: 'tension',
+    layoutId: 8,
+    sizeId: 7,
+    setIds: '5,6',
+    angle: 25,
+    isAngleAdjustable: true,
+  };
+
+  it('switches to the owned board carrying the climb override angle, not the board stored angle', async () => {
+    myBoards.boards = [ownedAdjustable];
+    const hosts: Array<ReturnType<typeof useDrawerHost>> = [];
+    renderHost((host) => hosts.push(host));
+    await waitFor(() => expect(hosts.at(-1)).toBeDefined());
+
+    const climb = makeQueueItem('queue-x', 'climb-switch-1').climb as unknown as Climb;
+    const override: BoardConfig = {
+      boardName: 'tension',
+      layoutId: 8,
+      sizeId: 7,
+      setIds: '5,6',
+      angle: 55,
+    };
+    act(() => {
+      hosts.at(-1)?.openPlayDrawer(climb, { setAsCurrent: false, boardConfig: override });
+    });
+    await waitFor(() => expect(playDrawer.props?.onSwitchBoard).toBeDefined());
+
+    act(() => {
+      getOnSwitchBoard()();
+    });
+
+    expect(activeBoard.setActiveBoard).toHaveBeenCalledWith(
+      expect.objectContaining({ uuid: 'board-tension', angle: 55 }),
+    );
+    expect(activeBoard.setActiveBoard).not.toHaveBeenCalledWith(expect.objectContaining({ angle: 25 }));
+  });
+
+  it('passes a fixed-angle owned board through with its own angle unchanged', async () => {
+    const ownedFixed: UserBoard = {
+      ...ownedAdjustable,
+      uuid: 'board-tension-fixed',
+      slug: 'board-tension-fixed',
+      name: 'Tension fixed',
+      angle: 25,
+      isAngleAdjustable: false,
+    };
+    myBoards.boards = [ownedFixed];
+    const hosts: Array<ReturnType<typeof useDrawerHost>> = [];
+    renderHost((host) => hosts.push(host));
+    await waitFor(() => expect(hosts.at(-1)).toBeDefined());
+
+    const climb = makeQueueItem('queue-x', 'climb-switch-2').climb as unknown as Climb;
+    const override: BoardConfig = {
+      boardName: 'tension',
+      layoutId: 8,
+      sizeId: 7,
+      setIds: '5,6',
+      angle: 55,
+    };
+    act(() => {
+      hosts.at(-1)?.openPlayDrawer(climb, { setAsCurrent: false, boardConfig: override });
+    });
+    await waitFor(() => expect(playDrawer.props?.onSwitchBoard).toBeDefined());
+
+    act(() => {
+      getOnSwitchBoard()();
+    });
+
+    expect(activeBoard.setActiveBoard).toHaveBeenCalledWith(
+      expect.objectContaining({ uuid: 'board-tension-fixed', angle: 25 }),
+    );
+  });
+
+  it('routes to the board picker when the user owns no board matching the climb override', async () => {
+    // Owned board is a genuinely different model (board name + layout) than the
+    // climb's override, so boardLooselyMatches finds nothing to switch to.
+    myBoards.boards = [ownedAdjustable];
+    const hosts: Array<ReturnType<typeof useDrawerHost>> = [];
+    renderHost((host) => hosts.push(host));
+    await waitFor(() => expect(hosts.at(-1)).toBeDefined());
+
+    const climb = makeQueueItem('queue-x', 'climb-switch-unowned').climb as unknown as Climb;
+    const override: BoardConfig = {
+      boardName: 'kilter',
+      layoutId: 1,
+      sizeId: 10,
+      setIds: '1,2',
+      angle: 55,
+    };
+    act(() => {
+      hosts.at(-1)?.openPlayDrawer(climb, { setAsCurrent: false, boardConfig: override });
+    });
+    await waitFor(() => expect(playDrawer.props?.onSwitchBoard).toBeDefined());
+
+    act(() => {
+      getOnSwitchBoard()();
+    });
+
+    // No owned match → close the drawer and send the user to the board picker.
+    expect(playDrawer.close).toHaveBeenCalledTimes(1);
+    expect(routerPush).toHaveBeenCalledWith(expect.objectContaining({ pathname: '/boards' }));
+    expect(activeBoard.setActiveBoard).not.toHaveBeenCalled();
   });
 });
