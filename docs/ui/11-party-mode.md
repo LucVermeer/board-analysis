@@ -17,7 +17,7 @@ The lightbulb is a send / re-assert affordance. Lit means our session's climb is
 
 2. **Connected, unlit:** Tapping re-asserts (re-sends) the current climb to the board.
 
-3. **Pending:** After tapping the lightbulb, a 2-second watcher timer starts. If `confirmClimbOnWall` arrives within that window (via the `wall-confirm-bus`), the timer is dismissed and the lightbulb lights. If not, a fallback runs (auto-connect or device picker).
+3. **Pending:** After tapping the lightbulb, a 2-second watcher timer starts. If `confirmClimbOnWall` arrives within that window (via the `wall-confirm-bus`), the timer is dismissed and the lightbulb lights. If not, the timer just clears the pulse. The tap already initiated the connect above, so the watcher is armed **pulse-only** (`pulseOnly: true`) and never fires its own connect fallback — a second connect while the device picker is still open would start a duplicate scan (the iOS "Already scanning" failure). The controller's `auto_connect` / `picker` fallbacks remain for callers that arm without first connecting.
 
 4. **Lit:** Our session's climb is confirmed on the wall. A `WallDisconnected` event turns it back off for everyone when the relaying connection drops.
 
@@ -98,13 +98,13 @@ When any participant changes the board angle:
 
 ### Data Layer
 
-| Operation               | Type         | Purpose                                                                                           |
-| ----------------------- | ------------ | ------------------------------------------------------------------------------------------------- |
-| `confirmClimbOnWall`    | Mutation     | Confirms a climb was sent to the board via BLE (lights the lightbulb for all members)             |
-| `reportWallDisconnect`  | Mutation     | Reports the relaying BLE link dropped (unlights the lightbulb for all members)                    |
-| `setSessionBoardPath`   | Mutation     | Broadcasts angle/board path change to all members                                                 |
-| `setSessionBoardSerial` | Mutation     | Shares which physical board serial is connected                                                   |
-| `sessionUpdates`        | Subscription | Real-time session events (wall confirm/disconnect, path changes, serial changes, joins/leaves)    |
-| `queueUpdates`          | Subscription | Real-time queue state changes (add, remove, reorder, current climb)                               |
+| Operation               | Type         | Purpose                                                                                        |
+| ----------------------- | ------------ | ---------------------------------------------------------------------------------------------- |
+| `confirmClimbOnWall`    | Mutation     | Confirms a climb was sent to the board via BLE (lights the lightbulb for all members)          |
+| `reportWallDisconnect`  | Mutation     | Reports the relaying BLE link dropped (unlights the lightbulb for all members)                 |
+| `setSessionBoardPath`   | Mutation     | Broadcasts angle/board path change to all members                                              |
+| `setSessionBoardSerial` | Mutation     | Shares which physical board serial is connected                                                |
+| `sessionUpdates`        | Subscription | Real-time session events (wall confirm/disconnect, path changes, serial changes, joins/leaves) |
+| `queueUpdates`          | Subscription | Real-time queue state changes (add, remove, reorder, current climb)                            |
 
 ---
