@@ -30,6 +30,8 @@ import { useToast } from '../../../src/providers/toast-provider';
 import { useDrawerHost } from '../../../src/providers/drawer-host-provider';
 import { useBottomChromeMetrics } from '../../../src/hooks/use-bottom-chrome-metrics';
 import { ProgressiveBlur } from '../../../src/components/ProgressiveBlur';
+import { GlassActionToolbar, TOP_ACTION_SIZE } from '../../../src/components/chrome';
+import { UserAvatarToolbarAction } from '../../../src/components/user-drawer/UserAvatarToolbarAction';
 import { dedupeSessionsById } from '../../../src/lib/feed-time-buckets';
 import { deriveFeedScopeInput, type FeedMode } from '../../../src/lib/feed/feed-scope';
 import { openClimbInPlayDrawer } from '../../../src/lib/open-climb-in-play-drawer';
@@ -41,6 +43,10 @@ import { BETA_CARD_HEIGHT, BETA_CARD_WIDTH } from '../../../src/components/play-
 
 const RECENT_BETA_LIMIT = 20;
 const SHELF_GAP = spacing[3];
+// The floating avatar island's vertical band (matches the other tabs' chrome
+// row): used to inset the feed below it and size the top blur.
+const TOP_ISLAND_BAND = spacing[1] + TOP_ACTION_SIZE + spacing[2];
+const ROW_GUTTER = spacing[4];
 const BETA_SKELETON_KEYS = ['beta-skeleton-1', 'beta-skeleton-2', 'beta-skeleton-3'];
 const INITIAL_FEED_SKELETON_KEYS = ['home-feed-skeleton-1', 'home-feed-skeleton-2', 'home-feed-skeleton-3'];
 const NEXT_PAGE_FEED_SKELETON_KEYS = ['home-feed-footer-skeleton-1', 'home-feed-footer-skeleton-2'];
@@ -413,10 +419,15 @@ export default function HomeTab() {
           feed.isFetchingNextPage ? <ActivitySkeletonList skeletonKeys={NEXT_PAGE_FEED_SKELETON_KEYS} /> : null
         }
       />
-      {/* Frost content scrolling under the status-bar strip, matching the other
-          tabs. Home has no floating islands, so it's just the top strip — the
-          "Home" title lives in the list and scrolls away beneath it. */}
-      <ProgressiveBlur style={[styles.topBlur, { height: insets.top + spacing[6] }]} />
+      {/* Frost content scrolling under the chrome band, matching the other tabs —
+          the scope title lives in the list and scrolls away beneath it. */}
+      <ProgressiveBlur style={[styles.topBlur, { height: insets.top + TOP_ISLAND_BAND }]} />
+      {/* Floating user-avatar island, top-left, matching the other tabs' header. */}
+      <View pointerEvents="box-none" style={[styles.topLeftIsland, { top: insets.top + spacing[1] }]}>
+        <GlassActionToolbar actionCount={1}>
+          <UserAvatarToolbarAction variant="glass" />
+        </GlassActionToolbar>
+      </View>
       <CommentSheet
         sheetRef={commentSheetRef}
         entityId={commentTarget?.entityId ?? null}
@@ -655,6 +666,10 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
   },
+  topLeftIsland: {
+    position: 'absolute',
+    left: ROW_GUTTER,
+  },
   centered: {
     flex: 1,
     alignItems: 'center',
@@ -663,7 +678,9 @@ const styles = StyleSheet.create({
     gap: spacing[2],
   },
   header: {
-    paddingTop: spacing[3],
+    // Clear the floating avatar island so the scope title starts just below it
+    // (the title then scrolls up under the island + blur).
+    paddingTop: TOP_ISLAND_BAND,
   },
   scopeTitleWrap: {
     paddingHorizontal: spacing[4],
