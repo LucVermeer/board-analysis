@@ -145,15 +145,12 @@ describe('pruner TTL cutoff', () => {
     // Now fire the prune interval.
     vi.advanceTimersByTime(60_000 + 1); // crosses 5-min boundary from original creation
 
-    // Bucket should still exist (lastRefillMs was reset < 5 min ago).
-    // Bucket had partial refill from the long gap; it may or may not be
-    // throttled — but either way it should NOT return true/true/false of a
-    // freshly-allocated bucket, which would indicate incorrect eviction+realloc.
-    // Instead we just confirm the prune didn't silently reset to full capacity
-    // when it shouldn't have: try to drain, then verify the throttle is in effect.
-    checkWidgetRateLimit('session-refreshed'); // may be allowed
-    checkWidgetRateLimit('session-refreshed'); // may be allowed
-    // After draining at least 2, the next one must be throttled (cap is 2).
+    // Bucket was touched at t≈299s; now at t≈360s, 61s have passed, so it
+    // refills to capacity 2. Both drain calls must succeed (bucket was not
+    // evicted — lastRefillMs was reset well within the 5-min TTL), and the
+    // third must be throttled (cap is 2).
+    expect(checkWidgetRateLimit('session-refreshed')).toBe(true);
+    expect(checkWidgetRateLimit('session-refreshed')).toBe(true);
     expect(checkWidgetRateLimit('session-refreshed')).toBe(false);
   });
 });

@@ -18,7 +18,7 @@ This document describes the WebSocket implementation used for real-time party se
 12. [iOS Live Activity Integration](#ios-live-activity-integration)
 13. [Live Activity Push Notifications (APNs)](#live-activity-push-notifications-apns)
 14. [Activity Push Token Lifecycle](#activity-push-token-lifecycle)
-15. [Widget Navigation REST Endpoint](#widget-navigation-rest-endpoint)
+15. [Widget REST Endpoints](#widget-rest-endpoints)
 
 ---
 
@@ -1669,7 +1669,7 @@ The helper lives in `mobile/ios/App/App/SharedKeychain.swift`. The `keychain-acc
 
 ### Widget Button Flow
 
-Lock-screen widget taps (next/prev climb) do NOT go through the native WebSocket. They hit the backend directly via `/api/widget/navigate` (see [Widget Navigation REST Endpoint](#widget-navigation-rest-endpoint)) because the widget extension can't talk to `SessionWebSocketManager` (different process). The backend updates the queue, publishes a `CurrentClimbChanged` event, and the APNs hook fans the change back out to every device's Live Activity.
+Lock-screen widget taps (next/prev climb) do NOT go through the native WebSocket. They hit the backend directly via `/api/widget/navigate` (see [Widget REST Endpoints](#widget-rest-endpoints)) because the widget extension can't talk to `SessionWebSocketManager` (different process). The backend updates the queue, publishes a `CurrentClimbChanged` event, and the APNs hook fans the change back out to every device's Live Activity.
 
 ### Lifecycle
 
@@ -1831,7 +1831,7 @@ The push token as the credential keeps the widget extension out of the user-auth
 
 **take-control**
 - `sessionId`: non-empty string
-- Request body capped at 4 KB
+- Request body capped at 2 KB
 
 Anything else returns 400.
 
