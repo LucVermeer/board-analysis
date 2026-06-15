@@ -32,6 +32,7 @@ const IOS_RUN_SCRIPT = resolve(ROOT_DIR, 'scripts', 'mobile-ios-run.ts');
 const OUTPUT_ROOT = resolve(ROOT_DIR, 'mobile', 'screenshots');
 const LOG = '[mobile:screenshots]';
 
+const APP_ID = 'com.boardsesh.app';
 const DEFAULT_IOS_DEVICE = 'iPhone 16 Pro Max';
 const IOS_DEVICE_TYPE_ID = 'com.apple.CoreSimulator.SimDeviceType.iPhone-16-Pro-Max';
 // Mirrors packages/mobile/.env.example. iOS simulators reach the host directly,
@@ -252,6 +253,11 @@ function clearStatusBar(udid: string): void {
   runCapture('xcrun', ['simctl', 'status_bar', udid, 'clear']);
 }
 
+/** True once the app bundle is installed on the simulator. */
+function appInstalled(udid: string): boolean {
+  return runCapture('xcrun', ['simctl', 'get_app_container', udid, APP_ID, 'app']).status === 0;
+}
+
 function collectScreenshots(captureDir: string, platform: 'ios' | 'android', deviceName: string): string[] {
   const outputDir = join(OUTPUT_ROOT, platform, deviceSlug(deviceName));
   mkdirSync(outputDir, { recursive: true });
@@ -280,14 +286,29 @@ function runIos(options: ScreenshotOptions): number {
   console.log(
     `${LOG} Building Release app for ${device.name} (backend=${options.backend}, flow=${options.flow}${options.variant ? `, variant=${options.variant}` : ''})...`,
   );
-  const buildStatus = runInherit(
-    'bunx',
-    ['tsx', IOS_RUN_SCRIPT, '--', '--configuration', 'Release', '--device', device.udid],
-    buildEnv,
-  );
+  const runBuild = (): number =>
+    runInherit('bunx', ['tsx', IOS_RUN_SCRIPT, '--', '--configuration', 'Release', '--device', device.udid], buildEnv);
+  let buildStatus = runBuild();
+  if (buildStatus !== 0 && !appInstalled(device.udid)) {
+    // RN New Architecture codegen ("Generate Specs") can race the compile step
+    // on a cold/clean build, failing with "Build input file cannot be found:
+    // …/ReactCodegen/*-generated.mm". The specs are written during that first
+    // attempt, so a second build finds them — the well-known "build twice on a
+    // clean checkout" quirk. This bites every fresh CI runner, so retry once.
+    console.log(`${LOG} First build did not install the app (likely the cold-build codegen race); retrying once...`);
+    buildStatus = runBuild();
+  }
+  // Gate on the app actually being installed, not on expo's exit code: for a
+  // Release build, `expo run:ios` succeeds at build+install but then fails its
+  // post-install launch step (it opens the app via the dev-client URL, which a
+  // Release build doesn't handle — `simctl openurl` times out). Maestro launches
+  // the app itself, so that launch-step failure is harmless.
+  if (!appInstalled(device.udid)) {
+    console.error(`${LOG} FAILED: app not installed after build (exit ${buildStatus}).`);
+    return buildStatus === 0 ? 1 : buildStatus;
+  }
   if (buildStatus !== 0) {
-    console.error(`${LOG} FAILED: Release build/install exited with ${buildStatus}.`);
-    return buildStatus;
+    console.log(`${LOG} Build + install OK; ignoring expo's post-install launch step (Maestro launches the app).`);
   }
 
   const captureDir = mkdtempSync(join(tmpdir(), 'boardsesh-shots-'));

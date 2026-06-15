@@ -1,53 +1,58 @@
 appId: com.boardsesh.app
 name: app-store screenshots
 ---
-# App Store / Play Store hero shots. Logs in once, then deep-links to each main
-# tab and captures it. The filter sheet is captured LAST so its (slightly more
-# fragile) tap can't disturb the earlier tab captures.
+# App Store / Play Store hero shots. Logs in once (lands on Home), then deep-links
+# to each tab and captures it.
+#
+# iOS shows an "Open in 'Boardsesh'?" system confirmation when a custom-scheme
+# deep link is opened via simctl; each openLink is followed by an optional
+# tapOn "Open" to confirm it. Captures are best-effort (waitForAnimationToEnd +
+# screenshot) so one slow/empty screen never aborts the whole set — screenshot
+# QUALITY depends on the signed-in account having an active board + feed data
+# (see scripts/mobile-screenshots.ts notes).
 - launchApp:
     clearState: true
-- runFlow: login.yaml
+# clearState wipes the app sandbox but NOT the Keychain, where the auth token
+# lives — so a rerun may already be signed in. Only run login when the auth
+# screen is actually showing (fresh install / signed out).
+- runFlow:
+    when:
+      visible:
+        id: 'auth-email-input'
+    file: login.yaml
 
-# Climbs — the main browse surface (grades, board art).
+# Home — already here after login (no deep link, no confirm prompt).
+- waitForAnimationToEnd
+- takeScreenshot: 00-home
+
+# Climbs — the main browse surface (needs an active board to show climbs).
 - openLink: com.boardsesh.app://climbs
-- extendedWaitUntil:
-    visible:
-      id: 'climb-list'
-    timeout: 30000
+- tapOn:
+    text: 'Open'
+    optional: true
 - waitForAnimationToEnd
 - takeScreenshot: 01-climbs
 
 # Discover — playlists.
 - openLink: com.boardsesh.app://discover
+- tapOn:
+    text: 'Open'
+    optional: true
 - waitForAnimationToEnd
 - takeScreenshot: 03-discover
 
 # Record — session / live wall.
 - openLink: com.boardsesh.app://record
+- tapOn:
+    text: 'Open'
+    optional: true
 - waitForAnimationToEnd
 - takeScreenshot: 04-record
 
 # Profile — stats, sessions, logbook.
 - openLink: com.boardsesh.app://profile
+- tapOn:
+    text: 'Open'
+    optional: true
 - waitForAnimationToEnd
 - takeScreenshot: 05-profile
-
-# Home — social feed. Captured after the others so the feed query has settled.
-- openLink: com.boardsesh.app://home
-- extendedWaitUntil:
-    visible:
-      id: 'home-screen'
-    timeout: 30000
-- waitForAnimationToEnd
-- takeScreenshot: 00-home
-
-# Search filters sheet — opened from Climbs. The filter button is matched by its
-# "Filters" accessibility label (en-US, no active filters at flow start).
-- openLink: com.boardsesh.app://climbs
-- extendedWaitUntil:
-    visible:
-      id: 'climb-list'
-    timeout: 30000
-- tapOn: 'Filters'
-- waitForAnimationToEnd
-- takeScreenshot: 02-search-filters
