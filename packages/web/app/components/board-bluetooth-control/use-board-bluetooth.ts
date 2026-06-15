@@ -208,6 +208,13 @@ export function useBoardBluetooth({
   // connection can fire several disconnects in a row. Reset once we reconnect
   // (or the user explicitly disconnects) so the next genuine drop prompts again.
   const boardTakenPromptShownRef = useRef(false);
+  // True from the moment a connect attempt starts until it settles — and the
+  // device picker being open counts as in-flight. A second concurrent connect()
+  // would start a second native scan and trip "Already scanning. Stopping now."
+  // on iOS (e.g. the wall-confirm 2s fallback firing while the user is still
+  // choosing a board in the picker). A ref, not the `loading` state, because
+  // state updates are async: two rapid calls both read the stale `false`.
+  const connectInFlightRef = useRef(false);
   // Latest config-matched reconnect serial, mirrored from the derived value
   // below so handleDisconnection's "take it back" action can silently reconnect
   // to the same board without taking the derived value (or boardDetails) as a
@@ -533,6 +540,17 @@ export function useBoardBluetooth({
         return false;
       }
 
+      // A connect attempt (possibly with the device picker still open) is
+      // already running. Starting a second one here scans again while the first
+      // scan is live, which trips "Already scanning. Stopping now." on the
+      // native iOS shell. Ignore the re-entrant call; the in-flight attempt
+      // stands. Sequential connects (reconnect to a different board) still work
+      // — the flag clears in `finally` below.
+      if (connectInFlightRef.current) {
+        return false;
+      }
+      connectInFlightRef.current = true;
+
       setLoading(true);
 
       // Tracks which stage of the pairing flow we're in so the catch block
@@ -663,6 +681,9 @@ export function useBoardBluetooth({
         }
       } finally {
         setLoading(false);
+        // Release the re-entrancy guard so the next deliberate connect (or a
+        // take-back reconnect) can run.
+        connectInFlightRef.current = false;
         // Re-arm the take-back prompt once a connect attempt finishes, whether
         // it succeeded or failed. Resetting only on success would leave the
         // guard stuck true after a failed take-back, so a later genuine drop
