@@ -13,6 +13,9 @@ export type Contributor = {
   name: string | null;
   avatarUrl: string;
   htmlUrl: string;
+  pullRequests: number;
+  issues: number;
+  /** pullRequests + issues — the ranking score the list is sorted by. */
   contributions: number;
 };
 

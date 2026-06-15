@@ -115,7 +115,6 @@
       "joinDiscord": "Join Discord",
       "partnerTitle": "Partner with us officially",
       "partnerBody": "Boardsesh works with Kilter, Tension, and MoonBoard from the outside. If you build boards and want to make something official together, we're keen to talk.",
-      "partnerCta": "partnerships@boardsesh.com",
       "acknowledgementsLink": "Acknowledgements",
       "acknowledgementsLinkBody": "The people behind Boardsesh"
     },
@@ -141,7 +140,8 @@
     "licenses": {
       "title": "Open source licenses",
       "intro": "Boardsesh is built with these open source packages. Thank you to their maintainers.",
-      "viewSource": "View source"
+      "viewSource": "View source",
+      "close": "Close"
     },
     "onboarding": {
       "skip": "Skip",

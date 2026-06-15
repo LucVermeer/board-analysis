@@ -1,7 +1,7 @@
 /**
  * App-facing accessor for the bundled third-party license attribution, generated
- * at build time by scripts/generate-oss-licenses.ts. Imported only by the
- * licenses screen so the ~1 MB manifest isn't parsed until that route opens.
+ * at build time by scripts/generate-oss-licenses.ts. Metro inlines this ~1 MB JSON
+ * into the JS bundle; only the licenses screen imports it.
  */
 import licenses from '../data/oss-licenses.generated.json';
 

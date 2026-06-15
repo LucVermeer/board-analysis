@@ -122,7 +122,7 @@ export default function AboutScreen() {
             {t('mobile.about.partnerBody')}
           </Text>
           <Button
-            title={t('mobile.about.partnerCta')}
+            title={PARTNERSHIPS_EMAIL}
             icon="mail"
             size="large"
             variant="outlined"

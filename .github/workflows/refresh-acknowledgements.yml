@@ -53,7 +53,10 @@ jobs:
           if [[ -n "$(git status --porcelain packages/mobile/src/data)" ]]; then
             git add packages/mobile/src/data/acknowledgements.generated.json packages/mobile/src/data/oss-licenses.generated.json
             git commit -m "chore: refresh acknowledgements + OSS licenses [skip ci]"
-            git push
+            # Explicit target: commit back to the branch this run was dispatched from
+            # (main on the schedule) — checkout leaves a detached HEAD, so a bare
+            # `git push` has no upstream and could otherwise be ambiguous.
+            git push origin "HEAD:${{ github.ref_name }}"
           else
             echo "No changes to acknowledgements data."
           fi

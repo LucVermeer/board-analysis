@@ -16,18 +16,20 @@ import { spacing } from '../src/theme/tokens';
 
 const keyExtractor = (item: OssLicense) => `${item.name}@${item.version}`;
 
-function Separator() {
+const Separator = memo(function Separator() {
   const { systemColors } = useTheme();
   return <View style={[styles.separator, { backgroundColor: systemColors.separator }]} />;
-}
+});
 
 type LicenseRowProps = { license: OssLicense; onPress: (license: OssLicense) => void };
 
 const LicenseRow = memo(function LicenseRow({ license, onPress }: LicenseRowProps) {
   const { systemColors } = useTheme();
+  // Stable per-row handler so the memo isn't defeated by a fresh inline closure.
+  const handlePress = useCallback(() => onPress(license), [onPress, license]);
   return (
     <PressableSurface
-      onPress={() => onPress(license)}
+      onPress={handlePress}
       feedback="opacity"
       opacityTo={0.7}
       accessibilityRole="button"
@@ -78,6 +80,8 @@ export default function LicensesScreen() {
         }}
       />
       <View style={styles.flex}>
+        {/* FlashList v2 self-measures rows — `estimatedItemSize` was removed and
+            no longer typechecks (see BoardCarousel for the same note). */}
         <FlashList
           data={ossLicenses}
           renderItem={renderItem}
@@ -112,7 +116,7 @@ export default function LicensesScreen() {
             <Pressable
               onPress={handleClose}
               accessibilityRole="button"
-              accessibilityLabel={t('mobile.licenses.title')}
+              accessibilityLabel={t('mobile.licenses.close')}
               hitSlop={12}
             >
               <Icon name="close" size={22} color={systemColors.secondaryLabel} />
@@ -186,7 +190,6 @@ const styles = StyleSheet.create({
   },
   licenseText: {
     lineHeight: 18,
-    fontVariant: ['tabular-nums'],
   },
   modalFooter: {
     paddingHorizontal: spacing[4],
