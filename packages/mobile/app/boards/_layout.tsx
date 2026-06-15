@@ -1,25 +1,14 @@
 import { Stack, router } from 'expo-router';
-import { Platform, Pressable } from 'react-native';
+import { Pressable } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { Icon } from '../../src/components/Icon';
+import { glassStackScreenOptions } from '../../src/theme/navigation';
 
 export default function BoardsLayout() {
   const { t } = useTranslation('common');
 
   return (
-    <Stack
-      screenOptions={{
-        headerLargeTitle: false,
-        // iOS keeps the transparent blur header (content insets via
-        // contentInsetAdjustmentBehavior="automatic"). On Android that prop is a
-        // no-op and edge-to-edge would draw content under the floating header +
-        // status bar (the title overlapped the toolbar) — a solid header lays the
-        // scene out below it.
-        headerTransparent: Platform.OS === 'ios',
-        headerBlurEffect: 'systemMaterial',
-        contentStyle: { backgroundColor: 'transparent' },
-      }}
-    >
+    <Stack screenOptions={glassStackScreenOptions}>
       <Stack.Screen
         name="index"
         options={{

@@ -196,6 +196,14 @@ vi.mock('../../GlassIconButton', () => ({
   }) => createElement('button', { 'data-icon': iconName, onClick: onPress, 'aria-label': accessibilityLabel }),
 }));
 
+// GlassSurface pulls in @react-native-community/blur + expo-glass-effect at
+// import time; stub it to a plain div that still renders its children (the
+// collapsed-bar title).
+vi.mock('../../GlassSurface', () => ({
+  GlassSurface: ({ children }: { children?: ReactNode }) =>
+    createElement('div', { 'data-glass-surface': 'true' }, children ?? null),
+}));
+
 vi.mock('../PlaylistBoardBackdrop', () => ({
   PlaylistBoardBackdrop: ({ boardType }: { boardType: string }) => createElement('div', { 'data-backdrop': boardType }),
 }));

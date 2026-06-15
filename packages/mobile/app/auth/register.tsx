@@ -159,9 +159,12 @@ export default function RegisterScreen() {
 
   return (
     <>
-      <Stack.Screen options={{ headerShown: true, title: t('login.tabs.signUp'), headerLargeTitle: false }} />
+      <Stack.Screen options={{ headerShown: true, title: t('login.tabs.signUp') }} />
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView
+          // The stack header is transparent + blurred on iOS; inset the form
+          // below it (and the status bar) instead of drawing under it.
+          contentInsetAdjustmentBehavior="automatic"
           contentContainerStyle={styles.container}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="interactive"

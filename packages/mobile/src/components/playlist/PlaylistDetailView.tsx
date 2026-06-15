@@ -31,11 +31,12 @@ import { ActivityIndicator } from '../ActivityIndicator';
 import { ClimbListRow } from '../ClimbListRow';
 import { ClimbListRowSkeleton } from '../ClimbListRowSkeleton';
 import { GlassIconButton } from '../GlassIconButton';
+import { GlassSurface } from '../GlassSurface';
 import { Button } from '../Button';
 import { PlaylistEditClimbRow } from './PlaylistEditClimbRow';
 import { usePlaylistDrag } from './use-playlist-drag';
 import { PlaylistBoardBackdrop } from './PlaylistBoardBackdrop';
-import { buildHeroGradient, shiftLightness } from './playlist-gradient';
+import { buildHeroGradient } from './playlist-gradient';
 import { resolvePlaylistEmojiIcon } from './playlist-icon';
 import { PLAYLIST_COLORS, isValidHexColor } from './playlist-colors';
 import { withAlpha } from '../../theme/colors';
@@ -477,9 +478,7 @@ export function PlaylistDetailView({
     );
   }
 
-  // ── Liquid Glass branch (unchanged) ─────────────────────────────────────────
-  // The collapsed bar uses the gradient's deeper tone so white text stays legible.
-  const headerColor = shiftLightness(baseColor, -20);
+  // ── Liquid Glass branch ──────────────────────────────────────────────────────
   const gradient = buildHeroGradient(hero.color);
   const showBackdrop = !!(hero.showBoardBackdrop && hero.boardType);
   // With the board backdrop on, drop the gradient to a translucent wash so the
@@ -600,18 +599,27 @@ export function PlaylistDetailView({
         ListEmptyComponent={listEmptyComponent}
       />
 
-      {/* Collapsed colour header bar — the playlist colour + centered name, fading
-          in once the hero scrolls off. Sits below the floating FABs. */}
+      {/* Collapsed header bar — a translucent blur surface (matching the app's
+          other glass headers) carrying a subtle playlist-colour tint + the
+          centered name, fading in once the hero scrolls off. Sits below the
+          floating FABs. */}
       <Animated.View
         pointerEvents="none"
         style={[
           styles.headerBar,
-          { height: headerBarHeight, paddingTop: insets.top, backgroundColor: headerColor },
+          { height: headerBarHeight, paddingTop: insets.top, borderBottomColor: systemColors.separator },
           headerBarStyle,
         ]}
       >
+        <GlassSurface
+          glassEffectStyle="regular"
+          tintColor={withAlpha(baseColor, 0.35)}
+          fallbackColor={systemColors.secondaryBackground}
+          style={StyleSheet.absoluteFill}
+          pointerEvents="none"
+        />
         <View style={styles.headerBarRow}>
-          <Text variant="headline" numberOfLines={1} color={iosSystemColors.white} style={styles.headerBarTitle}>
+          <Text variant="headline" numberOfLines={1} color={systemColors.label} style={styles.headerBarTitle}>
             {hero.name}
           </Text>
         </View>
@@ -731,8 +739,8 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     zIndex: 1,
+    overflow: 'hidden',
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(0, 0, 0, 0.15)',
   },
   headerBarRow: {
     flex: 1,
@@ -744,9 +752,6 @@ const styles = StyleSheet.create({
   },
   headerBarTitle: {
     fontWeight: '600',
-    textShadowColor: 'rgba(0, 0, 0, 0.35)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
   },
   topBar: {
     position: 'absolute',

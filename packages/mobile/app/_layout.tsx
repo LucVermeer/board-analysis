@@ -46,6 +46,7 @@ import { Icon } from '../src/components/Icon';
 import { brandColors } from '../src/theme/colors';
 import { iosDarkColors } from '../src/theme/ios-colors';
 import { spacing } from '../src/theme/tokens';
+import { glassStackScreenOptions } from '../src/theme/navigation';
 import { reportError } from '../src/lib/error-reporting';
 import { loadRequiredFonts } from '../src/lib/required-fonts';
 import { AnalyticsProvider } from '../src/components/analytics/AnalyticsProvider';
@@ -322,7 +323,10 @@ function RootLayout() {
                                                     <UserDrawerProvider>
                                                       <ThemedNavigation>
                                                         <Stack
-                                                          screenOptions={{ headerShown: false }}
+                                                          screenOptions={{
+                                                            ...glassStackScreenOptions,
+                                                            headerShown: false,
+                                                          }}
                                                           initialRouteName="index"
                                                         >
                                                           <Stack.Screen name="index" />
