@@ -51,13 +51,21 @@ vi.mock('../../Icon', () => ({
   Icon: ({ name }: { name: string }) => createElement('span', { 'data-icon': name }),
 }));
 
+vi.mock('../../GlassSurface', () => ({ GlassSurface: () => createElement('div', { 'data-glass': 'true' }) }));
+vi.mock('../../../hooks/use-native-glass', () => ({ useNativeGlass: () => false }));
+
 vi.mock('../../../providers/theme-provider', () => ({
-  useTheme: () => ({ systemColors: { label: '#000', secondaryLabel: '#999' } }),
+  useTheme: () => ({
+    systemColors: { label: '#000', secondaryLabel: '#999', separator: '#ccc', elevatedSurface: '#fff' },
+  }),
 }));
 
 vi.mock('../../../theme/tokens', () => ({
-  spacing: { 2: 8 },
+  spacing: { 1: 4, 2: 8, 4: 16 },
+  shadows: { sm: {} },
 }));
+
+vi.mock('../../../theme/layout', () => ({ glassSize: { capsule: 44 } }));
 
 import { FeedScopeTitle } from '../FeedScopeTitle';
 

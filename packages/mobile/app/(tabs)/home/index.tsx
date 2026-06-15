@@ -305,9 +305,6 @@ export default function HomeTab() {
   const header = useMemo(
     () => (
       <View style={styles.header}>
-        <View style={styles.scopeTitleWrap}>
-          <FeedScopeTitle title={scopeMenu.title} actions={scopeMenu.actions} onSelectIndex={scopeMenu.onSelectIndex} />
-        </View>
         <RecentBetaShelf
           heading={betaHeading}
           videos={betaVideos.data ?? []}
@@ -322,7 +319,6 @@ export default function HomeTab() {
       </View>
     ),
     [
-      scopeMenu,
       betaHeading,
       betaVideos.data,
       betaVideos.isError,
@@ -419,14 +415,25 @@ export default function HomeTab() {
           feed.isFetchingNextPage ? <ActivitySkeletonList skeletonKeys={NEXT_PAGE_FEED_SKELETON_KEYS} /> : null
         }
       />
-      {/* Frost content scrolling under the chrome band, matching the other tabs —
-          the scope title lives in the list and scrolls away beneath it. */}
+      {/* Frost content scrolling under the chrome band, matching the other tabs. */}
       <ProgressiveBlur style={[styles.topBlur, { height: insets.top + TOP_ISLAND_BAND }]} />
-      {/* Floating user-avatar island, top-left, matching the other tabs' header. */}
-      <View pointerEvents="box-none" style={[styles.topLeftIsland, { top: insets.top + spacing[1] }]}>
-        <GlassActionToolbar actionCount={1}>
-          <UserAvatarToolbarAction variant="glass" />
-        </GlassActionToolbar>
+      {/* Floating header: the user-avatar island (left) and the scope menu (a glass
+          title-menu pill, centred) over the blur — matching the other tabs. */}
+      <View pointerEvents="box-none" style={[styles.headerChrome, { paddingTop: insets.top + spacing[1] }]}>
+        <View pointerEvents="box-none" style={styles.headerRow}>
+          <GlassActionToolbar actionCount={1}>
+            <UserAvatarToolbarAction variant="glass" />
+          </GlassActionToolbar>
+          <View pointerEvents="box-none" style={styles.headerCenter}>
+            <FeedScopeTitle
+              title={scopeMenu.title}
+              actions={scopeMenu.actions}
+              onSelectIndex={scopeMenu.onSelectIndex}
+            />
+          </View>
+          {/* Balance the avatar so the scope menu reads centred. */}
+          <View style={styles.headerRightSpacer} />
+        </View>
       </View>
       <CommentSheet
         sheetRef={commentSheetRef}
@@ -666,9 +673,27 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
   },
-  topLeftIsland: {
+  headerChrome: {
     position: 'absolute',
-    left: ROW_GUTTER,
+    top: 0,
+    left: 0,
+    right: 0,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: ROW_GUTTER,
+    height: TOP_ACTION_SIZE,
+  },
+  headerCenter: {
+    flex: 1,
+    minWidth: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing[2],
+  },
+  headerRightSpacer: {
+    width: TOP_ACTION_SIZE,
   },
   centered: {
     flex: 1,
@@ -678,13 +703,9 @@ const styles = StyleSheet.create({
     gap: spacing[2],
   },
   header: {
-    // Clear the floating avatar island so the scope title starts just below it
-    // (the title then scrolls up under the island + blur).
+    // Clear the floating header band so the feed starts just below it (content
+    // then scrolls up under the islands + blur).
     paddingTop: TOP_ISLAND_BAND,
-  },
-  scopeTitleWrap: {
-    paddingHorizontal: spacing[4],
-    paddingBottom: spacing[3],
   },
   shelfSection: {
     paddingBottom: spacing[5],
