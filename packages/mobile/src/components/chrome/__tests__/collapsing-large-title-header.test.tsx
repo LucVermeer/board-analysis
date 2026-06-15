@@ -23,8 +23,8 @@ vi.mock('react-native', () => ({
 }));
 
 vi.mock('expo-linear-gradient', () => ({
-  LinearGradient: ({ children }: { children?: ReactNode }) =>
-    createElement('div', { 'data-gradient': 'true' }, children),
+  LinearGradient: ({ children, colors }: { children?: ReactNode; colors?: readonly string[] }) =>
+    createElement('div', { 'data-gradient': 'true', 'data-colors': JSON.stringify(colors) }, children),
 }));
 // useAnimatedReaction is a no-op so `collapsed` stays false; the collapsed title
 // capsule never mounts but the centre-content fade wrapper always does.
@@ -46,11 +46,14 @@ vi.mock('react-native-safe-area-context', () => ({
 
 vi.mock('../../../providers/theme-provider', () => ({
   useTheme: () => ({
+    colorScheme: 'dark',
     systemColors: {
       label: '#000',
       separator: '#ccc',
       elevatedSurface: '#fff',
-      background: '#fff',
+      // Non-string sentinel = an iOS PlatformColor (OpaqueColorValue); this is the
+      // case that triggers the concrete scrim-colour resolution from colorScheme.
+      background: { semantic: 'systemBackground' },
     },
   }),
 }));
@@ -134,6 +137,18 @@ describe('CollapsingLargeTitleHeader', () => {
     // The capsule mounts a PressableSurface labelled by the title; with the
     // reaction mocked no-op, `collapsed` stays false so it never renders.
     expect(container.querySelector('[data-pressable="You"]')).toBeNull();
+  });
+
+  it('uses a concrete dark scrim colour in a dark override (not a light PlatformColor)', () => {
+    // Regression: the scrim fed expo-linear-gradient a PlatformColor, which bakes
+    // against the OS trait — so the header stayed light-mode white when the phone
+    // was light but the app was forced dark. With colorScheme 'dark' the scrim
+    // must resolve to the concrete dark background, never white.
+    const { container } = render(<CollapsingLargeTitleHeader {...makeProps()} />);
+    const gradient = container.querySelector('[data-gradient="true"]');
+    const colors = JSON.parse(gradient?.getAttribute('data-colors') ?? '[]') as string[];
+    expect(colors[0]).toBe('#000000');
+    expect(colors).not.toContain('#FFFFFF');
   });
 
   it('reports its measured height through onHeightChange (container onLayout)', () => {

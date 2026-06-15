@@ -14,6 +14,16 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../providers/theme-provider';
 import { useNativeGlass } from '../../hooks/use-native-glass';
 import { spacing, shadows } from '../../theme/tokens';
+
+// iOS systemBackground per scheme, as concrete hexes. expo-linear-gradient bakes
+// a dynamic PlatformColor into a static CGColor resolved against the OS trait, so
+// the gradient can't use systemColors.background (a PlatformColor on iOS) — it
+// would ignore the app's dark override and stay white when the phone is in light
+// mode. These mirror PlatformColor('systemBackground') but are keyed off our
+// override-aware colorScheme. (Defined locally to keep this component free of the
+// PlatformColor import chain.)
+const SCRIM_BACKGROUND_DARK = '#000000';
+const SCRIM_BACKGROUND_LIGHT = '#FFFFFF';
 import { Text } from '../Text';
 import { GlassSurface } from '../GlassSurface';
 import { PressableSurface } from '../PressableSurface';
@@ -96,10 +106,21 @@ export function CollapsingLargeTitleHeader({
   centerContent,
   children,
 }: CollapsingLargeTitleHeaderProps) {
-  const { systemColors } = useTheme();
+  const { systemColors, colorScheme } = useTheme();
   const nativeGlass = useNativeGlass();
   const insets = useSafeAreaInsets();
   const { progress, collapsed } = useCollapseProgress(scrollY);
+
+  // A concrete string background (Android / Material variant) is already
+  // override-correct, so use it as-is; otherwise (an iOS PlatformColor, which the
+  // gradient can't resolve against the override) substitute the concrete scrim
+  // colour for our resolved colorScheme.
+  const scrimColor =
+    typeof systemColors.background === 'string'
+      ? systemColors.background
+      : colorScheme === 'dark'
+        ? SCRIM_BACKGROUND_DARK
+        : SCRIM_BACKGROUND_LIGHT;
 
   // Only the centre content (which is leaving) fades — flattening its glass
   // mid-fade is invisible because it's disappearing. The capsule that *stays*
@@ -125,7 +146,7 @@ export function CollapsingLargeTitleHeader({
           doesn't bleed through the gaps between the islands. */}
       <LinearGradient
         pointerEvents="none"
-        colors={[systemColors.background, systemColors.background, 'transparent'] as const}
+        colors={[scrimColor, scrimColor, 'transparent'] as const}
         locations={[0, 0.7, 1]}
         style={StyleSheet.absoluteFill}
       />
