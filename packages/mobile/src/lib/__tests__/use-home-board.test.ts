@@ -41,6 +41,7 @@ describe('useHomeBoard', () => {
     vi.mocked(useMyBoards).mockReturnValue({ data: { boards: [board({ uuid: 'solo' })] }, isLoading: false } as never);
     const { result } = renderHook(() => useHomeBoard());
     expect(result.current.board?.uuid).toBe('solo');
+    expect(result.current.boards).toHaveLength(1);
   });
 
   it('picks the most-ticked board type, then the highest-activity board of that type', () => {
@@ -61,6 +62,8 @@ describe('useHomeBoard', () => {
     const { result } = renderHook(() => useHomeBoard());
     // kilter is most-ticked (3 > 1); k2 is the highest-activity kilter board.
     expect(result.current.board?.uuid).toBe('k2');
+    // Exposes the full owned-boards list, not just the inferred home board.
+    expect(result.current.boards).toHaveLength(3);
   });
 
   it('returns null when no active board, no ticks, and multiple boards', () => {
@@ -71,6 +74,16 @@ describe('useHomeBoard', () => {
     vi.mocked(useAllBoardsTicks).mockReturnValue({ data: {}, isLoading: false } as never);
     const { result } = renderHook(() => useHomeBoard());
     expect(result.current.board).toBeNull();
+  });
+
+  it('returns a stable empty boards array while myBoards has no data', () => {
+    vi.mocked(useMyBoards).mockReturnValue({ data: undefined, isLoading: false } as never);
+    const { result, rerender } = renderHook(() => useHomeBoard());
+    expect(result.current.boards).toHaveLength(0);
+    const firstBoards = result.current.boards;
+    rerender();
+    // Same reference across renders so consumers memoising on it don't churn.
+    expect(result.current.boards).toBe(firstBoards);
   });
 
   it('is still resolving while the active-board (AsyncStorage) read is pending', () => {

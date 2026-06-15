@@ -6,7 +6,7 @@ import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import type BottomSheet from '@gorhom/bottom-sheet';
 import { type ContextMenuAction } from 'react-native-context-menu-view';
-import type { SessionFeedItem, SocialEntityType, UserBoard } from '@boardsesh/shared-schema';
+import type { SessionFeedItem, SessionFeedTickHighlight, SocialEntityType, UserBoard } from '@boardsesh/shared-schema';
 import { betaLinkIdentity, isBetaVideoUrl, isInstagramUrl, isTikTokUrl } from '@boardsesh/shared-schema';
 import { Text } from '../../../src/components/Text';
 import { Icon } from '../../../src/components/Icon';
@@ -18,7 +18,6 @@ import { CommentSheet } from '../../../src/components/you/CommentSheet';
 import { FeedScopeTitle } from '../../../src/components/feed/FeedScopeTitle';
 import {
   useBulkVoteSummaries,
-  useMyBoards,
   useRecentBetaLinks,
   useSessionGroupedFeed,
   type RecentBetaVideo,
@@ -85,9 +84,7 @@ export default function HomeTab() {
   // gym/board both views filter to (`null` = unscoped: crew across all boards,
   // or the "Everyone" global feed). It defaults to the inferred home board once
   // it resolves; the view stays on `crew`.
-  const { board: homeBoard, isResolving: isResolvingHomeBoard } = useHomeBoard();
-  const myBoards = useMyBoards(undefined, { enabled: isAuthenticated });
-  const ownedBoards = useMemo(() => myBoards.data?.boards ?? [], [myBoards.data]);
+  const { board: homeBoard, isResolving: isResolvingHomeBoard, boards: ownedBoards } = useHomeBoard();
   const [mode, setMode] = useState<FeedMode>('crew');
   const [selectedBoard, setSelectedBoard] = useState<UserBoard | null>(null);
   // Once home-board inference settles, point the crew/gym filter at the home
@@ -148,6 +145,16 @@ export default function HomeTab() {
     commentSheetRef.current?.snapToIndex(0);
   }, []);
 
+  const handleSessionPress = useCallback(
+    (session: SessionFeedItem) => navigateToSessionFeedItem(router, session),
+    [router],
+  );
+
+  const handleOpenClimb = useCallback(
+    (tick: SessionFeedTickHighlight) => openClimbInPlayDrawer({ kind: 'tick', tick }, { openPlayDrawer, router }),
+    [openPlayDrawer, router],
+  );
+
   const handleEndReached = useCallback(() => {
     if (feed.hasNextPage && !feed.isFetchingNextPage) void feed.fetchNextPage();
   }, [feed]);
@@ -191,11 +198,11 @@ export default function HomeTab() {
         session={item}
         voteSummary={summaryMap.get(`${item.socialEntityType}:${item.socialEntityId}`)}
         onOpenComments={handleOpenComments}
-        onPress={(session) => navigateToSessionFeedItem(router, session)}
-        onOpenClimb={(tick) => openClimbInPlayDrawer({ kind: 'tick', tick }, { openPlayDrawer, router })}
+        onPress={handleSessionPress}
+        onOpenClimb={handleOpenClimb}
       />
     ),
-    [handleOpenComments, openPlayDrawer, router, summaryMap],
+    [handleOpenComments, handleSessionPress, handleOpenClimb, summaryMap],
   );
 
   // The scope menu: "My crew" (default), the home gym/board, any other owned

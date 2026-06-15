@@ -262,8 +262,11 @@ vi.mock('../../lib/climb-to-queue-item', () => ({
   }),
 }));
 
+import { router } from 'expo-router';
 import { DrawerHostProvider, useDrawerHost, type BoardConfig } from '../drawer-host-provider';
 import type { BoardSheetClimbAction } from '../../components/board-presence/BoardSheet';
+
+const routerPush = router.push as unknown as ReturnType<typeof vi.fn>;
 
 function makeQueueItem(uuid: string, climbUuid = uuid): ClimbQueueItem {
   return {
@@ -786,6 +789,7 @@ describe('DrawerHostProvider switch board keeps the climb angle', () => {
     activeBoard.setActiveBoard.mockClear();
     playDrawer.open.mockClear();
     playDrawer.close.mockClear();
+    routerPush.mockClear();
   });
 
   function getOnSwitchBoard(): () => void {
@@ -873,5 +877,36 @@ describe('DrawerHostProvider switch board keeps the climb angle', () => {
     expect(activeBoard.setActiveBoard).toHaveBeenCalledWith(
       expect.objectContaining({ uuid: 'board-tension-fixed', angle: 25 }),
     );
+  });
+
+  it('routes to the board picker when the user owns no board matching the climb override', async () => {
+    // Owned board is a genuinely different model (board name + layout) than the
+    // climb's override, so boardLooselyMatches finds nothing to switch to.
+    myBoards.boards = [ownedAdjustable];
+    const hosts: Array<ReturnType<typeof useDrawerHost>> = [];
+    renderHost((host) => hosts.push(host));
+    await waitFor(() => expect(hosts.at(-1)).toBeDefined());
+
+    const climb = makeQueueItem('queue-x', 'climb-switch-unowned').climb as unknown as Climb;
+    const override: BoardConfig = {
+      boardName: 'kilter',
+      layoutId: 1,
+      sizeId: 10,
+      setIds: '1,2',
+      angle: 55,
+    };
+    act(() => {
+      hosts.at(-1)?.openPlayDrawer(climb, { setAsCurrent: false, boardConfig: override });
+    });
+    await waitFor(() => expect(playDrawer.props?.onSwitchBoard).toBeDefined());
+
+    act(() => {
+      getOnSwitchBoard()();
+    });
+
+    // No owned match → close the drawer and send the user to the board picker.
+    expect(playDrawer.close).toHaveBeenCalledTimes(1);
+    expect(routerPush).toHaveBeenCalledWith(expect.objectContaining({ pathname: '/boards' }));
+    expect(activeBoard.setActiveBoard).not.toHaveBeenCalled();
   });
 });

@@ -9,9 +9,17 @@ export type HomeBoardResult = {
   /** The board the home feed scopes to by default, or `null` when none can be
    *  inferred (no active board, no ticks, and not exactly one owned board). */
   board: UserBoard | null;
+  /** Every board the user owns. Shares the `useMyBoards` cache the inference
+   *  already reads, so consumers don't subscribe to that query a second time. */
+  boards: UserBoard[];
   /** True while the inputs the inference depends on are still loading. */
   isResolving: boolean;
 };
+
+// Referentially stable empty list so the returned `boards` keeps the same
+// reference across renders while `useMyBoards` has no data — a fresh `[]` would
+// bust consumers memoising on it.
+const EMPTY_BOARDS: UserBoard[] = [];
 
 function boardActivity(board: UserBoard): number {
   return board.uniqueClimbers || board.totalAscents || 0;
@@ -84,5 +92,5 @@ export function useHomeBoard(): HomeBoardResult {
   // the crew fallback before the tick-based inference has had its inputs.
   const isResolving =
     activeBoardLoading || (!activeBoard && (boardsLoading || (needsTicks && (profileLoading || ticksLoading))));
-  return { board, isResolving };
+  return { board, boards: myBoardsConn?.boards ?? EMPTY_BOARDS, isResolving };
 }
