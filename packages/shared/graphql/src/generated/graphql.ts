@@ -266,7 +266,7 @@ export type AscentFeedResult = {
   totalCount: Scalars['Int']['output'];
 };
 
-/** Input for attaching an Instagram video as beta for a climb. */
+/** Input for attaching an Instagram or TikTok video as beta for a climb. */
 export type AttachBetaLinkInput = {
   /** Optional angle the video was climbed at */
   angle?: InputMaybe<Scalars['Int']['input']>;
@@ -274,8 +274,10 @@ export type AttachBetaLinkInput = {
   boardType: Scalars['String']['input'];
   /** Climb UUID */
   climbUuid: Scalars['String']['input'];
-  /** Instagram post or reel URL */
+  /** Instagram or TikTok video URL */
   link: Scalars['String']['input'];
+  /** Optional tick UUID this beta video belongs to */
+  tickUuid?: InputMaybe<Scalars['ID']['input']>;
 };
 
 /** Stored credentials for an Aurora Climbing board account. */
@@ -315,12 +317,14 @@ export type AuroraCredentialStatus = {
 export type BetaLink = {
   __typename?: 'BetaLink';
   angle?: Maybe<Scalars['Int']['output']>;
+  boardId?: Maybe<Scalars['Int']['output']>;
   climbUuid: Scalars['String']['output'];
   createdAt?: Maybe<Scalars['String']['output']>;
   foreignUsername?: Maybe<Scalars['String']['output']>;
   isListed?: Maybe<Scalars['Boolean']['output']>;
   link: Scalars['String']['output'];
   thumbnail?: Maybe<Scalars['String']['output']>;
+  tickUuid?: Maybe<Scalars['ID']['output']>;
 };
 
 /**
@@ -2036,7 +2040,7 @@ export type Mutation = {
    */
   addQueueItem: ClimbQueueItem;
   /**
-   * Attach an Instagram post or reel as beta for a climb. Idempotent on
+   * Attach an Instagram or TikTok video as beta for a climb. Idempotent on
    * (boardType, climbUuid, link).
    */
   attachBetaLink: Scalars['Boolean']['output'];
@@ -4492,7 +4496,7 @@ export type SaveTickInput = {
   sizeId?: InputMaybe<Scalars['Int']['input']>;
   /** Result of the attempt */
   status: TickStatus;
-  /** Optional Instagram post or reel URL to attach as beta for the climb */
+  /** Optional Instagram or TikTok video URL to attach as beta for the climb */
   videoUrl?: InputMaybe<Scalars['String']['input']>;
 };
 
@@ -5903,6 +5907,8 @@ export type GetBetaLinksQuery = {
     thumbnail?: string | null;
     isListed?: boolean | null;
     createdAt?: string | null;
+    tickUuid?: string | null;
+    boardId?: number | null;
   }>;
 };
 
@@ -5933,6 +5939,8 @@ export type GetRecentBetaLinksQuery = {
       thumbnail?: string | null;
       isListed?: boolean | null;
       createdAt?: string | null;
+      tickUuid?: string | null;
+      boardId?: number | null;
     };
   }>;
 };
@@ -5958,6 +5966,8 @@ export type GetUserBetaLinksQuery = {
       thumbnail?: string | null;
       isListed?: boolean | null;
       createdAt?: string | null;
+      tickUuid?: string | null;
+      boardId?: number | null;
     };
   }>;
 };
@@ -8181,6 +8191,8 @@ export const GetBetaLinksDocument = {
                 { kind: 'Field', name: { kind: 'Name', value: 'thumbnail' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'isListed' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'tickUuid' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'boardId' } },
               ],
             },
           },
@@ -8281,6 +8293,8 @@ export const GetRecentBetaLinksDocument = {
                       { kind: 'Field', name: { kind: 'Name', value: 'thumbnail' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'isListed' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'tickUuid' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'boardId' } },
                     ],
                   },
                 },
@@ -8348,6 +8362,8 @@ export const GetUserBetaLinksDocument = {
                       { kind: 'Field', name: { kind: 'Name', value: 'thumbnail' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'isListed' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'tickUuid' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'boardId' } },
                     ],
                   },
                 },
