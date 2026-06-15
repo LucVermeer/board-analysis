@@ -35,16 +35,9 @@
       "boardEmptyBody": "Be the first to log a session, or see what everyone else is climbing.",
       "boardEmptyCta": "Browse everyone",
       "scope": {
-        "myGym": "My gym",
         "myCrew": "My crew",
         "everyone": "Everyone",
-        "everyoneSubtitle": "All boards · global feed",
-        "switcherTitle": "Show activity from",
-        "homeBoardSection": "Your home board",
-        "otherBoardsSection": "Your other boards",
-        "findGym": "Find a gym near you",
-        "climbersActive_one": "{{count}} climber active",
-        "climbersActive_other": "{{count}} climbers active"
+        "findGym": "Find a gym near you"
       }
     }
   },
@@ -165,7 +158,7 @@
       "attempt": "Attempt"
     },
     "hardest": "Hardest",
-    "betaCaption": "Beta from this session",
+    "betaEyebrow": "Beta",
     "hardestSend": "Hardest send",
     "unknownClimb": "Unknown climb",
     "attempts_one": "{{count}} try",

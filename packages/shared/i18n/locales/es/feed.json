@@ -35,16 +35,9 @@
       "boardEmptyBody": "Sé el primero en registrar una sesión, o mira qué está escalando el resto.",
       "boardEmptyCta": "Ver a todos",
       "scope": {
-        "myGym": "Mi gimnasio",
         "myCrew": "Mi crew",
         "everyone": "Todos",
-        "everyoneSubtitle": "Todas las tablas · feed global",
-        "switcherTitle": "Mostrar actividad de",
-        "homeBoardSection": "Tu tabla principal",
-        "otherBoardsSection": "Tus otras tablas",
-        "findGym": "Busca un gimnasio cerca",
-        "climbersActive_one": "{{count}} escalador activo",
-        "climbersActive_other": "{{count}} escaladores activos"
+        "findGym": "Busca un gimnasio cerca"
       }
     }
   },
@@ -165,7 +158,7 @@
       "attempt": "Intento"
     },
     "hardest": "Más difícil",
-    "betaCaption": "Beta de esta sesión",
+    "betaEyebrow": "Beta",
     "hardestSend": "Encadene más difícil",
     "unknownClimb": "Bloque desconocido",
     "attempts_one": "{{count}} intento",

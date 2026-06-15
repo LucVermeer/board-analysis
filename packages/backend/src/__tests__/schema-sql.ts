@@ -485,4 +485,50 @@ export const schemaSQL = `
     "synced_at" timestamp DEFAULT now() NOT NULL
   );
   CREATE UNIQUE INDEX IF NOT EXISTS "unique_integration_export" ON "integration_exports" ("provider","user_id","session_type","session_id");
+
+  -- Social tables the session-grouped feed LEFT-joins for vote/comment counts.
+  -- entity_type is a text column here (the real schema uses an enum); the feed
+  -- only does string-equality filters on it, so text is behavior-equivalent.
+  DROP TABLE IF EXISTS "vote_counts" CASCADE;
+  CREATE TABLE IF NOT EXISTS "vote_counts" (
+    "entity_type" text NOT NULL,
+    "entity_id" text NOT NULL,
+    "upvotes" integer DEFAULT 0 NOT NULL,
+    "downvotes" integer DEFAULT 0 NOT NULL,
+    "score" integer DEFAULT 0 NOT NULL,
+    "hot_score" double precision DEFAULT 0 NOT NULL,
+    "created_at" timestamp NOT NULL,
+    PRIMARY KEY ("entity_type", "entity_id")
+  );
+
+  DROP TABLE IF EXISTS "comments" CASCADE;
+  CREATE TABLE IF NOT EXISTS "comments" (
+    "id" bigserial PRIMARY KEY NOT NULL,
+    "uuid" text NOT NULL UNIQUE,
+    "user_id" text NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+    "entity_type" text NOT NULL,
+    "entity_id" text NOT NULL,
+    "parent_comment_id" bigint,
+    "body" text NOT NULL,
+    "created_at" timestamp DEFAULT now() NOT NULL,
+    "updated_at" timestamp DEFAULT now() NOT NULL,
+    "deleted_at" timestamp
+  );
+  CREATE INDEX IF NOT EXISTS "comments_entity_created_at_idx" ON "comments" ("entity_type", "entity_id", "created_at");
+
+  -- Beta links the session feed INNER-joins for featured-beta enrichment. Empty
+  -- in tests (no featured beta), but the relation must exist so the query plans.
+  DROP TABLE IF EXISTS "board_beta_links" CASCADE;
+  CREATE TABLE IF NOT EXISTS "board_beta_links" (
+    "board_type" text NOT NULL,
+    "climb_uuid" text NOT NULL,
+    "link" text NOT NULL,
+    "foreign_username" text,
+    "angle" integer,
+    "thumbnail" text,
+    "is_listed" boolean,
+    "created_at" text,
+    "shortcode" text,
+    "created_by_user_id" text
+  );
 `;

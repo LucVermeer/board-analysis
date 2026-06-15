@@ -2,9 +2,11 @@ import { describe, it, expect } from 'vitest';
 import { deriveFeedScopeInput } from '../feed/feed-scope';
 
 describe('deriveFeedScopeInput', () => {
-  it('crew mode is followingOnly across all boards', () => {
-    expect(deriveFeedScopeInput('crew', 'board-1')).toEqual({ followingOnly: true, includeDailyHighlights: true });
-    expect(deriveFeedScopeInput('crew', null)).toEqual({ followingOnly: true, includeDailyHighlights: true });
+  it('crew mode is followingOnly across all boards, never board-filtered', () => {
+    const expected = { followingOnly: true, includeDailyHighlights: true };
+    // The selected board is ignored in crew mode (no boardUuid in the input).
+    expect(deriveFeedScopeInput('crew', 'board-1')).toEqual(expected);
+    expect(deriveFeedScopeInput('crew', null)).toEqual(expected);
   });
 
   it('gym mode with a board scopes by boardUuid, not followingOnly', () => {

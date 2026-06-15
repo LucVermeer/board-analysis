@@ -47,7 +47,6 @@ vi.mock('../../ClimbListThumbnail', () => ({
 }));
 vi.mock('../AvatarGroup', () => ({ AvatarGroup: () => createElement('span', null) }));
 vi.mock('../FeedSocialRow', () => ({ FeedSocialRow: () => createElement('span', null) }));
-vi.mock('../GradeChip', () => ({ GradeChip: () => createElement('span', null) }));
 vi.mock('../MetricChip', () => ({ MetricChip: () => createElement('span', null) }));
 vi.mock('../YouCharts', () => ({
   StackedBarChart: (props: Record<string, unknown>) => {

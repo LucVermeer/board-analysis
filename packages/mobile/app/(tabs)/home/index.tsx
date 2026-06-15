@@ -5,21 +5,17 @@ import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import type BottomSheet from '@gorhom/bottom-sheet';
-import { type BottomSheetModal } from '@gorhom/bottom-sheet';
+import { type ContextMenuAction } from 'react-native-context-menu-view';
 import type { SessionFeedItem, SocialEntityType, UserBoard } from '@boardsesh/shared-schema';
 import { betaLinkIdentity, isBetaVideoUrl, isInstagramUrl, isTikTokUrl } from '@boardsesh/shared-schema';
-import { toBoardName } from '@boardsesh/board-config';
 import { Text } from '../../../src/components/Text';
 import { Icon } from '../../../src/components/Icon';
 import type { IconName } from '../../../src/components/icon-map';
 import { Card } from '../../../src/components/Card';
 import { Button } from '../../../src/components/Button';
-import { SegmentedControl } from '../../../src/components/SegmentedControl';
-import { PressableSurface } from '../../../src/components/PressableSurface';
 import { SessionFeedCard } from '../../../src/components/you/SessionFeedCard';
 import { CommentSheet } from '../../../src/components/you/CommentSheet';
-import { FeedScopeSwitcherSheet } from '../../../src/components/feed/FeedScopeSwitcherSheet';
-import { BoardImageNative } from '../../../src/components/BoardImageNative';
+import { FeedScopeTitle } from '../../../src/components/feed/FeedScopeTitle';
 import {
   useBulkVoteSummaries,
   useMyBoards,
@@ -36,7 +32,6 @@ import { useBottomChromeMetrics } from '../../../src/hooks/use-bottom-chrome-met
 import { dedupeSessionsById } from '../../../src/lib/feed-time-buckets';
 import { deriveFeedScopeInput, type FeedMode } from '../../../src/lib/feed/feed-scope';
 import { openClimbInPlayDrawer } from '../../../src/lib/open-climb-in-play-drawer';
-import { getBoardRenderData } from '../../../src/lib/board-details';
 import { hapticLight } from '../../../src/lib/haptics';
 import { navigateToSessionFeedItem } from '../../../src/lib/session-feed-navigation';
 import { iosSystemColors } from '../../../src/theme/ios-colors';
@@ -45,7 +40,6 @@ import { BETA_CARD_HEIGHT, BETA_CARD_WIDTH } from '../../../src/components/play-
 
 const RECENT_BETA_LIMIT = 20;
 const SHELF_GAP = spacing[3];
-const SCOPE_PILL_ART = 16;
 const BETA_SKELETON_KEYS = ['beta-skeleton-1', 'beta-skeleton-2', 'beta-skeleton-3'];
 const INITIAL_FEED_SKELETON_KEYS = ['home-feed-skeleton-1', 'home-feed-skeleton-2', 'home-feed-skeleton-3'];
 const NEXT_PAGE_FEED_SKELETON_KEYS = ['home-feed-footer-skeleton-1', 'home-feed-footer-skeleton-2'];
@@ -84,39 +78,31 @@ export default function HomeTab() {
   const bottomChrome = useBottomChromeMetrics();
   const listRef = useRef<FlashListRef<SessionFeedItem>>(null);
   const commentSheetRef = useRef<BottomSheet | null>(null);
-  const switcherSheetRef = useRef<BottomSheetModal | null>(null);
   const [commentTarget, setCommentTarget] = useState<CommentTarget | null>(null);
 
-  // Feed scope. `mode` toggles between the gym feed (everyone on a board) and the
-  // crew feed (people you follow). `selectedBoard` is the board the gym feed
-  // scopes to; `null` means "Everyone" (global). Both default off the inferred
-  // home board once it resolves.
+  // Feed scope. `mode` chooses the view — `crew` (people you follow) is the
+  // default; `gym` is everyone on the selected board. `selectedBoard` is the
+  // gym/board both views filter to (`null` = unscoped: crew across all boards,
+  // or the "Everyone" global feed). It defaults to the inferred home board once
+  // it resolves; the view stays on `crew`.
   const { board: homeBoard, isResolving: isResolvingHomeBoard } = useHomeBoard();
   const myBoards = useMyBoards(undefined, { enabled: isAuthenticated });
   const ownedBoards = useMemo(() => myBoards.data?.boards ?? [], [myBoards.data]);
-  const [mode, setMode] = useState<FeedMode>('gym');
+  const [mode, setMode] = useState<FeedMode>('crew');
   const [selectedBoard, setSelectedBoard] = useState<UserBoard | null>(null);
-  // Once home-board inference settles, default the scope. With a home board, sit
-  // on its gym feed; without one, fall back to the crew feed so the user never
-  // lands on an unscoped firehose.
+  // Once home-board inference settles, point the crew/gym filter at the home
+  // board. The view stays on `crew`; with no home board it's the unfiltered crew.
   const hasDefaultedScope = useRef(false);
   useEffect(() => {
     if (hasDefaultedScope.current || isResolvingHomeBoard) return;
     hasDefaultedScope.current = true;
-    if (homeBoard) {
-      setSelectedBoard(homeBoard);
-    } else {
-      setMode('crew');
-    }
+    if (homeBoard) setSelectedBoard(homeBoard);
   }, [homeBoard, isResolvingHomeBoard]);
 
-  const feedInput = useMemo(
-    () => deriveFeedScopeInput(mode, mode === 'gym' ? (selectedBoard?.uuid ?? null) : null),
-    [mode, selectedBoard],
-  );
-  // The beta shelf rescopes to the board's type when scoped to a board in gym
-  // mode ("Fresh beta on this board"), else stays global ("Fresh beta").
-  const betaBoardType = mode === 'gym' ? (selectedBoard?.boardType ?? null) : null;
+  const feedInput = useMemo(() => deriveFeedScopeInput(mode, selectedBoard?.uuid ?? null), [mode, selectedBoard]);
+  // The beta shelf rescopes to the selected board's type ("Fresh beta on this
+  // board"); with no board it stays global ("Fresh beta").
+  const betaBoardType = selectedBoard?.boardType ?? null;
 
   // Hold both queries until home-board inference settles, so a cold start never
   // fires the unscoped global feed first (initial state is gym + no board) and
@@ -171,25 +157,24 @@ export default function HomeTab() {
     if (isAuthenticated) void feed.refetch();
   }, [betaVideos, feed, isAuthenticated, sessionVoteSummaries, tickVoteSummaries]);
 
-  const openSwitcher = useCallback(() => {
+  const handleSelectCrew = useCallback(() => {
     hapticLight();
-    switcherSheetRef.current?.present();
+    setMode('crew');
   }, []);
 
   const handleSelectBoard = useCallback((board: UserBoard) => {
+    hapticLight();
     setSelectedBoard(board);
     setMode('gym');
-    switcherSheetRef.current?.dismiss();
   }, []);
 
   const handleSelectEveryone = useCallback(() => {
+    hapticLight();
     setSelectedBoard(null);
     setMode('gym');
-    switcherSheetRef.current?.dismiss();
   }, []);
 
   const handleFindGym = useCallback(() => {
-    switcherSheetRef.current?.dismiss();
     router.push('/gyms');
   }, [router]);
 
@@ -211,13 +196,73 @@ export default function HomeTab() {
     [handleOpenComments, openPlayDrawer, router, summaryMap],
   );
 
-  const scopeOptions = useMemo(
-    () => [
-      { key: 'gym' as const, label: t('mobile.home.scope.myGym') },
-      { key: 'crew' as const, label: t('mobile.home.scope.myCrew') },
-    ],
-    [t],
-  );
+  // The scope menu: "My crew" (default), the home gym/board, any other owned
+  // boards, "Everyone", and "Find a gym". The active scope carries a checkmark
+  // and doubles as the large title. `onSelectIndex` runs the tapped item.
+  const scopeMenu = useMemo(() => {
+    const items: { action: ContextMenuAction; run: () => void }[] = [
+      {
+        action: { title: t('mobile.home.scope.myCrew'), systemIcon: 'person.2.fill', selected: mode === 'crew' },
+        run: handleSelectCrew,
+      },
+    ];
+    if (homeBoard) {
+      items.push({
+        action: {
+          title: homeBoard.gymName ?? homeBoard.name,
+          systemIcon: 'building.2.fill',
+          selected: mode === 'gym' && selectedBoard?.uuid === homeBoard.uuid,
+        },
+        run: () => handleSelectBoard(homeBoard),
+      });
+    }
+    for (const board of ownedBoards) {
+      if (homeBoard && board.uuid === homeBoard.uuid) continue;
+      items.push({
+        action: {
+          title: board.gymName ?? board.name,
+          systemIcon: 'building.2.fill',
+          selected: mode === 'gym' && selectedBoard?.uuid === board.uuid,
+        },
+        run: () => handleSelectBoard(board),
+      });
+    }
+    items.push({
+      action: {
+        title: t('mobile.home.scope.everyone'),
+        systemIcon: 'globe',
+        selected: mode === 'gym' && selectedBoard == null,
+      },
+      run: handleSelectEveryone,
+    });
+    items.push({
+      action: { title: t('mobile.home.scope.findGym'), systemIcon: 'mappin.and.ellipse' },
+      run: handleFindGym,
+    });
+
+    const title =
+      mode === 'crew'
+        ? t('mobile.home.scope.myCrew')
+        : selectedBoard == null
+          ? t('mobile.home.scope.everyone')
+          : (selectedBoard.gymName ?? selectedBoard.name);
+
+    return {
+      title,
+      actions: items.map((item) => item.action),
+      onSelectIndex: (index: number) => items[index]?.run(),
+    };
+  }, [
+    t,
+    mode,
+    homeBoard,
+    ownedBoards,
+    selectedBoard,
+    handleSelectCrew,
+    handleSelectBoard,
+    handleSelectEveryone,
+    handleFindGym,
+  ]);
 
   const handleBetaOpenClimb = useCallback(
     (video: RecentBetaVideo) => {
@@ -242,18 +287,8 @@ export default function HomeTab() {
   const header = useMemo(
     () => (
       <View style={styles.header}>
-        <Text variant="largeTitle" style={styles.screenTitle}>
-          {t('mobile.home.title')}
-        </Text>
-        <View style={styles.scopeBar}>
-          <SegmentedControl
-            options={scopeOptions}
-            selectedKey={mode}
-            onSelect={setMode}
-            trackColor={systemColors.fill}
-            accessibilityLabel={t('mobile.home.scope.switcherTitle')}
-          />
-          {mode === 'gym' ? <ScopePill board={selectedBoard} onPress={openSwitcher} /> : null}
+        <View style={styles.scopeTitleWrap}>
+          <FeedScopeTitle title={scopeMenu.title} actions={scopeMenu.actions} onSelectIndex={scopeMenu.onSelectIndex} />
         </View>
         <RecentBetaShelf
           heading={betaHeading}
@@ -269,19 +304,14 @@ export default function HomeTab() {
       </View>
     ),
     [
+      scopeMenu,
       betaHeading,
       betaVideos.data,
       betaVideos.isError,
       betaVideos.isLoading,
       betaVideos.refetch,
       handleBetaOpenClimb,
-      mode,
-      openSwitcher,
-      scopeOptions,
-      selectedBoard,
       sessionsHeading,
-      systemColors.fill,
-      t,
     ],
   );
 
@@ -371,15 +401,6 @@ export default function HomeTab() {
           feed.isFetchingNextPage ? <ActivitySkeletonList skeletonKeys={NEXT_PAGE_FEED_SKELETON_KEYS} /> : null
         }
       />
-      <FeedScopeSwitcherSheet
-        ref={switcherSheetRef}
-        homeBoard={homeBoard}
-        boards={ownedBoards}
-        selectedBoardUuid={mode === 'gym' ? (selectedBoard?.uuid ?? null) : null}
-        onSelectBoard={handleSelectBoard}
-        onSelectEveryone={handleSelectEveryone}
-        onFindGym={handleFindGym}
-      />
       <CommentSheet
         sheetRef={commentSheetRef}
         entityId={commentTarget?.entityId ?? null}
@@ -387,63 +408,6 @@ export default function HomeTab() {
         onClose={() => setCommentTarget(null)}
       />
     </View>
-  );
-}
-
-/**
- * The gym-scope context pill: board art + gym/board name (or a community glyph +
- * "Everyone" when unscoped), with a chevron that opens the switcher. Shown only
- * in My-gym mode.
- */
-function ScopePill({ board, onPress }: { board: UserBoard | null; onPress: () => void }) {
-  const { t } = useTranslation('feed');
-  const { systemColors } = useTheme();
-
-  const boardName = board ? toBoardName(board.boardType) : null;
-  const render = useMemo(() => {
-    if (!board || boardName === null) return null;
-    return getBoardRenderData({
-      boardName,
-      layoutId: board.layoutId,
-      sizeId: board.sizeId,
-      setIds: board.setIds.split(',').map(Number).filter(Number.isFinite),
-    });
-  }, [board, boardName]);
-
-  const label = board ? (board.gymName ?? board.name) : t('mobile.home.scope.everyone');
-
-  return (
-    <PressableSurface
-      onPress={onPress}
-      feedback="scale"
-      scaleTo={0.96}
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      accessibilityHint={t('mobile.home.scope.switcherTitle')}
-      style={[styles.scopePill, { backgroundColor: systemColors.fill }]}
-    >
-      {board && render && boardName ? (
-        <View style={styles.scopePillArt}>
-          <BoardImageNative
-            frames=""
-            boardName={boardName}
-            layoutId={board.layoutId}
-            sizeId={board.sizeId}
-            setIds={board.setIds}
-            boardWidth={render.boardWidth}
-            boardHeight={render.boardHeight}
-            renderWidth={400}
-            style={styles.scopePillArtImage}
-          />
-        </View>
-      ) : (
-        <Icon name="people" size={SCOPE_PILL_ART} color={systemColors.secondaryLabel} />
-      )}
-      <Text variant="subheadline" numberOfLines={1} color={systemColors.label} style={styles.scopePillLabel}>
-        {label}
-      </Text>
-      <Icon name="chevron.down" size={14} color={systemColors.secondaryLabel} />
-    </PressableSurface>
   );
 }
 
@@ -679,39 +643,9 @@ const styles = StyleSheet.create({
   header: {
     paddingTop: spacing[3],
   },
-  screenTitle: {
+  scopeTitleWrap: {
     paddingHorizontal: spacing[4],
     paddingBottom: spacing[3],
-  },
-  scopeBar: {
-    paddingHorizontal: spacing[4],
-    paddingBottom: spacing[4],
-    gap: spacing[3],
-  },
-  scopePill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    maxWidth: '100%',
-    gap: spacing[2],
-    paddingLeft: spacing[2],
-    paddingRight: spacing[3],
-    paddingVertical: spacing[1],
-    borderRadius: borderRadius.full,
-  },
-  scopePillArt: {
-    width: SCOPE_PILL_ART,
-    height: SCOPE_PILL_ART,
-    borderRadius: borderRadius.sm,
-    overflow: 'hidden',
-  },
-  scopePillArtImage: {
-    width: '100%',
-    height: '100%',
-  },
-  scopePillLabel: {
-    flexShrink: 1,
-    fontWeight: '600',
   },
   shelfSection: {
     paddingBottom: spacing[5],

@@ -21,8 +21,7 @@ import { logger } from '../../../utils/logger';
 import { buildGradeDistributionFromTicks, computeSessionAggregates } from './session-feed-utils';
 
 type SessionFeedFilterOptions = {
-  boardTypeFilter: string | null;
-  layoutIdFilter: number | null;
+  boardIdFilter: number | null;
 };
 
 type SessionFeedRow = {
@@ -101,30 +100,28 @@ export const sessionFeedQueries = {
 
     const offset = validatedInput.cursor ? (decodeOffsetCursor(validatedInput.cursor) ?? 0) : 0;
 
-    // Board filter
-    let boardTypeFilter: string | null = null;
-    let layoutIdFilter: number | null = null;
+    // Board filter — scope to the EXACT board (user_boards.id), not the board
+    // type + layout. A layout is shared by 1,000+ gyms, so the old type+layout
+    // filter surfaced every gym on that layout. boardsesh_ticks.board_id points
+    // at the specific board, and the (board_id, climbed_at) / (board_id, user_id)
+    // indexes back the filter.
+    let boardIdFilter: number | null = null;
     if (validatedInput.boardUuid) {
       const board = await dbRead
-        .select({
-          boardType: dbSchema.userBoards.boardType,
-          layoutId: dbSchema.userBoards.layoutId,
-        })
+        .select({ id: dbSchema.userBoards.id })
         .from(dbSchema.userBoards)
         .where(eq(dbSchema.userBoards.uuid, validatedInput.boardUuid))
         .limit(1)
         .then((rows) => rows[0]);
 
       if (board) {
-        boardTypeFilter = board.boardType;
-        layoutIdFilter = board.layoutId;
+        boardIdFilter = board.id;
       }
     }
 
     let sessionRows;
     try {
-      const sessionBoardFilter = boardTypeFilter ? sql`AND t.board_type = ${boardTypeFilter}` : sql``;
-      const sessionLayoutFilter = layoutIdFilter !== null ? sql`AND cf.layout_id = ${layoutIdFilter}` : sql``;
+      const sessionBoardFilter = boardIdFilter !== null ? sql`AND t.board_id = ${boardIdFilter}` : sql``;
       const shouldIncludeDailyHighlights = includeDailyHighlights && participantFilterEnabled;
       const eligibleUsersCte = userId
         ? sql`eligible_users AS (SELECT ${userId}::text AS user_id),`
@@ -136,22 +133,12 @@ export const sessionFeedQueries = {
         eligible_sessions AS (
           SELECT DISTINCT t.session_id
           FROM boardsesh_ticks t
-          ${layoutIdFilter !== null ? sql`LEFT JOIN board_climb_aliases bca ON bca.board_type = t.board_type AND bca.alias_uuid = t.climb_uuid LEFT JOIN board_climbs cf ON cf.uuid = COALESCE(bca.canonical_uuid, t.climb_uuid) AND cf.board_type = t.board_type` : sql``}
           INNER JOIN eligible_users eu ON eu.user_id = t.user_id
           WHERE t.session_id IS NOT NULL
             ${sessionBoardFilter}
-            ${sessionLayoutFilter}
         ),
         `
         : sql``;
-      // Resolve dedup-merged climbs to their canonical UUID before the layout
-      // join — board_climbs only has a row on the canonical, so an aliased tick
-      // would otherwise be dropped from a layout-filtered feed. The alias PK
-      // (board_type, alias_uuid) keeps the hop to ≤1 row.
-      const sessionLayoutJoin =
-        layoutIdFilter !== null
-          ? sql`LEFT JOIN board_climb_aliases bca ON bca.board_type = t.board_type AND bca.alias_uuid = t.climb_uuid LEFT JOIN board_climbs cf ON cf.uuid = COALESCE(bca.canonical_uuid, t.climb_uuid) AND cf.board_type = t.board_type`
-          : sql``;
       const dailyHighlightCtes = shouldIncludeDailyHighlights
         ? sql`
         daily_ticks AS (
@@ -160,7 +147,6 @@ export const sessionFeedQueries = {
             t.climbed_at::date AS day,
             COALESCE(t.difficulty, ROUND(bcs.display_difficulty)::int) AS effective_difficulty
           FROM boardsesh_ticks t
-          ${sessionLayoutJoin}
           INNER JOIN eligible_users eu ON eu.user_id = t.user_id
           LEFT JOIN board_climb_aliases bca_stats ON bca_stats.board_type = t.board_type AND bca_stats.alias_uuid = t.climb_uuid
           LEFT JOIN board_climb_stats bcs
@@ -169,7 +155,6 @@ export const sessionFeedQueries = {
             AND bcs.angle = t.angle
           WHERE t.session_id IS NULL
             ${sessionBoardFilter}
-            ${sessionLayoutFilter}
             AND NOT EXISTS (
               SELECT 1
               FROM boardsesh_ticks session_tick
@@ -333,11 +318,9 @@ export const sessionFeedQueries = {
               + COALESCE(SUM(t.attempt_count) FILTER (WHERE t.status = 'attempt'), 0)
             )::int AS total_attempts
           FROM boardsesh_ticks t
-          ${sessionLayoutJoin}
           ${participantFilterEnabled ? sql`INNER JOIN eligible_sessions es ON es.session_id = t.session_id` : sql``}
           WHERE t.session_id IS NOT NULL
             ${sessionBoardFilter}
-            ${sessionLayoutFilter}
           GROUP BY t.session_id
         ),
         scored AS (
@@ -387,7 +370,7 @@ export const sessionFeedQueries = {
     const dailyHighlightTickUuids = resultRows
       .filter((row) => row.session_type === 'daily_highlight' && !!row.highlight_tick_uuid)
       .map((row) => row.highlight_tick_uuid as string);
-    const filterOptions: SessionFeedFilterOptions = { boardTypeFilter, layoutIdFilter };
+    const filterOptions: SessionFeedFilterOptions = { boardIdFilter };
 
     const [
       participantMap,
@@ -882,18 +865,11 @@ async function fetchDailyDetailParticipants(
  */
 async function fetchParticipantsBatch(
   sessionIds: string[],
-  { boardTypeFilter, layoutIdFilter }: SessionFeedFilterOptions,
+  { boardIdFilter }: SessionFeedFilterOptions,
 ): Promise<Map<string, SessionFeedParticipant[]>> {
   if (sessionIds.length === 0) return new Map();
 
-  // Resolve dedup-merged climbs to their canonical UUID before the layout join
-  // so aliased ticks aren't dropped from a layout-filtered participant count.
-  const batchLayoutJoin =
-    layoutIdFilter !== null
-      ? sql`LEFT JOIN board_climb_aliases bca ON bca.board_type = t.board_type AND bca.alias_uuid = t.climb_uuid LEFT JOIN board_climbs cf ON cf.uuid = COALESCE(bca.canonical_uuid, t.climb_uuid) AND cf.board_type = t.board_type`
-      : sql``;
-  const batchBoardFilter = boardTypeFilter ? sql`AND t.board_type = ${boardTypeFilter}` : sql``;
-  const batchLayoutFilter = layoutIdFilter !== null ? sql`AND cf.layout_id = ${layoutIdFilter}` : sql``;
+  const batchBoardFilter = boardIdFilter !== null ? sql`AND t.board_id = ${boardIdFilter}` : sql``;
 
   const result = await dbRead.execute(sql`
     SELECT
@@ -908,7 +884,6 @@ async function fetchParticipantsBatch(
         + COALESCE(SUM(t.attempt_count) FILTER (WHERE t.status = 'attempt'), 0)
       )::int AS attempts
     FROM boardsesh_ticks t
-    ${batchLayoutJoin}
     LEFT JOIN users u ON u.id = t.user_id
     LEFT JOIN user_profiles up ON up.user_id = t.user_id
     WHERE t.session_id IN ${sql`(${sql.join(
@@ -916,7 +891,6 @@ async function fetchParticipantsBatch(
       sql`, `,
     )})`}
       ${batchBoardFilter}
-      ${batchLayoutFilter}
     GROUP BY t.session_id, t.user_id, up.display_name, u.name, up.avatar_url, u.image
     ORDER BY sends DESC
   `);
@@ -953,18 +927,11 @@ async function fetchParticipantsBatch(
  */
 async function fetchGradeDistributionBatch(
   sessionIds: string[],
-  { boardTypeFilter, layoutIdFilter }: SessionFeedFilterOptions,
+  { boardIdFilter }: SessionFeedFilterOptions,
 ): Promise<Map<string, SessionGradeDistributionItem[]>> {
   if (sessionIds.length === 0) return new Map();
 
-  // Resolve dedup-merged climbs to their canonical UUID before the layout join
-  // so aliased ticks aren't dropped from a layout-filtered distribution.
-  const batchLayoutJoin =
-    layoutIdFilter !== null
-      ? sql`LEFT JOIN board_climbs cf ON cf.uuid = COALESCE(bca.canonical_uuid, t.climb_uuid) AND cf.board_type = t.board_type`
-      : sql``;
-  const batchBoardFilter = boardTypeFilter ? sql`AND t.board_type = ${boardTypeFilter}` : sql``;
-  const batchLayoutFilter = layoutIdFilter !== null ? sql`AND cf.layout_id = ${layoutIdFilter}` : sql``;
+  const batchBoardFilter = boardIdFilter !== null ? sql`AND t.board_id = ${boardIdFilter}` : sql``;
 
   const result = await dbRead.execute(sql`
     SELECT
@@ -977,18 +944,15 @@ async function fetchGradeDistributionBatch(
         + COALESCE(SUM(t.attempt_count) FILTER (WHERE t.status = 'attempt'), 0)
       )::int AS attempt
     FROM boardsesh_ticks t
-    -- Alias hop shared by both the layout filter and the consensus-grade stats
-    -- join below: a tick on a deduped-away alias UUID has its board_climbs row
-    -- and its board_climb_stats on the canonical, so resolve before both joins.
+    -- Resolve a tick on a deduped-away alias UUID to the canonical, where its
+    -- board_climb_stats row lives, so the consensus-grade fallback below works.
     LEFT JOIN board_climb_aliases bca ON bca.board_type = t.board_type AND bca.alias_uuid = t.climb_uuid
-    ${batchLayoutJoin}
     LEFT JOIN board_climb_stats bcs ON bcs.climb_uuid = COALESCE(bca.canonical_uuid, t.climb_uuid) AND bcs.board_type = t.board_type AND bcs.angle = t.angle
     WHERE t.session_id IN ${sql`(${sql.join(
       sessionIds.map((id) => sql`${id}`),
       sql`, `,
     )})`}
       ${batchBoardFilter}
-      ${batchLayoutFilter}
       AND COALESCE(t.difficulty, ROUND(bcs.display_difficulty)::int) IS NOT NULL
     GROUP BY t.session_id, diff_num
     ORDER BY diff_num DESC
@@ -1047,31 +1011,22 @@ async function fetchSessionMetaBatch(
  */
 async function fetchBoardTypesBatch(
   sessionIds: string[],
-  { boardTypeFilter, layoutIdFilter }: SessionFeedFilterOptions,
+  { boardIdFilter }: SessionFeedFilterOptions,
 ): Promise<Map<string, string[]>> {
   if (sessionIds.length === 0) return new Map();
 
-  // Resolve dedup-merged climbs to their canonical UUID before the layout join
-  // so aliased ticks aren't dropped from a layout-filtered board-type roll-up.
-  const batchLayoutJoin =
-    layoutIdFilter !== null
-      ? sql`LEFT JOIN board_climb_aliases bca ON bca.board_type = t.board_type AND bca.alias_uuid = t.climb_uuid LEFT JOIN board_climbs cf ON cf.uuid = COALESCE(bca.canonical_uuid, t.climb_uuid) AND cf.board_type = t.board_type`
-      : sql``;
-  const batchBoardFilter = boardTypeFilter ? sql`AND t.board_type = ${boardTypeFilter}` : sql``;
-  const batchLayoutFilter = layoutIdFilter !== null ? sql`AND cf.layout_id = ${layoutIdFilter}` : sql``;
+  const batchBoardFilter = boardIdFilter !== null ? sql`AND t.board_id = ${boardIdFilter}` : sql``;
 
   const result = await dbRead.execute(sql`
     SELECT
       t.session_id,
       ARRAY_AGG(DISTINCT t.board_type) AS board_types
     FROM boardsesh_ticks t
-    ${batchLayoutJoin}
     WHERE t.session_id IN ${sql`(${sql.join(
       sessionIds.map((id) => sql`${id}`),
       sql`, `,
     )})`}
       ${batchBoardFilter}
-      ${batchLayoutFilter}
     GROUP BY t.session_id
   `);
 
@@ -1214,16 +1169,11 @@ async function fetchTickHighlightsByUuid(tickUuids: string[]): Promise<Map<strin
 
 async function fetchHardestSendsBatch(
   sessionIds: string[],
-  { boardTypeFilter, layoutIdFilter }: SessionFeedFilterOptions,
+  { boardIdFilter }: SessionFeedFilterOptions,
 ): Promise<Map<string, SessionFeedTickHighlight>> {
   if (sessionIds.length === 0) return new Map();
 
-  const batchLayoutJoin =
-    layoutIdFilter !== null
-      ? sql`LEFT JOIN board_climb_aliases bca_filter ON bca_filter.board_type = t.board_type AND bca_filter.alias_uuid = t.climb_uuid LEFT JOIN board_climbs cf_filter ON cf_filter.uuid = COALESCE(bca_filter.canonical_uuid, t.climb_uuid) AND cf_filter.board_type = t.board_type`
-      : sql``;
-  const batchBoardFilter = boardTypeFilter ? sql`AND t.board_type = ${boardTypeFilter}` : sql``;
-  const batchLayoutFilter = layoutIdFilter !== null ? sql`AND cf_filter.layout_id = ${layoutIdFilter}` : sql``;
+  const batchBoardFilter = boardIdFilter !== null ? sql`AND t.board_id = ${boardIdFilter}` : sql``;
 
   const result = await dbRead.execute(sql`
     WITH ranked AS (
@@ -1235,7 +1185,6 @@ async function fetchHardestSendsBatch(
           ORDER BY COALESCE(t.difficulty, ROUND(bcs_rank.display_difficulty)::int, -1) DESC, t.climbed_at DESC, t.id DESC
         ) AS rank
       FROM boardsesh_ticks t
-      ${batchLayoutJoin}
       LEFT JOIN board_climb_aliases bca_rank ON bca_rank.board_type = t.board_type AND bca_rank.alias_uuid = t.climb_uuid
       LEFT JOIN board_climb_stats bcs_rank
         ON bcs_rank.climb_uuid = COALESCE(bca_rank.canonical_uuid, t.climb_uuid)
@@ -1246,7 +1195,6 @@ async function fetchHardestSendsBatch(
         sql`, `,
       )})`}
         ${batchBoardFilter}
-        ${batchLayoutFilter}
         AND t.status IN ('flash', 'send')
     )
     SELECT
@@ -1278,16 +1226,11 @@ async function fetchHardestSendsBatch(
 
 async function fetchDailyGradeDistributionBatch(
   dailyHighlightKeys: DailyHighlightKey[],
-  { boardTypeFilter, layoutIdFilter }: SessionFeedFilterOptions,
+  { boardIdFilter }: SessionFeedFilterOptions,
 ): Promise<Map<string, SessionGradeDistributionItem[]>> {
   if (dailyHighlightKeys.length === 0) return new Map();
 
-  const batchLayoutJoin =
-    layoutIdFilter !== null
-      ? sql`LEFT JOIN board_climb_aliases bca_filter ON bca_filter.board_type = t.board_type AND bca_filter.alias_uuid = t.climb_uuid LEFT JOIN board_climbs cf_filter ON cf_filter.uuid = COALESCE(bca_filter.canonical_uuid, t.climb_uuid) AND cf_filter.board_type = t.board_type`
-      : sql``;
-  const batchBoardFilter = boardTypeFilter ? sql`AND t.board_type = ${boardTypeFilter}` : sql``;
-  const batchLayoutFilter = layoutIdFilter !== null ? sql`AND cf_filter.layout_id = ${layoutIdFilter}` : sql``;
+  const batchBoardFilter = boardIdFilter !== null ? sql`AND t.board_id = ${boardIdFilter}` : sql``;
 
   const valuesSql = sql.join(
     dailyHighlightKeys.map((key) => sql`(${key.sessionId}, ${key.userId}, ${key.day}::date)`),
@@ -1312,7 +1255,6 @@ async function fetchDailyGradeDistributionBatch(
       ON t.user_id = keys.user_id
       AND t.climbed_at::date = keys.day
       AND t.session_id IS NULL
-    ${batchLayoutJoin}
     LEFT JOIN board_climb_aliases bca ON bca.board_type = t.board_type AND bca.alias_uuid = t.climb_uuid
     LEFT JOIN board_climb_stats bcs
       ON bcs.climb_uuid = COALESCE(bca.canonical_uuid, t.climb_uuid)
@@ -1320,7 +1262,6 @@ async function fetchDailyGradeDistributionBatch(
       AND bcs.angle = t.angle
     WHERE COALESCE(t.difficulty, ROUND(bcs.display_difficulty)::int) IS NOT NULL
       ${batchBoardFilter}
-      ${batchLayoutFilter}
     GROUP BY keys.session_id, diff_num
     ORDER BY diff_num DESC
   `);
@@ -1487,16 +1428,11 @@ function betaCandidateRankSql(partitionExpression: SQL) {
 
 async function fetchSessionFeaturedBetaRows(
   sessionIds: string[],
-  { boardTypeFilter, layoutIdFilter }: SessionFeedFilterOptions,
+  { boardIdFilter }: SessionFeedFilterOptions,
 ): Promise<FeaturedBetaRow[]> {
   if (sessionIds.length === 0) return [];
 
-  const batchLayoutJoin =
-    layoutIdFilter !== null
-      ? sql`LEFT JOIN board_climb_aliases bca_filter ON bca_filter.board_type = t.board_type AND bca_filter.alias_uuid = t.climb_uuid LEFT JOIN board_climbs cf_filter ON cf_filter.uuid = COALESCE(bca_filter.canonical_uuid, t.climb_uuid) AND cf_filter.board_type = t.board_type`
-      : sql``;
-  const batchBoardFilter = boardTypeFilter ? sql`AND t.board_type = ${boardTypeFilter}` : sql``;
-  const batchLayoutFilter = layoutIdFilter !== null ? sql`AND cf_filter.layout_id = ${layoutIdFilter}` : sql``;
+  const batchBoardFilter = boardIdFilter !== null ? sql`AND t.board_id = ${boardIdFilter}` : sql``;
 
   const result = await dbRead.execute(sql`
     WITH ranked AS (
@@ -1512,7 +1448,6 @@ async function fetchSessionFeaturedBetaRows(
         bl.created_at AS "createdAt",
         ${betaCandidateRankSql(sql`t.session_id`)}
       FROM boardsesh_ticks t
-      ${batchLayoutJoin}
       ${betaCandidateJoinSql()}
       LEFT JOIN board_climb_aliases bca_beta ON bca_beta.board_type = t.board_type AND bca_beta.alias_uuid = t.climb_uuid
       LEFT JOIN board_climb_stats bcs_beta
@@ -1524,7 +1459,6 @@ async function fetchSessionFeaturedBetaRows(
         sql`, `,
       )})`}
         ${batchBoardFilter}
-        ${batchLayoutFilter}
         AND t.status IN ('flash', 'send')
     )
     SELECT *
@@ -1537,16 +1471,11 @@ async function fetchSessionFeaturedBetaRows(
 
 async function fetchDailyFeaturedBetaRows(
   dailyHighlightKeys: DailyHighlightKey[],
-  { boardTypeFilter, layoutIdFilter }: SessionFeedFilterOptions,
+  { boardIdFilter }: SessionFeedFilterOptions,
 ): Promise<FeaturedBetaRow[]> {
   if (dailyHighlightKeys.length === 0) return [];
 
-  const batchLayoutJoin =
-    layoutIdFilter !== null
-      ? sql`LEFT JOIN board_climb_aliases bca_filter ON bca_filter.board_type = t.board_type AND bca_filter.alias_uuid = t.climb_uuid LEFT JOIN board_climbs cf_filter ON cf_filter.uuid = COALESCE(bca_filter.canonical_uuid, t.climb_uuid) AND cf_filter.board_type = t.board_type`
-      : sql``;
-  const batchBoardFilter = boardTypeFilter ? sql`AND t.board_type = ${boardTypeFilter}` : sql``;
-  const batchLayoutFilter = layoutIdFilter !== null ? sql`AND cf_filter.layout_id = ${layoutIdFilter}` : sql``;
+  const batchBoardFilter = boardIdFilter !== null ? sql`AND t.board_id = ${boardIdFilter}` : sql``;
   const valuesSql = sql.join(
     dailyHighlightKeys.map((key) => sql`(${key.sessionId}, ${key.userId}, ${key.day}::date)`),
     sql`, `,
@@ -1573,7 +1502,6 @@ async function fetchDailyFeaturedBetaRows(
         ON t.user_id = keys.user_id
         AND t.climbed_at::date = keys.day
         AND t.session_id IS NULL
-      ${batchLayoutJoin}
       ${betaCandidateJoinSql()}
       LEFT JOIN board_climb_aliases bca_beta ON bca_beta.board_type = t.board_type AND bca_beta.alias_uuid = t.climb_uuid
       LEFT JOIN board_climb_stats bcs_beta
@@ -1582,7 +1510,6 @@ async function fetchDailyFeaturedBetaRows(
         AND bcs_beta.angle = t.angle
       WHERE t.status IN ('flash', 'send')
         ${batchBoardFilter}
-        ${batchLayoutFilter}
     )
     SELECT *
     FROM ranked
