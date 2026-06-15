@@ -151,10 +151,12 @@ export default function BoardSelection() {
     bluetoothSheetRef.current?.expand();
   }, []);
 
-  const onModeCustom = useCallback(() => {
-    setCustomSeed(null); // blank builder
-    customSheetRef.current?.expand();
-  }, []);
+  // Deliberate "create an owned board" flow: a pushed screen that leads with the
+  // controllers the user has recently connected to (serial-attached, named,
+  // owned), with the manual builder as a fallback inside it.
+  const onModeCreate = useCallback(() => {
+    router.push({ pathname: '/boards/create', params: { returnTo: boardReturnTo } });
+  }, [router, boardReturnTo]);
 
   const onModeFindGym = useCallback(() => {
     router.push({ pathname: '/gyms', params: { returnTo: boardReturnTo } });
@@ -264,7 +266,7 @@ export default function BoardSelection() {
           />
           <BoardModeCard icon="bluetooth" label={t('mobile.discovery.bluetooth')} onPress={onModeBluetooth} />
           <BoardModeCard icon="pin" label={t('mobile.discovery.findGym')} onPress={onModeFindGym} />
-          <BoardModeCard icon="plus" label={t('mobile.discovery.custom')} onPress={onModeCustom} />
+          <BoardModeCard icon="plus" label={t('mobile.discovery.create')} onPress={onModeCreate} />
         </View>
 
         {shouldFocusMyBoards ? myBoardsSection : nearbySection}

@@ -3531,6 +3531,13 @@ export type Query = {
    * Capped server-side (small grid surface). Requires authentication.
    */
   myPinnedPlaylists: Array<Playlist>;
+  /**
+   * Controllers the current user has recently connected to over BLE, newest
+   * first, each with the config seen at last connect, the user's saved board for
+   * that serial (if any), and a preview of their last send on it. Powers the
+   * "create a board" flow. Requires authentication.
+   */
+  myRecentBoardSerials: Array<RecentBoardSerial>;
   /** Get the current user's community roles. */
   myRoles: Array<CommunityRoleAssignment>;
   /**
@@ -3966,6 +3973,11 @@ export type QueryMyPinnedPlaylistsArgs = {
 };
 
 /** Root query type for all read operations. */
+export type QueryMyRecentBoardSerialsArgs = {
+  limit?: InputMaybe<Scalars['Int']['input']>;
+};
+
+/** Root query type for all read operations. */
 export type QueryNearbySessionsArgs = {
   latitude: Scalars['Float']['input'];
   longitude: Scalars['Float']['input'];
@@ -4292,6 +4304,56 @@ export type RecentBetaLink = {
   boardType: Scalars['String']['output'];
   climbName?: Maybe<Scalars['String']['output']>;
   layoutId?: Maybe<Scalars['Int']['output']>;
+};
+
+/**
+ * A controller serial the current user has BLE-connected to, with the board
+ * config seen at last connect, the user's saved board for that serial (if one
+ * exists yet), and a preview of the last climb they sent on it. Ordered by
+ * recency (most-recently-connected first). Powers the "create a board" flow,
+ * which turns a recently-used controller into a named, owned board.
+ */
+export type RecentBoardSerial = {
+  __typename?: 'RecentBoardSerial';
+  /** API/protocol level from the BLE device name (the @N suffix); null if never observed */
+  apiLevel?: Maybe<Scalars['Int']['output']>;
+  /** Board type (kilter, tension, ...) at last connect */
+  boardName: Scalars['String']['output'];
+  /** Preview of the last climb the user sent on this serial's board, if any */
+  lastClimb?: Maybe<RecentSerialLastClimb>;
+  /** Layout ID at last connect */
+  layoutId: Scalars['Int']['output'];
+  /** The user's saved board for this serial, if one already exists */
+  ownedBoard?: Maybe<UserBoard>;
+  /** Controller box serial number */
+  serialNumber: Scalars['String']['output'];
+  /** Comma-separated set IDs at last connect */
+  setIds: Scalars['String']['output'];
+  /** Size ID at last connect */
+  sizeId: Scalars['Int']['output'];
+  /** When this controller was last connected (recency key) */
+  updatedAt: Scalars['String']['output'];
+};
+
+/** Preview of the most recent send the current user logged on a serial's board. */
+export type RecentSerialLastClimb = {
+  __typename?: 'RecentSerialLastClimb';
+  /** Angle the climb was sent at */
+  angle: Scalars['Int']['output'];
+  /** Climb UUID */
+  climbUuid: Scalars['String']['output'];
+  /** When the send was logged */
+  climbedAt: Scalars['String']['output'];
+  /** Difficulty ID (user override or rounded consensus) */
+  difficulty?: Maybe<Scalars['Int']['output']>;
+  /** Encoded hold frames for rendering the board art thumbnail */
+  frames?: Maybe<Scalars['String']['output']>;
+  /** Human-readable grade label (e.g. V5) */
+  gradeName?: Maybe<Scalars['String']['output']>;
+  /** Climb name */
+  name?: Maybe<Scalars['String']['output']>;
+  /** Setter username */
+  setter?: Maybe<Scalars['String']['output']>;
 };
 
 /**

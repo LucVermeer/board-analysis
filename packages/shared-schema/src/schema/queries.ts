@@ -459,6 +459,14 @@ export const queriesTypeDefs = /* GraphQL */ `
     myBoardSerialConfigs(serialNumbers: [String!]!): [BoardSerialConfig!]!
 
     """
+    Controllers the current user has recently connected to over BLE, newest
+    first, each with the config seen at last connect, the user's saved board for
+    that serial (if any), and a preview of their last send on it. Powers the
+    "create a board" flow. Requires authentication.
+    """
+    myRecentBoardSerials(limit: Int): [RecentBoardSerial!]!
+
+    """
     Get current user's boards.
     Requires authentication.
     """

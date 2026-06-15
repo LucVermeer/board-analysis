@@ -7,7 +7,12 @@ import { rowsFromResult } from '@boardsesh/db/client';
 import { db } from '../../../db/client';
 import * as dbSchema from '@boardsesh/db/schema';
 import { requireAuthenticated, applyRateLimit, validateInput } from '../shared/helpers';
-import { consensusDifficultyExpr } from '../shared/sql-expressions';
+import {
+  consensusDifficultyExpr,
+  consensusGradeTable,
+  consensusGradeJoinCondition,
+  difficultyNameWithFallbackExpr,
+} from '../shared/sql-expressions';
 import {
   CreateBoardInputSchema,
   UpdateBoardInputSchema,
@@ -786,6 +791,193 @@ export const socialBoardQueries = {
       boardUuid: row.boardUuid,
       boardSlug: row.boardSlug,
     }));
+  },
+
+  /**
+   * Controllers the current user has recently connected to over BLE, newest
+   * first. For each serial we resolve the user's saved board (by the explicit
+   * `board_uuid` link recorded at connect time, or by a `serialNumber` match on
+   * one of their boards) and a preview of the last climb they sent on it. Powers
+   * the mobile "create a board" flow, which turns a recently-used controller
+   * into a named, owned, serial-attached board.
+   *
+   * Three batched queries (no N+1, all bounded by `limit` <= 25):
+   *   A) recents ordered by updatedAt DESC
+   *   B) the owned boards those serials resolve to (enriched once)
+   *   C) the latest send per resolved board (DISTINCT ON)
+   */
+  myRecentBoardSerials: async (_: unknown, { limit }: { limit?: number | null }, ctx: ConnectionContext) => {
+    requireAuthenticated(ctx);
+    await applyRateLimit(ctx, 20, 'myRecentBoardSerials');
+
+    const { userId } = ctx;
+    if (!userId) {
+      throw new Error('Authentication required to perform this operation');
+    }
+
+    const take = Math.min(Math.max(limit ?? 10, 1), 25);
+
+    // A) Recent serials, newest connect first.
+    const recentRows = await db
+      .select({
+        serialNumber: dbSchema.userBoardSerials.serialNumber,
+        boardName: dbSchema.userBoardSerials.boardName,
+        layoutId: dbSchema.userBoardSerials.layoutId,
+        sizeId: dbSchema.userBoardSerials.sizeId,
+        setIds: dbSchema.userBoardSerials.setIds,
+        apiLevel: dbSchema.userBoardSerials.apiLevel,
+        updatedAt: dbSchema.userBoardSerials.updatedAt,
+        boardUuid: dbSchema.userBoardSerials.boardUuid,
+      })
+      .from(dbSchema.userBoardSerials)
+      .where(eq(dbSchema.userBoardSerials.userId, userId))
+      .orderBy(desc(dbSchema.userBoardSerials.updatedAt))
+      .limit(take);
+
+    if (recentRows.length === 0) return [];
+
+    // B) Resolve each serial to the user's owned board, by the explicit
+    // board_uuid link recorded at connect time OR by a serialNumber match on one
+    // of their boards. Both are user-scoped and exclude soft-deleted boards.
+    const linkedUuids = recentRows.map((row) => row.boardUuid).filter((uuid): uuid is string => uuid != null);
+    const serials = recentRows.map((row) => row.serialNumber);
+    const boardMatchConditions = [
+      linkedUuids.length > 0 ? inArray(dbSchema.userBoards.uuid, linkedUuids) : undefined,
+      serials.length > 0 ? inArray(dbSchema.userBoards.serialNumber, serials) : undefined,
+    ].filter((condition) => condition !== undefined);
+
+    const ownedBoardRows =
+      boardMatchConditions.length > 0
+        ? await db
+            .select()
+            .from(dbSchema.userBoards)
+            .where(
+              and(
+                eq(dbSchema.userBoards.ownerId, userId),
+                isNull(dbSchema.userBoards.deletedAt),
+                or(...boardMatchConditions),
+              ),
+            )
+        : [];
+
+    const boardByUuid = new Map(ownedBoardRows.map((board) => [board.uuid, board]));
+    const boardBySerial = new Map<string, (typeof ownedBoardRows)[number]>();
+    for (const board of ownedBoardRows) {
+      if (board.serialNumber) boardBySerial.set(board.serialNumber, board);
+    }
+
+    // Resolve each recent row to a board, preferring the explicit link.
+    const resolvedBoards = recentRows.map((row) => {
+      if (row.boardUuid && boardByUuid.has(row.boardUuid)) return boardByUuid.get(row.boardUuid)!;
+      return boardBySerial.get(row.serialNumber) ?? null;
+    });
+
+    // Enrich the distinct resolved boards in one batch, so `ownedBoard` carries
+    // the full UserBoard shape the mobile client already consumes.
+    const distinctBoards = [
+      ...new Map(
+        resolvedBoards
+          .filter((board): board is (typeof ownedBoardRows)[number] => board !== null)
+          .map((board) => [board.id, board]),
+      ).values(),
+    ];
+    const enriched = await enrichBoards(
+      distinctBoards.map((board) => ({ board })),
+      userId,
+    );
+    const enrichedById = new Map(distinctBoards.map((board, index) => [board.id, enriched[index]]));
+
+    // C) The user's last send per resolved board (flash or send, newest first).
+    const boardIds = distinctBoards.map((board) => board.id);
+    const lastClimbByBoardId = new Map<
+      number,
+      {
+        climbUuid: string;
+        name: string | null;
+        frames: string | null;
+        angle: number;
+        difficulty: number | null;
+        gradeName: string | null;
+        setter: string | null;
+        climbedAt: string;
+      }
+    >();
+    if (boardIds.length > 0) {
+      const lastClimbRows = await db
+        .selectDistinctOn([dbSchema.boardseshTicks.boardId], {
+          boardId: dbSchema.boardseshTicks.boardId,
+          climbUuid: dbSchema.boardseshTicks.climbUuid,
+          angle: dbSchema.boardseshTicks.angle,
+          climbedAt: dbSchema.boardseshTicks.climbedAt,
+          difficulty: sql<number | null>`COALESCE(${dbSchema.boardseshTicks.difficulty}, ${consensusDifficultyExpr})`,
+          name: dbSchema.boardClimbs.name,
+          frames: dbSchema.boardClimbs.frames,
+          setter: dbSchema.boardClimbs.setterUsername,
+          gradeName: difficultyNameWithFallbackExpr,
+        })
+        .from(dbSchema.boardseshTicks)
+        .leftJoin(
+          dbSchema.boardClimbs,
+          and(
+            eq(dbSchema.boardClimbs.uuid, dbSchema.boardseshTicks.climbUuid),
+            eq(dbSchema.boardClimbs.boardType, dbSchema.boardseshTicks.boardType),
+          ),
+        )
+        .leftJoin(
+          dbSchema.boardClimbStats,
+          and(
+            eq(dbSchema.boardClimbStats.climbUuid, dbSchema.boardseshTicks.climbUuid),
+            eq(dbSchema.boardClimbStats.boardType, dbSchema.boardseshTicks.boardType),
+            eq(dbSchema.boardClimbStats.angle, dbSchema.boardseshTicks.angle),
+          ),
+        )
+        .leftJoin(
+          dbSchema.boardDifficultyGrades,
+          and(
+            eq(dbSchema.boardDifficultyGrades.difficulty, dbSchema.boardseshTicks.difficulty),
+            eq(dbSchema.boardDifficultyGrades.boardType, dbSchema.boardseshTicks.boardType),
+          ),
+        )
+        .leftJoin(consensusGradeTable, consensusGradeJoinCondition)
+        .where(
+          and(
+            inArray(dbSchema.boardseshTicks.boardId, boardIds),
+            eq(dbSchema.boardseshTicks.userId, userId),
+            or(eq(dbSchema.boardseshTicks.status, 'flash'), eq(dbSchema.boardseshTicks.status, 'send')),
+          ),
+        )
+        .orderBy(dbSchema.boardseshTicks.boardId, desc(dbSchema.boardseshTicks.climbedAt));
+
+      for (const row of lastClimbRows) {
+        if (row.boardId == null) continue;
+        lastClimbByBoardId.set(row.boardId, {
+          climbUuid: row.climbUuid,
+          name: row.name,
+          frames: row.frames,
+          angle: Number(row.angle),
+          difficulty: row.difficulty != null ? Number(row.difficulty) : null,
+          gradeName: row.gradeName,
+          setter: row.setter,
+          climbedAt: row.climbedAt,
+        });
+      }
+    }
+
+    return recentRows.map((row, index) => {
+      const board = resolvedBoards[index];
+      const lastClimb = board ? (lastClimbByBoardId.get(board.id) ?? null) : null;
+      return {
+        serialNumber: row.serialNumber,
+        boardName: row.boardName,
+        layoutId: Number(row.layoutId),
+        sizeId: Number(row.sizeId),
+        setIds: row.setIds,
+        apiLevel: row.apiLevel,
+        updatedAt: row.updatedAt.toISOString(),
+        ownedBoard: board ? (enrichedById.get(board.id) ?? null) : null,
+        lastClimb,
+      };
+    });
   },
 
   /**
