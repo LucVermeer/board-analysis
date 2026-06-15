@@ -26,6 +26,9 @@ export type Sponsor = {
 export const contributors: Contributor[] = data.contributors;
 export const sponsors: Sponsor[] = data.sponsors;
 
+/** Sponsors who chose to stay private — shown only as an anonymous count. */
+export const privateSponsorCount: number = data.privateSponsorCount;
+
 /** Where the "Become a sponsor" empty-state CTA points. */
 export const SPONSORS_URL = 'https://github.com/sponsors/boardsesh';
 

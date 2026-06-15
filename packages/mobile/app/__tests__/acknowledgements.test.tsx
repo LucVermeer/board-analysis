@@ -17,18 +17,20 @@ vi.mock('react-native', () => ({
 vi.mock('expo-router', () => ({ Stack: { Screen: () => null }, useRouter: () => routerMock }));
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
-    t: (key: string) =>
+    t: (key: string, vars?: { count?: number }) =>
       ({
         'mobile.acknowledgements.becomeSponsor': 'Become a sponsor',
         'mobile.acknowledgements.ossLicensesLink': 'Open source licenses',
         'mobile.acknowledgements.friendsTitle': 'The crew',
+        'mobile.acknowledgements.privateSponsorsThanks': `and ${vars?.count ?? 0} more sponsoring privately — thank you too`,
       })[key] ?? key,
   }),
 }));
 
 vi.mock('../../src/lib/acknowledgements', () => ({
   contributors: [{ login: 'alpha', name: null, avatarUrl: '', htmlUrl: 'https://github.com/alpha', contributions: 5 }],
-  sponsors: [],
+  sponsors: [{ login: 'bluejayio', name: 'Shuying Zhang', avatarUrl: '', url: 'https://github.com/bluejayio' }],
+  privateSponsorCount: 1,
   friends: ['Caz', 'Joz'],
   partnerName: 'Gabby A',
   dogName: 'Scouty Scout',
@@ -86,15 +88,18 @@ describe('AcknowledgementsScreen', () => {
     expect(openUrl.openExternalUrl).toHaveBeenCalledWith('https://github.com/alpha', 'acknowledgements');
   });
 
-  it('shows the sponsors empty-state CTA that opens GitHub Sponsors', () => {
+  it('renders a public sponsor chip that opens their profile', () => {
     render(<AcknowledgementsScreen />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Become a sponsor' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Shuying Zhang' }));
 
-    expect(openUrl.openExternalUrl).toHaveBeenCalledWith(
-      'https://github.com/sponsors/boardsesh',
-      'acknowledgements-sponsor',
-    );
+    expect(openUrl.openExternalUrl).toHaveBeenCalledWith('https://github.com/bluejayio', 'acknowledgements');
+  });
+
+  it('thanks private sponsors as an anonymous count', () => {
+    render(<AcknowledgementsScreen />);
+
+    expect(screen.getByText('and 1 more sponsoring privately — thank you too')).toBeTruthy();
   });
 
   it('thanks the crew, partner, and dog by name', () => {

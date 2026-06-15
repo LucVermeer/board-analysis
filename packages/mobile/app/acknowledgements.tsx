@@ -8,7 +8,15 @@ import { PressableSurface } from '../src/components/PressableSurface';
 import { SectionHeader } from '../src/components/SectionHeader';
 import { Text } from '../src/components/Text';
 import { useBottomChromeMetrics } from '../src/hooks/use-bottom-chrome-metrics';
-import { contributors, sponsors, friends, partnerName, dogName, SPONSORS_URL } from '../src/lib/acknowledgements';
+import {
+  contributors,
+  sponsors,
+  privateSponsorCount,
+  friends,
+  partnerName,
+  dogName,
+  SPONSORS_URL,
+} from '../src/lib/acknowledgements';
 import { openExternalUrl } from '../src/lib/open-url';
 import { useTheme } from '../src/providers/theme-provider';
 import { borderRadius, spacing } from '../src/theme/tokens';
@@ -141,11 +149,18 @@ export default function AcknowledgementsScreen() {
                   />
                 ))}
               </View>
+              {privateSponsorCount > 0 ? (
+                <Text variant="subheadline" color={systemColors.secondaryLabel} style={styles.privateThanks}>
+                  {t('mobile.acknowledgements.privateSponsorsThanks', { count: privateSponsorCount })}
+                </Text>
+              ) : null}
             </>
           ) : (
             <View style={[styles.emptyCard, { backgroundColor: systemColors.secondaryBackground }]}>
               <Text variant="subheadline" color={systemColors.secondaryLabel} style={styles.emptyText}>
-                {t('mobile.acknowledgements.sponsorsEmpty')}
+                {privateSponsorCount > 0
+                  ? t('mobile.acknowledgements.privateSponsorsThanks', { count: privateSponsorCount })
+                  : t('mobile.acknowledgements.sponsorsEmpty')}
               </Text>
               <Button
                 title={t('mobile.acknowledgements.becomeSponsor')}
@@ -234,6 +249,12 @@ const styles = StyleSheet.create({
   sectionBody: {
     paddingHorizontal: spacing[1],
     lineHeight: 20,
+  },
+  privateThanks: {
+    paddingHorizontal: spacing[1],
+    marginTop: spacing[1],
+    lineHeight: 20,
+    fontStyle: 'italic',
   },
   chips: {
     flexDirection: 'row',

@@ -25,6 +25,8 @@ export type AcknowledgementsData = {
   generatedAt: string;
   contributors: Contributor[];
   sponsors: Sponsor[];
+  /** How many sponsors chose to stay private — surfaced as an anonymous count. */
+  privateSponsorCount: number;
 };
 
 /** Subset of the GitHub REST `/contributors` shape we rely on. */

@@ -127,6 +127,7 @@
       "sponsorsTitle": "Sponsors",
       "sponsorsBody": "Climbers keeping the lights on through GitHub Sponsors.",
       "sponsorsEmpty": "No sponsors yet — want to be the first?",
+      "privateSponsorsThanks": "and {{count}} more sponsoring privately — thank you too",
       "becomeSponsor": "Become a sponsor",
       "personalTitle": "Personal thanks",
       "friendsTitle": "The crew",

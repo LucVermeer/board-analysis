@@ -325,6 +325,7 @@
       "sponsorsTitle": "Patrocinadores",
       "sponsorsBody": "Escaladores que mantienen esto en marcha a través de GitHub Sponsors.",
       "sponsorsEmpty": "Aún no hay patrocinadores, ¿quieres ser el primero?",
+      "privateSponsorsThanks": "y {{count}} más patrocinando en privado — gracias también",
       "becomeSponsor": "Hazte patrocinador",
       "personalTitle": "Agradecimientos personales",
       "friendsTitle": "La cuerda",

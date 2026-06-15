@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-06-15T03:20:51.696Z",
+  "generatedAt": "2026-06-15T03:25:16.275Z",
   "contributors": [
     {
       "login": "marcodejongh",
@@ -93,5 +93,6 @@
       "avatarUrl": "https://avatars.githubusercontent.com/u/26174891?v=4",
       "url": "https://github.com/bluejayio"
     }
-  ]
+  ],
+  "privateSponsorCount": 1
 }
