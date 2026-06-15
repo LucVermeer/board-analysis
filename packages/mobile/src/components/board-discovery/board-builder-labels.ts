@@ -61,3 +61,32 @@ export function formatSizeLabel(size: { name: string; description?: string | nul
   const kit = cleanKitDescription(size.description);
   return kit ? `${dimensions} · ${kit}` : dimensions;
 }
+
+/** Just the dimensions of a size, e.g. "12×12" — for use inside a board name. */
+export function formatSizeDimensions(size: { name: string }): string {
+  return cleanDimensions(size.name);
+}
+
+/**
+ * A suggested board name from the owner + config, e.g. "Marco's Kilter Original
+ * 12×12". Drops the possessive when there's no name. Used as the create-form
+ * placeholder and the fallback when the user leaves the name blank.
+ */
+export function formatDefaultBoardName(params: {
+  userName?: string | null;
+  boardName: string;
+  /** Raw layout name (cleaned internally). */
+  layoutName: string;
+  size?: { name: string } | null;
+}): string {
+  const { userName, boardName, layoutName, size } = params;
+  const config = [
+    boardTypeLabel(boardName),
+    cleanLayoutName(layoutName, boardName),
+    size ? formatSizeDimensions(size) : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+  const owner = userName?.trim();
+  return owner ? `${owner}'s ${config}` : config;
+}

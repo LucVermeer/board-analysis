@@ -14,7 +14,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { SUPPORTED_BOARDS, toBoardName } from '@boardsesh/board-config';
 import type { BoardName } from '@boardsesh/shared-schema';
-import { useMyBoards, useCreateBoard } from '../../src/lib/graphql/hooks';
+import { useMyBoards, useCreateBoard, useProfile } from '../../src/lib/graphql/hooks';
 import { useSetActiveBoard } from '../../src/lib/graphql/use-active-board';
 import { useAuth } from '../../src/providers/auth-provider';
 import { useToast } from '../../src/providers/toast-provider';
@@ -30,6 +30,7 @@ import {
   boardTypeLabel,
   cleanLayoutName,
   formatSizeLabel,
+  formatDefaultBoardName,
 } from '../../src/components/board-discovery/board-builder-labels';
 import { findOwnedBoardForConfig } from '../../src/components/board-discovery/board-items';
 import { BoardImageNative } from '../../src/components/BoardImageNative';
@@ -64,6 +65,7 @@ export default function CreateBoard() {
 
   const setActiveBoard = useSetActiveBoard();
   const createBoard = useCreateBoard();
+  const { data: profile } = useProfile({ enabled: isAuthenticated });
   const { data: boardConnection } = useMyBoards(undefined, { enabled: isAuthenticated });
   const myBoards = boardConnection?.boards ?? [];
 
@@ -83,6 +85,24 @@ export default function CreateBoard() {
   const builder = useBoardBuilder(seed);
   const { setCoords } = builder;
 
+  // Auto-generated default name, e.g. "Marco's Kilter Original 12×12", from the
+  // user's display name + config. Used as the placeholder and the create-time
+  // fallback when the user leaves the name blank.
+  const selectedSize = useMemo(
+    () => builder.sizes.find((size) => size.id === builder.sizeId) ?? null,
+    [builder.sizes, builder.sizeId],
+  );
+  const defaultName = useMemo(
+    () =>
+      formatDefaultBoardName({
+        userName: profile?.displayName,
+        boardName: builder.boardName,
+        layoutName: builder.rawLayoutName,
+        size: selectedSize,
+      }),
+    [profile?.displayName, builder.boardName, builder.rawLayoutName, selectedSize],
+  );
+
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
@@ -97,7 +117,7 @@ export default function CreateBoard() {
 
   const handleCreate = useCallback(async () => {
     if (submitting) return;
-    const input = builder.buildCreateInput();
+    const input = builder.buildCreateInput(defaultName);
     if (!input) return;
     setSubmitting(true);
     hapticSelection();
@@ -118,7 +138,7 @@ export default function CreateBoard() {
       showToast(t('mobile.create.createError'), 'error');
       setSubmitting(false);
     }
-  }, [submitting, builder, myBoards, createBoard, setActiveBoard, router, boardReturnTo, showToast, t]);
+  }, [submitting, builder, defaultName, myBoards, createBoard, setActiveBoard, router, boardReturnTo, showToast, t]);
 
   // Chip options — memoised so the per-snap angle re-render doesn't rebuild them
   // (they don't depend on angle), letting the memoised chip rows bail out.
@@ -163,7 +183,6 @@ export default function CreateBoard() {
     [builder.sets, builder.setIds],
   );
 
-  const layoutName = cleanLayoutName(builder.rawLayoutName, builder.boardName);
   const showPreview = builder.layoutId != null && builder.sizeId != null && builder.setIds.length > 0;
   const setIdsWire = builder.setIds.join(',');
   // Account for both the scroll content padding and the preview tile's padding.
@@ -248,7 +267,7 @@ export default function CreateBoard() {
             <BuilderTextInput
               value={builder.name}
               onChangeText={builder.setName}
-              placeholder={layoutName}
+              placeholder={defaultName}
               maxLength={100}
               returnKeyType="done"
             />

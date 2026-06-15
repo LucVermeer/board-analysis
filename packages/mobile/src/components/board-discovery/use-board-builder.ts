@@ -123,8 +123,12 @@ export function useBoardBuilder(seed?: BoardBuilderSeed | null) {
 
   const canCreate = layoutId != null && sizeId != null && setIds.length > 0;
 
-  /** The validated CreateBoardInput, or null when the config is incomplete. */
-  const buildCreateInput = (): CreateBoardInput | null => {
+  /**
+   * The validated CreateBoardInput, or null when the config is incomplete.
+   * `fallbackName` (e.g. an auto-generated "Marco's Kilter Original 12×12") is
+   * used when the user left the name blank; defaults to the cleaned layout name.
+   */
+  const buildCreateInput = (fallbackName?: string): CreateBoardInput | null => {
     if (layoutId == null || sizeId == null || setIds.length === 0) return null;
     return {
       boardType: boardName,
@@ -132,7 +136,7 @@ export function useBoardBuilder(seed?: BoardBuilderSeed | null) {
       sizeId,
       // Canonical order so a re-ticked set matches an existing owned board.
       setIds: normaliseSetIds(setIds.join(',')),
-      name: name.trim() || cleanLayoutName(rawLayoutName, boardName),
+      name: name.trim() || fallbackName?.trim() || cleanLayoutName(rawLayoutName, boardName),
       angle,
       isOwned,
       isPublic,

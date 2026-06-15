@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { boardTypeLabel, cleanLayoutName, formatSizeLabel } from '../board-builder-labels';
+import { boardTypeLabel, cleanLayoutName, formatSizeLabel, formatDefaultBoardName } from '../board-builder-labels';
 
 describe('boardTypeLabel', () => {
   it('uses trademark-correct names', () => {
@@ -40,5 +40,35 @@ describe('formatSizeLabel', () => {
   it('shows just the dimensions when there is no kit description', () => {
     expect(formatSizeLabel({ name: '12 high x 12 wide', description: '' })).toBe('12×12');
     expect(formatSizeLabel({ name: '7x10', description: null })).toBe('7×10');
+  });
+});
+
+describe('formatDefaultBoardName', () => {
+  it('combines owner, board type, layout, and size dimensions', () => {
+    expect(
+      formatDefaultBoardName({
+        userName: 'Marco',
+        boardName: 'kilter',
+        layoutName: 'Kilter Board Original',
+        size: { name: '12x12' },
+      }),
+    ).toBe("Marco's Kilter Original 12×12");
+  });
+
+  it('drops the possessive when there is no user name', () => {
+    expect(
+      formatDefaultBoardName({
+        userName: null,
+        boardName: 'tension',
+        layoutName: 'Tension Board 2 Mirror',
+        size: { name: '12 high x 16 wide' },
+      }),
+    ).toBe('Tension Mirror 12×16');
+  });
+
+  it('omits the size when none is selected yet', () => {
+    expect(
+      formatDefaultBoardName({ userName: 'Sam', boardName: 'kilter', layoutName: 'Kilter Board Homewall', size: null }),
+    ).toBe("Sam's Kilter Homewall");
   });
 });
