@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import type { SessionDetailTick, SessionGradeDistributionItem } from '@boardsesh/shared-schema';
+import type { SessionGradeDistributionItem } from '@boardsesh/shared-schema';
 import { Card } from '../Card';
 import { SectionHeader } from '../SectionHeader';
 import { StackedBarChart, type ChartLegendItem } from '../you/YouCharts';
@@ -17,14 +17,9 @@ import { spacing } from '../../theme/tokens';
  * legend explains the shade split. Renders nothing when there's no data.
  */
 export function SessionAnalyticsSection({
-  ticks,
-  gradeDistribution = [],
+  gradeDistribution,
 }: {
-  ticks: SessionDetailTick[];
-  // Optional until app/session/[sessionId].tsx is wired in a later phase to pass
-  // session.gradeDistribution; defaults to an empty distribution (renders the
-  // ticks-only empty path).
-  gradeDistribution?: SessionGradeDistributionItem[];
+  gradeDistribution: SessionGradeDistributionItem[];
 }) {
   const { t } = useTranslation('profile');
   const { colorScheme } = useTheme();
@@ -47,7 +42,9 @@ export function SessionAnalyticsSection({
     [t, colorScheme],
   );
 
-  if (!gradeBars && ticks.length === 0) return null;
+  // `buildSessionGradeBars` returns null for an empty or all-zero distribution,
+  // so this covers both the no-distribution and no-ascent cases.
+  if (!gradeBars) return null;
 
   return (
     <View>

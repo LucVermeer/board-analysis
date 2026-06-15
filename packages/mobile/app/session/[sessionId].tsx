@@ -118,7 +118,7 @@ export default function SessionDetailScreen() {
         hardestGrade={session.hardestGrade}
       />
 
-      <SessionAnalyticsSection ticks={session.ticks} gradeDistribution={session.gradeDistribution} />
+      <SessionAnalyticsSection gradeDistribution={session.gradeDistribution} />
 
       <SessionBetaCarousel ticks={session.ticks} />
 

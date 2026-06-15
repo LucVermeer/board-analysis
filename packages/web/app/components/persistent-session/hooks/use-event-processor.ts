@@ -226,10 +226,13 @@ export function useEventProcessor({ refs }: UseEventProcessorArgs): EventProcess
           // The live stats event omits per-climb beta links (the subscription
           // doesn't select them), so carry over the ones the detail query
           // already cached, keyed by climb, rather than dropping them.
-          const betaByClimb = new Map(prev.ticks.map((tick) => [tick.climbUuid, tick.betaLinks ?? []]));
+          // Key by `${boardType}:${climbUuid}` to match the session-detail
+          // resolver's beta map, so a climb UUID shared across two boards keeps
+          // its own beta.
+          const betaByClimb = new Map(prev.ticks.map((tick) => [`${tick.boardType}:${tick.climbUuid}`, tick.betaLinks ?? []]));
           const ticks = [...event.ticks]
             .sort((a, b) => new Date(b.climbedAt).getTime() - new Date(a.climbedAt).getTime())
-            .map((tick) => ({ ...tick, betaLinks: betaByClimb.get(tick.climbUuid) ?? [] }));
+            .map((tick) => ({ ...tick, betaLinks: betaByClimb.get(`${tick.boardType}:${tick.climbUuid}`) ?? [] }));
           const firstTickAt = ticks.length > 0 ? ticks[ticks.length - 1].climbedAt : prev.firstTickAt;
           const lastTickAt = ticks.length > 0 ? ticks[0].climbedAt : prev.lastTickAt;
 
