@@ -124,6 +124,16 @@ export function CollapsingLargeTitleHeader({
         ? SCRIM_BACKGROUND_DARK
         : SCRIM_BACKGROUND_LIGHT;
 
+  // The scrim is invisible at rest and fades in as content scrolls up under the
+  // islands — the iOS nav-bar idiom. At rest the list insets its content below
+  // the measured chrome height, so there's nothing to mask; painting an opaque
+  // scrim there just showed a visible band over the scene (it can't match every
+  // screen's background). Fading it on scroll removes the at-rest band while
+  // still masking content that scrolls into the gaps between the islands.
+  const scrimStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(scrollY.value, [0, 12], [0, 1], Extrapolation.CLAMP),
+  }));
+
   // Only the centre content (which is leaving) fades — flattening its glass
   // mid-fade is invisible because it's disappearing. The capsule that *stays*
   // uses transform only, so the live glass survives.
@@ -144,14 +154,16 @@ export function CollapsingLargeTitleHeader({
 
   return (
     <View pointerEvents="box-none" style={[styles.container, { paddingTop: insets.top }]} onLayout={handleLayout}>
-      {/* Scrim: the screen background fading to clear, so content scrolling up
-          doesn't bleed through the gaps between the islands. */}
-      <LinearGradient
-        pointerEvents="none"
-        colors={[scrimColor, scrimColor, 'transparent'] as const}
-        locations={[0, 0.7, 1]}
-        style={StyleSheet.absoluteFill}
-      />
+      {/* Scrim: matches the scene background and fades in on scroll so content
+          scrolling up doesn't bleed through the gaps between the islands. Hidden
+          at rest (nothing to mask) so it never shows as a band over the scene. */}
+      <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, scrimStyle]}>
+        <LinearGradient
+          colors={[scrimColor, scrimColor, 'transparent'] as const}
+          locations={[0, 0.7, 1]}
+          style={StyleSheet.absoluteFill}
+        />
+      </Animated.View>
       <View pointerEvents="box-none" style={styles.row}>
         {/* Left island (anchored left). */}
         {leftActions ? (

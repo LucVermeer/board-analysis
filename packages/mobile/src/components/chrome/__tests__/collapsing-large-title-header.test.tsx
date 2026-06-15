@@ -133,9 +133,9 @@ describe('CollapsingLargeTitleHeader', () => {
       />,
     );
 
-    const fadeWrapper = container.querySelector('[data-animated-view="true"]');
-    expect(fadeWrapper).not.toBeNull();
-    expect(fadeWrapper?.querySelector('[data-testid="center"]')).not.toBeNull();
+    // The scrim is also an animated view, so target the wrapper that actually
+    // holds the centre content rather than the first animated view in the tree.
+    expect(container.querySelector('[data-animated-view="true"] [data-testid="center"]')).not.toBeNull();
   });
 
   it('does not render the collapsed title capsule while collapsed is false', () => {
