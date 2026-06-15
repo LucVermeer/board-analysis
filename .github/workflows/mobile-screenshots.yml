@@ -104,6 +104,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: mobile-screenshots-ios
-          path: mobile/screenshots/ios/**
+          path: app-stores/apple/screenshots/**
           if-no-files-found: warn
           retention-days: 14

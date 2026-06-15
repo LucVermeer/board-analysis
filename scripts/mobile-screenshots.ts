@@ -6,7 +6,8 @@
  * Boots a simulator, applies a clean status bar, builds + installs a clean
  * Release app (no Expo dev-menu bubble) with EXPO_PUBLIC_SCREENSHOT_MODE=1, runs
  * a Maestro flow that deep-links to each screen and captures it, then collects
- * the PNGs into mobile/screenshots/<platform>/<device>/.
+ * the PNGs into app-stores/<store>/screenshots/<device>/ (ios -> apple, android
+ * -> google).
  *
  * Usage:
  *   vp run mobile:screenshots -- [--platform ios] [--flow app-store|onboarding]
@@ -29,7 +30,9 @@ const ROOT_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const MOBILE_DIR = resolve(ROOT_DIR, 'packages', 'mobile');
 const MAESTRO_DIR = resolve(MOBILE_DIR, '.maestro');
 const IOS_RUN_SCRIPT = resolve(ROOT_DIR, 'scripts', 'mobile-ios-run.ts');
-const OUTPUT_ROOT = resolve(ROOT_DIR, 'mobile', 'screenshots');
+const OUTPUT_ROOT = resolve(ROOT_DIR, 'app-stores');
+// Output is grouped by store (the directory name), not by platform id.
+const STORE_BY_PLATFORM: Record<'ios' | 'android', string> = { ios: 'apple', android: 'google' };
 const LOG = '[mobile:screenshots]';
 
 const APP_ID = 'com.boardsesh.app';
@@ -273,7 +276,7 @@ function appInstalled(udid: string): boolean {
 }
 
 function collectScreenshots(captureDir: string, platform: 'ios' | 'android', deviceName: string): string[] {
-  const outputDir = join(OUTPUT_ROOT, platform, deviceSlug(deviceName));
+  const outputDir = join(OUTPUT_ROOT, STORE_BY_PLATFORM[platform], 'screenshots', deviceSlug(deviceName));
   mkdirSync(outputDir, { recursive: true });
   const pngs = readdirSync(captureDir).filter((file) => file.toLowerCase().endsWith('.png'));
   for (const png of pngs) {
@@ -369,7 +372,9 @@ function runIos(options: ScreenshotOptions): number {
       console.error(`${LOG} WARNING: flow completed but no PNGs were captured.`);
       return 1;
     }
-    console.log(`${LOG} Saved ${saved.length} screenshot(s) to mobile/screenshots/ios/${deviceSlug(device.name)}/`);
+    console.log(
+      `${LOG} Saved ${saved.length} screenshot(s) to app-stores/${STORE_BY_PLATFORM.ios}/screenshots/${deviceSlug(device.name)}/`,
+    );
     for (const file of saved) console.log(`${LOG}   ${file}`);
   } finally {
     rmSync(captureDir, { force: true, recursive: true });

@@ -6,7 +6,7 @@ orchestrator (`scripts/mobile-screenshots.ts`, exposed as `vp run
 mobile:screenshots`) boots the simulator, applies a clean status bar, resets the
 keychain, builds and installs a clean Release app with
 `EXPO_PUBLIC_SCREENSHOT_MODE=1`, then runs the flow and collects the PNGs into
-`mobile/screenshots/<platform>/<device>/`.
+`app-stores/<apple|google>/screenshots/<device>/`.
 
 ## Backend
 
