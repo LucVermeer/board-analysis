@@ -6,7 +6,7 @@ import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { useTranslation } from 'react-i18next';
 import { useBluetoothConnectedStatus } from '../../src/lib/ble/bluetooth-status-store';
 import { useQueueSessionId } from '../../src/providers/queue-provider';
-import { useHasAccessoryClimb } from '../../src/hooks/use-has-accessory-climb';
+import { useStickyAccessoryPresence } from '../../src/hooks/use-sticky-accessory-presence';
 import { QueueBottomAccessory } from '../../src/components/queue-control/QueueBottomAccessory';
 import { MaterialTabBar } from '../../src/components/navigation/MaterialTabBar';
 import { useTheme } from '../../src/providers/theme-provider';
@@ -58,8 +58,10 @@ export default function TabLayout() {
   // doesn't re-render the tab tree on every queue change. Wall-aware: stays true
   // across a board-level climb change (only the climb identity changes), so the
   // UIKit accessory host is never unmounted/remounted mid-change — which is what
-  // left a stale snapshot stacked under the new one (doubled text).
-  const hasCurrentClimb = useHasAccessoryClimb();
+  // left a stale snapshot stacked under the new one (doubled text). The sticky
+  // wrapper additionally holds the mount across a brief presence blip (board
+  // reconnect / queue rehydrate), so those don't churn the host either.
+  const hasCurrentClimb = useStickyAccessoryPresence();
   const showRecordBadge = isBluetoothConnected || sessionId !== null;
   const eagerMountRecord = Platform.OS === 'android';
 
@@ -115,7 +117,7 @@ export default function TabLayout() {
       tintColor={systemColors.label}
     >
       {nativeAccessoryActive && hasCurrentClimb ? (
-        <NativeTabs.BottomAccessory>
+        <NativeTabs.BottomAccessory key="queue-bottom-accessory">
           <QueueBottomAccessory />
         </NativeTabs.BottomAccessory>
       ) : null}

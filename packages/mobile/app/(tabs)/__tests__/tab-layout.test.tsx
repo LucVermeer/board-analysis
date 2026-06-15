@@ -37,11 +37,12 @@ vi.mock('../../../src/providers/queue-provider', () => ({
   useQueueSessionId: () => ({ sessionId: cfg.sessionId }),
 }));
 
-// Wall-aware presence gate: true for a local OR a live wall (board-presence)
-// climb. The layout only sees the combined boolean — the local-vs-wall split is
-// unit-tested in use-has-accessory-climb / board-presence-react.
-vi.mock('../../../src/hooks/use-has-accessory-climb', () => ({
-  useHasAccessoryClimb: () => cfg.hasCurrentClimb,
+// Wall-aware, snapshot-stable presence gate: true for a local OR a live wall
+// (board-presence) climb, held briefly across a presence blip. The layout only
+// sees the combined boolean — the local-vs-wall split is unit-tested in
+// use-has-accessory-climb, and the hold logic in use-sticky-accessory-presence.
+vi.mock('../../../src/hooks/use-sticky-accessory-presence', () => ({
+  useStickyAccessoryPresence: () => cfg.hasCurrentClimb,
 }));
 
 vi.mock('../../../src/components/queue-control/QueueBottomAccessory', () => ({
