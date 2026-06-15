@@ -5,6 +5,7 @@ import { Icon } from '../../src/components/Icon';
 
 export default function BoardsLayout() {
   const { t } = useTranslation('common');
+  const { t: tBoards } = useTranslation('boards');
 
   return (
     <Stack
@@ -38,6 +39,10 @@ export default function BoardsLayout() {
           ),
         }}
       />
+      {/* The full-screen board builder, pushed onto the boards stack (not a
+          nested sheet): a back chevron is the drill-in affordance and there's no
+          dueling pan-to-dismiss over the already-modal picker. */}
+      <Stack.Screen name="create" options={{ title: tBoards('mobile.create.screenTitle') }} />
     </Stack>
   );
 }

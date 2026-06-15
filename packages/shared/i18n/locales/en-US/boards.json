@@ -41,23 +41,41 @@
     "discovery": {
       "findNearby": "Find nearby",
       "bluetooth": "Bluetooth",
-      "custom": "Custom",
       "locationDenied": "Allow location",
       "nearbyTitle": "Near you",
       "nearbyShowing": "Showing nearby",
       "yourBoardsTitle": "Your boards",
       "popularTitle": "Popular setups",
-      "findGym": "Find gym"
+      "findGym": "Find gym",
+      "create": "Create board"
+    },
+    "create": {
+      "screenTitle": "Set up your board",
+      "previewHint": "Pick your layout and we'll show your wall",
+      "adjustable": "Adjustable angle",
+      "anglePreview": "Wall tilted to {{angle}}°",
+      "moreOptions": "More options",
+      "ownBoard": "I own this board",
+      "public": "Public board",
+      "publicHint": "Show it on the map so your crew can find it",
+      "unlisted": "Unlisted",
+      "hideLocation": "Hide exact location",
+      "location": "Location",
+      "locationPlaceholder": "Home, gym name, or city",
+      "useMyLocation": "Use my location",
+      "locationSet": "Location set",
+      "serial": "Controller serial",
+      "serialPlaceholder": "e.g. ABC-12345",
+      "serialHint": "Optional — your controller links itself the first time you connect.",
+      "save": "Save my board",
+      "createError": "Couldn't create that board. Try again."
     },
     "custom": {
-      "title": "Build a board",
       "board": "Board",
       "layout": "Layout",
       "size": "Size",
       "sets": "Sets",
       "angle": "Angle",
-      "start": "Start climbing",
-      "createError": "Couldn't create that board. Try again.",
       "name": "Board name"
     },
     "bluetooth": {
