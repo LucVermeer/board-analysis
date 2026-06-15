@@ -29,4 +29,5 @@ export {
   BoardPresenceHasClimbContext,
 } from './board-presence-provider';
 
-export type { BoardPresenceClient } from './types';
+export { boardHistoryCursor } from './types';
+export type { BoardHistoryCursor, BoardPresenceClient } from './types';

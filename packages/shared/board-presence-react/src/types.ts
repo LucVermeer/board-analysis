@@ -14,6 +14,20 @@ import type {
   ResolvedBoard,
 } from '@boardsesh/shared-schema';
 
+/**
+ * Keyset cursor for `fetchHistory` paging: the stringified `seq` of the last
+ * row from the previous page. `seq` is a number everywhere else, but the
+ * GraphQL `boardHistory(before: String)` arg is a String and rejects a
+ * non-integer `before` with BAD_USER_INPUT — so always stringify the seq.
+ * Build it with `boardHistoryCursor` instead of calling `.toString()` ad hoc.
+ */
+export type BoardHistoryCursor = string;
+
+/** Cursor for the next page back: the `seq` of a climb (or a raw seq), stringified. */
+export function boardHistoryCursor(climbOrSeq: BoardPresenceClimb | number): BoardHistoryCursor {
+  return (typeof climbOrSeq === 'number' ? climbOrSeq : climbOrSeq.seq).toString();
+}
+
 export interface BoardPresenceClient {
   /**
    * Subscribe to a board's live "now on the wall" feed. Each event is one
@@ -39,7 +53,7 @@ export interface BoardPresenceClient {
    * size. Optional so read-only / web clients that only need the live feed plus
    * recent backfill still satisfy the interface.
    */
-  fetchHistory?(boardId: number, opts?: { limit?: number; before?: string }): Promise<BoardPresenceClimb[]>;
+  fetchHistory?(boardId: number, opts?: { limit?: number; before?: BoardHistoryCursor }): Promise<BoardPresenceClimb[]>;
 
   /** Durable + live stats for the board's wall feed. */
   fetchStats(boardId: number): Promise<BoardPresenceStats>;
