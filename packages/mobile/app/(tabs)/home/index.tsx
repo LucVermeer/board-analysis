@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FlatList, Linking, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -28,6 +29,9 @@ import { useTheme } from '../../../src/providers/theme-provider';
 import { useToast } from '../../../src/providers/toast-provider';
 import { useDrawerHost } from '../../../src/providers/drawer-host-provider';
 import { useBottomChromeMetrics } from '../../../src/hooks/use-bottom-chrome-metrics';
+import { ProgressiveBlur } from '../../../src/components/ProgressiveBlur';
+import { GlassActionToolbar, TOP_ACTION_SIZE } from '../../../src/components/chrome';
+import { UserAvatarToolbarAction } from '../../../src/components/user-drawer/UserAvatarToolbarAction';
 import { dedupeSessionsById } from '../../../src/lib/feed-time-buckets';
 import { deriveFeedScopeInput, type FeedMode } from '../../../src/lib/feed/feed-scope';
 import { openClimbInPlayDrawer } from '../../../src/lib/open-climb-in-play-drawer';
@@ -39,6 +43,10 @@ import { BETA_CARD_HEIGHT, BETA_CARD_WIDTH } from '../../../src/components/play-
 
 const RECENT_BETA_LIMIT = 20;
 const SHELF_GAP = spacing[3];
+// The floating avatar island's vertical band (matches the other tabs' chrome
+// row): used to inset the feed below it and size the top blur.
+const TOP_ISLAND_BAND = spacing[1] + TOP_ACTION_SIZE + spacing[2];
+const ROW_GUTTER = spacing[4];
 const BETA_SKELETON_KEYS = ['beta-skeleton-1', 'beta-skeleton-2', 'beta-skeleton-3'];
 const INITIAL_FEED_SKELETON_KEYS = ['home-feed-skeleton-1', 'home-feed-skeleton-2', 'home-feed-skeleton-3'];
 const NEXT_PAGE_FEED_SKELETON_KEYS = ['home-feed-footer-skeleton-1', 'home-feed-footer-skeleton-2'];
@@ -75,6 +83,7 @@ export default function HomeTab() {
   const { systemColors, brandColors } = useTheme();
   const { openPlayDrawer } = useDrawerHost();
   const bottomChrome = useBottomChromeMetrics();
+  const insets = useSafeAreaInsets();
   const listRef = useRef<FlashListRef<SessionFeedItem>>(null);
   const commentSheetRef = useRef<BottomSheet | null>(null);
   const [commentTarget, setCommentTarget] = useState<CommentTarget | null>(null);
@@ -296,9 +305,6 @@ export default function HomeTab() {
   const header = useMemo(
     () => (
       <View style={styles.header}>
-        <View style={styles.scopeTitleWrap}>
-          <FeedScopeTitle title={scopeMenu.title} actions={scopeMenu.actions} onSelectIndex={scopeMenu.onSelectIndex} />
-        </View>
         <RecentBetaShelf
           heading={betaHeading}
           videos={betaVideos.data ?? []}
@@ -313,7 +319,6 @@ export default function HomeTab() {
       </View>
     ),
     [
-      scopeMenu,
       betaHeading,
       betaVideos.data,
       betaVideos.isError,
@@ -410,6 +415,26 @@ export default function HomeTab() {
           feed.isFetchingNextPage ? <ActivitySkeletonList skeletonKeys={NEXT_PAGE_FEED_SKELETON_KEYS} /> : null
         }
       />
+      {/* Frost content scrolling under the chrome band, matching the other tabs. */}
+      <ProgressiveBlur style={[styles.topBlur, { height: insets.top + TOP_ISLAND_BAND }]} />
+      {/* Floating header: the user-avatar island (left) and the scope menu (a glass
+          title-menu pill, centred) over the blur — matching the other tabs. */}
+      <View pointerEvents="box-none" style={[styles.headerChrome, { paddingTop: insets.top + spacing[1] }]}>
+        <View pointerEvents="box-none" style={styles.headerRow}>
+          <GlassActionToolbar actionCount={1}>
+            <UserAvatarToolbarAction variant="glass" />
+          </GlassActionToolbar>
+          <View pointerEvents="box-none" style={styles.headerCenter}>
+            <FeedScopeTitle
+              title={scopeMenu.title}
+              actions={scopeMenu.actions}
+              onSelectIndex={scopeMenu.onSelectIndex}
+            />
+          </View>
+          {/* Balance the avatar so the scope menu reads centred. */}
+          <View style={styles.headerRightSpacer} />
+        </View>
+      </View>
       <CommentSheet
         sheetRef={commentSheetRef}
         entityId={commentTarget?.entityId ?? null}
@@ -642,6 +667,34 @@ function RecentBetaCard({
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
+  topBlur: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+  },
+  headerChrome: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: ROW_GUTTER,
+    height: TOP_ACTION_SIZE,
+  },
+  headerCenter: {
+    flex: 1,
+    minWidth: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing[2],
+  },
+  headerRightSpacer: {
+    width: TOP_ACTION_SIZE,
+  },
   centered: {
     flex: 1,
     alignItems: 'center',
@@ -650,11 +703,9 @@ const styles = StyleSheet.create({
     gap: spacing[2],
   },
   header: {
-    paddingTop: spacing[3],
-  },
-  scopeTitleWrap: {
-    paddingHorizontal: spacing[4],
-    paddingBottom: spacing[3],
+    // Clear the floating header band so the feed starts just below it (content
+    // then scrolls up under the islands + blur).
+    paddingTop: TOP_ISLAND_BAND,
   },
   shelfSection: {
     paddingBottom: spacing[5],

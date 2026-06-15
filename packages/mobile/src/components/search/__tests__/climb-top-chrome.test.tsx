@@ -331,8 +331,6 @@ vi.mock('../../user-drawer/UserAvatarToolbarAction', () => ({
 
 import { ClimbTopChrome } from '../ClimbTopChrome';
 
-const scrollY = { value: 0 } as unknown as Parameters<typeof ClimbTopChrome>[0]['scrollY'];
-
 function makeProps(over: Partial<Parameters<typeof ClimbTopChrome>[0]> = {}) {
   return {
     title: 'All climbs',
@@ -340,8 +338,6 @@ function makeProps(over: Partial<Parameters<typeof ClimbTopChrome>[0]> = {}) {
     onCreate: vi.fn(),
     onOpenBoardDetail: vi.fn(),
     onHeightChange: vi.fn(),
-    scrollY,
-    onPressTitle: vi.fn(),
     searchFieldRef: { current: null } as RefObject<SearchHeaderHandle | null>,
     searchInitialValue: '',
     searchPlaceholder: 'Search climbs',

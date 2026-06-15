@@ -26,26 +26,13 @@ vi.mock('expo-linear-gradient', () => ({
   LinearGradient: ({ children }: { children?: ReactNode }) =>
     createElement('div', { 'data-gradient': 'true' }, children),
 }));
-// useAnimatedReaction is a no-op so `collapsed` stays false; the collapsed title
-// capsule never mounts but the centre-content fade wrapper always does.
-vi.mock('react-native-reanimated', () => ({
-  default: {
-    View: ({ children, pointerEvents }: { children?: ReactNode; pointerEvents?: string }) =>
-      createElement('div', { 'data-animated-view': 'true', 'data-pointer': pointerEvents ?? '' }, children),
-  },
-  Extrapolation: { CLAMP: 'clamp' },
-  interpolate: () => 0,
-  runOnJS: (fn: (...args: unknown[]) => unknown) => fn,
-  useAnimatedReaction: () => {},
-  useAnimatedStyle: () => ({}),
-  useDerivedValue: () => ({ value: 0 }),
-}));
 vi.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 47, bottom: 0, left: 0, right: 0 }),
 }));
 
 vi.mock('../../../providers/theme-provider', () => ({
   useTheme: () => ({
+    colorScheme: 'light',
     systemColors: {
       label: '#000',
       separator: '#ccc',
@@ -75,26 +62,20 @@ vi.mock('../../Text', () => ({
 
 import { CollapsingLargeTitleHeader } from '../CollapsingLargeTitleHeader';
 
-const scrollY = { value: 0 } as unknown as Parameters<typeof CollapsingLargeTitleHeader>[0]['scrollY'];
-
 function makeProps(over: Partial<Parameters<typeof CollapsingLargeTitleHeader>[0]> = {}) {
   return {
-    title: 'You',
-    scrollY,
-    onPressTitle: vi.fn(),
     onHeightChange: vi.fn(),
     ...over,
   };
 }
 
 describe('CollapsingLargeTitleHeader', () => {
-  it('renders the leftActions / rightActions / centerContent / children slots when provided', () => {
+  it('renders the leftActions / rightActions / children slots when provided', () => {
     const { container } = render(
       <CollapsingLargeTitleHeader
         {...makeProps({
           leftActions: createElement('div', { 'data-testid': 'left' }),
           rightActions: createElement('div', { 'data-testid': 'right' }),
-          centerContent: createElement('div', { 'data-testid': 'center' }),
         })}
       >
         {createElement('div', { 'data-testid': 'children' })}
@@ -103,37 +84,34 @@ describe('CollapsingLargeTitleHeader', () => {
 
     expect(container.querySelector('[data-testid="left"]')).not.toBeNull();
     expect(container.querySelector('[data-testid="right"]')).not.toBeNull();
-    expect(container.querySelector('[data-testid="center"]')).not.toBeNull();
     expect(container.querySelector('[data-testid="children"]')).not.toBeNull();
   });
 
-  it('omits the leftActions / rightActions / centerContent / children slots when not provided', () => {
+  it('omits the leftActions / rightActions / children slots when not provided', () => {
     const { container } = render(<CollapsingLargeTitleHeader {...makeProps()} />);
 
     expect(container.querySelector('[data-testid="left"]')).toBeNull();
     expect(container.querySelector('[data-testid="right"]')).toBeNull();
-    expect(container.querySelector('[data-testid="center"]')).toBeNull();
     expect(container.querySelector('[data-testid="children"]')).toBeNull();
   });
 
-  it('wraps centerContent in an animated fade wrapper (so it fades out as the title takes over)', () => {
-    const { container } = render(
-      <CollapsingLargeTitleHeader
-        {...makeProps({ centerContent: createElement('div', { 'data-testid': 'center' }) })}
-      />,
-    );
-
-    const fadeWrapper = container.querySelector('[data-animated-view="true"]');
-    expect(fadeWrapper).not.toBeNull();
-    expect(fadeWrapper?.querySelector('[data-testid="center"]')).not.toBeNull();
+  it('renders the persistent plain centre title when centerTitle is set', () => {
+    const { container } = render(<CollapsingLargeTitleHeader {...makeProps({ centerTitle: 'V4–V6 · Quality' })} />);
+    expect(container.textContent).toContain('V4–V6 · Quality');
   });
 
-  it('does not render the collapsed title capsule while collapsed is false', () => {
-    const { container } = render(<CollapsingLargeTitleHeader {...makeProps({ title: 'You' })} />);
+  it('omits the centre title when centerTitle is not set', () => {
+    const { container } = render(<CollapsingLargeTitleHeader {...makeProps()} />);
+    expect(container.textContent).not.toContain('V4–V6 · Quality');
+  });
 
-    // The capsule mounts a PressableSurface labelled by the title; with the
-    // reaction mocked no-op, `collapsed` stays false so it never renders.
-    expect(container.querySelector('[data-pressable="You"]')).toBeNull();
+  it('renders the progressive blur behind the header islands', () => {
+    const { container } = render(<CollapsingLargeTitleHeader {...makeProps()} />);
+    // ProgressiveBlur renders a MaskedView wrapping the BlurView (both stubbed in
+    // the mobile test config). Its own colour-scheme behaviour is covered by
+    // progressive-blur.test.tsx.
+    expect(container.querySelector('[data-testid="masked-view"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="blur-view"]')).not.toBeNull();
   });
 
   it('reports its measured height through onHeightChange (container onLayout)', () => {

@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, Pressable, StyleSheet } from 'react-native';
+import { View, Pressable, ScrollView, StyleSheet } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import Animated, { useAnimatedRef, useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated';
 import { useQueryClient } from '@tanstack/react-query';
 import { router, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -100,17 +99,6 @@ export default function DiscoverLibrary() {
   // Measured top-chrome height so the scroll content clears the floating islands
   // (seeded to the safe-area top + a row, like the Climbs list).
   const [chromeHeight, setChromeHeight] = useState(() => insets.top + 56);
-
-  // Scroll offset drives the in-body "Discover" title collapsing into the chrome;
-  // tapping the collapsed title capsule scrolls back to the top.
-  const listRef = useAnimatedRef<Animated.ScrollView>();
-  const scrollY = useSharedValue(0);
-  const onScroll = useAnimatedScrollHandler((event) => {
-    scrollY.value = event.contentOffset.y;
-  });
-  const handleScrollToTop = useCallback(() => {
-    listRef.current?.scrollTo({ y: 0, animated: true });
-  }, [listRef]);
 
   const {
     data: smartCounts,
@@ -421,8 +409,7 @@ export default function DiscoverLibrary() {
 
   return (
     <View style={styles.flex}>
-      <Animated.ScrollView
-        ref={listRef}
+      <ScrollView
         style={styles.flex}
         contentInsetAdjustmentBehavior="never"
         contentContainerStyle={{
@@ -431,12 +418,9 @@ export default function DiscoverLibrary() {
         }}
         scrollIndicatorInsets={{ top: chromeHeight }}
         keyboardShouldPersistTaps="handled"
-        onScroll={onScroll}
-        scrollEventThrottle={16}
       >
         {/* The screen's identity, in-body under the floating chrome (the grey
-            "Discover" stack header is gone). Collapses into a header capsule as it
-            scrolls up behind the glass. */}
+            "Discover" stack header is gone). */}
         <Text variant="largeTitle" style={styles.screenTitle}>
           {t('bottomTabBar.discover')}
         </Text>
@@ -629,15 +613,13 @@ export default function DiscoverLibrary() {
             <ActivityIndicator size="large" />
           </View>
         ) : null}
-      </Animated.ScrollView>
+      </ScrollView>
 
       <DiscoverTopChrome
         canCreate={isAuthenticated}
         onCreate={handleCreatePress}
         onOpenBoardSwitcher={() => router.push({ pathname: '/boards', params: { returnTo: '/(tabs)/discover' } })}
         onHeightChange={setChromeHeight}
-        scrollY={scrollY}
-        onPressTitle={handleScrollToTop}
       />
 
       <PlaylistFormSheet

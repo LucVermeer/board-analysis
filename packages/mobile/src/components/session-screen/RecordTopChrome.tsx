@@ -1,6 +1,5 @@
 import { useCallback } from 'react';
 import { type LayoutChangeEvent, StyleSheet, View } from 'react-native';
-import { type SharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { Appbar } from 'react-native-paper';
@@ -18,16 +17,13 @@ import { spacing } from '../../theme/tokens';
 const noop = () => {};
 
 type RecordTopChromeProps = {
-  /** The session title — the large in-body title and the collapsed capsule. */
+  /** The session title — shown in the Material app bar; on glass the board pill +
+   *  in-body session content carry context (no scrolled title). */
   title: string;
   /** Open the full board switcher; the board pill doubles as the board picker. */
   onOpenBoardSwitcher: () => void;
   /** Report the measured chrome height so the list can inset its top padding. */
   onHeightChange: (height: number) => void;
-  /** List scroll offset, driving the title collapse. */
-  scrollY: SharedValue<number>;
-  /** Tapping the collapsed title capsule scrolls the list back to the top. */
-  onPressTitle: () => void;
   /** Open the invite sheet. Provided only while a session is live; the share
    *  glyph then docks at the far right of the chrome's right toolbar. */
   onShare?: () => void;
@@ -51,15 +47,12 @@ type RecordTopChromeProps = {
  * (mirroring `ClimbTopChrome`) — the session title via `Appbar.Content` and (only
  * while a session is live) a share `Appbar.Action`. The board is switched from the
  * in-body `BoardSummaryCard` (which carries the full name · size · angle), so the
- * app bar stays session-titled rather than duplicating a board switcher. There's
- * no collapse on Material, so `scrollY` / `onPressTitle` are unused.
+ * app bar stays session-titled rather than duplicating a board switcher.
  */
 export function RecordTopChrome({
   title,
   onOpenBoardSwitcher,
   onHeightChange,
-  scrollY,
-  onPressTitle,
   onShare,
   onEndSession,
 }: RecordTopChromeProps) {
@@ -150,7 +143,6 @@ export function RecordTopChrome({
 
   return (
     <CollapsingTopChrome
-      title={title}
       // Record has no create action — the create island is gated off (canCreate
       // false), so onCreate / createAccessibilityLabel are inert.
       canCreate={false}
@@ -159,8 +151,6 @@ export function RecordTopChrome({
       onOpenBoardSwitcher={onOpenBoardSwitcher}
       boardPillAccessibilityHint={tBoards('boardPill.switchHint')}
       onHeightChange={onHeightChange}
-      scrollY={scrollY}
-      onPressTitle={onPressTitle}
       leadingAction={leadingAction}
       leadingActionCount={onShare ? 1 : 0}
       trailingAction={trailingAction}

@@ -150,6 +150,9 @@ export default function SessionDetailScreen() {
         renderItem={renderItem}
         keyExtractor={keyExtractor}
         ListHeaderComponent={header}
+        // The stack header is transparent + blurred on iOS, so let the list
+        // inset its content below it (and the status bar) rather than draw under.
+        contentInsetAdjustmentBehavior="automatic"
         contentContainerStyle={{ paddingBottom }}
       />
 

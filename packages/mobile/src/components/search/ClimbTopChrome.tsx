@@ -1,14 +1,14 @@
-// Top chrome for the climbs list. The board pill, glass action islands and the
+// Top chrome for the climbs list. The board glyph, glass action islands and the
 // angle / lightbulb controls are shared with the Discover chrome via
 // CollapsingTopChrome (`../chrome`) so both tabs read as one system: on the
-// liquid-glass variant this file delegates to CollapsingTopChrome (centred board
-// pill that collapses into a filter title on scroll) and adds the climbs-only
-// search row. The Material variant keeps a dedicated Appbar.Header with the board
-// as its subtitle plus grade / filter quick chips.
+// liquid-glass variant this file delegates to CollapsingTopChrome (left/right
+// glass islands over the progressive blur) and adds the climbs-only search row.
+// Climbs is the one tab that keeps a header title — the filter summary sits
+// persistently in the centre. The Material variant keeps a dedicated
+// Appbar.Header with the board as its subtitle plus grade / filter quick chips.
 
 import { type RefObject, useCallback, useState } from 'react';
 import { Keyboard, type LayoutChangeEvent, StyleSheet, View } from 'react-native';
-import { type SharedValue } from 'react-native-reanimated';
 import { useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
@@ -36,18 +36,15 @@ const MATERIAL_SEARCH_HEIGHT = 48;
 
 type ClimbTopChromeProps = {
   searchMode?: 'custom' | 'native';
-  /** Title for the collapsed glass header capsule — the active filter summary, or
-   *  "All climbs" when no filter is active. The caller renders the matching large
-   *  in-body title at the top of the list. (Unused by the Material variant.) */
+  /** The active filter summary (e.g. "V4–V6 · Quality"), or "All climbs" when no
+   *  filter is active. Shown as a plain inline title once scrolled; the caller
+   *  renders the matching large in-body title at the top of the list. (Unused by
+   *  the Material variant.) */
   title: string;
   canCreate: boolean;
   onCreate: () => void;
   onOpenBoardDetail: () => void;
   onHeightChange: (height: number) => void;
-  /** List scroll offset, driving the glass title collapse. */
-  scrollY: SharedValue<number>;
-  /** Tapping the collapsed glass title scrolls the list back to the top. */
-  onPressTitle: () => void;
   searchFieldRef: RefObject<SearchHeaderHandle | null>;
   searchInitialValue: string;
   searchPlaceholder: string;
@@ -78,8 +75,6 @@ export function ClimbTopChrome({
   onCreate,
   onOpenBoardDetail,
   onHeightChange,
-  scrollY,
-  onPressTitle,
   searchFieldRef,
   searchInitialValue,
   searchPlaceholder,
@@ -234,19 +229,18 @@ export function ClimbTopChrome({
     );
   }
 
-  // Liquid-glass variant: the shared collapsing chrome (centred board pill that
-  // collapses into the filter title, board glyph docking into the toolbar) with
-  // the climbs-only search row as its below-row content.
+  // Liquid-glass variant: the shared chrome (left/right glass islands over the
+  // progressive blur) with the climbs-only search row as its below-row content.
+  // Climbs is the one tab that keeps a header title — the filter summary sits
+  // persistently in the centre via `centerTitle`.
   return (
     <CollapsingTopChrome
-      title={title}
+      centerTitle={title}
       canCreate={canCreate}
       onCreate={onCreate}
       createAccessibilityLabel={t('mobile.create.fab.ariaLabel')}
       onOpenBoardSwitcher={onOpenBoardDetail}
       onHeightChange={onHeightChange}
-      scrollY={scrollY}
-      onPressTitle={onPressTitle}
     >
       {usesCustomSearch ? (
         <View pointerEvents="box-none" style={styles.searchStack}>

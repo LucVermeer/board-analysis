@@ -109,7 +109,7 @@ type DrawerHostValue = {
    *  "Climb added to queue" snackbar's Open action). */
   openQueueSheet: () => void;
   /** Opens the board sheet ("now on the wall" — wall feed, history, stats, and a
-   *  separate Switch-board control). Wired to the BoardPill when the
+   *  separate Switch-board control). Wired to the board glyph when the
    *  `board-presence` flag is on. */
   openBoardSheet: () => void;
 };
@@ -484,7 +484,7 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
   );
 
   // Switch-board control inside the board sheet: dismiss the sheet, then open
-  // the existing board switcher (today's BoardPill destination).
+  // the existing board switcher (today's board-glyph destination).
   const handleSwitchBoardFromSheet = useCallback(() => {
     track(SHARED_EVENTS.BoardSwapInvokedFromSheet, { boardId: boardPresenceBoardIdRef.current ?? undefined });
     requestCloseBoardSheet();

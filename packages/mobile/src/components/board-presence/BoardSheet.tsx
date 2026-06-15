@@ -9,7 +9,7 @@
 //
 // State comes from `@boardsesh/board-presence-react`'s split current/feed
 // contexts, which are inert when the `board-presence` flag is off — so this
-// sheet is only ever opened from the BoardPill when the flag is on.
+// sheet is only ever opened from the board glyph when the flag is on.
 
 import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { Platform, Pressable, StyleSheet, View, type ColorValue } from 'react-native';

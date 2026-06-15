@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { Stack, useRouter } from 'expo-router';
-import { Platform, ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { BoardseshLogo } from '../src/components/BoardseshLogo';
 import { Button } from '../src/components/Button';
@@ -61,16 +61,9 @@ export default function AboutScreen() {
 
   return (
     <>
-      <Stack.Screen
-        options={{
-          title: t('mobile.about.title'),
-          headerShown: true,
-          headerLargeTitle: false,
-          headerTransparent: Platform.OS === 'ios',
-          headerBlurEffect: 'systemMaterial',
-          contentStyle: { backgroundColor: 'transparent' },
-        }}
-      />
+      {/* Inherits the transparent blur header + minimal back button from the
+          root stack's glassStackScreenOptions; just turns the header on. */}
+      <Stack.Screen options={{ title: t('mobile.about.title'), headerShown: true }} />
       <ScrollView
         contentInsetAdjustmentBehavior="automatic"
         contentContainerStyle={[styles.container, { paddingBottom: bottomChrome.scrollBottomPadding + spacing[6] }]}

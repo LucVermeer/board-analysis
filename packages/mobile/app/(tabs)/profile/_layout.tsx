@@ -1,22 +1,13 @@
 import { Stack } from 'expo-router';
-import { Platform } from 'react-native';
 import { useTranslation } from 'react-i18next';
+import { glassStackScreenOptions } from '../../../src/theme/navigation';
 
 export default function ProfileLayout() {
   const { t } = useTranslation('common');
   const { t: tSettings } = useTranslation('settings');
 
   return (
-    <Stack
-      screenOptions={{
-        headerLargeTitle: false,
-        // Solid header on Android (transparent blur is iOS-only; on Android it
-        // leaves content under the floating header + status bar). See climbs/_layout.
-        headerTransparent: Platform.OS === 'ios',
-        headerBlurEffect: 'systemMaterial',
-        contentStyle: { backgroundColor: 'transparent' },
-      }}
-    >
+    <Stack screenOptions={glassStackScreenOptions}>
       {/* The You screen owns its top via the floating ProfileTopChrome (large
           title collapsing into a glass capsule), like the Discover/Climbs tabs —
           so the stack header is hidden here. */}

@@ -35,6 +35,13 @@ export default defineConfig({
       '@react-native-async-storage/async-storage': fileURLToPath(
         new URL('./test/async-storage-stub.ts', import.meta.url),
       ),
+      // @react-native-masked-view/masked-view and @react-native-community/blur are
+      // native modules that can't load under vitest's node/jsdom env. Stub them so
+      // any suite can import a blur/glass primitive (GlassSurface, ProgressiveBlur)
+      // without crashing; suites that assert their props register their own vi.mock,
+      // which takes precedence over these aliases.
+      '@react-native-masked-view/masked-view': fileURLToPath(new URL('./test/masked-view-stub.tsx', import.meta.url)),
+      '@react-native-community/blur': fileURLToPath(new URL('./test/community-blur-stub.tsx', import.meta.url)),
     },
     // .tsx test files can opt into a jsdom environment per file via the
     // `// @vitest-environment jsdom` pragma — needed to render React
