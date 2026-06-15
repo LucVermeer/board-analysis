@@ -382,6 +382,9 @@ const createEmptySessionRuntimeState = (): MobileSessionRuntimeState => ({
   boardPath: '',
 });
 
+// Stable empty Set so the no-session case never publishes a fresh identity.
+const EMPTY_USER_ID_SET: ReadonlySet<string> = new Set<string>();
+
 export function QueueProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(queueReducer, defaultSearchParams, initialState);
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -1672,29 +1675,23 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     [playlistSuggestionSource],
   );
 
-  // Sorted, logged-in member userIds (anonymous members have no userId to match,
-  // so they're filtered out). `sessionUsers` gets a new array identity on every
-  // ≤1/2s SessionStatsUpdated push even when the roster is unchanged; sorting gives
-  // a stable order for the change-detector below.
-  const sessionMemberUserIdList = useMemo(
-    () =>
-      sessionUsers
-        .map((user) => user.userId)
-        .filter((userId): userId is string => userId != null)
-        .sort(),
-    [sessionUsers],
-  );
-  // Gate the Set's identity on a content signature so a stats push with an
-  // unchanged roster doesn't churn the session-control value (and re-light the
-  // bulbs that read it). The Set is rebuilt from the list itself — never by
-  // splitting the signature back into ids — so it's robust to any userId shape.
-  const sessionMemberUserIdSignature = sessionMemberUserIdList.join(' ');
-  const sessionMemberUserIds = useMemo<ReadonlySet<string>>(
-    // Depends on the signature, not the list: the list gets a fresh identity on
-    // each stats push, but the Set rebuilds only when its contents actually change.
-    () => new Set(sessionMemberUserIdList),
-    [sessionMemberUserIdSignature],
-  );
+  // The logged-in member userIds (anonymous members have no userId to match, so
+  // they're filtered out), used to id-match the board-presence holder. `sessionUsers`
+  // gets a fresh array identity on every ≤1/2s SessionStatsUpdated push even when the
+  // roster is unchanged, so we hold the Set in a ref and keep its identity stable by
+  // content equality: a new Set is published only when the membership actually
+  // changes, so a stats-only push doesn't churn the session-control value (and
+  // re-light the bulbs that read it). Content equality also avoids any
+  // string-signature delimiter ambiguity.
+  const sessionMemberUserIdsRef = useRef<ReadonlySet<string>>(EMPTY_USER_ID_SET);
+  const sessionMemberUserIds = useMemo<ReadonlySet<string>>(() => {
+    const next = new Set(sessionUsers.map((user) => user.userId).filter((userId): userId is string => userId != null));
+    const prev = sessionMemberUserIdsRef.current;
+    const unchanged = prev.size === next.size && [...next].every((userId) => prev.has(userId));
+    if (unchanged) return prev;
+    sessionMemberUserIdsRef.current = next;
+    return next;
+  }, [sessionUsers]);
 
   const sessionControlValue = useMemo<QueueSessionControlContextValue>(
     () => ({
