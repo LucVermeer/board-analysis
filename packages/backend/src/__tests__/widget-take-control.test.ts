@@ -69,6 +69,7 @@ vi.mock('../services/queue-navigation', () => ({
 }));
 
 const { handleWidgetTakeControl } = await import('../handlers/widget-take-control');
+const { __resetWidgetRateLimitForTests } = await import('../handlers/widget-rate-limit');
 
 const SESSION_ID = 'session-widget-test';
 const USER_ID = 'user-widget-test';
@@ -153,6 +154,7 @@ function makeResponse(): MockRes {
 describe('handleWidgetTakeControl (re-assert)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    __resetWidgetRateLimitForTests();
     tokenLookupRows.mockReturnValue([]);
     getQueueStateMock.mockResolvedValue({ queue: [], currentClimbQueueItem: null });
     setCurrentClimbAndPublishMock.mockResolvedValue({
@@ -273,6 +275,33 @@ describe('handleWidgetTakeControl (re-assert)', () => {
     const parsed = JSON.parse(res.body) as { success: boolean };
     expect(parsed.success).toBe(true);
     expect(setCurrentClimbAndPublishMock).not.toHaveBeenCalled();
+  });
+
+  it('rate-limits rapid re-assert mashing per session (429) after the bucket drains', async () => {
+    // The re-assert calls setCurrentClimbAndPublish (optimistic-lock retry loop
+    // + BLE re-send), so lock-screen lightbulb mashing must be bounded. Shared
+    // per-session token bucket: capacity 2, so the 3rd rapid tap is rejected.
+    tokenLookupRows.mockReturnValue([{ sessionId: SESSION_ID, userId: USER_ID }]);
+    const current = makeClimbItem();
+    getQueueStateMock.mockResolvedValue({ queue: [current], currentClimbQueueItem: current });
+
+    async function tap(): Promise<number> {
+      const req = makeRequest({
+        method: 'POST',
+        authHeader: `Bearer ${REGISTERED_TOKEN}`,
+        body: { sessionId: SESSION_ID },
+      });
+      const res = makeResponse();
+      await handleWidgetTakeControl(req as unknown as IncomingMessage, res as unknown as ServerResponse);
+      return res.statusCode;
+    }
+
+    expect(await tap()).toBe(200);
+    expect(await tap()).toBe(200);
+    // Third rapid tap drains the bucket -> 429, and no extra board write fires.
+    const third = await tap();
+    expect(third).toBe(429);
+    expect(setCurrentClimbAndPublishMock).toHaveBeenCalledTimes(2);
   });
 
   it('returns 500 without leaking details when the re-assert fails', async () => {

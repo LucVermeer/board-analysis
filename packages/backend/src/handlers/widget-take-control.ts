@@ -4,6 +4,7 @@ import { authenticateWidget } from './widget-auth';
 import { roomManager } from '../services/room-manager';
 import { pubsub } from '../pubsub/index';
 import { setCurrentClimbAndPublish } from '../services/queue-navigation';
+import { checkWidgetRateLimit, ensureWidgetRateLimitPruner } from './widget-rate-limit';
 import { logger } from '../utils/logger';
 
 interface WidgetTakeControlBody {
@@ -112,6 +113,18 @@ export async function handleWidgetTakeControl(req: IncomingMessage, res: ServerR
   if (!authResult.userId) {
     res.writeHead(403, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ success: false, error: 'Widget re-assert requires an authenticated participant' }));
+    return;
+  }
+
+  // Per-session rate limit (shared with /api/widget/navigate, token bucket
+  // capacity 2, refill 1 / 1.5s). The re-assert calls setCurrentClimbAndPublish,
+  // whose optimistic-lock retry loop + BLE re-send make rapid lock-screen
+  // lightbulb mashes a stampede risk. Applied after auth so an unauthenticated
+  // caller can't poison a member's bucket.
+  ensureWidgetRateLimitPruner();
+  if (!checkWidgetRateLimit(sessionId)) {
+    res.writeHead(429, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: false, error: 'Too many requests' }));
     return;
   }
 

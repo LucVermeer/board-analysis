@@ -1,6 +1,16 @@
 'use client';
 
-import React, { useCallback, useEffect, useLayoutEffect, useRef, useState, useMemo, useDeferredValue } from 'react';
+import React, {
+  useCallback,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useMemo,
+  useDeferredValue,
+} from 'react';
+import { BoardPresenceCurrentContext } from '@boardsesh/board-presence-react';
 import { useTranslation } from 'react-i18next';
 import { track } from '@/app/lib/analytics';
 import IconButton from '@mui/material/IconButton';
@@ -186,6 +196,11 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
     reassertWall,
     reconnectSerialForCurrentBoard,
   } = useBluetoothContext();
+
+  // Board-presence connection holder — "someone is connected to and writing the
+  // wall right now" (seeded for late joiners via fetchConnection). Used only to
+  // light the party lightbulb; null when the board is free or unbound.
+  const boardPresenceCurrent = useContext(BoardPresenceCurrentContext);
 
   // In a party session, the drawer-local `drawerDisplayedItem` (set by browse
   // callers via the open-drawer event payload) takes precedence over the wall
@@ -753,7 +768,11 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
             onToggleFavorite={toggleFavorite}
             onOpenActions={handleOpenActionsMenu}
             onOpenQueue={handleOpenQueueDrawer}
-            lightbulbActive={isPersistentSessionActive ? wallConfirmed : isBluetoothConnected}
+            lightbulbActive={
+              isPersistentSessionActive
+                ? wallConfirmed || isBluetoothConnected || boardPresenceCurrent?.holder != null
+                : isBluetoothConnected
+            }
             lightbulbPending={pendingClimbUuid != null}
             lightbulbCoachmark={showLightbulbCoachmark && !pendingClimbUuid}
             lightbulbCoachmarkText={t('playView.actionBar.lightbulb.coachmark')}
