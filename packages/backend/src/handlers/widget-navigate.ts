@@ -9,6 +9,7 @@ import {
   trackLiveActivityWidgetNavigationAttributionGap,
 } from '../services/analytics/live-activity';
 import { checkWidgetRateLimit, ensureWidgetRateLimitPruner, __resetWidgetRateLimitForTests } from './widget-rate-limit';
+import { verifyWidgetSession } from './widget-session-guard';
 import { logger } from '../utils/logger';
 
 // Re-exported so existing callers/tests that import the reset from this module
@@ -186,10 +187,10 @@ export async function handleWidgetNavigate(req: IncomingMessage, res: ServerResp
   }
 
   try {
-    // Sessions are always-live: any authenticated session member may navigate
-    // the wall. The Live Activity token already proves session membership (a
-    // row in activity_push_tokens bound to this sessionId), so no further
-    // ownership gate is needed here.
+    // Sessions are always-live: any current session member may navigate the
+    // wall (no driver gate). The Live Activity token proves the user joined at
+    // some point, but that row outlives session-end and leave — so re-check the
+    // durable session/membership below before mutating.
 
     // Rate limit (per session) — apply *after* auth so an unauthenticated
     // caller can't poison a member's bucket.
@@ -202,6 +203,22 @@ export async function handleWidgetNavigate(req: IncomingMessage, res: ServerResp
       });
       res.writeHead(429, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ success: false, error: 'Too many requests' }));
+      return;
+    }
+
+    // Reject stale tokens whose session has ended or whose user isn't a
+    // participant, before any queue read/mutation (else a stale token revives
+    // an ended session's persisted queue).
+    const guard = await verifyWidgetSession(sessionId, authResult.userId);
+    if (!guard.ok) {
+      trackWidgetNavigation(authResult.userId, {
+        sessionId,
+        action,
+        outcome: guard.status === 410 ? 'session_ended' : 'not_participant',
+        statusCode: guard.status,
+      });
+      res.writeHead(guard.status, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: false, error: guard.error }));
       return;
     }
 

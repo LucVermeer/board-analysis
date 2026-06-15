@@ -5,6 +5,7 @@ import { roomManager } from '../services/room-manager';
 import { pubsub } from '../pubsub/index';
 import { setCurrentClimbAndPublish } from '../services/queue-navigation';
 import { checkWidgetRateLimit, ensureWidgetRateLimitPruner } from './widget-rate-limit';
+import { verifyWidgetSession } from './widget-session-guard';
 import { logger } from '../utils/logger';
 
 interface WidgetTakeControlBody {
@@ -125,6 +126,16 @@ export async function handleWidgetTakeControl(req: IncomingMessage, res: ServerR
   if (!checkWidgetRateLimit(sessionId)) {
     res.writeHead(429, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ success: false, error: 'Too many requests' }));
+    return;
+  }
+
+  // Reject stale tokens whose session has ended or whose user isn't a
+  // participant, before reading/re-publishing the queue (else a stale token
+  // revives an ended session's persisted queue via setCurrentClimbAndPublish).
+  const guard = await verifyWidgetSession(sessionId, authResult.userId);
+  if (!guard.ok) {
+    res.writeHead(guard.status, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: false, error: guard.error }));
     return;
   }
 

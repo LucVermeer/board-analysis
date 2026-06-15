@@ -15,6 +15,7 @@ import { describe, it, expect, vi, beforeEach } from 'vite-plus/test';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { EventEmitter } from 'node:events';
 import type { ClimbQueueItem } from '@boardsesh/shared-schema';
+import { boardSessionParticipants } from '../db/schema';
 
 type TokenRow = { sessionId: string; userId: string | null };
 
@@ -24,6 +25,15 @@ type MockQueueState = {
 };
 
 const tokenLookupRows = vi.fn<() => TokenRow[]>(() => []);
+// Durable board_session_participants lookup used by the widget-session guard;
+// default participant. Separate from tokenLookupRows so a test can simulate
+// "token row exists but user isn't a participant".
+const participantRows = vi.fn<() => Array<{ sessionId: string }>>(() => [{ sessionId: 'participant-row' }]);
+// Durable session row used by the guard's ended-session check. Default active.
+const getSessionByIdMock = vi.fn<() => Promise<{ status: string; endedAt: Date | null } | null>>(async () => ({
+  status: 'active',
+  endedAt: null,
+}));
 const getQueueStateMock = vi.fn<() => Promise<MockQueueState>>(async () => ({
   queue: [],
   currentClimbQueueItem: null,
@@ -38,9 +48,15 @@ const setCurrentClimbAndPublishMock = vi.fn(async () => ({
 vi.mock('../db/client', () => {
   function makeChain() {
     const chain: Record<string, unknown> = {};
-    chain.from = vi.fn(() => chain);
+    let table: unknown = null;
+    chain.from = vi.fn((from: unknown) => {
+      table = from;
+      return chain;
+    });
     chain.where = vi.fn(() => chain);
-    chain.limit = vi.fn(async (_n: number) => tokenLookupRows());
+    chain.limit = vi.fn(async (_n: number) =>
+      table === boardSessionParticipants ? participantRows() : tokenLookupRows(),
+    );
     return chain;
   }
   return {
@@ -57,6 +73,7 @@ vi.mock('../handlers/cors', () => ({
 vi.mock('../services/room-manager', () => ({
   roomManager: {
     getQueueState: getQueueStateMock,
+    getSessionById: getSessionByIdMock,
   },
 }));
 
@@ -156,6 +173,8 @@ describe('handleWidgetTakeControl (re-assert)', () => {
     vi.clearAllMocks();
     __resetWidgetRateLimitForTests();
     tokenLookupRows.mockReturnValue([]);
+    participantRows.mockReturnValue([{ sessionId: 'participant-row' }]);
+    getSessionByIdMock.mockResolvedValue({ status: 'active', endedAt: null });
     getQueueStateMock.mockResolvedValue({ queue: [], currentClimbQueueItem: null });
     setCurrentClimbAndPublishMock.mockResolvedValue({
       sequence: 1,
@@ -256,6 +275,42 @@ describe('handleWidgetTakeControl (re-assert)', () => {
     expect(callArgs[1].uuid).toBe(current.uuid);
     expect(callArgs[2]).toBe(false);
     expect(callArgs[6]).toBe('widget-take-control');
+  });
+
+  it('returns 410 without re-asserting when the session has ended (stale token)', async () => {
+    tokenLookupRows.mockReturnValue([{ sessionId: SESSION_ID, userId: USER_ID }]);
+    const current = makeClimbItem();
+    getQueueStateMock.mockResolvedValue({ queue: [current], currentClimbQueueItem: current });
+    getSessionByIdMock.mockResolvedValue({ status: 'ended', endedAt: new Date('2026-01-01T00:00:00Z') });
+
+    const req = makeRequest({
+      method: 'POST',
+      authHeader: `Bearer ${REGISTERED_TOKEN}`,
+      body: { sessionId: SESSION_ID },
+    });
+    const res = makeResponse();
+    await handleWidgetTakeControl(req as unknown as IncomingMessage, res as unknown as ServerResponse);
+
+    expect(res.statusCode).toBe(410);
+    expect(setCurrentClimbAndPublishMock).not.toHaveBeenCalled();
+  });
+
+  it('returns 403 without re-asserting when the token user is not a participant', async () => {
+    tokenLookupRows.mockReturnValue([{ sessionId: SESSION_ID, userId: USER_ID }]);
+    const current = makeClimbItem();
+    getQueueStateMock.mockResolvedValue({ queue: [current], currentClimbQueueItem: current });
+    participantRows.mockReturnValue([]); // token row exists, but no participant record
+
+    const req = makeRequest({
+      method: 'POST',
+      authHeader: `Bearer ${REGISTERED_TOKEN}`,
+      body: { sessionId: SESSION_ID },
+    });
+    const res = makeResponse();
+    await handleWidgetTakeControl(req as unknown as IncomingMessage, res as unknown as ServerResponse);
+
+    expect(res.statusCode).toBe(403);
+    expect(setCurrentClimbAndPublishMock).not.toHaveBeenCalled();
   });
 
   it('succeeds without re-publishing when there is no current climb', async () => {
