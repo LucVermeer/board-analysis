@@ -19,6 +19,9 @@ const bottomChrome = vi.hoisted(() => ({
     fixedFooterBottom: 88,
     jsQueueReserve: 0,
     tabBarBottom: 50,
+    // The Material-vs-glass arbitration now lives in computeBottomChromeMetrics
+    // (unit-tested there); InSessionView just wires this resolved field.
+    inSessionListBottom: 130,
   },
 }));
 
@@ -162,7 +165,7 @@ import { InSessionView } from '../InSessionView';
 describe('InSessionView footer', () => {
   beforeEach(() => {
     list.contentContainerStyle = null;
-    bottomChrome.metrics = { fixedFooterBottom: 88, jsQueueReserve: 0, tabBarBottom: 50 };
+    bottomChrome.metrics = { fixedFooterBottom: 88, jsQueueReserve: 0, tabBarBottom: 50, inSessionListBottom: 130 };
     theme.variant = 'liquidGlass';
     queue.endSession.mockReset();
     queue.endSession.mockResolvedValue(null);
@@ -181,7 +184,7 @@ describe('InSessionView footer', () => {
   });
 
   it('adds the JS queue capsule reserve on Liquid Glass fallback devices', () => {
-    bottomChrome.metrics = { fixedFooterBottom: 196, jsQueueReserve: 66, tabBarBottom: 50 };
+    bottomChrome.metrics = { fixedFooterBottom: 196, jsQueueReserve: 66, tabBarBottom: 50, inSessionListBottom: 196 };
 
     render(createElement(InSessionView));
 
@@ -192,7 +195,7 @@ describe('InSessionView footer', () => {
 
   it('uses the fixed-footer reserve for the Material active-context bar', () => {
     theme.variant = 'material';
-    bottomChrome.metrics = { fixedFooterBottom: 88, jsQueueReserve: 48, tabBarBottom: 50 };
+    bottomChrome.metrics = { fixedFooterBottom: 88, jsQueueReserve: 48, tabBarBottom: 50, inSessionListBottom: 88 };
 
     render(createElement(InSessionView));
 

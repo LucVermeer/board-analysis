@@ -2,6 +2,7 @@ import { Platform } from 'react-native';
 import { useTheme } from '../providers/theme-provider';
 import { useReduceTransparency } from './use-reduce-transparency';
 import { useGlassCapability } from './use-glass-capability';
+import { assertNever } from '../lib/assert-never';
 
 /**
  * How a translucent surface should actually render on this device, for this
@@ -22,9 +23,17 @@ export function useEffectiveSurfaceMode(): SurfaceMode {
   const reduceTransparency = useReduceTransparency();
   const glassCapable = useGlassCapability();
 
+  // a11y wins regardless of variant.
   if (reduceTransparency) return 'solid';
-  if (variant === 'material') return 'material';
-  if (glassCapable) return 'glass';
-  if (Platform.OS === 'ios') return 'blur';
-  return 'solid';
+  switch (variant) {
+    case 'material':
+      return 'material';
+    case 'liquidGlass':
+      if (glassCapable) return 'glass';
+      if (Platform.OS === 'ios') return 'blur';
+      return 'solid';
+    // A new UiVariant must declare its surface mode.
+    default:
+      return assertNever(variant);
+  }
 }

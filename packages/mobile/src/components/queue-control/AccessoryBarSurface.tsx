@@ -57,8 +57,9 @@ export function AccessoryBarSurface({
     );
   }
 
-  // Material is already opaque, so keep it on the Material surface path even
-  // when Reduce Transparency resolves translucent surfaces to solid.
+  // Material is already opaque, so keep it on the Material surface path even when
+  // Reduce Transparency resolves translucent surfaces to solid. Genuine dual-axis
+  // check (surface capability OR aesthetic variant) — see theme/variants/README.md.
   if (mode === 'material' || variant === 'material') {
     // Docked: neutral M3 surface that reads one elevation step above the tab bar
     // (hairline separator + elevation shadow). Floating: the same surface as a

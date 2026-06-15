@@ -11,11 +11,19 @@ vi.mock('react-native', () => ({
 }));
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock('../../../providers/theme-provider', () => ({
-  useTheme: () => ({
-    variant: ctrl.variant,
-    systemColors: { label: '#000', fill: '#eee', separator: '#ccc' },
-    brandColors: { primary: '#6D28D9' },
-  }),
+  useTheme: () => {
+    const label = '#000';
+    return {
+      variant: ctrl.variant,
+      systemColors: { label, fill: '#eee', separator: '#ccc' },
+      brandColors: { primary: '#6D28D9' },
+      // Done glyph uses the `pin` action colour: label on Liquid Glass, brand on Material.
+      actionColors:
+        ctrl.variant === 'material'
+          ? { neutral: label, success: label, favorite: '#FF3B30', accent: label, pin: '#6D28D9' }
+          : { neutral: label, success: label, favorite: label, accent: label, pin: label },
+    };
+  },
 }));
 vi.mock('../../../hooks/use-native-glass', () => ({ useNativeGlass: () => false }));
 vi.mock('../../../theme/tokens', () => ({ shadows: { sm: {} } }));

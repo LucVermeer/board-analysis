@@ -40,6 +40,7 @@ import { Text } from '../../Text';
 import { GradeSingleSelectRail } from '../../grade';
 import { useGradeFormat } from '../../../hooks/use-grade-format';
 import { useTheme } from '../../../providers/theme-provider';
+import { createVariantComponent, selectByVariant } from '../../../theme/variants';
 import { hapticSelection } from '../../../lib/haptics';
 import { spacing, borderRadius } from '../../../theme/tokens';
 import { springs } from '../../../theme/animations';
@@ -154,10 +155,7 @@ type ChipProps = {
 // selected) so it reads as a native M3 filter chip rather than an iOS pill.
 // Split into two sub-components (rather than an early return) so the glass
 // branch's reanimated hooks stay unconditional across a runtime variant flip.
-function Chip(props: ChipProps) {
-  const { variant } = useTheme();
-  return variant === 'material' ? <ChipMaterial {...props} /> : <ChipGlass {...props} />;
-}
+const Chip = createVariantComponent('Chip', { liquidGlass: ChipGlass, material: ChipMaterial });
 
 function ChipMaterial({ label, selected, onPress, accessibilityLabel }: ChipProps) {
   return (
@@ -217,7 +215,7 @@ type StepperRow = { key: string; node: ReactNode };
 // pattern. Rows carry stable keys (the option field name), so no index keys.
 function GroupedSteppers({ rows }: { rows: StepperRow[] }) {
   const { systemColors, variant, m3 } = useTheme();
-  const isMaterial = variant === 'material';
+  const isMaterial = selectByVariant(variant, { material: true, liquidGlass: false });
   // Material: a filled tonal card (surfaceVariant) with outlineVariant dividers,
   // instead of the iOS `${systemGray}14` inset-table look.
   return (
@@ -271,7 +269,7 @@ export function GeneratorPickerCard({
   const { t } = useTranslation('session');
   const { systemColors, variant, m3 } = useTheme();
   const { formatGradeByDifficultyId } = useGradeFormat();
-  const isMaterial = variant === 'material';
+  const isMaterial = selectByVariant(variant, { material: true, liquidGlass: false });
 
   const isKilterHomewall = boardName === 'kilter' && layoutId === KILTER_HOMEWALL_LAYOUT_ID;
   const showTallClimbsFilter = isKilterHomewall && sizeId != null && isKilterHomewallTallSizeId(sizeId);

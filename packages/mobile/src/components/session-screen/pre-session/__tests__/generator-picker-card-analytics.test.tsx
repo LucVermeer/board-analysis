@@ -185,7 +185,12 @@ vi.mock('../../../../hooks/use-grade-format', () => ({
   useGradeFormat: () => ({ formatGradeByDifficultyId: (difficultyId: number) => `V${difficultyId}` }),
 }));
 vi.mock('../../../../providers/theme-provider', () => ({
-  useTheme: () => ({ systemColors: { fill: '#eee' }, brandColors: {}, opacity: { disabled: 0.5 } }),
+  useTheme: () => ({
+    systemColors: { fill: '#eee' },
+    brandColors: {},
+    opacity: { disabled: 0.5 },
+    variant: 'liquidGlass',
+  }),
 }));
 vi.mock('../../../../lib/haptics', () => ({ hapticSelection: haptics.hapticSelection }));
 vi.mock('../../../../theme/tokens', () => ({ spacing: {}, borderRadius: {} }));

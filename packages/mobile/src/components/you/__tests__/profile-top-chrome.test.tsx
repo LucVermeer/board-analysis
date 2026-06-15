@@ -2,10 +2,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, fireEvent } from '@testing-library/react';
 import { createElement, type ReactNode } from 'react';
-import type { ProfileTabKey } from '../ProfileTopChrome';
+import type { ProfileTabKey, ProfileTopChromeProps } from '../ProfileTopChrome';
 
 const ctrl = vi.hoisted(() => ({
-  variant: 'glass' as 'glass' | 'material',
+  variant: 'liquidGlass' as 'liquidGlass' | 'material',
 }));
 // Captures the props the SegmentedControl receives so the test can assert its
 // option set / selected key / which variant branch rendered it.
@@ -147,7 +147,7 @@ vi.mock('../../chrome', () => ({
 
 import { ProfileTopChrome } from '../ProfileTopChrome';
 
-function makeProps(over: Partial<Parameters<typeof ProfileTopChrome>[0]> = {}) {
+function makeProps(over: Partial<ProfileTopChromeProps> = {}) {
   return {
     activeTab: 'progress' as ProfileTabKey,
     onSelectTab: vi.fn(),
@@ -166,7 +166,7 @@ const filterIcon = (root: HTMLElement) => root.querySelector('[data-icon="filter
 
 describe('ProfileTopChrome', () => {
   beforeEach(() => {
-    ctrl.variant = 'glass';
+    ctrl.variant = 'liquidGlass';
     segments.entries = [];
     materialTabs.entries = [];
   });

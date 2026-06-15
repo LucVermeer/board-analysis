@@ -482,6 +482,13 @@ export default defineConfig({
         command: 'tsx scripts/mobile-patches-check.ts',
         cache: false,
       },
+      'check:mobile-variants': {
+        // Guards against raw theme-variant magic-string compares regrowing in
+        // mobile components — they must route through selectByVariant /
+        // createVariantComponent / a theme.* token (see theme/variants/README.md).
+        command: 'bash scripts/mobile-variant-guard.sh',
+        cache: false,
+      },
       'check:mobile-bundle': {
         command: 'bash scripts/mobile-bundle-check.sh',
         cache: false,

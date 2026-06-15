@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import type BottomSheet from '@gorhom/bottom-sheet';
 import type { SessionFeedItem, SocialEntityType } from '@boardsesh/shared-schema';
 import { Text } from '../Text';
+import { ScreenTitle } from '../ScreenTitle';
 import { Icon } from '../Icon';
 import { Button } from '../Button';
 import { Card } from '../Card';
@@ -88,7 +89,7 @@ function SessionCardSkeleton() {
 
 export function SessionsTab({ userId, topInset = 0 }: SessionsTabProps) {
   const { t } = useTranslation('you');
-  const { systemColors, brandColors, variant } = useTheme();
+  const { systemColors, brandColors } = useTheme();
   const router = useRouter();
   const { openPlayDrawer } = useDrawerHost();
   const bottomChrome = useBottomChromeMetrics();
@@ -198,17 +199,12 @@ export function SessionsTab({ userId, topInset = 0 }: SessionsTabProps) {
   const listHeader = useMemo(
     () => (
       <>
-        {/* On Material the M3 app bar owns the title, so the in-body large title is
-            gated off there to avoid a doubled title. */}
-        {variant === 'material' ? null : (
-          <Text variant="largeTitle" style={styles.screenTitle}>
-            {t('metadata.dashboard.title')}
-          </Text>
-        )}
+        {/* ScreenTitle hides itself on Material (the M3 app bar owns the title). */}
+        <ScreenTitle style={styles.screenTitle}>{t('metadata.dashboard.title')}</ScreenTitle>
         {sessions.length > 0 ? <SessionsFeedHeader sessions={sessions} now={now} /> : null}
       </>
     ),
-    [t, sessions, now, variant],
+    [t, sessions, now],
   );
 
   if (!userId) {

@@ -10,6 +10,7 @@ import { PressableSurface } from '../PressableSurface';
 import { iconMap } from '../icon-map';
 import { UserAvatarToolbarAction } from '../user-drawer/UserAvatarToolbarAction';
 import { useTheme } from '../../providers/theme-provider';
+import { selectByVariant } from '../../theme/variants';
 import { spacing } from '../../theme/tokens';
 
 // Record's defining action is the Start/End footer button, so the chrome's
@@ -66,7 +67,8 @@ export function RecordTopChrome({
     [onHeightChange],
   );
 
-  if (variant === 'material') {
+  const isMaterial = selectByVariant(variant, { material: true, liquidGlass: false });
+  if (isMaterial) {
     return (
       <View
         pointerEvents="box-none"

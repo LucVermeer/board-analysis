@@ -51,6 +51,9 @@ const bottomChrome = vi.hoisted(() => ({
     tabBarBottom: 120,
     tabBarHeight: 49,
     fixedFooterBottom: 120,
+    // Liquid Glass anchors to the raw safe-area inset (100); the Material-vs-glass
+    // arbitration lives in computeBottomChromeMetrics. PreSessionView wires this field.
+    preSessionFooterBottom: 100,
   },
 }));
 
@@ -195,6 +198,7 @@ beforeEach(() => {
     tabBarBottom: 120,
     tabBarHeight: 49,
     fixedFooterBottom: 120,
+    preSessionFooterBottom: 100,
   };
   preview.result.items = [makeRow('a'), makeRow('b')] as unknown[];
   preview.result.refreshingUuids = new Set<string>();

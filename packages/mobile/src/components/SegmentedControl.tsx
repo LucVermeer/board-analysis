@@ -5,6 +5,7 @@ import { PressableSurface } from './PressableSurface';
 import { hapticSelection } from '../lib/haptics';
 import { spacing } from '../theme/tokens';
 import { useTheme } from '../providers/theme-provider';
+import { selectByVariant } from '../theme/variants';
 
 type SegmentOption<K extends string> = {
   key: K;
@@ -102,8 +103,14 @@ function Segment({
  * change.
  */
 export function SegmentedControl<K extends string = string>(props: SegmentedControlProps<K>) {
-  const { variant: uiVariant } = useTheme();
-  return uiVariant === 'material' ? <SegmentedControlMaterial {...props} /> : <SegmentedControlGlass {...props} />;
+  // Generic over the option key, so it stays an explicit wrapper (the variant factory
+  // fixes the prop type); selectByVariant keeps the swap declarative — no raw
+  // `variant ===` — and renders the chosen impl as JSX (its own fiber/hooks).
+  const Impl = selectByVariant(useTheme().variant, {
+    liquidGlass: SegmentedControlGlass,
+    material: SegmentedControlMaterial,
+  });
+  return <Impl {...props} />;
 }
 
 function SegmentedControlMaterial<K extends string = string>({

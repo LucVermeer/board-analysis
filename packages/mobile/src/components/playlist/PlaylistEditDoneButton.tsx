@@ -29,10 +29,12 @@ type PlaylistEditDoneButtonProps = {
  */
 export function PlaylistEditDoneButton({ onPress, collapsed }: PlaylistEditDoneButtonProps) {
   const { t } = useTranslation('playlists');
-  const { systemColors, brandColors, variant } = useTheme();
+  const { systemColors, actionColors } = useTheme();
   const nativeGlass = useNativeGlass();
   const label = t('editClimbs.done');
-  const actionColor = variant === 'liquidGlass' ? systemColors.label : brandColors.primary;
+  // Done glyph/label: monochrome on Liquid Glass, brand on Material (the `pin`
+  // action policy — both share "glass → label, material → brand primary").
+  const actionColor = actionColors.pin;
 
   if (collapsed) {
     return (

@@ -13,6 +13,7 @@ vi.mock('../../providers/theme-provider', () => ({
     systemColors: { label: '#000', separator: '#ccc', tertiaryBackground: '#eee', tertiaryLabel: '#aaa' },
     brandColors: { primary: '#6D28D9' },
     opacity: { disabled: 0.5 },
+    variant: 'liquidGlass',
   }),
 }));
 vi.mock('../../theme/tokens', () => ({ spacing: { 2: 8, 3: 12, 4: 16 }, borderRadius: { md: 10 } }));

@@ -16,6 +16,7 @@ import { Appbar, Chip } from 'react-native-paper';
 import type { Grade } from '@boardsesh/shared-schema';
 import type { GradeBound } from '@boardsesh/climb-filters';
 import { useTheme } from '../../providers/theme-provider';
+import { selectByVariant } from '../../theme/variants';
 import { useActiveBoard, useSetActiveBoard } from '../../lib/graphql/use-active-board';
 import { spacing } from '../../theme/tokens';
 import { hapticLight } from '../../lib/haptics';
@@ -119,7 +120,8 @@ export function ClimbTopChrome({
     onSearchBlur();
   }, [onSearchBlur]);
 
-  if (variant === 'material') {
+  const isMaterial = selectByVariant(variant, { material: true, liquidGlass: false });
+  if (isMaterial) {
     const hasGradeFilter = gradeChip?.active === true;
     const nonGradeFilterCount = Math.max(0, activeFilterCount - (hasGradeFilter ? 1 : 0));
     const hasNonGradeFilters = nonGradeFilterCount > 0;
