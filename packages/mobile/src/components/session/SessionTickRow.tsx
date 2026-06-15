@@ -1,4 +1,4 @@
-import { memo } from 'react';
+import { memo, useCallback } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import type { SessionDetailTick, SessionFeedParticipant } from '@boardsesh/shared-schema';
@@ -95,10 +95,10 @@ export const SessionTickRow = memo(function SessionTickRow({
   const subtitleParts = [attemptText, tick.comment ?? null].filter((part): part is string => !!part);
   const subtitle = subtitleParts.length > 0 ? subtitleParts.join(' · ') : undefined;
 
-  const handlePress = () => {
+  const handlePress = useCallback(() => {
     hapticSelection();
     onPress(tick);
-  };
+  }, [onPress, tick]);
 
   const climb = sessionTickToClimb(tick);
   const boardConfig = getBoardConfigForPlaylist(tick.boardType, tick.layoutId);

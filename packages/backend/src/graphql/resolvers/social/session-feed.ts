@@ -1,4 +1,4 @@
-import { eq, and, or, desc, sql, count as drizzleCount, isNull, inArray, type SQL } from 'drizzle-orm';
+import { eq, and, desc, sql, count as drizzleCount, isNull, inArray, type SQL } from 'drizzle-orm';
 import { dbRead } from '../../../db/client';
 import * as dbSchema from '@boardsesh/db/schema';
 import { getGradeLabel } from '@boardsesh/db/queries';
@@ -1381,17 +1381,12 @@ async function fetchBetaLinksByClimb(
   // Unique (boardType, climbUuid) pairs so the IN-list stays bounded by the
   // number of distinct climbs, not the number of ticks.
   const pairSet = new Set<string>();
-  const pairPredicates: SQL[] = [];
+  const pairs: Array<{ boardType: string; climbUuid: string }> = [];
   for (const { tick } of tickRows) {
     const key = `${tick.boardType}:${tick.climbUuid}`;
     if (pairSet.has(key)) continue;
     pairSet.add(key);
-    pairPredicates.push(
-      and(
-        eq(dbSchema.boardBetaLinks.boardType, tick.boardType),
-        eq(dbSchema.boardBetaLinks.climbUuid, tick.climbUuid),
-      ) as SQL,
-    );
+    pairs.push({ boardType: tick.boardType, climbUuid: tick.climbUuid });
   }
 
   const betaRows = await dbRead
@@ -1408,7 +1403,13 @@ async function fetchBetaLinksByClimb(
     .from(dbSchema.boardBetaLinks)
     .where(
       and(
-        or(...pairPredicates),
+        // Row-tuple IN-list over (board_type, climb_uuid): Postgres can probe the
+        // (board_type, climb_uuid, link) primary key per pair, which is friendlier
+        // than an OR-of-equality chain.
+        sql`(${dbSchema.boardBetaLinks.boardType}, ${dbSchema.boardBetaLinks.climbUuid}) in (${sql.join(
+          pairs.map((pair) => sql`(${pair.boardType}, ${pair.climbUuid})`),
+          sql`, `,
+        )})`,
         eq(dbSchema.boardBetaLinks.isListed, true),
         // Match the featured-beta KayaClimb exclusion: drop links pointing at
         // kayaclimb.com (and any subdomain), which aren't shareable video beta.
