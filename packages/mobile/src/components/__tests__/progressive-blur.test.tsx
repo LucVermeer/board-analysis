@@ -8,6 +8,7 @@ const themeMock = vi.hoisted(() => ({ colorScheme: 'dark' as 'dark' | 'light' })
 
 vi.mock('react-native', () => ({
   StyleSheet: { absoluteFill: {} },
+  View: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
 }));
 
 // Render the mask + children so both the gradient mask and the blur are assertable

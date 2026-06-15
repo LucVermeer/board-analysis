@@ -1,57 +1,69 @@
-import { StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
+import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import MaskedView from '@react-native-masked-view/masked-view';
 import { BlurView } from '@react-native-community/blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../providers/theme-provider';
 
-// MaskedView shows where the mask is opaque and hides where it's transparent, so a
-// black→transparent vertical gradient keeps the blur at full strength up top and
-// fades it to clear toward the bottom. The default holds full blur for the top
-// ~55% (status bar + top of the islands) then fades it out across the rest.
-const MASK_COLORS = ['#000000', '#000000', 'transparent'] as const;
-const DEFAULT_MASK_LOCATIONS = [0, 0.55, 1] as const;
+// A black→transparent vertical mask: MaskedView shows where the mask is opaque and
+// hides where it's transparent, so each blur layer is full strength at the top and
+// fades to clear by its `fadeEnd`.
+const MASK_COLORS = ['#000000', 'transparent'] as const;
+// Stacked layers fake a *variable* blur: a single masked blur only fades its
+// opacity (uniform radius), which reads as an abrupt edge. Stacking N thin layers,
+// each fading out higher than the last, means the top is covered by every layer
+// (max blur) and the bottom by just one — so the effective blur radius ramps
+// smoothly. More layers = smoother (and more GPU work).
+const DEFAULT_LAYERS = 5;
 
 type ProgressiveBlurProps = {
   /** Absolute position/size of the blur region (set by the caller). */
   style?: StyleProp<ViewStyle>;
-  /** Blur strength where the mask is fully opaque. */
+  /** Blur strength per layer (honoured by the basic blur types; the ultra-thin
+   *  material defines its own radius and the ramp comes from stacking). */
   blurAmount?: number;
-  /** Mask stops: full blur to `[1]`, faded to clear by `[2]`. */
-  maskLocations?: readonly [number, number, number];
+  /** Number of stacked blur layers — higher is a smoother ramp, more GPU work. */
+  layers?: number;
 };
 
 /**
- * A top-down progressive (gradient) blur: a uniform `BlurView` faded out toward the
- * bottom by a vertical gradient mask. Rendered behind the floating header islands
- * so content scrolling up frosts out gradually (instead of bleeding through the
- * gaps between them) and the status-bar / Dynamic Island strip reads as glass
- * rather than an opaque band. The blur tint follows the app's resolved colour
- * scheme, so it honours the in-app light/dark override (the OS-trait-driven native
- * material would not).
+ * A top-down progressive (gradient) blur for the floating header chrome: several
+ * ultra-thin blur layers stacked so the blur radius ramps smoothly from strong at
+ * the top to nothing at the bottom (a true variable blur, not just a faded uniform
+ * one). Content scrolling up frosts out gradually and the status-bar / Dynamic
+ * Island strip reads as light glass. The blur tint follows the app's resolved
+ * colour scheme, so it honours the in-app light/dark override.
  */
-export function ProgressiveBlur({
-  style,
-  blurAmount = 24,
-  maskLocations = DEFAULT_MASK_LOCATIONS,
-}: ProgressiveBlurProps) {
+export function ProgressiveBlur({ style, blurAmount = 16, layers = DEFAULT_LAYERS }: ProgressiveBlurProps) {
   const { colorScheme } = useTheme();
   const isDark = colorScheme === 'dark';
+  // Ultra-thin material: a light, very translucent frost. Stacking accumulates it
+  // toward the top without ever reading as the heavy `dark`/`light` UIBlurEffect.
+  const blurType = isDark ? 'ultraThinMaterialDark' : 'ultraThinMaterialLight';
+  const fallbackColor = isDark ? '#000000' : '#F2F2F2';
+
   return (
-    <MaskedView
-      pointerEvents="none"
-      style={style}
-      maskElement={<LinearGradient colors={MASK_COLORS} locations={maskLocations} style={StyleSheet.absoluteFill} />}
-    >
-      <BlurView
-        // The ultra-thin material is a light, very translucent frost (vs the heavy
-        // `dark`/`light` UIBlurEffect, which read as a near-opaque cap behind the
-        // Dynamic Island). The explicit Dark/Light variant follows our resolved
-        // scheme, so it still honours the in-app light/dark override.
-        blurType={isDark ? 'ultraThinMaterialDark' : 'ultraThinMaterialLight'}
-        blurAmount={blurAmount}
-        reducedTransparencyFallbackColor={isDark ? '#000000' : '#F2F2F2'}
-        style={StyleSheet.absoluteFill}
-      />
-    </MaskedView>
+    <View pointerEvents="none" style={style}>
+      {Array.from({ length: layers }, (_, layer) => {
+        // Later layers fade out higher up, so they accumulate toward the top.
+        const fadeEnd = (layers - layer) / layers;
+        return (
+          <MaskedView
+            key={layer}
+            pointerEvents="none"
+            style={StyleSheet.absoluteFill}
+            maskElement={
+              <LinearGradient colors={MASK_COLORS} locations={[0, fadeEnd]} style={StyleSheet.absoluteFill} />
+            }
+          >
+            <BlurView
+              blurType={blurType}
+              blurAmount={blurAmount}
+              reducedTransparencyFallbackColor={fallbackColor}
+              style={StyleSheet.absoluteFill}
+            />
+          </MaskedView>
+        );
+      })}
+    </View>
   );
 }
