@@ -8,6 +8,10 @@ const cfg = vi.hoisted(() => ({
   sessionId: null as string | null,
   nativeAccessoryActive: true,
   hasCurrentClimb: false,
+  // Whether the focused route is inside the (tabs) group. The native bottom
+  // accessory only mounts on-tabs; a root-level push (session detail) or modal
+  // takes the tab bar off screen, so the host unmounts there.
+  insideTabs: true,
   variant: 'liquidGlass' as 'liquidGlass' | 'material',
   // Whether the device can render real iOS 26 glass chrome. The native tab bar
   // mounts only for the Liquid Glass variant on a capable device; everything else
@@ -43,6 +47,13 @@ vi.mock('../../../src/providers/queue-provider', () => ({
 // use-has-accessory-climb, and the hold logic in use-sticky-accessory-presence.
 vi.mock('../../../src/hooks/use-sticky-accessory-presence', () => ({
   useStickyAccessoryPresence: () => cfg.hasCurrentClimb,
+}));
+
+// Route gate on the accessory mount: false once a root push/modal slides the tab
+// bar (and its accessory) off screen. Driven by useSegments() + isTabsRoute in the
+// real hook; the route-segment split is unit-tested in route-segments.test.
+vi.mock('../../../src/hooks/use-inside-tabs', () => ({
+  useInsideTabs: () => cfg.insideTabs,
 }));
 
 vi.mock('../../../src/components/queue-control/QueueBottomAccessory', () => ({
@@ -148,6 +159,7 @@ describe('TabLayout', () => {
     cfg.sessionId = null;
     cfg.nativeAccessoryActive = true;
     cfg.hasCurrentClimb = false;
+    cfg.insideTabs = true;
     cfg.variant = 'liquidGlass';
     cfg.glassCapable = true;
     cfg.platformOS = 'ios';
@@ -245,6 +257,19 @@ describe('TabLayout', () => {
   it('skips the empty native bottom accessory when no climb is current', () => {
     cfg.nativeAccessoryActive = true;
     cfg.hasCurrentClimb = false;
+
+    const { container } = render(<TabLayout />);
+
+    expect(container.querySelector('[data-bottom-accessory="true"]')).toBeNull();
+  });
+
+  it('skips the native bottom accessory when outside the tabs group', () => {
+    // A root push (session detail) or modal slides the tab bar off screen. Unmount
+    // the accessory host there so UIKit doesn't keep a stale glass-platter snapshot
+    // that re-presents doubled on return.
+    cfg.nativeAccessoryActive = true;
+    cfg.hasCurrentClimb = true;
+    cfg.insideTabs = false;
 
     const { container } = render(<TabLayout />);
 

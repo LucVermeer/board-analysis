@@ -342,7 +342,6 @@ function RootLayout() {
                                                             name="auth"
                                                             options={{ headerShown: false, gestureEnabled: false }}
                                                           />
-                                                          <Stack.Screen name="session/[sessionId]" />
                                                           <Stack.Screen
                                                             name="join/[sessionId]"
                                                             options={{ presentation: 'modal', headerShown: false }}

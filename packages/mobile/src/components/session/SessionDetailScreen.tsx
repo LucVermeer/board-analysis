@@ -6,28 +6,35 @@ import { useTranslation } from 'react-i18next';
 import type BottomSheet from '@gorhom/bottom-sheet';
 import type { SessionDetailTick, SessionFeedParticipant, SocialEntityType } from '@boardsesh/shared-schema';
 import { formatTickAbsoluteTime } from '@boardsesh/profile-stats';
-import { Text } from '../../src/components/Text';
-import { Icon } from '../../src/components/Icon';
-import { ActivityIndicator } from '../../src/components/ActivityIndicator';
-import { SectionHeader } from '../../src/components/SectionHeader';
-import { FeedSocialRow } from '../../src/components/you/FeedSocialRow';
-import { CommentSheet } from '../../src/components/you/CommentSheet';
-import { SessionDetailHero } from '../../src/components/session/SessionDetailHero';
-import { SessionStatTiles } from '../../src/components/session/SessionStatTiles';
-import { SessionAnalyticsSection } from '../../src/components/session/SessionAnalyticsSection';
-import { SessionBetaCarousel } from '../../src/components/session/SessionBetaCarousel';
-import { SessionParticipantBreakdown } from '../../src/components/session/SessionParticipantBreakdown';
-import { SessionTickRow } from '../../src/components/session/SessionTickRow';
-import { useSessionDetail } from '../../src/lib/graphql/hooks';
-import { openClimbInPlayDrawer } from '../../src/lib/open-climb-in-play-drawer';
-import { useBottomChromeMetrics } from '../../src/hooks/use-bottom-chrome-metrics';
-import { useDrawerHost } from '../../src/providers/drawer-host-provider';
-import { spacing } from '../../src/theme/tokens';
-import { useTheme } from '../../src/providers/theme-provider';
+import { Text } from '../Text';
+import { Icon } from '../Icon';
+import { ActivityIndicator } from '../ActivityIndicator';
+import { SectionHeader } from '../SectionHeader';
+import { FeedSocialRow } from '../you/FeedSocialRow';
+import { CommentSheet } from '../you/CommentSheet';
+import { SessionDetailHero } from './SessionDetailHero';
+import { SessionStatTiles } from './SessionStatTiles';
+import { SessionAnalyticsSection } from './SessionAnalyticsSection';
+import { SessionBetaCarousel } from './SessionBetaCarousel';
+import { SessionParticipantBreakdown } from './SessionParticipantBreakdown';
+import { SessionTickRow } from './SessionTickRow';
+import { useSessionDetail } from '../../lib/graphql/hooks';
+import { openClimbInPlayDrawer } from '../../lib/open-climb-in-play-drawer';
+import { useBottomChromeMetrics } from '../../hooks/use-bottom-chrome-metrics';
+import { useDrawerHost } from '../../providers/drawer-host-provider';
+import { spacing } from '../../theme/tokens';
+import { useTheme } from '../../providers/theme-provider';
 
 // Hoisted so FlashList gets a stable reference across renders.
 const keyExtractor = (tick: SessionDetailTick) => tick.uuid;
 
+/**
+ * Session detail — hero + stats + ticks list. Mounted from a per-tab route
+ * (`home/session/[sessionId]`, `profile/session/[sessionId]`) so it pushes inside
+ * the tab stack and keeps the native tab bar + Liquid Glass bottom accessory on
+ * screen (matching the playlist detail view), rather than a root push that slides
+ * the tab bar away.
+ */
 export default function SessionDetailScreen() {
   const { sessionId } = useLocalSearchParams<{ sessionId: string }>();
   const { t } = useTranslation('session');
