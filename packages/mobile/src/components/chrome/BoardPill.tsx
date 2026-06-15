@@ -61,7 +61,9 @@ export function BoardPill({ onPress, accessibilityHint }: BoardPillProps) {
         ]}
       >
         <GlassSurface
-          glassEffectStyle="regular"
+          // `clear` (lighter, content-forward) so the floating board pill reads
+          // as a translucent floating bar rather than frosted chrome.
+          glassEffectStyle="clear"
           fallbackColor={systemColors.elevatedSurface}
           borderRadius={CAPSULE_RADIUS}
           style={StyleSheet.absoluteFill}

@@ -130,7 +130,8 @@ export function CollapsingTopChrome({
         ]}
       >
         <GlassSurface
-          glassEffectStyle="regular"
+          // `clear` (lighter, content-forward) to match the other floating islands.
+          glassEffectStyle="clear"
           fallbackColor={systemColors.elevatedSurface}
           borderRadius={TOP_TOOLBAR_RADIUS}
           style={StyleSheet.absoluteFill}
