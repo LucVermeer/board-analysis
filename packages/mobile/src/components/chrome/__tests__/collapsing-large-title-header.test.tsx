@@ -80,9 +80,7 @@ const scrollY = { value: 0 } as unknown as Parameters<typeof CollapsingLargeTitl
 
 function makeProps(over: Partial<Parameters<typeof CollapsingLargeTitleHeader>[0]> = {}) {
   return {
-    title: 'You',
     scrollY,
-    onPressTitle: vi.fn(),
     onHeightChange: vi.fn(),
     ...over,
   };
@@ -127,14 +125,6 @@ describe('CollapsingLargeTitleHeader', () => {
     const fadeWrapper = container.querySelector('[data-animated-view="true"]');
     expect(fadeWrapper).not.toBeNull();
     expect(fadeWrapper?.querySelector('[data-testid="center"]')).not.toBeNull();
-  });
-
-  it('does not render the collapsed title capsule while collapsed is false', () => {
-    const { container } = render(<CollapsingLargeTitleHeader {...makeProps({ title: 'You' })} />);
-
-    // The capsule mounts a PressableSurface labelled by the title; with the
-    // reaction mocked no-op, `collapsed` stays false so it never renders.
-    expect(container.querySelector('[data-pressable="You"]')).toBeNull();
   });
 
   it('renders the progressive blur behind the header islands', () => {

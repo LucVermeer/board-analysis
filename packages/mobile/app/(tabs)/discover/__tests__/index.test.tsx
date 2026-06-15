@@ -117,6 +117,7 @@ vi.mock('react-native-reanimated', () => ({
 
 vi.mock('react-native', () => ({
   View: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
+  ScrollView: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
   Pressable: ({
     children,
     onPress,

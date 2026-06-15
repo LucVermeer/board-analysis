@@ -1,15 +1,15 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { type NativeScrollEvent, type NativeSyntheticEvent, StyleSheet, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useSharedValue, withSpring, type SharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { FlashList, type FlashListRef } from '@shopify/flash-list';
+import { FlashList } from '@shopify/flash-list';
 import { randomUUID } from 'expo-crypto';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
 import type { ClimbQueueItem } from '@boardsesh/queue';
-import type { Climb, SessionDetailTick, SessionFeedParticipant } from '@boardsesh/shared-schema';
+import type { SessionDetailTick, SessionFeedParticipant } from '@boardsesh/shared-schema';
 import { getGradeTextColor } from '@boardsesh/play-view';
 import { formatTickRelativeTime, tickTimeMs } from '@boardsesh/profile-stats';
 import { Card } from '../../Card';
@@ -378,21 +378,15 @@ export function InSessionView({
   const scrollOffset = useSharedValue(0);
   const startedAtTop = useSharedValue(true);
   // FlashList forwards a plain JS scroll event (it isn't a reanimated host
-  // component), so we mirror the offset into the shared value here — the same
-  // pattern the climbs list uses to drive its collapsing chrome. The dismiss
+  // component), so we mirror the offset into the shared value here. The dismiss
   // gesture only reads `scrollOffset.value <= 0` on start, so JS-thread latency
-  // is immaterial. The same shared value also drives the floating chrome's
-  // title collapse in tab mode (one shared value, both consumers).
+  // is immaterial.
   const handleScroll = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
       scrollOffset.value = event.nativeEvent.contentOffset.y;
     },
     [scrollOffset],
   );
-  const listRef = useRef<FlashListRef<SessionDetailTick & { status: SessionHistoryStatus }>>(null);
-  const handleScrollToTop = useCallback(() => {
-    listRef.current?.scrollToTop({ animated: true });
-  }, []);
   const handleOpenBoardSwitcher = useCallback(() => {
     router.push('/boards');
   }, [router]);
@@ -561,7 +555,6 @@ export function InSessionView({
 
   const scrollView = (
     <FlashList
-      ref={listRef}
       style={styles.scroll}
       data={sessionHistoryTicks}
       renderItem={renderHistoryRow}
@@ -593,8 +586,6 @@ export function InSessionView({
           title={t('mobile.session.headerActive')}
           onOpenBoardSwitcher={handleOpenBoardSwitcher}
           onHeightChange={setChromeHeight}
-          scrollY={scrollOffset}
-          onPressTitle={handleScrollToTop}
           onShare={onShare}
           onEndSession={onRequestEndSession}
         />

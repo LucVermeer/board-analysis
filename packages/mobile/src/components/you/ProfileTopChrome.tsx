@@ -13,7 +13,6 @@
 
 import { useCallback, useMemo } from 'react';
 import { type LayoutChangeEvent, StyleSheet, View } from 'react-native';
-import { type SharedValue } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
 import { Appbar } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -44,11 +43,6 @@ type ProfileTopChromeProps = {
   hasActiveFilters: boolean;
   /** Open the Progress filter sheet (only reachable from the Progress sub-tab). */
   onOpenFilters: () => void;
-  /** Active sub-tab's scroll offset, driving the large title collapse (glass only). */
-  scrollY: SharedValue<number>;
-  /** Tapping the collapsed title capsule scrolls the active sub-tab to the top
-   *  (glass only). */
-  onPressTitle: () => void;
   /** Report the measured chrome height so each sub-tab can inset its top padding. */
   onHeightChange: (height: number) => void;
 };
@@ -141,8 +135,6 @@ function ProfileTopChromeGlass({
   onSelectTab,
   hasActiveFilters,
   onOpenFilters,
-  scrollY,
-  onPressTitle,
   onHeightChange,
 }: ProfileTopChromeProps) {
   const { t } = useTranslation('you');
@@ -170,14 +162,7 @@ function ProfileTopChromeGlass({
     ) : undefined;
 
   return (
-    <CollapsingLargeTitleHeader
-      title={dashboardTitle}
-      scrollY={scrollY}
-      onPressTitle={onPressTitle}
-      onHeightChange={onHeightChange}
-      leftActions={leftActions}
-      rightActions={rightActions}
-    >
+    <CollapsingLargeTitleHeader onHeightChange={onHeightChange} leftActions={leftActions} rightActions={rightActions}>
       <View pointerEvents="box-none" style={styles.segmentStack}>
         <View
           style={[

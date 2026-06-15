@@ -128,14 +128,12 @@ const scrollY = { value: 0 } as unknown as Parameters<typeof CollapsingTopChrome
 
 function makeProps(over: Partial<Parameters<typeof CollapsingTopChrome>[0]> = {}) {
   return {
-    title: 'All climbs',
     canCreate: false,
     onCreate: vi.fn(),
     createAccessibilityLabel: 'create.label',
     onOpenBoardSwitcher: vi.fn(),
     onHeightChange: vi.fn(),
     scrollY,
-    onPressTitle: vi.fn(),
     ...over,
   };
 }
@@ -192,16 +190,6 @@ describe('CollapsingTopChrome', () => {
     rerender(<CollapsingTopChrome {...makeProps({ canCreate: true, onCreate })} />);
     fireEvent.click(createAction(container)!);
     expect(onCreate).toHaveBeenCalledTimes(1);
-  });
-
-  it('docks a board glyph labelled by the title into the toolbar, opening the switcher', () => {
-    ctrl.board = board;
-    const onOpenBoardSwitcher = vi.fn();
-    const { container } = render(<CollapsingTopChrome {...makeProps({ title: 'V4–V6', onOpenBoardSwitcher })} />);
-    const glyph = container.querySelector('[data-pressable="V4–V6"]') as HTMLButtonElement | null;
-    expect(glyph).not.toBeNull();
-    fireEvent.click(glyph!);
-    expect(onOpenBoardSwitcher).toHaveBeenCalledTimes(1);
   });
 
   it('shows the lightbulb only when bluetooth is available', () => {

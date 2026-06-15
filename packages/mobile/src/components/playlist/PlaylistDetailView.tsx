@@ -31,7 +31,7 @@ import { ActivityIndicator } from '../ActivityIndicator';
 import { ClimbListRow } from '../ClimbListRow';
 import { ClimbListRowSkeleton } from '../ClimbListRowSkeleton';
 import { GlassIconButton } from '../GlassIconButton';
-import { GlassSurface } from '../GlassSurface';
+import { ProgressiveBlur } from '../ProgressiveBlur';
 import { Button } from '../Button';
 import { PlaylistEditClimbRow } from './PlaylistEditClimbRow';
 import { usePlaylistDrag } from './use-playlist-drag';
@@ -599,25 +599,14 @@ export function PlaylistDetailView({
         ListEmptyComponent={listEmptyComponent}
       />
 
-      {/* Collapsed header bar — a translucent blur surface (matching the app's
-          other glass headers) carrying a subtle playlist-colour tint + the
-          centered name, fading in once the hero scrolls off. Sits below the
-          floating FABs. */}
+      {/* Collapsed header bar — a progressive blur (matching the tabs' chrome)
+          carrying the centered name, fading in once the hero scrolls off. Sits
+          below the floating FABs. */}
       <Animated.View
         pointerEvents="none"
-        style={[
-          styles.headerBar,
-          { height: headerBarHeight, paddingTop: insets.top, borderBottomColor: systemColors.separator },
-          headerBarStyle,
-        ]}
+        style={[styles.headerBar, { height: headerBarHeight, paddingTop: insets.top }, headerBarStyle]}
       >
-        <GlassSurface
-          glassEffectStyle="regular"
-          tintColor={withAlpha(baseColor, 0.35)}
-          fallbackColor={systemColors.secondaryBackground}
-          style={StyleSheet.absoluteFill}
-          pointerEvents="none"
-        />
+        <ProgressiveBlur style={StyleSheet.absoluteFill} />
         <View style={styles.headerBarRow}>
           <Text variant="headline" numberOfLines={1} color={systemColors.label} style={styles.headerBarTitle}>
             {hero.name}
@@ -740,7 +729,6 @@ const styles = StyleSheet.create({
     right: 0,
     zIndex: 1,
     overflow: 'hidden',
-    borderBottomWidth: StyleSheet.hairlineWidth,
   },
   headerBarRow: {
     flex: 1,

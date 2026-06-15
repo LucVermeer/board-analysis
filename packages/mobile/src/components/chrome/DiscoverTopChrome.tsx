@@ -1,4 +1,3 @@
-import { type SharedValue } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
 import { CollapsingTopChrome } from './CollapsingTopChrome';
 
@@ -11,17 +10,13 @@ type DiscoverTopChromeProps = {
   onOpenBoardSwitcher: () => void;
   /** Report the measured chrome height so the list can inset its top padding. */
   onHeightChange: (height: number) => void;
-  /** List scroll offset, driving the "Discover" title collapse. */
-  scrollY: SharedValue<number>;
-  /** Tapping the collapsed "Discover" capsule scrolls the list back to the top. */
-  onPressTitle: () => void;
 };
 
 /**
  * Discover's floating glass chrome. A thin wrapper over the shared
- * `CollapsingTopChrome` that injects the "Discover" title and the playlist /
- * boards i18n strings — the centred-title collapse and board-pill-to-toolbar
- * dock all live in the shared component, also used by the Climbs/Search tab.
+ * `CollapsingTopChrome` that injects the playlist / boards i18n strings. The
+ * board pill + islands stay put over the progressive blur; the in-body "Discover"
+ * title scrolls away (the tab bar already labels the tab, so no scrolled title).
  */
 export function DiscoverTopChrome(props: DiscoverTopChromeProps) {
   const { t } = useTranslation('playlists');
@@ -29,7 +24,6 @@ export function DiscoverTopChrome(props: DiscoverTopChromeProps) {
   return (
     <CollapsingTopChrome
       {...props}
-      title={t('bottomTabBar.discover')}
       createAccessibilityLabel={t('library.createFab.ariaLabel')}
       boardPillAccessibilityHint={tBoards('boardPill.switchHint')}
     />

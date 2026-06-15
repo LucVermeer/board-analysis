@@ -11,8 +11,6 @@ type ChromeProps = {
   onOpenBoardSwitcher?: () => void;
   boardPillAccessibilityHint?: string;
   onHeightChange?: (height: number) => void;
-  scrollY?: unknown;
-  onPressTitle?: () => void;
   trailingAction?: ReactNode;
   trailingActionCount?: number;
   leadingAction?: ReactNode;
@@ -115,15 +113,11 @@ vi.mock('../../user-drawer/UserAvatarToolbarAction', () => ({
 
 import { RecordTopChrome } from '../RecordTopChrome';
 
-const scrollY = { value: 0 } as unknown as Parameters<typeof RecordTopChrome>[0]['scrollY'];
-
 function makeProps(over: Partial<Parameters<typeof RecordTopChrome>[0]> = {}) {
   return {
     title: 'Morning session',
     onOpenBoardSwitcher: vi.fn(),
     onHeightChange: vi.fn(),
-    scrollY,
-    onPressTitle: vi.fn(),
     ...over,
   };
 }
@@ -141,18 +135,16 @@ describe('RecordTopChrome', () => {
     expect(chrome.props?.canCreate).toBe(false);
   });
 
-  it('forwards title / scrollY / onHeightChange / onPressTitle / onOpenBoardSwitcher', () => {
+  it('forwards onHeightChange / onOpenBoardSwitcher (no scrolled title on glass)', () => {
     const onHeightChange = vi.fn();
-    const onPressTitle = vi.fn();
     const onOpenBoardSwitcher = vi.fn();
-    render(
-      <RecordTopChrome {...makeProps({ title: 'Evening sesh', onHeightChange, onPressTitle, onOpenBoardSwitcher })} />,
-    );
+    render(<RecordTopChrome {...makeProps({ title: 'Evening sesh', onHeightChange, onOpenBoardSwitcher })} />);
 
-    expect(chrome.props?.title).toBe('Evening sesh');
-    expect(chrome.props?.scrollY).toBe(scrollY);
+    // The capsule title is gone — the glass chrome no longer carries the session
+    // title; it only rides along as the (inert) create accessibility label.
+    expect(chrome.props?.title).toBeUndefined();
+    expect(chrome.props?.createAccessibilityLabel).toBe('Evening sesh');
     expect(chrome.props?.onHeightChange).toBe(onHeightChange);
-    expect(chrome.props?.onPressTitle).toBe(onPressTitle);
     expect(chrome.props?.onOpenBoardSwitcher).toBe(onOpenBoardSwitcher);
   });
 

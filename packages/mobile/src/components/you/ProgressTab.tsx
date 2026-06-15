@@ -1,6 +1,5 @@
-import { memo, useEffect, useMemo } from 'react';
-import { View, RefreshControl, StyleSheet, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
-import Animated, { useAnimatedRef } from 'react-native-reanimated';
+import { memo, useMemo } from 'react';
+import { View, RefreshControl, ScrollView, StyleSheet } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import type { useYouProfileData } from '../../lib/graphql/hooks';
 import { Text } from '../Text';
@@ -19,33 +18,17 @@ type YouData = ReturnType<typeof useYouProfileData>;
 
 type ProgressTabProps = {
   data: YouData;
-  /** Plain-JS scroll handler from the screen, writing the shared scroll offset
-   *  that drives the floating chrome's title collapse. */
-  onScroll: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
   /** Measured chrome height — the scroll content insets its top by this so the
    *  first card rests below the floating chrome and the rest scroll under it. */
   topInset: number;
-  /** Register this tab's scroll-to-top so the screen's title capsule can reach it. */
-  registerScrollToTop: (scrollToTop: (() => void) | null) => void;
 };
 
-export const ProgressTab = memo(function ProgressTab({
-  data,
-  onScroll,
-  topInset,
-  registerScrollToTop,
-}: ProgressTabProps) {
+export const ProgressTab = memo(function ProgressTab({ data, topInset }: ProgressTabProps) {
   const { t } = useTranslation('profile');
   const { t: tYou } = useTranslation('you');
   const { systemColors, colorScheme, brandColors, variant } = useTheme();
   const bottomChrome = useBottomChromeMetrics();
   const paddingBottom = bottomChrome.scrollBottomPadding + spacing[6];
-
-  const scrollRef = useAnimatedRef<Animated.ScrollView>();
-  useEffect(() => {
-    registerScrollToTop(() => scrollRef.current?.scrollTo({ y: 0, animated: true }));
-    return () => registerScrollToTop(null);
-  }, [registerScrollToTop, scrollRef]);
 
   const totalAscents = data.statisticsSummary.totalAscents;
   const noAscentData = t('empty.noAscentData');
@@ -79,14 +62,11 @@ export const ProgressTab = memo(function ProgressTab({
   }
 
   return (
-    <Animated.ScrollView
-      ref={scrollRef}
+    <ScrollView
       style={styles.flex}
       contentInsetAdjustmentBehavior="never"
       contentContainerStyle={{ paddingTop: topInset, paddingBottom }}
       scrollIndicatorInsets={{ top: topInset }}
-      onScroll={onScroll}
-      scrollEventThrottle={16}
       refreshControl={
         <RefreshControl refreshing={data.refreshing} onRefresh={data.refetch} tintColor={brandColors.primary} />
       }
@@ -167,7 +147,7 @@ export const ProgressTab = memo(function ProgressTab({
           )}
         </>
       )}
-    </Animated.ScrollView>
+    </ScrollView>
   );
 });
 

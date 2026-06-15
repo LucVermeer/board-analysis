@@ -147,16 +147,12 @@ vi.mock('../../chrome', () => ({
 
 import { ProfileTopChrome } from '../ProfileTopChrome';
 
-const scrollY = { value: 0 } as unknown as Parameters<typeof ProfileTopChrome>[0]['scrollY'];
-
 function makeProps(over: Partial<Parameters<typeof ProfileTopChrome>[0]> = {}) {
   return {
     activeTab: 'progress' as ProfileTabKey,
     onSelectTab: vi.fn(),
     hasActiveFilters: false,
     onOpenFilters: vi.fn(),
-    scrollY,
-    onPressTitle: vi.fn(),
     onHeightChange: vi.fn(),
     ...over,
   };

@@ -7,7 +7,7 @@ import {
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from 'react-native';
-import { FlashList, type FlashListRef } from '@shopify/flash-list';
+import { FlashList } from '@shopify/flash-list';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
@@ -157,8 +157,7 @@ function ClimbListInner() {
   const bottomChrome = useBottomChromeMetrics();
 
   // Scroll offset drives the glass large in-body filter title collapsing into the
-  // top chrome; tapping the collapsed title capsule scrolls the list back to top.
-  const listRef = useRef<FlashListRef<Climb>>(null);
+  // inline title shown in the top chrome on scroll.
   const scrollY = useSharedValue(0);
   const handleScroll = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -166,9 +165,6 @@ function ClimbListInner() {
     },
     [scrollY],
   );
-  const handleScrollToTop = useCallback(() => {
-    listRef.current?.scrollToTop({ animated: true });
-  }, []);
 
   // iOS 26 uses the native tab-bar bottom accessory for current climb + tick, and
   // presents this screen's headerSearchBarOptions controller in the bottom tab
@@ -850,7 +846,6 @@ function ClimbListInner() {
     <View style={[styles.container, { backgroundColor: systemColors.background }]}>
       <Stack.Screen options={stackOptions} />
       <FlashList
-        ref={listRef}
         data={visibleClimbs}
         renderItem={renderClimbItem}
         keyExtractor={keyExtractor}
@@ -898,7 +893,6 @@ function ClimbListInner() {
         onOpenBoardDetail={handleOpenBoardDetail}
         onHeightChange={setSearchBarHeight}
         scrollY={scrollY}
-        onPressTitle={handleScrollToTop}
         searchFieldRef={searchHeaderRef}
         searchInitialValue={name}
         searchPlaceholder={t('search.placeholders.climbs')}

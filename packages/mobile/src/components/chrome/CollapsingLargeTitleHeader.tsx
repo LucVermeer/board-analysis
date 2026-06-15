@@ -11,34 +11,28 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../providers/theme-provider';
-import { useNativeGlass } from '../../hooks/use-native-glass';
-import { spacing, shadows } from '../../theme/tokens';
+import { spacing } from '../../theme/tokens';
 import { Text } from '../Text';
-import { GlassSurface } from '../GlassSurface';
 import { ProgressiveBlur } from '../ProgressiveBlur';
-import { PressableSurface } from '../PressableSurface';
 import { TOP_ACTION_SIZE } from './GlassActionToolbar';
 
 const ROW_GUTTER = spacing[4];
-const TITLE_PILL_HEIGHT = 34;
-const TITLE_PILL_RADIUS = TITLE_PILL_HEIGHT / 2;
-// The large in-body title collapses into the header over this scroll distance:
-// the centred content fades out as the title capsule takes over.
+// The centre content hands off to the optional plain inline title over this
+// scroll distance: the centred content fades out, the inline title fades in.
 export const COLLAPSE_START = 6;
 export const COLLAPSE_END = 48;
 
 /**
- * Shared collapse math for the floating large-title chrome. Returns the 0→1
- * `progress` derived value plus a `collapsed` boolean that flips once past the
- * midpoint (so the faded-out centre content stops capturing touches). Both this
- * board-agnostic header and the board-aware `CollapsingTopChrome` (which docks a
- * board glyph) read from the same math so the title capsule and the board dock
- * stay in lockstep.
+ * Collapse math for the optional plain inline title (Climbs only). Returns the
+ * 0→1 `progress` plus a `collapsed` boolean that flips past the midpoint so the
+ * faded-out centre content stops capturing touches.
  */
-export function useCollapseProgress(scrollY: SharedValue<number>) {
+export function useCollapseProgress(scrollY: SharedValue<number> | undefined) {
   const [collapsed, setCollapsed] = useState(false);
+  // scrollY is omitted on screens with no scrolled title (centre stays static);
+  // fall back to 0 inside the worklet so progress is constant.
   const progress = useDerivedValue(() =>
-    interpolate(scrollY.value, [COLLAPSE_START, COLLAPSE_END], [0, 1], Extrapolation.CLAMP),
+    interpolate(scrollY?.value ?? 0, [COLLAPSE_START, COLLAPSE_END], [0, 1], Extrapolation.CLAMP),
   );
   useAnimatedReaction(
     () => progress.value > 0.5,
@@ -50,23 +44,21 @@ export function useCollapseProgress(scrollY: SharedValue<number>) {
 }
 
 type CollapsingLargeTitleHeaderProps = {
-  /** The screen's identity, shown in the centred collapsed capsule. Callers render
-   *  the matching large in-body title at the top of their scroll content. */
-  title: string;
-  /** VoiceOver label for the collapsed title capsule. Defaults to `title`. */
-  titleAccessibilityLabel?: string;
-  /** List scroll offset, driving the title collapse. */
-  scrollY: SharedValue<number>;
-  /** Tapping the collapsed title capsule scrolls the list back to the top. */
-  onPressTitle: () => void;
+  /** List scroll offset. Only needed when `collapsedInlineTitle` is set (the
+   *  centre cross-fade); omit on screens whose centre content stays static. */
+  scrollY?: SharedValue<number>;
+  /** Optional title shown as plain centred text once scrolled (e.g. the Climbs
+   *  filter summary). Cross-fades with `centerContent`. Omit to keep the centre
+   *  content static with no scrolled title (Discover/Profile/Record). */
+  collapsedInlineTitle?: string;
   /** Report the measured chrome height so the list can inset its top padding. */
   onHeightChange: (height: number) => void;
   /** Glass island(s) anchored to the left of the islands row. */
   leftActions?: ReactNode;
   /** Glass island(s) anchored to the right of the islands row. */
   rightActions?: ReactNode;
-  /** At-rest centred control (e.g. a board pill) that fades out as the collapsed
-   *  title capsule takes over. Omit on screens with no centred control. */
+  /** At-rest centred control (e.g. a board pill). Stays static unless a
+   *  `collapsedInlineTitle` is set, in which case it cross-fades out on scroll. */
   centerContent?: ReactNode;
   /** Extra controls rendered below the islands row (e.g. a search or segmented
    *  control row). Measured into the reported chrome height. */
@@ -74,22 +66,16 @@ type CollapsingLargeTitleHeaderProps = {
 };
 
 /**
- * The board-agnostic floating glass chrome shared across tabs: a fade scrim, a
- * left/right glass-island row, and the screen's large in-body title collapsing
- * into a centred glass capsule on scroll. The capsule animates with transform
- * only (never opacity) so the live iOS liquid glass never flattens; only the
- * leaving centre content fades. Callers inject their own islands and, optionally,
- * a centred control.
- *
- * The board-aware Discover/Climbs chrome (`CollapsingTopChrome`) composes this
- * and adds the board pill plus the board-glyph dock; the Record and Profile tabs
- * use it with their own islands.
+ * The board-agnostic floating glass chrome shared across tabs: an always-on
+ * progressive blur, a left/right glass-island row, and an optional centred
+ * control. The screen renders its own large in-body title at the top of its
+ * scroll content; it simply scrolls away under the blur. Climbs additionally
+ * passes `collapsedInlineTitle` (its filter summary), which cross-fades in as
+ * plain centred text once scrolled — the one surface that keeps a scrolled title.
  */
 export function CollapsingLargeTitleHeader({
-  title,
-  titleAccessibilityLabel,
   scrollY,
-  onPressTitle,
+  collapsedInlineTitle,
   onHeightChange,
   leftActions,
   rightActions,
@@ -97,27 +83,21 @@ export function CollapsingLargeTitleHeader({
   children,
 }: CollapsingLargeTitleHeaderProps) {
   const { systemColors } = useTheme();
-  const nativeGlass = useNativeGlass();
   const insets = useSafeAreaInsets();
   const { progress, collapsed } = useCollapseProgress(scrollY);
+  const hasInlineTitle = collapsedInlineTitle != null && scrollY != null;
 
-  // The progressive blur spans the status bar + the islands row, down to just
-  // below the capsules, and fades to clear at its bottom (see ProgressiveBlur). It
-  // frosts content that scrolls up under the islands instead of painting a flat
-  // band, and self-hides at rest (blurring the empty scene reads as the scene).
+  // Always-on progressive blur from the top of the screen to just below the
+  // islands row; frosts content scrolling under the islands.
   const blurHeight = insets.top + spacing[1] + TOP_ACTION_SIZE + spacing[2];
 
-  // Only the centre content (which is leaving) fades — flattening its glass
-  // mid-fade is invisible because it's disappearing. The capsule that *stays*
-  // uses transform only, so the live glass survives.
+  // Centre content fades out as the inline title fades in. With no inline title /
+  // no scroll tracking, progress stays 0, so this is a no-op (centre stays static).
   const centerFadeStyle = useAnimatedStyle(() => ({
     opacity: interpolate(progress.value, [0, 0.5], [1, 0], Extrapolation.CLAMP),
   }));
-  const titleStyle = useAnimatedStyle(() => ({
-    transform: [
-      { translateY: interpolate(progress.value, [0.5, 0.85], [6, 0], Extrapolation.CLAMP) },
-      { scale: interpolate(progress.value, [0.5, 0.85], [0.94, 1], Extrapolation.CLAMP) },
-    ],
+  const inlineTitleStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(progress.value, [0.5, 1], [0, 1], Extrapolation.CLAMP),
   }));
 
   const handleLayout = useCallback(
@@ -127,10 +107,9 @@ export function CollapsingLargeTitleHeader({
 
   return (
     <View pointerEvents="box-none" style={[styles.container, { paddingTop: insets.top }]} onLayout={handleLayout}>
-      {/* Progressive glass: a blur from the top of the screen down to just below
-          the capsules, strongest up top and fading to clear — so content frosts
-          out gradually under the islands and the Dynamic Island / status-bar strip
-          reads as glass rather than an opaque band. */}
+      {/* Always-on progressive glass: a blur from the top of the screen down to
+          just below the islands, strongest up top and fading to clear, so content
+          frosts out gradually and the status-bar strip reads as glass. */}
       <ProgressiveBlur style={[styles.blur, { height: blurHeight }]} />
       <View pointerEvents="box-none" style={styles.row}>
         {/* Left island (anchored left). */}
@@ -140,50 +119,31 @@ export function CollapsingLargeTitleHeader({
           </View>
         ) : null}
 
-        {/* Centred at-rest control; fades out as the title takes over. */}
+        {/* Centred at-rest control (e.g. board pill). Static unless an inline
+            title is set, in which case it cross-fades out on scroll. */}
         {centerContent ? (
-          <Animated.View pointerEvents={collapsed ? 'none' : 'box-none'} style={[styles.centerAnchor, centerFadeStyle]}>
+          <Animated.View
+            pointerEvents={hasInlineTitle && collapsed ? 'none' : 'box-none'}
+            style={[styles.centerAnchor, centerFadeStyle]}
+          >
             {centerContent}
           </Animated.View>
         ) : null}
 
-        {/* Collapsed title capsule, centred; tap scrolls to the top. Transform-only
-            entrance keeps the glass surface live (no opacity). */}
-        {collapsed ? (
-          <Animated.View pointerEvents="box-none" style={[styles.centerAnchor, titleStyle]}>
-            <PressableSurface
-              onPress={onPressTitle}
-              feedback="scale"
-              scaleTo={0.96}
-              hitSlop={8}
-              accessibilityRole="button"
-              accessibilityLabel={titleAccessibilityLabel ?? title}
+        {/* Optional plain inline title (Climbs filter summary), cross-fading in as
+            the centre content fades out. Non-interactive — status-bar tap handles
+            scroll-to-top. */}
+        {hasInlineTitle ? (
+          <Animated.View pointerEvents="none" style={[styles.centerAnchor, inlineTitleStyle]}>
+            <Text
+              variant="headline"
+              numberOfLines={1}
+              ellipsizeMode="tail"
+              color={systemColors.label}
+              style={styles.inlineTitle}
             >
-              <View
-                style={[
-                  styles.titlePill,
-                  !nativeGlass && shadows.sm,
-                  !nativeGlass && { borderWidth: StyleSheet.hairlineWidth, borderColor: systemColors.separator },
-                ]}
-              >
-                <GlassSurface
-                  glassEffectStyle="regular"
-                  fallbackColor={systemColors.elevatedSurface}
-                  borderRadius={TITLE_PILL_RADIUS}
-                  style={StyleSheet.absoluteFill}
-                  pointerEvents="none"
-                />
-                <Text
-                  variant="subheadline"
-                  numberOfLines={1}
-                  ellipsizeMode="tail"
-                  color={systemColors.label}
-                  style={styles.titleText}
-                >
-                  {title}
-                </Text>
-              </View>
-            </PressableSurface>
+              {collapsedInlineTitle}
+            </Text>
           </Animated.View>
         ) : null}
 
@@ -209,7 +169,7 @@ const styles = StyleSheet.create({
     zIndex: 20,
   },
   // Progressive blur layer (height applied inline): spans from the top of the
-  // screen down to just below the capsules, behind the islands row.
+  // screen down to just below the islands row, behind the islands.
   blur: {
     position: 'absolute',
     top: 0,
@@ -245,20 +205,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  titlePill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    height: TITLE_PILL_HEIGHT,
-    borderRadius: TITLE_PILL_RADIUS,
-    paddingHorizontal: 16,
-    // Clip the absolutely-filled GlassSurface to the rounded corners on Android.
-    overflow: 'hidden',
-    // Match the board pill's width cap so a long title ellipsizes rather than
-    // running under the left/right islands (both stay visible when collapsed).
-    maxWidth: 180,
-  },
-  titleText: {
+  inlineTitle: {
     fontWeight: '600',
     flexShrink: 1,
+    // Keep a long title clear of the left/right islands.
+    maxWidth: 180,
+    textAlign: 'center',
   },
 });

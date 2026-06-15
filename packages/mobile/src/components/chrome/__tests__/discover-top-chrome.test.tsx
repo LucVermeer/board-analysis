@@ -121,16 +121,12 @@ vi.mock('../../user-drawer/UserAvatarToolbarAction', () => ({
 
 import { DiscoverTopChrome } from '../DiscoverTopChrome';
 
-const scrollY = { value: 0 } as unknown as Parameters<typeof DiscoverTopChrome>[0]['scrollY'];
-
 function makeProps(over: Partial<Parameters<typeof DiscoverTopChrome>[0]> = {}) {
   return {
     canCreate: false,
     onCreate: vi.fn(),
     onOpenBoardSwitcher: vi.fn(),
     onHeightChange: vi.fn(),
-    scrollY,
-    onPressTitle: vi.fn(),
     ...over,
   };
 }

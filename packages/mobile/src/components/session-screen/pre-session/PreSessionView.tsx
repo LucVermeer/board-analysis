@@ -1,8 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { StyleSheet, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
-import { FlashList, type FlashListRef } from '@shopify/flash-list';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { StyleSheet, View } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { ScrollView as GestureScrollView } from 'react-native-gesture-handler';
-import { useSharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -62,21 +61,6 @@ export function PreSessionView({ showChrome = false }: PreSessionViewProps) {
   const { openPlayDrawer } = useDrawerHost();
   const { showToast } = useToast();
 
-  // Scroll offset drives the floating large-title chrome's collapse; tapping the
-  // collapsed title capsule scrolls the list back to the top. FlashList forwards
-  // a plain JS scroll event, so we mirror the offset into the shared value (the
-  // same pattern the climbs list uses).
-  const listRef = useRef<FlashListRef<PreviewItem>>(null);
-  const scrollY = useSharedValue(0);
-  const handleScroll = useCallback(
-    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-      scrollY.value = event.nativeEvent.contentOffset.y;
-    },
-    [scrollY],
-  );
-  const handleScrollToTop = useCallback(() => {
-    listRef.current?.scrollToTop({ animated: true });
-  }, []);
   // Measured chrome height (incl. the top safe-area inset) so the list pads its
   // top by it. Only used when the floating chrome renders (tab mode).
   const [chromeHeight, setChromeHeight] = useState(() => insets.top + 56);
@@ -296,19 +280,14 @@ export function PreSessionView({ showChrome = false }: PreSessionViewProps) {
   return (
     <View style={styles.container}>
       <FlashList
-        ref={listRef}
         style={styles.scroll}
         data={previewItems}
         renderItem={renderPreviewRow}
         keyExtractor={previewKeyExtractor}
         ListHeaderComponent={listHeader}
-        // Supported in FlashList 2.3.1: typed in FlashListProps and consumed at
-        // runtime (useSecondaryProps wraps it via createAnimatedComponent). Use a
-        // gesture-handler scroll host so Android nested chip rails keep their
+        // Use a gesture-handler scroll host so Android nested chip rails keep their
         // horizontal gestures while the preview rows stay virtualized.
         renderScrollComponent={GestureScrollView}
-        onScroll={handleScroll}
-        scrollEventThrottle={16}
         // The floating chrome owns the top inset (tab mode), so pad manually by
         // the measured chrome height; never auto-inset under the (absent) header.
         contentInsetAdjustmentBehavior="never"
@@ -327,8 +306,6 @@ export function PreSessionView({ showChrome = false }: PreSessionViewProps) {
           title={t('mobile.session.headerStart')}
           onOpenBoardSwitcher={handleOpenBoardSwitcher}
           onHeightChange={setChromeHeight}
-          scrollY={scrollY}
-          onPressTitle={handleScrollToTop}
         />
       ) : null}
 

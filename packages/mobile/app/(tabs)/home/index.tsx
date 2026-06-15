@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FlatList, Linking, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -28,6 +29,7 @@ import { useTheme } from '../../../src/providers/theme-provider';
 import { useToast } from '../../../src/providers/toast-provider';
 import { useDrawerHost } from '../../../src/providers/drawer-host-provider';
 import { useBottomChromeMetrics } from '../../../src/hooks/use-bottom-chrome-metrics';
+import { ProgressiveBlur } from '../../../src/components/ProgressiveBlur';
 import { dedupeSessionsById } from '../../../src/lib/feed-time-buckets';
 import { deriveFeedScopeInput, type FeedMode } from '../../../src/lib/feed/feed-scope';
 import { openClimbInPlayDrawer } from '../../../src/lib/open-climb-in-play-drawer';
@@ -75,6 +77,7 @@ export default function HomeTab() {
   const { systemColors, brandColors } = useTheme();
   const { openPlayDrawer } = useDrawerHost();
   const bottomChrome = useBottomChromeMetrics();
+  const insets = useSafeAreaInsets();
   const listRef = useRef<FlashListRef<SessionFeedItem>>(null);
   const commentSheetRef = useRef<BottomSheet | null>(null);
   const [commentTarget, setCommentTarget] = useState<CommentTarget | null>(null);
@@ -410,6 +413,10 @@ export default function HomeTab() {
           feed.isFetchingNextPage ? <ActivitySkeletonList skeletonKeys={NEXT_PAGE_FEED_SKELETON_KEYS} /> : null
         }
       />
+      {/* Frost content scrolling under the status-bar strip, matching the other
+          tabs. Home has no floating islands, so it's just the top strip — the
+          "Home" title lives in the list and scrolls away beneath it. */}
+      <ProgressiveBlur style={[styles.topBlur, { height: insets.top + spacing[6] }]} />
       <CommentSheet
         sheetRef={commentSheetRef}
         entityId={commentTarget?.entityId ?? null}
@@ -642,6 +649,12 @@ function RecentBetaCard({
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
+  topBlur: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+  },
   centered: {
     flex: 1,
     alignItems: 'center',

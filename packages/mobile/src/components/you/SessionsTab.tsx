@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, RefreshControl, StyleSheet, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
-import { FlashList, type FlashListRef } from '@shopify/flash-list';
+import { useCallback, useMemo, useRef, useState } from 'react';
+import { View, RefreshControl, StyleSheet } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import type BottomSheet from '@gorhom/bottom-sheet';
@@ -31,14 +31,9 @@ const PENDING_SKELETON_KEYS = ['session-skeleton-1', 'session-skeleton-2'];
 
 type SessionsTabProps = {
   userId: string | undefined;
-  /** Plain-JS scroll handler from the screen, writing the shared scroll offset
-   *  that drives the floating chrome's title collapse. */
-  onScroll?: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
   /** Measured chrome height — the list insets its top by this so the first row
    *  rests below the floating chrome and the rest scroll under it. */
   topInset?: number;
-  /** Register this tab's scroll-to-top so the screen's title capsule can reach it. */
-  registerScrollToTop?: (scrollToTop: (() => void) | null) => void;
 };
 
 // String-literal `t(...)` per call so the catalog keys stay statically greppable.
@@ -91,20 +86,13 @@ function SessionCardSkeleton() {
   );
 }
 
-export function SessionsTab({ userId, onScroll, topInset = 0, registerScrollToTop }: SessionsTabProps) {
+export function SessionsTab({ userId, topInset = 0 }: SessionsTabProps) {
   const { t } = useTranslation('you');
   const { systemColors, brandColors, variant } = useTheme();
   const router = useRouter();
   const { openPlayDrawer } = useDrawerHost();
   const bottomChrome = useBottomChromeMetrics();
   const paddingBottom = bottomChrome.scrollBottomPadding + spacing[4];
-
-  const listRef = useRef<FlashListRef<FeedRow>>(null);
-  useEffect(() => {
-    if (!registerScrollToTop) return;
-    registerScrollToTop(() => listRef.current?.scrollToTop({ animated: true }));
-    return () => registerScrollToTop(null);
-  }, [registerScrollToTop]);
 
   const commentSheetRef = useRef<BottomSheet | null>(null);
   const [commentTarget, setCommentTarget] = useState<CommentTarget | null>(null);
@@ -238,14 +226,11 @@ export function SessionsTab({ userId, onScroll, topInset = 0, registerScrollToTo
   return (
     <View style={styles.flex}>
       <FlashList
-        ref={listRef}
         data={rows}
         extraData={summaryMap}
         renderItem={renderItem}
         getItemType={(row) => row.type}
         keyExtractor={(row) => (row.type === 'header' ? `header-${row.bucket}` : row.item.sessionId)}
-        onScroll={onScroll}
-        scrollEventThrottle={16}
         contentInsetAdjustmentBehavior="never"
         onEndReached={handleEndReached}
         onEndReachedThreshold={0.5}

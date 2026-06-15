@@ -1,13 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  View,
-  RefreshControl,
-  Pressable,
-  StyleSheet,
-  type NativeScrollEvent,
-  type NativeSyntheticEvent,
-} from 'react-native';
-import { FlashList, type FlashListRef } from '@shopify/flash-list';
+import { useCallback, useMemo, useRef, useState } from 'react';
+import { View, RefreshControl, Pressable, StyleSheet } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { useTranslation } from 'react-i18next';
 import type BottomSheet from '@gorhom/bottom-sheet';
 import type { AscentFeedItem } from '@boardsesh/graphql/operations';
@@ -25,28 +18,16 @@ import { useTheme } from '../../providers/theme-provider';
 
 type LogbookTabProps = {
   userId: string | undefined;
-  /** Plain-JS scroll handler from the screen, writing the shared scroll offset
-   *  that drives the floating chrome's title collapse. */
-  onScroll?: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
   /** Measured chrome height — the list insets its top by this so the first row
    *  rests below the floating chrome and the rest scroll under it. */
   topInset?: number;
-  /** Register this tab's scroll-to-top so the screen's title capsule can reach it. */
-  registerScrollToTop?: (scrollToTop: (() => void) | null) => void;
 };
 
-export function LogbookTab({ userId, onScroll, topInset = 0, registerScrollToTop }: LogbookTabProps) {
+export function LogbookTab({ userId, topInset = 0 }: LogbookTabProps) {
   const { t } = useTranslation('you');
   const { systemColors, brandColors, variant } = useTheme();
   const bottomChrome = useBottomChromeMetrics();
   const paddingBottom = bottomChrome.scrollBottomPadding + spacing[4];
-
-  const listRef = useRef<FlashListRef<AscentFeedItem>>(null);
-  useEffect(() => {
-    if (!registerScrollToTop) return;
-    registerScrollToTop(() => listRef.current?.scrollToTop({ animated: true }));
-    return () => registerScrollToTop(null);
-  }, [registerScrollToTop]);
 
   const editSheetRef = useRef<BottomSheet | null>(null);
   const [editAscent, setEditAscent] = useState<AscentFeedItem | null>(null);
@@ -130,12 +111,9 @@ export function LogbookTab({ userId, onScroll, topInset = 0, registerScrollToTop
   return (
     <View style={styles.flex}>
       <FlashList
-        ref={listRef}
         data={items}
         renderItem={renderItem}
         keyExtractor={keyExtractor}
-        onScroll={onScroll}
-        scrollEventThrottle={16}
         contentInsetAdjustmentBehavior="never"
         onEndReached={handleEndReached}
         onEndReachedThreshold={0.5}
