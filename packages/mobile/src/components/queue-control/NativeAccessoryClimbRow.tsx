@@ -1,6 +1,6 @@
 import { StyleSheet, View, type ColorValue } from 'react-native';
 import { GestureDetector } from 'react-native-gesture-handler';
-import type { Climb, ClimbQueueItem } from '@boardsesh/queue';
+import type { Climb } from '@boardsesh/queue';
 import { useGradeFormat } from '../../hooks/use-grade-format';
 import { useTheme } from '../../providers/theme-provider';
 import { useDrawerHost, type BoardConfig } from '../../providers/drawer-host-provider';
@@ -10,12 +10,12 @@ import { CHROME_LABEL_MAX_FONT_SCALE } from '../../theme/typography';
 import { Text } from '../Text';
 import { AccessoryClimbThumbnail } from './AccessoryClimbThumbnail';
 import { useAccessoryClimbTap } from './use-accessory-climb-tap';
-import { useWallOrQueueCurrentClimb } from './use-wall-or-queue-climb';
 import { LogAscentToolbarButton } from './LogAscentToolbarButton';
 
 type AccessoryPlacement = 'regular' | 'inline';
 
 type NativeAccessoryClimbRowProps = {
+  climb: Climb;
   placement: AccessoryPlacement;
   width: number;
 };
@@ -60,41 +60,33 @@ function ClimbLabel({ climb, labelColor, formattedGrade, showThumbnail, boardCon
   );
 }
 
-function climbFromItem(item: ClimbQueueItem | null | undefined): Climb | null {
-  return item?.climb ?? null;
-}
-
 /**
  * Content for the iOS 26 tab-bar bottom accessory (Liquid Glass variant only).
- * UIKit supplies the glass platter, so this stays bare: current climb + tick.
- * Tap-to-open is shared with the floating capsule via useAccessoryClimbTap. Its
- * plain grade + board thumbnail are tuned for the platter, so they intentionally
- * differ from the floating capsule's colorized grade.
+ * UIKit supplies the glass platter, so this stays bare: current climb + tick. The
+ * displayed climb is resolved once by {@link QueueBottomAccessory} and passed in,
+ * so this component never re-gates (a second gate could blank the live platter for
+ * a frame, which UIKit snapshotted as doubled text). Tap-to-open is shared with
+ * the floating capsule via useAccessoryClimbTap. Its plain grade + board thumbnail
+ * are tuned for the platter, so they intentionally differ from the floating
+ * capsule's colorized grade.
  */
-export function NativeAccessoryClimbRow({ placement, width }: NativeAccessoryClimbRowProps) {
+export function NativeAccessoryClimbRow({ climb, placement, width }: NativeAccessoryClimbRowProps) {
   const { boardConfig } = useDrawerHost();
   const { systemColors } = useTheme();
   const { formatGrade } = useGradeFormat();
-  const { openGesture, currentItem } = useAccessoryClimbTap();
+  const { openGesture } = useAccessoryClimbTap();
 
-  const queueCurrentClimb = climbFromItem(currentItem);
-  // Source-of-truth flip: when a board feed is live (and the flag is on) the
-  // accessory shows the wall's actual lit climb; otherwise the local queue head.
-  const currentClimb = useWallOrQueueCurrentClimb(queueCurrentClimb);
   const showThumbnail = placement === 'regular' && boardConfig !== null;
-
-  if (!currentClimb) return null;
-
   const rowHeight = placement === 'inline' ? glassSize.inline : glassSize.standard;
-  const currentFormattedGrade = formatGrade(currentClimb.difficulty);
+  const currentFormattedGrade = formatGrade(climb.difficulty);
 
   return (
     <View style={[styles.row, { width, height: rowHeight }]}>
       <GestureDetector gesture={openGesture}>
-        <View style={styles.tapClip} accessibilityRole="button" accessibilityLabel={currentClimb.name}>
+        <View style={styles.tapClip} accessibilityRole="button" accessibilityLabel={climb.name}>
           <View style={styles.labelSlot}>
             <ClimbLabel
-              climb={currentClimb}
+              climb={climb}
               labelColor={systemColors.label}
               formattedGrade={currentFormattedGrade}
               showThumbnail={showThumbnail}
@@ -104,7 +96,7 @@ export function NativeAccessoryClimbRow({ placement, width }: NativeAccessoryCli
         </View>
       </GestureDetector>
       <View style={[styles.tickSlot, { width: glassSize.inline, height: rowHeight }]}>
-        <LogAscentToolbarButton climb={currentClimb} size={glassSize.inline} iconSize={24} />
+        <LogAscentToolbarButton climb={climb} size={glassSize.inline} iconSize={24} />
       </View>
     </View>
   );

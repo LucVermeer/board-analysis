@@ -284,6 +284,13 @@ function makeBoardConfig(): BoardConfig {
   return { boardName: 'kilter', layoutId: 1, sizeId: 10, setIds: '1,20', angle: 40 };
 }
 
+// The displayed climb is now passed in by QueueBottomAccessory; default to the
+// queue head the test set up so the existing assertions keep reading it.
+function renderRow(placement: 'regular' | 'inline', width = 344) {
+  const climb = queue.state.currentClimbQueueItem?.climb as Climb;
+  return render(<NativeAccessoryClimbRow climb={climb} placement={placement} width={width} />);
+}
+
 function getCurrentThumbnail(container: HTMLElement): HTMLElement {
   const thumbnail = container.querySelector('[data-thumbnail="p1r12"]');
   expect(thumbnail).not.toBeNull();
@@ -308,7 +315,7 @@ describe('NativeAccessoryClimbRow', () => {
   });
 
   it('renders a regular now-climbing row with thumbnail, grade, and integrated tick', () => {
-    const { container } = render(<NativeAccessoryClimbRow placement="regular" width={344} />);
+    const { container } = renderRow('regular');
 
     expect(container.textContent).toContain("Alvin's Nuts");
     expect(container.textContent).toContain('V6');
@@ -354,7 +361,7 @@ describe('NativeAccessoryClimbRow', () => {
     queue.state.currentClimbQueueItem = mirroredItem;
     queue.state.queue = [mirroredItem];
 
-    const { container } = render(<NativeAccessoryClimbRow placement="regular" width={344} />);
+    const { container } = renderRow('regular');
 
     const thumbnail = getCurrentThumbnail(container);
     expect(thumbnail.getAttribute('data-mirrored')).toBe('true');
@@ -365,7 +372,7 @@ describe('NativeAccessoryClimbRow', () => {
   it('uses the full silhouette for very tall board thumbnails', () => {
     boardRender.boardWidth = 1080;
     boardRender.boardHeight = 2498;
-    const { container } = render(<NativeAccessoryClimbRow placement="regular" width={344} />);
+    const { container } = renderRow('regular');
     const thumbnail = getCurrentThumbnail(container);
 
     expectNumericAttribute(thumbnail, 'data-board-width', 17.293835);
@@ -375,7 +382,7 @@ describe('NativeAccessoryClimbRow', () => {
   it('keeps near-square Kilter Homewall thumbnails off the accessory edges', () => {
     boardRender.boardWidth = 1080;
     boardRender.boardHeight = 1157;
-    const { container } = render(<NativeAccessoryClimbRow placement="regular" width={344} />);
+    const { container } = renderRow('regular');
     const thumbnail = getCurrentThumbnail(container);
 
     expect(container.querySelector('[data-height="48"]')).not.toBeNull();
@@ -387,7 +394,7 @@ describe('NativeAccessoryClimbRow', () => {
   it('uses the full silhouette for wide board thumbnails', () => {
     boardRender.boardWidth = 1200;
     boardRender.boardHeight = 663;
-    const { container } = render(<NativeAccessoryClimbRow placement="regular" width={344} />);
+    const { container } = renderRow('regular');
     const thumbnail = getCurrentThumbnail(container);
 
     expectNumericAttribute(thumbnail, 'data-board-width', 40);
@@ -395,7 +402,7 @@ describe('NativeAccessoryClimbRow', () => {
   });
 
   it('keeps the thumbnail out of inline placement', () => {
-    const { container } = render(<NativeAccessoryClimbRow placement="inline" width={344} />);
+    const { container } = renderRow('inline');
 
     expect(container.textContent).toContain("Alvin's Nuts");
     expect(container.querySelector('[data-thumbnail]')).toBeNull();
@@ -405,7 +412,7 @@ describe('NativeAccessoryClimbRow', () => {
 
   it('omits the thumbnail when board config is unavailable', () => {
     drawer.boardConfig = null;
-    const { container } = render(<NativeAccessoryClimbRow placement="regular" width={344} />);
+    const { container } = renderRow('regular');
 
     expect(container.textContent).toContain("Alvin's Nuts");
     expect(container.querySelector('[data-thumbnail]')).toBeNull();
@@ -413,7 +420,7 @@ describe('NativeAccessoryClimbRow', () => {
   });
 
   it('keeps the tick outside the climb gesture target', () => {
-    const { container } = render(<NativeAccessoryClimbRow placement="regular" width={344} />);
+    const { container } = renderRow('regular');
     const tick = container.querySelector('[data-tick="true"]');
 
     expect(tick).not.toBeNull();
@@ -428,7 +435,7 @@ describe('NativeAccessoryClimbRow', () => {
     queue.state.currentClimbQueueItem = currentItem;
     queue.state.queue = [currentItem];
 
-    const { container } = render(<NativeAccessoryClimbRow placement="regular" width={344} />);
+    const { container } = renderRow('regular');
 
     const nameNodes = Array.from(container.querySelectorAll('[data-text]')).filter(
       (textNode) => textNode.textContent === 'Current Climb',
@@ -437,5 +444,24 @@ describe('NativeAccessoryClimbRow', () => {
 
     const tapTarget = container.querySelector('[data-role="button"]');
     expect(tapTarget?.getAttribute('data-actions')).toBe('');
+  });
+
+  it('renders the passed climb even when the local queue head is empty', () => {
+    // QueueBottomAccessory owns the single render gate; the row must not re-gate on
+    // its own queue read (an empty-vs-content flip inside the live platter is what
+    // UIKit snapshotted as doubled text). With no queue head, the prop still draws.
+    queue.state.currentClimbQueueItem = null;
+    queue.state.queue = [];
+
+    const { container } = render(
+      <NativeAccessoryClimbRow
+        climb={makeClimb({ uuid: 'wall', name: 'On The Wall' })}
+        placement="regular"
+        width={344}
+      />,
+    );
+
+    expect(container.textContent).toContain('On The Wall');
+    expect(container.querySelector('[data-tick="true"]')).not.toBeNull();
   });
 });
