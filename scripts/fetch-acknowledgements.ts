@@ -121,10 +121,11 @@ function fetchContributors(): Contributor[] | null {
 // a one-time gift isn't an "active" recurring subscription, so activeOnly:true
 // would silently drop them. includePrivate:false still respects sponsors who
 // chose to stay private (they're surfaced only as an anonymous count below).
-const PUBLIC_SPONSORS_QUERY = `query($login: String!) {
+const PUBLIC_SPONSORS_QUERY = `query($login: String!, $cursor: String) {
   organization(login: $login) {
-    sponsorshipsAsMaintainer(first: 100, activeOnly: false, includePrivate: false, orderBy: { field: CREATED_AT, direction: ASC }) {
+    sponsorshipsAsMaintainer(first: 100, after: $cursor, activeOnly: false, includePrivate: false, orderBy: { field: CREATED_AT, direction: ASC }) {
       totalCount
+      pageInfo { hasNextPage endCursor }
       nodes {
         sponsorEntity {
           __typename
@@ -147,19 +148,36 @@ const ALL_SPONSOR_COUNT_QUERY = `query($login: String!) {
 }`;
 
 function fetchSponsorData(): { sponsors: Sponsor[]; privateCount: number } | null {
-  let publicConnection;
+  type PublicConnection = {
+    totalCount?: number;
+    pageInfo?: { hasNextPage?: boolean; endCursor?: string };
+    nodes?: RawSponsorNode[];
+  };
+  const rawNodes: RawSponsorNode[] = [];
+  let publicCount = 0;
+  let cursor: string | null = null;
   try {
-    const response = JSON.parse(
-      gh(['api', 'graphql', '-f', `query=${PUBLIC_SPONSORS_QUERY}`, '-f', `login=${SPONSOR_ORG}`]),
-    ) as { data?: { organization?: { sponsorshipsAsMaintainer?: { totalCount?: number; nodes?: RawSponsorNode[] } } } };
-    publicConnection = response.data?.organization?.sponsorshipsAsMaintainer;
+    // Paginate fully — an org can have more than the 100-per-page maximum.
+    for (let page = 0; page < 200; page += 1) {
+      const args = ['api', 'graphql', '-f', `query=${PUBLIC_SPONSORS_QUERY}`, '-f', `login=${SPONSOR_ORG}`];
+      if (cursor) args.push('-f', `cursor=${cursor}`);
+      const response = JSON.parse(gh(args)) as {
+        data?: { organization?: { sponsorshipsAsMaintainer?: PublicConnection } };
+      };
+      const connection = response.data?.organization?.sponsorshipsAsMaintainer;
+      if (!connection) break;
+      publicCount = connection.totalCount ?? publicCount;
+      for (const node of connection.nodes ?? []) rawNodes.push(node);
+      if (!connection.pageInfo?.hasNextPage || !connection.pageInfo.endCursor) break;
+      cursor = connection.pageInfo.endCursor;
+    }
   } catch (error) {
     console.warn(`[acknowledgements] sponsors fetch failed, keeping existing list: ${String(error)}`);
     return null;
   }
 
-  const sponsors = transformSponsors(publicConnection?.nodes ?? []);
-  const publicCount = publicConnection?.totalCount ?? sponsors.length;
+  const sponsors = transformSponsors(rawNodes);
+  publicCount = publicCount || sponsors.length;
 
   // Private count is best-effort: it needs the org-maintainer token, so any
   // failure just means we don't show the anonymous count rather than failing.

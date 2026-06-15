@@ -139,4 +139,13 @@ describe('LicensesScreen', () => {
 
     expect(openUrl.openExternalUrl).toHaveBeenCalledWith('https://github.com/facebook/react', 'license-source');
   });
+
+  it('hides View source for a package with no repository', () => {
+    render(<LicensesScreen />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'zod' }));
+
+    expect(screen.getByTestId('license-modal')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'View source' })).toBeNull();
+  });
 });

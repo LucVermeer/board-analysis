@@ -145,4 +145,30 @@ describe('AcknowledgementsScreen', () => {
 
     expect(routerMock.push).toHaveBeenCalledWith('/scout');
   });
+
+  it('shows the empty-state Become-a-sponsor CTA when there are no sponsors', async () => {
+    // Re-mock the data module with no sponsors and re-import the screen so the
+    // sponsors.length === 0 branch renders.
+    vi.resetModules();
+    vi.doMock('../../src/lib/acknowledgements', () => ({
+      contributors: [],
+      sponsors: [],
+      privateSponsorCount: 0,
+      friends: ['Gabby'],
+      dogName: 'Scout',
+      SPONSORS_URL: 'https://github.com/sponsors/boardsesh',
+    }));
+    const { default: EmptySponsorsScreen } = await import('../acknowledgements');
+
+    render(<EmptySponsorsScreen />);
+    fireEvent.click(screen.getByRole('button', { name: 'Become a sponsor' }));
+
+    expect(openUrl.openExternalUrl).toHaveBeenCalledWith(
+      'https://github.com/sponsors/boardsesh',
+      'acknowledgements-sponsor',
+    );
+
+    vi.doUnmock('../../src/lib/acknowledgements');
+    vi.resetModules();
+  });
 });
