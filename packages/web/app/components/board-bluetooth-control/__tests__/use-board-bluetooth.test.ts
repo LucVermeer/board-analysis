@@ -920,6 +920,30 @@ describe('useBoardBluetooth', () => {
       expect(mockCreateBluetoothAdapter).toHaveBeenCalledTimes(2);
     });
 
+    it('releases the guard after the user cancels the picker so a re-tap connects', async () => {
+      // The most common real re-entry: the user dismisses the picker, then taps
+      // the lightbulb again. The cancel rejects requestAndConnect → connect()'s
+      // finally clears the guard, so the re-tap is not swallowed.
+      mockAdapter.requestAndConnect.mockRejectedValueOnce(new Error('Device selection cancelled'));
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      const { result } = renderHook(() => useBoardBluetooth({ boardDetails: mockBoardDetails }));
+
+      await act(async () => {
+        await result.current.connect();
+      });
+      expect(result.current.isConnected).toBe(false);
+      // Cancelling stays silent (not a failure toast).
+      expect(mockShowMessage).not.toHaveBeenCalled();
+
+      await act(async () => {
+        await result.current.connect();
+      });
+      expect(result.current.isConnected).toBe(true);
+      expect(mockCreateBluetoothAdapter).toHaveBeenCalledTimes(2);
+      errorSpy.mockRestore();
+    });
+
     it('releases the guard after a failed attempt so the next connect can run', async () => {
       mockAdapter.requestAndConnect.mockRejectedValueOnce(new Error('GATT connect failed'));
       const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
