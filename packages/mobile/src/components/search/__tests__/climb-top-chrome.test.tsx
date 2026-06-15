@@ -165,6 +165,14 @@ vi.mock('../../../lib/graphql/use-active-board', () => ({
 vi.mock('../../../providers/bluetooth-provider', () => ({
   useOptionalBluetoothContext: () => ctrl.bluetooth,
 }));
+// The shared lightbulb hook also reads board presence + session state. Inert
+// defaults here so the bulb follows local BLE (boardId null → session fallback,
+// which is false), keeping these tests focused on the chrome layout.
+vi.mock('../../../providers/board-presence-provider', () => ({ useBoardPresenceControls: () => ({ boardId: null }) }));
+vi.mock('../../../providers/queue-provider', () => ({
+  useQueueSessionControls: () => ({ isSessionWallLit: false, sessionId: null }),
+}));
+vi.mock('../../../lib/analytics', () => ({ track: vi.fn() }));
 
 vi.mock('../../../theme/tokens', () => ({
   spacing: { 1: 4, 2: 8, 3: 12, 4: 16 },

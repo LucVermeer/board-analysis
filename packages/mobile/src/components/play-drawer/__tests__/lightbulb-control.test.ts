@@ -1,36 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildPlayDrawerBoardLayout,
+  deriveLightbulbLit,
   derivePlayDrawerLightbulbPressAction,
-  derivePlayDrawerLightbulbState,
 } from '../lightbulb-control';
 
 describe('play drawer lightbulb control', () => {
-  it('lights the lightbulb iff the board is connected', () => {
-    expect(derivePlayDrawerLightbulbState({ isBluetoothConnected: false, isBluetoothLoading: false })).toEqual({
-      lightbulbActive: false,
-      lightbulbPending: false,
-    });
-
-    expect(derivePlayDrawerLightbulbState({ isBluetoothConnected: true, isBluetoothLoading: false })).toEqual({
-      lightbulbActive: true,
-      lightbulbPending: false,
-    });
-  });
-
-  it('treats Bluetooth loading as pending', () => {
-    expect(derivePlayDrawerLightbulbState({ isBluetoothConnected: false, isBluetoothLoading: true })).toEqual({
-      lightbulbActive: false,
-      lightbulbPending: true,
-    });
-
-    // Connected and still loading (e.g. a reconnect re-push) stays lit + pending.
-    expect(derivePlayDrawerLightbulbState({ isBluetoothConnected: true, isBluetoothLoading: true })).toEqual({
-      lightbulbActive: true,
-      lightbulbPending: true,
-    });
-  });
-
   it('derives the connect/disconnect tap action', () => {
     // No board selected on this client at all — nothing to toggle.
     expect(
@@ -71,5 +46,63 @@ describe('play drawer lightbulb control', () => {
 
   it('builds the analytics board-layout key', () => {
     expect(buildPlayDrawerBoardLayout({ boardName: 'kilter', layoutId: 1, sizeId: 10 })).toBe('kilter:1:10');
+  });
+});
+
+describe('deriveLightbulbLit', () => {
+  it('lights whenever this device holds the BLE link', () => {
+    expect(
+      deriveLightbulbLit({
+        localConnected: true,
+        isSubscribedToBoardFeed: false,
+        peerHolderPresent: false,
+        isSessionWallLit: false,
+      }),
+    ).toBe(true);
+  });
+
+  it('lights when subscribed and a peer holds the wall', () => {
+    expect(
+      deriveLightbulbLit({
+        localConnected: false,
+        isSubscribedToBoardFeed: true,
+        peerHolderPresent: true,
+        isSessionWallLit: false,
+      }),
+    ).toBe(true);
+  });
+
+  it('ignores a stuck session flag once subscribed to the authoritative feed', () => {
+    // The regression: the holder has cleared (peer disconnected) but the
+    // best-effort session flag is stuck true. Subscribed clients trust the
+    // holder, so the bulb correctly reads off — the phone can take control back.
+    expect(
+      deriveLightbulbLit({
+        localConnected: false,
+        isSubscribedToBoardFeed: true,
+        peerHolderPresent: false,
+        isSessionWallLit: true,
+      }),
+    ).toBe(false);
+  });
+
+  it('falls back to the session flag for a member that never bound the board', () => {
+    expect(
+      deriveLightbulbLit({
+        localConnected: false,
+        isSubscribedToBoardFeed: false,
+        peerHolderPresent: false,
+        isSessionWallLit: true,
+      }),
+    ).toBe(true);
+
+    expect(
+      deriveLightbulbLit({
+        localConnected: false,
+        isSubscribedToBoardFeed: false,
+        peerHolderPresent: false,
+        isSessionWallLit: false,
+      }),
+    ).toBe(false);
   });
 });
