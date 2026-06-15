@@ -270,6 +270,14 @@ export default defineConfig({
         command: 'bun scripts/mobile-board-art-network-check.ts',
         cache: false,
       },
+      'generate:acknowledgements': {
+        command: 'node --import tsx scripts/fetch-acknowledgements.ts',
+        cache: false,
+      },
+      'generate:oss-licenses': {
+        command: 'node --import tsx scripts/generate-oss-licenses.ts',
+        cache: false,
+      },
       'generate:ios-board-placement-data': {
         command: 'node --import tsx packages/board-constants/scripts/generate-ios-board-placement-data.ts',
         dependsOn: ['build:constants'],

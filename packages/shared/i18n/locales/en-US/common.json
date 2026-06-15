@@ -110,9 +110,38 @@
       "boardsBody": "Boardsesh supports sessions on your Kilter, Tension, and MoonBoard setups without pretending to be an official app.",
       "openTitle": "Built in the open",
       "openBody": "The project is open source so climbers can report rough edges, request features, and help steer what comes next.",
-      "independentTitle": "Independent project",
       "independentBody": "Boardsesh is not affiliated with or endorsed by Aurora Climbing, Kilter, Tension, Moon Climbing, or any board manufacturer.",
-      "joinDiscord": "Join Discord"
+      "viewOnGithub": "View on GitHub",
+      "joinDiscord": "Join Discord",
+      "partnerTitle": "Partner with us officially",
+      "partnerBody": "Boardsesh works with Kilter, Tension, and MoonBoard from the outside. If you build boards and want to make something official together, we're keen to talk.",
+      "acknowledgementsLink": "Acknowledgements",
+      "acknowledgementsLinkBody": "The people behind Boardsesh"
+    },
+    "acknowledgements": {
+      "title": "Acknowledgements",
+      "intro": "Boardsesh exists because of the people who build it, back it, and put up with endless board talk. Thank you.",
+      "contributorsTitle": "Contributors",
+      "contributorsBody": "Everyone who's shipped code, fixes, and ideas on GitHub.",
+      "sponsorsTitle": "Sponsors",
+      "sponsorsBody": "Climbers keeping the lights on through GitHub Sponsors.",
+      "sponsorsEmpty": "No sponsors yet — want to be the first?",
+      "privateSponsorsThanks": "and {{count}} more sponsoring privately — thank you too",
+      "becomeSponsor": "Become a sponsor",
+      "personalTitle": "Personal thanks",
+      "discordTitle": "Everyone on our Discord",
+      "discordBody": "Thanks for the beta, the psyche, and the bug reports. Tap to join.",
+      "friendsTitle": "The crew",
+      "friendsBody": "{{names}} — for listening to me go on about Boardsesh, and for actually climbing on it.",
+      "dogBody": "Thanks Scout for all the emotional support, she's the real MVP of Boardsesh. Despite not even climbing and just wanting to be a beach dog.",
+      "ossLicensesLink": "Open source licenses",
+      "ossLicensesBody": "The open source software Boardsesh is built on"
+    },
+    "licenses": {
+      "title": "Open source licenses",
+      "intro": "Boardsesh is built with these open source packages. Thank you to their maintainers.",
+      "viewSource": "View source",
+      "close": "Close"
     },
     "onboarding": {
       "skip": "Skip",

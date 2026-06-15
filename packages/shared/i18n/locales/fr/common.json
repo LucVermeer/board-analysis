@@ -110,9 +110,38 @@
       "boardsBody": "Boardsesh prend en charge les sessions sur vos setups Kilter, Tension et MoonBoard sans se présenter comme une app officielle.",
       "openTitle": "Construit en public",
       "openBody": "Le projet est open source pour que les grimpeurs puissent signaler les accrocs, demander des fonctions et aider à choisir la suite.",
-      "independentTitle": "Projet indépendant",
       "independentBody": "Boardsesh n'est ni affilié ni approuvé par Aurora Climbing, Kilter, Tension, Moon Climbing ou un fabricant de boards.",
-      "joinDiscord": "Rejoindre Discord"
+      "viewOnGithub": "Voir sur GitHub",
+      "joinDiscord": "Rejoindre Discord",
+      "partnerTitle": "Devenez partenaire officiel",
+      "partnerBody": "Boardsesh fonctionne avec Kilter, Tension et MoonBoard depuis l'extérieur. Si vous fabriquez des boards et voulez construire quelque chose d'officiel ensemble, on serait ravis d'en parler.",
+      "acknowledgementsLink": "Remerciements",
+      "acknowledgementsLinkBody": "Les personnes derrière Boardsesh"
+    },
+    "acknowledgements": {
+      "title": "Remerciements",
+      "intro": "Boardsesh existe grâce aux personnes qui le construisent, le soutiennent et supportent que je parle sans fin de boards. Merci.",
+      "contributorsTitle": "Contributeurs",
+      "contributorsBody": "Toutes les personnes qui ont apporté du code, des correctifs et des idées sur GitHub.",
+      "sponsorsTitle": "Sponsors",
+      "sponsorsBody": "Les grimpeurs qui font vivre le projet via GitHub Sponsors.",
+      "sponsorsEmpty": "Pas encore de sponsor — envie d'être le premier ?",
+      "privateSponsorsThanks": "et {{count}} de plus en privé — merci à vous aussi",
+      "becomeSponsor": "Devenir sponsor",
+      "personalTitle": "Remerciements personnels",
+      "discordTitle": "Tout le monde sur notre Discord",
+      "discordBody": "Merci pour la beta, la motivation et les rapports de bugs. Touchez pour rejoindre.",
+      "friendsTitle": "La team",
+      "friendsBody": "{{names}} — pour m'avoir écouté parler sans fin de Boardsesh, et pour avoir vraiment grimpé dessus.",
+      "dogBody": "Merci à Scout pour tout le soutien moral, c'est la vraie MVP de Boardsesh. Même si elle ne grimpe pas et veut juste être une chienne de plage.",
+      "ossLicensesLink": "Licences open source",
+      "ossLicensesBody": "Les logiciels open source sur lesquels Boardsesh est construit"
+    },
+    "licenses": {
+      "title": "Licences open source",
+      "intro": "Boardsesh est construit avec ces paquets open source. Merci à leurs mainteneurs.",
+      "viewSource": "Voir le code",
+      "close": "Fermer"
     },
     "onboarding": {
       "skip": "Passer",
