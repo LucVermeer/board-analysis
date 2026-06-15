@@ -107,9 +107,14 @@ export default function AboutScreen() {
         </View>
 
         <View style={[styles.notice, { backgroundColor: systemColors.secondaryBackground }]}>
-          <Text variant="headline" style={styles.noticeTitle}>
-            {t('mobile.about.openTitle')}
-          </Text>
+          <View style={styles.noticeHeader}>
+            <View style={[styles.cardIcon, { backgroundColor: systemColors.fill }]}>
+              <Icon name="github" size={22} color={systemColors.accent} />
+            </View>
+            <Text variant="headline" style={styles.noticeHeaderTitle}>
+              {t('mobile.about.openTitle')}
+            </Text>
+          </View>
           <Text variant="subheadline" color={systemColors.secondaryLabel} style={styles.noticeBody}>
             {t('mobile.about.openBody')}
           </Text>
@@ -127,9 +132,14 @@ export default function AboutScreen() {
         </View>
 
         <View style={[styles.notice, { backgroundColor: systemColors.secondaryBackground }]}>
-          <Text variant="headline" style={styles.noticeTitle}>
-            {t('mobile.about.partnerTitle')}
-          </Text>
+          <View style={styles.noticeHeader}>
+            <View style={[styles.cardIcon, { backgroundColor: systemColors.fill }]}>
+              <Icon name="boards.fill" size={22} color={systemColors.accent} />
+            </View>
+            <Text variant="headline" style={styles.noticeHeaderTitle}>
+              {t('mobile.about.partnerTitle')}
+            </Text>
+          </View>
           <Text variant="subheadline" color={systemColors.secondaryLabel} style={styles.noticeBody}>
             {t('mobile.about.partnerBody')}
           </Text>
@@ -231,7 +241,13 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.lg,
     padding: spacing[4],
   },
-  noticeTitle: {
+  noticeHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[3],
+  },
+  noticeHeaderTitle: {
+    flex: 1,
     fontWeight: '700',
   },
   noticeBody: {
