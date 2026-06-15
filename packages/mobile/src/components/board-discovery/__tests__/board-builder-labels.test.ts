@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { boardTypeLabel, cleanLayoutName, formatSizeLabel, formatDefaultBoardName } from '../board-builder-labels';
+import {
+  boardTypeLabel,
+  cleanLayoutName,
+  formatSizeLabel,
+  formatSizeDimensions,
+  formatDefaultBoardName,
+} from '../board-builder-labels';
 
 describe('boardTypeLabel', () => {
   it('uses trademark-correct names', () => {
@@ -40,6 +46,13 @@ describe('formatSizeLabel', () => {
   it('shows just the dimensions when there is no kit description', () => {
     expect(formatSizeLabel({ name: '12 high x 12 wide', description: '' })).toBe('12×12');
     expect(formatSizeLabel({ name: '7x10', description: null })).toBe('7×10');
+  });
+});
+
+describe('formatSizeDimensions', () => {
+  it('returns just the × dimensions', () => {
+    expect(formatSizeDimensions({ name: '10x12' })).toBe('10×12');
+    expect(formatSizeDimensions({ name: '12 high x 16 wide' })).toBe('12×16');
   });
 });
 

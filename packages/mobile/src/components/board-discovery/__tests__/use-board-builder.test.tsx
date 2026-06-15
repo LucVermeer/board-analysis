@@ -102,4 +102,19 @@ describe('useBoardBuilder', () => {
     expect(input?.latitude).toBe(1.5);
     expect(input?.longitude).toBe(-2.5);
   });
+
+  it('applies the name precedence: typed name → fallbackName → cleaned layout name', () => {
+    const { result } = renderHook(() => useBoardBuilder());
+    act(() => result.current.selectBoard('kilter'));
+    act(() => result.current.selectLayout(1));
+
+    // Blank name + a fallback (e.g. the auto-generated name) → fallback.
+    expect(result.current.buildCreateInput("Marco's Kilter")?.name).toBe("Marco's Kilter");
+    // Blank name + no fallback → cleaned layout name ("Kilter Board Original" → "Original").
+    expect(result.current.buildCreateInput()?.name).toBe('Original');
+
+    // A typed name wins over the fallback.
+    act(() => result.current.setName('Garage'));
+    expect(result.current.buildCreateInput("Marco's Kilter")?.name).toBe('Garage');
+  });
 });

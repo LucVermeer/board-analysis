@@ -268,6 +268,7 @@ export default function CreateBoard() {
               value={builder.name}
               onChangeText={builder.setName}
               placeholder={defaultName}
+              accessibilityLabel={t('mobile.custom.name')}
               maxLength={100}
               returnKeyType="done"
             />
@@ -321,6 +322,7 @@ export default function CreateBoard() {
               value={builder.locationName}
               onChangeText={builder.setLocationName}
               placeholder={t('mobile.create.locationPlaceholder')}
+              accessibilityLabel={t('mobile.create.location')}
               maxLength={120}
             />
             <Button
@@ -335,6 +337,7 @@ export default function CreateBoard() {
               value={builder.serialNumber}
               onChangeText={builder.setSerialNumber}
               placeholder={t('mobile.create.serialPlaceholder')}
+              accessibilityLabel={t('mobile.create.serial')}
               autoCapitalize="characters"
               maxLength={100}
             />
