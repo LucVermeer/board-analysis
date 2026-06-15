@@ -156,8 +156,10 @@ export function CollapsingLargeTitleHeader({
     <View pointerEvents="box-none" style={[styles.container, { paddingTop: insets.top }]} onLayout={handleLayout}>
       {/* Scrim: matches the scene background and fades in on scroll so content
           scrolling up doesn't bleed through the gaps between the islands. Hidden
-          at rest (nothing to mask) so it never shows as a band over the scene. */}
-      <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, scrimStyle]}>
+          at rest (nothing to mask). Starts below the status-bar inset so the
+          Dynamic Island / status-bar strip stays transparent (content scrolls
+          under it, as on a native nav bar) — only the islands row is masked. */}
+      <Animated.View pointerEvents="none" style={[styles.scrim, { top: insets.top }, scrimStyle]}>
         <LinearGradient
           colors={[scrimColor, scrimColor, 'transparent'] as const}
           locations={[0, 0.7, 1]}
@@ -239,6 +241,14 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     zIndex: 20,
+  },
+  // Sits below the status-bar inset (top is applied inline) so the scrim never
+  // covers the Dynamic Island / status-bar strip — only the islands row + below.
+  scrim: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
   row: {
     height: TOP_ACTION_SIZE,
