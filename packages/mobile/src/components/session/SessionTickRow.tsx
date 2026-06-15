@@ -1,4 +1,4 @@
-import { memo, useCallback } from 'react';
+import { memo, useCallback, useMemo } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import type { SessionDetailTick, SessionFeedParticipant } from '@boardsesh/shared-schema';
@@ -110,7 +110,14 @@ export const SessionTickRow = memo(function SessionTickRow({
   }, [onPress, tick]);
 
   const climb = sessionTickToClimb(tick);
-  const boardConfig = getBoardConfigForPlaylist(tick.boardType, tick.layoutId);
+  // Per-row in a virtualised list: getBoardConfigForPlaylist runs a sizes scan
+  // (getSizesForLayoutId filter + reduce), so memoise on the board identity.
+  // Ticks in a session share one (boardType, layoutId), so this collapses to
+  // ~one compute per board. Mirrors PlaylistBoardBackdrop.
+  const boardConfig = useMemo(
+    () => getBoardConfigForPlaylist(tick.boardType, tick.layoutId),
+    [tick.boardType, tick.layoutId],
+  );
 
   if (climb && boardConfig) {
     return (
