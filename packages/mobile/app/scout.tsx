@@ -52,7 +52,7 @@ const styles = StyleSheet.create({
   },
   photo: {
     width: '100%',
-    aspectRatio: 3 / 2,
+    aspectRatio: 3 / 5,
     borderRadius: borderRadius.xl,
   },
   text: {
