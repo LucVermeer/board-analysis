@@ -100,15 +100,17 @@ export default function HomeTab() {
   }, [homeBoard, isResolvingHomeBoard]);
 
   const feedInput = useMemo(() => deriveFeedScopeInput(mode, selectedBoard?.uuid ?? null), [mode, selectedBoard]);
-  // The beta shelf rescopes to the selected board's type ("Fresh beta on this
-  // board"); with no board it stays global ("Fresh beta").
+  // The beta shelf rescopes to the selected board's type + layout ("Fresh beta
+  // on this board"); with no board it stays global ("Fresh beta"). Layout
+  // matters — a Kilter Original beta is useless on a Kilter Homewall.
   const betaBoardType = selectedBoard?.boardType ?? null;
+  const betaLayoutId = selectedBoard?.layoutId ?? null;
 
   // Hold both queries until home-board inference settles, so a cold start never
   // fires the unscoped global feed first (initial state is gym + no board) and
   // then refetches the scoped/crew query — that double-fetch flickered the feed.
   const scopeReady = !isResolvingHomeBoard;
-  const betaVideos = useRecentBetaLinks(RECENT_BETA_LIMIT, betaBoardType, scopeReady);
+  const betaVideos = useRecentBetaLinks(RECENT_BETA_LIMIT, betaBoardType, betaLayoutId, scopeReady);
   const feed = useSessionGroupedFeed(feedInput, isAuthenticated && scopeReady);
 
   const sessions = useMemo(

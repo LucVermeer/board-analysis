@@ -424,14 +424,17 @@ export function useBetaLinks(boardType: string, climbUuid: string, enabled = tru
   });
 }
 
-export function useRecentBetaLinks(limit = 20, boardType?: string | null, enabled = true) {
+export function useRecentBetaLinks(limit = 20, boardType?: string | null, layoutId?: number | null, enabled = true) {
   return useQuery({
-    queryKey: ['recentBetaLinks', limit, boardType ?? null],
+    queryKey: ['recentBetaLinks', limit, boardType ?? null, layoutId ?? null],
     queryFn: () =>
       getHttpClient().request<GetRecentBetaLinksQueryResponse, GetRecentBetaLinksQueryVariables>(
         GET_RECENT_BETA_LINKS,
         {
-          limit,
+          // Over-fetch when a layout is set so the client-side layout filter
+          // below still fills the shelf (the server query only narrows by board
+          // type). A backend `layoutId` arg would let us drop this.
+          limit: layoutId != null ? limit * 4 : limit,
           boardType,
         },
       ),
@@ -440,12 +443,16 @@ export function useRecentBetaLinks(limit = 20, boardType?: string | null, enable
       const videos: RecentBetaVideo[] = [];
 
       for (const row of data.recentBetaLinks) {
+        // Beta is board-specific: a Kilter Original beta is useless on a Kilter
+        // Homewall, so scope to the selected board's layout too, not just type.
+        if (layoutId != null && row.layoutId !== layoutId) continue;
         const betaLink = mapBetaLink(row.betaLink);
         if (!isBetaVideoUrl(betaLink.link)) continue;
         const identity = betaLinkIdentity(betaLink.link);
         if (seenIdentities.has(identity)) continue;
         seenIdentities.add(identity);
         videos.push({ ...row, betaLink });
+        if (videos.length >= limit) break;
       }
 
       return videos;
