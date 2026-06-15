@@ -21,9 +21,9 @@ type BoardSwitcherButtonProps = {
  * 45°", or "Garage Wall • 40°" for a named board) shown as the app-bar title
  * with a trailing down-caret affordance, so it reads as a tappable context
  * switcher rather than the static subtitle it replaces. It is the flat M3
- * counterpart of the liquid-glass `BoardPill` — reads the active board itself,
- * renders nothing when none is set, and fires the haptic here while the caller
- * injects what a tap does. Lives where `Appbar.Content` did, taking `flex: 1`.
+ * counterpart of the liquid-glass `BoardToolbarAction` — reads the active board
+ * itself, renders nothing when none is set, and fires the haptic here while the
+ * caller injects what a tap does. Lives where `Appbar.Content` did, `flex: 1`.
  */
 export function BoardSwitcherButton({ onPress, accessibilityHint }: BoardSwitcherButtonProps) {
   const { systemColors } = useTheme();

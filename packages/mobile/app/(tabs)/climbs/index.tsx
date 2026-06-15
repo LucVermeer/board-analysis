@@ -1,12 +1,5 @@
 import { memo, useState, useCallback, useMemo, useRef, useEffect, type ComponentProps } from 'react';
-import {
-  View,
-  StyleSheet,
-  RefreshControl,
-  Keyboard,
-  type NativeScrollEvent,
-  type NativeSyntheticEvent,
-} from 'react-native';
+import { View, StyleSheet, RefreshControl, Keyboard } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -155,16 +148,6 @@ function ClimbListInner() {
   const visibleSearchTextRef = useRef('');
   const insets = useSafeAreaInsets();
   const bottomChrome = useBottomChromeMetrics();
-
-  // Scroll offset drives the glass large in-body filter title collapsing into the
-  // inline title shown in the top chrome on scroll.
-  const scrollY = useSharedValue(0);
-  const handleScroll = useCallback(
-    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-      scrollY.value = event.nativeEvent.contentOffset.y;
-    },
-    [scrollY],
-  );
 
   // iOS 26 uses the native tab-bar bottom accessory for current climb + tick, and
   // presents this screen's headerSearchBarOptions controller in the bottom tab
@@ -681,7 +664,7 @@ function ClimbListInner() {
     [summaryFilterTokens, variant, t],
   );
   // The glass screen title: the active-filter summary, or "All climbs" when none.
-  // Shown both as the large in-body title and the collapsed header capsule.
+  // Shown as the persistent centre title in the floating chrome.
   const searchTitle = filterSummary ?? t('mobile.search.allClimbs');
   const gradeFilterToken = useMemo(
     () => filterTokens.find((filterToken) => filterToken.key === 'grade'),
@@ -699,15 +682,9 @@ function ClimbListInner() {
   const listHeader = useMemo(
     () => (
       <>
-        {/* Glass variant: the screen's identity in-body under the floating
-            chrome — the active filter ("V4–V6 · Quality") or "All climbs" —
-            collapsing into the centered header capsule as it scrolls up. The
-            Material variant shows the title in its Appbar instead. */}
-        {variant === 'material' ? null : (
-          <Text variant="largeTitle" numberOfLines={2} ellipsizeMode="tail" style={styles.screenTitle}>
-            {searchTitle}
-          </Text>
-        )}
+        {/* The filter summary now lives persistently in the floating chrome's
+            centre (glass) / Appbar (Material), so the list itself opens straight
+            into the recent-filter pills and climbs. */}
         {showRecentPills ? (
           <RecentFilterPills
             recentFilters={recentFilters}
@@ -719,16 +696,7 @@ function ClimbListInner() {
         ) : null}
       </>
     ),
-    [
-      variant,
-      searchTitle,
-      showRecentPills,
-      recentFilters,
-      filters,
-      name,
-      handleApplyRecentFilter,
-      handleClearRecentFilters,
-    ],
+    [showRecentPills, recentFilters, filters, name, handleApplyRecentFilter, handleClearRecentFilters],
   );
 
   const listFooter = useMemo(
@@ -851,8 +819,6 @@ function ClimbListInner() {
         keyExtractor={keyExtractor}
         onEndReached={handleEndReached}
         onEndReachedThreshold={0.5}
-        onScroll={handleScroll}
-        scrollEventThrottle={16}
         // The header is transparent on every path now, so the chrome owns the top
         // inset and the list pads manually by the measured chrome height. Leaving
         // this 'automatic' would double-inset under the (invisible) native header.
@@ -892,7 +858,6 @@ function ClimbListInner() {
         onCreate={handleCreateClimb}
         onOpenBoardDetail={handleOpenBoardDetail}
         onHeightChange={setSearchBarHeight}
-        scrollY={scrollY}
         searchFieldRef={searchHeaderRef}
         searchInitialValue={name}
         searchPlaceholder={t('search.placeholders.climbs')}
@@ -960,11 +925,6 @@ function ClimbListSkeletonRows({ count }: { count: number }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  screenTitle: {
-    paddingHorizontal: spacing[4],
-    paddingTop: 0,
-    paddingBottom: spacing[2],
   },
   loadingContainer: {
     flex: 1,

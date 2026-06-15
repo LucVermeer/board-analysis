@@ -124,8 +124,6 @@ vi.mock('../../user-drawer/UserAvatarToolbarAction', () => ({
 
 import { CollapsingTopChrome } from '../CollapsingTopChrome';
 
-const scrollY = { value: 0 } as unknown as Parameters<typeof CollapsingTopChrome>[0]['scrollY'];
-
 function makeProps(over: Partial<Parameters<typeof CollapsingTopChrome>[0]> = {}) {
   return {
     canCreate: false,
@@ -133,7 +131,6 @@ function makeProps(over: Partial<Parameters<typeof CollapsingTopChrome>[0]> = {}
     createAccessibilityLabel: 'create.label',
     onOpenBoardSwitcher: vi.fn(),
     onHeightChange: vi.fn(),
-    scrollY,
     ...over,
   };
 }
@@ -143,7 +140,9 @@ const createAction = (root: HTMLElement) =>
 const lightbulb = (root: HTMLElement) =>
   (root.querySelector('[data-pressable="ble.connectBoard"]') ??
     root.querySelector('[data-pressable="lightControl.disconnect"]')) as HTMLButtonElement | null;
-const capsule = (root: HTMLElement) =>
+// The board control is the right-toolbar glyph whose VoiceOver label is the full
+// board label (e.g. "Display:kilter • M • 40°"), so the '•' marker finds it.
+const boardAction = (root: HTMLElement) =>
   root.querySelector('[data-capsule]:not([data-capsule=""])') as HTMLButtonElement | null;
 
 const board: BoardFields = {
@@ -163,22 +162,24 @@ describe('CollapsingTopChrome', () => {
     haptics.light.mockClear();
   });
 
-  it('renders the board pill for the active board', () => {
+  it('renders the board glyph for the active board, labelled with the board', () => {
     ctrl.board = board;
     const { container } = render(<CollapsingTopChrome {...makeProps()} />);
-    expect(capsule(container)?.getAttribute('data-capsule')).toBe('Display:kilter • M • 40°');
+    expect(boardAction(container)?.getAttribute('data-capsule')).toBe('Display:kilter • M • 40°');
+    // It's a glyph (the boards icon), not the old centred text pill.
+    expect(boardAction(container)?.querySelector('[data-icon="boards"]')).not.toBeNull();
   });
 
-  it('renders no board pill when there is no active board', () => {
+  it('renders no board glyph when there is no active board', () => {
     const { container } = render(<CollapsingTopChrome {...makeProps()} />);
-    expect(capsule(container)).toBeNull();
+    expect(boardAction(container)).toBeNull();
   });
 
-  it('opens the board switcher when the pill is pressed', () => {
+  it('opens the board switcher when the board glyph is pressed', () => {
     ctrl.board = board;
     const onOpenBoardSwitcher = vi.fn();
     const { container } = render(<CollapsingTopChrome {...makeProps({ onOpenBoardSwitcher })} />);
-    fireEvent.click(capsule(container)!);
+    fireEvent.click(boardAction(container)!);
     expect(onOpenBoardSwitcher).toHaveBeenCalledTimes(1);
   });
 

@@ -136,7 +136,9 @@ const createAction = (root: HTMLElement) =>
 const lightbulb = (root: HTMLElement) =>
   (root.querySelector('[data-pressable="ble.connectBoard"]') ??
     root.querySelector('[data-pressable="lightControl.disconnect"]')) as HTMLButtonElement | null;
-const capsule = (root: HTMLElement) =>
+// The board control is the right-toolbar glyph whose VoiceOver label is the full
+// board label (e.g. "Display:kilter • M • 40°"), so the '•' marker finds it.
+const boardAction = (root: HTMLElement) =>
   root.querySelector('[data-capsule]:not([data-capsule=""])') as HTMLButtonElement | null;
 
 const board: BoardFields = {
@@ -156,17 +158,17 @@ describe('DiscoverTopChrome', () => {
     haptics.light.mockClear();
   });
 
-  it('renders the board pill for the active board', () => {
+  it('renders the board glyph for the active board', () => {
     ctrl.board = board;
     const { container } = render(<DiscoverTopChrome {...makeProps()} />);
-    expect(capsule(container)?.getAttribute('data-capsule')).toBe('Display:kilter • M • 40°');
+    expect(boardAction(container)?.getAttribute('data-capsule')).toBe('Display:kilter • M • 40°');
   });
 
-  it('opens the board switcher when the pill is pressed', () => {
+  it('opens the board switcher when the board glyph is pressed', () => {
     ctrl.board = board;
     const onOpenBoardSwitcher = vi.fn();
     const { container } = render(<DiscoverTopChrome {...makeProps({ onOpenBoardSwitcher })} />);
-    fireEvent.click(capsule(container)!);
+    fireEvent.click(boardAction(container)!);
     expect(onOpenBoardSwitcher).toHaveBeenCalledTimes(1);
   });
 

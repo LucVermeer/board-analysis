@@ -1,15 +1,14 @@
-// Top chrome for the climbs list. The board pill, glass action islands and the
+// Top chrome for the climbs list. The board glyph, glass action islands and the
 // angle / lightbulb controls are shared with the Discover chrome via
 // CollapsingTopChrome (`../chrome`) so both tabs read as one system: on the
-// liquid-glass variant this file delegates to CollapsingTopChrome (static centred
-// board pill + islands over the progressive blur) and adds the climbs-only search
-// row. Climbs is the one tab that keeps a scrolled title — the filter summary
-// cross-fades in as plain text. The Material variant keeps a dedicated
+// liquid-glass variant this file delegates to CollapsingTopChrome (left/right
+// glass islands over the progressive blur) and adds the climbs-only search row.
+// Climbs is the one tab that keeps a header title — the filter summary sits
+// persistently in the centre. The Material variant keeps a dedicated
 // Appbar.Header with the board as its subtitle plus grade / filter quick chips.
 
 import { type RefObject, useCallback, useState } from 'react';
 import { Keyboard, type LayoutChangeEvent, StyleSheet, View } from 'react-native';
-import { type SharedValue } from 'react-native-reanimated';
 import { useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
@@ -46,8 +45,6 @@ type ClimbTopChromeProps = {
   onCreate: () => void;
   onOpenBoardDetail: () => void;
   onHeightChange: (height: number) => void;
-  /** List scroll offset, driving the inline-title cross-fade. */
-  scrollY: SharedValue<number>;
   searchFieldRef: RefObject<SearchHeaderHandle | null>;
   searchInitialValue: string;
   searchPlaceholder: string;
@@ -78,7 +75,6 @@ export function ClimbTopChrome({
   onCreate,
   onOpenBoardDetail,
   onHeightChange,
-  scrollY,
   searchFieldRef,
   searchInitialValue,
   searchPlaceholder,
@@ -233,19 +229,18 @@ export function ClimbTopChrome({
     );
   }
 
-  // Liquid-glass variant: the shared chrome (static centred board pill + islands
-  // over the progressive blur) with the climbs-only search row as its below-row
-  // content. Climbs is the one tab that keeps a scrolled title — the filter
-  // summary cross-fades in as plain text via `collapsedInlineTitle`.
+  // Liquid-glass variant: the shared chrome (left/right glass islands over the
+  // progressive blur) with the climbs-only search row as its below-row content.
+  // Climbs is the one tab that keeps a header title — the filter summary sits
+  // persistently in the centre via `centerTitle`.
   return (
     <CollapsingTopChrome
-      collapsedInlineTitle={title}
+      centerTitle={title}
       canCreate={canCreate}
       onCreate={onCreate}
       createAccessibilityLabel={t('mobile.create.fab.ariaLabel')}
       onOpenBoardSwitcher={onOpenBoardDetail}
       onHeightChange={onHeightChange}
-      scrollY={scrollY}
     >
       {usesCustomSearch ? (
         <View pointerEvents="box-none" style={styles.searchStack}>

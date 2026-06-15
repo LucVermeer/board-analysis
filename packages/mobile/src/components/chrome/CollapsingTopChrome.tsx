@@ -1,6 +1,5 @@
 import { type ReactNode, isValidElement } from 'react';
 import { StyleSheet, View } from 'react-native';
-import type { SharedValue } from 'react-native-reanimated';
 import { useTheme } from '../../providers/theme-provider';
 import { useActiveBoard } from '../../lib/graphql/use-active-board';
 import { useOptionalBluetoothContext } from '../../providers/bluetooth-provider';
@@ -8,7 +7,7 @@ import { useNativeGlass } from '../../hooks/use-native-glass';
 import { shadows } from '../../theme/tokens';
 import { Icon } from '../Icon';
 import { GlassSurface } from '../GlassSurface';
-import { BoardPill } from './BoardPill';
+import { BoardToolbarAction } from './BoardToolbarAction';
 import { GlassActionToolbar, GlassToolbarAction, TOP_ACTION_SIZE } from './GlassActionToolbar';
 import { AngleToolbarAction } from './AngleToolbarAction';
 import { LightbulbToolbarAction } from './LightbulbToolbarAction';
@@ -24,16 +23,14 @@ type CollapsingTopChromeProps = {
   onCreate: () => void;
   /** VoiceOver label for the create action (namespace differs per screen). */
   createAccessibilityLabel: string;
-  /** Open the full board switcher; the board pill doubles as the board filter. */
+  /** Open the full board switcher; the board glyph doubles as the board filter. */
   onOpenBoardSwitcher: () => void;
-  /** Optional VoiceOver hint for the board pill. */
+  /** Optional VoiceOver hint for the board glyph. */
   boardPillAccessibilityHint?: string;
   /** Report the measured chrome height so the list can inset its top padding. */
   onHeightChange: (height: number) => void;
-  /** List scroll offset — only needed alongside `collapsedInlineTitle` (Climbs). */
-  scrollY?: SharedValue<number>;
-  /** Optional plain inline title shown once scrolled (Climbs filter summary). */
-  collapsedInlineTitle?: string;
+  /** Optional persistent plain centre title (Climbs filter summary). */
+  centerTitle?: string;
   /** Optional glass action(s) docked at the far right of the right toolbar (e.g. the
    *  Record tab's share/invite + End controls). Discover/Climbs pass none. */
   trailingAction?: ReactNode;
@@ -56,16 +53,18 @@ type CollapsingTopChromeProps = {
 };
 
 /**
- * Shared floating glass chrome — a centred board pill flanked by angle / create /
- * light islands over an always-on progressive blur. The board pill and islands
- * stay put; the screen's large in-body title simply scrolls away under the blur.
- * Climbs additionally passes `collapsedInlineTitle` (its filter summary), which
- * cross-fades in as plain text once scrolled.
+ * Shared floating glass chrome — a left island (avatar / create / angle) and a
+ * right island (board / light / trailing) over an always-on progressive blur.
+ * The islands stay put; the screen's large in-body title simply scrolls away
+ * under the blur. Climbs additionally passes `centerTitle` (its filter summary),
+ * which sits as a persistent plain title in the centre of the islands row.
  *
- * Composes the board-agnostic `CollapsingLargeTitleHeader` and supplies the board
- * pill as the centre content. Used by Discover (`DiscoverTopChrome`), Climbs
- * (`ClimbTopChrome`, which adds a search row via `children` + the inline title),
- * and Record (`RecordTopChrome`, which adds a share `trailingAction`).
+ * Composes the board-agnostic `CollapsingLargeTitleHeader`. The board control is
+ * a single glass glyph (`BoardToolbarAction`) docked in the right toolbar beside
+ * the lightbulb — there is no large centred board pill. Used by Discover
+ * (`DiscoverTopChrome`), Climbs (`ClimbTopChrome`, which adds a search row via
+ * `children` + the centre title), and Record (`RecordTopChrome`, which adds a
+ * share `trailingAction`).
  */
 export function CollapsingTopChrome({
   canCreate,
@@ -74,8 +73,7 @@ export function CollapsingTopChrome({
   onOpenBoardSwitcher,
   boardPillAccessibilityHint,
   onHeightChange,
-  scrollY,
-  collapsedInlineTitle,
+  centerTitle,
   trailingAction,
   trailingActionCount,
   leadingAction,
@@ -94,15 +92,17 @@ export function CollapsingTopChrome({
   const leadingActions = leadingActionCount ?? (isValidElement(leadingAction) ? 1 : 0);
   const leftActionCount = 1 + leadingActions + (canCreate ? 1 : 0) + (canOpenAngle ? 1 : 0);
 
-  // The right glass toolbar holds the lightbulb (and an optional trailing action).
-  // It's a fixed-width island now (the board never docks here). The lightbulb is
-  // hidden when `hideLight` (e.g. the active-session header).
+  // The right glass toolbar holds the board glyph, the lightbulb, and an optional
+  // trailing action — a fixed-width island sized to whichever of those are live.
+  // The board glyph shows whenever a board is set; the lightbulb is hidden when
+  // `hideLight` (e.g. the active-session header).
+  const boardActions = activeBoard ? 1 : 0;
   const lightActions = bluetooth && !hideLight ? 1 : 0;
   // Reserve a slot only for a real element — a `false`/`null` from a `cond && <…>`
   // caller must not widen the toolbar by a phantom 48px. Callers passing a fragment
   // of several actions supply `trailingActionCount` explicitly.
   const trailingActions = trailingActionCount ?? (isValidElement(trailingAction) ? 1 : 0);
-  const rightActionCount = lightActions + trailingActions;
+  const rightActionCount = boardActions + lightActions + trailingActions;
   const rightToolbarWidth = rightActionCount * TOP_ACTION_SIZE;
 
   const leftActions = (
@@ -118,7 +118,9 @@ export function CollapsingTopChrome({
     </GlassActionToolbar>
   );
 
-  // Right glass toolbar: lightbulb (+ optional trailing action), fixed width.
+  // Right glass toolbar: board glyph + lightbulb (+ optional trailing action),
+  // fixed width. Order reads board → light → trailing (session controls furthest
+  // right).
   const rightActions =
     rightToolbarWidth > 0 ? (
       <View
@@ -137,6 +139,9 @@ export function CollapsingTopChrome({
           style={StyleSheet.absoluteFill}
           pointerEvents="none"
         />
+        {activeBoard ? (
+          <BoardToolbarAction onPress={onOpenBoardSwitcher} accessibilityHint={boardPillAccessibilityHint} />
+        ) : null}
         {bluetooth && !hideLight ? <LightbulbToolbarAction /> : null}
         {trailingAction}
       </View>
@@ -144,12 +149,10 @@ export function CollapsingTopChrome({
 
   return (
     <CollapsingLargeTitleHeader
-      scrollY={scrollY}
-      collapsedInlineTitle={collapsedInlineTitle}
+      centerTitle={centerTitle}
       onHeightChange={onHeightChange}
       leftActions={leftActions}
       rightActions={rightActions}
-      centerContent={<BoardPill onPress={onOpenBoardSwitcher} accessibilityHint={boardPillAccessibilityHint} />}
     >
       {children}
     </CollapsingLargeTitleHeader>
