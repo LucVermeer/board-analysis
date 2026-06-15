@@ -10,7 +10,7 @@ function makeOptions(overrides: Partial<ScreenshotOptions> = {}): ScreenshotOpti
     device: 'iPhone 16 Pro Max',
     variant: null,
     theme: 'dark',
-    workout: 'pyramid',
+    workout: 'volume',
     shutdown: false,
     ...overrides,
   };

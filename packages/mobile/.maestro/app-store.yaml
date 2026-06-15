@@ -19,7 +19,7 @@ name: app-store screenshots
 # - clearState wipes the client-side active board (AsyncStorage); it's re-picked
 #   via the board picker below.
 # - The Record/session screen renders the WORKOUT GENERATOR because the build
-#   bakes EXPO_PUBLIC_SCREENSHOT_WORKOUT (default pyramid) — its shelf is a
+#   bakes EXPO_PUBLIC_SCREENSHOT_WORKOUT (default volume) — its shelf is a
 #   gesture-handler ScrollView Maestro can't tap, so the selection is pre-seeded.
 # - iOS shows an "Open in 'Boardsesh'?" confirmation for simctl deep links; each
 #   openLink is followed by an optional tapOn "Open".
@@ -74,7 +74,7 @@ name: app-store screenshots
 - takeScreenshot: 01-climbs
 
 # Workout generator — the Record/session screen with a workout pre-selected
-# (pyramid): target grade, warm-up, step config + the generated preview queue.
+# (volume): target grade, warm-up, set config + the generated preview queue.
 - openLink: com.boardsesh.app://record
 - tapOn:
     text: 'Open'

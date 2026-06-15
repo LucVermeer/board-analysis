@@ -74,10 +74,10 @@ export function parseArgs(argv: readonly string[]): ScreenshotOptions {
     variant: null,
     // Dark is the canonical store appearance (the app defaults to dark).
     theme: 'dark',
-    // Pyramid by default so the Record screen captures the workout generator
-    // (its shelf is a gesture-handler ScrollView Maestro can't tap). `--workout off`
-    // leaves the generator Off (plain "Start a session").
-    workout: 'pyramid',
+    // Volume by default so the Record screen captures the workout generator with
+    // a visible, selected tile (its shelf is a gesture-handler ScrollView Maestro
+    // can't tap/scroll). `--workout off` leaves the generator Off ("Start a session").
+    workout: 'volume',
     shutdown: false,
   };
 

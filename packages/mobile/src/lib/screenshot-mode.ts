@@ -44,7 +44,7 @@ export const SCREENSHOT_VARIANT_PREFERENCE: UiVariantPreference = isUiVariantPre
  * The workout shelf is a react-native-gesture-handler ScrollView, which doesn't
  * respond to Maestro's synthetic taps/swipes, so we can't pick it from the flow —
  * baking the initial selection is the reliable way. Empty/unset (the default)
- * leaves the generator "Off". Set e.g. `EXPO_PUBLIC_SCREENSHOT_WORKOUT=pyramid`.
+ * leaves the generator "Off". Set e.g. `EXPO_PUBLIC_SCREENSHOT_WORKOUT=volume`.
  */
 const SCREENSHOT_WORKOUT_TYPES = ['volume', 'pyramid', 'ladder', 'gradeFocus'] as const;
 export type ScreenshotWorkout = (typeof SCREENSHOT_WORKOUT_TYPES)[number];
