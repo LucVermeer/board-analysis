@@ -1786,9 +1786,9 @@ The 8-tokens-per-session cap is enforced under a Postgres advisory lock (`pg_adv
 
 `unregisterActivityPushToken(sessionId, token)` is the symmetric mutation. The delete is scoped to `(token, sessionId)` so an attacker holding a leaked token cannot wipe another session's registrations. Same auth + participant + rate-limit checks apply.
 
-## Widget Navigation REST Endpoint
+## Widget REST Endpoints
 
-Lock-screen widget extensions cannot reach the JS webapp or its WebSocket. Instead, the Next / Previous buttons hit a dedicated REST endpoint:
+Lock-screen widget extensions cannot reach the JS webapp or its WebSocket. Two dedicated REST endpoints cover the write paths:
 
 ```
 POST /api/widget/navigate
@@ -1796,34 +1796,60 @@ POST /api/widget/navigate
   Content-Type: application/json
 
   { "sessionId": "<id>", "action": "next" | "previous", "currentIndex": <int ≥ 0> }
+
+POST /api/widget/take-control
+  Authorization: Bearer <APNs Live Activity push token>
+  Content-Type: application/json
+
+  { "sessionId": "<id>" }
 ```
 
-### Auth
+### Auth Contract: Always-Live Sessions
 
-The Bearer credential is the device's APNs Live Activity push token — the same value the widget pulled from `SharedKeychain.livePushTokenKey`. The handler looks up `(token, sessionId)` in `activity_push_tokens`; an unknown token returns 401, while a known token bound to a different session returns 410 so the widget can re-register. Treating the push token as the credential keeps the widget extension out of the user-auth path entirely (it never sees the user's Bearer token) and is safe because the token is already a per-session, per-device secret.
+Widget sessions are **always-live**: there is no driver role for these endpoints. Any authenticated session participant may navigate the queue or re-assert the current climb. This is a deliberate departure from the older driver-ownership model (where only the elected leader could make writes).
+
+**Threat model rationale:** The widget endpoints run outside the main app process; they cannot participate in the in-process leader-election protocol. A driver gate would either (a) require an extra per-request Redis round-trip to resolve current leadership, or (b) silently deny any widget tap while the session has no leader — both unacceptable for a lock-screen control. Since the Live Activity push token is already scoped to `(device, session)` and only issued to authenticated participants, possession of a valid token already proves the device joined and was authorised to be in the session.
+
+Two-layer auth on every request:
+
+1. **Token auth** (`widget-auth.ts`): Bearer token must be registered in `activity_push_tokens` with matching `sessionId`. Unknown token → 401. Token bound to a different session → 410 (widget re-registers). This layer identifies the device+session.
+2. **Membership check** (`widget-session-guard.ts`): Confirms the session is still active and the token owner is still a participant (`board_session_participants` row exists). Session ended → 410. Not a participant → 403. This prevents stale tokens from mutating an ended session's persisted queue.
+
+The `userId` on the `activity_push_tokens` row is used for analytics attribution only — the token proves participation, not identity. A `null` userId (token row pre-dating the `user_id` column) authorises navigation but emits an attribution-gap metric instead of a normal analytics event.
+
+`/api/widget/take-control` additionally requires a non-null `userId` on the token row (403 if `userId: null`), since re-asserting the board's LED state is a board-write action that should always be attributed.
+
+The push token as the credential keeps the widget extension out of the user-auth path entirely — it never sees the user's Bearer JWT. The token is already a per-session, per-device secret issued by Apple.
 
 ### Validation
 
+**navigate**
 - `sessionId`: non-empty string
 - `action`: `"next"` or `"previous"`
 - `currentIndex`: integer, `>= 0`
+- Request body capped at 4 KB
+
+**take-control**
+- `sessionId`: non-empty string
 - Request body capped at 4 KB
 
 Anything else returns 400.
 
 ### Rate Limiting
 
-Per-session token bucket — capacity 2, refill 1 per 1.5s. Burst clicks are smoothed; sustained tapping caps at ~40 req/min per session. Returns 429 when the bucket is empty. The session-scoped bucket means one device can't deny service for another.
+Both endpoints share a **per-session** token bucket (capacity 2, refill 1 per 1.5s) defined in `widget-rate-limit.ts`. Burst clicks are smoothed; sustained tapping caps at ~40 req/min per session. Returns 429 when the bucket is empty. The session-scoped bucket means one device can't deny service for another on the same session. Rate limiting is applied after auth so an unauthenticated caller cannot poison a real participant's bucket.
 
 ### Server-Authoritative Navigation
 
-The handler does NOT trust the `currentIndex` from the widget — it fetches the server's queue state via `roomManager.getQueueState(sessionId)`, computes the target index from `action` (wrapping at boundaries for `next`, clamped to 0 for `previous`), and calls `navigateToQueueItem` (shared with the `setCurrentClimb` GraphQL mutation). That function does optimistic-lock retry against the room manager and publishes the resulting `CurrentClimbChanged` via `pubsub.publishQueueEvent`, which fans out to JS subscribers and triggers the APNs push hook described above.
+The navigate handler does NOT trust the `currentIndex` from the widget — it fetches the server's queue state via `roomManager.getQueueState(sessionId)`, computes the target index from `action` (wrapping at boundaries for `next`, clamped to 0 for `previous`), and calls `navigateToQueueItem` (shared with the `setCurrentClimb` GraphQL mutation). That function does optimistic-lock retry against the room manager and publishes the resulting `CurrentClimbChanged` via `pubsub.publishQueueEvent`, which fans out to JS subscribers and triggers the APNs push hook described above.
 
 The `currentIndex` field in the request is validated for shape only; the handler reads server state for the actual position.
 
+The take-control handler re-publishes the session's current climb (re-asserting the board's LED state) by calling `setCurrentClimbAndPublish`. If no current climb exists in the queue the handler succeeds (200) as a no-op — there is nothing to assert.
+
 ### Why HTTP and Not a GraphQL Mutation
 
-A GraphQL mutation would require either the JS GraphQL client (not available in the widget process) or hand-rolled GraphQL-over-HTTP in Swift. The REST handler is simpler, cheaper, and lets us keep the widget extension free of GraphQL tooling. The downside — a second endpoint surface to keep in sync — is small for one operation.
+A GraphQL mutation would require either the JS GraphQL client (not available in the widget process) or hand-rolled GraphQL-over-HTTP in Swift. The REST handlers are simpler, cheaper, and let us keep the widget extension free of GraphQL tooling. The downside — a second endpoint surface to keep in sync — is small for two operations.
 
 ## Related Files
 
@@ -1838,6 +1864,10 @@ A GraphQL mutation would require either the JS GraphQL client (not available in 
 - `packages/backend/src/services/queue-navigation.ts` - Shared queue-navigation logic (used by `setCurrentClimb` and `/api/widget/navigate`)
 - `packages/backend/src/services/apns/index.ts` - APNs HTTP/2 send + 5s debounce + Live Activity content state assembly
 - `packages/backend/src/handlers/widget-navigate.ts` - REST handler for `POST /api/widget/navigate`
+- `packages/backend/src/handlers/widget-take-control.ts` - REST handler for `POST /api/widget/take-control`
+- `packages/backend/src/handlers/widget-auth.ts` - Bearer-token auth for both widget endpoints
+- `packages/backend/src/handlers/widget-session-guard.ts` - Membership + session-liveness gate (applied after token auth, before queue mutation)
+- `packages/backend/src/handlers/widget-rate-limit.ts` - Per-session token bucket shared by both widget endpoints (`checkWidgetRateLimit`, `ensureWidgetRateLimitPruner`)
 - `packages/backend/src/graphql/resolvers/queue/` - Queue mutations & subscriptions
 - `packages/backend/src/graphql/resolvers/sessions/` - Session mutations & subscriptions
 - `packages/backend/src/graphql/resolvers/sessions/push-tokens.ts` - `registerActivityPushToken` / `unregisterActivityPushToken` resolvers with the per-session cap + advisory-lock TOCTOU fix

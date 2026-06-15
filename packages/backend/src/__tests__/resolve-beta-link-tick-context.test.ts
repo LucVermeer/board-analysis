@@ -1,9 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // db.select is called twice in resolveBetaLinkTickContext:
-//   1. tick + alias left-join query  → chain: .from().leftJoin().leftJoin().where().limit()
-//   2. existing beta-link check      → chain: .from().where().limit()
-// Each test stubs these calls with mockImplementationOnce in order.
+//   1. Tick + alias left-join query (.from(boardseshTicks) ...)
+//   2. Existing beta-link check     (.from(boardBetaLinks) ...)
+//
+// The mock dispatches on the table passed to .from() so adding/removing joins
+// in the production query doesn't silently break these tests — only an actual
+// change in which table is queried would do that.
 const { mockDbSelect } = vi.hoisted(() => ({
   mockDbSelect: vi.fn(),
 }));
@@ -43,6 +46,7 @@ vi.mock('../graphql/resolvers/shared/helpers', async () => {
   return { ...actual, applyRateLimit: vi.fn(async () => {}) };
 });
 
+import * as dbSchema from '@boardsesh/db/schema';
 import { resolveBetaLinkTickContext } from '../graphql/resolvers/ticks/mutations';
 
 type TickRow = {
@@ -57,30 +61,6 @@ type TickRow = {
   boardId: number | null;
 };
 
-function stubTickQuery(row: TickRow | null) {
-  mockDbSelect.mockImplementationOnce((() => ({
-    from: () => ({
-      leftJoin: () => ({
-        leftJoin: () => ({
-          where: () => ({
-            limit: () => Promise.resolve(row ? [row] : []),
-          }),
-        }),
-      }),
-    }),
-  })) as unknown as () => never);
-}
-
-function stubBetaLinkCheck(existingLink: string | null) {
-  mockDbSelect.mockImplementationOnce((() => ({
-    from: () => ({
-      where: () => ({
-        limit: () => Promise.resolve(existingLink ? [{ link: existingLink }] : []),
-      }),
-    }),
-  })) as unknown as () => never);
-}
-
 function makeTick(overrides: Partial<TickRow> = {}): TickRow {
   return {
     uuid: 'tick-uuid-1',
@@ -94,6 +74,37 @@ function makeTick(overrides: Partial<TickRow> = {}): TickRow {
     boardId: 42,
     ...overrides,
   };
+}
+
+/**
+ * Configure the db.select mock to dispatch on the table passed to .from():
+ *   boardseshTicks → resolves tickRow (or empty array if null)
+ *   boardBetaLinks → resolves [{ link }] if existingLink provided, else []
+ *
+ * The mock returns a chain stub for whichever table is hit. Any join methods
+ * on the tick query are forwarded so the chain terminates correctly regardless
+ * of how many joins the production query uses.
+ */
+function setupDbMocks(tickRow: TickRow | null, existingLink: string | null = null) {
+  mockDbSelect.mockImplementation(() => ({
+    from: (table: unknown) => {
+      if (table === dbSchema.boardseshTicks) {
+        const tickResults = tickRow ? [tickRow] : [];
+        const chain = {
+          leftJoin: () => chain,
+          where: () => ({ limit: () => Promise.resolve(tickResults) }),
+        };
+        return chain;
+      }
+      if (table === dbSchema.boardBetaLinks) {
+        const linkResults = existingLink ? [{ link: existingLink }] : [];
+        return {
+          where: () => ({ limit: () => Promise.resolve(linkResults) }),
+        };
+      }
+      return { where: () => ({ limit: () => Promise.resolve([]) }) };
+    },
+  }));
 }
 
 describe('resolveBetaLinkTickContext', () => {
@@ -118,42 +129,42 @@ describe('resolveBetaLinkTickContext', () => {
   });
 
   it('throws TICK_NOT_FOUND when the tick UUID does not exist', async () => {
-    stubTickQuery(null);
+    setupDbMocks(null);
     await expect(
       resolveBetaLinkTickContext({ boardType: 'kilter', climbUuid: 'climb-1', tickUuid: 'nonexistent-uuid' }, 'user-1'),
     ).rejects.toMatchObject({ extensions: { code: 'TICK_NOT_FOUND' } });
   });
 
   it('throws FORBIDDEN when the tick belongs to a different user', async () => {
-    stubTickQuery(makeTick({ userId: 'other-user' }));
+    setupDbMocks(makeTick({ userId: 'other-user' }));
     await expect(
       resolveBetaLinkTickContext({ boardType: 'kilter', climbUuid: 'climb-1', tickUuid: 'tick-uuid-1' }, 'user-1'),
     ).rejects.toMatchObject({ extensions: { code: 'FORBIDDEN' } });
   });
 
   it('throws BETA_LINK_TICK_NOT_ASCENT when tick status is attempt', async () => {
-    stubTickQuery(makeTick({ status: 'attempt' }));
+    setupDbMocks(makeTick({ status: 'attempt' }));
     await expect(
       resolveBetaLinkTickContext({ boardType: 'kilter', climbUuid: 'climb-1', tickUuid: 'tick-uuid-1' }, 'user-1'),
     ).rejects.toMatchObject({ extensions: { code: 'BETA_LINK_TICK_NOT_ASCENT' } });
   });
 
   it('throws BETA_LINK_TICK_MISMATCH when tick is for a different board type', async () => {
-    stubTickQuery(makeTick({ boardType: 'tension' }));
+    setupDbMocks(makeTick({ boardType: 'tension' }));
     await expect(
       resolveBetaLinkTickContext({ boardType: 'kilter', climbUuid: 'climb-1', tickUuid: 'tick-uuid-1' }, 'user-1'),
     ).rejects.toMatchObject({ extensions: { code: 'BETA_LINK_TICK_MISMATCH' } });
   });
 
   it('throws when tick climb UUID does not match the input climb UUID', async () => {
-    stubTickQuery(makeTick({ climbUuid: 'climb-other', canonicalClimbUuid: null, inputCanonicalClimbUuid: null }));
+    setupDbMocks(makeTick({ climbUuid: 'climb-other', canonicalClimbUuid: null, inputCanonicalClimbUuid: null }));
     await expect(
       resolveBetaLinkTickContext({ boardType: 'kilter', climbUuid: 'climb-1', tickUuid: 'tick-uuid-1' }, 'user-1'),
     ).rejects.toMatchObject({ extensions: { code: 'BETA_LINK_TICK_MISMATCH' } });
   });
 
   it('throws BETA_LINK_TICK_MISMATCH when the provided angle differs from the tick angle', async () => {
-    stubTickQuery(makeTick({ angle: 40 }));
+    setupDbMocks(makeTick({ angle: 40 }));
     await expect(
       resolveBetaLinkTickContext(
         { boardType: 'kilter', climbUuid: 'climb-1', angle: 45, tickUuid: 'tick-uuid-1' },
@@ -163,8 +174,7 @@ describe('resolveBetaLinkTickContext', () => {
   });
 
   it('does not throw for angle check when no input angle is provided', async () => {
-    stubTickQuery(makeTick({ angle: 40 }));
-    stubBetaLinkCheck(null);
+    setupDbMocks(makeTick({ angle: 40 }));
     const result = await resolveBetaLinkTickContext(
       { boardType: 'kilter', climbUuid: 'climb-1', tickUuid: 'tick-uuid-1' },
       'user-1',
@@ -173,16 +183,14 @@ describe('resolveBetaLinkTickContext', () => {
   });
 
   it('throws BETA_LINK_TICK_ALREADY_LINKED when the tick already has a beta video', async () => {
-    stubTickQuery(makeTick());
-    stubBetaLinkCheck('https://www.instagram.com/reel/EXISTING/');
+    setupDbMocks(makeTick(), 'https://www.instagram.com/reel/EXISTING/');
     await expect(
       resolveBetaLinkTickContext({ boardType: 'kilter', climbUuid: 'climb-1', tickUuid: 'tick-uuid-1' }, 'user-1'),
     ).rejects.toMatchObject({ extensions: { code: 'BETA_LINK_TICK_ALREADY_LINKED' } });
   });
 
   it('returns full tick context on the happy path', async () => {
-    stubTickQuery(makeTick());
-    stubBetaLinkCheck(null);
+    setupDbMocks(makeTick());
     const result = await resolveBetaLinkTickContext(
       { boardType: 'kilter', climbUuid: 'climb-1', angle: 40, tickUuid: 'tick-uuid-1' },
       'user-1',
@@ -192,9 +200,7 @@ describe('resolveBetaLinkTickContext', () => {
 
   it('accepts both flash and send status ticks', async () => {
     for (const status of ['flash', 'send'] as const) {
-      mockDbSelect.mockReset();
-      stubTickQuery(makeTick({ status }));
-      stubBetaLinkCheck(null);
+      setupDbMocks(makeTick({ status }));
       const result = await resolveBetaLinkTickContext(
         { boardType: 'kilter', climbUuid: 'climb-1', tickUuid: 'tick-uuid-1' },
         'user-1',
@@ -207,10 +213,9 @@ describe('resolveBetaLinkTickContext', () => {
     // tick.climbUuid = 'alias-a' → canonical 'canonical-1'
     // input.climbUuid = 'alias-b' → canonical 'canonical-1'
     // Both resolve to the same canonical — should succeed.
-    stubTickQuery(
+    setupDbMocks(
       makeTick({ climbUuid: 'alias-a', canonicalClimbUuid: 'canonical-1', inputCanonicalClimbUuid: 'canonical-1' }),
     );
-    stubBetaLinkCheck(null);
     const result = await resolveBetaLinkTickContext(
       { boardType: 'kilter', climbUuid: 'alias-b', tickUuid: 'tick-uuid-1' },
       'user-1',
@@ -219,8 +224,7 @@ describe('resolveBetaLinkTickContext', () => {
   });
 
   it('returns angle from the tick, not from the input (tick is authoritative)', async () => {
-    stubTickQuery(makeTick({ angle: 30 }));
-    stubBetaLinkCheck(null);
+    setupDbMocks(makeTick({ angle: 30 }));
     const result = await resolveBetaLinkTickContext(
       // Matching angle passed — stored angle comes from the tick
       { boardType: 'kilter', climbUuid: 'climb-1', angle: 30, tickUuid: 'tick-uuid-1' },

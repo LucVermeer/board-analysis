@@ -650,10 +650,16 @@ export const tickMutations = {
     const userId = ctx.userId!;
     const now = new Date().toISOString();
 
-    // Gate the tick-context DB probe with the write budget so an authenticated
-    // caller cannot enumerate tick UUIDs by watching error variants without
-    // consuming any budget. validateAndEnrichBetaLinkInsert also calls
-    // applyRateLimit (burning a second unit) — both burns are intentional.
+    // Each attachBetaLink call burns 2 rate-limit tokens (effective ceiling:
+    // 15 link-attaches/min per user, not 30):
+    //   1. Here — gates the tick-context DB probe so an authenticated caller
+    //      cannot enumerate tick UUIDs for free by watching which error code
+    //      comes back (TICK_NOT_FOUND vs FORBIDDEN vs BETA_LINK_TICK_MISMATCH).
+    //   2. Inside validateAndEnrichBetaLinkInsert — gates the cross-climb dedup
+    //      probe and the outbound IG validation fetch.
+    // Both burns are intentional. 15 link-attaches/min is well above legitimate
+    // use; the two-token cost is a side effect of the gating architecture, not
+    // a deliberate rate ceiling, but 15/min is still the effective limit.
     await applyRateLimit(ctx, 30, 'beta-link-validation');
     const tickContext = await resolveBetaLinkTickContext(validated, userId);
 
