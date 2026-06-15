@@ -132,8 +132,7 @@
       "personalTitle": "Remerciements personnels",
       "friendsTitle": "La team",
       "friendsBody": "{{names}} — pour m'avoir écouté parler sans fin de Boardsesh, et pour avoir vraiment grimpé dessus.",
-      "partnerThanksBody": "L'amour de ma vie — merci de supporter que je te bassine avec Boardsesh, sans fin.",
-      "dogBody": "Le meilleur chien, pour la compagnie à chaque session nocturne.",
+      "dogBody": "Merci à Scout pour tout le soutien moral, c'est la vraie MVP de Boardsesh. Même si elle ne grimpe pas et veut juste être une chienne de plage.",
       "ossLicensesLink": "Licences open source",
       "ossLicensesBody": "Les logiciels open source sur lesquels Boardsesh est construit"
     },

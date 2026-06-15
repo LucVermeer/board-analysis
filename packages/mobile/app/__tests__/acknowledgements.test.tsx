@@ -28,12 +28,21 @@ vi.mock('react-i18next', () => ({
 }));
 
 vi.mock('../../src/lib/acknowledgements', () => ({
-  contributors: [{ login: 'alpha', name: null, avatarUrl: '', htmlUrl: 'https://github.com/alpha', contributions: 5 }],
+  contributors: [
+    {
+      login: 'alpha',
+      name: null,
+      avatarUrl: '',
+      htmlUrl: 'https://github.com/alpha',
+      pullRequests: 3,
+      issues: 2,
+      contributions: 5,
+    },
+  ],
   sponsors: [{ login: 'bluejayio', name: 'Shuying Zhang', avatarUrl: '', url: 'https://github.com/bluejayio' }],
   privateSponsorCount: 1,
-  friends: ['Caz', 'Joz'],
-  partnerName: 'Gabby A',
-  dogName: 'Scouty Scout',
+  friends: ['Gabby', 'Caz', 'Joz'],
+  dogName: 'Scout',
   SPONSORS_URL: 'https://github.com/sponsors/boardsesh',
 }));
 vi.mock('../../src/lib/open-url', () => openUrl);
@@ -102,12 +111,11 @@ describe('AcknowledgementsScreen', () => {
     expect(screen.getByText('and 1 more sponsoring privately — thank you too')).toBeTruthy();
   });
 
-  it('thanks the crew, partner, and dog by name', () => {
+  it('thanks the crew and the dog', () => {
     render(<AcknowledgementsScreen />);
 
     expect(screen.getByText('The crew')).toBeTruthy();
-    expect(screen.getByText('Gabby A')).toBeTruthy();
-    expect(screen.getByText('Scouty Scout')).toBeTruthy();
+    expect(screen.getByText('Scout')).toBeTruthy();
   });
 
   it('links to the open source licenses screen', () => {
@@ -116,5 +124,13 @@ describe('AcknowledgementsScreen', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Open source licenses' }));
 
     expect(routerMock.push).toHaveBeenCalledWith('/licenses');
+  });
+
+  it('opens the Scout easter-egg page from the dog card', () => {
+    render(<AcknowledgementsScreen />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Scout' }));
+
+    expect(routerMock.push).toHaveBeenCalledWith('/scout');
   });
 });

@@ -13,7 +13,6 @@ import {
   sponsors,
   privateSponsorCount,
   friends,
-  partnerName,
   dogName,
   SPONSORS_URL,
 } from '../src/lib/acknowledgements';
@@ -45,33 +44,45 @@ function ThanksCard({
   icon,
   title,
   body,
-  highlighted = false,
+  onPress,
 }: {
   icon: IconName;
   title: string;
   body: string;
-  highlighted?: boolean;
+  onPress?: () => void;
 }) {
-  const { systemColors, brandColors } = useTheme();
-  const background = highlighted ? brandColors.primaryFill : systemColors.secondaryBackground;
-  const onColor = highlighted ? brandColors.onPrimary : undefined;
-  const bodyColor = highlighted ? brandColors.onPrimary : systemColors.secondaryLabel;
-  const iconColor = highlighted ? brandColors.onPrimary : systemColors.accent;
-  return (
-    <View style={[styles.card, { backgroundColor: background }]}>
-      <View style={[styles.cardIcon, { backgroundColor: highlighted ? 'transparent' : systemColors.fill }]}>
-        <Icon name={icon} size={highlighted ? 26 : 22} color={iconColor} />
+  const { systemColors } = useTheme();
+  const content = (
+    <>
+      <View style={[styles.cardIcon, { backgroundColor: systemColors.fill }]}>
+        <Icon name={icon} size={22} color={systemColors.accent} />
       </View>
       <View style={styles.cardText}>
-        <Text variant="headline" color={onColor} style={styles.cardTitle}>
+        <Text variant="headline" style={styles.cardTitle}>
           {title}
         </Text>
-        <Text variant="subheadline" color={bodyColor} style={styles.cardBody}>
+        <Text variant="subheadline" color={systemColors.secondaryLabel} style={styles.cardBody}>
           {body}
         </Text>
       </View>
-    </View>
+      {onPress ? <Icon name="chevron.right" size={16} color={systemColors.secondaryLabel} /> : null}
+    </>
   );
+  if (onPress) {
+    return (
+      <PressableSurface
+        onPress={onPress}
+        feedback="opacity"
+        opacityTo={0.7}
+        accessibilityRole="button"
+        accessibilityLabel={title}
+        style={[styles.card, styles.cardPressable, { backgroundColor: systemColors.secondaryBackground }]}
+      >
+        {content}
+      </PressableSurface>
+    );
+  }
+  return <View style={[styles.card, { backgroundColor: systemColors.secondaryBackground }]}>{content}</View>;
 }
 
 export default function AcknowledgementsScreen() {
@@ -87,6 +98,9 @@ export default function AcknowledgementsScreen() {
   const handleBecomeSponsor = useCallback(() => {
     void openExternalUrl(SPONSORS_URL, 'acknowledgements-sponsor');
   }, []);
+  const handleOpenScout = useCallback(() => {
+    router.push('/scout');
+  }, [router]);
   const handleOpenLicenses = useCallback(() => {
     router.push('/licenses');
   }, [router]);
@@ -183,12 +197,11 @@ export default function AcknowledgementsScreen() {
               body={t('mobile.acknowledgements.friendsBody', { names: friendsLine })}
             />
             <ThanksCard
-              icon="favorite.fill"
-              title={partnerName}
-              body={t('mobile.acknowledgements.partnerThanksBody')}
-              highlighted
+              icon="paw"
+              title={dogName}
+              body={t('mobile.acknowledgements.dogBody')}
+              onPress={handleOpenScout}
             />
-            <ThanksCard icon="paw" title={dogName} body={t('mobile.acknowledgements.dogBody')} />
           </View>
         </View>
 
@@ -279,6 +292,9 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.lg,
     padding: spacing[4],
     gap: spacing[3],
+  },
+  cardPressable: {
+    alignItems: 'center',
   },
   cardIcon: {
     width: 40,

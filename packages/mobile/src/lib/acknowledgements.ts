@@ -33,6 +33,6 @@ export const privateSponsorCount: number = data.privateSponsorCount;
 export const SPONSORS_URL = 'https://github.com/sponsors/boardsesh';
 
 // Personal thanks — kept as data so the screen renders the names directly.
-export const friends = ['Caz', 'Joz', 'Pete', 'Nic', 'Jess', 'Roxy'] as const;
-export const partnerName = 'Gabby A';
-export const dogName = 'Scouty Scout';
+// Gabby leads the crew; Scout gets her own easter-egg page.
+export const friends = ['Gabby', 'Caz', 'Joz', 'Pete', 'Nic', 'Jess', 'Roxy'] as const;
+export const dogName = 'Scout';
