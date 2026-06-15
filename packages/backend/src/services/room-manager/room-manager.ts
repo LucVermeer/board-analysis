@@ -225,6 +225,11 @@ class RoomManager {
       const cleared = await pubsub.clearBoardWriterIf(String(note.boardId), note.emitterId);
       if (cleared) {
         const seq = await pubsub.nextBoardSeq(String(note.boardId));
+        // `publishBoardPresenceEvent` / `publishSessionEvent` are synchronous
+        // (`: void`): they dispatch to local subscribers inline and internally
+        // `.catch()` the async Redis publish (see PubSub in pubsub/index.ts), so
+        // they neither return a promise nor reject here. The surrounding
+        // try/catch is only for the awaited `clearBoardWriterIf` / `nextBoardSeq`.
         pubsub.publishBoardPresenceEvent(String(note.boardId), {
           __typename: 'BoardConnectionChanged',
           holder: null,
