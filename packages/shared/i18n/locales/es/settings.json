@@ -400,6 +400,7 @@
     "cancel": "Cancelar",
     "connectBoard": "Conectar tablero",
     "relightBoard": "Reiluminar tablero",
+    "turnOff": "Apagar el tablero",
     "holdForControls": "Mantén pulsado para los controles",
     "notAvailable": "Bluetooth no está disponible",
     "connectionFailedTitle": "No se pudo conectar",

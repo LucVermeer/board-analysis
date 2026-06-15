@@ -400,6 +400,7 @@
     "cancel": "Annuler",
     "connectBoard": "Connecter le panneau",
     "relightBoard": "Rallumer le panneau",
+    "turnOff": "Éteindre le panneau",
     "holdForControls": "Maintenir pour les commandes",
     "notAvailable": "Le Bluetooth n'est pas disponible",
     "connectionFailedTitle": "Connexion impossible",

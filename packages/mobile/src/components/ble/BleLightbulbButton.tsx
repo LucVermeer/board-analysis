@@ -24,6 +24,13 @@ type BleLightbulbButtonProps = {
    */
   onLongPress?: () => void;
   accessibilityLabel: string;
+  /**
+   * Whether the control reads as "selected" to assistive tech. Defaults to
+   * `isConnected`. Pass the local-BLE connection state when `isConnected` is an
+   * OR'd visual (e.g. the bulb is lit because a peer holds the wall) so
+   * VoiceOver reflects what tapping does, not just the filled look.
+   */
+  accessibilitySelected?: boolean;
   scanningAccessibilityHint?: string;
   /** Hint describing the long-press action (e.g. "Hold to disconnect"). */
   longPressAccessibilityHint?: string;
@@ -45,6 +52,7 @@ export function BleLightbulbButton({
   onPress,
   onLongPress,
   accessibilityLabel,
+  accessibilitySelected,
   scanningAccessibilityHint,
   longPressAccessibilityHint,
   haptic = 'light',
@@ -102,7 +110,7 @@ export function BleLightbulbButton({
         scanningAccessibilityHint,
         longPressAccessibilityHint,
       )}
-      accessibilityState={{ selected: isConnected }}
+      accessibilityState={{ selected: accessibilitySelected ?? isConnected }}
       hitSlop={8}
       style={({ pressed }) => [
         styles.container,

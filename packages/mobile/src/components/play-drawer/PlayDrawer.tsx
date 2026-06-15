@@ -670,6 +670,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
                   isFavorited={isFavorited}
                   remainingQueueCount={navigationState.remainingCount}
                   lightbulbActive={lightbulbActive}
+                  lightbulbConnected={bluetoothConnected}
                   lightbulbPending={lightbulbState.lightbulbPending}
                   lightbulbLongPressEnabled={bluetoothConnected}
                   ascentCount={ascentCount}

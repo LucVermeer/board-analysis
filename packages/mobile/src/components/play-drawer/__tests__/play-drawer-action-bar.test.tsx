@@ -37,16 +37,19 @@ vi.mock('../../Text', () => ({
 vi.mock('../../ble/BleLightbulbButton', () => ({
   BleLightbulbButton: ({
     accessibilityLabel,
+    accessibilitySelected,
     longPressAccessibilityHint,
     onLongPress,
   }: {
     accessibilityLabel?: string;
+    accessibilitySelected?: boolean;
     longPressAccessibilityHint?: string;
     onLongPress?: () => void;
   }) =>
     createElement('div', {
       'data-ble': 'true',
       'data-label': accessibilityLabel,
+      'data-selected': accessibilitySelected == null ? undefined : String(accessibilitySelected),
       'data-long-press-hint': longPressAccessibilityHint,
       'data-long-press-enabled': onLongPress ? 'true' : 'false',
     }),
@@ -89,6 +92,7 @@ const baseProps = {
   isFavorited: false,
   remainingQueueCount: 3,
   lightbulbActive: false,
+  lightbulbConnected: false,
   ascentCount: 2,
   currentAngle: 40,
   onPrevClick: vi.fn(),
@@ -122,6 +126,26 @@ describe('PlayDrawerActionBar', () => {
     expect(anglePill).toBeTruthy();
     expect(anglePill.textContent).toContain('40°');
     expect(Number(anglePill.getAttribute('data-hitslop'))).toBeGreaterThanOrEqual(6);
+  });
+
+  it('derives the lightbulb label + selected state from local BLE (lightbulbConnected), not the lit visual', () => {
+    // Peer lit the wall (lightbulbActive true) but this phone is NOT connected:
+    // the bulb is filled, yet tapping connects — so the a11y label/selected must
+    // read "connect", not "turn off"/selected.
+    const peerLit = render(
+      createElement(PlayDrawerActionBar, { ...baseProps, lightbulbActive: true, lightbulbConnected: false }),
+    );
+    const peerBulb = peerLit.container.querySelector('[data-ble="true"]') as HTMLElement;
+    expect(peerBulb.getAttribute('data-label')).toBe('ble.connectBoard');
+    expect(peerBulb.getAttribute('data-selected')).toBe('false');
+
+    // This phone connected → tapping disconnects → "turn off" + selected.
+    const localConnected = render(
+      createElement(PlayDrawerActionBar, { ...baseProps, lightbulbActive: true, lightbulbConnected: true }),
+    );
+    const localBulb = localConnected.container.querySelector('[data-ble="true"]') as HTMLElement;
+    expect(localBulb.getAttribute('data-label')).toBe('ble.turnOff');
+    expect(localBulb.getAttribute('data-selected')).toBe('true');
   });
 
   it('passes party wall-control labels through to the lightbulb', () => {

@@ -400,6 +400,7 @@
     "cancel": "Cancel",
     "connectBoard": "Connect Board",
     "relightBoard": "Re-light board",
+    "turnOff": "Turn off the board",
     "holdForControls": "Hold for board controls",
     "notAvailable": "Bluetooth is not available",
     "connectionFailedTitle": "Couldn't connect",
