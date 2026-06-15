@@ -96,4 +96,20 @@ describe('QueueBottomAccessory', () => {
     expect(container.querySelector('[data-native-row]')).toBeNull();
     expect(container.childNodes).toHaveLength(0);
   });
+
+  it('retains the displayed climb across a presence blip while mounted', () => {
+    // While the host stays mounted (sticky presence boolean), a blip resolves the
+    // raw selector to null for a frame — board reconnect / queue rehydrate. The row
+    // must keep showing the last climb, not blank: an empty→content flip inside the
+    // live platter is exactly what UIKit snapshots as doubled text.
+    const { container, rerender } = render(<QueueBottomAccessory />);
+    expect(container.querySelector('[data-native-row]')?.getAttribute('data-climb-name')).toBe('Tea Magic');
+
+    cfg.currentClimbQueueItem = null;
+    rerender(<QueueBottomAccessory />);
+
+    const row = container.querySelector('[data-native-row]');
+    expect(row).not.toBeNull();
+    expect(row?.getAttribute('data-climb-name')).toBe('Tea Magic');
+  });
 });
