@@ -9,36 +9,37 @@ import { useTheme } from '../providers/theme-provider';
 // fades to clear by its `fadeEnd`.
 const MASK_COLORS = ['#000000', 'transparent'] as const;
 // Stacked layers fake a *variable* blur: a single masked blur only fades its
-// opacity (uniform radius), which reads as an abrupt edge. Stacking N thin layers,
-// each fading out higher than the last, means the top is covered by every layer
-// (max blur) and the bottom by just one — so the effective blur radius ramps
-// smoothly. More layers = smoother (and more GPU work).
-const DEFAULT_LAYERS = 5;
+// opacity (uniform radius), which reads as an abrupt edge. Stacking N layers, each
+// fading out higher than the last, means the top is covered by every layer (max
+// blur) and the bottom by just one — so the effective blur radius ramps smoothly.
+// Thin material is heavier than ultra-thin (closer to the native tab bar's chrome
+// glass), so fewer layers reach the target darkness — which also helps scroll perf.
+const DEFAULT_LAYERS = 3;
 
 type ProgressiveBlurProps = {
   /** Absolute position/size of the blur region (set by the caller). */
   style?: StyleProp<ViewStyle>;
-  /** Blur strength per layer (honoured by the basic blur types; the ultra-thin
-   *  material defines its own radius and the ramp comes from stacking). */
+  /** Blur strength per layer (honoured by the basic blur types; the material types
+   *  define their own radius and the ramp comes from stacking). */
   blurAmount?: number;
   /** Number of stacked blur layers — higher is a smoother ramp, more GPU work. */
   layers?: number;
 };
 
 /**
- * A top-down progressive (gradient) blur for the floating header chrome: several
- * ultra-thin blur layers stacked so the blur radius ramps smoothly from strong at
- * the top to nothing at the bottom (a true variable blur, not just a faded uniform
- * one). Content scrolling up frosts out gradually and the status-bar / Dynamic
- * Island strip reads as light glass. The blur tint follows the app's resolved
+ * A top-down progressive (gradient) blur for the floating header chrome: a few
+ * thin blur layers stacked so the blur radius ramps smoothly from strong at the
+ * top to nothing at the bottom (a true variable blur, not just a faded uniform
+ * one). The thin material matches the native tab bar's heavier glass so the header
+ * and tab bar read as the same surface. The blur tint follows the app's resolved
  * colour scheme, so it honours the in-app light/dark override.
  */
 export function ProgressiveBlur({ style, blurAmount = 16, layers = DEFAULT_LAYERS }: ProgressiveBlurProps) {
   const { colorScheme } = useTheme();
   const isDark = colorScheme === 'dark';
-  // Ultra-thin material: a light, very translucent frost. Stacking accumulates it
-  // toward the top without ever reading as the heavy `dark`/`light` UIBlurEffect.
-  const blurType = isDark ? 'ultraThinMaterialDark' : 'ultraThinMaterialLight';
+  // Thin material: heavier than ultra-thin, so it reads like the native tab bar's
+  // chrome glass rather than a light grey. Stacking accumulates it toward the top.
+  const blurType = isDark ? 'thinMaterialDark' : 'thinMaterialLight';
   const fallbackColor = isDark ? '#000000' : '#F2F2F2';
 
   return (

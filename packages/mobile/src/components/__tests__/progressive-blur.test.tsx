@@ -50,19 +50,19 @@ describe('ProgressiveBlur', () => {
     expect(colors[colors.length - 1]).toBe('transparent');
   });
 
-  it('uses the dark ultra-thin material when the resolved scheme is dark', () => {
+  it('uses the dark thin material when the resolved scheme is dark', () => {
     themeMock.colorScheme = 'dark';
     const { container } = render(<ProgressiveBlur />);
     expect(container.querySelector('[data-testid="blur-view"]')?.getAttribute('data-blur-type')).toBe(
-      'ultraThinMaterialDark',
+      'thinMaterialDark',
     );
   });
 
-  it('uses the light ultra-thin material when the resolved scheme is light (honours the in-app override)', () => {
+  it('uses the light thin material when the resolved scheme is light (honours the in-app override)', () => {
     themeMock.colorScheme = 'light';
     const { container } = render(<ProgressiveBlur />);
     expect(container.querySelector('[data-testid="blur-view"]')?.getAttribute('data-blur-type')).toBe(
-      'ultraThinMaterialLight',
+      'thinMaterialLight',
     );
   });
 });
