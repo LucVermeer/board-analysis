@@ -230,9 +230,9 @@ Buttons from left to right:
    - **Pending** (`lightbulbPending=true`): Box-shadow pulse animation (`lightbulbPulse`, 1100ms ease-in-out infinite). Amber box-shadow expands to 6px and fades.
    - **Coachmark** (`lightbulbCoachmark=true`): Same pulse animation but single iteration (900ms). A MUI `Tooltip` with `placement="top"` and `arrow` shows coachmark text. The tooltip auto-dismisses on animation end via `onAnimationEnd`.
 
-   Tap behavior (send / re-assert the current climb — same solo or party):
-   - **Disconnected**: Opens the Bluetooth device picker (`bluetoothConnect()`), then sends the current climb.
-   - **Connected**: Re-asserts (re-sends) the current climb to the board. Arms the 2-second wall-confirm watcher (`armWallConfirmWatcher`) and sets `pendingClimbUuid`; `WallConfirmedClimb` lights the bulb. A `WallDisconnected` event (relaying BLE link dropped) turns it back off while the current climb is preserved.
+   Tap behavior (always-live — no driver role):
+   - **Disconnected**: Initiates the connect (`bluetoothConnect()` — silent reconnect to the last board's serial on native shells, otherwise the device picker), then arms the 2-second wall-confirm watcher (`armWallConfirmWatcher`) and sets `pendingClimbUuid`; `WallConfirmedClimb` lights the bulb. The watcher is armed **pulse-only** (`pulseOnly: true`): on timeout it only clears the pulse and never fires a connect fallback, because the tap already started a connect — a second connect while the picker is still open would start a duplicate scan ("Already scanning" on iOS). A `WallDisconnected` event (relaying BLE link dropped) turns the bulb back off while the current climb is preserved.
+   - **Connected**: Disconnects (turns the board off); the drop releases the session wall + board-presence holder so every member's lightbulb clears.
 
    Long-press (via `useLongPress` hook): Opens the `LightControlDrawer` (disco light shows, glyph animations, LED color palette customization, manual BLE disconnect). The `consumeLongPress()` method in the click handler swallows the synthesized click that follows a long-press, preventing both actions from firing.
 

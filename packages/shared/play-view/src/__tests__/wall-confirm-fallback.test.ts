@@ -240,6 +240,55 @@ describe('createWallConfirmFallbackController', () => {
     expect(wallConfirmBus.listenerCount()).toBe(0);
   });
 
+  it('pulseOnly: never connects on timeout even when disconnected and supported', () => {
+    // The production lightbulb path: the caller already initiated a connect, so
+    // a second bluetoothConnect here would start a duplicate native scan
+    // ("Already scanning. Stopping now." on iOS). pulseOnly suppresses it while
+    // still recording the timeout.
+    const wallConfirmBus = createLocalWallConfirmBus();
+    const callbacks = createCallbacks();
+    const deps = createDeps(wallConfirmBus, {
+      // The exact state that previously triggered the harmful picker re-connect.
+      isBluetoothConnected: () => false,
+      isBluetoothSupported: () => true,
+      lastConnectedBoardSerial: () => 'serial-42',
+      isNativeApp: () => true,
+    });
+    const controller = createWallConfirmFallbackController(deps, callbacks);
+
+    controller.armWatcher({ ...baseClimb, mode: 'party', pulseOnly: true });
+    vi.advanceTimersByTime(WALL_CONFIRM_TIMEOUT_MS);
+
+    expect(deps.bluetoothConnect).not.toHaveBeenCalled();
+    expect(callbacks.onTimeout).toHaveBeenCalledWith({ climbUuid: 'climb-1' });
+    expect(callbacks.onTrackTimeout).toHaveBeenCalledWith({
+      mode: 'party',
+      fallback: 'pulse_only',
+      boardLayout: 'Original',
+    });
+  });
+
+  it('pulseOnly: still confirms the climb and clears the pulse when WallConfirmedClimb arrives', () => {
+    const wallConfirmBus = createLocalWallConfirmBus();
+    const callbacks = createCallbacks();
+    const deps = createDeps(wallConfirmBus);
+    const controller = createWallConfirmFallbackController(deps, callbacks);
+
+    controller.armWatcher({ ...baseClimb, pulseOnly: true });
+    vi.advanceTimersByTime(400);
+    wallConfirmBus.emit('climb-1');
+    vi.advanceTimersByTime(WALL_CONFIRM_TIMEOUT_MS);
+
+    expect(callbacks.onConfirmed).toHaveBeenCalledWith({
+      climbUuid: 'climb-1',
+      latencyMs: 400,
+      confirmedByRole: 'other',
+    });
+    expect(callbacks.onTimeout).not.toHaveBeenCalled();
+    expect(deps.bluetoothConnect).not.toHaveBeenCalled();
+    expect(wallConfirmBus.listenerCount()).toBe(0);
+  });
+
   it('reads current dependency values when the timeout fires', () => {
     const wallConfirmBus = createLocalWallConfirmBus();
     const callbacks = createCallbacks();
