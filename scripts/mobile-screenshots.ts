@@ -347,6 +347,13 @@ function runIos(options: ScreenshotOptions): number {
     const email = process.env.SCREENSHOT_USER_EMAIL ?? DEFAULT_USER_EMAIL;
     const password = process.env.SCREENSHOT_USER_PASSWORD ?? DEFAULT_USER_PASSWORD;
     console.log(`${LOG} Running Maestro flow ${options.flow} on ${device.udid}...`);
+    // Credentials are passed via `-e`, which is the ONLY mechanism Maestro 2.6.1
+    // offers: `maestro test` has no `--env-file` and does not read `${VAR}` from
+    // the shell environment (verified — env-only resolves to empty and login
+    // fails). The value is therefore briefly visible in the process arg list
+    // (`ps aux`) for the run's duration. This is acceptable here: CI runs on an
+    // ephemeral, single-tenant runner, and locally it's the developer's own
+    // machine. Revisit with `--env-file` if/when we bump to a Maestro that has it.
     const maestroStatus = runInherit(
       'maestro',
       [

@@ -37,7 +37,7 @@ name: app-store screenshots
     text: 'Open'
     optional: true
 - waitForAnimationToEnd
-- takeScreenshot: 04-discover
+- takeScreenshot: 03-discover
 
 # Profile — stats, sessions, logbook.
 - openLink: com.boardsesh.app://profile
@@ -45,7 +45,7 @@ name: app-store screenshots
     text: 'Open'
     optional: true
 - waitForAnimationToEnd
-- takeScreenshot: 06-profile
+- takeScreenshot: 05-profile
 
 # Activate a board so Climbs / board-view / Record render real content. Open the
 # board picker and tap the first card under "Your boards" (top-left), which
@@ -73,7 +73,7 @@ name: app-store screenshots
     text: 'Open'
     optional: true
 - waitForAnimationToEnd
-- takeScreenshot: 05-record
+- takeScreenshot: 04-record
 
 # Board view — open the first climb (the signature feature: wall with holds lit).
 - openLink: com.boardsesh.app://climbs

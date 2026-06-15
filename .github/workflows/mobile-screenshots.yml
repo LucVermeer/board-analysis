@@ -83,6 +83,11 @@ jobs:
           bunx wait-on http-get://localhost:8080/health --timeout 120000
 
       - name: Install Maestro
+        # Pin the version so an upstream Maestro release can't silently change
+        # behaviour. The install script honours MAESTRO_VERSION. Bump this
+        # deliberately after re-validating the flow locally.
+        env:
+          MAESTRO_VERSION: 2.6.1
         run: |
           curl -Ls "https://get.maestro.mobile.dev" | bash
           echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"

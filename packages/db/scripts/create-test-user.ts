@@ -165,7 +165,10 @@ async function seedTestUserPlaylists(db: ReturnType<typeof createScriptDb>['db']
       })
       .onConflictDoUpdate({
         target: playlists.uuid,
-        set: { name: seed.name, color, icon, updatedAt: lastAccessedAt },
+        // Include isPublic so re-running against an existing DB converges the
+        // visibility flag (e.g. flips the Tension TB2 playlist public) — without
+        // it, Discover stays empty on a container built from an older image.
+        set: { name: seed.name, color, icon, isPublic: seed.isPublic, updatedAt: lastAccessedAt },
       })
       .returning({ id: playlists.id });
 

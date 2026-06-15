@@ -1,0 +1,109 @@
+import { describe, expect, it } from 'vitest';
+
+import { buildScreenshotEnv, deviceSlug, parseArgs, type ScreenshotOptions } from '../mobile-screenshots';
+
+function makeOptions(overrides: Partial<ScreenshotOptions> = {}): ScreenshotOptions {
+  return {
+    platform: 'ios',
+    flow: 'app-store',
+    backend: 'local',
+    device: 'iPhone 16 Pro Max',
+    variant: null,
+    theme: 'dark',
+    shutdown: false,
+    ...overrides,
+  };
+}
+
+describe('deviceSlug', () => {
+  it('lowercases and dash-joins a device name', () => {
+    expect(deviceSlug('iPhone 16 Pro Max')).toBe('iphone-16-pro-max');
+  });
+
+  it('collapses runs of non-alphanumerics and trims edges', () => {
+    expect(deviceSlug('  Pixel 8 (Pro) ')).toBe('pixel-8-pro');
+    expect(deviceSlug('iPad Pro 13"')).toBe('ipad-pro-13');
+  });
+});
+
+describe('parseArgs', () => {
+  it('defaults to ios / app-store / local / dark when no flags are given', () => {
+    expect(parseArgs([])).toEqual(makeOptions());
+  });
+
+  it('ignores a bare `--` separator', () => {
+    expect(parseArgs(['--'])).toEqual(makeOptions());
+  });
+
+  it('parses every flag', () => {
+    expect(
+      parseArgs([
+        '--platform',
+        'android',
+        '--flow',
+        'onboarding',
+        '--backend',
+        'prod',
+        '--theme',
+        'light',
+        '--variant',
+        'material',
+        '--device',
+        'Pixel 8',
+        '--shutdown',
+      ]),
+    ).toEqual({
+      platform: 'android',
+      flow: 'onboarding',
+      backend: 'prod',
+      device: 'Pixel 8',
+      variant: 'material',
+      theme: 'light',
+      shutdown: true,
+    });
+  });
+
+  it('rejects an invalid enum value', () => {
+    expect(() => parseArgs(['--theme', 'sepia'])).toThrow(/--theme must be one of/);
+    expect(() => parseArgs(['--platform', 'windows'])).toThrow(/--platform must be one of/);
+  });
+
+  it('rejects an unknown flag and a value-less flag', () => {
+    expect(() => parseArgs(['--bogus'])).toThrow(/Unknown argument/);
+    expect(() => parseArgs(['--device', '--shutdown'])).toThrow(/--device requires a value/);
+  });
+});
+
+describe('buildScreenshotEnv', () => {
+  it('always enables screenshot mode and bakes the theme', () => {
+    const env = buildScreenshotEnv(makeOptions({ theme: 'dark' }), {});
+    expect(env.EXPO_PUBLIC_SCREENSHOT_MODE).toBe('1');
+    expect(env.EXPO_PUBLIC_SCREENSHOT_THEME).toBe('dark');
+  });
+
+  it('points a local build at the local backend defaults', () => {
+    const env = buildScreenshotEnv(makeOptions({ backend: 'local' }), {});
+    expect(env.EXPO_PUBLIC_BACKEND_URL).toBe('http://localhost:8080');
+    expect(env.EXPO_PUBLIC_WEB_URL).toBe('http://localhost:3000');
+  });
+
+  it('respects a pre-set backend URL for a local build', () => {
+    const env = buildScreenshotEnv(makeOptions({ backend: 'local' }), {
+      EXPO_PUBLIC_BACKEND_URL: 'http://10.0.0.5:8080',
+    });
+    expect(env.EXPO_PUBLIC_BACKEND_URL).toBe('http://10.0.0.5:8080');
+  });
+
+  it('leaves backend URLs unset for a prod build (app uses its prod defaults)', () => {
+    const env = buildScreenshotEnv(makeOptions({ backend: 'prod' }), {});
+    expect(env.EXPO_PUBLIC_BACKEND_URL).toBeUndefined();
+    expect(env.EXPO_PUBLIC_WEB_URL).toBeUndefined();
+  });
+
+  it('sets the variant override only when one is requested', () => {
+    expect(buildScreenshotEnv(makeOptions({ variant: 'material' }), {}).EXPO_PUBLIC_SCREENSHOT_VARIANT).toBe(
+      'material',
+    );
+    expect(buildScreenshotEnv(makeOptions({ variant: null }), {}).EXPO_PUBLIC_SCREENSHOT_VARIANT).toBeUndefined();
+  });
+});

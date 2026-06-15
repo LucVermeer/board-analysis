@@ -12,6 +12,12 @@
  *     create-test-user.ts running this logic at build time, the standalone
  *     run becomes unnecessary.
  *
+ * Scope: this backfills CLIMBS only. Playlist visibility (`isPublic`, which
+ * decides what Discover shows) is owned by `create-test-user.ts`. On an existing
+ * container built from an older image, re-run `create-test-user.ts` (its upsert
+ * now converges `isPublic`) — or rebuild the dev-DB image — so the public
+ * Tension/Kilter playlists actually surface in Discover.
+ *
  * Run the stopgap: `node --import tsx packages/db/scripts/seed-playlist-climbs.ts`
  *
  * Determinism: selection is `ORDER BY ascensionist_count DESC NULLS LAST,
