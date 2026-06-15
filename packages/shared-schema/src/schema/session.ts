@@ -41,6 +41,10 @@ export const sessionTypeDefs = /* GraphQL */ `
     queueState: QueueState!
     "Whether the current client is the session leader (presentation/backward compatibility only)"
     isLeader: Boolean!
+    driverParticipantId: ID
+      @deprecated(
+        reason: "Sessions are always-live; there is no driver. Always null. Kept one release for stale clients (cached web bundles, un-OTA'd native apps); remove after rollout."
+      )
     "Most recently observed BLE board serial for this session. Set when a participant pairs their phone to a physical board; broadcast as SessionBoardSerialChanged so late-joiners can auto-connect to the same board. Null when no board has been recorded."
     lastConnectedBoardSerial: String
     "Unique identifier for this client's connection"

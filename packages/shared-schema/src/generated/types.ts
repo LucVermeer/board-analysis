@@ -1308,6 +1308,20 @@ export type DiscoverableSession = {
 };
 
 /**
+ * DEPRECATED. Sessions are always-live; there is no wall driver. This type and its
+ * SessionEvent union membership are kept one release purely so stale clients (cached web
+ * bundles, un-OTA'd native apps) whose `sessionUpdates` documents still contain
+ * `... on DriverChanged` keep passing GraphQL validation. The backend never publishes it.
+ * Remove after the rollout window. (GraphQL has no @deprecated for union members/object
+ * types, hence this comment.)
+ */
+export type DriverChanged = {
+  __typename?: 'DriverChanged';
+  driverParticipantId?: Maybe<Scalars['ID']['output']>;
+  previousDriverParticipantId?: Maybe<Scalars['ID']['output']>;
+};
+
+/**
  * Response containing events since a given sequence number.
  * Used for delta synchronization when reconnecting.
  */
@@ -2163,6 +2177,12 @@ export type Mutation = {
    */
   registerActivityPushToken: Scalars['Boolean']['output'];
   registerController: ControllerRegistration;
+  /**
+   * Deprecated. No wall driver exists; inert no-op kept one release for stale clients.
+   * Returns the session unchanged and never publishes `DriverChanged`. Remove after rollout.
+   * @deprecated Always-live; no driver. No-op. Remove after rollout.
+   */
+  releaseControl: Session;
   /** Remove a climb from a playlist. */
   removeClimbFromPlaylist: Scalars['Boolean']['output'];
   /** Remove a member from a gym. */
@@ -2310,6 +2330,15 @@ export type Mutation = {
    * Caller must be a participant of the session. Requires authentication.
    */
   syncSessionToIntegration: IntegrationExportResult;
+  /**
+   * Deprecated. Sessions are always-live, so there is no wall driver to claim. Kept one
+   * release as an inert compat shim for stale clients (cached web bundles, un-OTA'd native
+   * apps) that still call it: if `climb` is provided it is set as the current climb (so the
+   * stale client's wall change still propagates), otherwise it is a no-op. Never publishes
+   * `DriverChanged`. Remove after the rollout window.
+   * @deprecated Always-live; no driver. Sets the climb (if given) and returns the session. Remove after rollout.
+   */
+  takeControl: Session;
   /**
    * Toggle favorite status for a climb.
    * Returns new favorite state.
@@ -2789,6 +2818,11 @@ export type MutationSubscribeNewClimbsArgs = {
 export type MutationSyncSessionToIntegrationArgs = {
   provider: IntegrationProvider;
   sessionId: Scalars['ID']['input'];
+};
+
+/** Root mutation type for all write operations. */
+export type MutationTakeControlArgs = {
+  climb?: InputMaybe<ClimbQueueItemInput>;
 };
 
 /** Root mutation type for all write operations. */
@@ -4553,6 +4587,8 @@ export type Session = {
   clientId: Scalars['ID']['output'];
   /** Hex color for multi-session display */
   color?: Maybe<Scalars['String']['output']>;
+  /** @deprecated Sessions are always-live; there is no driver. Always null. Kept one release for stale clients (cached web bundles, un-OTA'd native apps); remove after rollout. */
+  driverParticipantId?: Maybe<Scalars['ID']['output']>;
   /** When the session was ended (ISO 8601) */
   endedAt?: Maybe<Scalars['String']['output']>;
   /** Optional session goal text */
@@ -4676,6 +4712,7 @@ export type SessionEnded = {
 
 /** Union of possible session events. */
 export type SessionEvent =
+  | DriverChanged
   | LeaderChanged
   | SessionBoardPathChanged
   | SessionBoardSerialChanged
@@ -5925,6 +5962,7 @@ export type ResolversUnionTypes<_RefType extends Record<string, unknown>> = Reso
     | QueueItemRemoved
     | QueueReordered;
   SessionEvent:
+    | DriverChanged
     | LeaderChanged
     | SessionBoardPathChanged
     | SessionBoardSerialChanged
@@ -6016,6 +6054,7 @@ export type ResolversTypes = ResolversObject<{
   DiscoverPlaylistsResult: ResolverTypeWrapper<DiscoverPlaylistsResult>;
   DiscoverablePlaylist: ResolverTypeWrapper<DiscoverablePlaylist>;
   DiscoverableSession: ResolverTypeWrapper<DiscoverableSession>;
+  DriverChanged: ResolverTypeWrapper<DriverChanged>;
   EventsReplayResponse: ResolverTypeWrapper<
     Omit<EventsReplayResponse, 'events'> & { events: Array<ResolversTypes['QueueEvent']> }
   >;
@@ -6296,6 +6335,7 @@ export type ResolversParentTypes = ResolversObject<{
   DiscoverPlaylistsResult: DiscoverPlaylistsResult;
   DiscoverablePlaylist: DiscoverablePlaylist;
   DiscoverableSession: DiscoverableSession;
+  DriverChanged: DriverChanged;
   EventsReplayResponse: Omit<EventsReplayResponse, 'events'> & { events: Array<ResolversParentTypes['QueueEvent']> };
   FavoritesCount: FavoritesCount;
   FeedbackContextInput: FeedbackContextInput;
@@ -7162,6 +7202,15 @@ export type DiscoverableSessionResolvers<
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
+export type DriverChangedResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['DriverChanged'] = ResolversParentTypes['DriverChanged'],
+> = ResolversObject<{
+  driverParticipantId?: Resolver<Maybe<ResolversTypes['ID']>, ParentType, ContextType>;
+  previousDriverParticipantId?: Resolver<Maybe<ResolversTypes['ID']>, ParentType, ContextType>;
+  __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
+}>;
+
 export type EventsReplayResponseResolvers<
   ContextType = ConnectionContext,
   ParentType extends ResolversParentTypes['EventsReplayResponse'] = ResolversParentTypes['EventsReplayResponse'],
@@ -7773,6 +7822,7 @@ export type MutationResolvers<
     ContextType,
     RequireFields<MutationRegisterControllerArgs, 'input'>
   >;
+  releaseControl?: Resolver<ResolversTypes['Session'], ParentType, ContextType>;
   removeClimbFromPlaylist?: Resolver<
     ResolversTypes['Boolean'],
     ParentType,
@@ -7958,6 +8008,7 @@ export type MutationResolvers<
     ContextType,
     RequireFields<MutationSyncSessionToIntegrationArgs, 'provider' | 'sessionId'>
   >;
+  takeControl?: Resolver<ResolversTypes['Session'], ParentType, ContextType, Partial<MutationTakeControlArgs>>;
   toggleFavorite?: Resolver<
     ResolversTypes['ToggleFavoriteResult'],
     ParentType,
@@ -9027,6 +9078,7 @@ export type SessionResolvers<
   boardPath?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   clientId?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
   color?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  driverParticipantId?: Resolver<Maybe<ResolversTypes['ID']>, ParentType, ContextType>;
   endedAt?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   goal?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   id?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
@@ -9131,6 +9183,7 @@ export type SessionEventResolvers<
   ParentType extends ResolversParentTypes['SessionEvent'] = ResolversParentTypes['SessionEvent'],
 > = ResolversObject<{
   __resolveType: TypeResolveFn<
+    | 'DriverChanged'
     | 'LeaderChanged'
     | 'SessionBoardPathChanged'
     | 'SessionBoardSerialChanged'
@@ -9803,6 +9856,7 @@ export type Resolvers<ContextType = ConnectionContext> = ResolversObject<{
   DiscoverPlaylistsResult?: DiscoverPlaylistsResultResolvers<ContextType>;
   DiscoverablePlaylist?: DiscoverablePlaylistResolvers<ContextType>;
   DiscoverableSession?: DiscoverableSessionResolvers<ContextType>;
+  DriverChanged?: DriverChangedResolvers<ContextType>;
   EventsReplayResponse?: EventsReplayResponseResolvers<ContextType>;
   FavoritesCount?: FavoritesCountResolvers<ContextType>;
   FollowConnection?: FollowConnectionResolvers<ContextType>;

@@ -46,6 +46,7 @@ import { autoSyncSessionToIntegrations } from '../../../integrations/export-serv
 import { normalizeIanaTimezone } from '../../../utils/timezone';
 import { endLiveActivity } from '../../../services/apns';
 import { buildSessionPayload } from './helpers';
+import { setCurrentClimbAndPublish } from '../../../services/queue-navigation';
 
 /**
  * `isLeader` audit (always-live sessions):
@@ -432,6 +433,38 @@ export const sessionMutations = {
     // Mirror confirmClimbOnWall: return the resolved Session so optimistic-UI
     // callers can apply server-derived state without a follow-up query.
     return buildSessionPayload(sessionId, ctx, { participantId });
+  },
+
+  /**
+   * DEPRECATED compat shim — sessions are always-live, so there is no wall
+   * driver to claim. Kept one release for stale clients (cached web bundles,
+   * un-OTA'd native apps) that still call `takeControl`. If a climb is provided
+   * we set it as the current climb (so the stale client's wall change still
+   * propagates always-live, shouldAddToQueue=true mirrors setCurrentClimb);
+   * otherwise it's a no-op. NEVER publishes `DriverChanged`. Remove after the
+   * rollout window.
+   */
+  takeControl: async (_: unknown, { climb }: { climb?: ClimbQueueItem | null }, ctx: ConnectionContext) => {
+    await applyRateLimit(ctx, RATE_LIMIT_SESSION, RATE_LIMIT_SESSION_OP);
+    const sessionId = requireSession(ctx);
+    await requireSessionMember(ctx, sessionId);
+    if (climb !== null && climb !== undefined) {
+      validateInput(ClimbQueueItemSchema, climb, 'climb');
+      await setCurrentClimbAndPublish(sessionId, climb, true, roomManager, pubsub, ctx.connectionId || null, null);
+    }
+    return buildSessionPayload(sessionId, ctx, ctx.participantId ? { participantId: ctx.participantId } : {});
+  },
+
+  /**
+   * DEPRECATED compat shim — no wall driver exists. Inert no-op kept one release
+   * for stale clients. NEVER publishes `DriverChanged`. Returns the session
+   * unchanged. Remove after the rollout window.
+   */
+  releaseControl: async (_: unknown, __: unknown, ctx: ConnectionContext) => {
+    await applyRateLimit(ctx, RATE_LIMIT_SESSION, RATE_LIMIT_SESSION_OP);
+    const sessionId = requireSession(ctx);
+    await requireSessionMember(ctx, sessionId);
+    return buildSessionPayload(sessionId, ctx, ctx.participantId ? { participantId: ctx.participantId } : {});
   },
 
   /**

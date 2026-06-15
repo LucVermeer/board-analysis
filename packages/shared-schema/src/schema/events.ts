@@ -7,6 +7,7 @@ export const eventsTypeDefs = /* GraphQL */ `
     | UserLeft
     | UserPresenceChanged
     | LeaderChanged
+    | DriverChanged
     | WallConfirmedClimb
     | WallDisconnected
     | SessionBoardSerialChanged
@@ -46,6 +47,19 @@ export const eventsTypeDefs = /* GraphQL */ `
     leaderId: ID!
     "Connection ID of the new leader, for current-client leadership checks"
     leaderConnectionId: ID
+  }
+
+  """
+  DEPRECATED. Sessions are always-live; there is no wall driver. This type and its
+  SessionEvent union membership are kept one release purely so stale clients (cached web
+  bundles, un-OTA'd native apps) whose \`sessionUpdates\` documents still contain
+  \`... on DriverChanged\` keep passing GraphQL validation. The backend never publishes it.
+  Remove after the rollout window. (GraphQL has no @deprecated for union members/object
+  types, hence this comment.)
+  """
+  type DriverChanged {
+    driverParticipantId: ID
+    previousDriverParticipantId: ID
   }
 
   """

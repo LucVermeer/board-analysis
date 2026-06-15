@@ -105,3 +105,72 @@ describe('native iOS queue subscription drift guard', () => {
     );
   });
 });
+
+describe('previous-release driver operations still validate (deprecated compat shims)', () => {
+  // Stale clients — cached web bundles and un-OTA'd native binaries — still send
+  // the pre-always-live driver operations. The deprecated schema shims
+  // (Session.driverParticipantId, takeControl/releaseControl, the DriverChanged
+  // union member) exist so these keep passing GraphQL validation through the
+  // rollout window. Without them, a single `... on DriverChanged` fragment would
+  // fail validation and take down the WHOLE sessionUpdates subscription (and a
+  // driverParticipantId selection would break join). This test fails loudly if
+  // a shim is removed before the rollout window closes.
+  const legacyOperations: Array<[string, string]> = [
+    [
+      'legacy JoinSession selecting driverParticipantId',
+      `mutation JoinSession($sessionId: ID!, $boardPath: String!) {
+        joinSession(sessionId: $sessionId, boardPath: $boardPath) {
+          id
+          participantId
+          isLeader
+          driverParticipantId
+        }
+      }`,
+    ],
+    [
+      'legacy TakeControl mutation',
+      `mutation TakeControl($climb: ClimbQueueItemInput) {
+        takeControl(climb: $climb) {
+          id
+          driverParticipantId
+        }
+      }`,
+    ],
+    [
+      'legacy ReleaseControl mutation',
+      `mutation ReleaseControl {
+        releaseControl {
+          id
+          driverParticipantId
+        }
+      }`,
+    ],
+    [
+      'legacy SessionUpdates subscription with DriverChanged fragment',
+      `subscription SessionUpdates($sessionId: ID!) {
+        sessionUpdates(sessionId: $sessionId) {
+          __typename
+          ... on DriverChanged {
+            driverParticipantId
+            previousDriverParticipantId
+          }
+          ... on WallConfirmedClimb {
+            climbUuid
+          }
+        }
+      }`,
+    ],
+  ];
+
+  for (const [name, source] of legacyOperations) {
+    it(`${name} still validates against the shimmed schema`, () => {
+      const document = parse(source);
+      const errors = validate(schema, document);
+      if (errors.length > 0) {
+        const detail = errors.map((error, index) => `  ${index + 1}. ${error.message}`).join('\n');
+        throw new Error(`Legacy operation "${name}" must keep validating during rollout but errored:\n${detail}`);
+      }
+      expect(errors).toHaveLength(0);
+    });
+  }
+});

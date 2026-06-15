@@ -1305,6 +1305,20 @@ export type DiscoverableSession = {
 };
 
 /**
+ * DEPRECATED. Sessions are always-live; there is no wall driver. This type and its
+ * SessionEvent union membership are kept one release purely so stale clients (cached web
+ * bundles, un-OTA'd native apps) whose `sessionUpdates` documents still contain
+ * `... on DriverChanged` keep passing GraphQL validation. The backend never publishes it.
+ * Remove after the rollout window. (GraphQL has no @deprecated for union members/object
+ * types, hence this comment.)
+ */
+export type DriverChanged = {
+  __typename?: 'DriverChanged';
+  driverParticipantId?: Maybe<Scalars['ID']['output']>;
+  previousDriverParticipantId?: Maybe<Scalars['ID']['output']>;
+};
+
+/**
  * Response containing events since a given sequence number.
  * Used for delta synchronization when reconnecting.
  */
@@ -2160,6 +2174,12 @@ export type Mutation = {
    */
   registerActivityPushToken: Scalars['Boolean']['output'];
   registerController: ControllerRegistration;
+  /**
+   * Deprecated. No wall driver exists; inert no-op kept one release for stale clients.
+   * Returns the session unchanged and never publishes `DriverChanged`. Remove after rollout.
+   * @deprecated Always-live; no driver. No-op. Remove after rollout.
+   */
+  releaseControl: Session;
   /** Remove a climb from a playlist. */
   removeClimbFromPlaylist: Scalars['Boolean']['output'];
   /** Remove a member from a gym. */
@@ -2307,6 +2327,15 @@ export type Mutation = {
    * Caller must be a participant of the session. Requires authentication.
    */
   syncSessionToIntegration: IntegrationExportResult;
+  /**
+   * Deprecated. Sessions are always-live, so there is no wall driver to claim. Kept one
+   * release as an inert compat shim for stale clients (cached web bundles, un-OTA'd native
+   * apps) that still call it: if `climb` is provided it is set as the current climb (so the
+   * stale client's wall change still propagates), otherwise it is a no-op. Never publishes
+   * `DriverChanged`. Remove after the rollout window.
+   * @deprecated Always-live; no driver. Sets the climb (if given) and returns the session. Remove after rollout.
+   */
+  takeControl: Session;
   /**
    * Toggle favorite status for a climb.
    * Returns new favorite state.
@@ -2786,6 +2815,11 @@ export type MutationSubscribeNewClimbsArgs = {
 export type MutationSyncSessionToIntegrationArgs = {
   provider: IntegrationProvider;
   sessionId: Scalars['ID']['input'];
+};
+
+/** Root mutation type for all write operations. */
+export type MutationTakeControlArgs = {
+  climb?: InputMaybe<ClimbQueueItemInput>;
 };
 
 /** Root mutation type for all write operations. */
@@ -4550,6 +4584,8 @@ export type Session = {
   clientId: Scalars['ID']['output'];
   /** Hex color for multi-session display */
   color?: Maybe<Scalars['String']['output']>;
+  /** @deprecated Sessions are always-live; there is no driver. Always null. Kept one release for stale clients (cached web bundles, un-OTA'd native apps); remove after rollout. */
+  driverParticipantId?: Maybe<Scalars['ID']['output']>;
   /** When the session was ended (ISO 8601) */
   endedAt?: Maybe<Scalars['String']['output']>;
   /** Optional session goal text */
@@ -4673,6 +4709,7 @@ export type SessionEnded = {
 
 /** Union of possible session events. */
 export type SessionEvent =
+  | DriverChanged
   | LeaderChanged
   | SessionBoardPathChanged
   | SessionBoardSerialChanged

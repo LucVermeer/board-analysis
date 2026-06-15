@@ -352,6 +352,10 @@ type Session {
   queueState: QueueState!
   "Whether the current client is the session leader (presentation/backward compatibility only)"
   isLeader: Boolean!
+  driverParticipantId: ID
+    @deprecated(
+      reason: "Sessions are always-live; there is no driver. Always null. Kept one release for stale clients (cached web bundles, un-OTA'd native apps); remove after rollout."
+    )
   "Most recently observed BLE board serial for this session. Set when a participant pairs their phone to a physical board; broadcast as SessionBoardSerialChanged so late-joiners can auto-connect to the same board. Null when no board has been recorded."
   lastConnectedBoardSerial: String
   "Unique identifier for this client's connection"
@@ -4425,6 +4429,24 @@ type Mutation {
   setQueue(queue: [ClimbQueueItemInput!]!, currentClimbQueueItem: ClimbQueueItemInput): QueueState!
 
   """
+  Deprecated. Sessions are always-live, so there is no wall driver to claim. Kept one
+  release as an inert compat shim for stale clients (cached web bundles, un-OTA'd native
+  apps) that still call it: if `climb` is provided it is set as the current climb (so the
+  stale client's wall change still propagates), otherwise it is a no-op. Never publishes
+  `DriverChanged`. Remove after the rollout window.
+  """
+  takeControl(climb: ClimbQueueItemInput): Session!
+    @deprecated(
+      reason: "Always-live; no driver. Sets the climb (if given) and returns the session. Remove after rollout."
+    )
+
+  """
+  Deprecated. No wall driver exists; inert no-op kept one release for stale clients.
+  Returns the session unchanged and never publishes `DriverChanged`. Remove after rollout.
+  """
+  releaseControl: Session! @deprecated(reason: "Always-live; no driver. No-op. Remove after rollout.")
+
+  """
   Confirm to all session participants that a climb was successfully relayed to the wall
   over BLE from this client's phone. Any session participant may call — the BLE-capable
   phone that handled the send is the source of truth for confirmation. The server stamps
@@ -5057,6 +5079,7 @@ union SessionEvent =
   | UserLeft
   | UserPresenceChanged
   | LeaderChanged
+  | DriverChanged
   | WallConfirmedClimb
   | WallDisconnected
   | SessionBoardSerialChanged
@@ -5096,6 +5119,19 @@ type LeaderChanged {
   leaderId: ID!
   "Connection ID of the new leader, for current-client leadership checks"
   leaderConnectionId: ID
+}
+
+"""
+DEPRECATED. Sessions are always-live; there is no wall driver. This type and its
+SessionEvent union membership are kept one release purely so stale clients (cached web
+bundles, un-OTA'd native apps) whose `sessionUpdates` documents still contain
+`... on DriverChanged` keep passing GraphQL validation. The backend never publishes it.
+Remove after the rollout window. (GraphQL has no @deprecated for union members/object
+types, hence this comment.)
+"""
+type DriverChanged {
+  driverParticipantId: ID
+  previousDriverParticipantId: ID
 }
 
 """
