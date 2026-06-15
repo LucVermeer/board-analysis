@@ -56,15 +56,27 @@ export function useLightbulbControl(options: UseLightbulbControlOptions): Lightb
   // Raw context (non-throwing) so a bulb rendered outside the provider degrades
   // to "no peer holder" instead of crashing.
   const boardPresenceCurrent = useContext(BoardPresenceCurrentContext);
-  const { isSessionWallLit, sessionId } = useQueueSessionControls();
+  const { isSessionWallLit, sessionId, sessionMemberUserIds } = useQueueSessionControls();
 
   const localConnected = bluetooth?.isConnected ?? false;
   const pending = bluetooth?.loading ?? false;
 
+  // The board-presence holder is board-scoped (anyone on this board feed). Tie it
+  // to the session so the bulb only lights for someone I'm climbing with: a
+  // logged-in holder matches by userId; an anonymous holder falls back to the
+  // session wall-lit flag (in a session only). A holder who isn't in my session —
+  // or any holder while I'm solo — no longer lights the bulb, but its avatar still
+  // shows via BoardConnectionBadge.
+  const holder = boardPresenceCurrent?.holder ?? null;
+  const holderUserId = holder?.userId ?? null;
+  const sessionHolderPresent = sessionId !== null && holderUserId !== null && sessionMemberUserIds.has(holderUserId);
+  const holderIsAnonymous = holder !== null && holderUserId === null && sessionId !== null;
+
   const lit = deriveLightbulbLit({
     localConnected,
     isSubscribedToBoardFeed: boardId !== null,
-    peerHolderPresent: boardPresenceCurrent?.holder != null,
+    sessionHolderPresent,
+    holderIsAnonymous,
     isSessionWallLit,
   });
 

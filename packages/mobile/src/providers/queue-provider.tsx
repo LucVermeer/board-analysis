@@ -196,7 +196,7 @@ const QueueContext = createContext<QueueContextValue | null>(null);
  * - useQueue(): legacy/full reducer state plus actions; use only when state shape is required.
  * - useQueueActions(): stable command surface for enqueue/session/playback writes.
  * - useQueueSessionId(): rare session-id changes for structural chrome.
- * - useQueueSessionControls(): session id plus serial/wall controls for party surfaces.
+ * - useQueueSessionControls(): session id, serial/wall controls, and the member-userId set for party surfaces.
  * - useQueueLiveStats(): high-frequency live stats and roster updates.
  * - useActiveClimbUuid(): row-level active-climb highlighting.
  * - useHasActiveClimb(): presence-only bottom chrome metrics.
@@ -211,7 +211,16 @@ type QueueSessionControlContextValue = Pick<
   | 'confirmClimbOnWall'
   | 'reportWallDisconnect'
   | 'setSessionBoardSerial'
->;
+> & {
+  /**
+   * Stable DB user UUIDs of the current session's members (including me). Used to
+   * id-match the board-presence holder against "someone in my session" so the
+   * lightbulb lights only for a session member's BLE link, not any board holder.
+   * Empty when solo. Memoized by the sorted-id set so the ≤1/2s party push doesn't
+   * churn its identity.
+   */
+  sessionMemberUserIds: ReadonlySet<string>;
+};
 
 const QueueSessionControlContext = createContext<QueueSessionControlContextValue | null>(null);
 
@@ -372,6 +381,9 @@ const createEmptySessionRuntimeState = (): MobileSessionRuntimeState => ({
   lastConnectedBoardSerial: null,
   boardPath: '',
 });
+
+// Stable empty Set so the no-session case never publishes a fresh identity.
+const EMPTY_USER_ID_SET: ReadonlySet<string> = new Set<string>();
 
 export function QueueProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(queueReducer, defaultSearchParams, initialState);
@@ -1663,12 +1675,31 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     [playlistSuggestionSource],
   );
 
+  // The logged-in member userIds (anonymous members have no userId to match, so
+  // they're filtered out), used to id-match the board-presence holder. `sessionUsers`
+  // gets a fresh array identity on every ≤1/2s SessionStatsUpdated push even when the
+  // roster is unchanged, so we hold the Set in a ref and keep its identity stable by
+  // content equality: a new Set is published only when the membership actually
+  // changes, so a stats-only push doesn't churn the session-control value (and
+  // re-light the bulbs that read it). Content equality also avoids any
+  // string-signature delimiter ambiguity.
+  const sessionMemberUserIdsRef = useRef<ReadonlySet<string>>(EMPTY_USER_ID_SET);
+  const sessionMemberUserIds = useMemo<ReadonlySet<string>>(() => {
+    const next = new Set(sessionUsers.map((user) => user.userId).filter((userId): userId is string => userId != null));
+    const prev = sessionMemberUserIdsRef.current;
+    const unchanged = prev.size === next.size && [...next].every((userId) => prev.has(userId));
+    if (unchanged) return prev;
+    sessionMemberUserIdsRef.current = next;
+    return next;
+  }, [sessionUsers]);
+
   const sessionControlValue = useMemo<QueueSessionControlContextValue>(
     () => ({
       sessionId,
       participantId,
       lastConnectedBoardSerial,
       isSessionWallLit,
+      sessionMemberUserIds,
       confirmClimbOnWall,
       reportWallDisconnect,
       setSessionBoardSerial,
@@ -1678,6 +1709,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       participantId,
       lastConnectedBoardSerial,
       isSessionWallLit,
+      sessionMemberUserIds,
       confirmClimbOnWall,
       reportWallDisconnect,
       setSessionBoardSerial,

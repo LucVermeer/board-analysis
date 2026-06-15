@@ -55,33 +55,74 @@ describe('deriveLightbulbLit', () => {
       deriveLightbulbLit({
         localConnected: true,
         isSubscribedToBoardFeed: false,
-        peerHolderPresent: false,
+        sessionHolderPresent: false,
+        holderIsAnonymous: false,
         isSessionWallLit: false,
       }),
     ).toBe(true);
   });
 
-  it('lights when subscribed and a peer holds the wall', () => {
+  it('lights when subscribed and a session member holds the wall', () => {
     expect(
       deriveLightbulbLit({
         localConnected: false,
         isSubscribedToBoardFeed: true,
-        peerHolderPresent: true,
+        sessionHolderPresent: true,
+        holderIsAnonymous: false,
         isSessionWallLit: false,
       }),
     ).toBe(true);
   });
 
-  it('ignores a stuck session flag once subscribed to the authoritative feed', () => {
-    // The regression: the holder has cleared (peer disconnected) but the
-    // best-effort session flag is stuck true. Subscribed clients trust the
-    // holder, so the bulb correctly reads off — the phone can take control back.
+  it('stays off when subscribed and the holder is not in my session (stranger / solo)', () => {
+    // A board holder exists but they aren't a member of my session (or I'm solo):
+    // session-scoped, so the bulb reads off even though the holder's avatar shows.
     expect(
       deriveLightbulbLit({
         localConnected: false,
         isSubscribedToBoardFeed: true,
-        peerHolderPresent: false,
+        sessionHolderPresent: false,
+        holderIsAnonymous: false,
+        isSessionWallLit: false,
+      }),
+    ).toBe(false);
+  });
+
+  it('ignores a stuck session flag once the holder has cleared', () => {
+    // The regression guard: the holder cleared (peer disconnected) but the
+    // best-effort session flag is stuck true. With no holder, neither the
+    // session-member nor the anonymous path can fire, so the bulb reads off.
+    expect(
+      deriveLightbulbLit({
+        localConnected: false,
+        isSubscribedToBoardFeed: true,
+        sessionHolderPresent: false,
+        holderIsAnonymous: false,
         isSessionWallLit: true,
+      }),
+    ).toBe(false);
+  });
+
+  it('falls back to the session flag for an anonymous holder in a session', () => {
+    // An anonymous session peer can't be id-matched, so trust the session flag —
+    // but only while a holder actually exists.
+    expect(
+      deriveLightbulbLit({
+        localConnected: false,
+        isSubscribedToBoardFeed: true,
+        sessionHolderPresent: false,
+        holderIsAnonymous: true,
+        isSessionWallLit: true,
+      }),
+    ).toBe(true);
+
+    expect(
+      deriveLightbulbLit({
+        localConnected: false,
+        isSubscribedToBoardFeed: true,
+        sessionHolderPresent: false,
+        holderIsAnonymous: true,
+        isSessionWallLit: false,
       }),
     ).toBe(false);
   });
@@ -91,7 +132,8 @@ describe('deriveLightbulbLit', () => {
       deriveLightbulbLit({
         localConnected: false,
         isSubscribedToBoardFeed: false,
-        peerHolderPresent: false,
+        sessionHolderPresent: false,
+        holderIsAnonymous: false,
         isSessionWallLit: true,
       }),
     ).toBe(true);
@@ -100,7 +142,8 @@ describe('deriveLightbulbLit', () => {
       deriveLightbulbLit({
         localConnected: false,
         isSubscribedToBoardFeed: false,
-        peerHolderPresent: false,
+        sessionHolderPresent: false,
+        holderIsAnonymous: false,
         isSessionWallLit: false,
       }),
     ).toBe(false);
