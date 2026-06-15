@@ -63,9 +63,13 @@ function fetchContributors(): Contributor[] | null {
   }
 }
 
+// activeOnly:false so one-time sponsors (and past supporters) are thanked too —
+// a one-time gift isn't an "active" recurring subscription, so activeOnly:true
+// would silently drop them. includePrivate:false still respects sponsors who
+// chose to stay private.
 const SPONSORS_QUERY = `query($login: String!) {
   organization(login: $login) {
-    sponsorshipsAsMaintainer(first: 100, activeOnly: true, includePrivate: false, orderBy: { field: CREATED_AT, direction: ASC }) {
+    sponsorshipsAsMaintainer(first: 100, activeOnly: false, includePrivate: false, orderBy: { field: CREATED_AT, direction: ASC }) {
       nodes {
         sponsorEntity {
           __typename

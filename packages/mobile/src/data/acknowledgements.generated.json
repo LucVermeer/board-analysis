@@ -1,12 +1,12 @@
 {
-  "generatedAt": "2026-06-15T02:09:33.085Z",
+  "generatedAt": "2026-06-15T03:20:51.696Z",
   "contributors": [
     {
       "login": "marcodejongh",
       "name": null,
       "avatarUrl": "https://avatars.githubusercontent.com/u/1107647?v=4",
       "htmlUrl": "https://github.com/marcodejongh",
-      "contributions": 5464
+      "contributions": 5465
     },
     {
       "login": "gardaholm",
@@ -86,5 +86,12 @@
       "contributions": 1
     }
   ],
-  "sponsors": []
+  "sponsors": [
+    {
+      "login": "bluejayio",
+      "name": "Shuying Zhang",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/26174891?v=4",
+      "url": "https://github.com/bluejayio"
+    }
+  ]
 }
