@@ -4,15 +4,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../providers/theme-provider';
 import { spacing } from '../../theme/tokens';
 import { Text } from '../Text';
-import { GlassSurface } from '../GlassSurface';
 import { ProgressiveBlur } from '../ProgressiveBlur';
 import { TOP_ACTION_SIZE } from './GlassActionToolbar';
 
 const ROW_GUTTER = spacing[4];
-// The centre title's own frosted backing — the progressive blur has faded by the
-// title band, so a small glass chip keeps the text legible over busy content.
-const CENTER_TITLE_HEIGHT = 30;
-const CENTER_TITLE_RADIUS = CENTER_TITLE_HEIGHT / 2;
 
 type CollapsingLargeTitleHeaderProps = {
   /** Optional persistent title shown as plain centred text in the islands row
@@ -72,30 +67,20 @@ export function CollapsingLargeTitleHeader({
         {leftActions}
 
         {/* Flexible centre: the optional persistent plain title (Climbs filter
-            summary); otherwise the spacer that holds the right island to the edge.
-            Non-interactive — status-bar tap handles scroll-to-top. */}
+            summary) — plain text over the progressive blur, no pill; otherwise the
+            spacer that holds the right island to the edge. Non-interactive —
+            status-bar tap handles scroll-to-top. */}
         <View pointerEvents="none" style={styles.centerSection}>
           {centerTitle != null ? (
-            <View style={styles.centerTitleBacking}>
-              {/* A frosted chip behind the title keeps it legible — the progressive
-                  blur has faded to near-clear by this band. */}
-              <GlassSurface
-                glassEffectStyle="regular"
-                fallbackColor={systemColors.elevatedSurface}
-                borderRadius={CENTER_TITLE_RADIUS}
-                style={StyleSheet.absoluteFill}
-                pointerEvents="none"
-              />
-              <Text
-                variant="headline"
-                numberOfLines={1}
-                ellipsizeMode="tail"
-                color={systemColors.label}
-                style={styles.centerTitle}
-              >
-                {centerTitle}
-              </Text>
-            </View>
+            <Text
+              variant="headline"
+              numberOfLines={1}
+              ellipsizeMode="tail"
+              color={systemColors.label}
+              style={styles.centerTitle}
+            >
+              {centerTitle}
+            </Text>
           ) : null}
         </View>
 
@@ -139,17 +124,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: spacing[2],
-  },
-  centerTitleBacking: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    height: CENTER_TITLE_HEIGHT,
-    borderRadius: CENTER_TITLE_RADIUS,
-    paddingHorizontal: spacing[3],
-    overflow: 'hidden',
-    // Never exceed the centre gap between the islands — ellipsize instead.
-    maxWidth: '100%',
   },
   centerTitle: {
     fontWeight: '600',
