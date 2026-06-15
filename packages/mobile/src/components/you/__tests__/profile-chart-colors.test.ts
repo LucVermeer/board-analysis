@@ -54,6 +54,7 @@ describe('buildSessionGradeBars with splitFlash', () => {
   it('emits a single send segment when there are no flashes', () => {
     const bars = buildSessionGradeBars([gradeItem({ grade: 'V4', send: 5, flash: 0 })], undefined, {
       splitFlash: true,
+      colorScheme: 'light',
     });
 
     expect(bars).toHaveLength(1);
@@ -65,6 +66,7 @@ describe('buildSessionGradeBars with splitFlash', () => {
   it('emits a single flash cap segment when there are no sends', () => {
     const bars = buildSessionGradeBars([gradeItem({ grade: 'V4', send: 0, flash: 4 })], undefined, {
       splitFlash: true,
+      colorScheme: 'light',
     });
 
     expect(bars).toHaveLength(1);
@@ -74,9 +76,12 @@ describe('buildSessionGradeBars with splitFlash', () => {
   });
 
   it('drops grades with no ascents and returns null for an entirely empty distribution', () => {
-    expect(buildSessionGradeBars([], undefined, { splitFlash: true })).toBeNull();
+    expect(buildSessionGradeBars([], undefined, { splitFlash: true, colorScheme: 'light' })).toBeNull();
     expect(
-      buildSessionGradeBars([gradeItem({ grade: 'V4', send: 0, flash: 0 })], undefined, { splitFlash: true }),
+      buildSessionGradeBars([gradeItem({ grade: 'V4', send: 0, flash: 0 })], undefined, {
+        splitFlash: true,
+        colorScheme: 'light',
+      }),
     ).toBeNull();
   });
 
@@ -84,7 +89,7 @@ describe('buildSessionGradeBars with splitFlash', () => {
     const bars = buildSessionGradeBars(
       [gradeItem({ grade: 'V6', send: 1 }), gradeItem({ grade: 'V2', send: 1 }), gradeItem({ grade: 'V4', send: 1 })],
       undefined,
-      { splitFlash: true },
+      { splitFlash: true, colorScheme: 'light' },
     );
 
     expect((bars ?? []).map((bar) => bar.key)).toEqual(['V2', 'V4', 'V6']);
@@ -93,6 +98,7 @@ describe('buildSessionGradeBars with splitFlash', () => {
   it('applies formatGrade to the segment label while keeping the grade key', () => {
     const bars = buildSessionGradeBars([gradeItem({ grade: 'V4', send: 1, flash: 1 })], (grade) => `Grade ${grade}`, {
       splitFlash: true,
+      colorScheme: 'light',
     });
 
     const [bar] = bars ?? [];

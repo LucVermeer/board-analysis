@@ -131,15 +131,24 @@ export function gradeBadgeColor(gradeLabel: string | null | undefined): string {
   return getGradeColor(gradeLabel) ?? DEFAULT_GRADE_COLOR;
 }
 
-export type SessionGradeBarsOptions = {
-  /**
-   * Split each grade bar into a muted send (redpoint) base and a vivid flash
-   * cap, so a brighter top band reads as "flashed". When falsy (default) each
-   * bar is a single vivid segment of flash + send.
-   */
-  splitFlash?: boolean;
-  colorScheme?: ColorSchemeName;
-};
+export type SessionGradeBarsOptions =
+  | {
+      /**
+       * Split each grade bar into a muted send (redpoint) base and a vivid flash
+       * cap, so a brighter top band reads as "flashed".
+       */
+      splitFlash: true;
+      /**
+       * Required when splitting: the muted redpoint base is colour-scheme aware,
+       * so omitting it would silently force light-mode shades on dark-mode users.
+       */
+      colorScheme: ColorSchemeName;
+    }
+  | {
+      /** Each bar is a single vivid segment of flash + send (the default). */
+      splitFlash?: false;
+      colorScheme?: ColorSchemeName;
+    };
 
 /**
  * Build grade-distribution bars for a session view. By default each grade bar is

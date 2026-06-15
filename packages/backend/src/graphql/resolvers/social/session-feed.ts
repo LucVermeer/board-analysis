@@ -506,6 +506,9 @@ export const sessionFeedQueries = {
         frames: dbSchema.boardClimbs.frames,
         difficultyName: dbSchema.boardDifficultyGrades.boulderName,
         consensusDifficulty: dbSchema.boardClimbStats.displayDifficulty,
+        // Canonical climb UUID (alias-resolved) so beta links — which are stored
+        // against the canonical climb — resolve for ticks pointing at an alias.
+        canonicalClimbUuid: sql<string>`COALESCE(${dbSchema.boardClimbAliases.canonicalUuid}, ${dbSchema.boardseshTicks.climbUuid})`,
       })
       .from(dbSchema.boardseshTicks)
       // Resolve dedup-merged climbs to their canonical UUID before joining
@@ -594,7 +597,7 @@ export const sessionFeedQueries = {
         climbedAt: row.tick.climbedAt,
         upvotes: tickVoteMap.get(row.tick.uuid) ?? 0,
         totalAttempts: null,
-        betaLinks: betaLinksByClimb.get(`${row.tick.boardType}:${row.tick.climbUuid}`) ?? [],
+        betaLinks: betaLinksByClimb.get(`${row.tick.boardType}:${row.canonicalClimbUuid}`) ?? [],
       };
     });
 
@@ -1370,23 +1373,24 @@ function mapBetaLinkRow(row: BetaLinkRow): BetaLinksGqlRow {
  * different feature. Here we want every shareable clip for the climbs, not one.
  *
  * No live Instagram/TikTok enrichment — thumbnails are whatever is pre-cached.
- * Returns a Map keyed `${boardType}:${climbUuid}`.
+ * Matches on the alias-resolved canonical climb UUID (beta is stored against the
+ * canonical), and returns a Map keyed `${boardType}:${canonicalClimbUuid}`.
  */
 async function fetchBetaLinksByClimb(
-  tickRows: Array<{ tick: { boardType: string; climbUuid: string } }>,
+  tickRows: Array<{ tick: { boardType: string }; canonicalClimbUuid: string }>,
 ): Promise<Map<string, BetaLinksGqlRow[]>> {
   const map = new Map<string, BetaLinksGqlRow[]>();
   if (tickRows.length === 0) return map;
 
-  // Unique (boardType, climbUuid) pairs so the IN-list stays bounded by the
-  // number of distinct climbs, not the number of ticks.
+  // Unique (boardType, canonicalClimbUuid) pairs so the IN-list stays bounded by
+  // the number of distinct climbs, not the number of ticks.
   const pairSet = new Set<string>();
   const pairs: Array<{ boardType: string; climbUuid: string }> = [];
-  for (const { tick } of tickRows) {
-    const key = `${tick.boardType}:${tick.climbUuid}`;
+  for (const { tick, canonicalClimbUuid } of tickRows) {
+    const key = `${tick.boardType}:${canonicalClimbUuid}`;
     if (pairSet.has(key)) continue;
     pairSet.add(key);
-    pairs.push({ boardType: tick.boardType, climbUuid: tick.climbUuid });
+    pairs.push({ boardType: tick.boardType, climbUuid: canonicalClimbUuid });
   }
 
   const betaRows = await dbRead

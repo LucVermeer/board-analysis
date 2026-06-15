@@ -33,7 +33,7 @@ export function SessionBetaCarousel({ ticks }: SessionBetaCarouselProps) {
 
   return (
     <View>
-      <SectionHeader title={t('betaVideos.title')} />
+      <SectionHeader title={t('mobile.betaVideos.title')} />
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}

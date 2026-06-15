@@ -16,11 +16,7 @@ import { spacing } from '../../theme/tokens';
  * flash cap so a brighter top band reads as "flashed". A compact two-swatch
  * legend explains the shade split. Renders nothing when there's no data.
  */
-export function SessionAnalyticsSection({
-  gradeDistribution,
-}: {
-  gradeDistribution: SessionGradeDistributionItem[];
-}) {
+export function SessionAnalyticsSection({ gradeDistribution }: { gradeDistribution: SessionGradeDistributionItem[] }) {
   const { t } = useTranslation('profile');
   const { colorScheme } = useTheme();
   // Match the grade format the Progress tab / useYouProfileData uses so a

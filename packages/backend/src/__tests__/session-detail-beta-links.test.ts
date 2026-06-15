@@ -131,6 +131,15 @@ function conditionToText(node: unknown): string {
     return '';
   }
 }
+// Bound parameter values (climb UUIDs render as params, not inline SQL), so the
+// canonical-vs-alias assertion checks params rather than the SQL text.
+function conditionToParams(node: unknown): unknown[] {
+  try {
+    return pgDialect.sqlToQuery(node as SQL).params;
+  } catch {
+    return [];
+  }
+}
 
 const { sessionDetail } = await import('../graphql/resolvers/social/session-feed').then(
   (module) => module.sessionFeedQueries,
@@ -143,6 +152,8 @@ function makeTickRow(overrides: {
   uuid: string;
   climbUuid: string;
   climbName: string;
+  /** Alias-resolved canonical UUID; defaults to climbUuid (no alias). */
+  canonicalClimbUuid?: string;
   boardType?: string;
   angle?: number;
   status?: string;
@@ -172,6 +183,7 @@ function makeTickRow(overrides: {
     frames: 'p1r1',
     difficultyName: 'V10',
     consensusDifficulty: 10,
+    canonicalClimbUuid: overrides.canonicalClimbUuid ?? overrides.climbUuid,
   };
 }
 
@@ -224,6 +236,40 @@ describe('sessionDetail per-tick betaLinks', () => {
         createdAt: '2024-01-10T00:00:00.000Z',
       },
     ]);
+  });
+
+  it('matches beta on the alias-resolved canonical climb UUID', async () => {
+    // Tick points at an alias UUID; its canonical ('climb-canonical') is where
+    // the listed beta lives.
+    betaLinkTestState.tickRows = [
+      makeTickRow({
+        uuid: 'tick-1',
+        climbUuid: 'climb-alias',
+        canonicalClimbUuid: 'climb-canonical',
+        climbName: 'Renamed',
+      }),
+    ];
+    betaLinkTestState.betaLinkRowsByQuery.push([
+      {
+        boardType: 'kilter',
+        climbUuid: 'climb-canonical',
+        link: LISTED_INSTAGRAM_LINK,
+        foreignUsername: 'marco',
+        angle: 40,
+        thumbnail: null,
+        isListed: true,
+        createdAt: '2024-01-10T00:00:00.000Z',
+      },
+    ]);
+
+    const result = await sessionDetail(undefined, { sessionId: 'party-1' });
+
+    // The alias tick still surfaces the canonical climb's beta.
+    expect(result?.ticks[0]?.betaLinks?.map((beta) => beta.link)).toEqual([LISTED_INSTAGRAM_LINK]);
+    // The query bound the canonical UUID, not the alias.
+    const betaParams = betaLinkTestState.betaLinkWhereClauses.flatMap(conditionToParams);
+    expect(betaParams).toContain('climb-canonical');
+    expect(betaParams).not.toContain('climb-alias');
   });
 
   it('only includes is_listed links and excludes KayaClimb URLs', async () => {

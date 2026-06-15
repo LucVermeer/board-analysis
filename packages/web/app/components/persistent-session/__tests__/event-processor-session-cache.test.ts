@@ -331,7 +331,11 @@ describe('useEventProcessor - SessionStatsUpdated → React Query cache', () => 
         createStatsEvent({
           ticks: [
             createTick('2026-04-30T09:00:00Z', { uuid: 'tick-kilter', boardType: 'kilter', climbUuid: 'shared-climb' }),
-            createTick('2026-04-30T09:01:00Z', { uuid: 'tick-tension', boardType: 'tension', climbUuid: 'shared-climb' }),
+            createTick('2026-04-30T09:01:00Z', {
+              uuid: 'tick-tension',
+              boardType: 'tension',
+              climbUuid: 'shared-climb',
+            }),
           ],
         }),
       );

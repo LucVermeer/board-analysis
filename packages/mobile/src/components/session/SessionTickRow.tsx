@@ -32,6 +32,10 @@ const STATUS_META: Record<string, TickStatusMeta> = {
 };
 const ATTEMPT_META: TickStatusMeta = { icon: 'circle', color: iosSystemColors.systemGray };
 
+// Leading status disc / avatar size. Shared by the styles and the separator
+// inset so the hairline always aligns past the disc + its two gutters.
+const STATUS_ICON_SIZE = 28;
+
 function statusMeta(status: string): TickStatusMeta {
   return STATUS_META[status] ?? ATTEMPT_META;
 }
@@ -95,6 +99,11 @@ export const SessionTickRow = memo(function SessionTickRow({
   const subtitleParts = [attemptText, tick.comment ?? null].filter((part): part is string => !!part);
   const subtitle = subtitleParts.length > 0 ? subtitleParts.join(' · ') : undefined;
 
+  // SessionDetail carries no per-tick comment count (only a session-level one),
+  // so the comment button opens the sheet without a count badge — FeedSocialRow
+  // hides the badge at 0. Real per-tick counts would be a separate backend add.
+  const tickCommentCount = 0;
+
   const handlePress = useCallback(() => {
     hapticSelection();
     onPress(tick);
@@ -138,7 +147,7 @@ export const SessionTickRow = memo(function SessionTickRow({
             entityType="tick"
             upvotes={tick.upvotes}
             userVote={null}
-            commentCount={0}
+            commentCount={tickCommentCount}
             onOpenComments={onOpenComments}
             compact
           />
@@ -180,7 +189,7 @@ export const SessionTickRow = memo(function SessionTickRow({
             entityType="tick"
             upvotes={tick.upvotes}
             userVote={null}
-            commentCount={0}
+            commentCount={tickCommentCount}
             onOpenComments={onOpenComments}
             compact
           />
@@ -199,25 +208,25 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[3],
   },
   statusSlot: {
-    width: 28,
+    width: STATUS_ICON_SIZE,
     alignItems: 'center',
     justifyContent: 'center',
   },
   statusIcon: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: STATUS_ICON_SIZE,
+    height: STATUS_ICON_SIZE,
+    borderRadius: STATUS_ICON_SIZE / 2,
     alignItems: 'center',
     justifyContent: 'center',
   },
   separator: {
     height: StyleSheet.hairlineWidth,
-    marginLeft: spacing[3] + 28 + spacing[3],
+    marginLeft: spacing[3] + STATUS_ICON_SIZE + spacing[3],
   },
   badge: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: STATUS_ICON_SIZE,
+    height: STATUS_ICON_SIZE,
+    borderRadius: STATUS_ICON_SIZE / 2,
     alignItems: 'center',
     justifyContent: 'center',
   },

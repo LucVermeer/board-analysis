@@ -229,7 +229,9 @@ export function useEventProcessor({ refs }: UseEventProcessorArgs): EventProcess
           // Key by `${boardType}:${climbUuid}` to match the session-detail
           // resolver's beta map, so a climb UUID shared across two boards keeps
           // its own beta.
-          const betaByClimb = new Map(prev.ticks.map((tick) => [`${tick.boardType}:${tick.climbUuid}`, tick.betaLinks ?? []]));
+          const betaByClimb = new Map(
+            prev.ticks.map((tick) => [`${tick.boardType}:${tick.climbUuid}`, tick.betaLinks ?? []]),
+          );
           const ticks = [...event.ticks]
             .sort((a, b) => new Date(b.climbedAt).getTime() - new Date(a.climbedAt).getTime())
             .map((tick) => ({ ...tick, betaLinks: betaByClimb.get(`${tick.boardType}:${tick.climbUuid}`) ?? [] }));
