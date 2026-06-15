@@ -201,13 +201,10 @@ export const GraphQLQueueProvider = ({
   // when any member's BLE phone relays a climb (`WallConfirmedClimb`) and OFF
   // when a member's BLE link drops (`WallDisconnected`). It never clears the
   // current climb. Solo doesn't use it — the solo lightbulb reads
-  // `isBluetoothConnected` directly.
-  const [wallConfirmed, setWallConfirmed] = useState(false);
-  // Reset the session-scoped wall indicator whenever the active session
-  // changes (or ends) so a new session doesn't inherit a stale lit state.
-  useEffect(() => {
-    setWallConfirmed(false);
-  }, [sessionId]);
+  // `isBluetoothConnected` directly. The state lives in the root
+  // persistent-session provider (always mounted) so it survives leaving and
+  // remounting a board route; we just read it here.
+  const wallConfirmed = isPersistentSessionActive ? persistentSession.isSessionWallLit : false;
   // Pull the session's currently-known BLE board serial through so consumers
   // (the drawer's lightbulb fallback) don't have to reach into the
   // persistent-session context directly.
@@ -294,22 +291,14 @@ export const GraphQLQueueProvider = ({
   // climb to the wall. Republish on the local bus so the drawer's lightbulb
   // timer (subscribed locally) dismisses the same way it does in solo,
   // regardless of whether this client did the BLE write or saw a peer do it.
-  // It also lights the session-scoped `wallConfirmed` indicator for everyone.
-  //
-  // WallDisconnected turns that indicator OFF for every member (a peer's — or
-  // our own — BLE link to the wall dropped). It deliberately does NOT clear
-  // the current climb; only the lightbulb/wall-confirmed state goes dark.
+  // The `wallConfirmed` indicator itself is owned by the root persistent-session
+  // provider (see `isSessionWallLit`) so it survives route remounts; this relay
+  // only drives the local drawer-timer bus.
   useEffect(() => {
     if (!isPersistentSessionActive) return;
     const unsubscribe = persistentSession.subscribeToSessionEvents((event) => {
       if (event.__typename === 'WallConfirmedClimb') {
         emitWallConfirm(event.climbUuid);
-        setWallConfirmed(true);
-        return;
-      }
-      if (event.__typename === 'WallDisconnected') {
-        setWallConfirmed(false);
-        return;
       }
     });
     return unsubscribe;

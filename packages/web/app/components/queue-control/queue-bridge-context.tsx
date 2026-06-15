@@ -660,10 +660,11 @@ function usePersistentSessionQueueAdapter(): {
       clientId: ps.clientId,
       participantId: ps.participantId,
       isLeader: ps.isLeader,
-      // The bridge (off-board adapter) has no session-event subscription, so
-      // the wall-confirmed indicator is always false here — the board-route
-      // GraphQLQueueProvider owns the live value via injection.
-      wallConfirmed: false,
+      // Read the wall-lit indicator from the root persistent-session provider
+      // (always mounted), so the off-board persistent bar/drawer lightbulb stays
+      // correct even though this bridge has no session-event subscription of its
+      // own. Solo (not a party) is never lit.
+      wallConfirmed: isParty ? ps.isSessionWallLit : false,
       lastConnectedBoardSerial: isParty ? (ps.session?.lastConnectedBoardSerial ?? null) : null,
       isBackendMode: true,
       hasConnected: ps.hasConnected,
@@ -685,6 +686,7 @@ function usePersistentSessionQueueAdapter(): {
       ps.clientId,
       ps.participantId,
       ps.isLeader,
+      ps.isSessionWallLit,
       ps.error,
     ],
   );

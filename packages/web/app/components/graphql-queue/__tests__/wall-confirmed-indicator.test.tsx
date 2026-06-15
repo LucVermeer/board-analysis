@@ -2,14 +2,14 @@ import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vite-plus/test';
 import { renderHook, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import type { SessionEvent } from '@boardsesh/shared-schema';
 import type { Climb } from '@/app/lib/types';
 import type { ClimbQueueItem } from '../../queue-control/types';
 
-// Verifies the always-live session-scoped wall-confirmed indicator
-// (`SessionDataType.wallConfirmed`): WallConfirmedClimb turns it ON for
-// everyone, WallDisconnected turns it OFF for everyone — and WallDisconnected
-// never clears the current climb.
+// Verifies the QueueContext surfaces the session-scoped wall-lit indicator
+// (`SessionDataType.wallConfirmed`) by reflecting the root persistent-session
+// `isSessionWallLit` value, and that toggling it never clears the current climb.
+// The event-driven state machine (WallConfirmedClimb -> on, WallDisconnected ->
+// off) is owned by, and tested at, the persistent-session provider.
 
 vi.mock('@/app/components/providers/snackbar-provider', () => ({
   useSnackbar: () => ({ showMessage: vi.fn() }),
@@ -33,10 +33,6 @@ vi.mock('../../queue-control/hooks/use-queue-data-fetching', () => ({
     climbUuids: [],
   }),
 }));
-
-// Capture the session-event subscriber the QueueContext registers so the test
-// can emit WallConfirmedClimb / WallDisconnected through it.
-let sessionEventSubscriber: ((event: SessionEvent) => void) | null = null;
 
 const mockPersistentSession = {
   activeSession: {
@@ -64,6 +60,7 @@ const mockPersistentSession = {
   participantId: 'participant-1',
   isLeader: false,
   users: [],
+  isSessionWallLit: false,
   currentClimbQueueItem: null,
   queue: [],
   localQueue: [],
@@ -88,12 +85,7 @@ const mockPersistentSession = {
   offlineBufferRef: { current: [] as unknown[] },
   lastReceivedSequenceRef: { current: null as number | null },
   subscribeToQueueEvents: vi.fn(() => vi.fn()),
-  subscribeToSessionEvents: vi.fn((cb: (event: SessionEvent) => void) => {
-    sessionEventSubscriber = cb;
-    return () => {
-      sessionEventSubscriber = null;
-    };
-  }),
+  subscribeToSessionEvents: vi.fn(() => vi.fn()),
   triggerResync: vi.fn(),
   endSessionWithSummary: vi.fn(),
   sessionSummary: null,
@@ -220,45 +212,34 @@ function createWrapper() {
 describe('Session-scoped wall-confirmed indicator', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    sessionEventSubscriber = null;
+    mockPersistentSession.isSessionWallLit = false;
   });
 
-  it('WallConfirmedClimb turns the indicator on; WallDisconnected turns it off without clearing the current climb', () => {
-    const { result } = renderHook(() => useQueueContext(), { wrapper: createWrapper() });
+  it('reflects the root persistent-session isSessionWallLit, and toggling it never clears the current climb', () => {
+    mockPersistentSession.isSessionWallLit = false;
+    const { result, rerender } = renderHook(() => useQueueContext(), { wrapper: createWrapper() });
 
     expect(result.current.isPersistentSessionActive).toBe(true);
     expect(result.current.wallConfirmed).toBe(false);
-    expect(sessionEventSubscriber).not.toBeNull();
 
-    // Seed a current climb so we can assert it survives the WallDisconnected.
+    // Seed a current climb so we can assert it survives an indicator toggle.
     const item: ClimbQueueItem = { uuid: 'queue-item-1', climb: makeClimb('climb-1'), suggested: false };
     act(() => {
       result.current.setCurrentClimbQueueItem(item);
     });
     expect(result.current.currentClimb?.uuid).toBe('climb-1');
 
-    // A member's BLE phone relays the climb → indicator on for everyone.
-    act(() => {
-      sessionEventSubscriber!({
-        __typename: 'WallConfirmedClimb',
-        climbUuid: 'climb-1',
-        confirmedAt: new Date().toISOString(),
-        confirmedByParticipantId: 'participant-2',
-        queueItemUuid: 'queue-item-1',
-      } as SessionEvent);
-    });
+    // Persistent-session reports the wall lit (a member relayed the climb) →
+    // wallConfirmed mirrors it; the current climb is untouched.
+    mockPersistentSession.isSessionWallLit = true;
+    rerender();
     expect(result.current.wallConfirmed).toBe(true);
-    // Current climb unchanged by the confirm.
     expect(result.current.currentClimb?.uuid).toBe('climb-1');
 
-    // A member's BLE link drops → indicator off for everyone, current climb
-    // preserved.
-    act(() => {
-      sessionEventSubscriber!({
-        __typename: 'WallDisconnected',
-        disconnectedByParticipantId: 'participant-2',
-      } as SessionEvent);
-    });
+    // Persistent-session reports the wall dark (a member's BLE dropped) →
+    // wallConfirmed mirrors it; the current climb is still preserved.
+    mockPersistentSession.isSessionWallLit = false;
+    rerender();
     expect(result.current.wallConfirmed).toBe(false);
     expect(result.current.currentClimb?.uuid).toBe('climb-1');
   });

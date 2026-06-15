@@ -160,6 +160,16 @@ export type PersistentSessionStateType = {
   isLeader: boolean;
   users: SessionUser[];
 
+  /**
+   * Session-scoped "the wall is currently lit" indicator. ON when any member's
+   * BLE phone relays a climb (`WallConfirmedClimb`), OFF when a member's BLE
+   * link drops (`WallDisconnected`). Lives here (root, always-mounted) rather
+   * than in the board-route queue provider so it survives leaving/remounting a
+   * board route — the persistent bar/drawer lightbulb reads it everywhere.
+   * Never clears the current climb. Resets on session change.
+   */
+  isSessionWallLit: boolean;
+
   // Queue state synced from backend
   currentClimbQueueItem: LocalClimbQueueItem | null;
   queue: LocalClimbQueueItem[];
