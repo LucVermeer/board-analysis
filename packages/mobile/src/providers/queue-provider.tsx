@@ -1672,24 +1672,28 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     [playlistSuggestionSource],
   );
 
-  // Stable join key of the session's logged-in member userIds (anonymous members
-  // have no userId to match, so they're filtered out). `sessionUsers` gets a new
-  // array identity on every ≤1/2s SessionStatsUpdated push; keying the Set on this
-  // sorted string means its identity only changes on a real roster delta, so the
-  // session-control value (and the lightbulbs that read it) don't churn on stats.
-  // userIds are DB UUIDs, so a comma join round-trips losslessly.
-  const sessionMemberUserIdKey = useMemo(
+  // Sorted, logged-in member userIds (anonymous members have no userId to match,
+  // so they're filtered out). `sessionUsers` gets a new array identity on every
+  // ≤1/2s SessionStatsUpdated push even when the roster is unchanged; sorting gives
+  // a stable order for the change-detector below.
+  const sessionMemberUserIdList = useMemo(
     () =>
       sessionUsers
         .map((user) => user.userId)
         .filter((userId): userId is string => userId != null)
-        .sort()
-        .join(','),
+        .sort(),
     [sessionUsers],
   );
+  // Gate the Set's identity on a content signature so a stats push with an
+  // unchanged roster doesn't churn the session-control value (and re-light the
+  // bulbs that read it). The Set is rebuilt from the list itself — never by
+  // splitting the signature back into ids — so it's robust to any userId shape.
+  const sessionMemberUserIdSignature = sessionMemberUserIdList.join(' ');
   const sessionMemberUserIds = useMemo<ReadonlySet<string>>(
-    () => new Set(sessionMemberUserIdKey ? sessionMemberUserIdKey.split(',') : []),
-    [sessionMemberUserIdKey],
+    // Depends on the signature, not the list: the list gets a fresh identity on
+    // each stats push, but the Set rebuilds only when its contents actually change.
+    () => new Set(sessionMemberUserIdList),
+    [sessionMemberUserIdSignature],
   );
 
   const sessionControlValue = useMemo<QueueSessionControlContextValue>(

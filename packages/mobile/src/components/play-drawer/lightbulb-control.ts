@@ -37,7 +37,11 @@ export function derivePlayDrawerLightbulbPressAction(args: {
 export function deriveLightbulbLit(args: {
   localConnected: boolean;
   isSubscribedToBoardFeed: boolean;
-  /** A board-presence holder whose userId matches a member of my session (incl. me). */
+  /**
+   * A board-presence holder whose userId matches a member of my session (incl.
+   * me). Mutually exclusive with `holderIsAnonymous`: a holder either has a
+   * matchable userId or is anonymous, never both.
+   */
   sessionHolderPresent: boolean;
   /** The current holder is anonymous (exists, userId == null) AND I'm in a session. */
   holderIsAnonymous: boolean;

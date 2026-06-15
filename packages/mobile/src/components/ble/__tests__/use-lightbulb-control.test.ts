@@ -106,6 +106,20 @@ describe('useLightbulbControl lit state', () => {
     expect(result.current.localConnected).toBe(false);
   });
 
+  it('lights for a late-joiner from the seeded holder, without the session flag', () => {
+    // A late-joiner seeds the holder via the boardConnection query but never
+    // receives the WallConfirmedClimb that sets isSessionWallLit. The logged-in
+    // peer's userId match lights the bulb immediately, so the bulb is correct
+    // before (and even without) the fragile session flag.
+    ctrl.boardId = 42;
+    ctrl.sessionId = 'session-1';
+    ctrl.sessionMemberUserIds = new Set(['peer-user']);
+    ctrl.isSessionWallLit = false;
+    ctrl.presence = holderPresenceFor('peer-user');
+    const { result } = renderControl();
+    expect(result.current.lit).toBe(true);
+  });
+
   it('stays off when a stranger holds the wall while solo', () => {
     // The bug fix: subscribed and a holder exists, but I'm not in a session, so
     // the holder isn't someone I'm climbing with — the bulb reads off (the avatar
