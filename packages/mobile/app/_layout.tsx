@@ -323,9 +323,16 @@ function RootLayout() {
                                                     <UserDrawerProvider>
                                                       <ThemedNavigation>
                                                         <Stack
+                                                          // Root scenes keep the opaque, theme-aware nav background so a dark
+                                                          // backstop sits behind the tab screens (the tab stacks paint their own
+                                                          // transparent content over it). glassStackScreenOptions' transparent
+                                                          // contentStyle would expose the light window background at the top of the
+                                                          // screen in dark mode, where the floating chrome leaves it uncovered.
+                                                          // The header props still apply to root-level pushed screens (session, about).
                                                           screenOptions={{
                                                             ...glassStackScreenOptions,
                                                             headerShown: false,
+                                                            contentStyle: undefined,
                                                           }}
                                                           initialRouteName="index"
                                                         >
