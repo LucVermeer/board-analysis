@@ -12,8 +12,8 @@
 
 import { useCallback, useMemo, useRef, startTransition } from 'react';
 import { usePlaylistClimbActivation, fetchPlaylistSuggestionClimbs } from '@boardsesh/playlists-react';
-import { createPlaylistSuggestionSource, getQueueBoardKey, type Climb, type ClimbQueueItem } from '@boardsesh/queue';
-import { useIsPartyPreviewOnly, useQueueActions } from '../../providers/queue-provider';
+import { getQueueBoardKey, type Climb, type ClimbQueueItem } from '@boardsesh/queue';
+import { useQueueActions } from '../../providers/queue-provider';
 import { useDrawerHost } from '../../providers/drawer-host-provider';
 import { useActiveBoard } from '../graphql/use-active-board';
 import { climbToQueueItem } from '../climb-to-queue-item';
@@ -56,7 +56,6 @@ export function usePlaylistActivation({
   const { setCurrentClimb, refreshPlaylistSuggestionSource } = useQueueActions();
   const { openPlayDrawer } = useDrawerHost();
   const activeBoard = useActiveBoard().data ?? null;
-  const isPartyPreviewOnly = useIsPartyPreviewOnly();
 
   // The queue item the returned callback already pinned in the drawer as
   // previewQueueItem. queueApi.setCurrentClimb dispatches that exact item so
@@ -149,35 +148,10 @@ export function usePlaylistActivation({
   // the animation frame runs.
   return useCallback(
     (climb: Climb) => {
-      if (isPartyPreviewOnly) {
-        // Non-driver in a party session: never touch the shared queue (same
-        // gating as the queue sheet's tap paths). Open a local preview with a
-        // drawer-local suggestion source so next-swipes walk the playlist
-        // locally; the lightbulb promotes it via takeControl(queueItem,
-        // { playlistSuggestionSource }). Preview mode uses the loaded climbs
-        // only — no async full-list refresh, matching the queue-sheet preview.
-        const previewItem = climbToQueueItem(toSchemaClimb(climb), { suggested: true });
-        const target = resolveTarget(climb);
-        const previewSource = target
-          ? createPlaylistSuggestionSource({
-              playlistUuid: sourceId,
-              activatedClimb: climb,
-              climbs: allClimbs,
-              boardKey: target.boardKey,
-              isClimbable: target.isClimbable,
-            })
-          : null;
-        openPlayDrawer(toSchemaClimb(climb), {
-          setAsCurrent: false,
-          previewQueueItem: previewItem,
-          previewPlaylistSuggestionSource: previewSource,
-        });
-        // A preview-only tap never reaches setCurrentClimb, so drop any item a
-        // prior solo tap pinned — otherwise a later same-uuid solo activation
-        // reuses the stale instance instead of building a fresh one.
-        pendingQueueItemRef.current = null;
-        return Promise.resolve();
-      }
+      // Always-live: every tap activates the climb for the whole session (no
+      // driver/preview gate). The drawer opens first (same frame as the tap),
+      // then the shared activation builds the suggestion source and dispatches
+      // the queue update under startTransition.
       const item = climbToQueueItem(toSchemaClimb(climb));
       pendingQueueItemRef.current = item;
       openPlayDrawer(toSchemaClimb(climb), { setAsCurrent: false, previewQueueItem: item });
@@ -186,6 +160,6 @@ export function usePlaylistActivation({
         reportHandledError(error, { tags: { source: 'playlist', op: 'activate-climb' } });
       });
     },
-    [activate, openPlayDrawer, isPartyPreviewOnly, resolveTarget, sourceId, allClimbs],
+    [activate, openPlayDrawer],
   );
 }

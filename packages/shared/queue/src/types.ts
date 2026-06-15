@@ -104,7 +104,6 @@ export type QueueState<TSearchParams extends QueueSearchParams = QueueSearchPara
   lastReceivedSequence: number | null;
   lastReceivedStateHash: string | null;
   needsResync: boolean;
-  optimisticDriverParticipantId: string | null;
 };
 
 export type QueueAction<TSearchParams extends QueueSearchParams = QueueSearchParams> =
@@ -150,7 +149,5 @@ export type QueueAction<TSearchParams extends QueueSearchParams = QueueSearchPar
   | { type: 'CLEANUP_PENDING_UPDATE'; payload: { correlationId: string } }
   | { type: 'CLEANUP_PENDING_UPDATES_BATCH'; payload: { correlationIds: string[] } }
   | { type: 'CLEAR_RESYNC_FLAG' }
-  | { type: 'OPTIMISTIC_SET_DRIVER'; payload: { participantId: string } }
-  | { type: 'OPTIMISTIC_CLEAR_DRIVER' }
   | { type: 'REGRADE_CLIMBS'; payload: { grades: Record<string, ClimbRegradePatch> } }
   | { type: 'CLEAR_QUEUE' };

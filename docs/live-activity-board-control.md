@@ -12,9 +12,9 @@ Two BLE layers exist in the codebase. The **React Native layer** (`packages/mobi
 
 - Single native `URLSessionWebSocketTask` owned by `SessionWebSocketManager`, shared between webview and Live Activity
 - Widget shows current climb name, grade, angle, queue position, and board thumbnail
-- Widget shows whether this device currently owns wall control. In party sessions, non-drivers see the lightbulb off and the Previous/Next controls disabled.
-- Next/Previous buttons navigate the queue optimistically (App Group UserDefaults) and send `setCurrentClimb` mutation via native WS, but only after local driver state allows navigation. The backend `/api/widget/navigate` endpoint still rejects non-driver requests.
-- Non-drivers can tap the widget lightbulb to POST `/api/widget/take-control` with the registered Live Activity bearer token. The endpoint requires the token row to have a bound `userId`, claims that participant as driver, and then the widget enables navigation after the successful response.
+- Widget shows whether our session's climb is confirmed on the wall (lightbulb lit). Sessions are always-live, so any participant may navigate.
+- Next/Previous buttons navigate the queue optimistically (App Group UserDefaults) and send `setCurrentClimb` mutation via native WS. The backend `/api/widget/navigate` endpoint accepts any authenticated session member (no driver gate).
+- Tapping the widget lightbulb POSTs `/api/widget/take-control` with the registered Live Activity bearer token. The endpoint requires the token row to have a bound `userId` and re-asserts (re-broadcasts `CurrentClimbChanged` for) the current climb; it returns 200.
 - All queue delta events (FullSync, ItemAdded, ItemRemoved, CurrentClimbChanged, Reordered) are processed natively and persisted to App Group
 - Message buffering when webview is backgrounded, with flush or resync on foreground
 - Rust board renderer (`packages/board-renderer-wasm/`) compiles to WASM, used in both Node.js backend (server-rendered thumbnails) and web frontend (Web Worker). Already has `HoldData` types, frame string parsing (`p<hold_id>r<state_code>`), and Aurora hold state color mapping

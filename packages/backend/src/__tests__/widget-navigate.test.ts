@@ -1,10 +1,17 @@
 /**
  * Tests for the widget-navigate REST handler.
  *
+ * Sessions are always-live: any authenticated session member may navigate the
+ * wall — there is no driver gate. The Live Activity token proves session
+ * membership (a row in activity_push_tokens bound to the sessionId).
+ *
  * Verifies:
  * - Missing Authorization header → 401.
  * - Bearer token not registered for sessionId → 401.
+ * - Bearer token bound to a different session → 410.
  * - Bearer token registered for sessionId → 200.
+ * - A token registered for the session with no bound userId still navigates
+ *   (200) — membership, not driver ownership, is what's required now.
  * - Per-session rate limit returns 429 after burst exhausted.
  */
 
@@ -28,7 +35,6 @@ type MockQueueState = {
 const tokenLookupRows = vi.fn<() => Array<{ sessionId: string; userId: string | null }>>(() => []);
 const trackLiveActivityWidgetNavigationMock = vi.fn();
 const trackLiveActivityWidgetNavigationAttributionGapMock = vi.fn();
-const getSessionDriverParticipantIdMock = vi.fn<() => Promise<string | null>>(async () => 'user-widget-test');
 const getQueueStateMock = vi.fn<() => Promise<MockQueueState>>(async () => ({
   queue: [
     { uuid: 'q1', climb: { uuid: 'c1' } },
@@ -58,7 +64,6 @@ vi.mock('../handlers/cors', () => ({
 
 vi.mock('../services/room-manager', () => ({
   roomManager: {
-    getSessionDriverParticipantId: getSessionDriverParticipantIdMock,
     getQueueState: getQueueStateMock,
   },
 }));
@@ -165,7 +170,6 @@ describe('handleWidgetNavigate', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     tokenLookupRows.mockReturnValue([]);
-    getSessionDriverParticipantIdMock.mockResolvedValue(USER_ID);
     getQueueStateMock.mockResolvedValue({
       queue: [
         { uuid: 'q1', climb: { uuid: 'c1' } },
@@ -255,7 +259,10 @@ describe('handleWidgetNavigate', () => {
     });
   });
 
-  it('rejects a registered widget token with no userId because driver ownership cannot be proven', async () => {
+  it('navigates for a registered token with no bound userId (membership suffices), attributing via the gap path', async () => {
+    // Always-live: a token registered for the session navigates even without a
+    // bound userId. With no userId we can't attribute the PostHog event to a
+    // person, so it flows through the attribution-gap path instead of 403ing.
     tokenLookupRows.mockReturnValue([{ sessionId: SESSION_ID, userId: null }]);
     const req = makeRequest({
       method: 'POST',
@@ -265,37 +272,18 @@ describe('handleWidgetNavigate', () => {
     const res = makeResponse();
     await handleWidgetNavigate(req as unknown as IncomingMessage, res as unknown as ServerResponse);
 
-    expect(res.statusCode).toBe(403);
-    expect(mockNavigate).not.toHaveBeenCalled();
+    expect(res.statusCode).toBe(200);
+    expect(mockNavigate).toHaveBeenCalledOnce();
     expect(trackLiveActivityWidgetNavigationMock).not.toHaveBeenCalled();
     expect(trackLiveActivityWidgetNavigationAttributionGapMock).toHaveBeenCalledWith({
       sessionId: SESSION_ID,
       action: 'next',
-      outcome: 'not_driver',
-      statusCode: 403,
+      outcome: 'success',
+      statusCode: 200,
       reason: 'missing_user_id',
-    });
-  });
-
-  it('returns 403 when the registered widget is not owned by the current driver', async () => {
-    tokenLookupRows.mockReturnValue([{ sessionId: SESSION_ID, userId: USER_ID }]);
-    getSessionDriverParticipantIdMock.mockResolvedValue('driver-user-id');
-    const req = makeRequest({
-      method: 'POST',
-      authHeader: `Bearer ${REGISTERED_TOKEN}`,
-      body: { sessionId: SESSION_ID, action: 'previous', currentIndex: 0 },
-    });
-    const res = makeResponse();
-    await handleWidgetNavigate(req as unknown as IncomingMessage, res as unknown as ServerResponse);
-
-    expect(res.statusCode).toBe(403);
-    expect(mockNavigate).not.toHaveBeenCalled();
-    expect(trackLiveActivityWidgetNavigationMock).toHaveBeenCalledWith({
-      userId: USER_ID,
-      sessionId: SESSION_ID,
-      action: 'previous',
-      outcome: 'not_driver',
-      statusCode: 403,
+      queueLength: 2,
+      serverCurrentIndex: 0,
+      targetIndex: 1,
     });
   });
 

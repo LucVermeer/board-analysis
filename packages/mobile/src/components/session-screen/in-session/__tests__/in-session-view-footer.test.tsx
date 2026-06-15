@@ -81,7 +81,6 @@ vi.mock('expo-crypto', () => ({ randomUUID: () => 'test-uuid' }));
 vi.mock('expo-router', () => ({ useRouter: () => ({ push: vi.fn() }) }));
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock('@tanstack/react-query', () => ({ useQueryClient: () => ({ invalidateQueries: vi.fn() }) }));
-vi.mock('@boardsesh/queue-runtime', () => ({ deriveIsDriver: () => true }));
 vi.mock('@boardsesh/play-view', () => ({ formatGrade: (grade: string) => grade, getGradeTextColor: () => '#fff' }));
 vi.mock('../../../Button', () => ({ Button: () => createElement('button') }));
 vi.mock('../../../Card', () => ({
@@ -123,11 +122,9 @@ vi.mock('../../../../providers/queue-provider', () => ({
   useQueueActions: () => ({ endSession: queue.endSession, setCurrentClimb: vi.fn() }),
   useQueueLiveStats: () => ({ liveStats: null, sessionUsers: [] }),
   useQueueSessionControls: () => ({
-    driverParticipantId: null,
     participantId: 'participant-1',
     sessionId: 'session-1',
   }),
-  useIsPartyPreviewOnly: () => false,
 }));
 vi.mock('../../../../providers/drawer-host-provider', () => ({ useDrawerHost: () => ({ openPlayDrawer: vi.fn() }) }));
 vi.mock('../../../../lib/graphql/hooks', () => ({

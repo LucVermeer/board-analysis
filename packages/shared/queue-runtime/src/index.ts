@@ -16,8 +16,6 @@ export type {
 export { createJoinSessionTracker } from './ensure-joined';
 export type { JoinSessionTracker, JoinSessionTrackerOptions } from './ensure-joined';
 
-export { deriveIsDriver, derivePreviewOnly } from './driver-state';
-
 export { applySessionRuntimeEvent, upsertRuntimeSessionUser } from './session-events';
 export type {
   ApplySessionRuntimeEventOptions,
@@ -25,14 +23,3 @@ export type {
   RuntimeSessionState,
   RuntimeSessionUser,
 } from './session-events';
-
-export {
-  createReleaseControlOptimisticPlan,
-  createTakeControlOptimisticPlan,
-  deriveTakeControlPlaylistSuggestionSource,
-  shouldRollbackReleaseControlDriver,
-  shouldRollbackTakeControlDriver,
-  shouldRollbackTakeControlQueue,
-  shouldSurfaceReleaseControlFailure,
-} from './wall-control-optimistic';
-export type { ReleaseControlOptimisticPlan, TakeControlOptimisticPlan } from './wall-control-optimistic';

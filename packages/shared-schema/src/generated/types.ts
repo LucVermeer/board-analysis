@@ -1307,15 +1307,6 @@ export type DiscoverableSession = {
   participantCount: Scalars['Int']['output'];
 };
 
-/** Event when the wall driver changes (the participant authorized to drive the wall via the queue-control-bar pivot's lightbulb). Null when no member is currently driving. */
-export type DriverChanged = {
-  __typename?: 'DriverChanged';
-  /** Stable participant id of the new driver, or null when control was released */
-  driverParticipantId?: Maybe<Scalars['ID']['output']>;
-  /** Stable participant id of the previous driver, or null when there was none (e.g. the very first take of the session, or after a release). Lets clients render 'X took the wall from Y' toasts and populate the Phase 5 previousDriver analytics property without local bookkeeping. */
-  previousDriverParticipantId?: Maybe<Scalars['ID']['output']>;
-};
-
 /**
  * Response containing events since a given sequence number.
  * Used for delta synchronization when reconnecting.
@@ -2048,15 +2039,14 @@ export type Mutation = {
   chooseBoardForSerial: ResolvedBoard;
   /**
    * Confirm to all session participants that a climb was successfully relayed to the wall
-   * over BLE from this client's phone. Any session participant may call (no driver
-   * requirement) — the BLE-capable phone that handled the send is the source of truth for
-   * confirmation. The server stamps `confirmedAt` and `confirmedByParticipantId` from
-   * the caller's identity; clients cannot forge either field. Publishes
-   * `WallConfirmedClimb`. The optional `queueItemUuid` disambiguates the press when
-   * the same climb is queued twice. Returns the resolved Session so optimistic-UI callers
-   * can apply server-derived state without a follow-up query (symmetric with
-   * `takeControl` / `releaseControl`). Session identity is resolved from the WebSocket
-   * connection context — no `sessionId` argument is required.
+   * over BLE from this client's phone. Any session participant may call — the BLE-capable
+   * phone that handled the send is the source of truth for confirmation. The server stamps
+   * `confirmedAt` and `confirmedByParticipantId` from the caller's identity; clients
+   * cannot forge either field. Publishes `WallConfirmedClimb`. The optional
+   * `queueItemUuid` disambiguates the press when the same climb is queued twice. Returns
+   * the resolved Session so optimistic-UI callers can apply server-derived state without a
+   * follow-up query. Session identity is resolved from the WebSocket connection context —
+   * no `sessionId` argument is required.
    */
   confirmClimbOnWall: Session;
   controllerHeartbeat: Scalars['Boolean']['output'];
@@ -2173,11 +2163,6 @@ export type Mutation = {
    */
   registerActivityPushToken: Scalars['Boolean']['output'];
   registerController: ControllerRegistration;
-  /**
-   * Release wall-control authority. Clears the driver only when the caller is the current
-   * driver (idempotent otherwise). Publishes `DriverChanged { driverParticipantId: null }`.
-   */
-  releaseControl: Session;
   /** Remove a climb from a playlist. */
   removeClimbFromPlaylist: Scalars['Boolean']['output'];
   /** Remove a member from a gym. */
@@ -2207,6 +2192,15 @@ export type Mutation = {
    * someone else now holds it. Auth-optional. Returns whether the slot was freed.
    */
   reportBoardDisconnect: Scalars['Boolean']['output'];
+  /**
+   * Report that this client's BLE link to the wall dropped (explicit lightbulb-off or a
+   * detected drop), so every session participant turns the queue-control-bar lightbulb off.
+   * The current climb is unchanged — pressing the lightbulb re-asserts (re-sends) it.
+   * Publishes `WallDisconnected`. The session-scoped counterpart to board-presence's
+   * `reportBoardDisconnect`. Session identity is resolved from the WebSocket connection
+   * context — no `sessionId` argument is required.
+   */
+  reportWallDisconnect: Session;
   /**
    * Resolve a BLE serial for clients that can disambiguate. Returns a single
    * `board` when the serial is unambiguous (remembered choice, only one match,
@@ -2277,11 +2271,10 @@ export type Mutation = {
    * angle is the only route-level dimension that members observe as a group;
    * climb URLs are managed by setCurrentClimb. Any participant may call —
    * angle is presentational and doesn't drive BLE (hold positions are sent
-   * per-climb), so the queue-control-bar pivot's "only driver moves the wall"
-   * rule doesn't apply. Idempotent: when the stored boardPath already matches,
-   * no event fires. Publishes `SessionBoardPathChanged` on change. Returns
-   * the resolved Session for optimistic-UI symmetry with takeControl /
-   * releaseControl. Session identity is resolved from the WebSocket connection
+   * per-climb). Idempotent: when the stored boardPath already matches, no event
+   * fires. Publishes `SessionBoardPathChanged` on change. Returns the resolved
+   * Session so optimistic-UI callers can apply server-derived state without a
+   * follow-up query. Session identity is resolved from the WebSocket connection
    * context — no `sessionId` argument is required.
    */
   setSessionBoardPath: Session;
@@ -2289,9 +2282,10 @@ export type Mutation = {
    * Record the BLE board serial that this client paired with so other (mobile)
    * participants can auto-connect to the same physical board. Any session participant
    * may call. Idempotent: when the stored serial already matches, no event fires.
-   * Publishes `SessionBoardSerialChanged` on change. Returns the resolved Session for
-   * optimistic-UI symmetry with `takeControl` / `releaseControl`. Session identity is
-   * resolved from the WebSocket connection context — no `sessionId` argument is required.
+   * Publishes `SessionBoardSerialChanged` on change. Returns the resolved Session so
+   * optimistic-UI callers can apply server-derived state without a follow-up query.
+   * Session identity is resolved from the WebSocket connection context — no
+   * `sessionId` argument is required.
    */
   setSessionBoardSerial: Session;
   /**
@@ -2316,13 +2310,6 @@ export type Mutation = {
    * Caller must be a participant of the session. Requires authentication.
    */
   syncSessionToIntegration: IntegrationExportResult;
-  /**
-   * Claim wall-control authority in the current session and optionally broadcast a climb.
-   * Any session participant may call — yank-on-press by design. If `climb` is provided, also
-   * appends it to the queue (when not already present) and sets it as the current climb,
-   * mirroring `setCurrentClimb`'s side effects. Publishes `DriverChanged`.
-   */
-  takeControl: Session;
   /**
    * Toggle favorite status for a climb.
    * Returns new favorite state.
@@ -2802,11 +2789,6 @@ export type MutationSubscribeNewClimbsArgs = {
 export type MutationSyncSessionToIntegrationArgs = {
   provider: IntegrationProvider;
   sessionId: Scalars['ID']['input'];
-};
-
-/** Root mutation type for all write operations. */
-export type MutationTakeControlArgs = {
-  climb?: InputMaybe<ClimbQueueItemInput>;
 };
 
 /** Root mutation type for all write operations. */
@@ -4571,8 +4553,6 @@ export type Session = {
   clientId: Scalars['ID']['output'];
   /** Hex color for multi-session display */
   color?: Maybe<Scalars['String']['output']>;
-  /** Stable participant id of the user currently driving the wall. Set via takeControl, cleared via releaseControl or driver disconnect. Distinct from isLeader, which is presentation/legacy only. */
-  driverParticipantId?: Maybe<Scalars['ID']['output']>;
   /** When the session was ended (ISO 8601) */
   endedAt?: Maybe<Scalars['String']['output']>;
   /** Optional session goal text */
@@ -4589,7 +4569,7 @@ export type Session = {
   lastConnectedBoardSerial?: Maybe<Scalars['String']['output']>;
   /** Optional name for the session */
   name?: Maybe<Scalars['String']['output']>;
-  /** Backend-resolved participant id for the requesting client. For authenticated users this is the user UUID; for anonymous users it equals clientId. Use this (not the locally generated activeSession.participantId) when comparing against driverParticipantId — the backend always ignores client-supplied participantIds for security and uses this resolved value as the broadcast identity. TEMPORARILY NULLABLE: a follow-up release will flip this back to ID! once every Session-returning resolver has been audited to confirm it populates the field. Clients should treat null as 'unknown — fall back to clientId for self-checks'. */
+  /** Backend-resolved participant id for the requesting client. For authenticated users this is the user UUID; for anonymous users it equals clientId. Use this (not the locally generated activeSession.participantId) for self-checks against broadcast participant ids — the backend always ignores client-supplied participantIds for security and uses this resolved value as the broadcast identity. TEMPORARILY NULLABLE: a follow-up release will flip this back to ID! once every Session-returning resolver has been audited to confirm it populates the field. Clients should treat null as 'unknown — fall back to clientId for self-checks'. */
   participantId?: Maybe<Scalars['ID']['output']>;
   /** Current queue state */
   queueState: QueueState;
@@ -4696,7 +4676,6 @@ export type SessionEnded = {
 
 /** Union of possible session events. */
 export type SessionEvent =
-  | DriverChanged
   | LeaderChanged
   | SessionBoardPathChanged
   | SessionBoardSerialChanged
@@ -4705,7 +4684,8 @@ export type SessionEvent =
   | UserJoined
   | UserLeft
   | UserPresenceChanged
-  | WallConfirmedClimb;
+  | WallConfirmedClimb
+  | WallDisconnected;
 
 /** A beta video paired with the tick it represents in a session feed card. */
 export type SessionFeedBetaHighlight = {
@@ -5822,6 +5802,20 @@ export type WallConfirmedClimb = {
 };
 
 /**
+ * Event broadcast when the device that was relaying the session's climb to the
+ * wall over BLE drops its connection (an explicit lightbulb-off, a detected BLE
+ * drop, or the WebSocket closing). Clients turn the queue-control-bar lightbulb
+ * off — the session no longer knows its climb is lit, and someone outside the
+ * session may have changed the wall. The current climb is unchanged; pressing the
+ * lightbulb re-asserts (re-sends) it. Symmetric with WallConfirmedClimb.
+ */
+export type WallDisconnected = {
+  __typename?: 'WallDisconnected';
+  /** Stable participant id of the member whose connection was relaying the climb, or null for a system/crash backstop (WebSocket close) */
+  disconnectedByParticipantId?: Maybe<Scalars['ID']['output']>;
+};
+
+/**
  * Bounding box defining a board region for filtering climbs.
  * Coordinates are in the same grid space as board placements
  * (board_holes.x/y) and board_climbs edge columns.
@@ -5931,7 +5925,6 @@ export type ResolversUnionTypes<_RefType extends Record<string, unknown>> = Reso
     | QueueItemRemoved
     | QueueReordered;
   SessionEvent:
-    | DriverChanged
     | LeaderChanged
     | SessionBoardPathChanged
     | SessionBoardSerialChanged
@@ -5940,7 +5933,8 @@ export type ResolversUnionTypes<_RefType extends Record<string, unknown>> = Reso
     | UserJoined
     | UserLeft
     | UserPresenceChanged
-    | WallConfirmedClimb;
+    | WallConfirmedClimb
+    | WallDisconnected;
 }>;
 
 /** Mapping between all available schema types and the resolvers types */
@@ -6022,7 +6016,6 @@ export type ResolversTypes = ResolversObject<{
   DiscoverPlaylistsResult: ResolverTypeWrapper<DiscoverPlaylistsResult>;
   DiscoverablePlaylist: ResolverTypeWrapper<DiscoverablePlaylist>;
   DiscoverableSession: ResolverTypeWrapper<DiscoverableSession>;
-  DriverChanged: ResolverTypeWrapper<DriverChanged>;
   EventsReplayResponse: ResolverTypeWrapper<
     Omit<EventsReplayResponse, 'events'> & { events: Array<ResolversTypes['QueueEvent']> }
   >;
@@ -6221,6 +6214,7 @@ export type ResolversTypes = ResolversObject<{
   VoteOnProposalInput: VoteOnProposalInput;
   VoteSummary: ResolverTypeWrapper<VoteSummary>;
   WallConfirmedClimb: ResolverTypeWrapper<WallConfirmedClimb>;
+  WallDisconnected: ResolverTypeWrapper<WallDisconnected>;
   ZoneBoxInput: ZoneBoxInput;
   ZoneMatchMode: ZoneMatchMode;
 }>;
@@ -6302,7 +6296,6 @@ export type ResolversParentTypes = ResolversObject<{
   DiscoverPlaylistsResult: DiscoverPlaylistsResult;
   DiscoverablePlaylist: DiscoverablePlaylist;
   DiscoverableSession: DiscoverableSession;
-  DriverChanged: DriverChanged;
   EventsReplayResponse: Omit<EventsReplayResponse, 'events'> & { events: Array<ResolversParentTypes['QueueEvent']> };
   FavoritesCount: FavoritesCount;
   FeedbackContextInput: FeedbackContextInput;
@@ -6487,6 +6480,7 @@ export type ResolversParentTypes = ResolversObject<{
   VoteOnProposalInput: VoteOnProposalInput;
   VoteSummary: VoteSummary;
   WallConfirmedClimb: WallConfirmedClimb;
+  WallDisconnected: WallDisconnected;
   ZoneBoxInput: ZoneBoxInput;
 }>;
 
@@ -7168,15 +7162,6 @@ export type DiscoverableSessionResolvers<
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type DriverChangedResolvers<
-  ContextType = ConnectionContext,
-  ParentType extends ResolversParentTypes['DriverChanged'] = ResolversParentTypes['DriverChanged'],
-> = ResolversObject<{
-  driverParticipantId?: Resolver<Maybe<ResolversTypes['ID']>, ParentType, ContextType>;
-  previousDriverParticipantId?: Resolver<Maybe<ResolversTypes['ID']>, ParentType, ContextType>;
-  __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
-}>;
-
 export type EventsReplayResponseResolvers<
   ContextType = ConnectionContext,
   ParentType extends ResolversParentTypes['EventsReplayResponse'] = ResolversParentTypes['EventsReplayResponse'],
@@ -7788,7 +7773,6 @@ export type MutationResolvers<
     ContextType,
     RequireFields<MutationRegisterControllerArgs, 'input'>
   >;
-  releaseControl?: Resolver<ResolversTypes['Session'], ParentType, ContextType>;
   removeClimbFromPlaylist?: Resolver<
     ResolversTypes['Boolean'],
     ParentType,
@@ -7837,6 +7821,7 @@ export type MutationResolvers<
     ContextType,
     RequireFields<MutationReportBoardDisconnectArgs, 'boardId'>
   >;
+  reportWallDisconnect?: Resolver<ResolversTypes['Session'], ParentType, ContextType>;
   resolveBoardCandidatesForSerial?: Resolver<
     ResolversTypes['ResolveBoardResult'],
     ParentType,
@@ -7973,7 +7958,6 @@ export type MutationResolvers<
     ContextType,
     RequireFields<MutationSyncSessionToIntegrationArgs, 'provider' | 'sessionId'>
   >;
-  takeControl?: Resolver<ResolversTypes['Session'], ParentType, ContextType, Partial<MutationTakeControlArgs>>;
   toggleFavorite?: Resolver<
     ResolversTypes['ToggleFavoriteResult'],
     ParentType,
@@ -9043,7 +9027,6 @@ export type SessionResolvers<
   boardPath?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   clientId?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
   color?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
-  driverParticipantId?: Resolver<Maybe<ResolversTypes['ID']>, ParentType, ContextType>;
   endedAt?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   goal?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   id?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
@@ -9148,7 +9131,6 @@ export type SessionEventResolvers<
   ParentType extends ResolversParentTypes['SessionEvent'] = ResolversParentTypes['SessionEvent'],
 > = ResolversObject<{
   __resolveType: TypeResolveFn<
-    | 'DriverChanged'
     | 'LeaderChanged'
     | 'SessionBoardPathChanged'
     | 'SessionBoardSerialChanged'
@@ -9157,7 +9139,8 @@ export type SessionEventResolvers<
     | 'UserJoined'
     | 'UserLeft'
     | 'UserPresenceChanged'
-    | 'WallConfirmedClimb',
+    | 'WallConfirmedClimb'
+    | 'WallDisconnected',
     ParentType,
     ContextType
   >;
@@ -9760,6 +9743,14 @@ export type WallConfirmedClimbResolvers<
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
+export type WallDisconnectedResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['WallDisconnected'] = ResolversParentTypes['WallDisconnected'],
+> = ResolversObject<{
+  disconnectedByParticipantId?: Resolver<Maybe<ResolversTypes['ID']>, ParentType, ContextType>;
+  __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
+}>;
+
 export type Resolvers<ContextType = ConnectionContext> = ResolversObject<{
   ActivityFeedItem?: ActivityFeedItemResolvers<ContextType>;
   ActivityFeedResult?: ActivityFeedResultResolvers<ContextType>;
@@ -9812,7 +9803,6 @@ export type Resolvers<ContextType = ConnectionContext> = ResolversObject<{
   DiscoverPlaylistsResult?: DiscoverPlaylistsResultResolvers<ContextType>;
   DiscoverablePlaylist?: DiscoverablePlaylistResolvers<ContextType>;
   DiscoverableSession?: DiscoverableSessionResolvers<ContextType>;
-  DriverChanged?: DriverChangedResolvers<ContextType>;
   EventsReplayResponse?: EventsReplayResponseResolvers<ContextType>;
   FavoritesCount?: FavoritesCountResolvers<ContextType>;
   FollowConnection?: FollowConnectionResolvers<ContextType>;
@@ -9922,4 +9912,5 @@ export type Resolvers<ContextType = ConnectionContext> = ResolversObject<{
   UserSearchResult?: UserSearchResultResolvers<ContextType>;
   VoteSummary?: VoteSummaryResolvers<ContextType>;
   WallConfirmedClimb?: WallConfirmedClimbResolvers<ContextType>;
+  WallDisconnected?: WallDisconnectedResolvers<ContextType>;
 }>;

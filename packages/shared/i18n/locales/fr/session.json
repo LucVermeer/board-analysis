@@ -218,10 +218,7 @@
       "logAttempt": "Enregistrer un essai",
       "showParticipants": "Afficher les participants",
       "hideParticipants": "Masquer les participants",
-      "openPlayDrawer": "Ouvrir le bloc du mur",
-      "userIsDriving": "{{username}} est au contrôle",
-      "returnToWallClimb": "Revenir au bloc de {{username}}",
-      "returnToWallClimbNoDriver": "Revenir au bloc du mur"
+      "openPlayDrawer": "Ouvrir le bloc du mur"
     },
     "offline": {
       "idle": "Hors ligne",
@@ -251,12 +248,6 @@
   },
   "queueProvider": {
     "offlineLimitReached": "Tu as atteint la limite hors ligne de la file d'attente. Reconnecte-toi pour synchroniser tes blocs."
-  },
-  "driverToast": {
-    "firstDriver": "{{newDriver}} pilote le mur.",
-    "tookFromOther": "{{newDriver}} a pris le mur à {{previousDriver}}.",
-    "tookFromYou": "{{newDriver}} t'a pris le mur.",
-    "unknownDriver": "Quelqu'un"
   },
   "mobile": {
     "logbook": {
@@ -458,7 +449,6 @@
       "inLeaderboardTitle": "Qui grimpe",
       "inLeaderboardClimber": "Grimpeur",
       "inPresenceCount": "{{count}} en train de grimper",
-      "inDriverLabel": "Aux commandes",
       "invite": "Inviter des grimpeurs",
       "inviteTitle": "Inviter à cette session",
       "inviteSubtitle": "Scannez pour rejoindre ou partagez le lien",
@@ -476,13 +466,8 @@
     "pause": "Pause",
     "replay": "Rejouer",
     "speed": "Vitesse de lecture",
-    "onWallChip": "SUR LE MUR · {{username}}",
-    "onWallChipNoDriver": "SUR LE MUR",
-    "drivingChip": "AU CONTRÔLE",
     "audienceCount_one": "{{count}} autre en train de regarder",
     "audienceCount_other": "{{count}} autres en train de regarder",
-    "returnToWallPill": "{{username}} · {{climbName}}",
-    "previewCoachmark": "Aperçu. Touche l'ampoule pour envoyer au mur.",
     "yourAscents_one": "Ton ascension ({{count}})",
     "yourAscents_other": "Tes ascensions ({{count}})",
     "triesCount_one": "{{count}} essai",
@@ -502,10 +487,10 @@
       "openQueueAria": "Ouvrir la file d'attente",
       "queueCountAria": "File, {{count}} blocs",
       "lightbulb": {
-        "drivingNamed": "Tu contrôles «{{name}}». Touche pour relâcher.",
-        "driving": "Tu contrôles. Touche pour relâcher.",
-        "takeNamed": "Prendre le contrôle et envoyer «{{name}}»",
-        "take": "Prendre le contrôle du mur",
+        "litNamed": "«{{name}}» est sur le mur. Touche pour l’envoyer à nouveau.",
+        "lit": "Ta voie est sur le mur. Touche pour l’envoyer à nouveau.",
+        "sendNamed": "Envoyer «{{name}}» au mur",
+        "send": "Envoyer la voie au mur",
         "coachmark": "Envoyer au mur"
       }
     },

@@ -7,8 +7,8 @@ export const eventsTypeDefs = /* GraphQL */ `
     | UserLeft
     | UserPresenceChanged
     | LeaderChanged
-    | DriverChanged
     | WallConfirmedClimb
+    | WallDisconnected
     | SessionBoardSerialChanged
     | SessionBoardPathChanged
     | SessionEnded
@@ -49,16 +49,6 @@ export const eventsTypeDefs = /* GraphQL */ `
   }
 
   """
-  Event when the wall driver changes (the participant authorized to drive the wall via the queue-control-bar pivot's lightbulb). Null when no member is currently driving.
-  """
-  type DriverChanged {
-    "Stable participant id of the new driver, or null when control was released"
-    driverParticipantId: ID
-    "Stable participant id of the previous driver, or null when there was none (e.g. the very first take of the session, or after a release). Lets clients render 'X took the wall from Y' toasts and populate the Phase 5 previousDriver analytics property without local bookkeeping."
-    previousDriverParticipantId: ID
-  }
-
-  """
   Event broadcast when a participant's phone successfully relays a climb to the
   wall over BLE. Other clients use this confirmation to flip the queue-control-bar
   lightbulb from pending to confirmed and to dismiss the local fallback timer.
@@ -74,6 +64,19 @@ export const eventsTypeDefs = /* GraphQL */ `
     confirmedByParticipantId: ID!
     "UUID of the queue item that triggered this send, or null when the BLE-capable phone reported only a climb UUID. Lets clients disambiguate when the same climb is queued twice — without this, both queue entries' pending lightbulbs would clear on a single confirmation."
     queueItemUuid: ID
+  }
+
+  """
+  Event broadcast when the device that was relaying the session's climb to the
+  wall over BLE drops its connection (an explicit lightbulb-off, a detected BLE
+  drop, or the WebSocket closing). Clients turn the queue-control-bar lightbulb
+  off — the session no longer knows its climb is lit, and someone outside the
+  session may have changed the wall. The current climb is unchanged; pressing the
+  lightbulb re-asserts (re-sends) it. Symmetric with WallConfirmedClimb.
+  """
+  type WallDisconnected {
+    "Stable participant id of the member whose connection was relaying the climb, or null for a system/crash backstop (WebSocket close)"
+    disconnectedByParticipantId: ID
   }
 
   """

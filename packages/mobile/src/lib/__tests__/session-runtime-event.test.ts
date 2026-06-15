@@ -12,12 +12,21 @@ const user: SessionUser = {
 };
 
 describe('toMobileSessionRuntimeEvent', () => {
-  it('adapts roster, driver, serial, and path events', () => {
+  it('adapts roster, wall-disconnect, serial, and path events', () => {
     expect(toMobileSessionRuntimeEvent({ __typename: 'UserJoined', user })).toEqual({ __typename: 'UserJoined', user });
-    expect(toMobileSessionRuntimeEvent({ __typename: 'DriverChanged', driverParticipantId: 'participant-1' })).toEqual({
-      __typename: 'DriverChanged',
-      driverParticipantId: 'participant-1',
-      previousDriverParticipantId: null,
+    expect(
+      toMobileSessionRuntimeEvent({
+        __typename: 'WallDisconnected',
+        disconnectedByParticipantId: 'participant-1',
+      }),
+    ).toEqual({
+      __typename: 'WallDisconnected',
+      disconnectedByParticipantId: 'participant-1',
+    });
+    // A WallDisconnected with no originator still maps (the signal is session-wide).
+    expect(toMobileSessionRuntimeEvent({ __typename: 'WallDisconnected' })).toEqual({
+      __typename: 'WallDisconnected',
+      disconnectedByParticipantId: null,
     });
     expect(
       toMobileSessionRuntimeEvent({

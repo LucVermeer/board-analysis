@@ -24,7 +24,6 @@ export const initialState = <TSearchParams extends QueueSearchParams>(
   lastReceivedSequence: null,
   lastReceivedStateHash: null,
   needsResync: false,
-  optimisticDriverParticipantId: null,
 });
 
 export function queueReducer<TSearchParams extends QueueSearchParams>(
@@ -248,7 +247,7 @@ export function queueReducer<TSearchParams extends QueueSearchParams>(
       // clientId echo guards above, so they're legitimate peer broadcasts and
       // need to flow through (the BLE-paired phone re-sends the climb to the
       // board on every broadcast, even when the wall climb's uuid hasn't
-      // changed — e.g. driver release+retake on the same climb).
+      // changed — e.g. a member re-asserting the same climb to re-light the wall).
       if (!isServerEvent && item && state.currentClimbQueueItem?.uuid === item.uuid) {
         return state;
       }
@@ -422,23 +421,6 @@ export function queueReducer<TSearchParams extends QueueSearchParams>(
         queue: [],
         currentClimbQueueItem: null,
         playlistSuggestionSource: null,
-      };
-
-    case 'OPTIMISTIC_SET_DRIVER':
-      // Fired from `takeControl` so the lightbulb flips before the server
-      // round-trip. Idempotent — re-setting the same participant id is a no-op
-      // for the consumer (string equality).
-      if (state.optimisticDriverParticipantId === action.payload.participantId) return state;
-      return {
-        ...state,
-        optimisticDriverParticipantId: action.payload.participantId,
-      };
-
-    case 'OPTIMISTIC_CLEAR_DRIVER':
-      if (state.optimisticDriverParticipantId === null) return state;
-      return {
-        ...state,
-        optimisticDriverParticipantId: null,
       };
 
     default:

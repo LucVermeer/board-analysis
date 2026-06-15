@@ -6,7 +6,6 @@ import { LiveActivityBridge } from '../live-activity-bridge';
 
 const queue = vi.hoisted(() => ({
   sessionId: 'session-1' as string | null,
-  isPartyPreviewOnly: false,
   nextClimb: vi.fn(),
   previousClimb: vi.fn(),
   state: {
@@ -31,7 +30,6 @@ vi.mock('../../../providers/queue-provider', () => ({
     nextClimb: queue.nextClimb,
     previousClimb: queue.previousClimb,
   }),
-  useIsPartyPreviewOnly: () => queue.isPartyPreviewOnly,
 }));
 
 vi.mock('../use-live-activity', () => ({
@@ -56,10 +54,9 @@ function renderBridge() {
   return render(<LiveActivityBridge boardName="kilter" layoutId={1} sizeId={10} setIds="1,2" />);
 }
 
-describe('LiveActivityBridge wall-control gating', () => {
+describe('LiveActivityBridge widget navigation (always-live)', () => {
   beforeEach(() => {
     queue.sessionId = 'session-1';
-    queue.isPartyPreviewOnly = false;
     queue.state = { queue: [], currentClimbQueueItem: null };
     queue.nextClimb.mockClear();
     queue.previousClimb.mockClear();
@@ -67,26 +64,7 @@ describe('LiveActivityBridge wall-control gating', () => {
     widget.useLiveActivity.mockClear();
   });
 
-  it('ignores widget navigation when preview-only (party non-driver)', () => {
-    queue.isPartyPreviewOnly = true;
-    renderBridge();
-
-    act(() => {
-      widget.listener?.({ action: 'next' });
-      widget.listener?.({ action: 'previous' });
-    });
-
-    expect(queue.nextClimb).not.toHaveBeenCalled();
-    expect(queue.previousClimb).not.toHaveBeenCalled();
-    expect(widget.useLiveActivity).toHaveBeenCalledWith(
-      expect.objectContaining({
-        widgetNavigationAllowed: false,
-        isPartySession: true,
-      }),
-    );
-  });
-
-  it('allows widget navigation when not preview-only (driver or solo occupant)', () => {
+  it('always allows widget navigation in a party session (no driver gate)', () => {
     renderBridge();
 
     act(() => {
@@ -125,7 +103,6 @@ describe('LiveActivityBridge wall-control gating', () => {
 describe('LiveActivityBridge session-presence gating', () => {
   beforeEach(() => {
     queue.sessionId = 'session-1';
-    queue.isPartyPreviewOnly = false;
     queue.state = { queue: [], currentClimbQueueItem: null };
     widget.useLiveActivity.mockClear();
   });

@@ -4,7 +4,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createElement, type ReactNode } from 'react';
 import type { ClimbQueueItem } from '@boardsesh/queue';
 import type { BoardPresenceClimb } from '@boardsesh/shared-schema';
-import { derivePreviewOnly } from '@boardsesh/queue-runtime';
 import type { BoardSerialConfig } from '@boardsesh/graphql/operations';
 import type { ResolvedBoardEntry } from '../../lib/ble/resolve-serials';
 import type { PickerState } from '../../lib/ble/use-board-bluetooth';
@@ -33,14 +32,10 @@ const alert = vi.hoisted(() => ({
 const queue = vi.hoisted(() => ({
   currentClimbQueueItem: null as ClimbQueueItem | null,
   sessionId: 'session-1' as string | null,
-  driverParticipantId: 'participant-self' as string | null,
   participantId: 'participant-self' as string | null,
-  // Live roster size — 0 during the pre-JOIN window (unseeded), >1 once JOIN
-  // resolves. Used by the useIsPartyPreviewOnly mock via derivePreviewOnly so
-  // tests exercise the actual gating logic rather than a hand-wired boolean.
-  sessionUserCount: 2,
   lastConnectedBoardSerial: null as string | null,
   confirmClimbOnWall: vi.fn(async () => {}),
+  reportWallDisconnect: vi.fn(async () => {}),
   setSessionBoardSerial: vi.fn(async () => {}),
 }));
 
@@ -174,21 +169,12 @@ vi.mock('../queue-provider', () => ({
   }),
   useQueueSessionControls: () => ({
     sessionId: queue.sessionId,
-    driverParticipantId: queue.driverParticipantId,
     participantId: queue.participantId,
     lastConnectedBoardSerial: queue.lastConnectedBoardSerial,
     confirmClimbOnWall: queue.confirmClimbOnWall,
+    reportWallDisconnect: queue.reportWallDisconnect,
     setSessionBoardSerial: queue.setSessionBoardSerial,
   }),
-  // Derive from the real derivePreviewOnly so tests exercise the actual gating
-  // path, including the participantId-null / empty-roster pre-JOIN window.
-  useIsPartyPreviewOnly: () =>
-    derivePreviewOnly({
-      isSessionActive: queue.sessionId !== null,
-      participantId: queue.participantId,
-      driverParticipantId: queue.driverParticipantId,
-      sessionUserCount: queue.sessionUserCount,
-    }),
 }));
 
 const boardDetails = vi.hoisted(() => ({
@@ -277,11 +263,10 @@ describe('BluetoothProvider wall-confirm integration', () => {
     await setHoldColorOverridesPreference({});
     queue.currentClimbQueueItem = makeQueueItem('climb-1');
     queue.sessionId = 'session-1';
-    queue.driverParticipantId = 'participant-self';
     queue.participantId = 'participant-self';
-    queue.sessionUserCount = 2;
     queue.lastConnectedBoardSerial = null;
     queue.confirmClimbOnWall.mockClear();
+    queue.reportWallDisconnect.mockClear();
     queue.setSessionBoardSerial.mockClear();
     wallConfirm.emitWallConfirm.mockClear();
     analytics.track.mockClear();
@@ -372,11 +357,10 @@ describe('BluetoothProvider wall-confirm integration', () => {
 
   it('auto-sends shared climb updates while connected regardless of party role', async () => {
     // Holder model (always-take): the auto-sender mounts on isConnected alone —
-    // there is no driver/preview write-gate. A connected party non-driver writes
-    // the wall and becomes the board's connection holder. (Replaces the old
-    // "non-driver does not auto-send" / "starts on becoming driver" / "aborts on
-    // losing wall control" driver-gated tests.)
-    queue.driverParticipantId = 'participant-other';
+    // there is no driver/preview write-gate. Any connected member writes the wall
+    // and becomes the board's connection holder. (Replaces the old "non-driver
+    // does not auto-send" / "starts on becoming driver" / "aborts on losing wall
+    // control" driver-gated tests.)
 
     renderProvider();
 
@@ -421,14 +405,11 @@ describe('BluetoothProvider wall-confirm integration', () => {
 
   it('keeps auto-sending while a restored session is waiting for JOIN to resolve identity', async () => {
     // Simulate the pre-JOIN window: sessionId is restored from storage (truthy)
-    // but participantId and driverParticipantId are both null, and the roster is
-    // empty (sessionUserCount = 0) because JOIN hasn't returned yet. With an
-    // unseeded roster, derivePreviewOnly must return false so BluetoothAutoSender
-    // mounts and the eventual wall driver can auto-send immediately on JOIN.
+    // but participantId is still null because JOIN hasn't returned yet. The
+    // auto-sender mounts on isConnected alone (always-live), so it writes the
+    // wall immediately without waiting on identity.
     queue.sessionId = 'session-1';
-    queue.driverParticipantId = null;
     queue.participantId = null;
-    queue.sessionUserCount = 0;
 
     renderProvider();
 
@@ -1120,5 +1101,49 @@ describe('BluetoothProvider wall-confirm integration', () => {
     const buttons = alert.alert.mock.calls[0]?.[2] as Array<{ onPress?: () => void }> | undefined;
     buttons?.[1]?.onPress?.();
     expect(handleSelect).toHaveBeenCalledWith('device-2');
+  });
+
+  describe('wall disconnect on BLE drop', () => {
+    it('reports wall disconnect to the session on an explicit user disconnect', async () => {
+      renderProvider(createElement(BluetoothProbe));
+
+      await waitFor(() => {
+        expect(bluetooth.state.sendFramesToBoard).toHaveBeenCalled();
+      });
+      queue.reportWallDisconnect.mockClear();
+
+      await act(async () => {
+        await capturedBluetooth?.disconnect();
+      });
+
+      expect(queue.reportWallDisconnect).toHaveBeenCalled();
+    });
+
+    it('reports wall disconnect to the session on an unexpected BLE drop', async () => {
+      const { rerender } = renderProvider();
+
+      await waitFor(() => {
+        expect(bluetooth.state.sendFramesToBoard).toHaveBeenCalled();
+      });
+      queue.reportWallDisconnect.mockClear();
+
+      // Simulate an involuntary drop: isConnected flips true -> false with no
+      // user-initiated disconnect in flight. The drop effect frees the board
+      // hold and broadcasts WallDisconnected to the session.
+      bluetooth.state.isConnected = false;
+      await act(async () => {
+        rerender(
+          createElement(BluetoothProvider, {
+            boardName: 'kilter',
+            layoutId: 1,
+            sizeId: 10,
+            setIds: '1,20',
+            children: createElement('div', null),
+          }),
+        );
+      });
+
+      expect(queue.reportWallDisconnect).toHaveBeenCalled();
+    });
   });
 });

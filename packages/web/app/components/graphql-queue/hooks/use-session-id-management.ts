@@ -71,9 +71,8 @@ export function useSessionIdManagement({
   //     when the user creates a session from THIS provider's route (no
   //     navigation, same baseBoardPath as the page they're on), nothing
   //     else picks up the new id. Without this sync, isPersistentSessionActive
-  //     stays false, deriveIsDriver returns true (solo branch), and the
-  //     drawer lightbulb keeps reading as "lit BLE" instead of flipping to
-  //     "party, no driver claimed yet".
+  //     stays false and the drawer lightbulb keeps reading as "lit BLE"
+  //     (solo) instead of the session-scoped wall-confirmed indicator.
   //
   // Guarded on persistentSessionId being non-null so the cookie value isn't
   // wiped during the initial IndexedDB-load window (where activeSession is

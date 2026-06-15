@@ -2,14 +2,14 @@ import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vite-plus/test';
 import { renderHook, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { SessionEvent } from '@boardsesh/shared-schema';
 import type { Climb } from '@/app/lib/types';
 import type { ClimbQueueItem } from '../../queue-control/types';
 
-// Always-live model: the bar's prev/next button is reachable by every session
-// participant. The bar calls `setCurrentClimbQueueItem`, which routes to
-// `persistentSession.setCurrentClimb`. Backend `setCurrentClimb` is unrestricted
-// (no isLeader / driver gate). Test guards against a future regression where the
-// client path would start gating the mutation on a role.
+// Verifies the always-live session-scoped wall-confirmed indicator
+// (`SessionDataType.wallConfirmed`): WallConfirmedClimb turns it ON for
+// everyone, WallDisconnected turns it OFF for everyone — and WallDisconnected
+// never clears the current climb.
 
 vi.mock('@/app/components/providers/snackbar-provider', () => ({
   useSnackbar: () => ({ showMessage: vi.fn() }),
@@ -34,10 +34,10 @@ vi.mock('../../queue-control/hooks/use-queue-data-fetching', () => ({
   }),
 }));
 
-const mockPersistentSessionSetCurrentClimb = vi.fn().mockResolvedValue(undefined);
+// Capture the session-event subscriber the QueueContext registers so the test
+// can emit WallConfirmedClimb / WallDisconnected through it.
+let sessionEventSubscriber: ((event: SessionEvent) => void) | null = null;
 
-// Party session active. Local user is `participant-1`. Always-live: no driver
-// role; any participant can advance the wall climb.
 const mockPersistentSession = {
   activeSession: {
     sessionId: 'session-1',
@@ -78,7 +78,7 @@ const mockPersistentSession = {
   setInitialQueueForSession: vi.fn(),
   addQueueItem: vi.fn().mockResolvedValue(undefined),
   removeQueueItem: vi.fn().mockResolvedValue(undefined),
-  setCurrentClimb: mockPersistentSessionSetCurrentClimb,
+  setCurrentClimb: vi.fn().mockResolvedValue(undefined),
   mirrorCurrentClimb: vi.fn().mockResolvedValue(undefined),
   setQueue: vi.fn().mockResolvedValue(undefined),
   replaceQueueItem: vi.fn().mockResolvedValue(undefined),
@@ -88,7 +88,12 @@ const mockPersistentSession = {
   offlineBufferRef: { current: [] as unknown[] },
   lastReceivedSequenceRef: { current: null as number | null },
   subscribeToQueueEvents: vi.fn(() => vi.fn()),
-  subscribeToSessionEvents: vi.fn(() => vi.fn()),
+  subscribeToSessionEvents: vi.fn((cb: (event: SessionEvent) => void) => {
+    sessionEventSubscriber = cb;
+    return () => {
+      sessionEventSubscriber = null;
+    };
+  }),
   triggerResync: vi.fn(),
   endSessionWithSummary: vi.fn(),
   sessionSummary: null,
@@ -212,37 +217,49 @@ function createWrapper() {
   };
 }
 
-describe('Any-participant setCurrentClimbQueueItem (bar prev/next)', () => {
+describe('Session-scoped wall-confirmed indicator', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    sessionEventSubscriber = null;
   });
 
-  it('routes through persistentSession.setCurrentClimb for any session participant', () => {
+  it('WallConfirmedClimb turns the indicator on; WallDisconnected turns it off without clearing the current climb', () => {
     const { result } = renderHook(() => useQueueContext(), { wrapper: createWrapper() });
 
-    // Sanity: this client is in a party session.
     expect(result.current.isPersistentSessionActive).toBe(true);
-    expect(result.current.participantId).toBe('participant-1');
+    expect(result.current.wallConfirmed).toBe(false);
+    expect(sessionEventSubscriber).not.toBeNull();
 
-    const targetItem: ClimbQueueItem = {
-      uuid: 'queue-item-1',
-      climb: makeClimb('target-climb'),
-      suggested: false,
-    };
-
+    // Seed a current climb so we can assert it survives the WallDisconnected.
+    const item: ClimbQueueItem = { uuid: 'queue-item-1', climb: makeClimb('climb-1'), suggested: false };
     act(() => {
-      result.current.setCurrentClimbQueueItem(targetItem);
+      result.current.setCurrentClimbQueueItem(item);
     });
+    expect(result.current.currentClimb?.uuid).toBe('climb-1');
 
-    // The mutation fires for any participant (always-live, no driver gate). If
-    // a regression re-added a role gate to setCurrentClimbQueueItem, this would
-    // fail. Backend `setCurrentClimb` resolver doesn't gate either, so the wire
-    // call goes through end-to-end.
-    expect(mockPersistentSessionSetCurrentClimb).toHaveBeenCalledTimes(1);
-    const [calledItem, shouldAddToQueue, correlationId] = mockPersistentSessionSetCurrentClimb.mock.calls[0];
-    expect(calledItem.uuid).toBe(targetItem.uuid);
-    expect(calledItem.climb.uuid).toBe(targetItem.climb.uuid);
-    expect(shouldAddToQueue).toBe(false); // suggested: false on the input
-    expect(correlationId).toMatch(/^client-1-\d+$/);
+    // A member's BLE phone relays the climb → indicator on for everyone.
+    act(() => {
+      sessionEventSubscriber!({
+        __typename: 'WallConfirmedClimb',
+        climbUuid: 'climb-1',
+        confirmedAt: new Date().toISOString(),
+        confirmedByParticipantId: 'participant-2',
+        queueItemUuid: 'queue-item-1',
+      } as SessionEvent);
+    });
+    expect(result.current.wallConfirmed).toBe(true);
+    // Current climb unchanged by the confirm.
+    expect(result.current.currentClimb?.uuid).toBe('climb-1');
+
+    // A member's BLE link drops → indicator off for everyone, current climb
+    // preserved.
+    act(() => {
+      sessionEventSubscriber!({
+        __typename: 'WallDisconnected',
+        disconnectedByParticipantId: 'participant-2',
+      } as SessionEvent);
+    });
+    expect(result.current.wallConfirmed).toBe(false);
+    expect(result.current.currentClimb?.uuid).toBe('climb-1');
   });
 });

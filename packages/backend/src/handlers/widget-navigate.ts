@@ -248,25 +248,13 @@ export async function handleWidgetNavigate(req: IncomingMessage, res: ServerResp
   }
 
   try {
-    // The Live Activity token proves session membership, but wall navigation is
-    // driver-only. Authenticated users join with participantId === userId, so
-    // compare the token's bound user to the current driver before mutating the
-    // shared queue. Legacy rows without userId cannot prove driver ownership.
-    const driverParticipantId = await roomManager.getSessionDriverParticipantId(sessionId);
-    if (!authResult.userId || driverParticipantId !== authResult.userId) {
-      trackWidgetNavigation(authResult.userId, {
-        sessionId,
-        action,
-        outcome: 'not_driver',
-        statusCode: 403,
-      });
-      res.writeHead(403, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ success: false, error: 'Widget navigation requires the current driver' }));
-      return;
-    }
+    // Sessions are always-live: any authenticated session member may navigate
+    // the wall. The Live Activity token already proves session membership (a
+    // row in activity_push_tokens bound to this sessionId), so no further
+    // ownership gate is needed here.
 
-    // Rate limit (per session) — apply *after* auth + driver check so a
-    // non-driver cannot poison the driver's bucket.
+    // Rate limit (per session) — apply *after* auth so an unauthenticated
+    // caller can't poison a member's bucket.
     if (!checkRateLimit(sessionId)) {
       trackWidgetNavigation(authResult.userId, {
         sessionId,

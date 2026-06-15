@@ -1,7 +1,9 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { applyCorsHeaders } from './cors';
 import { authenticateWidget } from './widget-auth';
-import { takeSessionDriverControl } from '../services/session-driver-control';
+import { roomManager } from '../services/room-manager';
+import { pubsub } from '../pubsub/index';
+import { setCurrentClimbAndPublish } from '../services/queue-navigation';
 import { logger } from '../utils/logger';
 
 interface WidgetTakeControlBody {
@@ -35,16 +37,23 @@ function readBody(req: IncomingMessage): Promise<string> {
 }
 
 /**
- * Handle widget wall-control claim requests.
+ * Handle widget re-assert (legacy "take-control") requests.
  *
  * POST /api/widget/take-control
  * Headers:
  *   Authorization: Bearer <apnsToken>
  * Body: { sessionId: string }
  *
+ * Sessions are always-live, so there is no driver to claim. The frozen native
+ * iOS widget still POSTs this endpoint when the user taps its lightbulb — we
+ * keep it returning 200 for wire-compat. Repurposed to RE-ASSERT the session's
+ * current climb: re-publish it as the current climb so any BLE-capable phone in
+ * the session re-sends it to the wall (`CurrentClimbChanged` fans out to all
+ * members). With no current climb, it's a successful no-op.
+ *
  * The bearer token must be registered to the requested session and must have a
  * bound `userId`. Legacy anonymous token rows are rejected because the backend
- * cannot map them to a stable participant id for driver ownership.
+ * cannot map them to a stable participant id.
  */
 export async function handleWidgetTakeControl(req: IncomingMessage, res: ServerResponse): Promise<void> {
   if (!applyCorsHeaders(req, res)) return;
@@ -102,15 +111,28 @@ export async function handleWidgetTakeControl(req: IncomingMessage, res: ServerR
 
   if (!authResult.userId) {
     res.writeHead(403, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ success: false, error: 'Widget take-control requires an authenticated participant' }));
+    res.end(JSON.stringify({ success: false, error: 'Widget re-assert requires an authenticated participant' }));
     return;
   }
 
   try {
-    await takeSessionDriverControl({
-      sessionId,
-      participantId: authResult.userId,
-    });
+    // Re-assert the session's current climb so a BLE phone re-sends it. The
+    // climb is already in the queue, so shouldAddToQueue=false — this just
+    // re-publishes CurrentClimbChanged to every member. No current climb is a
+    // successful no-op (nothing to re-send).
+    const queueState = await roomManager.getQueueState(sessionId);
+    const currentItem = queueState.currentClimbQueueItem;
+    if (currentItem) {
+      await setCurrentClimbAndPublish(
+        sessionId,
+        currentItem,
+        false,
+        roomManager,
+        pubsub,
+        undefined,
+        'widget-take-control',
+      );
+    }
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ success: true }));
   } catch (error) {

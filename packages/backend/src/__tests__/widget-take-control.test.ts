@@ -1,11 +1,39 @@
+/**
+ * Tests for the widget re-assert handler (legacy POST /api/widget/take-control).
+ *
+ * Sessions are always-live — there is no driver to claim. The frozen native iOS
+ * widget still POSTs this endpoint, so it must keep returning 200. Repurposed to
+ * RE-ASSERT the session's current climb: re-publish it via
+ * `setCurrentClimbAndPublish` so a BLE phone re-sends it to the wall. With no
+ * current climb, it's a successful no-op.
+ *
+ * Auth contract is unchanged: the bearer token must be registered to the
+ * session and must have a bound userId.
+ */
+
 import { describe, it, expect, vi, beforeEach } from 'vite-plus/test';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { EventEmitter } from 'node:events';
+import type { ClimbQueueItem } from '@boardsesh/shared-schema';
 
 type TokenRow = { sessionId: string; userId: string | null };
 
+type MockQueueState = {
+  queue: ClimbQueueItem[];
+  currentClimbQueueItem: ClimbQueueItem | null;
+};
+
 const tokenLookupRows = vi.fn<() => TokenRow[]>(() => []);
-const takeSessionDriverControlMock = vi.fn(async (_args: { sessionId: string; participantId: string }) => {});
+const getQueueStateMock = vi.fn<() => Promise<MockQueueState>>(async () => ({
+  queue: [],
+  currentClimbQueueItem: null,
+}));
+const setCurrentClimbAndPublishMock = vi.fn(async () => ({
+  sequence: 1,
+  stateHash: 'hash-1',
+  queue: [] as ClimbQueueItem[],
+  addedToQueue: false,
+}));
 
 vi.mock('../db/client', () => {
   function makeChain() {
@@ -26,8 +54,18 @@ vi.mock('../handlers/cors', () => ({
   applyCorsHeaders: vi.fn(() => true),
 }));
 
-vi.mock('../services/session-driver-control', () => ({
-  takeSessionDriverControl: (args: { sessionId: string; participantId: string }) => takeSessionDriverControlMock(args),
+vi.mock('../services/room-manager', () => ({
+  roomManager: {
+    getQueueState: getQueueStateMock,
+  },
+}));
+
+vi.mock('../pubsub/index', () => ({
+  pubsub: {},
+}));
+
+vi.mock('../services/queue-navigation', () => ({
+  setCurrentClimbAndPublish: (...args: unknown[]) => setCurrentClimbAndPublishMock(...(args as [])),
 }));
 
 const { handleWidgetTakeControl } = await import('../handlers/widget-take-control');
@@ -36,6 +74,29 @@ const SESSION_ID = 'session-widget-test';
 const USER_ID = 'user-widget-test';
 const REGISTERED_TOKEN = 'b'.repeat(64);
 const STRANGER_TOKEN = 'c'.repeat(64);
+
+function makeClimbItem(): ClimbQueueItem {
+  return {
+    uuid: 'a1b2c3d4-e5f6-4789-a0b1-c2d3e4f56789',
+    climb: {
+      uuid: '22222222-2222-2222-2222-222222222222',
+      setter_username: 'tester',
+      name: 'V5 Test Climb',
+      frames: 'p1r1,p2r2',
+      angle: 40,
+      ascensionist_count: 10,
+      difficulty: '18',
+      quality_average: '3.5',
+      stars: 3,
+      difficulty_error: '0.3',
+      mirrored: false,
+      benchmark_difficulty: null,
+    },
+    addedBy: 'participant-1',
+    tickedBy: [],
+    suggested: false,
+  } as unknown as ClimbQueueItem;
+}
 
 interface MockReq extends EventEmitter {
   method?: string;
@@ -89,11 +150,17 @@ function makeResponse(): MockRes {
   };
 }
 
-describe('handleWidgetTakeControl', () => {
+describe('handleWidgetTakeControl (re-assert)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     tokenLookupRows.mockReturnValue([]);
-    takeSessionDriverControlMock.mockResolvedValue(undefined);
+    getQueueStateMock.mockResolvedValue({ queue: [], currentClimbQueueItem: null });
+    setCurrentClimbAndPublishMock.mockResolvedValue({
+      sequence: 1,
+      stateHash: 'hash-1',
+      queue: [],
+      addedToQueue: false,
+    });
   });
 
   it('returns 401 when Authorization header is missing', async () => {
@@ -103,7 +170,7 @@ describe('handleWidgetTakeControl', () => {
     await handleWidgetTakeControl(req as unknown as IncomingMessage, res as unknown as ServerResponse);
 
     expect(res.statusCode).toBe(401);
-    expect(takeSessionDriverControlMock).not.toHaveBeenCalled();
+    expect(setCurrentClimbAndPublishMock).not.toHaveBeenCalled();
   });
 
   it('returns 401 when bearer token is unknown', async () => {
@@ -118,7 +185,7 @@ describe('handleWidgetTakeControl', () => {
     await handleWidgetTakeControl(req as unknown as IncomingMessage, res as unknown as ServerResponse);
 
     expect(res.statusCode).toBe(401);
-    expect(takeSessionDriverControlMock).not.toHaveBeenCalled();
+    expect(setCurrentClimbAndPublishMock).not.toHaveBeenCalled();
   });
 
   it('returns 410 when bearer token is bound to a different session', async () => {
@@ -136,7 +203,7 @@ describe('handleWidgetTakeControl', () => {
     const parsed = JSON.parse(res.body) as { success: boolean; error: string };
     expect(parsed.success).toBe(false);
     expect(parsed.error).toContain('re-register');
-    expect(takeSessionDriverControlMock).not.toHaveBeenCalled();
+    expect(setCurrentClimbAndPublishMock).not.toHaveBeenCalled();
   });
 
   it('returns 403 when registered widget token has no bound userId', async () => {
@@ -151,11 +218,14 @@ describe('handleWidgetTakeControl', () => {
     await handleWidgetTakeControl(req as unknown as IncomingMessage, res as unknown as ServerResponse);
 
     expect(res.statusCode).toBe(403);
-    expect(takeSessionDriverControlMock).not.toHaveBeenCalled();
+    expect(setCurrentClimbAndPublishMock).not.toHaveBeenCalled();
   });
 
-  it('claims driver control for the token-bound user', async () => {
+  it('re-asserts the current climb (publishes CurrentClimbChanged) and returns 200', async () => {
     tokenLookupRows.mockReturnValue([{ sessionId: SESSION_ID, userId: USER_ID }]);
+    const current = makeClimbItem();
+    getQueueStateMock.mockResolvedValue({ queue: [current], currentClimbQueueItem: current });
+
     const req = makeRequest({
       method: 'POST',
       authHeader: `Bearer ${REGISTERED_TOKEN}`,
@@ -168,15 +238,48 @@ describe('handleWidgetTakeControl', () => {
     expect(res.statusCode).toBe(200);
     const parsed = JSON.parse(res.body) as { success: boolean };
     expect(parsed.success).toBe(true);
-    expect(takeSessionDriverControlMock).toHaveBeenCalledWith({
-      sessionId: SESSION_ID,
-      participantId: USER_ID,
-    });
+    // Re-publishes the current climb without re-adding it to the queue
+    // (shouldAddToQueue=false). Pin the load-bearing args.
+    expect(setCurrentClimbAndPublishMock).toHaveBeenCalledTimes(1);
+    const callArgs = setCurrentClimbAndPublishMock.mock.calls[0] as unknown as [
+      string,
+      ClimbQueueItem,
+      boolean,
+      unknown,
+      unknown,
+      unknown,
+      string,
+    ];
+    expect(callArgs[0]).toBe(SESSION_ID);
+    expect(callArgs[1].uuid).toBe(current.uuid);
+    expect(callArgs[2]).toBe(false);
+    expect(callArgs[6]).toBe('widget-take-control');
   });
 
-  it('returns 500 without leaking details when driver control fails', async () => {
+  it('succeeds without re-publishing when there is no current climb', async () => {
     tokenLookupRows.mockReturnValue([{ sessionId: SESSION_ID, userId: USER_ID }]);
-    takeSessionDriverControlMock.mockRejectedValueOnce(new Error('redis exploded'));
+    getQueueStateMock.mockResolvedValue({ queue: [], currentClimbQueueItem: null });
+
+    const req = makeRequest({
+      method: 'POST',
+      authHeader: `Bearer ${REGISTERED_TOKEN}`,
+      body: { sessionId: SESSION_ID },
+    });
+    const res = makeResponse();
+
+    await handleWidgetTakeControl(req as unknown as IncomingMessage, res as unknown as ServerResponse);
+
+    expect(res.statusCode).toBe(200);
+    const parsed = JSON.parse(res.body) as { success: boolean };
+    expect(parsed.success).toBe(true);
+    expect(setCurrentClimbAndPublishMock).not.toHaveBeenCalled();
+  });
+
+  it('returns 500 without leaking details when the re-assert fails', async () => {
+    tokenLookupRows.mockReturnValue([{ sessionId: SESSION_ID, userId: USER_ID }]);
+    const current = makeClimbItem();
+    getQueueStateMock.mockResolvedValue({ queue: [current], currentClimbQueueItem: current });
+    setCurrentClimbAndPublishMock.mockRejectedValueOnce(new Error('redis exploded'));
     const req = makeRequest({
       method: 'POST',
       authHeader: `Bearer ${REGISTERED_TOKEN}`,

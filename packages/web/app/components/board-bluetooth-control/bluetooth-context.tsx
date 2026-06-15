@@ -188,7 +188,7 @@ function BluetoothAutoSender({
   // started before it completes throws "GATT operation already in progress."
   // With my recent reducer fix that lets duplicate server broadcasts through
   // (so the BLE phone re-sends on every CurrentClimbChanged, including
-  // takeControl(currentClimb) re-broadcasts of the same climb), this hits
+  // lightbulb re-assert re-broadcasts of the same climb), this hits
   // any time two broadcasts land in quick succession.
   //
   // Pattern: while a write is in flight, store the most recent pending
@@ -354,7 +354,7 @@ export function BluetoothProvider({
   const persistentSessionActions = usePersistentSessionActions();
   const persistentSessionState = usePersistentSessionState();
   const sessionId = persistentSessionState.session?.id ?? null;
-  const { confirmClimbOnWall, setSessionBoardSerial } = persistentSessionActions;
+  const { confirmClimbOnWall, setSessionBoardSerial, reportWallDisconnect } = persistentSessionActions;
   // Mirror the live sessionId into a ref so the BLE-connect callback
   // (created during useBoardBluetooth init) reads the current value, not a
   // stale snapshot from the first render.
@@ -362,6 +362,22 @@ export function BluetoothProvider({
   useEffect(() => {
     sessionIdRef.current = sessionId;
   }, [sessionId]);
+  // Mirror reportWallDisconnect into a ref so the BLE connection-change
+  // callback stays identity-stable while still calling the latest action.
+  const reportWallDisconnectRef = useRef(reportWallDisconnect);
+  reportWallDisconnectRef.current = reportWallDisconnect;
+
+  // When this client's own BLE link to the wall drops while in a session,
+  // tell the session so every member's wall-confirmed lightbulb clears. The
+  // `connected` flag is false on an involuntary drop (gattserverdisconnected)
+  // AND on an explicit user disconnect; both should clear the shared
+  // indicator, since either way this client is no longer driving the wall.
+  // No-op in solo (reportWallDisconnect short-circuits with no active session).
+  const handleConnectionChange = useCallback((connected: boolean) => {
+    if (connected) return;
+    if (!sessionIdRef.current) return;
+    void reportWallDisconnectRef.current();
+  }, []);
 
   // Board presence ("now on the wall"). All of these are inert when the
   // `board-presence` flag is off: `enabled` is false, `boardId` is null,
@@ -463,6 +479,7 @@ export function BluetoothProvider({
       ledColorOverrides,
       analyticsBoardId: presenceBoardId,
       onConnectSuccess: handleConnectSuccess,
+      onConnectionChange: handleConnectionChange,
     });
 
   // Bumped by reassertWall() to force the auto-sender to re-push the current

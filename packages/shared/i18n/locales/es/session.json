@@ -218,10 +218,7 @@
       "logAttempt": "Registrar intento",
       "showParticipants": "Mostrar participantes",
       "hideParticipants": "Ocultar participantes",
-      "openPlayDrawer": "Abrir el bloque del muro",
-      "userIsDriving": "{{username}} está al mando",
-      "returnToWallClimb": "Volver al bloque de {{username}}",
-      "returnToWallClimbNoDriver": "Volver al bloque del muro"
+      "openPlayDrawer": "Abrir el bloque del muro"
     },
     "offline": {
       "idle": "Sin conexión",
@@ -251,12 +248,6 @@
   },
   "queueProvider": {
     "offlineLimitReached": "Has alcanzado el límite de la cola sin conexión. Vuelve a conectarte para sincronizar tus vías."
-  },
-  "driverToast": {
-    "firstDriver": "{{newDriver}} está manejando la pared.",
-    "tookFromOther": "{{newDriver}} le quitó la pared a {{previousDriver}}.",
-    "tookFromYou": "{{newDriver}} te quitó la pared.",
-    "unknownDriver": "Alguien"
   },
   "mobile": {
     "logbook": {
@@ -458,7 +449,6 @@
       "inLeaderboardTitle": "Quién escala",
       "inLeaderboardClimber": "Escalador",
       "inPresenceCount": "{{count}} escalando",
-      "inDriverLabel": "Al mando",
       "invite": "Invitar escaladores",
       "inviteTitle": "Invitar a esta sesión",
       "inviteSubtitle": "Escanea para unirte o comparte el enlace",
@@ -476,13 +466,8 @@
     "pause": "Pausar",
     "replay": "Repetir",
     "speed": "Velocidad de reproducción",
-    "onWallChip": "EN EL MURO · {{username}}",
-    "onWallChipNoDriver": "EN EL MURO",
-    "drivingChip": "AL MANDO",
     "audienceCount_one": "{{count}} más mirando",
     "audienceCount_other": "{{count}} más mirando",
-    "returnToWallPill": "{{username}} · {{climbName}}",
-    "previewCoachmark": "Vista previa. Toca la bombilla para enviar al muro.",
     "yourAscents_one": "Tu ascenso ({{count}})",
     "yourAscents_other": "Tus ascensos ({{count}})",
     "triesCount_one": "{{count}} intento",
@@ -502,10 +487,10 @@
       "openQueueAria": "Abrir cola",
       "queueCountAria": "Cola, {{count}} bloques",
       "lightbulb": {
-        "drivingNamed": "Estás controlando “{{name}}”. Toca para soltar.",
-        "driving": "Estás controlando. Toca para soltar.",
-        "takeNamed": "Tomar el control y enviar “{{name}}”",
-        "take": "Tomar el control del muro",
+        "litNamed": "“{{name}}” está en el muro. Toca para enviarla de nuevo.",
+        "lit": "Tu vía está en el muro. Toca para enviarla de nuevo.",
+        "sendNamed": "Enviar “{{name}}” al muro",
+        "send": "Enviar la vía al muro",
         "coachmark": "Enviar al muro"
       }
     },
