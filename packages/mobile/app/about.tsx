@@ -1,14 +1,18 @@
 import { useCallback } from 'react';
-import { Stack } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import { Platform, ScrollView, StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
+import { BoardseshLogo } from '../src/components/BoardseshLogo';
 import { Button } from '../src/components/Button';
 import { Icon } from '../src/components/Icon';
+import { PressableSurface } from '../src/components/PressableSurface';
 import { SectionHeader } from '../src/components/SectionHeader';
 import { Text } from '../src/components/Text';
 import { useBottomChromeMetrics } from '../src/hooks/use-bottom-chrome-metrics';
 import { openDiscordInvite } from '../src/lib/discord';
+import { openPartnershipsEmail, PARTNERSHIPS_EMAIL } from '../src/lib/partnerships';
 import { useTheme } from '../src/providers/theme-provider';
+import { useToast } from '../src/providers/toast-provider';
 import { borderRadius, spacing } from '../src/theme/tokens';
 import type { IconName } from '../src/components/icon-map';
 
@@ -20,11 +24,22 @@ type AboutCard = {
 
 export default function AboutScreen() {
   const { t } = useTranslation('common');
-  const { systemColors, brandColors } = useTheme();
+  const { systemColors } = useTheme();
   const bottomChrome = useBottomChromeMetrics();
+  const router = useRouter();
+  const { showToast } = useToast();
   const handleJoinDiscord = useCallback(() => {
     void openDiscordInvite('about');
   }, []);
+  const handlePartnerEmail = useCallback(() => {
+    // If no mail handler opens, surface the address so it can still be copied.
+    void openPartnershipsEmail().then((opened) => {
+      if (!opened) showToast(PARTNERSHIPS_EMAIL, 'info');
+    });
+  }, [showToast]);
+  const handleOpenAcknowledgements = useCallback(() => {
+    router.push('/acknowledgements');
+  }, [router]);
   const cards: AboutCard[] = [
     {
       icon: 'lightbulb',
@@ -60,9 +75,7 @@ export default function AboutScreen() {
         contentContainerStyle={[styles.container, { paddingBottom: bottomChrome.scrollBottomPadding + spacing[6] }]}
       >
         <View style={[styles.hero, { backgroundColor: systemColors.secondaryBackground }]}>
-          <View style={[styles.heroIcon, { backgroundColor: brandColors.primaryFill }]}>
-            <Icon name="boards.fill" size={32} color={brandColors.onPrimary} />
-          </View>
+          <BoardseshLogo size={88} style={styles.heroLogo} />
           <Text variant="title1" style={styles.heroTitle}>
             {t('mobile.about.heroTitle')}
           </Text>
@@ -100,6 +113,46 @@ export default function AboutScreen() {
             {t('mobile.about.independentBody')}
           </Text>
         </View>
+
+        <View style={[styles.notice, { backgroundColor: systemColors.secondaryBackground }]}>
+          <Text variant="headline" style={styles.noticeTitle}>
+            {t('mobile.about.partnerTitle')}
+          </Text>
+          <Text variant="subheadline" color={systemColors.secondaryLabel} style={styles.noticeBody}>
+            {t('mobile.about.partnerBody')}
+          </Text>
+          <Button
+            title={t('mobile.about.partnerCta')}
+            icon="mail"
+            size="large"
+            variant="outlined"
+            onPress={handlePartnerEmail}
+            style={styles.partnerButton}
+          />
+        </View>
+
+        <PressableSurface
+          onPress={handleOpenAcknowledgements}
+          feedback="opacity"
+          opacityTo={0.7}
+          accessibilityRole="button"
+          accessibilityLabel={t('mobile.about.acknowledgementsLink')}
+          style={[styles.linkRow, { backgroundColor: systemColors.secondaryBackground }]}
+        >
+          <View style={[styles.cardIcon, { backgroundColor: systemColors.fill }]}>
+            <Icon name="favorite.fill" size={22} color={systemColors.accent} />
+          </View>
+          <View style={styles.cardText}>
+            <Text variant="headline" style={styles.cardTitle}>
+              {t('mobile.about.acknowledgementsLink')}
+            </Text>
+            <Text variant="subheadline" color={systemColors.secondaryLabel} style={styles.cardBody}>
+              {t('mobile.about.acknowledgementsLinkBody')}
+            </Text>
+          </View>
+          <Icon name="chevron.right" size={16} color={systemColors.secondaryLabel} />
+        </PressableSurface>
+
         <Button title={t('mobile.about.joinDiscord')} icon="open.external" size="large" onPress={handleJoinDiscord} />
       </ScrollView>
     </>
@@ -119,12 +172,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[5],
     paddingVertical: spacing[8],
   },
-  heroIcon: {
-    width: 64,
-    height: 64,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: borderRadius.full,
+  heroLogo: {
     marginBottom: spacing[4],
   },
   heroTitle: {
@@ -177,5 +225,16 @@ const styles = StyleSheet.create({
   noticeBody: {
     marginTop: spacing[2],
     lineHeight: 20,
+  },
+  partnerButton: {
+    marginTop: spacing[4],
+    alignSelf: 'flex-start',
+  },
+  linkRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: borderRadius.lg,
+    padding: spacing[4],
+    gap: spacing[3],
   },
 });
