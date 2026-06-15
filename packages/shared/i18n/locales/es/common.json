@@ -328,6 +328,8 @@
       "privateSponsorsThanks": "y {{count}} más patrocinando en privado — gracias también",
       "becomeSponsor": "Hazte patrocinador",
       "personalTitle": "Agradecimientos personales",
+      "discordTitle": "Toda la gente de nuestro Discord",
+      "discordBody": "Gracias por la beta, la motivación y los reportes de fallos. Toca para unirte.",
       "friendsTitle": "La cuerda",
       "friendsBody": "{{names}}: por escucharme hablar sin parar de Boardsesh y por escalar de verdad en él.",
       "dogBody": "Gracias a Scout por todo el apoyo emocional, es la verdadera MVP de Boardsesh. A pesar de no escalar y solo querer ser una perra de playa.",

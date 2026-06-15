@@ -16,6 +16,7 @@ import {
   dogName,
   SPONSORS_URL,
 } from '../src/lib/acknowledgements';
+import { openDiscordInvite } from '../src/lib/discord';
 import { openExternalUrl } from '../src/lib/open-url';
 import { useTheme } from '../src/providers/theme-provider';
 import { borderRadius, spacing } from '../src/theme/tokens';
@@ -30,7 +31,7 @@ function Chip({ label, icon, onPress }: { label: string; icon?: IconName; onPres
       opacityTo={0.6}
       accessibilityRole="button"
       accessibilityLabel={label}
-      style={[styles.chip, { backgroundColor: systemColors.secondaryBackground }]}
+      style={[styles.chip, { backgroundColor: systemColors.fill }]}
     >
       {icon ? <Icon name={icon} size={13} color={systemColors.secondaryLabel} /> : null}
       <Text variant="subheadline" numberOfLines={1}>
@@ -98,6 +99,9 @@ export default function AcknowledgementsScreen() {
   const handleBecomeSponsor = useCallback(() => {
     void openExternalUrl(SPONSORS_URL, 'acknowledgements-sponsor');
   }, []);
+  const handleJoinDiscord = useCallback(() => {
+    void openDiscordInvite('acknowledgements');
+  }, []);
   const handleOpenScout = useCallback(() => {
     router.push('/scout');
   }, [router]);
@@ -132,24 +136,26 @@ export default function AcknowledgementsScreen() {
 
         <View style={styles.section}>
           <SectionHeader title={t('mobile.acknowledgements.contributorsTitle')} />
-          <Text variant="subheadline" color={systemColors.secondaryLabel} style={styles.sectionBody}>
-            {t('mobile.acknowledgements.contributorsBody')}
-          </Text>
-          <View style={styles.chips}>
-            {contributors.map((contributor) => (
-              <Chip
-                key={contributor.login}
-                label={contributor.name ?? contributor.login}
-                onPress={() => handleOpenProfile(contributor.htmlUrl)}
-              />
-            ))}
+          <View style={[styles.groupCard, { backgroundColor: systemColors.secondaryBackground }]}>
+            <Text variant="subheadline" color={systemColors.secondaryLabel} style={styles.sectionBody}>
+              {t('mobile.acknowledgements.contributorsBody')}
+            </Text>
+            <View style={styles.chips}>
+              {contributors.map((contributor) => (
+                <Chip
+                  key={contributor.login}
+                  label={contributor.name ?? contributor.login}
+                  onPress={() => handleOpenProfile(contributor.htmlUrl)}
+                />
+              ))}
+            </View>
           </View>
         </View>
 
         <View style={styles.section}>
           <SectionHeader title={t('mobile.acknowledgements.sponsorsTitle')} />
           {sponsors.length > 0 ? (
-            <>
+            <View style={[styles.groupCard, { backgroundColor: systemColors.secondaryBackground }]}>
               <Text variant="subheadline" color={systemColors.secondaryLabel} style={styles.sectionBody}>
                 {t('mobile.acknowledgements.sponsorsBody')}
               </Text>
@@ -168,10 +174,10 @@ export default function AcknowledgementsScreen() {
                   {t('mobile.acknowledgements.privateSponsorsThanks', { count: privateSponsorCount })}
                 </Text>
               ) : null}
-            </>
+            </View>
           ) : (
-            <View style={[styles.emptyCard, { backgroundColor: systemColors.secondaryBackground }]}>
-              <Text variant="subheadline" color={systemColors.secondaryLabel} style={styles.emptyText}>
+            <View style={[styles.groupCard, { backgroundColor: systemColors.secondaryBackground }]}>
+              <Text variant="subheadline" color={systemColors.secondaryLabel} style={styles.sectionBody}>
                 {privateSponsorCount > 0
                   ? t('mobile.acknowledgements.privateSponsorsThanks', { count: privateSponsorCount })
                   : t('mobile.acknowledgements.sponsorsEmpty')}
@@ -191,6 +197,12 @@ export default function AcknowledgementsScreen() {
         <View style={styles.section}>
           <SectionHeader title={t('mobile.acknowledgements.personalTitle')} />
           <View style={styles.cardStack}>
+            <ThanksCard
+              icon="discord"
+              title={t('mobile.acknowledgements.discordTitle')}
+              body={t('mobile.acknowledgements.discordBody')}
+              onPress={handleJoinDiscord}
+            />
             <ThanksCard
               icon="people"
               title={t('mobile.acknowledgements.friendsTitle')}
@@ -259,13 +271,15 @@ const styles = StyleSheet.create({
   section: {
     gap: spacing[2],
   },
+  groupCard: {
+    borderRadius: borderRadius.lg,
+    padding: spacing[4],
+    gap: spacing[3],
+  },
   sectionBody: {
-    paddingHorizontal: spacing[1],
     lineHeight: 20,
   },
   privateThanks: {
-    paddingHorizontal: spacing[1],
-    marginTop: spacing[1],
     lineHeight: 20,
     fontStyle: 'italic',
   },
@@ -273,7 +287,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing[2],
-    marginTop: spacing[1],
   },
   chip: {
     flexDirection: 'row',
@@ -312,13 +325,6 @@ const styles = StyleSheet.create({
   },
   cardBody: {
     marginTop: spacing[1],
-    lineHeight: 20,
-  },
-  emptyCard: {
-    borderRadius: borderRadius.lg,
-    padding: spacing[4],
-  },
-  emptyText: {
     lineHeight: 20,
   },
   sponsorButton: {

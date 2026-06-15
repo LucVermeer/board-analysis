@@ -103,6 +103,7 @@ export const iconMap = {
   'person.badge.plus': { ios: 'person.badge.plus', android: 'account-plus-outline' },
   people: { ios: 'person.2', android: 'account-multiple-outline' },
   'people.fill': { ios: 'person.2.fill', android: 'account-multiple' },
+  discord: { ios: 'bubble.left.and.bubble.right.fill', android: 'discord' },
   notification: { ios: 'bell', android: 'bell-outline' },
   'notification.fill': { ios: 'bell.fill', android: 'bell' },
 

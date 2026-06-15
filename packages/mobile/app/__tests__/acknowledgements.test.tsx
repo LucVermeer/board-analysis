@@ -5,6 +5,7 @@ import { createElement, type ReactNode } from 'react';
 
 const routerMock = vi.hoisted(() => ({ push: vi.fn() }));
 const openUrl = vi.hoisted(() => ({ openExternalUrl: vi.fn() }));
+const discord = vi.hoisted(() => ({ openDiscordInvite: vi.fn() }));
 
 vi.mock('react-native', () => ({
   Platform: { OS: 'ios' },
@@ -22,6 +23,7 @@ vi.mock('react-i18next', () => ({
         'mobile.acknowledgements.becomeSponsor': 'Become a sponsor',
         'mobile.acknowledgements.ossLicensesLink': 'Open source licenses',
         'mobile.acknowledgements.friendsTitle': 'The crew',
+        'mobile.acknowledgements.discordTitle': 'Everyone on our Discord',
         'mobile.acknowledgements.privateSponsorsThanks': `and ${vars?.count ?? 0} more sponsoring privately — thank you too`,
       })[key] ?? key,
   }),
@@ -46,6 +48,7 @@ vi.mock('../../src/lib/acknowledgements', () => ({
   SPONSORS_URL: 'https://github.com/sponsors/boardsesh',
 }));
 vi.mock('../../src/lib/open-url', () => openUrl);
+vi.mock('../../src/lib/discord', () => discord);
 
 vi.mock('../../src/components/Button', () => ({
   Button: ({ onPress, title }: { onPress: () => void; title: string }) =>
@@ -86,6 +89,7 @@ import AcknowledgementsScreen from '../acknowledgements';
 beforeEach(() => {
   routerMock.push.mockClear();
   openUrl.openExternalUrl.mockClear();
+  discord.openDiscordInvite.mockClear();
 });
 
 describe('AcknowledgementsScreen', () => {
@@ -116,6 +120,14 @@ describe('AcknowledgementsScreen', () => {
 
     expect(screen.getByText('The crew')).toBeTruthy();
     expect(screen.getByText('Scout')).toBeTruthy();
+  });
+
+  it('opens the Discord invite from the community card', () => {
+    render(<AcknowledgementsScreen />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Everyone on our Discord' }));
+
+    expect(discord.openDiscordInvite).toHaveBeenCalledWith('acknowledgements');
   });
 
   it('links to the open source licenses screen', () => {

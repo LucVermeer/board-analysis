@@ -130,6 +130,8 @@
       "privateSponsorsThanks": "and {{count}} more sponsoring privately — thank you too",
       "becomeSponsor": "Become a sponsor",
       "personalTitle": "Personal thanks",
+      "discordTitle": "Everyone on our Discord",
+      "discordBody": "Thanks for the beta, the psyche, and the bug reports. Tap to join.",
       "friendsTitle": "The crew",
       "friendsBody": "{{names}} — for listening to me go on about Boardsesh, and for actually climbing on it.",
       "dogBody": "Thanks Scout for all the emotional support, she's the real MVP of Boardsesh. Despite not even climbing and just wanting to be a beach dog.",
