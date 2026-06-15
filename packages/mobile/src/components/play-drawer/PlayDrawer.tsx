@@ -1,5 +1,6 @@
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
+import { forwardRef, useCallback, useContext, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { View, Pressable, StyleSheet, useWindowDimensions } from 'react-native';
+import { BoardPresenceCurrentContext } from '@boardsesh/board-presence-react';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -200,6 +201,13 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
       }),
     [bluetoothConnected, bluetoothLoading],
   );
+  // The lightbulb reads lit if *anyone* is connected to the board, not just this
+  // device: in a session every member shares the wall, so another member's
+  // connection (the board-presence holder) lights it too. Read the context
+  // directly (non-throwing) so the portaled drawer never crashes if it renders
+  // outside the provider. The press action still keys on THIS device's BLE.
+  const boardPresenceCurrent = useContext(BoardPresenceCurrentContext);
+  const lightbulbActive = lightbulbState.lightbulbActive || boardPresenceCurrent?.holder != null;
   // Queue-mutation gating comes from the provider's roster-aware selector (a
   // solo occupant keeps full control).
   const isPartyPreviewOnly = useIsPartyPreviewOnly();
@@ -681,7 +689,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
                   supportsMirroring={supportsMirroring}
                   isFavorited={isFavorited}
                   remainingQueueCount={navigationState.remainingCount}
-                  lightbulbActive={lightbulbState.lightbulbActive}
+                  lightbulbActive={lightbulbActive}
                   lightbulbPending={lightbulbState.lightbulbPending}
                   lightbulbLongPressEnabled={bluetoothConnected}
                   ascentCount={ascentCount}
