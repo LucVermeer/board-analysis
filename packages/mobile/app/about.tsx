@@ -10,11 +10,14 @@ import { SectionHeader } from '../src/components/SectionHeader';
 import { Text } from '../src/components/Text';
 import { useBottomChromeMetrics } from '../src/hooks/use-bottom-chrome-metrics';
 import { openDiscordInvite } from '../src/lib/discord';
+import { openExternalUrl } from '../src/lib/open-url';
 import { openPartnershipsEmail, PARTNERSHIPS_EMAIL } from '../src/lib/partnerships';
 import { useTheme } from '../src/providers/theme-provider';
 import { useToast } from '../src/providers/toast-provider';
 import { borderRadius, spacing } from '../src/theme/tokens';
 import type { IconName } from '../src/components/icon-map';
+
+const GITHUB_REPO_URL = 'https://github.com/boardsesh/boardsesh';
 
 type AboutCard = {
   icon: IconName;
@@ -40,6 +43,9 @@ export default function AboutScreen() {
   const handleOpenAcknowledgements = useCallback(() => {
     router.push('/acknowledgements');
   }, [router]);
+  const handleOpenGithub = useCallback(() => {
+    void openExternalUrl(GITHUB_REPO_URL, 'about-github');
+  }, []);
   const cards: AboutCard[] = [
     {
       icon: 'lightbulb',
@@ -50,11 +56,6 @@ export default function AboutScreen() {
       icon: 'boards',
       title: t('mobile.about.boardsTitle'),
       body: t('mobile.about.boardsBody'),
-    },
-    {
-      icon: 'people',
-      title: t('mobile.about.openTitle'),
-      body: t('mobile.about.openBody'),
     },
   ];
 
@@ -107,11 +108,22 @@ export default function AboutScreen() {
 
         <View style={[styles.notice, { backgroundColor: systemColors.secondaryBackground }]}>
           <Text variant="headline" style={styles.noticeTitle}>
-            {t('mobile.about.independentTitle')}
+            {t('mobile.about.openTitle')}
+          </Text>
+          <Text variant="subheadline" color={systemColors.secondaryLabel} style={styles.noticeBody}>
+            {t('mobile.about.openBody')}
           </Text>
           <Text variant="subheadline" color={systemColors.secondaryLabel} style={styles.noticeBody}>
             {t('mobile.about.independentBody')}
           </Text>
+          <Button
+            title={t('mobile.about.viewOnGithub')}
+            icon="github"
+            size="large"
+            variant="outlined"
+            onPress={handleOpenGithub}
+            style={styles.partnerButton}
+          />
         </View>
 
         <View style={[styles.notice, { backgroundColor: systemColors.secondaryBackground }]}>

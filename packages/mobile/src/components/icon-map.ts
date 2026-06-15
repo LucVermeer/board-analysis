@@ -45,6 +45,7 @@ export const iconMap = {
   paw: { ios: 'pawprint.fill', android: 'paw' },
   flag: { ios: 'flag', android: 'flag-outline' },
   link: { ios: 'link', android: 'link-variant' },
+  github: { ios: 'chevron.left.forwardslash.chevron.right', android: 'github' },
   upload: { ios: 'square.and.arrow.up', android: 'upload-outline' },
   delete: { ios: 'trash', android: 'delete-outline' },
   'delete.fill': { ios: 'trash.fill', android: 'delete' },

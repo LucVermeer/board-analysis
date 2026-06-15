@@ -30,8 +30,8 @@ vi.mock('react-i18next', () => ({
     t: (key: string) =>
       ({
         'mobile.about.joinDiscord': 'Join Discord',
-        'mobile.about.partnerCta': 'partnerships@boardsesh.com',
         'mobile.about.acknowledgementsLink': 'Acknowledgements',
+        'mobile.about.viewOnGithub': 'View on GitHub',
       })[key] ?? key,
   }),
 }));
@@ -119,5 +119,13 @@ describe('AboutScreen partnerships + acknowledgements', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Acknowledgements' }));
 
     expect(routerMock.push).toHaveBeenCalledWith('/acknowledgements');
+  });
+
+  it('opens the GitHub repository from the open-source card', () => {
+    render(<AboutScreen />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'View on GitHub' }));
+
+    expect(browser.openBrowserAsync).toHaveBeenCalledWith('https://github.com/boardsesh/boardsesh');
   });
 });
