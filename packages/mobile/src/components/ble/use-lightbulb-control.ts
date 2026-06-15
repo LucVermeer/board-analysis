@@ -60,7 +60,6 @@ export function useLightbulbControl(options: UseLightbulbControlOptions): Lightb
 
   const localConnected = bluetooth?.isConnected ?? false;
   const pending = bluetooth?.loading ?? false;
-  const hasBluetooth = bluetooth !== null;
 
   const lit = deriveLightbulbLit({
     localConnected,
@@ -72,7 +71,8 @@ export function useLightbulbControl(options: UseLightbulbControlOptions): Lightb
   const onPress = useCallback(() => {
     if (!bluetooth) return;
     const pressAction = derivePlayDrawerLightbulbPressAction({
-      hasBluetooth,
+      // Guaranteed non-null by the guard above.
+      hasBluetooth: true,
       isBluetoothConnected: bluetooth.isConnected,
       isBluetoothLoading: bluetooth.loading,
     });
@@ -95,7 +95,7 @@ export function useLightbulbControl(options: UseLightbulbControlOptions): Lightb
     });
     bluetooth.armUndoWallChangeToast();
     void bluetooth.connect(undefined, undefined, bluetooth.reconnectSerialForCurrentBoard ?? undefined);
-  }, [bluetooth, hasBluetooth, source, sessionId, boardLayout, climbUuid]);
+  }, [bluetooth, source, sessionId, boardLayout, climbUuid]);
 
   return { bluetooth, lit, localConnected, pending, onPress };
 }
