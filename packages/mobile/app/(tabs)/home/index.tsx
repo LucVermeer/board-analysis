@@ -155,7 +155,7 @@ export default function HomeTab() {
   }, []);
 
   const handleSessionPress = useCallback(
-    (session: SessionFeedItem) => navigateToSessionFeedItem(router, session),
+    (session: SessionFeedItem) => navigateToSessionFeedItem(router, session, '/home/session/[sessionId]'),
     [router],
   );
 
