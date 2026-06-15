@@ -21,6 +21,8 @@ type ButtonProps = {
   loading?: boolean;
   haptic?: boolean;
   tintColor?: string;
+  /** Native test identifier (used by Maestro screenshot flows). */
+  testID?: string;
   style?: ViewStyle;
 };
 
@@ -49,6 +51,7 @@ function ButtonMaterial({
   loading = false,
   haptic = true,
   tintColor,
+  testID,
   style,
 }: ButtonProps) {
   const { brandColors: brand } = useTheme();
@@ -77,6 +80,7 @@ function ButtonMaterial({
       // Approximate the small/medium/large ladder on Paper's single-height button.
       labelStyle={{ fontSize: config.fontSize }}
       contentStyle={{ paddingVertical: config.paddingVertical }}
+      testID={testID}
       style={style}
     >
       {title}
@@ -95,6 +99,7 @@ function ButtonGlass({
   loading = false,
   haptic = true,
   tintColor,
+  testID,
   style,
 }: ButtonProps) {
   const config = sizeConfig[size];
@@ -139,6 +144,7 @@ function ButtonGlass({
       accessibilityRole="button"
       accessibilityState={{ disabled: disabled || loading }}
       accessibilityLabel={title}
+      testID={testID}
       style={[containerStyle, style]}
     >
       {icon && <Icon name={icon} size={config.iconSize} color={textColor} />}

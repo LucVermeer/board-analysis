@@ -3,7 +3,9 @@
  * App Store Screenshot Generation
  *
  * Captures screenshots at iPhone 14 Plus 6.5" resolution for App Store submission.
- * Screenshots are saved to mobile/screenshots/ for upload to App Store Connect.
+ * Screenshots are saved to mobile/screenshots/web/ for upload to App Store
+ * Connect. (Native RN captures live under mobile/screenshots/ios|android/ —
+ * see scripts/mobile-screenshots.ts.)
  *
  * Run via the dedicated Playwright project (viewport set in playwright.config.ts):
  *   cd packages/web && bunx playwright test --project=app-store-screenshots
@@ -33,7 +35,7 @@ import {
   waitForSkeletonsGone,
 } from './helpers/waits';
 
-const SCREENSHOT_DIR = path.resolve(__dirname, '../../../mobile/screenshots');
+const SCREENSHOT_DIR = path.resolve(__dirname, '../../../mobile/screenshots/web');
 const boardUrl = '/kilter/original/12x12-square/screw_bolt/40/list';
 
 // Board-page screenshots: beforeEach navigates to the board list.

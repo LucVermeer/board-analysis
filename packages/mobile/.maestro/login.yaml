@@ -1,0 +1,25 @@
+appId: com.boardsesh.app
+name: login (subflow)
+---
+# Reusable login subflow. The screenshots build cold-launches signed out, so the
+# auth screen is already up. Fill the seeded test credentials (passed by the
+# orchestrator via `maestro test -e SCREENSHOT_USER_EMAIL=... -e
+# SCREENSHOT_USER_PASSWORD=...`) and wait until the app redirects out of auth.
+- assertVisible:
+    id: 'auth-email-input'
+    timeout: 30000
+- tapOn:
+    id: 'auth-email-input'
+- inputText: ${SCREENSHOT_USER_EMAIL}
+- tapOn:
+    id: 'auth-password-input'
+- inputText: ${SCREENSHOT_USER_PASSWORD}
+- hideKeyboard
+- tapOn:
+    id: 'auth-submit-button'
+# The email field disappearing is the reliable "auth succeeded + redirected"
+# signal — more robust than racing a specific tab's content load.
+- extendedWaitUntil:
+    notVisible:
+      id: 'auth-email-input'
+    timeout: 45000

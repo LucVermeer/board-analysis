@@ -505,6 +505,10 @@ export default defineConfig({
         command: 'bash scripts/mobile-screenshot.sh',
         cache: false,
       },
+      'mobile:screenshots': {
+        command: 'tsx scripts/mobile-screenshots.ts',
+        cache: false,
+      },
       'mobile:publish': {
         command: 'tsx scripts/mobile-publish.ts',
         cache: false,

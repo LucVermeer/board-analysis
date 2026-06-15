@@ -3,6 +3,7 @@ import { router, useSegments } from 'expo-router';
 import * as Linking from 'expo-linking';
 import { hasSeenOnboarding } from '../../lib/onboarding/onboarding-storage';
 import { useProfile } from '../../lib/graphql/hooks';
+import { SCREENSHOT_MODE } from '../../lib/screenshot-mode';
 
 type OnboardingGateProps = {
   /** True once auth + fonts are resolved and the splash has hidden. */
@@ -51,6 +52,9 @@ export function OnboardingGate({ ready }: OnboardingGateProps) {
 
   useEffect(() => {
     if (!ready || decidedRef.current) return;
+    // Screenshot builds never auto-present the tour: the app-store flow needs to
+    // reach the tabs, and the onboarding-capture flow opens /onboarding itself.
+    if (SCREENSHOT_MODE) return;
     decidedRef.current = true;
 
     let cancelled = false;

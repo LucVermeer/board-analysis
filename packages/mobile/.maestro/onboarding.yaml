@@ -1,0 +1,30 @@
+appId: com.boardsesh.app
+name: onboarding illustrations
+---
+# Captures real app screens to embed as onboarding-card illustrations (the cards
+# fall back to SF Symbol / MDI glyphs when no image is present — see
+# onboarding-cards.ts). The orchestrator crops these to the card content region
+# and writes them under packages/mobile/assets/onboarding/.
+#
+# Card -> screen mapping (welcome/connect/find/play):
+#   welcome -> climbs list   (the browse hero)
+#   play    -> discover      (playlists)
+# TODO(connect): BLE device picker — needs screenshot-mode demo BLE devices
+#   (the simulator has no Bluetooth). Mirror web's e2e-bluetooth-picker flag.
+# TODO(find): board/climb detail — needs a deterministic deep link to a seeded
+#   climb (com.boardsesh.app://climbs/<uuid>) or a stable climb-row testID to tap.
+- launchApp:
+    clearState: true
+- runFlow: login.yaml
+
+- openLink: com.boardsesh.app://climbs
+- extendedWaitUntil:
+    visible:
+      id: 'climb-list'
+    timeout: 30000
+- waitForAnimationToEnd
+- takeScreenshot: onboarding-welcome
+
+- openLink: com.boardsesh.app://discover
+- waitForAnimationToEnd
+- takeScreenshot: onboarding-play

@@ -141,6 +141,7 @@ export function OnboardingCarousel({
     ({ item }: ListRenderItemInfo<OnboardingCardData>) => (
       <OnboardingCard
         icon={item.icon}
+        image={item.image}
         title={copy[item.id].title}
         body={copy[item.id].body}
         width={pageWidth}

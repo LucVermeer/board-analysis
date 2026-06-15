@@ -1,0 +1,53 @@
+appId: com.boardsesh.app
+name: app-store screenshots
+---
+# App Store / Play Store hero shots. Logs in once, then deep-links to each main
+# tab and captures it. The filter sheet is captured LAST so its (slightly more
+# fragile) tap can't disturb the earlier tab captures.
+- launchApp:
+    clearState: true
+- runFlow: login.yaml
+
+# Climbs — the main browse surface (grades, board art).
+- openLink: com.boardsesh.app://climbs
+- extendedWaitUntil:
+    visible:
+      id: 'climb-list'
+    timeout: 30000
+- waitForAnimationToEnd
+- takeScreenshot: 01-climbs
+
+# Discover — playlists.
+- openLink: com.boardsesh.app://discover
+- waitForAnimationToEnd
+- takeScreenshot: 03-discover
+
+# Record — session / live wall.
+- openLink: com.boardsesh.app://record
+- waitForAnimationToEnd
+- takeScreenshot: 04-record
+
+# Profile — stats, sessions, logbook.
+- openLink: com.boardsesh.app://profile
+- waitForAnimationToEnd
+- takeScreenshot: 05-profile
+
+# Home — social feed. Captured after the others so the feed query has settled.
+- openLink: com.boardsesh.app://home
+- extendedWaitUntil:
+    visible:
+      id: 'home-screen'
+    timeout: 30000
+- waitForAnimationToEnd
+- takeScreenshot: 00-home
+
+# Search filters sheet — opened from Climbs. The filter button is matched by its
+# "Filters" accessibility label (en-US, no active filters at flow start).
+- openLink: com.boardsesh.app://climbs
+- extendedWaitUntil:
+    visible:
+      id: 'climb-list'
+    timeout: 30000
+- tapOn: 'Filters'
+- waitForAnimationToEnd
+- takeScreenshot: 02-search-filters

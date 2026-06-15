@@ -528,7 +528,7 @@ jobs:
         # soft-fail notice. Wipe them first so the stage step only ever
         # sees files the current Playwright run actually wrote.
         run: |
-          rm -f mobile/screenshots/*.png \
+          rm -f mobile/screenshots/web/*.png \
                 packages/web/public/help/*.png \
                 packages/web/e2e/screenshots/layouts/*.png
 
@@ -560,7 +560,7 @@ jobs:
         if: always()
         run: |
           mkdir -p screenshots-out/app-store screenshots-out/layouts screenshots-out/help
-          cp mobile/screenshots/*.png                     screenshots-out/app-store/ 2>/dev/null || true
+          cp mobile/screenshots/web/*.png                 screenshots-out/app-store/ 2>/dev/null || true
           cp packages/web/e2e/screenshots/layouts/*.png    screenshots-out/layouts/   2>/dev/null || true
           cp packages/web/public/help/*.png                screenshots-out/help/      2>/dev/null || true
           ls -R screenshots-out || true

@@ -130,6 +130,7 @@ export default function LoginScreen() {
 
         <View style={styles.form}>
           <AuthTextInput
+            testID="auth-email-input"
             label={t('login.fields.email')}
             value={email}
             onChangeText={setEmail}
@@ -145,6 +146,7 @@ export default function LoginScreen() {
           />
           <AuthTextInput
             ref={passwordRef}
+            testID="auth-password-input"
             label={t('login.fields.password')}
             value={password}
             onChangeText={setPassword}
@@ -163,6 +165,7 @@ export default function LoginScreen() {
             hideLabel={t('login.a11y.hidePassword')}
           />
           <Button
+            testID="auth-submit-button"
             title={t('nativeStart.signIn')}
             onPress={() => {
               void onSubmit();
