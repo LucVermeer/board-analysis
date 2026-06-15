@@ -9,25 +9,13 @@ import Animated, {
   useAnimatedStyle,
   useDerivedValue,
 } from 'react-native-reanimated';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../providers/theme-provider';
 import { useNativeGlass } from '../../hooks/use-native-glass';
 import { spacing, shadows } from '../../theme/tokens';
-
-// The scrim fades the *scene* background to clear, so it must match the
-// navigation scene background set in the root ThemedNavigation: black in dark,
-// the React Navigation DefaultTheme grey (rgb 242,242,242) in light. We can't
-// derive it from systemColors.background — on iOS that's a PlatformColor, which
-// expo-linear-gradient bakes into a static CGColor against the OS trait: it
-// ignored the in-app dark override (white band when the phone was light but the
-// app forced dark) AND, being pure white, banded over the grey light scene.
-// Concrete per-scheme values keyed off our override-aware colorScheme fix both.
-// (Defined locally to keep this component out of the PlatformColor import chain.)
-const SCRIM_BACKGROUND_DARK = '#000000';
-const SCRIM_BACKGROUND_LIGHT = '#F2F2F2';
 import { Text } from '../Text';
 import { GlassSurface } from '../GlassSurface';
+import { ProgressiveBlur } from '../ProgressiveBlur';
 import { PressableSurface } from '../PressableSurface';
 import { TOP_ACTION_SIZE } from './GlassActionToolbar';
 
@@ -108,31 +96,16 @@ export function CollapsingLargeTitleHeader({
   centerContent,
   children,
 }: CollapsingLargeTitleHeaderProps) {
-  const { systemColors, colorScheme } = useTheme();
+  const { systemColors } = useTheme();
   const nativeGlass = useNativeGlass();
   const insets = useSafeAreaInsets();
   const { progress, collapsed } = useCollapseProgress(scrollY);
 
-  // A concrete string background (Android / Material variant) is already
-  // override-correct, so use it as-is; otherwise (an iOS PlatformColor, which the
-  // gradient can't resolve against the override) substitute the concrete scrim
-  // colour for our resolved colorScheme.
-  const scrimColor =
-    typeof systemColors.background === 'string'
-      ? systemColors.background
-      : colorScheme === 'dark'
-        ? SCRIM_BACKGROUND_DARK
-        : SCRIM_BACKGROUND_LIGHT;
-
-  // The scrim is invisible at rest and fades in as content scrolls up under the
-  // islands — the iOS nav-bar idiom. At rest the list insets its content below
-  // the measured chrome height, so there's nothing to mask; painting an opaque
-  // scrim there just showed a visible band over the scene (it can't match every
-  // screen's background). Fading it on scroll removes the at-rest band while
-  // still masking content that scrolls into the gaps between the islands.
-  const scrimStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(scrollY.value, [0, 12], [0, 1], Extrapolation.CLAMP),
-  }));
+  // The progressive blur spans the status bar + the islands row, down to just
+  // below the capsules, and fades to clear at its bottom (see ProgressiveBlur). It
+  // frosts content that scrolls up under the islands instead of painting a flat
+  // band, and self-hides at rest (blurring the empty scene reads as the scene).
+  const blurHeight = insets.top + spacing[1] + TOP_ACTION_SIZE + spacing[2];
 
   // Only the centre content (which is leaving) fades — flattening its glass
   // mid-fade is invisible because it's disappearing. The capsule that *stays*
@@ -154,18 +127,11 @@ export function CollapsingLargeTitleHeader({
 
   return (
     <View pointerEvents="box-none" style={[styles.container, { paddingTop: insets.top }]} onLayout={handleLayout}>
-      {/* Scrim: matches the scene background and fades in on scroll so content
-          scrolling up doesn't bleed through the gaps between the islands. Hidden
-          at rest (nothing to mask). Starts below the status-bar inset so the
-          Dynamic Island / status-bar strip stays transparent (content scrolls
-          under it, as on a native nav bar) — only the islands row is masked. */}
-      <Animated.View pointerEvents="none" style={[styles.scrim, { top: insets.top }, scrimStyle]}>
-        <LinearGradient
-          colors={[scrimColor, scrimColor, 'transparent'] as const}
-          locations={[0, 0.7, 1]}
-          style={StyleSheet.absoluteFill}
-        />
-      </Animated.View>
+      {/* Progressive glass: a blur from the top of the screen down to just below
+          the capsules, strongest up top and fading to clear — so content frosts
+          out gradually under the islands and the Dynamic Island / status-bar strip
+          reads as glass rather than an opaque band. */}
+      <ProgressiveBlur style={[styles.blur, { height: blurHeight }]} />
       <View pointerEvents="box-none" style={styles.row}>
         {/* Left island (anchored left). */}
         {leftActions ? (
@@ -242,13 +208,13 @@ const styles = StyleSheet.create({
     right: 0,
     zIndex: 20,
   },
-  // Sits below the status-bar inset (top is applied inline) so the scrim never
-  // covers the Dynamic Island / status-bar strip — only the islands row + below.
-  scrim: {
+  // Progressive blur layer (height applied inline): spans from the top of the
+  // screen down to just below the capsules, behind the islands row.
+  blur: {
     position: 'absolute',
+    top: 0,
     left: 0,
     right: 0,
-    bottom: 0,
   },
   row: {
     height: TOP_ACTION_SIZE,

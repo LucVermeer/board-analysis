@@ -1,10 +1,7 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { render, fireEvent } from '@testing-library/react';
 import { createElement, type ReactNode } from 'react';
-
-// Mutable across tests so we can exercise both colour schemes against the scrim.
-const themeMock = vi.hoisted(() => ({ colorScheme: 'dark' as 'dark' | 'light' }));
 
 type ViewMockProps = {
   children?: ReactNode;
@@ -26,8 +23,8 @@ vi.mock('react-native', () => ({
 }));
 
 vi.mock('expo-linear-gradient', () => ({
-  LinearGradient: ({ children, colors }: { children?: ReactNode; colors?: readonly string[] }) =>
-    createElement('div', { 'data-gradient': 'true', 'data-colors': JSON.stringify(colors) }, children),
+  LinearGradient: ({ children }: { children?: ReactNode }) =>
+    createElement('div', { 'data-gradient': 'true' }, children),
 }));
 // useAnimatedReaction is a no-op so `collapsed` stays false; the collapsed title
 // capsule never mounts but the centre-content fade wrapper always does.
@@ -49,14 +46,12 @@ vi.mock('react-native-safe-area-context', () => ({
 
 vi.mock('../../../providers/theme-provider', () => ({
   useTheme: () => ({
-    colorScheme: themeMock.colorScheme,
+    colorScheme: 'light',
     systemColors: {
       label: '#000',
       separator: '#ccc',
       elevatedSurface: '#fff',
-      // Non-string sentinel = an iOS PlatformColor (OpaqueColorValue); this is the
-      // case that triggers the concrete scrim-colour resolution from colorScheme.
-      background: { semantic: 'systemBackground' },
+      background: '#fff',
     },
   }),
 }));
@@ -94,10 +89,6 @@ function makeProps(over: Partial<Parameters<typeof CollapsingLargeTitleHeader>[0
 }
 
 describe('CollapsingLargeTitleHeader', () => {
-  afterEach(() => {
-    themeMock.colorScheme = 'dark';
-  });
-
   it('renders the leftActions / rightActions / centerContent / children slots when provided', () => {
     const { container } = render(
       <CollapsingLargeTitleHeader
@@ -133,9 +124,9 @@ describe('CollapsingLargeTitleHeader', () => {
       />,
     );
 
-    // The scrim is also an animated view, so target the wrapper that actually
-    // holds the centre content rather than the first animated view in the tree.
-    expect(container.querySelector('[data-animated-view="true"] [data-testid="center"]')).not.toBeNull();
+    const fadeWrapper = container.querySelector('[data-animated-view="true"]');
+    expect(fadeWrapper).not.toBeNull();
+    expect(fadeWrapper?.querySelector('[data-testid="center"]')).not.toBeNull();
   });
 
   it('does not render the collapsed title capsule while collapsed is false', () => {
@@ -146,26 +137,13 @@ describe('CollapsingLargeTitleHeader', () => {
     expect(container.querySelector('[data-pressable="You"]')).toBeNull();
   });
 
-  it('uses a concrete dark scrim colour in a dark override (not a light PlatformColor)', () => {
-    // Regression: the scrim fed expo-linear-gradient a PlatformColor, which bakes
-    // against the OS trait — so the header stayed light-mode white when the phone
-    // was light but the app was forced dark. With colorScheme 'dark' the scrim
-    // must resolve to the concrete dark background, never white.
-    themeMock.colorScheme = 'dark';
+  it('renders the progressive blur behind the header islands', () => {
     const { container } = render(<CollapsingLargeTitleHeader {...makeProps()} />);
-    const gradient = container.querySelector('[data-gradient="true"]');
-    const colors = JSON.parse(gradient?.getAttribute('data-colors') ?? '[]') as string[];
-    expect(colors[0]).toBe('#000000');
-    expect(colors).not.toContain('#FFFFFF');
-  });
-
-  it('uses the grey scene scrim colour in light, never pure white (no banding over the grey scene)', () => {
-    themeMock.colorScheme = 'light';
-    const { container } = render(<CollapsingLargeTitleHeader {...makeProps()} />);
-    const gradient = container.querySelector('[data-gradient="true"]');
-    const colors = JSON.parse(gradient?.getAttribute('data-colors') ?? '[]') as string[];
-    expect(colors[0]).toBe('#F2F2F2');
-    expect(colors).not.toContain('#FFFFFF');
+    // ProgressiveBlur renders a MaskedView wrapping the BlurView (both stubbed in
+    // the mobile test config). Its own colour-scheme behaviour is covered by
+    // progressive-blur.test.tsx.
+    expect(container.querySelector('[data-testid="masked-view"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="blur-view"]')).not.toBeNull();
   });
 
   it('reports its measured height through onHeightChange (container onLayout)', () => {
