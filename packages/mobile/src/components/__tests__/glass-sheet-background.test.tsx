@@ -25,6 +25,7 @@ vi.mock('../../providers/theme-provider', () => ({
     systemColors: { secondaryBackground: '#1C1C1E' },
     // Material variant corners; null on Liquid Glass — both are valid style entries.
     sheet: { corners: { borderTopLeftRadius: 28, borderTopRightRadius: 28 } },
+    colorScheme: 'dark',
   }),
 }));
 
@@ -32,10 +33,14 @@ vi.mock('../../theme/tokens', () => ({
   sheetStyles: { background: { borderTopLeftRadius: 16, borderTopRightRadius: 16 } },
 }));
 
+vi.mock('../../theme/colors', () => ({
+  playDrawerMaterialTint: { light: 'rgba(255, 255, 255, 0.6)', dark: 'rgba(15, 11, 22, 0.55)' },
+}));
+
 import { GlassSheetBackground } from '../GlassSheetBackground';
 
 // gorhom passes more than style/pointerEvents; the component only reads those.
-function renderBackground(props: { style?: unknown; pointerEvents?: string }) {
+function renderBackground(props: { style?: unknown; pointerEvents?: string; opaqueMaterial?: boolean }) {
   return render(createElement(GlassSheetBackground, props as unknown as ComponentProps<typeof GlassSheetBackground>));
 }
 
@@ -46,6 +51,16 @@ describe('GlassSheetBackground', () => {
     expect(glass.props?.glassEffectStyle).toBe('regular');
     expect(glass.props?.fallbackColor).toBe('#1C1C1E');
     expect(glass.props?.pointerEvents).toBe('auto');
+  });
+
+  it('leaves the material untinted by default so sibling sheets keep the lighter glass', () => {
+    renderBackground({ style: { flex: 1 }, pointerEvents: 'auto' });
+    expect(glass.props?.tintColor).toBeUndefined();
+  });
+
+  it('tints the material with the scheme-aware play-drawer tint when opaqueMaterial is set', () => {
+    renderBackground({ style: { flex: 1 }, pointerEvents: 'auto', opaqueMaterial: true });
+    expect(glass.props?.tintColor).toBe('rgba(15, 11, 22, 0.55)'); // dark scheme from the theme mock
   });
 
   it("forwards gorhom's positioning style, rounds the top corners, and clips the blur fallback", () => {

@@ -168,6 +168,19 @@ export type AndroidFallbackColors = typeof androidFallbackColors;
 export type MaterialSurfaces = typeof materialSurfaces;
 
 /**
+ * Translucent tint composited over the Play Drawer's frosted material so its
+ * full-screen "now playing" takeover reads as a denser, more opaque surface than
+ * the lighter glass the other sheets use — board art behind it is muted, not
+ * crisp. Kept translucent so the material still reads as frosted glass, just
+ * heavier. Scheme-keyed so the drawer stays light in light mode and dark in dark
+ * mode; only the opacity of the material changes.
+ */
+export const playDrawerMaterialTint = {
+  light: 'rgba(255, 255, 255, 0.6)',
+  dark: 'rgba(15, 11, 22, 0.55)',
+} as const;
+
+/**
  * Normalise a `#RGB`/`#RRGGBB` hex string to a 6-digit hex (no `#`), or return
  * `null` for any other format (already-`rgba()`, named colour, PlatformColor).
  * Shared by `withAlpha` and `parseHex` so the expansion/validation rule can't
