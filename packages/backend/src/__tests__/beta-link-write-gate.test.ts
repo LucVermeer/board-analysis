@@ -3,7 +3,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const { mockDbSelect } = vi.hoisted(() => ({
   mockDbSelect: vi.fn(() => ({
     from: () => ({
-      innerJoin: () => ({ where: () => Promise.resolve([]) }),
+      // The conflict check uses LEFT JOIN (changed from INNER JOIN so beta links
+      // for unsynced climbs are not silently excluded from the dedup query).
+      leftJoin: () => ({ where: () => Promise.resolve([]) }),
     }),
   })),
 }));
@@ -155,7 +157,7 @@ describe('validateAndEnrichBetaLinkInsert (gate)', () => {
       order.push('db');
       return {
         from: () => ({
-          innerJoin: () => ({ where: () => Promise.resolve([]) }),
+          leftJoin: () => ({ where: () => Promise.resolve([]) }),
         }),
       };
     }) as unknown as () => never);
@@ -222,7 +224,7 @@ describe('findInstagramShortcodeConflict', () => {
     // void-returning signature `mockDbSelect` got from its initial setup.
     mockDbSelect.mockImplementation((() => ({
       from: () => ({
-        innerJoin: () => ({
+        leftJoin: () => ({
           where: () => Promise.resolve(rows.map((row) => ({ boardType: 'kilter', ...row }))),
         }),
       }),

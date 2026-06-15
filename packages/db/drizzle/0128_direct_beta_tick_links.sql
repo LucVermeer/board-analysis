@@ -41,7 +41,22 @@ UPDATE board_beta_links bl
 SET video_identity = ranked_identities.video_identity
 FROM ranked_identities
 WHERE bl.ctid = ranked_identities.row_id
-  AND ranked_identities.identity_rank = 1;--> statement-breakpoint
+  AND ranked_identities.identity_rank = 1;
+-- NOTE: only the rank-1 winner per video_identity gets backfilled above.
+-- Loser rows (duplicate links resolving to the same identity) are left with
+-- video_identity = NULL so they are invisible to the partial unique index.
+-- They do not cause constraint violations but are stale. A follow-up
+-- cleanup migration should delete them with:
+--   DELETE FROM board_beta_links loser
+--   WHERE loser.video_identity IS NULL
+--     AND EXISTS (
+--       SELECT 1 FROM board_beta_links winner
+--       WHERE winner.video_identity IS NOT NULL
+--         AND winner.video_identity = <computed identity for loser.link>
+--     );
+-- That migration requires re-running the same regexp_match logic from the
+-- identity_candidates CTE above, scoped to WHERE video_identity IS NULL.
+--> statement-breakpoint
 
 WITH beta_candidates AS (
   SELECT

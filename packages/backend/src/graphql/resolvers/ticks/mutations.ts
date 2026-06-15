@@ -81,7 +81,7 @@ export async function findBetaLinkIdentityConflict(
       climbUuid: dbSchema.boardBetaLinks.climbUuid,
     })
     .from(dbSchema.boardBetaLinks)
-    .innerJoin(
+    .leftJoin(
       dbSchema.boardClimbs,
       and(
         eq(dbSchema.boardClimbs.boardType, dbSchema.boardBetaLinks.boardType),
@@ -163,8 +163,16 @@ export type BetaLinkInsertPlan =
 
 export type ValidateAndEnrichOptions = {
   // Decides whether a same-climb video duplicate is fatal (attachBetaLink)
-  // or a silent skip (saveTick). Cross-climb dups are always fatal.
+  // or a silent skip (saveTick).
   onSameClimbDup: 'throw' | 'skip';
+  // Decides what happens when the same video is attached to a *different board
+  // type* (e.g. the video is on a Kilter climb and saveTick is for a Tension
+  // climb). video_identity is global, so a cross-board conflict can occur even
+  // when the user is legitimately attaching beta for a completely different
+  // climb. saveTick passes 'skip' because the video URL is incidental; the
+  // tick itself is still valid. attachBetaLink passes 'throw' (the default)
+  // because the user explicitly chose this URL.
+  onCrossBoardDup?: 'throw' | 'skip';
 };
 
 // Single gated entrypoint for write-time beta-link validation. Steps:
@@ -201,6 +209,10 @@ export async function validateAndEnrichBetaLinkInsert(
 
   const conflict = await findBetaLinkIdentityConflict(boardType, climbUuid, url);
   if (conflict.kind === 'cross-climb') {
+    const isCrossBoard = conflict.existingBoardType !== boardType;
+    if (isCrossBoard && (options.onCrossBoardDup ?? 'throw') === 'skip') {
+      return { action: 'skip-existing' };
+    }
     throw new InstagramBetaValidationError(crossClimbDupMessage(conflict.climbName, conflict.existingBoardType, boardType));
   }
   if (conflict.kind === 'same-climb') {
@@ -229,7 +241,7 @@ const tickClimbAlias = aliasedTable(dbSchema.boardClimbAliases, 'beta_link_tick_
 const inputClimbAlias = aliasedTable(dbSchema.boardClimbAliases, 'beta_link_input_climb_alias');
 
 export async function resolveBetaLinkTickContext(
-  input: { boardType: string; climbUuid: string; angle?: number | null; tickUuid?: string | null },
+  input: { boardType: string; climbUuid: string; angle?: number | null; tickUuid?: string | null; link?: string },
   userId: string,
 ): Promise<BetaLinkTickContext> {
   if (!input.tickUuid) {
@@ -299,6 +311,13 @@ export async function resolveBetaLinkTickContext(
     .where(eq(dbSchema.boardBetaLinks.tickUuid, tick.uuid))
     .limit(1);
   if (existingTickBetaLink) {
+    // Idempotency: if the same canonical video is being re-submitted for the
+    // same tick (e.g. mobile retry after a network blip), treat it as a
+    // no-op success. A different video URL on an already-linked tick is
+    // a genuine conflict and still throws.
+    if (input.link && betaLinkIdentity(input.link) === betaLinkIdentity(existingTickBetaLink.link)) {
+      return { tickUuid: tick.uuid, boardId: tick.boardId, angle: tick.angle };
+    }
     throw new GraphQLError('This tick already has a beta video linked', {
       extensions: { code: 'BETA_LINK_TICK_ALREADY_LINKED' },
     });
@@ -486,9 +505,18 @@ export const tickMutations = {
     // saveTick is treating beta-link attach as an *incidental* side effect of
     // logging a tick, so a same-climb video dup must NOT fail the tick —
     // we'd otherwise reject a perfectly valid tick because the user happened
-    // to leave the video URL in the form. Cross-climb dup is still fatal:
-    // the user explicitly chose this video URL and we want to surface the
-    // friendly "post a separate reel" message.
+    // to leave the video URL in the form.
+    //
+    // video_identity is global (not per board type), so a cross-board dup is
+    // also silently skipped: if the user previously attached this video to a
+    // Kilter climb, a new Tension tick with the same URL is still valid — we
+    // just don't link the beta a second time. Cross-board conflicts are only
+    // fatal for the explicit `attachBetaLink` mutation, where the user made a
+    // deliberate choice.
+    //
+    // Same-board cross-climb dups (same board type, different climb) remain
+    // fatal: the user explicitly chose this URL for this climb and should see
+    // the "post a separate reel" message.
     const tickVideoUrl = videoUrlForTickStatus(validatedInput.status, validatedInput.videoUrl);
     const attachedVideoUrl = tickVideoUrl ? normalizeBetaVideoUrl(tickVideoUrl) : tickVideoUrl;
     const betaPlan: BetaLinkInsertPlan = attachedVideoUrl
@@ -499,6 +527,7 @@ export const tickMutations = {
           attachedVideoUrl,
           {
             onSameClimbDup: 'skip',
+            onCrossBoardDup: 'skip',
           },
         )
       : { action: 'no-url' };
@@ -638,7 +667,10 @@ export const tickMutations = {
 
   /**
    * Attach an Instagram or TikTok video as beta for a climb.
-   * Idempotent on (boardType, climbUuid, link).
+   * Idempotent on (boardType, climbUuid, link) when tickUuid is absent.
+   * When tickUuid is supplied, re-submitting the same canonical video for the
+   * same tick is also idempotent. Submitting a *different* video for an
+   * already-linked tick throws BETA_LINK_TICK_ALREADY_LINKED.
    */
   attachBetaLink: async (_: unknown, { input }: { input: unknown }, ctx: ConnectionContext): Promise<boolean> => {
     requireAuthenticated(ctx);
@@ -661,7 +693,7 @@ export const tickMutations = {
     // use; the two-token cost is a side effect of the gating architecture, not
     // a deliberate rate ceiling, but 15/min is still the effective limit.
     await applyRateLimit(ctx, 30, 'beta-link-validation');
-    const tickContext = await resolveBetaLinkTickContext(validated, userId);
+    const tickContext = await resolveBetaLinkTickContext({ ...validated, link: normalizedLink }, userId);
 
     // Validation runs first — it's an outbound HTTP fetch we don't want to
     // hold a DB connection open for. attachBetaLink is a deliberate user

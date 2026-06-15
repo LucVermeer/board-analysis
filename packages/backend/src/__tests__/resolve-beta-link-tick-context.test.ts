@@ -182,11 +182,38 @@ describe('resolveBetaLinkTickContext', () => {
     expect(result).toMatchObject({ tickUuid: 'tick-uuid-1', angle: 40 });
   });
 
-  it('throws BETA_LINK_TICK_ALREADY_LINKED when the tick already has a beta video', async () => {
+  it('throws BETA_LINK_TICK_ALREADY_LINKED when the tick already has a different beta video', async () => {
+    setupDbMocks(makeTick(), 'https://www.instagram.com/reel/EXISTING/');
+    await expect(
+      resolveBetaLinkTickContext(
+        { boardType: 'kilter', climbUuid: 'climb-1', tickUuid: 'tick-uuid-1', link: 'https://www.instagram.com/reel/DIFFERENT/' },
+        'user-1',
+      ),
+    ).rejects.toMatchObject({ extensions: { code: 'BETA_LINK_TICK_ALREADY_LINKED' } });
+  });
+
+  it('throws BETA_LINK_TICK_ALREADY_LINKED when no link is provided and the tick already has a video', async () => {
     setupDbMocks(makeTick(), 'https://www.instagram.com/reel/EXISTING/');
     await expect(
       resolveBetaLinkTickContext({ boardType: 'kilter', climbUuid: 'climb-1', tickUuid: 'tick-uuid-1' }, 'user-1'),
     ).rejects.toMatchObject({ extensions: { code: 'BETA_LINK_TICK_ALREADY_LINKED' } });
+  });
+
+  it('returns existing context (idempotent) when the same canonical video is re-submitted for the same tick', async () => {
+    // Simulates a mobile retry: the first call succeeded, the tick now has a beta
+    // link, and the client retries. Since the video identity matches, succeed silently.
+    setupDbMocks(makeTick(), 'https://www.instagram.com/reel/SameId/');
+    const result = await resolveBetaLinkTickContext(
+      {
+        boardType: 'kilter',
+        climbUuid: 'climb-1',
+        tickUuid: 'tick-uuid-1',
+        // Same reel, different tracking params — normalizes to the same identity.
+        link: 'https://www.instagram.com/reel/SameId/?igsh=tracking',
+      },
+      'user-1',
+    );
+    expect(result).toEqual({ tickUuid: 'tick-uuid-1', boardId: 42, angle: 40 });
   });
 
   it('returns full tick context on the happy path', async () => {
