@@ -283,17 +283,11 @@ Filter by `subsystem:com.boardsesh.app`. Useful categories:
 
 ## Running the Full Stack
 
-Start all services from the monorepo root:
+Start all services from the monorepo root with a single command — `vp run dev`
+brings up the database, backend, and web dev server together:
 
 ```bash
-# Terminal 1: Database
-bun run db:up
-
-# Terminal 2: Web dev server
-bun run dev
-
-# Terminal 3: Backend
-bun run backend:dev
+vp run dev
 ```
 
 Verify the backend is reachable from your iPhone:
@@ -323,7 +317,7 @@ Check the database for the registered token:
 
 ```bash
 # From the repo root
-bun run db:studio
+vp run db:studio
 ```
 
 Then look at the `activity_push_tokens` table — you should see a row with your session ID and a hex token.
