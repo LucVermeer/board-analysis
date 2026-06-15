@@ -6,10 +6,12 @@
 # — never an inline `variant === 'material'` / `=== 'liquidGlass'` comparison that
 # can silently regrow. See packages/mobile/src/theme/variants/README.md.
 #
-# Deliberately scoped to the theme variant: it matches a `variant`/`uiVariant`
-# identifier compared to a UiVariant literal, so it does NOT flag the orthogonal
-# surface-capability axis (`mode === 'material'`, `surfaceMode === 'material'`) or
-# unrelated props (`variant === 'filled'`, `=== 'scroll'`).
+# Deliberately scoped to the theme variant: the `[vV]ariant` token matches a
+# `variant`, `uiVariant`, or `theme.variant` identifier (grep substring-matches, so
+# the `.` in `theme.variant` is fine) compared to a UiVariant literal. It does NOT
+# flag the orthogonal surface-capability axis (`mode === 'material'`,
+# `surfaceMode === 'material'`) or unrelated props (`variant === 'filled'`,
+# `=== 'scroll'`).
 #
 # Two escape hatches for genuine exceptions:
 #   1. A trailing `// variant-ok` comment on the offending line (per-line opt-out).
@@ -29,7 +31,7 @@ cd "$(dirname "$0")/.."
 ALLOWLIST='queue-control/AccessoryBarSurface\.tsx|user-drawer/UserAvatarToolbarAction\.tsx'
 
 matches=$(
-  grep -rnE "(ui)?[vV]ariant[[:space:]]*[!=]==[[:space:]]*'(material|liquidGlass)'" \
+  grep -rnE "[vV]ariant[[:space:]]*[!=]==[[:space:]]*'(material|liquidGlass)'" \
     packages/mobile/src/components \
     --include='*.tsx' --include='*.ts' \
     | grep -v '__tests__' \

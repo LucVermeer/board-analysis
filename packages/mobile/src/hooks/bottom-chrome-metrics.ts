@@ -1,4 +1,8 @@
 import type { UiVariant } from '../theme/resolve-ui-variant';
+// Import the leaf module (not the ./variants barrel): the barrel re-exports
+// createVariantComponent, which pulls the provider + react-native and would break
+// this module's pure, react-native-free unit test. select-by-variant is type-only.
+import { selectByVariant } from '../theme/variants/select-by-variant';
 import {
   MATERIAL_ACTIVE_CONTEXT_BAR_HEIGHT,
   MATERIAL_TAB_BAR_HEIGHT,
@@ -136,7 +140,12 @@ export function computeBottomChromeMetrics({
     scrollBottomPadding: insetsBottom + tabBarHeight + jsQueueReserve,
     floatingControlBottom: insetsBottom + tabBarHeight + Math.max(jsQueueReserve, nativeAccessoryReserve),
     fixedFooterBottom,
-    inSessionListBottom: uiVariant === 'material' ? fixedFooterBottom : insetsBottom + jsQueueReserve,
-    preSessionFooterBottom: uiVariant === 'material' ? fixedFooterBottom : insetsBottom,
+    // selectByVariant (vs a raw ternary) keeps these exhaustive: a new UiVariant is
+    // a compile error here, since this file is outside the components/ guard scope.
+    inSessionListBottom: selectByVariant(uiVariant, {
+      material: fixedFooterBottom,
+      liquidGlass: insetsBottom + jsQueueReserve,
+    }),
+    preSessionFooterBottom: selectByVariant(uiVariant, { material: fixedFooterBottom, liquidGlass: insetsBottom }),
   };
 }
