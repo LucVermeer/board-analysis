@@ -40,12 +40,16 @@ beforeEach(() => {
 });
 
 describe('openClimbInPlayDrawer', () => {
-  it('kind:climb opens the drawer directly with the given board config', () => {
+  it('kind:climb opens the drawer directly with the given board config, tagged as a climb-view', () => {
     const deps = makeDeps();
     const climb = { uuid: 'c-1', name: 'X' } as Climb;
     const boardConfig = { boardName: 'kilter', layoutId: 1, sizeId: 10, setIds: '1,20,33', angle: 40 };
     openClimbInPlayDrawer({ kind: 'climb', climb, boardConfig }, deps);
-    expect(deps.openPlayDrawer).toHaveBeenCalledWith(climb, { setAsCurrent: false, boardConfig });
+    expect(deps.openPlayDrawer).toHaveBeenCalledWith(climb, {
+      setAsCurrent: false,
+      boardConfig,
+      source: 'climb_view',
+    });
     expect(deps.router.push).not.toHaveBeenCalled();
   });
 
@@ -58,6 +62,7 @@ describe('openClimbInPlayDrawer', () => {
     expect(options).toEqual({
       setAsCurrent: false,
       boardConfig: { boardName: 'kilter', layoutId: 1, sizeId: 10, setIds: '1,20,33', angle: 50 },
+      source: 'climb_view',
     });
     expect(deps.router.push).not.toHaveBeenCalled();
   });

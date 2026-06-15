@@ -22,6 +22,7 @@ import { FeedSocialRow } from './FeedSocialRow';
 import { StackedBarChart } from './YouCharts';
 import { MetricChip } from './MetricChip';
 import { buildSessionGradeBars, gradeBadgeColor } from './profile-chart-colors';
+import { nounFromCountLabel } from './noun-from-count-label';
 import { mapBetaLink } from '../../lib/beta-video-url';
 import { getBoardConfigForPlaylist } from '../../lib/playlists/board-details-for-playlist';
 import { spacing, borderRadius } from '../../theme/tokens';
@@ -411,17 +412,6 @@ const HeroSend = memo(function HeroSend({ tick }: { tick: SessionFeedTickHighlig
     </View>
   );
 });
-
-/**
- * Drop the leading `{{count}}` token from a pluralised count label so the chip
- * can show the number on its own value line and the bare noun as the label.
- * Every locale formats these keys as "{{count}} <noun>" (count first, space,
- * noun), so splitting on the first space is locale-safe.
- */
-function nounFromCountLabel(countLabel: string): string {
-  const firstSpace = countLabel.indexOf(' ');
-  return firstSpace === -1 ? countLabel : countLabel.slice(firstSpace + 1);
-}
 
 /**
  * Stats rail: sends / hardest / flashes / tries. Exactly one coloured chip —

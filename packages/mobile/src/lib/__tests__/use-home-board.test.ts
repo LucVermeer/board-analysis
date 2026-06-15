@@ -3,10 +3,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook } from '@testing-library/react';
 import type { UserBoard } from '@boardsesh/shared-schema';
 
+vi.mock('../../providers/auth-provider', () => ({ useAuth: vi.fn() }));
 vi.mock('../graphql/use-active-board', () => ({ useActiveBoard: vi.fn() }));
 vi.mock('../graphql/hooks/index', () => ({ useMyBoards: vi.fn(), useProfile: vi.fn() }));
 vi.mock('../graphql/hooks/use-you-data', () => ({ useAllBoardsTicks: vi.fn() }));
 
+import { useAuth } from '../../providers/auth-provider';
 import { useActiveBoard } from '../graphql/use-active-board';
 import { useMyBoards, useProfile } from '../graphql/hooks/index';
 import { useAllBoardsTicks } from '../graphql/hooks/use-you-data';
@@ -18,7 +20,8 @@ function board(overrides: Partial<UserBoard>): UserBoard {
 
 beforeEach(() => {
   vi.resetAllMocks();
-  vi.mocked(useProfile).mockReturnValue({ data: { id: 'u1' } } as never);
+  vi.mocked(useAuth).mockReturnValue({ isAuthenticated: true } as never);
+  vi.mocked(useProfile).mockReturnValue({ data: { id: 'u1' }, isLoading: false } as never);
   vi.mocked(useActiveBoard).mockReturnValue({ data: null, isLoading: false } as never);
   vi.mocked(useMyBoards).mockReturnValue({ data: undefined, isLoading: false } as never);
   vi.mocked(useAllBoardsTicks).mockReturnValue({ data: undefined, isLoading: false } as never);
@@ -74,5 +77,31 @@ describe('useHomeBoard', () => {
     vi.mocked(useActiveBoard).mockReturnValue({ data: undefined, isLoading: true } as never);
     const { result } = renderHook(() => useHomeBoard());
     expect(result.current.isResolving).toBe(true);
+  });
+
+  it('keeps resolving while the profile loads and ticks are needed (>1 board)', () => {
+    // The tick query is gated on `profile?.id`, so it reports `isLoading: false`
+    // until the profile lands. `needsTicks` is true here (2 boards, no active
+    // board), so `profileLoading` must keep `isResolving` true — otherwise a
+    // one-shot caller locks the crew fallback before tick inference can run.
+    vi.mocked(useMyBoards).mockReturnValue({
+      data: { boards: [board({ uuid: 'k', boardType: 'kilter' }), board({ uuid: 't', boardType: 'tension' })] },
+      isLoading: false,
+    } as never);
+    vi.mocked(useProfile).mockReturnValue({ data: undefined, isLoading: true } as never);
+    vi.mocked(useAllBoardsTicks).mockReturnValue({ data: undefined, isLoading: false } as never);
+    const { result } = renderHook(() => useHomeBoard());
+    expect(result.current.isResolving).toBe(true);
+    expect(result.current.board).toBeNull();
+  });
+
+  it('does not let a loading profile block when ticks are not needed (single board)', () => {
+    // A single owned board needs no tick disambiguation, so `needsTicks` is
+    // false and `profileLoading` must not gate `isResolving`.
+    vi.mocked(useMyBoards).mockReturnValue({ data: { boards: [board({ uuid: 'solo' })] }, isLoading: false } as never);
+    vi.mocked(useProfile).mockReturnValue({ data: undefined, isLoading: true } as never);
+    const { result } = renderHook(() => useHomeBoard());
+    expect(result.current.isResolving).toBe(false);
+    expect(result.current.board?.uuid).toBe('solo');
   });
 });

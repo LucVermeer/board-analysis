@@ -410,6 +410,36 @@ export type RecentBetaVideo = Omit<RecentBetaLinkGqlRow, 'betaLink'> & {
   betaLink: BetaLink;
 };
 
+/**
+ * Narrow recent beta-link rows to the shelf the client actually shows:
+ * scoped to the selected layout, video-only, deduped by stable video
+ * identity, and capped at `limit`. A null `layoutId` means "any layout".
+ * Exported for tests; production callers go through `useRecentBetaLinks`.
+ */
+export function selectRecentBetaVideos(
+  rows: RecentBetaLinkGqlRow[],
+  layoutId: number | null | undefined,
+  limit: number,
+): RecentBetaVideo[] {
+  const seenIdentities = new Set<string>();
+  const videos: RecentBetaVideo[] = [];
+
+  for (const row of rows) {
+    // Beta is board-specific: a Kilter Original beta is useless on a Kilter
+    // Homewall, so scope to the selected board's layout too, not just type.
+    if (layoutId != null && row.layoutId !== layoutId) continue;
+    const betaLink = mapBetaLink(row.betaLink);
+    if (!isBetaVideoUrl(betaLink.link)) continue;
+    const identity = betaLinkIdentity(betaLink.link);
+    if (seenIdentities.has(identity)) continue;
+    seenIdentities.add(identity);
+    videos.push({ ...row, betaLink });
+    if (videos.length >= limit) break;
+  }
+
+  return videos;
+}
+
 export function useBetaLinks(boardType: string, climbUuid: string, enabled = true) {
   return useQuery({
     queryKey: ['betaLinks', boardType, climbUuid],
@@ -438,25 +468,7 @@ export function useRecentBetaLinks(limit = 20, boardType?: string | null, layout
           boardType,
         },
       ),
-    select: (data) => {
-      const seenIdentities = new Set<string>();
-      const videos: RecentBetaVideo[] = [];
-
-      for (const row of data.recentBetaLinks) {
-        // Beta is board-specific: a Kilter Original beta is useless on a Kilter
-        // Homewall, so scope to the selected board's layout too, not just type.
-        if (layoutId != null && row.layoutId !== layoutId) continue;
-        const betaLink = mapBetaLink(row.betaLink);
-        if (!isBetaVideoUrl(betaLink.link)) continue;
-        const identity = betaLinkIdentity(betaLink.link);
-        if (seenIdentities.has(identity)) continue;
-        seenIdentities.add(identity);
-        videos.push({ ...row, betaLink });
-        if (videos.length >= limit) break;
-      }
-
-      return videos;
-    },
+    select: (data) => selectRecentBetaVideos(data.recentBetaLinks, layoutId, limit),
     enabled,
     staleTime: 5 * 60 * 1000,
   });

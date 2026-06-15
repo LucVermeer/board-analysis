@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import type { UserBoard } from '@boardsesh/shared-schema';
+import { useAuth } from '../../../providers/auth-provider';
 import { useActiveBoard } from '../use-active-board';
 import { useMyBoards, useProfile } from './index';
 import { useAllBoardsTicks } from './use-you-data';
@@ -34,9 +35,10 @@ function boardActivity(board: UserBoard): number {
  * feed-scoping concept layered on top.
  */
 export function useHomeBoard(): HomeBoardResult {
+  const { isAuthenticated } = useAuth();
   const { data: activeBoard, isLoading: activeBoardLoading } = useActiveBoard();
-  const { data: myBoardsConn, isLoading: boardsLoading } = useMyBoards();
-  const { data: profile } = useProfile();
+  const { data: myBoardsConn, isLoading: boardsLoading } = useMyBoards(undefined, { enabled: isAuthenticated });
+  const { data: profile, isLoading: profileLoading } = useProfile({ enabled: isAuthenticated });
 
   const boards = myBoardsConn?.boards;
   // Only pay for the per-board-type tick scan when it can actually change the
@@ -76,6 +78,11 @@ export function useHomeBoard(): HomeBoardResult {
   // warm `myBoards` cache hit could settle `isResolving` to false while the
   // stored board is still loading, and a one-shot caller would lock in the wrong
   // (inferred) board instead of the user's real active pick.
-  const isResolving = activeBoardLoading || (!activeBoard && (boardsLoading || (needsTicks && ticksLoading)));
+  // When `needsTicks`, the tick query is gated on `profile?.id`, so it stays
+  // `isLoading: false` until the profile lands. Fold `profileLoading` into that
+  // branch so a one-shot caller can't settle `isResolving` to false and lock in
+  // the crew fallback before the tick-based inference has had its inputs.
+  const isResolving =
+    activeBoardLoading || (!activeBoard && (boardsLoading || (needsTicks && (profileLoading || ticksLoading))));
   return { board, isResolving };
 }

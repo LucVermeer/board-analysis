@@ -83,6 +83,13 @@ export type OpenPlayDrawerOptions = PlayDrawerOpenOptions & {
    *  default). The override is applied via state, so the actual open happens
    *  after the new boardConfig has propagated to PlayDrawer's props. */
   boardConfig?: BoardConfig;
+  /** Analytics-only tag for the `Play Drawer Opened` event's `source`. Lets a
+   *  real climb-view (feed/session/beta/playlist) be distinguished from a
+   *  queue-nav / accessory tap — both pass `setAsCurrent: false`, so the
+   *  default `current_queue_item`/`mobile` heuristic can't tell them apart.
+   *  Pulled out before the rest of the options reach `PlayDrawer.open`, so it
+   *  never leaks into the drawer itself. */
+  source?: 'climb_view' | 'current_queue_item' | 'mobile';
 };
 
 type DrawerHostValue = {
@@ -217,13 +224,15 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
   myBoardsRef.current = myBoardsConn;
 
   const openPlayDrawer = useCallback((climb: Climb, options?: OpenPlayDrawerOptions) => {
-    const { boardConfig: override, ...openOptions } = options ?? {};
+    // Pull `source` out alongside `boardConfig` so neither reaches PlayDrawer.open
+    // — `source` is analytics-only and would otherwise leak into the drawer.
+    const { boardConfig: override, source: openSource, ...openOptions } = options ?? {};
     const boardConfig = override ?? activeBoardConfigRef.current;
     track(SHARED_EVENTS.PlayDrawerOpened, {
       climbUuid: climb.uuid,
       boardName: boardConfig?.boardName,
       layoutId: boardConfig?.layoutId,
-      source: openOptions.setAsCurrent === false ? 'current_queue_item' : 'mobile',
+      source: openSource ?? (openOptions.setAsCurrent === false ? 'current_queue_item' : 'mobile'),
     });
     if (override) {
       pendingOverrideOpenRef.current = { climb, options: openOptions };
@@ -493,7 +502,13 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
       boardLooselyMatches({ boardName: board.boardType, layoutId: board.layoutId }, override),
     );
     if (owned) {
-      void setActiveBoard(owned);
+      // boardLooselyMatches ignores angle, so `owned`'s stored angle can differ
+      // from the climb's override angle. Switch to the board CARRYING the override
+      // angle so the climb keeps rendering at the same angle and the now-enabled
+      // queue/tick/favorite/LED controls act on it — unless the board's angle is
+      // fixed, in which case its own angle stands.
+      const switchedBoard = owned.isAngleAdjustable === false ? owned : { ...owned, angle: override.angle };
+      void setActiveBoard(switchedBoard);
       setBoardConfigOverride(null);
       return;
     }

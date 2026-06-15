@@ -47,7 +47,7 @@ export function openClimbInPlayDrawer(args: OpenClimbArgs, deps: OpenClimbDeps):
   const { openPlayDrawer, router } = deps;
 
   if (args.kind === 'climb') {
-    openPlayDrawer(args.climb, { setAsCurrent: false, boardConfig: args.boardConfig });
+    openPlayDrawer(args.climb, { setAsCurrent: false, boardConfig: args.boardConfig, source: 'climb_view' });
     return;
   }
 
@@ -64,6 +64,7 @@ export function openClimbInPlayDrawer(args: OpenClimbArgs, deps: OpenClimbDeps):
           setIds: config.setIds.join(','),
           angle: args.tick.angle,
         },
+        source: 'climb_view',
       });
       return;
     }

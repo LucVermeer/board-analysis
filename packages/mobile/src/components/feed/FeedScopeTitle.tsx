@@ -4,7 +4,7 @@
 // Replaces the old segmented control + scope pill — one HIG-native line instead
 // of a persistent toggle eating vertical space.
 
-import { StyleSheet, View, type NativeSyntheticEvent } from 'react-native';
+import { Platform, StyleSheet, View, type NativeSyntheticEvent } from 'react-native';
 import ContextMenu, {
   type ContextMenuAction,
   type ContextMenuOnPressNativeEvent,
@@ -24,10 +24,18 @@ type FeedScopeTitleProps = {
 
 export function FeedScopeTitle({ title, actions, onSelectIndex }: FeedScopeTitleProps) {
   const { systemColors } = useTheme();
+  // `selected` (the checkmark) and `systemIcon` only render on iOS; on Android
+  // the menu is title-only, so the active scope would have no marker. Prefix the
+  // selected action's title with a checkmark glyph instead. The array order is
+  // untouched, so `onSelectIndex` still maps each item back to its source index.
+  const menuActions =
+    Platform.OS === 'ios'
+      ? actions
+      : actions.map((action) => (action.selected ? { ...action, title: `✓  ${action.title}` } : action));
   return (
     <ContextMenu
       dropdownMenuMode
-      actions={actions}
+      actions={menuActions}
       onPress={(event: NativeSyntheticEvent<ContextMenuOnPressNativeEvent>) => onSelectIndex(event.nativeEvent.index)}
       style={styles.menu}
     >
