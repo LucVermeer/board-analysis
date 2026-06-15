@@ -875,4 +875,94 @@ describe('useBoardBluetooth', () => {
       expect(call).toBeUndefined();
     });
   });
+
+  describe('re-entrant connect guard', () => {
+    it('ignores a second connect() while the first is still in flight (picker open)', async () => {
+      // Hold the first attempt at the scan/picker stage: requestAndConnect never
+      // resolves until we say so, mirroring a user still choosing a board.
+      let resolveConnect: (value: { deviceId: string; deviceName: string }) => void;
+      const pending = new Promise<{ deviceId: string; deviceName: string }>((resolve) => {
+        resolveConnect = resolve;
+      });
+      mockAdapter.requestAndConnect.mockReturnValue(pending);
+
+      const { result } = renderHook(() => useBoardBluetooth({ boardDetails: mockBoardDetails }));
+
+      let firstPromise!: Promise<boolean>;
+      act(() => {
+        firstPromise = result.current.connect();
+      });
+
+      // A second tap — or the 2-second wall-confirm fallback firing while the
+      // picker is open — must NOT start a second native scan ("Already scanning.
+      // Stopping now." on iOS). It returns false and creates no extra adapter.
+      let secondResult: boolean | undefined;
+      await act(async () => {
+        secondResult = await result.current.connect();
+      });
+
+      expect(secondResult).toBe(false);
+      expect(mockCreateBluetoothAdapter).toHaveBeenCalledTimes(1);
+      expect(mockAdapter.requestAndConnect).toHaveBeenCalledTimes(1);
+
+      // Let the first attempt finish.
+      await act(async () => {
+        resolveConnect!({ deviceId: 'test', deviceName: 'Board' });
+        await firstPromise;
+      });
+      expect(result.current.isConnected).toBe(true);
+
+      // Guard released: a later deliberate connect runs normally.
+      mockAdapter.requestAndConnect.mockResolvedValue({ deviceId: 'test-2', deviceName: 'Board 2' });
+      await act(async () => {
+        await result.current.connect();
+      });
+      expect(mockCreateBluetoothAdapter).toHaveBeenCalledTimes(2);
+    });
+
+    it('releases the guard after the user cancels the picker so a re-tap connects', async () => {
+      // The most common real re-entry: the user dismisses the picker, then taps
+      // the lightbulb again. The cancel rejects requestAndConnect → connect()'s
+      // finally clears the guard, so the re-tap is not swallowed.
+      mockAdapter.requestAndConnect.mockRejectedValueOnce(new Error('Device selection cancelled'));
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      const { result } = renderHook(() => useBoardBluetooth({ boardDetails: mockBoardDetails }));
+
+      await act(async () => {
+        await result.current.connect();
+      });
+      expect(result.current.isConnected).toBe(false);
+      // Cancelling stays silent (not a failure toast).
+      expect(mockShowMessage).not.toHaveBeenCalled();
+
+      await act(async () => {
+        await result.current.connect();
+      });
+      expect(result.current.isConnected).toBe(true);
+      expect(mockCreateBluetoothAdapter).toHaveBeenCalledTimes(2);
+      errorSpy.mockRestore();
+    });
+
+    it('releases the guard after a failed attempt so the next connect can run', async () => {
+      mockAdapter.requestAndConnect.mockRejectedValueOnce(new Error('GATT connect failed'));
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      const { result } = renderHook(() => useBoardBluetooth({ boardDetails: mockBoardDetails }));
+
+      await act(async () => {
+        await result.current.connect();
+      });
+      expect(result.current.isConnected).toBe(false);
+
+      // The failed attempt cleared the in-flight guard in `finally`, so a retry
+      // is not swallowed.
+      await act(async () => {
+        await result.current.connect();
+      });
+      expect(result.current.isConnected).toBe(true);
+      expect(mockCreateBluetoothAdapter).toHaveBeenCalledTimes(2);
+      errorSpy.mockRestore();
+    });
+  });
 });
