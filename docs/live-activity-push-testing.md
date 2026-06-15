@@ -91,7 +91,7 @@ Cross-device limitation: when _another_ user navigates and your phone is suspend
 - Apple Developer account (paid, $99/year) with the Boardsesh app registered
 - iPhone running iOS 17+ connected via USB or on the same network
 - Tailscale set up on both the Mac and iPhone
-- Local dev environment running (`bun run db:up`, `bun run dev`, `bun run backend:dev`)
+- Local dev environment running: `vp run dev` (starts the DB, backend, and web together; run `vp run db:up` first if you only need the database)
 
 ## Apple Developer Setup
 
