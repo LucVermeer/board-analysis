@@ -1,61 +1,64 @@
 import { describe, it, expect } from 'vitest';
 import {
-  isBotContributor,
-  transformContributors,
+  isBotLogin,
+  aggregateContributors,
   transformSponsors,
-  type RawContributor,
+  type AuthorRef,
   type RawSponsorNode,
 } from '../lib/acknowledgements-transform';
 
-describe('isBotContributor', () => {
-  it('flags GitHub App accounts by type', () => {
-    expect(isBotContributor({ login: 'some-app', type: 'Bot' })).toBe(true);
+describe('isBotLogin', () => {
+  it('flags [bot] suffixes, known automation, and AI assistants', () => {
+    expect(isBotLogin('dependabot[bot]')).toBe(true);
+    expect(isBotLogin('github-actions')).toBe(true);
+    expect(isBotLogin('some-bot')).toBe(true);
+    expect(isBotLogin('claude')).toBe(true);
+    expect(isBotLogin('Codex')).toBe(true);
   });
 
-  it('flags [bot] suffix and known automation logins', () => {
-    expect(isBotContributor({ login: 'dependabot[bot]', type: 'User' })).toBe(true);
-    expect(isBotContributor({ login: 'github-actions', type: 'User' })).toBe(true);
-    expect(isBotContributor({ login: 'some-bot', type: 'User' })).toBe(true);
-  });
-
-  it('flags AI coding assistants that commit as users', () => {
-    expect(isBotContributor({ login: 'claude', type: 'User' })).toBe(true);
-    expect(isBotContributor({ login: 'Codex', type: 'User' })).toBe(true);
-    expect(isBotContributor({ login: 'devin-ai-integration', type: 'User' })).toBe(true);
-  });
-
-  it('keeps real people', () => {
-    expect(isBotContributor({ login: 'marcodejongh', type: 'User' })).toBe(false);
-  });
-
-  it('treats a missing login as a bot (nothing to thank)', () => {
-    expect(isBotContributor({ type: 'User' })).toBe(true);
+  it('keeps real people and treats an empty login as a bot', () => {
+    expect(isBotLogin('marcodejongh')).toBe(false);
+    expect(isBotLogin('')).toBe(true);
   });
 });
 
-describe('transformContributors', () => {
-  const raw: RawContributor[] = [
-    { login: 'beta', avatar_url: 'a', html_url: 'hb', contributions: 3, type: 'User' },
-    { login: 'dependabot[bot]', contributions: 999, type: 'Bot' },
-    { login: 'alpha', avatar_url: 'a', html_url: 'ha', contributions: 10, type: 'User' },
+describe('aggregateContributors', () => {
+  const prAuthors: AuthorRef[] = [
+    { login: 'alpha', typename: 'User', name: 'Alpha', url: 'https://github.com/alpha' },
+    { login: 'alpha', typename: 'User' },
+    { login: 'beta', typename: 'User' },
+    { login: 'dependabot[bot]', typename: 'Bot' },
+  ];
+  const issueAuthors: AuthorRef[] = [
+    { login: 'beta', typename: 'User' },
+    { login: 'beta', typename: 'User' },
+    { login: 'gamma', typename: 'User' },
+    { login: 'claude', typename: 'User' },
   ];
 
-  it('drops bots and sorts by contributions desc', () => {
-    const result = transformContributors(raw);
-    expect(result.map((contributor) => contributor.login)).toEqual(['alpha', 'beta']);
-  });
+  it('ranks by combined pull requests + issues and drops bots/AI', () => {
+    const result = aggregateContributors(prAuthors, issueAuthors);
 
-  it('defaults name to null and backfills a profile URL when missing', () => {
-    const [first] = transformContributors([{ login: 'nourl', contributions: 1, type: 'User' }]);
-    expect(first.name).toBeNull();
-    expect(first.htmlUrl).toBe('https://github.com/nourl');
-  });
-
-  it('uses provided display names when available', () => {
-    const [first] = transformContributors([{ login: 'alpha', contributions: 1, type: 'User' }], {
-      alpha: 'Alpha Person',
+    // beta: 1 PR + 2 issues = 3; alpha: 2 PRs = 2; gamma: 1 issue = 1. Bots gone.
+    expect(result.map((entry) => entry.login)).toEqual(['beta', 'alpha', 'gamma']);
+    expect(result.find((entry) => entry.login === 'beta')).toMatchObject({
+      pullRequests: 1,
+      issues: 2,
+      contributions: 3,
     });
-    expect(first.name).toBe('Alpha Person');
+    expect(result.find((entry) => entry.login === 'alpha')).toMatchObject({
+      pullRequests: 2,
+      issues: 0,
+      contributions: 2,
+    });
+  });
+
+  it('backfills display name and a profile URL', () => {
+    const [, alpha] = aggregateContributors(prAuthors, issueAuthors);
+    expect(alpha.name).toBe('Alpha');
+    expect(aggregateContributors([{ login: 'nourl', typename: 'User' }], [])[0].htmlUrl).toBe(
+      'https://github.com/nourl',
+    );
   });
 });
 

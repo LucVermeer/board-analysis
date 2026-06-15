@@ -4,11 +4,12 @@
  * Generates packages/mobile/src/data/acknowledgements.generated.json — the
  * contributor + sponsor lists shown on the mobile Acknowledgements screen.
  *
- * Contributors come from the GitHub REST API (public, no special scope).
- * Sponsors come from the GitHub GraphQL API for the `boardsesh` org, which needs
- * an authenticated token with sponsors / `read:org` scope — locally that's your
- * `gh` keyring; in CI it's the ACKNOWLEDGEMENTS_GH_TOKEN secret. The default
- * Actions `GITHUB_TOKEN` can read contributors but NOT org sponsors.
+ * Contributors come from paginated GraphQL over the repo's pull requests + issues
+ * (public data, no special scope). Sponsors come from the GitHub GraphQL API for
+ * the `boardsesh` org, which needs an authenticated token with sponsors /
+ * `read:org` scope — locally that's your `gh` keyring; in CI it's the
+ * ACKNOWLEDGEMENTS_GH_TOKEN secret. The default Actions `GITHUB_TOKEN` can read
+ * contributors but NOT org sponsors.
  *
  * Degrades gracefully: if a fetch fails (offline, `gh` missing, no sponsor
  * scope) the existing committed JSON for that section is kept and the script
@@ -23,12 +24,12 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  transformContributors,
+  aggregateContributors,
   transformSponsors,
   type AcknowledgementsData,
+  type AuthorRef,
   type Contributor,
   type Sponsor,
-  type RawContributor,
   type RawSponsorNode,
 } from './lib/acknowledgements-transform';
 
@@ -51,12 +52,65 @@ function readExisting(): AcknowledgementsData {
   }
 }
 
+// Contributors are everyone who authored a PR or an issue, ranked by the sum of
+// the two. The GraphQL connections are paginated fully (the REST /contributors
+// endpoint only counts commits and can't see issue creators).
+const authorSelection = `author { __typename login avatarUrl ... on User { name url } ... on Organization { name url } }`;
+const PR_AUTHORS_QUERY = `query($owner: String!, $name: String!, $cursor: String) {
+  repository(owner: $owner, name: $name) {
+    pullRequests(first: 100, after: $cursor, orderBy: { field: CREATED_AT, direction: ASC }) {
+      pageInfo { hasNextPage endCursor }
+      nodes { ${authorSelection} }
+    }
+  }
+}`;
+const ISSUE_AUTHORS_QUERY = `query($owner: String!, $name: String!, $cursor: String) {
+  repository(owner: $owner, name: $name) {
+    issues(first: 100, after: $cursor, orderBy: { field: CREATED_AT, direction: ASC }) {
+      pageInfo { hasNextPage endCursor }
+      nodes { ${authorSelection} }
+    }
+  }
+}`;
+
+type AuthorNode = { __typename?: string; login?: string; avatarUrl?: string; name?: string | null; url?: string };
+type AuthorConnection = {
+  pageInfo?: { hasNextPage?: boolean; endCursor?: string };
+  nodes?: { author?: AuthorNode | null }[];
+};
+
+function fetchAuthors(query: string, connectionKey: 'pullRequests' | 'issues'): AuthorRef[] {
+  const authors: AuthorRef[] = [];
+  let cursor: string | null = null;
+  // Hard page cap so a pagination bug can never loop forever.
+  for (let page = 0; page < 200; page += 1) {
+    const args = ['api', 'graphql', '-f', `query=${query}`, '-f', `owner=${REPO_OWNER}`, '-f', `name=${REPO_NAME}`];
+    if (cursor) args.push('-f', `cursor=${cursor}`);
+    const response = JSON.parse(gh(args)) as { data?: { repository?: Record<string, AuthorConnection> } };
+    const connection = response.data?.repository?.[connectionKey];
+    for (const node of connection?.nodes ?? []) {
+      const author = node.author;
+      if (author?.login) {
+        authors.push({
+          login: author.login,
+          typename: author.__typename,
+          name: author.name ?? null,
+          avatarUrl: author.avatarUrl,
+          url: author.url,
+        });
+      }
+    }
+    if (!connection?.pageInfo?.hasNextPage || !connection.pageInfo.endCursor) break;
+    cursor = connection.pageInfo.endCursor;
+  }
+  return authors;
+}
+
 function fetchContributors(): Contributor[] | null {
   try {
-    const raw = JSON.parse(
-      gh(['api', `repos/${REPO_OWNER}/${REPO_NAME}/contributors?per_page=100`, '--paginate']),
-    ) as RawContributor[];
-    return transformContributors(raw);
+    const prAuthors = fetchAuthors(PR_AUTHORS_QUERY, 'pullRequests');
+    const issueAuthors = fetchAuthors(ISSUE_AUTHORS_QUERY, 'issues');
+    return aggregateContributors(prAuthors, issueAuthors);
   } catch (error) {
     console.warn(`[acknowledgements] contributors fetch failed, keeping existing list: ${String(error)}`);
     return null;
