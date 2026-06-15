@@ -47,12 +47,15 @@ export type ScreenshotPlatform = 'ios' | 'android' | 'all';
 export type ScreenshotFlow = 'app-store' | 'onboarding';
 export type ScreenshotBackend = 'local' | 'prod';
 
+export type ScreenshotTheme = 'light' | 'dark';
+
 export interface ScreenshotOptions {
   platform: ScreenshotPlatform;
   flow: ScreenshotFlow;
   backend: ScreenshotBackend;
   device: string;
   variant: string | null;
+  theme: ScreenshotTheme;
   shutdown: boolean;
 }
 
@@ -64,6 +67,8 @@ export function parseArgs(argv: readonly string[]): ScreenshotOptions {
     backend: 'local',
     device: DEFAULT_IOS_DEVICE,
     variant: null,
+    // Dark is the canonical store appearance (the app defaults to dark).
+    theme: 'dark',
     shutdown: false,
   };
 
@@ -89,6 +94,10 @@ export function parseArgs(argv: readonly string[]): ScreenshotOptions {
         break;
       case '--variant':
         options.variant = expectEnum(flag, value, ['material', 'liquidGlass']);
+        index++;
+        break;
+      case '--theme':
+        options.theme = expectEnum(flag, value, ['light', 'dark']) as ScreenshotTheme;
         index++;
         break;
       case '--shutdown':
@@ -135,7 +144,12 @@ export function buildScreenshotEnv(
   options: ScreenshotOptions,
   baseEnv: NodeJS.ProcessEnv = process.env,
 ): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = { ...baseEnv, EXPO_PUBLIC_SCREENSHOT_MODE: '1' };
+  const env: NodeJS.ProcessEnv = {
+    ...baseEnv,
+    EXPO_PUBLIC_SCREENSHOT_MODE: '1',
+    // Baked at JS-bundle time; theme-provider locks to it in screenshot mode.
+    EXPO_PUBLIC_SCREENSHOT_THEME: options.theme,
+  };
   if (options.variant) {
     env.EXPO_PUBLIC_SCREENSHOT_VARIANT = options.variant;
   }
@@ -284,7 +298,7 @@ function runIos(options: ScreenshotOptions): number {
 
   const buildEnv = buildScreenshotEnv(options);
   console.log(
-    `${LOG} Building Release app for ${device.name} (backend=${options.backend}, flow=${options.flow}${options.variant ? `, variant=${options.variant}` : ''})...`,
+    `${LOG} Building Release app for ${device.name} (backend=${options.backend}, theme=${options.theme}, flow=${options.flow}${options.variant ? `, variant=${options.variant}` : ''})...`,
   );
   const runBuild = (): number =>
     runInherit('bunx', ['tsx', IOS_RUN_SCRIPT, '--', '--configuration', 'Release', '--device', device.udid], buildEnv);

@@ -19,13 +19,13 @@ export const SCREENSHOT_MODE = process.env.EXPO_PUBLIC_SCREENSHOT_MODE === '1';
 
 /**
  * Theme the screenshots build locks to so a capture can't flip mid-run when
- * SecureStore hydrates. Defaults to light; override per run with
- * `EXPO_PUBLIC_SCREENSHOT_THEME=dark`.
+ * SecureStore hydrates. Defaults to dark (the canonical store appearance, and
+ * the app's default); override per run with `EXPO_PUBLIC_SCREENSHOT_THEME=light`.
  */
 const screenshotThemeEnv = process.env.EXPO_PUBLIC_SCREENSHOT_THEME;
 export const SCREENSHOT_THEME_OVERRIDE: ThemeOverride = isThemeOverride(screenshotThemeEnv)
   ? screenshotThemeEnv
-  : 'light';
+  : 'dark';
 
 /**
  * UI variant the screenshots build locks to. Defaults to `'auto'`, which already
