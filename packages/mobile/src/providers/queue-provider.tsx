@@ -196,7 +196,7 @@ const QueueContext = createContext<QueueContextValue | null>(null);
  * - useQueue(): legacy/full reducer state plus actions; use only when state shape is required.
  * - useQueueActions(): stable command surface for enqueue/session/playback writes.
  * - useQueueSessionId(): rare session-id changes for structural chrome.
- * - useQueueSessionControls(): session id plus serial/wall controls for party surfaces.
+ * - useQueueSessionControls(): session id, serial/wall controls, and the member-userId set for party surfaces.
  * - useQueueLiveStats(): high-frequency live stats and roster updates.
  * - useActiveClimbUuid(): row-level active-climb highlighting.
  * - useHasActiveClimb(): presence-only bottom chrome metrics.
@@ -211,7 +211,16 @@ type QueueSessionControlContextValue = Pick<
   | 'confirmClimbOnWall'
   | 'reportWallDisconnect'
   | 'setSessionBoardSerial'
->;
+> & {
+  /**
+   * Stable DB user UUIDs of the current session's members (including me). Used to
+   * id-match the board-presence holder against "someone in my session" so the
+   * lightbulb lights only for a session member's BLE link, not any board holder.
+   * Empty when solo. Memoized by the sorted-id set so the ≤1/2s party push doesn't
+   * churn its identity.
+   */
+  sessionMemberUserIds: ReadonlySet<string>;
+};
 
 const QueueSessionControlContext = createContext<QueueSessionControlContextValue | null>(null);
 
@@ -1663,12 +1672,33 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     [playlistSuggestionSource],
   );
 
+  // Stable join key of the session's logged-in member userIds (anonymous members
+  // have no userId to match, so they're filtered out). `sessionUsers` gets a new
+  // array identity on every ≤1/2s SessionStatsUpdated push; keying the Set on this
+  // sorted string means its identity only changes on a real roster delta, so the
+  // session-control value (and the lightbulbs that read it) don't churn on stats.
+  // userIds are DB UUIDs, so a comma join round-trips losslessly.
+  const sessionMemberUserIdKey = useMemo(
+    () =>
+      sessionUsers
+        .map((user) => user.userId)
+        .filter((userId): userId is string => userId != null)
+        .sort()
+        .join(','),
+    [sessionUsers],
+  );
+  const sessionMemberUserIds = useMemo<ReadonlySet<string>>(
+    () => new Set(sessionMemberUserIdKey ? sessionMemberUserIdKey.split(',') : []),
+    [sessionMemberUserIdKey],
+  );
+
   const sessionControlValue = useMemo<QueueSessionControlContextValue>(
     () => ({
       sessionId,
       participantId,
       lastConnectedBoardSerial,
       isSessionWallLit,
+      sessionMemberUserIds,
       confirmClimbOnWall,
       reportWallDisconnect,
       setSessionBoardSerial,
@@ -1678,6 +1708,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       participantId,
       lastConnectedBoardSerial,
       isSessionWallLit,
+      sessionMemberUserIds,
       confirmClimbOnWall,
       reportWallDisconnect,
       setSessionBoardSerial,
