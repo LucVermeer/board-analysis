@@ -514,9 +514,11 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   );
 
   // Glass background with squared-off top corners so the sheet reads as a
-  // full-screen takeover, not a rounded panel.
+  // full-screen takeover, not a rounded panel. `opaqueMaterial` makes the
+  // takeover a denser, more opaque surface than the lighter glass on the other
+  // sheets, while staying light in light mode.
   const renderBackground = useCallback(
-    (props: BottomSheetBackgroundProps) => <GlassSheetBackground {...props} flatTop />,
+    (props: BottomSheetBackgroundProps) => <GlassSheetBackground {...props} flatTop opaqueMaterial />,
     [],
   );
 

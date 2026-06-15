@@ -3,6 +3,7 @@ import type { BottomSheetBackgroundProps } from '@gorhom/bottom-sheet';
 import { GlassSurface } from './GlassSurface';
 import { useTheme } from '../providers/theme-provider';
 import { sheetStyles } from '../theme/tokens';
+import { playDrawerMaterialTint } from '../theme/colors';
 
 /**
  * Shared frosted-glass background for bottom sheets — the same Liquid-Glass
@@ -22,14 +23,22 @@ type GlassSheetBackgroundProps = BottomSheetBackgroundProps & {
    * 28dp corners so the sheet reads as a screen, not a panel.
    */
   flatTop?: boolean;
+  /**
+   * Composite a scheme-aware tint over the material so the surface reads as a
+   * denser, more opaque takeover than the lighter glass the other sheets use.
+   * Used by the Play Drawer only; off by default so every other sheet keeps the
+   * original glass.
+   */
+  opaqueMaterial?: boolean;
 };
 
-export function GlassSheetBackground({ style, pointerEvents, flatTop }: GlassSheetBackgroundProps) {
-  const { systemColors, sheet } = useTheme();
+export function GlassSheetBackground({ style, pointerEvents, flatTop, opaqueMaterial }: GlassSheetBackgroundProps) {
+  const { systemColors, sheet, colorScheme } = useTheme();
   return (
     <GlassSurface
       glassEffectStyle="regular"
       fallbackColor={systemColors.secondaryBackground}
+      tintColor={opaqueMaterial ? playDrawerMaterialTint[colorScheme] : undefined}
       style={[style, sheetStyles.background, sheet.corners, flatTop && styles.flatTop, styles.clip]}
       pointerEvents={pointerEvents}
     />
