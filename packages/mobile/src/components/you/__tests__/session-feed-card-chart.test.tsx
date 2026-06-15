@@ -83,7 +83,27 @@ vi.mock('../../../lib/haptics', () => ({ hapticLight: vi.fn() }));
 vi.mock('../../../lib/beta-video-url', () => ({
   isInstagramUrl: (url: string) => url.includes('instagram.com'),
   isTikTokUrl: (url: string) => url.includes('tiktok.com'),
-  mapBetaLink: (row: { link: string }) => ({ link: row.link }),
+  mapBetaLink: (row: {
+    climbUuid: string;
+    link: string;
+    foreignUsername: string | null;
+    angle: number | null;
+    thumbnail: string | null;
+    isListed: boolean | null;
+    createdAt: string;
+    tickUuid?: string | null;
+    boardId?: number | null;
+  }) => ({
+    climb_uuid: row.climbUuid,
+    link: row.link,
+    foreign_username: row.foreignUsername,
+    angle: row.angle,
+    thumbnail: row.thumbnail,
+    is_listed: row.isListed ?? false,
+    created_at: row.createdAt,
+    tick_uuid: row.tickUuid ?? null,
+    board_id: row.boardId ?? null,
+  }),
 }));
 vi.mock('../../../lib/playlists/board-details-for-playlist', () => ({ getBoardConfigForPlaylist: () => null }));
 
@@ -160,7 +180,23 @@ describe('SessionFeedCard chart', () => {
     const hardest = tick();
     const { getByLabelText } = render(
       createElement(SessionFeedCard, {
-        session: session({ hardestSend: hardest }),
+        session: session({
+          hardestSend: tick(),
+          featuredBeta: {
+            tick: tick({ uuid: 'tick-2', climbName: 'Beta Climb' }),
+            betaLink: {
+              climbUuid: 'climb-2',
+              link: 'https://www.instagram.com/reel/demo/',
+              foreignUsername: 'setter',
+              angle: 40,
+              thumbnail: null,
+              isListed: true,
+              createdAt: '2026-06-12T00:00:00.000Z',
+              tickUuid: 'tick-2',
+              boardId: null,
+            },
+          },
+        }),
         onOpenComments: vi.fn(),
         onPress: vi.fn(),
         onOpenClimb,
