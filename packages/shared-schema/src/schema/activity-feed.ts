@@ -511,6 +511,8 @@ export const activityFeedTypeDefs = /* GraphQL */ `
     upvotes: Int!
     "Total attempts (sum of attemptCount) since last successful ascent by this user on this climb"
     totalAttempts: Int
+    "Stored beta videos attached to this climb, batched with the session detail (no live enrichment). Populated by the session-detail query; absent on other selections that reuse this type (e.g. the live SessionStatsUpdated subscription)."
+    betaLinks: [BetaLink!]
   }
 
   """

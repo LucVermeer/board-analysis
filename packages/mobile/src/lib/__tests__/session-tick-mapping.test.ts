@@ -6,7 +6,7 @@ vi.mock('../playlists/board-details-for-playlist', () => ({
 }));
 
 import { getBoardConfigForPlaylist } from '../playlists/board-details-for-playlist';
-import { sessionTicksToLogbook, navigateToSessionClimb } from '../session-tick-mapping';
+import { sessionTickToClimb, navigateToSessionClimb } from '../session-tick-mapping';
 
 const mockedGetBoardConfig = vi.mocked(getBoardConfigForPlaylist);
 
@@ -33,51 +33,63 @@ function makeTick(overrides: Partial<SessionDetailTick> = {}): SessionDetailTick
     climbedAt: '2026-06-01T10:00:00.000Z',
     upvotes: 0,
     totalAttempts: 5,
+    betaLinks: [],
     ...overrides,
   };
 }
 
-describe('sessionTicksToLogbook', () => {
-  it('buckets ticks by board type', () => {
-    const result = sessionTicksToLogbook([
-      makeTick({ uuid: 'a', boardType: 'kilter' }),
-      makeTick({ uuid: 'b', boardType: 'tension' }),
-      makeTick({ uuid: 'c', boardType: 'kilter' }),
-    ]);
-    expect(Object.keys(result).sort()).toEqual(['kilter', 'tension']);
-    expect(result.kilter).toHaveLength(2);
-    expect(result.tension).toHaveLength(1);
+describe('sessionTickToClimb', () => {
+  it('returns null without frames (falls back to the plain text row)', () => {
+    expect(sessionTickToClimb(makeTick({ frames: null }))).toBeNull();
   });
 
-  it('maps tick fields onto LogbookEntry, mirroring difficulty into effectiveDifficulty', () => {
-    const [entry] = sessionTicksToLogbook([makeTick({ difficulty: 12, attemptCount: 3, angle: 40 })]).kilter;
-    expect(entry).toMatchObject({
-      climbed_at: '2026-06-01T10:00:00.000Z',
-      difficulty: 12,
-      effectiveDifficulty: 12,
-      tries: 3,
-      angle: 40,
-      status: 'send',
-      layoutId: 1,
-      boardType: 'kilter',
-      climbUuid: 'climb-1',
+  it('maps a framed tick onto the ClimbListItemClimb shape', () => {
+    const climb = sessionTickToClimb(
+      makeTick({
+        climbUuid: 'climb-7',
+        climbName: 'Crimp City',
+        frames: 'p1145r15',
+        difficultyName: 'V6',
+        setterUsername: 'setter-bob',
+      }),
+    );
+
+    expect(climb).toMatchObject({
+      uuid: 'climb-7',
+      name: 'Crimp City',
+      frames: 'p1145r15',
+      difficulty: 'V6',
+      ascensionist_count: 0,
+      setter_username: 'setter-bob',
     });
   });
 
-  it('normalises unknown statuses to attempt and clamps tries to at least 1', () => {
-    const [entry] = sessionTicksToLogbook([makeTick({ status: 'repeat', attemptCount: 0 })]).kilter;
-    expect(entry.status).toBe('attempt');
-    expect(entry.tries).toBe(1);
+  it('sets benchmark_difficulty only when the tick is a benchmark', () => {
+    const benchmark = sessionTickToClimb(makeTick({ frames: 'p1', difficultyName: 'V5', isBenchmark: true }));
+    expect(benchmark?.benchmark_difficulty).toBe('V5');
+
+    const nonBenchmark = sessionTickToClimb(makeTick({ frames: 'p1', difficultyName: 'V5', isBenchmark: false }));
+    expect(nonBenchmark?.benchmark_difficulty).toBeNull();
   });
 
-  it('coalesces a null difficulty to null on both grade fields', () => {
-    const [entry] = sessionTicksToLogbook([makeTick({ difficulty: null })]).kilter;
-    expect(entry.difficulty).toBeNull();
-    expect(entry.effectiveDifficulty).toBeNull();
+  it('passes through mirrored and is_no_match flags', () => {
+    const climb = sessionTickToClimb(makeTick({ frames: 'p1', isMirror: true, isNoMatch: true }));
+    expect(climb?.mirrored).toBe(true);
+    expect(climb?.is_no_match).toBe(true);
   });
 
-  it('returns an empty object for no ticks', () => {
-    expect(sessionTicksToLogbook([])).toEqual({});
+  it('keeps the community star average hidden by defaulting quality_average to "0"', () => {
+    const climb = sessionTickToClimb(makeTick({ frames: 'p1', quality: 3 }));
+    expect(climb?.quality_average).toBe('0');
+  });
+
+  it('coalesces null name, difficultyName and setterUsername to empty strings', () => {
+    const climb = sessionTickToClimb(
+      makeTick({ frames: 'p1', climbName: null, difficultyName: null, setterUsername: null }),
+    );
+    expect(climb?.name).toBe('');
+    expect(climb?.difficulty).toBe('');
+    expect(climb?.setter_username).toBe('');
   });
 });
 

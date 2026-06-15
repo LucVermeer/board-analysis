@@ -4679,6 +4679,8 @@ export type SessionDetailTick = {
   __typename?: 'SessionDetailTick';
   angle: Scalars['Int']['output'];
   attemptCount: Scalars['Int']['output'];
+  /** Stored beta videos attached to this climb, batched with the session detail (no live enrichment). Populated by the session-detail query; absent on other selections that reuse this type (e.g. the live SessionStatsUpdated subscription). */
+  betaLinks?: Maybe<Array<BetaLink>>;
   boardType: Scalars['String']['output'];
   climbName?: Maybe<Scalars['String']['output']>;
   climbUuid: Scalars['String']['output'];
@@ -9147,6 +9149,7 @@ export type SessionDetailTickResolvers<
 > = ResolversObject<{
   angle?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   attemptCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  betaLinks?: Resolver<Maybe<Array<ResolversTypes['BetaLink']>>, ParentType, ContextType>;
   boardType?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   climbName?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   climbUuid?: Resolver<ResolversTypes['String'], ParentType, ContextType>;

@@ -261,6 +261,10 @@ export type SessionDetailTick = {
   climbedAt: string;
   upvotes: number;
   totalAttempts?: number | null;
+  // Populated by the session-detail query (always an array there); absent on
+  // other selection sets that reuse this type, e.g. the live SessionStatsUpdated
+  // subscription. Consumers default to [] when reading it.
+  betaLinks?: BetaLinksGqlRow[] | null;
 };
 
 export type SessionDetail = {

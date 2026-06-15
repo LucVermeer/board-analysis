@@ -131,17 +131,47 @@ export function gradeBadgeColor(gradeLabel: string | null | undefined): string {
   return getGradeColor(gradeLabel) ?? DEFAULT_GRADE_COLOR;
 }
 
+export type SessionGradeBarsOptions =
+  | {
+      /**
+       * Split each grade bar into a muted send (redpoint) base and a vivid flash
+       * cap, so a brighter top band reads as "flashed".
+       */
+      splitFlash: true;
+      /**
+       * Required when splitting: the muted redpoint base is colour-scheme aware,
+       * so omitting it would silently force light-mode shades on dark-mode users.
+       */
+      colorScheme: ColorSchemeName;
+    }
+  | {
+      /** Each bar is a single vivid segment of flash + send (the default). */
+      splitFlash?: false;
+      colorScheme?: ColorSchemeName;
+    };
+
 /**
- * Build grade-distribution bars for a session view. Each grade bar is the total
- * ascents (flash + send) for that grade, drawn in the grade's own vivid colour —
- * a colourful grade pyramid. Grades with no ascents are dropped; returns null
- * when the whole distribution is empty. Pass straight to `StackedBarChart` (the
- * segment carries an explicit colour, so `colorBy` is ignored for these bars).
+ * Build grade-distribution bars for a session view. By default each grade bar is
+ * the total ascents (flash + send) for that grade, drawn in the grade's own vivid
+ * colour — a colourful grade pyramid.
+ *
+ * With `options.splitFlash`, each bar is split into two same-hue shades: a muted
+ * `gradeChartColor` send (redpoint) base and a vivid `gradeBadgeColor` flash cap.
+ * The flash segment is pushed last so it renders at the top of the stack
+ * (`StackedBarChart` maps `segments[0]` to the bottom of the bar). The same-hue
+ * two-shade split keeps grades distinguishable across the whole V0→V17 palette.
+ *
+ * Grades with no ascents are dropped; returns null when the whole distribution is
+ * empty. Pass straight to `StackedBarChart` (each segment carries an explicit
+ * colour, so `colorBy` is ignored for these bars).
  */
 export function buildSessionGradeBars(
   distribution: SessionGradeDistributionItem[],
   formatGrade?: FormatGrade,
+  options?: SessionGradeBarsOptions,
 ): ColoredBar[] | null {
+  const splitFlash = options?.splitFlash ?? false;
+  const colorScheme = options?.colorScheme ?? 'light';
   const bars: ColoredBar[] = [];
   // Order the X-axis easy→hard regardless of the order the backend returns.
   const ordered = [...distribution].sort((a, b) => gradeSortValue(a.grade) - gradeSortValue(b.grade));
@@ -149,11 +179,24 @@ export function buildSessionGradeBars(
     const total = item.flash + item.send;
     if (total <= 0) continue;
     const label = formatGrade?.(item.grade) ?? item.grade;
-    bars.push({
-      key: item.grade,
-      label,
-      segments: [{ value: total, key: item.grade, label, color: gradeBadgeColor(item.grade) }],
-    });
+    if (splitFlash) {
+      const segments: ColoredBarSegment[] = [];
+      // Send (redpoint) base — muted same-hue shade — sits at the bottom.
+      if (item.send > 0) {
+        segments.push({ value: item.send, key: item.grade, label, color: gradeChartColor(item.grade, colorScheme) });
+      }
+      // Flash cap — vivid same-hue shade — pushed last so it tops the stack.
+      if (item.flash > 0) {
+        segments.push({ value: item.flash, key: item.grade, label, color: gradeBadgeColor(item.grade) });
+      }
+      bars.push({ key: item.grade, label, segments });
+    } else {
+      bars.push({
+        key: item.grade,
+        label,
+        segments: [{ value: total, key: item.grade, label, color: gradeBadgeColor(item.grade) }],
+      });
+    }
   }
   return bars.length > 0 ? bars : null;
 }

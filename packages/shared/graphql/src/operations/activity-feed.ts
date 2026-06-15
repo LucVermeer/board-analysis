@@ -181,6 +181,15 @@ export const GET_SESSION_DETAIL = gql`
         climbedAt
         upvotes
         totalAttempts
+        betaLinks {
+          climbUuid
+          link
+          foreignUsername
+          angle
+          thumbnail
+          isListed
+          createdAt
+        }
       }
     }
   }

@@ -4676,6 +4676,8 @@ export type SessionDetailTick = {
   __typename?: 'SessionDetailTick';
   angle: Scalars['Int']['output'];
   attemptCount: Scalars['Int']['output'];
+  /** Stored beta videos attached to this climb, batched with the session detail (no live enrichment). Populated by the session-detail query; absent on other selections that reuse this type (e.g. the live SessionStatsUpdated subscription). */
+  betaLinks?: Maybe<Array<BetaLink>>;
   boardType: Scalars['String']['output'];
   climbName?: Maybe<Scalars['String']['output']>;
   climbUuid: Scalars['String']['output'];

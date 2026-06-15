@@ -62,6 +62,7 @@ function makeSessionDetail(overrides: Partial<SessionDetail> = {}): SessionDetai
         climbedAt: '2024-01-15T10:10:00.000Z',
         upvotes: 2,
         totalAttempts: 2,
+        betaLinks: [],
       },
     ],
     upvotes: 0,
@@ -132,6 +133,7 @@ describe('buildSessionStatsUpdatedEvent', () => {
       climbedAt: `2024-01-15T10:${String(i).padStart(2, '0')}:00.000Z`,
       upvotes: 0,
       totalAttempts: 1,
+      betaLinks: [],
     }));
     const detail = makeSessionDetail({ ticks });
     sessionDetailMock.mockResolvedValue(detail);

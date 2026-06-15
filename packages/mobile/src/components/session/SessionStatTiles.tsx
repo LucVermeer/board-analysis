@@ -47,7 +47,7 @@ function StatTile({ value, label, icon, tint }: { value: number; label: string; 
     <View style={[styles.tile, { backgroundColor: systemColors.fill }]}>
       <View style={styles.valueRow}>
         <Icon name={icon} size={14} color={tint} />
-        <Text variant="title3" color={tint}>
+        <Text variant="title2" color={systemColors.label}>
           {value}
         </Text>
       </View>
@@ -65,7 +65,7 @@ function GradeTile({ grade, label }: { grade: string; label: string }) {
   const displayGrade = formatGrade(grade) ?? grade;
   return (
     <View style={[styles.tile, { backgroundColor: background }]}>
-      <Text variant="title3" color={textColor}>
+      <Text variant="title2" color={textColor}>
         {displayGrade}
       </Text>
       <Text variant="caption1" color={textColor} style={styles.gradeLabel} numberOfLines={1}>

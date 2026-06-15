@@ -1,82 +1,53 @@
 import { useMemo } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import { deriveProfileViewModel } from '@boardsesh/profile-stats';
-import type { SessionDetailTick } from '@boardsesh/shared-schema';
+import type { SessionGradeDistributionItem } from '@boardsesh/shared-schema';
 import { Card } from '../Card';
 import { SectionHeader } from '../SectionHeader';
-import { StackedBarChart, GroupedBarChart, type ChartLegendItem } from '../you/YouCharts';
-import { layoutChartColor, flashRedpointColor } from '../you/profile-chart-colors';
-import { sessionTicksToLogbook } from '../../lib/session-tick-mapping';
+import { StackedBarChart, type ChartLegendItem } from '../you/YouCharts';
+import { buildSessionGradeBars, gradeBadgeColor, gradeChartColor } from '../you/profile-chart-colors';
 import { useGradeFormat } from '../../hooks/use-grade-format';
 import { useTheme } from '../../providers/theme-provider';
 import { spacing } from '../../theme/tokens';
 
 /**
- * Rich per-session breakdown: maps the session's ticks into the shared
- * `deriveProfileViewModel` aggregation (timeframe 'all', all boards) and renders
- * the grade-distribution + flash-vs-redpoint charts, mirroring the Progress tab.
- * Renders nothing when there are no ticks.
+ * Per-session grade breakdown. Renders a grade-distribution chart where each bar
+ * is coloured by grade hue, split into a muted send (redpoint) base and a vivid
+ * flash cap so a brighter top band reads as "flashed". A compact two-swatch
+ * legend explains the shade split. Renders nothing when there's no data.
  */
-export function SessionAnalyticsSection({ ticks }: { ticks: SessionDetailTick[] }) {
+export function SessionAnalyticsSection({ gradeDistribution }: { gradeDistribution: SessionGradeDistributionItem[] }) {
   const { t } = useTranslation('profile');
   const { colorScheme } = useTheme();
   // Match the grade format the Progress tab / useYouProfileData uses so a
-  // session's charts read identically to the profile's.
-  const { gradeFormat } = useGradeFormat();
+  // session's chart reads identically to the profile's.
+  const { formatGrade } = useGradeFormat();
 
-  const viewModel = useMemo(() => {
-    if (ticks.length === 0) return null;
-    return deriveProfileViewModel({
-      allBoardsTicks: sessionTicksToLogbook(ticks),
-      selectedBoard: 'all',
-      timeframe: 'all',
-      fromDate: '',
-      toDate: '',
-      gradeFormat,
-      profileStats: null,
-    });
-  }, [ticks, gradeFormat]);
-
-  const gradeDistLegend = useMemo<ChartLegendItem[] | undefined>(
-    () =>
-      viewModel?.aggregatedStackedBars?.legend.map((entry) => ({
-        label: entry.label,
-        color: layoutChartColor(entry.key, colorScheme),
-      })),
-    [colorScheme, viewModel],
-  );
-  const flashRedpointLegend = useMemo<ChartLegendItem[] | undefined>(
-    () =>
-      viewModel?.aggregatedFlashRedpointBars?.[0]?.values.map((value) => ({
-        label: value.label,
-        color: flashRedpointColor(value.key, colorScheme),
-      })),
-    [viewModel, colorScheme],
+  const gradeBars = useMemo(
+    () => buildSessionGradeBars(gradeDistribution, formatGrade, { splitFlash: true, colorScheme }),
+    [gradeDistribution, formatGrade, colorScheme],
   );
 
-  if (!viewModel) return null;
+  // Representative vivid (flash) vs muted (redpoint) swatches so the user reads
+  // "brighter shade = flash" — V5 is a mid-palette grade that reads on both.
+  const shadeLegend = useMemo<ChartLegendItem[]>(
+    () => [
+      { label: t('stats.flash'), color: gradeBadgeColor('V5') },
+      { label: t('stats.redpoint'), color: gradeChartColor('V5', colorScheme) },
+    ],
+    [t, colorScheme],
+  );
+
+  // `buildSessionGradeBars` returns null for an empty or all-zero distribution,
+  // so this covers both the no-distribution and no-ascent cases.
+  if (!gradeBars) return null;
 
   return (
     <View>
       <SectionHeader title={t('stats.gradeDistribution')} />
       <Card style={styles.chartCard}>
-        <StackedBarChart
-          bars={viewModel.aggregatedStackedBars?.bars ?? null}
-          colorBy="layout"
-          legend={gradeDistLegend}
-          fitYAxisToData
-        />
+        <StackedBarChart bars={gradeBars} colorBy="grade" legend={shadeLegend} fitYAxisToData />
       </Card>
-
-      {viewModel.aggregatedFlashRedpointBars && (
-        <>
-          <SectionHeader title={t('stats.flashVsRedpoint')} />
-          <Card style={styles.chartCard}>
-            <GroupedBarChart bars={viewModel.aggregatedFlashRedpointBars} legend={flashRedpointLegend} fitYAxisToData />
-          </Card>
-        </>
-      )}
     </View>
   );
 }

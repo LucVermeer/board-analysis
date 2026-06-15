@@ -1,45 +1,33 @@
 import { type useRouter } from 'expo-router';
-import type { LogbookEntry } from '@boardsesh/profile-stats';
 import type { SessionDetailTick } from '@boardsesh/shared-schema';
+import type { ClimbListItemClimb } from '../components/ClimbListItemContent';
 import { getBoardConfigForPlaylist } from './playlists/board-details-for-playlist';
 
 type Router = ReturnType<typeof useRouter>;
 
 /**
- * Normalise a session's per-climb ticks into the `LogbookEntry` shape the shared
- * `deriveProfileViewModel` aggregation consumes, bucketed by board type (the
- * derive step keys every chart off `Record<boardType, LogbookEntry[]>`).
+ * Adapt a session tick into the permissive `ClimbListItemClimb` shape the shared
+ * climb-list visual (thumbnail + name + colorized grade) consumes. Mirrors
+ * LogbookRow's `ascentToClimb`. Returns null without frames — the host then
+ * falls back to the plain text row (e.g. MoonBoard, which has no bundled art).
  *
- * `SessionDetailTick.status` is a free-form string off the GraphQL record, so we
- * narrow it to the three statuses the stats layer understands; anything else
- * (shouldn't happen in practice) falls through as an attempt.
+ * The logger's personal `quality` is deliberately NOT surfaced as the community
+ * star average, so `quality_average` stays '0' (the row hides the star when 0).
  */
-export function sessionTicksToLogbook(ticks: SessionDetailTick[]): Record<string, LogbookEntry[]> {
-  const byBoard: Record<string, LogbookEntry[]> = {};
-  for (const tick of ticks) {
-    const boardType = tick.boardType;
-    const entry: LogbookEntry = {
-      climbed_at: tick.climbedAt,
-      difficulty: tick.difficulty ?? null,
-      // Session ticks carry no consensus override, so the user difficulty doubles
-      // as the effective grade for bucketing.
-      effectiveDifficulty: tick.difficulty ?? null,
-      tries: Math.max(1, tick.attemptCount),
-      angle: tick.angle,
-      status: normaliseStatus(tick.status),
-      layoutId: tick.layoutId ?? null,
-      boardType,
-      climbUuid: tick.climbUuid,
-    };
-    (byBoard[boardType] ??= []).push(entry);
-  }
-  return byBoard;
-}
-
-function normaliseStatus(status: string): LogbookEntry['status'] {
-  if (status === 'flash') return 'flash';
-  if (status === 'send') return 'send';
-  return 'attempt';
+export function sessionTickToClimb(tick: SessionDetailTick): ClimbListItemClimb | null {
+  if (!tick.frames) return null;
+  return {
+    uuid: tick.climbUuid,
+    name: tick.climbName ?? '',
+    frames: tick.frames,
+    difficulty: tick.difficultyName ?? '',
+    ascensionist_count: 0,
+    quality_average: '0',
+    setter_username: tick.setterUsername ?? '',
+    benchmark_difficulty: tick.isBenchmark ? (tick.difficultyName ?? null) : null,
+    mirrored: tick.isMirror,
+    is_no_match: tick.isNoMatch,
+  };
 }
 
 /**
