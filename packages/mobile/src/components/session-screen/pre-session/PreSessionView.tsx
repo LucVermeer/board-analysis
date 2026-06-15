@@ -33,6 +33,7 @@ import {
   DEFAULT_PYRAMID_OPTIONS,
   DEFAULT_VOLUME_OPTIONS,
 } from '@boardsesh/playlist-generator';
+import { assertNever } from '../../../lib/assert-never';
 import { SCREENSHOT_MODE, SCREENSHOT_WORKOUT } from '../../../lib/screenshot-mode';
 import { GeneratorPickerCard, type GeneratorSelection } from './GeneratorPickerCard';
 import { WorkoutPreviewRow } from './WorkoutPreviewRow';
@@ -57,6 +58,10 @@ function initialGeneratorSelection(): GeneratorSelection {
       return { type: 'on', options: { ...DEFAULT_LADDER_OPTIONS, targetGrade } };
     case 'gradeFocus':
       return { type: 'on', options: { ...DEFAULT_GRADE_FOCUS_OPTIONS, targetGrade } };
+    default:
+      // A new ScreenshotWorkout variant must add a case above; otherwise this
+      // turns into a compile error instead of silently returning undefined.
+      return assertNever(SCREENSHOT_WORKOUT);
   }
 }
 

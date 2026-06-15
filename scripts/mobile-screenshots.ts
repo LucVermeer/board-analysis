@@ -202,7 +202,15 @@ function commandExists(command: string): boolean {
 function listSimulatorDevices(): DeviceInfo[] {
   const { status, stdout } = runCapture('xcrun', ['simctl', 'list', 'devices', '--json']);
   if (status !== 0) return [];
-  const parsed = JSON.parse(stdout) as { devices: Record<string, Array<DeviceInfo & { isAvailable?: boolean }>> };
+  // simctl can emit partial/empty JSON while Xcode is installing or updating
+  // components; treat unparseable output as "no devices" rather than throwing a
+  // SyntaxError that surfaces as a confusing stack in main()'s catch.
+  let parsed: { devices: Record<string, Array<DeviceInfo & { isAvailable?: boolean }>> };
+  try {
+    parsed = JSON.parse(stdout) as { devices: Record<string, Array<DeviceInfo & { isAvailable?: boolean }>> };
+  } catch {
+    return [];
+  }
   const devices: DeviceInfo[] = [];
   for (const runtimeDevices of Object.values(parsed.devices)) {
     for (const device of runtimeDevices) {
@@ -217,9 +225,18 @@ function listSimulatorDevices(): DeviceInfo[] {
 function newestIosRuntime(): string | null {
   const { status, stdout } = runCapture('xcrun', ['simctl', 'list', 'runtimes', '--json']);
   if (status !== 0) return null;
-  const parsed = JSON.parse(stdout) as {
+  // Same defensive parse as listSimulatorDevices: partial JSON during a Xcode
+  // component install shouldn't crash the run.
+  let parsed: {
     runtimes: Array<{ identifier: string; isAvailable?: boolean; platform?: string; version?: string }>;
   };
+  try {
+    parsed = JSON.parse(stdout) as {
+      runtimes: Array<{ identifier: string; isAvailable?: boolean; platform?: string; version?: string }>;
+    };
+  } catch {
+    return null;
+  }
   const ios = parsed.runtimes
     .filter((runtime) => runtime.isAvailable !== false && /iOS/i.test(runtime.identifier))
     .sort((a, b) => (a.version ?? '').localeCompare(b.version ?? '', undefined, { numeric: true }));

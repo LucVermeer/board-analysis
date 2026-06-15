@@ -83,14 +83,23 @@ jobs:
           bunx wait-on http-get://localhost:8080/health --timeout 120000
 
       - name: Install Maestro
-        # Pin the version so an upstream Maestro release can't silently change
-        # behaviour. The install script honours MAESTRO_VERSION. Bump this
-        # deliberately after re-validating the flow locally.
+        # Pinned to a specific GitHub Releases asset and verified against a
+        # checksum committed in this repo — NOT `curl … get.maestro.mobile.dev | bash`,
+        # whose redirect target isn't pinned and would run arbitrary code on the
+        # runner if compromised. Because MAESTRO_SHA256 lives in version control,
+        # a swapped release asset fails the checksum gate here. Bump the version +
+        # hash together (from the release's checksums_sha256.txt) after
+        # re-validating the flow locally.
         env:
           MAESTRO_VERSION: 2.6.1
+          MAESTRO_SHA256: 3440825f514f537c6a96bcf5de995780c2a4a7f83a43208fdc95d4f1fecfad3b
         run: |
-          curl -Ls "https://get.maestro.mobile.dev" | bash
-          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+          set -euo pipefail
+          url="https://github.com/mobile-dev-inc/maestro/releases/download/cli-${MAESTRO_VERSION}/maestro.zip"
+          curl -fsSL "$url" -o maestro.zip
+          echo "${MAESTRO_SHA256}  maestro.zip" | shasum -a 256 -c -
+          unzip -q maestro.zip -d "$HOME/.maestro-dist"
+          echo "$HOME/.maestro-dist/maestro/bin" >> "$GITHUB_PATH"
 
       - name: Capture screenshots
         run: |

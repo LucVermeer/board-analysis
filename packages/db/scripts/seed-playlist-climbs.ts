@@ -25,6 +25,7 @@
  * derived from the playlist row id — no randomness, no Date.now(). The dev DB
  * is a pre-built image, so the seed must be byte-stable across rebuilds.
  */
+import { pathToFileURL } from 'node:url';
 import { and, asc, eq, sql } from 'drizzle-orm';
 import { createScriptDb, getScriptDatabaseUrl } from './db-connection.js';
 import { playlists, playlistClimbs, playlistOwnership } from '../src/schema/app/playlists.js';
@@ -40,8 +41,8 @@ const DEFAULT_PLAYLIST_ANGLE = 40;
 // Bounds for the deterministic per-playlist climb count (inclusive). Varying
 // the size between playlists makes the Discover/library grid look real instead
 // of every card reading the same number.
-const MIN_CLIMBS_PER_PLAYLIST = 8;
-const MAX_CLIMBS_PER_PLAYLIST = 20;
+export const MIN_CLIMBS_PER_PLAYLIST = 8;
+export const MAX_CLIMBS_PER_PLAYLIST = 20;
 
 type ScriptDb = ReturnType<typeof createScriptDb>['db'];
 
@@ -55,7 +56,7 @@ type PlaylistClimbTarget = {
  * Deterministic climb count for a playlist, derived from its row id so the
  * same playlist always gets the same number of climbs (8–20) across rebuilds.
  */
-function climbCountForPlaylist(playlistId: bigint): number {
+export function climbCountForPlaylist(playlistId: bigint): number {
   const span = MAX_CLIMBS_PER_PLAYLIST - MIN_CLIMBS_PER_PLAYLIST + 1;
   // playlistId is a bigint; reduce it into the span without precision loss.
   const offset = Number(((playlistId % BigInt(span)) + BigInt(span)) % BigInt(span));
@@ -119,7 +120,17 @@ async function selectClimbUuids(db: ScriptDb, target: PlaylistClimbTarget, limit
 export async function seedPlaylistClimbs(db: ScriptDb, target: PlaylistClimbTarget): Promise<number> {
   const limit = climbCountForPlaylist(target.playlistId);
   const climbUuids = await selectClimbUuids(db, target, limit);
-  if (climbUuids.length === 0) return 0;
+  if (climbUuids.length === 0) {
+    // Most likely: the board/layout has no board_climb_stats row at
+    // DEFAULT_PLAYLIST_ANGLE (40°), so the inner join matched nothing. Flag it so
+    // a silently-empty playlist on a newly-added layout is distinguishable from
+    // an intentional skip. Validated layouts (Kilter/Tension) have 40° stats.
+    console.warn(
+      `No displayable climbs at ${DEFAULT_PLAYLIST_ANGLE}° for playlist ${target.playlistId} ` +
+        `(boardType=${target.boardType}, layoutId=${target.layoutId ?? 'null'}); leaving it empty.`,
+    );
+    return 0;
+  }
 
   await db
     .insert(playlistClimbs)
@@ -180,13 +191,14 @@ async function backfillTestUserPlaylistClimbs(): Promise<void> {
 }
 
 // Only run the stopgap when invoked directly, not when imported by
-// create-test-user.ts. `import.meta.url` resolves to this file's URL; compare
-// it to the process entrypoint.
+// create-test-user.ts. `import.meta.url` resolves to this file's URL; compare it
+// to the process entrypoint via pathToFileURL so paths with spaces or special
+// characters still match (a bare `file://${argv[1]}` template doesn't encode them).
 const invokedDirectly =
   typeof process !== 'undefined' &&
   Array.isArray(process.argv) &&
   process.argv[1] != null &&
-  import.meta.url === `file://${process.argv[1]}`;
+  import.meta.url === pathToFileURL(process.argv[1]).href;
 
 if (invokedDirectly) {
   void backfillTestUserPlaylistClimbs();
