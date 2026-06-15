@@ -1,37 +1,35 @@
 appId: com.boardsesh.app
 name: app-store screenshots
 ---
-# App Store / Play Store hero shots. Logs in once (lands on Home), then deep-links
-# to each tab and captures it.
+# App Store / Play Store hero shots against the prod backend + curated test user.
 #
-# iOS shows an "Open in 'Boardsesh'?" system confirmation when a custom-scheme
-# deep link is opened via simctl; each openLink is followed by an optional
-# tapOn "Open" to confirm it. Captures are best-effort (waitForAnimationToEnd +
-# screenshot) so one slow/empty screen never aborts the whole set — screenshot
-# QUALITY depends on the signed-in account having an active board + feed data
-# (see scripts/mobile-screenshots.ts notes).
+# IMPORTANT — coordinate taps: on this iOS 26 / RN Fabric build, Maestro's
+# accessibility tree only exposes native text inputs and system dialogs; plain
+# Views, Text, reanimated pressables and gesture rows do NOT surface, so app
+# buttons can't be matched by id/text. Board-dependent interactions therefore use
+# percentage coordinate taps, which are pinned to the orchestrator's device
+# (iPhone 16 Pro Max). If you change the device, re-check the two `point:` taps.
+#
+# Other notes:
+# - The orchestrator resets the simulator keychain first, so the app launches
+#   signed out and login authenticates against prod.
+# - clearState wipes the client-side active board (AsyncStorage); it's re-picked
+#   via the board picker below.
+# - iOS shows an "Open in 'Boardsesh'?" confirmation for simctl deep links; each
+#   openLink is followed by an optional tapOn "Open".
+# - Board-independent captures (home/discover/profile) run first so a board-pick
+#   miss can't lose them.
 - launchApp:
     clearState: true
-# clearState wipes the app sandbox but NOT the Keychain, where the auth token
-# lives — so a rerun may already be signed in. Only run login when the auth
-# screen is actually showing (fresh install / signed out).
 - runFlow:
     when:
       visible:
         id: 'auth-email-input'
     file: login.yaml
 
-# Home — already here after login (no deep link, no confirm prompt).
+# Home — feed populated by the prod test user's follows.
 - waitForAnimationToEnd
 - takeScreenshot: 00-home
-
-# Climbs — the main browse surface (needs an active board to show climbs).
-- openLink: com.boardsesh.app://climbs
-- tapOn:
-    text: 'Open'
-    optional: true
-- waitForAnimationToEnd
-- takeScreenshot: 01-climbs
 
 # Discover — playlists.
 - openLink: com.boardsesh.app://discover
@@ -39,15 +37,7 @@ name: app-store screenshots
     text: 'Open'
     optional: true
 - waitForAnimationToEnd
-- takeScreenshot: 03-discover
-
-# Record — session / live wall.
-- openLink: com.boardsesh.app://record
-- tapOn:
-    text: 'Open'
-    optional: true
-- waitForAnimationToEnd
-- takeScreenshot: 04-record
+- takeScreenshot: 04-discover
 
 # Profile — stats, sessions, logbook.
 - openLink: com.boardsesh.app://profile
@@ -55,4 +45,43 @@ name: app-store screenshots
     text: 'Open'
     optional: true
 - waitForAnimationToEnd
-- takeScreenshot: 05-profile
+- takeScreenshot: 06-profile
+
+# Activate a board so Climbs / board-view / Record render real content. Open the
+# board picker and tap the first card under "Your boards" (top-left), which
+# activates it and dismisses back to Climbs.
+- openLink: com.boardsesh.app://boards
+- tapOn:
+    text: 'Open'
+    optional: true
+- waitForAnimationToEnd
+- tapOn:
+    point: '24%,45%'
+- waitForAnimationToEnd
+
+# Climbs — the main browse surface (now board-backed).
+- openLink: com.boardsesh.app://climbs
+- tapOn:
+    text: 'Open'
+    optional: true
+- waitForAnimationToEnd
+- takeScreenshot: 01-climbs
+
+# Record — start-a-session surface (board selected).
+- openLink: com.boardsesh.app://record
+- tapOn:
+    text: 'Open'
+    optional: true
+- waitForAnimationToEnd
+- takeScreenshot: 05-record
+
+# Board view — open the first climb (the signature feature: wall with holds lit).
+- openLink: com.boardsesh.app://climbs
+- tapOn:
+    text: 'Open'
+    optional: true
+- waitForAnimationToEnd
+- tapOn:
+    point: '50%,26%'
+- waitForAnimationToEnd
+- takeScreenshot: 02-board-view

@@ -311,6 +311,15 @@ function runIos(options: ScreenshotOptions): number {
     console.log(`${LOG} Build + install OK; ignoring expo's post-install launch step (Maestro launches the app).`);
   }
 
+  // Reset the simulator keychain so the app launches signed out and login runs
+  // against the target backend. The auth token lives in a shared keychain access
+  // group (group.com.boardsesh.app) that survives both `clearState` and an app
+  // uninstall — so without this a stale token (e.g. from a previous --backend
+  // local run) makes login skip and the app talk to the wrong backend with an
+  // invalid session. The login subflow re-authenticates from a clean slate.
+  console.log(`${LOG} Resetting simulator keychain (clears any stale auth token)...`);
+  runCapture('xcrun', ['simctl', 'keychain', device.udid, 'reset']);
+
   const captureDir = mkdtempSync(join(tmpdir(), 'boardsesh-shots-'));
   try {
     const flowFile = join(MAESTRO_DIR, `${options.flow}.yaml`);
