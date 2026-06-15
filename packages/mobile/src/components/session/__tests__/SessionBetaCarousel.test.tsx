@@ -96,7 +96,7 @@ describe('SessionBetaCarousel', () => {
     ]);
   });
 
-  it('filters out non-video links', () => {
+  it('filters out unsupported platforms (e.g. YouTube)', () => {
     const { getAllByTestId } = render(
       createElement(SessionBetaCarousel, {
         ticks: [

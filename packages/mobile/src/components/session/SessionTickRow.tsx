@@ -110,6 +110,8 @@ export const SessionTickRow = memo(function SessionTickRow({
   }, [onPress, tick]);
 
   const climb = sessionTickToClimb(tick);
+  // getBoardConfigForPlaylist memoises internally (static board metadata), so
+  // this per-row call is O(1) after the first lookup for the board.
   const boardConfig = getBoardConfigForPlaylist(tick.boardType, tick.layoutId);
 
   if (climb && boardConfig) {
