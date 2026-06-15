@@ -37,3 +37,20 @@ const screenshotVariantEnv = process.env.EXPO_PUBLIC_SCREENSHOT_VARIANT;
 export const SCREENSHOT_VARIANT_PREFERENCE: UiVariantPreference = isUiVariantPreference(screenshotVariantEnv)
   ? screenshotVariantEnv
   : 'auto';
+
+/**
+ * Workout type the session/Record screen pre-selects in screenshot mode, so the
+ * generator renders with a chosen workout (chart + generated preview) on load.
+ * The workout shelf is a react-native-gesture-handler ScrollView, which doesn't
+ * respond to Maestro's synthetic taps/swipes, so we can't pick it from the flow —
+ * baking the initial selection is the reliable way. Empty/unset (the default)
+ * leaves the generator "Off". Set e.g. `EXPO_PUBLIC_SCREENSHOT_WORKOUT=pyramid`.
+ */
+const SCREENSHOT_WORKOUT_TYPES = ['volume', 'pyramid', 'ladder', 'gradeFocus'] as const;
+export type ScreenshotWorkout = (typeof SCREENSHOT_WORKOUT_TYPES)[number];
+const screenshotWorkoutEnv = process.env.EXPO_PUBLIC_SCREENSHOT_WORKOUT;
+export const SCREENSHOT_WORKOUT: ScreenshotWorkout | null = SCREENSHOT_WORKOUT_TYPES.includes(
+  screenshotWorkoutEnv as ScreenshotWorkout,
+)
+  ? (screenshotWorkoutEnv as ScreenshotWorkout)
+  : null;

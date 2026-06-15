@@ -27,10 +27,38 @@ import { reportError } from '../../../lib/error-reporting';
 import { RecordTopChrome } from '../RecordTopChrome';
 import { SESSION_START_FAB_HEIGHT, SessionStartFab } from '../SessionStartFab';
 import { BoardSummaryCard } from './BoardSummaryCard';
+import {
+  DEFAULT_GRADE_FOCUS_OPTIONS,
+  DEFAULT_LADDER_OPTIONS,
+  DEFAULT_PYRAMID_OPTIONS,
+  DEFAULT_VOLUME_OPTIONS,
+} from '@boardsesh/playlist-generator';
+import { SCREENSHOT_MODE, SCREENSHOT_WORKOUT } from '../../../lib/screenshot-mode';
 import { GeneratorPickerCard, type GeneratorSelection } from './GeneratorPickerCard';
 import { WorkoutPreviewRow } from './WorkoutPreviewRow';
 import { useWorkoutPreview } from './use-workout-preview';
 import type { PreviewItem } from './workout-preview-pool';
+
+// Screenshot mode pre-selects a workout so the Record screen renders the
+// generator (chart + generated preview) on load. The workout shelf is a
+// react-native-gesture-handler ScrollView that Maestro can't tap, so baking the
+// initial selection is the only reliable way to capture it. Off in normal builds.
+// The DEFAULT_*_OPTIONS omit `targetGrade` (see playlist-generator types), so each
+// branch adds a mid-grade default — mirroring buildDefaultOptions in GeneratorPickerCard.
+function initialGeneratorSelection(): GeneratorSelection {
+  if (!SCREENSHOT_MODE || !SCREENSHOT_WORKOUT) return { type: 'off' };
+  const targetGrade = 15;
+  switch (SCREENSHOT_WORKOUT) {
+    case 'volume':
+      return { type: 'on', options: { ...DEFAULT_VOLUME_OPTIONS, targetGrade } };
+    case 'pyramid':
+      return { type: 'on', options: { ...DEFAULT_PYRAMID_OPTIONS, targetGrade } };
+    case 'ladder':
+      return { type: 'on', options: { ...DEFAULT_LADDER_OPTIONS, targetGrade } };
+    case 'gradeFocus':
+      return { type: 'on', options: { ...DEFAULT_GRADE_FOCUS_OPTIONS, targetGrade } };
+  }
+}
 
 type PreSessionViewProps = {
   /** Render the floating glass chrome (large title + board pill). True in the
@@ -69,7 +97,7 @@ export function PreSessionView({ showChrome = false }: PreSessionViewProps) {
     router.push('/boards');
   }, [router]);
 
-  const [selection, setSelection] = useState<GeneratorSelection>({ type: 'off' });
+  const [selection, setSelection] = useState<GeneratorSelection>(initialGeneratorSelection);
   const [isStarting, setIsStarting] = useState(false);
   const [activePreviewUuid, setActivePreviewUuid] = useState<string | null>(null);
   // Measured height of the Start capsule's container, so the list reserves exactly

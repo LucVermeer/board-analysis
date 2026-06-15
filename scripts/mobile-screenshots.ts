@@ -59,6 +59,8 @@ export interface ScreenshotOptions {
   device: string;
   variant: string | null;
   theme: ScreenshotTheme;
+  /** Workout type the Record/session screen pre-selects (generator screenshot); null = Off. */
+  workout: string | null;
   shutdown: boolean;
 }
 
@@ -72,6 +74,10 @@ export function parseArgs(argv: readonly string[]): ScreenshotOptions {
     variant: null,
     // Dark is the canonical store appearance (the app defaults to dark).
     theme: 'dark',
+    // Pyramid by default so the Record screen captures the workout generator
+    // (its shelf is a gesture-handler ScrollView Maestro can't tap). `--workout off`
+    // leaves the generator Off (plain "Start a session").
+    workout: 'pyramid',
     shutdown: false,
   };
 
@@ -103,6 +109,12 @@ export function parseArgs(argv: readonly string[]): ScreenshotOptions {
         options.theme = expectEnum(flag, value, ['light', 'dark']) as ScreenshotTheme;
         index++;
         break;
+      case '--workout': {
+        const workout = expectEnum(flag, value, ['volume', 'pyramid', 'ladder', 'gradeFocus', 'off']);
+        options.workout = workout === 'off' ? null : workout;
+        index++;
+        break;
+      }
       case '--shutdown':
         options.shutdown = true;
         break;
@@ -155,6 +167,9 @@ export function buildScreenshotEnv(
   };
   if (options.variant) {
     env.EXPO_PUBLIC_SCREENSHOT_VARIANT = options.variant;
+  }
+  if (options.workout) {
+    env.EXPO_PUBLIC_SCREENSHOT_WORKOUT = options.workout;
   }
   if (options.backend === 'local') {
     env.EXPO_PUBLIC_BACKEND_URL = env.EXPO_PUBLIC_BACKEND_URL ?? LOCAL_BACKEND_URL;

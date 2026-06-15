@@ -10,6 +10,7 @@ function makeOptions(overrides: Partial<ScreenshotOptions> = {}): ScreenshotOpti
     device: 'iPhone 16 Pro Max',
     variant: null,
     theme: 'dark',
+    workout: 'pyramid',
     shutdown: false,
     ...overrides,
   };
@@ -50,6 +51,8 @@ describe('parseArgs', () => {
         'material',
         '--device',
         'Pixel 8',
+        '--workout',
+        'ladder',
         '--shutdown',
       ]),
     ).toEqual({
@@ -59,8 +62,13 @@ describe('parseArgs', () => {
       device: 'Pixel 8',
       variant: 'material',
       theme: 'light',
+      workout: 'ladder',
       shutdown: true,
     });
+  });
+
+  it('maps --workout off to null', () => {
+    expect(parseArgs(['--workout', 'off']).workout).toBeNull();
   });
 
   it('rejects an invalid enum value', () => {
@@ -105,5 +113,10 @@ describe('buildScreenshotEnv', () => {
       'material',
     );
     expect(buildScreenshotEnv(makeOptions({ variant: null }), {}).EXPO_PUBLIC_SCREENSHOT_VARIANT).toBeUndefined();
+  });
+
+  it('bakes the workout when set and omits it when null', () => {
+    expect(buildScreenshotEnv(makeOptions({ workout: 'pyramid' }), {}).EXPO_PUBLIC_SCREENSHOT_WORKOUT).toBe('pyramid');
+    expect(buildScreenshotEnv(makeOptions({ workout: null }), {}).EXPO_PUBLIC_SCREENSHOT_WORKOUT).toBeUndefined();
   });
 });
