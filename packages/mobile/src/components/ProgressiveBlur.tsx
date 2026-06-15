@@ -43,7 +43,11 @@ export function ProgressiveBlur({
       maskElement={<LinearGradient colors={MASK_COLORS} locations={maskLocations} style={StyleSheet.absoluteFill} />}
     >
       <BlurView
-        blurType={isDark ? 'dark' : 'light'}
+        // The ultra-thin material is a light, very translucent frost (vs the heavy
+        // `dark`/`light` UIBlurEffect, which read as a near-opaque cap behind the
+        // Dynamic Island). The explicit Dark/Light variant follows our resolved
+        // scheme, so it still honours the in-app light/dark override.
+        blurType={isDark ? 'ultraThinMaterialDark' : 'ultraThinMaterialLight'}
         blurAmount={blurAmount}
         reducedTransparencyFallbackColor={isDark ? '#000000' : '#F2F2F2'}
         style={StyleSheet.absoluteFill}
