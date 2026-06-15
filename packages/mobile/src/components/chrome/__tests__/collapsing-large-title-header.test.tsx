@@ -1,7 +1,10 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, fireEvent } from '@testing-library/react';
 import { createElement, type ReactNode } from 'react';
+
+// Mutable across tests so we can exercise both colour schemes against the scrim.
+const themeMock = vi.hoisted(() => ({ colorScheme: 'dark' as 'dark' | 'light' }));
 
 type ViewMockProps = {
   children?: ReactNode;
@@ -46,7 +49,7 @@ vi.mock('react-native-safe-area-context', () => ({
 
 vi.mock('../../../providers/theme-provider', () => ({
   useTheme: () => ({
-    colorScheme: 'dark',
+    colorScheme: themeMock.colorScheme,
     systemColors: {
       label: '#000',
       separator: '#ccc',
@@ -91,6 +94,10 @@ function makeProps(over: Partial<Parameters<typeof CollapsingLargeTitleHeader>[0
 }
 
 describe('CollapsingLargeTitleHeader', () => {
+  afterEach(() => {
+    themeMock.colorScheme = 'dark';
+  });
+
   it('renders the leftActions / rightActions / centerContent / children slots when provided', () => {
     const { container } = render(
       <CollapsingLargeTitleHeader
@@ -144,10 +151,20 @@ describe('CollapsingLargeTitleHeader', () => {
     // against the OS trait — so the header stayed light-mode white when the phone
     // was light but the app was forced dark. With colorScheme 'dark' the scrim
     // must resolve to the concrete dark background, never white.
+    themeMock.colorScheme = 'dark';
     const { container } = render(<CollapsingLargeTitleHeader {...makeProps()} />);
     const gradient = container.querySelector('[data-gradient="true"]');
     const colors = JSON.parse(gradient?.getAttribute('data-colors') ?? '[]') as string[];
     expect(colors[0]).toBe('#000000');
+    expect(colors).not.toContain('#FFFFFF');
+  });
+
+  it('uses the grey scene scrim colour in light, never pure white (no banding over the grey scene)', () => {
+    themeMock.colorScheme = 'light';
+    const { container } = render(<CollapsingLargeTitleHeader {...makeProps()} />);
+    const gradient = container.querySelector('[data-gradient="true"]');
+    const colors = JSON.parse(gradient?.getAttribute('data-colors') ?? '[]') as string[];
+    expect(colors[0]).toBe('#F2F2F2');
     expect(colors).not.toContain('#FFFFFF');
   });
 

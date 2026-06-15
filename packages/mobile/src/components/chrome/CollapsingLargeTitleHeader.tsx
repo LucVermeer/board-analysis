@@ -15,15 +15,17 @@ import { useTheme } from '../../providers/theme-provider';
 import { useNativeGlass } from '../../hooks/use-native-glass';
 import { spacing, shadows } from '../../theme/tokens';
 
-// iOS systemBackground per scheme, as concrete hexes. expo-linear-gradient bakes
-// a dynamic PlatformColor into a static CGColor resolved against the OS trait, so
-// the gradient can't use systemColors.background (a PlatformColor on iOS) — it
-// would ignore the app's dark override and stay white when the phone is in light
-// mode. These mirror PlatformColor('systemBackground') but are keyed off our
-// override-aware colorScheme. (Defined locally to keep this component free of the
-// PlatformColor import chain.)
+// The scrim fades the *scene* background to clear, so it must match the
+// navigation scene background set in the root ThemedNavigation: black in dark,
+// the React Navigation DefaultTheme grey (rgb 242,242,242) in light. We can't
+// derive it from systemColors.background — on iOS that's a PlatformColor, which
+// expo-linear-gradient bakes into a static CGColor against the OS trait: it
+// ignored the in-app dark override (white band when the phone was light but the
+// app forced dark) AND, being pure white, banded over the grey light scene.
+// Concrete per-scheme values keyed off our override-aware colorScheme fix both.
+// (Defined locally to keep this component out of the PlatformColor import chain.)
 const SCRIM_BACKGROUND_DARK = '#000000';
-const SCRIM_BACKGROUND_LIGHT = '#FFFFFF';
+const SCRIM_BACKGROUND_LIGHT = '#F2F2F2';
 import { Text } from '../Text';
 import { GlassSurface } from '../GlassSurface';
 import { PressableSurface } from '../PressableSurface';
