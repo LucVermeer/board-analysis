@@ -3,8 +3,8 @@
 //
 // A `boardPath` (e.g. `kilter/8/17/27,28/40`) is just a config tuple — it has
 // no uuid/slug, but `setActiveBoard` (and the BLE wrapper, BoardProvider, etc.)
-// need a real UserBoard. Resolution mirrors the custom-board create flow
-// (CustomBoardSheet): reuse a board the user already owns that matches the
+// need a real UserBoard. Resolution mirrors the board builder's create flow
+// (app/boards/create): reuse a board the user already owns that matches the
 // config, otherwise persist a new one via CREATE_BOARD so the server hands back
 // a full UserBoard (uuid/slug/isAngleAdjustable).
 //

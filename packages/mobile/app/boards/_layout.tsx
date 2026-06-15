@@ -39,11 +39,10 @@ export default function BoardsLayout() {
           ),
         }}
       />
-      {/* Pushed onto the boards stack (not nested sheets): a back chevron is the
-          drill-in affordance and there's no dueling pan-to-dismiss over the
-          already-modal picker. */}
+      {/* The full-screen board builder, pushed onto the boards stack (not a
+          nested sheet): a back chevron is the drill-in affordance and there's no
+          dueling pan-to-dismiss over the already-modal picker. */}
       <Stack.Screen name="create" options={{ title: tBoards('mobile.create.screenTitle') }} />
-      <Stack.Screen name="name" options={{ title: tBoards('mobile.create.nameScreenTitle') }} />
     </Stack>
   );
 }

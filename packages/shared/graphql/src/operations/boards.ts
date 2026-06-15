@@ -172,33 +172,6 @@ export const GET_MY_BOARD_SERIAL_CONFIGS = gql`
   }
 `;
 
-export const GET_MY_RECENT_BOARD_SERIALS = gql`
-  query GetMyRecentBoardSerials($limit: Int) {
-    myRecentBoardSerials(limit: $limit) {
-      serialNumber
-      boardName
-      layoutId
-      sizeId
-      setIds
-      apiLevel
-      updatedAt
-      ownedBoard {
-        ${BOARD_FIELDS}
-      }
-      lastClimb {
-        climbUuid
-        name
-        frames
-        angle
-        difficulty
-        gradeName
-        setter
-        climbedAt
-      }
-    }
-  }
-`;
-
 // ============================================
 // Board Mutations
 // ============================================
@@ -375,37 +348,6 @@ export type GetMyBoardSerialConfigsQueryVariables = {
 
 export type GetMyBoardSerialConfigsQueryResponse = {
   myBoardSerialConfigs: BoardSerialConfig[];
-};
-
-export type RecentSerialLastClimb = {
-  climbUuid: string;
-  name: string | null;
-  frames: string | null;
-  angle: number;
-  difficulty: number | null;
-  gradeName: string | null;
-  setter: string | null;
-  climbedAt: string;
-};
-
-export type RecentBoardSerial = {
-  serialNumber: string;
-  boardName: string;
-  layoutId: number;
-  sizeId: number;
-  setIds: string;
-  apiLevel: number | null;
-  updatedAt: string;
-  ownedBoard: UserBoard | null;
-  lastClimb: RecentSerialLastClimb | null;
-};
-
-export type GetMyRecentBoardSerialsQueryVariables = {
-  limit?: number;
-};
-
-export type GetMyRecentBoardSerialsQueryResponse = {
-  myRecentBoardSerials: RecentBoardSerial[];
 };
 
 export type RecordBoardSerialInput = {

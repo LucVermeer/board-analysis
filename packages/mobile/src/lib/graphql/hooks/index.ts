@@ -10,7 +10,6 @@ import type {
   SearchBoardsInput,
   PopularBoardConfigsInput,
   CreateBoardInput,
-  UpdateBoardInput,
   SetterStatsInput,
   UserProfile,
   SessionSummary,
@@ -22,10 +21,6 @@ import {
   type SimilarClimbsResponse,
   CLIMB_STATS_HISTORY,
   type ClimbStatsHistoryResponse,
-  GET_MY_RECENT_BOARD_SERIALS,
-  UPDATE_BOARD,
-  type GetMyRecentBoardSerialsQueryResponse,
-  type UpdateBoardMutationResponse,
 } from '@boardsesh/graphql/operations';
 import {
   GET_FAVORITES,
@@ -135,24 +130,6 @@ export function useBoardsBySerialNumbers(serialNumbers: string[]) {
   });
 }
 
-/**
- * Controllers the user has recently connected to over BLE, newest first, each
- * with the user's saved board for that serial (if any) and a preview of their
- * last send on it. Powers the "create a board" flow.
- */
-export function useMyRecentBoardSerials(limit = 10, options?: { enabled?: boolean }) {
-  return useQuery({
-    queryKey: ['myRecentBoardSerials', limit],
-    queryFn: () =>
-      getHttpClient().request<GetMyRecentBoardSerialsQueryResponse>(GET_MY_RECENT_BOARD_SERIALS, { limit }),
-    select: (data) => data.myRecentBoardSerials,
-    // Recents only shift when the user connects to a board, which doesn't happen
-    // while this screen is open — avoid refetch churn but stay fresh on remount.
-    staleTime: 30_000,
-    enabled: options?.enabled ?? true,
-  });
-}
-
 export function usePopularBoardConfigs(input?: PopularBoardConfigsInput, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ['popularBoardConfigs', input],
@@ -215,25 +192,8 @@ export function useCreateBoard() {
       return response.createBoard;
     },
     onSuccess: () => {
-      // A freshly created board should appear in the user's board list, and a
-      // serial-attached create flips its recent-serial row to "owned".
+      // A freshly created board should appear in the user's board list.
       void queryClient.invalidateQueries({ queryKey: ['myBoards'] });
-      void queryClient.invalidateQueries({ queryKey: ['myRecentBoardSerials'] });
-    },
-  });
-}
-
-export function useUpdateBoard() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (input: UpdateBoardInput) => {
-      const response = await getHttpClient().request<UpdateBoardMutationResponse>(UPDATE_BOARD, { input });
-      return response.updateBoard;
-    },
-    onSuccess: (board) => {
-      void queryClient.invalidateQueries({ queryKey: ['myBoards'] });
-      void queryClient.invalidateQueries({ queryKey: ['board', board.uuid] });
-      void queryClient.invalidateQueries({ queryKey: ['myRecentBoardSerials'] });
     },
   });
 }

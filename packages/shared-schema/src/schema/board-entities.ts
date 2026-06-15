@@ -118,56 +118,6 @@ export const boardEntitiesTypeDefs = /* GraphQL */ `
   }
 
   """
-  A controller serial the current user has BLE-connected to, with the board
-  config seen at last connect, the user's saved board for that serial (if one
-  exists yet), and a preview of the last climb they sent on it. Ordered by
-  recency (most-recently-connected first). Powers the "create a board" flow,
-  which turns a recently-used controller into a named, owned board.
-  """
-  type RecentBoardSerial {
-    "Controller box serial number"
-    serialNumber: String!
-    "Board type (kilter, tension, ...) at last connect"
-    boardName: String!
-    "Layout ID at last connect"
-    layoutId: Int!
-    "Size ID at last connect"
-    sizeId: Int!
-    "Comma-separated set IDs at last connect"
-    setIds: String!
-    "API/protocol level from the BLE device name (the @N suffix); null if never observed"
-    apiLevel: Int
-    "When this controller was last connected (recency key)"
-    updatedAt: String!
-    "The user's saved board for this serial, if one already exists"
-    ownedBoard: UserBoard
-    "Preview of the last climb the user sent on this serial's board, if any"
-    lastClimb: RecentSerialLastClimb
-  }
-
-  """
-  Preview of the most recent send the current user logged on a serial's board.
-  """
-  type RecentSerialLastClimb {
-    "Climb UUID"
-    climbUuid: String!
-    "Climb name"
-    name: String
-    "Encoded hold frames for rendering the board art thumbnail"
-    frames: String
-    "Angle the climb was sent at"
-    angle: Int!
-    "Difficulty ID (user override or rounded consensus)"
-    difficulty: Int
-    "Human-readable grade label (e.g. V5)"
-    gradeName: String
-    "Setter username"
-    setter: String
-    "When the send was logged"
-    climbedAt: String!
-  }
-
-  """
   A leaderboard entry for a board.
   """
   type BoardLeaderboardEntry {

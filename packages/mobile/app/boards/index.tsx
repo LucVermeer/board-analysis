@@ -16,7 +16,6 @@ import { Button } from '../../src/components/Button';
 import { ActivityIndicator } from '../../src/components/ActivityIndicator';
 import { BoardCarousel } from '../../src/components/board-discovery/BoardCarousel';
 import { BoardModeCard, type ModeCardState } from '../../src/components/board-discovery/BoardModeCard';
-import { CustomBoardSheet, type BoardSeed } from '../../src/components/board-discovery/CustomBoardSheet';
 import { BluetoothQuickstartSheet } from '../../src/components/board-discovery/BluetoothQuickstartSheet';
 import { userBoardToItem, popularConfigToItem } from '../../src/components/board-discovery/board-items';
 import type { DiscoveryBoardItem } from '../../src/components/board-discovery/BoardDiscoveryCard';
@@ -57,14 +56,10 @@ export default function BoardSelection() {
   // (a gym a couple of streets away must still surface).
   const { data: nearby, isLoading: isNearbyLoading } = useNearbyBoards(location.coords, 20);
 
-  const customSheetRef = useRef<BottomSheet>(null);
   const bluetoothSheetRef = useRef<BottomSheet>(null);
   // State (not a ref) so the quickstart sheet re-renders and kicks off its scan
   // when opened, and tears it down when closed.
   const [bluetoothActive, setBluetoothActive] = useState(false);
-  // Pre-fill for the custom builder — set when opened from a Popular config,
-  // null when opened blank from the Custom mode card.
-  const [customSeed, setCustomSeed] = useState<BoardSeed | null>(null);
 
   // See the boards index error path: a hard 401 clears tokens but doesn't flip
   // isAuthenticated, so re-validate on error to escape a stuck retry loop.
@@ -151,9 +146,8 @@ export default function BoardSelection() {
     bluetoothSheetRef.current?.expand();
   }, []);
 
-  // Deliberate "create an owned board" flow: a pushed screen that leads with the
-  // controllers the user has recently connected to (serial-attached, named,
-  // owned), with the manual builder as a fallback inside it.
+  // Deliberate "create an owned board" flow: the full-screen builder (a home
+  // board owner's board isn't in the DB yet, so this is the primary path).
   const onModeCreate = useCallback(() => {
     router.push({ pathname: '/boards/create', params: { returnTo: boardReturnTo } });
   }, [router, boardReturnTo]);
@@ -162,27 +156,24 @@ export default function BoardSelection() {
     router.push({ pathname: '/gyms', params: { returnTo: boardReturnTo } });
   }, [router, boardReturnTo]);
 
-  // Both the created-board and already-owned paths close the sheet and activate.
-  const onCustomBoardResolved = useCallback(
-    (board: UserBoard) => {
-      customSheetRef.current?.close();
-      void activateBoard(board);
+  // A popular config has no UserBoard — open the builder pre-seeded with the
+  // tapped config so the user names and creates it (the builder dedupes against
+  // a config the user already owns).
+  const onSelectPopular = useCallback(
+    (item: DiscoveryBoardItem) => {
+      router.push({
+        pathname: '/boards/create',
+        params: {
+          returnTo: boardReturnTo,
+          seedBoardName: item.boardName,
+          seedLayoutId: String(item.layoutId),
+          seedSizeId: String(item.sizeId),
+          seedSetIds: item.setIds,
+        },
+      });
     },
-    [activateBoard],
+    [router, boardReturnTo],
   );
-
-  // A popular config has no UserBoard, so it routes through the custom builder
-  // (pre-seeded with the tapped config) which CREATEs it — or, if the user
-  // already owns that exact config, activates the existing board.
-  const onSelectPopular = useCallback((item: DiscoveryBoardItem) => {
-    setCustomSeed({
-      boardName: item.boardName,
-      layoutId: item.layoutId,
-      sizeId: item.sizeId,
-      setIds: item.setIds,
-    });
-    customSheetRef.current?.expand();
-  }, []);
 
   // Drive the Find Nearby card off both the location permission and the nearby
   // query: loading while resolving the fix or fetching, 'done' once results are
@@ -278,7 +269,7 @@ export default function BoardSelection() {
           </Section>
         ) : null}
 
-        {myBoardItems.length === 0 && popularItems.length === 0 ? (
+        {myBoardItems.length === 0 ? (
           <View style={styles.emptyState}>
             <Text variant="headline" style={styles.emptyTitle}>
               {t('mobile.emptyTitle')}
@@ -286,18 +277,11 @@ export default function BoardSelection() {
             <Text variant="subheadline" style={styles.emptySubtitle}>
               {t('mobile.emptySubtitle')}
             </Text>
+            <Button title={t('mobile.discovery.create')} onPress={onModeCreate} style={styles.emptyCta} />
           </View>
         ) : null}
       </ScrollView>
 
-      <CustomBoardSheet
-        ref={customSheetRef}
-        seed={customSeed}
-        existingBoards={myBoards}
-        onCreated={onCustomBoardResolved}
-        onSelectExisting={onCustomBoardResolved}
-        onError={() => showToast(t('mobile.custom.createError'), 'error')}
-      />
       <BluetoothQuickstartSheet
         ref={bluetoothSheetRef}
         active={bluetoothActive}
@@ -370,5 +354,8 @@ const styles = StyleSheet.create({
     marginTop: spacing[2],
     opacity: 0.4,
     textAlign: 'center',
+  },
+  emptyCta: {
+    marginTop: spacing[5],
   },
 });

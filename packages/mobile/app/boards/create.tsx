@@ -1,200 +1,489 @@
-import { useCallback, useRef, useState } from 'react';
-import { View, StyleSheet } from 'react-native';
-import { FlashList } from '@shopify/flash-list';
+import { useCallback, useEffect, useMemo, useState, type ComponentProps } from 'react';
+import {
+  View,
+  ScrollView,
+  TextInput,
+  StyleSheet,
+  Pressable,
+  KeyboardAvoidingView,
+  Platform,
+  useWindowDimensions,
+  type ViewStyle,
+} from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import type BottomSheet from '@gorhom/bottom-sheet';
-import type { UserBoard } from '@boardsesh/shared-schema';
-import type { RecentBoardSerial } from '@boardsesh/graphql/operations';
-import { useMyBoards, useMyRecentBoardSerials } from '../../src/lib/graphql/hooks';
+import { SUPPORTED_BOARDS, toBoardName } from '@boardsesh/board-config';
+import type { BoardName } from '@boardsesh/shared-schema';
+import { useMyBoards, useCreateBoard } from '../../src/lib/graphql/hooks';
 import { useSetActiveBoard } from '../../src/lib/graphql/use-active-board';
 import { useAuth } from '../../src/providers/auth-provider';
 import { useToast } from '../../src/providers/toast-provider';
+import { useTheme } from '../../src/providers/theme-provider';
 import { hapticSelection } from '../../src/lib/haptics';
 import { resolveBoardReturnTo } from '../../src/lib/boards/board-return-to';
 import { useBottomChromeMetrics } from '../../src/hooks/use-bottom-chrome-metrics';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useDeviceLocation } from '../../src/lib/use-device-location';
+import { useBoardBuilder, type BoardBuilderSeed } from '../../src/components/board-discovery/use-board-builder';
+import { BoardConfigChips } from '../../src/components/board-discovery/BoardConfigChips';
+import {
+  boardTypeLabel,
+  cleanLayoutName,
+  formatSizeLabel,
+} from '../../src/components/board-discovery/board-builder-labels';
+import { findOwnedBoardForConfig } from '../../src/components/board-discovery/board-items';
+import { BoardImageNative } from '../../src/components/BoardImageNative';
+import { getBoardRenderData } from '../../src/lib/board-details';
+import { AngleSlider } from '../../src/components/play-drawer/AngleSlider';
+import { AngleBoardDiagram } from '../../src/components/play-drawer/AngleBoardDiagram';
+import { SwitchRow } from '../../src/components/SwitchRow';
 import { Text } from '../../src/components/Text';
 import { Icon } from '../../src/components/Icon';
 import { Button } from '../../src/components/Button';
-import { ActivityIndicator } from '../../src/components/ActivityIndicator';
-import { RecentSerialRow } from '../../src/components/board-discovery/RecentSerialRow';
-import { CustomBoardSheet } from '../../src/components/board-discovery/CustomBoardSheet';
-import { BluetoothQuickstartSheet } from '../../src/components/board-discovery/BluetoothQuickstartSheet';
-import { iosSystemColors } from '../../src/theme/ios-colors';
-import { spacing } from '../../src/theme/tokens';
+import { spacing, borderRadius } from '../../src/theme/tokens';
+
+const PREVIEW_MAX_HEIGHT = 260;
 
 export default function CreateBoard() {
   const router = useRouter();
-  const { returnTo } = useLocalSearchParams<{ returnTo?: string }>();
-  const boardReturnTo = resolveBoardReturnTo(returnTo);
+  const params = useLocalSearchParams<{
+    returnTo?: string;
+    seedBoardName?: string;
+    seedLayoutId?: string;
+    seedSizeId?: string;
+    seedSetIds?: string;
+  }>();
+  const boardReturnTo = resolveBoardReturnTo(params.returnTo);
   const { isAuthenticated } = useAuth();
   const { t } = useTranslation('boards');
   const { showToast } = useToast();
+  const { systemColors } = useTheme();
+  const insets = useSafeAreaInsets();
   const bottomChrome = useBottomChromeMetrics();
+  const { width: windowWidth } = useWindowDimensions();
 
   const setActiveBoard = useSetActiveBoard();
-  const { data: recents, isLoading } = useMyRecentBoardSerials(10, { enabled: isAuthenticated });
+  const createBoard = useCreateBoard();
   const { data: boardConnection } = useMyBoards(undefined, { enabled: isAuthenticated });
   const myBoards = boardConnection?.boards ?? [];
 
-  const customSheetRef = useRef<BottomSheet>(null);
-  const bluetoothSheetRef = useRef<BottomSheet>(null);
-  const [bluetoothActive, setBluetoothActive] = useState(false);
+  // Pre-fill when opened from a Popular config. Memoised so the builder doesn't
+  // re-seed (and wipe edits) on every render.
+  const seed = useMemo<BoardBuilderSeed | null>(() => {
+    const boardName = params.seedBoardName ? toBoardName(params.seedBoardName) : null;
+    if (!boardName || !params.seedLayoutId || !params.seedSizeId || !params.seedSetIds) return null;
+    return {
+      boardName,
+      layoutId: Number(params.seedLayoutId),
+      sizeId: Number(params.seedSizeId),
+      setIds: params.seedSetIds,
+    };
+  }, [params.seedBoardName, params.seedLayoutId, params.seedSizeId, params.seedSetIds]);
 
-  const activateBoard = useCallback(
-    async (board: UserBoard) => {
-      hapticSelection();
-      try {
-        await setActiveBoard(board);
-        router.dismissTo(boardReturnTo);
-      } catch {
-        showToast(t('mobile.boardSwitchError'), 'error');
-      }
-    },
-    [setActiveBoard, router, boardReturnTo, showToast, t],
-  );
+  const builder = useBoardBuilder(seed);
+  const { setCoords } = builder;
 
-  // Tapping a recent serial opens the naming/confirm step: create mode when the
-  // serial has no owned board yet, rename when it already maps to one.
-  const onSelectRecent = useCallback(
-    (serial: RecentBoardSerial) => {
-      router.push({
-        pathname: '/boards/name',
-        params: {
-          serialNumber: serial.serialNumber,
-          mode: serial.ownedBoard ? 'rename' : 'create',
-          returnTo: boardReturnTo,
-        },
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  const location = useDeviceLocation();
+  const requestLocation = location.request;
+  const onUseMyLocation = useCallback(() => void requestLocation(), [requestLocation]);
+  useEffect(() => {
+    // location.coords stays null until the user taps "Use my location" (request
+    // is explicit), so this only stamps coords once they've opted in.
+    if (location.coords) setCoords(location.coords);
+  }, [location.coords, setCoords]);
+
+  const handleCreate = useCallback(async () => {
+    if (submitting) return;
+    const input = builder.buildCreateInput();
+    if (!input) return;
+    setSubmitting(true);
+    hapticSelection();
+    try {
+      // Activate an already-owned matching board instead of hitting the server's
+      // duplicate-config guard.
+      const owned = findOwnedBoardForConfig(myBoards, {
+        boardType: input.boardType,
+        layoutId: input.layoutId,
+        sizeId: input.sizeId,
+        setIds: input.setIds,
       });
-    },
-    [router, boardReturnTo],
+      const board = owned ?? (await createBoard.mutateAsync(input));
+      await setActiveBoard(board);
+      router.dismissTo(boardReturnTo);
+      // Navigated away on success — no need to clear `submitting` (unmounting).
+    } catch {
+      showToast(t('mobile.create.createError'), 'error');
+      setSubmitting(false);
+    }
+  }, [submitting, builder, myBoards, createBoard, setActiveBoard, router, boardReturnTo, showToast, t]);
+
+  // Chip options — memoised so the per-snap angle re-render doesn't rebuild them
+  // (they don't depend on angle), letting the memoised chip rows bail out.
+  const boardOptions = useMemo(
+    () =>
+      SUPPORTED_BOARDS.map((board) => ({
+        key: board,
+        label: boardTypeLabel(board),
+        value: board,
+        selected: board === builder.boardName,
+      })),
+    [builder.boardName],
+  );
+  const layoutOptions = useMemo(
+    () =>
+      builder.layouts.map((layout) => ({
+        key: layout.id,
+        label: cleanLayoutName(layout.name, builder.boardName),
+        value: layout.id,
+        selected: layout.id === builder.layoutId,
+      })),
+    [builder.layouts, builder.boardName, builder.layoutId],
+  );
+  const sizeOptions = useMemo(
+    () =>
+      builder.sizes.map((size) => ({
+        key: size.id,
+        label: formatSizeLabel(size),
+        value: size.id,
+        selected: size.id === builder.sizeId,
+      })),
+    [builder.sizes, builder.sizeId],
+  );
+  const setOptions = useMemo(
+    () =>
+      builder.sets.map((set) => ({
+        key: set.id,
+        label: set.name,
+        value: set.id,
+        selected: builder.setIds.includes(set.id),
+      })),
+    [builder.sets, builder.setIds],
   );
 
-  const openManualBuilder = useCallback(() => {
-    customSheetRef.current?.expand();
-  }, []);
-
-  const openBluetoothScan = useCallback(() => {
-    setBluetoothActive(true);
-    bluetoothSheetRef.current?.expand();
-  }, []);
-
-  const renderItem = useCallback(
-    ({ item }: { item: RecentBoardSerial }) => <RecentSerialRow serial={item} onPress={onSelectRecent} />,
-    [onSelectRecent],
-  );
-
-  const hasRecents = (recents?.length ?? 0) > 0;
+  const layoutName = cleanLayoutName(builder.rawLayoutName, builder.boardName);
+  const showPreview = builder.layoutId != null && builder.sizeId != null && builder.setIds.length > 0;
+  const setIdsWire = builder.setIds.join(',');
+  // Account for both the scroll content padding and the preview tile's padding.
+  const previewMaxWidth = windowWidth - (spacing[4] + spacing[3]) * 2;
 
   return (
-    <>
-      <FlashList
+    <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <ScrollView
         contentInsetAdjustmentBehavior="automatic"
-        data={recents ?? []}
-        renderItem={renderItem}
-        keyExtractor={keyExtractor}
-        contentContainerStyle={{ paddingBottom: bottomChrome.scrollBottomPadding }}
-        ListHeaderComponent={
-          hasRecents ? (
-            <View style={styles.header}>
-              <Text variant="subheadline" color={iosSystemColors.systemGray}>
-                {t('mobile.create.subtitle')}
-              </Text>
-            </View>
-          ) : null
-        }
-        ListEmptyComponent={
-          isLoading ? (
-            <View style={styles.centered}>
-              <ActivityIndicator size="large" />
-            </View>
+        contentContainerStyle={[styles.content, { paddingBottom: bottomChrome.scrollBottomPadding + spacing[16] }]}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        {/* Live board art — turns layout/size/set IDs into a recognizable wall. */}
+        <View style={[styles.preview, { backgroundColor: systemColors.secondaryBackground }]}>
+          {showPreview ? (
+            <BoardConfigPreview
+              boardName={builder.boardName}
+              layoutId={builder.layoutId!}
+              sizeId={builder.sizeId!}
+              setIds={setIdsWire}
+              maxWidth={previewMaxWidth}
+            />
           ) : (
-            <View style={styles.centered}>
-              <Icon name="bluetooth" size={40} color={iosSystemColors.systemGray} />
-              <Text variant="headline" style={styles.emptyTitle}>
-                {t('mobile.create.emptyTitle')}
+            <View style={styles.previewPlaceholder}>
+              <Icon name="boards" size={40} color={systemColors.tertiaryLabel} />
+              <Text variant="footnote" color={systemColors.tertiaryLabel} style={styles.previewHint}>
+                {t('mobile.create.previewHint')}
               </Text>
-              <Text variant="subheadline" color={iosSystemColors.systemGray} style={styles.emptyBody}>
-                {t('mobile.create.emptyBody')}
-              </Text>
-              <Button title={t('mobile.create.scanCta')} onPress={openBluetoothScan} style={styles.emptyPrimary} />
-              <Button
-                title={t('mobile.create.manualCta')}
-                variant="text"
-                onPress={openManualBuilder}
-                style={styles.emptySecondary}
+            </View>
+          )}
+        </View>
+
+        <SectionLabel>{t('mobile.custom.board')}</SectionLabel>
+        <BoardConfigChips groupLabel={t('mobile.custom.board')} options={boardOptions} onSelect={builder.selectBoard} />
+
+        <SectionLabel>{t('mobile.custom.layout')}</SectionLabel>
+        <BoardConfigChips
+          groupLabel={t('mobile.custom.layout')}
+          options={layoutOptions}
+          onSelect={builder.selectLayout}
+        />
+
+        {builder.sizes.length > 0 ? (
+          <>
+            <SectionLabel>{t('mobile.custom.size')}</SectionLabel>
+            <BoardConfigChips
+              groupLabel={t('mobile.custom.size')}
+              options={sizeOptions}
+              onSelect={builder.selectSize}
+            />
+          </>
+        ) : null}
+
+        {builder.angles.length > 0 ? (
+          <>
+            <SectionLabel>{t('mobile.custom.angle')}</SectionLabel>
+            {/* Teaching diagram: tilts the wall to the angle (+ degree readout),
+                reused from the play drawer. */}
+            <View style={styles.angleDiagram}>
+              <AngleBoardDiagram
+                angle={builder.angle}
+                size={140}
+                accessibilityLabel={t('mobile.create.anglePreview', { angle: builder.angle })}
               />
             </View>
-          )
-        }
-        ListFooterComponent={
-          hasRecents ? (
-            <View style={styles.footer}>
-              <Button title={t('mobile.create.manualCta')} variant="outlined" onPress={openManualBuilder} />
-            </View>
-          ) : null
-        }
-      />
+            {/* Reuse the play-drawer angle picker for a consistent feel. */}
+            <AngleSlider angles={builder.angles} value={builder.angle} onChange={builder.setAngle} />
+            {/* Adjustability is a separate capability from the default angle, so
+                it's a toggle (matching the other settings rows), not a chip. */}
+            <SwitchRow
+              label={t('mobile.create.adjustable')}
+              value={builder.isAngleAdjustable}
+              onValueChange={builder.setIsAngleAdjustable}
+            />
+          </>
+        ) : null}
 
-      <CustomBoardSheet
-        ref={customSheetRef}
-        seed={null}
-        existingBoards={myBoards}
-        onCreated={(board) => {
-          customSheetRef.current?.close();
-          void activateBoard(board);
-        }}
-        onSelectExisting={(board) => {
-          customSheetRef.current?.close();
-          void activateBoard(board);
-        }}
-        onError={() => showToast(t('mobile.custom.createError'), 'error')}
-      />
-      <BluetoothQuickstartSheet
-        ref={bluetoothSheetRef}
-        active={bluetoothActive}
-        onClose={() => setBluetoothActive(false)}
-        onSelect={(board) => {
-          bluetoothSheetRef.current?.close();
-          void activateBoard(board);
-        }}
-      />
-    </>
+        {builder.layoutId != null ? (
+          <>
+            <SectionLabel>{t('mobile.custom.name')}</SectionLabel>
+            <BuilderTextInput
+              value={builder.name}
+              onChangeText={builder.setName}
+              placeholder={layoutName}
+              maxLength={100}
+              returnKeyType="done"
+            />
+          </>
+        ) : null}
+
+        {/* Advanced — hold sets (default all), visibility, location, serial. */}
+        <Pressable
+          onPress={() => setAdvancedOpen((open) => !open)}
+          accessibilityRole="button"
+          accessibilityState={{ expanded: advancedOpen }}
+          style={styles.advancedHeader}
+        >
+          <Text variant="headline">{t('mobile.create.moreOptions')}</Text>
+          <Icon name={advancedOpen ? 'chevron.up' : 'chevron.down'} size={18} color={systemColors.secondaryLabel} />
+        </Pressable>
+
+        {advancedOpen ? (
+          <View style={styles.advancedBody}>
+            {builder.sets.length > 0 ? (
+              <>
+                <SectionLabel>{t('mobile.custom.sets')}</SectionLabel>
+                <BoardConfigChips
+                  groupLabel={t('mobile.custom.sets')}
+                  options={setOptions}
+                  onSelect={builder.toggleSet}
+                />
+              </>
+            ) : null}
+
+            <SwitchRow label={t('mobile.create.ownBoard')} value={builder.isOwned} onValueChange={builder.setIsOwned} />
+            <SwitchRow
+              label={t('mobile.create.public')}
+              description={t('mobile.create.publicHint')}
+              value={builder.isPublic}
+              onValueChange={builder.setIsPublic}
+            />
+            <SwitchRow
+              label={t('mobile.create.unlisted')}
+              value={builder.isUnlisted}
+              onValueChange={builder.setIsUnlisted}
+            />
+            <SwitchRow
+              label={t('mobile.create.hideLocation')}
+              value={builder.hideLocation}
+              onValueChange={builder.setHideLocation}
+            />
+
+            <SectionLabel>{t('mobile.create.location')}</SectionLabel>
+            <BuilderTextInput
+              value={builder.locationName}
+              onChangeText={builder.setLocationName}
+              placeholder={t('mobile.create.locationPlaceholder')}
+              maxLength={120}
+            />
+            <Button
+              title={builder.coords ? t('mobile.create.locationSet') : t('mobile.create.useMyLocation')}
+              variant="text"
+              onPress={onUseMyLocation}
+              disabled={builder.coords != null}
+            />
+
+            <SectionLabel>{t('mobile.create.serial')}</SectionLabel>
+            <BuilderTextInput
+              value={builder.serialNumber}
+              onChangeText={builder.setSerialNumber}
+              placeholder={t('mobile.create.serialPlaceholder')}
+              autoCapitalize="characters"
+              maxLength={100}
+            />
+            <Text variant="caption1" color={systemColors.tertiaryLabel} style={styles.serialHint}>
+              {t('mobile.create.serialHint')}
+            </Text>
+          </View>
+        ) : null}
+      </ScrollView>
+
+      {/* Pinned, safe-area-aware primary action. */}
+      <View
+        style={[
+          styles.footer,
+          {
+            backgroundColor: systemColors.secondaryBackground,
+            borderTopColor: systemColors.separator,
+            paddingBottom: insets.bottom + spacing[3],
+          },
+        ]}
+      >
+        <Button
+          title={t('mobile.create.save')}
+          onPress={() => void handleCreate()}
+          variant="filled"
+          size="large"
+          disabled={!builder.canCreate || submitting}
+          loading={submitting}
+        />
+      </View>
+    </KeyboardAvoidingView>
   );
 }
 
-function keyExtractor(item: RecentBoardSerial): string {
-  return item.serialNumber;
+function SectionLabel({ children }: { children: string }) {
+  const { systemColors } = useTheme();
+  return (
+    <Text variant="footnote" color={systemColors.secondaryLabel} style={styles.sectionLabel}>
+      {children}
+    </Text>
+  );
+}
+
+/** Themed text input for the builder's form fields (name / location / serial). */
+function BuilderTextInput({ style, ...props }: ComponentProps<typeof TextInput>) {
+  const { systemColors } = useTheme();
+  return (
+    <TextInput
+      placeholderTextColor={systemColors.tertiaryLabel}
+      {...props}
+      style={[
+        styles.input,
+        {
+          color: systemColors.label,
+          borderColor: systemColors.separator,
+          backgroundColor: systemColors.secondaryBackground,
+        },
+        style,
+      ]}
+    />
+  );
+}
+
+/** The empty board art (no lit holds) at the config's native aspect ratio. */
+function BoardConfigPreview({
+  boardName,
+  layoutId,
+  sizeId,
+  setIds,
+  maxWidth,
+}: {
+  boardName: BoardName;
+  layoutId: number;
+  sizeId: number;
+  setIds: string;
+  maxWidth: number;
+}) {
+  const renderData = useMemo(() => {
+    const setIdValues = setIds.split(',').map(Number).filter(Number.isFinite);
+    if (setIdValues.length === 0) return null;
+    return getBoardRenderData({ boardName, layoutId, sizeId, setIds: setIdValues });
+  }, [boardName, layoutId, sizeId, setIds]);
+
+  if (!renderData) return null;
+
+  const aspect = renderData.boardWidth / renderData.boardHeight;
+  let height = PREVIEW_MAX_HEIGHT;
+  let width = height * aspect;
+  if (width > maxWidth) {
+    width = maxWidth;
+    height = width / aspect;
+  }
+  const boardStyle: ViewStyle = { width, height, borderRadius: borderRadius.lg, overflow: 'hidden' };
+
+  return (
+    // Decorative — the config is already conveyed by the chips, so hide the art
+    // from screen readers rather than landing on an unlabeled image.
+    <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+      <BoardImageNative
+        frames=""
+        boardName={boardName}
+        layoutId={layoutId}
+        sizeId={sizeId}
+        setIds={setIds}
+        boardWidth={renderData.boardWidth}
+        boardHeight={renderData.boardHeight}
+        renderWidth={Math.round(width)}
+        style={boardStyle}
+      />
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
-  header: {
-    paddingHorizontal: spacing[4],
-    paddingTop: spacing[3],
-    paddingBottom: spacing[2],
+  flex: {
+    flex: 1,
   },
-  footer: {
+  content: {
     padding: spacing[4],
+    gap: spacing[2],
   },
-  centered: {
+  preview: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: spacing[6],
-    paddingVertical: spacing[12],
+    minHeight: PREVIEW_MAX_HEIGHT,
+    borderRadius: borderRadius.lg,
+    padding: spacing[3],
+    marginBottom: spacing[2],
   },
-  emptyTitle: {
+  previewPlaceholder: {
+    alignItems: 'center',
+    gap: spacing[2],
+  },
+  previewHint: {
+    textAlign: 'center',
+  },
+  sectionLabel: {
     marginTop: spacing[3],
-    textAlign: 'center',
+    marginBottom: spacing[1],
+    textTransform: 'uppercase',
   },
-  emptyBody: {
-    marginTop: spacing[1],
-    textAlign: 'center',
+  angleDiagram: {
+    alignItems: 'center',
+    paddingVertical: spacing[2],
   },
-  emptyPrimary: {
+  input: {
+    paddingHorizontal: spacing[3],
+    paddingVertical: spacing[3],
+    borderRadius: borderRadius.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    fontSize: 17,
+  },
+  advancedHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     marginTop: spacing[5],
-    alignSelf: 'stretch',
+    paddingVertical: spacing[2],
   },
-  emptySecondary: {
-    marginTop: spacing[2],
+  advancedBody: {
+    gap: spacing[2],
+  },
+  serialHint: {
+    marginTop: spacing[1],
+  },
+  footer: {
+    paddingHorizontal: spacing[4],
+    paddingTop: spacing[3],
+    borderTopWidth: StyleSheet.hairlineWidth,
   },
 });
