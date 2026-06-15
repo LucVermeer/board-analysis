@@ -166,7 +166,6 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   const { isAuthenticated } = useAuth();
 
   const { boardName, layoutId, sizeId, setIds, angle } = boardConfig;
-  const bluetoothConnected = bluetooth?.isConnected ?? false;
   const bluetoothArmUndoWallChangeToast = bluetooth?.armUndoWallChangeToast;
   const bluetoothReassertWall = bluetooth?.reassertWall;
   const bluetoothClearBoard = bluetooth?.clearBoard;
@@ -208,6 +207,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   // that to the action bar for the accessibility label.
   const {
     lit: lightbulbActive,
+    localConnected: bluetoothConnected,
     pending: lightbulbPending,
     onPress: handleLightbulb,
   } = useLightbulbControl({

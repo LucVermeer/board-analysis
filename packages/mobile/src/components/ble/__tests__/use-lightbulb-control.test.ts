@@ -73,6 +73,17 @@ describe('useLightbulbControl lit state', () => {
     expect(result.current.localConnected).toBe(true);
   });
 
+  it('stays lit and locally connected when this device holds the wall and is subscribed', () => {
+    // This device drives the wall (isConnected) AND is subscribed to the board
+    // feed (boardId bound). Local connection short-circuits lit before the
+    // holder/session checks, so both read true.
+    ctrl.bluetooth = makeBluetooth({ isConnected: true });
+    ctrl.boardId = 42;
+    const { result } = renderControl();
+    expect(result.current.lit).toBe(true);
+    expect(result.current.localConnected).toBe(true);
+  });
+
   it('lights from a session peer holding the wall, without claiming local connection', () => {
     // The headline behaviour: subscribed to the board feed (boardId bound), a
     // peer holds it, this device is not connected — the bulb reads lit but the
