@@ -1,7 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
   Linking,
   Modal,
@@ -30,6 +29,7 @@ import { SectionHeader } from '../SectionHeader';
 import { Text } from '../Text';
 import { useTheme } from '../../providers/theme-provider';
 import { useToast } from '../../providers/toast-provider';
+import { useConfirm } from '../../providers/dialog-provider';
 import { borderRadius, spacing } from '../../theme/tokens';
 import { iosSystemColors } from '../../theme/ios-colors';
 import {
@@ -108,6 +108,7 @@ export function BoardAccountsSection() {
   const { t: tCommon } = useTranslation('common');
   const { systemColors, brandColors, colorScheme } = useTheme();
   const { showToast } = useToast();
+  const confirm = useConfirm();
   const queryClient = useQueryClient();
 
   const credentialsQuery = useQuery({
@@ -233,18 +234,19 @@ export function BoardAccountsSection() {
   }, [showToast, t]);
 
   const handleUnlink = useCallback(
-    (boardType: AuroraBoardName) => {
+    async (boardType: AuroraBoardName) => {
       const boardName = boardDisplayName(boardType);
-      Alert.alert(t('aurora.card.unlinkConfirm.title'), t('aurora.card.unlinkConfirm.description', { boardName }), [
-        { text: tCommon('actions.cancel'), style: 'cancel' },
-        {
-          text: t('aurora.card.unlink'),
-          style: 'destructive',
-          onPress: () => deleteCredentialMutation.mutate(boardType),
-        },
-      ]);
+      const confirmed = await confirm({
+        title: t('aurora.card.unlinkConfirm.title'),
+        message: t('aurora.card.unlinkConfirm.description', { boardName }),
+        confirmLabel: t('aurora.card.unlink'),
+        cancelLabel: tCommon('actions.cancel'),
+        destructive: true,
+      });
+      if (!confirmed) return;
+      deleteCredentialMutation.mutate(boardType);
     },
-    [deleteCredentialMutation, t, tCommon],
+    [confirm, deleteCredentialMutation, t, tCommon],
   );
 
   const handleImportPress = useCallback(

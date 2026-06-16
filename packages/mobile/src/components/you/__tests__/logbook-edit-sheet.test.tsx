@@ -84,6 +84,9 @@ vi.mock('@boardsesh/board-react', () => ({
   useUpdateTick: () => ({ mutate: mutations.updateMutate, isPending: false }),
   useDeleteTick: () => ({ mutate: mutations.deleteMutate, isPending: false }),
 }));
+vi.mock('../../../providers/dialog-provider', () => ({
+  useConfirm: () => () => Promise.resolve(true),
+}));
 vi.mock('../../Sheet', () => ({
   Sheet: ({ children, footer }: { children?: ReactNode; footer?: ReactNode }) =>
     createElement('div', null, children, footer),
