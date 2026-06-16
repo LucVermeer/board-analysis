@@ -14,11 +14,11 @@ name: app-store screenshots
 #   board view  = '50%,26%' (first climb row in the list)
 #
 # Other notes:
-# - The .app is a Debug dev-client that loads its JS from Metro. The ORCHESTRATOR
-#   launches it + loads the bundle (`simctl openurl ${MAESTRO_DEV_CLIENT_URL}`)
-#   before this flow runs — not Maestro's openLink, whose "Open in Boardsesh?"
-#   confirmation races the flow's tap on a cold CI start and leaves the dev-client
-#   stuck on its launcher. So this flow just waits for the auth screen.
+# - The .app is a Debug dev-client that auto-loads Metro on launch (the build bakes
+#   DEV_CLIENT_DEFAULT_LAUNCHER_URL into Info.plist), so the ORCHESTRATOR just
+#   `simctl launch`es it — no `simctl openurl`, which on a fresh CI sim raises an
+#   "Open in Boardsesh?" confirmation Maestro can't reliably dismiss. So this flow
+#   just waits for the auth screen.
 # - The orchestrator uninstalled + reinstalled the app (fresh AsyncStorage, so no
 #   stale active board — re-picked via the board picker below) and reset the
 #   simulator keychain, so this cold-loads signed out and login authenticates
@@ -26,28 +26,12 @@ name: app-store screenshots
 # - The Record/session screen renders the WORKOUT GENERATOR because Metro bundles
 #   EXPO_PUBLIC_SCREENSHOT_WORKOUT (default volume) — its shelf is a
 #   gesture-handler ScrollView Maestro can't tap, so the selection is pre-seeded.
-# - iOS shows an "Open in 'Boardsesh'?" confirmation for in-flow simctl deep links;
-#   each openLink is followed by an optional tapOn "Open".
+# - iOS shows an "Open in 'Boardsesh'?" confirmation for the first in-flow route
+#   deep link on a fresh sim (until the scheme is trusted); each openLink is
+#   followed by an optional tapOn "Open".
 # - Board-independent captures (home/discover/profile) run first so a board-pick
 #   miss can't lose them.
 #
-# The orchestrator's `simctl openurl` raises an "Open in Boardsesh?" system
-# confirmation on a fresh CI sim (the custom scheme isn't trusted yet) — and iOS
-# queues a SECOND one as the app launches and loads the bundle, which then
-# occludes the auth form. Tap Open whenever it shows until they're cleared.
-# `runFlow when visible` checks the CURRENT screen, so there's no wait on a warm /
-# local sim where no dialog appears.
-- repeat:
-    times: 8
-    commands:
-      - runFlow:
-          when:
-            visible:
-              text: 'Open'
-          commands:
-            - tapOn:
-                text: 'Open'
-      - waitForAnimationToEnd
 # Cold Metro bundle on the first load can take a while; wait for the signed-out
 # auth screen (the orchestrator guarantees a logged-out start), then log in.
 - extendedWaitUntil:

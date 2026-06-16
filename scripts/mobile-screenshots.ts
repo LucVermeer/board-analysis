@@ -406,19 +406,16 @@ function runIos(options: ScreenshotOptions): number {
     // Maestro's auth-screen wait (the slow-CI-runner timeout this guards against).
     prewarmMetroBundle();
 
-    // Launch the app + load the Metro bundle OURSELVES via `simctl openurl`,
-    // rather than letting Maestro's openLink do it. On CI, Maestro's openLink pops
-    // an "Open in Boardsesh?" system confirmation whose one-shot tap in the flow
-    // races and misses — the dev-client then sits on its launcher ("No development
-    // servers found") and never loads, so the auth screen never appears and the
-    // capture times out. `simctl openurl` delivers the deep link directly with no
-    // such dialog, so the app cold-launches straight to the bundle (and the auth
-    // screen) before Maestro even starts. Dev-menu chrome is suppressed at build
-    // time by ./plugins/with-screenshot-dev-menu (Info.plist), so it stays clean
-    // across this launch and the in-flow reload — no per-launch args needed.
-    const devClientUrl = metroDevClientUrl();
-    console.log(`${LOG} Launching + loading the dev-client bundle (${devClientUrl})...`);
-    runCapture('xcrun', ['simctl', 'openurl', device.udid, devClientUrl]);
+    // Just launch the app — no `simctl openurl`. The screenshots build bakes
+    // DEV_CLIENT_DEFAULT_LAUNCHER_URL=http://localhost:8081 into Info.plist (see
+    // ./plugins/with-screenshot-dev-menu), so the dev-client auto-connects to
+    // Metro on a plain launch and lands on the auth screen — without ever opening
+    // the custom-scheme URL. That matters because a fresh CI sim raises an "Open
+    // in Boardsesh?" confirmation for ANY openurl of the scheme, and Maestro can't
+    // dismiss it reliably (it can queue two, occluding the form). Avoiding openurl
+    // sidesteps the whole class. Dev-menu chrome is suppressed via the same plugin.
+    console.log(`${LOG} Launching the app (auto-loads Metro via DEV_CLIENT_DEFAULT_LAUNCHER_URL)...`);
+    runCapture('xcrun', ['simctl', 'launch', device.udid, APP_ID]);
 
     const flowFile = join(MAESTRO_DIR, `${options.flow}.yaml`);
     if (!existsSync(flowFile)) {

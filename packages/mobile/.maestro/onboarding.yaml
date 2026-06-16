@@ -20,26 +20,11 @@ name: onboarding illustrations
 # TODO(find): board/climb detail — needs a deterministic deep link to a seeded
 #   climb (com.boardsesh.app://climbs/<uuid>) or a stable climb-row testID to tap.
 #
-# The .app is a Debug dev-client. The orchestrator launches it + loads the bundle
-# (`simctl openurl ${MAESTRO_DEV_CLIENT_URL}`) before this flow — not Maestro's
-# openLink, whose "Open in Boardsesh?" dialog races the tap on a cold CI start. So
-# this flow just waits for the auth screen. The orchestrator uninstalled +
-# reinstalled and reset the keychain, so this cold-loads signed out.
-#
-# Clear the "Open in Boardsesh?" confirmations the orchestrator's openurl raises on
-# a fresh CI sim (iOS queues up to two; a warm/local sim shows none). runFlow checks
-# the current screen so it never waits when there's no dialog.
-- repeat:
-    times: 8
-    commands:
-      - runFlow:
-          when:
-            visible:
-              text: 'Open'
-          commands:
-            - tapOn:
-                text: 'Open'
-      - waitForAnimationToEnd
+# The .app is a Debug dev-client that auto-loads Metro on launch (build bakes
+# DEV_CLIENT_DEFAULT_LAUNCHER_URL), so the orchestrator just `simctl launch`es it —
+# no openurl, no "Open in Boardsesh?" dialog on a fresh CI sim. This flow just waits
+# for the auth screen. The orchestrator uninstalled + reinstalled and reset the
+# keychain, so this cold-loads signed out.
 - extendedWaitUntil:
     visible:
       id: 'auth-email-input'

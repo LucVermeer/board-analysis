@@ -20,6 +20,15 @@ function applyScreenshotDevMenuInfoPlist(infoPlist) {
   infoPlist.EXDevMenuIsOnboardingFinished = true;
   infoPlist.EXDevMenuShowFloatingActionButton = false;
   infoPlist.EXDevMenuShowsAtLaunch = false;
+  // Make the dev-client auto-load Metro on a plain launch. EXDevLauncherController
+  // reads this Info.plist key and, when there's no incoming URL and no
+  // last-opened app, loads it directly (no `simctl openurl`). That's the whole
+  // point: a fresh CI sim raises an "Open in Boardsesh?" confirmation for any
+  // openurl of the custom scheme, and Maestro can't dismiss it reliably. With this
+  // the orchestrator just `simctl launch`es the app and it connects to Metro —
+  // no openurl, no dialog. Fixed to 8081 (the screenshots Metro port); a
+  // BOARDSESH_METRO_PORT override would need this rebuilt to match.
+  infoPlist.DEV_CLIENT_DEFAULT_LAUNCHER_URL = 'http://localhost:8081';
   return infoPlist;
 }
 
