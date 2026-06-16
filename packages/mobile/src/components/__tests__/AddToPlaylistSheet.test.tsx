@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, fireEvent, waitFor } from '@testing-library/react';
+import { render, fireEvent, waitFor, act } from '@testing-library/react';
 import { createElement, forwardRef, useImperativeHandle, type ReactNode } from 'react';
 import type { Climb } from '@boardsesh/shared-schema';
 import type { Playlist } from '@boardsesh/graphql/operations/playlists';
@@ -37,7 +37,10 @@ vi.mock('@gorhom/bottom-sheet', () => ({
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
-    t: (key: string) => key,
+    t: (key: string, options?: Record<string, unknown>) =>
+      key === 'actions.playlist.toast.createdNamed' && typeof options?.name === 'string'
+        ? `${key} ${options.name}`
+        : key,
   }),
 }));
 
@@ -204,7 +207,7 @@ describe('AddToPlaylistSheet', () => {
     await waitFor(() => {
       expect(playlistContext.addToPlaylist).toHaveBeenCalledWith('p-new', 'climb-1', 40);
     });
-    expect(toast.showToast).toHaveBeenCalledWith('actions.playlist.toast.createdNamed', 'success');
+    expect(toast.showToast).toHaveBeenCalledWith(expect.stringContaining('Projects'), 'success');
     expect(onClose).toHaveBeenCalled();
   });
 
@@ -258,10 +261,13 @@ describe('AddToPlaylistSheet', () => {
     fireEvent.click(getByLabelText('actions.playlist.popover.createNew'));
     expect(getByLabelText('submit-created-playlist').getAttribute('data-submitting')).toBe('false');
 
-    createDeferred.resolve(created);
-    await waitFor(() => {
-      expect(playlistContext.addToPlaylist).toHaveBeenCalledWith('p-new', 'climb-1', 40);
+    await act(async () => {
+      createDeferred.resolve(created);
+      await createDeferred.promise;
     });
+    expect(playlistContext.addToPlaylist).not.toHaveBeenCalled();
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(getByLabelText('submit-created-playlist').getAttribute('data-submitting')).toBe('false');
   });
 
   it('keeps the add sheet open when playlist creation succeeds but adding the climb fails', async () => {

@@ -53,6 +53,7 @@ function AddToPlaylistSheet({
   // Track presented state so we never dismiss() a not-presented modal (gorhom
   // then no-ops the next present()). Mirrors LogAscentSheet.
   const isPresentedRef = useRef(false);
+  const createRequestIdRef = useRef(0);
 
   useEffect(() => {
     if (visible && climb && !isPresentedRef.current) {
@@ -97,18 +98,24 @@ function AddToPlaylistSheet({
   const handleCreatePlaylist = useCallback(
     async (values: PlaylistFormValues) => {
       if (!climb) return;
+      const createRequestId = createRequestIdRef.current + 1;
+      createRequestIdRef.current = createRequestId;
+      const isCurrentCreateRequest = () => createRequestIdRef.current === createRequestId && isPresentedRef.current;
       setCreating(true);
       try {
         const created = await createPlaylist(values.name, values.description, values.color, values.icon, {
           boardType: boardName,
           layoutId,
         });
+        if (!isCurrentCreateRequest()) return;
         setCreateVisible(false);
         try {
           await addToPlaylist(created.uuid, climb.uuid, angle);
+          if (!isCurrentCreateRequest()) return;
           showToast(t('actions.playlist.toast.createdNamed', { name: created.name }), 'success');
           onClose();
         } catch (error) {
+          if (!isCurrentCreateRequest()) return;
           if (__DEV__) {
             console.warn('[playlist] created playlist but failed to add climb', {
               playlistUuid: created.uuid,
@@ -120,6 +127,7 @@ function AddToPlaylistSheet({
           showToast(t('actions.playlist.toast.addFailed'), 'error');
         }
       } catch (error) {
+        if (!isCurrentCreateRequest()) return;
         if (__DEV__) {
           console.warn('[playlist] create playlist from add sheet failed', {
             climbUuid: climb.uuid,
@@ -130,7 +138,7 @@ function AddToPlaylistSheet({
         }
         showToast(t('actions.playlist.toast.createFailed'), 'error');
       } finally {
-        setCreating(false);
+        if (createRequestIdRef.current === createRequestId) setCreating(false);
       }
     },
     [climb, createPlaylist, boardName, layoutId, addToPlaylist, angle, showToast, t, onClose],
@@ -138,6 +146,7 @@ function AddToPlaylistSheet({
 
   const handleDismiss = useCallback(() => {
     isPresentedRef.current = false;
+    createRequestIdRef.current += 1;
     setCreateVisible(false);
     setCreating(false);
     onClose();
