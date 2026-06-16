@@ -1,11 +1,10 @@
 // @vitest-environment jsdom
 import { createElement, type ReactNode } from 'react';
 import { render } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SessionDetail } from '@boardsesh/shared-schema';
 
-// Capture what FeedSocialRow receives so we can assert the correct entityId.
-const socialRow = vi.hoisted(() => ({ lastEntityId: null as string | null }));
+const mockFeedSocialRow = vi.hoisted(() => vi.fn());
 
 vi.mock('react-native', () => ({
   View: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
@@ -23,9 +22,9 @@ vi.mock('../../you/AvatarGroup', () => ({
   AvatarGroup: () => createElement('div', { 'data-testid': 'avatar-group' }),
 }));
 vi.mock('../../you/FeedSocialRow', () => ({
-  FeedSocialRow: ({ entityId }: { entityId: string }) => {
-    socialRow.lastEntityId = entityId;
-    return createElement('div', { 'data-testid': 'social-row', 'data-entity': entityId });
+  FeedSocialRow: (props: { entityId: string }) => {
+    mockFeedSocialRow(props);
+    return createElement('div', { 'data-testid': 'social-row', 'data-entity': props.entityId });
   },
 }));
 vi.mock('../../you/profile-chart-colors', () => ({ gradeBadgeColor: () => '#f00' }));
@@ -47,13 +46,18 @@ vi.mock('../../../hooks/use-grade-format', () => ({
   useGradeFormat: () => ({ formatGrade: (g: string) => g }),
 }));
 vi.mock('@boardsesh/profile-stats', () => ({
-  formatTickAbsoluteTime: (_date: string, fmt: string) => fmt,
+  // Return a fixed sentinel distinct from any i18n key so assertions are stable.
+  formatTickAbsoluteTime: () => '__ABSOLUTE_TIME__',
 }));
 vi.mock('../../../lib/format-session-when', () => ({
   formatSessionWhen: () => 'Sunday morning',
 }));
 
 import { SessionSummaryCard } from '../SessionSummaryCard';
+
+beforeEach(() => {
+  mockFeedSocialRow.mockClear();
+});
 
 function session(overrides: Partial<SessionDetail> = {}): SessionDetail {
   return {
@@ -101,8 +105,7 @@ describe('SessionSummaryCard', () => {
 
   it('uses formatTickAbsoluteTime for a named session (titleIsDate=false)', () => {
     const { container } = render_(session(), 'Morning Sesh', false);
-    // The mock returns the format string itself, so assert on its content.
-    expect(container.textContent).toContain('MMM D, YYYY');
+    expect(container.textContent).toContain('__ABSOLUTE_TIME__');
   });
 
   it('uses formatSessionWhen for an unnamed session (titleIsDate=true)', () => {
@@ -166,6 +169,6 @@ describe('SessionSummaryCard', () => {
 
   it('passes the sessionId to FeedSocialRow', () => {
     render_(session({ sessionId: 'sess-42' }), 'Sesh', false);
-    expect(socialRow.lastEntityId).toBe('sess-42');
+    expect(mockFeedSocialRow).toHaveBeenCalledWith(expect.objectContaining({ entityId: 'sess-42' }));
   });
 });
