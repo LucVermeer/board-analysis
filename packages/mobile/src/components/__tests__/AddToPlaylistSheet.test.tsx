@@ -115,7 +115,13 @@ vi.mock('../playlist', () => ({
           {
             'aria-label': 'submit-created-playlist',
             'data-submitting': submitting ? 'true' : 'false',
-            onClick: () => onSubmit({ name: 'Projects', description: undefined, color: undefined, icon: undefined }),
+            onClick: () =>
+              onSubmit({
+                name: 'Projects',
+                description: 'Moon projects',
+                color: '#ff00ff',
+                icon: 'star',
+              }),
           },
           'submit create',
         )
@@ -195,7 +201,7 @@ describe('AddToPlaylistSheet', () => {
     fireEvent.click(getByLabelText('submit-created-playlist'));
 
     await waitFor(() => {
-      expect(playlistContext.createPlaylist).toHaveBeenCalledWith('Projects', undefined, undefined, undefined, {
+      expect(playlistContext.createPlaylist).toHaveBeenCalledWith('Projects', 'Moon projects', '#ff00ff', 'star', {
         boardType: 'kilter',
         layoutId: 1,
       });
