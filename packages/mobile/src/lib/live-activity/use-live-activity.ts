@@ -63,7 +63,9 @@ async function resolveBoardBackgroundPaths(board: BoardConfig): Promise<string[]
   if (Platform.OS !== 'ios') return [];
   const setIds = board.setIds
     .split(',')
-    .map((value) => Number(value.trim()))
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0)
+    .map((value) => Number(value))
     .filter((value) => Number.isInteger(value));
   try {
     // Imported lazily so module load doesn't pull in expo-asset + the bundled
