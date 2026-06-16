@@ -41,6 +41,7 @@
     "sync:catalog": "tsx src/cli/index.ts catalog",
     "sync:daemon": "tsx src/cli/index.ts daemon",
     "sync:locations": "tsx src/cli/index.ts locations --skip-if-missing-credentials",
+    "sync:repair-stats": "tsx src/cli/index.ts repair-stats",
     "sync:user": "tsx src/cli/index.ts user"
   },
   "dependencies": {

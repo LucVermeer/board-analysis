@@ -557,11 +557,13 @@ export const boardClimbStats = pgTable(
     angle: integer('angle').notNull(),
     displayDifficulty: doublePrecision('display_difficulty'),
     benchmarkDifficulty: doublePrecision('benchmark_difficulty'),
-    // ascensionistCount is the materialized sum kept in sync by three writers:
+    // ascensionistCount is the materialized total kept in sync by three writers:
     // Aurora sync updates aurora_ascensionist_count + ascensionist_count in one
     // statement; Kilter sync updates kilter_ascensionist_count +
     // ascensionist_count in one statement; the Boardsesh tick recompute updates
-    // boardsesh_ascensionist_count + ascensionist_count in one statement.
+    // boardsesh_ascensionist_count + ascensionist_count in one statement. Kilter
+    // and Aurora are alternate upstream snapshots, so totals use the higher of
+    // those two plus Boardsesh, not their sum.
     // Keep it as a regular column (not GENERATED) so the custom covering indexes
     // (board_climb_stats_ascents_covering_idx, migration 0068; the v2 variant with
     // climb_uuid as a trailing key column, migration 0122) keep working.
