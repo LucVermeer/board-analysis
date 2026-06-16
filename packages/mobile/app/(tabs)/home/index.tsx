@@ -442,11 +442,13 @@ export default function HomeTab() {
               accessibilityHint={t('mobile.home.scope.hint')}
             />
           </View>
-          {/* Search action: balances the avatar so the scope menu reads centred,
-              and opens the full-screen climber search. */}
+          {/* Find-climbers action: balances the avatar so the scope menu reads
+              centred, and opens the full-screen climber search. Uses a
+              person-add glyph (not a magnifier) so it doesn't read as a second
+              "search" next to the Climbs tab's bottom-bar magnifier. */}
           <GlassActionToolbar actionCount={1}>
             <GlassToolbarAction onPress={handleOpenSearch} accessibilityLabel={t('mobile.home.searchAction')}>
-              <Icon name="search" size={22} color={systemColors.label} />
+              <Icon name="person.badge.plus" size={22} color={systemColors.label} />
             </GlassToolbarAction>
           </GlassActionToolbar>
         </View>
