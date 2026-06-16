@@ -38,7 +38,7 @@ name: app-store screenshots
 - extendedWaitUntil:
     visible:
       id: 'auth-email-input'
-    timeout: 180000
+    timeout: 300000
 - runFlow: login.yaml
 
 # Home — feed populated by the prod test user's follows.

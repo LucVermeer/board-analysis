@@ -402,6 +402,10 @@ function runIos(options: ScreenshotOptions): number {
       return 1;
     }
 
+    // Compile the bundle now so the dev-client load below isn't a cold bundle on
+    // Maestro's auth-screen wait (the slow-CI-runner timeout this guards against).
+    prewarmMetroBundle();
+
     // Pre-launch the app with UserDefaults argument-domain overrides so
     // expo-dev-client's dev-menu UI doesn't appear in the captures:
     //   -EXDevMenuIsOnboardingFinished YES     → skip the one-time "developer
@@ -532,6 +536,47 @@ function startMetro(env: NodeJS.ProcessEnv): ChildProcess {
     stdio: 'inherit',
     detached: true,
   });
+}
+
+/**
+ * Compile the JS bundle the dev-client will request, so its load in Maestro is a
+ * Metro transform-cache hit instead of a cold bundle (3900+ modules, ~100s+ on a
+ * fresh CI runner with no on-disk Metro cache) on the auth-screen wait's critical
+ * path — which has timed out there. We fetch the manifest the dev-client would
+ * and request its exact launchAsset URL (same hermes/bytecode transform params),
+ * so Metro caches the right variant. Best-effort: a miss just falls back to
+ * Maestro cold-loading the bundle (its wait is generous).
+ */
+function prewarmMetroBundle(): void {
+  const manifest = runCapture('curl', [
+    '-fsS',
+    '--max-time',
+    '30',
+    `http://localhost:${METRO_PORT}/`,
+    '-H',
+    'expo-platform: ios',
+    '-H',
+    'Accept: application/expo+json,application/json',
+  ]);
+  let bundleUrl: string | undefined;
+  if (manifest.status === 0) {
+    try {
+      bundleUrl = (JSON.parse(manifest.stdout) as { launchAsset?: { url?: string } }).launchAsset?.url;
+    } catch {
+      // Non-JSON manifest — fall through to skip.
+    }
+  }
+  if (!bundleUrl) {
+    console.log(`${LOG} Metro pre-warm skipped (no bundle URL); Maestro will cold-load the bundle.`);
+    return;
+  }
+  console.log(`${LOG} Pre-warming the Metro bundle...`);
+  const warmed = runCapture('curl', ['-fsS', '-o', '/dev/null', '--max-time', '300', bundleUrl]);
+  console.log(
+    warmed.status === 0
+      ? `${LOG} Metro bundle pre-warmed.`
+      : `${LOG} Metro pre-warm did not finish (non-fatal); Maestro will load the bundle.`,
+  );
 }
 
 /** Poll Metro's /status until it answers (or ~120s elapse). */
