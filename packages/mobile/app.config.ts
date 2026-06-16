@@ -96,6 +96,10 @@ export default ({ config }: ConfigContext): ExpoConfig & { newArchEnabled?: bool
   const hasDevMetadata = devMetadata.branchName || devMetadata.qaNotes || devMetadata.qaNotesFilePath;
   const tailscaleHosts = resolveTailscaleHosts();
   const isDevBuild = isDevBuildProfile();
+  // The dedicated screenshots simulator build (scripts/mobile-build-sim-app.ts)
+  // sets this so we bake dev-menu suppression into Info.plist — see
+  // ./plugins/with-screenshot-dev-menu. Off for every other build.
+  const isScreenshotBuild = process.env.BOARDSESH_SCREENSHOT_BUILD === '1';
 
   // Only register the Google Sign-In config plugin when we can supply a valid
   // iosUrlScheme; without Google credentials the entry is omitted (Apple-only).
@@ -361,6 +365,11 @@ export default ({ config }: ConfigContext): ExpoConfig & { newArchEnabled?: bool
       // builds — preview/production keep stock Expo ATS so we don't ship an
       // arbitrary-loads relaxation through App Store review.
       ...(isDevBuild ? ['./plugins/with-boardsesh-dev-networking'] : []),
+      // Screenshots build only: bake dev-menu suppression (onboarding sheet /
+      // floating gear / show-at-launch) into Info.plist so the dev-client chrome
+      // can't cover the captured screens across a cold relaunch. See the plugin
+      // for why per-launch args aren't enough on CI.
+      ...(isScreenshotBuild ? ['./plugins/with-screenshot-dev-menu'] : []),
       // Apple Health entitlement + usage strings for the health-workouts native
       // module (writes finished sessions as HKWorkouts, reads body mass for the
       // calorie estimate). iOS-only mod; the module is skipped on Android. No

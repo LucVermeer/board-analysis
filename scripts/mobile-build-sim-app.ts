@@ -190,6 +190,11 @@ export function main(argv: readonly string[] = process.argv.slice(2)): number {
     return 0;
   }
 
+  // Tells app.config.ts to register ./plugins/with-screenshot-dev-menu, which
+  // bakes dev-menu suppression into Info.plist so the dev-client chrome can't
+  // cover the captured screens on a cold relaunch. Read at prebuild time.
+  process.env.BOARDSESH_SCREENSHOT_BUILD = '1';
+
   try {
     ensureNativeProject(options.clean);
     podInstall();
