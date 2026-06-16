@@ -159,11 +159,11 @@ function BluetoothAutoSender({
    * Fires after a successful BLE write (or a deduped re-broadcast). Always
    * emits onto the local wall-confirm bus (so the same phone's drawer timer
    * dismisses); in party mode it additionally broadcasts via
-   * `confirmClimbOnWall`, and (behind the board-presence flag) reports the lit
-   * climb to the board's wall feed. Receives the full lit queue item so the
+   * `confirmClimbOnWall`, and it reports the lit climb to the board's wall feed
+   * (board presence is always-on). Receives the full lit queue item so the
    * consumer can build both the local confirm (uuid) and the wall report
    * (ClimbQueueItemInput). Keeping all paths in one callback means
-   * BluetoothAutoSender doesn't need to know whether a session/flag is active.
+   * BluetoothAutoSender doesn't need to know whether a session is active.
    */
   onWallConfirmed: (item: ClimbQueueItem, sendSignature: string) => void;
   /**
@@ -367,10 +367,11 @@ export function BluetoothProvider({
   const reportWallDisconnectRef = useRef(reportWallDisconnect);
   reportWallDisconnectRef.current = reportWallDisconnect;
 
-  // Board presence ("now on the wall"). All of these are inert when the
-  // `board-presence` flag is off: `enabled` is false, `boardId` is null,
-  // `resolveAndBindBoard` no-ops, and the safe wall-report no-ops for a null
-  // board — so the BLE flow below behaves exactly as today.
+  // Board presence ("now on the wall"). Inert until a board is bound: `boardId`
+  // is null, `resolveAndBindBoard` no-ops while no presence client exists, and
+  // the safe wall-report no-ops for a null board — so the BLE flow below behaves
+  // exactly as today until a serial resolves. (`enabled` is always true now that
+  // board presence is GA.)
   const {
     enabled: presenceEnabled,
     boardId: presenceBoardId,
@@ -379,7 +380,7 @@ export function BluetoothProvider({
   } = useBoardPresenceControls();
   const { currentClimb: currentWallClimb, reportClimb: reportWallClimb } = useOptionalWallReport();
   // Live refs so the connect / wall-confirm callbacks stay identity-stable while
-  // still reading the latest flag / board / report fn.
+  // still reading the latest board / report fn.
   const presenceEnabledRef = useRef(presenceEnabled);
   presenceEnabledRef.current = presenceEnabled;
   const presenceBoardIdRef = useRef(presenceBoardId);
@@ -439,8 +440,8 @@ export function BluetoothProvider({
     (serial: string | null) => {
       resetReportDedup();
       // Resolve+bind the shared board for this serial so the wall feed
-      // subscribes. No-op when the flag is off; runs even in solo (the feed is
-      // not session-gated). Coexists with the session board-serial write below.
+      // subscribes. Runs even in solo (the feed is not session-gated). Coexists
+      // with the session board-serial write below.
       if (presenceEnabledRef.current && boardDetails) {
         void resolveAndBindBoardRef
           .current({
@@ -518,9 +519,9 @@ export function BluetoothProvider({
 
   // Always emit on the local wall-confirm bus (so the same phone's drawer
   // dismisses its 2s fallback timer); fire the party WS confirm when a session
-  // exists (solo has no peers to notify); and — behind the board-presence flag
-  // — report the lit climb to the board's wall feed so a solo climber's sends
-  // feed the wall, with a one-tap Undo of the wall change they just caused.
+  // exists (solo has no peers to notify); and report the lit climb to the
+  // board's wall feed so a solo climber's sends feed the wall, with a one-tap
+  // Undo of the wall change they just caused.
   const restoreWallClimb = useCallback(
     async (previousClimb: BoardPresenceClimb | null) => {
       resetReportDedup();

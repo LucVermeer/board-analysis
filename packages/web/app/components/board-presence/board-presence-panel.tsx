@@ -1,12 +1,12 @@
 'use client';
 
-// BoardPresencePanel — the flag-gated entry surface for "now on the wall".
+// BoardPresencePanel — the entry surface for "now on the wall".
 //
-// Renders nothing unless the `board-presence` flag is on AND a board is bound
-// (a BLE serial has been resolved to a shared boardId). When both hold, it shows
-// a small entry pill near the bottom bar; tapping it opens the BoardSheet and a
-// "Switch board" footer dispatches the existing board switcher. Flag off ⇒ this
-// returns null and the app's board-header behaviour is exactly as today.
+// Renders nothing until a board is bound (a BLE serial has been resolved to a
+// shared boardId). Once bound, it shows a small entry pill near the bottom bar;
+// tapping it opens the BoardSheet and a "Switch board" footer dispatches the
+// existing board switcher. No board bound ⇒ this returns null and the app's
+// board-header behaviour is exactly as today.
 //
 // Mounted as a child of WebBoardPresenceProvider (so it can read the wall
 // context) and of the queue bridge (so it can label the active board).
@@ -68,8 +68,9 @@ export function BoardPresencePanel() {
     });
   }, [open, history.length, boardId]);
 
-  // Flag off or no board bound: render nothing. The shared wall context is inert
-  // in this state, so there's nothing meaningful to show anyway.
+  // No board bound: render nothing. The shared wall context is inert in this
+  // state, so there's nothing meaningful to show anyway. (`enabled` is always
+  // true now that board presence is GA, but the guard is cheap to keep.)
   if (!enabled || boardId === null) return null;
 
   return (

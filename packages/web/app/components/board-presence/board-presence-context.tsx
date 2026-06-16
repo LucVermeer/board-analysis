@@ -82,12 +82,12 @@ const BoardPresenceControlsContext = createContext<BoardPresenceControlsValue | 
 export function WebBoardPresenceProvider({ children }: { children: ReactNode }) {
   // Board presence is always-on (no feature flag).
   const enabled = true;
-  const { token } = useWsAuthToken();
+  const { token, isAuthenticated } = useWsAuthToken();
   const [boardId, setBoardId] = useState<number | null>(null);
 
   // Dedicated graphql-ws client for the board-presence feed. Rebuilt when the
-  // flag flips on or the auth token changes (so the subscription reconnects
-  // authenticated). Exposing the concrete client through state intentionally
+  // auth token changes (so the subscription reconnects authenticated).
+  // Exposing the concrete client through state intentionally
   // changes the injected presence-client identity, which makes the shared hook
   // unsubscribe from the disposed socket and resubscribe on the replacement.
   const [activeWsClient, setActiveWsClient] = useState<Client | null>(null);
@@ -132,34 +132,43 @@ export function WebBoardPresenceProvider({ children }: { children: ReactNode }) 
   boardIdRef.current = boardId;
   const presenceClientRef = useRef(presenceClient);
   presenceClientRef.current = presenceClient;
+  // Read the latest auth state inside the empty-dep callback below without
+  // re-creating it on every token refresh.
+  const isAuthenticatedRef = useRef(isAuthenticated);
+  isAuthenticatedRef.current = isAuthenticated;
 
   const resolveAndBindBoard = useCallback(async (args: ResolveBoardArgs): Promise<ResolvedBoard | null> => {
     const activeClient = presenceClientRef.current;
     if (activeClient === null) {
       return null;
     }
-    const resolveKey =
-      args.serial && args.serial.length > 0
-        ? `serial:${args.serial}`
-        : `config:${args.boardType}:${args.layoutId}:${args.sizeId}:${args.setIds}`;
+    // Serial boards resolve by serial only for signed-in users:
+    // `resolveBoardForSerial` is auth-required server-side (it can create/own a
+    // board). A logged-out climber on a serial board falls back to the
+    // per-config shared feed (`resolveBoardForConfig` is anonymous-allowed), so
+    // they still see the wall instead of firing a guaranteed-failing mutation —
+    // and the matching `console.warn` — on every BLE connect.
+    const useSerial = isAuthenticatedRef.current && !!args.serial && args.serial.length > 0;
+    const resolveKey = useSerial
+      ? `serial:${args.serial}`
+      : `config:${args.boardType}:${args.layoutId}:${args.sizeId}:${args.setIds}`;
     if (lastResolvedKeyRef.current === resolveKey && boardIdRef.current !== null) {
       return null;
     }
-    const resolved =
-      args.serial && args.serial.length > 0
-        ? await activeClient.resolveBoardForSerial({
-            serial: args.serial,
-            boardType: args.boardType,
-            layoutId: args.layoutId,
-            sizeId: args.sizeId,
-            setIds: args.setIds,
-          })
-        : await activeClient.resolveBoardForConfig({
-            boardType: args.boardType,
-            layoutId: args.layoutId,
-            sizeId: args.sizeId,
-            setIds: args.setIds,
-          });
+    const resolved = useSerial
+      ? await activeClient.resolveBoardForSerial({
+          serial: args.serial as string,
+          boardType: args.boardType,
+          layoutId: args.layoutId,
+          sizeId: args.sizeId,
+          setIds: args.setIds,
+        })
+      : await activeClient.resolveBoardForConfig({
+          boardType: args.boardType,
+          layoutId: args.layoutId,
+          sizeId: args.sizeId,
+          setIds: args.setIds,
+        });
     lastResolvedKeyRef.current = resolveKey;
     setBoardId(resolved.boardId);
     return resolved;
@@ -217,10 +226,10 @@ function BoardNowPlayingInstrument({ boardId }: { boardId: number | null }) {
 }
 
 /**
- * Imperative controls for resolving/binding the board and reading the
- * flag/boardId. Returns a stable no-op fallback when rendered outside the
- * provider, so callers (e.g. a BLE flow that may mount before the provider in
- * tests) never crash.
+ * Imperative controls for resolving/binding the board and reading the bound
+ * boardId. Returns a stable no-op fallback when rendered outside the provider,
+ * so callers (e.g. a BLE flow that may mount before the provider in tests)
+ * never crash.
  */
 export function useBoardPresenceControls(): BoardPresenceControlsValue {
   const value = useContext(BoardPresenceControlsContext);
