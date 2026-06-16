@@ -19,6 +19,7 @@
 import { MATERIAL_ACTIVE_CONTEXT_BAR_HEIGHT, TOOLBAR_RESERVE, TAB_BAR_HEIGHT, glassSize } from '../../theme/layout';
 import { useQueue } from '../../providers/queue-provider';
 import { useTheme } from '../../providers/theme-provider';
+import { selectByVariant } from '../../theme/variants';
 import { useBottomChromeMetrics } from '../../hooks/use-bottom-chrome-metrics';
 import { ActiveContextBar } from './ActiveContextBar';
 import { ClimbCapsule } from './ClimbCapsule';
@@ -40,7 +41,8 @@ export function PersistentQueueBar() {
   if (!currentClimb) return null;
   if (!bottomChrome.jsQueueToolbarVisible && bottomChrome.nativeAccessoryMounted) return null;
 
-  if (variant === 'material') {
+  const isMaterial = selectByVariant(variant, { material: true, liquidGlass: false });
+  if (isMaterial) {
     return (
       <ActiveContextBar
         fillPrimary

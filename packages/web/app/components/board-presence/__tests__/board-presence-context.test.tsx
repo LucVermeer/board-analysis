@@ -7,7 +7,7 @@ const transport = vi.hoisted(() => ({
   resolveBoardForSerial: vi.fn(async () => ({ boardId: 42, boardName: 'Garage Wall' }) as unknown as ResolvedBoard),
   resolveBoardForConfig: vi.fn(async () => ({ boardId: 43, boardName: 'MoonBoard 2019' }) as unknown as ResolvedBoard),
 }));
-const auth = vi.hoisted(() => ({ token: 'tok' as string | null }));
+const auth = vi.hoisted(() => ({ token: 'tok' as string | null, isAuthenticated: true }));
 const sharedProvider = vi.hoisted(() => ({
   lastBoardId: undefined as number | null | undefined,
   lastClient: null as unknown,
@@ -16,7 +16,7 @@ const sharedProvider = vi.hoisted(() => ({
 const wsClient = vi.hoisted(() => ({ created: 0, disposed: 0, lastId: 0 }));
 
 vi.mock('@/app/hooks/use-ws-auth-token', () => ({
-  useWsAuthToken: () => ({ token: auth.token, isAuthenticated: true, isLoading: false, error: null }),
+  useWsAuthToken: () => ({ token: auth.token, isAuthenticated: auth.isAuthenticated, isLoading: false, error: null }),
 }));
 
 vi.mock('@/app/lib/backend-url', () => ({
@@ -92,6 +92,7 @@ function renderProvider() {
 describe('WebBoardPresenceProvider', () => {
   beforeEach(() => {
     auth.token = 'tok';
+    auth.isAuthenticated = true;
     transport.resolveBoardForSerial.mockClear();
     transport.resolveBoardForConfig.mockClear();
     sharedProvider.lastBoardId = undefined;
@@ -103,9 +104,8 @@ describe('WebBoardPresenceProvider', () => {
     wsClient.lastId = 0;
   });
 
-  it('is always-on: enabled, builds a WS client, null boardId until a board is bound', async () => {
+  it('is always-on: builds a WS client, null boardId until a board is bound', async () => {
     renderProvider();
-    expect(capturedControls?.enabled).toBe(true);
     expect(wsClient.created).toBe(1);
     // No board bound yet, so the shared provider collapses to its empty state.
     expect(sharedProvider.lastBoardId).toBeNull();
@@ -113,7 +113,6 @@ describe('WebBoardPresenceProvider', () => {
 
   it('resolves+binds the board and feeds its id to the shared provider', async () => {
     renderProvider();
-    expect(capturedControls?.enabled).toBe(true);
     expect(wsClient.created).toBe(1);
 
     await act(async () => {
@@ -175,6 +174,84 @@ describe('WebBoardPresenceProvider', () => {
     });
     await waitFor(() => {
       expect(sharedProvider.lastBoardId).toBe(43);
+    });
+  });
+
+  it('routes a logged-out climber on a serial board through the anon-allowed config feed', async () => {
+    // `resolveBoardForSerial` is auth-required server-side, so an anonymous
+    // climber must fall back to `resolveBoardForConfig` (anon-allowed) instead
+    // of firing a guaranteed-failing serial mutation on every BLE connect.
+    auth.isAuthenticated = false;
+    renderProvider();
+
+    await act(async () => {
+      const resolved = await capturedControls?.resolveAndBindBoard({
+        serial: 'SERIAL-1',
+        boardType: 'kilter',
+        layoutId: 1,
+        sizeId: 10,
+        setIds: '1,2',
+      });
+      expect(resolved?.boardId).toBe(43);
+    });
+
+    expect(transport.resolveBoardForSerial).not.toHaveBeenCalled();
+    expect(transport.resolveBoardForConfig).toHaveBeenCalledWith({
+      boardType: 'kilter',
+      layoutId: 1,
+      sizeId: 10,
+      setIds: '1,2',
+    });
+    await waitFor(() => {
+      expect(sharedProvider.lastBoardId).toBe(43);
+    });
+  });
+
+  it('uses the serial resolver for a signed-in climber on a serial board', async () => {
+    auth.isAuthenticated = true;
+    renderProvider();
+
+    await act(async () => {
+      await capturedControls?.resolveAndBindBoard({
+        serial: 'SERIAL-1',
+        boardType: 'kilter',
+        layoutId: 1,
+        sizeId: 10,
+        setIds: '1,2',
+      });
+    });
+
+    expect(transport.resolveBoardForSerial).toHaveBeenCalledTimes(1);
+    expect(transport.resolveBoardForConfig).not.toHaveBeenCalled();
+  });
+
+  it('upgrades the anon config feed to the serial feed on reconnect after login', async () => {
+    // Anon connect binds the config feed (boardId 43).
+    auth.isAuthenticated = false;
+    const rendered = renderProvider();
+    const serialArgs = { serial: 'SERIAL-1', boardType: 'kilter', layoutId: 1, sizeId: 10, setIds: '1,2' };
+    await act(async () => {
+      await capturedControls?.resolveAndBindBoard(serialArgs);
+    });
+    expect(transport.resolveBoardForConfig).toHaveBeenCalledTimes(1);
+    expect(transport.resolveBoardForSerial).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect(sharedProvider.lastBoardId).toBe(43);
+    });
+
+    // The climber logs in and reconnects. A pure auth flip does not re-resolve on
+    // its own (resolveAndBindBoard only runs on a fresh BLE connect), so simulate
+    // the reconnect by re-rendering — picking up the new auth state — and calling
+    // resolveAndBindBoard again for the same serial. resolveKey flips config:→
+    // serial:, so the dedup guard lets the serial resolve through (boardId 42).
+    auth.isAuthenticated = true;
+    rendered.rerender(createElement(WebBoardPresenceProvider, null, createElement(Probe)));
+    await act(async () => {
+      await capturedControls?.resolveAndBindBoard(serialArgs);
+    });
+    expect(transport.resolveBoardForSerial).toHaveBeenCalledTimes(1);
+    await waitFor(() => {
+      expect(sharedProvider.lastBoardId).toBe(42);
     });
   });
 

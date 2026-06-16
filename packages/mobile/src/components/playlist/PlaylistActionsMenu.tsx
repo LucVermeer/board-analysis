@@ -34,7 +34,7 @@ export function PlaylistActionsMenu({
   onClose,
 }: PlaylistActionsMenuProps) {
   const { t } = useTranslation('playlists');
-  const { systemColors, brandColors, variant } = useTheme();
+  const { actionColors } = useTheme();
   const sheetRef = useRef<BottomSheetModal>(null);
   // Track presented state so we never call dismiss() on a not-presented modal
   // (which leaves gorhom in a state where the next present() is a no-op — the
@@ -57,9 +57,8 @@ export function PlaylistActionsMenu({
     isPresentedRef.current = false;
     onClose();
   }, [onClose]);
-  const neutralActionIconColor = systemColors.label;
-  const accentActionIconColor = variant === 'liquidGlass' ? neutralActionIconColor : systemColors.accent;
-  const pinActionIconColor = variant === 'liquidGlass' ? neutralActionIconColor : brandColors.primary;
+  // Monochrome on Liquid Glass, semantic on Material — resolved once as a token.
+  const { accent: accentActionIconColor, pin: pinActionIconColor } = actionColors;
 
   return (
     <ModalSheet ref={sheetRef} snapPoints={snapPoints} onDismiss={handleDismiss}>

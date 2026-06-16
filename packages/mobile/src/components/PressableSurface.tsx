@@ -51,6 +51,8 @@ type PressableSurfaceProps = {
   /** Custom assistive-tech actions (e.g. a long-press equivalent VoiceOver / Switch Control can reach). */
   accessibilityActions?: ReadonlyArray<AccessibilityActionInfo>;
   onAccessibilityAction?: (event: AccessibilityActionEvent) => void;
+  /** Native test identifier (used by Maestro screenshot flows). */
+  testID?: string;
   style?: StyleProp<ViewStyle>;
 };
 
@@ -82,6 +84,7 @@ export function PressableSurface({
   accessibilityState,
   accessibilityActions,
   onAccessibilityAction,
+  testID,
   style,
 }: PressableSurfaceProps) {
   // `pressed` is 0 at rest, 1 while held. Resolved into a scale or opacity in
@@ -137,6 +140,7 @@ export function PressableSurface({
         accessibilityState={accessibilityState}
         accessibilityActions={accessibilityActions}
         onAccessibilityAction={onAccessibilityAction}
+        testID={testID}
         style={style}
       >
         {children}
@@ -159,6 +163,7 @@ export function PressableSurface({
       accessibilityState={accessibilityState}
       accessibilityActions={accessibilityActions}
       onAccessibilityAction={onAccessibilityAction}
+      testID={testID}
       style={[animatedStyle, style]}
     >
       {children}

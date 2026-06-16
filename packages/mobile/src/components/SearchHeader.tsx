@@ -4,6 +4,7 @@ import { Searchbar } from 'react-native-paper';
 import { Icon } from './Icon';
 import { GlassSurface } from './GlassSurface';
 import { useTheme } from '../providers/theme-provider';
+import { selectByVariant } from '../theme/variants';
 import { iosSystemColors } from '../theme/ios-colors';
 
 export type SearchHeaderHandle = {
@@ -81,7 +82,8 @@ export const SearchHeader = forwardRef<SearchHeaderHandle, SearchHeaderProps>(fu
   // Material variant: an authentic MD3 search bar. The imperative handle still
   // works because Paper's Searchbar forwards its ref to the inner TextInput
   // (blur/focus) and getText/setText stay backed by our own `text` state.
-  if (uiVariant === 'material') {
+  const isMaterial = selectByVariant(uiVariant, { material: true, liquidGlass: false });
+  if (isMaterial) {
     return (
       <View style={[styles.materialFrame, { height, borderRadius: radius }]}>
         <Searchbar

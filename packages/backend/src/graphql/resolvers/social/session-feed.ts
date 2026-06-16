@@ -64,6 +64,8 @@ type BetaLinkRow = {
   thumbnail: string | null;
   isListed: boolean | null;
   createdAt: string | null;
+  betaLinkTickUuid: string | null;
+  boardId: number | null;
 };
 
 type FeaturedBetaRow = BetaLinkRow & {
@@ -548,9 +550,11 @@ export const sessionFeedQueries = {
         : [];
     const tickVoteMap = new Map(tickVoteCounts.map((v) => [v.entityId, Number(v.upvotes)]));
 
-    // Batch-fetch stored beta links for the session's climbs in one query.
-    // Keyed by `${boardType}:${climbUuid}` so each tick reads an O(1) Map entry.
-    const betaLinksByClimb = await fetchBetaLinksByClimb(tickRows);
+    // Batch-fetch the beta videos attached to THIS session's own ticks in one
+    // query, keyed by tickUuid so each tick reads an O(1) Map entry. Scoped by
+    // the direct beta↔tick link, so the carousel shows only the crew's own clips
+    // (not every community video for the climbs).
+    const betaLinksByTick = await fetchBetaLinksByTick(tickUuids);
 
     // Build ticks (totalAttempts added below)
     const ticks: SessionDetailTick[] = tickRows.map((row) => {
@@ -580,7 +584,7 @@ export const sessionFeedQueries = {
         climbedAt: row.tick.climbedAt,
         upvotes: tickVoteMap.get(row.tick.uuid) ?? 0,
         totalAttempts: null,
-        betaLinks: betaLinksByClimb.get(`${row.tick.boardType}:${row.canonicalClimbUuid}`) ?? [],
+        betaLinks: betaLinksByTick.get(row.tick.uuid) ?? [],
       };
     });
 
@@ -1294,49 +1298,36 @@ function mapBetaLinkRow(row: BetaLinkRow): BetaLinksGqlRow {
     thumbnail: row.thumbnail,
     isListed: row.isListed,
     createdAt: row.createdAt,
+    tickUuid: row.betaLinkTickUuid ?? null,
+    boardId: row.boardId ?? null,
   };
 }
 
 /**
- * Batch-fetch stored beta links for the climbs ticked in a session, for the
+ * Batch-fetch beta videos attached to the SESSION'S OWN ticks, for the
  * session-detail beta carousel.
  *
- * Runs ONE query against board_beta_links filtered to the unique
- * (boardType, climbUuid) pairs from the session's ticks — the same direct
- * climb-uuid lookup the per-climb `betaLinks` query (the play-drawer beta list)
- * uses, so the carousel surfaces the same community beta a climber would see on
- * each climb. It adds two gates appropriate to this aggregated public view:
- * is_listed = true and the KayaClimb URL exclusion.
+ * Runs ONE query against board_beta_links filtered by `tick_uuid IN (<the
+ * session's tick uuids>)` — the direct beta↔tick link added in migration
+ * `0128_direct_beta_tick_links.sql`. Because a beta link's `tick_uuid` resolves
+ * to exactly one ascent (one user, one session), this returns ONLY the clips the
+ * session's own climbers attached to their sends here — not every community clip
+ * for the climbs. `board_beta_links_tick_uuid_unique` means at most one clip per
+ * tick. Keeps the is_listed + KayaClimb gates.
  *
- * This is deliberately NOT the featured-beta path (`betaCandidateJoinSql`),
- * which additionally scopes to the ticking user's own beta, matches the tick
- * angle, and resolves climb aliases to rank a single personal highlight — a
- * different feature. Here we want every shareable clip for the climbs, not one.
+ * Returns a Map keyed by `tickUuid`, so each tick reads an O(1) entry. The
+ * carousel attributes each clip to the participant who logged that tick.
  *
- * No live Instagram/TikTok enrichment — thumbnails are whatever is pre-cached.
- * Matches on the alias-resolved canonical climb UUID (beta is stored against the
- * canonical), and returns a Map keyed `${boardType}:${canonicalClimbUuid}`.
+ * Community beta (every shareable clip for a climb, regardless of who posted it)
+ * is intentionally NOT surfaced here — it lives on the climb's play-drawer beta
+ * list, where "all the beta for this climb" is the correct scope.
  */
-async function fetchBetaLinksByClimb(
-  tickRows: Array<{ tick: { boardType: string }; canonicalClimbUuid: string }>,
-): Promise<Map<string, BetaLinksGqlRow[]>> {
+async function fetchBetaLinksByTick(tickUuids: string[]): Promise<Map<string, BetaLinksGqlRow[]>> {
   const map = new Map<string, BetaLinksGqlRow[]>();
-  if (tickRows.length === 0) return map;
-
-  // Unique (boardType, canonicalClimbUuid) pairs so the IN-list stays bounded by
-  // the number of distinct climbs, not the number of ticks.
-  const pairSet = new Set<string>();
-  const pairs: Array<{ boardType: string; climbUuid: string }> = [];
-  for (const { tick, canonicalClimbUuid } of tickRows) {
-    const key = `${tick.boardType}:${canonicalClimbUuid}`;
-    if (pairSet.has(key)) continue;
-    pairSet.add(key);
-    pairs.push({ boardType: tick.boardType, climbUuid: canonicalClimbUuid });
-  }
+  if (tickUuids.length === 0) return map;
 
   const betaRows = await dbRead
     .select({
-      boardType: dbSchema.boardBetaLinks.boardType,
       climbUuid: dbSchema.boardBetaLinks.climbUuid,
       link: dbSchema.boardBetaLinks.link,
       foreignUsername: dbSchema.boardBetaLinks.foreignUsername,
@@ -1344,17 +1335,13 @@ async function fetchBetaLinksByClimb(
       thumbnail: dbSchema.boardBetaLinks.thumbnail,
       isListed: dbSchema.boardBetaLinks.isListed,
       createdAt: dbSchema.boardBetaLinks.createdAt,
+      betaLinkTickUuid: dbSchema.boardBetaLinks.tickUuid,
+      boardId: dbSchema.boardBetaLinks.boardId,
     })
     .from(dbSchema.boardBetaLinks)
     .where(
       and(
-        // Row-tuple IN-list over (board_type, climb_uuid): Postgres can probe the
-        // (board_type, climb_uuid, link) primary key per pair, which is friendlier
-        // than an OR-of-equality chain.
-        sql`(${dbSchema.boardBetaLinks.boardType}, ${dbSchema.boardBetaLinks.climbUuid}) in (${sql.join(
-          pairs.map((pair) => sql`(${pair.boardType}, ${pair.climbUuid})`),
-          sql`, `,
-        )})`,
+        inArray(dbSchema.boardBetaLinks.tickUuid, tickUuids),
         eq(dbSchema.boardBetaLinks.isListed, true),
         // Match the featured-beta KayaClimb exclusion: drop links pointing at
         // kayaclimb.com (and any subdomain), which aren't shareable video beta.
@@ -1364,13 +1351,14 @@ async function fetchBetaLinksByClimb(
     .orderBy(desc(dbSchema.boardBetaLinks.createdAt));
 
   for (const row of betaRows) {
-    const key = `${row.boardType}:${row.climbUuid}`;
-    const existing = map.get(key);
+    const tickUuid = row.betaLinkTickUuid;
+    if (!tickUuid) continue;
+    const existing = map.get(tickUuid);
     const mapped = mapBetaLinkRow(row);
     if (existing) {
       existing.push(mapped);
     } else {
-      map.set(key, [mapped]);
+      map.set(tickUuid, [mapped]);
     }
   }
   return map;
@@ -1406,8 +1394,14 @@ function betaCandidateJoinSql() {
     INNER JOIN board_beta_links bl
       ON bl.board_type = t.board_type
       AND bl.climb_uuid = COALESCE(bca_video.canonical_uuid, t.climb_uuid)
-      AND bl.created_by_user_id = t.user_id
-      AND (bl.angle IS NULL OR bl.angle = t.angle)
+      AND (
+        bl.tick_uuid = t.uuid
+        OR (
+          bl.tick_uuid IS NULL
+          AND bl.created_by_user_id = t.user_id
+          AND (bl.angle IS NULL OR bl.angle = t.angle)
+        )
+      )
       AND bl.is_listed IS TRUE
       AND bl.link !~* '^https?://([a-z0-9-]+\\.)*kayaclimb\\.com/'
   `;
@@ -1418,6 +1412,7 @@ function betaCandidateRankSql(partitionExpression: SQL) {
     ROW_NUMBER() OVER (
       PARTITION BY ${partitionExpression}
       ORDER BY
+        (bl.tick_uuid = t.uuid) DESC,
         COALESCE(t.difficulty, ROUND(bcs_beta.display_difficulty)::int, -1) DESC,
         t.climbed_at DESC,
         t.id DESC,
@@ -1446,6 +1441,8 @@ async function fetchSessionFeaturedBetaRows(
         bl.thumbnail,
         bl.is_listed AS "isListed",
         bl.created_at AS "createdAt",
+        bl.tick_uuid AS "betaLinkTickUuid",
+        bl.board_id AS "boardId",
         ${betaCandidateRankSql(sql`t.session_id`)}
       FROM boardsesh_ticks t
       ${betaCandidateJoinSql()}
@@ -1496,6 +1493,8 @@ async function fetchDailyFeaturedBetaRows(
         bl.thumbnail,
         bl.is_listed AS "isListed",
         bl.created_at AS "createdAt",
+        bl.tick_uuid AS "betaLinkTickUuid",
+        bl.board_id AS "boardId",
         ${betaCandidateRankSql(sql`keys.session_id`)}
       FROM keys
       INNER JOIN boardsesh_ticks t

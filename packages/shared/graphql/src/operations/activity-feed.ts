@@ -136,6 +136,8 @@ const SESSION_FEED_ITEM_FIELDS = `
       thumbnail
       isListed
       createdAt
+      tickUuid
+      boardId
     }
   }
   socialEntityType
@@ -189,6 +191,8 @@ export const GET_SESSION_DETAIL = gql`
           thumbnail
           isListed
           createdAt
+          tickUuid
+          boardId
         }
       }
     }

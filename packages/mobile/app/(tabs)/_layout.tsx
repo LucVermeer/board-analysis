@@ -12,6 +12,7 @@ import { MaterialTabBar } from '../../src/components/navigation/MaterialTabBar';
 import { useTheme } from '../../src/providers/theme-provider';
 import { brandColors } from '../../src/theme/colors';
 import { useNativeAccessoryActive, useNativeTabBar } from '../../src/hooks/use-bottom-accessory';
+import { useInsideTabs } from '../../src/hooks/use-inside-tabs';
 
 // Cold-start on Home: the leftmost tab carries the beta shelf and followed
 // activity feed, while Climbs remains the search surface one tab over. Drives
@@ -62,6 +63,15 @@ export default function TabLayout() {
   // wrapper additionally holds the mount across a brief presence blip (board
   // reconnect / queue rehydrate), so those don't churn the host either.
   const hasCurrentClimb = useStickyAccessoryPresence();
+  // Route term on the same mount gate: a root-level push (session detail) or modal
+  // slides the whole tab bar — and its bottom accessory — off screen. Without this,
+  // React leaves the accessory host mounted underneath, so UIKit keeps a stale glass
+  // platter that re-presents stacked under the fresh one on return (doubled, offset
+  // text). Unmounting on tab-group exit releases the host cleanly; bottom-chrome
+  // arbitration already assumes the native accessory is gone off-tabs, so this just
+  // makes the real mount match. `isTabsRoute` keys on segments[0] only, so intra-tab
+  // navigation doesn't toggle it.
+  const insideTabs = useInsideTabs();
   const showRecordBadge = isBluetoothConnected || sessionId !== null;
   const eagerMountRecord = Platform.OS === 'android';
 
@@ -116,7 +126,7 @@ export default function TabLayout() {
       labelStyle={{ default: { color: systemColors.secondaryLabel }, selected: { color: systemColors.label } }}
       tintColor={systemColors.label}
     >
-      {nativeAccessoryActive && hasCurrentClimb ? (
+      {insideTabs && nativeAccessoryActive && hasCurrentClimb ? (
         <NativeTabs.BottomAccessory key="queue-bottom-accessory">
           <QueueBottomAccessory />
         </NativeTabs.BottomAccessory>

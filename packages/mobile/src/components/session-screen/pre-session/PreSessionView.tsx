@@ -13,6 +13,7 @@ import { track } from '../../../lib/analytics';
 import { Card } from '../../Card';
 import { SectionHeader } from '../../SectionHeader';
 import { Text } from '../../Text';
+import { ScreenTitle } from '../../ScreenTitle';
 import type { QueueItemRowBoard } from '../../QueueItemRow';
 import { useTheme } from '../../../providers/theme-provider';
 import { spacing } from '../../../theme/tokens';
@@ -26,10 +27,43 @@ import { reportError } from '../../../lib/error-reporting';
 import { RecordTopChrome } from '../RecordTopChrome';
 import { SESSION_START_FAB_HEIGHT, SessionStartFab } from '../SessionStartFab';
 import { BoardSummaryCard } from './BoardSummaryCard';
+import {
+  DEFAULT_GRADE_FOCUS_OPTIONS,
+  DEFAULT_LADDER_OPTIONS,
+  DEFAULT_PYRAMID_OPTIONS,
+  DEFAULT_VOLUME_OPTIONS,
+} from '@boardsesh/playlist-generator';
+import { assertNever } from '../../../lib/assert-never';
+import { SCREENSHOT_MODE, SCREENSHOT_WORKOUT } from '../../../lib/screenshot-mode';
 import { GeneratorPickerCard, type GeneratorSelection } from './GeneratorPickerCard';
 import { WorkoutPreviewRow } from './WorkoutPreviewRow';
 import { useWorkoutPreview } from './use-workout-preview';
 import type { PreviewItem } from './workout-preview-pool';
+
+// Screenshot mode pre-selects a workout so the Record screen renders the
+// generator (chart + generated preview) on load. The workout shelf is a
+// react-native-gesture-handler ScrollView that Maestro can't tap, so baking the
+// initial selection is the only reliable way to capture it. Off in normal builds.
+// The DEFAULT_*_OPTIONS omit `targetGrade` (see playlist-generator types), so each
+// branch adds a mid-grade default — mirroring buildDefaultOptions in GeneratorPickerCard.
+function initialGeneratorSelection(): GeneratorSelection {
+  if (!SCREENSHOT_MODE || !SCREENSHOT_WORKOUT) return { type: 'off' };
+  const targetGrade = 15;
+  switch (SCREENSHOT_WORKOUT) {
+    case 'volume':
+      return { type: 'on', options: { ...DEFAULT_VOLUME_OPTIONS, targetGrade } };
+    case 'pyramid':
+      return { type: 'on', options: { ...DEFAULT_PYRAMID_OPTIONS, targetGrade } };
+    case 'ladder':
+      return { type: 'on', options: { ...DEFAULT_LADDER_OPTIONS, targetGrade } };
+    case 'gradeFocus':
+      return { type: 'on', options: { ...DEFAULT_GRADE_FOCUS_OPTIONS, targetGrade } };
+    default:
+      // A new ScreenshotWorkout variant must add a case above; otherwise this
+      // turns into a compile error instead of silently returning undefined.
+      return assertNever(SCREENSHOT_WORKOUT);
+  }
+}
 
 type PreSessionViewProps = {
   /** Render the floating glass chrome (large title + board pill). True in the
@@ -68,7 +102,7 @@ export function PreSessionView({ showChrome = false }: PreSessionViewProps) {
     router.push('/boards');
   }, [router]);
 
-  const [selection, setSelection] = useState<GeneratorSelection>({ type: 'off' });
+  const [selection, setSelection] = useState<GeneratorSelection>(initialGeneratorSelection);
   const [isStarting, setIsStarting] = useState(false);
   const [activePreviewUuid, setActivePreviewUuid] = useState<string | null>(null);
   // Measured height of the Start capsule's container, so the list reserves exactly
@@ -191,15 +225,10 @@ export function PreSessionView({ showChrome = false }: PreSessionViewProps) {
   const canStart = activeBoard != null && !isStarting && generatorPreviewReady;
   // The single source of the Start capsule's bottom offset: passed to SessionStartFab
   // AND used for the list reservation, so the FAB position and the last-row clearance
-  // can't drift. Liquid Glass anchors to the raw safe-area inset; Material uses the
-  // fixed-footer reserve.
-  //
-  // Verified on-device (iPhone 17 Pro / iOS 26): with the native tab bar + climb
-  // accessory present, `useSafeAreaInsets().bottom` is 139 = home indicator (34) +
-  // tab bar (49) + accessory (56) — i.e. the glass tab bar DOES extend the UIKit safe
-  // area. `bottomChrome.fixedFooterBottom` adds the tab bar + accessory a second time
-  // (246), which strands the control ~110px up the screen — hence the raw inset here.
-  const footerBottom = variant === 'material' ? bottomChrome.fixedFooterBottom : insets.bottom;
+  // can't drift. The Material-vs-glass arbitration — with the on-device iPhone 17 Pro
+  // evidence for why glass uses the raw inset — lives in computeBottomChromeMetrics
+  // (see `preSessionFooterBottom`).
+  const footerBottom = bottomChrome.preSessionFooterBottom;
 
   // Inline status copy shown above an empty preview (loading / no results /
   // error). When rows are already present a rebuild keeps them mounted, so these
@@ -220,13 +249,9 @@ export function PreSessionView({ showChrome = false }: PreSessionViewProps) {
     () => (
       <View style={styles.header}>
         {/* The screen's identity in-body under the floating chrome, collapsing
-            into the centred header capsule as it scrolls up. On Material the
-            app bar owns the title, so the in-body large title is gated off. */}
-        {variant === 'material' ? null : (
-          <Text variant="largeTitle" style={styles.screenTitle}>
-            {t('mobile.session.headerStart')}
-          </Text>
-        )}
+            into the centred header capsule as it scrolls up. ScreenTitle hides
+            itself on Material (the M3 app bar owns the title). */}
+        <ScreenTitle style={styles.screenTitle}>{t('mobile.session.headerStart')}</ScreenTitle>
 
         {/* The chrome pill owns board identity but collapses on scroll, so this
             keeps the full config (name · size · angle) persistently visible when a

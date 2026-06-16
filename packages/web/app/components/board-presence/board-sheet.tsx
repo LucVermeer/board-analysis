@@ -8,8 +8,8 @@
 // window event the bottom tab bar listens for).
 //
 // State comes from `@boardsesh/board-presence-react`'s split current/feed
-// contexts, which are inert when the `board-presence` flag is off — so this
-// sheet is only ever opened from the entry pill when the flag is on.
+// contexts, which are inert until a board is bound — so this sheet is only ever
+// opened from the entry pill once a BLE serial has resolved to a board.
 
 import React, { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';

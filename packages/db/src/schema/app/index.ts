@@ -21,3 +21,4 @@ export * from './profile-percentiles';
 export * from './activity-push-tokens';
 export * from './recommendation-stats';
 export * from './integration-exports';
+export * from './location-sync';

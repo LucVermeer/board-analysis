@@ -80,15 +80,26 @@ older iPhone is the variant with the chrome degraded, not Material.
   (iOS < 26 frosted) → `material`/`solid` (Android, Reduce Transparency). Buttons stay JS
   (`PressableSurface`) on every path, so any phone on Liquid Glass falls back to JS buttons safely.
 
-**Component routing rule.** Cross-variant components expose one public prop API and branch internally
-on `theme.variant`. Call sites never change. The canonical shape (`Button.tsx`, `Card.tsx`):
+**Component routing rule.** Cross-variant components expose one public prop API and route internally
+on `theme.variant`; call sites never change. Don't hand-write the `variant === '…'` branch — use the
+shared primitives in `packages/mobile/src/theme/variants/` (full decision tree + four-axis model in
+its `README.md`):
 
 ```tsx
-export function Button(props: ButtonProps) {
-  const { variant } = useTheme();
-  return variant === 'material' ? <ButtonMaterial {...props} /> : <ButtonGlass {...props} />;
-}
+// Whole subtree differs → createVariantComponent (renders the chosen impl as JSX,
+// so each gets its own fiber/hook list and a live variant flip can't crash).
+export const Button = createVariantComponent('Button', { liquidGlass: ButtonGlass, material: ButtonMaterial });
+
+// A single value differs → selectByVariant (a typed Record<UiVariant, T>; a new
+// variant is a compile error at the call site).
+const iconColor = selectByVariant(variant, { liquidGlass: systemColors.label, material: brandColors.primary });
 ```
+
+Three rungs, in order of preference: (1) a **token** resolved once in the provider when the value has a
+designer-facing name (`theme.actionColors`, `theme.chartColors`, `theme.sectionCaption`,
+`theme.radii`, `theme.textStyles`); (2) **`createVariantComponent`** for a whole-subtree swap;
+(3) **`selectByVariant`** for a local one-off. A CI guard (`vp run check:mobile-variants`) blocks raw
+`variant === 'material'` / `=== 'liquidGlass'` compares from regrowing in `src/components/`.
 
 ---
 

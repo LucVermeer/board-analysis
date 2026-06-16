@@ -453,15 +453,18 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
     } else {
       void bluetoothConnect();
     }
-    // Pulse the bulb until the climb is confirmed on the wall (the 2s watcher is
-    // a no-op once connected — see wall-confirm-fallback's already_connected
-    // path — and a picker cancel resolves via timeout).
+    // Pulse the bulb until the climb is confirmed on the wall. We just initiated
+    // the connect above, so arm pulse-only: the watcher must NOT fire its own
+    // connect fallback on timeout. Re-connecting 2s later is redundant once the
+    // first connect lands, and firing it while the device picker is still open
+    // starts a second scan that trips "Already scanning. Stopping now." on iOS.
     if (currentClimb) {
       setPendingClimbUuid(currentClimb.uuid);
       armWallConfirmWatcher({
         climbUuid: currentClimb.uuid,
         mode: isPersistentSessionActive ? 'party' : 'solo',
         boardLayout,
+        pulseOnly: true,
       });
     }
   }, [

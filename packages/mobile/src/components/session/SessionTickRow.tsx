@@ -10,7 +10,6 @@ import { ListRow } from '../ListRow';
 import { PressableAvatar } from '../PressableAvatar';
 import { PressableSurface } from '../PressableSurface';
 import { ClimbListItemContent } from '../ClimbListItemContent';
-import { FeedSocialRow } from '../you/FeedSocialRow';
 import { gradeBadgeColor } from '../you/profile-chart-colors';
 import { useGradeFormat } from '../../hooks/use-grade-format';
 import { useTheme } from '../../providers/theme-provider';
@@ -80,7 +79,6 @@ type SessionTickRowProps = {
   /** Participant who logged the tick, for the leading avatar in multi-user sessions. */
   participant?: SessionFeedParticipant;
   onPress: (tick: SessionDetailTick) => void;
-  onOpenComments: (tickUuid: string) => void;
 };
 
 export const SessionTickRow = memo(function SessionTickRow({
@@ -88,7 +86,6 @@ export const SessionTickRow = memo(function SessionTickRow({
   isMultiUser,
   participant,
   onPress,
-  onOpenComments,
 }: SessionTickRowProps) {
   const { t } = useTranslation('session');
   const { systemColors } = useTheme();
@@ -96,13 +93,13 @@ export const SessionTickRow = memo(function SessionTickRow({
 
   const meta = statusMeta(tick.status);
   const attemptText = formatAttemptText(tick, t);
-  const subtitleParts = [attemptText, tick.comment ?? null].filter((part): part is string => !!part);
-  const subtitle = subtitleParts.length > 0 ? subtitleParts.join(' · ') : undefined;
-
-  // SessionDetail carries no per-tick comment count (only a session-level one),
-  // so the comment button opens the sheet without a count badge — FeedSocialRow
-  // hides the badge at 0. Real per-tick counts would be a separate backend add.
-  const tickCommentCount = 0;
+  // The setter moves out of the climb's primary subtitle into the detail line,
+  // explicitly labelled, so it's never misread as the person who sent the climb.
+  const setterText = tick.setterUsername ? t('detail.setBy', { username: tick.setterUsername }) : null;
+  const detailParts = [attemptText, tick.comment ?? null, setterText].filter((part): part is string => !!part);
+  // Multi-user "who" is carried by the leading avatar + the climbers leaderboard,
+  // so the row subtitle stays attempt/comment/setter (no redundant name line).
+  const fallbackSubtitle = detailParts.join(' · ') || undefined;
 
   const handlePress = useCallback(() => {
     hapticSelection();
@@ -146,17 +143,8 @@ export const SessionTickRow = memo(function SessionTickRow({
             sizeId={boardConfig.sizeId}
             setIds={boardConfig.setIds.join(',')}
             angle={tick.angle}
-            subtitleDetailParts={subtitleParts}
+            subtitleDetailParts={detailParts}
             showAscentStatus={false}
-          />
-          <FeedSocialRow
-            entityId={tick.uuid}
-            entityType="tick"
-            upvotes={tick.upvotes}
-            userVote={null}
-            commentCount={tickCommentCount}
-            onOpenComments={onOpenComments}
-            compact
           />
         </PressableSurface>
         <View style={[styles.separator, { backgroundColor: systemColors.separator }]} />
@@ -171,7 +159,7 @@ export const SessionTickRow = memo(function SessionTickRow({
   return (
     <ListRow
       title={tick.climbName ?? t('detail.unknownClimb')}
-      subtitle={subtitle}
+      subtitle={fallbackSubtitle}
       onPress={handlePress}
       leading={
         isMultiUser ? (
@@ -188,24 +176,13 @@ export const SessionTickRow = memo(function SessionTickRow({
         )
       }
       trailing={
-        <View style={styles.trailing}>
-          {gradeLabel && gradeColor ? (
-            <View style={[styles.gradePill, { backgroundColor: gradeColor }]}>
-              <Text variant="caption1" color={getGradeTextColor(gradeColor)} style={styles.gradeText}>
-                {gradeLabel}
-              </Text>
-            </View>
-          ) : null}
-          <FeedSocialRow
-            entityId={tick.uuid}
-            entityType="tick"
-            upvotes={tick.upvotes}
-            userVote={null}
-            commentCount={tickCommentCount}
-            onOpenComments={onOpenComments}
-            compact
-          />
-        </View>
+        gradeLabel && gradeColor ? (
+          <View style={[styles.gradePill, { backgroundColor: gradeColor }]}>
+            <Text variant="caption1" color={getGradeTextColor(gradeColor)} style={styles.gradeText}>
+              {gradeLabel}
+            </Text>
+          </View>
+        ) : undefined
       }
     />
   );
@@ -241,11 +218,6 @@ const styles = StyleSheet.create({
     borderRadius: STATUS_ICON_SIZE / 2,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  trailing: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing[2],
   },
   gradePill: {
     paddingHorizontal: spacing[2],

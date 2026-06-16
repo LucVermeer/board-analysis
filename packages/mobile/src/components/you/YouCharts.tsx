@@ -7,7 +7,6 @@ import { Text } from '../Text';
 import { Icon } from '../Icon';
 import { ActivityIndicator } from '../ActivityIndicator';
 import { useTheme } from '../../providers/theme-provider';
-import { androidFallbackColors, materialSurfaces } from '../../theme/colors';
 import { hapticSelection } from '../../lib/haptics';
 import { gradeChartColor, layoutChartColor, flashRedpointColor, type ColoredBar } from './profile-chart-colors';
 import {
@@ -267,16 +266,12 @@ export const StackedBarChart = memo(function StackedBarChart({
   showYAxisScale,
   minBarWidth = 4,
 }: StackedBarsProps) {
-  const { colorScheme, variant } = useTheme();
+  // gifted-charts colour props require plain strings (not PlatformColor); `chartColors`
+  // is the matching string table per variant+scheme, resolved once by the provider.
+  const { colorScheme, chartColors } = useTheme();
   const { t } = useTranslation('profile');
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const isEmpty = !bars || bars.length === 0;
-  // gifted-charts color props require plain strings (not PlatformColor). On the
-  // Material variant resolveSystemColors pulls from materialSurfaces; on glass/
-  // native iOS it uses PlatformColor — neither is safe to pass directly to the
-  // chart library. Pick the matching string table so the axis color is consistent
-  // with systemColors on every platform and variant.
-  const chartColors = variant === 'material' ? materialSurfaces[colorScheme] : androidFallbackColors[colorScheme];
 
   // Color resolution is width-independent, so memoize it off the data.
   const tooltipModels = useMemo(
@@ -421,11 +416,10 @@ export const GroupedBarChart = memo(function GroupedBarChart({
   zoomable = true,
   fitYAxisToData,
 }: GroupedBarsProps) {
-  const { colorScheme, variant } = useTheme();
+  const { colorScheme, chartColors } = useTheme();
   const { t } = useTranslation('profile');
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const isEmpty = !bars || bars.length === 0;
-  const chartColors = variant === 'material' ? materialSurfaces[colorScheme] : androidFallbackColors[colorScheme];
   const groupGap = 14;
   const innerGap = 2;
   const tooltipModels = useMemo(
@@ -536,8 +530,7 @@ export const TotalAreaChart = memo(function TotalAreaChart({
   interactive = true,
   zoomable = true,
 }: AreaProps) {
-  const { colorScheme, variant } = useTheme();
-  const chartColors = variant === 'material' ? materialSurfaces[colorScheme] : androidFallbackColors[colorScheme];
+  const { chartColors } = useTheme();
   const isEmpty = !timeline || timeline.series.length === 0;
 
   // Data + axis labels are width-independent — memoize off the timeline.

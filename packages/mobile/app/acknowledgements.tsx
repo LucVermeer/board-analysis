@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { Stack, useRouter } from 'expo-router';
-import { Platform, ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { Button } from '../src/components/Button';
 import { Icon } from '../src/components/Icon';
@@ -8,6 +8,7 @@ import { PressableSurface } from '../src/components/PressableSurface';
 import { SectionHeader } from '../src/components/SectionHeader';
 import { Text } from '../src/components/Text';
 import { useBottomChromeMetrics } from '../src/hooks/use-bottom-chrome-metrics';
+import { useStackScreenOptions } from '../src/hooks/use-stack-screen-options';
 import {
   contributors,
   sponsors,
@@ -109,18 +110,15 @@ export default function AcknowledgementsScreen() {
     router.push('/licenses');
   }, [router]);
 
+  // Variant-aware header from the shared hook: a transparent blur header on Liquid
+  // Glass (iOS), an opaque M3 app bar on Material — including the forced-Material-
+  // on-iOS / Android paths where a transparent header would slide content under the
+  // status bar.
+  const screenOptions = useStackScreenOptions();
+
   return (
     <>
-      <Stack.Screen
-        options={{
-          title: t('mobile.acknowledgements.title'),
-          headerShown: true,
-          headerLargeTitle: false,
-          headerTransparent: Platform.OS === 'ios',
-          headerBlurEffect: 'systemMaterial',
-          contentStyle: { backgroundColor: 'transparent' },
-        }}
-      />
+      <Stack.Screen options={{ ...screenOptions, title: t('mobile.acknowledgements.title'), headerShown: true }} />
       <ScrollView
         contentInsetAdjustmentBehavior="automatic"
         contentContainerStyle={[styles.container, { paddingBottom: bottomChrome.scrollBottomPadding + spacing[6] }]}
@@ -208,6 +206,7 @@ export default function AcknowledgementsScreen() {
               title={t('mobile.acknowledgements.friendsTitle')}
               body={t('mobile.acknowledgements.friendsBody', { names: friendsLine })}
             />
+            <ThanksCard icon="person" title="Alex" body={t('mobile.acknowledgements.alexBody')} />
             <ThanksCard
               icon="paw"
               title={dogName}

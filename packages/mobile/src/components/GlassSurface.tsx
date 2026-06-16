@@ -3,8 +3,9 @@ import { StyleSheet, View, type ColorValue, type StyleProp, type ViewProps, type
 import { BlurView } from '@react-native-community/blur';
 import { GlassView, type GlassStyle } from 'expo-glass-effect';
 import { useTheme } from '../providers/theme-provider';
+import type { MaterialSurfaceContainers } from '../theme/colors';
 import { iosDarkColors, iosLightColors } from '../theme/ios-colors';
-import { shadows } from '../theme/tokens';
+import { shadows, type MaterialElevationLevel } from '../theme/tokens';
 import { useEffectiveSurfaceMode } from '../hooks/use-effective-surface-mode';
 
 type GlassSurfaceProps = {
@@ -44,6 +45,20 @@ type GlassSurfaceProps = {
    */
   isInteractive?: boolean;
   pointerEvents?: ViewProps['pointerEvents'];
+  /**
+   * Material-only: the M3 surface-container TONE this surface carries (depth is
+   * tonal first on Material). Omit to keep the legacy opaque `secondaryBackground`
+   * base. Ignored on glass/blur (Liquid Glass expresses depth through the glass).
+   * Pair with `level` per the canonical M3 role map (sheet → `low`, nav/menu →
+   * `base`, dialog → `high`, filled card → `highest`).
+   */
+  role?: keyof MaterialSurfaceContainers;
+  /**
+   * Material-only: the M3 elevation CAST (level0–5). Omit to keep the legacy
+   * `shadows.sm`. The material branch applies it on the same view as the
+   * background + radius (no `overflow:'hidden'`), so a rounded surface still casts.
+   */
+  level?: MaterialElevationLevel;
 };
 
 /**
@@ -69,8 +84,10 @@ export function GlassSurface({
   blurAmount = 20,
   isInteractive = false,
   pointerEvents,
+  role,
+  level,
 }: GlassSurfaceProps) {
-  const { systemColors, colorScheme } = useTheme();
+  const { systemColors, colorScheme, m3SurfaceContainers, materialElevation } = useTheme();
   const mode = useEffectiveSurfaceMode();
   const isDark = colorScheme === 'dark';
 
@@ -99,14 +116,20 @@ export function GlassSurface({
     );
   }
 
-  // Material: opaque M3 tonal surface. Background + radius + shadow live on the
-  // same view (no `overflow: 'hidden'`, which would clip the iOS shadow) so the
-  // surface casts a real elevation shadow with rounded corners. The fallback and
-  // tint composite over the opaque base, matching the blur path.
+  // Material: opaque M3 tonal surface. Depth is tone-FIRST — `role` picks the
+  // surface-container tone, `level` adds the elevation cast (both default to the
+  // legacy base + `shadows.sm` so unmigrated consumers don't shift). Background +
+  // radius + cast live on the SAME view (no `overflow: 'hidden'`, which would clip
+  // the shadow) so even a rounded surface casts. Fallback/tint composite on top.
   if (mode === 'material') {
+    const materialBg = role ? m3SurfaceContainers[role] : baseColor;
+    const elevationStyle = level ? materialElevation[level] : shadows.sm;
+    // When a `role` tone is given it IS the surface — an opaque `fallbackColor`
+    // would paint over and hide it, so skip the fallback layer (the translucent
+    // `tint` still composites). Without a role, keep the legacy fallback-over-base.
     return (
-      <View style={[style, radius, shadows.sm, { backgroundColor: baseColor }]} pointerEvents={pointerEvents}>
-        {fallbackColor ? (
+      <View style={[style, radius, elevationStyle, { backgroundColor: materialBg }]} pointerEvents={pointerEvents}>
+        {!role && fallbackColor ? (
           <View pointerEvents="none" style={[StyleSheet.absoluteFill, radius, { backgroundColor: fallbackColor }]} />
         ) : null}
         {tintColor ? (

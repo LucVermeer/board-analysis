@@ -1,0 +1,110 @@
+appId: com.boardsesh.app
+name: app-store screenshots
+---
+# App Store / Play Store hero shots against the prod backend + curated test user.
+#
+# IMPORTANT — coordinate taps: on this iOS 26 / RN Fabric build, Maestro's
+# accessibility tree only exposes native text inputs and system dialogs; plain
+# Views, Text, reanimated pressables and gesture rows do NOT surface, so app
+# buttons can't be matched by id/text. Board-dependent interactions therefore use
+# percentage coordinate taps, pinned to the orchestrator's device (iPhone 16 Pro
+# Max). If you change the device, re-check the three `point:` taps below:
+#   board pick = '24%,45%' (first "Your boards" card on /boards)
+#   board sheet = '78%,10%' (board-switcher glyph in the climbs top chrome)
+#   board view  = '50%,26%' (first climb row in the list)
+#
+# Other notes:
+# - The orchestrator resets the simulator keychain first, so the app launches
+#   signed out and login authenticates against prod.
+# - clearState wipes the client-side active board (AsyncStorage); it's re-picked
+#   via the board picker below.
+# - The Record/session screen renders the WORKOUT GENERATOR because the build
+#   bakes EXPO_PUBLIC_SCREENSHOT_WORKOUT (default volume) — its shelf is a
+#   gesture-handler ScrollView Maestro can't tap, so the selection is pre-seeded.
+# - iOS shows an "Open in 'Boardsesh'?" confirmation for simctl deep links; each
+#   openLink is followed by an optional tapOn "Open".
+# - Board-independent captures (home/discover/profile) run first so a board-pick
+#   miss can't lose them.
+- launchApp:
+    clearState: true
+- runFlow:
+    when:
+      visible:
+        id: 'auth-email-input'
+    file: login.yaml
+
+# Home — feed populated by the prod test user's follows.
+- waitForAnimationToEnd
+- takeScreenshot: 00-home
+
+# Discover — playlists.
+- openLink: com.boardsesh.app://discover
+- tapOn:
+    text: 'Open'
+    optional: true
+- waitForAnimationToEnd
+- takeScreenshot: 03-discover
+
+# Profile — stats, sessions, logbook.
+- openLink: com.boardsesh.app://profile
+- tapOn:
+    text: 'Open'
+    optional: true
+- waitForAnimationToEnd
+- takeScreenshot: 05-profile
+
+# Activate a board so Climbs / board-view / board-sheet / generator render real
+# content. Open the board picker and tap the first card under "Your boards"
+# (top-left), which activates it and dismisses back to Climbs.
+- openLink: com.boardsesh.app://boards
+- tapOn:
+    text: 'Open'
+    optional: true
+- waitForAnimationToEnd
+- tapOn:
+    point: '24%,45%'
+- waitForAnimationToEnd
+
+# Climbs — the main browse surface (now board-backed).
+- openLink: com.boardsesh.app://climbs
+- tapOn:
+    text: 'Open'
+    optional: true
+- waitForAnimationToEnd
+- takeScreenshot: 01-climbs
+
+# Workout generator — the Record/session screen with a workout pre-selected
+# (volume): target grade, warm-up, set config + the generated preview queue.
+- openLink: com.boardsesh.app://record
+- tapOn:
+    text: 'Open'
+    optional: true
+- waitForAnimationToEnd
+- takeScreenshot: 04-workout-generator
+
+# Board view — open the first climb (the signature feature: wall with holds lit).
+- openLink: com.boardsesh.app://climbs
+- tapOn:
+    text: 'Open'
+    optional: true
+- waitForAnimationToEnd
+- tapOn:
+    point: '50%,26%'
+- waitForAnimationToEnd
+- takeScreenshot: 02-board-view
+
+# Board sheet — LAST, because the drawer-host overlays (board sheet, play drawer)
+# persist across deep-link tab switches. Relaunch first (no clearState — keeps the
+# Keychain login + the active board) to clear the play drawer left open by the
+# board-view step, then open Climbs and tap the board-switcher glyph.
+- launchApp
+- waitForAnimationToEnd
+- openLink: com.boardsesh.app://climbs
+- tapOn:
+    text: 'Open'
+    optional: true
+- waitForAnimationToEnd
+- tapOn:
+    point: '78%,10%'
+- waitForAnimationToEnd
+- takeScreenshot: 06-board-sheet

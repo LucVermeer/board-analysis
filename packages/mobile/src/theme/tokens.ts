@@ -72,6 +72,27 @@ export const shadows = {
   },
 } as const;
 
+/**
+ * Material 3 elevation as a full ViewStyle per level — iOS `shadow*` props AND
+ * Android `elevation` in one object, because iOS ignores `elevation` (a bare
+ * number renders flat on Material-on-iOS) and Android ignores `shadow*`. Pair
+ * with the tonal `m3SurfaceContainers` ramp: depth on Material is tone-FIRST,
+ * with these casts layered on the components M3 actually shadows (sheet L1, nav/
+ * menu L2, dialog/FAB L3+). Level 0 is flat (app-bar-at-rest, filled card). Apply
+ * on the SAME view as the background + radius (never under `overflow:'hidden'`,
+ * which clips the cast) — see `GlassSurface`'s material branch.
+ */
+export const materialElevationByLevel = {
+  level0: { shadowColor, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0, shadowRadius: 0, elevation: 0 },
+  level1: { shadowColor, shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2, elevation: 1 },
+  level2: { shadowColor, shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.12, shadowRadius: 3, elevation: 2 },
+  level3: { shadowColor, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.14, shadowRadius: 5, elevation: 3 },
+  level4: { shadowColor, shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.15, shadowRadius: 6, elevation: 4 },
+  level5: { shadowColor, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.16, shadowRadius: 8, elevation: 5 },
+} as const;
+
+export type MaterialElevationLevel = keyof typeof materialElevationByLevel;
+
 export const opacity = {
   subtle: 0.7,
   peek: 0.62,
@@ -109,15 +130,20 @@ export const sheetStyles = {
  * parallel Material design system.
  */
 export const material = {
-  /** M3 pressed state-layer opacity, used to tint ripples. */
+  /** M3 pressed state-layer opacity, used to tint ripples (and the iOS-on-Material
+   *  pressed overlay, where there is no `android_ripple`). */
   pressedStateLayer: 0.12,
+  /** M3 disabled opacities: content (text/icon) at 38%, container fill at 12% —
+   *  replaces the single Liquid-Glass `opacity.disabled` (0.5) on Material. */
+  disabledContentOpacity: 0.38,
+  disabledContainerOpacity: 0.12,
   navBar: {
     /** Tonal pill behind the focused tab's icon (M3 spec: 64×32). */
     activeIndicatorWidth: 64,
     activeIndicatorHeight: 32,
     activeIndicatorRadius: 16,
-    /** Resting elevation of the solid Android nav surface. */
-    surfaceElevation: 3,
+    /** Resting elevation of the solid Android nav surface (M3 nav bar = level 2). */
+    surfaceElevation: 2,
   },
   sheet: {
     /** M3 bottom-sheet top corner radius (iOS keeps borderRadius.xl = 16). */

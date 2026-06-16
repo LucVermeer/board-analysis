@@ -6,9 +6,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 // param. `betaInsert` is set whenever an inserted row carries a `link` field.
 const { betaInsert, selectMock } = vi.hoisted(() => ({
   betaInsert: { current: null as Record<string, unknown> | null },
-  // Dedup probe (findInstagramShortcodeConflict) — return no conflict.
+  // Dedup probe (findBetaLinkIdentityConflict) — return no conflict. It now
+  // leftJoins board_climbs for the conflicting climb's name, so the mock chain
+  // mirrors from().leftJoin().where().
   selectMock: vi.fn(() => ({
-    from: () => ({ innerJoin: () => ({ where: () => Promise.resolve([]) }) }),
+    from: () => ({ leftJoin: () => ({ where: () => Promise.resolve([]) }) }),
   })),
 }));
 

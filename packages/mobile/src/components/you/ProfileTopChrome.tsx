@@ -17,6 +17,7 @@ import { useTranslation } from 'react-i18next';
 import { Appbar } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../providers/theme-provider';
+import { createVariantComponent } from '../../theme/variants';
 import { useNativeGlass } from '../../hooks/use-native-glass';
 import { spacing, shadows } from '../../theme/tokens';
 import { Icon } from '../Icon';
@@ -35,7 +36,7 @@ const SEGMENT_TRACK_RADIUS = 10;
 
 export type ProfileTabKey = 'progress' | 'sessions' | 'logbook' | 'social';
 
-type ProfileTopChromeProps = {
+export type ProfileTopChromeProps = {
   /** Selected sub-tab; drives the segmented control's pill / the active tab. */
   activeTab: ProfileTabKey;
   onSelectTab: (key: ProfileTabKey) => void;
@@ -47,10 +48,10 @@ type ProfileTopChromeProps = {
   onHeightChange: (height: number) => void;
 };
 
-export function ProfileTopChrome(props: ProfileTopChromeProps) {
-  const { variant } = useTheme();
-  return variant === 'material' ? <ProfileTopChromeMaterial {...props} /> : <ProfileTopChromeGlass {...props} />;
-}
+export const ProfileTopChrome = createVariantComponent('ProfileTopChrome', {
+  liquidGlass: ProfileTopChromeGlass,
+  material: ProfileTopChromeMaterial,
+});
 
 function useSegmentOptions() {
   const { t } = useTranslation('you');

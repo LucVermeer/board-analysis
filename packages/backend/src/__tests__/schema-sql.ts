@@ -529,6 +529,12 @@ export const schemaSQL = `
     "is_listed" boolean,
     "created_at" text,
     "shortcode" text,
-    "created_by_user_id" text
+    "created_by_user_id" text,
+    "tick_uuid" text,
+    "board_id" bigint,
+    "video_identity" text
   );
+  CREATE UNIQUE INDEX IF NOT EXISTS "board_beta_links_video_identity_unique" ON "board_beta_links" ("video_identity") WHERE "video_identity" IS NOT NULL;
+  CREATE UNIQUE INDEX IF NOT EXISTS "board_beta_links_tick_uuid_unique" ON "board_beta_links" ("tick_uuid") WHERE "tick_uuid" IS NOT NULL;
+  CREATE INDEX IF NOT EXISTS "board_beta_links_board_id_idx" ON "board_beta_links" ("board_id") WHERE "board_id" IS NOT NULL;
 `;

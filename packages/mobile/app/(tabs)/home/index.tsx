@@ -159,7 +159,7 @@ export default function HomeTab() {
   }, [router]);
 
   const handleSessionPress = useCallback(
-    (session: SessionFeedItem) => navigateToSessionFeedItem(router, session),
+    (session: SessionFeedItem) => navigateToSessionFeedItem(router, session, '/home/session/[sessionId]'),
     [router],
   );
 
@@ -351,15 +351,21 @@ export default function HomeTab() {
   }
 
   return (
-    <View style={[styles.flex, { backgroundColor: systemColors.background }]}>
+    <View testID="home-screen" style={[styles.flex, { backgroundColor: systemColors.background }]}>
       <FlashList
         ref={listRef}
         data={sessions}
         extraData={summaryMap}
         renderItem={renderItem}
         keyExtractor={(item) => item.sessionId}
-        contentInsetAdjustmentBehavior="automatic"
-        contentContainerStyle={{ paddingBottom: bottomChrome.scrollBottomPadding + spacing[5] }}
+        // The floating glass header owns the top inset on every platform (the
+        // iOS-only `automatic` behaviour left an Android gap), so pad manually.
+        contentInsetAdjustmentBehavior="never"
+        contentContainerStyle={{
+          paddingTop: insets.top + TOP_ISLAND_BAND,
+          paddingBottom: bottomChrome.scrollBottomPadding + spacing[5],
+        }}
+        scrollIndicatorInsets={{ top: insets.top + TOP_ISLAND_BAND }}
         onEndReached={handleEndReached}
         onEndReachedThreshold={0.5}
         ListHeaderComponent={header}
@@ -433,6 +439,7 @@ export default function HomeTab() {
               title={scopeMenu.title}
               actions={scopeMenu.actions}
               onSelectIndex={scopeMenu.onSelectIndex}
+              accessibilityHint={t('mobile.home.scope.hint')}
             />
           </View>
           {/* Search action: balances the avatar so the scope menu reads centred,
@@ -709,9 +716,9 @@ const styles = StyleSheet.create({
     gap: spacing[2],
   },
   header: {
-    // Clear the floating header band so the feed starts just below it (content
-    // then scrolls up under the islands + blur).
-    paddingTop: TOP_ISLAND_BAND,
+    // A small gap below the floating header band (the list already insets by the
+    // band via contentContainerStyle).
+    paddingTop: spacing[2],
   },
   shelfSection: {
     paddingBottom: spacing[5],

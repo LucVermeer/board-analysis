@@ -7,6 +7,7 @@ import { Icon } from '../Icon';
 import { Text } from '../Text';
 import { iconMap, type IconName } from '../icon-map';
 import { useTheme } from '../../providers/theme-provider';
+import { selectByVariant } from '../../theme/variants';
 import { useNativeGlass } from '../../hooks/use-native-glass';
 import { hapticLight } from '../../lib/haptics';
 import { spacing, shadows } from '../../theme/tokens';
@@ -77,19 +78,22 @@ export function SessionStartFab({
       onLayout={onHeightChange ? handleLayout : undefined}
       style={[styles.container, { bottom: bottomOffset }]}
     >
-      {variant === 'material' ? (
-        <FAB
-          icon={iconMap[icon].android}
-          label={label}
-          onPress={onPress}
-          disabled={disabled}
-          loading={loading}
-          variant="primary"
-          mode="elevated"
-        />
-      ) : (
-        <StartGlassCapsule label={label} icon={icon} onPress={onPress} disabled={disabled} loading={loading} />
-      )}
+      {selectByVariant(variant, {
+        material: (
+          <FAB
+            icon={iconMap[icon].android}
+            label={label}
+            onPress={onPress}
+            disabled={disabled}
+            loading={loading}
+            variant="primary"
+            mode="elevated"
+          />
+        ),
+        liquidGlass: (
+          <StartGlassCapsule label={label} icon={icon} onPress={onPress} disabled={disabled} loading={loading} />
+        ),
+      })}
     </View>
   );
 }

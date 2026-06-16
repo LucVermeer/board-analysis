@@ -6,6 +6,7 @@ import { PressableSurface } from './PressableSurface';
 import { iconMap, type IconName } from './icon-map';
 import { hapticLight } from '../lib/haptics';
 import { useTheme } from '../providers/theme-provider';
+import { createVariantComponent } from '../theme/variants';
 
 type ButtonVariant = 'filled' | 'outlined' | 'text' | 'tonal';
 type ButtonSize = 'small' | 'medium' | 'large';
@@ -21,6 +22,8 @@ type ButtonProps = {
   loading?: boolean;
   haptic?: boolean;
   tintColor?: string;
+  /** Native test identifier (used by Maestro screenshot flows). */
+  testID?: string;
   style?: ViewStyle;
 };
 
@@ -35,10 +38,7 @@ const sizeConfig = {
  * the existing Liquid-Glass/HIG button on the Liquid Glass variant. The public
  * prop API is identical for both, so call sites never change.
  */
-export function Button(props: ButtonProps) {
-  const { variant: uiVariant } = useTheme();
-  return uiVariant === 'material' ? <ButtonMaterial {...props} /> : <ButtonGlass {...props} />;
-}
+export const Button = createVariantComponent('Button', { liquidGlass: ButtonGlass, material: ButtonMaterial });
 
 // 'tonal' is the M3 middle-emphasis button — Paper's contained-tonal pulls its
 // secondaryContainer fill + onSecondaryContainer label straight from the MD3
@@ -56,6 +56,7 @@ function ButtonMaterial({
   loading = false,
   haptic = true,
   tintColor,
+  testID,
   style,
 }: ButtonProps) {
   const { brandColors: brand } = useTheme();
@@ -86,6 +87,7 @@ function ButtonMaterial({
       // Approximate the small/medium/large ladder on Paper's single-height button.
       labelStyle={{ fontSize: config.fontSize }}
       contentStyle={{ paddingVertical: config.paddingVertical }}
+      testID={testID}
       style={style}
     >
       {title}
@@ -105,6 +107,7 @@ function ButtonGlass({
   loading = false,
   haptic = true,
   tintColor,
+  testID,
   style,
 }: ButtonProps) {
   const config = sizeConfig[size];
@@ -151,6 +154,7 @@ function ButtonGlass({
       accessibilityRole="button"
       accessibilityState={{ disabled: disabled || loading }}
       accessibilityLabel={accessibilityLabel ?? title}
+      testID={testID}
       style={[containerStyle, style]}
     >
       {icon && <Icon name={icon} size={config.iconSize} color={textColor} />}

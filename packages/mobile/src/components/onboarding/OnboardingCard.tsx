@@ -1,15 +1,20 @@
 import { memo } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, View, type ImageSourcePropType } from 'react-native';
+import { Image } from 'expo-image';
 import { Text } from '../Text';
 import { Icon } from '../Icon';
-import { spacing } from '../../theme/tokens';
+import { spacing, borderRadius } from '../../theme/tokens';
 import type { IconName } from '../icon-map';
 
 const ILLUSTRATION_SIZE = 96;
+const ILLUSTRATION_IMAGE_WIDTH = 240;
+const ILLUSTRATION_IMAGE_HEIGHT = 360;
 
 type OnboardingCardProps = {
   /** Glyph for this page (resolved from the card data by the carousel). */
   icon: IconName;
+  /** Real app-screen illustration; when present it replaces the glyph. */
+  image?: ImageSourcePropType;
   /** Already-translated heading. Resolved at the call site with a static `t()`
    * literal so the i18n orphan checker can see the keys (no `t(variable)`). */
   title: string;
@@ -29,11 +34,15 @@ type OnboardingCardProps = {
  * heading and body together as the user pages across. Memoised so FlatList row
  * recycling doesn't re-render unchanged pages.
  */
-function OnboardingCardComponent({ icon, title, body, width, iconColor, bodyColor }: OnboardingCardProps) {
+function OnboardingCardComponent({ icon, image, title, body, width, iconColor, bodyColor }: OnboardingCardProps) {
   return (
     <View style={[styles.page, { width }]} accessible accessibilityRole="text" accessibilityLabel={`${title}. ${body}`}>
       <View style={styles.illustration} importantForAccessibility="no-hide-descendants">
-        <Icon name={icon} size={ILLUSTRATION_SIZE} color={iconColor} />
+        {image ? (
+          <Image source={image} style={styles.illustrationImage} contentFit="contain" accessible={false} />
+        ) : (
+          <Icon name={icon} size={ILLUSTRATION_SIZE} color={iconColor} />
+        )}
       </View>
       <Text variant="largeTitle" style={styles.title}>
         {title}
@@ -58,6 +67,11 @@ const styles = StyleSheet.create({
     marginBottom: spacing[8],
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  illustrationImage: {
+    width: ILLUSTRATION_IMAGE_WIDTH,
+    height: ILLUSTRATION_IMAGE_HEIGHT,
+    borderRadius: borderRadius.lg,
   },
   title: {
     textAlign: 'center',

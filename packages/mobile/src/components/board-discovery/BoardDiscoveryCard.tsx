@@ -79,7 +79,7 @@ export function BoardDiscoveryCard({ item, onPress }: BoardDiscoveryCardProps) {
       accessibilityRole="button"
       style={[animatedStyle, styles.container]}
     >
-      <View style={[styles.thumb, thumbStyle]}>
+      <View testID="board-card" style={[styles.thumb, thumbStyle]}>
         {render ? (
           <BoardImageNative
             frames=""

@@ -334,7 +334,8 @@
       "discordTitle": "Toda la gente de nuestro Discord",
       "discordBody": "Gracias por la beta, la motivación y los reportes de fallos. Toca para unirte.",
       "friendsTitle": "La cuerda",
-      "friendsBody": "{{names}}: por escucharme hablar sin parar de Boardsesh y por escalar de verdad en él.",
+      "friendsBody": "{{names}}, gracias por seguir queriendo sesionar conmigo, a pesar de haberles obligado a todos a hacer beta testing en vez de escalar. Vuestra experiencia real ha ayudado mucho a marcar el rumbo de Boardsesh.",
+      "alexBody": "Por dar feedback de diseño desde su retiro al otro lado del mundo — espero que volvamos a coincidir en la pared algún día.",
       "dogBody": "Gracias a Scout por todo el apoyo emocional, es la verdadera MVP de Boardsesh. A pesar de no escalar y solo querer ser una perra de playa.",
       "ossLicensesLink": "Licencias open source",
       "ossLicensesBody": "El software open source con el que se construye Boardsesh"
@@ -377,7 +378,6 @@
       "home": "Inicio",
       "boards": "Tablas",
       "climbs": "Bloques",
-      "climb": "Bloque",
       "profile": "Perfil",
       "holdFilter": "Tipos de presa",
       "zoneFilter": "Zona del muro"

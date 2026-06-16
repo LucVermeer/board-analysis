@@ -25,6 +25,13 @@ const services = {
     dockerfile: 'Dockerfile.web',
     rootPackageName: '@boardsesh/web',
   },
+  sync: {
+    dockerfile: 'Dockerfile.sync',
+    // All sync CLIs in one image. The source layer is the union of these roots'
+    // transitive workspace deps; the daemon/CLI to run is chosen by the container
+    // command, not baked into the image.
+    rootPackageNames: ['@boardsesh/kilter-sync', '@boardsesh/aurora-sync', '@boardsesh/moonboard-sync'],
+  },
 };
 
 const dependencyFields = ['dependencies', 'optionalDependencies', 'peerDependencies'];
@@ -115,7 +122,10 @@ function getServiceSourcePackageDirs(serviceName, repoRoot = defaultRepoRoot) {
   const service = requireKnownService(serviceName);
   const workspacesByName = getWorkspacePackageMap(repoRoot);
   const seenPackageNames = new Set();
-  const stack = [service.rootPackageName];
+  // A service roots from one package (rootPackageName) or several (rootPackageNames,
+  // e.g. the combined sync image). Union their transitive workspace-dependency walks.
+  const rootPackageNames = service.rootPackageNames ?? [service.rootPackageName];
+  const stack = [...rootPackageNames];
 
   while (stack.length > 0) {
     const packageName = stack.pop();

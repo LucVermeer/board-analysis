@@ -10,6 +10,7 @@ import { TextInput as PaperTextInput, HelperText } from 'react-native-paper';
 import { Text } from './Text';
 import { Icon } from './Icon';
 import { useTheme } from '../providers/theme-provider';
+import { selectByVariant } from '../theme/variants';
 import { iosSystemColors } from '../theme/ios-colors';
 
 // iOS systemRed — matches login.tsx's error text and is correct on the Liquid
@@ -42,6 +43,8 @@ type AuthTextInputProps = {
   /** Show-password / hide-password labels for the toggle (already translated). */
   showLabel?: string;
   hideLabel?: string;
+  /** Native test identifier (used by Maestro screenshot flows). */
+  testID?: string;
 };
 
 /**
@@ -72,6 +75,7 @@ export const AuthTextInput = forwardRef<RNTextInput, AuthTextInputProps>(functio
     accessibilityLabel,
     showLabel = 'Show password',
     hideLabel = 'Hide password',
+    testID,
   },
   ref,
 ) {
@@ -94,9 +98,11 @@ export const AuthTextInput = forwardRef<RNTextInput, AuthTextInputProps>(functio
     passwordRules,
     onSubmitEditing,
     secureTextEntry: masked,
+    testID,
   } as const;
 
-  if (theme.variant === 'material') {
+  const isMaterial = selectByVariant(theme.variant, { material: true, liquidGlass: false });
+  if (isMaterial) {
     return (
       <View>
         <PaperTextInput

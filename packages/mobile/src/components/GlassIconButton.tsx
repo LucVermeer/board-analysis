@@ -15,7 +15,7 @@ import { PressableSurface } from './PressableSurface';
 import { Icon } from './Icon';
 import { Text } from './Text';
 import { iconMap, type IconName } from './icon-map';
-import { useTheme } from '../providers/theme-provider';
+import { createVariantComponent } from '../theme/variants';
 import { brandColors } from '../theme/colors';
 import { iosSystemColors } from '../theme/ios-colors';
 import { timing } from '../theme/animations';
@@ -69,10 +69,10 @@ function formatBadgeCount(badgeCount: number | undefined): string | null {
  * variant and to the original Liquid Glass circle on the Liquid Glass variant.
  * The public prop API is identical for both, so call sites never change.
  */
-export function GlassIconButton(props: GlassIconButtonProps) {
-  const { variant: uiVariant } = useTheme();
-  return uiVariant === 'material' ? <GlassIconButtonMaterial {...props} /> : <GlassIconButtonGlass {...props} />;
-}
+export const GlassIconButton = createVariantComponent('GlassIconButton', {
+  liquidGlass: GlassIconButtonGlass,
+  material: GlassIconButtonMaterial,
+});
 
 /**
  * Material 3 icon button. Paper resolves the MDI glyph through our icon settings

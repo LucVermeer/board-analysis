@@ -1,9 +1,9 @@
-import { View, StyleSheet } from 'react-native';
+import { StyleSheet } from 'react-native';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { Badge as PaperBadge } from 'react-native-paper';
 import { Text } from './Text';
 import { iosSystemColors } from '../theme/ios-colors';
-import { useTheme } from '../providers/theme-provider';
+import { createVariantComponent } from '../theme/variants';
 
 type BadgeProps = {
   count?: number;
@@ -17,10 +17,7 @@ type BadgeProps = {
  * existing animated Liquid-Glass dot/count badge on the Liquid Glass variant.
  * The public prop API is identical for both, so call sites never change.
  */
-export function Badge(props: BadgeProps) {
-  const { variant: uiVariant } = useTheme();
-  return uiVariant === 'material' ? <BadgeMaterial {...props} /> : <BadgeGlass {...props} />;
-}
+export const Badge = createVariantComponent('Badge', { liquidGlass: BadgeGlass, material: BadgeMaterial });
 
 function BadgeMaterial({ count, visible = true, color = iosSystemColors.systemRed, size = 'medium' }: BadgeProps) {
   const isDot = count === undefined || count === 0;

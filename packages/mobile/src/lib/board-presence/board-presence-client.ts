@@ -16,6 +16,7 @@
 import { type Client, execute, subscribe } from '@boardsesh/graphql-client';
 import {
   BOARD_CONNECTION,
+  BOARD_HISTORY,
   BOARD_NOW_PLAYING,
   BOARD_PRESENCE_STATS,
   BOARD_RECENT_CLIMBS,
@@ -40,6 +41,7 @@ import type {
 
 type BoardNowPlayingData = { boardNowPlaying: BoardPresenceEvent };
 type BoardRecentClimbsData = { boardRecentClimbs: BoardPresenceClimb[] };
+type BoardHistoryData = { boardHistory: BoardPresenceClimb[] };
 type BoardPresenceStatsData = { boardPresenceStats: BoardPresenceStats };
 type BoardConnectionData = { boardConnection: BoardConnectionHolder | null };
 type ReportBoardClimbData = { reportBoardClimb: boolean };
@@ -65,6 +67,9 @@ export type SerialResolveArgs = {
  * keep using the legacy single-board resolver).
  */
 export type MobileBoardPresenceClient = BoardPresenceClient & {
+  // Always implemented here (unlike the optional shared method), so callers and
+  // tests can invoke it directly without optional chaining.
+  fetchHistory: NonNullable<BoardPresenceClient['fetchHistory']>;
   resolveBoardCandidatesForSerial(args: SerialResolveArgs): Promise<ResolveBoardResult>;
   chooseBoardForSerial(args: { boardId: number; serial: string }): Promise<ResolvedBoard>;
 };
@@ -103,6 +108,14 @@ export function createMobileBoardPresenceClient(getClient: () => Client): Mobile
         variables: { boardId },
       });
       return data.boardRecentClimbs ?? [];
+    },
+
+    async fetchHistory(boardId, opts) {
+      const data = await execute<BoardHistoryData>(getClient(), {
+        query: BOARD_HISTORY,
+        variables: { boardId, limit: opts?.limit ?? null, before: opts?.before ?? null },
+      });
+      return data.boardHistory ?? [];
     },
 
     async fetchStats(boardId) {

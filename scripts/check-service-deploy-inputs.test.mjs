@@ -198,3 +198,30 @@ void test('rejects source package COPY instructions before bun install', () => {
     assert.match(failures.join('\n'), /appears before bun install/);
   });
 });
+
+void test('passes when Dockerfile.sync and the sync packages are present', () => {
+  withFixtureRepo((repoRoot) => {
+    // Dockerfile.sync is optional, so the base fixture skips it. Add the sync
+    // workspaces the `sync` service roots from plus a valid Dockerfile.sync so
+    // the optional sync validation (requireDockerContextFile + the generated
+    // `sync` context) actually runs and is asserted green.
+    writePackage(repoRoot, 'packages/kilter-sync', {
+      name: '@boardsesh/kilter-sync',
+      dependencies: { '@boardsesh/shared-lib': 'workspace:*' },
+    });
+    writePackage(repoRoot, 'packages/aurora-sync', { name: '@boardsesh/aurora-sync' });
+    writePackage(repoRoot, 'packages/moonboard-sync', { name: '@boardsesh/moonboard-sync' });
+
+    const dockerfile = [
+      'FROM node:22-alpine',
+      'COPY manifests/package.json manifests/bun.lock ./',
+      'COPY manifests/packages ./packages',
+      'RUN bun install --frozen-lockfile',
+      'COPY source/packages ./packages',
+      '',
+    ].join('\n');
+    writeFixtureFile(repoRoot, 'Dockerfile.sync', dockerfile);
+
+    assert.deepEqual(createServiceDeployInputFailures({ repoRoot }), []);
+  });
+});

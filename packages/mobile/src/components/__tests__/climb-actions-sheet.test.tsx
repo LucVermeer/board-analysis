@@ -53,11 +53,19 @@ vi.mock('@boardsesh/create-climb-react', () => ({ computeCanUpdate: () => ctrl.c
 vi.mock('@boardsesh/analytics', () => ({ SHARED_EVENTS: {} }));
 vi.mock('../../providers/toast-provider', () => ({ useToast: () => ({ showToast: vi.fn() }) }));
 vi.mock('../../providers/theme-provider', () => ({
-  useTheme: () => ({
-    variant: ctrl.variant,
-    brandColors: { success: '#0a0' },
-    systemColors: { accent: '#00f', label: '#fff' },
-  }),
+  useTheme: () => {
+    const label = '#fff';
+    return {
+      variant: ctrl.variant,
+      brandColors: { success: '#0a0' },
+      systemColors: { accent: '#00f', label },
+      // Resolved action-icon colours: monochrome on Liquid Glass, semantic on Material.
+      actionColors:
+        ctrl.variant === 'material'
+          ? { neutral: label, success: '#0a0', favorite: '#f00', accent: '#00f', pin: '#6D28D9' }
+          : { neutral: label, success: label, favorite: label, accent: label, pin: label },
+    };
+  },
 }));
 vi.mock('../../theme/ios-colors', () => ({ iosSystemColors: { systemRed: '#f00', systemOrange: '#f80' } }));
 vi.mock('../../theme/tokens', () => ({ spacing: { 2: 8 } }));

@@ -26,9 +26,11 @@ type FeedScopeTitleProps = {
   /** Menu items, in render order; `onSelectIndex` is called with the tapped index. */
   actions: ContextMenuAction[];
   onSelectIndex: (index: number) => void;
+  /** VoiceOver hint — the pill is a menu, so cue what activating it does. */
+  accessibilityHint?: string;
 };
 
-export function FeedScopeTitle({ title, actions, onSelectIndex }: FeedScopeTitleProps) {
+export function FeedScopeTitle({ title, actions, onSelectIndex, accessibilityHint }: FeedScopeTitleProps) {
   const { systemColors } = useTheme();
   const nativeGlass = useNativeGlass();
   // `selected` (the checkmark) and `systemIcon` only render on iOS; on Android
@@ -49,6 +51,7 @@ export function FeedScopeTitle({ title, actions, onSelectIndex }: FeedScopeTitle
       <View
         accessibilityRole="button"
         accessibilityLabel={title}
+        accessibilityHint={accessibilityHint}
         style={[
           styles.pill,
           !nativeGlass && shadows.sm,
@@ -59,6 +62,8 @@ export function FeedScopeTitle({ title, actions, onSelectIndex }: FeedScopeTitle
             translucent control rather than frosted chrome. */}
         <GlassSurface
           glassEffectStyle="clear"
+          // Floating scope pill = M3 surfaceContainer tone on Material.
+          role="base"
           fallbackColor={systemColors.elevatedSurface}
           borderRadius={PILL_RADIUS}
           style={StyleSheet.absoluteFill}

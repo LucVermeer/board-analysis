@@ -1,39 +1,60 @@
 import { useMemo } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import type { SessionDetailTick } from '@boardsesh/shared-schema';
+import type { BetaLink, SessionDetailTick, SessionFeedParticipant } from '@boardsesh/shared-schema';
 import { SectionHeader } from '../SectionHeader';
-import { betaLinkIdentity, dedupeBetaLinks, isBetaVideoUrl, mapBetaLinks } from '../../lib/beta-video-url';
+import { betaLinkIdentity, isBetaVideoUrl, mapBetaLink } from '../../lib/beta-video-url';
 import { spacing } from '../../theme/tokens';
 import { BetaVideoCard, BETA_CARD_WIDTH } from '../play-drawer/BetaVideoCard';
 
+type CrewBetaItem = { betaLink: BetaLink; uploaderName: string | null; uploaderAvatarUrl: string | null };
+
 type SessionBetaCarouselProps = {
   ticks: SessionDetailTick[];
+  /** Resolves a tick's `userId` to the participant who logged it (the uploader). */
+  participantById: Map<string, SessionFeedParticipant>;
+  isMultiUser: boolean;
 };
 
 const CARD_GAP = spacing[3];
 
 /**
- * Beta-video shelf for the session detail screen. Aggregates every tick's beta
- * links, keeps only valid Instagram/TikTok URLs, dedupes them across the
- * session, and renders a horizontal snap carousel. The list is bounded (one
- * deduped set per session), so a plain ScrollView matches BetaVideosSection.
- * Self-hides when there's nothing to show.
+ * "Beta from this crew" shelf. The backend now scopes each tick's `betaLinks` to
+ * the clip the ticking user attached to that ascent (via the direct beta↔tick
+ * link), so this shows only the session's own videos — not every community clip
+ * for the climbs. Each clip is attributed to the participant who logged its tick
+ * (multi-user only; solo beta is all the viewer's). Walking ticks (rather than a
+ * blind flatMap) keeps that uploader association. Self-hides when empty.
  */
-export function SessionBetaCarousel({ ticks }: SessionBetaCarouselProps) {
+export function SessionBetaCarousel({ ticks, participantById, isMultiUser }: SessionBetaCarouselProps) {
   const { t } = useTranslation('session');
 
-  const betaLinks = useMemo(() => {
-    const mapped = mapBetaLinks(ticks.flatMap((tick) => tick.betaLinks ?? []));
-    const videos = mapped.filter((betaLink) => isBetaVideoUrl(betaLink.link));
-    return dedupeBetaLinks(videos);
-  }, [ticks]);
+  const items = useMemo<CrewBetaItem[]>(() => {
+    const result: CrewBetaItem[] = [];
+    const seen = new Set<string>();
+    for (const tick of ticks) {
+      const uploader = participantById.get(tick.userId);
+      for (const raw of tick.betaLinks ?? []) {
+        const mapped = mapBetaLink(raw);
+        if (!isBetaVideoUrl(mapped.link)) continue;
+        const identity = betaLinkIdentity(mapped.link);
+        if (seen.has(identity)) continue;
+        seen.add(identity);
+        result.push({
+          betaLink: mapped,
+          uploaderName: isMultiUser ? (uploader?.displayName ?? null) : null,
+          uploaderAvatarUrl: isMultiUser ? (uploader?.avatarUrl ?? null) : null,
+        });
+      }
+    }
+    return result;
+  }, [ticks, participantById, isMultiUser]);
 
-  if (betaLinks.length === 0) return null;
+  if (items.length === 0) return null;
 
   return (
     <View>
-      <SectionHeader title={t('mobile.betaVideos.title')} />
+      <SectionHeader title={t('mobile.betaVideos.crewTitle')} />
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -42,8 +63,13 @@ export function SessionBetaCarousel({ ticks }: SessionBetaCarouselProps) {
         decelerationRate="fast"
         snapToAlignment="start"
       >
-        {betaLinks.map((betaLink) => (
-          <BetaVideoCard key={betaLinkIdentity(betaLink.link)} link={betaLink} />
+        {items.map((item) => (
+          <BetaVideoCard
+            key={betaLinkIdentity(item.betaLink.link)}
+            link={item.betaLink}
+            uploaderName={item.uploaderName}
+            uploaderAvatarUrl={item.uploaderAvatarUrl}
+          />
         ))}
       </ScrollView>
     </View>

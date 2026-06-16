@@ -60,6 +60,7 @@
     "db:studio": "drizzle-kit studio",
     "db:import-moonboard": "tsx scripts/import-moonboard-problems.ts",
     "db:import-aurora-unified": "tsx scripts/import-aurora-board-unified.ts",
+    "db:dedupe-gyms": "tsx scripts/dedupe-gym-locations.ts",
     "db:seed-social": "tsx scripts/seed-social.ts",
     "db:create-test-user": "tsx scripts/create-test-user.ts",
     "db:seed-beta-links": "tsx scripts/seed-dev-beta-links.ts"

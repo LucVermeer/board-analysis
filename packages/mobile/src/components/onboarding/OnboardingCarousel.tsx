@@ -25,6 +25,7 @@ import {
 } from '../../lib/onboarding/onboarding-analytics';
 import { hapticSelection } from '../../lib/haptics';
 import { useTheme } from '../../providers/theme-provider';
+import { selectByVariant } from '../../theme/variants';
 import { useReduceMotion } from '../../hooks/use-reduce-motion';
 import { spacing } from '../../theme/tokens';
 
@@ -140,6 +141,7 @@ export function OnboardingCarousel({
     ({ item }: ListRenderItemInfo<OnboardingCardData>) => (
       <OnboardingCard
         icon={item.icon}
+        image={item.image}
         title={copy[item.id].title}
         body={copy[item.id].body}
         width={pageWidth}
@@ -219,7 +221,7 @@ export function OnboardingCarousel({
               onPress={handleNext}
               variant="filled"
               size="large"
-              tintColor={variant === 'material' ? undefined : accentColor}
+              tintColor={selectByVariant(variant, { material: undefined, liquidGlass: accentColor })}
               haptic={false}
               style={styles.cta}
             />

@@ -30,11 +30,19 @@ vi.mock('../../Icon', () => ({
     createElement('span', { 'data-icon': name, 'data-color': typeof color === 'string' ? color : '' }),
 }));
 vi.mock('../../../providers/theme-provider', () => ({
-  useTheme: () => ({
-    variant: ctrl.variant,
-    systemColors: { label: '#000', accent: '#007AFF' },
-    brandColors: { primary: '#6D28D9' },
-  }),
+  useTheme: () => {
+    const label = '#000';
+    return {
+      variant: ctrl.variant,
+      systemColors: { label, accent: '#007AFF' },
+      brandColors: { primary: '#6D28D9' },
+      // Resolved action-icon colours: monochrome on Liquid Glass, semantic on Material.
+      actionColors:
+        ctrl.variant === 'material'
+          ? { neutral: label, success: label, favorite: '#FF3B30', accent: '#007AFF', pin: '#6D28D9' }
+          : { neutral: label, success: label, favorite: label, accent: label, pin: label },
+    };
+  },
 }));
 vi.mock('../../../theme/ios-colors', () => ({ iosSystemColors: { systemRed: '#FF3B30' } }));
 vi.mock('../../../theme/tokens', () => ({ spacing: { 2: 8 } }));

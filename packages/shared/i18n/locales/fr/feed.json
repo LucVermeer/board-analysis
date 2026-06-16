@@ -17,7 +17,6 @@
   },
   "mobile": {
     "home": {
-      "title": "Accueil",
       "betaTitle": "Beta récente",
       "betaEmpty": "Aucune vidéo beta pour le moment",
       "betaError": "Impossible de charger les vidéos beta.",
@@ -40,7 +39,8 @@
       "scope": {
         "myCrew": "Mon crew",
         "everyone": "Tout le monde",
-        "findGym": "Trouver une salle près de toi"
+        "findGym": "Trouver une salle près de toi",
+        "hint": "Change les voies que vous voyez"
       }
     }
   },
@@ -162,12 +162,11 @@
     },
     "hardest": "Plus dur",
     "betaEyebrow": "Bêta",
-    "hardestSend": "Réussite la plus dure",
+    "betaBy": "Bêta par {{name}}",
+    "gradeSpread": "Éventail de cotations de {{min}} à {{max}}, {{sends}} réussites",
     "unknownClimb": "Bloc inconnu",
     "attempts_one": "{{count}} essai",
     "attempts_other": "{{count}} essais",
-    "chartEmpty": "Aucune cotation pour l'instant",
-    "chartLabel": "Graphique des cotations",
     "openHint": "Ouvre la session",
     "openHardestClimb": "Ouvrir {{climb}}"
   },

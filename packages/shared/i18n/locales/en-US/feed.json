@@ -17,7 +17,6 @@
   },
   "mobile": {
     "home": {
-      "title": "Home",
       "betaTitle": "Fresh beta",
       "betaEmpty": "No beta videos yet",
       "betaError": "Couldn't load beta videos.",
@@ -40,7 +39,8 @@
       "scope": {
         "myCrew": "My crew",
         "everyone": "Everyone",
-        "findGym": "Find a gym near you"
+        "findGym": "Find a gym near you",
+        "hint": "Switches whose climbs you see"
       }
     }
   },
@@ -162,12 +162,11 @@
     },
     "hardest": "Hardest",
     "betaEyebrow": "Beta",
-    "hardestSend": "Hardest send",
+    "betaBy": "Beta by {{name}}",
+    "gradeSpread": "Grade spread {{min}} to {{max}}, {{sends}} sends",
     "unknownClimb": "Unknown climb",
     "attempts_one": "{{count}} try",
     "attempts_other": "{{count}} tries",
-    "chartEmpty": "No grades yet",
-    "chartLabel": "Grade chart",
     "openHint": "Opens the session",
     "openHardestClimb": "Open {{climb}}"
   },

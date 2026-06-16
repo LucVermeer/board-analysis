@@ -34,6 +34,8 @@ export function GlassActionToolbar({ actionCount, children }: { actionCount: num
         // `clear` (lighter, content-forward) for the floating islands — more
         // transparent than `regular`, the right variant for floating bars.
         glassEffectStyle="clear"
+        // Floating toolbar island = M3 surfaceContainer tone on Material.
+        role="base"
         fallbackColor={systemColors.elevatedSurface}
         borderRadius={TOP_TOOLBAR_RADIUS}
         style={StyleSheet.absoluteFill}

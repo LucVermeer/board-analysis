@@ -1,4 +1,8 @@
 import type { UiVariant } from '../theme/resolve-ui-variant';
+// Import the leaf module (not the ./variants barrel): the barrel re-exports
+// createVariantComponent, which pulls the provider + react-native and would break
+// this module's pure, react-native-free unit test. select-by-variant is type-only.
+import { selectByVariant } from '../theme/variants/select-by-variant';
 import {
   MATERIAL_ACTIVE_CONTEXT_BAR_HEIGHT,
   MATERIAL_TAB_BAR_HEIGHT,
@@ -58,6 +62,25 @@ export type BottomChromeMetrics = {
    * footers clear only active queue/accessory chrome.
    */
   fixedFooterBottom: number;
+  /**
+   * Bottom padding for the in-session climb list. Material docks a fixed footer
+   * (clears active queue/accessory chrome via `fixedFooterBottom`); Liquid Glass
+   * floats, so the list clears the raw safe-area inset plus only the JS queue
+   * reserve — the glass tab bar already extends the UIKit inset, so adding the
+   * tab bar height again would double-count it.
+   */
+  inSessionListBottom: number;
+  /**
+   * Bottom offset for the pre-session Start capsule / footer. Material uses the
+   * fixed-footer reserve; Liquid Glass anchors to the raw safe-area inset.
+   *
+   * Verified on-device (iPhone 17 Pro / iOS 26): with the native tab bar + climb
+   * accessory present, the safe-area bottom inset is 139 = home indicator (34) +
+   * tab bar (49) + accessory (56) — the glass tab bar extends the UIKit safe area.
+   * `fixedFooterBottom` would add the tab bar + accessory a second time (246),
+   * stranding the control ~110px up the screen — hence the raw inset on glass.
+   */
+  preSessionFooterBottom: number;
 };
 
 /**
@@ -117,5 +140,12 @@ export function computeBottomChromeMetrics({
     scrollBottomPadding: insetsBottom + tabBarHeight + jsQueueReserve,
     floatingControlBottom: insetsBottom + tabBarHeight + Math.max(jsQueueReserve, nativeAccessoryReserve),
     fixedFooterBottom,
+    // selectByVariant (vs a raw ternary) keeps these exhaustive: a new UiVariant is
+    // a compile error here, since this file is outside the components/ guard scope.
+    inSessionListBottom: selectByVariant(uiVariant, {
+      material: fixedFooterBottom,
+      liquidGlass: insetsBottom + jsQueueReserve,
+    }),
+    preSessionFooterBottom: selectByVariant(uiVariant, { material: fixedFooterBottom, liquidGlass: insetsBottom }),
   };
 }

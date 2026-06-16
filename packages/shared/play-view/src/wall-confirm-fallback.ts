@@ -12,12 +12,23 @@
 export const WALL_CONFIRM_TIMEOUT_MS = 2000;
 
 export type WallConfirmMode = 'party' | 'solo';
-export type WallConfirmFallback = 'already_connected' | 'unsupported' | 'auto_connect' | 'picker';
+export type WallConfirmFallback = 'already_connected' | 'unsupported' | 'auto_connect' | 'picker' | 'pulse_only';
 
 export type WallConfirmArmArgs = {
   climbUuid: string;
   mode: WallConfirmMode;
   boardLayout: string;
+  /**
+   * Drive the pulse/confirm UI but never connect on timeout. Set this when the
+   * caller has *itself* just initiated a connect (the always-live lightbulb tap
+   * does this): re-connecting 2s later is at best redundant (a successful
+   * connect already short-circuits via `already_connected`) and at worst a
+   * second native scan started while the first picker is still open — which
+   * trips "Already scanning. Stopping now." on the iOS shell. The watcher still
+   * waits for `WallConfirmedClimb` and fires `onConfirmed` / `onTimeout` to
+   * clear the pulse; only the connect fallback is suppressed.
+   */
+  pulseOnly?: boolean;
 };
 
 type WallConfirmTimeoutId = ReturnType<typeof setTimeout>;
@@ -80,7 +91,7 @@ export function createWallConfirmFallbackController(
     }
   };
 
-  const armWatcher = ({ climbUuid, mode, boardLayout }: WallConfirmArmArgs) => {
+  const armWatcher = ({ climbUuid, mode, boardLayout, pulseOnly = false }: WallConfirmArmArgs) => {
     cancelWatcher();
 
     const armedAt = getNow();
@@ -91,6 +102,13 @@ export function createWallConfirmFallbackController(
 
       cancelWatcher();
       callbacks.onTimeout?.({ climbUuid });
+
+      // The caller already kicked off its own connect — never start another one
+      // (the second scan is what breaks iOS pairing). Just record the timeout.
+      if (pulseOnly) {
+        callbacks.onTrackTimeout?.({ mode, fallback: 'pulse_only', boardLayout });
+        return;
+      }
 
       if (deps.isBluetoothConnected()) {
         callbacks.onTrackTimeout?.({ mode, fallback: 'already_connected', boardLayout });

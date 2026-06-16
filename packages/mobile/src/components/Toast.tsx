@@ -18,6 +18,7 @@ import {
 import type { UiVariant } from '../theme/resolve-ui-variant';
 import { isTabsRoute } from '../lib/route-segments';
 import { useTheme } from '../providers/theme-provider';
+import { createVariantComponent, selectByVariant } from '../theme/variants';
 
 export type ToastVariant = 'success' | 'error' | 'info' | 'warning';
 
@@ -49,14 +50,7 @@ const VARIANT_CONFIG: Record<ToastVariant, { icon: IconName; colorKey: 'success'
  * existing Liquid-Glass/HIG pill on the Liquid Glass variant. The public prop API
  * is identical for both, so ToastProvider never changes.
  */
-export function Toast({ toast, onDismiss }: ToastProps) {
-  const { variant: uiVariant } = useTheme();
-  return uiVariant === 'material' ? (
-    <ToastMaterial toast={toast} onDismiss={onDismiss} />
-  ) : (
-    <ToastGlass toast={toast} onDismiss={onDismiss} />
-  );
-}
+export const Toast = createVariantComponent('Toast', { liquidGlass: ToastGlass, material: ToastMaterial });
 
 /**
  * Reserve the worst-case queue toolbar height on tab screens so a toast never
@@ -67,12 +61,15 @@ export function Toast({ toast, onDismiss }: ToastProps) {
 function useToastBottomOffset(uiVariant: UiVariant) {
   const insets = useSafeAreaInsets();
   const segments = useSegments();
-  const toolbarReserve = uiVariant === 'material' ? MATERIAL_ACTIVE_CONTEXT_BAR_HEIGHT : TOOLBAR_RESERVE;
+  const toolbarReserve = selectByVariant(uiVariant, {
+    material: MATERIAL_ACTIVE_CONTEXT_BAR_HEIGHT,
+    liquidGlass: TOOLBAR_RESERVE,
+  });
   // The Material variant's JS nav bar is the taller M3 80dp bar; Liquid Glass uses
   // the 49pt iOS tab bar. This is an independent recomputation (it sits above
   // QueueProvider, so it can't use computeBottomChromeMetrics) — keep the tab-bar
   // term variant-aware to match, or the Material snackbar tucks under the nav bar.
-  const tabBarHeight = uiVariant === 'material' ? MATERIAL_TAB_BAR_HEIGHT : TAB_BAR_HEIGHT;
+  const tabBarHeight = selectByVariant(uiVariant, { material: MATERIAL_TAB_BAR_HEIGHT, liquidGlass: TAB_BAR_HEIGHT });
   return isTabsRoute(segments)
     ? insets.bottom + tabBarHeight + toolbarReserve + spacing[2]
     : insets.bottom + spacing[3];

@@ -1,5 +1,13 @@
 import { MD3DarkTheme, MD3LightTheme, type MD3Theme } from 'react-native-paper';
-import { brandColors, brandColorsDark, materialSurfaces, withAlpha } from './colors';
+import {
+  brandColors,
+  brandColorsDark,
+  materialSurfaces,
+  materialSurfaceContainers,
+  materialElevationLevels,
+  withAlpha,
+  blendOpaque,
+} from './colors';
 
 type ColorScheme = 'light' | 'dark';
 
@@ -24,10 +32,16 @@ export function buildPaperTheme(colorScheme: ColorScheme, dynamic?: MD3Theme['co
   }
 
   const surfaces = materialSurfaces[colorScheme];
+  const containers = materialSurfaceContainers[colorScheme];
   const isDark = colorScheme === 'dark';
   const brand = isDark ? brandColorsDark : brandColors;
   const onSurface = surfaces.label as string;
   const onSurfaceVariant = surfaces.secondaryLabel as string;
+  const surface = surfaces.secondaryBackground as string;
+  // Explicit container ink — a near-black/near-white VIOLET that clears contrast
+  // on the translucent-violet `primaryContainer`. Aliasing `onSurface` made it
+  // near-white in dark, illegible on the dark-scheme container.
+  const onPrimaryContainer = isDark ? '#EADDFF' : '#21005D';
 
   return {
     ...base,
@@ -36,11 +50,11 @@ export function buildPaperTheme(colorScheme: ColorScheme, dynamic?: MD3Theme['co
       primary: brand.primaryFill,
       onPrimary: brand.onPrimary,
       primaryContainer: withAlpha(brand.primaryFill, isDark ? 0.32 : 0.14),
-      onPrimaryContainer: onSurface,
+      onPrimaryContainer,
       secondary: brand.primaryFill,
       onSecondary: brand.onPrimary,
       secondaryContainer: withAlpha(brand.primaryFill, isDark ? 0.28 : 0.16),
-      onSecondaryContainer: onSurface,
+      onSecondaryContainer: onPrimaryContainer,
       // Amber accent is the M3 tertiary role — fill-only, so it carries dark text
       // in BOTH schemes (white fails on amber). Pin to the light-scheme label
       // token (the dark ink) rather than the per-scheme `onSurface`, which would
@@ -51,21 +65,25 @@ export function buildPaperTheme(colorScheme: ColorScheme, dynamic?: MD3Theme['co
       onBackground: onSurface,
       surface: surfaces.secondaryBackground as string,
       onSurface,
-      surfaceVariant: surfaces.tertiaryBackground as string,
+      // Neutral-variant surface for filled text fields / tonal fills — a real
+      // toned container, not `tertiaryBackground` (`#FFFFFF` in light, which made
+      // filled fields invisible).
+      surfaceVariant: containers.base,
       onSurfaceVariant,
-      outline: surfaces.separator as string,
+      // `outline` is the stronger form/component border (M3 ~ neutral-variant
+      // mid-tone); `outlineVariant` is the faint divider. They were both aliased
+      // to `separator` (0.18α), so borders and dividers were indistinguishable.
+      outline: blendOpaque(onSurface, surface, 0.45),
       outlineVariant: surfaces.separator as string,
       error: brand.error,
       onError: '#FFFFFF',
-      // Surface-tint ladder: map Paper's elevation levels onto our tonal surfaces
-      // so elevated Paper components match the rest of the Material chrome.
+      // Surface-tint ladder: the five elevation levels are now DISTINCT, monotonic
+      // tonal steps (computed brand-over-surface), so Paper's elevated components
+      // (Surface/Menu/FAB/Card/Dialog/Appbar) tier instead of collapsing to one
+      // `elevatedSurface` colour — and "+1 level on press/focus" shows real depth.
       elevation: {
         level0: 'transparent',
-        level1: surfaces.secondaryBackground as string,
-        level2: surfaces.elevatedSurface as string,
-        level3: surfaces.elevatedSurface as string,
-        level4: surfaces.elevatedSurface as string,
-        level5: surfaces.elevatedSurface as string,
+        ...materialElevationLevels(colorScheme),
       },
     },
   };

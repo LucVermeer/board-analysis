@@ -51,6 +51,9 @@ const bottomChrome = vi.hoisted(() => ({
     tabBarBottom: 120,
     tabBarHeight: 49,
     fixedFooterBottom: 120,
+    // Liquid Glass anchors to the raw safe-area inset (100); the Material-vs-glass
+    // arbitration lives in computeBottomChromeMetrics. PreSessionView wires this field.
+    preSessionFooterBottom: 100,
   },
 }));
 
@@ -138,7 +141,9 @@ vi.mock('../../SessionStartFab', () => ({
 vi.mock('../../../Text', () => ({
   Text: ({ children }: { children?: ReactNode }) => createElement('span', null, children),
 }));
-vi.mock('../../../../providers/theme-provider', () => ({ useTheme: () => ({ systemColors: {} }) }));
+vi.mock('../../../../providers/theme-provider', () => ({
+  useTheme: () => ({ systemColors: {}, features: { inBodyLargeTitle: false, filtersInTopChrome: false } }),
+}));
 vi.mock('../../../../lib/graphql/use-active-board', () => ({
   useActiveBoard: () => ({ data: { boardType: 'kilter', layoutId: 1, sizeId: 10, setIds: '1,2', angle: 40 } }),
 }));
@@ -195,6 +200,7 @@ beforeEach(() => {
     tabBarBottom: 120,
     tabBarHeight: 49,
     fixedFooterBottom: 120,
+    preSessionFooterBottom: 100,
   };
   preview.result.items = [makeRow('a'), makeRow('b')] as unknown[];
   preview.result.refreshingUuids = new Set<string>();

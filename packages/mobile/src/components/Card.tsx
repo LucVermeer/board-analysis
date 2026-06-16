@@ -14,6 +14,7 @@ import { PressableSurface } from './PressableSurface';
 import { hapticLight } from '../lib/haptics';
 import { borderRadius } from '../theme/tokens';
 import { useTheme } from '../providers/theme-provider';
+import { createVariantComponent } from '../theme/variants';
 
 type CardProps = {
   children: ReactNode;
@@ -32,10 +33,7 @@ type CardProps = {
  * Liquid Glass surface on the Liquid Glass variant. The public prop API is
  * identical for both, so call sites never change.
  */
-export function Card(props: CardProps) {
-  const { variant: uiVariant } = useTheme();
-  return uiVariant === 'material' ? <CardMaterial {...props} /> : <CardGlass {...props} />;
-}
+export const Card = createVariantComponent('Card', { liquidGlass: CardGlass, material: CardMaterial });
 
 function CardMaterial({
   children,

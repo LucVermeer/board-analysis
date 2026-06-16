@@ -19,12 +19,25 @@ describe('buildPaperTheme', () => {
     expect(theme.colors.background).toBe('#F3EFFA'); // materialSurfaces.light.background
     expect(theme.colors.surface).toBe('#FFFFFF'); // secondaryBackground
     expect(theme.colors.error).toBe('#C81E1E');
-    expect(theme.colors.elevation.level2).toBe('#FFFFFF'); // elevatedSurface (light)
+    // The five elevation levels are now DISTINCT, monotonic surface-tint tones
+    // (not all collapsed onto one `elevatedSurface`), so Paper's elevated
+    // components tier instead of looking identical.
+    const { level0, level1, level2, level3, level4, level5 } = theme.colors.elevation;
+    expect(level0).toBe('transparent');
+    expect(new Set([level1, level2, level3, level4, level5]).size).toBe(5);
     // The two grade stat tiles use the brand-violet primary/secondary containers
     // (not the vestigial amber tertiary), so they read as one tonal family.
     expect(theme.colors.primaryContainer).toContain('109, 40, 217'); // brand violet #6D28D9
     expect(theme.colors.secondaryContainer).toContain('109, 40, 217');
-    expect(theme.colors.onSecondaryContainer).toBe(theme.colors.onSurface);
+    // Container ink is an explicit dark violet — not the near-white `onSurface`,
+    // which was illegible on the (dark-scheme) container.
+    expect(theme.colors.onPrimaryContainer).toBe('#21005D');
+    expect(theme.colors.onSecondaryContainer).toBe('#21005D');
+    // `surfaceVariant` is a real toned container (filled text fields were
+    // invisible when it aliased `#FFFFFF`).
+    expect(theme.colors.surfaceVariant).not.toBe('#FFFFFF');
+    // `outline` (form border) is distinct from `outlineVariant` (faint divider).
+    expect(theme.colors.outline).not.toBe(theme.colors.outlineVariant);
   });
 
   it('uses the dark tonal surfaces for the dark scheme', () => {
