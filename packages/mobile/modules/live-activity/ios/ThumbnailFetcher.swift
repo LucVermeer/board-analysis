@@ -32,6 +32,14 @@ actor ThumbnailFetcher {
     /// Prevents duplicate fetches for the same climb UUID.
     private var inFlightTasks: [String: Task<URL?, Never>] = [:]
 
+    /// Decoded board-background layers keyed by file path, so a multi-set board
+    /// and adjacent-thumbnail pre-fetches don't re-read the same files from disk
+    /// on every composite. Pruned to the active board's paths in
+    /// `compositeWithBoardBackground`, so it holds only the current board's
+    /// handful of layers. Lives in the main-app process (this actor is owned by
+    /// LiveActivityManager), not the memory-constrained widget extension.
+    private var backgroundLayerCache: [String: UIImage] = [:]
+
     // MARK: - Init
 
     init(
@@ -195,6 +203,14 @@ actor ThumbnailFetcher {
         sharedDefaults?.stringArray(forKey: SharedConstants.boardBackgroundPathsKey) ?? []
     }
 
+    /// Decoded background layer for a path, memoized in `backgroundLayerCache`.
+    private func backgroundLayer(at path: String) -> UIImage? {
+        if let cached = backgroundLayerCache[path] { return cached }
+        guard let image = UIImage(contentsOfFile: path) else { return nil }
+        backgroundLayerCache[path] = image
+        return image
+    }
+
     /// Largest dimension (px) of the cached composite. The widget never shows
     /// the thumbnail larger than the 80×100pt lock-screen image (~240×300px at
     /// 3×), so capping the long side here keeps the PNG small without visible
@@ -222,9 +238,13 @@ actor ThumbnailFetcher {
     /// the cache also stays bounded to `maxCachedThumbnails`.
     private func compositeWithBoardBackground(overlayData: Data) -> Data? {
         let paths = stagedBackgroundPaths()
+        // Evict cached layers for boards we've navigated away from (and clear
+        // entirely when nothing is staged) so the cache tracks the active board.
+        let activePaths = Set(paths)
+        backgroundLayerCache = backgroundLayerCache.filter { activePaths.contains($0.key) }
         guard !paths.isEmpty, let overlay = UIImage(data: overlayData) else { return nil }
 
-        let backgroundLayers = paths.compactMap { UIImage(contentsOfFile: $0) }
+        let backgroundLayers = paths.compactMap { backgroundLayer(at: $0) }
         guard !backgroundLayers.isEmpty else { return nil }
 
         let nativeSize = overlay.size

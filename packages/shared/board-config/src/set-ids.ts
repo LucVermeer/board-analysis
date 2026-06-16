@@ -7,7 +7,9 @@ export function parseSetIds(setIds: string | number[]): number[] {
   if (Array.isArray(setIds)) return setIds;
   return setIds
     .split(',')
-    .map((part) => Number(part.trim()))
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0) // drop empty tokens ('', trailing/double commas) so '' → [] not [0]
+    .map((part) => Number(part))
     .filter((value) => Number.isFinite(value));
 }
 

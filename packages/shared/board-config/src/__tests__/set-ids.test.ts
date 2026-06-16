@@ -14,6 +14,12 @@ describe('parseSetIds', () => {
     expect(parseSetIds('2,foo,10')).toEqual([2, 10]);
   });
 
+  it('drops empty tokens instead of coercing them to 0', () => {
+    expect(parseSetIds('')).toEqual([]);
+    expect(parseSetIds('2,')).toEqual([2]);
+    expect(parseSetIds('2,,10')).toEqual([2, 10]);
+  });
+
   it('passes an array through unchanged', () => {
     expect(parseSetIds([2, 10])).toEqual([2, 10]);
   });

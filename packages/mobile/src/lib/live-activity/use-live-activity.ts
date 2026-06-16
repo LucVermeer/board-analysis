@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Platform } from 'react-native';
 import type { ClimbQueueItem } from '@boardsesh/queue';
-import type { BoardName } from '@boardsesh/shared-schema';
+import { parseSetIds, toBoardName } from '@boardsesh/board-config';
 import { getAuthToken } from '../auth-store';
 import { BACKEND_URL, WEB_BASE_URL } from '../env';
 import {
@@ -61,12 +61,12 @@ function getGraphqlWsUrl(): string {
 // widget falls back to overlay-only.
 async function resolveBoardBackgroundPaths(board: BoardConfig): Promise<string[]> {
   if (Platform.OS !== 'ios') return [];
-  const setIds = board.setIds
-    .split(',')
-    .map((value) => value.trim())
-    .filter((value) => value.length > 0)
-    .map((value) => Number(value))
-    .filter((value) => Number.isInteger(value));
+  // Validate the loose board string against the BoardName union instead of an
+  // unchecked cast — an unknown board (or empty config) skips compositing and
+  // the widget falls back to the holds-only overlay.
+  const boardName = toBoardName(board.boardName);
+  if (!boardName) return [];
+  const setIds = parseSetIds(board.setIds);
   try {
     // Imported lazily so module load doesn't pull in expo-asset + the bundled
     // board-art manifest (which require()s every board background) until a Live
@@ -74,7 +74,7 @@ async function resolveBoardBackgroundPaths(board: BoardConfig): Promise<string[]
     // without the native asset bridge never evaluate it.
     const { ensureBackgroundsCached } = await import('../background-image-cache');
     const result = await ensureBackgroundsCached({
-      boardName: board.boardName as BoardName,
+      boardName,
       layoutId: board.layoutId,
       sizeId: board.sizeId,
       setIds,
