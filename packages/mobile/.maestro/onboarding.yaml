@@ -20,14 +20,11 @@ name: onboarding illustrations
 # TODO(find): board/climb detail — needs a deterministic deep link to a seeded
 #   climb (com.boardsesh.app://climbs/<uuid>) or a stable climb-row testID to tap.
 #
-# The .app is a Debug dev-client: load the JS bundle from Metro via
-# ${MAESTRO_DEV_CLIENT_URL} (passed by the orchestrator via `-e`) rather than the
-# launcher. The orchestrator uninstalled+reinstalled and reset the keychain, so
-# this cold-loads signed out.
-- openLink: ${MAESTRO_DEV_CLIENT_URL}
-- tapOn:
-    text: 'Open'
-    optional: true
+# The .app is a Debug dev-client. The orchestrator launches it + loads the bundle
+# (`simctl openurl ${MAESTRO_DEV_CLIENT_URL}`) before this flow — not Maestro's
+# openLink, whose "Open in Boardsesh?" dialog races the tap on a cold CI start. So
+# this flow just waits for the auth screen. The orchestrator uninstalled +
+# reinstalled and reset the keychain, so this cold-loads signed out.
 - extendedWaitUntil:
     visible:
       id: 'auth-email-input'

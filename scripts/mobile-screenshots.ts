@@ -406,32 +406,19 @@ function runIos(options: ScreenshotOptions): number {
     // Maestro's auth-screen wait (the slow-CI-runner timeout this guards against).
     prewarmMetroBundle();
 
-    // Pre-launch the app with UserDefaults argument-domain overrides so
-    // expo-dev-client's dev-menu UI doesn't appear in the captures:
-    //   -EXDevMenuIsOnboardingFinished YES     → skip the one-time "developer
-    //      menu" onboarding sheet (shown on every fresh install — we uninstall
-    //      each run).
-    //   -EXDevMenuDisableAutoLaunch YES        → don't auto-present the dev menu
-    //      when the bundle loads.
-    //   -EXDevMenuShowFloatingActionButton NO  → hide the floating gear button
-    //      that otherwise sits in the top-right corner of every screen.
-    // These are read by DevMenuPreferences/DevMenuManager at the highest-priority
-    // arg domain. The app lands on the dev launcher; Maestro's first openLink then
-    // loads the bundle into this same process, where the overrides persist across
-    // the JS reload.
-    console.log(`${LOG} Pre-launching to suppress the dev-client menu + floating button...`);
-    runCapture('xcrun', [
-      'simctl',
-      'launch',
-      device.udid,
-      APP_ID,
-      '-EXDevMenuIsOnboardingFinished',
-      'YES',
-      '-EXDevMenuDisableAutoLaunch',
-      'YES',
-      '-EXDevMenuShowFloatingActionButton',
-      'NO',
-    ]);
+    // Launch the app + load the Metro bundle OURSELVES via `simctl openurl`,
+    // rather than letting Maestro's openLink do it. On CI, Maestro's openLink pops
+    // an "Open in Boardsesh?" system confirmation whose one-shot tap in the flow
+    // races and misses — the dev-client then sits on its launcher ("No development
+    // servers found") and never loads, so the auth screen never appears and the
+    // capture times out. `simctl openurl` delivers the deep link directly with no
+    // such dialog, so the app cold-launches straight to the bundle (and the auth
+    // screen) before Maestro even starts. Dev-menu chrome is suppressed at build
+    // time by ./plugins/with-screenshot-dev-menu (Info.plist), so it stays clean
+    // across this launch and the in-flow reload — no per-launch args needed.
+    const devClientUrl = metroDevClientUrl();
+    console.log(`${LOG} Launching + loading the dev-client bundle (${devClientUrl})...`);
+    runCapture('xcrun', ['simctl', 'openurl', device.udid, devClientUrl]);
 
     const flowFile = join(MAESTRO_DIR, `${options.flow}.yaml`);
     if (!existsSync(flowFile)) {
