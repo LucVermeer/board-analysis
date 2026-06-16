@@ -127,12 +127,12 @@ describe('SessionSummaryCard', () => {
 
   it('hides duration when durationMinutes is null', () => {
     const { container } = render_(session({ durationMinutes: null }), 'Sesh', false);
-    expect(container.textContent).not.toMatch(/\d+h|\d+m/);
+    expect(container.querySelector('[data-icon="clock"]')).toBeNull();
   });
 
   it('hides duration when durationMinutes is 0', () => {
     const { container } = render_(session({ durationMinutes: 0 }), 'Sesh', false);
-    expect(container.textContent).not.toMatch(/\d+h|\d+m/);
+    expect(container.querySelector('[data-icon="clock"]')).toBeNull();
   });
 
   it('shows the goal when set', () => {
