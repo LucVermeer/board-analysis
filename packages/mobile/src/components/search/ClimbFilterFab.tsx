@@ -1,10 +1,11 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { Pressable, StyleSheet } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import type { Grade } from '@boardsesh/shared-schema';
 import type { GradeBound } from '@boardsesh/climb-filters';
 import { spacing } from '../../theme/tokens';
-import { timing } from '../../theme/animations';
+import { timingFor } from '../../theme/motion-config';
+import { useTheme } from '../../providers/theme-provider';
 import { FILTER_FAB_SIZE, FilterButton } from './FilterButton';
 import { GradeRangeRail } from '../grade';
 
@@ -31,11 +32,18 @@ export function ClimbFilterFab({
   onCloseGrade,
   onGradeChange,
 }: ClimbFilterFabProps) {
+  const { motion } = useTheme();
   const animatedBottom = useSharedValue(bottom);
 
+  // The FAB slot slides when the grade rail opens/closes — a layout move, so
+  // emphasized motion (M3 easing + 350ms on Material; the prior 250ms on glass).
+  // Memoised so the slide effect re-fires only on a real `bottom` change, not on
+  // every theme recompute (e.g. a colour-scheme flip).
+  const slideTiming = useMemo(() => timingFor(motion.emphasized), [motion]);
+
   useEffect(() => {
-    animatedBottom.value = withTiming(bottom, { duration: timing.normal });
-  }, [animatedBottom, bottom]);
+    animatedBottom.value = withTiming(bottom, slideTiming);
+  }, [animatedBottom, bottom, slideTiming]);
 
   const fabSlotStyle = useAnimatedStyle(() => ({ bottom: animatedBottom.value }));
   const gradeRailSlotStyle = useAnimatedStyle(() => ({

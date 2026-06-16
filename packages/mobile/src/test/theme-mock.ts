@@ -8,7 +8,7 @@ import {
   sheetChromeByVariant,
   materialElevationByLevel,
 } from '../theme/tokens';
-import { springs, timing } from '../theme/animations';
+import { springs, timing, motionByVariant } from '../theme/animations';
 import { textStylesByVariant } from '../theme/typography';
 import {
   brandColors,
@@ -52,6 +52,7 @@ export function makeThemeMock(overrides: Partial<Theme> = {}): Theme {
     opacity,
     springs,
     timing,
+    motion: motionByVariant[variant],
     themeOverride: 'system',
     setThemeOverride: () => Promise.resolve(),
     variant,

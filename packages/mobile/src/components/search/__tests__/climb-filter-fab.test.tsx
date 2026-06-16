@@ -18,7 +18,10 @@ vi.mock('react-native-reanimated', () => ({
 }));
 
 vi.mock('../../../theme/tokens', () => ({ spacing: { 2: 8, 4: 16 } }));
-vi.mock('../../../theme/animations', () => ({ timing: { normal: 250 } }));
+vi.mock('../../../theme/motion-config', () => ({ timingFor: (config: { duration: number }) => config }));
+vi.mock('../../../providers/theme-provider', () => ({
+  useTheme: () => ({ motion: { standard: { duration: 150 }, emphasized: { duration: 250 } } }),
+}));
 vi.mock('../FilterButton', () => ({
   FILTER_FAB_SIZE: 48,
   FilterButton: ({
