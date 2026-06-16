@@ -1348,6 +1348,8 @@ async function fetchBetaLinksByClimb(
       thumbnail: dbSchema.boardBetaLinks.thumbnail,
       isListed: dbSchema.boardBetaLinks.isListed,
       createdAt: dbSchema.boardBetaLinks.createdAt,
+      betaLinkTickUuid: dbSchema.boardBetaLinks.tickUuid,
+      boardId: dbSchema.boardBetaLinks.boardId,
     })
     .from(dbSchema.boardBetaLinks)
     .where(
