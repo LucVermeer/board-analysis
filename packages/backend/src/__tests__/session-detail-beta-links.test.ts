@@ -13,20 +13,24 @@ import * as dbSchema from '@boardsesh/db/schema';
 // `.from(...)`. Every chain resolves to a row array; the beta-links branch is
 // counted so we can assert the per-session batch is a single query (no N+1
 // per tick) and that the resolver groups the returned rows back onto each tick
-// by climb.
+// by the direct beta↔tick link (`tick_uuid`).
 //
-// The is_listed = true / KayaClimb exclusion are SQL predicates evaluated by
-// Postgres, so a pure mock cannot exercise the DB filter itself. We therefore
-// (a) assert the resolver builds those predicates into the beta-links WHERE
-// clause, and (b) have the mock return only the rows the real query would
-// (the listed, non-Kaya link), proving the resolver surfaces exactly that row
-// per tick.
+// Session beta is now scoped to the session's OWN ticks via
+// `board_beta_links.tick_uuid IN (<session tick uuids>)` (migration
+// 0128_direct_beta_tick_links). The is_listed = true / KayaClimb exclusion are
+// SQL predicates evaluated by Postgres, so a pure mock cannot exercise the DB
+// filter itself. We therefore (a) assert the resolver builds the tick_uuid +
+// is_listed + KayaClimb predicates into the beta-links WHERE clause, and (b)
+// have the mock return only the rows the real query would (listed, non-Kaya,
+// tick-linked), proving the resolver attributes each clip to exactly its tick
+// and never bleeds beta onto another tick on the same climb.
 
 const betaLinkTestState = vi.hoisted(() => {
   // Rows the *real* board_beta_links query would return after Postgres applies
-  // `is_listed = true AND link !~* kayaclimb`. The unlisted row and the Kaya
-  // row are intentionally absent — the DB drops them — so the resolver should
-  // only ever see / surface the listed Instagram link.
+  // `tick_uuid IN (...) AND is_listed = true AND link !~* kayaclimb`. Unlisted,
+  // Kaya, and community (non-session-tick) rows are intentionally absent — the
+  // DB drops them — so the resolver only ever sees the crew's own tick-linked
+  // clips.
   const betaLinkRowsByQuery: Array<Record<string, unknown>[]> = [];
 
   const executeMock = vi.fn();
@@ -121,8 +125,8 @@ vi.mock('../db/client', () => {
 // Serialize a captured WHERE condition to real Postgres text using drizzle's
 // own compiler — the same path the resolver uses to emit SQL. Far less brittle
 // than hand-walking queryChunks: column names render as their snake_case
-// identifiers (e.g. "is_listed") and inline `sql` fragments (the kayaclimb
-// regex) render verbatim, so we can assert both predicates are present.
+// identifiers (e.g. "tick_uuid", "is_listed") and inline `sql` fragments (the
+// kayaclimb regex) render verbatim, so we can assert the predicates are present.
 const pgDialect = new PgDialect();
 function conditionToText(node: unknown): string {
   try {
@@ -131,8 +135,8 @@ function conditionToText(node: unknown): string {
     return '';
   }
 }
-// Bound parameter values (climb UUIDs render as params, not inline SQL), so the
-// canonical-vs-alias assertion checks params rather than the SQL text.
+// Bound parameter values (tick UUIDs render as params, not inline SQL), so the
+// tick-scoping assertion checks params rather than the SQL text.
 function conditionToParams(node: unknown): unknown[] {
   try {
     return pgDialect.sqlToQuery(node as SQL).params;
@@ -187,10 +191,33 @@ function makeTickRow(overrides: {
   };
 }
 
+// A board_beta_links row as it would arrive AFTER Postgres applied the
+// tick_uuid / is_listed / KayaClimb predicates. `betaLinkTickUuid` carries the
+// direct beta↔tick link the resolver groups on; `boardId` rides along.
+function makeBetaRow(overrides: {
+  tickUuid: string;
+  climbUuid: string;
+  link: string;
+  foreignUsername?: string | null;
+  boardId?: number | null;
+}) {
+  return {
+    climbUuid: overrides.climbUuid,
+    link: overrides.link,
+    foreignUsername: overrides.foreignUsername ?? 'marco',
+    angle: 40,
+    thumbnail: null,
+    isListed: true,
+    createdAt: '2024-01-10T00:00:00.000Z',
+    betaLinkTickUuid: overrides.tickUuid,
+    boardId: overrides.boardId ?? 7,
+  };
+}
+
 const LISTED_INSTAGRAM_LINK = 'https://www.instagram.com/p/LISTED/';
 const LISTED_TIKTOK_LINK = 'https://www.tiktok.com/@climber/video/123';
 
-describe('sessionDetail per-tick betaLinks', () => {
+describe('sessionDetail per-tick betaLinks (tick-scoped to the crew)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     betaLinkTestState.betaLinkRowsByQuery.length = 0;
@@ -201,21 +228,10 @@ describe('sessionDetail per-tick betaLinks', () => {
     betaLinkTestState.executeMock.mockResolvedValue([]);
   });
 
-  it('attaches a betaLinks array to every tick', async () => {
+  it('attaches the beta linked to a tick onto exactly that tick', async () => {
     betaLinkTestState.tickRows = [makeTickRow({ uuid: 'tick-1', climbUuid: 'climb-a', climbName: 'Crimpathon' })];
-    // Real DB already dropped unlisted + Kaya rows; only the listed IG link
-    // survives to the resolver.
     betaLinkTestState.betaLinkRowsByQuery.push([
-      {
-        boardType: 'kilter',
-        climbUuid: 'climb-a',
-        link: LISTED_INSTAGRAM_LINK,
-        foreignUsername: 'marco',
-        angle: 40,
-        thumbnail: 'https://cdn.example/thumb.jpg',
-        isListed: true,
-        createdAt: '2024-01-10T00:00:00.000Z',
-      },
+      makeBetaRow({ tickUuid: 'tick-1', climbUuid: 'climb-a', link: LISTED_INSTAGRAM_LINK }),
     ]);
 
     const result = await sessionDetail(undefined, { sessionId: 'party-1' });
@@ -225,166 +241,111 @@ describe('sessionDetail per-tick betaLinks', () => {
     for (const tick of result?.ticks ?? []) {
       expect(Array.isArray(tick.betaLinks)).toBe(true);
     }
+    // The mapped clip carries the direct tick link + boardId so the client can
+    // attribute it to the participant who logged that tick.
     expect(result?.ticks[0]?.betaLinks).toEqual([
       {
         climbUuid: 'climb-a',
         link: LISTED_INSTAGRAM_LINK,
         foreignUsername: 'marco',
         angle: 40,
-        thumbnail: 'https://cdn.example/thumb.jpg',
-        isListed: true,
-        createdAt: '2024-01-10T00:00:00.000Z',
-        tickUuid: null,
-        boardId: null,
-      },
-    ]);
-  });
-
-  it('matches beta on the alias-resolved canonical climb UUID', async () => {
-    // Tick points at an alias UUID; its canonical ('climb-canonical') is where
-    // the listed beta lives.
-    betaLinkTestState.tickRows = [
-      makeTickRow({
-        uuid: 'tick-1',
-        climbUuid: 'climb-alias',
-        canonicalClimbUuid: 'climb-canonical',
-        climbName: 'Renamed',
-      }),
-    ];
-    betaLinkTestState.betaLinkRowsByQuery.push([
-      {
-        boardType: 'kilter',
-        climbUuid: 'climb-canonical',
-        link: LISTED_INSTAGRAM_LINK,
-        foreignUsername: 'marco',
-        angle: 40,
         thumbnail: null,
         isListed: true,
         createdAt: '2024-01-10T00:00:00.000Z',
+        tickUuid: 'tick-1',
+        boardId: 7,
       },
     ]);
-
-    const result = await sessionDetail(undefined, { sessionId: 'party-1' });
-
-    // The alias tick still surfaces the canonical climb's beta.
-    expect(result?.ticks[0]?.betaLinks?.map((beta) => beta.link)).toEqual([LISTED_INSTAGRAM_LINK]);
-    // The query bound the canonical UUID, not the alias.
-    const betaParams = betaLinkTestState.betaLinkWhereClauses.flatMap(conditionToParams);
-    expect(betaParams).toContain('climb-canonical');
-    expect(betaParams).not.toContain('climb-alias');
   });
 
-  it('only includes is_listed links and excludes KayaClimb URLs', async () => {
-    betaLinkTestState.tickRows = [makeTickRow({ uuid: 'tick-1', climbUuid: 'climb-a', climbName: 'Crimpathon' })];
-    // The mock returns what Postgres would after applying the is_listed/Kaya
-    // predicates: only the listed, non-Kaya Instagram link. (The unlisted link
-    // and the kayaclimb.com link the test "seeds" below never come back.)
-    betaLinkTestState.betaLinkRowsByQuery.push([
-      {
-        boardType: 'kilter',
-        climbUuid: 'climb-a',
-        link: LISTED_INSTAGRAM_LINK,
-        foreignUsername: 'marco',
-        angle: 40,
-        thumbnail: null,
-        isListed: true,
-        createdAt: '2024-01-10T00:00:00.000Z',
-      },
-    ]);
-
-    const result = await sessionDetail(undefined, { sessionId: 'party-1' });
-
-    const links = result?.ticks[0]?.betaLinks ?? [];
-    expect(links.map((betaLink) => betaLink.link)).toEqual([LISTED_INSTAGRAM_LINK]);
-    // No unlisted link leaked through.
-    expect(links.every((betaLink) => betaLink.isListed === true)).toBe(true);
-    // No kayaclimb.com URL leaked through.
-    expect(links.some((betaLink) => /kayaclimb\.com/i.test(betaLink.link))).toBe(false);
-
-    // The is_listed = true and KayaClimb-exclusion predicates must actually be
-    // in the WHERE clause the resolver sent to board_beta_links — that's what
-    // makes the DB drop the unlisted/Kaya rows. Assert on the serialized SQL so
-    // a future refactor that drops a predicate fails here.
-    const betaWhereText = betaLinkTestState.betaLinkWhereClauses.map(conditionToText).join(' | ');
-    expect(betaWhereText).toContain('is_listed');
-    expect(betaWhereText.toLowerCase()).toContain('kayaclimb');
-  });
-
-  it('batches all climbs into a single query and groups links by climb (no per-tick N+1)', async () => {
-    // Three ticks across two distinct climbs (climb-a twice, climb-b once).
+  it('does not bleed a clip onto another tick on the same climb', async () => {
+    // Two sends of the SAME climb in the session, but beta is attached only to
+    // tick-1. The old climb-keyed query showed it on both; tick-scoping must not.
     betaLinkTestState.tickRows = [
       makeTickRow({ uuid: 'tick-1', climbUuid: 'climb-a', climbName: 'Crimpathon' }),
       makeTickRow({ uuid: 'tick-2', climbUuid: 'climb-a', climbName: 'Crimpathon' }),
-      makeTickRow({ uuid: 'tick-3', climbUuid: 'climb-b', climbName: 'Slopefest' }),
     ];
-    // Single batched result for both climbs; climb-a has the IG link, climb-b
-    // has a TikTok link. climb-b's row arrives in the same query.
     betaLinkTestState.betaLinkRowsByQuery.push([
-      {
-        boardType: 'kilter',
-        climbUuid: 'climb-a',
-        link: LISTED_INSTAGRAM_LINK,
-        foreignUsername: 'marco',
-        angle: 40,
-        thumbnail: null,
-        isListed: true,
-        createdAt: '2024-01-10T00:00:00.000Z',
-      },
-      {
-        boardType: 'kilter',
-        climbUuid: 'climb-b',
-        link: LISTED_TIKTOK_LINK,
-        foreignUsername: 'sam',
-        angle: 40,
-        thumbnail: null,
-        isListed: true,
-        createdAt: '2024-01-11T00:00:00.000Z',
-      },
-    ]);
-
-    const result = await sessionDetail(undefined, { sessionId: 'party-1' });
-
-    // Exactly one query hit board_beta_links for the whole session, regardless
-    // of the three ticks / two climbs — the N+1 guard.
-    expect(betaLinkTestState.betaLinkSelectCallCount.value).toBe(1);
-
-    const ticks = result?.ticks ?? [];
-    const byUuid = new Map(ticks.map((tick) => [tick.uuid, tick] as const));
-
-    // Both ticks on climb-a get climb-a's link...
-    expect(byUuid.get('tick-1')?.betaLinks?.map((link) => link.link)).toEqual([LISTED_INSTAGRAM_LINK]);
-    expect(byUuid.get('tick-2')?.betaLinks?.map((link) => link.link)).toEqual([LISTED_INSTAGRAM_LINK]);
-    // ...and the climb-b tick gets climb-b's link — correct grouping by climb.
-    expect(byUuid.get('tick-3')?.betaLinks?.map((link) => link.link)).toEqual([LISTED_TIKTOK_LINK]);
-
-    // A climb's links never bleed onto another climb's ticks.
-    expect(byUuid.get('tick-3')?.betaLinks?.some((link) => link.link === LISTED_INSTAGRAM_LINK)).toBe(false);
-  });
-
-  it('returns an empty betaLinks array for climbs with no stored links', async () => {
-    betaLinkTestState.tickRows = [
-      makeTickRow({ uuid: 'tick-1', climbUuid: 'climb-a', climbName: 'Crimpathon' }),
-      makeTickRow({ uuid: 'tick-2', climbUuid: 'climb-z', climbName: 'No Beta Here' }),
-    ];
-    // Only climb-a has a link; climb-z returns nothing from the batch query.
-    betaLinkTestState.betaLinkRowsByQuery.push([
-      {
-        boardType: 'kilter',
-        climbUuid: 'climb-a',
-        link: LISTED_INSTAGRAM_LINK,
-        foreignUsername: 'marco',
-        angle: 40,
-        thumbnail: null,
-        isListed: true,
-        createdAt: '2024-01-10T00:00:00.000Z',
-      },
+      makeBetaRow({ tickUuid: 'tick-1', climbUuid: 'climb-a', link: LISTED_INSTAGRAM_LINK }),
     ]);
 
     const result = await sessionDetail(undefined, { sessionId: 'party-1' });
 
     const byUuid = new Map((result?.ticks ?? []).map((tick) => [tick.uuid, tick] as const));
     expect(byUuid.get('tick-1')?.betaLinks?.map((link) => link.link)).toEqual([LISTED_INSTAGRAM_LINK]);
-    // Climb with no stored links surfaces an empty array, never undefined.
+    // The other send of the same climb has no clip attached → empty, not the
+    // sibling's clip.
+    expect(byUuid.get('tick-2')?.betaLinks).toEqual([]);
+  });
+
+  it('scopes the query to the session tick uuids with is_listed + KayaClimb gates', async () => {
+    betaLinkTestState.tickRows = [
+      makeTickRow({ uuid: 'tick-1', climbUuid: 'climb-a', climbName: 'Crimpathon' }),
+      makeTickRow({ uuid: 'tick-2', climbUuid: 'climb-b', climbName: 'Slopefest' }),
+    ];
+    betaLinkTestState.betaLinkRowsByQuery.push([
+      makeBetaRow({ tickUuid: 'tick-1', climbUuid: 'climb-a', link: LISTED_INSTAGRAM_LINK }),
+    ]);
+
+    const result = await sessionDetail(undefined, { sessionId: 'party-1' });
+
+    const links = result?.ticks.find((tick) => tick.uuid === 'tick-1')?.betaLinks ?? [];
+    expect(links.map((betaLink) => betaLink.link)).toEqual([LISTED_INSTAGRAM_LINK]);
+    expect(links.every((betaLink) => betaLink.isListed === true)).toBe(true);
+    expect(links.some((betaLink) => /kayaclimb\.com/i.test(betaLink.link))).toBe(false);
+
+    // The tick_uuid IN-list + is_listed + KayaClimb-exclusion predicates must
+    // actually be in the WHERE the resolver sent to board_beta_links — that's
+    // what scopes beta to the crew's own ticks and drops unlisted/Kaya rows.
+    const betaWhereText = betaLinkTestState.betaLinkWhereClauses.map(conditionToText).join(' | ');
+    expect(betaWhereText).toContain('tick_uuid');
+    expect(betaWhereText).toContain('is_listed');
+    expect(betaWhereText.toLowerCase()).toContain('kayaclimb');
+    // The session's tick uuids are bound as the IN-list params.
+    const betaParams = betaLinkTestState.betaLinkWhereClauses.flatMap(conditionToParams);
+    expect(betaParams).toContain('tick-1');
+    expect(betaParams).toContain('tick-2');
+  });
+
+  it('batches all ticks into a single query and groups links by tick (no per-tick N+1)', async () => {
+    // Three ticks; two carry their own clip, one carries none.
+    betaLinkTestState.tickRows = [
+      makeTickRow({ uuid: 'tick-1', climbUuid: 'climb-a', climbName: 'Crimpathon' }),
+      makeTickRow({ uuid: 'tick-2', climbUuid: 'climb-b', climbName: 'Slopefest' }),
+      makeTickRow({ uuid: 'tick-3', climbUuid: 'climb-c', climbName: 'Roof Project' }),
+    ];
+    betaLinkTestState.betaLinkRowsByQuery.push([
+      makeBetaRow({ tickUuid: 'tick-1', climbUuid: 'climb-a', link: LISTED_INSTAGRAM_LINK, foreignUsername: 'marco' }),
+      makeBetaRow({ tickUuid: 'tick-2', climbUuid: 'climb-b', link: LISTED_TIKTOK_LINK, foreignUsername: 'sam' }),
+    ]);
+
+    const result = await sessionDetail(undefined, { sessionId: 'party-1' });
+
+    // Exactly one query hit board_beta_links for the whole session — the N+1 guard.
+    expect(betaLinkTestState.betaLinkSelectCallCount.value).toBe(1);
+
+    const byUuid = new Map((result?.ticks ?? []).map((tick) => [tick.uuid, tick] as const));
+    expect(byUuid.get('tick-1')?.betaLinks?.map((link) => link.link)).toEqual([LISTED_INSTAGRAM_LINK]);
+    expect(byUuid.get('tick-2')?.betaLinks?.map((link) => link.link)).toEqual([LISTED_TIKTOK_LINK]);
+    // The tick with no attached clip gets an empty array, never undefined.
+    expect(byUuid.get('tick-3')?.betaLinks).toEqual([]);
+    // A tick's clip never bleeds onto another tick.
+    expect(byUuid.get('tick-2')?.betaLinks?.some((link) => link.link === LISTED_INSTAGRAM_LINK)).toBe(false);
+  });
+
+  it('returns an empty betaLinks array for ticks with no attached clip', async () => {
+    betaLinkTestState.tickRows = [
+      makeTickRow({ uuid: 'tick-1', climbUuid: 'climb-a', climbName: 'Crimpathon' }),
+      makeTickRow({ uuid: 'tick-2', climbUuid: 'climb-z', climbName: 'No Beta Here' }),
+    ];
+    betaLinkTestState.betaLinkRowsByQuery.push([
+      makeBetaRow({ tickUuid: 'tick-1', climbUuid: 'climb-a', link: LISTED_INSTAGRAM_LINK }),
+    ]);
+
+    const result = await sessionDetail(undefined, { sessionId: 'party-1' });
+
+    const byUuid = new Map((result?.ticks ?? []).map((tick) => [tick.uuid, tick] as const));
+    expect(byUuid.get('tick-1')?.betaLinks?.map((link) => link.link)).toEqual([LISTED_INSTAGRAM_LINK]);
     expect(byUuid.get('tick-2')?.betaLinks).toEqual([]);
   });
 });

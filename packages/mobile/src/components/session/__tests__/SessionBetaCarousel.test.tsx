@@ -2,12 +2,15 @@
 import { createElement, type ReactNode } from 'react';
 import { render } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { BetaLink, SessionDetailTick, BetaLinksGqlRow } from '@boardsesh/shared-schema';
+import type { BetaLink, SessionDetailTick, SessionFeedParticipant, BetaLinksGqlRow } from '@boardsesh/shared-schema';
 
-// Capture the link each (mocked) BetaVideoCard renders so we can assert exactly
-// one card per deduped video. The real beta-video-url helpers (filter + dedupe)
-// stay in play so the carousel's selection logic is what's under test.
-const cards = vi.hoisted(() => ({ links: [] as BetaLink[] }));
+// Capture what each (mocked) BetaVideoCard renders so we can assert exactly one
+// card per deduped video and its crew attribution. The real beta-video-url
+// helpers (filter + dedupe) stay in play so the carousel's selection logic is
+// what's under test.
+const cards = vi.hoisted(() => ({
+  rendered: [] as Array<{ link: string; uploaderName: string | null | undefined }>,
+}));
 
 vi.mock('react-native', () => ({
   View: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
@@ -22,8 +25,8 @@ vi.mock('../../SectionHeader', () => ({
 }));
 vi.mock('../../play-drawer/BetaVideoCard', () => ({
   BETA_CARD_WIDTH: 140,
-  BetaVideoCard: ({ link }: { link: BetaLink }) => {
-    cards.links.push(link);
+  BetaVideoCard: ({ link, uploaderName }: { link: BetaLink; uploaderName?: string | null }) => {
+    cards.rendered.push({ link: link.link, uploaderName });
     return createElement('div', { 'data-testid': 'beta-card', 'data-link': link.link });
   },
 }));
@@ -46,10 +49,10 @@ function betaRow(overrides: Partial<BetaLinksGqlRow> = {}): BetaLinksGqlRow {
   };
 }
 
-function tick(betaLinks: BetaLinksGqlRow[]): SessionDetailTick {
+function tick(betaLinks: BetaLinksGqlRow[], overrides: { uuid?: string; userId?: string } = {}): SessionDetailTick {
   return {
-    uuid: 'tick-1',
-    userId: 'user-1',
+    uuid: overrides.uuid ?? 'tick-1',
+    userId: overrides.userId ?? 'user-1',
     climbUuid: 'climb-1',
     climbName: 'Test Climb',
     boardType: 'kilter',
@@ -73,26 +76,33 @@ function tick(betaLinks: BetaLinksGqlRow[]): SessionDetailTick {
   };
 }
 
+function participant(userId: string, displayName: string): SessionFeedParticipant {
+  return { userId, displayName, avatarUrl: null, sends: 1, flashes: 0, attempts: 0 };
+}
+
+const SOLO = { participantById: new Map<string, SessionFeedParticipant>(), isMultiUser: false };
+
 beforeEach(() => {
-  cards.links = [];
+  cards.rendered = [];
 });
 
 describe('SessionBetaCarousel', () => {
   it('renders one BetaVideoCard per deduped video link across ticks', () => {
     const { getAllByTestId } = render(
       createElement(SessionBetaCarousel, {
+        ...SOLO,
         ticks: [
-          tick([betaRow({ link: 'https://www.instagram.com/reel/aaa/' })]),
-          tick([betaRow({ link: 'https://www.tiktok.com/@user/video/12345' })]),
+          tick([betaRow({ link: 'https://www.instagram.com/reel/aaa/' })], { uuid: 't1' }),
+          tick([betaRow({ link: 'https://www.tiktok.com/@user/video/12345' })], { uuid: 't2' }),
           // Same Instagram reel id as the first — deduped away.
-          tick([betaRow({ link: 'https://instagram.com/reel/aaa/?igsh=tracking' })]),
+          tick([betaRow({ link: 'https://instagram.com/reel/aaa/?igsh=tracking' })], { uuid: 't3' }),
         ],
       }),
     );
 
     const renderedCards = getAllByTestId('beta-card');
     expect(renderedCards).toHaveLength(2);
-    expect(cards.links.map((link) => link.link)).toEqual([
+    expect(cards.rendered.map((card) => card.link)).toEqual([
       'https://www.instagram.com/reel/aaa/',
       'https://www.tiktok.com/@user/video/12345',
     ]);
@@ -101,6 +111,7 @@ describe('SessionBetaCarousel', () => {
   it('filters out unsupported platforms (e.g. YouTube)', () => {
     const { getAllByTestId } = render(
       createElement(SessionBetaCarousel, {
+        ...SOLO,
         ticks: [
           tick([
             betaRow({ link: 'https://www.instagram.com/reel/bbb/' }),
@@ -112,13 +123,45 @@ describe('SessionBetaCarousel', () => {
     );
 
     expect(getAllByTestId('beta-card')).toHaveLength(1);
-    expect(cards.links.map((link) => link.link)).toEqual(['https://www.instagram.com/reel/bbb/']);
+    expect(cards.rendered.map((card) => card.link)).toEqual(['https://www.instagram.com/reel/bbb/']);
   });
 
   it('renders nothing when no tick has beta links', () => {
-    const { container } = render(createElement(SessionBetaCarousel, { ticks: [tick([]), tick([])] }));
+    const { container } = render(createElement(SessionBetaCarousel, { ...SOLO, ticks: [tick([]), tick([])] }));
     expect(container.querySelector('[data-testid="beta-card"]')).toBeNull();
     expect(container.querySelector('[data-testid="beta-scroll"]')).toBeNull();
-    expect(cards.links).toHaveLength(0);
+    expect(cards.rendered).toHaveLength(0);
+  });
+
+  it('attributes each clip to the participant who logged its tick (multi-user only)', () => {
+    const participantById = new Map<string, SessionFeedParticipant>([
+      ['user-a', participant('user-a', 'Cata')],
+      ['user-b', participant('user-b', 'Marco')],
+    ]);
+    render(
+      createElement(SessionBetaCarousel, {
+        participantById,
+        isMultiUser: true,
+        ticks: [
+          tick([betaRow({ link: 'https://www.instagram.com/reel/aaa/' })], { uuid: 't1', userId: 'user-a' }),
+          tick([betaRow({ link: 'https://www.tiktok.com/@user/video/12345' })], { uuid: 't2', userId: 'user-b' }),
+        ],
+      }),
+    );
+
+    expect(cards.rendered).toEqual([
+      { link: 'https://www.instagram.com/reel/aaa/', uploaderName: 'Cata' },
+      { link: 'https://www.tiktok.com/@user/video/12345', uploaderName: 'Marco' },
+    ]);
+  });
+
+  it('omits attribution in solo sessions', () => {
+    render(
+      createElement(SessionBetaCarousel, {
+        ...SOLO,
+        ticks: [tick([betaRow({ link: 'https://www.instagram.com/reel/aaa/' })], { userId: 'user-1' })],
+      }),
+    );
+    expect(cards.rendered).toEqual([{ link: 'https://www.instagram.com/reel/aaa/', uploaderName: null }]);
   });
 });

@@ -10,13 +10,11 @@ import { Text } from '../Text';
 import { Icon } from '../Icon';
 import { ActivityIndicator } from '../ActivityIndicator';
 import { SectionHeader } from '../SectionHeader';
-import { FeedSocialRow } from '../you/FeedSocialRow';
 import { CommentSheet } from '../you/CommentSheet';
-import { SessionDetailHero } from './SessionDetailHero';
-import { SessionStatTiles } from './SessionStatTiles';
+import { SessionSummaryCard } from './SessionSummaryCard';
 import { SessionAnalyticsSection } from './SessionAnalyticsSection';
 import { SessionBetaCarousel } from './SessionBetaCarousel';
-import { SessionParticipantBreakdown } from './SessionParticipantBreakdown';
+import { SessionLeaderboard } from './SessionLeaderboard';
 import { SessionTickRow } from './SessionTickRow';
 import { useSessionDetail } from '../../lib/graphql/hooks';
 import { openClimbInPlayDrawer } from '../../lib/open-climb-in-play-drawer';
@@ -43,7 +41,10 @@ export default function SessionDetailScreen() {
   const router = useRouter();
   const { openPlayDrawer } = useDrawerHost();
   const bottomChrome = useBottomChromeMetrics();
-  const paddingBottom = bottomChrome.scrollBottomPadding + spacing[6];
+  // floatingControlBottom (not scrollBottomPadding) reserves the iOS-26 native
+  // accessory — the now-playing bar — so the last sends clear it instead of
+  // hiding behind it.
+  const paddingBottom = bottomChrome.floatingControlBottom + spacing[6];
 
   const { data: session, isPending } = useSessionDetail(sessionId);
 
@@ -70,7 +71,6 @@ export default function SessionDetailScreen() {
   }, []);
 
   const handleOpenSessionComments = useCallback((id: string) => openComments(id, 'session'), [openComments]);
-  const handleOpenTickComments = useCallback((tickUuid: string) => openComments(tickUuid, 'tick'), [openComments]);
 
   const handleTickPress = useCallback(
     (tick: SessionDetailTick) => openClimbInPlayDrawer({ kind: 'tick', tick }, { openPlayDrawer, router }),
@@ -87,10 +87,9 @@ export default function SessionDetailScreen() {
         isMultiUser={isMultiUser}
         participant={participantById.get(item.userId)}
         onPress={handleTickPress}
-        onOpenComments={handleOpenTickComments}
       />
     ),
-    [isMultiUser, participantById, handleTickPress, handleOpenTickComments],
+    [isMultiUser, participantById, handleTickPress],
   );
 
   // Header title follows the loaded session name/date.
@@ -122,29 +121,18 @@ export default function SessionDetailScreen() {
 
   const header = (
     <View>
-      <SessionDetailHero session={session} title={title} />
-      <SessionStatTiles
-        sends={session.totalSends}
-        flashes={session.totalFlashes}
-        attempts={session.totalAttempts}
-        hardestGrade={session.hardestGrade}
+      <SessionSummaryCard
+        session={session}
+        title={title}
+        titleIsDate={!session.sessionName}
+        onOpenComments={handleOpenSessionComments}
       />
 
       <SessionAnalyticsSection gradeDistribution={session.gradeDistribution} />
 
-      <SessionBetaCarousel ticks={session.ticks} />
+      <SessionBetaCarousel ticks={session.ticks} participantById={participantById} isMultiUser={isMultiUser} />
 
-      <SessionParticipantBreakdown participants={session.participants} />
-
-      <View style={styles.social}>
-        <FeedSocialRow
-          entityId={session.sessionId}
-          upvotes={session.upvotes}
-          userVote={null}
-          commentCount={session.commentCount}
-          onOpenComments={handleOpenSessionComments}
-        />
-      </View>
+      <SessionLeaderboard participants={session.participants} ticks={session.ticks} />
 
       <SectionHeader title={t('detail.climbsCount', { count: session.ticks.length })} />
     </View>
@@ -177,5 +165,4 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing[3], paddingHorizontal: spacing[8] },
   notFound: { textAlign: 'center' },
-  social: { paddingHorizontal: spacing[4], marginTop: spacing[2] },
 });
