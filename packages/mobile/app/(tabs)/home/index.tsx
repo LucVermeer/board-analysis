@@ -6,7 +6,6 @@ import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import type BottomSheet from '@gorhom/bottom-sheet';
-import type { BottomSheetModal } from '@gorhom/bottom-sheet';
 import { type ContextMenuAction } from 'react-native-context-menu-view';
 import type { SessionFeedItem, SessionFeedTickHighlight, SocialEntityType, UserBoard } from '@boardsesh/shared-schema';
 import { betaLinkIdentity, isBetaVideoUrl, isInstagramUrl, isTikTokUrl } from '@boardsesh/shared-schema';
@@ -17,11 +16,9 @@ import { Card } from '../../../src/components/Card';
 import { Button } from '../../../src/components/Button';
 import { SessionFeedCard } from '../../../src/components/you/SessionFeedCard';
 import { CommentSheet } from '../../../src/components/you/CommentSheet';
-import { HomeClimberSearchSheet } from '../../../src/components/you/HomeClimberSearchSheet';
 import { FeedScopeTitle } from '../../../src/components/feed/FeedScopeTitle';
 import {
   useBulkVoteSummaries,
-  useProfile,
   useRecentBetaLinks,
   useSessionGroupedFeed,
   type RecentBetaVideo,
@@ -33,7 +30,7 @@ import { useToast } from '../../../src/providers/toast-provider';
 import { useDrawerHost } from '../../../src/providers/drawer-host-provider';
 import { useBottomChromeMetrics } from '../../../src/hooks/use-bottom-chrome-metrics';
 import { ProgressiveBlur } from '../../../src/components/ProgressiveBlur';
-import { GlassActionToolbar, GlassToolbarAction, TOP_ACTION_SIZE } from '../../../src/components/chrome';
+import { GlassActionToolbar, TOP_ACTION_SIZE } from '../../../src/components/chrome';
 import { UserAvatarToolbarAction } from '../../../src/components/user-drawer/UserAvatarToolbarAction';
 import { dedupeSessionsById } from '../../../src/lib/feed-time-buckets';
 import { deriveFeedScopeInput, type FeedMode } from '../../../src/lib/feed/feed-scope';
@@ -89,9 +86,7 @@ export default function HomeTab() {
   const insets = useSafeAreaInsets();
   const listRef = useRef<FlashListRef<SessionFeedItem>>(null);
   const commentSheetRef = useRef<BottomSheet | null>(null);
-  const searchSheetRef = useRef<BottomSheetModal | null>(null);
   const [commentTarget, setCommentTarget] = useState<CommentTarget | null>(null);
-  const profile = useProfile({ enabled: isAuthenticated });
 
   // Feed scope. `mode` chooses the view — `crew` (people you follow) is the
   // default; `gym` is everyone on the selected board. `selectedBoard` is the
@@ -160,8 +155,8 @@ export default function HomeTab() {
   }, []);
 
   const handleOpenSearch = useCallback(() => {
-    searchSheetRef.current?.present();
-  }, []);
+    router.push('/users/search');
+  }, [router]);
 
   const handleSessionPress = useCallback(
     (session: SessionFeedItem) => navigateToSessionFeedItem(router, session),
@@ -314,6 +309,7 @@ export default function HomeTab() {
   const header = useMemo(
     () => (
       <View style={styles.header}>
+        <HomeSearchPill onPress={handleOpenSearch} />
         <RecentBetaShelf
           heading={betaHeading}
           videos={betaVideos.data ?? []}
@@ -334,6 +330,7 @@ export default function HomeTab() {
       betaVideos.isLoading,
       betaVideos.refetch,
       handleBetaOpenClimb,
+      handleOpenSearch,
       sessionsHeading,
     ],
   );
@@ -440,21 +437,11 @@ export default function HomeTab() {
               onSelectIndex={scopeMenu.onSelectIndex}
             />
           </View>
-          {/* Search action: balances the avatar so the scope menu reads centred,
-              and opens the climber search sheet. */}
-          <GlassActionToolbar actionCount={1}>
-            <GlassToolbarAction onPress={handleOpenSearch} accessibilityLabel={t('mobile.home.searchAction')}>
-              <Icon name="search" size={22} color={systemColors.label} />
-            </GlassToolbarAction>
-          </GlassActionToolbar>
+          {/* Balances the avatar island so the scope menu stays centred; the
+              climber search now lives in the in-feed search pill below. */}
+          <View style={styles.headerRightSpacer} />
         </View>
       </View>
-      <HomeClimberSearchSheet
-        ref={searchSheetRef}
-        currentUserId={profile.data?.id}
-        isIdentityError={profile.isError}
-        onRetryIdentity={() => void profile.refetch()}
-      />
       <CommentSheet
         sheetRef={commentSheetRef}
         entityId={commentTarget?.entityId ?? null}
@@ -462,6 +449,30 @@ export default function HomeTab() {
         onClose={() => setCommentTarget(null)}
       />
     </View>
+  );
+}
+
+// A visible search affordance pinned at the top of the feed. Tapping pushes the
+// full-screen climber search (replacing the old header-icon → bottom-sheet).
+function HomeSearchPill({ onPress }: { onPress: () => void }) {
+  const { t } = useTranslation('feed');
+  const { systemColors } = useTheme();
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="search"
+      accessibilityLabel={t('mobile.home.searchAction')}
+      style={({ pressed }) => [
+        styles.searchPill,
+        { backgroundColor: systemColors.fill },
+        pressed && styles.searchPillPressed,
+      ]}
+    >
+      <Icon name="search" size={18} color={systemColors.secondaryLabel} />
+      <Text variant="subheadline" color={systemColors.secondaryLabel}>
+        {t('mobile.home.findClimbersTitle')}
+      </Text>
+    </Pressable>
   );
 }
 
@@ -723,6 +734,22 @@ const styles = StyleSheet.create({
     // Clear the floating header band so the feed starts just below it (content
     // then scrolls up under the islands + blur).
     paddingTop: TOP_ISLAND_BAND,
+  },
+  headerRightSpacer: {
+    width: TOP_ACTION_SIZE,
+  },
+  searchPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[2],
+    marginHorizontal: spacing[4],
+    marginBottom: spacing[4],
+    minHeight: 44,
+    paddingHorizontal: spacing[3],
+    borderRadius: 10,
+  },
+  searchPillPressed: {
+    opacity: 0.7,
   },
   shelfSection: {
     paddingBottom: spacing[5],

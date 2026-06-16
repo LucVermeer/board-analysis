@@ -343,6 +343,12 @@ function RootLayout() {
                                                             options={{ headerShown: false, gestureEnabled: false }}
                                                           />
                                                           <Stack.Screen name="session/[sessionId]" />
+                                                          {/* Public climber profiles + climber search, pushed from any
+                                                      tab (tappable avatars, the Home search pill). Modeled on
+                                                      session/[sessionId]: the screens own their native header. */}
+                                                          <Stack.Screen name="users/[userId]" />
+                                                          <Stack.Screen name="users/search" />
+                                                          <Stack.Screen name="users/connections" />
                                                           <Stack.Screen
                                                             name="join/[sessionId]"
                                                             options={{ presentation: 'modal', headerShown: false }}

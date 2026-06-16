@@ -67,7 +67,15 @@
       "emptySearch": "Aucun grimpeur trouvé",
       "emptySearchBody": "Aucun grimpeur ne correspond à \"{{query}}\".",
       "loadError": "Impossible de charger les grimpeurs",
-      "retry": "Réessaie"
+      "retry": "Réessaie",
+      "instagramLink": "Instagram",
+      "instagramOpenError": "Impossible d'ouvrir Instagram"
+    },
+    "profile": {
+      "title": "Profil",
+      "errorTitle": "Impossible de charger ce profil",
+      "notFoundTitle": "Grimpeur introuvable",
+      "notFoundBody": "Nous n'avons pas trouvé ce grimpeur."
     },
     "comments": {
       "title": "Commentaires",

@@ -4,7 +4,7 @@ import type { SessionFeedParticipant } from '@boardsesh/shared-schema';
 import { Text } from '../Text';
 import { Icon } from '../Icon';
 import { type IconName } from '../icon-map';
-import { Avatar } from '../Avatar';
+import { PressableAvatar } from '../PressableAvatar';
 import { ListRow } from '../ListRow';
 import { SectionHeader } from '../SectionHeader';
 import { withAlpha } from '../../theme/colors';
@@ -27,7 +27,14 @@ export function SessionParticipantBreakdown({ participants }: { participants: Se
         <ListRow
           key={participant.userId}
           title={participant.displayName ?? tYou('mobile.unknownName')}
-          leading={<Avatar uri={participant.avatarUrl} name={participant.displayName} size={32} />}
+          leading={
+            <PressableAvatar
+              userId={participant.userId}
+              uri={participant.avatarUrl}
+              name={participant.displayName}
+              size={32}
+            />
+          }
           showSeparator
           trailing={
             <View style={styles.chips}>

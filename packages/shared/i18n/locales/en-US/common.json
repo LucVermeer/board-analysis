@@ -6,6 +6,10 @@
     "mustBeSignedIn": "You must be signed in"
   },
   "mobile": {
+    "avatar": {
+      "viewProfile": "View {{name}}'s profile",
+      "thisClimber": "this climber"
+    },
     "more": {
       "title": "More",
       "library": "Library",

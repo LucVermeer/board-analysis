@@ -174,6 +174,7 @@ vi.mock('../../Icon', () => ({
   Icon: ({ name }: { name: string }) => createElement('i', { 'data-icon': name }),
 }));
 vi.mock('../../Avatar', () => ({ Avatar: () => createElement('div', { 'data-avatar': 'true' }) }));
+vi.mock('../../PressableAvatar', () => ({ PressableAvatar: () => null }));
 vi.mock('../../ActivityIndicator', () => ({
   ActivityIndicator: () => createElement('div', { 'data-spinner': 'true' }),
 }));

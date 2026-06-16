@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { View, RefreshControl, Pressable, StyleSheet } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
+import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import type BottomSheet from '@gorhom/bottom-sheet';
 import type { AscentFeedItem } from '@boardsesh/graphql/operations';
@@ -12,7 +13,9 @@ import { ActivityIndicator } from '../ActivityIndicator';
 import { LogbookRow } from './LogbookRow';
 import { LogbookEditSheet } from './LogbookEditSheet';
 import { useUserAscentsFeed } from '../../lib/graphql/hooks';
+import { openClimbInPlayDrawer } from '../../lib/open-climb-in-play-drawer';
 import { useBottomChromeMetrics } from '../../hooks/use-bottom-chrome-metrics';
+import { useDrawerHost } from '../../providers/drawer-host-provider';
 import { spacing, borderRadius } from '../../theme/tokens';
 import { useTheme } from '../../providers/theme-provider';
 
@@ -21,11 +24,19 @@ type LogbookTabProps = {
   /** Measured chrome height — the list insets its top by this so the first row
    *  rests below the floating chrome and the rest scroll under it. */
   topInset?: number;
+  /**
+   * Whether the signed-in user owns this logbook. Defaults to true (the You
+   * tab). When false (viewing another climber's profile) a row opens the climb
+   * read-only in the play drawer instead of the editable LogbookEditSheet.
+   */
+  viewerIsOwner?: boolean;
 };
 
-export function LogbookTab({ userId, topInset = 0 }: LogbookTabProps) {
+export function LogbookTab({ userId, topInset = 0, viewerIsOwner = true }: LogbookTabProps) {
   const { t } = useTranslation('you');
   const { systemColors, brandColors, variant } = useTheme();
+  const router = useRouter();
+  const { openPlayDrawer } = useDrawerHost();
   const bottomChrome = useBottomChromeMetrics();
   const paddingBottom = bottomChrome.scrollBottomPadding + spacing[4];
 
@@ -36,11 +47,29 @@ export function LogbookTab({ userId, topInset = 0 }: LogbookTabProps) {
   // Stabilise the FlashList `data` identity so it doesn't re-diff every render.
   const items = useMemo(() => feed.data?.pages.flatMap((page) => page.userAscentsFeed.items) ?? [], [feed.data]);
 
-  const handlePress = useCallback((ascent: AscentFeedItem) => {
-    track(SHARED_EVENTS.LogbookRowClicked, { climbUuid: ascent.climbUuid });
-    setEditAscent(ascent);
-    editSheetRef.current?.snapToIndex(0);
-  }, []);
+  const handlePress = useCallback(
+    (ascent: AscentFeedItem) => {
+      track(SHARED_EVENTS.LogbookRowClicked, { climbUuid: ascent.climbUuid });
+      // Another climber's logbook is read-only — open the climb itself rather
+      // than the tick-editing sheet, which only edits the signed-in user's ticks.
+      if (!viewerIsOwner) {
+        openClimbInPlayDrawer(
+          {
+            kind: 'ref',
+            climbUuid: ascent.climbUuid,
+            boardType: ascent.boardType,
+            layoutId: ascent.layoutId,
+            angle: ascent.angle,
+          },
+          { openPlayDrawer, router },
+        );
+        return;
+      }
+      setEditAscent(ascent);
+      editSheetRef.current?.snapToIndex(0);
+    },
+    [openPlayDrawer, router, viewerIsOwner],
+  );
 
   const handleEndReached = useCallback(() => {
     if (feed.hasNextPage && !feed.isFetchingNextPage) void feed.fetchNextPage();
@@ -143,7 +172,9 @@ export function LogbookTab({ userId, topInset = 0 }: LogbookTabProps) {
           </View>
         }
       />
-      <LogbookEditSheet sheetRef={editSheetRef} ascent={editAscent} onClose={() => setEditAscent(null)} />
+      {viewerIsOwner ? (
+        <LogbookEditSheet sheetRef={editSheetRef} ascent={editAscent} onClose={() => setEditAscent(null)} />
+      ) : null}
     </View>
   );
 }

@@ -6,6 +6,10 @@
     "mustBeSignedIn": "Vous devez être connecté"
   },
   "mobile": {
+    "avatar": {
+      "viewProfile": "Voir le profil de {{name}}",
+      "thisClimber": "ce grimpeur"
+    },
     "more": {
       "title": "Plus",
       "library": "Bibliothèque",

@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import type { PublicUserProfile, UserSearchResult } from '@boardsesh/shared-schema';
 import { Text } from '../Text';
 import { Icon } from '../Icon';
-import { Avatar } from '../Avatar';
+import { PressableAvatar } from '../PressableAvatar';
 import { ListRow } from '../ListRow';
 import { Button } from '../Button';
 import { ActivityIndicator } from '../ActivityIndicator';
@@ -120,7 +120,7 @@ export function ClimberSearchPersonRow({
     <ListRow
       title={displayName}
       subtitle={personSubtitle(person, t)}
-      leading={<Avatar uri={person.avatarUrl} name={person.displayName} size={36} />}
+      leading={<PressableAvatar userId={person.id} uri={person.avatarUrl} name={person.displayName} size={36} />}
       trailing={
         isCurrentUser ? (
           <Text variant="footnote" color={systemColors.secondaryLabel}>

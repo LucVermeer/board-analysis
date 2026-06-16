@@ -7,7 +7,7 @@ import { iconMap, type IconName } from './icon-map';
 import { hapticLight } from '../lib/haptics';
 import { useTheme } from '../providers/theme-provider';
 
-type ButtonVariant = 'filled' | 'outlined' | 'text';
+type ButtonVariant = 'filled' | 'outlined' | 'text' | 'tonal';
 type ButtonSize = 'small' | 'medium' | 'large';
 
 type ButtonProps = {
@@ -40,7 +40,10 @@ export function Button(props: ButtonProps) {
   return uiVariant === 'material' ? <ButtonMaterial {...props} /> : <ButtonGlass {...props} />;
 }
 
-const PAPER_MODE = { filled: 'contained', outlined: 'outlined', text: 'text' } as const;
+// 'tonal' is the M3 middle-emphasis button — Paper's contained-tonal pulls its
+// secondaryContainer fill + onSecondaryContainer label straight from the MD3
+// theme, so it needs no buttonColor/textColor override below.
+const PAPER_MODE = { filled: 'contained', outlined: 'outlined', text: 'text', tonal: 'contained-tonal' } as const;
 
 function ButtonMaterial({
   title,
@@ -76,7 +79,9 @@ function ButtonMaterial({
       // material-theme-provider); map our semantic name to its MDI name.
       icon={icon ? iconMap[icon].android : undefined}
       buttonColor={variant === 'filled' ? fillColor : undefined}
-      textColor={variant === 'filled' ? undefined : accentColor}
+      // Tonal lets Paper use its onSecondaryContainer label; only outlined/text
+      // take the brand tint.
+      textColor={variant === 'filled' || variant === 'tonal' ? undefined : accentColor}
       accessibilityLabel={accessibilityLabel ?? title}
       // Approximate the small/medium/large ladder on Paper's single-height button.
       labelStyle={{ fontSize: config.fontSize }}
@@ -127,7 +132,9 @@ function ButtonGlass({
     borderRadius: radii.button,
     opacity: disabled ? 0.5 : 1,
     ...(variant === 'filled' && { backgroundColor: fillColor }),
-    ...(variant === 'outlined' && { borderWidth: 1, borderColor: accentColor }),
+    // HIG has no tonal idiom — the Liquid Glass "Following" state is an outlined
+    // capsule, so tonal falls back to the same bordered treatment here.
+    ...((variant === 'outlined' || variant === 'tonal') && { borderWidth: 1, borderColor: accentColor }),
   };
 
   const textColor = variant === 'filled' ? onFillColor : accentColor;

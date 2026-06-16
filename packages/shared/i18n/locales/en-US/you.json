@@ -67,7 +67,15 @@
       "emptySearch": "No climbers found",
       "emptySearchBody": "No climbers match \"{{query}}\".",
       "loadError": "Couldn't load climbers",
-      "retry": "Try again"
+      "retry": "Try again",
+      "instagramLink": "Instagram",
+      "instagramOpenError": "Couldn't open Instagram"
+    },
+    "profile": {
+      "title": "Profile",
+      "errorTitle": "Couldn't load this profile",
+      "notFoundTitle": "Climber not found",
+      "notFoundBody": "We couldn't find that climber."
     },
     "comments": {
       "title": "Comments",

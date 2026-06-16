@@ -142,6 +142,9 @@ vi.mock('../../Icon', () => ({ Icon: ({ name }: { name: string }) => createEleme
 vi.mock('../../Avatar', () => ({
   Avatar: ({ name }: { name?: string | null }) => createElement('span', { 'data-avatar': name ?? '' }),
 }));
+vi.mock('../../PressableAvatar', () => ({
+  PressableAvatar: ({ name }: { name?: string | null }) => createElement('span', { 'data-avatar': name ?? '' }),
+}));
 vi.mock('../../ActivityIndicator', () => ({
   ActivityIndicator: ({ accessibilityLabel }: { accessibilityLabel?: string }) =>
     createElement('span', { 'aria-label': accessibilityLabel, 'data-loading': 'true' }),
