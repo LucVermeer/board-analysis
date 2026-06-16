@@ -2,7 +2,6 @@ import { View, StyleSheet } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import type { SessionDetail } from '@boardsesh/shared-schema';
 import { formatTickAbsoluteTime } from '@boardsesh/profile-stats';
-import { getGradeTextColor } from '@boardsesh/play-view';
 import { Text } from '../Text';
 import { Icon } from '../Icon';
 import { type IconName } from '../icon-map';
@@ -10,9 +9,11 @@ import { Card } from '../Card';
 import { AvatarGroup } from '../you/AvatarGroup';
 import { FeedSocialRow } from '../you/FeedSocialRow';
 import { gradeBadgeColor } from '../you/profile-chart-colors';
+import { withAlpha } from '../../theme/colors';
 import { spacing, borderRadius } from '../../theme/tokens';
 import { useTheme } from '../../providers/theme-provider';
 import { useGradeFormat } from '../../hooks/use-grade-format';
+import { formatSessionWhen } from '../../lib/format-session-when';
 
 function formatDuration(minutes: number): string {
   if (minutes < 60) return `${minutes}m`;
@@ -25,6 +26,9 @@ type SessionSummaryCardProps = {
   session: SessionDetail;
   /** Pre-resolved display name (session name or a generated date fallback). */
   title: string;
+  /** True when the title IS the date (unnamed session) — line 2 then shows a
+   *  human "Sunday morning" instead of repeating the date. */
+  titleIsDate: boolean;
   onOpenComments: (entityId: string) => void;
 };
 
@@ -35,11 +39,16 @@ type SessionSummaryCardProps = {
  * separate hero, a tiles card, and a standalone social row. Only the hardest-grade
  * tile carries colour, so the grade stays the one accent.
  */
-export function SessionSummaryCard({ session, title, onOpenComments }: SessionSummaryCardProps) {
+export function SessionSummaryCard({ session, title, titleIsDate, onOpenComments }: SessionSummaryCardProps) {
   const { systemColors } = useTheme();
   const { t } = useTranslation('you');
+  const { t: tSession } = useTranslation('session');
 
-  const absoluteDate = formatTickAbsoluteTime(session.lastTickAt, 'MMM D, YYYY · h:mm A');
+  // Named sessions show the full date+time on line 2; unnamed sessions already
+  // carry the date in the title, so line 2 becomes a human "Sunday morning".
+  const whenLine = titleIsDate
+    ? formatSessionWhen(session.lastTickAt, tSession)
+    : formatTickAbsoluteTime(session.lastTickAt, 'MMM D, YYYY · h:mm A');
   const board = session.boardTypes.join(' · ');
   const duration =
     session.durationMinutes != null && session.durationMinutes > 0 ? formatDuration(session.durationMinutes) : null;
@@ -52,7 +61,7 @@ export function SessionSummaryCard({ session, title, onOpenComments }: SessionSu
       </Text>
 
       <Text variant="subheadline" color={systemColors.secondaryLabel}>
-        {absoluteDate}
+        {whenLine}
       </Text>
 
       {board || duration ? (
@@ -128,15 +137,16 @@ function StatTile({ value, label, icon }: { value: number; label: string; icon: 
 function GradeTile({ grade }: { grade: string }) {
   const { t } = useTranslation('feed');
   const { formatGrade } = useGradeFormat();
-  const background = gradeBadgeColor(grade);
-  const textColor = getGradeTextColor(background);
+  // A 15%-alpha grade tint (the participant-chip treatment) rather than a solid
+  // slab, so the only saturated grade colour on screen is the chart below.
+  const gradeColor = gradeBadgeColor(grade);
   const displayGrade = formatGrade(grade) ?? grade;
   return (
-    <View style={[styles.tile, { backgroundColor: background }]}>
-      <Text variant="title2" color={textColor}>
+    <View style={[styles.tile, { backgroundColor: withAlpha(gradeColor, 0.15) }]}>
+      <Text variant="title2" color={gradeColor}>
         {displayGrade}
       </Text>
-      <Text variant="caption1" color={textColor} style={styles.gradeLabel} numberOfLines={1}>
+      <Text variant="caption1" color={gradeColor} style={styles.gradeLabel} numberOfLines={1}>
         {t('sessionFeedCard.hardest')}
       </Text>
     </View>

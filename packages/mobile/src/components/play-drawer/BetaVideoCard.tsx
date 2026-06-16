@@ -15,7 +15,7 @@ import { track } from '../../lib/analytics';
 import { iosSystemColors } from '../../theme/ios-colors';
 import { spacing, borderRadius } from '../../theme/tokens';
 
-export const BETA_CARD_WIDTH = 140;
+export const BETA_CARD_WIDTH = 108;
 const BETA_CARD_ASPECT_RATIO = 9 / 16;
 export const BETA_CARD_HEIGHT = BETA_CARD_WIDTH / BETA_CARD_ASPECT_RATIO;
 

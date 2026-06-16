@@ -62,6 +62,21 @@
     "delete": "Supprimer",
     "climberFallback": "Grimpeur",
     "setBy": "créé par {{username}}",
+    "weekday": {
+      "sunday": "dimanche",
+      "monday": "lundi",
+      "tuesday": "mardi",
+      "wednesday": "mercredi",
+      "thursday": "jeudi",
+      "friday": "vendredi",
+      "saturday": "samedi"
+    },
+    "partOfDay": {
+      "morning": "matin",
+      "afternoon": "après-midi",
+      "evening": "soir",
+      "night": "nuit"
+    },
     "unknownClimb": "Bloc inconnu",
     "attemptOnNth": "au {{ordinal}} essai",
     "totalAttempts": "{{count}} au total",

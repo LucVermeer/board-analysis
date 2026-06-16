@@ -62,6 +62,21 @@
     "delete": "Delete",
     "climberFallback": "Climber",
     "setBy": "set by {{username}}",
+    "weekday": {
+      "sunday": "Sunday",
+      "monday": "Monday",
+      "tuesday": "Tuesday",
+      "wednesday": "Wednesday",
+      "thursday": "Thursday",
+      "friday": "Friday",
+      "saturday": "Saturday"
+    },
+    "partOfDay": {
+      "morning": "morning",
+      "afternoon": "afternoon",
+      "evening": "evening",
+      "night": "night"
+    },
     "unknownClimb": "Unknown Climb",
     "attemptOnNth": "on {{ordinal}} attempt",
     "totalAttempts": "{{count}} total",

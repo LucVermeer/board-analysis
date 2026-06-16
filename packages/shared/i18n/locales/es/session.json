@@ -62,6 +62,21 @@
     "delete": "Eliminar",
     "climberFallback": "Escalador",
     "setBy": "creado por {{username}}",
+    "weekday": {
+      "sunday": "domingo",
+      "monday": "lunes",
+      "tuesday": "martes",
+      "wednesday": "miércoles",
+      "thursday": "jueves",
+      "friday": "viernes",
+      "saturday": "sábado"
+    },
+    "partOfDay": {
+      "morning": "por la mañana",
+      "afternoon": "por la tarde",
+      "evening": "al anochecer",
+      "night": "por la noche"
+    },
     "unknownClimb": "Bloque desconocido",
     "attemptOnNth": "al {{ordinal}} intento",
     "totalAttempts": "{{count}} en total",
