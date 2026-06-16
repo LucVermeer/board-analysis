@@ -86,6 +86,7 @@ Boardsesh is a monorepo containing a Next.js 16 application for controlling stan
 - No AI-generated images ever. Real photos or diagrams only.
 - No buzzwords. Concrete numbers and simple language.
 - No unnecessary check-ins. Default to action. Full autonomy except no data deletion without asking.
+- Do not leave completed code or documentation changes local-only. Unless the user explicitly opts out, publish validated changes in a pull request and share the PR with the user.
 
 ## GitHub Issue Fix Workflow
 

@@ -160,6 +160,17 @@ const playlist = {
   updatedAt: '2026-01-01T00:00:00Z',
 } satisfies Playlist;
 
+function makeSheetPlaylist(uuid: string, name: string): Playlist {
+  return { ...playlist, id: uuid, uuid, name };
+}
+
+function renderedPlaylistRowLabels(container: HTMLElement, playlistNames: string[]): string[] {
+  const expectedNames = new Set(playlistNames);
+  return Array.from(container.querySelectorAll('button[aria-label]'))
+    .map((button) => button.getAttribute('aria-label') ?? '')
+    .filter((label) => expectedNames.has(label));
+}
+
 function deferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
   let reject!: (reason?: unknown) => void;
@@ -196,6 +207,24 @@ describe('AddToPlaylistSheet', () => {
     playlistContext.addToPlaylist.mockReset();
     playlistContext.createPlaylist.mockReset();
     toast.showToast.mockReset();
+  });
+
+  it('renders existing playlist rows alphabetically by name', () => {
+    const unsortedPlaylists = [
+      makeSheetPlaylist('p-banana', 'banana'),
+      makeSheetPlaylist('p-apple', 'Apple'),
+      makeSheetPlaylist('p-eclair', 'Éclair'),
+      makeSheetPlaylist('p-cherry', 'cherry'),
+    ];
+    playlistContext.playlists = unsortedPlaylists;
+    const { container } = renderSheet();
+
+    expect(
+      renderedPlaylistRowLabels(
+        container,
+        unsortedPlaylists.map((entry) => entry.name),
+      ),
+    ).toEqual(['Apple', 'banana', 'cherry', 'Éclair']);
   });
 
   it('creates a playlist from the sheet and adds the current climb to it', async () => {
