@@ -76,7 +76,6 @@ vi.mock('../../../lib/session-tick-mapping', () => ({
   }),
 }));
 vi.mock('../../../lib/haptics', () => ({ hapticSelection: () => {} }));
-vi.mock('../../icon-map', () => ({}));
 
 import { SessionTickRow } from '../SessionTickRow';
 
