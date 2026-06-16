@@ -766,6 +766,7 @@
     },
   },
   "patchedDependencies": {
+    "expo-dev-launcher@56.0.18": "patches/expo-dev-launcher@56.0.18.patch",
     "react-native-screens@4.25.2": "patches/react-native-screens@4.25.2.patch",
   },
   "overrides": {
