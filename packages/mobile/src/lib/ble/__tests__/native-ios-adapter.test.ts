@@ -201,6 +201,79 @@ describe('NativeIosBleAdapter connect flow', () => {
     expect(nativeMock.startScan).toHaveBeenCalledWith(['AURORA-UUID']);
   });
 
+  it('deduplicates repeated board names even when native reports a different device id', async () => {
+    let manualPick: (deviceId: string) => void = () => {};
+    const seenDeviceIdsByUpdate: string[][] = [];
+    const adapter = new NativeIosBleAdapter(
+      (subscribe) =>
+        new Promise<string>((resolve) => {
+          manualPick = resolve;
+          subscribe((devices) => {
+            seenDeviceIdsByUpdate.push(devices.map((device) => device.deviceId));
+          });
+        }),
+    );
+    const connectPromise = adapter.requestAndConnect();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    scanListeners[0]?.({
+      device: { deviceId: 'first-native-id', name: 'Kilter Board#751737@3' },
+      localName: 'Kilter Board#751737@3',
+      rssi: -50,
+    });
+    scanListeners[0]?.({
+      device: { deviceId: 'second-native-id', name: 'Kilter Board#751737@3' },
+      localName: 'Kilter Board#751737@3',
+      rssi: -45,
+    });
+
+    manualPick('second-native-id');
+    await vi.runAllTimersAsync();
+    await connectPromise;
+
+    expect(seenDeviceIdsByUpdate).toEqual([[], ['first-native-id'], ['second-native-id']]);
+    expect(nativeMock.connect).toHaveBeenCalledWith('second-native-id');
+  });
+
+  it('replaces an unnamed row when a later scan response adds the board name', async () => {
+    let manualPick: (deviceId: string) => void = () => {};
+    const seenDevicesByUpdate: Array<Array<{ deviceId: string; name?: string }>> = [];
+    const adapter = new NativeIosBleAdapter(
+      (subscribe) =>
+        new Promise<string>((resolve) => {
+          manualPick = resolve;
+          subscribe((devices) => {
+            seenDevicesByUpdate.push(devices.map((device) => ({ deviceId: device.deviceId, name: device.name })));
+          });
+        }),
+    );
+    const connectPromise = adapter.requestAndConnect();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    scanListeners[0]?.({
+      device: { deviceId: 'late-name-device', name: '' },
+      localName: '',
+      rssi: -50,
+    });
+    scanListeners[0]?.({
+      device: { deviceId: 'late-name-device', name: 'Kilter Board#751737@3' },
+      localName: 'Kilter Board#751737@3',
+      rssi: -45,
+    });
+
+    manualPick('late-name-device');
+    await vi.runAllTimersAsync();
+    await connectPromise;
+
+    expect(seenDevicesByUpdate).toEqual([
+      [],
+      [{ deviceId: 'late-name-device', name: undefined }],
+      [{ deviceId: 'late-name-device', name: 'Kilter Board#751737@3' }],
+    ]);
+  });
+
   it('does not mask the original failure when stopScan rejects in the cleanup path', async () => {
     nativeMock.stopScan.mockRejectedValueOnce(new Error('bluetooth turned off'));
     const adapter = new NativeIosBleAdapter(() => Promise.reject(new Error('Device selection cancelled')));

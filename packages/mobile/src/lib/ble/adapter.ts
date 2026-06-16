@@ -10,6 +10,7 @@ import {
 import { bleManager } from './ble-manager';
 import { waitForBlePoweredOn } from './availability';
 import { isLikelyBoardDevice } from './board-device-filter';
+import { upsertDiscoveredDevice } from './scan-device-cache';
 import type { BluetoothAdapter, BleConnection, BoardScanFamily, DevicePickerFn, DiscoveredDevice } from './types';
 import { SCAN_TIMEOUT_MS, SERIAL_RECONNECT_GRACE_MS } from '@boardsesh/ble-protocol/scan-constants';
 
@@ -80,9 +81,9 @@ export class RNBleAdapter implements BluetoothAdapter {
       // Aurora scans can stay service-filtered. MoonBoard scans stay unfiltered
       // so name-prefix controllers without advertised UART still surface.
       const scanServiceUuids = this.scanFamily === 'aurora' ? [AURORA_ADVERTISED_SERVICE_UUID] : null;
-      bleManager.startDeviceScan(scanServiceUuids, null, (scanError, scannedDevice) => {
+      void bleManager.startDeviceScan(scanServiceUuids, null, (scanError, scannedDevice) => {
         if (scanError) {
-          bleManager.stopDeviceScan();
+          void bleManager.stopDeviceScan();
           // Surface the failure immediately so the user sees feedback instead
           // of waiting out the 30s scan window (the picker, if open, closes too).
           rejectSelection(new Error(`BLE scan failed: ${scanError.message}`));
@@ -104,22 +105,14 @@ export class RNBleAdapter implements BluetoothAdapter {
           return;
         }
 
-        // Deduplicate by deviceId — react-native-ble-plx uses stable
-        // peripheral UUIDs on iOS and device addresses on Android. An
-        // unfiltered scan re-fires this callback for every repeat
-        // advertisement, so only update state (and re-render the picker) when
-        // something material changed: a new device, or its name arriving in a
-        // later scan-response packet.
-        const alreadyListed = devices.get(scannedDevice.id);
-        if (alreadyListed && alreadyListed.name === deviceName) return;
-
         const device: DiscoveredDevice = {
           deviceId: scannedDevice.id,
           name: deviceName,
           rssi: scannedDevice.rssi ?? -100,
         };
-        devices.set(device.deviceId, device);
-        pushDevices();
+        if (upsertDiscoveredDevice(devices, device)) {
+          pushDevices();
+        }
 
         // Auto-select the stored board only until the picker takes over.
         if (autoSelecting && targetSerial) {
@@ -142,7 +135,7 @@ export class RNBleAdapter implements BluetoothAdapter {
         : undefined;
 
       scanTimeoutId = setTimeout(() => {
-        bleManager.stopDeviceScan();
+        void bleManager.stopDeviceScan();
         // Belt-and-suspenders: make sure the picker is open even if the grace
         // window never fired.
         if (autoSelecting) openPicker();
@@ -161,7 +154,7 @@ export class RNBleAdapter implements BluetoothAdapter {
     } finally {
       if (pickerFallbackId) clearTimeout(pickerFallbackId);
       if (scanTimeoutId) clearTimeout(scanTimeoutId);
-      bleManager.stopDeviceScan();
+      void bleManager.stopDeviceScan();
     }
 
     let selectedDeviceName: string | undefined;

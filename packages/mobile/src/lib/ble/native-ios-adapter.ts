@@ -7,6 +7,7 @@ import {
 import type { BluetoothAdapter, BleConnection, BoardScanFamily, DevicePickerFn, DiscoveredDevice } from './types';
 import { SCAN_TIMEOUT_MS, SERIAL_RECONNECT_GRACE_MS } from '@boardsesh/ble-protocol/scan-constants';
 import { isLikelyBoardDevice } from './board-device-filter';
+import { upsertDiscoveredDevice } from './scan-device-cache';
 
 /**
  * True when the running binary ships the newer BoardBle native surface
@@ -109,19 +110,14 @@ export class NativeIosBleAdapter implements BluetoothAdapter {
       ) {
         return;
       }
-      // Repeat advertisements of an unchanged device don't need a state
-      // update (or a picker re-render) — only a new device or a late-arriving
-      // name does.
-      const alreadyListed = devices.get(payload.device.deviceId);
-      if (alreadyListed && alreadyListed.name === deviceName) return;
-
       const device: DiscoveredDevice = {
         deviceId: payload.device.deviceId,
         name: deviceName,
         rssi: payload.rssi,
       };
-      devices.set(device.deviceId, device);
-      pushDevices();
+      if (upsertDiscoveredDevice(devices, device)) {
+        pushDevices();
+      }
 
       // Auto-select the stored board only until the picker takes over.
       if (autoSelecting && targetSerial) {
