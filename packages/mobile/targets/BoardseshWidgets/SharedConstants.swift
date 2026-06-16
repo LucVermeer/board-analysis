@@ -25,6 +25,13 @@ enum SharedConstants {
     static let layoutIdKey = "bs_layout_id"
     static let sizeIdKey = "bs_size_id"
     static let setIdsKey = "bs_set_ids"
+    /// File paths to the bundled board-background webp layer(s) for the active
+    /// board, resolved on the JS side (expo-asset) and staged here by
+    /// `startSession`. ThumbnailFetcher composites these behind the server's
+    /// holds-only overlay so the widget shows the board photo without fetching
+    /// board art over the network (the no-network-board-art rule). Empty when no
+    /// bundled background resolved — the overlay is then written as-is.
+    static let boardBackgroundPathsKey = "bs_board_background_paths"
     static let pendingActionKey = "bs_pending_action"
     /// Action ("next" | "previous") associated with the most recent Darwin
     /// notification. Always written by the intent; the Darwin handler reads

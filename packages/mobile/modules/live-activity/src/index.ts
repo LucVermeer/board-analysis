@@ -81,6 +81,14 @@ export type LiveActivityStartSessionOptions = {
   widgetNavigationAllowed: boolean;
   isPartySession: boolean;
   /**
+   * Bundled board-background webp file paths for the active board, resolved on
+   * the JS side (expo-asset) and staged into the App Group so the iOS
+   * ThumbnailFetcher can composite them behind the server's holds-only overlay —
+   * keeping board art off the network. Ordered base layers (drawn first). iOS
+   * only; the Android foreground service ignores it.
+   */
+  boardBackgroundPaths?: string[];
+  /**
    * Localized strings for the Android foreground-service notification. Ignored
    * on iOS (ActivityKit builds its UI in Swift). Supplied so the ongoing
    * notification + its Previous/Next actions respect the app locale instead of

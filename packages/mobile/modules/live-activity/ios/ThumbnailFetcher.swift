@@ -1,11 +1,15 @@
 import Foundation
+import UIKit
 
 // MARK: - ThumbnailFetcher
 
 /// Fetches climb hold-overlay thumbnails from the server and caches them in
 /// the App Group shared container so Live Activities can display them. The
 /// request intentionally omits `include_background=1`; bundled board photos
-/// must not be fetched over the network from native widget code.
+/// must not be fetched over the network from native widget code. Instead the
+/// holds overlay is composited on top of the bundled board-background webp(s)
+/// staged by `LiveActivityModule.startSession` (the no-network-board-art rule),
+/// so the cached thumbnail the widget renders carries the full board photo.
 actor ThumbnailFetcher {
 
     // MARK: - Configuration
@@ -163,7 +167,11 @@ actor ThumbnailFetcher {
                 return nil
             }
 
-            try data.write(to: fileURL, options: .atomic)
+            // Composite the holds overlay over the bundled board background(s)
+            // when they're staged; otherwise persist the raw overlay (the
+            // graceful holds-only fallback for an unbundled board).
+            let imageData = compositeWithBoardBackground(overlayData: data) ?? data
+            try imageData.write(to: fileURL, options: .atomic)
 
             // Evict after writing so we stay within the cache limit.
             // Note: called within the actor, so file I/O runs on the actor's
@@ -176,5 +184,50 @@ actor ThumbnailFetcher {
             // Network or I/O error -- return nil gracefully.
             return nil
         }
+    }
+
+    // MARK: - Background Compositing
+
+    /// Bundled board-background webp file paths staged by `startSession`
+    /// (`SharedConstants.boardBackgroundPathsKey`). Empty when no bundled
+    /// background resolved for the active board.
+    private func stagedBackgroundPaths() -> [String] {
+        sharedDefaults?.stringArray(forKey: SharedConstants.boardBackgroundPathsKey) ?? []
+    }
+
+    /// Draws the holds overlay on top of the staged board-background layer(s),
+    /// returning encoded PNG data. Returns `nil` when there's no usable
+    /// background (so the caller keeps the raw overlay) — never throws.
+    ///
+    /// Both background and overlay fill the same frame at the overlay's pixel
+    /// size: the server renders the overlay in the board's coordinate space and
+    /// each bundled background is that same board image, so an identical fill
+    /// rect keeps the climb circles aligned over the holds. `scale = 1` keeps
+    /// the canvas at the overlay's native pixel size (no 2x/3x upscaling); a
+    /// non-opaque context preserves transparency for boards whose layers don't
+    /// fully cover the frame.
+    private func compositeWithBoardBackground(overlayData: Data) -> Data? {
+        let paths = stagedBackgroundPaths()
+        guard !paths.isEmpty, let overlay = UIImage(data: overlayData) else { return nil }
+
+        let backgroundLayers = paths.compactMap { UIImage(contentsOfFile: $0) }
+        guard !backgroundLayers.isEmpty else { return nil }
+
+        let size = overlay.size
+        guard size.width > 0, size.height > 0 else { return nil }
+
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        format.opaque = false
+
+        let renderer = UIGraphicsImageRenderer(size: size, format: format)
+        let composed = renderer.image { _ in
+            let rect = CGRect(origin: .zero, size: size)
+            for layer in backgroundLayers {
+                layer.draw(in: rect)
+            }
+            overlay.draw(in: rect)
+        }
+        return composed.pngData()
     }
 }

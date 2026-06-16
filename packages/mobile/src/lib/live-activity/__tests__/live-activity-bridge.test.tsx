@@ -4,10 +4,22 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ClimbQueueItem } from '@boardsesh/queue';
 import { LiveActivityBridge } from '../live-activity-bridge';
 
+type QueueNavigateEvent = {
+  action: 'next' | 'previous';
+  currentIndex: number;
+  correlationId: string;
+};
+
+function makeItem(index: number): ClimbQueueItem {
+  return {
+    uuid: `queue-item-${index}`,
+    climb: { uuid: `climb-${index}` },
+  } as unknown as ClimbQueueItem;
+}
+
 const queue = vi.hoisted(() => ({
   sessionId: 'session-1' as string | null,
-  nextClimb: vi.fn(),
-  previousClimb: vi.fn(),
+  dispatchWidgetNavigation: vi.fn(),
   state: {
     queue: [] as ClimbQueueItem[],
     currentClimbQueueItem: null as ClimbQueueItem | null,
@@ -15,7 +27,7 @@ const queue = vi.hoisted(() => ({
 }));
 
 const widget = vi.hoisted(() => ({
-  listener: null as null | ((event: { action: 'next' | 'previous' }) => void),
+  listener: null as null | ((event: QueueNavigateEvent) => void),
   useLiveActivity: vi.fn(),
 }));
 
@@ -27,8 +39,7 @@ vi.mock('../../../providers/queue-provider', () => ({
   useQueue: () => ({
     state: queue.state,
     sessionId: queue.sessionId,
-    nextClimb: queue.nextClimb,
-    previousClimb: queue.previousClimb,
+    dispatchWidgetNavigation: queue.dispatchWidgetNavigation,
   }),
 }));
 
@@ -37,7 +48,7 @@ vi.mock('../use-live-activity', () => ({
 }));
 
 vi.mock('../live-activity-plugin', () => ({
-  addWidgetQueueNavigateListener: (listener: (event: { action: 'next' | 'previous' }) => void) => {
+  addWidgetQueueNavigateListener: (listener: (event: QueueNavigateEvent) => void) => {
     widget.listener = listener;
     return () => {
       widget.listener = null;
@@ -45,35 +56,61 @@ vi.mock('../live-activity-plugin', () => ({
   },
 }));
 
-const climbItem = {
-  uuid: 'queue-item-1',
-  climb: { uuid: 'climb-1' },
-} as unknown as ClimbQueueItem;
+const climbItem = makeItem(0);
 
 function renderBridge() {
   return render(<LiveActivityBridge boardName="kilter" layoutId={1} sizeId={10} setIds="1,2" />);
 }
 
 describe('LiveActivityBridge widget navigation (always-live)', () => {
+  const threeItemQueue = [makeItem(0), makeItem(1), makeItem(2)];
+
   beforeEach(() => {
     queue.sessionId = 'session-1';
-    queue.state = { queue: [], currentClimbQueueItem: null };
-    queue.nextClimb.mockClear();
-    queue.previousClimb.mockClear();
+    queue.state = { queue: threeItemQueue, currentClimbQueueItem: threeItemQueue[0] };
+    queue.dispatchWidgetNavigation.mockClear();
     widget.listener = null;
     widget.useLiveActivity.mockClear();
+  });
+
+  it('navigates to the absolute index the widget reports (not a relative step)', () => {
+    renderBridge();
+
+    act(() => {
+      widget.listener?.({ action: 'next', currentIndex: 1, correlationId: 'widget-navigate' });
+    });
+
+    // Maps currentIndex → queue[currentIndex] and forwards the correlationId so
+    // the racing CurrentClimbChanged echo is suppressed by the reducer.
+    expect(queue.dispatchWidgetNavigation).toHaveBeenCalledTimes(1);
+    expect(queue.dispatchWidgetNavigation).toHaveBeenCalledWith(threeItemQueue[1], 'widget-navigate');
+  });
+
+  it('does not double-advance: a single tap dispatches exactly one absolute move', () => {
+    renderBridge();
+
+    act(() => {
+      widget.listener?.({ action: 'previous', currentIndex: 0, correlationId: 'widget-navigate' });
+    });
+
+    expect(queue.dispatchWidgetNavigation).toHaveBeenCalledTimes(1);
+    expect(queue.dispatchWidgetNavigation).toHaveBeenCalledWith(threeItemQueue[0], 'widget-navigate');
+  });
+
+  it('ignores out-of-range indices instead of wrapping or crashing', () => {
+    renderBridge();
+
+    act(() => {
+      widget.listener?.({ action: 'next', currentIndex: 99, correlationId: 'widget-navigate' });
+      widget.listener?.({ action: 'previous', currentIndex: -1, correlationId: 'widget-navigate' });
+    });
+
+    expect(queue.dispatchWidgetNavigation).not.toHaveBeenCalled();
   });
 
   it('always allows widget navigation in a party session (no driver gate)', () => {
     renderBridge();
 
-    act(() => {
-      widget.listener?.({ action: 'next' });
-      widget.listener?.({ action: 'previous' });
-    });
-
-    expect(queue.nextClimb).toHaveBeenCalledOnce();
-    expect(queue.previousClimb).toHaveBeenCalledOnce();
     expect(widget.useLiveActivity).toHaveBeenCalledWith(
       expect.objectContaining({
         widgetNavigationAllowed: true,
@@ -87,10 +124,10 @@ describe('LiveActivityBridge widget navigation (always-live)', () => {
     renderBridge();
 
     act(() => {
-      widget.listener?.({ action: 'next' });
+      widget.listener?.({ action: 'next', currentIndex: 1, correlationId: 'widget-navigate' });
     });
 
-    expect(queue.nextClimb).toHaveBeenCalledOnce();
+    expect(queue.dispatchWidgetNavigation).toHaveBeenCalledWith(threeItemQueue[1], 'widget-navigate');
     expect(widget.useLiveActivity).toHaveBeenCalledWith(
       expect.objectContaining({
         widgetNavigationAllowed: true,

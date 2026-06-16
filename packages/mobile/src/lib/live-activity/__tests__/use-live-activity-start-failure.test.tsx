@@ -12,6 +12,13 @@ vi.mock('../../auth-store', () => ({
   getAuthToken: vi.fn().mockResolvedValue('token-abc'),
 }));
 
+// Stub the bundled board-art resolver the start path lazily imports on iOS, so
+// the dynamic import resolves deterministically (and never pulls expo-asset into
+// the test env). The start-failure behaviour under test is independent of it.
+vi.mock('../../background-image-cache', () => ({
+  ensureBackgroundsCached: vi.fn().mockResolvedValue({ paths: [], missingCount: 0 }),
+}));
+
 const plugin = vi.hoisted(() => ({
   startLiveActivitySession: vi.fn(),
   endLiveActivitySession: vi.fn().mockResolvedValue(undefined),
@@ -57,12 +64,14 @@ function Harness() {
   return null;
 }
 
-// Flush the availability + auth-token promises and the resulting effects.
+// Flush the availability + auth-token promises, the lazily-imported board-art
+// resolver, and the resulting effects. Macrotask turns drain the dynamic
+// import()'s microtask chain reliably regardless of how many ticks it needs.
 async function flushStart() {
   await act(async () => {
-    await Promise.resolve();
-    await Promise.resolve();
-    await Promise.resolve();
+    for (let turn = 0; turn < 4; turn++) {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
   });
 }
 
