@@ -12,6 +12,7 @@ import { PlaylistFormSheet, type PlaylistFormValues } from './playlist';
 import { useToast } from '../providers/toast-provider';
 import { usePlaylistsContext, type Playlist } from '../providers/playlists-provider';
 import { useTheme } from '../providers/theme-provider';
+import { sortPlaylistsByName } from '../lib/sort-filter-playlists';
 import { iosSystemColors } from '../theme/ios-colors';
 import { borderRadius, spacing } from '../theme/tokens';
 
@@ -54,6 +55,7 @@ function AddToPlaylistSheet({
   // then no-ops the next present()). Mirrors LogAscentSheet.
   const isPresentedRef = useRef(false);
   const createRequestIdRef = useRef(0);
+  const sortedPlaylists = useMemo(() => sortPlaylistsByName(playlists), [playlists]);
 
   useEffect(() => {
     if (visible && climb && !isPresentedRef.current) {
@@ -205,14 +207,14 @@ function AddToPlaylistSheet({
           <View style={styles.message}>
             <ActivityIndicator />
           </View>
-        ) : playlists.length === 0 ? (
+        ) : sortedPlaylists.length === 0 ? (
           <View style={styles.message}>
             <Text variant="subheadline" color={iosSystemColors.systemGray}>
               {t('actions.playlist.popover.empty')}
             </Text>
           </View>
         ) : (
-          playlists.map((playlist, index) => {
+          sortedPlaylists.map((playlist, index) => {
             const accent = validHexColor(playlist.color);
             return (
               <ListRow
@@ -223,7 +225,7 @@ function AddToPlaylistSheet({
                 onPress={() => {
                   void handleAddToPlaylist(playlist);
                 }}
-                showSeparator={index < playlists.length - 1}
+                showSeparator={index < sortedPlaylists.length - 1}
               />
             );
           })

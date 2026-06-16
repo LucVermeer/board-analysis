@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { Playlist } from '@boardsesh/graphql/operations/playlists';
-import { sortAndFilterPlaylists } from '../sort-filter-playlists';
+import { sortAndFilterPlaylists, sortPlaylistsByName } from '../sort-filter-playlists';
 
 // A minimal Playlist factory — the helper only reads `name`, so the rest is
 // padding to satisfy the type.
@@ -24,6 +24,17 @@ function playlist(name: string): Playlist {
 const names = (playlists: Playlist[]) => playlists.map((entry) => entry.name);
 
 describe('sortAndFilterPlaylists', () => {
+  it('sorts playlists by name without applying a filter', () => {
+    const input = [playlist('warmups'), playlist('Projects'), playlist('anti-style')];
+    expect(names(sortPlaylistsByName(input))).toEqual(['anti-style', 'Projects', 'warmups']);
+  });
+
+  it('does not mutate the input array when sorting by name', () => {
+    const input = [playlist('b'), playlist('a')];
+    sortPlaylistsByName(input);
+    expect(names(input)).toEqual(['b', 'a']);
+  });
+
   it('sorts alphabetically, case- and accent-insensitively', () => {
     const input = [playlist('banana'), playlist('Apple'), playlist('Éclair'), playlist('cherry')];
     expect(names(sortAndFilterPlaylists(input, ''))).toEqual(['Apple', 'banana', 'cherry', 'Éclair']);
