@@ -52,6 +52,15 @@ vi.mock('../../providers/theme-provider', () => ({
     systemColors: { secondaryBackground: '#1C1C1E', elevatedSurface: '#2C2C2E' },
     colorScheme: 'dark',
     variant: ctrl.variant,
+    m3SurfaceContainers: { lowest: '#101018', low: '#202028', base: '#303038', high: '#404048', highest: '#505058' },
+    materialElevation: {
+      level0: { elevation: 0 },
+      level1: { elevation: 1, shadowOpacity: 0.1 },
+      level2: { elevation: 2 },
+      level3: { elevation: 3, shadowOpacity: 0.14 },
+      level4: { elevation: 4 },
+      level5: { elevation: 5 },
+    },
   }),
 }));
 
@@ -154,5 +163,25 @@ describe('GlassSurface fallback hierarchy', () => {
     const { queryByTestId, container } = render(<GlassSurface tintColor="rgba(1, 2, 3, 0.2)" />);
     expect(queryByTestId('glass-view')?.getAttribute('data-tint')).toBe('rgba(1, 2, 3, 0.2)');
     expect(container.querySelector('[data-bg="rgba(1, 2, 3, 0.2)"]')).toBeNull();
+  });
+});
+
+describe('GlassSurface Material surface-container role', () => {
+  it('paints the role tone (not the legacy base) on the Material branch', () => {
+    ctrl.variant = 'material';
+    const { container } = render(<GlassSurface role="low" />);
+    // The `low` container tone is the surface...
+    expect(container.querySelector('[data-bg="#202028"]')).not.toBeNull();
+    // ...and the legacy opaque secondary-background base is no longer used.
+    expect(container.querySelector('[data-bg="#1C1C1E"]')).toBeNull();
+  });
+
+  it('lets the role tone win over an opaque fallbackColor (no cover-up)', () => {
+    // A role IS the surface; an opaque fallback would hide it, so it must be
+    // skipped (unlike the no-role case, where the fallback composites over base).
+    ctrl.variant = 'material';
+    const { container } = render(<GlassSurface role="base" fallbackColor="#FFFFFF" />);
+    expect(container.querySelector('[data-bg="#303038"]')).not.toBeNull();
+    expect(container.querySelector('[data-bg="#FFFFFF"]')).toBeNull();
   });
 });

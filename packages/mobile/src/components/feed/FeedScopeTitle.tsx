@@ -62,6 +62,8 @@ export function FeedScopeTitle({ title, actions, onSelectIndex, accessibilityHin
             translucent control rather than frosted chrome. */}
         <GlassSurface
           glassEffectStyle="clear"
+          // Floating scope pill = M3 surfaceContainer tone on Material.
+          role="base"
           fallbackColor={systemColors.elevatedSurface}
           borderRadius={PILL_RADIUS}
           style={StyleSheet.absoluteFill}
