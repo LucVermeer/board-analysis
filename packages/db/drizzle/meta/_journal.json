@@ -911,6 +911,13 @@
       "when": 1781421916949,
       "tag": "0129_numerous_star_brand",
       "breakpoints": true
+    },
+    {
+      "idx": 130,
+      "version": "7",
+      "when": 1781572944000,
+      "tag": "0130_vote_count_skip_guard",
+      "breakpoints": true
     }
   ]
 }

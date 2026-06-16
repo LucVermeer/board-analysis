@@ -166,6 +166,8 @@ export default defineConfig({
       },
       'db:dedupe-gyms': {
         command: 'bun run --filter=@boardsesh/db db:dedupe-gyms',
+        // Intentionally no db:up dependency: this maintenance/reporting command
+        // often targets DB_URL against a remote database instead of local Docker.
         cache: false,
       },
       'test:db': {

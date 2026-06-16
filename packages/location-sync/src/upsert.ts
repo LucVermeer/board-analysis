@@ -14,7 +14,6 @@ import { isValidCoordinate } from './coords';
 import type { LocationSyncSummary, PublicBoardLocationInput, SkippedLocationRecord } from './types';
 import {
   chooseCanonicalGymCandidate,
-  normalizeGymName,
   PHYSICAL_GYM_MATCH_DISTANCE_METERS,
   type CanonicalGymCandidate,
 } from '@boardsesh/db/queries';
@@ -139,7 +138,6 @@ async function findAliasedGymId(db: DrizzleDb, sourceKey: string): Promise<numbe
 }
 
 async function findPhysicalGymMatch(db: DrizzleDb, record: ValidBoardLocation): Promise<CanonicalGymCandidate | null> {
-  const normalizedGymName = normalizeGymName(record.gymName);
   const result = await db.execute(sql`
     WITH candidate_gyms AS (
       SELECT
@@ -159,7 +157,8 @@ async function findPhysicalGymMatch(db: DrizzleDb, record: ValidBoardLocation): 
         AND g.is_public = true
         AND g.deleted_at IS NULL
         AND g.location IS NOT NULL
-        AND lower(regexp_replace(trim(g.name), '[[:space:]]+', ' ', 'g')) = ${normalizedGymName}
+        AND lower(regexp_replace(trim(g.name), '[[:space:]]+', ' ', 'g')) =
+            lower(regexp_replace(trim(${record.gymName}), '[[:space:]]+', ' ', 'g'))
         AND ST_DWithin(
           g.location,
           ST_MakePoint(${record.longitude}, ${record.latitude})::geography,
@@ -296,13 +295,12 @@ async function resolveGymIdForSourceWithLock(
   sourceKey: string,
   record: ValidBoardLocation,
 ): Promise<number | null> {
-  const normalizedGymName = normalizeGymName(record.gymName);
   return db.transaction(async (transaction) => {
     const transactionDb = transaction as unknown as DrizzleDb;
     await transactionDb.execute(sql`
       SELECT pg_advisory_xact_lock(
         hashtext('boardsesh:location-sync:gym-name'),
-        hashtext(${normalizedGymName})
+        hashtext(lower(regexp_replace(trim(${record.gymName}), '[[:space:]]+', ' ', 'g')))
       )
     `);
     return resolveGymIdForSource(transactionDb, sourceKey, record);

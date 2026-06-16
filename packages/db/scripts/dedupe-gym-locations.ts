@@ -19,7 +19,6 @@ import {
   compareCanonicalGymCandidates,
   groupPhysicalGymCandidates,
   hasText,
-  normalizeGymName,
   PHYSICAL_GYM_MATCH_DISTANCE_METERS,
   type CanonicalGymCandidate,
   type PhysicalGymCluster,
@@ -250,9 +249,8 @@ async function executeCount(commandDb: ExecuteDb, query: SQLWrapper): Promise<nu
 }
 
 async function fetchCandidates(commandDb: ExecuteDb, onlyName: string | null): Promise<CanonicalGymCandidate[]> {
-  const normalizedNameFilter = onlyName ? normalizeGymName(onlyName) : null;
-  const nameClause = normalizedNameFilter
-    ? sql`AND lower(regexp_replace(trim(g.name), '[[:space:]]+', ' ', 'g')) = ${normalizedNameFilter}`
+  const nameClause = onlyName
+    ? sql`AND lower(regexp_replace(trim(g.name), '[[:space:]]+', ' ', 'g')) = lower(regexp_replace(trim(${onlyName}), '[[:space:]]+', ' ', 'g'))`
     : sql``;
 
   const rows = await executeRows<CandidateDatabaseRow>(
@@ -338,6 +336,33 @@ async function fetchCandidatesForApply(commandDb: ExecuteDb, gymIds: number[]): 
           AND g.longitude IS NOT NULL
           AND g.location IS NOT NULL
         FOR UPDATE
+      ),
+      board_counts AS (
+        SELECT board.gym_id, count(*)::int AS count
+        FROM user_boards board
+        INNER JOIN locked_gyms locked_gym ON locked_gym.id = board.gym_id
+        WHERE board.deleted_at IS NULL
+        GROUP BY board.gym_id
+      ),
+      member_counts AS (
+        SELECT gym_member.gym_id, count(*)::int AS count
+        FROM gym_members gym_member
+        INNER JOIN locked_gyms locked_gym ON locked_gym.id = gym_member.gym_id
+        GROUP BY gym_member.gym_id
+      ),
+      follower_counts AS (
+        SELECT gym_follow.gym_id, count(*)::int AS count
+        FROM gym_follows gym_follow
+        INNER JOIN locked_gyms locked_gym ON locked_gym.id = gym_follow.gym_id
+        GROUP BY gym_follow.gym_id
+      ),
+      comment_counts AS (
+        SELECT gym_comment.entity_id, count(*)::int AS count
+        FROM comments gym_comment
+        INNER JOIN locked_gyms locked_gym ON locked_gym.uuid = gym_comment.entity_id
+        WHERE gym_comment.entity_type = 'gym'
+          AND gym_comment.deleted_at IS NULL
+        GROUP BY gym_comment.entity_id
       )
       SELECT
         g.id AS "id",
@@ -351,29 +376,15 @@ async function fetchCandidatesForApply(commandDb: ExecuteDb, gymIds: number[]): 
         g.latitude AS "latitude",
         g.longitude AS "longitude",
         g.created_at AS "createdAt",
-        (
-          SELECT count(*)::int
-          FROM user_boards board
-          WHERE board.gym_id = g.id AND board.deleted_at IS NULL
-        ) AS "boardCount",
-        (
-          SELECT count(*)::int
-          FROM gym_members gym_member
-          WHERE gym_member.gym_id = g.id
-        ) AS "memberCount",
-        (
-          SELECT count(*)::int
-          FROM gym_follows gym_follow
-          WHERE gym_follow.gym_id = g.id
-        ) AS "followerCount",
-        (
-          SELECT count(*)::int
-          FROM comments gym_comment
-          WHERE gym_comment.entity_type = 'gym'
-            AND gym_comment.deleted_at IS NULL
-            AND gym_comment.entity_id = g.uuid
-        ) AS "commentCount"
+        COALESCE(board_counts.count, 0)::int AS "boardCount",
+        COALESCE(member_counts.count, 0)::int AS "memberCount",
+        COALESCE(follower_counts.count, 0)::int AS "followerCount",
+        COALESCE(comment_counts.count, 0)::int AS "commentCount"
       FROM locked_gyms g
+      LEFT JOIN board_counts ON board_counts.gym_id = g.id
+      LEFT JOIN member_counts ON member_counts.gym_id = g.id
+      LEFT JOIN follower_counts ON follower_counts.gym_id = g.id
+      LEFT JOIN comment_counts ON comment_counts.entity_id = g.uuid
       ORDER BY lower(g.name), g.id
     `,
   );
@@ -406,12 +417,8 @@ async function refetchClusterForApply(
   return matchingCluster;
 }
 
-async function disableVoteCountTrigger(commandDb: ExecuteDb): Promise<void> {
-  await commandDb.execute(sql`ALTER TABLE votes DISABLE TRIGGER votes_count_trigger`);
-}
-
-async function enableVoteCountTrigger(commandDb: ExecuteDb): Promise<void> {
-  await commandDb.execute(sql`ALTER TABLE votes ENABLE TRIGGER votes_count_trigger`);
+async function setVoteCountMaintenanceSkipped(commandDb: ExecuteDb, skipped: boolean): Promise<void> {
+  await commandDb.execute(sql`SELECT set_config('boardsesh.skip_vote_counts', ${skipped ? 'on' : 'off'}, true)`);
 }
 
 async function rebuildGymVoteCounts(commandDb: ExecuteDb, gymUuids: string[]): Promise<void> {
@@ -628,56 +635,51 @@ export async function mergeGymCluster(
 
   let votesUpserted = 0;
   let votesDeleted = 0;
-  await disableVoteCountTrigger(commandDb);
-  try {
-    votesUpserted = await executeCount(
-      commandDb,
-      sql`
-        WITH latest_votes AS (
-          SELECT DISTINCT ON (user_id)
-                 user_id,
-                 value,
-                 created_at
-            FROM votes
-           WHERE entity_type = 'gym'::social_entity_type
-             AND entity_id IN (${allGymUuidList})
-           ORDER BY user_id, created_at DESC, id DESC
-        ),
-        upserted AS (
-          INSERT INTO votes (user_id, entity_type, entity_id, value, created_at)
-          SELECT user_id,
-                 'gym'::social_entity_type,
-                 ${canonicalGym.uuid},
-                 value,
-                 created_at
-            FROM latest_votes
-          ON CONFLICT (user_id, entity_type, entity_id) DO UPDATE
-            SET value = excluded.value,
-                created_at = excluded.created_at
-          RETURNING 1
-        )
-        SELECT count(*)::int AS count FROM upserted
-      `,
-    );
+  await setVoteCountMaintenanceSkipped(commandDb, true);
+  votesUpserted = await executeCount(
+    commandDb,
+    sql`
+      WITH latest_votes AS (
+        SELECT DISTINCT ON (user_id)
+               user_id,
+               value,
+               created_at
+          FROM votes
+         WHERE entity_type = 'gym'::social_entity_type
+           AND entity_id IN (${allGymUuidList})
+         ORDER BY user_id, created_at DESC, id DESC
+      ),
+      upserted AS (
+        INSERT INTO votes (user_id, entity_type, entity_id, value, created_at)
+        SELECT user_id,
+               'gym'::social_entity_type,
+               ${canonicalGym.uuid},
+               value,
+               created_at
+          FROM latest_votes
+        ON CONFLICT (user_id, entity_type, entity_id) DO UPDATE
+          SET value = excluded.value,
+              created_at = excluded.created_at
+        RETURNING 1
+      )
+      SELECT count(*)::int AS count FROM upserted
+    `,
+  );
 
-    votesDeleted = await executeCount(
-      commandDb,
-      sql`
-        WITH deleted AS (
-          DELETE FROM votes
-           WHERE entity_type = 'gym'::social_entity_type
-             AND entity_id IN (${duplicateGymUuidList})
-           RETURNING 1
-        )
-        SELECT count(*)::int AS count FROM deleted
-      `,
-    );
-    await rebuildGymVoteCounts(commandDb, [canonicalGym.uuid, ...duplicateGymUuids]);
-  } catch (error: unknown) {
-    await enableVoteCountTrigger(commandDb).catch(() => {});
-    throw error;
-  }
-  await enableVoteCountTrigger(commandDb);
+  votesDeleted = await executeCount(
+    commandDb,
+    sql`
+      WITH deleted AS (
+        DELETE FROM votes
+         WHERE entity_type = 'gym'::social_entity_type
+           AND entity_id IN (${duplicateGymUuidList})
+         RETURNING 1
+      )
+      SELECT count(*)::int AS count FROM deleted
+    `,
+  );
+  await rebuildGymVoteCounts(commandDb, [canonicalGym.uuid, ...duplicateGymUuids]);
+  await setVoteCountMaintenanceSkipped(commandDb, false);
 
   const duplicateGymsSoftDeleted = await executeCount(
     commandDb,
