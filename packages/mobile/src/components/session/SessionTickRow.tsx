@@ -145,6 +145,7 @@ export const SessionTickRow = memo(function SessionTickRow({
             angle={tick.angle}
             subtitleDetailParts={detailParts}
             showAscentStatus={false}
+            primarySubtitleOverride={isMultiUser ? (participant?.displayName ?? null) : null}
           />
         </PressableSurface>
         <View style={[styles.separator, { backgroundColor: systemColors.separator }]} />

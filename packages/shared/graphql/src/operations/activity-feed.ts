@@ -183,6 +183,8 @@ export const GET_SESSION_DETAIL = gql`
         climbedAt
         upvotes
         totalAttempts
+        # boardId is kept for BetaLinksGqlRow type parity and flows through
+        # dedupeBetaLinks — it is not displayed by the session-detail carousel.
         betaLinks {
           climbUuid
           link
