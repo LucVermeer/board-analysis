@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { boardHistoryCursor } from '@boardsesh/board-presence-react';
 import type { Client } from '@boardsesh/graphql-client';
 import type { BoardPresenceEvent, ClimbQueueItemInput } from '@boardsesh/shared-schema';
 
@@ -97,7 +98,10 @@ describe('createMobileBoardPresenceClient', () => {
     const history = [makeClimb('h1'), makeClimb('h2')];
     transport.execute.mockResolvedValue({ boardHistory: history });
 
-    const climbs = await createMobileBoardPresenceClient(getClient).fetchHistory(7, { limit: 25, before: '900' });
+    const climbs = await createMobileBoardPresenceClient(getClient).fetchHistory(7, {
+      limit: 25,
+      before: boardHistoryCursor(900),
+    });
 
     expect(climbs).toEqual(history);
     const [passedClient, operation] = transport.execute.mock.calls[0];

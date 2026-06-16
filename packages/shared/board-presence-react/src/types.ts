@@ -19,13 +19,13 @@ import type {
  * row from the previous page. `seq` is a number everywhere else, but the
  * GraphQL `boardHistory(before: String)` arg is a String and rejects a
  * non-integer `before` with BAD_USER_INPUT — so always stringify the seq.
- * Build it with `boardHistoryCursor` instead of calling `.toString()` ad hoc.
+ * Branded so the only way to make one is `boardHistoryCursor`, never an ad-hoc string.
  */
-export type BoardHistoryCursor = string;
+export type BoardHistoryCursor = string & { readonly _brand: 'BoardHistoryCursor' };
 
 /** Cursor for the next page back: the `seq` of a climb (or a raw seq), stringified. */
 export function boardHistoryCursor(climbOrSeq: BoardPresenceClimb | number): BoardHistoryCursor {
-  return (typeof climbOrSeq === 'number' ? climbOrSeq : climbOrSeq.seq).toString();
+  return (typeof climbOrSeq === 'number' ? climbOrSeq : climbOrSeq.seq).toString() as BoardHistoryCursor;
 }
 
 export interface BoardPresenceClient {
