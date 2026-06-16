@@ -925,6 +925,13 @@
       "when": 1781587200000,
       "tag": "0131_aurora_credential_backoff",
       "breakpoints": true
+    },
+    {
+      "idx": 132,
+      "version": "7",
+      "when": 1781593514313,
+      "tag": "0132_system_catalog_serial_uniqueness",
+      "breakpoints": true
     }
   ]
 }

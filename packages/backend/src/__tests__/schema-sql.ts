@@ -394,9 +394,11 @@ export const schemaSQL = `
   -- Board presence: serials are not globally unique (the supplier reuses them),
   -- so a serial may map to many active boards. We only forbid one owner binding
   -- the same serial to two of their own boards; the user disambiguates the rest.
+  -- Excludes the system user (seeded public catalog boards) so the location
+  -- sync can mirror the upstream catalog's duplicate serials verbatim.
   CREATE UNIQUE INDEX IF NOT EXISTS "user_boards_unique_owner_serial"
     ON "user_boards" ("owner_id", "serial_number")
-    WHERE "serial_number" IS NOT NULL AND "serial_number" <> '' AND "deleted_at" IS NULL;
+    WHERE "serial_number" IS NOT NULL AND "serial_number" <> '' AND "deleted_at" IS NULL AND "owner_id" != '00000000-0000-0000-0000-000000000000';
   CREATE INDEX IF NOT EXISTS "user_boards_serial_idx"
     ON "user_boards" ("serial_number")
     WHERE "serial_number" IS NOT NULL AND "serial_number" <> '' AND "deleted_at" IS NULL;
