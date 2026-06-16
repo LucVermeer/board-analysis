@@ -96,8 +96,16 @@ export const SessionTickRow = memo(function SessionTickRow({
 
   const meta = statusMeta(tick.status);
   const attemptText = formatAttemptText(tick, t);
-  const subtitleParts = [attemptText, tick.comment ?? null].filter((part): part is string => !!part);
-  const subtitle = subtitleParts.length > 0 ? subtitleParts.join(' · ') : undefined;
+  // The setter moves out of the climb's primary subtitle into the detail line,
+  // explicitly labelled, so it's never misread as the person who sent the climb.
+  const setterText = tick.setterUsername ? t('detail.setBy', { username: tick.setterUsername }) : null;
+  const detailParts = [attemptText, tick.comment ?? null, setterText].filter((part): part is string => !!part);
+  // In multi-user sessions the sender is the key identity — the leading avatar
+  // alone wasn't enough to tell who sent what, so name them on their own line.
+  // Solo sessions don't need it (every climb is the viewer's own).
+  const senderName = isMultiUser ? (participant?.displayName ?? null) : null;
+  const fallbackSubtitle =
+    [senderName, ...detailParts].filter((part): part is string => !!part).join(' · ') || undefined;
 
   // SessionDetail carries no per-tick comment count (only a session-level one),
   // so the comment button opens the sheet without a count badge — FeedSocialRow
@@ -141,7 +149,8 @@ export const SessionTickRow = memo(function SessionTickRow({
             sizeId={boardConfig.sizeId}
             setIds={boardConfig.setIds.join(',')}
             angle={tick.angle}
-            subtitleDetailParts={subtitleParts}
+            subtitleDetailParts={detailParts}
+            primarySubtitleOverride={senderName}
             showAscentStatus={false}
           />
           <FeedSocialRow
@@ -166,7 +175,7 @@ export const SessionTickRow = memo(function SessionTickRow({
   return (
     <ListRow
       title={tick.climbName ?? t('detail.unknownClimb')}
-      subtitle={subtitle}
+      subtitle={fallbackSubtitle}
       onPress={handlePress}
       leading={
         isMultiUser ? (

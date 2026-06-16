@@ -8,6 +8,7 @@ import { isInstagramUrl, isTikTokUrl } from '@boardsesh/shared-schema';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { Text } from '../Text';
 import { Icon } from '../Icon';
+import { Avatar } from '../Avatar';
 import type { IconName } from '../icon-map';
 import { useToast } from '../../providers/toast-provider';
 import { track } from '../../lib/analytics';
@@ -20,9 +21,16 @@ export const BETA_CARD_HEIGHT = BETA_CARD_WIDTH / BETA_CARD_ASPECT_RATIO;
 
 type Props = {
   link: BetaLink;
+  /**
+   * Crew attribution: the session participant who attached this clip. When set,
+   * the card labels the uploader (avatar + name) instead of the original poster's
+   * @handle — answering "whose beta is this" on a multi-user session shelf.
+   */
+  uploaderName?: string | null;
+  uploaderAvatarUrl?: string | null;
 };
 
-export const BetaVideoCard = memo(function BetaVideoCard({ link }: Props) {
+export const BetaVideoCard = memo(function BetaVideoCard({ link, uploaderName, uploaderAvatarUrl }: Props) {
   const { t } = useTranslation('session');
   const { showToast } = useToast();
   const [imageFailed, setImageFailed] = useState(false);
@@ -47,9 +55,11 @@ export const BetaVideoCard = memo(function BetaVideoCard({ link }: Props) {
 
   const platform = detectPlatform(link.link);
   const username = link.foreign_username?.trim();
-  const accessibilityLabel = username
-    ? t('mobile.betaVideos.cardLabelWithUser', { username })
-    : t('mobile.betaVideos.cardLabel');
+  const accessibilityLabel = uploaderName
+    ? t('mobile.betaVideos.cardLabelByUploader', { name: uploaderName })
+    : username
+      ? t('mobile.betaVideos.cardLabelWithUser', { username })
+      : t('mobile.betaVideos.cardLabel');
 
   return (
     <Pressable
@@ -83,13 +93,20 @@ export const BetaVideoCard = memo(function BetaVideoCard({ link }: Props) {
         </View>
       )}
 
-      {username && (
+      {uploaderName ? (
+        <View style={[styles.usernamePill, styles.uploaderPill]}>
+          <Avatar uri={uploaderAvatarUrl ?? undefined} name={uploaderName} size={16} />
+          <Text variant="caption2" color={iosSystemColors.white} numberOfLines={1} style={styles.uploaderName}>
+            {uploaderName}
+          </Text>
+        </View>
+      ) : username ? (
         <View style={styles.usernamePill}>
           <Text variant="caption2" color={iosSystemColors.white} numberOfLines={1}>
             @{username}
           </Text>
         </View>
-      )}
+      ) : null}
     </Pressable>
   );
 });
@@ -143,4 +160,11 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.full,
     backgroundColor: 'rgba(0,0,0,0.55)',
   },
+  uploaderPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[1],
+    paddingLeft: 2,
+  },
+  uploaderName: { flexShrink: 1 },
 });

@@ -159,12 +159,10 @@
     },
     "hardest": "Más difícil",
     "betaEyebrow": "Beta",
-    "hardestSend": "Encadene más difícil",
+    "betaBy": "Beta de {{name}}",
     "unknownClimb": "Bloque desconocido",
     "attempts_one": "{{count}} intento",
     "attempts_other": "{{count}} intentos",
-    "chartEmpty": "Aún no hay grados",
-    "chartLabel": "Gráfico de grados",
     "openHint": "Abre la sesión",
     "openHardestClimb": "Abrir {{climb}}"
   },

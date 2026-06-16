@@ -59,6 +59,13 @@ type ClimbListItemContentProps = {
    * history row's leading badge) so it isn't duplicated beside the grade.
    */
   showAscentStatus?: boolean;
+  /**
+   * Overrides the computed primary subtitle (the sends · quality★ · setter line).
+   * `undefined` (default) keeps the computed line; a string replaces it; `null`
+   * hides it entirely. Session rows use this to show the sender's name (multi-user)
+   * or nothing (solo), having moved the setter into the detail line as "set by X".
+   */
+  primarySubtitleOverride?: string | null;
 };
 
 /**
@@ -116,6 +123,7 @@ const ClimbListItemContent = React.memo(function ClimbListItemContent({
   angle,
   subtitleDetailParts,
   showAscentStatus = true,
+  primarySubtitleOverride,
 }: ClimbListItemContentProps) {
   const { t } = useTranslation('climbs');
   const { formatGrade } = useGradeFormat();
@@ -123,8 +131,11 @@ const ClimbListItemContent = React.memo(function ClimbListItemContent({
   const gradeColor = getGradeColor(climb.difficulty) ?? DEFAULT_GRADE_COLOR;
   const formattedGrade = formatGrade(climb.difficulty);
 
-  // Subtitle parts: sends · quality★ · setter (each dropped when absent).
+  // Subtitle parts: sends · quality★ · setter (each dropped when absent). A
+  // caller-supplied override wins outright — a string replaces the line, null
+  // hides it — so session rows can show the sender instead.
   const subtitleText = useMemo(() => {
+    if (primarySubtitleOverride !== undefined) return primarySubtitleOverride;
     const parts: string[] = [];
     if (climb.is_draft) {
       parts.push(t('createClimbForm.draftBadge'));
@@ -140,7 +151,14 @@ const ClimbListItemContent = React.memo(function ClimbListItemContent({
       parts.push(climb.setter_username);
     }
     return parts.length > 0 ? parts.join(' · ') : t('mobile.climbRow.projectFallback');
-  }, [climb.is_draft, climb.ascensionist_count, climb.quality_average, climb.setter_username, t]);
+  }, [
+    primarySubtitleOverride,
+    climb.is_draft,
+    climb.ascensionist_count,
+    climb.quality_average,
+    climb.setter_username,
+    t,
+  ]);
 
   const subtitleDetailText = useMemo(() => {
     const parts = subtitleDetailParts?.filter((part) => part.length > 0) ?? [];
@@ -169,9 +187,11 @@ const ClimbListItemContent = React.memo(function ClimbListItemContent({
           </Text>
           <ClimbAttributeIcons isNoMatch={climb.is_no_match} benchmarkDifficulty={climb.benchmark_difficulty} />
         </View>
-        <Text variant="footnote" numberOfLines={1} style={styles.subtitle}>
-          {subtitleText}
-        </Text>
+        {subtitleText ? (
+          <Text variant="footnote" numberOfLines={1} style={styles.subtitle}>
+            {subtitleText}
+          </Text>
+        ) : null}
         {subtitleDetailText ? (
           <Text variant="caption1" numberOfLines={1} style={styles.subtitle}>
             {subtitleDetailText}

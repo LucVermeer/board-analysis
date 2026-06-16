@@ -191,6 +191,8 @@ export const GET_SESSION_DETAIL = gql`
           thumbnail
           isListed
           createdAt
+          tickUuid
+          boardId
         }
       }
     }

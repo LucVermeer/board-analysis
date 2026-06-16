@@ -159,12 +159,10 @@
     },
     "hardest": "Hardest",
     "betaEyebrow": "Beta",
-    "hardestSend": "Hardest send",
+    "betaBy": "Beta by {{name}}",
     "unknownClimb": "Unknown climb",
     "attempts_one": "{{count}} try",
     "attempts_other": "{{count}} tries",
-    "chartEmpty": "No grades yet",
-    "chartLabel": "Grade chart",
     "openHint": "Opens the session",
     "openHardestClimb": "Open {{climb}}"
   },

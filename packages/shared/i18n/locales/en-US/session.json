@@ -61,6 +61,7 @@
     "deleteAscentConfirm": "Are you sure? This cannot be undone.",
     "delete": "Delete",
     "climberFallback": "Climber",
+    "setBy": "set by {{username}}",
     "unknownClimb": "Unknown Climb",
     "attemptOnNth": "on {{ordinal}} attempt",
     "totalAttempts": "{{count}} total",
@@ -280,6 +281,8 @@
     },
     "betaVideos": {
       "title": "Beta Videos",
+      "crewTitle": "Beta from this crew",
+      "cardLabelByUploader": "Beta by {{name}}",
       "empty": "No beta videos yet. Be the first to share!",
       "videoCount_one": "{{count}} video",
       "videoCount_other": "{{count}} videos",

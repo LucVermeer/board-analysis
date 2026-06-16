@@ -61,6 +61,7 @@
     "deleteAscentConfirm": "¿Estás seguro? Esto no se puede deshacer.",
     "delete": "Eliminar",
     "climberFallback": "Escalador",
+    "setBy": "creado por {{username}}",
     "unknownClimb": "Bloque desconocido",
     "attemptOnNth": "al {{ordinal}} intento",
     "totalAttempts": "{{count}} en total",
@@ -280,6 +281,8 @@
     },
     "betaVideos": {
       "title": "Videos Beta",
+      "crewTitle": "Beta de este grupo",
+      "cardLabelByUploader": "Beta de {{name}}",
       "empty": "Sin videos beta todavía. ¡Sé el primero en compartir!",
       "videoCount_one": "{{count}} video",
       "videoCount_other": "{{count}} videos",

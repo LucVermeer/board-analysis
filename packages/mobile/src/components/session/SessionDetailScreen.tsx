@@ -10,10 +10,8 @@ import { Text } from '../Text';
 import { Icon } from '../Icon';
 import { ActivityIndicator } from '../ActivityIndicator';
 import { SectionHeader } from '../SectionHeader';
-import { FeedSocialRow } from '../you/FeedSocialRow';
 import { CommentSheet } from '../you/CommentSheet';
-import { SessionDetailHero } from './SessionDetailHero';
-import { SessionStatTiles } from './SessionStatTiles';
+import { SessionSummaryCard } from './SessionSummaryCard';
 import { SessionAnalyticsSection } from './SessionAnalyticsSection';
 import { SessionBetaCarousel } from './SessionBetaCarousel';
 import { SessionParticipantBreakdown } from './SessionParticipantBreakdown';
@@ -122,29 +120,13 @@ export default function SessionDetailScreen() {
 
   const header = (
     <View>
-      <SessionDetailHero session={session} title={title} />
-      <SessionStatTiles
-        sends={session.totalSends}
-        flashes={session.totalFlashes}
-        attempts={session.totalAttempts}
-        hardestGrade={session.hardestGrade}
-      />
+      <SessionSummaryCard session={session} title={title} onOpenComments={handleOpenSessionComments} />
 
       <SessionAnalyticsSection gradeDistribution={session.gradeDistribution} />
 
-      <SessionBetaCarousel ticks={session.ticks} />
+      <SessionBetaCarousel ticks={session.ticks} participantById={participantById} isMultiUser={isMultiUser} />
 
       <SessionParticipantBreakdown participants={session.participants} />
-
-      <View style={styles.social}>
-        <FeedSocialRow
-          entityId={session.sessionId}
-          upvotes={session.upvotes}
-          userVote={null}
-          commentCount={session.commentCount}
-          onOpenComments={handleOpenSessionComments}
-        />
-      </View>
 
       <SectionHeader title={t('detail.climbsCount', { count: session.ticks.length })} />
     </View>
@@ -177,5 +159,4 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing[3], paddingHorizontal: spacing[8] },
   notFound: { textAlign: 'center' },
-  social: { paddingHorizontal: spacing[4], marginTop: spacing[2] },
 });
