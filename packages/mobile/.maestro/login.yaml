@@ -1,14 +1,15 @@
 appId: com.boardsesh.app
 name: login (subflow)
 ---
-# Reusable login subflow. The screenshots build cold-launches signed out, so the
-# auth screen is already up. Fill the seeded test credentials (passed by the
-# orchestrator via `maestro test -e SCREENSHOT_USER_EMAIL=... -e
-# SCREENSHOT_USER_PASSWORD=...`) and wait until the app redirects out of auth.
+# Reusable login subflow. The caller loads the Metro bundle into the dev-client
+# and waits for the signed-out auth screen before invoking this. Fill the seeded
+# test credentials (passed by the orchestrator via `maestro test -e
+# SCREENSHOT_USER_EMAIL=... -e SCREENSHOT_USER_PASSWORD=...`) and wait until the
+# app redirects out of auth.
 #
 # A "Sign in to your Apple Account" system alert can linger on the simulator from
-# a prior Apple-auth attempt and cover the login form (clearState resets app data
-# but not system modals). Dismiss it if present.
+# a prior Apple-auth attempt and cover the login form (the orchestrator's app
+# reinstall resets app data but not system modals). Dismiss it if present.
 - tapOn:
     text: 'Close'
     optional: true

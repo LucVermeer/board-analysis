@@ -19,8 +19,19 @@ name: onboarding illustrations
 #   (the simulator has no Bluetooth). Mirror web's e2e-bluetooth-picker flag.
 # TODO(find): board/climb detail — needs a deterministic deep link to a seeded
 #   climb (com.boardsesh.app://climbs/<uuid>) or a stable climb-row testID to tap.
-- launchApp:
-    clearState: true
+#
+# The .app is a Debug dev-client: load the JS bundle from Metro via
+# ${MAESTRO_DEV_CLIENT_URL} (passed by the orchestrator via `-e`) rather than the
+# launcher. The orchestrator uninstalled+reinstalled and reset the keychain, so
+# this cold-loads signed out.
+- openLink: ${MAESTRO_DEV_CLIENT_URL}
+- tapOn:
+    text: 'Open'
+    optional: true
+- extendedWaitUntil:
+    visible:
+      id: 'auth-email-input'
+    timeout: 180000
 - runFlow: login.yaml
 
 - openLink: com.boardsesh.app://climbs

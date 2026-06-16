@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useMemo, useState, type ReactNode } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { LogBox, Pressable, StyleSheet, View } from 'react-native';
 // Navigation theme comes from expo-router's vendored React Navigation. Expo
 // SDK 56's expo-router is not compatible with a separately-installed
 // @react-navigation/* package, so import these from `expo-router` directly.
@@ -53,8 +53,17 @@ import { loadRequiredFonts } from '../src/lib/required-fonts';
 import { AnalyticsProvider } from '../src/components/analytics/AnalyticsProvider';
 import { AnalyticsScreenTracker } from '../src/components/analytics/AnalyticsScreenTracker';
 import { OnboardingGate } from '../src/components/onboarding/OnboardingGate';
+import { SCREENSHOT_MODE } from '../src/lib/screenshot-mode';
 
 void SplashScreen.preventAutoHideAsync();
+
+// The screenshots build is a Debug dev-client (__DEV__ true) so it can load its
+// JS from Metro; a stray warning would pop a LogBox toast into a captured
+// screenshot. Suppress all LogBox UI in screenshot mode. SCREENSHOT_MODE is a
+// build/bundle-time flag, so this dead-strips from every normal build.
+if (SCREENSHOT_MODE) {
+  LogBox.ignoreAllLogs(true);
+}
 
 const layoutStyles = StyleSheet.create({
   root: { flex: 1 },

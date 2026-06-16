@@ -11,6 +11,7 @@ function makeOptions(overrides: Partial<ScreenshotOptions> = {}): ScreenshotOpti
     variant: null,
     theme: 'dark',
     workout: 'volume',
+    appPath: null,
     shutdown: false,
     ...overrides,
   };
@@ -61,6 +62,8 @@ describe('parseArgs', () => {
         'Pixel 8',
         '--workout',
         'ladder',
+        '--app-path',
+        '/tmp/Boardsesh.app',
         '--shutdown',
       ]),
     ).toEqual({
@@ -71,6 +74,7 @@ describe('parseArgs', () => {
       variant: 'material',
       theme: 'light',
       workout: 'ladder',
+      appPath: '/tmp/Boardsesh.app',
       shutdown: true,
     });
   });

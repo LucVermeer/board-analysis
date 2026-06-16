@@ -3,24 +3,35 @@
 /**
  * Automated native screenshot capture for packages/mobile.
  *
- * Boots a simulator, applies a clean status bar, builds + installs a clean
- * Release app (no Expo dev-menu bubble) with EXPO_PUBLIC_SCREENSHOT_MODE=1, runs
- * a Maestro flow that deep-links to each screen and captures it, then collects
- * the PNGs into app-stores/<store>/screenshots/<device>/ (ios -> apple, android
- * -> google).
+ * The screenshot app is a Debug *dev-client* that loads its JS from Metro at
+ * runtime. The screenshot behaviour (EXPO_PUBLIC_SCREENSHOT_MODE, theme,
+ * workout) is baked into the Metro JS bundle, NOT the native binary — so the
+ * .app is reusable and only the JS regenerates per run. This is why CI can cache
+ * the .app (see scripts/mobile-build-sim-app.ts) keyed on native inputs and skip
+ * the ~30-min from-scratch compile on JS-only changes.
+ *
+ * Flow: boot a simulator, apply a clean status bar, get the .app (--app-path, or
+ * build one via mobile-build-sim-app), uninstall+install it, reset the keychain,
+ * start Metro with EXPO_PUBLIC_SCREENSHOT_MODE=1, then run a Maestro flow that
+ * loads the bundle from Metro (dev-client deep link), deep-links to each screen
+ * and captures it. PNGs land in app-stores/<store>/screenshots/<device>/ (ios ->
+ * apple, android -> google).
  *
  * Usage:
  *   vp run mobile:screenshots -- [--platform ios] [--flow app-store|onboarding]
  *                                 [--backend local|prod] [--device "iPhone 16 Pro Max"]
  *                                 [--variant material|liquidGlass] [--shutdown]
+ *                                 [--app-path <path/to/Boardsesh.app>]
  *
  * Requires: macOS + Xcode simulators, and Maestro (https://maestro.mobile.dev).
  * For --backend local, bring up the seeded dev DB + backend first (`vp run dev`).
- * Credentials come from SCREENSHOT_USER_EMAIL / SCREENSHOT_USER_PASSWORD
+ * Without --app-path the script builds a Debug simulator .app first (slow); CI
+ * passes a cached/prebuilt .app so the common path is just install + Metro +
+ * Maestro. Credentials come from SCREENSHOT_USER_EMAIL / SCREENSHOT_USER_PASSWORD
  * (default test@boardsesh.com / test).
  */
 
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -29,8 +40,14 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const ROOT_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const MOBILE_DIR = resolve(ROOT_DIR, 'packages', 'mobile');
 const MAESTRO_DIR = resolve(MOBILE_DIR, '.maestro');
-const IOS_RUN_SCRIPT = resolve(ROOT_DIR, 'scripts', 'mobile-ios-run.ts');
+const BUILD_SIM_APP_SCRIPT = resolve(ROOT_DIR, 'scripts', 'mobile-build-sim-app.ts');
+const APP_CACHE_DIR = resolve(MOBILE_DIR, '.app-cache');
 const OUTPUT_ROOT = resolve(ROOT_DIR, 'app-stores');
+// Metro dev server port the dev-client loads its JS bundle from. Defaults to
+// 8081; override with BOARDSESH_METRO_PORT when it's taken (this repo runs a
+// Metro per worktree). The orchestrator passes the matching dev-client URL to
+// Maestro via `-e MAESTRO_DEV_CLIENT_URL`, so the flows never hard-code a port.
+const METRO_PORT = Number.parseInt(process.env.BOARDSESH_METRO_PORT ?? '', 10) || 8081;
 // Output is grouped by store (the directory name), not by platform id.
 const STORE_BY_PLATFORM: Record<'ios' | 'android', string> = { ios: 'apple', android: 'google' };
 const LOG = '[mobile:screenshots]';
@@ -61,6 +78,8 @@ export interface ScreenshotOptions {
   theme: ScreenshotTheme;
   /** Workout type the Record/session screen pre-selects (generator screenshot); null = Off. */
   workout: string | null;
+  /** Prebuilt/cached Boardsesh.app to install; null builds one (slow, local only). */
+  appPath: string | null;
   shutdown: boolean;
 }
 
@@ -78,6 +97,7 @@ export function parseArgs(argv: readonly string[]): ScreenshotOptions {
     // a visible, selected tile (its shelf is a gesture-handler ScrollView Maestro
     // can't tap/scroll). `--workout off` leaves the generator Off ("Start a session").
     workout: 'volume',
+    appPath: null,
     shutdown: false,
   };
 
@@ -115,6 +135,10 @@ export function parseArgs(argv: readonly string[]): ScreenshotOptions {
         index++;
         break;
       }
+      case '--app-path':
+        options.appPath = resolve(expectValue(flag, value));
+        index++;
+        break;
       case '--shutdown':
         options.shutdown = true;
         break;
@@ -150,10 +174,11 @@ export function deviceSlug(deviceName: string): string {
 }
 
 /**
- * Build the env for the Release build. Always sets screenshot mode; for
- * --backend local it points the build at the local dev backend unless the caller
- * already exported an override. --backend prod leaves the URLs unset so the app's
- * production defaults apply.
+ * Build the env Metro bundles with (EXPO_PUBLIC_* are inlined into the JS bundle
+ * at bundle time, so these shape the dev-client's JS, not the native compile).
+ * Always sets screenshot mode; for --backend local it points the app at the
+ * local dev backend unless the caller already exported an override. --backend
+ * prod leaves the URLs unset so the app's production defaults apply.
  */
 export function buildScreenshotEnv(
   options: ScreenshotOptions,
@@ -302,11 +327,6 @@ function clearStatusBar(udid: string): void {
   runCapture('xcrun', ['simctl', 'status_bar', udid, 'clear']);
 }
 
-/** True once the app bundle is installed on the simulator. */
-function appInstalled(udid: string): boolean {
-  return runCapture('xcrun', ['simctl', 'get_app_container', udid, APP_ID, 'app']).status === 0;
-}
-
 function collectScreenshots(captureDir: string, platform: 'ios' | 'android', deviceName: string): string[] {
   const outputDir = join(OUTPUT_ROOT, STORE_BY_PLATFORM[platform], 'screenshots', deviceSlug(deviceName));
   mkdirSync(outputDir, { recursive: true });
@@ -331,46 +351,84 @@ function runIos(options: ScreenshotOptions): number {
   bootDevice(device);
   applyCleanStatusBar(device.udid);
 
-  const buildEnv = buildScreenshotEnv(options);
-  console.log(
-    `${LOG} Building Release app for ${device.name} (backend=${options.backend}, theme=${options.theme}, flow=${options.flow}${options.variant ? `, variant=${options.variant}` : ''})...`,
-  );
-  const runBuild = (): number =>
-    runInherit('bunx', ['tsx', IOS_RUN_SCRIPT, '--', '--configuration', 'Release', '--device', device.udid], buildEnv);
-  let buildStatus = runBuild();
-  if (buildStatus !== 0 && !appInstalled(device.udid)) {
-    // RN New Architecture codegen ("Generate Specs") can race the compile step
-    // on a cold/clean build, failing with "Build input file cannot be found:
-    // …/ReactCodegen/*-generated.mm". The specs are written during that first
-    // attempt, so a second build finds them — the well-known "build twice on a
-    // clean checkout" quirk. This bites every fresh CI runner, so retry once.
-    console.log(`${LOG} First build did not install the app (likely the cold-build codegen race); retrying once...`);
-    buildStatus = runBuild();
-  }
-  // Gate on the app actually being installed, not on expo's exit code: for a
-  // Release build, `expo run:ios` succeeds at build+install but then fails its
-  // post-install launch step (it opens the app via the dev-client URL, which a
-  // Release build doesn't handle — `simctl openurl` times out). Maestro launches
-  // the app itself, so that launch-step failure is harmless.
-  if (!appInstalled(device.udid)) {
-    console.error(`${LOG} FAILED: app not installed after build (exit ${buildStatus}).`);
-    return buildStatus === 0 ? 1 : buildStatus;
-  }
-  if (buildStatus !== 0) {
-    console.log(`${LOG} Build + install OK; ignoring expo's post-install launch step (Maestro launches the app).`);
+  // Resolve the dev-client .app: a cached/prebuilt one (--app-path, the CI common
+  // path) or build one now (slow; local convenience). The .app loads its JS from
+  // Metro, so it's reusable across JS changes.
+  const appPath = resolveAppPath(options);
+  console.log(`${LOG} Installing ${appPath} on ${device.name}...`);
+  // Uninstall first so the run starts from a clean container (fresh AsyncStorage,
+  // so no stale active board). The dev-client + Metro path drops Maestro's
+  // `clearState`, which can't run before the bundle has loaded — the uninstall +
+  // install gives the same fresh-data guarantee.
+  runCapture('xcrun', ['simctl', 'uninstall', device.udid, APP_ID]);
+  const install = runCapture('xcrun', ['simctl', 'install', device.udid, appPath]);
+  if (install.status !== 0) {
+    console.error(`${LOG} FAILED: simctl install exited ${install.status}.`);
+    return install.status;
   }
 
   // Reset the simulator keychain so the app launches signed out and login runs
   // against the target backend. The auth token lives in a shared keychain access
-  // group (group.com.boardsesh.app) that survives both `clearState` and an app
-  // uninstall — so without this a stale token (e.g. from a previous --backend
-  // local run) makes login skip and the app talk to the wrong backend with an
-  // invalid session. The login subflow re-authenticates from a clean slate.
+  // group (group.com.boardsesh.app) that survives both an app uninstall and the
+  // fresh install above — so without this a stale token (e.g. from a previous
+  // --backend local run) makes login skip and the app talk to the wrong backend
+  // with an invalid session. The login subflow re-authenticates from a clean slate.
   console.log(`${LOG} Resetting simulator keychain (clears any stale auth token)...`);
   runCapture('xcrun', ['simctl', 'keychain', device.udid, 'reset']);
 
+  // Start Metro so the dev-client can load its JS bundle. EXPO_PUBLIC_SCREENSHOT_*
+  // + the backend URLs are inlined here, at bundle time — that's what makes the
+  // native .app reusable. Killed in the finally below.
+  // Abort if the port is already taken: expo would silently skip starting our
+  // dev server (non-interactive), and the flow would then load whatever foreign
+  // Metro is on the port — capturing the wrong app's bundle. Fail loud instead.
+  if (portInUse(METRO_PORT)) {
+    console.error(
+      `${LOG} FAILED: port ${METRO_PORT} is already in use; another Metro would serve the wrong bundle. ` +
+        `Stop it, or set BOARDSESH_METRO_PORT to a free port.`,
+    );
+    return 1;
+  }
+
+  const metroEnv = buildScreenshotEnv(options);
+  console.log(
+    `${LOG} Starting Metro on ${METRO_PORT} (backend=${options.backend}, theme=${options.theme}, flow=${options.flow}${options.variant ? `, variant=${options.variant}` : ''})...`,
+  );
+  const metro = startMetro(metroEnv);
   const captureDir = mkdtempSync(join(tmpdir(), 'boardsesh-shots-'));
   try {
+    if (!waitForMetro()) {
+      console.error(`${LOG} FAILED: Metro did not become ready on port ${METRO_PORT}.`);
+      return 1;
+    }
+
+    // Pre-launch the app with UserDefaults argument-domain overrides so
+    // expo-dev-client's dev-menu UI doesn't appear in the captures:
+    //   -EXDevMenuIsOnboardingFinished YES     → skip the one-time "developer
+    //      menu" onboarding sheet (shown on every fresh install — we uninstall
+    //      each run).
+    //   -EXDevMenuDisableAutoLaunch YES        → don't auto-present the dev menu
+    //      when the bundle loads.
+    //   -EXDevMenuShowFloatingActionButton NO  → hide the floating gear button
+    //      that otherwise sits in the top-right corner of every screen.
+    // These are read by DevMenuPreferences/DevMenuManager at the highest-priority
+    // arg domain. The app lands on the dev launcher; Maestro's first openLink then
+    // loads the bundle into this same process, where the overrides persist across
+    // the JS reload.
+    console.log(`${LOG} Pre-launching to suppress the dev-client menu + floating button...`);
+    runCapture('xcrun', [
+      'simctl',
+      'launch',
+      device.udid,
+      APP_ID,
+      '-EXDevMenuIsOnboardingFinished',
+      'YES',
+      '-EXDevMenuDisableAutoLaunch',
+      'YES',
+      '-EXDevMenuShowFloatingActionButton',
+      'NO',
+    ]);
+
     const flowFile = join(MAESTRO_DIR, `${options.flow}.yaml`);
     if (!existsSync(flowFile)) {
       console.error(`${LOG} FAILED: flow not found: ${flowFile}`);
@@ -393,6 +451,9 @@ function runIos(options: ScreenshotOptions): number {
         device.udid,
         'test',
         flowFile,
+        // The flows load their JS via this dev-client deep link (port-agnostic).
+        '-e',
+        `MAESTRO_DEV_CLIENT_URL=${metroDevClientUrl()}`,
         '-e',
         `SCREENSHOT_USER_EMAIL=${email}`,
         '-e',
@@ -416,6 +477,7 @@ function runIos(options: ScreenshotOptions): number {
     );
     for (const file of saved) console.log(`${LOG}   ${file}`);
   } finally {
+    stopMetro(metro);
     rmSync(captureDir, { force: true, recursive: true });
     clearStatusBar(device.udid);
     if (options.shutdown) {
@@ -424,6 +486,85 @@ function runIos(options: ScreenshotOptions): number {
   }
 
   return 0;
+}
+
+/**
+ * Resolve the Boardsesh.app to install: a prebuilt/cached one (--app-path, the CI
+ * common path) or a freshly built Debug simulator app (local one-command DX).
+ */
+function resolveAppPath(options: ScreenshotOptions): string {
+  if (options.appPath) {
+    if (!existsSync(options.appPath)) {
+      throw new Error(`--app-path not found: ${options.appPath}`);
+    }
+    return options.appPath;
+  }
+  console.log(`${LOG} No --app-path given; building a Debug simulator app (slow — CI passes a cached .app)...`);
+  const status = runInherit('bunx', ['tsx', BUILD_SIM_APP_SCRIPT, '--', '--app-out', APP_CACHE_DIR], process.env);
+  if (status !== 0) {
+    throw new Error(`simulator app build failed (exit ${status})`);
+  }
+  const built = join(APP_CACHE_DIR, 'Boardsesh.app');
+  if (!existsSync(built)) {
+    throw new Error(`build reported success but ${built} is missing`);
+  }
+  return built;
+}
+
+/** expo-development-client deep link that loads the JS bundle from our Metro. */
+function metroDevClientUrl(): string {
+  return `${APP_ID}://expo-development-client/?url=${encodeURIComponent(`http://localhost:${METRO_PORT}`)}`;
+}
+
+/** True if anything is already listening on the port (a foreign Metro). */
+function portInUse(port: number): boolean {
+  return spawnSync('lsof', ['-nP', `-iTCP:${port}`, '-sTCP:LISTEN', '-t']).status === 0;
+}
+
+/**
+ * Start Metro in the background. `detached` so cleanup can kill the whole process
+ * group; `CI=1` keeps expo non-interactive (no keypress menu / TTY expectations).
+ */
+function startMetro(env: NodeJS.ProcessEnv): ChildProcess {
+  return spawn('bunx', ['expo', 'start', '--port', String(METRO_PORT)], {
+    cwd: MOBILE_DIR,
+    env: { ...env, CI: '1' },
+    stdio: 'inherit',
+    detached: true,
+  });
+}
+
+/** Poll Metro's /status until it answers (or ~120s elapse). */
+function waitForMetro(): boolean {
+  const statusUrl = `http://localhost:${METRO_PORT}/status`;
+  for (let attempt = 0; attempt < 60; attempt++) {
+    if (runCapture('curl', ['-fsS', '-o', '/dev/null', statusUrl]).status === 0) {
+      console.log(`${LOG} Metro is ready on port ${METRO_PORT}.`);
+      return true;
+    }
+    sleepSeconds(2);
+  }
+  return false;
+}
+
+function stopMetro(metro: ChildProcess | null): void {
+  if (!metro || metro.pid === undefined) return;
+  console.log(`${LOG} Stopping Metro...`);
+  try {
+    // Negative PID targets the detached process group, so Metro's node children
+    // die with it.
+    process.kill(-metro.pid, 'SIGTERM');
+  } catch {
+    try {
+      metro.kill('SIGTERM');
+    } catch {
+      // Already gone.
+    }
+  }
+}
+
+function sleepSeconds(seconds: number): void {
+  spawnSync('sleep', [String(seconds)]);
 }
 
 export function main(argv: readonly string[] = process.argv.slice(2)): number {
