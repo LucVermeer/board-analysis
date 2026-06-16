@@ -5,7 +5,7 @@ import type { SessionDetailTick, SessionFeedParticipant } from '@boardsesh/share
 import { getGradeTextColor } from '@boardsesh/play-view';
 import { Text } from '../Text';
 import { Icon } from '../Icon';
-import { type IconName } from '../icon-map';
+import type { IconName } from '../icon-map';
 import { ListRow } from '../ListRow';
 import { PressableAvatar } from '../PressableAvatar';
 import { PressableSurface } from '../PressableSurface';
