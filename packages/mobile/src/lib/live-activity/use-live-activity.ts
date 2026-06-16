@@ -80,8 +80,21 @@ async function resolveBoardBackgroundPaths(board: BoardConfig): Promise<string[]
       setIds,
       variant: 'thumb',
     });
-    return result?.paths ?? [];
-  } catch {
+    const paths = result?.paths ?? [];
+    if (paths.length === 0) {
+      // Pairs with the native "no board-background paths staged" log: if this
+      // fires, the board photo is missing because resolution came back empty
+      // (board not bundled / manifest miss), not because native couldn't read it.
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[LiveActivity] no bundled backgrounds for ${boardName}/${board.layoutId}/${board.sizeId}/${board.setIds} ` +
+          `(missing ${result?.missingCount ?? 'n/a'})`,
+      );
+    }
+    return paths;
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.warn('[LiveActivity] board-background resolution threw:', error instanceof Error ? error.message : error);
     return [];
   }
 }

@@ -32,6 +32,12 @@ enum SharedConstants {
     /// board art over the network (the no-network-board-art rule). Empty when no
     /// bundled background resolved — the overlay is then written as-is.
     static let boardBackgroundPathsKey = "bs_board_background_paths"
+    /// Version of the cached Live Activity thumbnail's content contract. When it
+    /// differs from `ThumbnailFetcher.cacheVersion`, the (update-surviving) App
+    /// Group thumbnail cache is purged so an upgraded build doesn't serve the
+    /// previous build's images (e.g. overlay-only thumbnails from before board
+    /// compositing).
+    static let thumbnailCacheVersionKey = "bs_thumbnail_cache_version"
     static let pendingActionKey = "bs_pending_action"
     /// Action ("next" | "previous") associated with the most recent Darwin
     /// notification. Always written by the intent; the Darwin handler reads
