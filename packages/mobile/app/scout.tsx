@@ -1,38 +1,27 @@
 import { Stack } from 'expo-router';
-import { Platform, ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { ScoutPhoto } from '../src/components/ScoutPhoto';
 import { Text } from '../src/components/Text';
 import { useBottomChromeMetrics } from '../src/hooks/use-bottom-chrome-metrics';
+import { useStackScreenOptions } from '../src/hooks/use-stack-screen-options';
 import { dogName } from '../src/lib/acknowledgements';
 import { useTheme } from '../src/providers/theme-provider';
-import { useVariantValue } from '../src/theme/variants';
 import { borderRadius, spacing } from '../src/theme/tokens';
 
 export default function ScoutScreen() {
   const { t } = useTranslation('common');
   const { systemColors } = useTheme();
   const bottomChrome = useBottomChromeMetrics();
-  // The transparent, blur-under-content header is an iOS-only feature (headerBlurEffect):
-  // on iOS, Liquid Glass gets it and Material's opaque M3 app bar does not. On Android
-  // — including a forced Liquid Glass user, where there's no glass surface — keep the
-  // header opaque so scroll content doesn't slide under the status bar (dual-axis:
-  // aesthetic AND platform). The hook is called unconditionally; only the value is gated.
-  const prefersGlassHeader = useVariantValue({ liquidGlass: true, material: false });
-  const headerTransparent = Platform.OS === 'ios' && prefersGlassHeader;
+  // Variant-aware header from the shared hook: a transparent blur header on Liquid
+  // Glass (iOS), an opaque M3 app bar on Material — including the forced-Material-
+  // on-iOS / Android paths where a transparent header would slide content under the
+  // status bar.
+  const screenOptions = useStackScreenOptions();
 
   return (
     <>
-      <Stack.Screen
-        options={{
-          title: dogName,
-          headerShown: true,
-          headerLargeTitle: false,
-          headerTransparent,
-          headerBlurEffect: 'systemMaterial',
-          contentStyle: { backgroundColor: 'transparent' },
-        }}
-      />
+      <Stack.Screen options={{ ...screenOptions, title: dogName, headerShown: true }} />
       <ScrollView
         contentInsetAdjustmentBehavior="automatic"
         contentContainerStyle={[styles.container, { paddingBottom: bottomChrome.scrollBottomPadding + spacing[6] }]}

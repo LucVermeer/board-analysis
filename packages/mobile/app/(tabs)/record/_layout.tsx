@@ -1,6 +1,6 @@
 import { Stack } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { glassStackScreenOptions } from '../../../src/theme/navigation';
+import { useStackScreenOptions } from '../../../src/hooks/use-stack-screen-options';
 
 /**
  * The Record tab renders the session screen inline (its `index` route). The
@@ -9,9 +9,10 @@ import { glassStackScreenOptions } from '../../../src/theme/navigation';
  */
 export default function RecordLayout() {
   const { t } = useTranslation('common');
+  const screenOptions = useStackScreenOptions();
 
   return (
-    <Stack screenOptions={glassStackScreenOptions}>
+    <Stack screenOptions={screenOptions}>
       <Stack.Screen name="index" options={{ headerShown: false }} />
       <Stack.Screen
         name="summary"

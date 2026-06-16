@@ -2,14 +2,15 @@ import { Stack, router } from 'expo-router';
 import { Pressable } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { Icon } from '../../src/components/Icon';
-import { glassStackScreenOptions } from '../../src/theme/navigation';
+import { useStackScreenOptions } from '../../src/hooks/use-stack-screen-options';
 
 export default function BoardsLayout() {
   const { t } = useTranslation('common');
   const { t: tBoards } = useTranslation('boards');
+  const screenOptions = useStackScreenOptions();
 
   return (
-    <Stack screenOptions={glassStackScreenOptions}>
+    <Stack screenOptions={screenOptions}>
       <Stack.Screen
         name="index"
         options={{
