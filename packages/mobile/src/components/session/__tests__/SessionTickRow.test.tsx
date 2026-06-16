@@ -9,7 +9,7 @@ const mockClimbListItemContent = vi.hoisted(() => vi.fn());
 
 vi.mock('react-native', () => ({
   View: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
-  StyleSheet: { create: (styles: unknown) => styles, hairlineWidth: 1 },
+  StyleSheet: { create: (styles: unknown) => styles },
 }));
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock('@boardsesh/play-view', () => ({ getGradeTextColor: () => '#fff' }));
@@ -31,7 +31,10 @@ vi.mock('../../ClimbListItemContent', () => ({
 }));
 vi.mock('../../you/profile-chart-colors', () => ({ gradeBadgeColor: () => '#000' }));
 vi.mock('../../../hooks/use-grade-format', () => ({
-  useGradeFormat: () => ({ formatGrade: (g: string) => g, formatGradeByDifficultyId: () => null }),
+  useGradeFormat: () => ({
+    formatGrade: (g: string) => g,
+    formatGradeByDifficultyId: () => null,
+  }),
 }));
 vi.mock('../../../providers/theme-provider', () => ({
   useTheme: () => ({ systemColors: { secondaryBackground: '#fff', separator: '#ccc' } }),
@@ -41,7 +44,10 @@ vi.mock('../../../theme/colors', () => ({
   withAlpha: (c: string) => c,
 }));
 vi.mock('../../../theme/ios-colors', () => ({ iosSystemColors: { systemGray: '#888', white: '#fff' } }));
-vi.mock('../../../theme/tokens', () => ({ spacing: { 2: 8, 3: 12 }, borderRadius: { sm: 4 } }));
+vi.mock('../../../theme/tokens', () => ({
+  spacing: { 2: 8, 3: 12 },
+  borderRadius: { sm: 4 },
+}));
 vi.mock('../../../lib/playlists/board-details-for-playlist', () => ({
   getBoardConfigForPlaylist: () => ({
     boardName: 'kilter',
