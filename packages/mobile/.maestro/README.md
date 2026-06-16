@@ -43,12 +43,14 @@ simulator keychain first so login authenticates cleanly against prod.
 - The app is a dev-client, so each flow first loads its JS from Metro with
   `openLink: ${MAESTRO_DEV_CLIENT_URL}` instead of `launchApp` — a bare launch
   would land on the launcher. The orchestrator passes that env via `maestro test
-  -e` (an `expo-development-client` deep link pointing at its Metro port, default
+-e` (an `expo-development-client` deep link pointing at its Metro port, default
   8081, override with `BOARDSESH_METRO_PORT`), so the flow isn't pinned to a port.
   Re-opening the deep link reloads the JS runtime (used to clear the play drawer
-  before the board-sheet shot). The first load waits up to 180s for the cold Metro
-  bundle. The orchestrator uninstalls + reinstalls and resets the keychain, so the
-  app cold-loads signed out with fresh app data (no Maestro `clearState` needed).
+  before the board-sheet shot). The orchestrator pre-warms the Metro bundle before
+  Maestro runs, but the first load still waits up to 300s as a safety net for a
+  cold bundle on a slow CI runner. The orchestrator uninstalls + reinstalls and
+  resets the keychain, so the app cold-loads signed out with fresh app data (no
+  Maestro `clearState` needed).
 - Navigation uses custom-scheme deep links (`com.boardsesh.app://<route>`); Expo
   Router maps tab routes with the `(tabs)` group stripped (`://climbs`, `://home`,
   `://boards`, …). Each `openLink` is followed by an optional `tapOn "Open"` to
