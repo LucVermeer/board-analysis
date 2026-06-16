@@ -50,6 +50,9 @@ vi.mock('../../../providers/theme-provider', () => ({
 vi.mock('../../../providers/toast-provider', () => ({
   useToast: () => ({ showToast: mocks.showToast }),
 }));
+vi.mock('../../../providers/dialog-provider', () => ({
+  useConfirm: () => () => Promise.resolve(true),
+}));
 
 type TextMockProps = { children?: ReactNode };
 vi.mock('../../Text', () => ({

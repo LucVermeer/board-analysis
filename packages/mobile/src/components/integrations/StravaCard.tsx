@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, Alert, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import type { IntegrationStatus } from '@boardsesh/shared-schema';
 import { Text } from '../Text';
@@ -8,6 +8,7 @@ import { ListRow } from '../ListRow';
 import { SwitchRow } from '../SwitchRow';
 import { useTheme } from '../../providers/theme-provider';
 import { useToast } from '../../providers/toast-provider';
+import { useConfirm } from '../../providers/dialog-provider';
 import { borderRadius, spacing } from '../../theme/tokens';
 import { connectStrava } from '../../lib/integrations';
 import { useDisconnectIntegration, useIntegrationStatuses, useSetIntegrationAutoSync } from '../../lib/graphql/hooks';
@@ -22,6 +23,7 @@ export function StravaCard() {
   const { t: tCommon } = useTranslation('common');
   const { systemColors, brandColors } = useTheme();
   const { showToast } = useToast();
+  const confirm = useConfirm();
   const { data: statuses, isLoading, refetch } = useIntegrationStatuses();
   // Destructure .mutate (stable across renders per React Query) — the
   // mutation object itself is a fresh reference every render and would churn
@@ -60,30 +62,29 @@ export function StravaCard() {
     [setAutoSyncMutate],
   );
 
-  const handleDisconnect = useCallback(() => {
-    Alert.alert(t('integrations.strava.disconnectConfirmTitle'), t('integrations.strava.disconnectConfirmBody'), [
-      { text: tCommon('actions.cancel'), style: 'cancel' },
+  const handleDisconnect = useCallback(async () => {
+    const confirmed = await confirm({
+      title: t('integrations.strava.disconnectConfirmTitle'),
+      message: t('integrations.strava.disconnectConfirmBody'),
+      confirmLabel: t('integrations.strava.disconnect'),
+      cancelLabel: tCommon('actions.cancel'),
+      destructive: true,
+    });
+    if (!confirmed) return;
+    disconnectIntegrationMutate(
+      { provider: 'STRAVA' },
       {
-        text: t('integrations.strava.disconnect'),
-        style: 'destructive',
-        onPress: () => {
-          disconnectIntegrationMutate(
-            { provider: 'STRAVA' },
-            {
-              onSuccess: () => {
-                showToast(t('integrations.toast.disconnected'), 'success');
-              },
-              onError: () => {
-                // The card stays in its connected state (statuses are only
-                // invalidated on success) — tell the user the tap did nothing.
-                showToast(t('integrations.toast.disconnectFailed'), 'error');
-              },
-            },
-          );
+        onSuccess: () => {
+          showToast(t('integrations.toast.disconnected'), 'success');
+        },
+        onError: () => {
+          // The card stays in its connected state (statuses are only
+          // invalidated on success) — tell the user the tap did nothing.
+          showToast(t('integrations.toast.disconnectFailed'), 'error');
         },
       },
-    ]);
-  }, [disconnectIntegrationMutate, showToast, t, tCommon]);
+    );
+  }, [confirm, disconnectIntegrationMutate, showToast, t, tCommon]);
 
   if (isLoading && !strava) {
     return (

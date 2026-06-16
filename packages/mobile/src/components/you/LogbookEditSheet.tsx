@@ -1,5 +1,5 @@
 import { type RefObject, useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Pressable, Alert, Platform, StyleSheet } from 'react-native';
+import { View, Pressable, Platform, StyleSheet } from 'react-native';
 import BottomSheet, { BottomSheetTextInput } from '@gorhom/bottom-sheet';
 import DateTimePicker, {
   DateTimePickerAndroid,
@@ -22,6 +22,7 @@ import { hapticSuccess, hapticError } from '../../lib/haptics';
 import { spacing, borderRadius } from '../../theme/tokens';
 import { useTheme } from '../../providers/theme-provider';
 import { useToast } from '../../providers/toast-provider';
+import { useConfirm } from '../../providers/dialog-provider';
 
 type TickStatus = 'flash' | 'send' | 'attempt';
 
@@ -73,6 +74,7 @@ export function LogbookEditSheet({ sheetRef, ascent, onClose }: LogbookEditSheet
   const { t } = useTranslation('you');
   const { systemColors, brandColors } = useTheme();
   const { showToast } = useToast();
+  const confirm = useConfirm();
   const updateTick = useUpdateTick();
   const deleteTick = useDeleteTick();
   // Save and delete hit the same tick UUID — never let one fire while the other
@@ -244,23 +246,23 @@ export function LogbookEditSheet({ sheetRef, ascent, onClose }: LogbookEditSheet
     updateTick,
   ]);
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (!ascent || isMutating) return;
-    Alert.alert(t('mobile.logbook.deleteTitle'), t('mobile.logbook.deleteConfirm'), [
-      { text: t('mobile.cancel'), style: 'cancel' },
-      {
-        text: t('mobile.logbook.delete'),
-        style: 'destructive',
-        onPress: () =>
-          deleteTick.mutate(ascent.uuid, {
-            onSuccess: () => sheetRef.current?.close(),
-            onError: () => {
-              hapticError();
-              showToast(t('mobile.logbook.deleteError'), 'error');
-            },
-          }),
+    const confirmed = await confirm({
+      title: t('mobile.logbook.deleteTitle'),
+      message: t('mobile.logbook.deleteConfirm'),
+      confirmLabel: t('mobile.logbook.delete'),
+      cancelLabel: t('mobile.cancel'),
+      destructive: true,
+    });
+    if (!confirmed) return;
+    deleteTick.mutate(ascent.uuid, {
+      onSuccess: () => sheetRef.current?.close(),
+      onError: () => {
+        hapticError();
+        showToast(t('mobile.logbook.deleteError'), 'error');
       },
-    ]);
+    });
   };
 
   return (
