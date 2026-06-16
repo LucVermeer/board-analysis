@@ -6,7 +6,6 @@ import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import type BottomSheet from '@gorhom/bottom-sheet';
-import { type ContextMenuAction } from 'react-native-context-menu-view';
 import type { SessionFeedItem, SessionFeedTickHighlight, SocialEntityType, UserBoard } from '@boardsesh/shared-schema';
 import { betaLinkIdentity, isBetaVideoUrl, isInstagramUrl, isTikTokUrl } from '@boardsesh/shared-schema';
 import { Text } from '../../../src/components/Text';
@@ -17,6 +16,7 @@ import { Button } from '../../../src/components/Button';
 import { SessionFeedCard } from '../../../src/components/you/SessionFeedCard';
 import { CommentSheet } from '../../../src/components/you/CommentSheet';
 import { FeedScopeTitle } from '../../../src/components/feed/FeedScopeTitle';
+import { type AppMenuAction } from '../../../src/components/AppMenu';
 import {
   useBulkVoteSummaries,
   useRecentBetaLinks,
@@ -218,16 +218,16 @@ export default function HomeTab() {
   // boards, "Everyone", and "Find a gym". The active scope carries a checkmark
   // and doubles as the large title. `onSelectIndex` runs the tapped item.
   const scopeMenu = useMemo(() => {
-    const items: { action: ContextMenuAction; run: () => void }[] = [
+    const items: { action: AppMenuAction; run: () => void }[] = [
       {
-        action: { title: t('mobile.home.scope.myCrew'), systemIcon: 'person.2.fill', selected: mode === 'crew' },
+        action: { label: t('mobile.home.scope.myCrew'), systemIcon: 'person.2.fill', selected: mode === 'crew' },
         run: handleSelectCrew,
       },
     ];
     if (homeBoard) {
       items.push({
         action: {
-          title: homeBoard.gymName ?? homeBoard.name,
+          label: homeBoard.gymName ?? homeBoard.name,
           systemIcon: 'building.2.fill',
           selected: mode === 'gym' && selectedBoard?.uuid === homeBoard.uuid,
         },
@@ -238,7 +238,7 @@ export default function HomeTab() {
       if (homeBoard && board.uuid === homeBoard.uuid) continue;
       items.push({
         action: {
-          title: board.gymName ?? board.name,
+          label: board.gymName ?? board.name,
           systemIcon: 'building.2.fill',
           selected: mode === 'gym' && selectedBoard?.uuid === board.uuid,
         },
@@ -247,14 +247,14 @@ export default function HomeTab() {
     }
     items.push({
       action: {
-        title: t('mobile.home.scope.everyone'),
+        label: t('mobile.home.scope.everyone'),
         systemIcon: 'globe',
         selected: mode === 'gym' && selectedBoard == null,
       },
       run: handleSelectEveryone,
     });
     items.push({
-      action: { title: t('mobile.home.scope.findGym'), systemIcon: 'mappin.and.ellipse' },
+      action: { label: t('mobile.home.scope.findGym'), systemIcon: 'mappin.and.ellipse' },
       run: handleFindGym,
     });
 
