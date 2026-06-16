@@ -236,16 +236,32 @@ describe('AddToPlaylistSheet', () => {
     expect(onClose).toHaveBeenCalled();
   });
 
-  it('hides the create sheet when the add sheet is dismissed', () => {
+  it('resets the create sheet when the add sheet is dismissed mid-create', async () => {
+    const created = { ...playlist, uuid: 'p-new', id: 'p-new', name: 'Projects', climbCount: 0 };
+    const createDeferred = deferred<typeof created>();
+    playlistContext.createPlaylist.mockReturnValueOnce(createDeferred.promise);
+    playlistContext.addToPlaylist.mockResolvedValueOnce(undefined);
     const { getByLabelText, queryByLabelText, onClose } = renderSheet();
 
     fireEvent.click(getByLabelText('actions.playlist.popover.createNew'));
-    expect(getByLabelText('submit-created-playlist')).not.toBeNull();
+    fireEvent.click(getByLabelText('submit-created-playlist'));
+
+    await waitFor(() => {
+      expect(getByLabelText('submit-created-playlist').getAttribute('data-submitting')).toBe('true');
+    });
 
     fireEvent.click(getByLabelText('dismiss-add-to-playlist-sheet'));
 
     expect(queryByLabelText('submit-created-playlist')).toBeNull();
     expect(onClose).toHaveBeenCalled();
+
+    fireEvent.click(getByLabelText('actions.playlist.popover.createNew'));
+    expect(getByLabelText('submit-created-playlist').getAttribute('data-submitting')).toBe('false');
+
+    createDeferred.resolve(created);
+    await waitFor(() => {
+      expect(playlistContext.addToPlaylist).toHaveBeenCalledWith('p-new', 'climb-1', 40);
+    });
   });
 
   it('keeps the add sheet open when playlist creation succeeds but adding the climb fails', async () => {

@@ -139,6 +139,7 @@ function AddToPlaylistSheet({
   const handleDismiss = useCallback(() => {
     isPresentedRef.current = false;
     setCreateVisible(false);
+    setCreating(false);
     onClose();
   }, [onClose]);
 
