@@ -513,6 +513,10 @@ export default defineConfig({
         command: 'tsx scripts/mobile-screenshots.ts',
         cache: false,
       },
+      'check:screenshot-dimensions': {
+        command: 'tsx scripts/assert-screenshot-dimensions.ts',
+        cache: false,
+      },
       'mobile:publish': {
         command: 'tsx scripts/mobile-publish.ts',
         cache: false,

@@ -46,10 +46,10 @@ user) and saves PNGs to `app-stores/apple/screenshots/<device>/` — e.g.
 
 ### Required screenshot sizes
 
-| Device                          | Resolution | Required?                          |
-| ------------------------------- | ---------- | ---------------------------------- |
-| 6.9" iPhone (iPhone 16 Pro Max) | 1320x2868  | Yes — captured by the Maestro flow |
-| 6.5" iPhone (iPhone 14 Plus)    | 1284x2778  | Optional (the 6.9" asset is accepted) |
+| Device                          | Resolution | Required?                                |
+| ------------------------------- | ---------- | ---------------------------------------- |
+| 6.9" iPhone (iPhone 16 Pro Max) | 1320x2868  | Yes — captured by the Maestro flow       |
+| 6.5" iPhone (iPhone 14 Plus)    | 1284x2778  | Optional (the 6.9" asset is accepted)    |
 | 13" iPad (iPad Pro)             | 2064x2752  | No, but recommended if iPad is supported |
 
 Dark is the canonical appearance; pass `--theme light` for a light set.
@@ -77,6 +77,55 @@ If you need a specific screen the flow doesn't cover:
 - Show a variety of boards (Kilter and Tension at minimum).
 - Make sure the queue has 3-5 climbs to show the feature clearly.
 - For the Bluetooth screenshot, show the scanning/pairing UI (it does not need a connected board).
+
+### Automated upload to App Store Connect
+
+You don't have to upload screenshots by hand. The **Mobile Screenshots (Native)**
+GitHub workflow captures the screenshots fresh and uploads them to App Store
+Connect via `fastlane deliver` — screenshots **only**, no binary, no text
+metadata, and no review submission. (The PNGs are no longer committed to the
+repo; they're regenerated each run.)
+
+**How to run it:** Actions → **Mobile Screenshots (Native)** → **Run workflow**,
+and set **upload** to `true`. Leaving `upload` unset (the default, and what the
+nightly cron uses) only captures and saves the artifact — it never touches App
+Store Connect.
+
+What it does:
+
+1. Captures the iPhone 16 Pro Max screenshots on a simulator (same as the
+   capture-only run).
+2. Runs `vp run check:screenshot-dimensions`, which fails the run if any PNG
+   isn't an Apple-accepted size for its slot (so Apple can't reject the upload
+   for a bad resolution).
+3. Runs `fastlane ios screenshots` (`fastlane/Fastfile`), which uploads the PNGs
+   with `skip_binary_upload`, `skip_metadata`, and `submit_for_review: false`.
+   deliver routes each image to its display slot by pixel dimensions
+   (1320×2868 → the 6.9" iPhone slot); the `00-`/`01-` filename prefixes set the
+   display order.
+
+**Authentication** uses the App Store Connect API key already configured for the
+TestFlight workflows — no new secrets:
+
+| Secret                             | Purpose                                                      |
+| ---------------------------------- | ------------------------------------------------------------ |
+| `APP_STORE_CONNECT_API_KEY_ID`     | API key id; names the decoded `.p8` (`AuthKey_<id>.p8`)      |
+| `APP_STORE_CONNECT_API_KEY_BASE64` | base64 of the `.p8` key; decoded at runtime, never committed |
+| `APP_STORE_CONNECT_ISSUER_ID`      | API issuer id                                                |
+
+> **The App Store version must be in an editable state.** deliver writes
+> screenshots to the version currently in **Prepare for Submission**. If the run
+> fails with a "could not find app/version" error, open App Store Connect, create
+> or open the next version so it's editable, then re-run the workflow. The lane
+> sets `submit_for_review: false` and `skip_app_version_update: true`, so it only
+> edits screenshots — it never bumps the version or submits for review.
+
+**Re-running is safe.** With `overwrite_screenshots` + `sync_screenshots`, each
+run replaces the App Store Connect screenshot set with exactly the captured PNGs,
+so a re-run converges rather than piling up duplicates.
+
+To run the lane locally instead (after capturing with `vp run mobile:screenshots`),
+see `fastlane/README.md`.
 
 ---
 
@@ -136,7 +185,8 @@ Go to https://appstoreconnect.apple.com and sign in with your Apple Developer ac
    - **Marketing URL**: https://boardsesh.com
    - **What's New**: Copy from the metadata file.
    - **Review Notes**: Copy the full review notes section from the metadata file.
-3. Upload screenshots for each required device size.
+3. Upload screenshots for each required device size — or run the automated
+   upload (see "Automated upload to App Store Connect" under section 2).
 4. Set the **App Category** to Health & Fitness (primary) and Sports (secondary).
 5. Set **Age Rating** to 4+ (no objectionable content).
 6. Set **Copyright** to `2024-2026 Boardsesh contributors`.

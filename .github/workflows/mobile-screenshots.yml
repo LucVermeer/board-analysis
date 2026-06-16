@@ -4,6 +4,12 @@ name: Mobile Screenshots (Native)
 # simulator via Maestro (scripts/mobile-screenshots.ts) and uploads them as an
 # artifact. Manual + nightly only — never gates PRs.
 #
+# On a manual dispatch with `upload = true`, it also uploads the freshly captured
+# screenshots to App Store Connect via fastlane (fastlane/Fastfile, screenshots
+# ONLY — no binary, metadata, or review submission). The nightly cron never
+# uploads (it only captures); uploading mutates the live "Prepare for Submission"
+# version, so it's opt-in per dispatch. See app-stores/apple/app-store-submission-guide.md.
+#
 # Data source: the seeded dev DB (ghcr.io/boardsesh/boardsesh-dev-db) brought up
 # with Colima, since macOS runners can't use Linux `services:` containers. This
 # is the first iteration of the workflow; the Colima + Release-build path is best
@@ -23,6 +29,10 @@ on:
         description: 'iOS simulator device name'
         type: string
         default: 'iPhone 16 Pro Max'
+      upload:
+        description: 'Upload the captured screenshots to App Store Connect (the App Store version must be in an editable state). Never runs on the nightly cron.'
+        type: boolean
+        default: false
   schedule:
     # 06:00 UTC nightly — regenerate the artifact off the latest main.
     - cron: '0 6 * * *'
@@ -108,6 +118,58 @@ jobs:
             --flow "${{ inputs.flow || 'app-store' }}" \
             --backend local \
             --device "${{ inputs.device || 'iPhone 16 Pro Max' }}"
+
+      # Fail loudly if any capture isn't an App Store-accepted size for its slot,
+      # so deliver can't get silently rejected by Apple (or route to the wrong
+      # slot). Runs on every capture, including nightly — an early warning if a
+      # future simulator/Xcode bump changes the capture resolution.
+      - name: Assert screenshot dimensions
+        run: vp run check:screenshot-dimensions
+
+      # --- Upload to App Store Connect (manual dispatch only; never on cron) ---
+      # Screenshots ONLY — no binary, no metadata, no review submission. Gated
+      # behind the `upload` input, which is unset on the schedule cron. The
+      # `success() &&` prefix is required: a custom `if:` overrides the default
+      # success() status check, so without it these would run even if capture failed.
+      - name: Set up Ruby + fastlane
+        if: success() && github.event_name == 'workflow_dispatch' && inputs.upload
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.4'
+          bundler-cache: true
+          working-directory: fastlane
+
+      - name: Decode App Store Connect API key
+        if: success() && github.event_name == 'workflow_dispatch' && inputs.upload
+        env:
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_API_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_API_KEY_BASE64 }}
+        run: |
+          set -euo pipefail
+          [ -n "$APP_STORE_CONNECT_API_KEY_ID" ] || { echo "::error::Missing APP_STORE_CONNECT_API_KEY_ID."; exit 1; }
+          [ -n "$APP_STORE_CONNECT_API_KEY_BASE64" ] || { echo "::error::Missing APP_STORE_CONNECT_API_KEY_BASE64."; exit 1; }
+          mkdir -p "$HOME/.private_keys"
+          key_path="$HOME/.private_keys/AuthKey_${APP_STORE_CONNECT_API_KEY_ID}.p8"
+          printf '%s' "$APP_STORE_CONNECT_API_KEY_BASE64" | base64 --decode > "$key_path"
+          grep -q 'BEGIN PRIVATE KEY' "$key_path" || { echo "::error::APP_STORE_CONNECT_API_KEY_BASE64 did not decode to an App Store Connect private key."; exit 1; }
+          echo "ASC_KEY_PATH=$key_path" >> "$GITHUB_ENV"
+
+      - name: Upload screenshots to App Store Connect
+        if: success() && github.event_name == 'workflow_dispatch' && inputs.upload
+        working-directory: fastlane
+        env:
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          FASTLANE_SKIP_UPDATE_CHECK: '1'
+          FASTLANE_DISABLE_ANIMATION: '1'
+        run: |
+          set -euo pipefail
+          [ -n "$APP_STORE_CONNECT_ISSUER_ID" ] || { echo "::error::Missing APP_STORE_CONNECT_ISSUER_ID."; exit 1; }
+          bundle exec fastlane ios screenshots
+
+      - name: Clean up App Store Connect key
+        if: always()
+        run: rm -f "$HOME/.private_keys/AuthKey_"*.p8 2>/dev/null || true
 
       - name: Dump backend log on failure
         if: failure()
