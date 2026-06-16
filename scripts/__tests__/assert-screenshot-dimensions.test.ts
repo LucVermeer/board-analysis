@@ -4,7 +4,9 @@ import {
   type Dimensions,
   findGooglePlayOffenders,
   findOffenders,
+  findScreenshotTreeOffenders,
   readPngDimensions,
+  type ScreenshotTree,
 } from '../assert-screenshot-dimensions';
 
 /** Build a minimal valid PNG header: signature + IHDR length + "IHDR" + width/height. */
@@ -52,6 +54,19 @@ describe('findOffenders', () => {
     expect(offenders).toEqual([]);
   });
 
+  it('accepts the common iPhone Plus and Pro sizes', () => {
+    expect(
+      findOffenders('iphone-14-plus', [
+        { name: 'iphone-14-plus/00-home.png', buffer: pngHeader({ width: 1284, height: 2778 }) },
+      ]),
+    ).toEqual([]);
+    expect(
+      findOffenders('iphone-16-pro', [
+        { name: 'iphone-16-pro/00-home.png', buffer: pngHeader({ width: 1206, height: 2622 }) },
+      ]),
+    ).toEqual([]);
+  });
+
   it('flags a wrong size, reporting both file and dimensions', () => {
     const offenders = findOffenders(slug, [
       { name: `${slug}/bad.png`, buffer: pngHeader({ width: 1284, height: 2778 }) },
@@ -72,6 +87,97 @@ describe('findOffenders', () => {
   it('reports a corrupt PNG as an offender rather than throwing', () => {
     const offenders = findOffenders(slug, [{ name: `${slug}/corrupt.png`, buffer: Buffer.alloc(4) }]);
     expect(offenders).toHaveLength(1);
+  });
+});
+
+describe('findScreenshotTreeOffenders', () => {
+  function screenshotTree(overrides: Partial<ScreenshotTree> = {}): ScreenshotTree {
+    const baseTree: ScreenshotTree = {};
+    for (const locale of ['en-US', 'es-ES', 'es-MX', 'fr-FR']) {
+      baseTree[locale] = {
+        'iphone-16-pro-max': [
+          {
+            name: `${locale}/iphone-16-pro-max/00-home.png`,
+            buffer: pngHeader({ width: 1320, height: 2868 }),
+          },
+        ],
+        'iphone-14-plus': [
+          {
+            name: `${locale}/iphone-14-plus/00-home.png`,
+            buffer: pngHeader({ width: 1284, height: 2778 }),
+          },
+        ],
+        'iphone-16-pro': [
+          {
+            name: `${locale}/iphone-16-pro/00-home.png`,
+            buffer: pngHeader({ width: 1206, height: 2622 }),
+          },
+        ],
+      };
+    }
+    for (const [locale, devices] of Object.entries(overrides)) {
+      if (devices) {
+        baseTree[locale] = devices;
+      }
+    }
+    return baseTree;
+  }
+
+  it('accepts a complete localized common-device tree', () => {
+    expect(findScreenshotTreeOffenders(screenshotTree())).toEqual([]);
+  });
+
+  it('flags missing App Store locales', () => {
+    const tree = screenshotTree();
+    delete tree['fr-FR'];
+    const offenders = findScreenshotTreeOffenders(tree);
+    expect(offenders.some((offender) => offender.file === 'fr-FR' && /missing/.test(offender.reason))).toBe(true);
+  });
+
+  it('flags inconsistent device sets across locales', () => {
+    const tree = screenshotTree({
+      'es-ES': {
+        'iphone-16-pro-max': [
+          {
+            name: 'es-ES/iphone-16-pro-max/00-home.png',
+            buffer: pngHeader({ width: 1320, height: 2868 }),
+          },
+        ],
+      },
+    });
+    const offenders = findScreenshotTreeOffenders(tree);
+    expect(offenders.some((offender) => offender.file === 'es-ES' && /device folders/.test(offender.reason))).toBe(
+      true,
+    );
+  });
+
+  it('flags inconsistent PNG sets across locales', () => {
+    const tree = screenshotTree({
+      'es-MX': {
+        'iphone-16-pro-max': [
+          {
+            name: 'es-MX/iphone-16-pro-max/01-climbs.png',
+            buffer: pngHeader({ width: 1320, height: 2868 }),
+          },
+        ],
+        'iphone-14-plus': [
+          {
+            name: 'es-MX/iphone-14-plus/00-home.png',
+            buffer: pngHeader({ width: 1284, height: 2778 }),
+          },
+        ],
+        'iphone-16-pro': [
+          {
+            name: 'es-MX/iphone-16-pro/00-home.png',
+            buffer: pngHeader({ width: 1206, height: 2622 }),
+          },
+        ],
+      },
+    });
+    const offenders = findScreenshotTreeOffenders(tree);
+    expect(
+      offenders.some((offender) => offender.file === 'es-MX/iphone-16-pro-max' && /PNG set/.test(offender.reason)),
+    ).toBe(true);
   });
 });
 

@@ -25,9 +25,16 @@ cd fastlane && bundle exec fastlane android next_version_code
 
 ## Screenshots — `ios screenshots`, `android screenshots`
 
-The iOS lane uploads PNGs in `app-stores/apple/screenshots/iphone-16-pro-max/`
-to App Store Connect as **screenshots only**. `deliver` routes each image to its
-display slot by pixel dimensions; the `NN-` filename prefixes set the order.
+The iOS lane uploads PNGs in
+`app-stores/apple/screenshots/<app-store-locale>/<device>/` (captured by
+`vp run mobile:screenshots -- --devices common --locales all`) as
+**screenshots only** — no binary, no text metadata, no review submission.
+deliver routes each image to its display slot by pixel dimensions; the `NN-`
+filename prefixes set the display order inside each slot.
+
+The upload expects the generated Apple locale folders `en-US`, `es-ES`, `es-MX`,
+and `fr-FR`. The app has one Spanish locale (`es`), so the capture pipeline
+writes the same Spanish screenshots to both App Store Connect Spanish locales.
 
 The Android lane uploads PNGs in `app-stores/google/screenshots/pixel-2/` to the
 Google Play phone screenshot slot as **screenshots only**, staged into

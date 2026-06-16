@@ -35,22 +35,28 @@ Verify the generated assets look correct before proceeding.
 Automated native capture (the real RN app, dark theme) via Maestro:
 
 ```bash
-vp run mobile:screenshots -- --platform ios --backend prod --theme dark
+vp run mobile:screenshots -- --platform ios --backend prod --theme dark --devices common --locales all
 ```
 
-This drives an iPhone 16 Pro Max simulator against prod (signed in as the test
-user) and saves PNGs to `app-stores/apple/screenshots/<device>/` — e.g.
-`app-stores/apple/screenshots/iphone-16-pro-max/`. See
+This drives the common iPhone simulator set against prod (signed in as the test
+user) and saves PNGs to `app-stores/apple/screenshots/<app-store-locale>/<device>/`
+— e.g. `app-stores/apple/screenshots/en-US/iphone-16-pro-max/`. See
 `packages/mobile/.maestro/README.md` for prerequisites (Maestro, the
 `SCREENSHOT_USER_PASSWORD` env, etc.).
 
 ### Required screenshot sizes
 
-| Device                          | Resolution | Required?                                |
-| ------------------------------- | ---------- | ---------------------------------------- |
-| 6.9" iPhone (iPhone 16 Pro Max) | 1320x2868  | Yes — captured by the Maestro flow       |
-| 6.5" iPhone (iPhone 14 Plus)    | 1284x2778  | Optional (the 6.9" asset is accepted)    |
-| 13" iPad (iPad Pro)             | 2064x2752  | No, but recommended if iPad is supported |
+| Device                           | Resolution | Required?                             |
+| -------------------------------- | ---------- | ------------------------------------- |
+| 6.9" iPhone (iPhone 16 Pro Max)  | 1320x2868  | Yes — captured by the Maestro flow    |
+| 6.5/6.7" iPhone (iPhone 14 Plus) | 1284x2778  | Optional, captured for common devices |
+| 6.3" iPhone (iPhone 16 Pro)      | 1206x2622  | Optional, captured for common devices |
+| 13" iPad (iPad Pro)              | 2064x2752  | Not required while tablet is disabled |
+
+The app currently has `supportsTablet: false`, so iPad screenshots are not part
+of the automated set. `--locales all` captures `en-US`, `es`, and `fr`; the
+single Spanish app locale is uploaded to both App Store Connect Spanish locales:
+`es-ES` and `es-MX`.
 
 Dark is the canonical appearance; pass `--theme light` for a light set.
 
@@ -93,9 +99,9 @@ Store Connect.
 
 What it does:
 
-1. Captures the iPhone 16 Pro Max screenshots on a simulator, against **prod**
-   (signed in as the test user) — the canonical store recipe, with no local
-   backend needed.
+1. Captures common iPhone screenshots on simulators, against **prod** (signed in
+   as the test user) for every supported app locale — the canonical store
+   recipe, with no local backend needed.
 2. Runs `vp run check:screenshot-dimensions`, which fails the run if any PNG
    isn't an Apple-accepted size for its slot (so Apple can't reject the upload
    for a bad resolution).
@@ -103,7 +109,7 @@ What it does:
    with `skip_binary_upload`, `skip_metadata`, and `submit_for_review: false`.
    deliver routes each image to its display slot by pixel dimensions
    (1320×2868 → the 6.9" iPhone slot); the `00-`/`01-` filename prefixes set the
-   display order.
+   display order inside each device slot.
 
 **Authentication** uses the App Store Connect API key already configured for the
 TestFlight workflows — no new secrets:

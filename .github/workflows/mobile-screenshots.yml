@@ -28,14 +28,18 @@ on:
         options:
           - app-store
           - onboarding
-      device:
-        description: 'iOS simulator device name'
+      devices:
+        description: 'iOS simulator devices: common, or a comma-separated list of simulator names'
         type: string
-        default: 'iPhone 16 Pro Max'
+        default: 'common'
       android_device:
         description: 'Android emulator device label used for screenshot output'
         type: string
         default: 'Pixel 2'
+      locales:
+        description: 'App locales: all, or a comma-separated list such as en-US,es,fr'
+        type: string
+        default: 'all'
       upload:
         description: 'Upload captured screenshots to App Store Connect and Google Play. Never runs on the nightly cron.'
         type: boolean
@@ -54,7 +58,7 @@ permissions:
 jobs:
   ios:
     runs-on: macos-26
-    timeout-minutes: 90
+    timeout-minutes: 180
 
     env:
       # Marks an upload dispatch — gates the App Store Connect upload steps so the
@@ -137,7 +141,8 @@ jobs:
             --platform ios \
             --flow "${{ inputs.flow || 'app-store' }}" \
             --backend prod \
-            --device "${{ inputs.device || 'iPhone 16 Pro Max' }}" \
+            --devices "${{ inputs.devices || 'common' }}" \
+            --locales "${{ inputs.locales || 'all' }}" \
             --app-path packages/mobile/.app-cache/Boardsesh.app
 
       # On a capture failure, save Maestro's debug output (the failure screenshot +

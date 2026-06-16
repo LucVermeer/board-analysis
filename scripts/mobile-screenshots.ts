@@ -16,12 +16,13 @@
  *
  * Flow: prepare a simulator/emulator, apply a clean status bar, install the app
  * artifact, run a Maestro flow that deep-links to each screen and captures it.
- * PNGs land in app-stores/<store>/screenshots/<device>/ (ios -> apple, android
- * -> google).
+ * iOS PNGs land in app-stores/apple/screenshots/<app-store-locale>/<device>/;
+ * Android PNGs land in app-stores/google/screenshots/<device>/.
  *
  * Usage:
  *   vp run mobile:screenshots -- [--platform ios] [--flow app-store|onboarding]
- *                                 [--backend local|prod] [--device "iPhone 16 Pro Max"]
+ *                                 [--backend local|prod] [--devices common|<comma-list>]
+ *                                 [--locales all|<comma-list>] [--device "iPhone 16 Pro Max"]
  *                                 [--variant material|liquidGlass] [--shutdown]
  *                                 [--app-path <path/to/Boardsesh.app|app.apk>]
  *
@@ -38,6 +39,7 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, 
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { SUPPORTED_LOCALES, isSupportedLocale, type Locale } from '../packages/shared/i18n/src/config';
 
 const ROOT_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const MOBILE_DIR = resolve(ROOT_DIR, 'packages', 'mobile');
@@ -59,9 +61,7 @@ const STORE_BY_PLATFORM: Record<'ios' | 'android', string> = { ios: 'apple', and
 const LOG = '[mobile:screenshots]';
 
 const APP_ID = 'com.boardsesh.app';
-const DEFAULT_IOS_DEVICE = 'iPhone 16 Pro Max';
 const DEFAULT_ANDROID_DEVICE = 'Pixel 2';
-const IOS_DEVICE_TYPE_ID = 'com.apple.CoreSimulator.SimDeviceType.iPhone-16-Pro-Max';
 const DEFAULT_ANDROID_APK = resolve(
   MOBILE_DIR,
   'android',
@@ -86,11 +86,55 @@ export type ScreenshotBackend = 'local' | 'prod';
 
 export type ScreenshotTheme = 'light' | 'dark';
 
+export interface IosScreenshotDevice {
+  name: string;
+  typeId: string;
+  // The one surviving coordinate tap (the board picker), passed to the flow as
+  // MAESTRO_BOARD_PICK_POINT. Everything else the flow needs is a deep link, so
+  // there's no per-device board-view / board-sheet tap any more.
+  boardPickPoint: string;
+}
+
+export const IOS_SCREENSHOT_DEVICES: readonly IosScreenshotDevice[] = [
+  {
+    name: 'iPhone 16 Pro Max',
+    typeId: 'com.apple.CoreSimulator.SimDeviceType.iPhone-16-Pro-Max',
+    boardPickPoint: '24%,45%',
+  },
+  {
+    name: 'iPhone 14 Plus',
+    typeId: 'com.apple.CoreSimulator.SimDeviceType.iPhone-14-Plus',
+    boardPickPoint: '24%,45%',
+  },
+  {
+    name: 'iPhone 16 Pro',
+    typeId: 'com.apple.CoreSimulator.SimDeviceType.iPhone-16-Pro',
+    boardPickPoint: '24%,45%',
+  },
+];
+
+const COMMON_IOS_DEVICE_NAMES = IOS_SCREENSHOT_DEVICES.map((device) => device.name);
+const DEFAULT_IOS_DEVICES_ARGUMENT = 'common';
+const DEFAULT_LOCALES_ARGUMENT = 'all';
+
+export interface AppStoreLocaleTarget {
+  appLocale: Locale;
+  appStoreLocales: readonly string[];
+}
+
+const APP_STORE_LOCALES_BY_APP_LOCALE: Record<Locale, readonly string[]> = {
+  'en-US': ['en-US'],
+  es: ['es-ES', 'es-MX'],
+  fr: ['fr-FR'],
+};
+
 export interface ScreenshotOptions {
   platform: ScreenshotPlatform;
   flow: ScreenshotFlow;
   backend: ScreenshotBackend;
-  device: string;
+  devices: string[];
+  androidDevice: string;
+  appLocales: Locale[];
   variant: string | null;
   theme: ScreenshotTheme;
   /** Workout type the Record/session screen pre-selects (generator screenshot); null = Off. */
@@ -102,12 +146,13 @@ export interface ScreenshotOptions {
 
 export function parseArgs(argv: readonly string[]): ScreenshotOptions {
   const args = argv.filter((argument) => argument !== '--');
-  let deviceProvided = false;
   const options: ScreenshotOptions = {
     platform: 'ios',
     flow: 'app-store',
     backend: 'local',
-    device: DEFAULT_IOS_DEVICE,
+    devices: [...COMMON_IOS_DEVICE_NAMES],
+    androidDevice: DEFAULT_ANDROID_DEVICE,
+    appLocales: [...SUPPORTED_LOCALES],
     variant: null,
     // Dark is the canonical store appearance (the app defaults to dark).
     theme: 'dark',
@@ -135,9 +180,19 @@ export function parseArgs(argv: readonly string[]): ScreenshotOptions {
         options.backend = expectEnum(flag, value, ['local', 'prod']) as ScreenshotBackend;
         index++;
         break;
-      case '--device':
-        options.device = expectValue(flag, value);
-        deviceProvided = true;
+      case '--device': {
+        const deviceName = expectValue(flag, value);
+        options.devices = [deviceName];
+        options.androidDevice = deviceName;
+        index++;
+        break;
+      }
+      case '--devices':
+        options.devices = parseDevicesArgument(expectValue(flag, value));
+        index++;
+        break;
+      case '--locales':
+        options.appLocales = parseLocalesArgument(expectValue(flag, value));
         index++;
         break;
       case '--variant':
@@ -166,11 +221,41 @@ export function parseArgs(argv: readonly string[]): ScreenshotOptions {
     }
   }
 
-  if (!deviceProvided && options.platform === 'android') {
-    options.device = DEFAULT_ANDROID_DEVICE;
-  }
-
   return options;
+}
+
+function parseDevicesArgument(value: string): string[] {
+  if (value === DEFAULT_IOS_DEVICES_ARGUMENT) {
+    return [...COMMON_IOS_DEVICE_NAMES];
+  }
+  const devices = value
+    .split(',')
+    .map((deviceName) => deviceName.trim())
+    .filter((deviceName) => deviceName.length > 0);
+  if (devices.length === 0) {
+    throw new Error('--devices requires at least one device name');
+  }
+  return devices;
+}
+
+function parseLocalesArgument(value: string): Locale[] {
+  if (value === DEFAULT_LOCALES_ARGUMENT) {
+    return [...SUPPORTED_LOCALES];
+  }
+  const locales = value
+    .split(',')
+    .map((locale) => locale.trim())
+    .filter((locale) => locale.length > 0);
+  if (locales.length === 0) {
+    throw new Error('--locales requires at least one locale');
+  }
+  const invalidLocales = locales.filter((locale) => !isSupportedLocale(locale));
+  if (invalidLocales.length > 0) {
+    throw new Error(
+      `--locales must contain supported app locales (${SUPPORTED_LOCALES.join(', ')}) or "all" (got ${invalidLocales.join(', ')})`,
+    );
+  }
+  return Array.from(new Set(locales)) as Locale[];
 }
 
 function expectValue(flag: string, value: string | undefined): string {
@@ -206,6 +291,7 @@ export function deviceSlug(deviceName: string): string {
 export function buildScreenshotEnv(
   options: ScreenshotOptions,
   baseEnv: NodeJS.ProcessEnv = process.env,
+  appLocale: Locale | null = null,
 ): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {
     ...baseEnv,
@@ -218,6 +304,9 @@ export function buildScreenshotEnv(
     EXPO_PUBLIC_SCREENSHOT_USER_EMAIL: baseEnv.SCREENSHOT_USER_EMAIL ?? DEFAULT_USER_EMAIL,
     EXPO_PUBLIC_SCREENSHOT_USER_PASSWORD: baseEnv.SCREENSHOT_USER_PASSWORD ?? DEFAULT_USER_PASSWORD,
   };
+  if (appLocale) {
+    env.EXPO_PUBLIC_SCREENSHOT_LOCALE = appLocale;
+  }
   if (options.variant) {
     env.EXPO_PUBLIC_SCREENSHOT_VARIANT = options.variant;
   }
@@ -296,26 +385,54 @@ function newestIosRuntime(): string | null {
   return ios.length > 0 ? ios[ios.length - 1].identifier : null;
 }
 
-function findOrCreateIosDevice(deviceName: string): DeviceInfo {
+function resolveIosScreenshotDevices(deviceNames: readonly string[]): IosScreenshotDevice[] {
+  return deviceNames.map((deviceName) => {
+    const knownDevice = IOS_SCREENSHOT_DEVICES.find((device) => device.name === deviceName);
+    if (knownDevice) return knownDevice;
+    // An unlisted device name: usable only if a simulator by that name already
+    // exists (typeId: '' tells findOrCreateIosDevice it can't auto-create one, so
+    // it errors with a clear message instead). It gets the shared default
+    // board-pick point — add an IOS_SCREENSHOT_DEVICES entry to tune it per device.
+    return {
+      name: deviceName,
+      typeId: '',
+      boardPickPoint: '24%,45%',
+    };
+  });
+}
+
+export function resolveAppStoreLocaleTargets(appLocales: readonly Locale[]): AppStoreLocaleTarget[] {
+  return appLocales.map((appLocale) => ({
+    appLocale,
+    appStoreLocales: APP_STORE_LOCALES_BY_APP_LOCALE[appLocale],
+  }));
+}
+
+function findOrCreateIosDevice(screenshotDevice: IosScreenshotDevice): DeviceInfo {
   const devices = listSimulatorDevices();
-  const booted = devices.find((device) => device.name === deviceName && device.state === 'Booted');
+  const booted = devices.find((device) => device.name === screenshotDevice.name && device.state === 'Booted');
   if (booted) return booted;
-  const existing = devices.find((device) => device.name === deviceName);
+  const existing = devices.find((device) => device.name === screenshotDevice.name);
   if (existing) return existing;
+  if (screenshotDevice.typeId.length === 0) {
+    throw new Error(
+      `No "${screenshotDevice.name}" simulator found. Create it in Xcode or use one of: ${COMMON_IOS_DEVICE_NAMES.join(', ')}.`,
+    );
+  }
 
   const runtime = newestIosRuntime();
   if (!runtime) {
     throw new Error(
-      `No "${deviceName}" simulator found and no iOS runtime available to create one. Open Xcode > Settings > Components to install a simulator runtime, or create the device in Xcode.`,
+      `No "${screenshotDevice.name}" simulator found and no iOS runtime available to create one. Open Xcode > Settings > Components to install a simulator runtime, or create the device in Xcode.`,
     );
   }
-  console.log(`${LOG} Creating simulator "${deviceName}" (${runtime})...`);
-  const { status } = runCapture('xcrun', ['simctl', 'create', deviceName, IOS_DEVICE_TYPE_ID, runtime]);
+  console.log(`${LOG} Creating simulator "${screenshotDevice.name}" (${runtime})...`);
+  const { status } = runCapture('xcrun', ['simctl', 'create', screenshotDevice.name, screenshotDevice.typeId, runtime]);
   if (status !== 0) {
-    throw new Error(`Failed to create simulator "${deviceName}". Create it manually in Xcode and rerun.`);
+    throw new Error(`Failed to create simulator "${screenshotDevice.name}". Create it manually in Xcode and rerun.`);
   }
-  const created = listSimulatorDevices().find((device) => device.name === deviceName);
-  if (!created) throw new Error(`Created "${deviceName}" but could not locate it afterwards.`);
+  const created = listSimulatorDevices().find((device) => device.name === screenshotDevice.name);
+  if (!created) throw new Error(`Created "${screenshotDevice.name}" but could not locate it afterwards.`);
   return created;
 }
 
@@ -355,14 +472,46 @@ function clearStatusBar(udid: string): void {
   runCapture('xcrun', ['simctl', 'status_bar', udid, 'clear']);
 }
 
-function collectScreenshots(captureDir: string, platform: 'ios' | 'android', deviceName: string): string[] {
-  const outputDir = join(OUTPUT_ROOT, STORE_BY_PLATFORM[platform], 'screenshots', deviceSlug(deviceName));
-  mkdirSync(outputDir, { recursive: true });
+function collectScreenshots(
+  captureDir: string,
+  platform: 'ios' | 'android',
+  deviceName: string,
+  appStoreLocales: readonly string[] | null = null,
+): string[] {
   const pngs = readdirSync(captureDir).filter((file) => file.toLowerCase().endsWith('.png'));
-  for (const png of pngs) {
-    cpSync(join(captureDir, png), join(outputDir, png));
+  const saved: string[] = [];
+  if (!appStoreLocales) {
+    const outputDir = join(OUTPUT_ROOT, STORE_BY_PLATFORM[platform], 'screenshots', deviceSlug(deviceName));
+    mkdirSync(outputDir, { recursive: true });
+    for (const png of pngs) {
+      const outputFile = join(outputDir, png);
+      cpSync(join(captureDir, png), outputFile);
+      saved.push(outputFile);
+    }
+    return saved;
   }
-  return pngs.map((png) => join(outputDir, png));
+
+  for (const appStoreLocale of appStoreLocales) {
+    const outputDir = join(
+      OUTPUT_ROOT,
+      STORE_BY_PLATFORM[platform],
+      'screenshots',
+      appStoreLocale,
+      deviceSlug(deviceName),
+    );
+    mkdirSync(outputDir, { recursive: true });
+    for (const existingFile of readdirSync(outputDir)) {
+      if (existingFile.toLowerCase().endsWith('.png')) {
+        rmSync(join(outputDir, existingFile), { force: true });
+      }
+    }
+    for (const png of pngs) {
+      const outputFile = join(outputDir, png);
+      cpSync(join(captureDir, png), outputFile);
+      saved.push(outputFile);
+    }
+  }
+  return saved;
 }
 
 function flowFileForPlatform(options: ScreenshotOptions, platform: 'ios' | 'android'): string {
@@ -371,25 +520,17 @@ function flowFileForPlatform(options: ScreenshotOptions, platform: 'ios' | 'andr
   return join(MAESTRO_DIR, `${options.flow}.yaml`);
 }
 
-function runIos(options: ScreenshotOptions): number {
-  if (!commandExists('xcrun') || runCapture('xcrun', ['simctl', 'help']).status !== 0) {
-    console.log(`${LOG} Skipped: iOS simulator tooling (xcrun simctl) not available.`);
-    return 0;
-  }
-  if (!commandExists('maestro')) {
-    console.error(`${LOG} FAILED: Maestro not found on PATH. ${MAESTRO_INSTALL_HINT}`);
-    return 1;
-  }
-
-  const device = findOrCreateIosDevice(options.device);
+function captureIosDevice(
+  options: ScreenshotOptions,
+  screenshotDevice: IosScreenshotDevice,
+  appPath: string,
+  localeTarget: AppStoreLocaleTarget,
+): number {
+  const device = findOrCreateIosDevice(screenshotDevice);
   bootDevice(device);
   applyCleanStatusBar(device.udid);
 
-  // Resolve the dev-client .app: a cached/prebuilt one (--app-path, the CI common
-  // path) or build one now (slow; local convenience). The .app loads its JS from
-  // Metro, so it's reusable across JS changes.
-  const appPath = resolveAppPath(options);
-  console.log(`${LOG} Installing ${appPath} on ${device.name}...`);
+  console.log(`${LOG} Installing ${appPath} on ${device.name} for ${localeTarget.appLocale}...`);
   // Uninstall first so the run starts from a clean container (fresh AsyncStorage,
   // so no stale active board). The dev-client + Metro path drops Maestro's
   // `clearState`, which can't run before the bundle has loaded — the uninstall +
@@ -401,44 +542,26 @@ function runIos(options: ScreenshotOptions): number {
     return install.status;
   }
 
-  // Reset the simulator keychain so the app launches signed out and login runs
+  // Reset the simulator keychain so the app's auto-sign-in re-authenticates
   // against the target backend. The auth token lives in a shared keychain access
   // group (group.com.boardsesh.app) that survives both an app uninstall and the
   // fresh install above — so without this a stale token (e.g. from a previous
-  // --backend local run) makes login skip and the app talk to the wrong backend
-  // with an invalid session. The login subflow re-authenticates from a clean slate.
+  // --backend local run) is reused and the app talks to the wrong backend with an
+  // invalid session. A clean keychain forces a fresh sign-in with the baked creds.
   console.log(`${LOG} Resetting simulator keychain (clears any stale auth token)...`);
   runCapture('xcrun', ['simctl', 'keychain', device.udid, 'reset']);
 
-  // Start Metro so the dev-client can load its JS bundle. EXPO_PUBLIC_SCREENSHOT_*
-  // + the backend URLs are inlined here, at bundle time — that's what makes the
-  // native .app reusable. Killed in the finally below.
-  // Abort if the port is already taken: expo would silently skip starting our
-  // dev server (non-interactive), and the flow would then load whatever foreign
-  // Metro is on the port — capturing the wrong app's bundle. Fail loud instead.
-  if (portInUse(METRO_PORT)) {
-    console.error(
-      `${LOG} FAILED: port ${METRO_PORT} is already in use; another Metro would serve the wrong bundle. ` +
-        `Stop it, or set BOARDSESH_METRO_PORT to a free port.`,
-    );
-    return 1;
-  }
-
-  const metroEnv = buildScreenshotEnv(options);
-  console.log(
-    `${LOG} Starting Metro on ${METRO_PORT} (backend=${options.backend}, theme=${options.theme}, flow=${options.flow}${options.variant ? `, variant=${options.variant}` : ''})...`,
-  );
-  const metro = startMetro(metroEnv);
   const captureDir = mkdtempSync(join(tmpdir(), 'boardsesh-shots-'));
   try {
-    if (!waitForMetro()) {
-      console.error(`${LOG} FAILED: Metro did not become ready on port ${METRO_PORT}.`);
-      return 1;
-    }
-
-    // Compile the bundle now so the dev-client launch below isn't a cold bundle
-    // when we wait for the app to reach home (the slow-CI-runner case this guards).
-    prewarmMetroBundle();
+    // Metro is already up and pre-warmed by runIos (once per locale, before this
+    // per-device loop), so this goes straight to launching the app.
+    //
+    // Every device in a locale shares one Metro log, and startMetro only truncates
+    // it when Metro starts — so a `$screen /home` line from the previous device is
+    // still in the log. Snapshot the current marker count and wait for it to
+    // INCREASE (not merely be present), or device 2+ would skip the readiness wait
+    // on a stale marker and capture a blank/loading frame.
+    const homeReadyBaseline = homeReadyMarkerCount();
 
     // Just launch the app — no `simctl openurl`. The screenshots build bakes
     // DEV_CLIENT_DEFAULT_LAUNCHER_URL=http://localhost:8081 into Info.plist (see
@@ -456,7 +579,7 @@ function runIos(options: ScreenshotOptions): number {
     // there before Maestro runs — this is what login.yaml's readiness wait used to
     // do (now deleted; there's no login screen to gate on).
     console.log(`${LOG} Waiting for the app to auto-sign-in and reach home...`);
-    if (!waitForHomeReady()) {
+    if (!waitForHomeReady(homeReadyBaseline)) {
       console.error(`${LOG} FAILED: app did not reach the home screen (auto sign-in / bundle load).`);
       return 1;
     }
@@ -490,6 +613,8 @@ function runIos(options: ScreenshotOptions): number {
         `SCREENSHOT_USER_EMAIL=${email}`,
         '-e',
         `SCREENSHOT_USER_PASSWORD=${password}`,
+        '-e',
+        `MAESTRO_BOARD_PICK_POINT=${screenshotDevice.boardPickPoint}`,
       ],
       process.env,
       captureDir,
@@ -499,17 +624,16 @@ function runIos(options: ScreenshotOptions): number {
       return maestroStatus;
     }
 
-    const saved = collectScreenshots(captureDir, 'ios', device.name);
+    const saved = collectScreenshots(captureDir, 'ios', device.name, localeTarget.appStoreLocales);
     if (saved.length === 0) {
       console.error(`${LOG} WARNING: flow completed but no PNGs were captured.`);
       return 1;
     }
     console.log(
-      `${LOG} Saved ${saved.length} screenshot(s) to app-stores/${STORE_BY_PLATFORM.ios}/screenshots/${deviceSlug(device.name)}/`,
+      `${LOG} Saved ${saved.length} screenshot(s) to app-stores/${STORE_BY_PLATFORM.ios}/screenshots/{${localeTarget.appStoreLocales.join(',')}}/${deviceSlug(device.name)}/`,
     );
     for (const file of saved) console.log(`${LOG}   ${file}`);
   } finally {
-    stopMetro(metro);
     rmSync(captureDir, { force: true, recursive: true });
     clearStatusBar(device.udid);
     if (options.shutdown) {
@@ -620,7 +744,7 @@ function resolveAndroidDeviceId(): string | null {
 }
 
 function androidDeviceName(options: ScreenshotOptions): string {
-  return options.device === DEFAULT_IOS_DEVICE ? DEFAULT_ANDROID_DEVICE : options.device;
+  return options.androidDevice;
 }
 
 function resolveAndroidAppPath(options: ScreenshotOptions): string {
@@ -733,6 +857,60 @@ function clearAndroidStatusBar(deviceId: string): void {
   ]);
 }
 
+function runIos(options: ScreenshotOptions): number {
+  if (!commandExists('xcrun') || runCapture('xcrun', ['simctl', 'help']).status !== 0) {
+    console.log(`${LOG} Skipped: iOS simulator tooling (xcrun simctl) not available.`);
+    return 0;
+  }
+  if (!commandExists('maestro')) {
+    console.error(`${LOG} FAILED: Maestro not found on PATH. ${MAESTRO_INSTALL_HINT}`);
+    return 1;
+  }
+
+  // Abort if the port is already taken: expo would silently skip starting our
+  // dev server (non-interactive), and the flow would then load whatever foreign
+  // Metro is on the port — capturing the wrong app's bundle. Fail loud instead.
+  if (portInUse(METRO_PORT)) {
+    console.error(
+      `${LOG} FAILED: port ${METRO_PORT} is already in use; another Metro would serve the wrong bundle. ` +
+        `Stop it, or set BOARDSESH_METRO_PORT to a free port.`,
+    );
+    return 1;
+  }
+
+  const appPath = resolveAppPath(options);
+  const screenshotDevices = resolveIosScreenshotDevices(options.devices);
+  const localeTargets = resolveAppStoreLocaleTargets(options.appLocales);
+
+  for (let localeIndex = 0; localeIndex < localeTargets.length; localeIndex++) {
+    if (localeIndex > 0 && !waitForPortToClose(METRO_PORT)) {
+      console.error(`${LOG} FAILED: Metro port ${METRO_PORT} did not close after the previous locale run.`);
+      return 1;
+    }
+    const localeTarget = localeTargets[localeIndex];
+    const metroEnv = buildScreenshotEnv(options, process.env, localeTarget.appLocale);
+    console.log(
+      `${LOG} Starting Metro on ${METRO_PORT} (backend=${options.backend}, theme=${options.theme}, flow=${options.flow}, locale=${localeTarget.appLocale}${options.variant ? `, variant=${options.variant}` : ''})...`,
+    );
+    const metro = startMetro(metroEnv);
+    try {
+      if (!waitForMetro()) {
+        console.error(`${LOG} FAILED: Metro did not become ready on port ${METRO_PORT}.`);
+        return 1;
+      }
+      prewarmMetroBundle();
+      for (const screenshotDevice of screenshotDevices) {
+        const status = captureIosDevice(options, screenshotDevice, appPath, localeTarget);
+        if (status !== 0) return status;
+      }
+    } finally {
+      stopMetro(metro);
+    }
+  }
+
+  return 0;
+}
+
 /**
  * Resolve the Boardsesh.app to install: a prebuilt/cached one (--app-path, the CI
  * common path) or a freshly built Debug simulator app (local one-command DX).
@@ -837,6 +1015,15 @@ function waitForMetro(): boolean {
   return false;
 }
 
+/** Wait for a just-stopped Metro process group to release its listening port. */
+function waitForPortToClose(port: number): boolean {
+  for (let attempt = 0; attempt < 30; attempt++) {
+    if (!portInUse(port)) return true;
+    sleepSeconds(1);
+  }
+  return false;
+}
+
 function stopMetro(metro: ChildProcess | null): void {
   if (!metro || metro.pid === undefined) return;
   console.log(`${LOG} Stopping Metro...`);
@@ -858,18 +1045,27 @@ function sleepSeconds(seconds: number): void {
 }
 
 /**
+ * How many times the app has logged it reached home so far. The `$screen /home`
+ * analytics line lands in Metro's stdout (NOT the device's unified log), which
+ * startMetro tee's to METRO_LOG_PATH — so count occurrences in that file.
+ */
+function homeReadyMarkerCount(): number {
+  const metroLog = existsSync(METRO_LOG_PATH) ? readFileSync(METRO_LOG_PATH, 'utf8') : '';
+  return metroLog.split('$screen /home').length - 1;
+}
+
+/**
  * After launch, wait until the app reaches the home screen, so the first
  * screenshot isn't a blank/loading frame. The screenshot build auto-signs-in and
  * boots straight to home (no login screen), so this replaces the old Maestro
- * login.yaml readiness gate. The app's `$screen /home` analytics line lands in
- * Metro's stdout (NOT the device's unified log), which startMetro tee's to
- * METRO_LOG_PATH — so poll that file.
+ * login.yaml readiness gate. Several devices share one Metro log within a locale,
+ * so wait for a NEW marker past `baselineCount` rather than any marker — the log
+ * still holds the previous device's `$screen /home`.
  */
-function waitForHomeReady(timeoutSeconds = 180): boolean {
+function waitForHomeReady(baselineCount = 0, timeoutSeconds = 180): boolean {
   const deadline = Date.now() + timeoutSeconds * 1000;
   while (Date.now() < deadline) {
-    const metroLog = existsSync(METRO_LOG_PATH) ? readFileSync(METRO_LOG_PATH, 'utf8') : '';
-    if (metroLog.includes('$screen /home')) return true;
+    if (homeReadyMarkerCount() > baselineCount) return true;
     sleepSeconds(2);
   }
   return false;

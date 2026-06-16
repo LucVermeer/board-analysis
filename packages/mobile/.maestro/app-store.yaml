@@ -13,12 +13,18 @@ name: app-store screenshots
 #        ://climbs?screenshotOpenFirst=1    -> auto-opens the first climb's board view
 #        ://profile?screenshotTab=logbook   -> profile Logbook tab
 #        ://profile?screenshotTab=sessions  -> profile Sessions tab; auto-opens newest session
-#   2. ONE coordinate tap that survives — the board picker (board pick = '24%,45%', the
-#      first "Your boards" card on /boards). Pinned to the orchestrator's device
-#      (iPhone 16 Pro Max); re-check it if you change the device.
+#   2. ONE coordinate tap that survives — the board picker (the first "Your boards" card
+#      on /boards). The orchestrator passes its percentage as MAESTRO_BOARD_PICK_POINT,
+#      per device, so this one flow captures the whole device matrix (see
+#      IOS_SCREENSHOT_DEVICES in scripts/mobile-screenshots.ts); re-check the point if a
+#      device's layout differs.
 #   The old board-view '50%,26%' and board-sheet '78%,10%' taps are GONE: the board view
 #   is now a deterministic deep link (it used to mis-tap and duplicate the climb-list
 #   shot), and the board-switcher sheet shot was retired.
+#
+# This flow is captured once per (device, locale) pair: the orchestrator bakes
+# EXPO_PUBLIC_SCREENSHOT_LOCALE into the Metro bundle per locale and reruns it on each
+# device in --devices, writing app-stores/apple/screenshots/<app-store-locale>/<device>/.
 #
 # Notes:
 # - The .app is a Debug dev-client that auto-loads Metro on launch, so the orchestrator
@@ -83,15 +89,15 @@ name: app-store screenshots
 - takeScreenshot: 04-session-detail
 
 # Activate a board so the board-backed shots render real content: open the board picker
-# and tap the first card under "Your boards" (the one surviving coordinate tap), which
-# activates it and dismisses back to Climbs.
+# and tap the first card under "Your boards" (the one surviving coordinate tap, supplied
+# per device as MAESTRO_BOARD_PICK_POINT), which activates it and dismisses back to Climbs.
 - openLink: com.boardsesh.app://boards
 - tapOn:
     text: 'Open'
     optional: true
 - waitForAnimationToEnd
 - tapOn:
-    point: '24%,45%'
+    point: ${MAESTRO_BOARD_PICK_POINT}
 - waitForAnimationToEnd
 
 # Climbs — the main browse surface (now board-backed). Plain link FIRST (the list shot),

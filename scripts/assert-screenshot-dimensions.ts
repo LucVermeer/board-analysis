@@ -16,7 +16,9 @@
  *   vp run check:screenshot-dimensions -- --platform android
  *
  * The default platform is ios for backwards compatibility with the original
- * App Store-only gate.
+ * App Store-only gate. Exit code 0 means every PNG under
+ * app-stores/apple/screenshots/<app-store-locale>/<device>/ or
+ * app-stores/google/screenshots/<device>/ matches the selected store rules.
  */
 
 import { readFileSync, readdirSync } from 'node:fs';
@@ -36,6 +38,8 @@ export interface Dimensions {
   height: number;
 }
 
+export const EXPECTED_APP_STORE_LOCALES = ['en-US', 'es-ES', 'es-MX', 'fr-FR'] as const;
+
 /**
  * Portrait sizes App Store Connect accepts, keyed by the capture device slug
  * (see deviceSlug() in mobile-screenshots.ts). A device folder with no entry
@@ -49,6 +53,10 @@ export const ACCEPTED_SIZES: Record<string, readonly Dimensions[]> = {
     { width: 1320, height: 2868 },
     { width: 1290, height: 2796 },
   ],
+  // 6.5"/6.7" iPhone Plus slot.
+  'iphone-14-plus': [{ width: 1284, height: 2778 }],
+  // Current non-Max Pro slot.
+  'iphone-16-pro': [{ width: 1206, height: 2622 }],
 };
 
 /** Read width/height from a PNG buffer's IHDR. Throws on a non-PNG / truncated file. */
@@ -75,7 +83,9 @@ export interface Offender {
   reason: string;
 }
 
-/** Pure: validate one Apple device folder's PNGs against its accepted-size allow-list. */
+export type ScreenshotTree = Record<string, Record<string, PngFile[]>>;
+
+/** Pure: validate one App Store device folder's PNGs against its accepted-size allow-list. */
 export function findOffenders(deviceSlug: string, files: readonly PngFile[]): Offender[] {
   const accepted = ACCEPTED_SIZES[deviceSlug];
   if (!accepted) {
@@ -157,6 +167,80 @@ export function findGooglePlayOffenders(deviceSlug: string, files: readonly PngF
   return offenders;
 }
 
+function sortedKeys(record: Record<string, unknown>): string[] {
+  return Object.keys(record).sort();
+}
+
+function basenames(files: readonly PngFile[], deviceSlug: string): string[] {
+  return files.map((file) => file.name.split('/').at(-1) ?? file.name.replace(`${deviceSlug}/`, '')).sort();
+}
+
+function listsMatch(first: readonly string[], second: readonly string[]): boolean {
+  return first.length === second.length && first.every((item, index) => item === second[index]);
+}
+
+/** Pure: validate locale/device coverage plus per-device PNG dimensions. */
+export function findScreenshotTreeOffenders(tree: ScreenshotTree): Offender[] {
+  const offenders: Offender[] = [];
+  const localeNames = sortedKeys(tree);
+
+  for (const locale of localeNames) {
+    if (!(EXPECTED_APP_STORE_LOCALES as readonly string[]).includes(locale)) {
+      offenders.push({ file: locale, reason: 'unknown App Store locale directory' });
+    }
+  }
+
+  for (const expectedLocale of EXPECTED_APP_STORE_LOCALES) {
+    if (!tree[expectedLocale]) {
+      offenders.push({ file: expectedLocale, reason: 'missing App Store locale directory' });
+    }
+  }
+
+  const firstExpectedLocale = EXPECTED_APP_STORE_LOCALES.find((locale) => tree[locale]);
+  const referenceDevices = firstExpectedLocale ? sortedKeys(tree[firstExpectedLocale]) : [];
+  if (referenceDevices.length === 0 && firstExpectedLocale) {
+    offenders.push({ file: firstExpectedLocale, reason: 'contains no device screenshot folders' });
+  }
+
+  for (const expectedLocale of EXPECTED_APP_STORE_LOCALES) {
+    const devices = tree[expectedLocale];
+    if (!devices) continue;
+    const deviceNames = sortedKeys(devices);
+    if (deviceNames.length === 0) {
+      offenders.push({ file: expectedLocale, reason: 'contains no device screenshot folders' });
+      continue;
+    }
+    if (referenceDevices.length > 0 && !listsMatch(deviceNames, referenceDevices)) {
+      offenders.push({
+        file: expectedLocale,
+        reason: `device folders are ${deviceNames.join(', ')}, expected ${referenceDevices.join(', ')}`,
+      });
+    }
+
+    for (const deviceName of deviceNames) {
+      const files = devices[deviceName];
+      if (!files || files.length === 0) {
+        offenders.push({ file: `${expectedLocale}/${deviceName}`, reason: 'contains no PNG screenshots' });
+        continue;
+      }
+      if (referenceDevices.includes(deviceName) && firstExpectedLocale) {
+        const referenceFiles = tree[firstExpectedLocale]?.[deviceName] ?? [];
+        const expectedFiles = basenames(referenceFiles, deviceName);
+        const actualFiles = basenames(files, deviceName);
+        if (expectedFiles.length > 0 && !listsMatch(actualFiles, expectedFiles)) {
+          offenders.push({
+            file: `${expectedLocale}/${deviceName}`,
+            reason: `PNG set is ${actualFiles.join(', ')}, expected ${expectedFiles.join(', ')}`,
+          });
+        }
+      }
+      offenders.push(...findOffenders(deviceName, files));
+    }
+  }
+
+  return offenders;
+}
+
 type ScreenshotPlatform = 'ios' | 'android' | 'all';
 
 function parsePlatform(argv: readonly string[]): ScreenshotPlatform {
@@ -180,47 +264,100 @@ function parsePlatform(argv: readonly string[]): ScreenshotPlatform {
   return platform;
 }
 
-function validateScreenshotRoot(
-  rootDir: string,
-  platformName: string,
-  validator: (deviceSlug: string, files: readonly PngFile[]) => Offender[],
-): number {
-  let deviceDirs: string[];
+function readAppleScreenshotTree(): { tree: ScreenshotTree; pngCount: number } | null {
+  let localeDirs: string[];
   try {
-    deviceDirs = readdirSync(rootDir, { withFileTypes: true })
+    localeDirs = readdirSync(APPLE_SHOTS_DIR, { withFileTypes: true })
       .filter((entry) => entry.isDirectory())
       .map((entry) => entry.name);
   } catch {
-    console.error(`${LOG} FAILED: ${rootDir} not found - run \`vp run mobile:screenshots\` first.`);
-    return 1;
+    console.error(`${LOG} FAILED: ${APPLE_SHOTS_DIR} not found - run \`vp run mobile:screenshots\` first.`);
+    return null;
   }
 
-  const offenders: Offender[] = [];
+  const tree: ScreenshotTree = {};
   let pngCount = 0;
-  for (const slug of deviceDirs) {
-    const dir = join(rootDir, slug);
-    const pngNames = readdirSync(dir).filter((name) => name.toLowerCase().endsWith('.png'));
-    const files: PngFile[] = pngNames.map((name) => ({
-      name: `${slug}/${name}`,
-      buffer: readFileSync(join(dir, name)),
-    }));
-    pngCount += files.length;
-    offenders.push(...validator(slug, files));
+  for (const locale of localeDirs) {
+    const localeDir = join(APPLE_SHOTS_DIR, locale);
+    tree[locale] = {};
+    const nestedDeviceDirs = readdirSync(localeDir, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name);
+    for (const slug of nestedDeviceDirs) {
+      const dir = join(localeDir, slug);
+      const pngNames = readdirSync(dir).filter((name) => name.toLowerCase().endsWith('.png'));
+      const files: PngFile[] = pngNames.map((name) => ({
+        name: `${locale}/${slug}/${name}`,
+        buffer: readFileSync(join(dir, name)),
+      }));
+      pngCount += files.length;
+      tree[locale][slug] = files;
+    }
   }
 
-  if (pngCount === 0) {
-    console.error(`${LOG} FAILED: no screenshots found under ${rootDir}.`);
+  return { tree, pngCount };
+}
+
+function validateAppleScreenshots(): number {
+  const screenshotTree = readAppleScreenshotTree();
+  if (!screenshotTree) return 1;
+
+  if (screenshotTree.pngCount === 0) {
+    console.error(`${LOG} FAILED: no screenshots found under ${APPLE_SHOTS_DIR}.`);
     return 1;
   }
+  const offenders = findScreenshotTreeOffenders(screenshotTree.tree);
   if (offenders.length > 0) {
-    console.error(`${LOG} FAILED: ${offenders.length} ${platformName} screenshot issue(s):`);
+    console.error(`${LOG} FAILED: ${offenders.length} App Store screenshot issue(s):`);
     for (const offender of offenders) {
       console.error(`  - ${offender.file}: ${offender.reason}`);
     }
     return 1;
   }
 
-  console.log(`${LOG} OK: ${pngCount} ${platformName} screenshot(s) match accepted dimensions.`);
+  console.log(`${LOG} OK: ${screenshotTree.pngCount} App Store screenshot(s) match accepted dimensions.`);
+  return 0;
+}
+
+function validateGooglePlayScreenshots(): number {
+  let deviceDirs: string[];
+  try {
+    deviceDirs = readdirSync(GOOGLE_SHOTS_DIR, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name);
+  } catch {
+    console.error(
+      `${LOG} FAILED: ${GOOGLE_SHOTS_DIR} not found - run \`vp run mobile:screenshots -- --platform android\` first.`,
+    );
+    return 1;
+  }
+
+  const offenders: Offender[] = [];
+  let pngCount = 0;
+  for (const slug of deviceDirs) {
+    const dir = join(GOOGLE_SHOTS_DIR, slug);
+    const pngNames = readdirSync(dir).filter((name) => name.toLowerCase().endsWith('.png'));
+    const files: PngFile[] = pngNames.map((name) => ({
+      name: `${slug}/${name}`,
+      buffer: readFileSync(join(dir, name)),
+    }));
+    pngCount += files.length;
+    offenders.push(...findGooglePlayOffenders(slug, files));
+  }
+
+  if (pngCount === 0) {
+    console.error(`${LOG} FAILED: no screenshots found under ${GOOGLE_SHOTS_DIR}.`);
+    return 1;
+  }
+  if (offenders.length > 0) {
+    console.error(`${LOG} FAILED: ${offenders.length} Google Play screenshot issue(s):`);
+    for (const offender of offenders) {
+      console.error(`  - ${offender.file}: ${offender.reason}`);
+    }
+    return 1;
+  }
+
+  console.log(`${LOG} OK: ${pngCount} Google Play screenshot(s) match accepted dimensions.`);
   return 0;
 }
 
@@ -235,10 +372,7 @@ function main(argv: readonly string[] = process.argv.slice(2)): number {
 
   const platforms: Array<'ios' | 'android'> = platform === 'all' ? ['ios', 'android'] : [platform];
   for (const selectedPlatform of platforms) {
-    const status =
-      selectedPlatform === 'ios'
-        ? validateScreenshotRoot(APPLE_SHOTS_DIR, 'App Store', findOffenders)
-        : validateScreenshotRoot(GOOGLE_SHOTS_DIR, 'Google Play', findGooglePlayOffenders);
+    const status = selectedPlatform === 'ios' ? validateAppleScreenshots() : validateGooglePlayScreenshots();
     if (status !== 0) return status;
   }
   return 0;
