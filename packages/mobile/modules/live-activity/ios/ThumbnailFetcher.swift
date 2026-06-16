@@ -1,11 +1,15 @@
 import Foundation
+import UIKit
 
 // MARK: - ThumbnailFetcher
 
 /// Fetches climb hold-overlay thumbnails from the server and caches them in
 /// the App Group shared container so Live Activities can display them. The
 /// request intentionally omits `include_background=1`; bundled board photos
-/// must not be fetched over the network from native widget code.
+/// must not be fetched over the network from native widget code. Instead the
+/// holds overlay is composited on top of the bundled board-background webp(s)
+/// staged by `LiveActivityModule.startSession` (the no-network-board-art rule),
+/// so the cached thumbnail the widget renders carries the full board photo.
 actor ThumbnailFetcher {
 
     // MARK: - Configuration
@@ -27,6 +31,14 @@ actor ThumbnailFetcher {
 
     /// Prevents duplicate fetches for the same climb UUID.
     private var inFlightTasks: [String: Task<URL?, Never>] = [:]
+
+    /// Decoded board-background layers keyed by file path, so a multi-set board
+    /// and adjacent-thumbnail pre-fetches don't re-read the same files from disk
+    /// on every composite. Pruned to the active board's paths in
+    /// `compositeWithBoardBackground`, so it holds only the current board's
+    /// handful of layers. Lives in the main-app process (this actor is owned by
+    /// LiveActivityManager), not the memory-constrained widget extension.
+    private var backgroundLayerCache: [String: UIImage] = [:]
 
     // MARK: - Init
 
@@ -163,7 +175,11 @@ actor ThumbnailFetcher {
                 return nil
             }
 
-            try data.write(to: fileURL, options: .atomic)
+            // Composite the holds overlay over the bundled board background(s)
+            // when they're staged; otherwise persist the raw overlay (the
+            // graceful holds-only fallback for an unbundled board).
+            let imageData = compositeWithBoardBackground(overlayData: data) ?? data
+            try imageData.write(to: fileURL, options: .atomic)
 
             // Evict after writing so we stay within the cache limit.
             // Note: called within the actor, so file I/O runs on the actor's
@@ -176,5 +192,91 @@ actor ThumbnailFetcher {
             // Network or I/O error -- return nil gracefully.
             return nil
         }
+    }
+
+    // MARK: - Background Compositing
+
+    /// Bundled board-background webp file paths staged by `startSession`
+    /// (`SharedConstants.boardBackgroundPathsKey`). Empty when no bundled
+    /// background resolved for the active board.
+    private func stagedBackgroundPaths() -> [String] {
+        sharedDefaults?.stringArray(forKey: SharedConstants.boardBackgroundPathsKey) ?? []
+    }
+
+    /// Decoded background layer for a path, memoized in `backgroundLayerCache`.
+    private func backgroundLayer(at path: String) -> UIImage? {
+        if let cached = backgroundLayerCache[path] { return cached }
+        guard let image = UIImage(contentsOfFile: path) else { return nil }
+        backgroundLayerCache[path] = image
+        return image
+    }
+
+    /// Drops all cached background layers. Called on a board/session change so
+    /// the previous board's decoded images don't linger until the next composite
+    /// (the only other place the cache is pruned) — e.g. when a new session
+    /// starts but no thumbnail is requested before the app backgrounds.
+    func clearBackgroundLayerCache() {
+        backgroundLayerCache.removeAll()
+    }
+
+    /// Largest dimension (px) of the cached composite. The widget never shows
+    /// the thumbnail larger than the 80×100pt lock-screen image (~240×300px at
+    /// 3×), so capping the long side here keeps the PNG small without visible
+    /// loss — and bounds it regardless of the server overlay's native size.
+    private static let maxCompositeDimension: CGFloat = 384
+
+    /// Draws the holds overlay on top of the staged board-background layer(s),
+    /// returning encoded PNG data. Returns `nil` when there's no usable
+    /// background (so the caller keeps the raw overlay) — never throws.
+    ///
+    /// Background and overlay fill the same frame: the server renders the overlay
+    /// in the board's coordinate space and each bundled background is that same
+    /// board image, so an identical fill rect keeps the climb circles aligned
+    /// over the holds. The canvas is the overlay aspect ratio scaled down to fit
+    /// `maxCompositeDimension` (never up), at `scale = 1` so points map 1:1 to px.
+    ///
+    /// PNG, with a non-opaque context, is required — NOT JPEG. The bundled board
+    /// art is a per-set hold render on transparency (measured 74–90% fully
+    /// transparent pixels), not an opaque board photo, and the server overlay is
+    /// likewise transparent. The composite must keep its alpha so the widget's
+    /// dark `activityBackgroundTint` shows through; flattening to JPEG would turn
+    /// the transparent board into a solid black block. iOS ImageIO can't encode
+    /// the smaller webp (decode-only — no runtime encoder without libwebp), so
+    /// PNG + the downscale above is the alpha-preserving, dependency-free option;
+    /// the cache also stays bounded to `maxCachedThumbnails`.
+    private func compositeWithBoardBackground(overlayData: Data) -> Data? {
+        let paths = stagedBackgroundPaths()
+        // Evict cached layers for boards we've navigated away from (and clear
+        // entirely when nothing is staged) so the cache tracks the active board.
+        let activePaths = Set(paths)
+        backgroundLayerCache = backgroundLayerCache.filter { activePaths.contains($0.key) }
+        guard !paths.isEmpty, let overlay = UIImage(data: overlayData) else { return nil }
+
+        let backgroundLayers = paths.compactMap { backgroundLayer(at: $0) }
+        guard !backgroundLayers.isEmpty else { return nil }
+
+        let nativeSize = overlay.size
+        guard nativeSize.width > 0, nativeSize.height > 0 else { return nil }
+
+        // Downscale only — preserve aspect ratio, never upscale a small overlay.
+        let downscale = min(1, Self.maxCompositeDimension / max(nativeSize.width, nativeSize.height))
+        let size = CGSize(
+            width: (nativeSize.width * downscale).rounded(),
+            height: (nativeSize.height * downscale).rounded()
+        )
+
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        format.opaque = false
+
+        let renderer = UIGraphicsImageRenderer(size: size, format: format)
+        let composed = renderer.image { _ in
+            let rect = CGRect(origin: .zero, size: size)
+            for layer in backgroundLayers {
+                layer.draw(in: rect)
+            }
+            overlay.draw(in: rect)
+        }
+        return composed.pngData()
     }
 }

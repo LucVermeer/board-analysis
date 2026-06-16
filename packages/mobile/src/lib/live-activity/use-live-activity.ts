@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Platform } from 'react-native';
 import type { ClimbQueueItem } from '@boardsesh/queue';
+import { parseSetIds, toBoardName } from '@boardsesh/board-config';
 import { getAuthToken } from '../auth-store';
 import { BACKEND_URL, WEB_BASE_URL } from '../env';
 import {
@@ -48,6 +49,41 @@ function getGraphqlHttpUrl(): string {
 
 function getGraphqlWsUrl(): string {
   return BACKEND_URL.replace(/^http(s?):\/\//, 'ws$1://').replace(/\/+$/, '') + '/graphql';
+}
+
+// Resolve the bundled board-background webp file path(s) for a board config so
+// the iOS widget can composite them behind the server's holds-only overlay
+// (the no-network-board-art rule — board photos ship in the bundle, never
+// fetched). iOS-only: Android's foreground service has no board thumbnail.
+// Resolving BEFORE startSession means the paths are staged ahead of the first
+// thumbnail pre-fetch, so the initial composite already carries the board photo.
+// Never rejects: a missing/partial bundle yields fewer (or zero) layers and the
+// widget falls back to overlay-only.
+async function resolveBoardBackgroundPaths(board: BoardConfig): Promise<string[]> {
+  if (Platform.OS !== 'ios') return [];
+  // Validate the loose board string against the BoardName union instead of an
+  // unchecked cast — an unknown board (or empty config) skips compositing and
+  // the widget falls back to the holds-only overlay.
+  const boardName = toBoardName(board.boardName);
+  if (!boardName) return [];
+  const setIds = parseSetIds(board.setIds);
+  try {
+    // Imported lazily so module load doesn't pull in expo-asset + the bundled
+    // board-art manifest (which require()s every board background) until a Live
+    // Activity actually starts on iOS — and so non-iOS / test environments
+    // without the native asset bridge never evaluate it.
+    const { ensureBackgroundsCached } = await import('../background-image-cache');
+    const result = await ensureBackgroundsCached({
+      boardName,
+      layoutId: board.layoutId,
+      sizeId: board.sizeId,
+      setIds,
+      variant: 'thumb',
+    });
+    return result?.paths ?? [];
+  } catch {
+    return [];
+  }
 }
 
 // React Native port of `packages/web/app/lib/live-activity/use-live-activity.ts`.
@@ -160,20 +196,28 @@ export function useLiveActivity({
       isActiveRef.current = true;
       const startGeneration = ++generationRef.current;
 
-      void startLiveActivitySession({
-        sessionId: sessionIdRef.current ?? `local-${Date.now()}`,
-        serverUrl: WEB_BASE_URL,
-        wsUrl: getGraphqlWsUrl(),
-        graphqlUrl: getGraphqlHttpUrl(),
-        authToken: authTokenRef.current ?? undefined,
-        boardName: stableBoard.boardName,
-        layoutId: stableBoard.layoutId,
-        sizeId: stableBoard.sizeId,
-        setIds: stableBoard.setIds,
-        widgetNavigationAllowed: widgetNavigationAllowedRef.current,
-        isPartySession: isPartySessionRef.current,
-        androidNotification: androidNotificationRef.current,
-      })
+      void resolveBoardBackgroundPaths(stableBoard)
+        .then((boardBackgroundPaths) => {
+          // A teardown or board/session change during background resolution
+          // supersedes this start — bail before requesting the activity so we
+          // don't leave a dangling one the cleanup already tried to end.
+          if (!isActiveRef.current || generationRef.current !== startGeneration) return undefined;
+          return startLiveActivitySession({
+            sessionId: sessionIdRef.current ?? `local-${Date.now()}`,
+            serverUrl: WEB_BASE_URL,
+            wsUrl: getGraphqlWsUrl(),
+            graphqlUrl: getGraphqlHttpUrl(),
+            authToken: authTokenRef.current ?? undefined,
+            boardName: stableBoard.boardName,
+            layoutId: stableBoard.layoutId,
+            sizeId: stableBoard.sizeId,
+            setIds: stableBoard.setIds,
+            widgetNavigationAllowed: widgetNavigationAllowedRef.current,
+            isPartySession: isPartySessionRef.current,
+            boardBackgroundPaths,
+            androidNotification: androidNotificationRef.current,
+          });
+        })
         .then(() => {
           if (!isActiveRef.current || generationRef.current !== startGeneration) return;
           // Send an initial update so the widget doesn't stay on "Loading...".

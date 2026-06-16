@@ -412,6 +412,20 @@ In the backend logs, look for:
 
 If you see `0 sent, N failed`, check the [Common Issues](#common-issues) section.
 
+### Board-photo thumbnail compositing
+
+The thumbnail in the Live Activity is built in two layers, never as a single network fetch (the no-network-board-art rule — see `scripts/mobile-board-art-network-check.ts`):
+
+1. The **climb's holds overlay** is fetched from `/api/internal/board-render?...&thumbnail=1` (no `include_background`) — a transparent PNG of just this climb's holds.
+2. The **board background** is the bundled board art (the per-set hold renders, mostly transparent webp shipped in the IPA). JS resolves these in `use-live-activity.ts` (`resolveBoardBackgroundPaths`) and stages their file paths into the App Group (`SharedConstants.boardBackgroundPathsKey`) at `startSession`.
+
+`ThumbnailFetcher.compositeWithBoardBackground` (main-app process) draws the background layer(s) under the overlay, downscales to the widget display size, and writes a transparent PNG to the App Group `thumbnails/` dir — what the widget renders.
+
+If the Live Activity shows only the climb's holds and no board behind them, the background layers didn't resolve or stage. Check:
+
+- `[background-image-cache] No bundled asset for "…"` warnings (a board added to the schema but its art not bundled — re-run `scripts/sync-mobile-board-backgrounds.sh`).
+- That `boardBackgroundPaths` is non-empty in the `startSession` payload for the active board.
+
 ## Debugging
 
 ### Backend APNs Logs

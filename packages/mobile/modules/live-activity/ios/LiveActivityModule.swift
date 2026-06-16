@@ -605,6 +605,7 @@ public class LiveActivityModule: Module {
         let graphqlUrl = options.graphqlUrl
         let widgetNavigationAllowed = options.widgetNavigationAllowed
         let isPartySession = options.isPartySession
+        let boardBackgroundPaths = options.boardBackgroundPaths
 
         // Store session details for push token registration.
         tokenQueue.sync {
@@ -643,6 +644,16 @@ public class LiveActivityModule: Module {
             defaults.set(layoutId, forKey: SharedConstants.layoutIdKey)
             defaults.set(sizeId, forKey: SharedConstants.sizeIdKey)
             defaults.set(setIds, forKey: SharedConstants.setIdsKey)
+            // Bundled board-background file paths for ThumbnailFetcher to
+            // composite behind the holds overlay. Staged here (before the first
+            // thumbnail pre-fetch) so the initial composite already has the
+            // board photo. Removed when empty so a board with no resolved
+            // background falls back to overlay-only instead of a stale path.
+            if boardBackgroundPaths.isEmpty {
+                defaults.removeObject(forKey: SharedConstants.boardBackgroundPathsKey)
+            } else {
+                defaults.set(boardBackgroundPaths, forKey: SharedConstants.boardBackgroundPathsKey)
+            }
             SharedWidgetWallControlState.save(
                 navigationAllowed: widgetNavigationAllowed,
                 isPartySession: isPartySession,
@@ -899,6 +910,10 @@ struct StartSessionOptions: Record {
     @Field var graphqlUrl: String?
     @Field var widgetNavigationAllowed: Bool = true
     @Field var isPartySession: Bool = false
+    /// Bundled board-background webp file paths (JS-resolved via expo-asset).
+    /// Empty when none resolved. iOS-only; the Android SessionPresence Record
+    /// ignores the extra key.
+    @Field var boardBackgroundPaths: [String] = []
 }
 
 struct UpdateActivityQueueItem: Record {

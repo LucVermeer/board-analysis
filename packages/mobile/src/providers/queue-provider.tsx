@@ -130,6 +130,16 @@ type QueueContextValue = {
   setCurrentClimb: (item: ClimbQueueItem, options?: SetCurrentClimbOptions) => void;
   nextClimb: () => void;
   previousClimb: () => void;
+  /**
+   * Apply a widget Next/Previous navigation by absolute index. Dispatches the
+   * current-climb change with the provided correlationId (so the racing
+   * `CurrentClimbChanged` server echo is suppressed) WITHOUT sending a fresh JS
+   * mutation — the native widget intent already sent the server mutation. Using
+   * the absolute item (not a relative `nextClimb`) keeps this idempotent, so it
+   * can't double-advance when the WebSocket echo lands before the Darwin event.
+   * Mirrors web's `dispatchWidgetNavigation`.
+   */
+  dispatchWidgetNavigation: (item: ClimbQueueItem, correlationId: string) => void;
   /** Replace the playlist suggestion source that drives swipe-through climbs. */
   setPlaylistSuggestionSource: (source: PlaylistSuggestionSource | null) => void;
   /** Refresh the suggestion source in place (no-op unless it matches the active one). */
@@ -1478,6 +1488,18 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     if (prevItem) dispatchSetCurrent(prevItem, false);
   }, [dispatchSetCurrent]);
 
+  // Optimistic dispatch for widget Next/Previous taps. The native widget intent
+  // already sent the server mutation (HTTP /api/widget/navigate or the WS
+  // fallback), so we only update the local reducer with the absolute item and
+  // register the correlationId for echo suppression — no fresh JS mutation, and
+  // no relative advance that could double-step against the racing broadcast.
+  const dispatchWidgetNavigation = useCallback((item: ClimbQueueItem, correlationId: string) => {
+    dispatch({
+      type: 'DELTA_UPDATE_CURRENT_CLIMB',
+      payload: { item, shouldAddToQueue: false, correlationId },
+    });
+  }, []);
+
   const setPlaylistSuggestionSource = useCallback((source: PlaylistSuggestionSource | null) => {
     setPlaylistSuggestionSourceState(source);
   }, []);
@@ -1595,6 +1617,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       setCurrentClimb,
       nextClimb,
       previousClimb,
+      dispatchWidgetNavigation,
       setPlaylistSuggestionSource,
       refreshPlaylistSuggestionSource,
       clearSession,
@@ -1617,6 +1640,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       setCurrentClimb,
       nextClimb,
       previousClimb,
+      dispatchWidgetNavigation,
       setPlaylistSuggestionSource,
       refreshPlaylistSuggestionSource,
       clearSession,

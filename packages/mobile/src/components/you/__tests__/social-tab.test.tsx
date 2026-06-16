@@ -170,6 +170,9 @@ vi.mock('../../../theme/ios-colors', () => ({ iosSystemColors: { systemGray: '#9
 vi.mock('../../Text', () => ({
   Text: ({ children }: { children?: ReactNode }) => createElement('span', null, children),
 }));
+vi.mock('../../ScreenTitle', () => ({
+  ScreenTitle: ({ children }: { children?: ReactNode }) => createElement('span', null, children),
+}));
 vi.mock('../../Icon', () => ({
   Icon: ({ name }: { name: string }) => createElement('i', { 'data-icon': name }),
 }));

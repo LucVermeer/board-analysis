@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQueue } from '../../providers/queue-provider';
 import { useLiveActivity } from './use-live-activity';
@@ -21,7 +21,7 @@ type LiveActivityBridgeProps = {
 // selected) so a guest user without a board doesn't trigger Live Activity
 // authorization prompts at random.
 export function LiveActivityBridge({ boardName, layoutId, sizeId, setIds }: LiveActivityBridgeProps) {
-  const { state, sessionId, nextClimb, previousClimb } = useQueue();
+  const { state, sessionId, dispatchWidgetNavigation } = useQueue();
   const { t } = useTranslation('session');
   // Always-live: widget Next/Previous drive the shared current climb for the
   // whole session, just like in-app navigation — no driver/preview gate.
@@ -55,20 +55,38 @@ export function LiveActivityBridge({ boardName, layoutId, sizeId, setIds }: Live
     androidNotification,
   });
 
-  // Subscribe to widget Next/Previous taps. Native already updates the
-  // optimistic Live Activity state and persists the new index to App Group
-  // UserDefaults; this listener brings the JS-side reducer in line so that
-  // when the app foregrounds, its currentClimbQueueItem matches the wall.
+  // Subscribe to widget Next/Previous taps. Native already advanced the shared
+  // index, updated the optimistic Live Activity, and sent the server mutation;
+  // this listener brings the JS reducer in line using the ABSOLUTE index native
+  // computed (event.currentIndex), not a relative nextClimb()/previousClimb().
+  //
+  // Why absolute: in a server-authorized session the backend's CurrentClimbChanged
+  // broadcast (correlationId 'widget-navigate') often reaches JS before this
+  // Darwin event and already moves the current climb. A relative advance would
+  // then step a second time → the queue jumps by two. Dispatching the absolute
+  // item with the event's correlationId is idempotent (re-applying the same
+  // index is a no-op) and registers the correlationId so the racing echo is
+  // suppressed. Mirrors web's LiveActivityBridge.
+  //
+  // Refs keep the listener subscribed once: the queue + dispatch read the latest
+  // values without re-running the effect (and re-registering the native listener)
+  // on every queue mutation.
+  const queueRef = useRef(state.queue);
+  queueRef.current = state.queue;
+  const dispatchWidgetNavigationRef = useRef(dispatchWidgetNavigation);
+  dispatchWidgetNavigationRef.current = dispatchWidgetNavigation;
+
   useEffect(() => {
     const unsubscribe = addWidgetQueueNavigateListener((event) => {
-      if (event.action === 'next') {
-        nextClimb();
-      } else if (event.action === 'previous') {
-        previousClimb();
-      }
+      const queue = queueRef.current;
+      // Out-of-range can arrive if the JS queue and the widget's snapshot have
+      // momentarily diverged (e.g. a queue edit mid-tap). Drop it rather than
+      // crash or wrap around.
+      if (event.currentIndex < 0 || event.currentIndex >= queue.length) return;
+      dispatchWidgetNavigationRef.current(queue[event.currentIndex], event.correlationId);
     });
     return unsubscribe;
-  }, [nextClimb, previousClimb]);
+  }, []);
 
   return null;
 }

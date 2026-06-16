@@ -74,6 +74,12 @@ actor LiveActivityManager {
         // Clean up any existing activities first.
         await endAllActivities()
 
+        // A new session/board is starting — drop the previous board's decoded
+        // background layers now instead of waiting for the next composite to
+        // prune them (which never runs if no thumbnail is requested before the
+        // app backgrounds).
+        await thumbnailFetcher.clearBackgroundLayerCache()
+
         // Install the push-token callback before requesting the activity.
         // ActivityKit can emit the first token between Activity.request returning
         // and any later setOnPushTokenUpdate call, which would silently drop it.

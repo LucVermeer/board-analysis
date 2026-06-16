@@ -33,6 +33,7 @@ import {
 import { useBottomChromeMetrics } from '../../hooks/use-bottom-chrome-metrics';
 import { borderRadius, spacing } from '../../theme/tokens';
 import { useTheme } from '../../providers/theme-provider';
+import { ScreenTitle } from '../ScreenTitle';
 
 type SocialMode = 'followers' | 'following' | 'search';
 
@@ -47,7 +48,7 @@ const EMPTY_PEOPLE: SocialPerson[] = [];
 
 export function SocialTab({ userId, onScroll, topInset = 0, registerScrollToTop }: SocialTabProps) {
   const { t } = useTranslation('you');
-  const { systemColors, brandColors, variant } = useTheme();
+  const { systemColors, brandColors } = useTheme();
   const bottomChrome = useBottomChromeMetrics();
   const paddingBottom = bottomChrome.scrollBottomPadding + spacing[4];
 
@@ -139,11 +140,7 @@ export function SocialTab({ userId, onScroll, topInset = 0, registerScrollToTop 
   const header = useMemo(
     () => (
       <View>
-        {variant === 'material' ? null : (
-          <Text variant="largeTitle" style={styles.screenTitle}>
-            {t('metadata.dashboard.title')}
-          </Text>
-        )}
+        <ScreenTitle style={styles.screenTitle}>{t('metadata.dashboard.title')}</ScreenTitle>
 
         <View style={styles.summaryRow}>
           <SocialStatCard
@@ -179,7 +176,7 @@ export function SocialTab({ userId, onScroll, topInset = 0, registerScrollToTop 
         ) : null}
       </View>
     ),
-    [followerCount, followingCount, mode, searchQuery, segmentOptions, systemColors.fill, t, variant],
+    [followerCount, followingCount, mode, searchQuery, segmentOptions, systemColors.fill, t],
   );
 
   if (!userId) {
