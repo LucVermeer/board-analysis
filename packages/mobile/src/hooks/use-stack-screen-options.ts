@@ -1,25 +1,7 @@
+import type { NativeStackNavigationOptions } from 'expo-router';
 import { useTheme } from '../providers/theme-provider';
-import { useVariantValue } from '../theme/variants';
+import { selectByVariant } from '../theme/variants';
 import { glassStackScreenOptions } from '../theme/navigation';
-
-/**
- * The native-stack header props this hook resolves — a hand-written subset of
- * `NativeStackNavigationOptions` (the monorepo's bun layout makes a direct type
- * import from `@react-navigation/native-stack` unreliable, and `navigation.ts`
- * already avoids it with per-field `as const`). Every field is a real native-stack
- * option, so the result spreads into a stack's `screenOptions` or a `Stack.Screen`.
- */
-type StackScreenOptions = {
-  headerLargeTitle?: boolean;
-  headerTransparent?: boolean;
-  headerBlurEffect?: 'systemMaterial';
-  headerShadowVisible?: boolean;
-  headerStyle?: { backgroundColor: string };
-  headerTintColor?: string;
-  headerTitleAlign?: 'left' | 'center';
-  headerBackButtonDisplayMode?: 'minimal';
-  contentStyle?: { backgroundColor: string };
-};
 
 /**
  * The native-stack `screenOptions` for the active UI variant — one source of truth
@@ -30,7 +12,9 @@ type StackScreenOptions = {
  * pushed screens.
  *
  * - **liquidGlass** → `glassStackScreenOptions`, the value **unchanged** (a
- *   transparent blur header on iOS). Liquid Glass stays byte-identical.
+ *   transparent blur header that floats over transparent content on iOS; a solid
+ *   header on Android, where a transparent one would draw under the status bar).
+ *   Liquid Glass stays byte-identical.
  * - **material** → an opaque Material 3 small top app bar: a solid surface that
  *   blends with the screen, an `onSurface` tint, a left-aligned title, flat at rest
  *   (no shadow, no iOS blur). This fixes forced-Material-on-iOS getting a wrong
@@ -43,14 +27,13 @@ type StackScreenOptions = {
  * M3 caveat: a real M3 app bar shifts `surface → surfaceContainer` as content
  * scrolls under it; native-stack can't express that, so the Material header stays
  * flat (see `theme/variants/README.md`). Lives in `src/hooks` (guard-exempt) — it
- * RESOLVES the variant, it isn't a render-body branch.
- *
- * Per-field `as const` keeps the string enums assignable to the native-stack option
- * types without importing them (same trick as `glassStackScreenOptions`).
+ * RESOLVES the variant, it isn't a render-body branch. Uses `selectByVariant` over
+ * the already-destructured `theme` so it reads the theme once (not twice via
+ * `useVariantValue`).
  */
-export function useStackScreenOptions(): StackScreenOptions {
-  const { systemColors } = useTheme();
-  return useVariantValue<StackScreenOptions>({
+export function useStackScreenOptions(): NativeStackNavigationOptions {
+  const { variant, systemColors } = useTheme();
+  return selectByVariant<NativeStackNavigationOptions>(variant, {
     liquidGlass: glassStackScreenOptions,
     material: {
       headerLargeTitle: false,
@@ -61,8 +44,8 @@ export function useStackScreenOptions(): StackScreenOptions {
       // iOS PlatformColor union that never applies on the Material branch.
       headerStyle: { backgroundColor: systemColors.background as string },
       headerTintColor: systemColors.label as string,
-      headerTitleAlign: 'left' as const,
-      headerBackButtonDisplayMode: 'minimal' as const,
+      headerTitleAlign: 'left',
+      headerBackButtonDisplayMode: 'minimal',
       contentStyle: { backgroundColor: systemColors.background as string },
     },
   });
