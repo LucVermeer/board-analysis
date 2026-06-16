@@ -1,14 +1,13 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
-import { useNavigation } from 'expo-router';
+import { Stack } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import type { PublicUserProfile } from '@boardsesh/shared-schema';
 import { ActivityIndicator } from '../../src/components/ActivityIndicator';
 import {
   ClimberSearchEmptyState,
   ClimberSearchErrorState,
-  ClimberSearchField,
   ClimberSearchLoadingState,
   ClimberSearchPersonRow,
   mapSearchResults,
@@ -22,10 +21,17 @@ import { spacing } from '../../src/theme/tokens';
 
 const EMPTY_PEOPLE: SocialPerson[] = [];
 
+// The native header search bar reports changes as either a string or a
+// synthetic event depending on platform — normalise both (mirrors the Climbs tab).
+type NativeSearchChange = string | { nativeEvent?: { text?: string } };
+function readNativeSearchText(change: NativeSearchChange): string {
+  return typeof change === 'string' ? change : (change.nativeEvent?.text ?? '');
+}
+
 export default function ClimberSearchScreen() {
   const { t } = useTranslation('feed');
+  const { t: tYou } = useTranslation('you');
   const { systemColors } = useTheme();
-  const navigation = useNavigation();
   const bottomChrome = useBottomChromeMetrics();
   const paddingBottom = bottomChrome.scrollBottomPadding + spacing[4];
 
@@ -39,9 +45,28 @@ export default function ClimberSearchScreen() {
   const search = useSearchUsers(debouncedSearchQuery, canUseSearchQuery);
   const toggleFollow = useToggleUserFollow(currentUserId);
 
-  useEffect(() => {
-    navigation.setOptions({ headerShown: true, title: t('mobile.home.findClimbersTitle') });
-  }, [navigation, t]);
+  const handleSearchChange = useCallback((change: NativeSearchChange) => {
+    setSearchQuery(readNativeSearchText(change));
+  }, []);
+
+  // Drive the search input from the native nav-bar search controller: it owns
+  // the keyboard (autoFocus pops it on arrival) and stays out of the content,
+  // so the results FlashList just insets below it via contentInsetAdjustment.
+  const stackOptions = useMemo(
+    () => ({
+      headerShown: true,
+      title: t('mobile.home.findClimbersTitle'),
+      headerSearchBarOptions: {
+        placeholder: tYou('mobile.social.searchPlaceholder'),
+        autoFocus: true,
+        autoCapitalize: 'none' as const,
+        hideWhenScrolling: false,
+        onChangeText: handleSearchChange,
+        onCancelButtonPress: () => setSearchQuery(''),
+      },
+    }),
+    [t, tYou, handleSearchChange],
+  );
 
   const people = useMemo(
     () => search.data?.pages.flatMap((page) => mapSearchResults(page.results)) ?? EMPTY_PEOPLE,
@@ -82,15 +107,15 @@ export default function ClimberSearchScreen() {
 
   return (
     <View style={[styles.flex, { backgroundColor: systemColors.background }]}>
-      <View style={styles.searchWrap}>
-        <ClimberSearchField value={searchQuery} onChangeText={setSearchQuery} />
-      </View>
+      <Stack.Screen options={stackOptions} />
 
       <FlashList
         data={visiblePeople}
         renderItem={renderItem}
         keyExtractor={(person) => person.id}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        contentInsetAdjustmentBehavior="automatic"
         contentContainerStyle={{ paddingBottom }}
         onEndReached={handleEndReached}
         onEndReachedThreshold={0.5}
@@ -117,11 +142,6 @@ export default function ClimberSearchScreen() {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  searchWrap: {
-    paddingHorizontal: spacing[4],
-    paddingTop: spacing[3],
-    paddingBottom: spacing[2],
-  },
   footer: {
     paddingVertical: spacing[5],
     alignItems: 'center',
