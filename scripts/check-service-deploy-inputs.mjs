@@ -159,7 +159,9 @@ function verifyGeneratedContext(failures, repoRoot, serviceName, outputRoot) {
 function createServiceDeployInputFailures({ repoRoot = defaultRepoRoot } = {}) {
   const failures = [];
 
-  for (const dockerfilePath of ['Dockerfile.backend', 'Dockerfile.web']) {
+  for (const dockerfilePath of ['Dockerfile.backend', 'Dockerfile.web', 'Dockerfile.sync']) {
+    // Dockerfile.sync (the combined sync image) is optional; backend/web are not.
+    if (dockerfilePath === 'Dockerfile.sync' && !existsSync(join(repoRoot, dockerfilePath))) continue;
     requireDockerContextFile(failures, repoRoot, dockerfilePath);
   }
 
@@ -167,6 +169,9 @@ function createServiceDeployInputFailures({ repoRoot = defaultRepoRoot } = {}) {
   try {
     verifyGeneratedContext(failures, repoRoot, 'backend', outputRoot);
     verifyGeneratedContext(failures, repoRoot, 'web', outputRoot);
+    if (existsSync(join(repoRoot, 'Dockerfile.sync'))) {
+      verifyGeneratedContext(failures, repoRoot, 'sync', outputRoot);
+    }
   } finally {
     rmSync(outputRoot, { recursive: true, force: true });
   }
