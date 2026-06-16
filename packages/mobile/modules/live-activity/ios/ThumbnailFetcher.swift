@@ -196,16 +196,21 @@ actor ThumbnailFetcher {
     }
 
     /// Draws the holds overlay on top of the staged board-background layer(s),
-    /// returning encoded PNG data. Returns `nil` when there's no usable
+    /// returning encoded image data. Returns `nil` when there's no usable
     /// background (so the caller keeps the raw overlay) — never throws.
     ///
     /// Both background and overlay fill the same frame at the overlay's pixel
     /// size: the server renders the overlay in the board's coordinate space and
     /// each bundled background is that same board image, so an identical fill
     /// rect keeps the climb circles aligned over the holds. `scale = 1` keeps
-    /// the canvas at the overlay's native pixel size (no 2x/3x upscaling); a
-    /// non-opaque context preserves transparency for boards whose layers don't
-    /// fully cover the frame.
+    /// the canvas at the overlay's native pixel size (no 2x/3x upscaling).
+    ///
+    /// Encoded as JPEG: the bottom background layer is a full-frame opaque board
+    /// photo, so the composite is opaque photo content where PNG would be 2–5×
+    /// larger — a meaningful difference for a 10-entry App Group thumbnail cache.
+    /// `opaque = true` drops the unused alpha channel to match. The raw overlay
+    /// (the no-background fallback in `_fetchAndSave`) stays PNG so its
+    /// transparency survives. PNG is kept only as an encode-failure fallback.
     private func compositeWithBoardBackground(overlayData: Data) -> Data? {
         let paths = stagedBackgroundPaths()
         guard !paths.isEmpty, let overlay = UIImage(data: overlayData) else { return nil }
@@ -218,7 +223,7 @@ actor ThumbnailFetcher {
 
         let format = UIGraphicsImageRendererFormat()
         format.scale = 1
-        format.opaque = false
+        format.opaque = true
 
         let renderer = UIGraphicsImageRenderer(size: size, format: format)
         let composed = renderer.image { _ in
@@ -228,6 +233,6 @@ actor ThumbnailFetcher {
             }
             overlay.draw(in: rect)
         }
-        return composed.pngData()
+        return composed.jpegData(compressionQuality: 0.85) ?? composed.pngData()
     }
 }
