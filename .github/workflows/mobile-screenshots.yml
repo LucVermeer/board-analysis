@@ -10,10 +10,12 @@ name: Mobile Screenshots (Native)
 # uploads (it only captures); uploading mutates the live "Prepare for Submission"
 # version, so it's opt-in per dispatch. See app-stores/apple/app-store-submission-guide.md.
 #
-# Data source: the seeded dev DB (ghcr.io/boardsesh/boardsesh-dev-db) brought up
-# with Colima, since macOS runners can't use Linux `services:` containers. This
-# is the first iteration of the workflow; the Colima + Release-build path is best
-# validated on the first manual dispatch (the pipeline itself is proven locally).
+# Data source depends on the run:
+#   - upload runs capture against PROD (signed in as the test user) — the canonical
+#     store recipe, and it needs no local backend, so it skips the Colima/Docker/DB
+#     steps below entirely.
+#   - capture-only / nightly runs use the seeded dev DB (ghcr.io/boardsesh/boardsesh-dev-db)
+#     brought up with Colima, since macOS runners can't use Linux `services:` containers.
 
 on:
   workflow_dispatch:
@@ -50,9 +52,11 @@ jobs:
     timeout-minutes: 90
 
     env:
-      # Build is pointed at the local seeded backend (Colima dev DB below).
-      EXPO_PUBLIC_BACKEND_URL: http://localhost:8080
-      EXPO_PUBLIC_WEB_URL: http://localhost:3000
+      # An upload dispatch captures against PROD (no local backend, no Colima) —
+      # matching the canonical "capture against the prod test user" recipe and
+      # sidestepping the Colima VM, which doesn't boot on this runner image.
+      # Capture-only / nightly runs use the seeded local backend (Colima below).
+      UPLOAD_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.upload }}
       # Reused from ios-rn-ci.yml so the Expo build links the same native config.
       EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID: 401523882502-0f6d7te1vekvkpmg18t8di6l0ig560q7.apps.googleusercontent.com
       EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID: 401523882502-h92kdkck1qhmdbgq7ltek87g4rg8rg3h.apps.googleusercontent.com
@@ -79,15 +83,20 @@ jobs:
       - name: Install Node.js dependencies
         run: bun install --frozen-lockfile
 
+      # The local seeded backend (Colima/Docker + dev DB + backend) is only needed
+      # for --backend local. Upload runs capture against prod, so skip all three.
       - name: Start Docker (Colima) for the seeded dev DB
+        if: success() && env.UPLOAD_RUN != 'true'
         run: |
           brew install colima docker
           colima start --cpu 3 --memory 6
 
       - name: Bring up seeded dev DB (+ Redis)
+        if: success() && env.UPLOAD_RUN != 'true'
         run: vp run db:up
 
       - name: Start backend
+        if: success() && env.UPLOAD_RUN != 'true'
         run: |
           bun run --filter=boardsesh-backend start > backend.log 2>&1 &
           bunx wait-on http-get://localhost:8080/health --timeout 120000
@@ -112,11 +121,22 @@ jobs:
           echo "$HOME/.maestro-dist/maestro/bin" >> "$GITHUB_PATH"
 
       - name: Capture screenshots
+        env:
+          # prod for upload runs, local otherwise. The local backend URLs are
+          # exported inline ONLY for local capture — they must NOT be in the
+          # environment for a prod build (the screenshot script spreads the env,
+          # so a stray EXPO_PUBLIC_BACKEND_URL would point a prod build at localhost).
+          SCREENSHOT_BACKEND: ${{ env.UPLOAD_RUN == 'true' && 'prod' || 'local' }}
         run: |
+          set -euo pipefail
+          if [ "$SCREENSHOT_BACKEND" = "local" ]; then
+            export EXPO_PUBLIC_BACKEND_URL=http://localhost:8080
+            export EXPO_PUBLIC_WEB_URL=http://localhost:3000
+          fi
           vp run mobile:screenshots -- \
             --platform ios \
             --flow "${{ inputs.flow || 'app-store' }}" \
-            --backend local \
+            --backend "$SCREENSHOT_BACKEND" \
             --device "${{ inputs.device || 'iPhone 16 Pro Max' }}"
 
       # Fail loudly if any capture isn't an App Store-accepted size for its slot,
@@ -132,7 +152,7 @@ jobs:
       # `success() &&` prefix is required: a custom `if:` overrides the default
       # success() status check, so without it these would run even if capture failed.
       - name: Set up Ruby + fastlane
-        if: success() && github.event_name == 'workflow_dispatch' && inputs.upload
+        if: success() && env.UPLOAD_RUN == 'true'
         uses: ruby/setup-ruby@v1
         with:
           ruby-version: '3.4'
@@ -140,7 +160,7 @@ jobs:
           working-directory: fastlane
 
       - name: Decode App Store Connect API key
-        if: success() && github.event_name == 'workflow_dispatch' && inputs.upload
+        if: success() && env.UPLOAD_RUN == 'true'
         env:
           APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
           APP_STORE_CONNECT_API_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_API_KEY_BASE64 }}
@@ -155,7 +175,7 @@ jobs:
           echo "ASC_KEY_PATH=$key_path" >> "$GITHUB_ENV"
 
       - name: Upload screenshots to App Store Connect
-        if: success() && github.event_name == 'workflow_dispatch' && inputs.upload
+        if: success() && env.UPLOAD_RUN == 'true'
         working-directory: fastlane
         env:
           APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}

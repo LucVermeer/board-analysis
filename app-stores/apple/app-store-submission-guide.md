@@ -93,8 +93,9 @@ Store Connect.
 
 What it does:
 
-1. Captures the iPhone 16 Pro Max screenshots on a simulator (same as the
-   capture-only run).
+1. Captures the iPhone 16 Pro Max screenshots on a simulator, against **prod**
+   (signed in as the test user) — the canonical store recipe, with no local
+   backend needed.
 2. Runs `vp run check:screenshot-dimensions`, which fails the run if any PNG
    isn't an Apple-accepted size for its slot (so Apple can't reject the upload
    for a bad resolution).
