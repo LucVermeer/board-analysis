@@ -156,7 +156,8 @@ vi.mock('../../../providers/theme-provider', () => ({
       separator: '#ddd',
     },
     brandColors: { primary: '#6D28D9' },
-    variant: 'glass',
+    features: { inBodyLargeTitle: true, filtersInTopChrome: false, summaryExcludesGradeFilter: false },
+    variant: 'liquidGlass',
   }),
 }));
 vi.mock('../../../hooks/use-bottom-chrome-metrics', () => ({
