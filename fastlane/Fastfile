@@ -1,0 +1,77 @@
+# Uploads the native App Store screenshots to App Store Connect.
+#
+# Screenshots only — no binary, no text metadata, no review submission. The
+# screenshots are captured fresh by `vp run mobile:screenshots` (see
+# scripts/mobile-screenshots.ts) into the canonical tree:
+#
+#   app-stores/apple/screenshots/<device>/NN-name.png
+#
+# deliver wants <screenshots_path>/<locale>/NN-name.png, so we stage the device
+# PNGs into an en-US/ dir under a temp path (never mutating the canonical tree)
+# and hand that to upload_to_app_store. deliver routes each image to its display
+# slot by pixel dimensions (1320×2868 -> 6.9" iPhone); the NN- filename prefixes
+# set the display order.
+#
+# Auth is an App Store Connect API key, supplied as env vars by CI:
+#   APP_STORE_CONNECT_API_KEY_ID, APP_STORE_CONNECT_ISSUER_ID, ASC_KEY_PATH
+# (ASC_KEY_PATH points at the decoded .p8 — see the upload workflow.)
+
+require "fileutils"
+require "tmpdir"
+
+opt_out_usage
+default_platform(:ios)
+
+REPO_ROOT = File.expand_path("..", __dir__)
+APPLE_SCREENSHOTS_DIR = File.join(REPO_ROOT, "app-stores", "apple", "screenshots", "iphone-16-pro-max")
+DELIVER_LOCALE = "en-US"
+
+platform :ios do
+  desc "Upload App Store screenshots to App Store Connect (no binary, no metadata, no review)"
+  lane :screenshots do
+    unless Dir.exist?(APPLE_SCREENSHOTS_DIR)
+      UI.user_error!("No screenshots directory at #{APPLE_SCREENSHOTS_DIR}. Run `vp run mobile:screenshots` first.")
+    end
+
+    pngs = Dir.glob(File.join(APPLE_SCREENSHOTS_DIR, "*.png")).sort
+    if pngs.empty?
+      # Guard against wiping the live screenshot set with an empty upload.
+      UI.user_error!("No PNGs found in #{APPLE_SCREENSHOTS_DIR}. Refusing to upload an empty screenshot set.")
+    end
+
+    staging_dir = Dir.mktmpdir("asc-screenshots-")
+    begin
+      locale_dir = File.join(staging_dir, DELIVER_LOCALE)
+      FileUtils.mkdir_p(locale_dir)
+      pngs.each { |png| FileUtils.cp(png, File.join(locale_dir, File.basename(png))) }
+      UI.message("Staged #{pngs.length} screenshot(s) into #{locale_dir}")
+
+      api_key = app_store_connect_api_key(
+        key_id: ENV.fetch("APP_STORE_CONNECT_API_KEY_ID"),
+        issuer_id: ENV.fetch("APP_STORE_CONNECT_ISSUER_ID"),
+        key_filepath: ENV.fetch("ASC_KEY_PATH"),
+        # ASC_KEY_PATH is a real .p8 file on disk (decoded in CI), not base64 content.
+        is_key_content_base64: false,
+        in_house: false
+      )
+
+      upload_to_app_store(
+        api_key: api_key,
+        app_identifier: "com.boardsesh.app",
+        screenshots_path: staging_dir,
+        skip_binary_upload: true,
+        skip_metadata: true,
+        skip_app_version_update: true,
+        overwrite_screenshots: true,
+        sync_screenshots: true,
+        submit_for_review: false,
+        run_precheck_before_submit: false,
+        # force: true is mandatory in CI — without it deliver opens an HTML
+        # preview in a browser and blocks until timeout.
+        force: true
+      )
+    ensure
+      FileUtils.remove_entry(staging_dir) if staging_dir && Dir.exist?(staging_dir)
+    end
+  end
+end

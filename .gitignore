@@ -106,3 +106,16 @@ packages/mobile/.bundle-check-output/
 
 # Local analysis workspace (out-of-tree artifacts, not source)
 .local-work/
+
+# App Store screenshots are captured fresh by the Maestro pipeline
+# (vp run mobile:screenshots) and uploaded on demand — not committed.
+/app-stores/apple/screenshots/
+/app-stores/google/screenshots/
+
+# fastlane — never commit credentials or generated run artifacts.
+*.p8
+AuthKey_*.p8
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/
+fastlane/test_output/
