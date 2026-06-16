@@ -170,7 +170,7 @@ describe('SessionTickRow — primarySubtitleOverride', () => {
     expect(mockClimbListItemContent).toHaveBeenCalledWith(expect.objectContaining({ primarySubtitleOverride: 'Cata' }));
   });
 
-  it('falls back to undefined (computed subtitle) in multi-user when participant is absent', () => {
+  it('passes null in multi-user when participant is absent (suppresses double-setter)', () => {
     render(
       createElement(SessionTickRow, {
         tick: tick(),
@@ -180,11 +180,11 @@ describe('SessionTickRow — primarySubtitleOverride', () => {
       }),
     );
     expect(mockClimbListItemContent).toHaveBeenCalledWith(
-      expect.objectContaining({ primarySubtitleOverride: undefined }),
+      expect.objectContaining({ primarySubtitleOverride: null }),
     );
   });
 
-  it('falls back to undefined when participant displayName is null', () => {
+  it('passes null when participant displayName is null (suppresses double-setter)', () => {
     render(
       createElement(SessionTickRow, {
         tick: tick(),
@@ -194,7 +194,7 @@ describe('SessionTickRow — primarySubtitleOverride', () => {
       }),
     );
     expect(mockClimbListItemContent).toHaveBeenCalledWith(
-      expect.objectContaining({ primarySubtitleOverride: undefined }),
+      expect.objectContaining({ primarySubtitleOverride: null }),
     );
   });
 });
