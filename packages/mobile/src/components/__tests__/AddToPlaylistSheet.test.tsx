@@ -65,9 +65,17 @@ vi.mock('../../theme/tokens', () => ({
 }));
 
 vi.mock('../ModalSheet', () => ({
-  ModalSheet: forwardRef(function ModalSheet({ children }: { children?: ReactNode }, ref) {
+  ModalSheet: forwardRef(function ModalSheet(
+    { children, onDismiss }: { children?: ReactNode; onDismiss?: () => void },
+    ref,
+  ) {
     useImperativeHandle(ref, () => ({ present: vi.fn(), dismiss: vi.fn() }));
-    return createElement('div', { 'data-modal-sheet': 'true' }, children);
+    return createElement(
+      'div',
+      { 'data-modal-sheet': 'true' },
+      children,
+      createElement('button', { 'aria-label': 'dismiss-add-to-playlist-sheet', onClick: onDismiss }, 'dismiss'),
+    );
   }),
 }));
 
@@ -135,6 +143,16 @@ const playlist = {
   updatedAt: '2026-01-01T00:00:00Z',
 } satisfies Playlist;
 
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject = promiseReject;
+  });
+  return { promise, resolve, reject };
+}
+
 function renderSheet(onClose = vi.fn()) {
   return {
     onClose,
@@ -165,7 +183,8 @@ describe('AddToPlaylistSheet', () => {
 
   it('creates a playlist from the sheet and adds the current climb to it', async () => {
     const created = { ...playlist, uuid: 'p-new', id: 'p-new', name: 'Projects', climbCount: 0 };
-    playlistContext.createPlaylist.mockResolvedValueOnce(created);
+    const createDeferred = deferred<typeof created>();
+    playlistContext.createPlaylist.mockReturnValueOnce(createDeferred.promise);
     playlistContext.addToPlaylist.mockResolvedValueOnce(undefined);
     const { getByLabelText, onClose } = renderSheet();
 
@@ -177,6 +196,12 @@ describe('AddToPlaylistSheet', () => {
         boardType: 'kilter',
         layoutId: 1,
       });
+      expect(getByLabelText('submit-created-playlist').getAttribute('data-submitting')).toBe('true');
+    });
+
+    createDeferred.resolve(created);
+
+    await waitFor(() => {
       expect(playlistContext.addToPlaylist).toHaveBeenCalledWith('p-new', 'climb-1', 40);
     });
     expect(toast.showToast).toHaveBeenCalledWith('actions.playlist.toast.createdNamed', 'success');
@@ -194,6 +219,32 @@ describe('AddToPlaylistSheet', () => {
       expect(playlistContext.addToPlaylist).toHaveBeenCalledWith('p-1', 'climb-1', 40);
     });
     expect(toast.showToast).toHaveBeenCalledWith('actions.playlist.toast.added', 'success');
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it('closes the add sheet and shows an error when adding an existing playlist row fails', async () => {
+    playlistContext.playlists = [playlist];
+    playlistContext.addToPlaylist.mockRejectedValueOnce(new Error('add failed'));
+    const { getByLabelText, onClose } = renderSheet();
+
+    fireEvent.click(getByLabelText('Hard Crimps'));
+
+    await waitFor(() => {
+      expect(playlistContext.addToPlaylist).toHaveBeenCalledWith('p-1', 'climb-1', 40);
+    });
+    expect(toast.showToast).toHaveBeenCalledWith('actions.playlist.toast.addFailed', 'error');
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it('hides the create sheet when the add sheet is dismissed', () => {
+    const { getByLabelText, queryByLabelText, onClose } = renderSheet();
+
+    fireEvent.click(getByLabelText('actions.playlist.popover.createNew'));
+    expect(getByLabelText('submit-created-playlist')).not.toBeNull();
+
+    fireEvent.click(getByLabelText('dismiss-add-to-playlist-sheet'));
+
+    expect(queryByLabelText('submit-created-playlist')).toBeNull();
     expect(onClose).toHaveBeenCalled();
   });
 

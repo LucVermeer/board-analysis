@@ -138,6 +138,7 @@ function AddToPlaylistSheet({
 
   const handleDismiss = useCallback(() => {
     isPresentedRef.current = false;
+    setCreateVisible(false);
     onClose();
   }, [onClose]);
 
@@ -233,7 +234,6 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     flex: 1,
-    flexShrink: 1,
   },
   createButton: {
     width: 34,

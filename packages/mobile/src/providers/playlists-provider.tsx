@@ -7,13 +7,14 @@
 
 import { createContext, useContext, useCallback, useMemo, type ReactNode } from 'react';
 import type { Playlist } from '@boardsesh/graphql/operations/playlists';
+import type { BoardName } from '@boardsesh/shared-schema';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { track } from '../lib/analytics';
 
 export type { Playlist } from '@boardsesh/graphql/operations/playlists';
 
 export type PlaylistCreateBoard = {
-  boardType: string;
+  boardType: BoardName;
   layoutId: number;
 };
 
