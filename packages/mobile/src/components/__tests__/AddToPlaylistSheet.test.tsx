@@ -319,7 +319,7 @@ describe('AddToPlaylistSheet', () => {
     const created = { ...playlist, uuid: 'p-new', id: 'p-new', name: 'Projects', climbCount: 0 };
     playlistContext.createPlaylist.mockResolvedValueOnce(created);
     playlistContext.addToPlaylist.mockRejectedValueOnce(new Error('add failed'));
-    const { getByLabelText, onClose } = renderSheet();
+    const { getByLabelText, queryByLabelText, onClose } = renderSheet();
 
     fireEvent.click(getByLabelText('actions.playlist.popover.createNew'));
     fireEvent.click(getByLabelText('submit-created-playlist'));
@@ -327,6 +327,7 @@ describe('AddToPlaylistSheet', () => {
     await waitFor(() => {
       expect(playlistContext.addToPlaylist).toHaveBeenCalledWith('p-new', 'climb-1', 40);
     });
+    expect(queryByLabelText('submit-created-playlist')).toBeNull();
     expect(toast.showToast).toHaveBeenCalledWith('actions.playlist.toast.addFailed', 'error');
     expect(onClose).not.toHaveBeenCalled();
   });
