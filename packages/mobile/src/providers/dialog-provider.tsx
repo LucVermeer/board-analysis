@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Alert, Platform } from 'react-native';
 import { Button, Dialog, Portal, Text } from 'react-native-paper';
 import { useTheme } from './theme-provider';
@@ -99,12 +99,25 @@ export function DialogProvider({ children }: { children: ReactNode }) {
     setQueue((q) => q.filter((item) => item.id !== target.id));
   }, []);
 
+  // Keep the one-shot guard bounded without a side effect in the updater above.
+  // Once the queue commits, the dialog for any settled id has unmounted and can
+  // no longer fire a racing handler, so the guard only needs the ids still pending.
+  useEffect(() => {
+    const pendingIds = new Set(queue.map((item) => item.id));
+    for (const settledId of settledIdsRef.current) {
+      if (!pendingIds.has(settledId)) settledIdsRef.current.delete(settledId);
+    }
+  }, [queue]);
+
   const current = queue[0];
 
   return (
     <DialogContext value={value}>
       {children}
-      {current ? (
+      {/* Only the Android-Material path ever queues a confirm; guarding on the same
+          `!useNativeAlert` condition keeps the Paper dialog off Liquid Glass / iOS
+          even if the variant flips while a confirm is mid-flight. */}
+      {!useNativeAlert && current ? (
         <Portal>
           <Dialog visible onDismiss={() => settle(current, false)}>
             <Dialog.Title>{current.title}</Dialog.Title>
