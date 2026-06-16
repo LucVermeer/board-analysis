@@ -325,11 +325,18 @@ describe('location upsert planning', () => {
 });
 
 describe('public board location upsert gym resolution', () => {
-  it('uses an existing source alias before physical matching or source upsert', async () => {
+  it('refreshes an existing source alias before physical matching or source upsert', async () => {
     const fakeDb = new FakeLocationSyncDb({ aliasedGymId: 42 });
 
     const summary = await upsertPublicBoardLocations(fakeDb as unknown as UpsertDb, [
-      locationRecord({ sourceKey: 'tension:board-aliased', gymSourceKey: 'tension:gym-aliased' }),
+      locationRecord({
+        sourceKey: 'tension:board-aliased',
+        gymSourceKey: 'tension:gym-aliased',
+        gymName: 'Board House Updated',
+        gymAddress: '1 Updated Lane',
+        latitude: -34.12,
+        longitude: 151.42,
+      }),
     ]);
 
     expect(summary).toMatchObject({
@@ -340,7 +347,15 @@ describe('public board location upsert gym resolution', () => {
     });
     expect(fakeDb.createdGymWrites).toEqual([]);
     expect(fakeDb.sourceAliasWrites).toEqual([]);
-    expect(fakeDb.gymMetadataWrites).toHaveLength(1);
+    expect(fakeDb.gymMetadataWrites).toMatchObject([
+      {
+        name: 'Board House Updated',
+        latitude: -34.12,
+        longitude: 151.42,
+        isPublic: true,
+        deletedAt: null,
+      },
+    ]);
     expect(fakeDb.boardWrites[0]?.gymId).toBe(42);
     expect(fakeDb.executeSqlTexts.some((queryText) => queryText.includes('WITH candidate_gyms'))).toBe(false);
   });

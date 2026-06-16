@@ -114,11 +114,14 @@ async function upsertSourceAlias(db: DrizzleDb, sourceKey: string, gymId: number
     });
 }
 
-async function fillMissingGymMetadata(db: DrizzleDb, gymId: number, record: ValidBoardLocation): Promise<void> {
+async function refreshSyncedGymMetadata(db: DrizzleDb, gymId: number, record: ValidBoardLocation): Promise<void> {
   await db
     .update(gyms)
     .set({
-      address: sql`COALESCE(${gyms.address}, ${record.gymAddress})`,
+      name: record.gymName,
+      address: sql`COALESCE(${record.gymAddress}, ${gyms.address})`,
+      latitude: record.latitude,
+      longitude: record.longitude,
       isPublic: true,
       updatedAt: sql`NOW()`,
       deletedAt: null,
@@ -276,14 +279,14 @@ async function resolveGymIdForSource(
 ): Promise<number | null> {
   const aliasedGymId = await findAliasedGymId(db, sourceKey);
   if (aliasedGymId !== null) {
-    await fillMissingGymMetadata(db, aliasedGymId, record);
+    await refreshSyncedGymMetadata(db, aliasedGymId, record);
     return aliasedGymId;
   }
 
   const physicalGymMatch = await findPhysicalGymMatch(db, record);
   if (physicalGymMatch) {
     await upsertSourceAlias(db, sourceKey, physicalGymMatch.id);
-    await fillMissingGymMetadata(db, physicalGymMatch.id, record);
+    await refreshSyncedGymMetadata(db, physicalGymMatch.id, record);
     return physicalGymMatch.id;
   }
 
