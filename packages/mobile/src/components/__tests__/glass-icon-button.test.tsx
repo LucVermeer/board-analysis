@@ -9,9 +9,25 @@ const ctrl = vi.hoisted(() => ({ variant: 'liquidGlass' as 'material' | 'liquidG
 
 // Minimal RN surface: View → div, StyleSheet stubs the helpers the button reads.
 vi.mock('react-native', () => ({
-  View: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
+  View: ({ children, style }: { children?: ReactNode; style?: unknown }) =>
+    createElement('div', { 'data-bg': readBackgroundColor(style) }, children),
   StyleSheet: { create: (styles: Record<string, unknown>) => styles, absoluteFill: {}, hairlineWidth: 1 },
 }));
+
+function readBackgroundColor(style: unknown): string {
+  if (Array.isArray(style)) {
+    for (let index = style.length - 1; index >= 0; index -= 1) {
+      const color = readBackgroundColor(style[index]);
+      if (color) return color;
+    }
+    return '';
+  }
+  if (style != null && typeof style === 'object' && 'backgroundColor' in style) {
+    const { backgroundColor } = style as { backgroundColor?: unknown };
+    return typeof backgroundColor === 'string' ? backgroundColor : '';
+  }
+  return '';
+}
 
 // Paper IconButton → DOM node exposing the props the material test asserts on.
 vi.mock('react-native-paper', () => ({
@@ -85,11 +101,20 @@ vi.mock('../Icon', () => ({
 }));
 
 vi.mock('../Text', () => ({
-  Text: ({ children, maxFontSizeMultiplier }: { children?: ReactNode; maxFontSizeMultiplier?: number }) =>
+  Text: ({
+    children,
+    color,
+    maxFontSizeMultiplier,
+  }: {
+    children?: ReactNode;
+    color?: string;
+    maxFontSizeMultiplier?: number;
+  }) =>
     createElement(
       'span',
       {
         'data-text': 'true',
+        'data-color': color ?? '',
         'data-max-font-size-multiplier': maxFontSizeMultiplier == null ? '' : String(maxFontSizeMultiplier),
       },
       children,
@@ -141,6 +166,26 @@ describe('GlassIconButton (Liquid Glass variant)', () => {
     expect(container.textContent).toContain('3');
     rerender(<GlassIconButton {...base} iconName="filter" badgeCount={0} />);
     expect(container.textContent).not.toContain('3');
+  });
+
+  it('uses the default violet badge with white text', () => {
+    const { container } = render(<GlassIconButton {...base} iconName="filter" badgeCount={3} />);
+    expect(container.querySelector('[data-bg="#6D28D9"]')).not.toBeNull();
+    expect(container.querySelector('[data-text]')?.getAttribute('data-color')).toBe('#FFFFFF');
+  });
+
+  it('allows callers to override badge colors', () => {
+    const { container } = render(
+      <GlassIconButton
+        {...base}
+        iconName="filter"
+        badgeCount={3}
+        badgeBackgroundColor="#FFFFFF"
+        badgeTextColor="#6D28D9"
+      />,
+    );
+    expect(container.querySelector('[data-bg="#FFFFFF"]')).not.toBeNull();
+    expect(container.querySelector('[data-text]')?.getAttribute('data-color')).toBe('#6D28D9');
   });
 
   it('clamps large badges and caps badge text scaling', () => {
