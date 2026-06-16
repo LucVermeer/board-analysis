@@ -296,6 +296,10 @@ export default defineConfig({
         command: 'node scripts/create-service-docker-context.mjs web',
         cache: false,
       },
+      'docker-context:sync': {
+        command: 'node scripts/create-service-docker-context.mjs sync',
+        cache: false,
+      },
       'test:service-deploy-inputs': {
         command: 'node --test scripts/check-service-deploy-inputs.test.mjs scripts/railway-deployment-status.test.mjs',
         cache: false,
