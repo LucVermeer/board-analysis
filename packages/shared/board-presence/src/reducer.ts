@@ -143,6 +143,14 @@ export function boardPresenceReducer(state: BoardPresenceState, action: BoardPre
       };
     }
 
+    case 'REFRESH_STATS': {
+      return {
+        ...state,
+        stats: action.payload.stats,
+        lastStatsSeq: Math.max(state.lastStatsSeq, action.payload.upToSeq),
+      };
+    }
+
     case 'APPLY_CONNECTION_CHANGED': {
       // Live connection push. Connection events share the per-board seq counter
       // with climb + stats events, so a stale/duplicate push (out-of-order Redis
@@ -169,6 +177,14 @@ export function boardPresenceReducer(state: BoardPresenceState, action: BoardPre
       return {
         ...state,
         holder: action.payload,
+      };
+    }
+
+    case 'REFRESH_CONNECTION': {
+      return {
+        ...state,
+        holder: action.payload.holder,
+        lastConnectionSeq: Math.max(state.lastConnectionSeq, action.payload.upToSeq),
       };
     }
 
