@@ -21,6 +21,8 @@ type GlassMockProps = {
   tintColor?: string;
   fallbackColor?: string;
   badgeCount?: number;
+  badgeBackgroundColor?: string;
+  badgeTextColor?: string;
 };
 vi.mock('../../GlassIconButton', () => ({
   GlassIconButton: ({
@@ -37,6 +39,8 @@ vi.mock('../../GlassIconButton', () => ({
     tintColor,
     fallbackColor,
     badgeCount,
+    badgeBackgroundColor,
+    badgeTextColor,
   }: GlassMockProps) =>
     createElement('button', {
       onClick: onPress,
@@ -55,13 +59,15 @@ vi.mock('../../GlassIconButton', () => ({
       'data-tint': tintColor ?? '',
       'data-fallback': fallbackColor ?? '',
       'data-badge': badgeCount == null ? '' : String(badgeCount),
+      'data-badge-bg': badgeBackgroundColor ?? '',
+      'data-badge-color': badgeTextColor ?? '',
     }),
 }));
 
 vi.mock('../../../providers/theme-provider', () => ({
   useTheme: () => ({
     systemColors: { fill: '#EEE', secondaryLabel: '#999' },
-    brandColors: { primary: '#6D28D9' },
+    brandColors: { primary: '#6D28D9', primaryFill: '#6D28D9', onPrimary: '#FFFFFF' },
     variant: cfg.variant,
   }),
 }));
@@ -136,6 +142,14 @@ describe('FilterButton', () => {
     expect(filterButton.getAttribute('data-fallback')).toBe('#EEE');
   });
 
+  it('uses a filled brand surface for the floating Liquid Glass affordance', () => {
+    const { container } = render(<FilterButton activeFilterCount={0} onPress={() => {}} prominence="floating" />);
+    const filterButton = button(container);
+    expect(filterButton.getAttribute('data-icon-color')).toBe('#FFFFFF');
+    expect(filterButton.getAttribute('data-tint')).toBe('#6D28D9');
+    expect(filterButton.getAttribute('data-fallback')).toBe('#6D28D9');
+  });
+
   it('uses a white glyph on the violet glass tint when active (Liquid Glass)', () => {
     cfg.variant = 'liquidGlass';
     const { container } = render(<FilterButton activeFilterCount={2} onPress={() => {}} />);
@@ -146,10 +160,31 @@ describe('FilterButton', () => {
     expect(filterButton.getAttribute('data-fallback')).toBe('#6D28D9@0.16');
   });
 
+  it('keeps the floating Liquid Glass count badge visible on the filled button', () => {
+    const { container } = render(<FilterButton activeFilterCount={2} onPress={() => {}} prominence="floating" />);
+    const filterButton = button(container);
+    expect(filterButton.getAttribute('data-icon-color')).toBe('#FFFFFF');
+    expect(filterButton.getAttribute('data-tint')).toBe('#6D28D9');
+    expect(filterButton.getAttribute('data-fallback')).toBe('#6D28D9');
+    expect(filterButton.getAttribute('data-badge-bg')).toBe('#FFFFFF');
+    expect(filterButton.getAttribute('data-badge-color')).toBe('#6D28D9');
+  });
+
   it('keeps the violet glyph on Material when active (no tint behind it)', () => {
     cfg.variant = 'material';
     const { container } = render(<FilterButton activeFilterCount={2} onPress={() => {}} />);
     expect(button(container).getAttribute('data-icon-color')).toBe('#6D28D9');
+  });
+
+  it('keeps Material styling unchanged when floating prominence is requested', () => {
+    cfg.variant = 'material';
+    const { container } = render(<FilterButton activeFilterCount={2} onPress={() => {}} prominence="floating" />);
+    const filterButton = button(container);
+    expect(filterButton.getAttribute('data-icon-color')).toBe('#6D28D9');
+    expect(filterButton.getAttribute('data-tint')).toBe('#6D28D9@0.18');
+    expect(filterButton.getAttribute('data-fallback')).toBe('#6D28D9@0.16');
+    expect(filterButton.getAttribute('data-badge-bg')).toBe('');
+    expect(filterButton.getAttribute('data-badge-color')).toBe('');
   });
 
   it('omits the count from the a11y label when no filters are active', () => {

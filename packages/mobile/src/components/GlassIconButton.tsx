@@ -42,6 +42,10 @@ type GlassIconButtonProps = {
   fallbackColor: ColorValue;
   /** Count badge (top-right). Rendered only when > 0. */
   badgeCount?: number;
+  /** Optional badge fill override for controls whose main surface already uses the default badge colour. */
+  badgeBackgroundColor?: ColorValue;
+  /** Optional badge text override paired with `badgeBackgroundColor`. */
+  badgeTextColor?: ColorValue;
   disabled?: boolean;
   /** Diameter of the circular target (default `glassSize.standard` — the standard
    *  floating FAB; pass `glassSize.hero` for a surface's defining action). */
@@ -94,6 +98,8 @@ function GlassIconButtonMaterial({
   accessibilityActions,
   onAccessibilityAction,
   badgeCount,
+  badgeBackgroundColor,
+  badgeTextColor,
   disabled = false,
   size = glassSize.standard,
 }: GlassIconButtonProps) {
@@ -121,7 +127,14 @@ function GlassIconButtonMaterial({
         accessibilityActions={accessibilityActions}
         onAccessibilityAction={onAccessibilityAction}
       />
-      {badgeLabel ? <BadgeLabel label={badgeLabel} style={styles.materialBadge} /> : null}
+      {badgeLabel ? (
+        <BadgeLabel
+          label={badgeLabel}
+          backgroundColor={badgeBackgroundColor}
+          textColor={badgeTextColor}
+          style={styles.materialBadge}
+        />
+      ) : null}
     </View>
   );
 }
@@ -148,6 +161,8 @@ function GlassIconButtonGlass({
   tintColor,
   fallbackColor,
   badgeCount,
+  badgeBackgroundColor,
+  badgeTextColor,
   disabled = false,
   size = glassSize.standard,
   secondaryIconName,
@@ -243,17 +258,29 @@ function GlassIconButtonGlass({
         )}
       </PressableSurface>
 
-      {badgeLabel ? <BadgeLabel label={badgeLabel} /> : null}
+      {badgeLabel ? (
+        <BadgeLabel label={badgeLabel} backgroundColor={badgeBackgroundColor} textColor={badgeTextColor} />
+      ) : null}
     </View>
   );
 }
 
-function BadgeLabel({ label, style }: { label: string; style?: StyleProp<ViewStyle> }) {
+function BadgeLabel({
+  label,
+  backgroundColor = brandColors.primary,
+  textColor = iosSystemColors.white,
+  style,
+}: {
+  label: string;
+  backgroundColor?: ColorValue;
+  textColor?: ColorValue;
+  style?: StyleProp<ViewStyle>;
+}) {
   return (
-    <View style={[styles.badge, style, { backgroundColor: brandColors.primary }]} pointerEvents="none">
+    <View style={[styles.badge, style, { backgroundColor }]} pointerEvents="none">
       <Text
         variant="caption2"
-        color={iosSystemColors.white}
+        color={textColor}
         maxFontSizeMultiplier={BADGE_MAX_FONT_SIZE_MULTIPLIER}
         style={styles.badgeText}
       >

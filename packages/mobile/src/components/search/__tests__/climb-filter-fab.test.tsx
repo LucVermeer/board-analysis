@@ -28,10 +28,12 @@ vi.mock('../FilterButton', () => ({
     activeFilterCount,
     onPress,
     onLongPress,
+    prominence,
   }: {
     activeFilterCount: number;
     onPress: () => void;
     onLongPress?: () => void;
+    prominence?: string;
   }) =>
     createElement(
       'button',
@@ -39,6 +41,7 @@ vi.mock('../FilterButton', () => ({
         onClick: onPress,
         onDoubleClick: onLongPress,
         'data-filter-count': String(activeFilterCount),
+        'data-prominence': prominence ?? '',
       },
       'filter',
     ),
@@ -74,6 +77,7 @@ describe('ClimbFilterFab', () => {
     fireEvent.click(getByText('filter'));
 
     expect(onOpenFilters).toHaveBeenCalledTimes(1);
+    expect(getByText('filter').getAttribute('data-prominence')).toBe('floating');
   });
 
   it('opens the grade rail from a long press', () => {

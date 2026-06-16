@@ -66,7 +66,12 @@ export function ClimbFilterFab({
         </Animated.View>
       ) : null}
       <Animated.View pointerEvents="box-none" style={[styles.fabSlot, fabSlotStyle]}>
-        <FilterButton activeFilterCount={activeFilterCount} onPress={onOpenFilters} onLongPress={onOpenGrade} />
+        <FilterButton
+          activeFilterCount={activeFilterCount}
+          onPress={onOpenFilters}
+          onLongPress={onOpenGrade}
+          prominence="floating"
+        />
       </Animated.View>
     </>
   );

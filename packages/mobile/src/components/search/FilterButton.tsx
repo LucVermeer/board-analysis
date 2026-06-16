@@ -16,18 +16,30 @@ type FilterButtonProps = {
   activeFilterCount: number;
   onPress: () => void;
   onLongPress?: () => void;
+  prominence?: 'standard' | 'floating';
 };
 
-export function FilterButton({ activeFilterCount, onPress, onLongPress }: FilterButtonProps) {
+export function FilterButton({ activeFilterCount, onPress, onLongPress, prominence = 'standard' }: FilterButtonProps) {
   const { t } = useTranslation('climbs');
   const { systemColors, brandColors, variant } = useTheme();
   const active = activeFilterCount > 0;
-  // Liquid Glass paints the active button on a violet glass tint, so a violet
-  // glyph is low-contrast — use white there. Material has no tint behind the
-  // glyph, so it keeps the violet (white would vanish on the bare surface).
-  const iconColor = active
-    ? selectByVariant(variant, { liquidGlass: iosSystemColors.white, material: brandColors.primary })
-    : systemColors.secondaryLabel;
+  const floatingLiquidGlass =
+    prominence === 'floating' && selectByVariant(variant, { liquidGlass: true, material: false });
+  let iconColor = systemColors.secondaryLabel;
+  let tintColor: string | undefined;
+  let fallbackColor = systemColors.fill;
+
+  if (floatingLiquidGlass) {
+    iconColor = brandColors.onPrimary;
+    tintColor = brandColors.primaryFill;
+    fallbackColor = brandColors.primaryFill;
+  } else if (active) {
+    // Liquid Glass paints the active button on a violet glass tint, so a violet
+    // glyph is low-contrast. Material has no tint behind the glyph.
+    iconColor = selectByVariant(variant, { liquidGlass: iosSystemColors.white, material: brandColors.primary });
+    tintColor = withAlpha(brandColors.primary, 0.18);
+    fallbackColor = withAlpha(brandColors.primary, 0.16);
+  }
 
   return (
     <GlassIconButton
@@ -52,9 +64,11 @@ export function FilterButton({ activeFilterCount, onPress, onLongPress }: Filter
             }
           : undefined
       }
-      tintColor={active ? withAlpha(brandColors.primary, 0.18) : undefined}
-      fallbackColor={active ? withAlpha(brandColors.primary, 0.16) : systemColors.fill}
+      tintColor={tintColor}
+      fallbackColor={fallbackColor}
       badgeCount={activeFilterCount}
+      badgeBackgroundColor={floatingLiquidGlass ? brandColors.onPrimary : undefined}
+      badgeTextColor={floatingLiquidGlass ? brandColors.primaryFill : undefined}
     />
   );
 }
