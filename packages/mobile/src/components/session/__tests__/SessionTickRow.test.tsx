@@ -18,7 +18,11 @@ vi.mock('../../Text', () => ({
 }));
 vi.mock('../../Icon', () => ({ Icon: () => createElement('i', null) }));
 vi.mock('../../ListRow', () => ({ ListRow: () => createElement('div', { 'data-testid': 'list-row' }) }));
-vi.mock('../../Avatar', () => ({ Avatar: () => createElement('span', { 'data-testid': 'avatar' }) }));
+// PressableAvatar wraps Avatar + PressableSurface and imports expo-router. Mocking
+// it prevents Rolldown from traversing into those packages during static analysis.
+vi.mock('../../PressableAvatar', () => ({
+  PressableAvatar: () => createElement('span', { 'data-testid': 'avatar' }),
+}));
 vi.mock('../../PressableSurface', () => ({
   PressableSurface: ({ children, onPress }: { children?: ReactNode; onPress?: () => void }) =>
     createElement('div', { onClick: onPress }, children),
@@ -44,6 +48,7 @@ vi.mock('react-native-reanimated', () => ({
 vi.mock('../../../theme/animations', () => ({
   springs: { snappy: {}, interactive: {}, gentle: {}, bouncy: {} },
   timing: { instant: 50, fast: 150, normal: 250, slow: 350 },
+  motionByVariant: { liquidGlass: {}, material: {} },
 }));
 vi.mock('../../ClimbListItemContent', () => ({
   ClimbListItemContent: (props: Record<string, unknown>) => {

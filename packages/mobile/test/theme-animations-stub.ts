@@ -26,3 +26,14 @@ export const timing = {
   normal: 250,
   slow: 350,
 };
+
+export const motionByVariant = {
+  liquidGlass: {
+    standard: { duration: 150 },
+    emphasized: { duration: 250 },
+  },
+  material: {
+    standard: { duration: 200, easingBezier: [0.2, 0, 0, 1] },
+    emphasized: { duration: 350, easingBezier: [0.05, 0.7, 0.1, 1] },
+  },
+};
