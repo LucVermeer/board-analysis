@@ -195,23 +195,31 @@ actor ThumbnailFetcher {
         sharedDefaults?.stringArray(forKey: SharedConstants.boardBackgroundPathsKey) ?? []
     }
 
+    /// Largest dimension (px) of the cached composite. The widget never shows
+    /// the thumbnail larger than the 80×100pt lock-screen image (~240×300px at
+    /// 3×), so capping the long side here keeps the PNG small without visible
+    /// loss — and bounds it regardless of the server overlay's native size.
+    private static let maxCompositeDimension: CGFloat = 384
+
     /// Draws the holds overlay on top of the staged board-background layer(s),
     /// returning encoded PNG data. Returns `nil` when there's no usable
     /// background (so the caller keeps the raw overlay) — never throws.
     ///
-    /// Both background and overlay fill the same frame at the overlay's pixel
-    /// size: the server renders the overlay in the board's coordinate space and
-    /// each bundled background is that same board image, so an identical fill
-    /// rect keeps the climb circles aligned over the holds. `scale = 1` keeps
-    /// the canvas at the overlay's native pixel size (no 2x/3x upscaling).
+    /// Background and overlay fill the same frame: the server renders the overlay
+    /// in the board's coordinate space and each bundled background is that same
+    /// board image, so an identical fill rect keeps the climb circles aligned
+    /// over the holds. The canvas is the overlay aspect ratio scaled down to fit
+    /// `maxCompositeDimension` (never up), at `scale = 1` so points map 1:1 to px.
     ///
     /// PNG, with a non-opaque context, is required — NOT JPEG. The bundled board
     /// art is a per-set hold render on transparency (measured 74–90% fully
     /// transparent pixels), not an opaque board photo, and the server overlay is
     /// likewise transparent. The composite must keep its alpha so the widget's
     /// dark `activityBackgroundTint` shows through; flattening to JPEG would turn
-    /// the transparent board into a solid black block. PNG also compresses these
-    /// sparse renders well, and the cache is bounded to `maxCachedThumbnails`.
+    /// the transparent board into a solid black block. iOS ImageIO can't encode
+    /// the smaller webp (decode-only — no runtime encoder without libwebp), so
+    /// PNG + the downscale above is the alpha-preserving, dependency-free option;
+    /// the cache also stays bounded to `maxCachedThumbnails`.
     private func compositeWithBoardBackground(overlayData: Data) -> Data? {
         let paths = stagedBackgroundPaths()
         guard !paths.isEmpty, let overlay = UIImage(data: overlayData) else { return nil }
@@ -219,8 +227,15 @@ actor ThumbnailFetcher {
         let backgroundLayers = paths.compactMap { UIImage(contentsOfFile: $0) }
         guard !backgroundLayers.isEmpty else { return nil }
 
-        let size = overlay.size
-        guard size.width > 0, size.height > 0 else { return nil }
+        let nativeSize = overlay.size
+        guard nativeSize.width > 0, nativeSize.height > 0 else { return nil }
+
+        // Downscale only — preserve aspect ratio, never upscale a small overlay.
+        let downscale = min(1, Self.maxCompositeDimension / max(nativeSize.width, nativeSize.height))
+        let size = CGSize(
+            width: (nativeSize.width * downscale).rounded(),
+            height: (nativeSize.height * downscale).rounded()
+        )
 
         let format = UIGraphicsImageRendererFormat()
         format.scale = 1
