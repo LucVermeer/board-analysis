@@ -19,6 +19,7 @@ import { PressableSurface } from '../PressableSurface';
 import { ClimbListThumbnail } from '../ClimbListThumbnail';
 import { AvatarGroup } from './AvatarGroup';
 import { FeedSocialRow } from './FeedSocialRow';
+import { SessionGradeStrip } from './SessionGradeStrip';
 import { gradeBadgeColor } from './profile-chart-colors';
 import { mapBetaLink } from '../../lib/beta-video-url';
 import { getBoardConfigForPlaylist } from '../../lib/playlists/board-details-for-playlist';
@@ -180,19 +181,18 @@ export const SessionFeedCard = memo(function SessionFeedCard({
               <Text variant="subheadline" style={styles.title} numberOfLines={1}>
                 {title}
               </Text>
+              {/* One line, sends first: counts in a bolder secondary colour, the
+                  time·duration·board tail quieter. Weight+colour carry the tiers
+                  at one 12pt size, so there's no orphaned second line. */}
               <Text variant="caption1" color={systemColors.tertiaryLabel} numberOfLines={1} style={styles.metaLine}>
+                {statLine ? (
+                  <Text variant="caption1" color={systemColors.secondaryLabel} style={styles.statEmphasis}>
+                    {statLine}
+                  </Text>
+                ) : null}
+                {statLine ? ' · ' : ''}
                 {metaLine}
               </Text>
-              {statLine ? (
-                <Text
-                  variant="subheadline"
-                  color={systemColors.secondaryLabel}
-                  numberOfLines={1}
-                  style={styles.statLine}
-                >
-                  {statLine}
-                </Text>
-              ) : null}
             </View>
           </View>
 
@@ -205,6 +205,10 @@ export const SessionFeedCard = memo(function SessionFeedCard({
             </View>
           ) : null}
         </PressableSurface>
+
+        {/* The session's grade SPREAD — the "this is a session" signal the
+            single-climb hero can't carry. Self-hides unless there are 2+ grades. */}
+        <SessionGradeStrip distribution={session.gradeDistribution} totalSends={session.totalSends} />
 
         {featuredBeta && betaLink ? (
           <PressableSurface
@@ -403,7 +407,7 @@ const styles = StyleSheet.create({
   headerText: { flex: 1 },
   title: { fontWeight: '600' },
   metaLine: { marginTop: 2 },
-  statLine: { marginTop: 2 },
+  statEmphasis: { fontWeight: '600' },
   goal: { flexDirection: 'row', alignItems: 'center', gap: spacing[2], marginTop: spacing[2] },
   hero: { flexDirection: 'row', gap: spacing[3], marginTop: spacing[2] },
   media: { width: HERO_MEDIA.width, height: HERO_MEDIA.height, borderRadius: borderRadius.md },

@@ -160,6 +160,7 @@
     "hardest": "Plus dur",
     "betaEyebrow": "Bêta",
     "betaBy": "Bêta par {{name}}",
+    "gradeSpread": "Éventail de cotations de {{min}} à {{max}}, {{sends}} réussites",
     "unknownClimb": "Bloc inconnu",
     "attempts_one": "{{count}} essai",
     "attempts_other": "{{count}} essais",

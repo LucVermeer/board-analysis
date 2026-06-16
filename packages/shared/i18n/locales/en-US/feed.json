@@ -160,6 +160,7 @@
     "hardest": "Hardest",
     "betaEyebrow": "Beta",
     "betaBy": "Beta by {{name}}",
+    "gradeSpread": "Grade spread {{min}} to {{max}}, {{sends}} sends",
     "unknownClimb": "Unknown climb",
     "attempts_one": "{{count}} try",
     "attempts_other": "{{count}} tries",

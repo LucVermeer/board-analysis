@@ -160,6 +160,7 @@
     "hardest": "Más difícil",
     "betaEyebrow": "Beta",
     "betaBy": "Beta de {{name}}",
+    "gradeSpread": "Rango de grados de {{min}} a {{max}}, {{sends}} encadenes",
     "unknownClimb": "Bloque desconocido",
     "attempts_one": "{{count}} intento",
     "attempts_other": "{{count}} intentos",

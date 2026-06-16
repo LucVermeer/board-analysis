@@ -55,14 +55,17 @@ export function SessionSummaryCard({ session, title, titleIsDate, onOpenComments
 
   return (
     <Card style={styles.card}>
-      <AvatarGroup participants={session.participants} size={44} />
-      <Text variant="title1" style={styles.title}>
-        {title}
-      </Text>
-
-      <Text variant="subheadline" color={systemColors.secondaryLabel}>
-        {whenLine}
-      </Text>
+      <View style={styles.headerRow}>
+        <AvatarGroup participants={session.participants} size={44} />
+        <View style={styles.headerText}>
+          <Text variant="title2" numberOfLines={1}>
+            {title}
+          </Text>
+          <Text variant="subheadline" color={systemColors.secondaryLabel}>
+            {whenLine}
+          </Text>
+        </View>
+      </View>
 
       {board || duration ? (
         <View style={styles.metaRow}>
@@ -155,7 +158,8 @@ function GradeTile({ grade }: { grade: string }) {
 
 const styles = StyleSheet.create({
   card: { marginHorizontal: spacing[4], marginTop: spacing[4], gap: spacing[1] },
-  title: { marginTop: spacing[1] },
+  headerRow: { flexDirection: 'row', alignItems: 'center', gap: spacing[3] },
+  headerText: { flex: 1 },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: spacing[2], marginTop: spacing[1] },
   metaItem: { flexDirection: 'row', alignItems: 'center', gap: spacing[1] },
   goal: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing[2], marginTop: spacing[2] },
