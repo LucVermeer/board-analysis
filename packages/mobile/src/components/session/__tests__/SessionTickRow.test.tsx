@@ -23,6 +23,28 @@ vi.mock('../../PressableSurface', () => ({
   PressableSurface: ({ children, onPress }: { children?: ReactNode; onPress?: () => void }) =>
     createElement('div', { onClick: onPress }, children),
 }));
+// PressableSurface statically imports `react-native-reanimated` and
+// `../theme/animations`. Rolldown traverses mocked modules' import graphs, so
+// we must also mock these to prevent parse errors in CI's module worker.
+vi.mock('react-native-reanimated', () => ({
+  default: {
+    View: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
+    createAnimatedComponent: (C: unknown) => C,
+  },
+  createAnimatedComponent: (C: unknown) => C,
+  useAnimatedStyle: () => ({}),
+  useSharedValue: (v: unknown) => ({ value: v }),
+  withSpring: (v: unknown) => v,
+  withTiming: (v: unknown) => v,
+  runOnJS:
+    (fn: (...args: unknown[]) => unknown) =>
+    (...args: unknown[]) =>
+      fn(...args),
+}));
+vi.mock('../../../theme/animations', () => ({
+  springs: { snappy: {}, interactive: {}, gentle: {}, bouncy: {} },
+  timing: { instant: 50, fast: 150, normal: 250, slow: 350 },
+}));
 vi.mock('../../ClimbListItemContent', () => ({
   ClimbListItemContent: (props: Record<string, unknown>) => {
     mockClimbListItemContent(props);
