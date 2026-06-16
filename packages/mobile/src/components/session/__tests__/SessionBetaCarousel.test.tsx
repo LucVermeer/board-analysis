@@ -127,9 +127,7 @@ describe('SessionBetaCarousel', () => {
   });
 
   it('renders nothing when no tick has beta links', () => {
-    const { container } = render(
-      createElement(SessionBetaCarousel, { ...SOLO, ticks: [tick([]), tick([])] }),
-    );
+    const { container } = render(createElement(SessionBetaCarousel, { ...SOLO, ticks: [tick([]), tick([])] }));
     expect(container.querySelector('[data-testid="beta-card"]')).toBeNull();
     expect(container.querySelector('[data-testid="beta-scroll"]')).toBeNull();
     expect(cards.rendered).toHaveLength(0);

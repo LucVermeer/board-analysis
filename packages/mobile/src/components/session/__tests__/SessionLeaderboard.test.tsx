@@ -9,7 +9,9 @@ vi.mock('react-native', () => ({
   StyleSheet: { create: (styles: unknown) => styles },
 }));
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
-vi.mock('../../Text', () => ({ Text: ({ children }: { children?: ReactNode }) => createElement('span', null, children) }));
+vi.mock('../../Text', () => ({
+  Text: ({ children }: { children?: ReactNode }) => createElement('span', null, children),
+}));
 vi.mock('../../Icon', () => ({ Icon: ({ name }: { name: string }) => createElement('i', { 'data-icon': name }) }));
 vi.mock('../../Avatar', () => ({ Avatar: () => createElement('span', { 'data-testid': 'avatar' }) }));
 vi.mock('../../ListRow', () => ({
@@ -27,7 +29,13 @@ vi.mock('../../../hooks/use-grade-format', () => ({ useGradeFormat: () => ({ for
 
 import { SessionLeaderboard } from '../SessionLeaderboard';
 
-function participant(userId: string, name: string, sends: number, flashes: number, attempts: number): SessionFeedParticipant {
+function participant(
+  userId: string,
+  name: string,
+  sends: number,
+  flashes: number,
+  attempts: number,
+): SessionFeedParticipant {
   return { userId, displayName: name, avatarUrl: null, sends, flashes, attempts };
 }
 

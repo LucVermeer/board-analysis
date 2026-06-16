@@ -10,7 +10,9 @@ const state = vi.hoisted(() => ({ bars: null as Bar[] | null }));
 
 vi.mock('react-native', () => ({
   View: ({ style, children }: { style?: unknown; children?: ReactNode }) => {
-    const flat = Array.isArray(style) ? Object.assign({}, ...style.filter(Boolean)) : ((style as Record<string, unknown>) ?? {});
+    const flat = Array.isArray(style)
+      ? Object.assign({}, ...style.filter(Boolean))
+      : ((style as Record<string, unknown>) ?? {});
     return createElement(
       'div',
       {
@@ -23,7 +25,9 @@ vi.mock('react-native', () => ({
   StyleSheet: { create: (styles: unknown) => styles },
 }));
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
-vi.mock('../../Text', () => ({ Text: ({ children }: { children?: ReactNode }) => createElement('span', null, children) }));
+vi.mock('../../Text', () => ({
+  Text: ({ children }: { children?: ReactNode }) => createElement('span', null, children),
+}));
 vi.mock('../profile-chart-colors', () => ({
   buildSessionGradeBars: () => state.bars,
   gradeBadgeColor: (g: string) => `color-${g}`,
