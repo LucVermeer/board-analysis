@@ -323,6 +323,15 @@ borderless)` builds a Pressable `android_ripple` config at that state-layer opac
 
 **Timing** (`withTiming`): `instant` 50ms · `fast` 150ms · `normal` 250ms · `slow` 350ms.
 
+**Variant-aware motion** (`theme.motion`, resolved from `motionByVariant`): for `withTiming`
+transitions that should follow the active design language. `theme.motion.standard` (utility:
+fades, small moves) and `theme.motion.emphasized` (hero: sheet/FAB moves, larger layout shifts)
+are pure-data `MotionConfig`s — Material carries an M3 easing curve + M3 duration (200 / 350ms),
+Liquid Glass carries the prior `timing` durations with no easing override. Build the reanimated
+config at the call site with `timingFor` (it stays out of the token modules so they remain
+reanimated-free for `makeThemeMock`): `value.value = withTiming(target, timingFor(theme.motion.emphasized))`.
+Springs (press/gesture feedback) stay variant-agnostic — these tokens cover the shared `withTiming` moves.
+
 **Haptics** (`packages/mobile/src/lib/haptics.ts`, expo-haptics, no-ops where unsupported). Visual
 press feedback is separate (that's `PressableSurface`); fire haptics from the handler:
 
@@ -381,6 +390,7 @@ type Theme = {
   opacity;
   springs;
   timing;
+  motion; // variant-aware withTiming configs: motion.standard / motion.emphasized (+ timingFor)
   variant; // 'liquidGlass' | 'material' (already resolved from 'auto')
   radii; // variant corner radii (e.g. radii.button)
   sheet; // variant sheet chrome (scrim/handle/corners)

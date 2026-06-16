@@ -44,25 +44,26 @@ export const timing = {
 export type SpringPreset = keyof typeof springs;
 export type TimingPreset = keyof typeof timing;
 
-/**
- * Material 3 easing curves as raw cubic-bezier control points (NOT
- * `Easing.bezier(...)` — this module stays reanimated-free so it's safe to import
- * from `makeThemeMock` and other non-RN contexts; the curve is constructed at the
- * call site via `theme/motion-config.ts`). `emphasized` is a two-part spline in the
- * M3 spec that no single cubic-bezier captures exactly — approximated here.
- */
-export const m3Easing = {
+// Material 3 easing curves as raw cubic-bezier control points — NOT
+// `Easing.bezier(...)`, so this module stays reanimated-free and safe to import from
+// `makeThemeMock`/non-RN contexts; the curve is built at the call site via
+// `theme/motion-config.ts`. Internal (only `motionByVariant` consumes them). Just the
+// two curves the tokens use today — add more when a token needs one (dead-code rule).
+//
+// `standard` is M3's standard-easing. `emphasized` approximates M3's emphasized
+// motion — a two-part accelerate→decelerate spline no single bezier captures — with
+// its dominant emphasized-decelerate segment (so it reads distinctly from `standard`,
+// a slower settle, not just a longer duration).
+const m3Easing = {
   standard: [0.2, 0, 0, 1],
-  emphasized: [0.2, 0, 0, 1],
-  decelerate: [0, 0, 0, 1],
-  accelerate: [0.3, 0, 1, 1],
+  emphasized: [0.05, 0.7, 0.1, 1],
 } as const satisfies Record<string, readonly [number, number, number, number]>;
 
-/** Material 3 standard durations (ms): utility motions short, hero motions medium+. */
-export const m3Duration = {
+// Material 3 standard durations (ms). Internal; add more (M3 has short1–4 / medium1–4
+// / long1–4) when a token needs them.
+const m3Duration = {
   short: 200, // M3 short4 — small utility transitions
   medium: 350, // M3 medium3 — standard component/layout transitions
-  long: 500, // M3 long2 — large/hero transitions
 } as const;
 
 /**

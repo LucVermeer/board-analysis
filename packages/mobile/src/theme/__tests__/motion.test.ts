@@ -10,9 +10,15 @@ import { motionByVariant } from '../animations';
 import { timingFor } from '../motion-config';
 
 describe('motionByVariant', () => {
-  it('gives Material M3 easing curves + standard durations', () => {
+  it('gives Material distinct M3 easing curves + standard durations', () => {
+    // standard = M3 standard-easing; emphasized approximates M3's two-part
+    // accelerate→decelerate spline with its dominant emphasized-decelerate segment,
+    // so it reads as a slower settle — not merely a longer duration than standard.
     expect(motionByVariant.material.standard).toEqual({ duration: 200, easingBezier: [0.2, 0, 0, 1] });
-    expect(motionByVariant.material.emphasized).toEqual({ duration: 350, easingBezier: [0.2, 0, 0, 1] });
+    expect(motionByVariant.material.emphasized).toEqual({ duration: 350, easingBezier: [0.05, 0.7, 0.1, 1] });
+    expect(motionByVariant.material.standard.easingBezier).not.toEqual(
+      motionByVariant.material.emphasized.easingBezier,
+    );
   });
 
   it('keeps the prior glass durations with no easing override (default ease)', () => {
