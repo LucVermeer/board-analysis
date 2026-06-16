@@ -153,4 +153,18 @@ describe('SessionTickRow — primarySubtitleOverride', () => {
       expect.objectContaining({ primarySubtitleOverride: undefined }),
     );
   });
+
+  it('falls back to undefined when participant displayName is null', () => {
+    render(
+      createElement(SessionTickRow, {
+        tick: tick(),
+        isMultiUser: true,
+        participant: { userId: 'user-1', displayName: null, avatarUrl: null, sends: 1, flashes: 0, attempts: 0 },
+        onPress: () => {},
+      }),
+    );
+    expect(mockClimbListItemContent).toHaveBeenCalledWith(
+      expect.objectContaining({ primarySubtitleOverride: undefined }),
+    );
+  });
 });
