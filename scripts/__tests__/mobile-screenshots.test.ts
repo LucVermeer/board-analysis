@@ -79,6 +79,10 @@ describe('parseArgs', () => {
     });
   });
 
+  it('defaults Android captures to the Play phone emulator device', () => {
+    expect(parseArgs(['--platform', 'android']).device).toBe('Pixel 2');
+  });
+
   it('maps --workout off to null', () => {
     expect(parseArgs(['--workout', 'off']).workout).toBeNull();
   });

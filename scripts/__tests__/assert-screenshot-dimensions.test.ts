@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { type Dimensions, findOffenders, readPngDimensions } from '../assert-screenshot-dimensions';
+import {
+  type Dimensions,
+  findGooglePlayOffenders,
+  findOffenders,
+  readPngDimensions,
+} from '../assert-screenshot-dimensions';
 
 /** Build a minimal valid PNG header: signature + IHDR length + "IHDR" + width/height. */
 function pngHeader({ width, height }: Dimensions): Buffer {
@@ -67,5 +72,53 @@ describe('findOffenders', () => {
   it('reports a corrupt PNG as an offender rather than throwing', () => {
     const offenders = findOffenders(slug, [{ name: `${slug}/corrupt.png`, buffer: Buffer.alloc(4) }]);
     expect(offenders).toHaveLength(1);
+  });
+});
+
+describe('findGooglePlayOffenders', () => {
+  const slug = 'pixel-2';
+
+  it('accepts 2-8 Play phone screenshots in the allowed size range', () => {
+    const offenders = findGooglePlayOffenders(slug, [
+      { name: `${slug}/00-home.png`, buffer: pngHeader({ width: 1080, height: 1920 }) },
+      { name: `${slug}/01-climbs.png`, buffer: pngHeader({ width: 1080, height: 1920 }) },
+    ]);
+    expect(offenders).toEqual([]);
+  });
+
+  it('requires at least two Play phone screenshots', () => {
+    const offenders = findGooglePlayOffenders(slug, [
+      { name: `${slug}/00-home.png`, buffer: pngHeader({ width: 1080, height: 1920 }) },
+    ]);
+    expect(offenders).toHaveLength(1);
+    expect(offenders[0].reason).toMatch(/at least 2/);
+  });
+
+  it('rejects more than eight Play phone screenshots', () => {
+    const files = Array.from({ length: 9 }, (_, index) => ({
+      name: `${slug}/0${index}-shot.png`,
+      buffer: pngHeader({ width: 1080, height: 1920 }),
+    }));
+    const offenders = findGooglePlayOffenders(slug, files);
+    expect(offenders).toHaveLength(1);
+    expect(offenders[0].reason).toMatch(/at most 8/);
+  });
+
+  it('rejects Play screenshots below the minimum side length', () => {
+    const offenders = findGooglePlayOffenders(slug, [
+      { name: `${slug}/00-home.png`, buffer: pngHeader({ width: 319, height: 568 }) },
+      { name: `${slug}/01-climbs.png`, buffer: pngHeader({ width: 1080, height: 1920 }) },
+    ]);
+    expect(offenders).toHaveLength(1);
+    expect(offenders[0].reason).toMatch(/at least 320px/);
+  });
+
+  it('rejects Play screenshots whose long side is more than twice the short side', () => {
+    const offenders = findGooglePlayOffenders(slug, [
+      { name: `${slug}/00-home.png`, buffer: pngHeader({ width: 1000, height: 2100 }) },
+      { name: `${slug}/01-climbs.png`, buffer: pngHeader({ width: 1080, height: 1920 }) },
+    ]);
+    expect(offenders).toHaveLength(1);
+    expect(offenders[0].reason).toMatch(/no more than 2x/);
   });
 });
