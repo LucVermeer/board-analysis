@@ -35,6 +35,16 @@ export type OpenClimbArgs =
       setIds?: string;
     };
 
+export type OpenClimbOptions = {
+  /**
+   * When `true`, the opened climb is set as the current climb (and appended to
+   * the queue) — a tap-to-activate. Defaults to `false` (view-only), preserving
+   * the original behaviour for every existing caller. Ignored on the `ref`
+   * fallback, which routes through the climb page and opens with its own default.
+   */
+  setAsCurrent?: boolean;
+};
+
 /**
  * The single entry point for opening a climb anywhere in the app. Every former
  * caller of the standalone climb page routes through here so all climb viewing
@@ -43,11 +53,12 @@ export type OpenClimbArgs =
  * Plain function (not a hook) so it's callable from `useCallback` bodies — pass
  * the host's `openPlayDrawer` and the screen's `router` as deps.
  */
-export function openClimbInPlayDrawer(args: OpenClimbArgs, deps: OpenClimbDeps): void {
+export function openClimbInPlayDrawer(args: OpenClimbArgs, deps: OpenClimbDeps, options?: OpenClimbOptions): void {
   const { openPlayDrawer, router } = deps;
+  const setAsCurrent = options?.setAsCurrent ?? false;
 
   if (args.kind === 'climb') {
-    openPlayDrawer(args.climb, { setAsCurrent: false, boardConfig: args.boardConfig, source: 'climb_view' });
+    openPlayDrawer(args.climb, { setAsCurrent, boardConfig: args.boardConfig, source: 'climb_view' });
     return;
   }
 
@@ -56,7 +67,7 @@ export function openClimbInPlayDrawer(args: OpenClimbArgs, deps: OpenClimbDeps):
     const config = getBoardConfigForPlaylist(args.tick.boardType, args.tick.layoutId);
     if (climb && config) {
       openPlayDrawer(climb, {
-        setAsCurrent: false,
+        setAsCurrent,
         boardConfig: {
           boardName: config.boardName,
           layoutId: config.layoutId,

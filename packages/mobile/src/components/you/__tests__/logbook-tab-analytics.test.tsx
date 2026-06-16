@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const analytics = vi.hoisted(() => ({ track: vi.fn() }));
 
-// Capture the per-row onPress LogbookTab wires up, so the test can fire a tap
+// Capture the per-row onActivate LogbookTab wires up, so the test can fire a tap
 // without a real list renderer.
 const row = vi.hoisted(() => ({ onPress: null as (() => void) | null }));
 
@@ -51,13 +51,13 @@ vi.mock('@shopify/flash-list', () => ({
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock('../LogbookRow', () => ({
   LogbookRow: ({
-    onPress,
+    onActivate,
     ascent,
   }: {
-    onPress: (ascent: { climbUuid: string }) => void;
+    onActivate: (ascent: { climbUuid: string }) => void;
     ascent: { climbUuid: string };
   }) => {
-    row.onPress = () => onPress(ascent);
+    row.onPress = () => onActivate(ascent);
     return createElement('div');
   },
 }));
@@ -75,7 +75,11 @@ vi.mock('../../../providers/theme-provider', () => ({
 }));
 vi.mock('expo-router', () => ({ useRouter: () => ({ push: vi.fn() }) }));
 vi.mock('../../../lib/open-climb-in-play-drawer', () => ({ openClimbInPlayDrawer: vi.fn() }));
-vi.mock('../../../providers/drawer-host-provider', () => ({ useDrawerHost: () => ({ openPlayDrawer: vi.fn() }) }));
+vi.mock('../../../lib/tick-to-climb', () => ({ tickToClimb: vi.fn() }));
+vi.mock('../../../lib/playlists/board-details-for-playlist', () => ({ getBoardConfigForPlaylist: vi.fn() }));
+vi.mock('../../../providers/drawer-host-provider', () => ({
+  useDrawerHost: () => ({ openPlayDrawer: vi.fn(), openClimbActions: vi.fn() }),
+}));
 
 import { LogbookTab } from '../LogbookTab';
 

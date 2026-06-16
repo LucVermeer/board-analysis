@@ -15,6 +15,8 @@ import { LogbookRow } from './LogbookRow';
 import { LogbookEditSheet } from './LogbookEditSheet';
 import { useUserAscentsFeed } from '../../lib/graphql/hooks';
 import { openClimbInPlayDrawer } from '../../lib/open-climb-in-play-drawer';
+import { tickToClimb } from '../../lib/tick-to-climb';
+import { getBoardConfigForPlaylist } from '../../lib/playlists/board-details-for-playlist';
 import { useBottomChromeMetrics } from '../../hooks/use-bottom-chrome-metrics';
 import { useDrawerHost } from '../../providers/drawer-host-provider';
 import { spacing, borderRadius } from '../../theme/tokens';
@@ -37,7 +39,7 @@ export function LogbookTab({ userId, topInset = 0, viewerIsOwner = true }: Logbo
   const { t } = useTranslation('you');
   const { systemColors, brandColors } = useTheme();
   const router = useRouter();
-  const { openPlayDrawer } = useDrawerHost();
+  const { openPlayDrawer, openClimbActions } = useDrawerHost();
   const bottomChrome = useBottomChromeMetrics();
   const paddingBottom = bottomChrome.scrollBottomPadding + spacing[4];
 
@@ -48,28 +50,44 @@ export function LogbookTab({ userId, topInset = 0, viewerIsOwner = true }: Logbo
   // Stabilise the FlashList `data` identity so it doesn't re-diff every render.
   const items = useMemo(() => feed.data?.pages.flatMap((page) => page.userAscentsFeed.items) ?? [], [feed.data]);
 
-  const handlePress = useCallback(
+  // Tap → set the climb active and open the play drawer (own logbook and another
+  // climber's read-only logbook alike). AscentFeedItem structurally satisfies the
+  // `tick` kind, which builds the climb + board config from frames.
+  const handleActivate = useCallback(
     (ascent: AscentFeedItem) => {
       track(SHARED_EVENTS.LogbookRowClicked, { climbUuid: ascent.climbUuid });
-      // Another climber's logbook is read-only — open the climb itself rather
-      // than the tick-editing sheet, which only edits the signed-in user's ticks.
-      if (!viewerIsOwner) {
-        openClimbInPlayDrawer(
-          {
-            kind: 'ref',
-            climbUuid: ascent.climbUuid,
-            boardType: ascent.boardType,
-            layoutId: ascent.layoutId,
-            angle: ascent.angle,
-          },
-          { openPlayDrawer, router },
-        );
-        return;
-      }
-      setEditAscent(ascent);
-      editSheetRef.current?.snapToIndex(0);
+      openClimbInPlayDrawer({ kind: 'tick', tick: ascent }, { openPlayDrawer, router }, { setAsCurrent: true });
     },
-    [openPlayDrawer, router, viewerIsOwner],
+    [openPlayDrawer, router],
+  );
+
+  // Swipe left-to-right → edit this tick (owner-only). The old tap behaviour.
+  const handleEdit = useCallback((ascent: AscentFeedItem) => {
+    setEditAscent(ascent);
+    editSheetRef.current?.snapToIndex(0);
+  }, []);
+
+  // Long press → open the climb actions sheet. For the owner it carries an
+  // "Edit entry" row wired back to the tick editor. No-op when the board can't
+  // resolve (no frames / MoonBoard) — nothing to render in the actions sheet.
+  const handleOpenActions = useCallback(
+    (ascent: AscentFeedItem) => {
+      const climb = tickToClimb(ascent);
+      const config = getBoardConfigForPlaylist(ascent.boardType, ascent.layoutId);
+      if (!climb || !config) return;
+      openClimbActions(
+        climb,
+        {
+          boardName: config.boardName,
+          layoutId: config.layoutId,
+          sizeId: config.sizeId,
+          setIds: config.setIds.join(','),
+          angle: ascent.angle,
+        },
+        viewerIsOwner ? { onEditEntry: () => handleEdit(ascent) } : undefined,
+      );
+    },
+    [openClimbActions, viewerIsOwner, handleEdit],
   );
 
   const handleEndReached = useCallback(() => {
@@ -81,8 +99,15 @@ export function LogbookTab({ userId, topInset = 0, viewerIsOwner = true }: Logbo
   }, [feed]);
 
   const renderItem = useCallback(
-    ({ item }: { item: AscentFeedItem }) => <LogbookRow ascent={item} onPress={handlePress} />,
-    [handlePress],
+    ({ item }: { item: AscentFeedItem }) => (
+      <LogbookRow
+        ascent={item}
+        onActivate={handleActivate}
+        onOpenActions={handleOpenActions}
+        onEdit={viewerIsOwner ? handleEdit : undefined}
+      />
+    ),
+    [handleActivate, handleOpenActions, handleEdit, viewerIsOwner],
   );
 
   // The screen's identity, in-body under the floating chrome. Memoized so

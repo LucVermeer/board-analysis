@@ -34,6 +34,9 @@ type ClimbActionsSheetProps = {
   onToggleFavorite?: () => void;
   /** When provided, shows a "Log a tick" row that opens the LogAscent sheet. */
   onTick?: () => void;
+  /** When provided, shows an "Edit entry" row that opens the logbook edit sheet
+   *  for the tick this climb was opened from (logbook context only). */
+  onEditEntry?: () => void;
   /** When provided, shows an "Add beta video" row that opens the share-your-beta sheet. */
   onAddBetaVideo?: () => void;
   onClose: () => void;
@@ -59,6 +62,7 @@ function ClimbActionsSheet({
   onOpenPlaylist,
   onToggleFavorite,
   onTick,
+  onEditEntry,
   onAddBetaVideo,
   onClose,
 }: ClimbActionsSheetProps) {
@@ -102,6 +106,11 @@ function ClimbActionsSheet({
     onTick?.();
     onClose();
   }, [onTick, onClose]);
+
+  const handleEditEntry = useCallback(() => {
+    onEditEntry?.();
+    onClose();
+  }, [onEditEntry, onClose]);
 
   const handleAddBetaVideo = useCallback(() => {
     onAddBetaVideo?.();
@@ -240,6 +249,14 @@ function ClimbActionsSheet({
             title={t('mobile.climbActions.tick')}
             leading={<Icon name="tick" size={22} color={successActionIconColor} />}
             onPress={handleTick}
+            showSeparator
+          />
+        )}
+        {onEditEntry && (
+          <ListRow
+            title={t('mobile.climbActions.editEntry')}
+            leading={<Icon name="edit" size={22} color={accentActionIconColor} />}
+            onPress={handleEditEntry}
             showSeparator
           />
         )}

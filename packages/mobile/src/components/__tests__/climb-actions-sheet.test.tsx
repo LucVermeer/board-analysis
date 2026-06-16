@@ -218,4 +218,20 @@ describe('ClimbActionsSheet present-on-visible (always-mounted toggle)', () => {
 
     expect(onOpenPlaylist).toHaveBeenCalledTimes(1);
   });
+
+  it('hides the Edit entry row unless onEditEntry is provided', () => {
+    render(<ClimbActionsSheet visible={true} {...baseProps} />);
+    expect(screen.queryByText('mobile.climbActions.editEntry')).toBeNull();
+  });
+
+  it('fires onEditEntry then onClose from the Edit entry row (logbook context)', () => {
+    const onEditEntry = vi.fn();
+    const onClose = vi.fn();
+    render(<ClimbActionsSheet visible={true} {...baseProps} onClose={onClose} onEditEntry={onEditEntry} />);
+
+    fireEvent.click(screen.getByText('mobile.climbActions.editEntry'));
+
+    expect(onEditEntry).toHaveBeenCalledTimes(1);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
 });

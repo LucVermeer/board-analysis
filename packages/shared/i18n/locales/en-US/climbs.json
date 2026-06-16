@@ -690,7 +690,8 @@
       "addBetaVideo": "Add beta video",
       "openInApp": "Open in Aurora app",
       "fork": "Remix this climb",
-      "edit": "Edit climb"
+      "edit": "Edit climb",
+      "editEntry": "Edit logbook entry"
     },
     "create": {
       "brush": {

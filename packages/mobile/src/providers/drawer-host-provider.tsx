@@ -49,6 +49,12 @@ export type BoardConfig = {
   angle: number;
 };
 
+export type OpenClimbActionsOptions = {
+  /** When set, the climb actions sheet shows an "Edit entry" row wired to this
+   *  callback (logbook rows pass it to open the tick editor). */
+  onEditEntry?: () => void;
+};
+
 export type LogAscentInput = {
   climbUuid: string;
   boardName: string;
@@ -99,8 +105,9 @@ type DrawerHostValue = {
   openPlayDrawer: (climb: Climb, options?: OpenPlayDrawerOptions) => void;
   openLogAscent: (input: LogAscentInput) => void;
   /** Opens the climb actions bottom sheet for the given climb. Uses the active
-   *  boardConfig at the time of opening. */
-  openClimbActions: (climb: Climb, boardConfigOverride?: BoardConfig) => void;
+   *  boardConfig at the time of opening. Pass `onEditEntry` (logbook context) to
+   *  add an "Edit entry" row that edits the tick the climb was opened from. */
+  openClimbActions: (climb: Climb, boardConfigOverride?: BoardConfig, options?: OpenClimbActionsOptions) => void;
   closeClimbActions: () => void;
   /** Opens the add-to-playlist bottom sheet for the given climb. Snapshots the
    *  active boardConfig (for the angle) at open time. */
@@ -134,7 +141,11 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
   const { data: myBoardsConn } = useMyBoards();
   const [boardConfigOverride, setBoardConfigOverride] = useState<BoardConfig | null>(null);
   const [logAscentInput, setLogAscentInput] = useState<LogAscentInput | null>(null);
-  const [climbActions, setClimbActions] = useState<{ climb: Climb; boardConfig: BoardConfig } | null>(null);
+  const [climbActions, setClimbActions] = useState<{
+    climb: Climb;
+    boardConfig: BoardConfig;
+    onEditEntry?: () => void;
+  } | null>(null);
   const [playlistClimb, setPlaylistClimb] = useState<{ climb: Climb; boardConfig: BoardConfig } | null>(null);
   const [betaVideoClimb, setBetaVideoClimb] = useState<{ climb: Climb; boardConfig: BoardConfig } | null>(null);
   const { addToQueue, setSessionBoardPath, setCurrentClimb } = useQueueActions();
@@ -309,11 +320,14 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
   // Snapshot the board config at open time so the sheet's per-row handlers
   // (queue / favorite / tick) keep operating on the same angle even if the
   // user switches their active board mid-interaction.
-  const openClimbActions = useCallback((climb: Climb, boardConfigOverride?: BoardConfig) => {
-    const boardConfig = boardConfigOverride ?? activeBoardConfigRef.current;
-    if (!boardConfig) return;
-    setClimbActions({ climb, boardConfig });
-  }, []);
+  const openClimbActions = useCallback(
+    (climb: Climb, boardConfigOverride?: BoardConfig, options?: OpenClimbActionsOptions) => {
+      const boardConfig = boardConfigOverride ?? activeBoardConfigRef.current;
+      if (!boardConfig) return;
+      setClimbActions({ climb, boardConfig, onEditEntry: options?.onEditEntry });
+    },
+    [],
+  );
 
   const closeClimbActions = useCallback(() => {
     setClimbActions(null);
@@ -649,6 +663,7 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
           onOpenPlaylist={handleClimbActionsOpenPlaylist}
           onToggleFavorite={handleClimbActionsToggleFavorite}
           onTick={handleClimbActionsTick}
+          onEditEntry={climbActions.onEditEntry}
           onAddBetaVideo={isAuthenticated ? handleClimbActionsAddBetaVideo : undefined}
           onClose={closeClimbActions}
         />
