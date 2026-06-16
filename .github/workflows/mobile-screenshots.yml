@@ -202,6 +202,10 @@ jobs:
           APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
           FASTLANE_SKIP_UPDATE_CHECK: '1'
           FASTLANE_DISABLE_ANIMATION: '1'
+          # The Fastfile uses deliver's `sync_screenshots: true`, which is still a
+          # beta feature; without this acknowledgement flag deliver hard-errors
+          # ("Please set a value to FASTLANE_ENABLE_BETA_DELIVER_SYNC_SCREENSHOTS").
+          FASTLANE_ENABLE_BETA_DELIVER_SYNC_SCREENSHOTS: 'true'
         run: |
           set -euo pipefail
           [ -n "$APP_STORE_CONNECT_ISSUER_ID" ] || { echo "::error::Missing APP_STORE_CONNECT_ISSUER_ID."; exit 1; }
