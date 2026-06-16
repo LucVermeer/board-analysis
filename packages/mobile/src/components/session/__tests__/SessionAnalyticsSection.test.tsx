@@ -42,7 +42,7 @@ vi.mock('../../../providers/theme-provider', () => ({ useTheme: () => ({ colorSc
 vi.mock('../../../theme/tokens', () => ({ spacing: { 4: 16 } }));
 
 import { SessionAnalyticsSection } from '../SessionAnalyticsSection';
-import { gradeBadgeColor, gradeChartColor } from '../../you/profile-chart-colors';
+import { gradeBadgeColor } from '../../you/profile-chart-colors';
 
 const distribution: SessionGradeDistributionItem[] = [{ grade: 'V4', flash: 2, send: 3, attempt: 0 }];
 
@@ -53,24 +53,23 @@ beforeEach(() => {
 });
 
 describe('SessionAnalyticsSection', () => {
-  it('renders exactly one grade-coloured chart (no second flash-vs-redpoint chart)', () => {
+  it('renders one solid grade-coloured chart (a grade pyramid, no flash/redpoint split or legend)', () => {
     const { getAllByTestId } = render(createElement(SessionAnalyticsSection, { gradeDistribution: distribution }));
 
     expect(getAllByTestId('stacked-bar-chart')).toHaveLength(1);
     expect(chart.renderCount).toBe(1);
 
-    // The bars carry the split-flash grade colours: a muted send base + a vivid
-    // flash cap, both keyed by grade.
+    // Solid bars: one segment per grade (flash + send combined = 5) in the grade's
+    // vivid colour. No two-shade split.
     expect(chart.bars).not.toBeNull();
     expect(chart.bars).toHaveLength(1);
     const [bar] = chart.bars ?? [];
     expect(bar.key).toBe('V4');
-    expect(bar.segments.map((segment) => segment.value)).toEqual([3, 2]);
-    expect(bar.segments[0].color).toBe(gradeChartColor('V4', 'light'));
-    expect(bar.segments[1].color).toBe(gradeBadgeColor('V4'));
+    expect(bar.segments.map((segment) => segment.value)).toEqual([5]);
+    expect(bar.segments[0].color).toBe(gradeBadgeColor('V4'));
 
-    // A two-swatch shade legend (flash vs redpoint), not a separate chart.
-    expect(chart.legendCount).toBe(2);
+    // No legend — the grade hue + x-axis label carry it.
+    expect(chart.legendCount).toBe(0);
   });
 
   it('renders nothing when the distribution is empty', () => {

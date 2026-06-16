@@ -1,7 +1,7 @@
 // Board-presence BLE wiring: on connect → resolveAndBindBoard, and on
 // wall-confirm → reportClimb + Undo snackbar. Mirrors the mobile
-// bluetooth-provider's presence coverage. All flag-gated: the report/resolve
-// paths are inert when `enabled` is false, so the BLE flow behaves as today.
+// bluetooth-provider's presence coverage. The report/resolve paths are inert
+// until a board is bound (boardId null), so the BLE flow behaves as today.
 
 import { describe, it, expect, vi, beforeEach } from 'vite-plus/test';
 import { render, waitFor } from '@testing-library/react';
@@ -90,7 +90,6 @@ vi.mock('@boardsesh/play-view', () => ({ emitWallConfirm: vi.fn() }));
 
 // The presence controls + wall report — the surface under test.
 const presence = vi.hoisted(() => ({
-  enabled: false as boolean,
   boardId: null as number | null,
   currentClimb: null as BoardPresenceClimb | null,
   resolveAndBindBoard: vi.fn().mockResolvedValue(null),
@@ -99,7 +98,6 @@ const presence = vi.hoisted(() => ({
 }));
 vi.mock('../../board-presence/board-presence-context', () => ({
   useBoardPresenceControls: () => ({
-    enabled: presence.enabled,
     boardId: presence.boardId,
     resolveAndBindBoard: presence.resolveAndBindBoard,
   }),
@@ -174,25 +172,13 @@ describe('Bluetooth board-presence: connect → resolve', () => {
     vi.clearAllMocks();
     ble.isConnected = false;
     queue.current = null;
-    presence.enabled = false;
     presence.boardId = null;
     presence.currentClimb = null;
     presence.resolveAndBindBoard.mockResolvedValue(null);
     lastConnectSuccess = null;
   });
 
-  it('does NOT resolve the board on connect when the flag is off', () => {
-    render(
-      <BluetoothProvider boardDetails={makeBoardDetails()}>
-        <div />
-      </BluetoothProvider>,
-    );
-    lastConnectSuccess?.('SERIAL-123');
-    expect(presence.resolveAndBindBoard).not.toHaveBeenCalled();
-  });
-
-  it('resolves + binds the board on connect when the flag is on, with the route board config', () => {
-    presence.enabled = true;
+  it('resolves + binds the board on connect, with the route board config', () => {
     render(
       <BluetoothProvider boardDetails={makeBoardDetails()}>
         <div />
@@ -209,7 +195,6 @@ describe('Bluetooth board-presence: connect → resolve', () => {
   });
 
   it('resolves serial-less boards through the route config fallback', () => {
-    presence.enabled = true;
     render(
       <BluetoothProvider boardDetails={makeBoardDetails({ board_name: 'moonboard' })}>
         <div />
@@ -226,7 +211,6 @@ describe('Bluetooth board-presence: connect → resolve', () => {
   });
 
   it('catches board resolution rejection on connect', async () => {
-    presence.enabled = true;
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     presence.resolveAndBindBoard.mockRejectedValueOnce(new Error('resolve failed'));
     render(
@@ -252,7 +236,6 @@ describe('Bluetooth board-presence: wall-confirm → report + Undo', () => {
     queue.current = makeItem('c1');
     ble.isConnected = true;
     mockSendFrames.mockResolvedValue(true);
-    presence.enabled = true;
     presence.boardId = 77;
     presence.currentClimb = makePresenceClimb('previous');
     presence.reportClimb.mockResolvedValue(true);
@@ -297,20 +280,6 @@ describe('Bluetooth board-presence: wall-confirm → report + Undo', () => {
     expect(restoredInput.climb.uuid).toBe('previous');
     expect(restoredAngle).toBe(40);
     expect(mockSendFrames.mock.invocationCallOrder[1]).toBeLessThan(presence.reportClimb.mock.invocationCallOrder[1]);
-  });
-
-  it('does NOT report when the board-presence flag is off', async () => {
-    presence.enabled = false;
-    render(
-      <BluetoothProvider boardDetails={makeBoardDetails()}>
-        <div />
-      </BluetoothProvider>,
-    );
-    await waitFor(() => {
-      expect(mockSendFrames).toHaveBeenCalled();
-    });
-    expect(presence.reportClimb).not.toHaveBeenCalled();
-    expect(mockShowMessage).not.toHaveBeenCalled();
   });
 
   it('does NOT report when no board is bound (boardId null)', async () => {

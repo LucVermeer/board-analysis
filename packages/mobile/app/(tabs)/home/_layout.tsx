@@ -1,9 +1,10 @@
 import { Stack } from 'expo-router';
-import { glassStackScreenOptions } from '../../../src/theme/navigation';
+import { useStackScreenOptions } from '../../../src/hooks/use-stack-screen-options';
 
 export default function HomeLayout() {
+  const screenOptions = useStackScreenOptions();
   return (
-    <Stack screenOptions={glassStackScreenOptions}>
+    <Stack screenOptions={screenOptions}>
       {/* The Home feed owns its top via floating chrome (the avatar island + scope
           title), like the other tabs — so the stack header is hidden here. */}
       <Stack.Screen name="index" options={{ headerShown: false }} />

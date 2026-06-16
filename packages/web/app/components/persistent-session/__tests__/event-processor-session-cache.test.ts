@@ -78,6 +78,8 @@ function betaRow(overrides: Partial<BetaLinksGqlRow> = {}): BetaLinksGqlRow {
     thumbnail: null,
     isListed: true,
     createdAt: '2026-04-30T08:00:00Z',
+    tickUuid: null,
+    boardId: null,
     ...overrides,
   };
 }

@@ -43,6 +43,8 @@ type AuthTextInputProps = {
   /** Show-password / hide-password labels for the toggle (already translated). */
   showLabel?: string;
   hideLabel?: string;
+  /** Native test identifier (used by Maestro screenshot flows). */
+  testID?: string;
 };
 
 /**
@@ -73,6 +75,7 @@ export const AuthTextInput = forwardRef<RNTextInput, AuthTextInputProps>(functio
     accessibilityLabel,
     showLabel = 'Show password',
     hideLabel = 'Hide password',
+    testID,
   },
   ref,
 ) {
@@ -95,6 +98,7 @@ export const AuthTextInput = forwardRef<RNTextInput, AuthTextInputProps>(functio
     passwordRules,
     onSubmitEditing,
     secureTextEntry: masked,
+    testID,
   } as const;
 
   const isMaterial = selectByVariant(theme.variant, { material: true, liquidGlass: false });

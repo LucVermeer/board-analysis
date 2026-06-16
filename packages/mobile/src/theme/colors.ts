@@ -248,3 +248,72 @@ export function blendOpaque(foreground: string, background: string, alpha: numbe
   const mix = (channel: 0 | 1 | 2) => fg[channel] * alpha + bg[channel] * (1 - alpha);
   return `#${toHexByte(mix(0))}${toHexByte(mix(1))}${toHexByte(mix(2))}`;
 }
+
+/**
+ * M3 surface-tint percentages for the elevation overlay (levels 1–5). The brand
+ * primary is alpha-composited over the base surface at these alphas to build the
+ * tonal surface-container ramp — this IS M3's mechanism for expressing depth
+ * (higher surface = more primary tint), so depth is tonal, not just a shadow.
+ */
+const m3SurfaceTint = { level1: 0.05, level2: 0.08, level3: 0.11, level4: 0.12, level5: 0.14 } as const;
+
+/**
+ * One container tone: the scheme's brand primary tinted over its base surface.
+ * In light the ramp tones toward violet as it rises; in dark the brighter fill
+ * lifts the near-black base — the canonical M3 direction in each scheme.
+ */
+function tintTone(scheme: 'light' | 'dark', alpha: number): string {
+  const base = materialSurfaces[scheme].background;
+  const primary = (scheme === 'dark' ? brandColorsDark : brandColors).primaryFill;
+  return blendOpaque(primary, base, alpha);
+}
+
+/**
+ * M3 surface-container tones for the Material variant, **computed** per scheme
+ * (the hand-tuned `materialSurfaces` collapsed these to one or two values — light
+ * `secondaryBackground`/`tertiaryBackground`/`elevatedSurface` were all `#FFFFFF`).
+ * Computing from `base + primary` (not tuned hexes) keeps the five steps monotonic
+ * and distinct, and lets a future Material You palette recompute them from a
+ * dynamic primary without a rewrite. Named roles map onto Paper's elevation
+ * levels: `low`↔level1, `base`↔level2, `high`↔level3, `highest`↔level5.
+ */
+export const materialSurfaceContainers = {
+  light: {
+    lowest: tintTone('light', 0.02),
+    low: tintTone('light', m3SurfaceTint.level1),
+    base: tintTone('light', m3SurfaceTint.level2),
+    high: tintTone('light', m3SurfaceTint.level3),
+    highest: tintTone('light', m3SurfaceTint.level5),
+  },
+  dark: {
+    lowest: tintTone('dark', 0.02),
+    low: tintTone('dark', m3SurfaceTint.level1),
+    base: tintTone('dark', m3SurfaceTint.level2),
+    high: tintTone('dark', m3SurfaceTint.level3),
+    highest: tintTone('dark', m3SurfaceTint.level5),
+  },
+} as const;
+
+/**
+ * Paper elevation-level tones (level1–5) for the MD3 theme — the SAME ramp as the
+ * named containers, so Paper's own elevated components (Surface/Menu/FAB/Card/
+ * Dialog/Appbar) tier identically to our app surfaces instead of collapsing to
+ * one `elevatedSurface` colour.
+ */
+export function materialElevationLevels(scheme: 'light' | 'dark'): {
+  level1: string;
+  level2: string;
+  level3: string;
+  level4: string;
+  level5: string;
+} {
+  return {
+    level1: tintTone(scheme, m3SurfaceTint.level1),
+    level2: tintTone(scheme, m3SurfaceTint.level2),
+    level3: tintTone(scheme, m3SurfaceTint.level3),
+    level4: tintTone(scheme, m3SurfaceTint.level4),
+    level5: tintTone(scheme, m3SurfaceTint.level5),
+  };
+}
+
+export type MaterialSurfaceContainers = typeof materialSurfaceContainers.light;

@@ -233,6 +233,20 @@ export const BOARD_RECENT_CLIMBS = `
   }
 `;
 
+// Query — durable, keyset-paged history of what was lit on a board, from
+// `board_climb_events` (survives past the 24h Redis window that backs
+// BOARD_RECENT_CLIMBS). Newest-first; `before` is an opaque cursor equal to the
+// `seq` of the previous page's last row, and `limit` is server-capped 1–100
+// (default 50). Reuses the same climb fields as the live feed so every wall
+// surface decodes one shape.
+export const BOARD_HISTORY = `
+  query BoardHistory($boardId: Int!, $limit: Int, $before: String) {
+    boardHistory(boardId: $boardId, limit: $limit, before: $before) {
+      ${BOARD_PRESENCE_CLIMB_FIELDS}
+    }
+  }
+`;
+
 // Query — durable + live stats for a board's wall feed.
 export const BOARD_PRESENCE_STATS = `
   query BoardPresenceStats($boardId: Int!) {

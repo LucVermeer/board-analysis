@@ -30,6 +30,8 @@ type BetaLinkResult = {
   thumbnail: string | null;
   isListed: boolean | null;
   createdAt: string | null;
+  tickUuid: string | null;
+  boardId: number | null;
 };
 
 type RecentBetaLinkResult = {
@@ -135,6 +137,8 @@ function passthroughResult(row: Row): BetaLinkResult {
     thumbnail: isOurS3Url(row.thumbnail) ? row.thumbnail : null,
     isListed: row.isListed,
     createdAt: row.createdAt,
+    tickUuid: row.tickUuid,
+    boardId: row.boardId,
   };
 }
 
@@ -192,6 +196,8 @@ async function enrichRow(row: Row, cfg: EnrichConfig): Promise<BetaLinkResult | 
       thumbnail: row.thumbnail,
       isListed: row.isListed,
       createdAt: row.createdAt,
+      tickUuid: row.tickUuid,
+      boardId: row.boardId,
     };
   }
 
@@ -232,6 +238,8 @@ async function enrichRow(row: Row, cfg: EnrichConfig): Promise<BetaLinkResult | 
     thumbnail,
     isListed: row.isListed,
     createdAt: row.createdAt,
+    tickUuid: row.tickUuid,
+    boardId: row.boardId,
   };
 }
 
@@ -289,6 +297,8 @@ type CachedRecentBetaLinkRow = {
   thumbnail: string | null;
   is_listed: boolean | null;
   created_at: string | null;
+  tick_uuid: string | null;
+  board_id: number | null;
   climb_name: string | null;
   layout_id: number | null;
 };
@@ -311,6 +321,8 @@ async function runRecentBetaLinksQuery(): Promise<CachedRecentBetaLinkRow[]> {
         bl.thumbnail,
         bl.is_listed,
         bl.created_at,
+        bl.tick_uuid,
+        bl.board_id,
         bc.name AS climb_name,
         bc.layout_id AS layout_id,
         ROW_NUMBER() OVER (
@@ -324,7 +336,7 @@ async function runRecentBetaLinksQuery(): Promise<CachedRecentBetaLinkRow[]> {
         AND bl.thumbnail IS NOT NULL
         AND bl.thumbnail LIKE ${`${STATIC_THUMBNAIL_PREFIX}%`}
     )
-    SELECT board_type, climb_uuid, link, foreign_username, angle, thumbnail, is_listed, created_at, climb_name, layout_id
+    SELECT board_type, climb_uuid, link, foreign_username, angle, thumbnail, is_listed, created_at, tick_uuid, board_id, climb_name, layout_id
     FROM ranked
     WHERE foreign_username IS NULL OR user_rank <= ${HOME_PER_USER_CAP}
     ORDER BY created_at DESC
@@ -523,6 +535,8 @@ export const betaLinkQueries = {
           thumbnail: r.thumbnail,
           isListed: r.is_listed,
           createdAt: r.created_at,
+          tickUuid: r.tick_uuid ?? null,
+          boardId: r.board_id ?? null,
         },
         climbName: r.climb_name,
         boardType: r.board_type,

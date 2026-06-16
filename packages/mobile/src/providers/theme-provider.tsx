@@ -14,6 +14,8 @@ import {
   brandColorsDark,
   androidFallbackColors,
   materialSurfaces,
+  materialSurfaceContainers,
+  type MaterialSurfaceContainers,
 } from '../theme/colors';
 import { textStylesByVariant, type TextVariant, type TypeStyle } from '../theme/typography';
 import { buildPaperTheme } from '../theme/paper-theme';
@@ -25,6 +27,7 @@ import {
   opacity,
   radiiByVariant,
   sheetChromeByVariant,
+  materialElevationByLevel,
   type Radii,
   type SheetChrome,
 } from '../theme/tokens';
@@ -38,8 +41,10 @@ import {
   type ChartColors,
   type SectionCaption,
 } from '../theme/variants/variant-tokens';
+import { variantFeatures, type VariantFeatures } from '../theme/variants/variant-features';
 import { secureStorePreferences } from '../lib/preferences/secure-store-adapter';
 import { assertNever } from '../lib/assert-never';
+import { SCREENSHOT_MODE, SCREENSHOT_THEME_OVERRIDE, SCREENSHOT_VARIANT_PREFERENCE } from '../lib/screenshot-mode';
 
 type ColorScheme = 'light' | 'dark';
 
@@ -113,6 +118,19 @@ type Theme = {
    */
   m3: MD3Theme['colors'];
   /**
+   * M3 tonal surface-container ramp ({lowest,low,base,high,highest}) for the
+   * current colour scheme. Material surfaces read a role here to express depth by
+   * TONE (the canonical M3 mechanism); pair with `materialElevation` for the cast.
+   * Only meaningful on Material — Liquid Glass never reads it.
+   */
+  m3SurfaceContainers: MaterialSurfaceContainers;
+  /**
+   * M3 elevation casts keyed by level (`level0`–`level5`), each a full ViewStyle
+   * (iOS `shadow*` + Android `elevation`). Scheme-independent. Apply on the same
+   * view as the tonal background — never under `overflow:'hidden'`.
+   */
+  materialElevation: typeof materialElevationByLevel;
+  /**
    * Semantic foregrounds for action rows / action FABs, resolved per variant:
    * monochrome (`systemColors.label`) on Liquid Glass, tinted by role on Material.
    */
@@ -124,6 +142,8 @@ type Theme = {
   chartColors: ChartColors;
   /** Section-caption treatment (uppercase / opacity / letter-spacing), per variant. */
   sectionCaption: SectionCaption;
+  /** Per-variant feature / content-layout flags (what shows, and where), resolved once. */
+  features: VariantFeatures;
 };
 
 const ThemeContext = createContext<Theme | null>(null);
@@ -188,12 +208,19 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
   // `'system'` until SecureStore hydrates — same value as a brand-new user, so
   // the first paint matches the OS preference. Once hydration completes the
   // resolved scheme switches to the saved override (if any) without a visible
-  // flash when the OS already matches the override.
-  const [themeOverride, setThemeOverrideState] = useState<ThemeOverride>('system');
+  // flash when the OS already matches the override. In screenshot mode the
+  // theme is locked to a fixed value (light by default) so captures can't flip
+  // mid-run when the keychain read resolves.
+  const [themeOverride, setThemeOverrideState] = useState<ThemeOverride>(
+    SCREENSHOT_MODE ? SCREENSHOT_THEME_OVERRIDE : 'system',
+  );
   // `'auto'` until SecureStore hydrates — same value as a brand-new user, so the
   // first paint resolves to the platform default (Liquid Glass on iOS 26,
-  // Material elsewhere) via the synchronous capability check, no flash.
-  const [uiVariantPreference, setUiVariantPreferenceState] = useState<UiVariantPreference>('auto');
+  // Material elsewhere) via the synchronous capability check, no flash. Locked
+  // in screenshot mode for the same reason as the theme override.
+  const [uiVariantPreference, setUiVariantPreferenceState] = useState<UiVariantPreference>(
+    SCREENSHOT_MODE ? SCREENSHOT_VARIANT_PREFERENCE : 'auto',
+  );
   // Guards the hydration effect against stomping a user choice that lands
   // before the SecureStore read resolves (a tap on a settings toggle can
   // beat the keychain read on a cold launch).
@@ -201,6 +228,10 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
   const hasUserChosenVariantRef = useRef(false);
 
   useEffect(() => {
+    // Screenshot mode pins the theme + variant to fixed values, so skip the
+    // SecureStore reads entirely — otherwise a saved override could flip the
+    // look between the first paint and the capture.
+    if (SCREENSHOT_MODE) return;
     let cancelled = false;
     secureStorePreferences
       .get<ThemeOverride>(THEME_OVERRIDE_KEY)
@@ -310,6 +341,8 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
       radii: radiiByVariant[variant],
       sheet: sheetChromeByVariant[variant],
       m3: m3Colors,
+      m3SurfaceContainers: materialSurfaceContainers[colorScheme],
+      materialElevation: materialElevationByLevel,
       actionColors: resolveActionColors(variant, {
         label: resolvedSystemColors.label,
         accent: resolvedSystemColors.accent,
@@ -318,6 +351,7 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
       }),
       chartColors: resolveChartColors(variant, colorScheme),
       sectionCaption: sectionCaptionByVariant[variant],
+      features: variantFeatures[variant],
     };
   }, [colorScheme, variant, themeOverride, setThemeOverride, uiVariantPreference, setUiVariant, m3Colors]);
 

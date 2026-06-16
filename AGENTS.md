@@ -204,7 +204,7 @@ This project uses [Vite+](https://viteplus.dev) (`vp`) as its unified toolchain 
 
 - `vp run test:e2e` - Full Playwright run: brings up the pre-built dev DB, exports the seeded test user, and runs every spec in `packages/web/e2e/`. Playwright's `webServer` config auto-starts `vp run dev` (backend + web) for you.
 - `vp run test:e2e:setup` - Only bring up the dev DB. Useful when iterating on a single spec: after setup, run `bun run --filter=@boardsesh/web test:e2e -- e2e/<spec>.spec.ts` (or use `test:e2e:ui` for the Playwright UI).
-- The seeded test user is `test@boardsesh.com` / `test`, exported as `TEST_USER_EMAIL`/`TEST_USER_PASSWORD` by the script so screenshot specs (`app-store-screenshots`, `help-screenshots`) run end-to-end without 1Password.
+- The seeded test user is `test@boardsesh.com` / `test`, exported as `TEST_USER_EMAIL`/`TEST_USER_PASSWORD` by the script so screenshot specs (`help-screenshots`, `layout-screenshots`) run end-to-end without 1Password.
 
 ### Database Commands (run from root or packages/db/)
 

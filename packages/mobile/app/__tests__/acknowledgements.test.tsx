@@ -115,10 +115,11 @@ describe('AcknowledgementsScreen', () => {
     expect(screen.getByText('and 1 more sponsoring privately — thank you too')).toBeTruthy();
   });
 
-  it('thanks the crew and the dog', () => {
+  it('thanks the crew, Alex, and the dog', () => {
     render(<AcknowledgementsScreen />);
 
     expect(screen.getByText('The crew')).toBeTruthy();
+    expect(screen.getByText('Alex')).toBeTruthy();
     expect(screen.getByText('Scout')).toBeTruthy();
   });
 

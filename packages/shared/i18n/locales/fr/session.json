@@ -61,6 +61,22 @@
     "deleteAscentConfirm": "Tu es sûr ? Cette action est irréversible.",
     "delete": "Supprimer",
     "climberFallback": "Grimpeur",
+    "setBy": "créé par {{username}}",
+    "weekday": {
+      "sunday": "dimanche",
+      "monday": "lundi",
+      "tuesday": "mardi",
+      "wednesday": "mercredi",
+      "thursday": "jeudi",
+      "friday": "vendredi",
+      "saturday": "samedi"
+    },
+    "partOfDay": {
+      "morning": "matin",
+      "afternoon": "après-midi",
+      "evening": "soir",
+      "night": "nuit"
+    },
     "unknownClimb": "Bloc inconnu",
     "attemptOnNth": "au {{ordinal}} essai",
     "totalAttempts": "{{count}} au total",
@@ -280,6 +296,8 @@
     },
     "betaVideos": {
       "title": "Videos Beta",
+      "crewTitle": "Beta de ce groupe",
+      "cardLabelByUploader": "Beta par {{name}}",
       "empty": "Pas encore de videos beta. Soyez le premier a partager !",
       "videoCount_one": "{{count}} video",
       "videoCount_other": "{{count}} videos",

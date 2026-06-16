@@ -38,7 +38,7 @@ export function AccessoryBarSurface({
   children,
 }: AccessoryBarSurfaceProps) {
   const mode = useEffectiveSurfaceMode();
-  const { systemColors, variant } = useTheme();
+  const { systemColors, variant, m3SurfaceContainers, materialElevation } = useTheme();
   const radius = treatment === 'docked' ? 0 : (borderRadius ?? height / 2);
   const shape: ViewStyle = { height, borderRadius: radius };
 
@@ -61,18 +61,19 @@ export function AccessoryBarSurface({
   // Reduce Transparency resolves translucent surfaces to solid. Genuine dual-axis
   // check (surface capability OR aesthetic variant) — see theme/variants/README.md.
   if (mode === 'material' || variant === 'material') {
-    // Docked: neutral M3 surface that reads one elevation step above the tab bar
-    // (hairline separator + elevation shadow). Floating: the same surface as a
-    // lifted pill. The grade colour lives in the bar's leading accent, not here.
+    // M3 bottom-bar surface: the `surfaceContainer` tone + a level-2 cast (the
+    // canonical nav/bottom-bar role). Docked adds a hairline top separator;
+    // floating is the same tone as a lifted pill. The grade colour lives in the
+    // bar's leading accent, not here. No clip on this View, so the cast shows.
     const materialSurfaceStyle: ViewStyle =
       treatment === 'docked'
         ? {
-            backgroundColor: systemColors.elevatedSurface,
+            backgroundColor: m3SurfaceContainers.base,
             borderTopWidth: StyleSheet.hairlineWidth,
             borderTopColor: systemColors.separator,
-            ...shadows.sm,
+            ...materialElevation.level2,
           }
-        : { backgroundColor: systemColors.elevatedSurface, ...shadows.sm };
+        : { backgroundColor: m3SurfaceContainers.base, ...materialElevation.level2 };
     return <View style={[shape, materialSurfaceStyle, style]}>{children}</View>;
   }
 

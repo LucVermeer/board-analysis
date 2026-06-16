@@ -347,7 +347,7 @@ export default function HomeTab() {
   }
 
   return (
-    <View style={[styles.flex, { backgroundColor: systemColors.background }]}>
+    <View testID="home-screen" style={[styles.flex, { backgroundColor: systemColors.background }]}>
       <FlashList
         ref={listRef}
         data={sessions}

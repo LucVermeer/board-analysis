@@ -154,7 +154,6 @@ const mockReportBoardDisconnect = vi.fn().mockResolvedValue(true);
 const mockResolveAndBindBoard = vi.fn().mockResolvedValue(null);
 vi.mock('../../board-presence/board-presence-context', () => ({
   useBoardPresenceControls: () => ({
-    enabled: false,
     boardId: mockPresenceBoardId,
     resolveAndBindBoard: mockResolveAndBindBoard,
     reportDisconnect: mockReportBoardDisconnect,
@@ -181,7 +180,7 @@ function createTestBoardDetails(overrides?: Partial<BoardDetails>): BoardDetails
     board_name: 'kilter',
     layout_id: 1,
     size_id: 10,
-    set_ids: '1,2',
+    set_ids: [1, 2],
     images_to_holds: {},
     holdsData: {},
     edge_left: 0,

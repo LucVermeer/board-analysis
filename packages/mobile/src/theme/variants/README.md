@@ -35,14 +35,16 @@ variant primitive with surface mode.
 2. A whole component subtree differs (different RN/Paper elements)? → **component swap** (`createVariantComponent` for small twins; an explicit `index.tsx` router for large folder-split twins).
 3. A single value differs and has a **stable, designer-facing name** (action-icon colour policy, chart palette, caption style)? → **token**: add a `…ByVariant` map / resolver in `variant-tokens.ts`, resolve in the provider, read `theme.X`.
 4. A layout metric tied to chrome arbitration (reserves, insets, footer padding)? → push into `computeBottomChromeMetrics` and read a named field.
-5. Whether a feature/section shows at all? → a named component that returns `null` (e.g. `ScreenTitle`) — never a bare `variant === 'material' ? null`.
+5. Whether a feature/section shows at all, or where it's laid out? → a flag in the `variantFeatures` registry (read via `theme.features`), consumed by a named component (e.g. `ScreenTitle`) — never a bare `variant === 'material' ? null`.
 6. A genuinely local, positional one-off? → `selectByVariant(variant, { liquidGlass, material })`.
 
 ## The primitives
 
 - **`selectByVariant(variant, { liquidGlass, material })`** — declarative value pick. Maps are `Record<UiVariant, T>`, so a new variant is a compile error at every call site. Prefer a token (step 3) for anything with a name.
+- **`useVariantValue({ liquidGlass, material })`** — `selectByVariant` bound to the live `theme.variant`, for a component that doesn't already destructure the theme. Same exhaustiveness + memoisation rules.
 - **`createVariantComponent(name, { liquidGlass, material })`** — one public component from two impls with an identical prop API. Renders the chosen impl as JSX so each gets its own fiber/hook list (a live variant flip unmounts one and mounts the other). React 19 `ref` forwards through `{...props}`.
 - **`variant-tokens.ts`** — the per-variant token resolvers (`resolveActionColors`, `resolveChartColors`, `sectionCaptionByVariant`, `applySectionCaption`). Shared by the provider and the test mock (`src/test/theme-mock.ts`) so they can't drift.
+- **`variant-features.ts`** — the `variantFeatures` registry (`Record<UiVariant, VariantFeatures>`) for content/layout feature gaps (`inBodyLargeTitle`, `filtersInTopChrome`); resolved once as `theme.features`.
 - **`assertNever`** (`src/lib/assert-never.ts`) — exhaustiveness guard for the few `switch (variant)` sites in the provider.
 
 ## Rules that keep it working
@@ -55,11 +57,31 @@ variant primitive with surface mode.
 ## Adding a third variant — the punch-list
 
 Widen `UiVariant` in `../resolve-ui-variant.ts` and the compiler enumerates the work:
-every `…ByVariant` map, every `selectByVariant`/`createVariantComponent` call, and every
-swap router fails to compile until handled. A **manual** checklist covers the capability
+every `…ByVariant` map, the `variantFeatures` registry, every `selectByVariant`/`createVariantComponent`
+call, and every swap router fails to compile until handled. A **manual** checklist covers the capability
 sites the type system can't reach: `resolveSystemColors` and `useEffectiveSurfaceMode`
 (guarded by `assertNever`), `theme.m3` (a Paper palette only meaningful on Material), and
 axis-D `Platform.OS` sites.
+
+## Navigation headers
+
+`useStackScreenOptions()` (`src/hooks/`) is the single source of truth for the **native stack
+header** on pushed/secondary screens: a transparent blur header on Liquid Glass (iOS), an opaque
+Material 3 small app bar on Material (solid surface, `onSurface` tint, flat at rest, no blur). Spread
+it as a stack's `screenOptions` in a `_layout`, or into a per-screen `<Stack.Screen options>`.
+
+- **Header XOR in-body `Appbar`.** A screen renders **either** the native stack header **or** its own
+  in-body top chrome (a Material `Appbar` / glass collapsing header) — never both. The five main tab
+  indexes (`climbs`/`discover`/`profile`/`record`/`home`) set `headerShown:false` and own their
+  chrome; everything pushed on top uses the native header via the hook. Don't render a body `Appbar`
+  under a shown native header.
+- **Deviation — no on-scroll tint.** A real M3 app bar shifts `surface → surfaceContainer` (level 2)
+  as content scrolls under it. Native-stack can't drive `headerStyle` from a scroll position, so the
+  Material header stays flat at the `surface` tone. Revisit with a scroll-driven `headerStyle` if the
+  flat look reads wrong.
+- **Genuinely-per-screen header intents stay local** (not in the hook): `climbs/index`'s
+  `headerBlurEffect:'none'` is the iOS-26 Liquid-Glass native-search header (Material hides it), and
+  `discover/all`'s `headerTransparent:false` is an intentional opaque list header on both variants.
 
 ## Scope
 

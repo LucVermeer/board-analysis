@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useState } from 'react';
 import { Stack } from 'expo-router';
-import { Modal, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FlashList } from '@shopify/flash-list';
 import { useTranslation } from 'react-i18next';
@@ -10,6 +10,7 @@ import { Icon } from '../src/components/Icon';
 import { PressableSurface } from '../src/components/PressableSurface';
 import { Text } from '../src/components/Text';
 import { useBottomChromeMetrics } from '../src/hooks/use-bottom-chrome-metrics';
+import { useStackScreenOptions } from '../src/hooks/use-stack-screen-options';
 import { loadOssLicenses, type OssLicense } from '../src/lib/oss-licenses';
 import { openExternalUrl } from '../src/lib/open-url';
 import { useTheme } from '../src/providers/theme-provider';
@@ -79,18 +80,15 @@ export default function LicensesScreen() {
     [handleSelect],
   );
 
+  // Variant-aware header from the shared hook: a transparent blur header on Liquid
+  // Glass (iOS), an opaque M3 app bar on Material — including the forced-Material-
+  // on-iOS / Android paths where a transparent header would slide content under the
+  // status bar.
+  const screenOptions = useStackScreenOptions();
+
   return (
     <>
-      <Stack.Screen
-        options={{
-          title: t('mobile.licenses.title'),
-          headerShown: true,
-          headerLargeTitle: false,
-          headerTransparent: Platform.OS === 'ios',
-          headerBlurEffect: 'systemMaterial',
-          contentStyle: { backgroundColor: 'transparent' },
-        }}
-      />
+      <Stack.Screen options={{ ...screenOptions, title: t('mobile.licenses.title'), headerShown: true }} />
       <View style={styles.flex}>
         {licenses === null ? (
           <View style={styles.loading}>

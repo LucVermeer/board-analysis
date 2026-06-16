@@ -64,8 +64,8 @@ export default function PersistentSessionWrapper({ children, boardConfigs }: Per
                   {/* WebBoardPresenceProvider wraps the BLE provider so the
                       connect→resolveBoardForSerial and wall-confirm→reportClimb
                       wiring inside BluetoothProvider can read the wall context.
-                      Inert (no client, null boardId) when the `board-presence`
-                      flag is off — exactly today's behaviour. */}
+                      Inert (no client, null boardId) until a BLE serial resolves
+                      to a board. */}
                   <WebBoardPresenceProvider>
                     <RootBluetoothProvider>
                       <PlaylistsAdapterProvider>

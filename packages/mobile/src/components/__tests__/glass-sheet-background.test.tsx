@@ -51,6 +51,8 @@ describe('GlassSheetBackground', () => {
     expect(glass.props?.glassEffectStyle).toBe('regular');
     expect(glass.props?.fallbackColor).toBe('#1C1C1E');
     expect(glass.props?.pointerEvents).toBe('auto');
+    // M3 modal bottom sheet = surfaceContainerLow (the scrim carries separation).
+    expect(glass.props?.role).toBe('low');
   });
 
   it('leaves the material untinted by default so sibling sheets keep the lighter glass', () => {

@@ -9,6 +9,7 @@ import { PressableSurface } from '../src/components/PressableSurface';
 import { SectionHeader } from '../src/components/SectionHeader';
 import { Text } from '../src/components/Text';
 import { useBottomChromeMetrics } from '../src/hooks/use-bottom-chrome-metrics';
+import { useStackScreenOptions } from '../src/hooks/use-stack-screen-options';
 import { openDiscordInvite } from '../src/lib/discord';
 import { openExternalUrl } from '../src/lib/open-url';
 import { openPartnershipsEmail, PARTNERSHIPS_EMAIL } from '../src/lib/partnerships';
@@ -28,6 +29,7 @@ type AboutCard = {
 export default function AboutScreen() {
   const { t } = useTranslation('common');
   const { systemColors } = useTheme();
+  const screenOptions = useStackScreenOptions();
   const bottomChrome = useBottomChromeMetrics();
   const router = useRouter();
   const { showToast } = useToast();
@@ -61,9 +63,9 @@ export default function AboutScreen() {
 
   return (
     <>
-      {/* Inherits the transparent blur header + minimal back button from the
-          root stack's glassStackScreenOptions; just turns the header on. */}
-      <Stack.Screen options={{ title: t('mobile.about.title'), headerShown: true }} />
+      {/* Variant-aware header (transparent blur on Liquid Glass, opaque M3 on
+          Material) from the shared hook; this screen just turns it on + titles it. */}
+      <Stack.Screen options={{ ...screenOptions, title: t('mobile.about.title'), headerShown: true }} />
       <ScrollView
         contentInsetAdjustmentBehavior="automatic"
         contentContainerStyle={[styles.container, { paddingBottom: bottomChrome.scrollBottomPadding + spacing[6] }]}

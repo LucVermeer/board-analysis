@@ -164,6 +164,15 @@ export default defineConfig({
         dependsOn: ['locations:aurora', 'locations:kilter', 'locations:moonboard'],
         cache: false,
       },
+      'db:dedupe-gyms': {
+        command: 'bun run --filter=@boardsesh/db db:dedupe-gyms',
+        // Intentionally no db:up dependency: this maintenance/reporting command
+        // often targets DB_URL against a remote database instead of local Docker.
+        cache: false,
+      },
+      'test:db': {
+        command: 'bun run --filter=@boardsesh/db test',
+      },
       'locations:aurora': {
         command: 'bun run --filter=@boardsesh/aurora-sync sync:locations',
         dependsOn: ['db:up'],
@@ -294,6 +303,10 @@ export default defineConfig({
       },
       'docker-context:web': {
         command: 'node scripts/create-service-docker-context.mjs web',
+        cache: false,
+      },
+      'docker-context:sync': {
+        command: 'node scripts/create-service-docker-context.mjs sync',
         cache: false,
       },
       'test:service-deploy-inputs': {
@@ -503,6 +516,14 @@ export default defineConfig({
       },
       'mobile:screenshot': {
         command: 'bash scripts/mobile-screenshot.sh',
+        cache: false,
+      },
+      'mobile:screenshots': {
+        command: 'tsx scripts/mobile-screenshots.ts',
+        cache: false,
+      },
+      'check:screenshot-dimensions': {
+        command: 'tsx scripts/assert-screenshot-dimensions.ts',
         cache: false,
       },
       'mobile:publish': {

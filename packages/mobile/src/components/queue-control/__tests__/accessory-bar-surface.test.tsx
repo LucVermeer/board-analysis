@@ -29,6 +29,10 @@ vi.mock('../../../providers/theme-provider', () => ({
       elevatedSurface: '#FFFFFF',
       separator: '#CCCCCC',
     },
+    m3SurfaceContainers: { lowest: '#101018', low: '#202028', base: '#2A2138', high: '#33293F', highest: '#3B2F49' },
+    materialElevation: {
+      level2: { elevation: 2, shadowOpacity: 0.12, shadowRadius: 3, shadowOffset: { width: 0, height: 1 } },
+    },
   }),
 }));
 
@@ -55,10 +59,11 @@ describe('AccessoryBarSurface', () => {
     const style = surface?.getAttribute('data-style') ?? '';
     expect(style).toContain('"height":48');
     expect(style).toContain('"borderRadius":0');
-    expect(style).toContain('"backgroundColor":"#FFFFFF"');
+    // M3 bottom-bar surface: the surfaceContainer tone (not the old elevatedSurface).
+    expect(style).toContain('"backgroundColor":"#2A2138"');
     expect(style).toContain('"borderTopWidth":1');
     expect(style).toContain('"borderTopColor":"#CCCCCC"');
-    // The docked bar lifts one elevation step above the tab bar (M3 separation).
+    // The docked bar lifts one elevation step above the tab bar (M3 nav-bar = level 2).
     expect(style).toContain('"elevation":2');
     expect(container.querySelector('[data-glass]')).toBeNull();
   });
@@ -73,6 +78,6 @@ describe('AccessoryBarSurface', () => {
     );
 
     expect(container.querySelector('[data-glass]')).toBeNull();
-    expect(container.querySelector('[data-view]')?.getAttribute('data-style')).toContain('"backgroundColor":"#FFFFFF"');
+    expect(container.querySelector('[data-view]')?.getAttribute('data-style')).toContain('"backgroundColor":"#2A2138"');
   });
 });
