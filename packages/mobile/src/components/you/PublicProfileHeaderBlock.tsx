@@ -13,6 +13,7 @@ import { useTheme } from '../../providers/theme-provider';
 import { useToast } from '../../providers/toast-provider';
 import { hapticLight } from '../../lib/haptics';
 import { spacing, borderRadius } from '../../theme/tokens';
+import { selectByVariant } from '../../theme/variants';
 
 const AVATAR_SIZE = 80;
 
@@ -110,7 +111,7 @@ function FollowButton({
   const isPending = toggleFollow.isPending && toggleFollow.variables?.userId === targetUserId;
 
   // Following at rest reads as middle-emphasis: M3 → tonal, HIG → outlined capsule.
-  const followingVariant = variant === 'material' ? 'tonal' : 'outlined';
+  const followingVariant = selectByVariant(variant, { liquidGlass: 'outlined', material: 'tonal' } as const);
 
   return (
     <Button
