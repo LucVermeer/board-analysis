@@ -30,7 +30,7 @@ import { Text } from '../Text';
 import { Icon } from '../Icon';
 import { ActivityIndicator } from '../ActivityIndicator';
 import { ClimbListRow, type ClimbListRowRenderContentArgs } from '../ClimbListRow';
-import { Avatar } from '../Avatar';
+import { PressableAvatar } from '../PressableAvatar';
 import { AccessoryClimbThumbnail } from '../queue-control/AccessoryClimbThumbnail';
 import { useTheme } from '../../providers/theme-provider';
 import { useToast } from '../../providers/toast-provider';
@@ -1089,7 +1089,12 @@ function HardestSendRow({
   return (
     <View style={[styles.hardestSendRow, { backgroundColor: surfaceColor }]}>
       <View style={styles.hardestAvatar}>
-        <Avatar uri={hardestSend.sentByAvatarUrl} name={climberName} size={34} />
+        <PressableAvatar
+          userId={hardestSend.sentByUserId}
+          uri={hardestSend.sentByAvatarUrl}
+          name={climberName}
+          size={34}
+        />
         <View style={[styles.crownBadge, { backgroundColor: withAlpha(crownColor, 0.18) }]}>
           <Icon name="crown" size={11} color={crownColor} />
         </View>

@@ -7,7 +7,7 @@ import { Text } from '../Text';
 import { Icon } from '../Icon';
 import { type IconName } from '../icon-map';
 import { ListRow } from '../ListRow';
-import { Avatar } from '../Avatar';
+import { PressableAvatar } from '../PressableAvatar';
 import { PressableSurface } from '../PressableSurface';
 import { ClimbListItemContent } from '../ClimbListItemContent';
 import { gradeBadgeColor } from '../you/profile-chart-colors';
@@ -123,7 +123,12 @@ export const SessionTickRow = memo(function SessionTickRow({
           style={[styles.row, { backgroundColor: systemColors.secondaryBackground }]}
         >
           {isMultiUser ? (
-            <Avatar uri={participant?.avatarUrl} name={participant?.displayName} size={28} />
+            <PressableAvatar
+              userId={participant?.userId}
+              uri={participant?.avatarUrl}
+              name={participant?.displayName}
+              size={28}
+            />
           ) : (
             <View style={styles.statusSlot}>
               <View style={[styles.statusIcon, { backgroundColor: withAlpha(meta.color, 0.15) }]}>
@@ -158,7 +163,12 @@ export const SessionTickRow = memo(function SessionTickRow({
       onPress={handlePress}
       leading={
         isMultiUser ? (
-          <Avatar uri={participant?.avatarUrl} name={participant?.displayName} size={28} />
+          <PressableAvatar
+            userId={participant?.userId}
+            uri={participant?.avatarUrl}
+            name={participant?.displayName}
+            size={28}
+          />
         ) : (
           <View style={[styles.badge, { backgroundColor: meta.color }]}>
             <Icon name={meta.icon} size={14} color={iosSystemColors.white} />

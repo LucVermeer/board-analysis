@@ -9,6 +9,7 @@ import { YouFilterSheet } from '../../../src/components/you/YouFilterSheet';
 import { ProgressTab } from '../../../src/components/you/ProgressTab';
 import { SessionsTab } from '../../../src/components/you/SessionsTab';
 import { LogbookTab } from '../../../src/components/you/LogbookTab';
+import { SocialTab } from '../../../src/components/you/SocialTab';
 
 export default function YouScreen() {
   const { systemColors } = useTheme();
@@ -40,6 +41,7 @@ export default function YouScreen() {
         {activeTab === 'progress' ? <ProgressTab data={youData} topInset={chromeHeight} /> : null}
         {activeTab === 'sessions' ? <SessionsTab userId={userId} topInset={chromeHeight} /> : null}
         {activeTab === 'logbook' ? <LogbookTab userId={userId} topInset={chromeHeight} /> : null}
+        {activeTab === 'social' ? <SocialTab userId={userId} topInset={chromeHeight} /> : null}
       </View>
 
       <ProfileTopChrome

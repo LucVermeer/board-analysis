@@ -28,6 +28,8 @@ vi.mock('../../../Avatar', () => ({
   Avatar: ({ name }: { name?: string | null }) => createElement('span', { 'data-avatar': name ?? '' }),
 }));
 
+vi.mock('../../../PressableAvatar', () => ({ PressableAvatar: () => null }));
+
 vi.mock('../../../SectionHeader', () => ({
   SectionHeader: ({ title }: { title: string }) => createElement('h2', null, title),
 }));

@@ -60,6 +60,9 @@ vi.mock('../../../theme/tokens', () => ({ spacing: {}, borderRadius: {} }));
 vi.mock('../../../providers/theme-provider', () => ({
   useTheme: () => ({ systemColors: {}, brandColors: {} }),
 }));
+vi.mock('expo-router', () => ({ useRouter: () => ({ push: vi.fn() }) }));
+vi.mock('../../../lib/open-climb-in-play-drawer', () => ({ openClimbInPlayDrawer: vi.fn() }));
+vi.mock('../../../providers/drawer-host-provider', () => ({ useDrawerHost: () => ({ openPlayDrawer: vi.fn() }) }));
 
 import { LogbookTab } from '../LogbookTab';
 

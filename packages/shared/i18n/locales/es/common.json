@@ -204,6 +204,10 @@
     "resetZoom": "Restablecer zoom"
   },
   "mobile": {
+    "avatar": {
+      "viewProfile": "Ver el perfil de {{name}}",
+      "thisClimber": "este escalador"
+    },
     "more": {
       "title": "Más",
       "library": "Biblioteca",

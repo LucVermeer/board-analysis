@@ -1,20 +1,42 @@
-import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   VOTE,
   GET_COMMENTS,
   ADD_COMMENT,
   GET_BULK_VOTE_SUMMARIES,
+  GET_PUBLIC_PROFILE,
+  GET_FOLLOWERS,
+  GET_FOLLOWING,
+  SEARCH_USERS,
+  FOLLOW_USER,
+  UNFOLLOW_USER,
   type VoteMutationResponse,
   type VoteMutationVariables,
   type GetCommentsQueryResponse,
   type AddCommentMutationResponse,
   type AddCommentMutationVariables,
   type GetBulkVoteSummariesQueryResponse,
+  type GetPublicProfileQueryResponse,
+  type GetPublicProfileQueryVariables,
+  type GetFollowersQueryResponse,
+  type GetFollowersQueryVariables,
+  type GetFollowingQueryResponse,
+  type GetFollowingQueryVariables,
+  type SearchUsersQueryResponse,
+  type SearchUsersQueryVariables,
+  type FollowUserMutationResponse,
+  type FollowUserMutationVariables,
+  type UnfollowUserMutationResponse,
+  type UnfollowUserMutationVariables,
+  GET_USER_CLIMBS,
+  type GetUserClimbsQueryResponse,
+  type GetUserClimbsQueryVariables,
 } from '@boardsesh/graphql/operations';
 import type { SocialEntityType } from '@boardsesh/shared-schema';
 import { getHttpClient } from '../client';
 
 const BULK_VOTE_SUMMARY_CHUNK_SIZE = 100;
+const SOCIAL_PAGE_SIZE = 30;
 
 function dedupeEntityIds(entityIds: string[]): string[] {
   const seenIds = new Set<string>();
@@ -35,6 +57,145 @@ function chunkEntityIds(entityIds: string[]): string[][] {
     chunks.push(entityIds.slice(startIndex, startIndex + BULK_VOTE_SUMMARY_CHUNK_SIZE));
   }
   return chunks;
+}
+
+/** Public social profile for a user, including follower/following counts. */
+export function usePublicProfile(userId: string | undefined, enabled = true) {
+  return useQuery({
+    queryKey: ['publicProfile', userId],
+    queryFn: async () => {
+      if (!userId) throw new Error('Cannot load a public profile without a user id.');
+      const variables: GetPublicProfileQueryVariables = { userId };
+      const response = await getHttpClient().request<GetPublicProfileQueryResponse, GetPublicProfileQueryVariables>(
+        GET_PUBLIC_PROFILE,
+        variables,
+      );
+      return response.publicProfile;
+    },
+    enabled: enabled && !!userId,
+  });
+}
+
+/** Followers for a user profile, paginated by offset. */
+export function useFollowers(userId: string | undefined, enabled = true) {
+  return useInfiniteQuery({
+    queryKey: ['followers', userId],
+    initialPageParam: 0,
+    queryFn: async ({ pageParam }) => {
+      if (!userId) throw new Error('Cannot load followers without a user id.');
+      const variables: GetFollowersQueryVariables = {
+        input: { userId, limit: SOCIAL_PAGE_SIZE, offset: Number(pageParam) },
+      };
+      const response = await getHttpClient().request<GetFollowersQueryResponse, GetFollowersQueryVariables>(
+        GET_FOLLOWERS,
+        variables,
+      );
+      return response.followers;
+    },
+    getNextPageParam: (lastPage, allPages) =>
+      lastPage.hasMore ? allPages.reduce((sum, page) => sum + page.users.length, 0) : undefined,
+    enabled: enabled && !!userId,
+  });
+}
+
+/** Users a profile follows, paginated by offset. */
+export function useFollowing(userId: string | undefined, enabled = true) {
+  return useInfiniteQuery({
+    queryKey: ['following', userId],
+    initialPageParam: 0,
+    queryFn: async ({ pageParam }) => {
+      if (!userId) throw new Error('Cannot load following without a user id.');
+      const variables: GetFollowingQueryVariables = {
+        input: { userId, limit: SOCIAL_PAGE_SIZE, offset: Number(pageParam) },
+      };
+      const response = await getHttpClient().request<GetFollowingQueryResponse, GetFollowingQueryVariables>(
+        GET_FOLLOWING,
+        variables,
+      );
+      return response.following;
+    },
+    getNextPageParam: (lastPage, allPages) =>
+      lastPage.hasMore ? allPages.reduce((sum, page) => sum + page.users.length, 0) : undefined,
+    enabled: enabled && !!userId,
+  });
+}
+
+/** Search Boardsesh users by display name. Disabled until the query has 2 chars. */
+export function useSearchUsers(query: string, enabled = true) {
+  const trimmedQuery = query.trim();
+
+  return useInfiniteQuery({
+    queryKey: ['searchUsers', trimmedQuery],
+    initialPageParam: 0,
+    queryFn: async ({ pageParam }) => {
+      if (trimmedQuery.length < 2) throw new Error('Cannot search users with fewer than 2 characters.');
+      const variables: SearchUsersQueryVariables = {
+        input: { query: trimmedQuery, limit: SOCIAL_PAGE_SIZE, offset: Number(pageParam) },
+      };
+      const response = await getHttpClient().request<SearchUsersQueryResponse, SearchUsersQueryVariables>(
+        SEARCH_USERS,
+        variables,
+      );
+      return response.searchUsers;
+    },
+    getNextPageParam: (lastPage, allPages) =>
+      lastPage.hasMore ? allPages.reduce((sum, page) => sum + page.results.length, 0) : undefined,
+    enabled: enabled && trimmedQuery.length >= 2,
+  });
+}
+
+export function useToggleUserFollow(currentUserId: string | undefined) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ userId, isFollowedByMe }: { userId: string; isFollowedByMe: boolean }) => {
+      if (isFollowedByMe) {
+        const variables: UnfollowUserMutationVariables = { input: { userId } };
+        const response = await getHttpClient().request<UnfollowUserMutationResponse, UnfollowUserMutationVariables>(
+          UNFOLLOW_USER,
+          variables,
+        );
+        return response.unfollowUser;
+      }
+
+      const variables: FollowUserMutationVariables = { input: { userId } };
+      const response = await getHttpClient().request<FollowUserMutationResponse, FollowUserMutationVariables>(
+        FOLLOW_USER,
+        variables,
+      );
+      return response.followUser;
+    },
+    onSuccess: (_data, variables) => {
+      void queryClient.invalidateQueries({ queryKey: ['publicProfile', variables.userId] });
+      if (currentUserId) void queryClient.invalidateQueries({ queryKey: ['publicProfile', currentUserId] });
+      void queryClient.invalidateQueries({ queryKey: ['followers'] });
+      void queryClient.invalidateQueries({ queryKey: ['following'] });
+      void queryClient.invalidateQueries({ queryKey: ['searchUsers'] });
+      void queryClient.invalidateQueries({ queryKey: ['activityFeed'] });
+    },
+  });
+}
+
+/** Climbs created by a user (across their linked setters), paginated by offset. */
+export function useUserClimbs(userId: string | undefined, enabled = true) {
+  return useInfiniteQuery({
+    queryKey: ['userClimbs', userId],
+    initialPageParam: 0,
+    queryFn: async ({ pageParam }) => {
+      if (!userId) throw new Error('Cannot load user climbs without a user id.');
+      const variables: GetUserClimbsQueryVariables = {
+        input: { userId, limit: SOCIAL_PAGE_SIZE, offset: Number(pageParam) },
+      };
+      const response = await getHttpClient().request<GetUserClimbsQueryResponse, GetUserClimbsQueryVariables>(
+        GET_USER_CLIMBS,
+        variables,
+      );
+      return response.userClimbs;
+    },
+    getNextPageParam: (lastPage, allPages) =>
+      lastPage.hasMore ? allPages.reduce((sum, page) => sum + page.climbs.length, 0) : undefined,
+    enabled: enabled && !!userId,
+  });
 }
 
 /**

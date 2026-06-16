@@ -355,6 +355,18 @@ function RootLayout() {
                                                               name="auth"
                                                               options={{ headerShown: false, gestureEnabled: false }}
                                                             />
+                                                            {/* Public climber profiles + climber search, pushed from any
+                                                          tab (tappable avatars, the Home search action). */}
+                                                            <Stack.Screen name="users/[userId]" />
+                                                            {/* Headerless push — hides the tab bar like the other pushed
+                                                          screens, with its own in-body search bar. NOT a modal: a native
+                                                          modal presentation traps the root play drawer beneath it when a
+                                                          climb is opened from a profile pushed off search. */}
+                                                            <Stack.Screen
+                                                              name="users/search"
+                                                              options={{ headerShown: false }}
+                                                            />
+                                                            <Stack.Screen name="users/connections" />
                                                             <Stack.Screen
                                                               name="join/[sessionId]"
                                                               options={{ presentation: 'modal', headerShown: false }}

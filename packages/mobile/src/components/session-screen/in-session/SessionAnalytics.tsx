@@ -5,7 +5,7 @@ import type { SessionGradeDistributionItem } from '@boardsesh/shared-schema';
 import { Text } from '../../Text';
 import { Icon } from '../../Icon';
 import { type IconName } from '../../icon-map';
-import { Avatar } from '../../Avatar';
+import { PressableAvatar } from '../../PressableAvatar';
 import { Card } from '../../Card';
 import { SectionHeader } from '../../SectionHeader';
 import { useTheme } from '../../../providers/theme-provider';
@@ -100,7 +100,9 @@ export function SessionAnalytics({
             </Text>
             {hardestSends.map((send, index) => (
               <View key={send.userId ?? `solo-${index}`} style={styles.hardestRow}>
-                {send.userId ? <Avatar uri={send.avatarUrl} name={send.displayName} size={28} /> : null}
+                {send.userId ? (
+                  <PressableAvatar userId={send.userId} uri={send.avatarUrl} name={send.displayName} size={28} />
+                ) : null}
                 {/* Grade as bold coloured text — no pill, per the chip cleanup. */}
                 <Text variant="title3" color={gradeBadgeColor(send.grade)} style={styles.hardestGrade}>
                   {formatGradeByDifficultyId(send.difficultyId) ?? formatGrade(send.grade) ?? send.grade}

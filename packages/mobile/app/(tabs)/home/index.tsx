@@ -30,7 +30,7 @@ import { useToast } from '../../../src/providers/toast-provider';
 import { useDrawerHost } from '../../../src/providers/drawer-host-provider';
 import { useBottomChromeMetrics } from '../../../src/hooks/use-bottom-chrome-metrics';
 import { ProgressiveBlur } from '../../../src/components/ProgressiveBlur';
-import { GlassActionToolbar, TOP_ACTION_SIZE } from '../../../src/components/chrome';
+import { GlassActionToolbar, GlassToolbarAction, TOP_ACTION_SIZE } from '../../../src/components/chrome';
 import { UserAvatarToolbarAction } from '../../../src/components/user-drawer/UserAvatarToolbarAction';
 import { dedupeSessionsById } from '../../../src/lib/feed-time-buckets';
 import { deriveFeedScopeInput, type FeedMode } from '../../../src/lib/feed/feed-scope';
@@ -153,6 +153,10 @@ export default function HomeTab() {
     setCommentTarget({ entityId, entityType });
     commentSheetRef.current?.snapToIndex(0);
   }, []);
+
+  const handleOpenSearch = useCallback(() => {
+    router.push('/users/search');
+  }, [router]);
 
   const handleSessionPress = useCallback(
     (session: SessionFeedItem) => navigateToSessionFeedItem(router, session, '/home/session/[sessionId]'),
@@ -438,8 +442,13 @@ export default function HomeTab() {
               accessibilityHint={t('mobile.home.scope.hint')}
             />
           </View>
-          {/* Balance the avatar so the scope menu reads centred. */}
-          <View style={styles.headerRightSpacer} />
+          {/* Search action: balances the avatar so the scope menu reads centred,
+              and opens the full-screen climber search. */}
+          <GlassActionToolbar actionCount={1}>
+            <GlassToolbarAction onPress={handleOpenSearch} accessibilityLabel={t('mobile.home.searchAction')}>
+              <Icon name="search" size={22} color={systemColors.label} />
+            </GlassToolbarAction>
+          </GlassActionToolbar>
         </View>
       </View>
       <CommentSheet
@@ -698,9 +707,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: spacing[2],
-  },
-  headerRightSpacer: {
-    width: TOP_ACTION_SIZE,
   },
   centered: {
     flex: 1,

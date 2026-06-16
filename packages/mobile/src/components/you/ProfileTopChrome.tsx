@@ -34,7 +34,7 @@ import { UserAvatarToolbarAction } from '../user-drawer/UserAvatarToolbarAction'
 // capsule's treatment). 10 leaves a hair of glass around the thumb's radius-7 tile.
 const SEGMENT_TRACK_RADIUS = 10;
 
-export type ProfileTabKey = 'progress' | 'sessions' | 'logbook';
+export type ProfileTabKey = 'progress' | 'sessions' | 'logbook' | 'social';
 
 export type ProfileTopChromeProps = {
   /** Selected sub-tab; drives the segmented control's pill / the active tab. */
@@ -60,6 +60,7 @@ function useSegmentOptions() {
       { key: 'progress' as const, label: t('tabs.progress') },
       { key: 'sessions' as const, label: t('tabs.sessions') },
       { key: 'logbook' as const, label: t('tabs.logbook') },
+      { key: 'social' as const, label: t('tabs.social') },
     ],
     [t],
   );
@@ -184,7 +185,7 @@ function ProfileTopChromeGlass({
             selectedKey={activeTab}
             onSelect={onSelectTab}
             trackColor="transparent"
-            textVariant="subheadline"
+            textVariant="footnote"
             accessibilityLabel={dashboardTitle}
           />
         </View>

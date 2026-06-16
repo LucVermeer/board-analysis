@@ -5,7 +5,7 @@ import type { SessionFeedParticipant } from '@boardsesh/shared-schema';
 import { Text } from '../../Text';
 import { Icon } from '../../Icon';
 import { type IconName } from '../../icon-map';
-import { Avatar } from '../../Avatar';
+import { PressableAvatar } from '../../PressableAvatar';
 import { SectionHeader } from '../../SectionHeader';
 import { useTheme } from '../../../providers/theme-provider';
 import { withAlpha } from '../../../theme/colors';
@@ -56,7 +56,12 @@ export function SessionLeaderboard({ participants, selfUserId }: SessionLeaderbo
               <Text variant="subheadline" color={systemColors.secondaryLabel} style={styles.rank}>
                 {index + 1}
               </Text>
-              <Avatar uri={participant.avatarUrl} name={participant.displayName} size={32} />
+              <PressableAvatar
+                userId={participant.userId}
+                uri={participant.avatarUrl}
+                name={participant.displayName}
+                size={32}
+              />
               <View style={styles.nameColumn}>
                 <Text variant="subheadline" style={styles.name} numberOfLines={1}>
                   {participant.displayName ?? t('mobile.session.inLeaderboardClimber')}
