@@ -26,6 +26,7 @@ import { useQueueSessionControls, useQueueActions, useQueueLiveStats } from '../
 import { useDrawerHost } from '../../../providers/drawer-host-provider';
 import { useSessionDetail, useSessionSummary } from '../../../lib/graphql/hooks';
 import { runSessionEndExports } from '../../../lib/integrations';
+import { SESSION_STORE_REVIEW_CANDIDATE_PARAM, isSessionStoreReviewEligible } from '../../../lib/store-review';
 import { climbToQueueItem } from '../../../lib/climb-to-queue-item';
 import { getBoardConfigForPlaylist } from '../../../lib/playlists/board-details-for-playlist';
 import { tickToClimb } from '../../../lib/tick-to-climb';
@@ -434,7 +435,10 @@ export function InSessionView({
         // rejection. The manual save button on the summary screen shares the same
         // dedup guard, so this won't double-write.
         runSessionEndExports(summary, {});
-        router.push({ pathname: '/(tabs)/record/summary', params: { sessionId: summary.sessionId } });
+        const summaryParams = isSessionStoreReviewEligible(summary)
+          ? { sessionId: summary.sessionId, reviewCandidate: SESSION_STORE_REVIEW_CANDIDATE_PARAM }
+          : { sessionId: summary.sessionId };
+        router.push({ pathname: '/(tabs)/record/summary', params: summaryParams });
       }
     } catch (error) {
       // Surface the failure (the sheet stays open so the user can retry) rather than

@@ -33,6 +33,7 @@ const theme = vi.hoisted(() => ({
 // error path (endSession rejects) can assert the spinner clears.
 const queue = vi.hoisted(() => ({ endSession: vi.fn() }));
 const sheet = vi.hoisted(() => ({ isEnding: false as boolean, onConfirm: null as (() => void) | null }));
+const router = vi.hoisted(() => ({ push: vi.fn() }));
 
 vi.mock('react-native', () => ({
   Pressable: ({ children }: { children?: ReactNode }) => createElement('button', null, children),
@@ -81,7 +82,7 @@ vi.mock('@shopify/flash-list', () => ({
 }));
 
 vi.mock('expo-crypto', () => ({ randomUUID: () => 'test-uuid' }));
-vi.mock('expo-router', () => ({ useRouter: () => ({ push: vi.fn() }) }));
+vi.mock('expo-router', () => ({ useRouter: () => router }));
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock('@tanstack/react-query', () => ({ useQueryClient: () => ({ invalidateQueries: vi.fn() }) }));
 vi.mock('@boardsesh/play-view', () => ({ formatGrade: (grade: string) => grade, getGradeTextColor: () => '#fff' }));
@@ -136,6 +137,10 @@ vi.mock('../../../../lib/graphql/hooks', () => ({
   }),
   useSessionSummary: () => ({ data: { startedAt: '2026-01-01T00:00:00.000Z' } }),
 }));
+vi.mock('../../../../lib/store-review', () => ({
+  SESSION_STORE_REVIEW_CANDIDATE_PARAM: '1',
+  isSessionStoreReviewEligible: (summary: { totalSends: number }) => summary.totalSends >= 3,
+}));
 vi.mock('../../../../lib/graphql/use-active-board', () => ({ useActiveBoard: () => ({ data: null }) }));
 vi.mock('../../../../lib/integrations', () => ({
   runSessionEndExports: integrations.runSessionEndExports,
@@ -169,6 +174,7 @@ describe('InSessionView footer', () => {
     theme.variant = 'liquidGlass';
     queue.endSession.mockReset();
     queue.endSession.mockResolvedValue(null);
+    router.push.mockClear();
     sheet.isEnding = false;
     sheet.onConfirm = null;
     integrations.runSessionEndExports.mockReset();
@@ -244,5 +250,45 @@ describe('InSessionView footer', () => {
     });
 
     expect(integrations.runSessionEndExports).toHaveBeenCalledWith(summary, {});
+  });
+
+  it('marks the summary route as a store-review candidate after 3 ascents', async () => {
+    queue.endSession.mockResolvedValueOnce({
+      sessionId: 'session-1',
+      totalSends: 3,
+      totalAttempts: 0,
+    });
+
+    render(createElement(InSessionView));
+
+    await act(async () => {
+      sheet.onConfirm?.();
+      await Promise.resolve();
+    });
+
+    expect(router.push).toHaveBeenCalledWith({
+      pathname: '/(tabs)/record/summary',
+      params: { sessionId: 'session-1', reviewCandidate: '1' },
+    });
+  });
+
+  it('does not mark the summary route as a store-review candidate after 2 ascents', async () => {
+    queue.endSession.mockResolvedValueOnce({
+      sessionId: 'session-1',
+      totalSends: 2,
+      totalAttempts: 0,
+    });
+
+    render(createElement(InSessionView));
+
+    await act(async () => {
+      sheet.onConfirm?.();
+      await Promise.resolve();
+    });
+
+    expect(router.push).toHaveBeenCalledWith({
+      pathname: '/(tabs)/record/summary',
+      params: { sessionId: 'session-1' },
+    });
   });
 });

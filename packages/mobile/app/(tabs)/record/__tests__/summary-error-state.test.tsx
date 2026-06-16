@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, fireEvent } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, fireEvent, act } from '@testing-library/react';
 import { createElement, type ReactNode } from 'react';
 
 type SummaryResult = {
@@ -22,10 +22,16 @@ const hook = vi.hoisted(() => ({
 }));
 
 const router = vi.hoisted(() => ({ back: vi.fn() }));
+const routeParams = vi.hoisted(() => ({
+  current: { sessionId: 'session-1' } as { sessionId: string; reviewCandidate?: string },
+}));
+const storeReview = vi.hoisted(() => ({
+  maybeRequestSessionStoreReview: vi.fn(),
+}));
 
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock('expo-router', () => ({
-  useLocalSearchParams: () => ({ sessionId: 'session-1' }),
+  useLocalSearchParams: () => routeParams.current,
   useRouter: () => router,
 }));
 vi.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ bottom: 0 }) }));
@@ -45,6 +51,12 @@ vi.mock('../../../../src/providers/theme-provider', () => ({
 }));
 vi.mock('../../../../src/hooks/use-grade-format', () => ({
   useGradeFormat: () => ({ formatGrade: (grade: string) => grade }),
+}));
+vi.mock('../../../../src/lib/store-review', () => ({
+  SESSION_STORE_REVIEW_CANDIDATE_PARAM: '1',
+  STORE_REVIEW_PROMPT_DELAY_MS: 1000,
+  isSessionStoreReviewEligible: (summary: { totalSends: number }) => summary.totalSends >= 3,
+  maybeRequestSessionStoreReview: storeReview.maybeRequestSessionStoreReview,
 }));
 
 vi.mock('react-native', () => ({
@@ -94,7 +106,14 @@ function setSummary(partial: Partial<SummaryResult>) {
 describe('SessionSummaryScreen settled error/empty state', () => {
   beforeEach(() => {
     router.back.mockClear();
+    routeParams.current = { sessionId: 'session-1' };
+    storeReview.maybeRequestSessionStoreReview.mockReset();
+    storeReview.maybeRequestSessionStoreReview.mockResolvedValue(false);
     hook.result.refetch = vi.fn();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('shows a spinner while the summary is still loading', () => {
@@ -129,5 +148,86 @@ describe('SessionSummaryScreen settled error/empty state', () => {
     const { getByText } = render(<SessionSummaryScreen />);
     fireEvent.click(getByText('summary.retry'));
     expect(refetch).toHaveBeenCalledOnce();
+  });
+
+  it('requests store review once after a review-candidate summary settles', async () => {
+    vi.useFakeTimers();
+    routeParams.current = { sessionId: 'session-1', reviewCandidate: '1' };
+    const summary = {
+      sessionId: 'session-1',
+      totalSends: 3,
+      totalAttempts: 0,
+      durationMinutes: null,
+      gradeDistribution: [],
+      participants: [],
+      hardestClimb: null,
+      goal: null,
+    };
+    setSummary({ data: summary });
+
+    render(<SessionSummaryScreen />);
+    expect(storeReview.maybeRequestSessionStoreReview).not.toHaveBeenCalled();
+
+    await act(async () => {
+      vi.advanceTimersByTime(1000);
+    });
+
+    expect(storeReview.maybeRequestSessionStoreReview).toHaveBeenCalledOnce();
+    expect(storeReview.maybeRequestSessionStoreReview).toHaveBeenCalledWith(summary);
+  });
+
+  it('still requests store review when the summary refetches before the delay expires', async () => {
+    vi.useFakeTimers();
+    routeParams.current = { sessionId: 'session-1', reviewCandidate: '1' };
+    const firstSummary = {
+      sessionId: 'session-1',
+      totalSends: 3,
+      totalAttempts: 0,
+      durationMinutes: null,
+      gradeDistribution: [],
+      participants: [],
+      hardestClimb: null,
+      goal: null,
+    };
+    const refetchedSummary = { ...firstSummary };
+    setSummary({ data: firstSummary });
+
+    const { rerender } = render(<SessionSummaryScreen />);
+
+    await act(async () => {
+      vi.advanceTimersByTime(500);
+    });
+    setSummary({ data: refetchedSummary });
+    rerender(<SessionSummaryScreen />);
+
+    await act(async () => {
+      vi.advanceTimersByTime(1000);
+    });
+
+    expect(storeReview.maybeRequestSessionStoreReview).toHaveBeenCalledOnce();
+    expect(storeReview.maybeRequestSessionStoreReview).toHaveBeenCalledWith(refetchedSummary);
+  });
+
+  it('does not request store review without the post-end route flag', async () => {
+    vi.useFakeTimers();
+    const summary = {
+      sessionId: 'session-1',
+      totalSends: 3,
+      totalAttempts: 0,
+      durationMinutes: null,
+      gradeDistribution: [],
+      participants: [],
+      hardestClimb: null,
+      goal: null,
+    };
+    setSummary({ data: summary });
+
+    render(<SessionSummaryScreen />);
+
+    await act(async () => {
+      vi.advanceTimersByTime(1000);
+    });
+
+    expect(storeReview.maybeRequestSessionStoreReview).not.toHaveBeenCalled();
   });
 });

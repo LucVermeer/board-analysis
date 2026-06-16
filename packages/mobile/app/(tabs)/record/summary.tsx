@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { View, ScrollView, StyleSheet, ActivityIndicator } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -13,6 +14,12 @@ import { useSessionSummary } from '../../../src/lib/graphql/hooks';
 import { useGradeFormat } from '../../../src/hooks/use-grade-format';
 import { SaveToAppleHealthButton } from '../../../src/components/integrations/SaveToAppleHealthButton';
 import { ShareToStravaButton } from '../../../src/components/integrations/ShareToStravaButton';
+import {
+  SESSION_STORE_REVIEW_CANDIDATE_PARAM,
+  STORE_REVIEW_PROMPT_DELAY_MS,
+  isSessionStoreReviewEligible,
+  maybeRequestSessionStoreReview,
+} from '../../../src/lib/store-review';
 import { brandColors } from '../../../src/theme/colors';
 import { spacing, borderRadius as br } from '../../../src/theme/tokens';
 
@@ -49,13 +56,29 @@ function getGradeColor(index: number): string {
 }
 
 export default function SessionSummaryScreen() {
-  const { sessionId } = useLocalSearchParams<{ sessionId: string }>();
+  const { sessionId, reviewCandidate } = useLocalSearchParams<{ sessionId: string; reviewCandidate?: string }>();
   const { data: summary, isPending, isFetching, isError, refetch } = useSessionSummary(sessionId ?? null);
   const { t } = useTranslation('session');
   const { systemColors, brandColors: brand } = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { formatGrade } = useGradeFormat();
+  const promptedSessionIdRef = useRef<string | null>(null);
+  const reviewCandidateParam = Array.isArray(reviewCandidate) ? reviewCandidate[0] : reviewCandidate;
+
+  useEffect(() => {
+    if (!summary) return undefined;
+    if (reviewCandidateParam !== SESSION_STORE_REVIEW_CANDIDATE_PARAM) return undefined;
+    if (!isSessionStoreReviewEligible(summary)) return undefined;
+    if (promptedSessionIdRef.current === summary.sessionId) return undefined;
+
+    const timer = setTimeout(() => {
+      promptedSessionIdRef.current = summary.sessionId;
+      void maybeRequestSessionStoreReview(summary);
+    }, STORE_REVIEW_PROMPT_DELAY_MS);
+
+    return () => clearTimeout(timer);
+  }, [summary, reviewCandidateParam]);
 
   // Still loading: query hasn't settled yet (first fetch in flight or refetching
   // after a retry). isPending covers the disabled (no sessionId) case too.
