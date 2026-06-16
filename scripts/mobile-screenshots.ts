@@ -3,31 +3,33 @@
 /**
  * Automated native screenshot capture for packages/mobile.
  *
- * The screenshot app is a Debug *dev-client* that loads its JS from Metro at
+ * The iOS screenshot app is a Debug *dev-client* that loads its JS from Metro at
  * runtime. The screenshot behaviour (EXPO_PUBLIC_SCREENSHOT_MODE, theme,
  * workout) is baked into the Metro JS bundle, NOT the native binary — so the
  * .app is reusable and only the JS regenerates per run. This is why CI can cache
  * the .app (see scripts/mobile-build-sim-app.ts) keyed on native inputs and skip
  * the ~30-min from-scratch compile on JS-only changes.
  *
- * Flow: boot a simulator, apply a clean status bar, get the .app (--app-path, or
- * build one via mobile-build-sim-app), uninstall+install it, reset the keychain,
- * start Metro with EXPO_PUBLIC_SCREENSHOT_MODE=1, then run a Maestro flow that
- * loads the bundle from Metro (dev-client deep link), deep-links to each screen
- * and captures it. PNGs land in app-stores/<store>/screenshots/<device>/ (ios ->
- * apple, android -> google).
+ * The Android screenshot app is a standalone APK built by Gradle with those same
+ * EXPO_PUBLIC_* values present at JS bundle time. The orchestrator installs that
+ * APK on an already-booted emulator and runs a platform-specific Maestro flow.
+ *
+ * Flow: prepare a simulator/emulator, apply a clean status bar, install the app
+ * artifact, run a Maestro flow that deep-links to each screen and captures it.
+ * PNGs land in app-stores/<store>/screenshots/<device>/ (ios -> apple, android
+ * -> google).
  *
  * Usage:
  *   vp run mobile:screenshots -- [--platform ios] [--flow app-store|onboarding]
  *                                 [--backend local|prod] [--device "iPhone 16 Pro Max"]
  *                                 [--variant material|liquidGlass] [--shutdown]
- *                                 [--app-path <path/to/Boardsesh.app>]
+ *                                 [--app-path <path/to/Boardsesh.app|app.apk>]
  *
- * Requires: macOS + Xcode simulators, and Maestro (https://maestro.mobile.dev).
- * For --backend local, bring up the seeded dev DB + backend first (`vp run dev`).
- * Without --app-path the script builds a Debug simulator .app first (slow); CI
- * passes a cached/prebuilt .app so the common path is just install + Metro +
- * Maestro. Credentials come from SCREENSHOT_USER_EMAIL / SCREENSHOT_USER_PASSWORD
+ * Requires: Maestro (https://maestro.mobile.dev) plus platform tooling (xcrun for
+ * iOS, adb for Android). For --backend local, bring up the seeded dev DB +
+ * backend first (`vp run dev`). iOS can build a Debug simulator .app when
+ * --app-path is omitted; Android expects --app-path to point at a prebuilt APK.
+ * Credentials come from SCREENSHOT_USER_EMAIL / SCREENSHOT_USER_PASSWORD
  * (default test@boardsesh.com / test).
  */
 
@@ -54,7 +56,18 @@ const LOG = '[mobile:screenshots]';
 
 const APP_ID = 'com.boardsesh.app';
 const DEFAULT_IOS_DEVICE = 'iPhone 16 Pro Max';
+const DEFAULT_ANDROID_DEVICE = 'Pixel 2';
 const IOS_DEVICE_TYPE_ID = 'com.apple.CoreSimulator.SimDeviceType.iPhone-16-Pro-Max';
+const DEFAULT_ANDROID_APK = resolve(
+  MOBILE_DIR,
+  'android',
+  'app',
+  'build',
+  'outputs',
+  'apk',
+  'release',
+  'app-release.apk',
+);
 // Mirrors packages/mobile/.env.example. iOS simulators reach the host directly,
 // so localhost is correct for a sim build pointed at the local dev backend.
 const LOCAL_BACKEND_URL = 'http://localhost:8080';
@@ -78,13 +91,14 @@ export interface ScreenshotOptions {
   theme: ScreenshotTheme;
   /** Workout type the Record/session screen pre-selects (generator screenshot); null = Off. */
   workout: string | null;
-  /** Prebuilt/cached Boardsesh.app to install; null builds one (slow, local only). */
+  /** Prebuilt/cached app artifact to install; iOS can build one when null. */
   appPath: string | null;
   shutdown: boolean;
 }
 
 export function parseArgs(argv: readonly string[]): ScreenshotOptions {
   const args = argv.filter((argument) => argument !== '--');
+  let deviceProvided = false;
   const options: ScreenshotOptions = {
     platform: 'ios',
     flow: 'app-store',
@@ -119,6 +133,7 @@ export function parseArgs(argv: readonly string[]): ScreenshotOptions {
         break;
       case '--device':
         options.device = expectValue(flag, value);
+        deviceProvided = true;
         index++;
         break;
       case '--variant':
@@ -145,6 +160,10 @@ export function parseArgs(argv: readonly string[]): ScreenshotOptions {
       default:
         throw new Error(`Unknown argument: ${flag}`);
     }
+  }
+
+  if (!deviceProvided && options.platform === 'android') {
+    options.device = DEFAULT_ANDROID_DEVICE;
   }
 
   return options;
@@ -337,6 +356,12 @@ function collectScreenshots(captureDir: string, platform: 'ios' | 'android', dev
   return pngs.map((png) => join(outputDir, png));
 }
 
+function flowFileForPlatform(options: ScreenshotOptions, platform: 'ios' | 'android'): string {
+  const platformFlowFile = join(MAESTRO_DIR, `${options.flow}-${platform}.yaml`);
+  if (existsSync(platformFlowFile)) return platformFlowFile;
+  return join(MAESTRO_DIR, `${options.flow}.yaml`);
+}
+
 function runIos(options: ScreenshotOptions): number {
   if (!commandExists('xcrun') || runCapture('xcrun', ['simctl', 'help']).status !== 0) {
     console.log(`${LOG} Skipped: iOS simulator tooling (xcrun simctl) not available.`);
@@ -433,7 +458,7 @@ function runIos(options: ScreenshotOptions): number {
       'NO',
     ]);
 
-    const flowFile = join(MAESTRO_DIR, `${options.flow}.yaml`);
+    const flowFile = flowFileForPlatform(options, 'ios');
     if (!existsSync(flowFile)) {
       console.error(`${LOG} FAILED: flow not found: ${flowFile}`);
       return 1;
@@ -490,6 +515,219 @@ function runIos(options: ScreenshotOptions): number {
   }
 
   return 0;
+}
+
+function runAndroid(options: ScreenshotOptions): number {
+  if (!commandExists('adb') || runCapture('adb', ['version']).status !== 0) {
+    console.error(`${LOG} FAILED: Android platform tooling (adb) is not available.`);
+    return 1;
+  }
+  if (!commandExists('maestro')) {
+    console.error(`${LOG} FAILED: Maestro not found on PATH. ${MAESTRO_INSTALL_HINT}`);
+    return 1;
+  }
+
+  const deviceId = resolveAndroidDeviceId();
+  if (!deviceId) {
+    console.error(`${LOG} FAILED: no ready Android device/emulator found in \`adb devices\`.`);
+    return 1;
+  }
+
+  const appPath = resolveAndroidAppPath(options);
+  const deviceName = androidDeviceName(options);
+  console.log(`${LOG} Installing ${appPath} on ${deviceId} (${deviceName})...`);
+  runCapture('adb', ['-s', deviceId, 'uninstall', APP_ID]);
+  const installStatus = runInherit('adb', ['-s', deviceId, 'install', '-r', appPath], process.env);
+  if (installStatus !== 0) {
+    console.error(`${LOG} FAILED: adb install exited ${installStatus}.`);
+    return installStatus;
+  }
+  // The uninstall should leave a fresh data directory. Clear again after install
+  // so reruns against an already-installed, same-signature APK also start signed
+  // out with no stale active board.
+  runCapture('adb', ['-s', deviceId, 'shell', 'pm', 'clear', APP_ID]);
+  applyCleanAndroidStatusBar(deviceId);
+
+  const flowFile = flowFileForPlatform(options, 'android');
+  if (!existsSync(flowFile)) {
+    console.error(`${LOG} FAILED: flow not found: ${flowFile}`);
+    return 1;
+  }
+
+  const captureDir = mkdtempSync(join(tmpdir(), 'boardsesh-android-shots-'));
+  try {
+    const email = process.env.SCREENSHOT_USER_EMAIL ?? DEFAULT_USER_EMAIL;
+    const password = process.env.SCREENSHOT_USER_PASSWORD ?? DEFAULT_USER_PASSWORD;
+    console.log(`${LOG} Running Maestro flow ${options.flow} on ${deviceId}...`);
+    const maestroStatus = runInherit(
+      'maestro',
+      [
+        '--device',
+        deviceId,
+        'test',
+        flowFile,
+        '-e',
+        `SCREENSHOT_USER_EMAIL=${email}`,
+        '-e',
+        `SCREENSHOT_USER_PASSWORD=${password}`,
+      ],
+      process.env,
+      captureDir,
+    );
+    if (maestroStatus !== 0) {
+      console.error(`${LOG} FAILED: Maestro exited with ${maestroStatus}.`);
+      return maestroStatus;
+    }
+
+    const saved = collectScreenshots(captureDir, 'android', deviceName);
+    if (saved.length === 0) {
+      console.error(`${LOG} WARNING: flow completed but no PNGs were captured.`);
+      return 1;
+    }
+    console.log(
+      `${LOG} Saved ${saved.length} screenshot(s) to app-stores/${STORE_BY_PLATFORM.android}/screenshots/${deviceSlug(deviceName)}/`,
+    );
+    for (const file of saved) console.log(`${LOG}   ${file}`);
+  } finally {
+    clearAndroidStatusBar(deviceId);
+    rmSync(captureDir, { force: true, recursive: true });
+    if (options.shutdown && deviceId.startsWith('emulator-')) {
+      runCapture('adb', ['-s', deviceId, 'emu', 'kill']);
+    }
+  }
+
+  return 0;
+}
+
+function resolveAndroidDeviceId(): string | null {
+  const explicitSerial = process.env.ANDROID_SERIAL;
+  if (explicitSerial && explicitSerial.length > 0) return explicitSerial;
+
+  const { status, stdout } = runCapture('adb', ['devices']);
+  if (status !== 0) return null;
+  const readyDevices = stdout
+    .split(/\r?\n/)
+    .slice(1)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .map((line) => line.split(/\s+/))
+    .filter((parts) => parts[1] === 'device')
+    .map((parts) => parts[0]);
+  return readyDevices[0] ?? null;
+}
+
+function androidDeviceName(options: ScreenshotOptions): string {
+  return options.device === DEFAULT_IOS_DEVICE ? DEFAULT_ANDROID_DEVICE : options.device;
+}
+
+function resolveAndroidAppPath(options: ScreenshotOptions): string {
+  if (options.appPath) {
+    if (!existsSync(options.appPath)) {
+      throw new Error(`--app-path not found: ${options.appPath}`);
+    }
+    return options.appPath;
+  }
+  if (existsSync(DEFAULT_ANDROID_APK)) {
+    return DEFAULT_ANDROID_APK;
+  }
+  throw new Error(
+    `Android capture requires --app-path <path/to/app.apk>. Build the screenshot APK first, or place one at ${DEFAULT_ANDROID_APK}.`,
+  );
+}
+
+function applyCleanAndroidStatusBar(deviceId: string): void {
+  runCapture('adb', ['-s', deviceId, 'shell', 'settings', 'put', 'global', 'sysui_demo_allowed', '1']);
+  runCapture('adb', [
+    '-s',
+    deviceId,
+    'shell',
+    'am',
+    'broadcast',
+    '-a',
+    'com.android.systemui.demo',
+    '-e',
+    'command',
+    'enter',
+  ]);
+  runCapture('adb', [
+    '-s',
+    deviceId,
+    'shell',
+    'am',
+    'broadcast',
+    '-a',
+    'com.android.systemui.demo',
+    '-e',
+    'command',
+    'clock',
+    '-e',
+    'hhmm',
+    '0941',
+  ]);
+  runCapture('adb', [
+    '-s',
+    deviceId,
+    'shell',
+    'am',
+    'broadcast',
+    '-a',
+    'com.android.systemui.demo',
+    '-e',
+    'command',
+    'battery',
+    '-e',
+    'level',
+    '100',
+    '-e',
+    'plugged',
+    'true',
+  ]);
+  runCapture('adb', [
+    '-s',
+    deviceId,
+    'shell',
+    'am',
+    'broadcast',
+    '-a',
+    'com.android.systemui.demo',
+    '-e',
+    'command',
+    'network',
+    '-e',
+    'wifi',
+    'show',
+    '-e',
+    'level',
+    '4',
+    '-e',
+    'mobile',
+    'show',
+    '-e',
+    'datatype',
+    'lte',
+    '-e',
+    'sims',
+    '1',
+    '-e',
+    'nosim',
+    'false',
+  ]);
+  runCapture('adb', ['-s', deviceId, 'shell', 'cmd', 'notification', 'dismiss-all']);
+}
+
+function clearAndroidStatusBar(deviceId: string): void {
+  runCapture('adb', [
+    '-s',
+    deviceId,
+    'shell',
+    'am',
+    'broadcast',
+    '-a',
+    'com.android.systemui.demo',
+    '-e',
+    'command',
+    'exit',
+  ]);
 }
 
 /**
@@ -621,19 +859,19 @@ export function main(argv: readonly string[] = process.argv.slice(2)): number {
     return 1;
   }
 
-  if (options.platform === 'android' || options.platform === 'all') {
-    console.error(
-      `${LOG} Android capture isn't wired up yet — the iOS pipeline lands first. Rerun with --platform ios.`,
-    );
-    return 1;
+  const platforms: Array<'ios' | 'android'> = options.platform === 'all' ? ['ios', 'android'] : [options.platform];
+
+  for (const platform of platforms) {
+    try {
+      const status = platform === 'ios' ? runIos(options) : runAndroid(options);
+      if (status !== 0) return status;
+    } catch (error) {
+      console.error(`${LOG} FAILED: ${error instanceof Error ? error.message : String(error)}`);
+      return 1;
+    }
   }
 
-  try {
-    return runIos(options);
-  } catch (error) {
-    console.error(`${LOG} FAILED: ${error instanceof Error ? error.message : String(error)}`);
-    return 1;
-  }
+  return 0;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

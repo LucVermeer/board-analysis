@@ -1,4 +1,4 @@
-# Uploads the native App Store screenshots to App Store Connect.
+# Uploads native store screenshots to App Store Connect / Google Play.
 #
 # Screenshots only — no binary, no text metadata, no review submission. The
 # screenshots are captured fresh by `vp run mobile:screenshots` (see
@@ -24,7 +24,9 @@ default_platform(:ios)
 
 REPO_ROOT = File.expand_path("..", __dir__)
 APPLE_SCREENSHOTS_DIR = File.join(REPO_ROOT, "app-stores", "apple", "screenshots", "iphone-16-pro-max")
+GOOGLE_SCREENSHOTS_DIR = File.join(REPO_ROOT, "app-stores", "google", "screenshots", "pixel-2")
 DELIVER_LOCALE = "en-US"
+SUPPLY_LOCALE = "en-US"
 
 platform :ios do
   desc "Upload App Store screenshots to App Store Connect (no binary, no metadata, no review)"
@@ -69,6 +71,48 @@ platform :ios do
         # force: true is mandatory in CI — without it deliver opens an HTML
         # preview in a browser and blocks until timeout.
         force: true
+      )
+    ensure
+      FileUtils.remove_entry(staging_dir) if staging_dir && Dir.exist?(staging_dir)
+    end
+  end
+end
+
+platform :android do
+  desc "Upload Play Store phone screenshots to Google Play (no binary, no text metadata)"
+  lane :screenshots do
+    unless Dir.exist?(GOOGLE_SCREENSHOTS_DIR)
+      UI.user_error!("No screenshots directory at #{GOOGLE_SCREENSHOTS_DIR}. Run `vp run mobile:screenshots -- --platform android` first.")
+    end
+
+    pngs = Dir.glob(File.join(GOOGLE_SCREENSHOTS_DIR, "*.png")).sort
+    if pngs.length < 2
+      UI.user_error!("Found #{pngs.length} PNG(s) in #{GOOGLE_SCREENSHOTS_DIR}. Refusing to upload fewer than 2 Play phone screenshots.")
+    end
+    if pngs.length > 8
+      UI.user_error!("Found #{pngs.length} PNG(s) in #{GOOGLE_SCREENSHOTS_DIR}. Google Play accepts at most 8 phone screenshots.")
+    end
+
+    staging_dir = Dir.mktmpdir("play-screenshots-")
+    begin
+      metadata_dir = File.join(staging_dir, "android")
+      phone_dir = File.join(metadata_dir, SUPPLY_LOCALE, "images", "phoneScreenshots")
+      FileUtils.mkdir_p(phone_dir)
+      pngs.each { |png| FileUtils.cp(png, File.join(phone_dir, File.basename(png))) }
+      UI.message("Staged #{pngs.length} Play phone screenshot(s) into #{phone_dir}")
+
+      upload_to_play_store(
+        package_name: "com.boardsesh.app",
+        json_key_data: ENV.fetch("GOOGLE_PLAY_SERVICE_ACCOUNT_JSON"),
+        metadata_path: metadata_dir,
+        skip_upload_apk: true,
+        skip_upload_aab: true,
+        skip_upload_metadata: true,
+        skip_upload_changelogs: true,
+        skip_upload_images: true,
+        skip_upload_screenshots: false,
+        sync_image_upload: true,
+        timeout: 300
       )
     ensure
       FileUtils.remove_entry(staging_dir) if staging_dir && Dir.exist?(staging_dir)

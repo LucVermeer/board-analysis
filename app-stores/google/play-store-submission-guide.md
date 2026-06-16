@@ -49,12 +49,18 @@ Verify the generated assets look correct before proceeding.
 Automated native capture (the real RN app, dark theme) via Maestro:
 
 ```bash
-vp run mobile:screenshots -- --platform android --backend prod --theme dark
+vp run mobile:screenshots -- --platform android --backend prod --theme dark --app-path /path/to/screenshot.apk
 ```
 
-Screenshots are saved to `app-stores/google/screenshots/<device>/`. (The Android
-pipeline is a planned follow-up; until it lands, capture from an emulator
-manually — see the manual alternative below.)
+Screenshots are saved to `app-stores/google/screenshots/<device>/`. The
+`Mobile Screenshots (Native)` GitHub workflow builds an x86_64 screenshot APK,
+runs it on a Pixel 2 emulator, validates the PNGs, and uploads them as an
+artifact on nightly and manual runs.
+
+To update Google Play automatically, dispatch **Mobile Screenshots (Native)** with
+`upload = true`. The workflow runs `fastlane android screenshots`, which uploads
+the phone screenshots only — no APK/AAB and no text metadata. The nightly cron
+never uploads.
 
 ### Required screenshot specs
 
@@ -95,11 +101,12 @@ The Play Store requires AAB format, not APK. (APKs are fine for sideloading and 
 
 ### Local build
 
-The signing config in `build.gradle` reads credentials from environment variables:
+`packages/mobile/` is a managed Expo project. Generate the Android project, then
+build the AAB from the generated Gradle project:
 
 ```bash
-cd mobile
-bunx cap sync android
+cd packages/mobile
+bunx expo prebuild --platform android --clean --no-install
 cd android
 
 ANDROID_KEYSTORE_PATH=/path/to/release.keystore \
@@ -109,15 +116,21 @@ ANDROID_KEY_PASSWORD=yourkeypass \
 ./gradlew bundleRelease --stacktrace
 ```
 
-Output: `mobile/android/app/build/outputs/bundle/release/app-release.aab`
+Output: `packages/mobile/android/app/build/outputs/bundle/release/app-release.aab`
 
 ### CI build
 
-The GitHub Actions workflow (`.github/workflows/android-release.yml`) builds both a signed APK and AAB on every push to `main` that touches `mobile/`. If the `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON` secret is configured, it also uploads the AAB to the Google Play internal testing track automatically.
+The GitHub Actions workflow (`.github/workflows/android-apk-rn.yml`) builds the
+React Native APK/AAB on every push to `main` that touches `packages/mobile/`. If
+the `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON` secret is configured, it also uploads the
+AAB to the Google Play internal testing track automatically.
 
 ### Increment version code
 
-Before each Play Store upload, increment `versionCode` in `mobile/android/app/build.gradle`. The CI workflow does this automatically using the GitHub Actions run number. For local builds, edit the value manually:
+Before each Play Store upload, increment `versionCode` in the generated
+`packages/mobile/android/app/build.gradle`. The CI workflow does this
+automatically using an offset plus the GitHub Actions run number. For local
+builds, edit the value manually:
 
 ```groovy
 versionCode = 2  // Must be higher than previous upload
@@ -389,13 +402,13 @@ After uploading, check **Quality > Pre-launch report** for crashes, ANRs, and pe
 
 The GitHub Actions workflow requires these repository secrets for automated builds and Play Store uploads:
 
-| Secret                             | Description                                                         |
-| ---------------------------------- | ------------------------------------------------------------------- |
-| `ANDROID_KEYSTORE_BASE64`          | Base64-encoded upload keystore file (`base64 -w0 release.keystore`) |
-| `ANDROID_KEYSTORE_PASSWORD`        | Keystore password                                                   |
-| `ANDROID_KEY_ALIAS`                | Key alias (e.g., `boardsesh`)                                       |
-| `ANDROID_KEY_PASSWORD`             | Key password                                                        |
-| `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON` | Google Play API service account JSON for automated uploads          |
+| Secret                             | Description                                                                   |
+| ---------------------------------- | ----------------------------------------------------------------------------- |
+| `ANDROID_KEYSTORE_BASE64`          | Base64-encoded upload keystore file (`base64 -w0 release.keystore`)           |
+| `ANDROID_KEYSTORE_PASSWORD`        | Keystore password                                                             |
+| `ANDROID_KEY_ALIAS`                | Key alias (e.g., `boardsesh`)                                                 |
+| `ANDROID_KEY_PASSWORD`             | Key password                                                                  |
+| `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON` | Google Play API service account JSON for automated AAB and screenshot uploads |
 
 ### Create the Google Play service account
 

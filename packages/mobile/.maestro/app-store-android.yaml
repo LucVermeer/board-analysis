@@ -1,0 +1,68 @@
+appId: com.boardsesh.app
+name: app-store screenshots android
+---
+# Play Store screenshots from the standalone screenshot APK. Unlike iOS, this
+# APK already contains the screenshot-mode JS bundle, so launch the app directly
+# instead of opening an expo-development-client URL.
+#
+# Coordinate taps are pinned to the CI Pixel 2 emulator at 1080x1920:
+#   board pick = '24%,45%' (first "Your boards" card on /boards)
+#   board sheet = '78%,10%' (board-switcher glyph in the climbs top chrome)
+#   board view  = '50%,26%' (first climb row in the list)
+- launchApp
+- extendedWaitUntil:
+    visible:
+      id: 'auth-email-input'
+    timeout: 180000
+- runFlow: login.yaml
+
+# Home — feed populated by the prod test user's follows.
+- waitForAnimationToEnd
+- takeScreenshot: 00-home
+
+# Discover — playlists.
+- openLink: com.boardsesh.app://discover
+- waitForAnimationToEnd
+- takeScreenshot: 03-discover
+
+# Profile — stats, sessions, logbook.
+- openLink: com.boardsesh.app://profile
+- waitForAnimationToEnd
+- takeScreenshot: 05-profile
+
+# Activate a board so Climbs / board-view / board-sheet / generator render real
+# content. Open the board picker and tap the first card under "Your boards".
+- openLink: com.boardsesh.app://boards
+- waitForAnimationToEnd
+- tapOn:
+    point: '24%,45%'
+- waitForAnimationToEnd
+
+# Climbs — the main browse surface.
+- openLink: com.boardsesh.app://climbs
+- waitForAnimationToEnd
+- takeScreenshot: 01-climbs
+
+# Workout generator — the Record/session screen with a workout pre-selected.
+- openLink: com.boardsesh.app://record
+- waitForAnimationToEnd
+- takeScreenshot: 04-workout-generator
+
+# Board view — open the first climb.
+- openLink: com.boardsesh.app://climbs
+- waitForAnimationToEnd
+- tapOn:
+    point: '50%,26%'
+- waitForAnimationToEnd
+- takeScreenshot: 02-board-view
+
+# Board sheet — relaunch first so the play drawer from the board-view shot is
+# gone, then open Climbs and tap the board-switcher glyph.
+- launchApp
+- waitForAnimationToEnd
+- openLink: com.boardsesh.app://climbs
+- waitForAnimationToEnd
+- tapOn:
+    point: '78%,10%'
+- waitForAnimationToEnd
+- takeScreenshot: 06-board-sheet

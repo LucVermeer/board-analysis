@@ -1,24 +1,22 @@
 /// <reference types="node" />
 
 /**
- * Dimension gate for the App Store screenshots before they're uploaded to
- * App Store Connect.
+ * Dimension gate for mobile store screenshots before they're uploaded.
  *
- * `fastlane deliver` routes each screenshot to a display slot by its pixel
- * dimensions, so a capture-resolution change (e.g. a new default simulator)
- * could silently produce PNGs Apple rejects, or that land in the wrong slot.
- * This gate runs after capture and fails loudly — listing every offender —
- * before fastlane ever talks to Apple.
+ * App Store Connect routes each screenshot to a display slot by exact pixel
+ * dimensions, so iOS captures are checked against device-specific allow-lists.
+ * Google Play accepts a broader phone screenshot range, so Android captures are
+ * checked against Play's generic size/count rules.
  *
  * It reads width/height straight from each PNG's IHDR header (no `sips` /
  * ImageMagick), so it runs identically on Linux CI and macOS.
  *
  * Usage:
- *   vp run check:screenshot-dimensions
+ *   vp run check:screenshot-dimensions -- --platform ios
+ *   vp run check:screenshot-dimensions -- --platform android
  *
- * Exit code 0 when every PNG under app-stores/apple/screenshots/<device>/ is an
- * App Store-accepted size for its device slot; 1 otherwise (including when no
- * PNGs are present, so a failed/empty capture can't pass silently).
+ * The default platform is ios for backwards compatibility with the original
+ * App Store-only gate.
  */
 
 import { readFileSync, readdirSync } from 'node:fs';
@@ -27,6 +25,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const ROOT_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const APPLE_SHOTS_DIR = resolve(ROOT_DIR, 'app-stores', 'apple', 'screenshots');
+const GOOGLE_SHOTS_DIR = resolve(ROOT_DIR, 'app-stores', 'google', 'screenshots');
 const LOG = '[check:screenshot-dimensions]';
 
 // First 8 bytes of every PNG file.
@@ -44,8 +43,8 @@ export interface Dimensions {
  * slug can't sneak un-validated sizes past the gate.
  */
 export const ACCEPTED_SIZES: Record<string, readonly Dimensions[]> = {
-  // 6.9" iPhone slot. Apple accepts the iPhone 16 Pro Max native 1320×2868 or
-  // the prior-gen 1290×2796 in this slot.
+  // 6.9" iPhone slot. Apple accepts the iPhone 16 Pro Max native 1320x2868 or
+  // the prior-gen 1290x2796 in this slot.
   'iphone-16-pro-max': [
     { width: 1320, height: 2868 },
     { width: 1290, height: 2796 },
@@ -76,7 +75,7 @@ export interface Offender {
   reason: string;
 }
 
-/** Pure: validate one device folder's PNGs against its accepted-size allow-list. */
+/** Pure: validate one Apple device folder's PNGs against its accepted-size allow-list. */
 export function findOffenders(deviceSlug: string, files: readonly PngFile[]): Offender[] {
   const accepted = ACCEPTED_SIZES[deviceSlug];
   if (!accepted) {
@@ -107,46 +106,144 @@ export function findOffenders(deviceSlug: string, files: readonly PngFile[]): Of
   return offenders;
 }
 
-function main(): number {
+/** Pure: validate one Google Play phone screenshot folder. */
+export function findGooglePlayOffenders(deviceSlug: string, files: readonly PngFile[]): Offender[] {
+  const offenders: Offender[] = [];
+  if (files.length < 2) {
+    offenders.push({
+      file: `${deviceSlug}/`,
+      reason: `has ${files.length} screenshot(s), expected at least 2 for a Play phone listing`,
+    });
+  }
+  if (files.length > 8) {
+    offenders.push({
+      file: `${deviceSlug}/`,
+      reason: `has ${files.length} screenshot(s), expected at most 8 for a Play phone listing`,
+    });
+  }
+
+  for (const file of files) {
+    let dimensions: Dimensions;
+    try {
+      dimensions = readPngDimensions(file.buffer);
+    } catch (error) {
+      offenders.push({ file: file.name, reason: error instanceof Error ? error.message : String(error) });
+      continue;
+    }
+
+    const shorterSide = Math.min(dimensions.width, dimensions.height);
+    const longerSide = Math.max(dimensions.width, dimensions.height);
+    if (shorterSide < 320) {
+      offenders.push({
+        file: file.name,
+        reason: `is ${dimensions.width}x${dimensions.height}, expected both sides to be at least 320px`,
+      });
+      continue;
+    }
+    if (longerSide > 3840) {
+      offenders.push({
+        file: file.name,
+        reason: `is ${dimensions.width}x${dimensions.height}, expected both sides to be at most 3840px`,
+      });
+      continue;
+    }
+    if (longerSide > shorterSide * 2) {
+      offenders.push({
+        file: file.name,
+        reason: `is ${dimensions.width}x${dimensions.height}, expected the long side to be no more than 2x the short side`,
+      });
+    }
+  }
+  return offenders;
+}
+
+type ScreenshotPlatform = 'ios' | 'android' | 'all';
+
+function parsePlatform(argv: readonly string[]): ScreenshotPlatform {
+  const args = argv.filter((argument) => argument !== '--');
+  let platform: ScreenshotPlatform = 'ios';
+  for (let index = 0; index < args.length; index++) {
+    const flag = args[index];
+    const value = args[index + 1];
+    if (flag !== '--platform') {
+      throw new Error(`Unknown argument: ${flag}`);
+    }
+    if (value === undefined || value.startsWith('--')) {
+      throw new Error('--platform requires a value');
+    }
+    if (value !== 'ios' && value !== 'android' && value !== 'all') {
+      throw new Error(`--platform must be one of: ios, android, all (got "${value}")`);
+    }
+    platform = value;
+    index++;
+  }
+  return platform;
+}
+
+function validateScreenshotRoot(
+  rootDir: string,
+  platformName: string,
+  validator: (deviceSlug: string, files: readonly PngFile[]) => Offender[],
+): number {
   let deviceDirs: string[];
   try {
-    deviceDirs = readdirSync(APPLE_SHOTS_DIR, { withFileTypes: true })
+    deviceDirs = readdirSync(rootDir, { withFileTypes: true })
       .filter((entry) => entry.isDirectory())
       .map((entry) => entry.name);
   } catch {
-    console.error(`${LOG} FAILED: ${APPLE_SHOTS_DIR} not found — run \`vp run mobile:screenshots\` first.`);
+    console.error(`${LOG} FAILED: ${rootDir} not found - run \`vp run mobile:screenshots\` first.`);
     return 1;
   }
 
   const offenders: Offender[] = [];
   let pngCount = 0;
   for (const slug of deviceDirs) {
-    const dir = join(APPLE_SHOTS_DIR, slug);
+    const dir = join(rootDir, slug);
     const pngNames = readdirSync(dir).filter((name) => name.toLowerCase().endsWith('.png'));
     const files: PngFile[] = pngNames.map((name) => ({
       name: `${slug}/${name}`,
       buffer: readFileSync(join(dir, name)),
     }));
     pngCount += files.length;
-    offenders.push(...findOffenders(slug, files));
+    offenders.push(...validator(slug, files));
   }
 
   if (pngCount === 0) {
-    console.error(`${LOG} FAILED: no screenshots found under ${APPLE_SHOTS_DIR}.`);
+    console.error(`${LOG} FAILED: no screenshots found under ${rootDir}.`);
     return 1;
   }
   if (offenders.length > 0) {
-    console.error(`${LOG} FAILED: ${offenders.length} screenshot(s) are not an App Store-accepted size:`);
+    console.error(`${LOG} FAILED: ${offenders.length} ${platformName} screenshot issue(s):`);
     for (const offender of offenders) {
       console.error(`  - ${offender.file}: ${offender.reason}`);
     }
     return 1;
   }
 
-  console.log(`${LOG} OK: ${pngCount} screenshot(s) match an accepted App Store size.`);
+  console.log(`${LOG} OK: ${pngCount} ${platformName} screenshot(s) match accepted dimensions.`);
+  return 0;
+}
+
+function main(argv: readonly string[] = process.argv.slice(2)): number {
+  let platform: ScreenshotPlatform;
+  try {
+    platform = parsePlatform(argv);
+  } catch (error) {
+    console.error(`${LOG} ${error instanceof Error ? error.message : String(error)}`);
+    return 1;
+  }
+
+  const platforms: Array<'ios' | 'android'> = platform === 'all' ? ['ios', 'android'] : [platform];
+  for (const selectedPlatform of platforms) {
+    const status =
+      selectedPlatform === 'ios'
+        ? validateScreenshotRoot(APPLE_SHOTS_DIR, 'App Store', findOffenders)
+        : validateScreenshotRoot(GOOGLE_SHOTS_DIR, 'Google Play', findGooglePlayOffenders);
+    if (status !== 0) return status;
+  }
   return 0;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  process.exit(main());
+  process.exit(main(process.argv.slice(2)));
 }
