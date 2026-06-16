@@ -140,9 +140,7 @@ describe('SyncRunner login failure handling', () => {
       }),
     );
 
-    await expect(
-      runnerPrivates.syncSingleCredential(createCredential({ credentialFailureCount: 1 })),
-    ).rejects.toThrow(
+    await expect(runnerPrivates.syncSingleCredential(createCredential({ credentialFailureCount: 1 }))).rejects.toThrow(
       'Login failed: Invalid username or password (expired after 2 failed credential attempts; reconnect to resume sync)',
     );
 
