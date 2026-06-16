@@ -359,6 +359,12 @@ function createServiceDeployInputFailures({ repoRoot = defaultRepoRoot } = {}) {
     'Dockerfile.web.dockerignore',
     'Generated Docker contexts replace Dockerfile-specific ignore files.',
   );
+  rejectExistingFile(
+    failures,
+    repoRoot,
+    'Dockerfile.sync.dockerignore',
+    'Generated Docker contexts replace Dockerfile-specific ignore files.',
+  );
 
   return failures;
 }
