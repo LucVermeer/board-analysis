@@ -1,5 +1,6 @@
 import Foundation
 import UIKit
+import os.log
 
 // MARK: - ThumbnailFetcher
 
@@ -20,12 +21,25 @@ actor ThumbnailFetcher {
     /// Subdirectory inside the shared container where thumbnails are stored.
     static let thumbnailsDirectory = "thumbnails"
 
+    /// Bumped when the cached thumbnail's content contract changes, so a build
+    /// with new compositing logic discards thumbnails written by older builds
+    /// instead of serving them stale. The App Group container survives app
+    /// updates, so without this an upgrading user keeps seeing the previous
+    /// build's images. v1 = overlay-only (no board art); v2 = board background
+    /// composited behind the holds overlay. Mirrors `RENDERER_VERSION` in
+    /// use-native-climb-render.ts, which solved the same transition in-app.
+    static let cacheVersion = 2
+
     // MARK: - Dependencies
 
     private let urlSession: URLSession
     private let fileManager: FileManager
     private let sharedDefaults: UserDefaults?
     private let sharedContainerUrl: URL?
+    private let logger = Logger(subsystem: "com.boardsesh.app", category: "ThumbnailFetcher")
+
+    /// Guards the one-per-process stale-cache purge.
+    private var didPurgeStaleCache = false
 
     // MARK: - In-flight deduplication
 
@@ -68,6 +82,10 @@ actor ThumbnailFetcher {
     ///
     /// Returns `nil` if any step fails (network error, missing config, etc.).
     func fetchThumbnail(for item: SharedQueueItem) async -> URL? {
+        // Drop thumbnails written by an older build before any cache hit, so a
+        // version bump (e.g. overlay-only → board-composited) forces a re-render.
+        purgeStaleCacheIfNeeded()
+
         // Return cached file if it already exists.
         if let cached = cachedFileURL(for: item.climbUuid), fileManager.fileExists(atPath: cached.path) {
             // Touch the file so eviction treats it as recently used.
@@ -111,6 +129,28 @@ actor ThumbnailFetcher {
                 }
             }
         }
+    }
+
+    /// Clears the thumbnail cache once per process when the stored cache version
+    /// differs from `cacheVersion` — i.e. after an app update whose compositing
+    /// contract changed. Without this, the App Group container (which survives
+    /// updates) would keep serving a prior build's thumbnails (e.g. overlay-only
+    /// images from before board compositing) straight from the cache check.
+    private func purgeStaleCacheIfNeeded() {
+        guard !didPurgeStaleCache else { return }
+        didPurgeStaleCache = true
+
+        let storedVersion = sharedDefaults?.integer(forKey: SharedConstants.thumbnailCacheVersionKey) ?? 0
+        guard storedVersion != Self.cacheVersion else { return }
+
+        if let directory = thumbnailsDirectoryURL(),
+           let files = try? fileManager.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil, options: .skipsHiddenFiles) {
+            for file in files {
+                try? fileManager.removeItem(at: file)
+            }
+            logger.notice("Purged \(files.count) stale thumbnail(s) (cache version \(storedVersion, privacy: .public) → \(Self.cacheVersion, privacy: .public))")
+        }
+        sharedDefaults?.set(Self.cacheVersion, forKey: SharedConstants.thumbnailCacheVersionKey)
     }
 
     /// Removes the oldest thumbnails when the cache exceeds `maxCachedThumbnails`.
@@ -250,10 +290,24 @@ actor ThumbnailFetcher {
         // entirely when nothing is staged) so the cache tracks the active board.
         let activePaths = Set(paths)
         backgroundLayerCache = backgroundLayerCache.filter { activePaths.contains($0.key) }
-        guard !paths.isEmpty, let overlay = UIImage(data: overlayData) else { return nil }
+
+        // These notices are the on-device diagnostic for "board photo missing":
+        // they pinpoint whether JS staged paths, and whether they decoded.
+        guard !paths.isEmpty else {
+            logger.notice("composite skipped: no board-background paths staged → holds-only overlay")
+            return nil
+        }
+        guard let overlay = UIImage(data: overlayData) else {
+            logger.error("composite skipped: server overlay failed to decode")
+            return nil
+        }
 
         let backgroundLayers = paths.compactMap { backgroundLayer(at: $0) }
-        guard !backgroundLayers.isEmpty else { return nil }
+        guard !backgroundLayers.isEmpty else {
+            logger.error("composite skipped: \(paths.count, privacy: .public) staged path(s) but 0 decoded via UIImage(contentsOfFile:) — first: \(paths.first ?? "?", privacy: .public)")
+            return nil
+        }
+        logger.notice("composite: \(backgroundLayers.count, privacy: .public)/\(paths.count, privacy: .public) background layer(s) under overlay")
 
         let nativeSize = overlay.size
         guard nativeSize.width > 0, nativeSize.height > 0 else { return nil }
