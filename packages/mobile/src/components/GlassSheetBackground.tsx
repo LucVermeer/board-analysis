@@ -37,6 +37,9 @@ export function GlassSheetBackground({ style, pointerEvents, flatTop, opaqueMate
   return (
     <GlassSurface
       glassEffectStyle="regular"
+      // Modal bottom sheet = M3 surfaceContainerLow; the scrim carries the
+      // separation, so the sheet tone stays low (not "high because it floats").
+      role="low"
       fallbackColor={systemColors.secondaryBackground}
       tintColor={opaqueMaterial ? playDrawerMaterialTint[colorScheme] : undefined}
       style={[style, sheetStyles.background, sheet.corners, flatTop && styles.flatTop, styles.clip]}

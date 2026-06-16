@@ -2,6 +2,9 @@ import { type ReactNode } from 'react';
 import { View, type StyleProp, type ViewProps, type ViewStyle } from 'react-native';
 import { GlassContainer } from 'expo-glass-effect';
 import { useNativeGlass } from '../hooks/use-native-glass';
+import { useTheme } from '../providers/theme-provider';
+import { useVariantValue } from '../theme/variants';
+import { borderRadius } from '../theme/tokens';
 
 type GlassClusterProps = {
   children?: ReactNode;
@@ -28,6 +31,14 @@ type GlassClusterProps = {
  */
 export function GlassCluster({ children, style, spacing, pointerEvents }: GlassClusterProps) {
   const nativeGlass = useNativeGlass();
+  const { m3SurfaceContainers } = useTheme();
+  // Material groups the row into one M3 `surfaceContainer` lozenge (the M3 answer
+  // to the merged-glass look); Liquid Glass without native glass (iOS < 26 /
+  // Android) stays a plain pass-through so the members keep their own shapes.
+  const materialGroupStyle = useVariantValue<ViewStyle | undefined>({
+    material: { backgroundColor: m3SurfaceContainers.base, borderRadius: borderRadius.full },
+    liquidGlass: undefined,
+  });
 
   if (nativeGlass) {
     return (
@@ -38,7 +49,7 @@ export function GlassCluster({ children, style, spacing, pointerEvents }: GlassC
   }
 
   return (
-    <View style={style} pointerEvents={pointerEvents}>
+    <View style={[materialGroupStyle, style]} pointerEvents={pointerEvents}>
       {children}
     </View>
   );

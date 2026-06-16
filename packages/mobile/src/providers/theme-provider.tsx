@@ -14,6 +14,8 @@ import {
   brandColorsDark,
   androidFallbackColors,
   materialSurfaces,
+  materialSurfaceContainers,
+  type MaterialSurfaceContainers,
 } from '../theme/colors';
 import { textStylesByVariant, type TextVariant, type TypeStyle } from '../theme/typography';
 import { buildPaperTheme } from '../theme/paper-theme';
@@ -25,6 +27,7 @@ import {
   opacity,
   radiiByVariant,
   sheetChromeByVariant,
+  materialElevationByLevel,
   type Radii,
   type SheetChrome,
 } from '../theme/tokens';
@@ -114,6 +117,19 @@ type Theme = {
    * roles, so use the `elevation.levelN` ladder for surface-container surfaces.
    */
   m3: MD3Theme['colors'];
+  /**
+   * M3 tonal surface-container ramp ({lowest,low,base,high,highest}) for the
+   * current colour scheme. Material surfaces read a role here to express depth by
+   * TONE (the canonical M3 mechanism); pair with `materialElevation` for the cast.
+   * Only meaningful on Material — Liquid Glass never reads it.
+   */
+  m3SurfaceContainers: MaterialSurfaceContainers;
+  /**
+   * M3 elevation casts keyed by level (`level0`–`level5`), each a full ViewStyle
+   * (iOS `shadow*` + Android `elevation`). Scheme-independent. Apply on the same
+   * view as the tonal background — never under `overflow:'hidden'`.
+   */
+  materialElevation: typeof materialElevationByLevel;
   /**
    * Semantic foregrounds for action rows / action FABs, resolved per variant:
    * monochrome (`systemColors.label`) on Liquid Glass, tinted by role on Material.
@@ -325,6 +341,8 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
       radii: radiiByVariant[variant],
       sheet: sheetChromeByVariant[variant],
       m3: m3Colors,
+      m3SurfaceContainers: materialSurfaceContainers[colorScheme],
+      materialElevation: materialElevationByLevel,
       actionColors: resolveActionColors(variant, {
         label: resolvedSystemColors.label,
         accent: resolvedSystemColors.accent,

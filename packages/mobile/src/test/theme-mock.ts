@@ -1,8 +1,22 @@
 import type { Theme } from '../providers/theme-provider';
-import { spacing, borderRadius, shadows, opacity, radiiByVariant, sheetChromeByVariant } from '../theme/tokens';
+import {
+  spacing,
+  borderRadius,
+  shadows,
+  opacity,
+  radiiByVariant,
+  sheetChromeByVariant,
+  materialElevationByLevel,
+} from '../theme/tokens';
 import { springs, timing } from '../theme/animations';
 import { textStylesByVariant } from '../theme/typography';
-import { brandColors, brandColorsDark, materialSurfaces, androidFallbackColors } from '../theme/colors';
+import {
+  brandColors,
+  brandColorsDark,
+  materialSurfaces,
+  androidFallbackColors,
+  materialSurfaceContainers,
+} from '../theme/colors';
 import { buildPaperTheme } from '../theme/paper-theme';
 import { resolveActionColors, resolveChartColors, sectionCaptionByVariant } from '../theme/variants/variant-tokens';
 import { variantFeatures } from '../theme/variants/variant-features';
@@ -46,6 +60,8 @@ export function makeThemeMock(overrides: Partial<Theme> = {}): Theme {
     radii: radiiByVariant[variant],
     sheet: sheetChromeByVariant[variant],
     m3: buildPaperTheme(colorScheme).colors,
+    m3SurfaceContainers: materialSurfaceContainers[colorScheme],
+    materialElevation: materialElevationByLevel,
     actionColors: resolveActionColors(variant, {
       label: systemColors.label,
       accent: systemColors.accent,
