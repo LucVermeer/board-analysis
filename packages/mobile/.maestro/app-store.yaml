@@ -31,6 +31,23 @@ name: app-store screenshots
 # - Board-independent captures (home/discover/profile) run first so a board-pick
 #   miss can't lose them.
 #
+# The orchestrator's `simctl openurl` raises an "Open in Boardsesh?" system
+# confirmation on a fresh CI sim (the custom scheme isn't trusted yet) — and iOS
+# queues a SECOND one as the app launches and loads the bundle, which then
+# occludes the auth form. Tap Open whenever it shows until they're cleared.
+# `runFlow when visible` checks the CURRENT screen, so there's no wait on a warm /
+# local sim where no dialog appears.
+- repeat:
+    times: 8
+    commands:
+      - runFlow:
+          when:
+            visible:
+              text: 'Open'
+          commands:
+            - tapOn:
+                text: 'Open'
+      - waitForAnimationToEnd
 # Cold Metro bundle on the first load can take a while; wait for the signed-out
 # auth screen (the orchestrator guarantees a logged-out start), then log in.
 - extendedWaitUntil:

@@ -25,6 +25,21 @@ name: onboarding illustrations
 # openLink, whose "Open in Boardsesh?" dialog races the tap on a cold CI start. So
 # this flow just waits for the auth screen. The orchestrator uninstalled +
 # reinstalled and reset the keychain, so this cold-loads signed out.
+#
+# Clear the "Open in Boardsesh?" confirmations the orchestrator's openurl raises on
+# a fresh CI sim (iOS queues up to two; a warm/local sim shows none). runFlow checks
+# the current screen so it never waits when there's no dialog.
+- repeat:
+    times: 8
+    commands:
+      - runFlow:
+          when:
+            visible:
+              text: 'Open'
+          commands:
+            - tapOn:
+                text: 'Open'
+      - waitForAnimationToEnd
 - extendedWaitUntil:
     visible:
       id: 'auth-email-input'
