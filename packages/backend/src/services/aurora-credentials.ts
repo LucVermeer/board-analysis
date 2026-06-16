@@ -218,6 +218,8 @@ export async function saveAuroraCredential(input: {
           lastSyncAt: null,
           syncStatus: 'pending',
           syncError: null,
+          credentialFailureCount: 0,
+          lastCredentialFailureAt: null,
           updatedAt: now,
         })
         .where(and(eq(auroraCredentials.userId, input.userId), eq(auroraCredentials.boardType, input.boardType)));
@@ -232,6 +234,8 @@ export async function saveAuroraCredential(input: {
         lastSyncAt: null,
         syncStatus: 'pending',
         syncError: null,
+        credentialFailureCount: 0,
+        lastCredentialFailureAt: null,
       });
     }
 
@@ -332,6 +336,8 @@ export async function saveKilterCredential(input: {
           auroraToken: null,
           syncStatus: 'pending',
           syncError: null,
+          credentialFailureCount: 0,
+          lastCredentialFailureAt: null,
           updatedAt: now,
         })
         .where(and(eq(auroraCredentials.userId, input.userId), eq(auroraCredentials.boardType, KILTER_BOARD_TYPE)));
@@ -341,6 +347,8 @@ export async function saveKilterCredential(input: {
         boardType: KILTER_BOARD_TYPE,
         encryptedRefreshToken,
         syncStatus: 'pending',
+        credentialFailureCount: 0,
+        lastCredentialFailureAt: null,
       });
     }
 
