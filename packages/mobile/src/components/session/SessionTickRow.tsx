@@ -97,8 +97,9 @@ export const SessionTickRow = memo(function SessionTickRow({
   // explicitly labelled, so it's never misread as the person who sent the climb.
   const setterText = tick.setterUsername ? t('detail.setBy', { username: tick.setterUsername }) : null;
   const detailParts = [attemptText, tick.comment ?? null, setterText].filter((part): part is string => !!part);
-  // Multi-user "who" is carried by the leading avatar + the climbers leaderboard,
-  // so the row subtitle stays attempt/comment/setter (no redundant name line).
+  // fallbackSubtitle is used only by the ListRow path (climb/boardConfig missing).
+  // In the ClimbListItemContent path, participant name is surfaced via
+  // primarySubtitleOverride and attempt/comment/setter via subtitleDetailParts.
   const fallbackSubtitle = detailParts.join(' · ') || undefined;
 
   const handlePress = useCallback(() => {

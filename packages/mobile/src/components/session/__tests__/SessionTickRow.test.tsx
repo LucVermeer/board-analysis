@@ -179,9 +179,7 @@ describe('SessionTickRow — primarySubtitleOverride', () => {
         onPress: () => {},
       }),
     );
-    expect(mockClimbListItemContent).toHaveBeenCalledWith(
-      expect.objectContaining({ primarySubtitleOverride: null }),
-    );
+    expect(mockClimbListItemContent).toHaveBeenCalledWith(expect.objectContaining({ primarySubtitleOverride: null }));
   });
 
   it('passes null when participant displayName is null (suppresses double-setter)', () => {
@@ -193,8 +191,6 @@ describe('SessionTickRow — primarySubtitleOverride', () => {
         onPress: () => {},
       }),
     );
-    expect(mockClimbListItemContent).toHaveBeenCalledWith(
-      expect.objectContaining({ primarySubtitleOverride: null }),
-    );
+    expect(mockClimbListItemContent).toHaveBeenCalledWith(expect.objectContaining({ primarySubtitleOverride: null }));
   });
 });

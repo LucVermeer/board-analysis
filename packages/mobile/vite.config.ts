@@ -12,18 +12,24 @@ export default defineConfig({
     name: 'mobile',
     globals: true,
     environment: 'node',
-    alias: {
+    alias: [
       // The real `posthog-react-native` entry re-exports RN-native components
       // (PostHogProvider/PostHogMaskView) whose untransformed source throws a
       // `SyntaxError` under vitest's node env, breaking every suite that imports
       // `src/lib/analytics`. Analytics is a no-op in tests (isAnalyticsEnabled is
       // false), so a lightweight stub satisfies the static imports safely.
-      'posthog-react-native': fileURLToPath(new URL('./test/posthog-react-native-stub.ts', import.meta.url)),
+      {
+        find: 'posthog-react-native',
+        replacement: fileURLToPath(new URL('./test/posthog-react-native-stub.ts', import.meta.url)),
+      },
       // react-native-paper's real entry throws a SyntaxError under vitest's node
       // env (untransformed RN-native source + react-native-vector-icons). Stub it
       // so any suite can import a Paper-backed primitive; component tests that
       // assert Paper props register their own vi.mock which takes precedence.
-      'react-native-paper': fileURLToPath(new URL('./test/react-native-paper-stub.tsx', import.meta.url)),
+      {
+        find: 'react-native-paper',
+        replacement: fileURLToPath(new URL('./test/react-native-paper-stub.tsx', import.meta.url)),
+      },
       // @react-native-async-storage/async-storage's ESM entry imports
       // `./createAsyncStorage` without a file extension, which fails to resolve
       // under vitest's node ESM env — breaking any suite that transitively loads
@@ -32,16 +38,23 @@ export default defineConfig({
       // storage. A tiny in-memory stub satisfies the static imports; suites that
       // assert storage behaviour register their own vi.mock, which takes
       // precedence.
-      '@react-native-async-storage/async-storage': fileURLToPath(
-        new URL('./test/async-storage-stub.ts', import.meta.url),
-      ),
+      {
+        find: '@react-native-async-storage/async-storage',
+        replacement: fileURLToPath(new URL('./test/async-storage-stub.ts', import.meta.url)),
+      },
       // @react-native-masked-view/masked-view and @react-native-community/blur are
       // native modules that can't load under vitest's node/jsdom env. Stub them so
       // any suite can import a blur/glass primitive (GlassSurface, ProgressiveBlur)
       // without crashing; suites that assert their props register their own vi.mock,
       // which takes precedence over these aliases.
-      '@react-native-masked-view/masked-view': fileURLToPath(new URL('./test/masked-view-stub.tsx', import.meta.url)),
-      '@react-native-community/blur': fileURLToPath(new URL('./test/community-blur-stub.tsx', import.meta.url)),
+      {
+        find: '@react-native-masked-view/masked-view',
+        replacement: fileURLToPath(new URL('./test/masked-view-stub.tsx', import.meta.url)),
+      },
+      {
+        find: '@react-native-community/blur',
+        replacement: fileURLToPath(new URL('./test/community-blur-stub.tsx', import.meta.url)),
+      },
       // expo-file-system and expo-image point their `main`/`exports` at TypeScript
       // source (src/index.ts). That source imports expo-modules-core native bindings
       // whose untransformed TS declarations throw `SyntaxError: Unexpected token
@@ -50,9 +63,26 @@ export default defineConfig({
       // expo-file-system, or LayeredClimbImage → expo-image) resolves cleanly.
       // Suites that assert real expo-file-system / expo-image behaviour can register
       // their own vi.mock which takes precedence over these aliases.
-      'expo-file-system': fileURLToPath(new URL('./test/expo-file-system-stub.ts', import.meta.url)),
-      'expo-image': fileURLToPath(new URL('./test/expo-image-stub.tsx', import.meta.url)),
-    },
+      {
+        find: 'expo-file-system',
+        replacement: fileURLToPath(new URL('./test/expo-file-system-stub.ts', import.meta.url)),
+      },
+      { find: 'expo-image', replacement: fileURLToPath(new URL('./test/expo-image-stub.tsx', import.meta.url)) },
+      // src/theme/animations.ts has `export type SpringPreset = keyof typeof springs`
+      // and `export type TimingPreset = keyof typeof timing`. In CI's Rolldown worker
+      // (Node.js 24), Rolldown's static analysis traverses into this file even when
+      // the importing module is vi.mock()'d, and the TypeScript transform does not
+      // strip `keyof typeof` before the parser sees it, producing
+      // `SyntaxError: Unexpected token 'typeof'`. A path-regex alias redirects ALL
+      // imports of this module (e.g. `../theme/animations`, `../../theme/animations`)
+      // to a plain-JS stub before Rolldown reads the source, eliminating the error.
+      // Suites that need specific animation values can register their own vi.mock
+      // which takes precedence at runtime.
+      {
+        find: /^(.*\/)?theme\/animations$/,
+        replacement: fileURLToPath(new URL('./test/theme-animations-stub.ts', import.meta.url)),
+      },
+    ],
     // .tsx test files can opt into a jsdom environment per file via the
     // `// @vitest-environment jsdom` pragma — needed to render React
     // providers in tests. Pure-logic tests stay node-env (faster).

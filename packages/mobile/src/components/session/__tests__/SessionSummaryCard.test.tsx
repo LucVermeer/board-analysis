@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SessionDetail } from '@boardsesh/shared-schema';
 
 const mockFeedSocialRow = vi.hoisted(() => vi.fn());
+const mockAvatarGroup = vi.hoisted(() => vi.fn());
 
 vi.mock('react-native', () => ({
   View: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
@@ -19,7 +20,10 @@ vi.mock('../../Card', () => ({
   Card: ({ children }: { children?: ReactNode }) => createElement('div', { 'data-testid': 'card' }, children),
 }));
 vi.mock('../../you/AvatarGroup', () => ({
-  AvatarGroup: () => createElement('div', { 'data-testid': 'avatar-group' }),
+  AvatarGroup: (props: Record<string, unknown>) => {
+    mockAvatarGroup(props);
+    return createElement('div', { 'data-testid': 'avatar-group' });
+  },
 }));
 vi.mock('../../you/FeedSocialRow', () => ({
   FeedSocialRow: (props: { entityId: string }) => {
@@ -57,6 +61,7 @@ import { SessionSummaryCard } from '../SessionSummaryCard';
 
 beforeEach(() => {
   mockFeedSocialRow.mockClear();
+  mockAvatarGroup.mockClear();
 });
 
 function session(overrides: Partial<SessionDetail> = {}): SessionDetail {
@@ -171,5 +176,11 @@ describe('SessionSummaryCard', () => {
   it('passes the sessionId to FeedSocialRow', () => {
     render_(session({ sessionId: 'sess-42' }), 'Sesh', false);
     expect(mockFeedSocialRow).toHaveBeenCalledWith(expect.objectContaining({ entityId: 'sess-42' }));
+  });
+
+  it('passes participants to AvatarGroup', () => {
+    const participants = [{ userId: 'u1', displayName: 'Alice', avatarUrl: null, sends: 3, flashes: 1, attempts: 7 }];
+    render_(session({ participants }), 'Party', false);
+    expect(mockAvatarGroup).toHaveBeenCalledWith(expect.objectContaining({ participants }));
   });
 });
