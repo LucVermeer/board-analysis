@@ -1,12 +1,16 @@
+import type { ImageSourcePropType } from 'react-native';
 import type { IconName } from '../../components/icon-map';
 
 /**
  * The four first-run walkthrough cards. Order is the page order. `id` is a
  * stable analytics key (mirrors web's tour step ids) and `icon` resolves to an
- * SF Symbol on iOS / MDI glyph on Android via the shared icon-map (no
- * synthesized imagery). Card COPY is resolved separately via `useOnboardingCopy`
- * with static `t()` literals so the i18n orphan checker can see every key — the
- * project lint hard-fails on `t(variable)`, so the keys can't live here as data.
+ * SF Symbol on iOS / MDI glyph on Android via the shared icon-map. An optional
+ * `image` (a real captured app screen, produced by `--flow onboarding` in
+ * `scripts/mobile-screenshots.ts`) takes precedence over the glyph when present;
+ * cards without one keep rendering the icon, so this is purely additive. Card
+ * COPY is resolved separately via `useOnboardingCopy` with static `t()` literals
+ * so the i18n orphan checker can see every key — the project lint hard-fails on
+ * `t(variable)`, so the keys can't live here as data.
  *
  * Pure data — kept out of the component so it can be unit-tested and so the
  * carousel's `renderItem` stays a hoisted, dependency-free callback.
@@ -16,6 +20,8 @@ export type OnboardingCardId = 'welcome' | 'connect' | 'find' | 'play';
 export type OnboardingCard = {
   id: OnboardingCardId;
   icon: IconName;
+  /** Real app-screen illustration; falls back to `icon` when absent. */
+  image?: ImageSourcePropType;
 };
 
 export const ONBOARDING_CARDS: readonly OnboardingCard[] = [

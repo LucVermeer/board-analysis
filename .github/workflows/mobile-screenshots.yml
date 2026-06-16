@@ -1,0 +1,123 @@
+name: Mobile Screenshots (Native)
+
+# Captures native App Store / onboarding screenshots from the RN app on an iOS
+# simulator via Maestro (scripts/mobile-screenshots.ts) and uploads them as an
+# artifact. Manual + nightly only — never gates PRs.
+#
+# Data source: the seeded dev DB (ghcr.io/boardsesh/boardsesh-dev-db) brought up
+# with Colima, since macOS runners can't use Linux `services:` containers. This
+# is the first iteration of the workflow; the Colima + Release-build path is best
+# validated on the first manual dispatch (the pipeline itself is proven locally).
+
+on:
+  workflow_dispatch:
+    inputs:
+      flow:
+        description: 'Maestro flow to run'
+        type: choice
+        default: app-store
+        options:
+          - app-store
+          - onboarding
+      device:
+        description: 'iOS simulator device name'
+        type: string
+        default: 'iPhone 16 Pro Max'
+  schedule:
+    # 06:00 UTC nightly — regenerate the artifact off the latest main.
+    - cron: '0 6 * * *'
+
+concurrency:
+  group: mobile-screenshots-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  ios:
+    runs-on: macos-26
+    timeout-minutes: 90
+
+    env:
+      # Build is pointed at the local seeded backend (Colima dev DB below).
+      EXPO_PUBLIC_BACKEND_URL: http://localhost:8080
+      EXPO_PUBLIC_WEB_URL: http://localhost:3000
+      # Reused from ios-rn-ci.yml so the Expo build links the same native config.
+      EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID: 401523882502-0f6d7te1vekvkpmg18t8di6l0ig560q7.apps.googleusercontent.com
+      EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID: 401523882502-h92kdkck1qhmdbgq7ltek87g4rg8rg3h.apps.googleusercontent.com
+      EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID: 401523882502-hvfhh79p4q1qq0md7lk646c6sgmsi9q0.apps.googleusercontent.com
+      SENTRY_DISABLE_AUTO_UPLOAD: 'true'
+      DATABASE_URL: postgresql://postgres:password@localhost:5432/main
+      REDIS_URL: redis://localhost:6379
+      # Test account that ships in the seeded dev DB. Override via repo secrets
+      # if a different account is ever needed.
+      SCREENSHOT_USER_EMAIL: ${{ secrets.SCREENSHOT_USER_EMAIL || 'test@boardsesh.com' }}
+      SCREENSHOT_USER_PASSWORD: ${{ secrets.SCREENSHOT_USER_PASSWORD || 'test' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+
+      - uses: voidzero-dev/setup-vp@v1
+        with:
+          node-version: 'lts'
+          cache: true
+
+      - name: Install Node.js dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Start Docker (Colima) for the seeded dev DB
+        run: |
+          brew install colima docker
+          colima start --cpu 3 --memory 6
+
+      - name: Bring up seeded dev DB (+ Redis)
+        run: vp run db:up
+
+      - name: Start backend
+        run: |
+          bun run --filter=boardsesh-backend start > backend.log 2>&1 &
+          bunx wait-on http-get://localhost:8080/health --timeout 120000
+
+      - name: Install Maestro
+        # Pinned to a specific GitHub Releases asset and verified against a
+        # checksum committed in this repo — NOT `curl … get.maestro.mobile.dev | bash`,
+        # whose redirect target isn't pinned and would run arbitrary code on the
+        # runner if compromised. Because MAESTRO_SHA256 lives in version control,
+        # a swapped release asset fails the checksum gate here. Bump the version +
+        # hash together (from the release's checksums_sha256.txt) after
+        # re-validating the flow locally.
+        env:
+          MAESTRO_VERSION: 2.6.1
+          MAESTRO_SHA256: 3440825f514f537c6a96bcf5de995780c2a4a7f83a43208fdc95d4f1fecfad3b
+        run: |
+          set -euo pipefail
+          url="https://github.com/mobile-dev-inc/maestro/releases/download/cli-${MAESTRO_VERSION}/maestro.zip"
+          curl -fsSL "$url" -o maestro.zip
+          echo "${MAESTRO_SHA256}  maestro.zip" | shasum -a 256 -c -
+          unzip -q maestro.zip -d "$HOME/.maestro-dist"
+          echo "$HOME/.maestro-dist/maestro/bin" >> "$GITHUB_PATH"
+
+      - name: Capture screenshots
+        run: |
+          vp run mobile:screenshots -- \
+            --platform ios \
+            --flow "${{ inputs.flow || 'app-store' }}" \
+            --backend local \
+            --device "${{ inputs.device || 'iPhone 16 Pro Max' }}"
+
+      - name: Dump backend log on failure
+        if: failure()
+        run: cat backend.log || true
+
+      - name: Upload screenshots artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-screenshots-ios
+          path: app-stores/apple/screenshots/**
+          if-no-files-found: warn
+          retention-days: 14

@@ -28,7 +28,11 @@ vi.mock('expo-image', () => ({ Image: () => createElement('img') }));
 
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock('@boardsesh/profile-stats', () => ({ formatTickRelativeTime: () => 'now' }));
-vi.mock('@boardsesh/shared-schema', () => ({ isBetaVideoUrl: () => true }));
+vi.mock('@boardsesh/shared-schema', () => ({
+  isBetaVideoUrl: () => true,
+  isInstagramUrl: () => true,
+  isTikTokUrl: () => false,
+}));
 vi.mock('../../Card', () => ({
   Card: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
 }));
@@ -180,23 +184,10 @@ describe('SessionFeedCard chart', () => {
     const hardest = tick();
     const { getByLabelText } = render(
       createElement(SessionFeedCard, {
-        session: session({
-          hardestSend: tick(),
-          featuredBeta: {
-            tick: tick({ uuid: 'tick-2', climbName: 'Beta Climb' }),
-            betaLink: {
-              climbUuid: 'climb-2',
-              link: 'https://www.instagram.com/reel/demo/',
-              foreignUsername: 'setter',
-              angle: 40,
-              thumbnail: null,
-              isListed: true,
-              createdAt: '2026-06-12T00:00:00.000Z',
-              tickUuid: 'tick-2',
-              boardId: null,
-            },
-          },
-        }),
+        // No featuredBeta: when a featured beta is present it takes the single
+        // hero slot (see heroIsHardestSend in SessionFeedCard). This test
+        // exercises the hardest-send hero press, so the card must have no beta.
+        session: session({ hardestSend: tick() }),
         onOpenComments: vi.fn(),
         onPress: vi.fn(),
         onOpenClimb,

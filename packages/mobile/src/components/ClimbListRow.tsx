@@ -388,6 +388,7 @@ const ClimbListRow = React.memo(function ClimbListRow({
       >
         <GestureDetector gesture={tapGesture}>
           <View
+            testID="climb-row"
             style={[climbListRowStyles.contentRow, { backgroundColor: systemColors.background }, contentRowStyle]}
             accessible
             accessibilityRole="button"

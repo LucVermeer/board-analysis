@@ -234,6 +234,8 @@ describe('sessionDetail per-tick betaLinks', () => {
         thumbnail: 'https://cdn.example/thumb.jpg',
         isListed: true,
         createdAt: '2024-01-10T00:00:00.000Z',
+        tickUuid: null,
+        boardId: null,
       },
     ]);
   });

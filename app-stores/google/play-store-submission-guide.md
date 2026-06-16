@@ -46,14 +46,15 @@ Verify the generated assets look correct before proceeding.
 
 ## 2. Take Screenshots
 
-Automated approach using Playwright:
+Automated native capture (the real RN app, dark theme) via Maestro:
 
 ```bash
-cd packages/web
-bunx playwright test e2e/app-store-screenshots.spec.ts
+vp run mobile:screenshots -- --platform android --backend prod --theme dark
 ```
 
-Screenshots are saved to `mobile/screenshots/`.
+Screenshots are saved to `app-stores/google/screenshots/<device>/`. (The Android
+pipeline is a planned follow-up; until it lands, capture from an emulator
+manually — see the manual alternative below.)
 
 ### Required screenshot specs
 

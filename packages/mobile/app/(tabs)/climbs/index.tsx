@@ -811,9 +811,10 @@ function ClimbListInner() {
   const isEmpty = visibleClimbs.length === 0 && !isClimbsLoading;
 
   return (
-    <View style={[styles.container, { backgroundColor: systemColors.background }]}>
+    <View testID="climbs-screen" style={[styles.container, { backgroundColor: systemColors.background }]}>
       <Stack.Screen options={stackOptions} />
       <FlashList
+        testID="climb-list"
         data={visibleClimbs}
         renderItem={renderClimbItem}
         keyExtractor={keyExtractor}

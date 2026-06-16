@@ -32,37 +32,42 @@ Verify the generated assets look correct before proceeding.
 
 ## 2. Take Screenshots
 
-Automated approach using Playwright:
+Automated native capture (the real RN app, dark theme) via Maestro:
 
 ```bash
-cd packages/web
-bunx playwright test e2e/app-store-screenshots.spec.ts
+vp run mobile:screenshots -- --platform ios --backend prod --theme dark
 ```
 
-Screenshots are saved to `mobile/screenshots/`.
+This drives an iPhone 16 Pro Max simulator against prod (signed in as the test
+user) and saves PNGs to `app-stores/apple/screenshots/<device>/` — e.g.
+`app-stores/apple/screenshots/iphone-16-pro-max/`. See
+`packages/mobile/.maestro/README.md` for prerequisites (Maestro, the
+`SCREENSHOT_USER_PASSWORD` env, etc.).
 
 ### Required screenshot sizes
 
-| Device                          | Resolution | Required?                    |
-| ------------------------------- | ---------- | ---------------------------- |
-| 6.5" iPhone (iPhone 14 Plus)    | 1284x2778  | Yes — captured by Playwright |
-| 6.9" iPhone (iPhone 16 Pro Max) | 1320x2868  | Can reuse 6.5" screenshots   |
-| 12.9" iPad (iPad Pro)           | 2048x2732  | No, but recommended          |
+| Device                          | Resolution | Required?                          |
+| ------------------------------- | ---------- | ---------------------------------- |
+| 6.9" iPhone (iPhone 16 Pro Max) | 1320x2868  | Yes — captured by the Maestro flow |
+| 6.5" iPhone (iPhone 14 Plus)    | 1284x2778  | Optional (the 6.9" asset is accepted) |
+| 13" iPad (iPad Pro)             | 2064x2752  | No, but recommended if iPad is supported |
+
+Dark is the canonical appearance; pass `--theme light` for a light set.
 
 ### Manual alternative
 
-If the Playwright tests are not set up or you need specific screenshots:
+If you need a specific screen the flow doesn't cover:
 
 1. Open Xcode > Window > Devices and Simulators
-2. Create or select an iPhone 15 Pro Max simulator
+2. Create or select an iPhone 16 Pro Max simulator
 3. Run the app in the simulator
 4. Navigate to each key screen:
-   - Board selection / home
+   - Board selection / home feed
    - Climb list with search results
    - Climb detail with hold overlay on board image
-   - Queue panel with multiple climbs
-   - Bluetooth connection / pairing screen
-   - Party Mode session view
+   - Record / start a session
+   - Discover / playlists
+   - Profile stats
    - Logbook / profile stats
 5. Press Cmd+S in the simulator to save a screenshot
 
