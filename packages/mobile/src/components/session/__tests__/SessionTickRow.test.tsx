@@ -37,7 +37,12 @@ vi.mock('../../../hooks/use-grade-format', () => ({
   }),
 }));
 vi.mock('../../../providers/theme-provider', () => ({
-  useTheme: () => ({ systemColors: { secondaryBackground: '#fff', separator: '#ccc' } }),
+  useTheme: () => ({
+    systemColors: {
+      secondaryBackground: '#fff',
+      separator: '#ccc',
+    },
+  }),
 }));
 vi.mock('../../../theme/colors', () => ({
   brandColors: { warning: '#fa0', success: '#0a0' },
