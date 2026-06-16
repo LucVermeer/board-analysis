@@ -29,6 +29,15 @@ vi.mock('../../ClimbListItemContent', () => ({
     return createElement('div', { 'data-testid': 'climb-content' });
   },
 }));
+// ClimbListItemContent imports ClimbListThumbnail, which transitively imports
+// expo-file-system and expo-image (native packages whose untransformed TS
+// source throws `SyntaxError: Unexpected token 'typeof'` in Vitest's worker).
+// Mocking ClimbListThumbnail stops Rolldown from traversing into those packages.
+vi.mock('../../ClimbListThumbnail', () => ({
+  ClimbListThumbnail: () => null,
+  THUMBNAIL_WIDTH: 76,
+  THUMBNAIL_HEIGHT: 96,
+}));
 vi.mock('../../you/profile-chart-colors', () => ({ gradeBadgeColor: () => '#000' }));
 vi.mock('../../../hooks/use-grade-format', () => ({
   useGradeFormat: () => ({

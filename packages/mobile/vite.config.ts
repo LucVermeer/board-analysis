@@ -42,6 +42,16 @@ export default defineConfig({
       // which takes precedence over these aliases.
       '@react-native-masked-view/masked-view': fileURLToPath(new URL('./test/masked-view-stub.tsx', import.meta.url)),
       '@react-native-community/blur': fileURLToPath(new URL('./test/community-blur-stub.tsx', import.meta.url)),
+      // expo-file-system and expo-image point their `main`/`exports` at TypeScript
+      // source (src/index.ts). That source imports expo-modules-core native bindings
+      // whose untransformed TS declarations throw `SyntaxError: Unexpected token
+      // 'typeof'` in Vitest's module worker. Stub them so any suite that transitively
+      // imports these packages (e.g. ClimbListThumbnail → use-native-climb-render →
+      // expo-file-system, or LayeredClimbImage → expo-image) resolves cleanly.
+      // Suites that assert real expo-file-system / expo-image behaviour can register
+      // their own vi.mock which takes precedence over these aliases.
+      'expo-file-system': fileURLToPath(new URL('./test/expo-file-system-stub.ts', import.meta.url)),
+      'expo-image': fileURLToPath(new URL('./test/expo-image-stub.tsx', import.meta.url)),
     },
     // .tsx test files can opt into a jsdom environment per file via the
     // `// @vitest-environment jsdom` pragma — needed to render React
