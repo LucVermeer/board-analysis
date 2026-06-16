@@ -17,7 +17,19 @@ type CapturedClimbListRowProps = {
   onPress?: (climb: { uuid: string; name: string }) => void;
 };
 
+type CapturedPlaylistEditClimbRowProps = {
+  climb: Climb;
+  board: {
+    boardName: string;
+    layoutId: number;
+    sizeId: number;
+    setIds: string;
+    angle: number;
+  };
+};
+
 const capturedClimbRows = vi.hoisted(() => [] as CapturedClimbListRowProps[]);
+const capturedEditRows = vi.hoisted(() => [] as CapturedPlaylistEditClimbRowProps[]);
 
 // ── React Native ──────────────────────────────────────────────────────────────
 vi.mock('react-native', () => ({
@@ -252,7 +264,10 @@ vi.mock('../use-playlist-drag', () => ({
   }),
 }));
 vi.mock('../PlaylistEditClimbRow', () => ({
-  PlaylistEditClimbRow: () => null,
+  PlaylistEditClimbRow: (props: CapturedPlaylistEditClimbRowProps) => {
+    capturedEditRows.push(props);
+    return createElement('div', { 'data-edit-climb-row': props.climb.uuid });
+  },
 }));
 
 // Use real playlist-gradient and playlist-colors (pure TS, no RN imports).
@@ -317,6 +332,7 @@ describe('PlaylistDetailView', () => {
     ctrl.back.mockClear();
     ctrl.variant = 'liquidGlass';
     capturedClimbRows.length = 0;
+    capturedEditRows.length = 0;
   });
 
   // ── Navigation ──────────────────────────────────────────────────────────────
@@ -459,6 +475,17 @@ describe('PlaylistDetailView', () => {
       angle: 35,
       unsupported: true,
     });
+  });
+
+  it('keeps edit row board props stable across parent rerenders', () => {
+    const climbs = [KILTER_CLIMB];
+    const renderBoard = { boardName: 'kilter', layoutId: 1, sizeId: 10, setIds: '1,20', angle: 45 };
+    const { rerender } = render(<PlaylistDetailView {...makeProps({ climbs, renderBoard, editMode: true })} />);
+
+    rerender(<PlaylistDetailView {...makeProps({ climbs, renderBoard, editMode: true })} />);
+
+    expect(capturedEditRows).toHaveLength(2);
+    expect(capturedEditRows[1]?.board).toBe(capturedEditRows[0]?.board);
   });
 
   // ── Board backdrop ──────────────────────────────────────────────────────────

@@ -47,6 +47,24 @@ describe('resolvePlaylistClimbRenderBoard', () => {
     });
   });
 
+  it('uses the smallest larger size when the climb needs more board than the active size', () => {
+    const activeBoard: PlaylistRenderBoard = {
+      boardName: 'kilter',
+      layoutId: 1,
+      sizeId: 14,
+      setIds: '1,20',
+      angle: 40,
+    };
+    const result = resolvePlaylistClimbRenderBoard(makeClimb({ frames: 'p1073r42' }), activeBoard);
+
+    expect(result?.renderBoard.boardName).toBe('kilter');
+    expect(result?.renderBoard.layoutId).toBe(1);
+    expect(result?.renderBoard.sizeId).toBe(10);
+    expect(result?.renderBoard.setIds).toBe('1,20');
+    expect(result?.fit).toBe('upsized');
+    expect(result?.incompatible).toBe(true);
+  });
+
   it('renders a different-board climb on its own board and marks it incompatible', () => {
     const activeBoard = getKnownBoard('kilter', 1);
     const result = resolvePlaylistClimbRenderBoard(

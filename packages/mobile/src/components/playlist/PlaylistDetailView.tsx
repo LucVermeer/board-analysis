@@ -1,4 +1,4 @@
-import { type ReactNode, useCallback, useRef, useState } from 'react';
+import { type ReactNode, useCallback, useMemo, useRef, useState } from 'react';
 import {
   type ColorValue,
   type LayoutChangeEvent,
@@ -33,7 +33,7 @@ import { ClimbListRowSkeleton } from '../ClimbListRowSkeleton';
 import { GlassIconButton } from '../GlassIconButton';
 import { ProgressiveBlur } from '../ProgressiveBlur';
 import { Button } from '../Button';
-import { PlaylistEditClimbRow } from './PlaylistEditClimbRow';
+import { PlaylistEditClimbRow, type PlaylistEditRowBoard } from './PlaylistEditClimbRow';
 import { usePlaylistDrag } from './use-playlist-drag';
 import { PlaylistBoardBackdrop } from './PlaylistBoardBackdrop';
 import { buildHeroGradient } from './playlist-gradient';
@@ -134,6 +134,12 @@ export type PlaylistDetailViewProps = {
 
 const noopReorder = (_climbUuid: string, _newIndex: number) => {};
 const noopRemove = (_climbUuid: string) => {};
+
+type ResolvedPlaylistClimbRow = {
+  renderBoard: PlaylistRenderBoard;
+  editBoard: PlaylistEditRowBoard;
+  incompatible: boolean;
+};
 
 /**
  * Shared hero + paginated climb list for the playlist-detail and
@@ -251,23 +257,38 @@ export function PlaylistDetailView({
     itemCount: climbs.length,
   });
 
+  const resolvedRowsByClimbUuid = useMemo(() => {
+    const resolvedRows = new Map<string, ResolvedPlaylistClimbRow>();
+    for (const climb of climbs) {
+      const resolvedBoard = resolvePlaylistClimbRenderBoard(climb, renderBoard);
+      if (!resolvedBoard) continue;
+
+      const board = resolvedBoard.renderBoard;
+      resolvedRows.set(climb.uuid, {
+        renderBoard: board,
+        editBoard: {
+          boardName: board.boardName as BoardName,
+          layoutId: board.layoutId,
+          sizeId: board.sizeId,
+          setIds: board.setIds,
+          angle: board.angle,
+        },
+        incompatible: resolvedBoard.incompatible,
+      });
+    }
+    return resolvedRows;
+  }, [climbs, renderBoard]);
+
   const renderItem = useCallback(
     ({ item, index }: { item: Climb; index: number }) => {
-      const resolvedBoard = resolvePlaylistClimbRenderBoard(item, renderBoard);
-      if (!resolvedBoard) return null;
+      const resolvedRow = resolvedRowsByClimbUuid.get(item.uuid);
+      if (!resolvedRow) return null;
 
       if (editMode) {
-        const board = resolvedBoard.renderBoard;
         return (
           <PlaylistEditClimbRow
             climb={item}
-            board={{
-              boardName: board.boardName as BoardName,
-              layoutId: board.layoutId,
-              sizeId: board.sizeId,
-              setIds: board.setIds,
-              angle: board.angle,
-            }}
+            board={resolvedRow.editBoard}
             rowIndex={index}
             drag={dragControls}
             onRemove={onRemoveClimb ?? noopRemove}
@@ -279,17 +300,17 @@ export function PlaylistDetailView({
       return (
         <ClimbListRow
           climb={toSchemaClimb(item)}
-          boardName={resolvedBoard.renderBoard.boardName as BoardName}
-          layoutId={resolvedBoard.renderBoard.layoutId}
-          sizeId={resolvedBoard.renderBoard.sizeId}
-          setIds={resolvedBoard.renderBoard.setIds}
-          angle={resolvedBoard.renderBoard.angle}
+          boardName={resolvedRow.renderBoard.boardName as BoardName}
+          layoutId={resolvedRow.renderBoard.layoutId}
+          sizeId={resolvedRow.renderBoard.sizeId}
+          setIds={resolvedRow.renderBoard.setIds}
+          angle={resolvedRow.renderBoard.angle}
           onPress={handleActivate}
-          unsupported={resolvedBoard.incompatible}
+          unsupported={resolvedRow.incompatible}
         />
       );
     },
-    [renderBoard, editMode, dragControls, onRemoveClimb, onReorderClimb, handleActivate],
+    [resolvedRowsByClimbUuid, editMode, dragControls, onRemoveClimb, onReorderClimb, handleActivate],
   );
 
   // Cog shown beside the playlist name only in edit mode — opens the
