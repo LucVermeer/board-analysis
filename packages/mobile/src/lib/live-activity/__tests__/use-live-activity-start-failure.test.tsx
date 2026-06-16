@@ -14,9 +14,13 @@ vi.mock('../../auth-store', () => ({
 
 // Stub the bundled board-art resolver the start path lazily imports on iOS, so
 // the dynamic import resolves deterministically (and never pulls expo-asset into
-// the test env). The start-failure behaviour under test is independent of it.
+// the test env). Hoisted so individual tests can vary its resolved paths.
+const backgroundCache = vi.hoisted(() => ({
+  ensureBackgroundsCached: vi.fn(),
+}));
+
 vi.mock('../../background-image-cache', () => ({
-  ensureBackgroundsCached: vi.fn().mockResolvedValue({ paths: [], missingCount: 0 }),
+  ensureBackgroundsCached: backgroundCache.ensureBackgroundsCached,
 }));
 
 const plugin = vi.hoisted(() => ({
@@ -80,6 +84,8 @@ describe('useLiveActivity start-failure cleanup', () => {
     plugin.startLiveActivitySession.mockReset();
     plugin.endLiveActivitySession.mockClear();
     plugin.endLiveActivitySession.mockResolvedValue(undefined);
+    backgroundCache.ensureBackgroundsCached.mockReset();
+    backgroundCache.ensureBackgroundsCached.mockResolvedValue({ paths: [], missingCount: 0 });
     vi.spyOn(console, 'warn').mockImplementation(() => {});
   });
 
@@ -107,5 +113,37 @@ describe('useLiveActivity start-failure cleanup', () => {
 
     expect(plugin.startLiveActivitySession).toHaveBeenCalledTimes(1);
     expect(plugin.endLiveActivitySession).not.toHaveBeenCalled();
+  });
+});
+
+describe('useLiveActivity board-background staging', () => {
+  beforeEach(() => {
+    plugin.startLiveActivitySession.mockReset();
+    plugin.startLiveActivitySession.mockResolvedValue(undefined);
+    backgroundCache.ensureBackgroundsCached.mockReset();
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('resolves bundled backgrounds for the board and passes them to startLiveActivitySession', async () => {
+    backgroundCache.ensureBackgroundsCached.mockResolvedValue({
+      paths: ['/bg/kilter-1.webp', '/bg/kilter-2.webp'],
+      missingCount: 0,
+    });
+
+    render(<Harness />);
+    await flushStart();
+
+    // Board string + comma setIds are validated/parsed (toBoardName + parseSetIds)
+    // before the lookup, and the resolved paths flow through to the native start.
+    expect(backgroundCache.ensureBackgroundsCached).toHaveBeenCalledWith(
+      expect.objectContaining({ boardName: 'kilter', layoutId: 1, sizeId: 10, setIds: [1, 2], variant: 'thumb' }),
+    );
+    expect(plugin.startLiveActivitySession).toHaveBeenCalledWith(
+      expect.objectContaining({ boardBackgroundPaths: ['/bg/kilter-1.webp', '/bg/kilter-2.webp'] }),
+    );
   });
 });

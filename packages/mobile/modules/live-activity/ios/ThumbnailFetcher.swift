@@ -211,6 +211,14 @@ actor ThumbnailFetcher {
         return image
     }
 
+    /// Drops all cached background layers. Called on a board/session change so
+    /// the previous board's decoded images don't linger until the next composite
+    /// (the only other place the cache is pruned) — e.g. when a new session
+    /// starts but no thumbnail is requested before the app backgrounds.
+    func clearBackgroundLayerCache() {
+        backgroundLayerCache.removeAll()
+    }
+
     /// Largest dimension (px) of the cached composite. The widget never shows
     /// the thumbnail larger than the 80×100pt lock-screen image (~240×300px at
     /// 3×), so capping the long side here keeps the PNG small without visible
