@@ -1,13 +1,16 @@
-import { useCallback, useMemo, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { useCallback, useMemo, useRef, useState } from 'react';
+import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
-import { Stack } from 'expo-router';
+import { Stack, useFocusEffect, useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import type { PublicUserProfile } from '@boardsesh/shared-schema';
+import { Text } from '../../src/components/Text';
 import { ActivityIndicator } from '../../src/components/ActivityIndicator';
 import {
   ClimberSearchEmptyState,
   ClimberSearchErrorState,
+  ClimberSearchField,
   ClimberSearchLoadingState,
   ClimberSearchPersonRow,
   mapSearchResults,
@@ -15,26 +18,19 @@ import {
   type SocialPerson,
 } from '../../src/components/you/ClimberSearch';
 import { useProfile, useSearchUsers, useToggleUserFollow } from '../../src/lib/graphql/hooks';
-import { useBottomChromeMetrics } from '../../src/hooks/use-bottom-chrome-metrics';
 import { useTheme } from '../../src/providers/theme-provider';
 import { spacing } from '../../src/theme/tokens';
 
 const EMPTY_PEOPLE: SocialPerson[] = [];
 
-// The native header search bar reports changes as either a string or a
-// synthetic event depending on platform — normalise both (mirrors the Climbs tab).
-type NativeSearchChange = string | { nativeEvent?: { text?: string } };
-function readNativeSearchText(change: NativeSearchChange): string {
-  return typeof change === 'string' ? change : (change.nativeEvent?.text ?? '');
-}
-
 export default function ClimberSearchScreen() {
-  const { t } = useTranslation('feed');
-  const { t: tYou } = useTranslation('you');
-  const { systemColors } = useTheme();
-  const bottomChrome = useBottomChromeMetrics();
-  const paddingBottom = bottomChrome.scrollBottomPadding + spacing[4];
+  const { t: tCommon } = useTranslation('common');
+  const { systemColors, brandColors } = useTheme();
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const paddingBottom = insets.bottom + spacing[4];
 
+  const inputRef = useRef<TextInput>(null);
   const { data: currentProfile } = useProfile();
   const currentUserId = currentProfile?.id;
 
@@ -45,27 +41,13 @@ export default function ClimberSearchScreen() {
   const search = useSearchUsers(debouncedSearchQuery, canUseSearchQuery);
   const toggleFollow = useToggleUserFollow(currentUserId);
 
-  const handleSearchChange = useCallback((change: NativeSearchChange) => {
-    setSearchQuery(readNativeSearchText(change));
-  }, []);
-
-  // Drive the search input from the native nav-bar search controller: it owns
-  // the keyboard (autoFocus pops it on arrival) and stays out of the content,
-  // so the results FlashList just insets below it via contentInsetAdjustment.
-  const stackOptions = useMemo(
-    () => ({
-      headerShown: true,
-      title: t('mobile.home.findClimbersTitle'),
-      headerSearchBarOptions: {
-        placeholder: tYou('mobile.social.searchPlaceholder'),
-        autoFocus: true,
-        autoCapitalize: 'none' as const,
-        hideWhenScrolling: false,
-        onChangeText: handleSearchChange,
-        onCancelButtonPress: () => setSearchQuery(''),
-      },
-    }),
-    [t, tYou, handleSearchChange],
+  // Focus the field once the modal has finished presenting — autoFocus alone
+  // races the slide-up and the keyboard can fail to appear.
+  useFocusEffect(
+    useCallback(() => {
+      const handle = setTimeout(() => inputRef.current?.focus(), 350);
+      return () => clearTimeout(handle);
+    }, []),
   );
 
   const people = useMemo(
@@ -106,8 +88,27 @@ export default function ClimberSearchScreen() {
   const visiblePeople = showInitialSpinner || showHint || showError ? EMPTY_PEOPLE : people;
 
   return (
-    <View style={[styles.flex, { backgroundColor: systemColors.background }]}>
-      <Stack.Screen options={stackOptions} />
+    <View style={[styles.flex, { backgroundColor: systemColors.background, paddingTop: insets.top }]}>
+      {/* Full-screen takeover (presented modally in the root stack) so the tab bar
+          is out of the way; we render our own search bar + Cancel instead of the
+          native header. */}
+      <Stack.Screen options={{ headerShown: false }} />
+
+      <View style={styles.searchRow}>
+        <View style={styles.searchFieldWrap}>
+          <ClimberSearchField ref={inputRef} value={searchQuery} onChangeText={setSearchQuery} autoFocus />
+        </View>
+        <Pressable
+          onPress={() => router.back()}
+          accessibilityRole="button"
+          hitSlop={8}
+          style={({ pressed }) => [styles.cancelButton, pressed && styles.cancelPressed]}
+        >
+          <Text variant="body" color={brandColors.primary}>
+            {tCommon('actions.cancel')}
+          </Text>
+        </Pressable>
+      </View>
 
       <FlashList
         data={visiblePeople}
@@ -115,7 +116,6 @@ export default function ClimberSearchScreen() {
         keyExtractor={(person) => person.id}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
-        contentInsetAdjustmentBehavior="automatic"
         contentContainerStyle={{ paddingBottom }}
         onEndReached={handleEndReached}
         onEndReachedThreshold={0.5}
@@ -142,6 +142,25 @@ export default function ClimberSearchScreen() {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
+  searchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[2],
+    paddingHorizontal: spacing[4],
+    paddingTop: spacing[2],
+    paddingBottom: spacing[2],
+  },
+  searchFieldWrap: {
+    flex: 1,
+  },
+  cancelButton: {
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingLeft: spacing[1],
+  },
+  cancelPressed: {
+    opacity: 0.6,
+  },
   footer: {
     paddingVertical: spacing[5],
     alignItems: 'center',

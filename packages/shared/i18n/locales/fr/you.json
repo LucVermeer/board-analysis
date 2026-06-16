@@ -17,7 +17,8 @@
     "progress": "Progression",
     "sessions": "Sessions",
     "logbook": "Carnet",
-    "social": "Social"
+    "social": "Social",
+    "climbs": "Blocs"
   },
   "progress": {
     "title": "Progression"
@@ -75,7 +76,9 @@
       "title": "Profil",
       "errorTitle": "Impossible de charger ce profil",
       "notFoundTitle": "Grimpeur introuvable",
-      "notFoundBody": "Nous n'avons pas trouvé ce grimpeur."
+      "notFoundBody": "Nous n'avons pas trouvé ce grimpeur.",
+      "noClimbs": "Aucun bloc créé pour l'instant",
+      "climbsError": "Impossible de charger les blocs"
     },
     "comments": {
       "title": "Commentaires",

@@ -556,6 +556,7 @@ export {
   useFollowing,
   useSearchUsers,
   useToggleUserFollow,
+  useUserClimbs,
   useVote,
   useBulkVoteSummaries,
   useChunkedBulkVoteSummaries,

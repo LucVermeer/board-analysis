@@ -17,7 +17,8 @@
     "progress": "Progress",
     "sessions": "Sessions",
     "logbook": "Logbook",
-    "social": "Social"
+    "social": "Social",
+    "climbs": "Climbs"
   },
   "progress": {
     "title": "Progress"
@@ -75,7 +76,9 @@
       "title": "Profile",
       "errorTitle": "Couldn't load this profile",
       "notFoundTitle": "Climber not found",
-      "notFoundBody": "We couldn't find that climber."
+      "notFoundBody": "We couldn't find that climber.",
+      "noClimbs": "No climbs created yet",
+      "climbsError": "Couldn't load climbs"
     },
     "comments": {
       "title": "Comments",

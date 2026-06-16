@@ -1,4 +1,4 @@
-import { useEffect, useState, type ComponentType } from 'react';
+import { forwardRef, useEffect, useState, type ComponentType } from 'react';
 import { Pressable, StyleSheet, TextInput, View, type TextInputProps } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import type { PublicUserProfile, UserSearchResult } from '@boardsesh/shared-schema';
@@ -62,17 +62,25 @@ type ClimberSearchFieldProps = {
   value: string;
   onChangeText: (value: string) => void;
   inputComponent?: SearchInputComponent;
+  autoFocus?: boolean;
 };
 
-export function ClimberSearchField({ value, onChangeText, inputComponent }: ClimberSearchFieldProps) {
+export const ClimberSearchField = forwardRef<TextInput, ClimberSearchFieldProps>(function ClimberSearchField(
+  { value, onChangeText, inputComponent, autoFocus },
+  ref,
+) {
   const { t } = useTranslation('you');
   const { systemColors } = useTheme();
-  const Input = inputComponent ?? TextInput;
+  // Cast so `ref` + `autoFocus` type-check: the default TextInput and the
+  // BottomSheetTextInput callers both forward a TextInput instance at runtime.
+  const Input = (inputComponent ?? TextInput) as typeof TextInput;
 
   return (
     <View style={[styles.searchField, { backgroundColor: systemColors.fill }]}>
       <Icon name="search" size={18} color={systemColors.secondaryLabel} />
       <Input
+        ref={ref}
+        autoFocus={autoFocus}
         value={value}
         onChangeText={onChangeText}
         placeholder={t('mobile.social.searchPlaceholder')}
@@ -96,7 +104,7 @@ export function ClimberSearchField({ value, onChangeText, inputComponent }: Clim
       ) : null}
     </View>
   );
-}
+});
 
 type ClimberSearchPersonRowProps = {
   person: SocialPerson;

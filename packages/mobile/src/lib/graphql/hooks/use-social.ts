@@ -28,6 +28,9 @@ import {
   type FollowUserMutationVariables,
   type UnfollowUserMutationResponse,
   type UnfollowUserMutationVariables,
+  GET_USER_CLIMBS,
+  type GetUserClimbsQueryResponse,
+  type GetUserClimbsQueryVariables,
 } from '@boardsesh/graphql/operations';
 import type { SocialEntityType } from '@boardsesh/shared-schema';
 import { getHttpClient } from '../client';
@@ -170,6 +173,28 @@ export function useToggleUserFollow(currentUserId: string | undefined) {
       void queryClient.invalidateQueries({ queryKey: ['searchUsers'] });
       void queryClient.invalidateQueries({ queryKey: ['activityFeed'] });
     },
+  });
+}
+
+/** Climbs created by a user (across their linked setters), paginated by offset. */
+export function useUserClimbs(userId: string | undefined, enabled = true) {
+  return useInfiniteQuery({
+    queryKey: ['userClimbs', userId],
+    initialPageParam: 0,
+    queryFn: async ({ pageParam }) => {
+      if (!userId) throw new Error('Cannot load user climbs without a user id.');
+      const variables: GetUserClimbsQueryVariables = {
+        input: { userId, limit: SOCIAL_PAGE_SIZE, offset: Number(pageParam) },
+      };
+      const response = await getHttpClient().request<GetUserClimbsQueryResponse, GetUserClimbsQueryVariables>(
+        GET_USER_CLIMBS,
+        variables,
+      );
+      return response.userClimbs;
+    },
+    getNextPageParam: (lastPage, allPages) =>
+      lastPage.hasMore ? allPages.reduce((sum, page) => sum + page.climbs.length, 0) : undefined,
+    enabled: enabled && !!userId,
   });
 }
 

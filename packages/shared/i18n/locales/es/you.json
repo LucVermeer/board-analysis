@@ -17,7 +17,8 @@
     "progress": "Progreso",
     "sessions": "Sesiones",
     "logbook": "Historial",
-    "social": "Social"
+    "social": "Social",
+    "climbs": "Bloques"
   },
   "progress": {
     "title": "Progreso"
@@ -75,7 +76,9 @@
       "title": "Perfil",
       "errorTitle": "No se pudo cargar este perfil",
       "notFoundTitle": "Escalador no encontrado",
-      "notFoundBody": "No pudimos encontrar a ese escalador."
+      "notFoundBody": "No pudimos encontrar a ese escalador.",
+      "noClimbs": "Aún no hay bloques creados",
+      "climbsError": "No se pudieron cargar los bloques"
     },
     "comments": {
       "title": "Comentarios",

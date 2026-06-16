@@ -347,7 +347,14 @@ function RootLayout() {
                                                       tab (tappable avatars, the Home search pill). Modeled on
                                                       session/[sessionId]: the screens own their native header. */}
                                                           <Stack.Screen name="users/[userId]" />
-                                                          <Stack.Screen name="users/search" />
+                                                          {/* Headerless push — hides the tab bar like the other pushed
+                                                      screens, with its own in-body search bar. NOT a modal: a
+                                                      native modal presentation traps the root play drawer beneath
+                                                      it when a climb is opened from a profile pushed off search. */}
+                                                          <Stack.Screen
+                                                            name="users/search"
+                                                            options={{ headerShown: false }}
+                                                          />
                                                           <Stack.Screen name="users/connections" />
                                                           <Stack.Screen
                                                             name="join/[sessionId]"

@@ -11,11 +11,12 @@ import { PublicProfileHeaderBlock } from '../../src/components/you/PublicProfile
 import { ProgressTab } from '../../src/components/you/ProgressTab';
 import { SessionsTab } from '../../src/components/you/SessionsTab';
 import { LogbookTab } from '../../src/components/you/LogbookTab';
+import { ProfileClimbsTab } from '../../src/components/you/ProfileClimbsTab';
 import { useProfile, usePublicProfile, useYouProfileData } from '../../src/lib/graphql/hooks';
 import { useTheme } from '../../src/providers/theme-provider';
 import { spacing } from '../../src/theme/tokens';
 
-type ProfileSection = 'progress' | 'sessions' | 'logbook';
+type ProfileSection = 'progress' | 'sessions' | 'logbook' | 'climbs';
 
 export default function PublicProfileScreen() {
   const { userId } = useLocalSearchParams<{ userId: string }>();
@@ -40,6 +41,10 @@ export default function PublicProfileScreen() {
   useEffect(() => {
     navigation.setOptions({
       headerShown: true,
+      // Opaque (not the app's translucent push header) so the in-body avatar/name
+      // block lays out below the bar instead of scrolling under it.
+      headerTransparent: false,
+      headerBlurEffect: undefined,
       title: profile ? displayName : t('mobile.profile.title'),
     });
   }, [navigation, profile, displayName, t]);
@@ -57,6 +62,7 @@ export default function PublicProfileScreen() {
       { key: 'progress' as const, label: t('tabs.progress') },
       { key: 'sessions' as const, label: t('tabs.sessions') },
       { key: 'logbook' as const, label: t('tabs.logbook') },
+      { key: 'climbs' as const, label: t('tabs.climbs') },
     ],
     [t],
   );
@@ -119,6 +125,7 @@ export default function PublicProfileScreen() {
         {activeSection === 'progress' ? <ProgressTab data={youData} topInset={0} /> : null}
         {activeSection === 'sessions' ? <SessionsTab userId={userId} topInset={0} /> : null}
         {activeSection === 'logbook' ? <LogbookTab userId={userId} topInset={0} viewerIsOwner={isSelf} /> : null}
+        {activeSection === 'climbs' ? <ProfileClimbsTab userId={userId} topInset={0} /> : null}
       </View>
     </View>
   );
