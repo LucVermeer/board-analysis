@@ -14,10 +14,11 @@ name: app-store screenshots
 #   board view  = '50%,26%' (first climb row in the list)
 #
 # Other notes:
-# - The .app is a Debug dev-client that loads its JS from Metro; the first step
-#   opens ${MAESTRO_DEV_CLIENT_URL} (an expo-development-client deep link the
-#   orchestrator passes via `-e`) so it loads the bundle from Metro, not the
-#   launcher.
+# - The .app is a Debug dev-client that auto-loads Metro on launch (the build bakes
+#   DEV_CLIENT_DEFAULT_LAUNCHER_URL into Info.plist), so the ORCHESTRATOR just
+#   `simctl launch`es it — no `simctl openurl`, which on a fresh CI sim raises an
+#   "Open in Boardsesh?" confirmation Maestro can't reliably dismiss. So this flow
+#   just waits for the auth screen.
 # - The orchestrator uninstalled + reinstalled the app (fresh AsyncStorage, so no
 #   stale active board — re-picked via the board picker below) and reset the
 #   simulator keychain, so this cold-loads signed out and login authenticates
@@ -25,14 +26,12 @@ name: app-store screenshots
 # - The Record/session screen renders the WORKOUT GENERATOR because Metro bundles
 #   EXPO_PUBLIC_SCREENSHOT_WORKOUT (default volume) — its shelf is a
 #   gesture-handler ScrollView Maestro can't tap, so the selection is pre-seeded.
-# - iOS shows an "Open in 'Boardsesh'?" confirmation for simctl deep links; each
-#   openLink is followed by an optional tapOn "Open".
+# - iOS shows an "Open in 'Boardsesh'?" confirmation for the first in-flow route
+#   deep link on a fresh sim (until the scheme is trusted); each openLink is
+#   followed by an optional tapOn "Open".
 # - Board-independent captures (home/discover/profile) run first so a board-pick
 #   miss can't lose them.
-- openLink: ${MAESTRO_DEV_CLIENT_URL}
-- tapOn:
-    text: 'Open'
-    optional: true
+#
 # Cold Metro bundle on the first load can take a while; wait for the signed-out
 # auth screen (the orchestrator guarantees a logged-out start), then log in.
 - extendedWaitUntil:

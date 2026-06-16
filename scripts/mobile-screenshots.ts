@@ -406,32 +406,16 @@ function runIos(options: ScreenshotOptions): number {
     // Maestro's auth-screen wait (the slow-CI-runner timeout this guards against).
     prewarmMetroBundle();
 
-    // Pre-launch the app with UserDefaults argument-domain overrides so
-    // expo-dev-client's dev-menu UI doesn't appear in the captures:
-    //   -EXDevMenuIsOnboardingFinished YES     → skip the one-time "developer
-    //      menu" onboarding sheet (shown on every fresh install — we uninstall
-    //      each run).
-    //   -EXDevMenuDisableAutoLaunch YES        → don't auto-present the dev menu
-    //      when the bundle loads.
-    //   -EXDevMenuShowFloatingActionButton NO  → hide the floating gear button
-    //      that otherwise sits in the top-right corner of every screen.
-    // These are read by DevMenuPreferences/DevMenuManager at the highest-priority
-    // arg domain. The app lands on the dev launcher; Maestro's first openLink then
-    // loads the bundle into this same process, where the overrides persist across
-    // the JS reload.
-    console.log(`${LOG} Pre-launching to suppress the dev-client menu + floating button...`);
-    runCapture('xcrun', [
-      'simctl',
-      'launch',
-      device.udid,
-      APP_ID,
-      '-EXDevMenuIsOnboardingFinished',
-      'YES',
-      '-EXDevMenuDisableAutoLaunch',
-      'YES',
-      '-EXDevMenuShowFloatingActionButton',
-      'NO',
-    ]);
+    // Just launch the app — no `simctl openurl`. The screenshots build bakes
+    // DEV_CLIENT_DEFAULT_LAUNCHER_URL=http://localhost:8081 into Info.plist (see
+    // ./plugins/with-screenshot-dev-menu), so the dev-client auto-connects to
+    // Metro on a plain launch and lands on the auth screen — without ever opening
+    // the custom-scheme URL. That matters because a fresh CI sim raises an "Open
+    // in Boardsesh?" confirmation for ANY openurl of the scheme, and Maestro can't
+    // dismiss it reliably (it can queue two, occluding the form). Avoiding openurl
+    // sidesteps the whole class. Dev-menu chrome is suppressed via the same plugin.
+    console.log(`${LOG} Launching the app (auto-loads Metro via DEV_CLIENT_DEFAULT_LAUNCHER_URL)...`);
+    runCapture('xcrun', ['simctl', 'launch', device.udid, APP_ID]);
 
     const flowFile = join(MAESTRO_DIR, `${options.flow}.yaml`);
     if (!existsSync(flowFile)) {

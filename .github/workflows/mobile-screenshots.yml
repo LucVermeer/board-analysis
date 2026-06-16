@@ -137,6 +137,28 @@ jobs:
             --device "${{ inputs.device || 'iPhone 16 Pro Max' }}" \
             --app-path packages/mobile/.app-cache/Boardsesh.app
 
+      # On a capture failure, save Maestro's debug output (the failure screenshot +
+      # view hierarchy) and the simulator's Boardsesh logs, so we can see what was
+      # on screen and whether the dev-client/JS loaded. Best-effort — never fails
+      # the job. The Maestro tests dir is under $HOME (actions/upload-artifact
+      # doesn't expand ~), so copy it into the workspace first.
+      - name: Collect capture debug artifacts
+        if: failure()
+        run: |
+          mkdir -p capture-debug
+          cp -R "$HOME/.maestro/tests" capture-debug/maestro-tests 2>/dev/null || echo "no maestro tests dir"
+          xcrun simctl spawn booted log show --last 10m --predicate 'process == "Boardsesh"' \
+            > capture-debug/device-boardsesh.log 2>&1 || echo "device log capture skipped"
+
+      - name: Upload capture debug artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: capture-debug
+          path: capture-debug/**
+          if-no-files-found: warn
+          retention-days: 14
+
       # Fail loudly if any capture isn't an App Store-accepted size for its slot,
       # so deliver can't get silently rejected by Apple (or route to the wrong
       # slot). Runs on every capture, including nightly — an early warning if a
@@ -180,6 +202,10 @@ jobs:
           APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
           FASTLANE_SKIP_UPDATE_CHECK: '1'
           FASTLANE_DISABLE_ANIMATION: '1'
+          # The Fastfile uses deliver's `sync_screenshots: true`, which is still a
+          # beta feature; without this acknowledgement flag deliver hard-errors
+          # ("Please set a value to FASTLANE_ENABLE_BETA_DELIVER_SYNC_SCREENSHOTS").
+          FASTLANE_ENABLE_BETA_DELIVER_SYNC_SCREENSHOTS: 'true'
         run: |
           set -euo pipefail
           [ -n "$APP_STORE_CONNECT_ISSUER_ID" ] || { echo "::error::Missing APP_STORE_CONNECT_ISSUER_ID."; exit 1; }
