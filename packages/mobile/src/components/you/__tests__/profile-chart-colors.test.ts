@@ -20,6 +20,14 @@ describe('profile chart colors', () => {
     expect(gradeChartColor('V4', 'dark')).not.toContain('0.');
   });
 
+  it('resolves combined grade labels to grade chart colors', () => {
+    expect(gradeChartColor('V8 / 7B', 'light')).toMatch(/^hsl\(/);
+    expect(gradeChartColor('V3+ / 6A+', 'dark')).toMatch(/^hsl\(/);
+    expect(gradeChartColor('6A+', 'light')).toMatch(/^hsl\(/);
+    expect(gradeChartColor('not-a-grade', 'light')).toBe('#5F5868');
+    expect(gradeChartColor('not-a-grade', 'dark')).toBe('#B8B2C4');
+  });
+
   it('uses scheme-aware categorical layout colors', () => {
     expect(layoutChartColor('kilter-1', 'light')).toBe('#007C92');
     expect(layoutChartColor('kilter-1', 'dark')).toBe('#22D3EE');

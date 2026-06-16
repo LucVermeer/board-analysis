@@ -1,9 +1,4 @@
-import {
-  V_GRADE_COLORS,
-  FONT_GRADE_COLORS,
-  getGradeColor,
-  DEFAULT_GRADE_COLOR,
-} from '@boardsesh/board-constants/grade-colors';
+import { getGradeColor, DEFAULT_GRADE_COLOR } from '@boardsesh/board-constants/grade-colors';
 import type { RawBar, RawBarSegment } from '@boardsesh/profile-stats';
 import type { SessionGradeDistributionItem } from '@boardsesh/shared-schema';
 import { brandColors, brandColorsDark, withAlpha } from '../../theme/colors';
@@ -75,11 +70,11 @@ export function layoutChartColor(layoutKey: string, colorScheme: ColorSchemeName
 /**
  * Softened grade color for chart bars — preserves hue but lowers saturation
  * and raises lightness for a cohesive, muted look. Mirrors web's
- * `getGradeChartColor`. `gradeKey` is a grade label (e.g. "V6" or "6A").
+ * `getGradeChartColor`. `gradeKey` is a grade label (e.g. "V6", "6A",
+ * or "V6 / 7A").
  */
 export function gradeChartColor(gradeKey: string, colorScheme: ColorSchemeName = 'light'): string {
-  const normalized = gradeKey.replace(/\+$/, '');
-  const hexColor = V_GRADE_COLORS[normalized] ?? FONT_GRADE_COLORS[gradeKey.toLowerCase()];
+  const hexColor = getGradeColor(gradeKey);
   if (!hexColor) return colorScheme === 'dark' ? '#B8B2C4' : '#5F5868';
 
   const hex = hexColor.replace('#', '');
