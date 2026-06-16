@@ -3,6 +3,8 @@ import type { ExpoConfig, ConfigContext } from 'expo/config';
 
 const DEFAULT_EAS_PROJECT_ID = '87499648-655e-4fb8-9856-65da37e55fb1';
 const EAS_PROJECT_ID = process.env.EXPO_PUBLIC_EAS_PROJECT_ID ?? DEFAULT_EAS_PROJECT_ID;
+const IOS_APP_STORE_URL = 'https://apps.apple.com/app/boardsesh/id6761350784';
+const ANDROID_PLAY_STORE_URL = 'https://play.google.com/store/apps/details?id=com.boardsesh.app';
 const HEALTH_UPDATE_USAGE_DESCRIPTION = 'Boardsesh saves your finished climbing sessions to Apple Health as workouts.';
 const HEALTH_SHARE_USAGE_DESCRIPTION =
   'Boardsesh reads your body weight to estimate calories and your saved Boardsesh workouts to prevent duplicates.';
@@ -133,6 +135,7 @@ export default ({ config }: ConfigContext): ExpoConfig & { newArchEnabled?: bool
       : {}),
     ios: {
       bundleIdentifier: 'com.boardsesh.app',
+      appStoreUrl: IOS_APP_STORE_URL,
       // Required by @bacons/apple-targets to assign the widget extension
       // target's DEVELOPMENT_TEAM build setting. Matches the existing main
       // target value baked into Boardsesh.xcodeproj/project.pbxproj.
@@ -185,6 +188,7 @@ export default ({ config }: ConfigContext): ExpoConfig & { newArchEnabled?: bool
     },
     android: {
       package: 'com.boardsesh.app',
+      playStoreUrl: ANDROID_PLAY_STORE_URL,
       // App Links for the multiplayer join flow:
       // https://www.boardsesh.com/join/{sessionId} (and the apex domain).
       // autoVerify lets Android open the link directly in the app once the
