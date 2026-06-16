@@ -11,6 +11,11 @@ export type AppMenuAction = {
   /** Marks the active row (a checkmark on Material / native iOS, a ✓-prefix on Android glass). */
   selected?: boolean;
   destructive?: boolean;
+  /**
+   * SF Symbol name for the native iOS dropdown (Liquid Glass) — e.g. `person.2.fill`.
+   * Glass-only: Paper's Material menu doesn't render SF Symbols, so it's ignored there.
+   */
+  systemIcon?: string;
 };
 
 export type AppMenuProps = {
@@ -46,6 +51,8 @@ function AppMenuGlass({
     title: Platform.OS === 'ios' ? action.label : action.selected ? `✓  ${action.label}` : action.label,
     selected: action.selected,
     destructive: action.destructive,
+    // SF Symbol shown by the native iOS dropdown (forwarded so it isn't dropped).
+    systemIcon: action.systemIcon,
   }));
   return (
     <ContextMenu
@@ -90,7 +97,9 @@ function AppMenuMaterial({
     >
       {actions.map((action, index) => (
         <Menu.Item
-          key={action.label}
+          // Composite key: scope entries can share a display name (two gyms named the
+          // same), so the label alone isn't unique — pair it with the position.
+          key={`${index}-${action.label}`}
           title={action.label}
           leadingIcon={action.selected ? 'check' : undefined}
           titleStyle={action.destructive ? { color: m3.error } : undefined}

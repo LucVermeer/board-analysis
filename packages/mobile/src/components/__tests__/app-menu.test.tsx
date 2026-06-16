@@ -51,7 +51,10 @@ vi.mock('../../providers/theme-provider', () => ({
 
 import { AppMenu, type AppMenuAction } from '../AppMenu';
 
-const ACTIONS: AppMenuAction[] = [{ label: 'My crew', selected: true }, { label: 'Everyone' }];
+const ACTIONS: AppMenuAction[] = [
+  { label: 'My crew', selected: true, systemIcon: 'person.2.fill' },
+  { label: 'Everyone' },
+];
 
 function renderMenu(onSelectIndex = vi.fn()) {
   const utils = render(
@@ -93,6 +96,8 @@ describe('AppMenu — Liquid Glass (native dropdown)', () => {
     renderMenu();
     expect(cm.actions?.map((a) => a.title)).toEqual(['My crew', 'Everyone']);
     expect(cm.actions?.[0].selected).toBe(true);
+    // SF Symbol forwarded to the native dropdown (regression guard).
+    expect(cm.actions?.[0].systemIcon).toBe('person.2.fill');
   });
 
   it('prefixes the selected row with a checkmark on Android (no native marker there)', () => {

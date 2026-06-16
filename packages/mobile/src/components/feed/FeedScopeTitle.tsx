@@ -5,7 +5,6 @@
 // chrome rather than a large in-body title.
 
 import { StyleSheet, View } from 'react-native';
-import type { ContextMenuAction } from 'react-native-context-menu-view';
 import { Text } from '../Text';
 import { Icon } from '../Icon';
 import { GlassSurface } from '../GlassSurface';
@@ -22,7 +21,7 @@ type FeedScopeTitleProps = {
   /** The active scope, shown in the pill. */
   title: string;
   /** Menu items, in render order; `onSelectIndex` is called with the tapped index. */
-  actions: ContextMenuAction[];
+  actions: AppMenuAction[];
   onSelectIndex: (index: number) => void;
   /** VoiceOver hint — the pill is a menu, so cue what activating it does. */
   accessibilityHint?: string;
@@ -32,15 +31,10 @@ export function FeedScopeTitle({ title, actions, onSelectIndex, accessibilityHin
   const { systemColors } = useTheme();
   const nativeGlass = useNativeGlass();
   // `AppMenu` owns the per-variant menu (Paper menu vs native dropdown) and the
-  // selected-row marker, so here we just map to its neutral action shape.
-  const menuActions: AppMenuAction[] = actions.map((action) => ({
-    label: action.title,
-    selected: action.selected,
-    destructive: action.destructive,
-  }));
+  // selected-row marker; the actions are already in its neutral shape.
   return (
     <AppMenu
-      actions={menuActions}
+      actions={actions}
       onSelectIndex={onSelectIndex}
       accessibilityLabel={title}
       accessibilityHint={accessibilityHint}

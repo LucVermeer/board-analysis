@@ -2,12 +2,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render } from '@testing-library/react';
 import { createElement, type ReactNode } from 'react';
-import type { ContextMenuAction } from 'react-native-context-menu-view';
 import type { AppMenuAction } from '../../AppMenu';
 
 // Capture the props FeedScopeTitle hands to AppMenu — the per-variant menu and the
 // selected-row marker are AppMenu's job (covered by app-menu.test.tsx); here we
-// only verify FeedScopeTitle maps its ContextMenu-shaped actions onto AppMenu's.
+// only verify FeedScopeTitle forwards its actions + labels the menu.
 const capture = vi.hoisted(() => ({
   actions: undefined as AppMenuAction[] | undefined,
   onSelectIndex: undefined as ((index: number) => void) | undefined,
@@ -54,9 +53,9 @@ vi.mock('../../../theme/layout', () => ({ glassSize: { capsule: 44 } }));
 
 import { FeedScopeTitle } from '../FeedScopeTitle';
 
-const ACTIONS: ContextMenuAction[] = [
-  { title: 'My crew', selected: true },
-  { title: 'Everyone', selected: false },
+const ACTIONS: AppMenuAction[] = [
+  { label: 'My crew', selected: true, systemIcon: 'person.2.fill' },
+  { label: 'Everyone', selected: false },
 ];
 
 beforeEach(() => {
@@ -66,12 +65,10 @@ beforeEach(() => {
 });
 
 describe('FeedScopeTitle', () => {
-  it('maps its ContextMenu-shaped actions onto AppMenu actions (title → label, selected kept)', () => {
+  it('forwards its actions to AppMenu unchanged (incl. the Glass-only systemIcon)', () => {
     render(createElement(FeedScopeTitle, { title: 'My crew', actions: ACTIONS, onSelectIndex: () => {} }));
-    expect(capture.actions).toEqual([
-      { label: 'My crew', selected: true, destructive: undefined },
-      { label: 'Everyone', selected: false, destructive: undefined },
-    ]);
+    expect(capture.actions).toBe(ACTIONS);
+    expect(capture.actions?.[0].systemIcon).toBe('person.2.fill');
   });
 
   it('labels the menu with the active scope and forwards onSelectIndex', () => {
