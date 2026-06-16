@@ -31,7 +31,7 @@ import {
   type Radii,
   type SheetChrome,
 } from '../theme/tokens';
-import { springs, timing } from '../theme/animations';
+import { springs, timing, motionByVariant, type Motion } from '../theme/animations';
 import { resolveUiVariant, type UiVariant } from '../theme/resolve-ui-variant';
 import {
   resolveActionColors,
@@ -96,6 +96,12 @@ type Theme = {
   opacity: typeof opacity;
   springs: typeof springs;
   timing: typeof timing;
+  /**
+   * Variant-aware `withTiming` motion (`standard` / `emphasized`): M3 easing curves +
+   * standard durations on Material, the prior durations (default ease) on Liquid
+   * Glass. Pure data — build the reanimated config with `timingFor` (theme/motion-config).
+   */
+  motion: Motion;
   themeOverride: ThemeOverride;
   setThemeOverride: (next: ThemeOverride) => Promise<void>;
   /** Resolved visual variant the app renders in ('auto' already resolved). */
@@ -333,6 +339,7 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
       opacity,
       springs,
       timing,
+      motion: motionByVariant[variant],
       themeOverride,
       setThemeOverride,
       variant,

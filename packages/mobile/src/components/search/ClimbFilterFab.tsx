@@ -4,7 +4,8 @@ import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-na
 import type { Grade } from '@boardsesh/shared-schema';
 import type { GradeBound } from '@boardsesh/climb-filters';
 import { spacing } from '../../theme/tokens';
-import { timing } from '../../theme/animations';
+import { timingFor } from '../../theme/motion-config';
+import { useTheme } from '../../providers/theme-provider';
 import { FILTER_FAB_SIZE, FilterButton } from './FilterButton';
 import { GradeRangeRail } from '../grade';
 
@@ -31,11 +32,14 @@ export function ClimbFilterFab({
   onCloseGrade,
   onGradeChange,
 }: ClimbFilterFabProps) {
+  const { motion } = useTheme();
   const animatedBottom = useSharedValue(bottom);
 
   useEffect(() => {
-    animatedBottom.value = withTiming(bottom, { duration: timing.normal });
-  }, [animatedBottom, bottom]);
+    // The FAB slot slides when the grade rail opens/closes — a layout move, so
+    // emphasized motion (M3 easing + 350ms on Material; the prior 250ms on glass).
+    animatedBottom.value = withTiming(bottom, timingFor(motion.emphasized));
+  }, [animatedBottom, bottom, motion]);
 
   const fabSlotStyle = useAnimatedStyle(() => ({ bottom: animatedBottom.value }));
   const gradeRailSlotStyle = useAnimatedStyle(() => ({
