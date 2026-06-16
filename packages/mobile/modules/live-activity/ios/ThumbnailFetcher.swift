@@ -196,7 +196,7 @@ actor ThumbnailFetcher {
     }
 
     /// Draws the holds overlay on top of the staged board-background layer(s),
-    /// returning encoded image data. Returns `nil` when there's no usable
+    /// returning encoded PNG data. Returns `nil` when there's no usable
     /// background (so the caller keeps the raw overlay) — never throws.
     ///
     /// Both background and overlay fill the same frame at the overlay's pixel
@@ -205,12 +205,13 @@ actor ThumbnailFetcher {
     /// rect keeps the climb circles aligned over the holds. `scale = 1` keeps
     /// the canvas at the overlay's native pixel size (no 2x/3x upscaling).
     ///
-    /// Encoded as JPEG: the bottom background layer is a full-frame opaque board
-    /// photo, so the composite is opaque photo content where PNG would be 2–5×
-    /// larger — a meaningful difference for a 10-entry App Group thumbnail cache.
-    /// `opaque = true` drops the unused alpha channel to match. The raw overlay
-    /// (the no-background fallback in `_fetchAndSave`) stays PNG so its
-    /// transparency survives. PNG is kept only as an encode-failure fallback.
+    /// PNG, with a non-opaque context, is required — NOT JPEG. The bundled board
+    /// art is a per-set hold render on transparency (measured 74–90% fully
+    /// transparent pixels), not an opaque board photo, and the server overlay is
+    /// likewise transparent. The composite must keep its alpha so the widget's
+    /// dark `activityBackgroundTint` shows through; flattening to JPEG would turn
+    /// the transparent board into a solid black block. PNG also compresses these
+    /// sparse renders well, and the cache is bounded to `maxCachedThumbnails`.
     private func compositeWithBoardBackground(overlayData: Data) -> Data? {
         let paths = stagedBackgroundPaths()
         guard !paths.isEmpty, let overlay = UIImage(data: overlayData) else { return nil }
@@ -223,7 +224,7 @@ actor ThumbnailFetcher {
 
         let format = UIGraphicsImageRendererFormat()
         format.scale = 1
-        format.opaque = true
+        format.opaque = false
 
         let renderer = UIGraphicsImageRenderer(size: size, format: format)
         let composed = renderer.image { _ in
@@ -233,6 +234,6 @@ actor ThumbnailFetcher {
             }
             overlay.draw(in: rect)
         }
-        return composed.jpegData(compressionQuality: 0.85) ?? composed.pngData()
+        return composed.pngData()
     }
 }
