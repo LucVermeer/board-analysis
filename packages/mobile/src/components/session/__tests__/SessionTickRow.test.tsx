@@ -124,9 +124,7 @@ describe('SessionTickRow — primarySubtitleOverride', () => {
         onPress: () => {},
       }),
     );
-    expect(mockClimbListItemContent).toHaveBeenCalledWith(
-      expect.objectContaining({ primarySubtitleOverride: null }),
-    );
+    expect(mockClimbListItemContent).toHaveBeenCalledWith(expect.objectContaining({ primarySubtitleOverride: null }));
   });
 
   it('passes the participant display name in a multi-user session', () => {
@@ -138,9 +136,7 @@ describe('SessionTickRow — primarySubtitleOverride', () => {
         onPress: () => {},
       }),
     );
-    expect(mockClimbListItemContent).toHaveBeenCalledWith(
-      expect.objectContaining({ primarySubtitleOverride: 'Cata' }),
-    );
+    expect(mockClimbListItemContent).toHaveBeenCalledWith(expect.objectContaining({ primarySubtitleOverride: 'Cata' }));
   });
 
   it('falls back to undefined (computed subtitle) in multi-user when participant is absent', () => {
