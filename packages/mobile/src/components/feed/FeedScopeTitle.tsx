@@ -1,17 +1,15 @@
 // The Home feed's scope control: a glass header pill showing the active scope
 // ("My crew" / a gym name / "Everyone") with a down-caret. Tapping it opens a
-// native iOS menu (UIMenu via react-native-context-menu-view's dropdown mode) to
-// switch scope / pick a gym — a HIG title-menu button in the floating chrome
-// rather than a large in-body title.
+// dropdown menu (a Material 3 Paper menu on Material, the native iOS UIMenu on
+// Liquid Glass) to switch scope / pick a gym — a title-menu button in the floating
+// chrome rather than a large in-body title.
 
-import { Platform, StyleSheet, View, type NativeSyntheticEvent } from 'react-native';
-import ContextMenu, {
-  type ContextMenuAction,
-  type ContextMenuOnPressNativeEvent,
-} from 'react-native-context-menu-view';
+import { StyleSheet, View } from 'react-native';
+import type { ContextMenuAction } from 'react-native-context-menu-view';
 import { Text } from '../Text';
 import { Icon } from '../Icon';
 import { GlassSurface } from '../GlassSurface';
+import { AppMenu, type AppMenuAction } from '../AppMenu';
 import { useNativeGlass } from '../../hooks/use-native-glass';
 import { spacing, shadows } from '../../theme/tokens';
 import { glassSize } from '../../theme/layout';
@@ -33,25 +31,22 @@ type FeedScopeTitleProps = {
 export function FeedScopeTitle({ title, actions, onSelectIndex, accessibilityHint }: FeedScopeTitleProps) {
   const { systemColors } = useTheme();
   const nativeGlass = useNativeGlass();
-  // `selected` (the checkmark) and `systemIcon` only render on iOS; on Android
-  // the menu is title-only, so the active scope would have no marker. Prefix the
-  // selected action's title with a checkmark glyph instead. The array order is
-  // untouched, so `onSelectIndex` still maps each item back to its source index.
-  const menuActions =
-    Platform.OS === 'ios'
-      ? actions
-      : actions.map((action) => (action.selected ? { ...action, title: `✓  ${action.title}` } : action));
+  // `AppMenu` owns the per-variant menu (Paper menu vs native dropdown) and the
+  // selected-row marker, so here we just map to its neutral action shape.
+  const menuActions: AppMenuAction[] = actions.map((action) => ({
+    label: action.title,
+    selected: action.selected,
+    destructive: action.destructive,
+  }));
   return (
-    <ContextMenu
-      dropdownMenuMode
+    <AppMenu
       actions={menuActions}
-      onPress={(event: NativeSyntheticEvent<ContextMenuOnPressNativeEvent>) => onSelectIndex(event.nativeEvent.index)}
+      onSelectIndex={onSelectIndex}
+      accessibilityLabel={title}
+      accessibilityHint={accessibilityHint}
       style={styles.menu}
     >
       <View
-        accessibilityRole="button"
-        accessibilityLabel={title}
-        accessibilityHint={accessibilityHint}
         style={[
           styles.pill,
           !nativeGlass && shadows.sm,
@@ -74,7 +69,7 @@ export function FeedScopeTitle({ title, actions, onSelectIndex, accessibilityHin
         </Text>
         <Icon name="chevron.down" size={18} color={systemColors.secondaryLabel} />
       </View>
-    </ContextMenu>
+    </AppMenu>
   );
 }
 
