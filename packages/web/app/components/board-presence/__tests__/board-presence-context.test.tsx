@@ -104,9 +104,8 @@ describe('WebBoardPresenceProvider', () => {
     wsClient.lastId = 0;
   });
 
-  it('is always-on: enabled, builds a WS client, null boardId until a board is bound', async () => {
+  it('is always-on: builds a WS client, null boardId until a board is bound', async () => {
     renderProvider();
-    expect(capturedControls?.enabled).toBe(true);
     expect(wsClient.created).toBe(1);
     // No board bound yet, so the shared provider collapses to its empty state.
     expect(sharedProvider.lastBoardId).toBeNull();
@@ -114,7 +113,6 @@ describe('WebBoardPresenceProvider', () => {
 
   it('resolves+binds the board and feeds its id to the shared provider', async () => {
     renderProvider();
-    expect(capturedControls?.enabled).toBe(true);
     expect(wsClient.created).toBe(1);
 
     await act(async () => {
@@ -225,6 +223,36 @@ describe('WebBoardPresenceProvider', () => {
 
     expect(transport.resolveBoardForSerial).toHaveBeenCalledTimes(1);
     expect(transport.resolveBoardForConfig).not.toHaveBeenCalled();
+  });
+
+  it('upgrades the anon config feed to the serial feed on reconnect after login', async () => {
+    // Anon connect binds the config feed (boardId 43).
+    auth.isAuthenticated = false;
+    const rendered = renderProvider();
+    const serialArgs = { serial: 'SERIAL-1', boardType: 'kilter', layoutId: 1, sizeId: 10, setIds: '1,2' };
+    await act(async () => {
+      await capturedControls?.resolveAndBindBoard(serialArgs);
+    });
+    expect(transport.resolveBoardForConfig).toHaveBeenCalledTimes(1);
+    expect(transport.resolveBoardForSerial).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect(sharedProvider.lastBoardId).toBe(43);
+    });
+
+    // The climber logs in and reconnects. A pure auth flip does not re-resolve on
+    // its own (resolveAndBindBoard only runs on a fresh BLE connect), so simulate
+    // the reconnect by re-rendering — picking up the new auth state — and calling
+    // resolveAndBindBoard again for the same serial. resolveKey flips config:→
+    // serial:, so the dedup guard lets the serial resolve through (boardId 42).
+    auth.isAuthenticated = true;
+    rendered.rerender(createElement(WebBoardPresenceProvider, null, createElement(Probe)));
+    await act(async () => {
+      await capturedControls?.resolveAndBindBoard(serialArgs);
+    });
+    expect(transport.resolveBoardForSerial).toHaveBeenCalledTimes(1);
+    await waitFor(() => {
+      expect(sharedProvider.lastBoardId).toBe(42);
+    });
   });
 
   it('replaces the injected presence client when the auth token rebuilds the websocket', async () => {

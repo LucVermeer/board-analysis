@@ -28,7 +28,7 @@ import { BOARD_PRESENCE_SWITCH_BOARD_EVENT } from './board-presence-events';
 
 export function BoardPresencePanel() {
   const { t } = useTranslation('session');
-  const { enabled, boardId } = useBoardPresenceControls();
+  const { boardId } = useBoardPresenceControls();
   const { boardDetails, angle } = useQueueBridgeBoardInfo();
   const { currentClimb } = useBoardPresenceCurrent();
   const { history } = useBoardPresenceFeed();
@@ -69,9 +69,8 @@ export function BoardPresencePanel() {
   }, [open, history.length, boardId]);
 
   // No board bound: render nothing. The shared wall context is inert in this
-  // state, so there's nothing meaningful to show anyway. (`enabled` is always
-  // true now that board presence is GA, but the guard is cheap to keep.)
-  if (!enabled || boardId === null) return null;
+  // state, so there's nothing meaningful to show anyway.
+  if (boardId === null) return null;
 
   return (
     <>

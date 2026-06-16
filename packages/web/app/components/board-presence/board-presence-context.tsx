@@ -59,8 +59,6 @@ export type ResolveBoardArgs = {
 };
 
 type BoardPresenceControlsValue = {
-  /** Always true — board presence is on for everyone. Wall surfaces still read this. */
-  enabled: boolean;
   /** The board currently bound to the connected serial, or null when none. */
   boardId: number | null;
   /**
@@ -80,8 +78,6 @@ type BoardPresenceControlsValue = {
 const BoardPresenceControlsContext = createContext<BoardPresenceControlsValue | null>(null);
 
 export function WebBoardPresenceProvider({ children }: { children: ReactNode }) {
-  // Board presence is always-on (no feature flag).
-  const enabled = true;
   const { token, isAuthenticated } = useWsAuthToken();
   const [boardId, setBoardId] = useState<number | null>(null);
 
@@ -148,6 +144,13 @@ export function WebBoardPresenceProvider({ children }: { children: ReactNode }) 
     // per-config shared feed (`resolveBoardForConfig` is anonymous-allowed), so
     // they still see the wall instead of firing a guaranteed-failing mutation —
     // and the matching `console.warn` — on every BLE connect.
+    //
+    // This only re-evaluates on a fresh BLE connect (the bluetooth provider's
+    // onConnectSuccess is the sole caller). Logging in mid-connection does NOT
+    // re-resolve on its own — an anon climber who binds the config feed then
+    // signs in keeps that feed until the next connect. The next connect upgrades
+    // them: `resolveKey` flips from `config:…` to `serial:…`, so the dedup guard
+    // below lets the serial resolve through rather than treating it as unchanged.
     const useSerial = isAuthenticatedRef.current && !!args.serial && args.serial.length > 0;
     const resolveKey = useSerial
       ? `serial:${args.serial}`
@@ -187,8 +190,8 @@ export function WebBoardPresenceProvider({ children }: { children: ReactNode }) 
   }, []);
 
   const controls = useMemo<BoardPresenceControlsValue>(
-    () => ({ enabled, boardId, resolveAndBindBoard, reportDisconnect }),
-    [enabled, boardId, resolveAndBindBoard, reportDisconnect],
+    () => ({ boardId, resolveAndBindBoard, reportDisconnect }),
+    [boardId, resolveAndBindBoard, reportDisconnect],
   );
 
   return (
@@ -237,7 +240,6 @@ export function useBoardPresenceControls(): BoardPresenceControlsValue {
 }
 
 const DISABLED_CONTROLS: BoardPresenceControlsValue = {
-  enabled: false,
   boardId: null,
   resolveAndBindBoard: async () => null,
   reportDisconnect: async () => false,

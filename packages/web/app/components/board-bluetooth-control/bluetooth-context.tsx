@@ -370,10 +370,8 @@ export function BluetoothProvider({
   // Board presence ("now on the wall"). Inert until a board is bound: `boardId`
   // is null, `resolveAndBindBoard` no-ops while no presence client exists, and
   // the safe wall-report no-ops for a null board — so the BLE flow below behaves
-  // exactly as today until a serial resolves. (`enabled` is always true now that
-  // board presence is GA.)
+  // exactly as today until a serial resolves.
   const {
-    enabled: presenceEnabled,
     boardId: presenceBoardId,
     resolveAndBindBoard,
     reportDisconnect: reportBoardDisconnect,
@@ -381,8 +379,6 @@ export function BluetoothProvider({
   const { currentClimb: currentWallClimb, reportClimb: reportWallClimb } = useOptionalWallReport();
   // Live refs so the connect / wall-confirm callbacks stay identity-stable while
   // still reading the latest board / report fn.
-  const presenceEnabledRef = useRef(presenceEnabled);
-  presenceEnabledRef.current = presenceEnabled;
   const presenceBoardIdRef = useRef(presenceBoardId);
   presenceBoardIdRef.current = presenceBoardId;
   const resolveAndBindBoardRef = useRef(resolveAndBindBoard);
@@ -442,7 +438,7 @@ export function BluetoothProvider({
       // Resolve+bind the shared board for this serial so the wall feed
       // subscribes. Runs even in solo (the feed is not session-gated). Coexists
       // with the session board-serial write below.
-      if (presenceEnabledRef.current && boardDetails) {
+      if (boardDetails) {
         void resolveAndBindBoardRef
           .current({
             serial,
@@ -525,7 +521,7 @@ export function BluetoothProvider({
   const restoreWallClimb = useCallback(
     async (previousClimb: BoardPresenceClimb | null) => {
       resetReportDedup();
-      if (!previousClimb || !presenceEnabledRef.current || presenceBoardIdRef.current === null || !boardDetails) {
+      if (!previousClimb || presenceBoardIdRef.current === null || !boardDetails) {
         return;
       }
       try {
@@ -560,7 +556,7 @@ export function BluetoothProvider({
       }
       // Report to the board-presence channel regardless of session, only on a
       // real change to the wall (skip a deduped re-broadcast of the same climb).
-      if (!presenceEnabledRef.current || presenceBoardIdRef.current === null) return;
+      if (presenceBoardIdRef.current === null) return;
       if (
         lastAcceptedReportSignatureRef.current === sendSignature ||
         pendingReportSignatureRef.current === sendSignature
