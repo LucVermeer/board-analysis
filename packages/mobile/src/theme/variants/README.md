@@ -63,6 +63,26 @@ sites the type system can't reach: `resolveSystemColors` and `useEffectiveSurfac
 (guarded by `assertNever`), `theme.m3` (a Paper palette only meaningful on Material), and
 axis-D `Platform.OS` sites.
 
+## Navigation headers
+
+`useStackScreenOptions()` (`src/hooks/`) is the single source of truth for the **native stack
+header** on pushed/secondary screens: a transparent blur header on Liquid Glass (iOS), an opaque
+Material 3 small app bar on Material (solid surface, `onSurface` tint, flat at rest, no blur). Spread
+it as a stack's `screenOptions` in a `_layout`, or into a per-screen `<Stack.Screen options>`.
+
+- **Header XOR in-body `Appbar`.** A screen renders **either** the native stack header **or** its own
+  in-body top chrome (a Material `Appbar` / glass collapsing header) — never both. The five main tab
+  indexes (`climbs`/`discover`/`profile`/`record`/`home`) set `headerShown:false` and own their
+  chrome; everything pushed on top uses the native header via the hook. Don't render a body `Appbar`
+  under a shown native header.
+- **Deviation — no on-scroll tint.** A real M3 app bar shifts `surface → surfaceContainer` (level 2)
+  as content scrolls under it. Native-stack can't drive `headerStyle` from a scroll position, so the
+  Material header stays flat at the `surface` tone. Revisit with a scroll-driven `headerStyle` if the
+  flat look reads wrong.
+- **Genuinely-per-screen header intents stay local** (not in the hook): `climbs/index`'s
+  `headerBlurEffect:'none'` is the iOS-26 Liquid-Glass native-search header (Material hides it), and
+  `discover/all`'s `headerTransparent:false` is an intentional opaque list header on both variants.
+
 ## Scope
 
 Variant is **mobile-only** — no `packages/shared/*-react` package and nothing on web reads

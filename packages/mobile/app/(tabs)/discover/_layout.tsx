@@ -1,12 +1,13 @@
 import { Stack } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { glassStackScreenOptions } from '../../../src/theme/navigation';
+import { useStackScreenOptions } from '../../../src/hooks/use-stack-screen-options';
 
 export default function DiscoverLayout() {
   const { t } = useTranslation('playlists');
+  const screenOptions = useStackScreenOptions();
 
   return (
-    <Stack screenOptions={glassStackScreenOptions}>
+    <Stack screenOptions={screenOptions}>
       <Stack.Screen
         name="index"
         options={{

@@ -1,13 +1,14 @@
 import { Stack } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { glassStackScreenOptions } from '../../../src/theme/navigation';
+import { useStackScreenOptions } from '../../../src/hooks/use-stack-screen-options';
 
 export default function ProfileLayout() {
   const { t } = useTranslation('common');
   const { t: tSettings } = useTranslation('settings');
+  const screenOptions = useStackScreenOptions();
 
   return (
-    <Stack screenOptions={glassStackScreenOptions}>
+    <Stack screenOptions={screenOptions}>
       {/* The You screen owns its top via the floating ProfileTopChrome (large
           title collapsing into a glass capsule), like the Discover/Climbs tabs —
           so the stack header is hidden here. */}
