@@ -192,6 +192,8 @@ export const GET_SESSION_DETAIL = gql`
           isListed
           createdAt
           tickUuid
+          # boardId is kept for BetaLinksGqlRow type parity and flows through
+          # dedupeBetaLinks — it is not displayed by the session-detail carousel.
           boardId
         }
       }

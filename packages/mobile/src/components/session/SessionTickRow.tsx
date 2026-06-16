@@ -5,7 +5,7 @@ import type { SessionDetailTick, SessionFeedParticipant } from '@boardsesh/share
 import { getGradeTextColor } from '@boardsesh/play-view';
 import { Text } from '../Text';
 import { Icon } from '../Icon';
-import { type IconName } from '../icon-map';
+import type { IconName } from '../icon-map';
 import { ListRow } from '../ListRow';
 import { PressableAvatar } from '../PressableAvatar';
 import { PressableSurface } from '../PressableSurface';
@@ -97,8 +97,9 @@ export const SessionTickRow = memo(function SessionTickRow({
   // explicitly labelled, so it's never misread as the person who sent the climb.
   const setterText = tick.setterUsername ? t('detail.setBy', { username: tick.setterUsername }) : null;
   const detailParts = [attemptText, tick.comment ?? null, setterText].filter((part): part is string => !!part);
-  // Multi-user "who" is carried by the leading avatar + the climbers leaderboard,
-  // so the row subtitle stays attempt/comment/setter (no redundant name line).
+  // fallbackSubtitle is used only by the ListRow path (climb/boardConfig missing).
+  // In the ClimbListItemContent path, participant name is surfaced via
+  // primarySubtitleOverride and attempt/comment/setter via subtitleDetailParts.
   const fallbackSubtitle = detailParts.join(' · ') || undefined;
 
   const handlePress = useCallback(() => {
@@ -145,6 +146,7 @@ export const SessionTickRow = memo(function SessionTickRow({
             angle={tick.angle}
             subtitleDetailParts={detailParts}
             showAscentStatus={false}
+            primarySubtitleOverride={isMultiUser ? (participant?.displayName ?? null) : null}
           />
         </PressableSurface>
         <View style={[styles.separator, { backgroundColor: systemColors.separator }]} />

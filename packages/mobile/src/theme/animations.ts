@@ -41,8 +41,8 @@ export const timing = {
   slow: 350,
 } as const;
 
-export type SpringPreset = keyof typeof springs;
-export type TimingPreset = keyof typeof timing;
+export type SpringPreset = 'snappy' | 'interactive' | 'gentle' | 'bouncy';
+export type TimingPreset = 'instant' | 'fast' | 'normal' | 'slow';
 
 // Material 3 easing curves as raw cubic-bezier control points — NOT
 // `Easing.bezier(...)`, so this module stays reanimated-free and safe to import from
