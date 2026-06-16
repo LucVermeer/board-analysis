@@ -102,6 +102,8 @@ packages/mobile/modules/**/android/.cxx/
 packages/mobile/modules/**/android/build/
 packages/mobile/dist/
 packages/mobile/.bundle-check-output/
+# Prebuilt simulator dev-client .app for the screenshots pipeline (CI-cached).
+packages/mobile/.app-cache/
 .claude/worktrees/
 
 # Local analysis workspace (out-of-tree artifacts, not source)

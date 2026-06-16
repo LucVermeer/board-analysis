@@ -239,6 +239,13 @@ Full rationale + repo examples: `docs/react-native-performance.md`.
 
 Use `vp run mobile:ios` for local `packages/mobile` iOS builds instead of raw `expo run:ios`. The wrapper points generated `packages/mobile/ios/build` at a shared cache under `~/Library/Caches/boardsesh/xcode/packages-mobile-ios/build`, so separate git worktrees reuse the same Xcode build products. Override with `BOARDSESH_IOS_BUILD_CACHE_DIR=/path/to/cache` only when deliberately isolating a cache. Do not pass `--no-build-cache`; it clears iOS derived data and defeats the shared-cache workflow.
 
+### App Store screenshots (cached dev-client + Metro)
+
+`vp run mobile:screenshots` (`scripts/mobile-screenshots.ts`) drives Maestro over an iOS simulator. The app it installs is a Debug **dev-client** that loads its JS from **Metro** at runtime — the screenshot behaviour (`EXPO_PUBLIC_SCREENSHOT_MODE`, theme, workout) is baked into the Metro JS bundle, **not** the native binary. So the native `.app` is reusable: only the JS regenerates per run.
+
+- Pass `--app-path <Boardsesh.app>` to install a prebuilt/cached app (CI's common path). Without it, the script builds one via `vp run mobile:build-sim-app` (`scripts/mobile-build-sim-app.ts` → `expo prebuild` + `pod install` + `xcodebuild build -sdk iphonesimulator -configuration Debug`; **not** `expo run:ios`, whose launch step hangs in CI). Use `--clean` for a deterministic from-scratch build.
+- `.github/workflows/mobile-screenshots.yml` caches the `.app` (`actions/cache`) keyed on **native inputs only**: `packages/mobile/app.config.ts`, `plugins/**`, `modules/**`, `package.json`, `patches/**`, and the root `package.json` (which pins `@expo/cli` / `react-native-screens`), plus `runner.os`/`runner.arch`. JS/TS-only and web-only changes (including `bun.lock` churn) are a cache hit and skip the ~30-min native build; any native-input change busts the key and rebuilds. Bump the `-v1-` salt to force a rebuild. A native-dep change must invalidate the key — when adding native config, confirm it's covered by one of those globs.
+
 ### OTA preview distribution (EAS Update)
 
 Multiple worktrees can publish independent previews. Testers install the "preview" build once and receive JS-only OTA updates.

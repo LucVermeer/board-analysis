@@ -14,24 +14,32 @@ name: app-store screenshots
 #   board view  = '50%,26%' (first climb row in the list)
 #
 # Other notes:
-# - The orchestrator resets the simulator keychain first, so the app launches
-#   signed out and login authenticates against prod.
-# - clearState wipes the client-side active board (AsyncStorage); it's re-picked
-#   via the board picker below.
-# - The Record/session screen renders the WORKOUT GENERATOR because the build
-#   bakes EXPO_PUBLIC_SCREENSHOT_WORKOUT (default volume) — its shelf is a
+# - The .app is a Debug dev-client that loads its JS from Metro; the first step
+#   opens ${MAESTRO_DEV_CLIENT_URL} (an expo-development-client deep link the
+#   orchestrator passes via `-e`) so it loads the bundle from Metro, not the
+#   launcher.
+# - The orchestrator uninstalled + reinstalled the app (fresh AsyncStorage, so no
+#   stale active board — re-picked via the board picker below) and reset the
+#   simulator keychain, so this cold-loads signed out and login authenticates
+#   against the target backend.
+# - The Record/session screen renders the WORKOUT GENERATOR because Metro bundles
+#   EXPO_PUBLIC_SCREENSHOT_WORKOUT (default volume) — its shelf is a
 #   gesture-handler ScrollView Maestro can't tap, so the selection is pre-seeded.
 # - iOS shows an "Open in 'Boardsesh'?" confirmation for simctl deep links; each
 #   openLink is followed by an optional tapOn "Open".
 # - Board-independent captures (home/discover/profile) run first so a board-pick
 #   miss can't lose them.
-- launchApp:
-    clearState: true
-- runFlow:
-    when:
-      visible:
-        id: 'auth-email-input'
-    file: login.yaml
+- openLink: ${MAESTRO_DEV_CLIENT_URL}
+- tapOn:
+    text: 'Open'
+    optional: true
+# Cold Metro bundle on the first load can take a while; wait for the signed-out
+# auth screen (the orchestrator guarantees a logged-out start), then log in.
+- extendedWaitUntil:
+    visible:
+      id: 'auth-email-input'
+    timeout: 180000
+- runFlow: login.yaml
 
 # Home — feed populated by the prod test user's follows.
 - waitForAnimationToEnd
@@ -94,10 +102,14 @@ name: app-store screenshots
 - takeScreenshot: 02-board-view
 
 # Board sheet — LAST, because the drawer-host overlays (board sheet, play drawer)
-# persist across deep-link tab switches. Relaunch first (no clearState — keeps the
-# Keychain login + the active board) to clear the play drawer left open by the
-# board-view step, then open Climbs and tap the board-switcher glyph.
-- launchApp
+# persist across deep-link tab switches. Reload the bundle first (a fresh JS
+# runtime; the Keychain login + active board survive it) to clear the play drawer
+# left open by the board-view step, then open Climbs and tap the board-switcher
+# glyph. The bundle is warm by now, so the reload is quick.
+- openLink: ${MAESTRO_DEV_CLIENT_URL}
+- tapOn:
+    text: 'Open'
+    optional: true
 - waitForAnimationToEnd
 - openLink: com.boardsesh.app://climbs
 - tapOn:

@@ -522,6 +522,10 @@ export default defineConfig({
         command: 'tsx scripts/mobile-screenshots.ts',
         cache: false,
       },
+      'mobile:build-sim-app': {
+        command: 'tsx scripts/mobile-build-sim-app.ts',
+        cache: false,
+      },
       'check:screenshot-dimensions': {
         command: 'tsx scripts/assert-screenshot-dimensions.ts',
         cache: false,
