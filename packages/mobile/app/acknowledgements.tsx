@@ -19,6 +19,7 @@ import {
 import { openDiscordInvite } from '../src/lib/discord';
 import { openExternalUrl } from '../src/lib/open-url';
 import { useTheme } from '../src/providers/theme-provider';
+import { useVariantValue } from '../src/theme/variants';
 import { borderRadius, spacing } from '../src/theme/tokens';
 import type { IconName } from '../src/components/icon-map';
 
@@ -109,6 +110,14 @@ export default function AcknowledgementsScreen() {
     router.push('/licenses');
   }, [router]);
 
+  // The transparent, blur-under-content header is an iOS-only feature (headerBlurEffect):
+  // on iOS, Liquid Glass gets it and Material's opaque M3 app bar does not. On Android
+  // — including a forced Liquid Glass user, where there's no glass surface — keep the
+  // header opaque so scroll content doesn't slide under the status bar (dual-axis:
+  // aesthetic AND platform). The hook is called unconditionally; only the value is gated.
+  const prefersGlassHeader = useVariantValue({ liquidGlass: true, material: false });
+  const headerTransparent = Platform.OS === 'ios' && prefersGlassHeader;
+
   return (
     <>
       <Stack.Screen
@@ -116,7 +125,7 @@ export default function AcknowledgementsScreen() {
           title: t('mobile.acknowledgements.title'),
           headerShown: true,
           headerLargeTitle: false,
-          headerTransparent: Platform.OS === 'ios',
+          headerTransparent,
           headerBlurEffect: 'systemMaterial',
           contentStyle: { backgroundColor: 'transparent' },
         }}
@@ -208,11 +217,7 @@ export default function AcknowledgementsScreen() {
               title={t('mobile.acknowledgements.friendsTitle')}
               body={t('mobile.acknowledgements.friendsBody', { names: friendsLine })}
             />
-            <ThanksCard
-              icon="person"
-              title="Alex"
-              body={t('mobile.acknowledgements.alexBody')}
-            />
+            <ThanksCard icon="person" title="Alex" body={t('mobile.acknowledgements.alexBody')} />
             <ThanksCard
               icon="paw"
               title={dogName}

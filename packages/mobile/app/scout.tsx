@@ -6,12 +6,20 @@ import { Text } from '../src/components/Text';
 import { useBottomChromeMetrics } from '../src/hooks/use-bottom-chrome-metrics';
 import { dogName } from '../src/lib/acknowledgements';
 import { useTheme } from '../src/providers/theme-provider';
+import { useVariantValue } from '../src/theme/variants';
 import { borderRadius, spacing } from '../src/theme/tokens';
 
 export default function ScoutScreen() {
   const { t } = useTranslation('common');
   const { systemColors } = useTheme();
   const bottomChrome = useBottomChromeMetrics();
+  // The transparent, blur-under-content header is an iOS-only feature (headerBlurEffect):
+  // on iOS, Liquid Glass gets it and Material's opaque M3 app bar does not. On Android
+  // — including a forced Liquid Glass user, where there's no glass surface — keep the
+  // header opaque so scroll content doesn't slide under the status bar (dual-axis:
+  // aesthetic AND platform). The hook is called unconditionally; only the value is gated.
+  const prefersGlassHeader = useVariantValue({ liquidGlass: true, material: false });
+  const headerTransparent = Platform.OS === 'ios' && prefersGlassHeader;
 
   return (
     <>
@@ -20,7 +28,7 @@ export default function ScoutScreen() {
           title: dogName,
           headerShown: true,
           headerLargeTitle: false,
-          headerTransparent: Platform.OS === 'ios',
+          headerTransparent,
           headerBlurEffect: 'systemMaterial',
           contentStyle: { backgroundColor: 'transparent' },
         }}
