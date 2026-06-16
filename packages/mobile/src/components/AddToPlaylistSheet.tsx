@@ -13,7 +13,7 @@ import { useToast } from '../providers/toast-provider';
 import { usePlaylistsContext, type Playlist } from '../providers/playlists-provider';
 import { useTheme } from '../providers/theme-provider';
 import { iosSystemColors } from '../theme/ios-colors';
-import { spacing } from '../theme/tokens';
+import { borderRadius, spacing } from '../theme/tokens';
 
 type AddToPlaylistSheetProps = {
   visible: boolean;
@@ -152,6 +152,16 @@ function AddToPlaylistSheet({
     onClose();
   }, [onClose]);
 
+  const handleShowCreate = useCallback(() => {
+    setCreateVisible(true);
+  }, []);
+
+  const handleCloseCreate = useCallback(() => {
+    createRequestIdRef.current += 1;
+    setCreateVisible(false);
+    setCreating(false);
+  }, []);
+
   const snapPoints = useMemo(() => ['50%', '90%'], []);
 
   return (
@@ -174,7 +184,7 @@ function AddToPlaylistSheet({
           </Text>
           {climb && isAuthenticated ? (
             <Pressable
-              onPress={() => setCreateVisible(true)}
+              onPress={handleShowCreate}
               accessibilityRole="button"
               accessibilityLabel={t('actions.playlist.popover.createNew')}
               hitSlop={8}
@@ -225,7 +235,7 @@ function AddToPlaylistSheet({
         visible={createVisible}
         submitting={creating}
         onSubmit={handleCreatePlaylist}
-        onClose={() => setCreateVisible(false)}
+        onClose={handleCloseCreate}
       />
     </>
   );
@@ -246,9 +256,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   createButton: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: spacing[8],
+    height: spacing[8],
+    borderRadius: borderRadius.full,
     alignItems: 'center',
     justifyContent: 'center',
   },

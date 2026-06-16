@@ -142,6 +142,17 @@ describe('PlaylistsProvider', () => {
     });
   });
 
+  it('forwards board context when createPlaylist receives one', async () => {
+    const createPlaylist = vi.fn(async (name: string) => mkPlaylist('p-board', name));
+    const boardContext = { boardType: 'kilter' as const, layoutId: 1 };
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <PlaylistsProvider createPlaylist={createPlaylist}>{children}</PlaylistsProvider>
+    );
+    const { result } = renderHook(() => usePlaylistsContext(), { wrapper });
+    await result.current.createPlaylist('Projects', 'Moon projects', '#ff00ff', 'star', boardContext);
+    expect(createPlaylist).toHaveBeenCalledWith('Projects', 'Moon projects', '#ff00ff', 'star', boardContext);
+  });
+
   it('usePlaylistsContext throws when called outside a provider', () => {
     expect(() => renderHook(() => usePlaylistsContext())).toThrow(/must be used within a PlaylistsProvider/);
   });

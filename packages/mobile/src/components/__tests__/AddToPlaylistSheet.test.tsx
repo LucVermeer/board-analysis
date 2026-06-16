@@ -64,7 +64,8 @@ vi.mock('../../theme/ios-colors', () => ({
 }));
 
 vi.mock('../../theme/tokens', () => ({
-  spacing: { 2: 8, 3: 12, 4: 16, 6: 24 },
+  borderRadius: { full: 9999 },
+  spacing: { 2: 8, 3: 12, 4: 16, 6: 24, 8: 32 },
 }));
 
 vi.mock('../ModalSheet', () => ({
@@ -104,26 +105,33 @@ vi.mock('../playlist', () => ({
     visible,
     submitting,
     onSubmit,
+    onClose,
   }: {
     visible: boolean;
     submitting?: boolean;
     onSubmit: (values: { name: string; description?: string; color?: string; icon?: string }) => void;
+    onClose: () => void;
   }) =>
     visible
       ? createElement(
-          'button',
-          {
-            'aria-label': 'submit-created-playlist',
-            'data-submitting': submitting ? 'true' : 'false',
-            onClick: () =>
-              onSubmit({
-                name: 'Projects',
-                description: 'Moon projects',
-                color: '#ff00ff',
-                icon: 'star',
-              }),
-          },
-          'submit create',
+          'div',
+          null,
+          createElement(
+            'button',
+            {
+              'aria-label': 'submit-created-playlist',
+              'data-submitting': submitting ? 'true' : 'false',
+              onClick: () =>
+                onSubmit({
+                  name: 'Projects',
+                  description: 'Moon projects',
+                  color: '#ff00ff',
+                  icon: 'star',
+                }),
+            },
+            'submit create',
+          ),
+          createElement('button', { 'aria-label': 'close-created-playlist-form', onClick: onClose }, 'close create'),
         )
       : null,
 }));
@@ -217,7 +225,7 @@ describe('AddToPlaylistSheet', () => {
     expect(onClose).toHaveBeenCalled();
   });
 
-  it('keeps existing playlist rows adding the climb', async () => {
+  it('adds the current climb to an existing playlist row', async () => {
     playlistContext.playlists = [playlist];
     playlistContext.addToPlaylist.mockResolvedValueOnce(undefined);
     const { getByLabelText, onClose } = renderSheet();
@@ -273,6 +281,37 @@ describe('AddToPlaylistSheet', () => {
     });
     expect(playlistContext.addToPlaylist).not.toHaveBeenCalled();
     expect(onClose).toHaveBeenCalledTimes(1);
+    expect(getByLabelText('submit-created-playlist').getAttribute('data-submitting')).toBe('false');
+  });
+
+  it('resets the create sheet when the create form is closed mid-create', async () => {
+    const created = { ...playlist, uuid: 'p-new', id: 'p-new', name: 'Projects', climbCount: 0 };
+    const createDeferred = deferred<typeof created>();
+    playlistContext.createPlaylist.mockReturnValueOnce(createDeferred.promise);
+    playlistContext.addToPlaylist.mockResolvedValueOnce(undefined);
+    const { getByLabelText, queryByLabelText, onClose } = renderSheet();
+
+    fireEvent.click(getByLabelText('actions.playlist.popover.createNew'));
+    fireEvent.click(getByLabelText('submit-created-playlist'));
+
+    await waitFor(() => {
+      expect(getByLabelText('submit-created-playlist').getAttribute('data-submitting')).toBe('true');
+    });
+
+    fireEvent.click(getByLabelText('close-created-playlist-form'));
+
+    expect(queryByLabelText('submit-created-playlist')).toBeNull();
+    expect(onClose).not.toHaveBeenCalled();
+
+    fireEvent.click(getByLabelText('actions.playlist.popover.createNew'));
+    expect(getByLabelText('submit-created-playlist').getAttribute('data-submitting')).toBe('false');
+
+    await act(async () => {
+      createDeferred.resolve(created);
+      await createDeferred.promise;
+    });
+    expect(playlistContext.addToPlaylist).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
     expect(getByLabelText('submit-created-playlist').getAttribute('data-submitting')).toBe('false');
   });
 
