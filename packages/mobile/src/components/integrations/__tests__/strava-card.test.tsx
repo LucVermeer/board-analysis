@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   autoSyncMutate: vi.fn(),
   disconnectMutate: vi.fn(),
   alert: vi.fn(),
+  confirm: vi.fn((_options: unknown) => Promise.resolve(mocks.confirmResult)),
   confirmResult: true,
   statuses: undefined as IntegrationStatus[] | undefined,
   isLoading: false,
@@ -52,7 +53,7 @@ vi.mock('../../../providers/toast-provider', () => ({
   useToast: () => ({ showToast: mocks.showToast }),
 }));
 vi.mock('../../../providers/dialog-provider', () => ({
-  useConfirm: () => () => Promise.resolve(mocks.confirmResult),
+  useConfirm: () => mocks.confirm,
 }));
 
 type TextMockProps = { children?: ReactNode };
@@ -113,6 +114,8 @@ describe('StravaCard', () => {
     mocks.autoSyncMutate.mockReset();
     mocks.disconnectMutate.mockReset();
     mocks.alert.mockReset();
+    // mockClear (not mockReset) so the default impl reading mocks.confirmResult survives.
+    mocks.confirm.mockClear();
     mocks.confirmResult = true;
     mocks.statuses = undefined;
     mocks.isLoading = false;
@@ -150,9 +153,11 @@ describe('StravaCard', () => {
     mocks.confirmResult = false;
     const { container } = render(<StravaCard />);
     fireEvent.click(button(container, 'integrations.strava.disconnect')!);
-    // Give the awaited confirm a tick to settle, then assert the mutation never fired.
-    await Promise.resolve();
-    await Promise.resolve();
+    // Wait until the confirm is requested, then await the very promise the handler
+    // awaited — its continuation (the `if (!confirmed) return`) runs before ours,
+    // so this is deterministic regardless of the handler's promise-chain depth.
+    await waitFor(() => expect(mocks.confirm).toHaveBeenCalledTimes(1));
+    await mocks.confirm.mock.results[0]!.value;
     expect(mocks.disconnectMutate).not.toHaveBeenCalled();
   });
 

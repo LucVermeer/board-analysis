@@ -96,7 +96,13 @@ export function DialogProvider({ children }: { children: ReactNode }) {
     if (settledIdsRef.current.has(target.id)) return;
     settledIdsRef.current.add(target.id);
     target.resolve(result);
-    setQueue((q) => q.filter((item) => item.id !== target.id));
+    setQueue((q) => {
+      // Drop the guard id as the item leaves the queue (and the dialog unmounts):
+      // no racing handler can fire for it anymore, so the Set stays bounded.
+      // Idempotent (ids are monotonic, never reused) under a StrictMode re-run.
+      settledIdsRef.current.delete(target.id);
+      return q.filter((item) => item.id !== target.id);
+    });
   }, []);
 
   const current = queue[0];
@@ -104,7 +110,10 @@ export function DialogProvider({ children }: { children: ReactNode }) {
   return (
     <DialogContext value={value}>
       {children}
-      {current ? (
+      {/* Only the Android-Material path ever queues a confirm; guarding on the same
+          `!useNativeAlert` condition keeps the Paper dialog off Liquid Glass / iOS
+          even if the variant flips while a confirm is mid-flight. */}
+      {!useNativeAlert && current ? (
         <Portal>
           <Dialog visible onDismiss={() => settle(current, false)}>
             <Dialog.Title>{current.title}</Dialog.Title>
