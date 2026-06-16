@@ -690,7 +690,8 @@
       "addBetaVideo": "Añadir vídeo de beta",
       "openInApp": "Abrir en la app Aurora",
       "fork": "Remix this climb",
-      "edit": "Editar vía"
+      "edit": "Editar vía",
+      "editEntry": "Editar registro"
     },
     "create": {
       "brush": {

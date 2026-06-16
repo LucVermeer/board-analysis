@@ -105,7 +105,7 @@ export default function ShareBetaScreen() {
   );
 
   const renderItem = useCallback(
-    ({ item }: { item: AscentFeedItem }) => <LogbookRow ascent={item} onPress={handleAttach} />,
+    ({ item }: { item: AscentFeedItem }) => <LogbookRow ascent={item} onActivate={handleAttach} />,
     [handleAttach],
   );
 
@@ -220,7 +220,7 @@ export default function ShareBetaScreen() {
                     {t('mobile.betaVideos.shareSuggestedTitle')}
                   </Text>
                   {suggestions.map((ascent) => (
-                    <LogbookRow key={ascent.uuid} ascent={ascent} onPress={handleAttach} />
+                    <LogbookRow key={ascent.uuid} ascent={ascent} onActivate={handleAttach} />
                   ))}
                   {listData.length > 0 && (
                     <Text variant="footnote" color={systemColors.tertiaryLabel} style={styles.sectionLabel}>
