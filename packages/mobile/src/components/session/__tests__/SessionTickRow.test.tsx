@@ -36,7 +36,10 @@ vi.mock('../../../hooks/use-grade-format', () => ({
 vi.mock('../../../providers/theme-provider', () => ({
   useTheme: () => ({ systemColors: { secondaryBackground: '#fff', separator: '#ccc' } }),
 }));
-vi.mock('../../../theme/colors', () => ({ brandColors: { warning: '#fa0', success: '#0a0' }, withAlpha: (c: string) => c }));
+vi.mock('../../../theme/colors', () => ({
+  brandColors: { warning: '#fa0', success: '#0a0' },
+  withAlpha: (c: string) => c,
+}));
 vi.mock('../../../theme/ios-colors', () => ({ iosSystemColors: { systemGray: '#888', white: '#fff' } }));
 vi.mock('../../../theme/tokens', () => ({ spacing: { 2: 8, 3: 12 }, borderRadius: { sm: 4 } }));
 vi.mock('../../../lib/playlists/board-details-for-playlist', () => ({

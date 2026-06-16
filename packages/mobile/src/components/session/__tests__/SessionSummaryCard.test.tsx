@@ -151,9 +151,10 @@ describe('SessionSummaryCard', () => {
   it('renders the stat tile values', () => {
     const { container } = render_(session({ totalSends: 7, totalFlashes: 3, totalAttempts: 20 }), 'Sesh', false);
     const text = container.textContent ?? '';
-    expect(text).toContain('7');
-    expect(text).toContain('3');
-    expect(text).toContain('20');
+    // Assert value + i18n label key together to avoid matching stray digits elsewhere.
+    expect(text).toContain('7mobile.sessions.weekly.sends');
+    expect(text).toContain('3mobile.sessions.weekly.flashes');
+    expect(text).toContain('20mobile.sessions.weekly.attempts');
   });
 
   it('renders the grade tile when hardestGrade is set', () => {
