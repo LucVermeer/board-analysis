@@ -3336,6 +3336,8 @@ export type PublicUserProfile = {
   followingCount: Scalars['Int']['output'];
   /** User ID */
   id: Scalars['ID']['output'];
+  /** Instagram profile URL, if the user has set one */
+  instagramUrl?: Maybe<Scalars['String']['output']>;
   /** Whether the current user follows this user */
   isFollowedByMe: Scalars['Boolean']['output'];
 };
@@ -7456,6 +7458,7 @@ export type GetPublicProfileQuery = {
     id: string;
     displayName?: string | null;
     avatarUrl?: string | null;
+    instagramUrl?: string | null;
     followerCount: number;
     followingCount: number;
     isFollowedByMe: boolean;
@@ -12368,6 +12371,7 @@ export const GetPublicProfileDocument = {
                 { kind: 'Field', name: { kind: 'Name', value: 'id' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'displayName' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'avatarUrl' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'instagramUrl' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'followerCount' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'followingCount' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'isFollowedByMe' } },

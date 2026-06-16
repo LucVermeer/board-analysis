@@ -44,6 +44,8 @@ export const socialTypeDefs = /* GraphQL */ `
     displayName: String
     "Avatar URL"
     avatarUrl: String
+    "Instagram profile URL, if the user has set one"
+    instagramUrl: String
     "Number of followers"
     followerCount: Int!
     "Number of users being followed"

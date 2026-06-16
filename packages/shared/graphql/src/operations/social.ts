@@ -36,6 +36,7 @@ export const GET_PUBLIC_PROFILE = gql`
       id
       displayName
       avatarUrl
+      instagramUrl
       followerCount
       followingCount
       isFollowedByMe
