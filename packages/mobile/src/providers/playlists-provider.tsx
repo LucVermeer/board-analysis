@@ -7,17 +7,29 @@
 
 import { createContext, useContext, useCallback, useMemo, type ReactNode } from 'react';
 import type { Playlist } from '@boardsesh/graphql/operations/playlists';
+import type { BoardName } from '@boardsesh/shared-schema';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { track } from '../lib/analytics';
 
 export type { Playlist } from '@boardsesh/graphql/operations/playlists';
+
+export type PlaylistCreateBoard = {
+  boardType: BoardName;
+  layoutId: number;
+};
 
 type PlaylistsContextValue = {
   playlists: Playlist[];
   getPlaylistsForClimb: (climbUuid: string) => Set<string>;
   addToPlaylist: (playlistId: string, climbUuid: string, angle: number) => Promise<void>;
   removeFromPlaylist: (playlistId: string, climbUuid: string) => Promise<void>;
-  createPlaylist: (name: string, description?: string, color?: string, icon?: string) => Promise<Playlist>;
+  createPlaylist: (
+    name: string,
+    description?: string,
+    color?: string,
+    icon?: string,
+    board?: PlaylistCreateBoard,
+  ) => Promise<Playlist>;
   isLoading: boolean;
   isAuthenticated: boolean;
   refreshPlaylists: () => Promise<void>;
@@ -46,7 +58,13 @@ type PlaylistsProviderProps = {
   playlistMemberships?: Map<string, Set<string>>;
   addToPlaylist?: (playlistId: string, climbUuid: string, angle: number) => Promise<void>;
   removeFromPlaylist?: (playlistId: string, climbUuid: string) => Promise<void>;
-  createPlaylist?: (name: string, description?: string, color?: string, icon?: string) => Promise<Playlist>;
+  createPlaylist?: (
+    name: string,
+    description?: string,
+    color?: string,
+    icon?: string,
+    board?: PlaylistCreateBoard,
+  ) => Promise<Playlist>;
   isLoading?: boolean;
   isAuthenticated?: boolean;
   refreshPlaylists?: () => Promise<void>;
@@ -76,8 +94,14 @@ export function PlaylistsProvider({
   );
 
   const trackedCreatePlaylist = useCallback(
-    async (name: string, description?: string, color?: string, icon?: string): Promise<Playlist> => {
-      const created = await createPlaylist(name, description, color, icon);
+    async (
+      name: string,
+      description?: string,
+      color?: string,
+      icon?: string,
+      board?: PlaylistCreateBoard,
+    ): Promise<Playlist> => {
+      const created = await createPlaylist(name, description, color, icon, board);
       track(SHARED_EVENTS.CreatePlaylist, {
         playlistId: created.id,
         hasDescription: !!description,

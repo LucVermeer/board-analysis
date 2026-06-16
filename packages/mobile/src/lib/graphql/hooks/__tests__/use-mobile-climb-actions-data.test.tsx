@@ -326,6 +326,32 @@ describe('useMobileClimbActionsData', () => {
       });
     });
 
+    it('can create against a supplied board snapshot instead of the live active board', async () => {
+      const created = mkPlaylist('p-new', 'Moon Projects');
+      requestMock.mockResolvedValueOnce({ allUserPlaylists: { playlists: [] } });
+      requestMock.mockResolvedValueOnce({ createPlaylist: created });
+
+      const { Wrapper } = makeWrapper();
+      const { result } = renderHook(() => useMobileClimbActionsData(), { wrapper: Wrapper });
+      await waitFor(() => expect(requestMock).toHaveBeenCalledWith(GET_ALL_USER_PLAYLISTS, expect.anything()));
+
+      await result.current.playlistsProviderProps.createPlaylist('Moon Projects', undefined, undefined, undefined, {
+        boardType: 'moonboard',
+        layoutId: 6,
+      });
+
+      expect(requestMock).toHaveBeenCalledWith(CREATE_PLAYLIST, {
+        input: {
+          boardType: 'moonboard',
+          layoutId: 6,
+          name: 'Moon Projects',
+          description: undefined,
+          color: undefined,
+          icon: undefined,
+        },
+      });
+    });
+
     it('optimistically prepends the new playlist to the cached list', async () => {
       const existing = mkPlaylist('p-old', 'Stuff');
       const created = mkPlaylist('p-new', 'Project');
@@ -343,6 +369,62 @@ describe('useMobileClimbActionsData', () => {
       // The cached list — same key the query above wrote to — should now lead
       // with the freshly-created playlist without waiting for a refetch.
       expect(queryClient.getQueryData<Playlist[]>(['userPlaylists'])).toEqual([created, existing]);
+    });
+
+    it('does not duplicate the created playlist if it is already cached', async () => {
+      const existing = mkPlaylist('p-old', 'Stuff');
+      const cachedCreated = mkPlaylist('p-new', 'Draft Project');
+      const created = { ...cachedCreated, name: 'Project' };
+      requestMock.mockResolvedValueOnce({ allUserPlaylists: { playlists: [cachedCreated, existing] } });
+      requestMock.mockResolvedValueOnce({ createPlaylist: created });
+
+      const { queryClient, Wrapper } = makeWrapper();
+      const { result } = renderHook(() => useMobileClimbActionsData(), { wrapper: Wrapper });
+      await waitFor(() => expect(result.current.playlistsProviderProps.playlists).toEqual([cachedCreated, existing]));
+
+      await act(async () => {
+        await result.current.playlistsProviderProps.createPlaylist('Project');
+      });
+
+      expect(queryClient.getQueryData<Playlist[]>(['userPlaylists'])).toEqual([created, existing]);
+    });
+
+    it('cancels an in-flight playlist fetch before optimistically prepending the created playlist', async () => {
+      const created = mkPlaylist('p-new', 'Project');
+      requestMock.mockImplementation((document) => {
+        if (document === GET_ALL_USER_PLAYLISTS) return new Promise(() => undefined);
+        if (document === CREATE_PLAYLIST) return Promise.resolve({ createPlaylist: created });
+        return Promise.reject(new Error('Unexpected request'));
+      });
+
+      const { queryClient, Wrapper } = makeWrapper();
+      const cancelSpy = vi.spyOn(queryClient, 'cancelQueries');
+      const { result } = renderHook(() => useMobileClimbActionsData(), { wrapper: Wrapper });
+      await waitFor(() => expect(requestMock).toHaveBeenCalledWith(GET_ALL_USER_PLAYLISTS, expect.anything()));
+
+      await act(async () => {
+        await result.current.playlistsProviderProps.createPlaylist('Project');
+      });
+
+      expect(cancelSpy).toHaveBeenCalledWith({ queryKey: ['userPlaylists'] });
+      expect(queryClient.getQueryData<Playlist[]>(['userPlaylists'])).toEqual([created]);
+    });
+
+    it('does not cancel the playlist fetch when playlist creation fails', async () => {
+      requestMock.mockImplementation((document) => {
+        if (document === GET_ALL_USER_PLAYLISTS) return new Promise(() => undefined);
+        if (document === CREATE_PLAYLIST) return Promise.reject(new Error('create failed'));
+        return Promise.reject(new Error('Unexpected request'));
+      });
+
+      const { queryClient, Wrapper } = makeWrapper();
+      const cancelSpy = vi.spyOn(queryClient, 'cancelQueries');
+      const { result } = renderHook(() => useMobileClimbActionsData(), { wrapper: Wrapper });
+      await waitFor(() => expect(requestMock).toHaveBeenCalledWith(GET_ALL_USER_PLAYLISTS, expect.anything()));
+
+      await expect(result.current.playlistsProviderProps.createPlaylist('Project')).rejects.toThrow('create failed');
+
+      expect(cancelSpy).not.toHaveBeenCalled();
     });
   });
 

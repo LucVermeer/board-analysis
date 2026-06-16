@@ -36,6 +36,7 @@ import {
 import { getHttpClient } from '../client';
 import { useAuth } from '../../../providers/auth-provider';
 import { useActiveBoard } from '../use-active-board';
+import type { PlaylistCreateBoard } from '../../../providers/playlists-provider';
 
 const PLAYLISTS_QUERY_KEY = ['userPlaylists'] as const;
 
@@ -77,7 +78,13 @@ type MobileClimbActionsData = {
     playlistMemberships: Map<string, Set<string>>;
     addToPlaylist: (playlistId: string, climbUuid: string, angle: number) => Promise<void>;
     removeFromPlaylist: (playlistId: string, climbUuid: string) => Promise<void>;
-    createPlaylist: (name: string, description?: string, color?: string, icon?: string) => Promise<Playlist>;
+    createPlaylist: (
+      name: string,
+      description?: string,
+      color?: string,
+      icon?: string,
+      board?: PlaylistCreateBoard,
+    ) => Promise<Playlist>;
     isLoading: boolean;
     isAuthenticated: boolean;
     refreshPlaylists: () => Promise<void>;
@@ -157,8 +164,14 @@ export function useMobileClimbActionsData(): MobileClimbActionsData {
   });
 
   const createPlaylistMutation = useMutation({
-    mutationFn: async (vars: { name: string; description?: string; color?: string; icon?: string }) => {
-      const { activeBoard: board } = mutationDepsRef.current;
+    mutationFn: async (vars: {
+      name: string;
+      description?: string;
+      color?: string;
+      icon?: string;
+      board?: PlaylistCreateBoard;
+    }) => {
+      const board = vars.board ?? mutationDepsRef.current.activeBoard;
       if (!board) throw new Error('Cannot create playlist: no active board selected.');
       // CreatePlaylistInput types layoutId as Int! — sending undefined would
       // round-trip a 400 from the server. Throw locally so the call site sees
@@ -205,12 +218,27 @@ export function useMobileClimbActionsData(): MobileClimbActionsData {
   }, []);
 
   const createPlaylist = useCallback(
-    async (name: string, description?: string, color?: string, icon?: string): Promise<Playlist> => {
-      const created = await createPlaylistMutateRef.current({ name, description, color, icon });
+    async (
+      name: string,
+      description?: string,
+      color?: string,
+      icon?: string,
+      board?: PlaylistCreateBoard,
+    ): Promise<Playlist> => {
+      const created = await createPlaylistMutateRef.current({ name, description, color, icon, board });
+      const { queryClient: client } = mutationDepsRef.current;
+      // The picker query can still be in flight when a user creates from the
+      // sheet. Cancel it after create succeeds but before the optimistic prepend
+      // so a failed create does not disturb the only in-flight picker load, while
+      // an older page response still cannot overwrite the created playlist.
+      await client.cancelQueries({ queryKey: PLAYLISTS_QUERY_KEY });
       // Optimistically prepend to the cached list so the picker shows the new
       // playlist immediately, without waiting for a refetch round-trip.
-      const { queryClient: client } = mutationDepsRef.current;
-      client.setQueryData<Playlist[]>(PLAYLISTS_QUERY_KEY, (prev) => (prev ? [created, ...prev] : [created]));
+      client.setQueryData<Playlist[]>(PLAYLISTS_QUERY_KEY, (prev) => {
+        const withoutCreated =
+          prev?.filter((playlist) => playlist.uuid !== created.uuid && playlist.id !== created.id) ?? [];
+        return [created, ...withoutCreated];
+      });
       return created;
     },
     [],

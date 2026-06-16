@@ -132,7 +132,7 @@ describe('PlaylistsProvider', () => {
     );
     const { result } = renderHook(() => usePlaylistsContext(), { wrapper });
     await result.current.createPlaylist('Projects');
-    expect(createPlaylist).toHaveBeenCalledWith('Projects', undefined, undefined, undefined);
+    expect(createPlaylist).toHaveBeenCalledWith('Projects', undefined, undefined, undefined, undefined);
     expect(trackMock).toHaveBeenCalledTimes(1);
     expect(trackMock).toHaveBeenCalledWith('Create Playlist', {
       playlistId: 'p-new',
@@ -140,6 +140,17 @@ describe('PlaylistsProvider', () => {
       hasColor: false,
       hasIcon: false,
     });
+  });
+
+  it('forwards board context when createPlaylist receives one', async () => {
+    const createPlaylist = vi.fn(async (name: string) => mkPlaylist('p-board', name));
+    const boardContext = { boardType: 'kilter' as const, layoutId: 1 };
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <PlaylistsProvider createPlaylist={createPlaylist}>{children}</PlaylistsProvider>
+    );
+    const { result } = renderHook(() => usePlaylistsContext(), { wrapper });
+    await result.current.createPlaylist('Projects', 'Moon projects', '#ff00ff', 'star', boardContext);
+    expect(createPlaylist).toHaveBeenCalledWith('Projects', 'Moon projects', '#ff00ff', 'star', boardContext);
   });
 
   it('usePlaylistsContext throws when called outside a provider', () => {
