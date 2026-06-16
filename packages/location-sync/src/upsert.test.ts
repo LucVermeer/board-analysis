@@ -1,9 +1,6 @@
-// These cover the pure planning/identity helpers (no DB). The behavioural half
-// of upsertPublicBoardLocations — that the PostGIS `location` geography ends up
-// populated from lat/lng without a manual UPDATE — depends on the migration
-// 0127 triggers and is exercised by packages/db's
-// location-trigger.integration.test.ts (opt-in, needs a PostGIS dev DB).
 import { describe, expect, it } from 'vitest';
+import { gyms, locationSyncGymSources, userBoards, users } from '@boardsesh/db/schema';
+import type { CanonicalGymCandidate } from '@boardsesh/db/queries';
 import type { PublicBoardLocationInput } from './types';
 import {
   buildBoardWriteIdentifiers,
@@ -11,7 +8,10 @@ import {
   buildLocationUpsertPlan,
   collectValidLocationRecords,
   collectUniqueGymLocationRecords,
+  upsertPublicBoardLocations,
 } from './upsert';
+
+type UpsertDb = Parameters<typeof upsertPublicBoardLocations>[0];
 
 const baseLocationRecord: PublicBoardLocationInput = {
   boardType: 'tension',
@@ -33,6 +33,214 @@ const baseLocationRecord: PublicBoardLocationInput = {
 
 function locationRecord(overrides: Partial<PublicBoardLocationInput>): PublicBoardLocationInput {
   return { ...baseLocationRecord, ...overrides };
+}
+
+function sqlToText(fragment: unknown): string {
+  if (typeof fragment === 'string') {
+    return fragment;
+  }
+
+  if (!fragment || typeof fragment !== 'object') {
+    return '';
+  }
+
+  const queryChunks = (fragment as { queryChunks?: unknown[] }).queryChunks;
+  if (!Array.isArray(queryChunks)) {
+    return '';
+  }
+
+  return queryChunks
+    .map((chunk) => {
+      if (typeof chunk === 'string') {
+        return chunk;
+      }
+      if (!chunk || typeof chunk !== 'object') {
+        return '?';
+      }
+
+      const chunkValue = (chunk as { value?: unknown }).value;
+      if (Array.isArray(chunkValue)) {
+        return chunkValue.join('');
+      }
+
+      if (Array.isArray((chunk as { queryChunks?: unknown[] }).queryChunks)) {
+        return sqlToText(chunk);
+      }
+
+      return '?';
+    })
+    .join('');
+}
+
+function tableLabel(table: unknown): string {
+  if (Object.is(table, users)) return 'users';
+  if (Object.is(table, gyms)) return 'gyms';
+  if (Object.is(table, locationSyncGymSources)) return 'locationSyncGymSources';
+  if (Object.is(table, userBoards)) return 'userBoards';
+  return 'unknown';
+}
+
+function rowValues(row: unknown): Record<string, unknown> {
+  if (!row || typeof row !== 'object' || Array.isArray(row)) {
+    throw new TypeError('expected row values object');
+  }
+  return row as Record<string, unknown>;
+}
+
+function candidate(overrides: Partial<CanonicalGymCandidate>): CanonicalGymCandidate {
+  return {
+    id: 500,
+    uuid: 'physical-gym',
+    name: 'Board House',
+    address: null,
+    contactEmail: null,
+    contactPhone: null,
+    description: null,
+    imageUrl: null,
+    latitude: -33.86,
+    longitude: 151.2,
+    createdAt: '2026-01-01T00:00:00Z',
+    boardCount: 0,
+    memberCount: 0,
+    followerCount: 0,
+    commentCount: 0,
+    ...overrides,
+  };
+}
+
+class FakeInsertBuilder {
+  private pendingRowValues: Record<string, unknown> | null = null;
+
+  constructor(
+    private readonly fakeDb: FakeLocationSyncDb,
+    private readonly table: unknown,
+  ) {}
+
+  values(nextRowValues: unknown): this {
+    this.pendingRowValues = rowValues(nextRowValues);
+    return this;
+  }
+
+  onConflictDoNothing(_config: unknown): Promise<void> {
+    if (Object.is(this.table, users) && this.pendingRowValues) {
+      this.fakeDb.systemUserWrites.push(this.pendingRowValues);
+    }
+    return Promise.resolve();
+  }
+
+  onConflictDoUpdate(_config: unknown): this {
+    if (Object.is(this.table, locationSyncGymSources) && this.pendingRowValues) {
+      this.fakeDb.sourceAliasWrites.push(this.pendingRowValues);
+    }
+    return this;
+  }
+
+  returning(_selection: unknown): Array<{ id: number }> {
+    if (!this.pendingRowValues) {
+      throw new Error(`missing insert values for ${tableLabel(this.table)}`);
+    }
+
+    if (Object.is(this.table, gyms)) {
+      this.fakeDb.createdGymWrites.push(this.pendingRowValues);
+      return [{ id: this.fakeDb.createdGymId }];
+    }
+
+    if (Object.is(this.table, userBoards)) {
+      this.fakeDb.boardWrites.push(this.pendingRowValues);
+      return [{ id: this.fakeDb.createdBoardId }];
+    }
+
+    throw new Error(`unexpected returning() for ${tableLabel(this.table)}`);
+  }
+}
+
+class FakeUpdateBuilder {
+  private updateValues: Record<string, unknown> | null = null;
+
+  constructor(
+    private readonly fakeDb: FakeLocationSyncDb,
+    private readonly table: unknown,
+  ) {}
+
+  set(nextUpdateValues: unknown): this {
+    this.updateValues = rowValues(nextUpdateValues);
+    return this;
+  }
+
+  where(_condition: unknown): Promise<void> {
+    if (Object.is(this.table, gyms)) {
+      this.fakeDb.gymMetadataWrites.push(this.updateValues ?? {});
+    }
+    return Promise.resolve();
+  }
+}
+
+class FakeSelectBuilder {
+  constructor(private readonly fakeDb: FakeLocationSyncDb) {}
+
+  from(_table: unknown): this {
+    return this;
+  }
+
+  innerJoin(_table: unknown, _condition: unknown): this {
+    return this;
+  }
+
+  where(_condition: unknown): this {
+    return this;
+  }
+
+  limit(_limit: number): Array<{ id: number }> {
+    return this.fakeDb.aliasedGymId === null ? [] : [{ id: this.fakeDb.aliasedGymId }];
+  }
+}
+
+class FakeLocationSyncDb {
+  readonly systemUserWrites: Array<Record<string, unknown>> = [];
+  readonly sourceAliasWrites: Array<Record<string, unknown>> = [];
+  readonly createdGymWrites: Array<Record<string, unknown>> = [];
+  readonly gymMetadataWrites: Array<Record<string, unknown>> = [];
+  readonly boardWrites: Array<Record<string, unknown>> = [];
+  readonly executeSqlTexts: string[] = [];
+
+  readonly aliasedGymId: number | null;
+  readonly physicalCandidates: CanonicalGymCandidate[];
+  readonly createdGymId: number;
+  readonly createdBoardId: number;
+
+  constructor(options: {
+    aliasedGymId?: number | null;
+    physicalCandidates?: CanonicalGymCandidate[];
+    createdGymId?: number;
+    createdBoardId?: number;
+  }) {
+    this.aliasedGymId = options.aliasedGymId ?? null;
+    this.physicalCandidates = options.physicalCandidates ?? [];
+    this.createdGymId = options.createdGymId ?? 900;
+    this.createdBoardId = options.createdBoardId ?? 901;
+  }
+
+  insert(table: unknown): FakeInsertBuilder {
+    return new FakeInsertBuilder(this, table);
+  }
+
+  update(table: unknown): FakeUpdateBuilder {
+    return new FakeUpdateBuilder(this, table);
+  }
+
+  select(_selection: unknown): FakeSelectBuilder {
+    return new FakeSelectBuilder(this);
+  }
+
+  execute(query: unknown): Promise<unknown[]> {
+    const queryText = sqlToText(query);
+    this.executeSqlTexts.push(queryText);
+    return Promise.resolve(queryText.includes('WITH candidate_gyms') ? this.physicalCandidates : []);
+  }
+
+  transaction<Result>(callback: (transaction: FakeLocationSyncDb) => Result | Promise<Result>): Promise<Result> {
+    return Promise.resolve(callback(this));
+  }
 }
 
 describe('location upsert planning', () => {
@@ -113,5 +321,84 @@ describe('location upsert planning', () => {
     expect(boardIdentifiers.slug).toMatch(/^board-house-tension-[0-9a-f]{8}$/);
     expect(buildGymWriteIdentifiers(validRecord.gymSourceKey, validRecord)).toEqual(gymIdentifiers);
     expect(buildBoardWriteIdentifiers(validRecord)).toEqual(boardIdentifiers);
+  });
+});
+
+describe('public board location upsert gym resolution', () => {
+  it('refreshes an existing source alias before physical matching or source upsert', async () => {
+    const fakeDb = new FakeLocationSyncDb({ aliasedGymId: 42 });
+
+    const summary = await upsertPublicBoardLocations(fakeDb as unknown as UpsertDb, [
+      locationRecord({
+        sourceKey: 'tension:board-aliased',
+        gymSourceKey: 'tension:gym-aliased',
+        gymName: 'Board House Updated',
+        gymAddress: '1 Updated Lane',
+        latitude: -34.12,
+        longitude: 151.42,
+      }),
+    ]);
+
+    expect(summary).toMatchObject({
+      boardsSeen: 1,
+      boardsUpserted: 1,
+      gymsSeen: 1,
+      gymsUpserted: 1,
+    });
+    expect(fakeDb.createdGymWrites).toEqual([]);
+    expect(fakeDb.sourceAliasWrites).toEqual([]);
+    expect(fakeDb.gymMetadataWrites).toMatchObject([
+      {
+        name: 'Board House Updated',
+        latitude: -34.12,
+        longitude: 151.42,
+        isPublic: true,
+        deletedAt: null,
+      },
+    ]);
+    expect(fakeDb.boardWrites[0]?.gymId).toBe(42);
+    expect(fakeDb.executeSqlTexts.some((queryText) => queryText.includes('WITH candidate_gyms'))).toBe(false);
+  });
+
+  it('aliases a conservative physical match instead of creating another gym row', async () => {
+    const fakeDb = new FakeLocationSyncDb({
+      physicalCandidates: [
+        candidate({ id: 87, uuid: 'less-used-gym', boardCount: 1 }),
+        candidate({ id: 88, uuid: 'canonical-gym', boardCount: 5 }),
+      ],
+    });
+
+    const summary = await upsertPublicBoardLocations(fakeDb as unknown as UpsertDb, [
+      locationRecord({
+        sourceKey: 'tension:board-physical',
+        gymSourceKey: 'tension:gym-physical',
+        gymName: '  Board   House  ',
+      }),
+    ]);
+
+    expect(summary.gymsUpserted).toBe(1);
+    expect(fakeDb.createdGymWrites).toEqual([]);
+    expect(fakeDb.sourceAliasWrites).toMatchObject([{ sourceKey: 'tension:gym-physical', gymId: 88 }]);
+    expect(fakeDb.gymMetadataWrites).toHaveLength(1);
+    expect(fakeDb.boardWrites[0]?.gymId).toBe(88);
+
+    const physicalMatchQueryText = fakeDb.executeSqlTexts.find((queryText) =>
+      queryText.includes('WITH candidate_gyms'),
+    );
+    expect(physicalMatchQueryText).toMatch(/=\s+lower\(regexp_replace\(trim\(/);
+  });
+
+  it('creates a source gym and alias when no alias or physical match exists', async () => {
+    const fakeDb = new FakeLocationSyncDb({ createdGymId: 123 });
+
+    const summary = await upsertPublicBoardLocations(fakeDb as unknown as UpsertDb, [
+      locationRecord({ sourceKey: 'tension:board-new', gymSourceKey: 'tension:gym-new' }),
+    ]);
+
+    expect(summary.gymsUpserted).toBe(1);
+    expect(fakeDb.createdGymWrites).toMatchObject([{ name: 'Board House' }]);
+    expect(fakeDb.sourceAliasWrites).toMatchObject([{ sourceKey: 'tension:gym-new', gymId: 123 }]);
+    expect(fakeDb.gymMetadataWrites).toEqual([]);
+    expect(fakeDb.boardWrites[0]?.gymId).toBe(123);
   });
 });
