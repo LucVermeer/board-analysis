@@ -292,7 +292,7 @@
       "ascensionists_one": "{{count}} ascensionista",
       "ascensionists_other": "{{count}} ascensionistas",
       "avgQuality": "Calidad promedio",
-      "gradeByAngle": "Grado por ángulo"
+      "ascentsByAngle": "Ascensos por ángulo"
     },
     "betaVideos": {
       "title": "Videos Beta",

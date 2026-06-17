@@ -5,44 +5,48 @@ import { getGradeColor, DEFAULT_GRADE_COLOR } from '@boardsesh/board-constants/g
 
 export type AngleGradeBar = {
   angle: number;
-  /** Numeric difficulty (Aurora display difficulty) used for relative bar width. */
+  /** Numeric difficulty (Aurora display difficulty) — drives the grade label + colour. */
   difficulty: number;
-  /** Formatted grade label shown at the end of the bar (e.g. "V6"). */
+  /** Formatted grade label shown above the bar (e.g. "V6"). */
   gradeName: string;
   /** Grade colour for the bar fill. */
   color: string;
+  /** Ascensionist count (sends) at this angle — drives bar height. */
+  sends: number;
 };
 
 const GRADE_BY_ID = new Map<number, BoulderGrade>(BOULDER_GRADES.map((grade) => [grade.difficulty_id, grade]));
 
 // Latest snapshot per angle → one grade bar; out-of-range difficulties show the rounded number.
+// The grade (label + colour) comes from the difficulty; bar height comes from the ascent count.
 export function buildAngleGradeBars(
   history: ClimbStatsHistoryEntry[] | undefined,
   gradeFormat: GradeDisplayFormat,
 ): AngleGradeBar[] {
   if (!history) return [];
 
-  const latestByAngle = new Map<number, { difficulty: number; createdAt: string }>();
+  const latestByAngle = new Map<number, { entry: ClimbStatsHistoryEntry; difficulty: number }>();
   for (const entry of history) {
     const difficulty = entry.displayDifficulty ?? entry.difficultyAverage;
     if (difficulty == null) continue;
     const existing = latestByAngle.get(entry.angle);
-    if (!existing || new Date(entry.createdAt).getTime() > new Date(existing.createdAt).getTime()) {
-      latestByAngle.set(entry.angle, { difficulty, createdAt: entry.createdAt });
+    if (!existing || new Date(entry.createdAt).getTime() > new Date(existing.entry.createdAt).getTime()) {
+      latestByAngle.set(entry.angle, { entry, difficulty });
     }
   }
 
-  return Array.from(latestByAngle.entries())
-    .map(([angle, { difficulty }]) => {
+  return Array.from(latestByAngle.values())
+    .map(({ entry, difficulty }) => {
       const grade = GRADE_BY_ID.get(Math.round(difficulty));
       const gradeName = grade
         ? (formatGrade(grade.difficulty_name, gradeFormat) ?? grade.v_grade)
         : String(Math.round(difficulty));
       return {
-        angle,
+        angle: entry.angle,
         difficulty,
         gradeName,
         color: getGradeColor(grade?.difficulty_name) ?? DEFAULT_GRADE_COLOR,
+        sends: entry.ascensionistCount ?? 0,
       };
     })
     .sort((a, b) => a.angle - b.angle);

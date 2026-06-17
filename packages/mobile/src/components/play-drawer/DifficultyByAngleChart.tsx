@@ -20,13 +20,43 @@ const BAR_RADIUS = borderRadius.sm;
 const PEAK_BAR_RADIUS = borderRadius.md;
 const TOP_LABEL_HEIGHT = 16;
 const MIN_BAR_WIDTH = 10;
+// Width reserved for the y-axis ascent-count labels (e.g. "120", "1.2k").
+const Y_AXIS_LABEL_WIDTH = 32;
 
-// Difficulty-by-angle as a column chart: x-axis angles, bar height ∝ the grade's
-// position within the local difficulty range (a flat baseline of `min - 1` so
-// the easiest angle still shows a stub and steps between angles read clearly),
-// the bar drawn in the grade's scheme-aware colour with the grade label above it.
-// The hardest angle is flagged with a non-colour cue (bold label + larger cap) so
-// it survives colour-blindness and both schemes/variants.
+// Compact tick label: whole numbers below 1k, "1.2k" above so labels stay narrow.
+function formatCount(value: number): string {
+  return value >= 1000 ? `${Math.round(value / 100) / 10}k` : String(value);
+}
+
+// Round a raw step up to a friendly 1/2/5 × 10ⁿ value so ticks read 0/5/10/15
+// instead of 0/3/6/9.
+function niceStep(rawStep: number): number {
+  if (rawStep <= 1) return 1;
+  const magnitude = Math.pow(10, Math.floor(Math.log10(rawStep)));
+  for (const multiple of [1, 2, 5]) {
+    if (rawStep <= multiple * magnitude) return multiple * magnitude;
+  }
+  return 10 * magnitude;
+}
+
+// Integer y-scale for the ascent counts: ~4 whole-number sections with the top
+// tick strictly above the tallest bar so its grade top-label has headroom.
+function buildAscentScale(maxSends: number): { maxValue: number; noOfSections: number; labels: string[] } {
+  const peak = Math.max(maxSends, 1);
+  const step = niceStep(Math.ceil(peak / 4));
+  let noOfSections = Math.ceil(peak / step);
+  if (step * noOfSections <= peak) noOfSections += 1;
+  const labels = Array.from({ length: noOfSections + 1 }, (_, index) => formatCount(index * step));
+  return { maxValue: step * noOfSections, noOfSections, labels };
+}
+
+// Ascents-by-angle column chart: x-axis angles, bar height = the number of
+// ascents (ascensionist count) at that angle, the bar drawn in the grade's
+// scheme-aware colour with the grade label above it and the ascent count on the
+// y-axis. The hardest angle is flagged with a non-colour cue (bold label + larger
+// cap) so the hardest grade survives colour-blindness and both schemes/variants —
+// note that, since height now means ascents, the hardest angle is no longer
+// necessarily the tallest bar.
 export const DifficultyByAngleChart = memo(function DifficultyByAngleChart({
   data,
   accessibilityLabel,
@@ -40,9 +70,7 @@ export const DifficultyByAngleChart = memo(function DifficultyByAngleChart({
   // closures) every time.
   const model = useMemo(() => {
     if (data.length === 0) return null;
-    const difficulties = data.map((bar) => bar.difficulty);
-    const baseline = Math.min(...difficulties) - 1;
-    const range = Math.max(Math.max(...difficulties) - baseline, 1);
+    const scale = buildAscentScale(Math.max(...data.map((bar) => bar.sends)));
     // The single hardest angle (first max wins on ties) gets the redundant cue.
     const hardestAngle = data.reduce((peak, bar) => (bar.difficulty > peak.difficulty ? bar : peak)).angle;
     const barData = data.map((bar) => {
@@ -50,7 +78,7 @@ export const DifficultyByAngleChart = memo(function DifficultyByAngleChart({
       const isHardest = bar.angle === hardestAngle;
       const topRadius = isHardest ? PEAK_BAR_RADIUS : BAR_RADIUS;
       return {
-        value: bar.difficulty - baseline,
+        value: bar.sends,
         frontColor: fill,
         label: `${bar.angle}°`,
         barBorderTopLeftRadius: topRadius,
@@ -70,9 +98,7 @@ export const DifficultyByAngleChart = memo(function DifficultyByAngleChart({
         ),
       };
     });
-    // +1 headroom so the tallest (hardest-angle) bar doesn't pin to the top edge
-    // and crowd its grade top-label.
-    return { barData, chartMaxValue: range + 1 };
+    return { barData, maxValue: scale.maxValue, noOfSections: scale.noOfSections, yAxisLabelTexts: scale.labels };
   }, [data, colorScheme]);
 
   const onLayout = (event: LayoutChangeEvent) => setWidth(event.nativeEvent.layout.width);
@@ -82,9 +108,11 @@ export const DifficultyByAngleChart = memo(function DifficultyByAngleChart({
   const count = data.length;
   const barSpacing = count > 8 ? 6 : 12;
   const initialSpacing = 10;
+  // Reserve space for the y-axis labels so the bars + axis fit the measured width.
+  const plotWidth = Math.max(0, width - Y_AXIS_LABEL_WIDTH);
   const barWidth =
-    width > 0
-      ? Math.max(MIN_BAR_WIDTH, Math.floor((width - initialSpacing * 2 - barSpacing * count) / count))
+    plotWidth > 0
+      ? Math.max(MIN_BAR_WIDTH, Math.floor((plotWidth - initialSpacing * 2 - barSpacing * count) / count))
       : MIN_BAR_WIDTH;
 
   return (
@@ -98,19 +126,23 @@ export const DifficultyByAngleChart = memo(function DifficultyByAngleChart({
       {width > 0 ? (
         <BarChart
           data={model.barData}
-          width={width - 8}
+          width={plotWidth - 8}
           height={CHART_HEIGHT}
           barWidth={barWidth}
           spacing={barSpacing}
           initialSpacing={initialSpacing}
-          maxValue={model.chartMaxValue}
+          maxValue={model.maxValue}
+          noOfSections={model.noOfSections}
+          yAxisLabelTexts={model.yAxisLabelTexts}
+          yAxisLabelWidth={Y_AXIS_LABEL_WIDTH}
           topLabelContainerStyle={styles.topLabelContainer}
-          hideRules
-          hideYAxisText
+          rulesColor={chartColors.separator}
+          rulesType="solid"
           yAxisThickness={0}
           xAxisThickness={StyleSheet.hairlineWidth}
           xAxisColor={chartColors.separator}
           xAxisLabelTextStyle={{ color: chartColors.secondaryLabel, fontSize: AXIS_LABEL_SIZE }}
+          yAxisTextStyle={{ color: chartColors.secondaryLabel, fontSize: AXIS_LABEL_SIZE }}
           isAnimated={!reduceMotion}
           animationDuration={reduceMotion ? 0 : 600}
           disableScroll
