@@ -1,9 +1,11 @@
-First release. Light up the holds for any climb on your Kilter, Tension, or MoonBoard over Bluetooth.
+Boardsesh 2.0 is a full native rewrite. The old app wrapped the website in a shell; this one is built native, so it connects to your board faster, holds the Bluetooth link steadier, and keeps the holds lit while you climb.
 
-In this build:
+New in 2.0:
+- Quicker, more reliable board connection over Bluetooth
+- A native feel throughout: smoother lists, faster search, real background support
 - Search tens of thousands of community-set climbs and filter by grade, rating, and holds
 - Build a queue and cycle through it with one tap, no phone fumbling between burns
 - Run a shared session with Party Mode so your crew climbs the same list
-- Log every attempt and send, with your logbook synced to Aurora Climbing for Kilter and Tension
+- Log every attempt and send, synced to Aurora Climbing for Kilter and Tension
 
 Open source. No ads, no subscriptions.

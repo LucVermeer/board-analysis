@@ -41,10 +41,10 @@ workflow), so the Play store listing icon is updated from code, not the Play
 Console UI.
 
 - `icon.png` (512x512, 32-bit PNG, under 1MB): committed, resized from `packages/mobile/assets/icon.png`.
-- `featureGraphic.png` (1024x500 PNG/JPG, no transparency): not committed yet. Drop in a real asset (brief below) to push it.
+- `featureGraphic.png` (1024x500, no transparency): committed, the app logo (`packages/mobile/assets/adaptive-icon.png`) centered on a #0A0A0A background. A clean stopgap; swap in a designed banner (brief below) when one is ready.
 
-The lane only uploads images that exist locally, so the feature graphic stays as
-whatever is live until a real `featureGraphic.png` is added here.
+The lane only uploads images that exist locally and never deletes a remote one,
+so swapping either file and re-running is all it takes to update the listing.
 
 **Feature graphic design brief:** show the Boardsesh logo/wordmark centered on a dark background (#0A0A0A or similar). Optionally include a faded image of a climbing wall or lit-up board holds behind the logo. Keep text minimal: the app name and a short tagline at most (e.g. "Light up your board"). Avoid screenshots in the feature graphic. Use high contrast so the logo reads well at small sizes in the Play Store browse view.
 

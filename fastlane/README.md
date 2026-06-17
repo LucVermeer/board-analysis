@@ -76,14 +76,15 @@ Google Play's listing images are source-controlled under
 ```
 images/
   icon.png            # 512x512, 32-bit PNG, < 1MB (Play high-res listing icon)
-  featureGraphic.png  # 1024x500 (optional; add a real asset, see play-store-metadata.md)
+  featureGraphic.png  # 1024x500, no transparency (Play feature graphic)
 ```
 
 `android images` uploads whatever images are present there and leaves phone
 screenshots and any image you didn't commit untouched (no `sync_image_upload`,
-so a missing `featureGraphic.png` never deletes the live one). `icon.png` is
-derived from `packages/mobile/assets/icon.png` (the app launcher icon) resized to
-512x512 — regenerate it with `sharp` if the app icon changes.
+so a missing image never deletes the live one). Both are derived from the app
+art with `sharp`: `icon.png` is `packages/mobile/assets/icon.png` resized to
+512x512, and `featureGraphic.png` is `adaptive-icon.png` centered on a #0A0A0A
+background. Regenerate them if the app art changes.
 
 This is the only way to update the Play **store-listing** icon from code instead
 of the Play Console UI. Note the launcher icon inside the app comes from the
