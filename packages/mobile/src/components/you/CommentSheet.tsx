@@ -58,7 +58,6 @@ export function CommentSheet({ sheetRef, entityId, entityType = 'session', onClo
       scrollable
       fullWindowOverlay
       onClose={onClose}
-      contentContainerStyle={styles.content}
       keyboardBehavior="interactive"
       keyboardBlurBehavior="restore"
       android_keyboardInputMode="adjustResize"
@@ -121,7 +120,6 @@ export function CommentSheet({ sheetRef, entityId, entityType = 'session', onClo
 }
 
 const styles = StyleSheet.create({
-  content: { paddingBottom: spacing[6] },
   title: { paddingHorizontal: spacing[4], paddingTop: spacing[2], paddingBottom: spacing[3] },
   centered: { paddingVertical: spacing[10], alignItems: 'center' },
   empty: { paddingHorizontal: spacing[4], paddingVertical: spacing[6], opacity: 0.6 },
