@@ -133,6 +133,32 @@ def staged_filename(device_slug, png_path)
   staged == basename ? "#{device_slug}-#{basename}" : staged
 end
 
+# A precautionary retry for the store screenshot uploads. App Store Connect throws
+# sporadic 500s (Spaceship::InternalServerError) that deliver only auto-retries on
+# 503, so a single bad gateway response would otherwise fail the whole upload (seen
+# in run 27719803749). Retries ONLY transient server-side errors (5xx / timeout /
+# temporary) with a short linear backoff; a real failure (bad credentials, a
+# rejected screenshot) is re-raised on the first attempt rather than looped on.
+# Both deliver (sync_screenshots) and supply (sync_image_upload) run in sync mode,
+# so a retried upload reconciles against the staged files instead of duplicating.
+TRANSIENT_UPLOAD_ERROR = /5\d\d|server error|timed?\s?out|timeout|temporar|try again|connection reset|bad gateway|service unavailable|internal server/i
+
+def with_upload_retries(max_attempts: 3, base_sleep: 30)
+  attempt = 0
+  begin
+    attempt += 1
+    yield
+  rescue => error
+    transient = error.message.to_s.match?(TRANSIENT_UPLOAD_ERROR) ||
+                error.class.name.to_s.match?(/InternalServerError|TemporaryError|ServerError|Timeout/)
+    raise if !transient || attempt >= max_attempts
+    delay = base_sleep * attempt
+    UI.important("Store upload attempt #{attempt}/#{max_attempts} hit a transient error (#{error.class}: #{error.message.to_s.lines.first&.strip}). Retrying in #{delay}s…")
+    sleep(delay)
+    retry
+  end
+end
+
 platform :ios do
   desc "Upload App Store screenshots to App Store Connect (no binary, no metadata, no review)"
   lane :screenshots do
@@ -162,21 +188,23 @@ platform :ios do
         in_house: false
       )
 
-      upload_to_app_store(
-        api_key: api_key,
-        app_identifier: "com.boardsesh.app",
-        screenshots_path: staging_dir,
-        skip_binary_upload: true,
-        skip_metadata: true,
-        skip_app_version_update: true,
-        overwrite_screenshots: true,
-        sync_screenshots: true,
-        submit_for_review: false,
-        run_precheck_before_submit: false,
-        # force: true is mandatory in CI — without it deliver opens an HTML
-        # preview in a browser and blocks until timeout.
-        force: true
-      )
+      with_upload_retries do
+        upload_to_app_store(
+          api_key: api_key,
+          app_identifier: "com.boardsesh.app",
+          screenshots_path: staging_dir,
+          skip_binary_upload: true,
+          skip_metadata: true,
+          skip_app_version_update: true,
+          overwrite_screenshots: true,
+          sync_screenshots: true,
+          submit_for_review: false,
+          run_precheck_before_submit: false,
+          # force: true is mandatory in CI — without it deliver opens an HTML
+          # preview in a browser and blocks until timeout.
+          force: true
+        )
+      end
     ensure
       FileUtils.remove_entry(staging_dir) if staging_dir && Dir.exist?(staging_dir)
     end
@@ -251,19 +279,21 @@ platform :android do
       pngs.each { |png| FileUtils.cp(png, File.join(phone_dir, File.basename(png))) }
       UI.message("Staged #{pngs.length} Play phone screenshot(s) into #{phone_dir}")
 
-      upload_to_play_store(
-        package_name: "com.boardsesh.app",
-        json_key_data: ENV.fetch("GOOGLE_PLAY_SERVICE_ACCOUNT_JSON"),
-        metadata_path: metadata_dir,
-        skip_upload_apk: true,
-        skip_upload_aab: true,
-        skip_upload_metadata: true,
-        skip_upload_changelogs: true,
-        skip_upload_images: true,
-        skip_upload_screenshots: false,
-        sync_image_upload: true,
-        timeout: 300
-      )
+      with_upload_retries do
+        upload_to_play_store(
+          package_name: "com.boardsesh.app",
+          json_key_data: ENV.fetch("GOOGLE_PLAY_SERVICE_ACCOUNT_JSON"),
+          metadata_path: metadata_dir,
+          skip_upload_apk: true,
+          skip_upload_aab: true,
+          skip_upload_metadata: true,
+          skip_upload_changelogs: true,
+          skip_upload_images: true,
+          skip_upload_screenshots: false,
+          sync_image_upload: true,
+          timeout: 300
+        )
+      end
     ensure
       FileUtils.remove_entry(staging_dir) if staging_dir && Dir.exist?(staging_dir)
     end
