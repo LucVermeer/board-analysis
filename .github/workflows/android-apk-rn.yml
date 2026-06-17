@@ -134,16 +134,20 @@ jobs:
           GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
         run: bunx expo prebuild --platform android --clean --no-install
 
-      # versionCode = max versionCode across Play tracks + 1, queried from Google
-      # Play via fastlane. Querying the live tracks keeps the result strictly
-      # above the Capacitor app's versionCode (an install upgrades in place).
-      # Falls back to offset + run_number (the previous deterministic scheme)
-      # when there's no Play service account yet or the query fails, so the build
-      # stays green before the Play bootstrap.
+      # versionCode = max(sideload floor, Play track ceiling + 1), resolved by
+      # `fastlane android next_version_code`. The sideload floor is the
+      # deterministic offset + run_number line below (VERSION_CODE_FALLBACK) — it
+      # is the versionCode every GitHub Release sideload APK has shipped, so it's
+      # the LIVE ceiling of the channel users sideload (~2_000_2xx). The Play
+      # internal track sits in the low hundreds, so it can only RAISE the number,
+      # never lower it: deriving from Play alone regressed the shared versionCode
+      # from 2_000_285 (build 285) to 190 (build 289), which Android rejects as
+      # INSTALL_FAILED_VERSION_DOWNGRADE on every sideload upgrade. See
+      # docs/android-sideload-build.md.
       # NOTE: github.run_number resets to 1 if this workflow file is renamed or
-      # recreated — if you do that AND the fallback is in use, bump
-      # version_code_offset past the current production ceiling via the
-      # workflow_dispatch input, or new builds will be un-installable.
+      # recreated — if you do that, bump version_code_offset past the current
+      # production ceiling via the workflow_dispatch input first, or the floor
+      # drops below installed builds and new APKs become un-installable.
       - name: Compute version code
         id: version_code
         working-directory: fastlane
