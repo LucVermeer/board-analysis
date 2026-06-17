@@ -5,7 +5,7 @@ import type { SessionDetailTick, SessionFeedParticipant } from '@boardsesh/share
 import { getGradeTextColor } from '@boardsesh/play-view';
 import { Text } from '../Text';
 import { Icon } from '../Icon';
-import type { IconName } from '../icon-map';
+import { type IconName } from '../icon-map';
 import { ListRow } from '../ListRow';
 import { PressableAvatar } from '../PressableAvatar';
 import { PressableSurface } from '../PressableSurface';
@@ -100,7 +100,9 @@ export const SessionTickRow = memo(function SessionTickRow({
   // fallbackSubtitle is used only by the ListRow path (climb/boardConfig missing).
   // In the ClimbListItemContent path, participant name is surfaced via
   // primarySubtitleOverride and attempt/comment/setter via subtitleDetailParts.
-  const fallbackSubtitle = detailParts.join(' · ') || undefined;
+  // ListRow has no detail line, so setterText is excluded here to avoid it
+  // appearing in the only subtitle slot alongside the attempt/comment text.
+  const fallbackSubtitle = [attemptText, tick.comment ?? null].filter((part): part is string => !!part).join(' · ') || undefined;
 
   const handlePress = useCallback(() => {
     hapticSelection();

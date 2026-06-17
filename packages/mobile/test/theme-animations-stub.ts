@@ -37,3 +37,14 @@ export const motionByVariant = {
     emphasized: { duration: 350, easingBezier: [0.05, 0.7, 0.1, 1] },
   },
 };
+
+export type SpringPreset = 'snappy' | 'interactive' | 'gentle' | 'bouncy';
+export type TimingPreset = 'instant' | 'fast' | 'normal' | 'slow';
+export type MotionConfig = {
+  duration: number;
+  easingBezier?: readonly [number, number, number, number];
+};
+export type Motion = {
+  standard: MotionConfig;
+  emphasized: MotionConfig;
+};
