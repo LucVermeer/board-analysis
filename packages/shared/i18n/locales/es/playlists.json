@@ -109,6 +109,9 @@
       "subtitle": "Estos son bloques de {{board}}. Cambia de tablero para ponerlos en cola.",
       "cta": "Cambiar de tablero"
     },
+    "unrenderableClimb": {
+      "subtitle": "Faltan datos del tablero para este bloque."
+    },
     "menu": {
       "generate": "Generar",
       "editClimbs": "Editar bloques",

@@ -109,6 +109,9 @@
       "subtitle": "Ce sont des voies {{board}}. Changez de planche pour les mettre en file.",
       "cta": "Changer de planche"
     },
+    "unrenderableClimb": {
+      "subtitle": "Les données de planche manquent pour cette voie."
+    },
     "menu": {
       "generate": "Générer",
       "editClimbs": "Modifier les blocs",

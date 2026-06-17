@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import type { BoardName } from '@boardsesh/shared-schema';
 import type { Climb } from '@boardsesh/queue';
+import { getProductSize, getSizesForLayoutId } from '@boardsesh/board-constants/product-sizes';
 import { getBoardConfigForPlaylist } from '../board-details-for-playlist';
 import type { PlaylistRenderBoard } from '../use-playlist-render-board';
-import { resolvePlaylistClimbRenderBoard } from '../playlist-climb-render-board';
+import { getPlaylistRenderBoardTarget, resolvePlaylistClimbRenderBoard } from '../playlist-climb-render-board';
 
 function makeClimb(overrides: Partial<Climb> = {}): Climb {
   return {
@@ -45,6 +47,43 @@ describe('resolvePlaylistClimbRenderBoard', () => {
       fit: 'exact',
       incompatible: false,
     });
+  });
+
+  it('honors a precomputed active-board compatibility target', () => {
+    const activeBoard = getKnownBoard('kilter', 1, 45);
+    const actualTarget = getPlaylistRenderBoardTarget(activeBoard);
+    const firstHoldId = actualTarget.holdsData?.[0]?.id;
+    if (firstHoldId == null) {
+      throw new Error('Expected kilter layout 1 to expose renderable holds');
+    }
+
+    const activeSize = getProductSize(activeBoard.boardName as BoardName, activeBoard.sizeId);
+    if (!activeSize) {
+      throw new Error('Expected kilter layout 1 active size to resolve');
+    }
+    const activeArea = (activeSize.edgeRight - activeSize.edgeLeft) * (activeSize.edgeTop - activeSize.edgeBottom);
+    const largerSizes = getSizesForLayoutId(activeBoard.boardName as BoardName, activeBoard.layoutId).filter((size) => {
+      const sizeArea = (size.edgeRight - size.edgeLeft) * (size.edgeTop - size.edgeBottom);
+      return sizeArea > activeArea;
+    });
+    expect(largerSizes).toHaveLength(0);
+
+    const climb = makeClimb({ frames: `p${firstHoldId}r42` });
+    const resultWithActualTarget = resolvePlaylistClimbRenderBoard(climb, activeBoard, actualTarget);
+    expect(resultWithActualTarget).toEqual({
+      renderBoard: activeBoard,
+      fit: 'exact',
+      incompatible: false,
+    });
+
+    const resultWithPrecomputedTarget = resolvePlaylistClimbRenderBoard(climb, activeBoard, {
+      board_name: activeBoard.boardName as BoardName,
+      layout_id: activeBoard.layoutId,
+      holdsData: [{ id: -1 }],
+    });
+
+    expect(resultWithPrecomputedTarget?.fit).toBe('incompatible');
+    expect(resultWithPrecomputedTarget?.incompatible).toBe(true);
   });
 
   it('uses the smallest larger size when the climb needs more board than the active size', () => {
