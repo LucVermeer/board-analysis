@@ -28,6 +28,8 @@ const mocks = vi.hoisted(() => ({
   queueItemCounter: 0,
 }));
 
+const VIEW_ONLY_BOARD = { boardName: 'tension', layoutId: 9, sizeId: 5, setIds: '1,2', angle: 35 };
+
 vi.mock('@boardsesh/playlists-react', () => ({
   usePlaylistClimbActivation: (options: UsePlaylistClimbActivationOptions) => {
     mocks.captured = options;
@@ -76,9 +78,22 @@ function makeClimb(uuid: string): Climb {
   };
 }
 
-function renderActivation(fetchPage = vi.fn()) {
+function renderActivation(
+  fetchPage = vi.fn(),
+  options: {
+    allClimbs?: Climb[];
+    sourceId?: string;
+    viewOnlyBoard?: typeof VIEW_ONLY_BOARD | ((climb: Climb) => typeof VIEW_ONLY_BOARD | null) | null;
+  } = {},
+) {
   return renderHook(() =>
-    usePlaylistActivation({ sourceId: 'pl-1', allClimbs: [], fetchPage, refreshErrorMessage: 'refresh failed:' }),
+    usePlaylistActivation({
+      sourceId: options.sourceId ?? 'playlist:pl-1',
+      allClimbs: options.allClimbs ?? [],
+      fetchPage,
+      viewOnlyBoard: options.viewOnlyBoard,
+      refreshErrorMessage: 'refresh failed:',
+    }),
   );
 }
 
@@ -181,8 +196,8 @@ describe('usePlaylistActivation (mobile wrapper)', () => {
 
   it('re-tapping the active climb whose suggestions already follow this list just reopens', async () => {
     mocks.activeClimbUuid = 'a';
-    // Suggestions already anchored on 'a' from this very list (sourceId 'pl-1').
-    mocks.suggestionSource = { playlistUuid: 'pl-1', activatedClimbUuid: 'a', boardKey: 'kilter:1:2:3' };
+    // Suggestions already anchored on 'a' from this very list (sourceId 'playlist:pl-1').
+    mocks.suggestionSource = { playlistUuid: 'playlist:pl-1', activatedClimbUuid: 'a', boardKey: 'kilter:1:2:3' };
     const { result } = renderActivation();
     const climb = makeClimb('a');
     await result.current(climb);
@@ -196,7 +211,7 @@ describe('usePlaylistActivation (mobile wrapper)', () => {
   it('re-tapping the active climb from a DIFFERENT list re-activates to follow it', async () => {
     mocks.activeClimbUuid = 'a';
     // 'a' is active, but its suggestions follow another list ('climblist'), not
-    // this one ('pl-1'). The drawer's next/previous must switch to follow 'pl-1'.
+    // this one ('playlist:pl-1'). The drawer's next/previous must switch to follow it.
     mocks.suggestionSource = { playlistUuid: 'climblist', activatedClimbUuid: 'a', boardKey: 'kilter:1:2:3' };
     const { result } = renderActivation();
     const climb = makeClimb('a');
@@ -231,6 +246,54 @@ describe('usePlaylistActivation (mobile wrapper)', () => {
     // 'a' is not the active climb ('b' is), so this still starts a fresh pass.
     expect(mocks.activate).toHaveBeenCalledWith(climb);
     expect(mocks.openPlayDrawer).toHaveBeenCalledWith(climb, { committedExternally: true });
+  });
+
+  it('opens wrong-board playlist climbs view-only without mutating the queue', async () => {
+    const climbA = { ...makeClimb('a'), angle: 20 };
+    const climbB = makeClimb('b');
+    const fetchPage = vi.fn();
+    const { result } = renderActivation(fetchPage, { allClimbs: [climbA, climbB], viewOnlyBoard: VIEW_ONLY_BOARD });
+
+    await result.current(climbA);
+
+    const viewOnlyOptions = mocks.openPlayDrawer.mock.calls[0][1];
+    expect(mocks.openPlayDrawer).toHaveBeenCalledWith(climbA, {
+      setAsCurrent: false,
+      boardConfig: { ...VIEW_ONLY_BOARD, angle: 20 },
+      previewQueueItem: expect.objectContaining({ climb: climbA, suggested: true }),
+      previewPlaylistSuggestionSource: expect.objectContaining({
+        playlistUuid: 'playlist:pl-1',
+        activatedClimbUuid: 'a',
+        boardKey: 'tension:9:5:1,2',
+        climbs: [climbA, climbB],
+      }),
+    });
+    expect(viewOnlyOptions.boardConfig).not.toBe(VIEW_ONLY_BOARD);
+    expect(mocks.activate).not.toHaveBeenCalled();
+    expect(mocks.setCurrentClimb).not.toHaveBeenCalled();
+    expect(mocks.refreshPlaylistSuggestionSource).not.toHaveBeenCalled();
+    expect(fetchPage).not.toHaveBeenCalled();
+  });
+
+  it('resolves the view-only board from the tapped climb', async () => {
+    const climb = { ...makeClimb('tension-a'), angle: 20 };
+    const viewOnlyResolver = vi.fn((tapped: Climb) =>
+      tapped.uuid === climb.uuid ? { boardName: 'tension', layoutId: 9, sizeId: 8, setIds: '4,5', angle: 0 } : null,
+    );
+    const { result } = renderActivation(vi.fn(), { allClimbs: [climb], viewOnlyBoard: viewOnlyResolver });
+
+    await result.current(climb);
+
+    expect(viewOnlyResolver).toHaveBeenCalledWith(climb);
+    expect(mocks.openPlayDrawer).toHaveBeenCalledWith(climb, {
+      setAsCurrent: false,
+      boardConfig: { boardName: 'tension', layoutId: 9, sizeId: 8, setIds: '4,5', angle: 20 },
+      previewQueueItem: expect.objectContaining({ climb, suggested: true }),
+      previewPlaylistSuggestionSource: expect.objectContaining({
+        boardKey: 'tension:9:8:4,5',
+      }),
+    });
+    expect(mocks.activate).not.toHaveBeenCalled();
   });
 
   it('fetchClimbsForBoard pages the playlist via the injected fetchPage', async () => {

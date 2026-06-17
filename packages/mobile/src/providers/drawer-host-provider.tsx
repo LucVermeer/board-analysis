@@ -6,9 +6,9 @@
  *
  * Default board comes from `useActiveBoard()` (the user's stored pick); callers
  * can override via the second arg to `openPlayDrawer` if needed (e.g. opening a
- * climb from a different board context). The active boardConfig is exposed
- * through the context so consumers (like the persistent bar's log-ascent
- * button) don't have to resolve the active board independently.
+ * climb from a different board context). The stored active boardConfig is
+ * exposed through the context so consumers (like the persistent bar's
+ * log-ascent button) don't have to resolve the active board independently.
  */
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
@@ -98,8 +98,9 @@ export type OpenPlayDrawerOptions = PlayDrawerOpenOptions & {
 };
 
 type DrawerHostValue = {
-  /** Currently resolved board config (override OR default board). Null while
-   *  the default board is still loading and no override is set. */
+  /** User's stored active board config. Temporary PlayDrawer overrides are not
+   *  reflected here, so persistent queue/log-ascent surfaces stay bound to the
+   *  selected board. Null while the stored board is still loading. */
   boardConfig: BoardConfig | null;
   openPlayDrawer: (climb: Climb, options?: OpenPlayDrawerOptions) => void;
   openLogAscent: (input: LogAscentInput) => void;
@@ -194,8 +195,11 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
   // matches the override.
   const pendingOverrideOpenRef = useRef<{ climb: Climb; options: PlayDrawerOpenOptions } | null>(null);
 
-  const activeBoardConfig: BoardConfig | null = useMemo(() => {
-    if (boardConfigOverride) return boardConfigOverride;
+  // The user's STORED active board as a BoardConfig (never the override). Used
+  // by non-drawer surfaces and to decide whether a climb opened with a board
+  // override is genuinely a different board (→ switch-board gate) or the same
+  // board (→ drop the override and render against the user's precise board).
+  const storedActiveBoardConfig = useMemo<BoardConfig | null>(() => {
     if (!activeBoard) return null;
     return {
       boardName: activeBoard.boardType,
@@ -204,7 +208,12 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
       setIds: activeBoard.setIds,
       angle: activeBoard.angle,
     };
-  }, [boardConfigOverride, activeBoard]);
+  }, [activeBoard]);
+
+  const activeBoardConfig: BoardConfig | null = useMemo(
+    () => boardConfigOverride ?? storedActiveBoardConfig,
+    [boardConfigOverride, storedActiveBoardConfig],
+  );
 
   const selectedBoardPresenceBoard = useMemo<ResolveBoardUuidArgs | null>(() => {
     if (!activeBoard) return null;
@@ -220,25 +229,14 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
     void resolveAndBindBoardByUuid(selectedBoardPresenceBoard);
   }, [boardPresenceEnabled, selectedBoardPresenceBoard, resolveAndBindBoardByUuid, resetPresence]);
 
-  // Keep a ref so the otherwise empty-dep `openClimbActions` callback can
-  // snapshot the current board config without churning its identity.
+  // Keep refs so otherwise empty-dep open callbacks can snapshot the relevant
+  // board config without churning their identity. `activeBoardConfigRef` is the
+  // drawer board (including a temporary override); `storedActiveBoardConfigRef`
+  // is the user's selected board and is what non-drawer surfaces use.
   const activeBoardConfigRef = useRef(activeBoardConfig);
   activeBoardConfigRef.current = activeBoardConfig;
-
-  // The user's STORED active board as a BoardConfig (never the override). Used
-  // to decide whether a climb opened with a board override is genuinely a
-  // different board (→ switch-board gate) or the same board (→ drop the override
-  // and render against the user's precise board).
-  const storedActiveBoardConfig = useMemo<BoardConfig | null>(() => {
-    if (!activeBoard) return null;
-    return {
-      boardName: activeBoard.boardType,
-      layoutId: activeBoard.layoutId,
-      sizeId: activeBoard.sizeId,
-      setIds: activeBoard.setIds,
-      angle: activeBoard.angle,
-    };
-  }, [activeBoard]);
+  const storedActiveBoardConfigRef = useRef(storedActiveBoardConfig);
+  storedActiveBoardConfigRef.current = storedActiveBoardConfig;
   const boardConfigOverrideRef = useRef(boardConfigOverride);
   boardConfigOverrideRef.current = boardConfigOverride;
   const myBoardsRef = useRef(myBoardsConn);
@@ -248,7 +246,7 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
     // Pull `source` out alongside `boardConfig` so neither reaches PlayDrawer.open
     // — `source` is analytics-only and would otherwise leak into the drawer.
     const { boardConfig: override, source: openSource, ...openOptions } = options ?? {};
-    const boardConfig = override ?? activeBoardConfigRef.current;
+    const boardConfig = override ?? storedActiveBoardConfigRef.current;
     track(SHARED_EVENTS.PlayDrawerOpened, {
       climbUuid: climb.uuid,
       boardName: boardConfig?.boardName,
@@ -259,6 +257,11 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
     });
     if (override) {
       pendingOverrideOpenRef.current = { climb, options: openOptions };
+      if (boardConfigsMatch(override, activeBoardConfigRef.current)) {
+        pendingOverrideOpenRef.current = null;
+        playDrawerRef.current?.open(climb, openOptions);
+        return;
+      }
       setBoardConfigOverride(override);
       return;
     }
@@ -334,7 +337,7 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
   // user switches their active board mid-interaction.
   const openClimbActions = useCallback(
     (climb: Climb, boardConfigOverride?: BoardConfig, options?: OpenClimbActionsOptions) => {
-      const boardConfig = boardConfigOverride ?? activeBoardConfigRef.current;
+      const boardConfig = boardConfigOverride ?? storedActiveBoardConfigRef.current;
       if (!boardConfig) return;
       setClimbActions({ climb, boardConfig, onEditEntry: options?.onEditEntry });
     },
@@ -346,7 +349,7 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const openAddToPlaylist = useCallback((climb: Climb, boardConfigOverride?: BoardConfig) => {
-    const boardConfig = boardConfigOverride ?? activeBoardConfigRef.current;
+    const boardConfig = boardConfigOverride ?? storedActiveBoardConfigRef.current;
     if (!boardConfig) return;
     setPlaylistClimb({ climb, boardConfig });
   }, []);
@@ -399,15 +402,15 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
 
   // The queue sheet renders climbs against the active board (thumbnails + tick).
   const queueBoard = useMemo<QueueItemRowBoard | null>(() => {
-    if (!activeBoardConfig) return null;
+    if (!storedActiveBoardConfig) return null;
     return {
-      boardName: activeBoardConfig.boardName as BoardName,
-      layoutId: activeBoardConfig.layoutId,
-      sizeId: activeBoardConfig.sizeId,
-      setIds: activeBoardConfig.setIds,
-      angle: activeBoardConfig.angle,
+      boardName: storedActiveBoardConfig.boardName as BoardName,
+      layoutId: storedActiveBoardConfig.layoutId,
+      sizeId: storedActiveBoardConfig.sizeId,
+      setIds: storedActiveBoardConfig.setIds,
+      angle: storedActiveBoardConfig.angle,
     };
-  }, [activeBoardConfig]);
+  }, [storedActiveBoardConfig]);
 
   // Tap a queue item → make it current (for the whole session, always-live) and
   // show it in the play drawer.
@@ -445,11 +448,11 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
 
   // Tick a history climb → open the log-ascent sheet (stacks above the queue
   // sheet, which stays open beneath) pre-filled with the active session.
-  // Deps: only `sessionId` — `activeBoardConfigRef` is a stable ref read at call
+  // Deps: only `sessionId` — `storedActiveBoardConfigRef` is a stable ref read at call
   // time (intentionally not a dep). If that ref ever becomes state, add it here.
   const handleQueueTickHistory = useCallback(
     (item: ClimbQueueItem) => {
-      const boardConfig = activeBoardConfigRef.current;
+      const boardConfig = storedActiveBoardConfigRef.current;
       if (!boardConfig) return;
       setLogAscentInput({
         climbUuid: item.climb.uuid,
@@ -516,7 +519,7 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
   const handleBoardSheetClimbPress = useCallback(
     (action: BoardSheetClimbAction) => {
       const item = climbToQueueItem(action.climb, { uuid: action.queueItemUuid ?? undefined });
-      const boardConfigOverride = boardConfigsMatch(action.boardConfig, activeBoardConfigRef.current)
+      const boardConfigOverride = boardConfigsMatch(action.boardConfig, storedActiveBoardConfigRef.current)
         ? undefined
         : action.boardConfig;
       setCurrentClimb(item);
@@ -566,7 +569,7 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<DrawerHostValue>(
     () => ({
-      boardConfig: activeBoardConfig,
+      boardConfig: storedActiveBoardConfig,
       openPlayDrawer,
       openLogAscent,
       openClimbActions,
@@ -577,7 +580,7 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
       openBoardSheet,
     }),
     [
-      activeBoardConfig,
+      storedActiveBoardConfig,
       openPlayDrawer,
       openLogAscent,
       openClimbActions,
@@ -657,7 +660,7 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
       <BoardSheet
         ref={boardSheetRef}
         boardLabel={boardSheetLabel}
-        boardConfig={activeBoardConfig}
+        boardConfig={storedActiveBoardConfig}
         onClose={requestCloseBoardSheet}
         onSwitchBoard={handleSwitchBoardFromSheet}
         onClimbPress={handleBoardSheetClimbPress}

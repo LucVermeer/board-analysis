@@ -4,7 +4,7 @@ import { renderHook } from '@testing-library/react';
 import { usePlaylistRenderBoard } from '../use-playlist-render-board';
 
 type ActiveBoard = {
-  boardName: string;
+  boardType: string;
   layoutId: number;
   sizeId: number;
   setIds: string;
@@ -15,7 +15,7 @@ type ResolvedBoard = { boardName: string; layoutId: number; sizeId: number; setI
 
 const mocks = vi.hoisted(() => ({
   push: vi.fn(),
-  activeBoard: { boardName: 'kilter', layoutId: 1, sizeId: 2, setIds: '3', angle: 40 } as ActiveBoard,
+  activeBoard: { boardType: 'kilter', layoutId: 1, sizeId: 2, setIds: '3', angle: 40 } as ActiveBoard,
   resolved: { boardName: 'tension', layoutId: 9, sizeId: 5, setIds: [1, 2] } as ResolvedBoard,
   getBoardConfigForPlaylist: vi.fn(),
 }));
@@ -34,8 +34,14 @@ vi.mock('@boardsesh/board-config', () => ({
   formatBoardDisplayName: (boardType: string) => boardType.charAt(0).toUpperCase() + boardType.slice(1),
 }));
 
+vi.mock('../../graphql/use-active-board', () => ({
+  useActiveBoard: () => ({ data: mocks.activeBoard }),
+}));
+
 vi.mock('../../../providers/drawer-host-provider', () => ({
-  useDrawerHost: () => ({ boardConfig: mocks.activeBoard }),
+  useDrawerHost: () => ({
+    boardConfig: { boardName: 'tension', layoutId: 9, sizeId: 5, setIds: '1,2', angle: 35 },
+  }),
 }));
 
 vi.mock('../board-details-for-playlist', () => ({
@@ -45,7 +51,7 @@ vi.mock('../board-details-for-playlist', () => ({
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mocks.activeBoard = { boardName: 'kilter', layoutId: 1, sizeId: 2, setIds: '3', angle: 40 };
+  mocks.activeBoard = { boardType: 'kilter', layoutId: 1, sizeId: 2, setIds: '3', angle: 40 };
   mocks.resolved = { boardName: 'tension', layoutId: 9, sizeId: 5, setIds: [1, 2] };
   mocks.getBoardConfigForPlaylist.mockImplementation(() => mocks.resolved);
 });
@@ -53,7 +59,13 @@ beforeEach(() => {
 describe('usePlaylistRenderBoard', () => {
   it('renders against the active board with no banner when the boards match', () => {
     const { result } = renderHook(() => usePlaylistRenderBoard({ boardType: 'kilter', layoutId: 1 }));
-    expect(result.current.renderBoard).toBe(mocks.activeBoard);
+    expect(result.current.renderBoard).toEqual({
+      boardName: 'kilter',
+      layoutId: 1,
+      sizeId: 2,
+      setIds: '3',
+      angle: 40,
+    });
     expect(result.current.banner).toBeNull();
     // No need to resolve the playlist's own board when it matches the active one.
     expect(mocks.getBoardConfigForPlaylist).not.toHaveBeenCalled();
@@ -61,23 +73,42 @@ describe('usePlaylistRenderBoard', () => {
 
   it('matches on board name when the playlist carries no layout (Aurora circuit)', () => {
     const { result } = renderHook(() => usePlaylistRenderBoard({ boardType: 'kilter', layoutId: null }));
-    expect(result.current.renderBoard).toBe(mocks.activeBoard);
+    expect(result.current.renderBoard).toMatchObject({ boardName: 'kilter', layoutId: 1 });
     expect(result.current.banner).toBeNull();
   });
 
   it('keeps the active board and shows a banner on a board-name mismatch', () => {
     const { result } = renderHook(() => usePlaylistRenderBoard({ boardType: 'tension', layoutId: 9 }));
-    expect(result.current.renderBoard).toBe(mocks.activeBoard);
+    expect(result.current.renderBoard).toEqual({
+      boardName: 'kilter',
+      layoutId: 1,
+      sizeId: 2,
+      setIds: '3',
+      angle: 40,
+    });
     expect(result.current.banner?.title).toContain('Tension');
     expect(result.current.banner?.subtitle).toContain('Tension');
     expect(mocks.getBoardConfigForPlaylist).not.toHaveBeenCalled();
+  });
+
+  it('ignores drawer-host board overrides when deciding playlist mismatch', () => {
+    const { result } = renderHook(() => usePlaylistRenderBoard({ boardType: 'tension', layoutId: 9 }));
+    // Regression guard: the mocked drawer host above reports a matching Tension
+    // override, but playlist mismatch must be based on the stored active board.
+    expect(result.current.banner).not.toBeNull();
   });
 
   it('treats a layout mismatch on the same board as a mismatch', () => {
     mocks.resolved = { boardName: 'kilter', layoutId: 8, sizeId: 7, setIds: [3] };
     const { result } = renderHook(() => usePlaylistRenderBoard({ boardType: 'kilter', layoutId: 8 }));
     expect(result.current.banner).not.toBeNull();
-    expect(result.current.renderBoard).toBe(mocks.activeBoard);
+    expect(result.current.renderBoard).toEqual({
+      boardName: 'kilter',
+      layoutId: 1,
+      sizeId: 2,
+      setIds: '3',
+      angle: 40,
+    });
     expect(mocks.getBoardConfigForPlaylist).not.toHaveBeenCalled();
   });
 
@@ -92,7 +123,13 @@ describe('usePlaylistRenderBoard', () => {
   it('keeps the active board when the playlist board cannot be resolved', () => {
     mocks.resolved = null;
     const { result } = renderHook(() => usePlaylistRenderBoard({ boardType: 'moonboard', layoutId: 1 }));
-    expect(result.current.renderBoard).toBe(mocks.activeBoard);
+    expect(result.current.renderBoard).toEqual({
+      boardName: 'kilter',
+      layoutId: 1,
+      sizeId: 2,
+      setIds: '3',
+      angle: 40,
+    });
     expect(result.current.banner).not.toBeNull();
     expect(mocks.getBoardConfigForPlaylist).not.toHaveBeenCalled();
   });
@@ -113,7 +150,7 @@ describe('usePlaylistRenderBoard', () => {
 
   it('always renders against the active board with no banner for smart playlists (null input)', () => {
     const { result } = renderHook(() => usePlaylistRenderBoard(null));
-    expect(result.current.renderBoard).toBe(mocks.activeBoard);
+    expect(result.current.renderBoard).toMatchObject({ boardName: 'kilter', layoutId: 1 });
     expect(result.current.banner).toBeNull();
     expect(mocks.getBoardConfigForPlaylist).not.toHaveBeenCalled();
   });

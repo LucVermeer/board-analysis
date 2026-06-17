@@ -48,6 +48,7 @@ import { usePlayDrawerWakeLock } from './use-play-drawer-wake-lock';
 import { useDeferredSheetOpen } from './use-deferred-sheet-open';
 import { resolveFavoriteRollback } from './favorite-rollback';
 import { buildPlayDrawerBoardLayout } from './lightbulb-control';
+import { getViewOnlyPreviewNavigationTarget } from './play-drawer-navigation';
 import { useLightbulbControl } from '../ble/use-lightbulb-control';
 import { track } from '../../lib/analytics';
 import { iosSystemColors } from '../../theme/ios-colors';
@@ -381,22 +382,46 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   }, [flushOnDismiss]);
 
   const handlePrev = useCallback(() => {
+    const previewTarget = getViewOnlyPreviewNavigationTarget({
+      previewItem: drawerPreviewItem,
+      previewSuggestionSource: drawerPreviewSuggestionSource,
+      targetItem: navigationState.prevItem,
+    });
+    if (previewTarget.viewOnly) {
+      if (!previewTarget.targetItem) return;
+      setDrawerPreviewItem(previewTarget.targetItem);
+      setIsMirrored(false);
+      // The favorite override is cleared by the climb-change effect.
+      return;
+    }
     // Always-live: navigation commits the shared current climb for everyone.
     setDrawerPreviewItem(null);
     setDrawerPreviewIsWallClimb(false);
     previousClimb();
     setIsMirrored(false);
     // The favorite override is cleared by the climb-change effect.
-  }, [previousClimb]);
+  }, [drawerPreviewSuggestionSource, drawerPreviewItem, navigationState.prevItem, previousClimb]);
 
   const handleNext = useCallback(() => {
+    const previewTarget = getViewOnlyPreviewNavigationTarget({
+      previewItem: drawerPreviewItem,
+      previewSuggestionSource: drawerPreviewSuggestionSource,
+      targetItem: navigationState.nextItem,
+    });
+    if (previewTarget.viewOnly) {
+      if (!previewTarget.targetItem) return;
+      setDrawerPreviewItem(previewTarget.targetItem);
+      setIsMirrored(false);
+      // The favorite override is cleared by the climb-change effect.
+      return;
+    }
     // Always-live: navigation commits the shared current climb for everyone.
     setDrawerPreviewItem(null);
     setDrawerPreviewIsWallClimb(false);
     nextClimb();
     setIsMirrored(false);
     // The favorite override is cleared by the climb-change effect.
-  }, [nextClimb]);
+  }, [drawerPreviewSuggestionSource, drawerPreviewItem, navigationState.nextItem, nextClimb]);
 
   // Promote the previewed climb to the active/current queue item. The Preview
   // badge clears and the lightbulb (which acts on the current climb) now drives

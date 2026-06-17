@@ -104,16 +104,21 @@ vi.mock('@shopify/flash-list', () => ({
     ListEmptyComponent?: ReactNode;
     ListFooterComponent?: ReactNode;
     onEndReached?: () => void;
-  }) =>
-    createElement(
+  }) => {
+    const rowNodes = data?.map((item, index) => {
+      const key =
+        typeof item === 'object' && item !== null && 'uuid' in item ? String((item as { uuid?: unknown }).uuid) : index;
+      return renderItem ? createElement('div', { key }, renderItem({ item, index })) : null;
+    });
+    return createElement(
       'div',
       { 'data-list': 'true', onClick: onEndReached },
       ListHeaderComponent ?? null,
-      data && data.length > 0 && renderItem
-        ? data.map((item, index) => createElement('div', { key: index }, renderItem({ item, index })))
-        : (ListEmptyComponent ?? null),
+      data?.length === 0 ? (ListEmptyComponent ?? null) : null,
+      rowNodes ?? null,
       ListFooterComponent ?? null,
-    ),
+    );
+  },
 }));
 
 vi.mock('expo-router', () => ({ useRouter: () => ({ back: ctrl.back }) }));
@@ -683,6 +688,16 @@ describe('PlaylistDetailView', () => {
       const { getByText } = render(<PlaylistDetailView {...makeProps({ climbs: [CLIMB], boardBanner: banner })} />);
       fireEvent.click(getByText(banner.cta));
       expect(banner.onPress).toHaveBeenCalledTimes(1);
+    });
+
+    it('opens a mismatched climb row through the view-only activation path', () => {
+      const onActivateClimb = vi.fn();
+      const { getByText } = render(
+        <PlaylistDetailView {...makeProps({ climbs: [CLIMB], boardBanner: banner, onActivateClimb })} />,
+      );
+      fireEvent.click(getByText(CLIMB.name));
+      expect(onActivateClimb).toHaveBeenCalledWith(CLIMB);
+      expect(banner.onPress).not.toHaveBeenCalled();
     });
 
     it('renders no banner when boardBanner is absent', () => {

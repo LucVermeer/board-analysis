@@ -13,8 +13,9 @@ import { useMemo } from 'react';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { formatBoardDisplayName } from '@boardsesh/board-config';
-import { useDrawerHost, type BoardConfig } from '../../providers/drawer-host-provider';
+import type { BoardConfig } from '../../providers/drawer-host-provider';
 import { boardLooselyMatches } from '../boards/board-matches';
+import { useActiveBoard } from '../graphql/use-active-board';
 import { getBoardConfigForPlaylist } from './board-details-for-playlist';
 
 /** The board a playlist's rows render against — same shape as the active board
@@ -48,7 +49,7 @@ export type UsePlaylistRenderBoardResult = {
 export function usePlaylistRenderBoard(
   playlistBoard: { boardType: string; layoutId?: number | null } | null,
 ): UsePlaylistRenderBoardResult {
-  const { boardConfig: activeBoard } = useDrawerHost();
+  const activeBoard = useActiveBoard().data ?? null;
   const router = useRouter();
   const { t } = useTranslation('playlists');
 
@@ -57,20 +58,31 @@ export function usePlaylistRenderBoard(
   const boardType = playlistBoard?.boardType ?? null;
   const layoutId = playlistBoard?.layoutId ?? null;
 
+  const activeRenderBoard = useMemo<PlaylistRenderBoard | null>(() => {
+    if (!activeBoard) return null;
+    return {
+      boardName: activeBoard.boardType,
+      layoutId: activeBoard.layoutId,
+      sizeId: activeBoard.sizeId,
+      setIds: activeBoard.setIds,
+      angle: activeBoard.angle,
+    };
+  }, [activeBoard]);
+
   // Resolve the preferred render board + mismatch flag from the real board state only (no
   // `t`/`router`), so `renderBoard`'s identity is stable across unrelated
   // re-renders and never churns the FlashList rows that depend on it.
   const { renderBoard, mismatch } = useMemo<{ renderBoard: PlaylistRenderBoard | null; mismatch: boolean }>(() => {
     // Smart playlists (no board): always the active board, no mismatch concept.
-    if (boardType == null) return { renderBoard: activeBoard, mismatch: false };
+    if (boardType == null) return { renderBoard: activeRenderBoard, mismatch: false };
 
-    const matchesActive = boardLooselyMatches({ boardName: boardType, layoutId }, activeBoard);
-    if (matchesActive) return { renderBoard: activeBoard, mismatch: false };
+    const matchesActive = boardLooselyMatches({ boardName: boardType, layoutId }, activeRenderBoard);
+    if (matchesActive) return { renderBoard: activeRenderBoard, mismatch: false };
 
     // Mismatch with an active board: keep passing the active board into row
     // rendering so each row can decide whether it fits, or fall back to its own
     // board and mark itself incompatible.
-    if (activeBoard) return { renderBoard: activeBoard, mismatch: true };
+    if (activeRenderBoard) return { renderBoard: activeRenderBoard, mismatch: true };
 
     // No active board → render against the playlist's own board (largest size +
     // all sets). `null` when it can't resolve (e.g. MoonBoard), in which case
@@ -89,7 +101,7 @@ export function usePlaylistRenderBoard(
       },
       mismatch: true,
     };
-  }, [activeBoard, boardType, layoutId]);
+  }, [activeRenderBoard, boardType, layoutId]);
 
   // Banner copy + navigation depend on `t`/`router`; kept in a separate memo so
   // their (possible) identity churn can't recreate `renderBoard`.

@@ -4,27 +4,32 @@
 // only difference between them is which GraphQL query backs the suggestion
 // refresh, so that fetcher is injected.
 //
-// Activation is two-phase (see the shared hook): it synchronously activates the
-// tapped climb with a suggestion source built from the loaded climbs, opens the
-// play drawer, then asynchronously fetches the full ordered board climb list and
-// swaps in a richer suggestion source so swiping through the play drawer walks
-// the whole playlist.
+// Active-board activation is two-phase (see the shared hook): it synchronously
+// activates the tapped climb with a suggestion source built from the loaded
+// climbs, opens the play drawer, then asynchronously fetches the full ordered
+// board climb list and swaps in a richer suggestion source so swiping through
+// the play drawer walks the whole playlist. Wrong-board playlists use a
+// view-only drawer path so they can be inspected without mutating the queue.
 
 import { useCallback, useMemo, useRef } from 'react';
 import { usePlaylistClimbActivation, fetchPlaylistSuggestionClimbs } from '@boardsesh/playlists-react';
-import { getQueueBoardKey, type Climb, type ClimbQueueItem } from '@boardsesh/queue';
+import { createPlaylistSuggestionSource, getQueueBoardKey, type Climb, type ClimbQueueItem } from '@boardsesh/queue';
 import { useActiveClimbUuid, usePlaylistSuggestionSource, useQueueActions } from '../../providers/queue-provider';
 import { useDrawerHost } from '../../providers/drawer-host-provider';
 import { useActiveBoard } from '../graphql/use-active-board';
 import { climbToQueueItem } from '../climb-to-queue-item';
 import { reportHandledError } from '../error-reporting';
 import { toSchemaClimb } from '../climb-types';
+import type { PlaylistRenderBoard } from './use-playlist-render-board';
 
 /** A single page of the suggestion-refresh fetch. */
 export type PlaylistActivationPage = {
   climbs: Climb[];
   hasMore: boolean;
 };
+
+/** Return a board config for view-only drawer preview, or null to activate normally. */
+type ViewOnlyBoardResolver = (climb: Climb) => PlaylistRenderBoard | null;
 
 export type UsePlaylistActivationOptions = {
   /** Stable suggestion-source id (e.g. `playlist:<uuid>` or `smart:<type>:<userId>`). */
@@ -42,6 +47,13 @@ export type UsePlaylistActivationOptions = {
     board: { boardName: string; layoutId: number; sizeId: number; setIds: string; angle: number };
     signal: AbortSignal;
   }) => Promise<PlaylistActivationPage>;
+  /**
+   * When set, the tap is view-only: open the drawer against this board config
+   * and keep playlist navigation local to the drawer without mutating the active
+   * queue. A resolver can return the specific board for the tapped row, or null
+   * when that row should activate normally.
+   */
+  viewOnlyBoard?: PlaylistRenderBoard | ViewOnlyBoardResolver | null;
   /** Logged when the async suggestion refresh fails (non-abort). */
   refreshErrorMessage: string;
 };
@@ -51,6 +63,7 @@ export function usePlaylistActivation({
   sourceId,
   allClimbs,
   fetchPage,
+  viewOnlyBoard,
   refreshErrorMessage,
 }: UsePlaylistActivationOptions): (climb: Climb) => Promise<void> {
   const { setCurrentClimb, setPlaylistSuggestionSource, refreshPlaylistSuggestionSource } = useQueueActions();
@@ -169,6 +182,39 @@ export function usePlaylistActivation({
   return useCallback(
     (climb: Climb) => {
       const schemaClimb = toSchemaClimb(climb);
+
+      // Wrong-board playlist climb: open a view-only drawer against the playlist's
+      // board instead of mutating the active-board queue. The drawer navigates the
+      // playlist locally (previewPlaylistSuggestionSource) until the user switches
+      // boards, and the tapped climb's angle rides along on the override.
+      const resolvedViewOnlyBoard = typeof viewOnlyBoard === 'function' ? viewOnlyBoard(climb) : viewOnlyBoard;
+
+      if (resolvedViewOnlyBoard) {
+        const item = climbToQueueItem(schemaClimb, { suggested: true });
+        const viewOnlyBoardConfig = {
+          ...resolvedViewOnlyBoard,
+          angle: climb.angle,
+        };
+        const previewPlaylistSuggestionSource = createPlaylistSuggestionSource({
+          playlistUuid: sourceId,
+          activatedClimb: climb,
+          climbs: allClimbs,
+          boardKey: getQueueBoardKey({
+            board_name: viewOnlyBoardConfig.boardName,
+            layout_id: viewOnlyBoardConfig.layoutId,
+            size_id: viewOnlyBoardConfig.sizeId,
+            set_ids: viewOnlyBoardConfig.setIds,
+          }),
+        });
+        openPlayDrawer(schemaClimb, {
+          setAsCurrent: false,
+          boardConfig: viewOnlyBoardConfig,
+          previewQueueItem: item,
+          previewPlaylistSuggestionSource,
+        });
+        return Promise.resolve();
+      }
+
       const isAlreadyActive = activeClimbUuidRef.current === climb.uuid;
       const source = playlistSuggestionSourceRef.current;
       const suggestionsAlreadyFollowThisList =
@@ -200,6 +246,6 @@ export function usePlaylistActivation({
         reportHandledError(error, { tags: { source: 'playlist', op: 'activate-climb' } });
       });
     },
-    [activate, openPlayDrawer, sourceId],
+    [activate, allClimbs, openPlayDrawer, sourceId, viewOnlyBoard],
   );
 }

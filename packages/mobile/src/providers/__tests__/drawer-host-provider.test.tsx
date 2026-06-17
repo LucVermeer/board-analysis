@@ -26,6 +26,13 @@ const analytics = vi.hoisted(() => ({
 
 const queueSheet = vi.hoisted(() => ({
   props: null as null | {
+    board: {
+      boardName: string;
+      layoutId: number;
+      sizeId: number;
+      setIds: string;
+      angle: number;
+    };
     onClose: () => void;
     onClimbPress: (item: ClimbQueueItem) => void;
     onSuggestionPress: (climb: ClimbQueueItem['climb'], source: PlaylistSuggestionSource) => void;
@@ -133,6 +140,13 @@ vi.mock('../../components/play-drawer/QueueSheet', async () => {
     QueueSheet: React.forwardRef(
       (
         props: {
+          board: {
+            boardName: string;
+            layoutId: number;
+            sizeId: number;
+            setIds: string;
+            angle: number;
+          };
           onClose: () => void;
           onClimbPress: (item: ClimbQueueItem) => void;
           onSuggestionPress: (climb: ClimbQueueItem['climb'], source: PlaylistSuggestionSource) => void;
@@ -522,15 +536,31 @@ describe('DrawerHostProvider board sheet climb actions', () => {
         committedExternally: true,
       }),
     );
-    await waitFor(() =>
+    await waitFor(() => {
       expect(hosts.at(-1)?.boardConfig).toMatchObject({
         boardName: 'kilter',
         layoutId: 1,
         sizeId: 10,
         setIds: '1,2',
-        angle: 30,
-      }),
-    );
+        angle: 40,
+      });
+      expect(queueSheet.props?.board).toMatchObject({
+        boardName: 'kilter',
+        layoutId: 1,
+        sizeId: 10,
+        setIds: '1,2',
+        angle: 40,
+      });
+      expect(boardSheet.props).toMatchObject({
+        boardConfig: expect.objectContaining({
+          boardName: 'kilter',
+          layoutId: 1,
+          sizeId: 10,
+          setIds: '1,2',
+          angle: 40,
+        }),
+      });
+    });
   });
 
   it('reuses queue, playlist, and climb-actions handlers for board-sheet climbs', async () => {
@@ -761,6 +791,40 @@ describe('DrawerHostProvider play drawer open analytics source', () => {
     // No board override → the drawer opens synchronously with only the queue
     // options; `source` was pulled out and must not reach PlayDrawer.open.
     expect(playDrawer.open).toHaveBeenCalledWith(climb, { committedExternally: true });
+  });
+});
+
+describe('DrawerHostProvider play drawer board overrides', () => {
+  beforeEach(() => {
+    playDrawer.open.mockClear();
+  });
+
+  it('reopens immediately when the requested override already matches the active drawer override', async () => {
+    const hosts: Array<ReturnType<typeof useDrawerHost>> = [];
+    renderHost((host) => hosts.push(host));
+    await waitFor(() => expect(hosts.at(-1)).toBeDefined());
+
+    const override: BoardConfig = {
+      boardName: 'tension',
+      layoutId: 8,
+      sizeId: 7,
+      setIds: '5,6',
+      angle: 35,
+    };
+    const firstClimb = makeQueueItem('queue-x', 'same-override-1').climb as unknown as Climb;
+    const secondClimb = makeQueueItem('queue-y', 'same-override-2').climb as unknown as Climb;
+
+    act(() => {
+      hosts.at(-1)?.openPlayDrawer(firstClimb, { setAsCurrent: false, boardConfig: override });
+    });
+    await waitFor(() => expect(playDrawer.open).toHaveBeenCalledWith(firstClimb, { setAsCurrent: false }));
+
+    playDrawer.open.mockClear();
+    act(() => {
+      hosts.at(-1)?.openPlayDrawer(secondClimb, { setAsCurrent: false, boardConfig: override });
+    });
+
+    expect(playDrawer.open).toHaveBeenCalledWith(secondClimb, { setAsCurrent: false });
   });
 });
 
