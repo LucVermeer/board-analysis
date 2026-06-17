@@ -147,6 +147,9 @@ export function useBoardPresence(boardId: number | null, client: BoardPresenceCl
     let isActive = true;
     let catchUpInFlight = false;
     let catchUpRequested = false;
+    // Once a baseline exists, a live gap may trigger catch-up even while the
+    // initial backfill is still resolving. That overlap is safe: both paths
+    // merge through BACKFILL_HISTORY, which dedups by (climbUuid, seq).
     let hasSequenceBaseline = false;
     // Identifies this effect run; late async results for a superseded board are
     // ignored by comparing against the ref, which the cleanup flips off.
