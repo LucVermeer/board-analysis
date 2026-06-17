@@ -18,6 +18,11 @@ import { spacing } from '../../theme/tokens';
  * just a broadcast glyph + an amber footnote line. It speaks the same vocabulary
  * as the BoardSheet "Now on the wall" hero (amber accent + the holder's "Lit by
  * {name}" identity), so the drawer and the sheet read as one system.
+ *
+ * Renders inline in the DrawerHeader's leading slot — to the left of the climb
+ * name, opposite the grade — so it reads as chrome in the corner rather than a
+ * banner pushing the board down. The header supplies the row padding, so this
+ * component carries no outer margins.
  */
 export const PlayDrawerOnWallBanner = memo(function PlayDrawerOnWallBanner() {
   const { t } = useTranslation('session');
@@ -43,13 +48,12 @@ export const PlayDrawerOnWallBanner = memo(function PlayDrawerOnWallBanner() {
 });
 
 const styles = StyleSheet.create({
+  // Margin-free: this renders inline in the DrawerHeader leading slot, which
+  // supplies the row's padding/gap. The grade sits in the trailing slot opposite.
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing[1],
-    marginHorizontal: spacing[4],
-    marginTop: spacing[1],
-    marginBottom: spacing[2],
   },
   label: {
     flexShrink: 1,

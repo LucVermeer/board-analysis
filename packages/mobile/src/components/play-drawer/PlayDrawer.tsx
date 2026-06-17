@@ -620,19 +620,17 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
                   setterUsername={displayedClimb.setter_username}
                   isNoMatch={displayedClimb.is_no_match}
                   benchmarkDifficulty={displayedClimb.benchmark_difficulty}
+                  // The accessory-bar wall climb is physically lit right now, so its
+                  // read-only "on the wall" status rides in the header's leading slot
+                  // (left of the name, opposite the grade) rather than as a banner.
+                  leading={isPreview && drawerPreviewIsWallClimb ? <PlayDrawerOnWallBanner /> : undefined}
                 />
 
-                {isPreview ? (
-                  drawerPreviewIsWallClimb ? (
-                    // The accessory-bar wall climb is physically lit right now, so
-                    // it's a read-only status, not a promotable preview — no button.
-                    <PlayDrawerOnWallBanner />
-                  ) : (
-                    // Cross-board previews use the switch-board overlay instead, so
-                    // hide "Set active" there — promoting a foreign-board climb would
-                    // only spill it into the queue.
-                    <PlayDrawerPreviewBanner showSetActive={!boardMismatch} onSetActive={handleSetActive} />
-                  )
+                {isPreview && !drawerPreviewIsWallClimb ? (
+                  // Cross-board previews use the switch-board overlay instead, so
+                  // hide "Set active" there — promoting a foreign-board climb would
+                  // only spill it into the queue.
+                  <PlayDrawerPreviewBanner showSetActive={!boardMismatch} onSetActive={handleSetActive} />
                 ) : null}
 
                 <View style={styles.boardSection}>

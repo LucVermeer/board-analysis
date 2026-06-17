@@ -1,4 +1,4 @@
-import { memo, useMemo } from 'react';
+import { memo, useMemo, type ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { getGradeColor, DEFAULT_GRADE_COLOR } from '@boardsesh/board-constants/grade-colors';
@@ -21,6 +21,9 @@ type PlayDrawerHeaderProps = {
   /** Intrinsic attributes shown as grey glyphs after the name. */
   isNoMatch?: boolean | null;
   benchmarkDifficulty?: string | null;
+  /** Left-aligned element on the name's row (e.g. the on-wall status). Shifts the
+   *  centered name right — pass only when that's acceptable. */
+  leading?: ReactNode;
 };
 
 export const PlayDrawerHeader = memo(function PlayDrawerHeader({
@@ -32,6 +35,7 @@ export const PlayDrawerHeader = memo(function PlayDrawerHeader({
   setterUsername,
   isNoMatch,
   benchmarkDifficulty,
+  leading,
 }: PlayDrawerHeaderProps) {
   const { t } = useTranslation('climbs');
   const gradeColor = useMemo(
@@ -47,6 +51,7 @@ export const PlayDrawerHeader = memo(function PlayDrawerHeader({
 
   return (
     <DrawerHeader
+      leading={leading}
       center={
         <>
           <View style={styles.nameRow}>

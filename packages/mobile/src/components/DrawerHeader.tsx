@@ -9,6 +9,11 @@ const DEFAULT_TRAILING_MIN_WIDTH: number = spacing[12];
 type DrawerHeaderProps = {
   /** Centered column content (e.g. title + subtitle, or a name input + counts). */
   center: ReactNode;
+  /** Left-aligned element on the same row as `center`/`trailing` (e.g. an on-wall
+   *  status). When provided it REPLACES the auto-width spacer, so `center` is no
+   *  longer mirror-centered against `trailing` — pass it only when an off-centre
+   *  name is acceptable. Omit it (the default) to keep `center` optically centered. */
+  leading?: ReactNode;
   /** Right-aligned element (e.g. a grade, an angle, a validity check). Its width
    *  is measured at runtime and mirrored into the leading spacer so `center`
    *  stays centered regardless of the trailing element's width. */
@@ -23,6 +28,7 @@ type DrawerHeaderProps = {
  */
 export const DrawerHeader = memo(function DrawerHeader({
   center,
+  leading,
   trailing,
   trailingMinWidth = DEFAULT_TRAILING_MIN_WIDTH,
 }: DrawerHeaderProps) {
@@ -36,7 +42,11 @@ export const DrawerHeader = memo(function DrawerHeader({
   return (
     <View style={styles.container}>
       <View style={styles.headerRow}>
-        <View style={[styles.leadingSpacer, { width: trailingWidth }]} />
+        {leading != null ? (
+          <View style={styles.leading}>{leading}</View>
+        ) : (
+          <View style={[styles.leadingSpacer, { width: trailingWidth }]} />
+        )}
         <View style={styles.centerColumn}>{center}</View>
         <View style={[styles.trailing, { minWidth: trailingMinWidth }]} onLayout={handleTrailingLayout}>
           {trailing}
@@ -60,6 +70,10 @@ const styles = StyleSheet.create({
   },
   leadingSpacer: {
     flexShrink: 0,
+  },
+  leading: {
+    flexShrink: 1,
+    alignItems: 'flex-start',
   },
   centerColumn: {
     flex: 1,
