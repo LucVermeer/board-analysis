@@ -96,6 +96,12 @@ export const ModalSheet = forwardRef<BottomSheetModal, ModalSheetProps>(function
     backgroundColor: systemColors.secondaryBackground,
   };
 
+  // FOLLOW-UP: this still renders the scrollable body and footer as flex siblings
+  // inside a single BottomSheetView — the anti-pattern Sheet.tsx moved away from
+  // (it now uses gorhom's native sticky footer via `footerComponent`). Nesting the
+  // scrollview inside a BottomSheetView breaks single-finger scrolling on Android
+  // and lets the body overflow the footer. PlaylistFormSheet hits this path with
+  // footer + scrollable. Port ModalSheet to the same `footerComponent` pattern.
   const footerNode = footer ? (
     <View
       style={[

@@ -272,7 +272,6 @@ export function LogbookEditSheet({ sheetRef, ascent, onClose }: LogbookEditSheet
       scrollable
       fullWindowOverlay
       onClose={onClose}
-      contentContainerStyle={styles.content}
       keyboardBehavior="interactive"
       keyboardBlurBehavior="restore"
       android_keyboardInputMode="adjustResize"
@@ -409,7 +408,6 @@ export function LogbookEditSheet({ sheetRef, ascent, onClose }: LogbookEditSheet
 }
 
 const styles = StyleSheet.create({
-  content: { paddingBottom: spacing[6] },
   title: { paddingHorizontal: spacing[4], paddingTop: spacing[2] },
   field: { paddingHorizontal: spacing[4] },
   dateTimeButton: {
