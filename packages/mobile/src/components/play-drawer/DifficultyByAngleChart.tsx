@@ -4,7 +4,6 @@ import { BarChart } from 'react-native-gifted-charts';
 import { Text } from '../Text';
 import { buildAscentScale, type AngleGradeBar } from './community-utils';
 import { useTheme } from '../../providers/theme-provider';
-import { useReduceMotion } from '../../hooks/use-reduce-motion';
 import { gradeChartColor } from '../you/profile-chart-colors';
 import { borderRadius, spacing } from '../../theme/tokens';
 
@@ -40,7 +39,6 @@ export const DifficultyByAngleChart = memo(function DifficultyByAngleChart({
   accessibilityLabel,
 }: DifficultyByAngleChartProps) {
   const { chartColors, colorScheme } = useTheme();
-  const reduceMotion = useReduceMotion();
   const [width, setWidth] = useState(0);
 
   // Bars + axis scale only depend on the data + scheme — memoize so a parent
@@ -124,8 +122,11 @@ export const DifficultyByAngleChart = memo(function DifficultyByAngleChart({
           xAxisColor={chartColors.separator}
           xAxisLabelTextStyle={{ color: chartColors.secondaryLabel, fontSize: AXIS_LABEL_SIZE }}
           yAxisTextStyle={{ color: chartColors.secondaryLabel, fontSize: AXIS_LABEL_SIZE }}
-          isAnimated={!reduceMotion}
-          animationDuration={reduceMotion ? 0 : 600}
+          // gifted-charts' entry animation is unreliable on Android when the chart
+          // mounts inside the collapsible's FadeIn transition — bars flash then
+          // collapse to 0 height and never grow back. Render statically, matching
+          // every other chart in the app (see YouCharts).
+          isAnimated={false}
           disableScroll
           disablePress
         />
