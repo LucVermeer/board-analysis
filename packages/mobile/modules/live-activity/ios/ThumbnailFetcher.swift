@@ -28,9 +28,15 @@ actor ThumbnailFetcher {
     /// instead of serving them stale. The App Group container survives app
     /// updates, so without this an upgrading user keeps seeing the previous
     /// build's images. v1 = overlay-only (no board art); v2 = board background
-    /// composited behind the holds overlay. Mirrors `RENDERER_VERSION` in
-    /// use-native-climb-render.ts, which solved the same transition in-app.
-    static let cacheVersion = 2
+    /// composited behind the holds overlay — but v2 builds decoded the bundled
+    /// webp via Apple ImageIO (`UIImage(contentsOfFile:)`), which fails on the
+    /// lossy VP8 board art, so v2 actually cached overlay-only images while
+    /// recording version 2. v3 = backgrounds decoded via libwebp
+    /// (`SDImageWebPCoder`), so the board photo finally composites. The bump
+    /// forces v2 builds' stale overlay-only thumbnails to be purged on update.
+    /// Mirrors `RENDERER_VERSION` in use-native-climb-render.ts, which solved the
+    /// same transition in-app.
+    static let cacheVersion = 3
 
     // MARK: - Dependencies
 
