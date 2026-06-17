@@ -392,16 +392,16 @@ describe('REFRESH_STATS', () => {
     expect(result.lastStatsSeq).toBe(8);
   });
 
-  it('never regresses lastStatsSeq when an older catch-up snapshot resolves late', () => {
-    const state = makeState({ stats: makeStats({ climbsSentCount: 7 }), lastStatsSeq: 12 });
+  it('ignores an older catch-up snapshot so neither stats nor lastStatsSeq regress', () => {
+    const freshStats = makeStats({ climbsSentCount: 7 });
+    const state = makeState({ stats: freshStats, lastStatsSeq: 12 });
 
     const result = boardPresenceReducer(state, {
       type: 'REFRESH_STATS',
       payload: { stats: makeStats({ climbsSentCount: 8 }), upToSeq: 10 },
     });
 
-    expect(result.stats?.climbsSentCount).toBe(8);
-    expect(result.lastStatsSeq).toBe(12);
+    expect(result).toBe(state);
   });
 });
 
@@ -524,7 +524,7 @@ describe('REFRESH_CONNECTION', () => {
     expect(result.lastConnectionSeq).toBe(9);
   });
 
-  it('can refresh to a free board without regressing lastConnectionSeq', () => {
+  it('ignores an older catch-up snapshot so neither holder nor lastConnectionSeq regress', () => {
     const state = makeState({ holder: makeHolder({ userId: 'old' }), lastConnectionSeq: 12 });
 
     const result = boardPresenceReducer(state, {
@@ -532,8 +532,7 @@ describe('REFRESH_CONNECTION', () => {
       payload: { holder: null, upToSeq: 10 },
     });
 
-    expect(result.holder).toBeNull();
-    expect(result.lastConnectionSeq).toBe(12);
+    expect(result).toBe(state);
   });
 });
 

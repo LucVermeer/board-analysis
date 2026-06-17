@@ -144,10 +144,13 @@ export function boardPresenceReducer(state: BoardPresenceState, action: BoardPre
     }
 
     case 'REFRESH_STATS': {
+      if (action.payload.upToSeq < state.lastStatsSeq) {
+        return state;
+      }
       return {
         ...state,
         stats: action.payload.stats,
-        lastStatsSeq: Math.max(state.lastStatsSeq, action.payload.upToSeq),
+        lastStatsSeq: action.payload.upToSeq,
       };
     }
 
@@ -181,10 +184,13 @@ export function boardPresenceReducer(state: BoardPresenceState, action: BoardPre
     }
 
     case 'REFRESH_CONNECTION': {
+      if (action.payload.upToSeq < state.lastConnectionSeq) {
+        return state;
+      }
       return {
         ...state,
         holder: action.payload.holder,
-        lastConnectionSeq: Math.max(state.lastConnectionSeq, action.payload.upToSeq),
+        lastConnectionSeq: action.payload.upToSeq,
       };
     }
 

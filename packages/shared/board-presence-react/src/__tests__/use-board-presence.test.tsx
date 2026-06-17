@@ -65,20 +65,33 @@ const connectionEvent = (seq: number, nextHolder: BoardConnectionHolder | null):
   seq,
 });
 
-type Deferred<T> = { promise: Promise<T>; resolve: (value: T) => void; resolved: boolean };
+type Deferred<T> = {
+  promise: Promise<T>;
+  reject: (reason: unknown) => void;
+  resolve: (value: T) => void;
+  settled: boolean;
+};
 function deferred<T>(): Deferred<T> {
   const target: Deferred<T> = {
     promise: Promise.resolve(undefined as T),
+    reject: () => {},
     resolve: () => {},
-    resolved: false,
+    settled: false,
   };
-  const promise = new Promise<T>((res) => {
+  const promise = new Promise<T>((res, rej) => {
     target.resolve = (value) => {
-      if (target.resolved) {
+      if (target.settled) {
         return;
       }
-      target.resolved = true;
+      target.settled = true;
       res(value);
+    };
+    target.reject = (reason) => {
+      if (target.settled) {
+        return;
+      }
+      target.settled = true;
+      rej(reason);
     };
   });
   target.promise = promise;
@@ -97,7 +110,7 @@ function pushDeferred<T>(map: Map<number, Array<Deferred<T>>>, boardId: number):
 }
 
 function nextPendingDeferred<T>(map: Map<number, Array<Deferred<T>>>, boardId: number): Deferred<T> {
-  const existing = map.get(boardId)?.find((entry) => !entry.resolved);
+  const existing = map.get(boardId)?.find((entry) => !entry.settled);
   return existing ?? pushDeferred(map, boardId);
 }
 
@@ -166,14 +179,29 @@ function makeClient() {
       target.resolve(climbs);
       return target.promise;
     },
+    rejectRecent: (boardId: number, error: unknown) => {
+      const target = nextPendingDeferred(recentByBoard, boardId);
+      target.reject(error);
+      return target.promise;
+    },
     resolveStats: (boardId: number, stats: BoardPresenceStats) => {
       const target = nextPendingDeferred(statsByBoard, boardId);
       target.resolve(stats);
       return target.promise;
     },
+    rejectStats: (boardId: number, error: unknown) => {
+      const target = nextPendingDeferred(statsByBoard, boardId);
+      target.reject(error);
+      return target.promise;
+    },
     resolveConnection: (boardId: number, nextHolder: BoardConnectionHolder | null) => {
       const target = nextPendingDeferred(connectionByBoard, boardId);
       target.resolve(nextHolder);
+      return target.promise;
+    },
+    rejectConnection: (boardId: number, error: unknown) => {
+      const target = nextPendingDeferred(connectionByBoard, boardId);
+      target.reject(error);
       return target.promise;
     },
   };
@@ -408,6 +436,33 @@ describe('useBoardPresence — sequence gap recovery', () => {
     expect(harness.fetchRecentClimbs).toHaveBeenCalledTimes(1);
     expect(harness.fetchStats).toHaveBeenCalledTimes(1);
     expect(harness.fetchConnection).toHaveBeenCalledTimes(1);
+  });
+
+  it('repairs history while keeping stale stats and holder when partial catch-up fetches fail', async () => {
+    const harness = makeClient();
+    const { result } = renderHook(() => useBoardPresence(1, harness.client));
+
+    await act(async () => {
+      await harness.resolveRecent(1, [climb('first', 1)]);
+      await harness.resolveStats(1, { ...emptyStats, climbsSentCount: 1 });
+      await harness.resolveConnection(1, holder({ userId: 'seed-holder' }));
+    });
+
+    act(() => {
+      harness.emit(setEvent(climb('live-newest', 4)));
+    });
+
+    await act(async () => {
+      await harness.resolveRecent(1, [climb('live-newest', 4), climb('missed', 3), climb('first', 1)]);
+      await Promise.all([
+        harness.rejectStats(1, new Error('stats fetch failed')).catch(() => undefined),
+        harness.rejectConnection(1, new Error('connection fetch failed')).catch(() => undefined),
+      ]);
+    });
+
+    await waitFor(() => expect(result.current.history.map((entry) => entry.seq)).toEqual([4, 3, 1]));
+    expect(result.current.stats?.climbsSentCount).toBe(1);
+    expect(result.current.holder?.userId).toBe('seed-holder');
   });
 
   it('coalesces multiple gaps while a catch-up is already in flight and reruns once', async () => {
