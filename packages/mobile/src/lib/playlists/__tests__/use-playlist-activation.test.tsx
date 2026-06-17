@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   refreshPlaylistSuggestionSource: vi.fn(),
   openPlayDrawer: vi.fn(),
   activeBoard: { boardType: 'kilter', layoutId: 1, sizeId: 2, setIds: '3', angle: 40 } as ActiveBoard,
+  activeClimbUuid: null as string | null,
   activate: vi.fn<(climb: Climb) => Promise<void>>(),
   fetchSuggestion: vi.fn(),
   captured: undefined as UsePlaylistClimbActivationOptions | undefined,
@@ -35,6 +36,7 @@ vi.mock('../../../providers/queue-provider', () => ({
     setCurrentClimb: mocks.setCurrentClimb,
     refreshPlaylistSuggestionSource: mocks.refreshPlaylistSuggestionSource,
   }),
+  useActiveClimbUuid: () => mocks.activeClimbUuid,
 }));
 vi.mock('../../../providers/drawer-host-provider', () => ({
   useDrawerHost: () => ({ openPlayDrawer: mocks.openPlayDrawer }),
@@ -82,6 +84,7 @@ function captured(): UsePlaylistClimbActivationOptions {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.activeBoard = { boardType: 'kilter', layoutId: 1, sizeId: 2, setIds: '3', angle: 40 };
+  mocks.activeClimbUuid = null;
   mocks.captured = undefined;
   mocks.activate.mockResolvedValue(undefined);
   mocks.queueItemCounter = 0;
@@ -165,6 +168,35 @@ describe('usePlaylistActivation (mobile wrapper)', () => {
 
     // Every tap drives the shared activation — there is no non-driver preview
     // branch that skips it anymore.
+    expect(mocks.activate).toHaveBeenCalledWith(climb);
+    expect(mocks.openPlayDrawer).toHaveBeenCalledWith(climb, { committedExternally: true });
+  });
+
+  it('re-tapping the already-active climb just reopens the drawer (no re-activate)', async () => {
+    mocks.activeClimbUuid = 'a';
+    const { result } = renderActivation();
+    const climb = makeClimb('a');
+    await result.current(climb);
+
+    // The drawer reopens for the active climb, but the shared activation does NOT
+    // run — re-activating would duplicate it in the queue and reset the pass.
+    expect(mocks.openPlayDrawer).toHaveBeenCalledWith(climb, { committedExternally: true });
+    expect(mocks.activate).not.toHaveBeenCalled();
+
+    // No item was pinned, so the next genuine activation builds a fresh one rather
+    // than reusing a stale pinned item for the same climb uuid.
+    const item = await captured().queueApi!.setCurrentClimb(climb, { playlistSuggestionSource: null });
+    expect(item?.climb).toEqual(climb);
+    expect(mocks.setCurrentClimb.mock.calls[0][0]).toBe(item);
+  });
+
+  it('activates a non-active climb even when a different climb is active', async () => {
+    mocks.activeClimbUuid = 'b';
+    const { result } = renderActivation();
+    const climb = makeClimb('a');
+    await result.current(climb);
+
+    // 'a' is not the active climb ('b' is), so this still starts a fresh pass.
     expect(mocks.activate).toHaveBeenCalledWith(climb);
     expect(mocks.openPlayDrawer).toHaveBeenCalledWith(climb, { committedExternally: true });
   });

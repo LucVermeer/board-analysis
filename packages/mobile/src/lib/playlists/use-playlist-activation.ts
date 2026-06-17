@@ -13,7 +13,7 @@
 import { useCallback, useMemo, useRef } from 'react';
 import { usePlaylistClimbActivation, fetchPlaylistSuggestionClimbs } from '@boardsesh/playlists-react';
 import { getQueueBoardKey, type Climb, type ClimbQueueItem } from '@boardsesh/queue';
-import { useQueueActions } from '../../providers/queue-provider';
+import { useActiveClimbUuid, useQueueActions } from '../../providers/queue-provider';
 import { useDrawerHost } from '../../providers/drawer-host-provider';
 import { useActiveBoard } from '../graphql/use-active-board';
 import { climbToQueueItem } from '../climb-to-queue-item';
@@ -56,6 +56,13 @@ export function usePlaylistActivation({
   const { setCurrentClimb, refreshPlaylistSuggestionSource } = useQueueActions();
   const { openPlayDrawer } = useDrawerHost();
   const activeBoard = useActiveBoard().data ?? null;
+
+  // Mirror the active climb uuid into a ref so the returned callback can guard a
+  // re-tap of the already-active climb without taking a dependency on it (keeps
+  // the callback identity stable).
+  const activeClimbUuid = useActiveClimbUuid();
+  const activeClimbUuidRef = useRef(activeClimbUuid);
+  activeClimbUuidRef.current = activeClimbUuid;
 
   // The queue item the returned callback built for this tap. queueApi.setCurrentClimb
   // dispatches that exact instance so the drawer's navigation anchor and the queue
@@ -146,6 +153,15 @@ export function usePlaylistActivation({
   // preview.
   return useCallback(
     (climb: Climb) => {
+      // Re-tapping the already-active climb just reopens its drawer. Building a
+      // fresh queue item and re-activating would duplicate it in the queue and
+      // reset the active pass. The drawer renders from currentClimbQueueItem
+      // (committedExternally), which already points at this climb — so don't set
+      // pendingQueueItemRef here, or a stale item could be reused on the next tap.
+      if (activeClimbUuidRef.current === climb.uuid) {
+        openPlayDrawer(toSchemaClimb(climb), { committedExternally: true });
+        return Promise.resolve();
+      }
       // Always-live: every tap activates the climb for the whole session (no
       // driver/preview gate). The drawer opens first (same frame as the tap),
       // then the shared activation builds the suggestion source and commits the
