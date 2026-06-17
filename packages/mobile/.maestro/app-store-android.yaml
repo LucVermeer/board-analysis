@@ -16,13 +16,13 @@ name: app-store screenshots android
 #   ://profile?screenshotTab=sessions  -> profile Sessions tab; auto-opens newest session
 #
 # One coordinate tap survives, pinned to the CI Pixel 2 emulator at 1080x1920:
-#   board pick = '24%,45%' (first "Your boards" card on /boards)
 #   board sheet = '78%,10%' (board-switcher glyph in the climbs top chrome)
-# The old board-view '50%,26%' tap is gone — it mis-tapped and duplicated the climb-list
-# shot; the board view is now a deterministic deep link.
+# The board itself is auto-selected on boot in screenshot mode (auth-provider.tsx activates
+# the user's first saved board), so there's no board-pick tap. The old board-view '50%,26%'
+# tap is gone too — the board view is now a deterministic deep link.
 #
-# Order: board-independent shots first (home/discover/profile/session); board-dependent
-# shots after the board is picked. Plain visits run before screenshot-param visits.
+# Order: plain visits run before screenshot-param visits (no stale param leaks). The board
+# is active from boot, so the board-backed shots need no in-flow board-pick step.
 - launchApp
 # Auto-signs-in on boot and lands straight on home (no login screen).
 
@@ -48,13 +48,8 @@ name: app-store screenshots android
 - waitForAnimationToEnd
 - takeScreenshot: 07-session-detail
 
-# Activate a board so the board-backed shots render real content. Open the board picker
-# and tap the first card under "Your boards".
-- openLink: com.boardsesh.app://boards
-- waitForAnimationToEnd
-- tapOn:
-    point: '24%,45%'
-- waitForAnimationToEnd
+# The active board is already selected (auto-activated on boot in screenshot mode), so the
+# board-backed shots below render real content with no board-picker step.
 
 # Climbs — the main browse surface. Plain link FIRST (the list shot).
 - openLink: com.boardsesh.app://climbs

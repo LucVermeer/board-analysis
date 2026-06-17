@@ -89,27 +89,23 @@ export type ScreenshotTheme = 'light' | 'dark';
 export interface IosScreenshotDevice {
   name: string;
   typeId: string;
-  // The one surviving coordinate tap (the board picker), passed to the flow as
-  // MAESTRO_BOARD_PICK_POINT. Everything else the flow needs is a deep link, so
-  // there's no per-device board-view / board-sheet tap any more.
-  boardPickPoint: string;
 }
 
+// The flow needs no per-device coordinate taps any more: every screen is a deep
+// link, and the active board is auto-selected on boot in screenshot mode (see
+// auth-provider.tsx), so there's no board-picker tap to tune per device.
 export const IOS_SCREENSHOT_DEVICES: readonly IosScreenshotDevice[] = [
   {
     name: 'iPhone 16 Pro Max',
     typeId: 'com.apple.CoreSimulator.SimDeviceType.iPhone-16-Pro-Max',
-    boardPickPoint: '24%,45%',
   },
   {
     name: 'iPhone 14 Plus',
     typeId: 'com.apple.CoreSimulator.SimDeviceType.iPhone-14-Plus',
-    boardPickPoint: '24%,45%',
   },
   {
     name: 'iPhone 16 Pro',
     typeId: 'com.apple.CoreSimulator.SimDeviceType.iPhone-16-Pro',
-    boardPickPoint: '24%,45%',
   },
 ];
 
@@ -391,12 +387,10 @@ function resolveIosScreenshotDevices(deviceNames: readonly string[]): IosScreens
     if (knownDevice) return knownDevice;
     // An unlisted device name: usable only if a simulator by that name already
     // exists (typeId: '' tells findOrCreateIosDevice it can't auto-create one, so
-    // it errors with a clear message instead). It gets the shared default
-    // board-pick point — add an IOS_SCREENSHOT_DEVICES entry to tune it per device.
+    // it errors with a clear message instead).
     return {
       name: deviceName,
       typeId: '',
-      boardPickPoint: '24%,45%',
     };
   });
 }
@@ -613,8 +607,6 @@ function captureIosDevice(
         `SCREENSHOT_USER_EMAIL=${email}`,
         '-e',
         `SCREENSHOT_USER_PASSWORD=${password}`,
-        '-e',
-        `MAESTRO_BOARD_PICK_POINT=${screenshotDevice.boardPickPoint}`,
       ],
       process.env,
       captureDir,
