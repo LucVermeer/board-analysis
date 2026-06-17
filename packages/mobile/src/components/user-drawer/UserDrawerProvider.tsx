@@ -95,17 +95,18 @@ export function UserDrawerProvider({ children }: { children: ReactNode }) {
     transform: [{ translateX: -drawerWidth + drawerWidth * drawerProgress.value }],
   }));
 
-  const openBoards = useCallback(
-    (focus?: 'myBoards') => {
-      closeUserDrawer();
-      const returnTo = currentBoardReturnTo(segments);
-      router.push({
-        pathname: '/boards',
-        params: focus ? { returnTo, focus } : { returnTo },
-      });
-    },
-    [closeUserDrawer, segments],
-  );
+  const openBoards = useCallback(() => {
+    closeUserDrawer();
+    const returnTo = currentBoardReturnTo(segments);
+    router.push({ pathname: '/boards', params: { returnTo } });
+  }, [closeUserDrawer, segments]);
+
+  // "My Boards" is now a management screen (edit / delete owned, unfollow
+  // followed), distinct from the board picker that "Change Board" opens.
+  const openManageBoards = useCallback(() => {
+    closeUserDrawer();
+    router.push('/boards/manage');
+  }, [closeUserDrawer]);
 
   const openProfileSettings = useCallback(() => {
     closeUserDrawer();
@@ -190,8 +191,8 @@ export function UserDrawerProvider({ children }: { children: ReactNode }) {
               </View>
 
               <View style={[styles.menuGroup, { backgroundColor: systemColors.elevatedSurface }]}>
-                <DrawerRow icon="boards" title={t('userDrawer.changeBoard')} onPress={() => openBoards()} />
-                <DrawerRow icon="boards.fill" title={t('myBoards.title')} onPress={() => openBoards('myBoards')} />
+                <DrawerRow icon="boards" title={t('userDrawer.changeBoard')} onPress={openBoards} />
+                <DrawerRow icon="boards.fill" title={t('myBoards.title')} onPress={openManageBoards} />
               </View>
 
               <View style={[styles.menuGroup, { backgroundColor: systemColors.elevatedSurface }]}>

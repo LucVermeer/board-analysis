@@ -30,6 +30,27 @@
     }
   },
   "mobile": {
+    "edit": {
+      "screenTitle": "Editar board",
+      "save": "Guardar cambios",
+      "updateError": "No se pudieron guardar los cambios. Inténtalo de nuevo.",
+      "notFound": "No encontramos ese board",
+      "back": "Volver",
+      "configLockedHint": "Este board tiene ascensos registrados, así que su layout, tamaño y sets están bloqueados."
+    },
+    "manage": {
+      "ownedHeader": "Tus boards",
+      "followingHeader": "Siguiendo",
+      "deleteTitle": "¿Eliminar board?",
+      "deleteMessage": "¿Quitar \"{{name}}\" de tus boards? No se puede deshacer.",
+      "deleteConfirm": "Eliminar",
+      "cancel": "Cancelar",
+      "deleteError": "No se pudo eliminar ese board. Inténtalo de nuevo.",
+      "unfollowError": "No se pudo dejar de seguir ese board. Inténtalo de nuevo.",
+      "editAria": "Editar {{name}}",
+      "deleteAria": "Eliminar {{name}}",
+      "unfollowAria": "Dejar de seguir {{name}}"
+    },
     "emptyTitle": "Aún no tienes boards",
     "emptySubtitle": "Busca un board para empezar",
     "signInTitle": "Inicia sesión para ver tus boards",

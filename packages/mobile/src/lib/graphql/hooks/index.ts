@@ -10,6 +10,7 @@ import type {
   SearchBoardsInput,
   PopularBoardConfigsInput,
   CreateBoardInput,
+  UpdateBoardInput,
   SetterStatsInput,
   UserProfile,
   SessionSummary,
@@ -33,6 +34,14 @@ import {
   type DeleteDraftClimbMutationResponse,
 } from '@boardsesh/graphql/operations/new-climb-feed';
 import { SEARCH_GYMS, type SearchGymsQueryResponse } from '@boardsesh/graphql/operations/gyms';
+import {
+  UPDATE_BOARD,
+  DELETE_BOARD,
+  UNFOLLOW_BOARD,
+  type UpdateBoardMutationResponse,
+  type DeleteBoardMutationResponse,
+  type UnfollowBoardMutationResponse,
+} from '@boardsesh/graphql/operations/boards';
 import { getHttpClient } from '../client';
 import {
   GET_PROFILE,
@@ -193,6 +202,66 @@ export function useCreateBoard() {
     },
     onSuccess: () => {
       // A freshly created board should appear in the user's board list.
+      void queryClient.invalidateQueries({ queryKey: ['myBoards'] });
+    },
+  });
+}
+
+/**
+ * Edit a board the user owns (name, visibility, angle, location, serial — and
+ * layout/size/sets only when the board has zero ticks; the server enforces the
+ * latter). Invalidate-only: `myBoards` carries enriched fields (counts, sizeName)
+ * that can't be rebuilt client-side. Re-syncing the active board's denormalised
+ * AsyncStorage copy is the edit screen's job — see `useSetActiveBoard`.
+ */
+export function useUpdateBoard() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: UpdateBoardInput) => {
+      const response = await getHttpClient().request<UpdateBoardMutationResponse>(UPDATE_BOARD, { input });
+      return response.updateBoard;
+    },
+    onSuccess: (updated) => {
+      void queryClient.invalidateQueries({ queryKey: ['myBoards'] });
+      void queryClient.invalidateQueries({ queryKey: ['board', updated.uuid] });
+    },
+  });
+}
+
+/**
+ * Soft-delete a board the user owns. `deleteBoard` takes a BARE `boardUuid`
+ * (unlike `unfollowBoard`, which wraps it in `{ input }`). Clearing the active
+ * board when the deleted one was active is the screen's responsibility.
+ */
+export function useDeleteBoard() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (boardUuid: string) => {
+      const response = await getHttpClient().request<DeleteBoardMutationResponse>(DELETE_BOARD, { boardUuid });
+      return response.deleteBoard;
+    },
+    onSuccess: (_deleted, boardUuid) => {
+      void queryClient.invalidateQueries({ queryKey: ['myBoards'] });
+      void queryClient.invalidateQueries({ queryKey: ['board', boardUuid] });
+    },
+  });
+}
+
+/**
+ * Stop following someone else's board. `unfollowBoard` wraps the uuid in
+ * `{ input: { boardUuid } }` (a FollowBoardInput) — NOT the bare arg shape that
+ * `deleteBoard` uses. Reversible, so callers skip the confirm dialog.
+ */
+export function useUnfollowBoard() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (boardUuid: string) => {
+      const response = await getHttpClient().request<UnfollowBoardMutationResponse>(UNFOLLOW_BOARD, {
+        input: { boardUuid },
+      });
+      return response.unfollowBoard;
+    },
+    onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['myBoards'] });
     },
   });

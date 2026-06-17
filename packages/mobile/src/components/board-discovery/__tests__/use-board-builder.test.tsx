@@ -117,4 +117,72 @@ describe('useBoardBuilder', () => {
     act(() => result.current.setName('Garage'));
     expect(result.current.buildCreateInput("Marco's Kilter")?.name).toBe('Garage');
   });
+
+  it('pre-fills the More-options meta from a full (edit) seed', () => {
+    const { result } = renderHook(() =>
+      useBoardBuilder({
+        boardName: 'kilter',
+        layoutId: 1,
+        sizeId: 10,
+        setIds: '20,1',
+        name: 'Garage Wall',
+        isPublic: false,
+        isUnlisted: true,
+        isOwned: false,
+        isAngleAdjustable: false,
+        locationName: 'Garage',
+        serialNumber: 'SN-9',
+        latitude: 1.5,
+        longitude: -2.5,
+      }),
+    );
+    expect(result.current.name).toBe('Garage Wall');
+    expect(result.current.isPublic).toBe(false);
+    expect(result.current.isUnlisted).toBe(true);
+    expect(result.current.isOwned).toBe(false);
+    expect(result.current.isAngleAdjustable).toBe(false);
+    expect(result.current.locationName).toBe('Garage');
+    expect(result.current.serialNumber).toBe('SN-9');
+    expect(result.current.coords).toEqual({ latitude: 1.5, longitude: -2.5 });
+  });
+
+  it('builds an update input carrying the uuid, meta, and normalised config', () => {
+    const { result } = renderHook(() =>
+      useBoardBuilder({
+        boardName: 'kilter',
+        layoutId: 1,
+        sizeId: 10,
+        setIds: '20,1',
+        name: 'Garage',
+        isPublic: false,
+      }),
+    );
+    const input = result.current.buildUpdateInput('board-uuid-1');
+    expect(input?.boardUuid).toBe('board-uuid-1');
+    expect(input?.name).toBe('Garage');
+    expect(input?.isPublic).toBe(false);
+    // Config is sent (not locked) and numerically normalised.
+    expect(input?.layoutId).toBe(1);
+    expect(input?.sizeId).toBe(10);
+    expect(input?.setIds).toBe('1,20');
+  });
+
+  it('omits the config from the update input when locked (board has ticks)', () => {
+    const { result } = renderHook(() =>
+      useBoardBuilder({ boardName: 'kilter', layoutId: 1, sizeId: 10, setIds: '20,1' }),
+    );
+    const input = result.current.buildUpdateInput('board-uuid-1', { lockedConfig: true });
+    expect(input?.boardUuid).toBe('board-uuid-1');
+    // Editable meta still present...
+    expect(input?.name).toBeDefined();
+    // ...but the config keys are omitted so the server's tick guard isn't tripped.
+    expect(input?.layoutId).toBeUndefined();
+    expect(input?.sizeId).toBeUndefined();
+    expect(input?.setIds).toBeUndefined();
+  });
+
+  it('returns a null update input before the config is complete', () => {
+    const { result } = renderHook(() => useBoardBuilder());
+    expect(result.current.buildUpdateInput('board-uuid-1')).toBeNull();
+  });
 });

@@ -30,6 +30,27 @@
     }
   },
   "mobile": {
+    "edit": {
+      "screenTitle": "Modifier le board",
+      "save": "Enregistrer",
+      "updateError": "Impossible d'enregistrer les modifications. Réessaie.",
+      "notFound": "Board introuvable",
+      "back": "Retour",
+      "configLockedHint": "Ce board a des voies enregistrées : son layout, sa taille et ses sets sont verrouillés."
+    },
+    "manage": {
+      "ownedHeader": "Tes boards",
+      "followingHeader": "Abonnements",
+      "deleteTitle": "Supprimer le board ?",
+      "deleteMessage": "Retirer \"{{name}}\" de tes boards ? C'est définitif.",
+      "deleteConfirm": "Supprimer",
+      "cancel": "Annuler",
+      "deleteError": "Impossible de supprimer ce board. Réessaie.",
+      "unfollowError": "Impossible de te désabonner de ce board. Réessaie.",
+      "editAria": "Modifier {{name}}",
+      "deleteAria": "Supprimer {{name}}",
+      "unfollowAria": "Se désabonner de {{name}}"
+    },
     "emptyTitle": "Aucun board pour le moment",
     "emptySubtitle": "Cherche un board pour commencer",
     "signInTitle": "Connecte-toi pour voir tes boards",
