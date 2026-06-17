@@ -12,6 +12,15 @@ import { glassSize } from '../../theme/layout';
 
 export const FILTER_FAB_SIZE = glassSize.inlinePrimary;
 
+// Tint alpha for the floating Liquid Glass FAB. It sits between the subtle
+// active-state tint (0.18) and the opaque fill — vivid enough to spot outdoors,
+// translucent enough that the glass still lenses the background instead of
+// collapsing into a flat purple disc. Kept deliberately soft: on the iOS < 26
+// blur fallback (where GlassSurface paints only the tint, not the opaque
+// fallback) the white glyph can sit near the 3:1 floor over a light backdrop —
+// an accepted, non-blocking tradeoff. iOS 26 glass and the solid path stay clear.
+const FLOATING_GLASS_TINT_ALPHA = 0.6;
+
 type FilterButtonProps = {
   activeFilterCount: number;
   onPress: () => void;
@@ -31,9 +40,9 @@ export function FilterButton({ activeFilterCount, onPress, onLongPress, prominen
 
   if (floatingLiquidGlass) {
     iconColor = brandColors.onPrimary;
-    // Translucent violet so the Liquid Glass lenses through (purple GLASS, not a
+    // Translucent violet so the Liquid Glass lenses through (purple glass, not a
     // flat fill); the opaque fallback keeps Reduce Transparency / Android legible.
-    tintColor = withAlpha(brandColors.primaryFill, 0.6);
+    tintColor = withAlpha(brandColors.primaryFill, FLOATING_GLASS_TINT_ALPHA);
     fallbackColor = brandColors.primaryFill;
   } else if (active) {
     // Liquid Glass paints the active button on a violet glass tint, so a violet
