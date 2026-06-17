@@ -1,18 +1,15 @@
 Busca una vía y mira cómo tu muro ilumina las presas. Toca un bloque, las presas se encienden, te cuelgas. Boardsesh conecta tu móvil con tu muro por Bluetooth, así que pasas la sesión escalando en vez de leer números en una pantalla.
 
-LO QUE TE LLEVAS
+UNA APP PARA TODOS TUS MUROS
+Kilter, Tension y MoonBoard tienen cada uno su propia app para su propio muro. Boardsesh funciona con todos ellos, más Decoy, Touchstone, Grasshopper y So iLL, en un solo sitio. Busca cualquier vía y Boardsesh la manda al muro por Bluetooth, encendiendo las presas. Control total de los LED en los siete muros.
 
-Ilumina las presas
-Busca cualquier vía y Boardsesh la manda al muro por Bluetooth, encendiendo las presas en Kilter, Tension, MoonBoard, Decoy, Touchstone, Grasshopper y So iLL. Control total de los LED en los siete muros.
+La gracia de tener una sola app son las dos cosas que una app de un solo muro no te da: el historial del muro siempre activo y las sesiones que llevas con tu peña.
 
-Por qué la app
-En el iPhone, Safari no tiene Web Bluetooth, así que la app nativa es la que conecta con tu muro y enciende las presas.
+HISTORIAL DEL MURO, SIEMPRE ACTIVO
+Cada muro al que te conectas tiene un feed en directo de lo que está encendido en esa pared ahora mismo: la vía que hay puesta en este momento, quién la encendió, el grado y el ángulo, quién la montó y los encadenes recientes. No tienes que abrir nada. Está ahí cuando estás en ese muro, actualizándose según caen las pegadas.
 
-Escala con tu peña
-Abre una sesión y todos los que estén dentro pueden mandar la siguiente vía al muro. Nadie tiene que ir pasando el móvil ni esperar su turno. La enciende quien esté conectado por Bluetooth.
-
-Mira quién está en el muro
-Un feed en directo muestra la vía encendida ahora mismo, quién la encendió, el grado y el ángulo, quién la montó y los encadenes recientes, actualizándose según caen las pegadas.
+SESIONES CON TU PEÑA
+Abre una sesión y tú y tu peña compartís una cola que cualquiera puede llevar. Cualquiera manda la siguiente vía al muro: nadie tiene que ir pasando el móvil ni esperar su turno. La enciende quien esté conectado por Bluetooth. Al terminar te llevas un resumen y el seguimiento: encadenes e intentos, reparto de grados, tu vía más dura y el progreso a lo largo del tiempo.
 
 Lleva la sesión desde la pantalla bloqueada (iOS 17+)
 Las Live Activities ponen la vía actual, tu sitio en la cola y la siguiente/anterior en la pantalla bloqueada y el Dynamic Island, así cambias de vía sin abrir la app.
@@ -23,8 +20,8 @@ Elige Volumen, Pirámide, Escalera o Foco de Grado, fija un grado objetivo y el 
 Registra tu escalada
 Apunta encadenes, flashes e intentos, recibe un resumen con la duración, el reparto de grados y tu vía más dura, y mira tus encadenes y grados en la pestaña Progreso.
 
-Exporta e importa
-Exporta tu sesión a Strava y guárdala en Apple Health en iOS. Importa tu logbook antiguo de Kilter y Tension desde Aurora Climbing.
+Llévate tu historial contigo
+Guarda tu sesión en Apple Health e importa tu logbook antiguo de Kilter y Tension desde Aurora Climbing.
 
 Encuentra más para escalar
 Sigue a tu peña y a los aperturistas, busca escaladores y fija playlists desde Discover.

@@ -5,23 +5,26 @@ Pick your board once and get climbing.
 LIGHT THE HOLDS
 Search any climb and Boardsesh sends it to the wall over Bluetooth, lighting the holds on Kilter, Tension, MoonBoard, Decoy, Touchstone, Grasshopper and So iLL. Full LED control on all seven, not browse-only.
 
+ONE APP FOR EVERY BOARD YOU CLIMB
+Kilter, Tension and MoonBoard each ship their own app for their own board. Boardsesh works across all of them, plus Decoy, Touchstone, Grasshopper and So iLL, in one place. One login, one queue, one place your history lives, whichever wall you walk up to.
+
 STAYS CONNECTED
 Boardsesh holds the link to your board in the background, so the holds stay lit through your burns even when the screen turns off or you switch apps. You are not reconnecting between climbs.
 
-CLIMB WITH YOUR CREW
-Start a session and everyone in it can send the next climb to the wall. No driver to hand the phone around, no turn to wait for. Whoever is connected over Bluetooth lights it.
+SEE WHAT IS LIT ON THIS WALL
+Walk up to a board and a live feed is already there: the climb lit right now, who lit it, the grade and angle, who set it, and recent sends. Nothing to start. It is tied to the wall and updates as burns happen.
 
-SEE WHO IS ON THE WALL
-A live feed shows the climb lit right now, who lit it, the grade and angle, who set it, and recent sends. It updates as burns happen.
+CLIMB WITH YOUR CREW
+Start a session and everyone in it shares one queue. Anyone sends the next climb to the wall, so there is no driver to hand the phone around and no turn to wait for. Whoever is connected over Bluetooth lights it.
+
+GET A RECAP
+When the session ends, your crew gets a recap: sends and attempts, grade spread, hardest send, and how your climbing stacks up week after week on the Progress tab.
 
 BUILD A WORKOUT
 Pick Volume, Pyramid, Ladder or Grade Focus, set a target grade and warm-up, preview the climbs, then send them to the wall one burn at a time.
 
 TRACK YOUR CLIMBING
-Record sends, flashes and attempts. Get a recap with duration, grade spread and your hardest send. Watch your sends and grades stack up week after week on the Progress tab.
-
-EXPORT AND IMPORT
-Send your session to Strava, save it to Apple Health, and import your past Kilter and Tension logbook from Aurora Climbing.
+Record sends, flashes and attempts. Bring your past Kilter and Tension climbs across by importing your logbook from Aurora Climbing.
 
 FIND MORE TO CLIMB
 Follow your crew and setters, search climbers, and pin playlists from Discover.

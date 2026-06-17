@@ -1,8 +1,8 @@
-Sessions are always live now. Anyone in a session can send the next climb to the wall, with no driver to hand the phone around and no turn to wait for. Whoever's connected over Bluetooth lights it.
+Sessions are always live now. Start a session and your crew shares one queue everyone can drive. Anyone sends the next climb to the wall, with no driver to hand the phone around and no turn to wait for. Whoever's connected over Bluetooth lights it.
 
 Also in this release:
-- See who's on the wall: a live feed shows the climb lit right now, who lit it, the grade, angle and setter, updating as burns happen.
+- Board history, always on: every board you connect to has a live feed of the climb lit right now, who lit it, the grade, angle and setter, updating as burns happen.
 - Run the session from your lock screen and Dynamic Island on iOS 17+ with Live Activities.
 - Build a workout with Volume, Pyramid, Ladder or Grade Focus, then send the climbs one burn at a time.
 - Track sends, flashes and attempts, and see your sends and grades chart out on the Progress tab.
-- Export sessions to Strava and save them to Apple Health on iOS.
+- Save your sessions to Apple Health, and import your past Kilter and Tension logbook from Aurora Climbing.

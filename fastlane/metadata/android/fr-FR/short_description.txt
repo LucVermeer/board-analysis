@@ -1,1 +1,1 @@
-Cherche une voie, allume les prises sur Kilter, Tension, MoonBoard en Bluetooth.
+Allume n’importe quelle board LED en Bluetooth.

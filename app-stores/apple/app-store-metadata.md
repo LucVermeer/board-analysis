@@ -78,18 +78,16 @@ You do not need a climbing board to test the app. Here is what you can verify:
 7. **Party Mode**: Start a party session from the queue panel. This creates a WebSocket-backed collaborative session. You can open a second browser tab at boardsesh.com, sign in with a different account, and join the same session to test real-time sync. Sessions are always live: any participant can set the next climb and it broadcasts to everyone instantly. There is no single "driver" and no voting step (the older driver/vote model is deprecated). Whoever is connected to the board over Bluetooth relays the lit climb to the wall.
 8. **Logbook**: After signing in, check the logbook/profile section to see logged climbs and stats.
 
-**Native Bluetooth (CoreBluetooth)**
+**What the app does**
 
-This app requires native CoreBluetooth to communicate with Kilter Board and Tension Board hardware. Web Bluetooth is not supported on iOS (https://caniuse.com/web-bluetooth), which is why this app exists as a native iOS app rather than a web app.
+Boardsesh lights up climbs on LED boards (Kilter, Tension, MoonBoard and others) over Bluetooth. Two things set it apart from a single-board app, and they are distinct features:
 
-The app acts as a BLE Central and connects to climbing boards that advertise the Aurora service (UUID 4488b571-7806-4df6-bcff-a2897e4953ff). It discovers the Nordic UART Service (UUID 6e400001-b5a3-f393-e0a9-e50e24dcca9e) and writes LED lighting commands to the RX characteristic (UUID 6e400002-b5a3-f393-e0a9-e50e24dcca9e). Data flows one direction only: phone to board. No personal data is transmitted over Bluetooth.
+- **Board history (board-linked, always on):** when you connect to a board, a live feed shows what is lit on that wall right now plus recent sends — who lit each climb, the grade, angle and setter. It is tied to the physical board, not to a session, and you do not start anything.
+- **Crew sessions (collaborative):** you start a session and everyone in it shares one queue that any participant can drive (no single driver). A session ends with a recap and feeds your logbook and progress tracking.
 
-The native CoreBluetooth bridge is provided by react-native-ble-plx (the app is a native React Native / Expo build; the previous Capacitor wrapper has been retired). It uses CBCentralManager for device discovery and CBPeripheral for characteristic writes. The app declares bluetooth-le in UIRequiredDeviceCapabilities and bluetooth-central in UIBackgroundModes.
+**Bluetooth**
 
-**Other technical notes**
-
-- Network requests go to boardsesh.com (production API).
-- WebSocket connections for Party Mode go to the backend at wss://backend.boardsesh.com.
+The app connects to climbing boards over Bluetooth Low Energy to light the holds. Data flows one way, phone to board; no personal data is sent over Bluetooth. It uses native CoreBluetooth (via react-native-ble-plx) and declares bluetooth-le / bluetooth-central so the connection survives the screen sleeping. Endpoints: API at boardsesh.com, Party Mode WebSocket at wss://backend.boardsesh.com.
 
 ## App Privacy - Data Collection Labels
 

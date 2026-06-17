@@ -1,1 +1,1 @@
-tension,boulder,escalada,bloque,via,resena,bluetooth,led,rocodromo,croquis,sesion,aperturista
+MoonBoard,kilter,tension,boulder,escalada,bloque,bluetooth,led,rocodromo,croquis,sesion,aperturista

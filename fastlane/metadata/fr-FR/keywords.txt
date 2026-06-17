@@ -1,1 +1,1 @@
-bloc,escalade,grimpe,mur,prise,led,bluetooth,seance,voie,ouvreur,projet,kilter,tension,moonboard
+MoonBoard,kilter,tension,bloc,escalade,grimpe,beta,send,bluetooth,led,seance,mur,ouvreur

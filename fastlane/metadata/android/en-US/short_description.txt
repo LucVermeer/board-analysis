@@ -1,1 +1,1 @@
-Search a climb, light the holds on Kilter, Tension or MoonBoard over Bluetooth.
+Light up any LED board over Bluetooth.
