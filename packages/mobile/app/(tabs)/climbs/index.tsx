@@ -58,7 +58,6 @@ import { getFilterSummary, buildClimbFilterSummary } from '../../../src/lib/filt
 import { getActiveFilterTokens } from '../../../src/lib/filter-tokens';
 import { normalizeSearchName, visibleSearchTextNeedsSync } from '../../../src/lib/search-name';
 import { track } from '../../../src/lib/analytics';
-import { SCREENSHOT_MODE } from '../../../src/lib/screenshot-mode';
 import { iosSystemColors } from '../../../src/theme/ios-colors';
 import { spacing } from '../../../src/theme/tokens';
 import { glassSize } from '../../../src/theme/layout';
@@ -554,7 +553,7 @@ function ClimbListInner() {
   // board's results land, and at most once. Dead-strips in normal builds.
   const screenshotBoardViewOpenedRef = useRef(false);
   useEffect(() => {
-    if (!SCREENSHOT_MODE || !screenshotOpenFirst) return;
+    if (process.env.EXPO_PUBLIC_SCREENSHOT_MODE !== '1' || !screenshotOpenFirst) return;
     if (screenshotBoardViewOpenedRef.current) return;
     const firstClimb = visibleClimbs[0];
     if (!searchReady || !firstClimb) return;

@@ -36,7 +36,7 @@ Connect Spanish folders (`es-ES` and `es-MX`).
 ## Flows
 
 There is no login flow. The screenshot build auto-signs-in on boot — the auth provider's
-`SCREENSHOT_MODE` branch (`auth-provider.tsx`, fed by `screenshot-mode.ts` `SCREENSHOT_USER_*`)
+`EXPO_PUBLIC_SCREENSHOT_MODE` branch (`auth-provider.tsx`, fed by `screenshot-mode.ts` `SCREENSHOT_USER_*`)
 signs in during its initial auth check, before the loading gate clears, so the app renders
 straight into Home: no login screen ever mounts, no form is typed, and iOS never offers to
 save the password. The orchestrator launches the app and waits for the `$screen /home` log

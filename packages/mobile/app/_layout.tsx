@@ -53,15 +53,14 @@ import { loadRequiredFonts } from '../src/lib/required-fonts';
 import { AnalyticsProvider } from '../src/components/analytics/AnalyticsProvider';
 import { AnalyticsScreenTracker } from '../src/components/analytics/AnalyticsScreenTracker';
 import { OnboardingGate } from '../src/components/onboarding/OnboardingGate';
-import { SCREENSHOT_MODE } from '../src/lib/screenshot-mode';
 
 void SplashScreen.preventAutoHideAsync();
 
 // The screenshots build is a Debug dev-client (__DEV__ true) so it can load its
 // JS from Metro; a stray warning would pop a LogBox toast into a captured
-// screenshot. Suppress all LogBox UI in screenshot mode. SCREENSHOT_MODE is a
-// build/bundle-time flag, so this dead-strips from every normal build.
-if (SCREENSHOT_MODE) {
+// screenshot. Suppress all LogBox UI in screenshot mode. EXPO_PUBLIC_SCREENSHOT_MODE
+// is inlined at build time, so this dead-strips from every normal build.
+if (process.env.EXPO_PUBLIC_SCREENSHOT_MODE === '1') {
   LogBox.ignoreAllLogs(true);
 }
 
