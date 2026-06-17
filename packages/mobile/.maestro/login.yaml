@@ -16,9 +16,11 @@ name: ready (subflow — waits for the screenshot-mode auto sign-in to land on a
 - tapOn:
     text: 'Close'
     optional: true
-# The "Climbs" tab item appears only once auto sign-in lands on a tab — a reliable
-# "loaded + authenticated" signal. Generous timeout covers a cold Metro bundle on a slow runner.
+# The "Discover" tab label appears only once auto sign-in lands on a tab — a reliable
+# "loaded + authenticated" signal. (NOT "Climbs": that tab uses role="search", so iOS 26
+# renders it as a magnifying-glass glyph with no text label.) Generous timeout covers a
+# cold Metro bundle on a slow runner.
 - extendedWaitUntil:
     visible:
-      text: 'Climbs'
+      text: 'Discover'
     timeout: 300000
