@@ -5,9 +5,12 @@
 > and the `Mobile Store Metadata` workflow). Edit the `.txt` files there, not the
 > prose below — the App Name, Short Description, Full Description, and What's New
 > copy live in `title.txt`, `short_description.txt`, `full_description.txt`, and
-> `changelogs/default.txt` respectively. This doc keeps the operational material
-> that `supply` can't upload: the feature-graphic brief, testing instructions,
-> data-safety form, and the screenshot map.
+> `changelogs/default.txt` respectively. The listing is localized: `en-US`
+> (default), `es-ES`, and `fr-FR` each have their own folder under
+> `fastlane/metadata/android/`, and `supply` uploads every locale folder it finds.
+> This doc keeps the operational material that `supply` can't upload: the
+> feature-graphic brief, testing instructions, data-safety form, and the
+> screenshot map.
 
 ## Basic Info
 
@@ -90,7 +93,7 @@ Internal reference for QA and closed testing tracks. Not a Play Store field.
 4. View a climb: Tap any climb to see the hold layout rendered on the board image. Colored circles show hand and foot positions.
 5. Queue management: Tap the "+" button on a climb to add it to your queue. Open the queue panel to see your list. Reorder by dragging, remove by swiping.
 6. Bluetooth pairing: Go to the Bluetooth connection screen. The app will request Bluetooth permission and scan for nearby BLE devices. Without a physical board, the scan will complete with no devices found. This is expected.
-7. Party Mode: Start a party session from the queue panel. This creates a WebSocket-backed collaborative session. You can open a second browser or device, sign in with a different account, and join the same session to test real-time sync (climb additions, queue reordering, and voting all sync live).
+7. Party Mode: Start a party session from the queue panel. This creates a WebSocket-backed collaborative session. You can open a second browser or device, sign in with a different account, and join the same session to test real-time sync. Sessions are always live: any participant can set the next climb and it broadcasts to everyone instantly. There is no single "driver" and no voting step (the older driver/vote model is deprecated). Whoever is connected to the board over Bluetooth relays the lit climb to the wall.
 8. Logbook: Check the logbook/profile section to see logged climbs and stats.
 
 ## Data Safety Form

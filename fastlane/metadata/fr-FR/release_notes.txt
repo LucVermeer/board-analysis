@@ -1,0 +1,8 @@
+Les séances sont toujours en live maintenant. Tout le monde dans une séance peut envoyer la prochaine voie au mur, sans pilote à qui passer le téléphone et sans tour à attendre. Celui qui est connecté en Bluetooth l'allume.
+
+Aussi dans cette version :
+- Vois qui est sur le mur : un fil live montre la voie allumée maintenant, qui l'a allumée, la cotation, l'inclinaison et l'ouvreur, qui se mettent à jour en temps réel.
+- Pilote la séance depuis ton écran verrouillé et la Dynamic Island sur iOS 17+ avec les Live Activities.
+- Monte une séance avec Volume, Pyramide, Échelle ou Focus de cotation, puis envoie les voies une par une.
+- Note tes sends, tes flashs et tes essais, et vois tes sends et tes cotations s'afficher dans l'onglet Progression.
+- Exporte tes séances vers Strava et enregistre-les dans Apple Health sur iOS.

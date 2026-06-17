@@ -1,0 +1,32 @@
+Busca una vía y mira cómo tu muro ilumina las presas por Bluetooth. Toca un bloque, las presas se encienden, te cuelgas. Pasa la sesión escalando en vez de leer números en una pantalla.
+
+La app nativa mantiene el enlace con tu muro aunque se apague la pantalla, así las presas siguen encendidas durante tus pegadas. Elige tu muro una vez y a escalar.
+
+ILUMINA LAS PRESAS
+Busca cualquier vía y Boardsesh la manda al muro por Bluetooth, encendiendo las presas en Kilter, Tension, MoonBoard, Decoy, Touchstone, Grasshopper y So iLL. Enciendes las presas en los siete por Bluetooth, no solo las consultas.
+
+POR QUÉ LA APP
+Chrome en Android llega al Bluetooth, así que la web conecta. La app suma un servicio en segundo plano que mantiene viva la conexión Bluetooth con el muro cuando se apaga la pantalla o dejas la app de fondo, así las presas siguen encendidas durante tus pegadas sin que tengas que estar pendiente de una pestaña.
+
+ESCALA CON TU PEÑA
+Abre una sesión y todos los que estén dentro pueden mandar la siguiente vía al muro. Nadie tiene que ir pasando el móvil ni esperar su turno. La enciende quien esté conectado por Bluetooth.
+
+MIRA QUÉ VÍA ESTÁ ENCENDIDA
+Un feed en directo muestra la vía encendida ahora mismo, quién la encendió, el grado y el ángulo, quién la montó y los encadenes recientes. Se actualiza según caen las pegadas.
+
+MÓNTATE UN ENTRENO
+Elige Volumen, Pirámide, Escalera o Foco de Grado, fija un grado objetivo y el calentamiento, previsualiza las vías y mándalas al muro pegada a pegada.
+
+REGISTRA TU ESCALADA
+Apunta encadenes, flashes e intentos. Recibe un resumen con la duración, el reparto de grados y tu vía más dura. Mira cómo tus encadenes y grados se acumulan semana tras semana en la pestaña Progreso.
+
+EXPORTA E IMPORTA
+Conecta Strava y manda tu sesión, guárdala en Apple Health e importa tu logbook antiguo de Kilter y Tension desde Aurora Climbing.
+
+ENCUENTRA MÁS PARA ESCALAR
+Sigue a tu peña y a los aperturistas, busca escaladores y fija playlists desde Discover.
+
+GRATIS, SIN ANUNCIOS, SIN SUSCRIPCIONES
+Código abierto en GitHub.
+
+Boardsesh funciona con estos muros y no está afiliado ni respaldado por Aurora Climbing ni Moon Climbing.

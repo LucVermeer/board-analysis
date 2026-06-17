@@ -1,0 +1,32 @@
+Cherche une voie et regarde ton mur allumer les prises en Bluetooth. Tu tapes un bloc, les prises s'allument, tu pars dessus. Tu passes ta séance à grimper, pas à lire des chiffres sur un écran.
+
+L'appli native garde un lien plus stable avec ta board qu'un onglet de navigateur. Choisis ta board une fois et grimpe.
+
+ALLUME LES PRISES
+Cherche n'importe quelle voie et Boardsesh l'envoie au mur en Bluetooth, en allumant les prises sur Kilter, Tension, MoonBoard, Decoy, Touchstone, Grasshopper et So iLL. Contrôle complet des LED sur les sept, pas seulement la consultation.
+
+POURQUOI L'APPLI
+Chrome sur Android peut atteindre le Bluetooth, donc le site web se connecte. L'appli garde une connexion plus stable qui survit à l'écran qui s'éteint, pour que les prises restent allumées pendant tes essais sans avoir à surveiller un onglet de navigateur.
+
+GRIMPE AVEC TA CREW
+Lance une séance et tout le monde dedans peut envoyer la prochaine voie au mur. Pas de pilote à qui passer le téléphone, pas de tour à attendre. Celui qui est connecté en Bluetooth l'allume.
+
+VOIS QUI EST SUR LE MUR
+Quand le fil live est actif sur ta board, il montre la voie allumée maintenant, qui l'a allumée, la cotation et l'inclinaison, qui l'a ouverte, et les sends récents, mis à jour en direct au fil des sends.
+
+MONTE UNE SÉANCE D'ENTRAÎNEMENT
+Choisis Volume, Pyramide, Échelle ou Focus de cotation, fixe une cotation cible et un échauffement, prévisualise les voies, puis envoie-les au mur une par une.
+
+SUIS TON ESCALADE
+Note tes sends, tes flashs et tes essais. Reçois un récap avec la durée, l'éventail de cotations et ton plus gros send. Regarde tes sends et tes cotations s'empiler semaine après semaine dans l'onglet Progression.
+
+EXPORTE ET IMPORTE
+Envoie ta séance vers Strava, enregistre-la dans Apple Health, et importe ton ancien carnet Kilter et Tension depuis Aurora Climbing.
+
+TROUVE PLUS À GRIMPER
+Suis ta crew et les ouvreurs, cherche des grimpeurs, et épingle des playlists depuis Discover.
+
+GRATUIT, SANS PUB, SANS ABONNEMENT
+Open source sur GitHub.
+
+Boardsesh fonctionne avec ces boards et n'est ni affilié à, ni soutenu par Aurora Climbing ou Moon Climbing.

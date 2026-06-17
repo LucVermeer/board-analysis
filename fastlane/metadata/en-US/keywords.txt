@@ -1,1 +1,1 @@
-kilter board,tension board,moonboard,So iLL,spray wall,system board,bouldering,climbing,bluetooth
+MoonBoard,kilter,tension,bouldering,climb,beta,send,bluetooth,led,workout,gym,setter,session

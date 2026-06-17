@@ -1,0 +1,1 @@
+Busca una vía e ilumina las presas en Kilter, Tension o MoonBoard por Bluetooth.

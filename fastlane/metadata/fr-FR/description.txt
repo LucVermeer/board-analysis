@@ -1,0 +1,36 @@
+Cherche une voie et regarde ton mur allumer les prises. Tu tapes un bloc, les prises s'allument, tu pars dessus. Boardsesh relie ton téléphone à ta board en Bluetooth, pour que ta séance se passe à grimper plutôt qu'à lire des chiffres sur un écran.
+
+CE QUE TU AS
+
+Allume les prises
+Cherche n'importe quelle voie et Boardsesh l'envoie au mur en Bluetooth, en allumant les prises sur Kilter, Tension, MoonBoard, Decoy, Touchstone, Grasshopper et So iLL. Contrôle complet des LED sur les sept boards.
+
+Pourquoi l'appli
+Sur iPhone, Safari n'a pas de Web Bluetooth, donc c'est l'appli native qui se connecte à ta board et allume les prises.
+
+Grimpe avec ta crew
+Lance une séance et tout le monde dedans peut envoyer la prochaine voie au mur. Pas de pilote à qui passer le téléphone, pas de tour à attendre. Celui qui est connecté en Bluetooth l'allume.
+
+Vois qui est sur le mur
+Un fil live montre la voie allumée maintenant et les sends récents, avec qui l'a allumée, la cotation, l'inclinaison et qui l'a ouverte, qui se mettent à jour en temps réel.
+
+Pilote la séance depuis ton écran verrouillé (iOS 17+)
+Les Live Activities mettent la voie en cours, ta place dans la file et suivant/précédent sur l'écran verrouillé et la Dynamic Island, pour enchaîner les voies sans ouvrir l'appli.
+
+Monte une séance d'entraînement
+Choisis Volume, Pyramide, Échelle ou Focus de cotation, fixe une cotation cible et un échauffement, prévisualise les voies, puis envoie-les au mur une par une.
+
+Suis ton escalade
+Note tes sends, tes flashs et tes essais, reçois un récap avec la durée, la répartition des cotations et ton plus gros send, et vois tes sends et tes cotations s'afficher dans l'onglet Progression.
+
+Exporte et importe
+Exporte ta séance vers Strava et enregistre-la dans Apple Health sur iOS. Importe ton ancien carnet Kilter et Tension depuis Aurora Climbing.
+
+Trouve plus à grimper
+Suis ta crew et les ouvreurs, cherche des grimpeurs, et épingle des playlists depuis Discover.
+
+Gratuit, sans pub, sans abonnement. Open source sur GitHub.
+
+Boards prises en charge : Kilter, Tension, MoonBoard (2010, 2016, 2024, Masters 2017, Masters 2019), Decoy, Touchstone, Grasshopper et So iLL.
+
+Boardsesh fonctionne avec ces boards et n'est ni affilié à, ni soutenu par Aurora Climbing ou Moon Climbing.

@@ -1,10 +1,1 @@
-Boardsesh 2.0 is a full native rewrite. The old app wrapped the website; this one is native, so it connects faster, holds the Bluetooth link steadier, and keeps holds lit while you climb.
-
-New in 2.0:
-- Quicker, steadier board connection
-- Native feel: smoother lists, faster search, background support
-- Search, filter, and queue climbs, cycle with one tap
-- Party Mode for your crew
-- Logbook synced to Aurora Climbing for Kilter and Tension
-
-Open source. No ads, no subscriptions.
+Boardsesh 2.0 is a native Android app. Search a climb and light the holds on Kilter, Tension, MoonBoard, Decoy, Touchstone, Grasshopper and So iLL over Bluetooth, with a steadier link that stays lit when the screen sleeps. Start a session and everyone in it can send the next climb. See who is on the wall right now in the live feed. Build Volume, Pyramid, Ladder or Grade Focus workouts. Record sends and watch your progress stack up. Free, no ads, open source.
