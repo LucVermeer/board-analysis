@@ -114,6 +114,7 @@ export const ProgressTab = memo(function ProgressTab({ data, topInset }: Progres
               emptyLabel={noAscentData}
               maxXLabels={6}
               showYAxisScale
+              accessibilityLabel={t('stats.weeklyAttemptsAria')}
             />
           </Card>
 
@@ -125,13 +126,14 @@ export const ProgressTab = memo(function ProgressTab({ data, topInset }: Progres
               emptyLabel={noAscentData}
               legend={gradeDistLegend}
               showYAxisScale
+              accessibilityLabel={t('stats.gradeDistributionAria')}
             />
           </Card>
 
           {data.aggregatedFlashRedpointBars && (
             <>
               <SectionHeader title={t('stats.flashVsRedpoint')} />
-              <Card style={styles.chartCard}>
+              <Card style={styles.chartCard} accessibilityLabel={t('stats.flashRedpointAria')}>
                 <GroupedBarChart
                   bars={data.aggregatedFlashRedpointBars}
                   emptyLabel={noAscentData}

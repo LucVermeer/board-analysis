@@ -5,15 +5,17 @@ import Svg, { Rect } from 'react-native-svg';
 import type { RawActivityDay, RawActivityHeatmap } from '@boardsesh/profile-stats';
 import { Text } from '../Text';
 import { useTheme } from '../../providers/theme-provider';
-import { brandColors, brandColorsDark, withAlpha } from '../../theme/colors';
-import { spacing } from '../../theme/tokens';
+import { blendOpaque } from '../../theme/colors';
+import { borderRadius, spacing } from '../../theme/tokens';
 
 const ROWS = 7;
 const CELL_GAP = 3;
-const CELL_RADIUS = 2;
 // Column budget (cell + gap) used to decide how many weeks fit the screen.
 const TARGET_COLUMN = 16;
 const INTENSITY_STEPS = [0.4, 0.6, 0.8, 1] as const;
+// Opaque-composite alphas for the empty floor (kept faint, scheme-tuned).
+const EMPTY_FLOOR_ALPHA_DARK = 0.1;
+const EMPTY_FLOOR_ALPHA_LIGHT = 0.08;
 
 type ActivityHeatmapProps = {
   heatmap: RawActivityHeatmap;
@@ -27,7 +29,7 @@ type ActivityHeatmapProps = {
  * a scroll screen, so the SVG grid isn't subject to the list-virtualization rule.
  */
 export function ActivityHeatmap({ heatmap }: ActivityHeatmapProps) {
-  const { colorScheme, chartColors } = useTheme();
+  const { colorScheme, chartColors, brandColors } = useTheme();
   const { t } = useTranslation('profile');
   const [width, setWidth] = useState(0);
 
@@ -49,14 +51,33 @@ export function ActivityHeatmap({ heatmap }: ActivityHeatmapProps) {
     return { totalClimbs, activeDays };
   }, [heatmap.days]);
 
-  const primary = (colorScheme === 'dark' ? brandColorsDark : brandColors).primary;
-  const emptyColor = chartColors.fill;
+  // Per-variant brand accent (opaque hex on every variant/scheme) composited onto
+  // the opaque card surface so the ramp + empty floor stay legible regardless of
+  // what sits behind the SVG. Computed once per scheme/variant change.
+  const primary = chartColors.accent;
+  const surface = chartColors.secondaryBackground;
+  const { emptyFill, stepFills } = useMemo(() => {
+    const floorAlpha = colorScheme === 'dark' ? EMPTY_FLOOR_ALPHA_DARK : EMPTY_FLOOR_ALPHA_LIGHT;
+    return {
+      emptyFill: blendOpaque(primary, surface, floorAlpha),
+      stepFills: INTENSITY_STEPS.map((step) => blendOpaque(primary, surface, step)),
+    };
+  }, [primary, surface, colorScheme]);
+
+  // "Today" via a LOCAL date string (NOT toISOString, which is UTC) so the
+  // current-day ring lands on the right cell across time zones.
+  const todayKey = useMemo(() => {
+    const now = new Date();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const dayOfMonth = String(now.getDate()).padStart(2, '0');
+    return `${now.getFullYear()}-${month}-${dayOfMonth}`;
+  }, []);
 
   const colorForCount = (count: number): string => {
-    if (count <= 0) return emptyColor;
+    if (count <= 0) return emptyFill;
     const ratio = count / heatmap.maxCount;
-    const stepIndex = Math.min(INTENSITY_STEPS.length - 1, Math.max(0, Math.ceil(ratio * INTENSITY_STEPS.length) - 1));
-    return withAlpha(primary, INTENSITY_STEPS[stepIndex]);
+    const stepIndex = Math.min(stepFills.length - 1, Math.max(0, Math.ceil(ratio * stepFills.length) - 1));
+    return stepFills[stepIndex];
   };
 
   const fitWeeks =
@@ -64,6 +85,11 @@ export function ActivityHeatmap({ heatmap }: ActivityHeatmapProps) {
   const shown = fitWeeks > 0 ? columns.slice(-fitWeeks) : [];
   const cell = shown.length > 0 ? (width - CELL_GAP * (shown.length - 1)) / shown.length : 0;
   const gridHeight = ROWS * cell + (ROWS - 1) * CELL_GAP;
+  // Corner radius scales with cell size but is capped by the sm token so wide
+  // cells don't over-round into pills.
+  const cornerRadius = Math.min(borderRadius.sm, Math.round(cell * 0.22));
+  // Current-day ring: inset by half its stroke so it sits inside the cell.
+  const ringWidth = Math.max(1.5, cell * 0.12);
 
   const onLayout = (event: LayoutChangeEvent) => setWidth(event.nativeEvent.layout.width);
 
@@ -76,17 +102,42 @@ export function ActivityHeatmap({ heatmap }: ActivityHeatmapProps) {
       {width > 0 && cell > 0 ? (
         <Svg width={width} height={gridHeight}>
           {shown.map((column, columnIndex) =>
-            column.map((day, rowIndex) => (
-              <Rect
-                key={day.date}
-                x={columnIndex * (cell + CELL_GAP)}
-                y={rowIndex * (cell + CELL_GAP)}
-                width={cell}
-                height={cell}
-                rx={CELL_RADIUS}
-                fill={colorForCount(day.count)}
-              />
-            )),
+            column.map((day, rowIndex) => {
+              const cellX = columnIndex * (cell + CELL_GAP);
+              const cellY = rowIndex * (cell + CELL_GAP);
+              return (
+                <Rect
+                  key={day.date}
+                  x={cellX}
+                  y={cellY}
+                  width={cell}
+                  height={cell}
+                  rx={cornerRadius}
+                  ry={cornerRadius}
+                  fill={colorForCount(day.count)}
+                  stroke={chartColors.separator}
+                  strokeWidth={StyleSheet.hairlineWidth}
+                />
+              );
+            }),
+          )}
+          {shown.map((column, columnIndex) =>
+            column.map((day, rowIndex) =>
+              day.date === todayKey ? (
+                <Rect
+                  key={`today-${day.date}`}
+                  x={columnIndex * (cell + CELL_GAP) + ringWidth / 2}
+                  y={rowIndex * (cell + CELL_GAP) + ringWidth / 2}
+                  width={cell - ringWidth}
+                  height={cell - ringWidth}
+                  rx={cornerRadius}
+                  ry={cornerRadius}
+                  fill="none"
+                  stroke={brandColors.tint}
+                  strokeWidth={ringWidth}
+                />
+              ) : null,
+            ),
           )}
         </Svg>
       ) : null}
@@ -95,10 +146,16 @@ export function ActivityHeatmap({ heatmap }: ActivityHeatmapProps) {
         <Text variant="caption2" color={chartColors.tertiaryLabel}>
           {t('stats.calendarLess')}
         </Text>
-        <View style={styles.legendSwatches}>
-          <View style={[styles.swatch, { backgroundColor: emptyColor }]} />
-          {INTENSITY_STEPS.map((step) => (
-            <View key={step} style={[styles.swatch, { backgroundColor: withAlpha(primary, step) }]} />
+        <View style={[styles.legendSwatches, { gap: CELL_GAP }]}>
+          <View
+            style={[
+              styles.swatch,
+              styles.emptySwatch,
+              { backgroundColor: emptyFill, borderColor: chartColors.separator },
+            ]}
+          />
+          {stepFills.map((fill, stepIndex) => (
+            <View key={INTENSITY_STEPS[stepIndex]} style={[styles.swatch, { backgroundColor: fill }]} />
           ))}
         </View>
         <Text variant="caption2" color={chartColors.tertiaryLabel}>
@@ -115,15 +172,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'flex-end',
     gap: spacing[2],
-    marginTop: spacing[2],
+    marginTop: spacing[3],
   },
   legendSwatches: {
     flexDirection: 'row',
-    gap: 3,
   },
   swatch: {
-    width: 12,
-    height: 12,
-    borderRadius: 2,
+    width: spacing[3],
+    height: spacing[3],
+    borderRadius: borderRadius.sm,
+  },
+  emptySwatch: {
+    borderWidth: StyleSheet.hairlineWidth,
   },
 });

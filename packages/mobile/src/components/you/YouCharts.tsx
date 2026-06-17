@@ -7,6 +7,8 @@ import { Text } from '../Text';
 import { Icon } from '../Icon';
 import { ActivityIndicator } from '../ActivityIndicator';
 import { useTheme } from '../../providers/theme-provider';
+import { spacing, borderRadius, opacity, materialElevationByLevel } from '../../theme/tokens';
+import { withAlpha } from '../../theme/colors';
 import { hapticSelection } from '../../lib/haptics';
 import { gradeChartColor, layoutChartColor, flashRedpointColor, type ColoredBar } from './profile-chart-colors';
 import {
@@ -22,6 +24,15 @@ const AXIS_LABEL_SIZE = 11;
 const STACK_BAR_RADIUS = 3;
 const MIN_ZOOM_SCALE = 1;
 const MAX_ZOOM_SCALE = 2.75;
+// Floor for grouped flash|redpoint bars so a dense V0-V17 axis keeps each bar
+// above the iOS 44pt / Android 48dp touch target instead of shrinking to 4px.
+const MIN_GROUPED_BAR = 6;
+// Selection lowlight for the interactive grouped chart: the flash/redpoint fills
+// already carry their own 0.85 alpha, so a deeper dim keeps unselected pairs
+// readable on the dark violet card while the focused pair still pops.
+const CHART_LOWLIGHT_OPACITY = 0.5;
+// Layout cap on histogram bar width so a wide card doesn't balloon six buckets.
+const MAX_HISTOGRAM_BAR_WIDTH = 36;
 
 export type ChartLegendItem = { color: string; label: string };
 
@@ -85,7 +96,7 @@ type FrameProps = {
 
 /** Measures available width and renders loading / empty / chart states. */
 function ChartFrame({ height, loading, emptyLabel, isEmpty, zoomable, children }: FrameProps) {
-  const { systemColors } = useTheme();
+  const { systemColors, chartColors, variant } = useTheme();
   const { t } = useTranslation('common');
   const [width, setWidth] = useState(0);
   const [zoomScale, setZoomScale] = useState(MIN_ZOOM_SCALE);
@@ -157,11 +168,14 @@ function ChartFrame({ height, loading, emptyLabel, isEmpty, zoomable, children }
       onResponderTerminationRequest={shouldReleaseResponder}
     >
       {loading ? (
-        <ActivityIndicator size="small" />
+        <ActivityIndicator size="small" color={chartColors.secondaryLabel} />
       ) : isEmpty ? (
-        <Text variant="footnote" color={systemColors.tertiaryLabel}>
-          {emptyLabel}
-        </Text>
+        <View style={styles.emptyState} accessibilityRole="image" accessibilityLabel={emptyLabel}>
+          <Icon name="chart.bar" size={22} color={systemColors.tertiaryLabel} />
+          <Text variant="footnote" color={systemColors.tertiaryLabel}>
+            {emptyLabel}
+          </Text>
+        </View>
       ) : width > 0 ? (
         children(width, zoomScale, canZoom && isZoomed)
       ) : null}
@@ -174,6 +188,7 @@ function ChartFrame({ height, loading, emptyLabel, isEmpty, zoomable, children }
               backgroundColor: systemColors.elevatedSurface,
               borderColor: systemColors.separator,
             },
+            variant === 'material' ? materialElevationByLevel.level2 : null,
           ]}
           accessibilityRole="button"
           accessibilityLabel={t('resetZoom')}
@@ -187,7 +202,7 @@ function ChartFrame({ height, loading, emptyLabel, isEmpty, zoomable, children }
 }
 
 function TooltipBubble({ model, totalLabel }: { model: ChartTooltipModel | undefined; totalLabel: string }) {
-  const { systemColors } = useTheme();
+  const { systemColors, variant } = useTheme();
   if (!model) return null;
 
   return (
@@ -198,6 +213,7 @@ function TooltipBubble({ model, totalLabel }: { model: ChartTooltipModel | undef
           backgroundColor: systemColors.elevatedSurface,
           borderColor: systemColors.separator,
         },
+        variant === 'material' ? materialElevationByLevel.level2 : null,
       ]}
     >
       <Text variant="caption1" style={styles.tooltipTitle} numberOfLines={1}>
@@ -249,6 +265,12 @@ type StackedBarsProps = {
   fitYAxisToData?: boolean;
   showYAxisScale?: boolean;
   minBarWidth?: number;
+  /**
+   * Screen-reader summary for the whole chart. When set, the outer wrapper
+   * announces it as an image and the inner SVG primitives are hidden from
+   * accessibility so VoiceOver/TalkBack don't traverse the bars individually.
+   */
+  accessibilityLabel?: string;
 };
 
 /** Stacked bars (weekly activity, grade distribution). */
@@ -265,6 +287,7 @@ export const StackedBarChart = memo(function StackedBarChart({
   fitYAxisToData,
   showYAxisScale,
   minBarWidth = 4,
+  accessibilityLabel,
 }: StackedBarsProps) {
   // gifted-charts colour props require plain strings (not PlatformColor); `chartColors`
   // is the matching string table per variant+scheme, resolved once by the provider.
@@ -335,8 +358,8 @@ export const StackedBarChart = memo(function StackedBarChart({
   const selectedTooltip = selectedIndex == null ? undefined : tooltipModels[selectedIndex];
 
   return (
-    <View>
-      <View style={styles.chartShell}>
+    <View accessibilityRole={accessibilityLabel ? 'image' : undefined} accessibilityLabel={accessibilityLabel}>
+      <View style={styles.chartShell} importantForAccessibility={accessibilityLabel ? 'no-hide-descendants' : 'auto'}>
         <ChartFrame
           height={height}
           loading={loading}
@@ -363,14 +386,14 @@ export const StackedBarChart = memo(function StackedBarChart({
                 yAxisThickness={0}
                 xAxisThickness={StyleSheet.hairlineWidth}
                 xAxisColor={chartColors.separator}
-                xAxisLabelTextStyle={{ color: chartColors.secondaryLabel, fontSize: AXIS_LABEL_SIZE }}
-                yAxisTextStyle={{ color: chartColors.secondaryLabel, fontSize: AXIS_LABEL_SIZE }}
+                xAxisLabelTextStyle={{ color: chartColors.tertiaryLabel, fontSize: AXIS_LABEL_SIZE }}
+                yAxisTextStyle={{ color: chartColors.tertiaryLabel, fontSize: AXIS_LABEL_SIZE }}
                 rulesColor={chartColors.separator}
                 rulesType="solid"
                 focusBarOnPress={interactive}
                 highlightedBarIndex={selectedIndex ?? -1}
                 highlightEnabled={interactive && selectedIndex != null}
-                lowlightOpacity={0.42}
+                lowlightOpacity={opacity.peek}
                 onBackgroundPress={interactive ? () => setSelectedIndex(null) : undefined}
                 isAnimated={false}
                 disableScroll={!scrollEnabled}
@@ -420,8 +443,8 @@ export const GroupedBarChart = memo(function GroupedBarChart({
   const { t } = useTranslation('profile');
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const isEmpty = !bars || bars.length === 0;
-  const groupGap = 14;
-  const innerGap = 2;
+  const groupGap = 16;
+  const innerGap = 3;
   const tooltipModels = useMemo(
     () => (bars ?? []).map((bar) => createGroupedTooltipModel(bar, (key) => flashRedpointColor(key, colorScheme))),
     [bars, colorScheme],
@@ -451,10 +474,10 @@ export const GroupedBarChart = memo(function GroupedBarChart({
             const list = bars ?? [];
             const initial = 8;
             const baseBarWidth = Math.max(
-              4,
+              MIN_GROUPED_BAR,
               Math.floor((width - initial * 2 - groupGap * list.length - innerGap * list.length) / (list.length * 2)),
             );
-            const barWidth = Math.max(4, Math.round(baseBarWidth * zoomScale));
+            const barWidth = Math.max(MIN_GROUPED_BAR, Math.round(baseBarWidth * zoomScale));
             const zoomedGroupGap = Math.max(groupGap, Math.round(groupGap * zoomScale));
             const zoomedInnerGap = Math.max(innerGap, Math.round(innerGap * zoomScale));
             const data = list.flatMap((bar, barIndex) =>
@@ -465,6 +488,14 @@ export const GroupedBarChart = memo(function GroupedBarChart({
                 label: valueIndex === 0 ? bar.label : undefined,
                 labelWidth: barWidth * 2 + zoomedInnerGap,
                 onPress: interactive ? () => handlePress(barIndex) : undefined,
+                topLabelComponent:
+                  value.value > 0
+                    ? () => (
+                        <Text variant="caption2" color={chartColors.secondaryLabel} style={styles.histogramTopLabel}>
+                          {value.value}
+                        </Text>
+                      )
+                    : undefined,
               })),
             );
             return (
@@ -474,18 +505,19 @@ export const GroupedBarChart = memo(function GroupedBarChart({
                 height={height - 28}
                 barWidth={barWidth}
                 initialSpacing={initial}
-                barBorderRadius={2}
+                barBorderRadius={STACK_BAR_RADIUS}
+                topLabelContainerStyle={{ width: barWidth }}
                 hideRules
                 hideYAxisText
                 maxValue={yAxisMaxValue}
                 yAxisThickness={0}
                 xAxisThickness={StyleSheet.hairlineWidth}
                 xAxisColor={chartColors.separator}
-                xAxisLabelTextStyle={{ color: chartColors.tertiaryLabel, fontSize: AXIS_LABEL_SIZE }}
+                xAxisLabelTextStyle={{ color: chartColors.secondaryLabel, fontSize: AXIS_LABEL_SIZE }}
                 focusBarOnPress={interactive}
                 highlightedBarIndex={selectedIndex == null ? -1 : [selectedIndex * 2, selectedIndex * 2 + 1]}
                 highlightEnabled={interactive && selectedIndex != null}
-                lowlightOpacity={0.42}
+                lowlightOpacity={CHART_LOWLIGHT_OPACITY}
                 onBackgroundPress={interactive ? () => setSelectedIndex(null) : undefined}
                 isAnimated={false}
                 disableScroll={!scrollEnabled}
@@ -530,7 +562,7 @@ export const TotalAreaChart = memo(function TotalAreaChart({
   interactive = true,
   zoomable = true,
 }: AreaProps) {
-  const { chartColors } = useTheme();
+  const { chartColors, colorScheme } = useTheme();
   const isEmpty = !timeline || timeline.series.length === 0;
 
   // Data + axis labels are width-independent — memoize off the timeline.
@@ -545,12 +577,39 @@ export const TotalAreaChart = memo(function TotalAreaChart({
     const yAxisLabelTexts = Array.from({ length: sections + 1 }, (_, index) =>
       formatThousands((maxValue * index) / sections),
     );
-    const data = totals.map((value, index) => ({
-      value,
-      label: downsampleLabel(index, weekLabels.length, weekLabels[index]),
-    }));
-    return { data, maxValue, sections, yAxisLabelTexts, pointCount: weekLabels.length };
-  }, [timeline]);
+    const latestTotal = totals[totals.length - 1] ?? 0;
+    // Mark only the final datum: a coloured end dot + a value pill so the eye
+    // lands on the current cumulative total. Interior points stay hidden.
+    const data = totals.map((value, index) => {
+      const isLast = index === totals.length - 1;
+      return {
+        value,
+        label: downsampleLabel(index, weekLabels.length, weekLabels[index]),
+        hideDataPoint: !isLast,
+        ...(isLast
+          ? {
+              dataPointColor: color,
+              dataPointRadius: 4,
+              dataPointLabelShiftY: -14,
+              dataPointLabelShiftX: -12,
+              dataPointLabelComponent: () => (
+                <View
+                  style={[
+                    styles.endValuePill,
+                    { backgroundColor: chartColors.elevatedSurface, borderColor: chartColors.separator },
+                  ]}
+                >
+                  <Text variant="caption2" color={chartColors.label} style={styles.endValueText}>
+                    {formatThousands(latestTotal)}
+                  </Text>
+                </View>
+              ),
+            }
+          : {}),
+      };
+    });
+    return { data, maxValue, sections, yAxisLabelTexts, pointCount: weekLabels.length, latestTotal };
+  }, [timeline, color, chartColors.elevatedSurface, chartColors.separator, chartColors.label]);
 
   return (
     <ChartFrame
@@ -563,23 +622,25 @@ export const TotalAreaChart = memo(function TotalAreaChart({
       {(width, zoomScale, scrollEnabled) => {
         if (!model) return null;
         const baseSpacing = Math.max(1, Math.floor((width - 48) / Math.max(1, model.pointCount - 1)));
-        const spacing = Math.max(1, Math.round(baseSpacing * zoomScale));
+        const lineSpacing = Math.max(1, Math.round(baseSpacing * zoomScale));
         return (
           <LineChart
             areaChart
             data={model.data}
             width={width - 48}
             height={height - 28}
-            spacing={spacing}
+            spacing={lineSpacing}
             initialSpacing={4}
+            endSpacing={spacing[4]}
             color={color}
             startFillColor={color}
             endFillColor={color}
-            startOpacity={0.35}
-            endOpacity={0.05}
+            startOpacity={colorScheme === 'dark' ? 0.55 : 0.42}
+            endOpacity={colorScheme === 'dark' ? 0.1 : 0.04}
+            gradientDirection="vertical"
             thickness={2}
-            hideDataPoints
             curved
+            curvature={0.2}
             maxValue={model.maxValue}
             noOfSections={model.sections}
             yAxisLabelTexts={model.yAxisLabelTexts}
@@ -590,6 +651,33 @@ export const TotalAreaChart = memo(function TotalAreaChart({
             rulesType="solid"
             yAxisTextStyle={{ color: chartColors.tertiaryLabel, fontSize: AXIS_LABEL_SIZE }}
             xAxisLabelTextStyle={{ color: chartColors.tertiaryLabel, fontSize: AXIS_LABEL_SIZE }}
+            pointerConfig={{
+              pointerStripColor: chartColors.separator,
+              pointerStripWidth: 1,
+              stripOverPointer: true,
+              pointerColor: color,
+              radius: 4,
+              pointerLabelWidth: 96,
+              pointerLabelHeight: 44,
+              activatePointersOnLongPress: false,
+              autoAdjustPointerLabelPosition: true,
+              pointerVanishDelay: 1600,
+              pointerLabelComponent: (items: { value: number; label?: string }[]) => (
+                <View
+                  style={[
+                    styles.tooltip,
+                    { backgroundColor: chartColors.elevatedSurface, borderColor: chartColors.separator },
+                  ]}
+                >
+                  <Text variant="caption2" color={chartColors.secondaryLabel} numberOfLines={1}>
+                    {items[0]?.label}
+                  </Text>
+                  <Text variant="caption1" style={styles.tooltipValue}>
+                    {formatThousands(items[0]?.value ?? 0)}
+                  </Text>
+                </View>
+              ),
+            }}
             isAnimated={false}
             disableScroll={!scrollEnabled}
           />
@@ -624,53 +712,100 @@ export const HistogramBarChart = memo(function HistogramBarChart({
   loading,
   emptyLabel,
 }: HistogramProps) {
-  const { chartColors } = useTheme();
+  const { chartColors, systemColors } = useTheme();
+  const { t } = useTranslation('profile');
   const isEmpty = !histogram || histogram.total === 0;
 
   const data = useMemo(
     () =>
-      (histogram?.buckets ?? []).map((bucket) => ({
-        value: bucket.value,
-        label: bucket.label,
-        frontColor: bucket.key === '1' ? flashColor : barColor,
-        topLabelComponent:
-          bucket.value > 0
-            ? () => (
-                <Text variant="caption2" color={chartColors.secondaryLabel} style={styles.histogramTopLabel}>
-                  {bucket.value}
-                </Text>
-              )
-            : undefined,
-      })),
-    [histogram, flashColor, barColor, chartColors.secondaryLabel],
+      (histogram?.buckets ?? []).map((bucket, bucketIndex) => {
+        const isFlash = bucket.key === '1';
+        // Effort tonal ramp on the non-flash buckets only (2…6+ get a faint→full
+        // violet); the flash bucket keeps its own hue. The flash bucket is at
+        // index 0, so its non-flash rank is bucketIndex - 1.
+        const nonFlashRank = bucketIndex - 1;
+        const frontColor = isFlash ? flashColor : withAlpha(barColor, Math.min(1, 0.55 + 0.1 * nonFlashRank));
+        return {
+          value: bucket.value,
+          label: bucket.label,
+          frontColor,
+          // Render every bucket's count; zero buckets show a dim 0 so a gappy
+          // distribution still reads as a real shape.
+          topLabelComponent: () => (
+            <Text
+              variant="caption1"
+              color={bucket.value === 0 ? chartColors.tertiaryLabel : isFlash ? flashColor : chartColors.label}
+              style={styles.histogramTopLabel}
+            >
+              {bucket.value}
+            </Text>
+          ),
+          // Flat bottom: round only the top caps so each column sits on the axis.
+          barBorderTopLeftRadius: borderRadius.sm,
+          barBorderTopRightRadius: borderRadius.sm,
+          barBorderBottomLeftRadius: 0,
+          barBorderBottomRightRadius: 0,
+        };
+      }),
+    [histogram, flashColor, barColor, chartColors.label, chartColors.tertiaryLabel],
   );
 
+  // Flash-rate + median-tries caption (i18n key already exists). Treat the
+  // '6plus' bucket as 6 tries for the weighted median.
+  const summary = useMemo(() => {
+    if (!histogram || histogram.total === 0) return null;
+    const flashCount = histogram.buckets.find((bucket) => bucket.key === '1')?.value ?? 0;
+    const flash = Math.round((flashCount / histogram.total) * 100);
+    const triesForBucket = (key: string): number => (key === '6plus' ? 6 : Number(key));
+    const midpoint = histogram.total / 2;
+    let cumulative = 0;
+    let median = triesForBucket(histogram.buckets[histogram.buckets.length - 1]?.key ?? '6plus');
+    for (const bucket of histogram.buckets) {
+      cumulative += bucket.value;
+      if (cumulative >= midpoint) {
+        median = triesForBucket(bucket.key);
+        break;
+      }
+    }
+    return { flash, median };
+  }, [histogram]);
+
   return (
-    <ChartFrame height={height} loading={loading} isEmpty={isEmpty} emptyLabel={emptyLabel}>
-      {(width) => {
-        const fitted = fitBars(width, data.length, 10);
-        return (
-          <BarChart
-            data={data}
-            width={width - 8}
-            height={height - 28}
-            barWidth={fitted.barWidth}
-            spacing={fitted.spacing}
-            initialSpacing={10}
-            barBorderRadius={STACK_BAR_RADIUS}
-            hideRules
-            hideYAxisText
-            yAxisThickness={0}
-            xAxisThickness={StyleSheet.hairlineWidth}
-            xAxisColor={chartColors.separator}
-            xAxisLabelTextStyle={{ color: chartColors.secondaryLabel, fontSize: AXIS_LABEL_SIZE }}
-            isAnimated={false}
-            disableScroll
-            disablePress
-          />
-        );
-      }}
-    </ChartFrame>
+    <View>
+      {summary ? (
+        <View style={styles.histogramCaption}>
+          <Text variant="footnote" color={systemColors.secondaryLabel}>
+            {t('stats.triesSummary', { flash: summary.flash, median: summary.median })}
+          </Text>
+        </View>
+      ) : null}
+      <ChartFrame height={height} loading={loading} isEmpty={isEmpty} emptyLabel={emptyLabel}>
+        {(width) => {
+          const fitted = fitBars(width, data.length, 10);
+          const barWidth = Math.min(fitted.barWidth, MAX_HISTOGRAM_BAR_WIDTH);
+          return (
+            <BarChart
+              data={data}
+              width={width - 8}
+              height={height - 36}
+              barWidth={barWidth}
+              spacing={fitted.spacing}
+              initialSpacing={spacing[2]}
+              endSpacing={spacing[2]}
+              hideRules
+              hideYAxisText
+              yAxisThickness={0}
+              xAxisThickness={StyleSheet.hairlineWidth}
+              xAxisColor={chartColors.separator}
+              xAxisLabelTextStyle={{ color: chartColors.secondaryLabel, fontSize: AXIS_LABEL_SIZE }}
+              isAnimated={false}
+              disableScroll
+              disablePress
+            />
+          );
+        }}
+      </ChartFrame>
+    </View>
   );
 });
 
@@ -680,10 +815,27 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  emptyState: {
+    alignItems: 'center',
+    gap: spacing[2],
+  },
   histogramTopLabel: {
     marginBottom: 2,
     textAlign: 'center',
     fontWeight: '600',
+  },
+  histogramCaption: {
+    marginBottom: spacing[2],
+  },
+  endValuePill: {
+    borderRadius: borderRadius.full,
+    paddingHorizontal: spacing[1],
+    paddingVertical: 1,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  endValueText: {
+    fontWeight: '700',
+    textAlign: 'center',
   },
   resetZoomButton: {
     position: 'absolute',
