@@ -31,9 +31,10 @@ simulator keychain first so login authenticates cleanly against prod.
 - `login.yaml` — reusable subflow. The screenshot build auto-signs-in on boot (see
   `screenshot-mode.ts` `SCREENSHOT_USER_*` + `app/auth/login.tsx`), so this no longer
   types credentials — it waits for the app to land on the home tab (the native tab
-  bar's "Climbs" item, which only appears once signed in). It deliberately does NOT
-  wait on the auth form: auto sign-in redirects faster than Maestro can catch the
-  field, and typing the form would pop iOS's "Save Password?" dialog over every shot.
+  bar's "Discover" label, which only appears once signed in; not "Climbs" — that tab
+  is a search glyph with no text). It deliberately does NOT wait on the auth form:
+  auto sign-in redirects faster than Maestro can catch the field, and typing the form
+  would pop iOS's "Save Password?" dialog over every shot.
 - `app-store.yaml` (iOS) — log in, then capture Home, Discover, Profile, Logbook,
   session detail, Climbs, the workout generator, playlist detail, and the board view
   (10 store slots; the `03` live-party slot is filled by the party flow, PR2).
