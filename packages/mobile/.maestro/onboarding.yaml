@@ -22,10 +22,9 @@ name: onboarding illustrations
 #
 # The .app is a Debug dev-client that auto-loads Metro on launch (build bakes
 # DEV_CLIENT_DEFAULT_LAUNCHER_URL), so the orchestrator just `simctl launch`es it —
-# no openurl, no "Open in Boardsesh?" dialog on a fresh CI sim. This flow just waits
-# for the auth screen. The orchestrator uninstalled + reinstalled and reset the
-# keychain, so this cold-loads signed out.
-- runFlow: login.yaml
+# no openurl, no "Open in Boardsesh?" dialog on a fresh CI sim. The build auto-signs-in
+# and boots straight to home (no login screen); the orchestrator waits for home before
+# running Maestro, so this flow opens right into the deep links below.
 
 - openLink: com.boardsesh.app://climbs
 - extendedWaitUntil:

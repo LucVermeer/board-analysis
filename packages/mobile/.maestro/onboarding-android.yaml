@@ -3,7 +3,6 @@ name: onboarding illustrations android
 ---
 # Android version of onboarding.yaml for the standalone screenshot APK.
 - launchApp
-- runFlow: login.yaml
 
 - openLink: com.boardsesh.app://climbs
 - extendedWaitUntil:

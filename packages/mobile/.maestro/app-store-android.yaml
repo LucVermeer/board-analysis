@@ -24,8 +24,7 @@ name: app-store screenshots android
 # Order: board-independent shots first (home/discover/profile/session); board-dependent
 # shots after the board is picked. Plain visits run before screenshot-param visits.
 - launchApp
-# Auto-signs-in on boot; login.yaml waits for the home tab (no login form is shown).
-- runFlow: login.yaml
+# Auto-signs-in on boot and lands straight on home (no login screen).
 
 # Home — feed populated by the prod test user's follows.
 - waitForAnimationToEnd

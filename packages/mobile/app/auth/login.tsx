@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -17,7 +17,6 @@ import { useTranslation } from 'react-i18next';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { classifyNativeAuthFailureReason } from '../../src/lib/native-auth-analytics';
 import { isGoogleSignInConfigured } from '../../src/lib/auth';
-import { SCREENSHOT_MODE, SCREENSHOT_USER_EMAIL, SCREENSHOT_USER_PASSWORD } from '../../src/lib/screenshot-mode';
 import { EMAIL_REGEX } from '../../src/lib/auth-validation';
 import { useAuth } from '../../src/providers/auth-provider';
 import { useTheme } from '../../src/providers/theme-provider';
@@ -41,28 +40,6 @@ export default function LoginScreen() {
   const [submitting, setSubmitting] = useState(false);
   // Shared Apple/Google flow; errors land in the same region as credentials sign-in.
   const { signIn: handleOAuthSignIn, inProgress: oauthInProgress } = useNativeOAuthSignIn({ setError });
-
-  // Screenshot mode signs in programmatically on mount, so the Maestro flows never
-  // type into the login form — typing makes iOS pop a "Save Password?" dialog that
-  // covers every captured screen and blocks the board picker. Fires once; inert in
-  // normal builds (dead-strips with SCREENSHOT_MODE).
-  //
-  // The sign-in is deliberately delayed: the Maestro flow's cold-bundle gate waits for
-  // the auth screen (`auth-email-input`) to appear — the only element that reliably
-  // surfaces to Maestro's a11y tree on this build (native tab-bar labels don't). An
-  // immediate sign-in redirects within the network round-trip, so the auth field flashes
-  // faster than Maestro polls and the gate times out. The delay keeps the auth screen up
-  // long enough to catch; then it redirects to home.
-  const screenshotSignInRef = useRef(false);
-  useEffect(() => {
-    if (!SCREENSHOT_MODE || screenshotSignInRef.current) return;
-    if (!SCREENSHOT_USER_EMAIL || !SCREENSHOT_USER_PASSWORD) return;
-    screenshotSignInRef.current = true;
-    const timer = setTimeout(() => {
-      void signInWithCredentials(SCREENSHOT_USER_EMAIL, SCREENSHOT_USER_PASSWORD);
-    }, 3500);
-    return () => clearTimeout(timer);
-  }, [signInWithCredentials]);
 
   const trimmedEmail = email.trim();
   const canSubmit = !submitting && trimmedEmail.length > 0 && password.length > 0;
