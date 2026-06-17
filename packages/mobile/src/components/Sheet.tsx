@@ -1,10 +1,12 @@
-import { forwardRef, useCallback, useMemo, type ReactNode } from 'react';
-import { Platform, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import { forwardRef, useCallback, useMemo, useState, type ReactNode } from 'react';
+import { Platform, StyleSheet, View, type LayoutChangeEvent, type StyleProp, type ViewStyle } from 'react-native';
 import BottomSheet, {
   BottomSheetBackdrop,
+  BottomSheetFooter,
   BottomSheetScrollView,
   BottomSheetView,
   type BottomSheetBackdropProps,
+  type BottomSheetFooterProps,
 } from '@gorhom/bottom-sheet';
 import { FullWindowOverlay } from 'react-native-screens';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -98,20 +100,45 @@ export const Sheet = forwardRef<BottomSheet, SheetProps>(function Sheet(
     backgroundColor: systemColors.secondaryBackground,
   };
 
-  const footerNode = footer ? (
-    <View
-      style={[
-        styles.footer,
-        {
-          backgroundColor: systemColors.secondaryBackground,
-          borderTopColor: systemColors.separator,
-          paddingBottom: insets.bottom + spacing[3],
-        },
-      ]}
-    >
-      {footer}
-    </View>
-  ) : null;
+  // Footer height feeds the scroll content's bottom padding. gorhom's
+  // BottomSheetFooter is an absolutely-positioned overlay pinned to the sheet's
+  // bottom (and it rises with the keyboard), so the scrollable body sits *behind*
+  // it — without this padding the last rows would hide under the footer.
+  const [footerHeight, setFooterHeight] = useState(0);
+  const handleFooterLayout = useCallback((event: LayoutChangeEvent) => {
+    setFooterHeight(event.nativeEvent.layout.height);
+  }, []);
+
+  // Use gorhom's native sticky footer instead of a flex sibling. This keeps the
+  // BottomSheetScrollView as the sheet's direct child, which is what preserves
+  // gorhom's scroll-gesture wiring — nesting the scrollview inside a
+  // BottomSheetView (the old footer path) broke single-finger scrolling on
+  // Android and let the body overflow, pushing the footer off-screen.
+  const renderFooter = useCallback(
+    (props: BottomSheetFooterProps) => (
+      <BottomSheetFooter {...props} bottomInset={0}>
+        <View
+          onLayout={handleFooterLayout}
+          style={[
+            styles.footer,
+            {
+              backgroundColor: systemColors.secondaryBackground,
+              borderTopColor: systemColors.separator,
+              paddingBottom: insets.bottom + spacing[3],
+            },
+          ]}
+        >
+          {footer}
+        </View>
+      </BottomSheetFooter>
+    ),
+    [footer, handleFooterLayout, systemColors.secondaryBackground, systemColors.separator, insets.bottom],
+  );
+
+  // When a sticky footer is present, reserve room below the content so it clears
+  // the overlay (footer height + a small gap). Overrides any paddingBottom the
+  // consumer set on contentContainerStyle.
+  const footerSpacing = footer ? { paddingBottom: footerHeight + spacing[4] } : null;
 
   const sheet = (
     <BottomSheet
@@ -129,39 +156,19 @@ export const Sheet = forwardRef<BottomSheet, SheetProps>(function Sheet(
       onChange={handleChange}
       onClose={onClose}
       handleIndicatorStyle={sheetChrome.handleStyle}
+      footerComponent={footer ? renderFooter : undefined}
       style={styles.sheet}
     >
-      {footer ? (
-        // Footer path: wrap scroll/static body + footer in a BottomSheetView so
-        // they share the sheet's flex column and the footer hugs the bottom.
-        <BottomSheetView style={styles.content}>
-          {scrollable ? (
-            <BottomSheetScrollView
-              style={styles.scrollView}
-              contentContainerStyle={contentContainerStyle}
-              showsVerticalScrollIndicator={false}
-            >
-              {children}
-            </BottomSheetScrollView>
-          ) : (
-            children
-          )}
-          {footerNode}
-        </BottomSheetView>
-      ) : scrollable ? (
-        // No-footer scrollable path stays unchanged for existing consumers:
-        // BottomSheetScrollView as the direct child keeps gorhom's gesture
-        // wiring intact (nesting it inside BottomSheetView is what the wrapper
-        // historically warned against).
+      {scrollable ? (
         <BottomSheetScrollView
           style={styles.content}
-          contentContainerStyle={contentContainerStyle}
+          contentContainerStyle={[contentContainerStyle, footerSpacing]}
           showsVerticalScrollIndicator={false}
         >
           {children}
         </BottomSheetScrollView>
       ) : (
-        <BottomSheetView style={styles.content}>{children}</BottomSheetView>
+        <BottomSheetView style={[styles.content, footerSpacing]}>{children}</BottomSheetView>
       )}
     </BottomSheet>
   );
@@ -184,9 +191,6 @@ const styles = StyleSheet.create({
     }),
   },
   content: {
-    flex: 1,
-  },
-  scrollView: {
     flex: 1,
   },
   footer: {
