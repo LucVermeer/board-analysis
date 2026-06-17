@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { BoardName, CreateBoardInput } from '@boardsesh/shared-schema';
+import type { BoardName, CreateBoardInput, UpdateBoardInput } from '@boardsesh/shared-schema';
 import { SUPPORTED_BOARDS, ANGLES, normaliseSetIds } from '@boardsesh/board-config';
 import {
   getBoardLayouts,
@@ -9,7 +9,14 @@ import {
 } from '../../lib/custom-board-options';
 import { cleanLayoutName } from './board-builder-labels';
 
-/** A board config to pre-fill the builder with (e.g. a tapped Popular setup). */
+/**
+ * A board to pre-fill the builder with. The config fields (board/layout/size/
+ * sets) drive the cascade and, when their VALUES change, re-seed it (see
+ * `seedKey`). The optional meta fields pre-fill the "More options" form when
+ * EDITING an existing board; they're seeded once via the `useState` initializers
+ * (never re-seeded), so a render can't wipe the user's edits. The create flow
+ * and the Popular-config seed omit them and fall back to the home-board defaults.
+ */
 export type BoardBuilderSeed = {
   boardName: BoardName;
   layoutId: number;
@@ -17,6 +24,17 @@ export type BoardBuilderSeed = {
   /** Comma-separated set ids. */
   setIds: string;
   angle?: number;
+  // Meta (edit only):
+  name?: string;
+  isOwned?: boolean;
+  isPublic?: boolean;
+  isUnlisted?: boolean;
+  hideLocation?: boolean;
+  isAngleAdjustable?: boolean;
+  locationName?: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  serialNumber?: string;
 };
 
 function defaultAngle(boardName: BoardName): number {
@@ -43,18 +61,22 @@ export function useBoardBuilder(seed?: BoardBuilderSeed | null) {
   const [sizeId, setSizeId] = useState<number | null>(seed?.sizeId ?? null);
   const [setIds, setSetIds] = useState<number[]>(seed ? parseSetIds(seed.setIds) : []);
   const [angle, setAngle] = useState<number>(seed?.angle ?? defaultAngle(initialBoard));
-  const [name, setName] = useState('');
+  // Meta seeds (edit) run once here — NOT in the re-seed effect — so re-renders
+  // can't clobber edits. Create / Popular omit them, so the home-board defaults apply.
+  const [name, setName] = useState(seed?.name ?? '');
 
   // "More options" / advanced. Owned + public default to the home-board case.
-  const [isOwned, setIsOwned] = useState(true);
-  const [isPublic, setIsPublic] = useState(true);
-  const [isUnlisted, setIsUnlisted] = useState(false);
-  const [hideLocation, setHideLocation] = useState(false);
+  const [isOwned, setIsOwned] = useState(seed?.isOwned ?? true);
+  const [isPublic, setIsPublic] = useState(seed?.isPublic ?? true);
+  const [isUnlisted, setIsUnlisted] = useState(seed?.isUnlisted ?? false);
+  const [hideLocation, setHideLocation] = useState(seed?.hideLocation ?? false);
   // Most home boards with a kicker tilt are adjustable; default on.
-  const [isAngleAdjustable, setIsAngleAdjustable] = useState(true);
-  const [locationName, setLocationName] = useState('');
-  const [coords, setCoords] = useState<{ latitude: number; longitude: number } | null>(null);
-  const [serialNumber, setSerialNumber] = useState('');
+  const [isAngleAdjustable, setIsAngleAdjustable] = useState(seed?.isAngleAdjustable ?? true);
+  const [locationName, setLocationName] = useState(seed?.locationName ?? '');
+  const [coords, setCoords] = useState<{ latitude: number; longitude: number } | null>(
+    seed?.latitude != null && seed?.longitude != null ? { latitude: seed.latitude, longitude: seed.longitude } : null,
+  );
+  const [serialNumber, setSerialNumber] = useState(seed?.serialNumber ?? '');
 
   // Re-seed when the seed's VALUES change (opened from a different Popular
   // config). Keyed on the serialized seed, not its object identity, so an
@@ -150,6 +172,44 @@ export function useBoardBuilder(seed?: BoardBuilderSeed | null) {
     };
   };
 
+  /**
+   * The validated UpdateBoardInput for `boardUuid`, or null when the config is
+   * incomplete. Name/angle/visibility/location/serial are always editable. The
+   * config (layout/size/sets) is sent only when `lockedConfig` is false — the
+   * server rejects config changes on boards that already have ticks, and an
+   * unchanged config would still trip its duplicate-config guard, so we omit it.
+   * Emptied location/serial are sent as `null` so editing them to blank clears
+   * the stored value (vs `buildCreateInput`, which has nothing to clear).
+   */
+  const buildUpdateInput = (
+    boardUuid: string,
+    options?: { lockedConfig?: boolean; fallbackName?: string },
+  ): UpdateBoardInput | null => {
+    if (layoutId == null || sizeId == null || setIds.length === 0) return null;
+    const input: UpdateBoardInput = {
+      boardUuid,
+      name: name.trim() || options?.fallbackName?.trim() || cleanLayoutName(rawLayoutName, boardName),
+      angle,
+      isOwned,
+      isPublic,
+      isUnlisted,
+      hideLocation,
+      isAngleAdjustable,
+      // null (not undefined) so emptying a previously-set field clears it on the
+      // server — undefined would leave the old value in place (see UpdateBoardInput).
+      serialNumber: serialNumber.trim() || null,
+      locationName: locationName.trim() || null,
+      latitude: coords?.latitude,
+      longitude: coords?.longitude,
+    };
+    if (!options?.lockedConfig) {
+      input.layoutId = layoutId;
+      input.sizeId = sizeId;
+      input.setIds = normaliseSetIds(setIds.join(','));
+    }
+    return input;
+  };
+
   return {
     // config
     boardName,
@@ -190,5 +250,6 @@ export function useBoardBuilder(seed?: BoardBuilderSeed | null) {
     setCoords,
     setSerialNumber,
     buildCreateInput,
+    buildUpdateInput,
   };
 }

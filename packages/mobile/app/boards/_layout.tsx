@@ -33,6 +33,10 @@ export default function BoardsLayout() {
           nested sheet): a back chevron is the drill-in affordance and there's no
           dueling pan-to-dismiss over the already-modal picker. */}
       <Stack.Screen name="create" options={{ title: tBoards('mobile.create.screenTitle') }} />
+      {/* Manage your boards (edit / delete owned, unfollow followed) — distinct
+          from the index picker, which only switches the active board. */}
+      <Stack.Screen name="manage" options={{ title: t('myBoards.title') }} />
+      <Stack.Screen name="edit" options={{ title: tBoards('mobile.edit.screenTitle') }} />
     </Stack>
   );
 }

@@ -18,6 +18,8 @@ type BoardConfigChipsProps<T> = {
   groupLabel: string;
   options: ChipOption<T>[];
   onSelect: (value: T) => void;
+  /** Read-only: chips render dimmed and ignore taps (e.g. locked config on edit). */
+  disabled?: boolean;
 };
 
 /**
@@ -26,20 +28,22 @@ type BoardConfigChipsProps<T> = {
  * `accessibilityState.selected` (not colour alone), and `hitSlop` keeps the
  * touch target ≥44pt even though the chip is visually compact.
  */
-function BoardConfigChipsInner<T>({ groupLabel, options, onSelect }: BoardConfigChipsProps<T>) {
+function BoardConfigChipsInner<T>({ groupLabel, options, onSelect, disabled = false }: BoardConfigChipsProps<T>) {
   const { systemColors, brandColors: themeBrandColors } = useTheme();
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
       {options.map((option) => (
         <Pressable
           key={option.key}
-          onPress={() => onSelect(option.value)}
+          onPress={disabled ? undefined : () => onSelect(option.value)}
+          disabled={disabled}
           accessibilityRole="button"
-          accessibilityState={{ selected: option.selected }}
+          accessibilityState={{ selected: option.selected, disabled }}
           accessibilityLabel={`${groupLabel}: ${option.label}`}
           hitSlop={8}
           style={[
             styles.chip,
+            disabled && styles.chipDisabled,
             {
               // Border is a foreground accent → scheme-aware. Fill stays static:
               // the selected label turns white and must sit on the brand fill.
@@ -72,5 +76,8 @@ const styles = StyleSheet.create({
     paddingVertical: spacing[2],
     borderRadius: borderRadius.full,
     borderWidth: StyleSheet.hairlineWidth,
+  },
+  chipDisabled: {
+    opacity: 0.4,
   },
 });

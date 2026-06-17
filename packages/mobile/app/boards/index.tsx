@@ -28,9 +28,8 @@ export default function BoardSelection() {
   const { isAuthenticated, refreshAuthState } = useAuth();
   const bottomChrome = useBottomChromeMetrics();
   const router = useRouter();
-  const { returnTo, focus } = useLocalSearchParams<{ returnTo?: string; focus?: string }>();
+  const { returnTo } = useLocalSearchParams<{ returnTo?: string }>();
   const boardReturnTo = resolveBoardReturnTo(returnTo);
-  const shouldFocusMyBoards = focus === 'myBoards';
   const { t } = useTranslation('boards');
   const { showToast } = useToast();
 
@@ -260,8 +259,8 @@ export default function BoardSelection() {
           <BoardModeCard icon="plus" label={t('mobile.discovery.create')} onPress={onModeCreate} />
         </View>
 
-        {shouldFocusMyBoards ? myBoardsSection : nearbySection}
-        {shouldFocusMyBoards ? nearbySection : myBoardsSection}
+        {nearbySection}
+        {myBoardsSection}
 
         {popularItems.length > 0 ? (
           <Section title={t('mobile.discovery.popularTitle')}>

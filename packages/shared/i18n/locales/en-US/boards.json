@@ -30,6 +30,27 @@
     }
   },
   "mobile": {
+    "edit": {
+      "screenTitle": "Edit board",
+      "save": "Save changes",
+      "updateError": "Couldn't save your changes. Try again.",
+      "notFound": "We couldn't find that board",
+      "back": "Go back",
+      "configLockedHint": "This board has logged climbs, so its layout, size, and sets are locked."
+    },
+    "manage": {
+      "ownedHeader": "Your boards",
+      "followingHeader": "Following",
+      "deleteTitle": "Delete board?",
+      "deleteMessage": "Remove \"{{name}}\" from your boards? This can't be undone.",
+      "deleteConfirm": "Delete",
+      "cancel": "Cancel",
+      "deleteError": "Couldn't delete that board. Try again.",
+      "unfollowError": "Couldn't unfollow that board. Try again.",
+      "editAria": "Edit {{name}}",
+      "deleteAria": "Delete {{name}}",
+      "unfollowAria": "Unfollow {{name}}"
+    },
     "emptyTitle": "No boards yet",
     "emptySubtitle": "Search for a board to get started",
     "signInTitle": "Sign in to see your boards",
