@@ -172,6 +172,7 @@
       "descriptionPlaceholder": "Optional description for your playlist...",
       "color": "Color",
       "icon": "Icon",
+      "iconHint": "Type any emoji, or pick one below",
       "removeIcon": "Remove",
       "visibility": "Visibility",
       "publicHint": "Public playlists can be viewed by anyone with the link",

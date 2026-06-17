@@ -346,6 +346,11 @@ export default function PlaylistDetail() {
           isPublic: values.isPublic,
         });
         queryClient.setQueryData(['playlist', playlistUuid], updated);
+        // Also patch the Add-to-Playlist picker's react-query list (the shelves
+        // refetch on focus, but this cache wouldn't until its staleTime lapses).
+        queryClient.setQueryData<Playlist[]>(['userPlaylists'], (prev) =>
+          prev?.map((entry) => (entry.uuid === updated.uuid || entry.id === updated.id ? updated : entry)),
+        );
         setEditVisible(false);
         showToast(t('edit.messages.updated'), 'success');
       } catch (err) {

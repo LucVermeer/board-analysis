@@ -172,6 +172,7 @@
       "descriptionPlaceholder": "Descripción opcional para tu lista...",
       "color": "Color",
       "icon": "Icono",
+      "iconHint": "Escribe cualquier emoji o elige uno abajo",
       "removeIcon": "Quitar",
       "visibility": "Visibilidad",
       "publicHint": "Las listas públicas pueden ser vistas por cualquiera con el enlace",

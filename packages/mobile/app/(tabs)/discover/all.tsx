@@ -1,6 +1,6 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, TextInput, View } from 'react-native';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useUserPlaylists } from '@boardsesh/playlists-react';
 import type { Playlist } from '@boardsesh/graphql/operations/playlists';
@@ -49,6 +49,21 @@ export default function AllPlaylistsScreen() {
   // Drain every page so the alphabetical sort + title filter see the whole
   // library, not just the first page.
   useDrainAllPages({ hasMore, isLoading, isLoadingMore, loadMore });
+
+  // Refresh on return so an edit/delete made on a pushed detail screen lands here
+  // (this list uses its own useState store, not the react-query cache the picker
+  // reads). Skip the first focus so we don't double-fetch the mount load. Mirrors
+  // the Discover hub's focus refetch. useDrainAllPages re-drains after refetch.
+  const hasFocusedRef = useRef(false);
+  useFocusEffect(
+    useCallback(() => {
+      if (!hasFocusedRef.current) {
+        hasFocusedRef.current = true;
+        return;
+      }
+      refetch();
+    }, [refetch]),
+  );
 
   const [query, setQuery] = useState('');
 

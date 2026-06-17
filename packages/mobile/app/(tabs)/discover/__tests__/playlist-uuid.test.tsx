@@ -14,6 +14,7 @@ vi.mock('../../../../src/lib/graphql/client', () => ({
 // usePlaylistClimbs: the climbs infinite query. The detail screen only reads
 // query.refetch (for the retry) and allClimbs here.
 const climbsRefetch = vi.hoisted(() => vi.fn());
+const updatePlaylistMock = vi.hoisted(() => vi.fn());
 vi.mock('@boardsesh/playlists-react', () => ({
   usePlaylistClimbs: () => ({
     query: {
@@ -26,7 +27,7 @@ vi.mock('@boardsesh/playlists-react', () => ({
     allClimbs: [],
   }),
   usePlaylistMutations: () => ({
-    updatePlaylist: vi.fn(),
+    updatePlaylist: updatePlaylistMock,
     deletePlaylist: vi.fn(),
     pinPlaylist: vi.fn(),
     unpinPlaylist: vi.fn(),
@@ -95,7 +96,18 @@ vi.mock('../../../../src/components/playlist', () => ({
   PlaylistDetailView: ({ hero }: { hero: { name: string } }) =>
     createElement('div', { 'data-detail-view': 'true', 'data-hero-name': hero.name }),
   SKELETON_PLACEHOLDERS: ['a', 'b'],
-  PlaylistFormSheet: () => null,
+  // Surface the edit submit so the cache-patch test can drive handleEditSubmit
+  // without the real gorhom sheet.
+  PlaylistFormSheet: ({ onSubmit }: { onSubmit?: (values: unknown) => void }) =>
+    createElement(
+      'button',
+      {
+        'data-form-submit': 'true',
+        onClick: () =>
+          onSubmit?.({ name: 'Bad climbs', description: '', color: '#1F2937', icon: '💀', isPublic: false }),
+      },
+      'form-submit',
+    ),
   PlaylistActionsMenu: () => null,
   PlaylistFollowButton: () => null,
   PlaylistEditDoneButton: () => null,
@@ -105,18 +117,21 @@ vi.mock('../../../../src/components/playlist', () => ({
 
 import PlaylistDetail from '../[playlist_uuid]';
 
-function renderDetail() {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
-    <QueryClientProvider client={queryClient}>
-      <PlaylistDetail />
-    </QueryClientProvider>,
-  );
+function renderDetail(queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })) {
+  return {
+    queryClient,
+    ...render(
+      <QueryClientProvider client={queryClient}>
+        <PlaylistDetail />
+      </QueryClientProvider>,
+    ),
+  };
 }
 
 beforeEach(() => {
   requestMock.mockReset();
   climbsRefetch.mockClear();
+  updatePlaylistMock.mockReset();
 });
 
 describe('PlaylistDetail metadata error handling', () => {
@@ -155,5 +170,47 @@ describe('PlaylistDetail metadata error handling', () => {
 
     expect(await findByText('detail.errors.notFoundTitle')).toBeTruthy();
     expect(queryByText('detail.errors.loadTitle')).toBeNull();
+  });
+});
+
+describe('PlaylistDetail edit cache propagation', () => {
+  const basePlaylist = {
+    uuid: 'p-1',
+    id: 'p-1',
+    name: 'Old name',
+    icon: '🔥',
+    color: '#6D28D9',
+    description: '',
+    climbCount: 3,
+    boardType: 'kilter',
+    layoutId: 1,
+    isPublic: false,
+    userRole: 'owner',
+    isPinnedByMe: false,
+    isFollowedByMe: false,
+    followerCount: 0,
+  };
+
+  it("patches the ['userPlaylists'] cache after an edit so the Add-to-Playlist picker is not stale", async () => {
+    requestMock.mockResolvedValue({ playlist: basePlaylist });
+    const updated = { ...basePlaylist, name: 'Bad climbs', icon: '💀', color: '#1F2937' };
+    updatePlaylistMock.mockResolvedValue(updated);
+
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    // The picker's cached list still holds the pre-edit row (matched by uuid).
+    queryClient.setQueryData(['userPlaylists'], [{ uuid: 'p-1', id: 'p-1', name: 'Old name', icon: '🔥' }]);
+
+    const { findByText } = renderDetail(queryClient);
+
+    fireEvent.click(await findByText('form-submit'));
+
+    await waitFor(() => expect(updatePlaylistMock).toHaveBeenCalledTimes(1));
+    await waitFor(() => {
+      const cached = queryClient.getQueryData<Array<{ icon: string; name: string }>>(['userPlaylists']);
+      expect(cached?.[0].icon).toBe('💀');
+      expect(cached?.[0].name).toBe('Bad climbs');
+    });
+    // The detail hero cache is updated to the full server response.
+    expect(queryClient.getQueryData(['playlist', 'p-1'])).toEqual(updated);
   });
 });
