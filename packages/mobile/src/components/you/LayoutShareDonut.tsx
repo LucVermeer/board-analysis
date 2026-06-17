@@ -15,7 +15,9 @@ type LayoutShareDonutProps = {
 };
 
 const DONUT_RADIUS = 62;
-const DONUT_INNER_RADIUS = 42;
+// Thin ring (≈14px) + a bigger hole reads as "data", not a 2010 pie; it also
+// gives the centre total room to breathe.
+const DONUT_INNER_RADIUS = 48;
 /** Hairline seam between slices, cut in the card surface colour. */
 const SLICE_SEPARATOR_WIDTH = 2;
 
@@ -49,7 +51,7 @@ export function LayoutShareDonut({ layoutPercentages, totalAscents }: LayoutShar
     (): ReactNode => (
       <View style={styles.center} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
         <Text
-          variant="title3"
+          variant="headline"
           color={systemColors.label}
           numberOfLines={1}
           adjustsFontSizeToFit
@@ -86,7 +88,7 @@ export function LayoutShareDonut({ layoutPercentages, totalAscents }: LayoutShar
           radius={DONUT_RADIUS}
           innerRadius={DONUT_INNER_RADIUS}
           innerCircleColor="transparent"
-          strokeColor={chartColors.elevatedSurface}
+          strokeColor={chartColors.secondaryBackground}
           strokeWidth={SLICE_SEPARATOR_WIDTH}
           centerLabelComponent={centerLabel}
         />
@@ -127,10 +129,9 @@ export function LayoutShareDonut({ layoutPercentages, totalAscents }: LayoutShar
 
 const styles = StyleSheet.create({
   container: {
-    marginTop: spacing[4],
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing[4],
+    gap: spacing[3],
   },
   center: {
     alignItems: 'center',

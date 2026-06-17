@@ -9,7 +9,6 @@ import {
   buildFlashRedpointBars,
   buildStatisticsSummary,
   buildVPointsTimeline,
-  buildTriesToSendHistogram,
   buildActivityHeatmap,
 } from '../chart-builders';
 import type { LogbookEntry } from '../types';
@@ -483,46 +482,6 @@ describe('buildVPointsTimeline', () => {
     )!;
     expect(result.weekLabels).toHaveLength(1);
     expect(result.series[0].data).toEqual([1]);
-  });
-});
-
-describe('buildTriesToSendHistogram', () => {
-  it('returns null for an empty logbook', () => {
-    expect(buildTriesToSendHistogram([])).toBeNull();
-  });
-
-  it('returns null when every entry is an attempt (no send took N tries)', () => {
-    expect(buildTriesToSendHistogram([makeEntry({ status: 'attempt', tries: 3 })])).toBeNull();
-  });
-
-  it('buckets sends by tries, flashes into bucket 1, and caps the tail at 6+', () => {
-    const result = buildTriesToSendHistogram([
-      makeEntry({ status: 'flash', tries: 1 }),
-      makeEntry({ status: 'send', tries: 2 }),
-      makeEntry({ status: 'send', tries: 6 }),
-      makeEntry({ status: 'send', tries: 12 }),
-      makeEntry({ status: 'attempt', tries: 4 }), // excluded
-    ])!;
-    expect(result.total).toBe(4);
-    const byKey = Object.fromEntries(result.buckets.map((bucket) => [bucket.key, bucket.value]));
-    expect(byKey['1']).toBe(1);
-    expect(byKey['2']).toBe(1);
-    expect(byKey['6plus']).toBe(2);
-    expect(result.buckets.map((bucket) => bucket.label)).toEqual(['1', '2', '3', '4', '5', '6+']);
-  });
-
-  it('treats legacy null-status entries as sends', () => {
-    const result = buildTriesToSendHistogram([makeEntry({ status: undefined, tries: 3 })])!;
-    expect(result.total).toBe(1);
-    expect(result.buckets.find((bucket) => bucket.key === '3')!.value).toBe(1);
-  });
-
-  it('clamps zero / fractional tries up into bucket 1', () => {
-    const result = buildTriesToSendHistogram([
-      makeEntry({ status: 'send', tries: 0 }),
-      makeEntry({ status: 'send', tries: 1 }),
-    ])!;
-    expect(result.buckets.find((bucket) => bucket.key === '1')!.value).toBe(2);
   });
 });
 

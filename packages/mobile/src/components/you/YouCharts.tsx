@@ -2,13 +2,12 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode
 import { Pressable, View, StyleSheet, type GestureResponderEvent, type LayoutChangeEvent } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { BarChart, LineChart } from 'react-native-gifted-charts';
-import type { RawGroupedBar, RawHistogram, RawVPointsTimeline } from '@boardsesh/profile-stats';
+import type { RawGroupedBar, RawVPointsTimeline } from '@boardsesh/profile-stats';
 import { Text } from '../Text';
 import { Icon } from '../Icon';
 import { ActivityIndicator } from '../ActivityIndicator';
 import { useTheme } from '../../providers/theme-provider';
 import { spacing, borderRadius, opacity, materialElevationByLevel } from '../../theme/tokens';
-import { withAlpha } from '../../theme/colors';
 import { useVariantValue } from '../../theme/variants';
 import { hapticSelection } from '../../lib/haptics';
 import { gradeChartColor, layoutChartColor, flashRedpointColor, type ColoredBar } from './profile-chart-colors';
@@ -32,8 +31,6 @@ const MIN_GROUPED_BAR = 6;
 // already carry their own 0.85 alpha, so a deeper dim keeps unselected pairs
 // readable on the dark violet card while the focused pair still pops.
 const CHART_LOWLIGHT_OPACITY = 0.5;
-// Layout cap on histogram bar width so a wide card doesn't balloon six buckets.
-const MAX_HISTOGRAM_BAR_WIDTH = 36;
 
 export type ChartLegendItem = { color: string; label: string };
 
@@ -381,9 +378,18 @@ export const StackedBarChart = memo(function StackedBarChart({
             const fitted = fitBars(width, stackData.length, minBarWidth);
             const barWidth = Math.max(minBarWidth, Math.round(fitted.barWidth * zoomScale));
             const spacing = Math.max(2, Math.round(fitted.spacing * zoomScale));
+            // gifted sizes each x-axis label box to ~one bar by default, so a wide
+            // week label ("W23 '24") on a 5px bar clips to "...". Give every KEPT
+            // label the full downsample-step width so it renders in full; blanked
+            // labels keep a 0 box so they don't steal layout.
+            const effectiveMaxLabels = maxXLabels ?? MAX_X_LABELS;
+            const labelStep =
+              stackData.length > effectiveMaxLabels ? Math.ceil(stackData.length / effectiveMaxLabels) : 1;
+            const labelBudget = labelStep * (barWidth + spacing);
+            const sizedData = stackData.map((bar) => (bar.label ? { ...bar, labelWidth: labelBudget } : bar));
             return (
               <BarChart
-                stackData={stackData}
+                stackData={sizedData}
                 width={width - 8}
                 height={height - 28}
                 barWidth={barWidth}
@@ -501,7 +507,7 @@ export const GroupedBarChart = memo(function GroupedBarChart({
                 topLabelComponent:
                   value.value > 0
                     ? () => (
-                        <Text variant="caption2" color={chartColors.secondaryLabel} style={styles.histogramTopLabel}>
+                        <Text variant="caption2" color={chartColors.secondaryLabel} style={styles.barTopLabel}>
                           {value.value}
                         </Text>
                       )
@@ -555,6 +561,9 @@ type AreaProps = {
   emptyLabel?: string;
   interactive?: boolean;
   zoomable?: boolean;
+  /** Max x-axis labels before downsampling blanks the rest (default 6 here —
+   *  week labels are wide, so fewer-but-readable beats a dense dotted axis). */
+  maxXLabels?: number;
 };
 
 /**
@@ -571,6 +580,7 @@ export const TotalAreaChart = memo(function TotalAreaChart({
   emptyLabel,
   interactive = true,
   zoomable = true,
+  maxXLabels = 6,
 }: AreaProps) {
   const { chartColors, colorScheme } = useTheme();
   const isEmpty = !timeline || timeline.series.length === 0;
@@ -594,7 +604,7 @@ export const TotalAreaChart = memo(function TotalAreaChart({
       const isLast = index === totals.length - 1;
       return {
         value,
-        label: downsampleLabel(index, weekLabels.length, weekLabels[index]),
+        label: downsampleLabel(index, weekLabels.length, weekLabels[index], maxXLabels),
         hideDataPoint: !isLast,
         ...(isLast
           ? {
@@ -619,7 +629,7 @@ export const TotalAreaChart = memo(function TotalAreaChart({
       };
     });
     return { data, maxValue, sections, yAxisLabelTexts, pointCount: weekLabels.length, latestTotal };
-  }, [timeline, color, chartColors.elevatedSurface, chartColors.separator, chartColors.label]);
+  }, [timeline, color, maxXLabels, chartColors.elevatedSurface, chartColors.separator, chartColors.label]);
 
   return (
     <ChartFrame
@@ -633,10 +643,32 @@ export const TotalAreaChart = memo(function TotalAreaChart({
         if (!model) return null;
         const baseSpacing = Math.max(1, Math.floor((width - 48) / Math.max(1, model.pointCount - 1)));
         const lineSpacing = Math.max(1, Math.round(baseSpacing * zoomScale));
+        // lineDataItem has no labelWidth, so the default axis label box is ~one
+        // point wide and a "W23 '24" label collapses to a dot. Render kept labels
+        // through a fixed-width labelComponent (step budget) so they're legible.
+        const labelStep = model.pointCount > maxXLabels ? Math.ceil(model.pointCount / maxXLabels) : 1;
+        const labelBudget = labelStep * lineSpacing;
+        const sizedData = model.data.map((point) =>
+          point.label
+            ? {
+                ...point,
+                labelComponent: () => (
+                  <Text
+                    variant="caption2"
+                    color={chartColors.tertiaryLabel}
+                    style={[styles.lineAxisLabel, { width: labelBudget }]}
+                    numberOfLines={1}
+                  >
+                    {point.label}
+                  </Text>
+                ),
+              }
+            : point,
+        );
         return (
           <LineChart
             areaChart
-            data={model.data}
+            data={sizedData}
             width={width - 48}
             height={height - 28}
             spacing={lineSpacing}
@@ -697,128 +729,6 @@ export const TotalAreaChart = memo(function TotalAreaChart({
   );
 });
 
-type HistogramProps = {
-  histogram: RawHistogram | null;
-  /** Colour for the leading bucket (1 try = a flash) — ties to the flash hue. */
-  flashColor: string;
-  /** Colour for the remaining buckets (2…6+ tries). */
-  barColor: string;
-  height?: number;
-  loading?: boolean;
-  emptyLabel?: string;
-};
-
-/**
- * Single-series histogram (tries-to-send). The first bucket — 1 try — is a
- * flash, so it's drawn in the flash hue; the rest use the neutral bar colour.
- * Each non-empty bucket carries its count as a top label. Six fixed buckets, so
- * no zoom/scroll/tooltip needed.
- */
-export const HistogramBarChart = memo(function HistogramBarChart({
-  histogram,
-  flashColor,
-  barColor,
-  height = 160,
-  loading,
-  emptyLabel,
-}: HistogramProps) {
-  const { chartColors, systemColors } = useTheme();
-  const { t } = useTranslation('profile');
-  const isEmpty = !histogram || histogram.total === 0;
-
-  const data = useMemo(
-    () =>
-      (histogram?.buckets ?? []).map((bucket, bucketIndex) => {
-        const isFlash = bucket.key === '1';
-        // Effort tonal ramp on the non-flash buckets only (2…6+ get a faint→full
-        // violet); the flash bucket keeps its own hue. The flash bucket is at
-        // index 0, so its non-flash rank is bucketIndex - 1.
-        const nonFlashRank = bucketIndex - 1;
-        const frontColor = isFlash ? flashColor : withAlpha(barColor, Math.min(1, 0.55 + 0.1 * nonFlashRank));
-        return {
-          value: bucket.value,
-          label: bucket.label,
-          frontColor,
-          // Render every bucket's count; zero buckets show a dim 0 so a gappy
-          // distribution still reads as a real shape.
-          topLabelComponent: () => (
-            <Text
-              variant="caption1"
-              color={bucket.value === 0 ? chartColors.tertiaryLabel : isFlash ? flashColor : chartColors.label}
-              style={styles.histogramTopLabel}
-            >
-              {bucket.value}
-            </Text>
-          ),
-          // Flat bottom: round only the top caps so each column sits on the axis.
-          barBorderTopLeftRadius: borderRadius.sm,
-          barBorderTopRightRadius: borderRadius.sm,
-          barBorderBottomLeftRadius: 0,
-          barBorderBottomRightRadius: 0,
-        };
-      }),
-    [histogram, flashColor, barColor, chartColors.label, chartColors.tertiaryLabel],
-  );
-
-  // Flash-rate + median-tries caption (i18n key already exists). Treat the
-  // '6plus' bucket as 6 tries for the weighted median.
-  const summary = useMemo(() => {
-    if (!histogram || histogram.total === 0) return null;
-    const flashCount = histogram.buckets.find((bucket) => bucket.key === '1')?.value ?? 0;
-    const flash = Math.round((flashCount / histogram.total) * 100);
-    const triesForBucket = (key: string): number => (key === '6plus' ? 6 : Number(key));
-    const midpoint = histogram.total / 2;
-    let cumulative = 0;
-    let median = triesForBucket(histogram.buckets[histogram.buckets.length - 1]?.key ?? '6plus');
-    for (const bucket of histogram.buckets) {
-      cumulative += bucket.value;
-      if (cumulative >= midpoint) {
-        median = triesForBucket(bucket.key);
-        break;
-      }
-    }
-    return { flash, median };
-  }, [histogram]);
-
-  return (
-    <View>
-      {summary ? (
-        <View style={styles.histogramCaption}>
-          <Text variant="footnote" color={systemColors.secondaryLabel}>
-            {t('stats.triesSummary', { flash: summary.flash, median: summary.median })}
-          </Text>
-        </View>
-      ) : null}
-      <ChartFrame height={height} loading={loading} isEmpty={isEmpty} emptyLabel={emptyLabel}>
-        {(width) => {
-          const fitted = fitBars(width, data.length, 10);
-          const barWidth = Math.min(fitted.barWidth, MAX_HISTOGRAM_BAR_WIDTH);
-          return (
-            <BarChart
-              data={data}
-              width={width - 8}
-              height={height - 36}
-              barWidth={barWidth}
-              spacing={fitted.spacing}
-              initialSpacing={spacing[2]}
-              endSpacing={spacing[2]}
-              hideRules
-              hideYAxisText
-              yAxisThickness={0}
-              xAxisThickness={StyleSheet.hairlineWidth}
-              xAxisColor={chartColors.separator}
-              xAxisLabelTextStyle={{ color: chartColors.secondaryLabel, fontSize: AXIS_LABEL_SIZE }}
-              isAnimated={false}
-              disableScroll
-              disablePress
-            />
-          );
-        }}
-      </ChartFrame>
-    </View>
-  );
-});
-
 const styles = StyleSheet.create({
   frame: {
     position: 'relative',
@@ -829,13 +739,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing[2],
   },
-  histogramTopLabel: {
+  barTopLabel: {
     marginBottom: 2,
     textAlign: 'center',
     fontWeight: '600',
   },
-  histogramCaption: {
-    marginBottom: spacing[2],
+  lineAxisLabel: {
+    textAlign: 'center',
   },
   endValuePill: {
     borderRadius: borderRadius.full,

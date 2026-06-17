@@ -6,7 +6,6 @@ import {
   buildAggregatedFlashRedpointBars,
   buildStatisticsSummary,
   buildVPointsTimeline,
-  buildTriesToSendHistogram,
   buildActivityHeatmap,
 } from './chart-builders';
 import { getDifficultyMapping } from './grade-mapping';
@@ -20,7 +19,6 @@ import type {
   RawVPointsTimeline,
   RawStatisticsSummary,
   RawGradeHighlight,
-  RawHistogram,
   RawActivityHeatmap,
 } from './types';
 
@@ -46,7 +44,6 @@ export type ProfileViewModel = {
   aggregatedFlashRedpointBars: RawGroupedBar[] | null;
   statisticsSummary: RawStatisticsSummary;
   vPointsTimeline: RawVPointsTimeline | null;
-  triesHistogram: RawHistogram | null;
   activityHeatmap: RawActivityHeatmap | null;
   hardestSend: RawGradeHighlight | null;
   hardestFlash: RawGradeHighlight | null;
@@ -94,8 +91,6 @@ export function deriveProfileViewModel(input: DeriveProfileViewModelInput): Prof
 
   const vPointsTimeline = buildVPointsTimeline(filteredBoardsTicks, timeframe, fromDate, toDate);
 
-  const triesHistogram = buildTriesToSendHistogram(filteredLogbook);
-
   const activityHeatmap = buildActivityHeatmap(filteredLogbook);
 
   const { hardestSend, hardestFlash } = computeHardest(filteredBoardsTicks, gradeFormat);
@@ -107,7 +102,6 @@ export function deriveProfileViewModel(input: DeriveProfileViewModelInput): Prof
     aggregatedFlashRedpointBars,
     statisticsSummary,
     vPointsTimeline,
-    triesHistogram,
     activityHeatmap,
     hardestSend,
     hardestFlash,

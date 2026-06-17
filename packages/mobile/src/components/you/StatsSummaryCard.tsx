@@ -6,7 +6,6 @@ import { Text } from '../Text';
 import { Icon } from '../Icon';
 import { type IconName } from '../icon-map';
 import { Card } from '../Card';
-import { LayoutShareDonut } from './LayoutShareDonut';
 import { gradeBadgeColor } from './profile-chart-colors';
 import { spacing, borderRadius, opacity } from '../../theme/tokens';
 import { useTheme } from '../../providers/theme-provider';
@@ -135,11 +134,6 @@ export function StatsSummaryCard({ statisticsSummary, hardestSend, hardestFlash,
           </Text>
         </View>
       )}
-
-      <LayoutShareDonut
-        layoutPercentages={statisticsSummary.layoutPercentages}
-        totalAscents={statisticsSummary.totalAscents}
-      />
     </Card>
   );
 }

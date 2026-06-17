@@ -114,21 +114,6 @@ export type RawGradeHighlight = {
   status: 'send' | 'flash';
 };
 
-/** One histogram column (e.g. a "tries before send" bucket). `key` is stable
- *  and language-neutral; `label` is a short axis caption (numbers only). */
-export type RawHistogramBucket = {
-  key: string;
-  label: string;
-  value: number;
-};
-
-/** A simple single-series histogram + its total count. */
-export type RawHistogram = {
-  buckets: RawHistogramBucket[];
-  /** Sum of every bucket value (the number of ascents the histogram covers). */
-  total: number;
-};
-
 /** One calendar day in the activity heatmap (local date, ascent count). */
 export type RawActivityDay = {
   /** Local calendar date, `YYYY-MM-DD`. */
