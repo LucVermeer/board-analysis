@@ -14,6 +14,11 @@ import type { ClimbQueueItem } from '@boardsesh/queue';
  */
 export type SubscriptionClimb = {
   uuid: string;
+  // Board the climb belongs to — round-tripped so a peer on a different board can
+  // skip a "spill" climb instead of dark-firing its wall. Nullish from older
+  // peers / pre-metadata items (then the spill guard treats it as sendable).
+  boardType?: string | null;
+  layoutId?: number | null;
   name: string;
   frames: string;
   setter_username: string;
@@ -49,6 +54,8 @@ export function toClimbQueueItem(subscriptionItem: SubscriptionQueueItem): Climb
     uuid: subscriptionItem.uuid,
     climb: {
       uuid: subscriptionItem.climb.uuid,
+      boardType: subscriptionItem.climb.boardType ?? undefined,
+      layoutId: subscriptionItem.climb.layoutId,
       name: subscriptionItem.climb.name,
       frames: subscriptionItem.climb.frames,
       setter_username: subscriptionItem.climb.setter_username,

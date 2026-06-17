@@ -182,6 +182,10 @@ export type ClimbRow = {
   name: string;
   description: string;
   frames: string;
+  /** Board the climb belongs to (the searched board). Carried so the queue's BLE
+   *  spill guard can skip a climb set for a different board/layout. */
+  boardType: string;
+  layoutId: number;
   angle: number;
   ascensionist_count: number;
   difficulty: string;

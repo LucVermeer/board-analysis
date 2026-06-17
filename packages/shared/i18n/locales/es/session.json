@@ -483,6 +483,8 @@
     }
   },
   "playView": {
+    "previewBadge": "Vista previa",
+    "setActive": "Activar",
     "previousFrame": "Fotograma anterior",
     "nextFrame": "Fotograma siguiente",
     "play": "Reproducir",

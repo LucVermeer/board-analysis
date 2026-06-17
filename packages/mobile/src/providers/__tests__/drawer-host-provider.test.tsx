@@ -450,7 +450,7 @@ describe('DrawerHostProvider queue sheet (always-live, no driver gate)', () => {
     });
 
     expect(queue.setCurrentClimb).toHaveBeenCalledWith(item);
-    expect(playDrawer.open).toHaveBeenCalledWith(item.climb, { setAsCurrent: false, previewQueueItem: item });
+    expect(playDrawer.open).toHaveBeenCalledWith(item.climb, { committedExternally: true });
   });
 
   it('broadcasts suggestion selection for every session member while anchoring drawer navigation to that item', async () => {
@@ -485,8 +485,7 @@ describe('DrawerHostProvider queue sheet (always-live, no driver gate)', () => {
       playlistSuggestionSource,
     });
     expect(playDrawer.open).toHaveBeenCalledWith(suggestion, {
-      setAsCurrent: false,
-      previewQueueItem: suggestedItem,
+      committedExternally: true,
     });
   });
 });
@@ -519,8 +518,7 @@ describe('DrawerHostProvider board sheet climb actions', () => {
     expect(queue.setCurrentClimb).toHaveBeenCalledWith(expect.objectContaining({ uuid: 'wall-queue-x', climb }));
     await waitFor(() =>
       expect(playDrawer.open).toHaveBeenCalledWith(climb, {
-        setAsCurrent: false,
-        previewQueueItem: expect.objectContaining({ uuid: 'wall-queue-x', climb }),
+        committedExternally: true,
       }),
     );
     await waitFor(() =>
@@ -742,8 +740,9 @@ describe('DrawerHostProvider play drawer open analytics source', () => {
     await waitFor(() => expect(hosts.at(-1)).toBeDefined());
 
     const climb = makeQueueItem('queue-x', 'climb-view-1').climb as unknown as Climb;
+    const previewItem = makeQueueItem('queue-preview-1', 'climb-view-1');
     act(() => {
-      hosts.at(-1)?.openPlayDrawer(climb, { setAsCurrent: false, source: 'climb_view' });
+      hosts.at(-1)?.openPlayDrawer(climb, { previewQueueItem: previewItem, source: 'climb_view' });
     });
 
     expect(analytics.track).toHaveBeenCalledWith(
@@ -752,14 +751,14 @@ describe('DrawerHostProvider play drawer open analytics source', () => {
     );
   });
 
-  it('defaults a queue-nav open (setAsCurrent:false, no source) to current_queue_item', async () => {
+  it('defaults a queue-nav open (committedExternally, no source) to current_queue_item', async () => {
     const hosts: Array<ReturnType<typeof useDrawerHost>> = [];
     renderHost((host) => hosts.push(host));
     await waitFor(() => expect(hosts.at(-1)).toBeDefined());
 
     const climb = makeQueueItem('queue-x', 'queue-nav-1').climb as unknown as Climb;
     act(() => {
-      hosts.at(-1)?.openPlayDrawer(climb, { setAsCurrent: false });
+      hosts.at(-1)?.openPlayDrawer(climb, { committedExternally: true });
     });
 
     expect(analytics.track).toHaveBeenCalledWith(
@@ -775,12 +774,12 @@ describe('DrawerHostProvider play drawer open analytics source', () => {
 
     const climb = makeQueueItem('queue-x', 'climb-view-2').climb as unknown as Climb;
     act(() => {
-      hosts.at(-1)?.openPlayDrawer(climb, { setAsCurrent: false, source: 'climb_view' });
+      hosts.at(-1)?.openPlayDrawer(climb, { committedExternally: true, source: 'climb_view' });
     });
 
     // No board override → the drawer opens synchronously with only the queue
     // options; `source` was pulled out and must not reach PlayDrawer.open.
-    expect(playDrawer.open).toHaveBeenCalledWith(climb, { setAsCurrent: false });
+    expect(playDrawer.open).toHaveBeenCalledWith(climb, { committedExternally: true });
   });
 });
 
@@ -829,7 +828,7 @@ describe('DrawerHostProvider switch board keeps the climb angle', () => {
       angle: 55,
     };
     act(() => {
-      hosts.at(-1)?.openPlayDrawer(climb, { setAsCurrent: false, boardConfig: override });
+      hosts.at(-1)?.openPlayDrawer(climb, { boardConfig: override });
     });
     await waitFor(() => expect(playDrawer.props?.onSwitchBoard).toBeDefined());
 
@@ -866,7 +865,7 @@ describe('DrawerHostProvider switch board keeps the climb angle', () => {
       angle: 55,
     };
     act(() => {
-      hosts.at(-1)?.openPlayDrawer(climb, { setAsCurrent: false, boardConfig: override });
+      hosts.at(-1)?.openPlayDrawer(climb, { boardConfig: override });
     });
     await waitFor(() => expect(playDrawer.props?.onSwitchBoard).toBeDefined());
 
@@ -896,7 +895,7 @@ describe('DrawerHostProvider switch board keeps the climb angle', () => {
       angle: 55,
     };
     act(() => {
-      hosts.at(-1)?.openPlayDrawer(climb, { setAsCurrent: false, boardConfig: override });
+      hosts.at(-1)?.openPlayDrawer(climb, { boardConfig: override });
     });
     await waitFor(() => expect(playDrawer.props?.onSwitchBoard).toBeDefined());
 

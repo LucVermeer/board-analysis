@@ -370,10 +370,16 @@
     "mobileRecordedLabel": "Recorded for this controller: {{config}}",
     "mobileConfigValue": "{{board}} layout {{layoutId}}, size {{sizeId}}, sets {{setIds}}",
     "mobileUnknownConfig": "Unknown board config",
+    "mobileSkippedSpillToast_one": "Skipped {{name}} — it's set for a different board",
+    "mobileSkippedSpillToast_other": "Skipped {{count}} climbs set for a different board",
     "mobileSwitchFailed": "Couldn't switch to that board's config. Try Connect anyway.",
     "cancel": "Cancel",
     "connectAnyway": "Connect anyway",
-    "switchToCorrect": "Switch to correct config"
+    "switchToCorrect": "Switch to correct config",
+    "mobileConnectAnyway": "Connect anyway",
+    "mobileConnectAnywayWarning": "Our records show this controller belongs to another board setup. Connecting anyway may light climbs incorrectly.",
+    "mobileSwitchSetup": "Switch board setup",
+    "mobileUseRecordedSetup": "Use recorded setup"
   },
   "devicePicker": {
     "title": "Select your board",
@@ -402,7 +408,7 @@
     "relightBoard": "Re-light board",
     "turnOff": "Turn off the board",
     "holdForControls": "Hold for board controls",
-    "notAvailable": "Bluetooth is not available",
+    "sendFailedTitle": "Couldn't light board",
     "connectionFailedTitle": "Couldn't connect",
     "permissionRequired": "Bluetooth permission required",
     "errorPermissionDenied": "Allow Bluetooth permissions to connect a board.",

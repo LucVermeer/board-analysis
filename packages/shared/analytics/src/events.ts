@@ -67,6 +67,17 @@ export const SHARED_EVENTS = {
   BlePickerDevicesResolved: 'BLE Picker Devices Resolved',
   ClimbSentToBoardSuccess: 'Climb Sent to Board Success',
   ClimbSentToBoardFailure: 'Climb Sent to Board Failure',
+  // A queued climb set for a DIFFERENT board/layout than the connected board was
+  // skipped instead of dark-firing the wall. Props: skippedClimbUuid,
+  // skippedCount, advancedToClimbUuid (null when no compatible climb remained),
+  // active board config, and the skipped climb's board config.
+  BleQueueClimbSkipped: 'BLE Queue Climb Skipped',
+  // The "this controller belongs to another board setup" dialog was shown when a
+  // scanned serial resolved to a different board config than the active one, and
+  // how the user resolved it. Resolved `action`: 'cancel' | 'connect_anyway' |
+  // 'switch_setup' | 'switch_failed'.
+  BleBoardConfigMismatchShown: 'BLE Board Config Mismatch Shown',
+  BleBoardConfigMismatchResolved: 'BLE Board Config Mismatch Resolved',
   // Search
   ClimbSearchPerformed: 'Climb Search Performed',
   SearchHoldFilterChanged: 'Search Hold Filter Changed',

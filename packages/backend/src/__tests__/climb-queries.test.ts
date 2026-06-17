@@ -35,6 +35,14 @@ describe('Climb Query Functions', () => {
       expect(typeof result.hasMore).toBe('boolean');
       expect(result.totalCount).toBeDefined();
       expect(typeof result.totalCount).toBe('number');
+
+      // Each result carries the searched board + layout so a queued climb can be
+      // checked against a connected board (BLE spill guard). The search is scoped
+      // to testParams (kilter / layout 1) by its WHERE clause.
+      if (result.climbs.length > 0) {
+        expect(result.climbs[0].boardType).toBe('kilter');
+        expect(result.climbs[0].layoutId).toBe(1);
+      }
     });
 
     it('should enforce MAX_PAGE_SIZE limit', async () => {

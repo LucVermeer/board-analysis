@@ -483,6 +483,8 @@
     }
   },
   "playView": {
+    "previewBadge": "Preview",
+    "setActive": "Set active",
     "previousFrame": "Previous frame",
     "nextFrame": "Next frame",
     "play": "Play",

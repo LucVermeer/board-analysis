@@ -72,6 +72,10 @@ vi.mock('react-native-gesture-handler', () => {
 
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 
+// useAccessoryClimbTap builds a preview queue item via climbToQueueItem, which
+// pulls expo-crypto's randomUUID — stub it so the native module isn't loaded.
+vi.mock('expo-crypto', () => ({ randomUUID: () => 'preview-uuid' }));
+
 // getGradeColor returns a distinct hue for V6 so we can assert the grade text
 // carries the grade colour (not a generic white-on-pill style).
 vi.mock('@boardsesh/board-constants/grade-colors', () => ({
@@ -249,11 +253,10 @@ describe('ClimbCapsule', () => {
     expect(container.querySelector('[data-glass]')?.getAttribute('data-tint')).toBe('');
   });
 
-  it('wires openPlayDrawer with setAsCurrent:false (drawer-open behavior; tap worklet not driven in jsdom)', () => {
-    // We cannot fire the RNGH Tap worklet under jsdom, so reach the wired
-    // callback directly by spying on Gesture.Tap().onEnd's handler is not
-    // exposed; instead assert the render path is healthy and that the only
-    // openPlayDrawer call shape the component can make carries setAsCurrent:false.
+  it('wires openPlayDrawer for tap-to-open (drawer-open behavior; tap worklet not driven in jsdom)', () => {
+    // We cannot fire the RNGH Tap worklet under jsdom, so the wired callback can't
+    // be reached here; instead assert the render path is healthy and that no
+    // openPlayDrawer call fires without a tap.
     const item = makeItem(makeClimb());
     queue.state.currentClimbQueueItem = item;
     queue.state.queue = [item];

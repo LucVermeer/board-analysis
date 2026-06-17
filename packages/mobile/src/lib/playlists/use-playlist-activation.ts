@@ -10,7 +10,7 @@
 // swaps in a richer suggestion source so swiping through the play drawer walks
 // the whole playlist.
 
-import { useCallback, useMemo, useRef, startTransition } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
 import { usePlaylistClimbActivation, fetchPlaylistSuggestionClimbs } from '@boardsesh/playlists-react';
 import { getQueueBoardKey, type Climb, type ClimbQueueItem } from '@boardsesh/queue';
 import { useQueueActions } from '../../providers/queue-provider';
@@ -57,12 +57,11 @@ export function usePlaylistActivation({
   const { openPlayDrawer } = useDrawerHost();
   const activeBoard = useActiveBoard().data ?? null;
 
-  // The queue item the returned callback already pinned in the drawer as
-  // previewQueueItem. queueApi.setCurrentClimb dispatches that exact item so
-  // the drawer's navigation anchor and the queue entry share one uuid —
-  // otherwise prev/remaining-count anchor on an orphan uuid that's never in
-  // the queue. Single-use; the climb-uuid match guards against a stale ref
-  // from an earlier tap whose activation never reached setCurrentClimb.
+  // The queue item the returned callback built for this tap. queueApi.setCurrentClimb
+  // dispatches that exact instance so the drawer's navigation anchor and the queue
+  // entry share one uuid — otherwise prev/remaining-count anchor on an orphan uuid
+  // that's never in the queue. Single-use; the climb-uuid match guards against a
+  // stale ref from an earlier tap whose activation never reached setCurrentClimb.
   const pendingQueueItemRef = useRef<ClimbQueueItem | null>(null);
 
   // The shared hook expects setCurrentClimb to return the activated item (so it
@@ -76,11 +75,11 @@ export function usePlaylistActivation({
         pendingQueueItemRef.current = null;
         const item =
           pendingItem && pendingItem.climb.uuid === climb.uuid ? pendingItem : climbToQueueItem(toSchemaClimb(climb));
-        // Mark as a non-urgent transition so React can flush the drawer's
-        // opening animation frame before processing the queue re-renders.
-        startTransition(() => {
-          setCurrentClimb(item, options);
-        });
+        // Commit synchronously: the drawer now renders from currentClimbQueueItem
+        // (no preview render-ahead), so this dispatch must land in the same batch
+        // as the open — under startTransition it would defer and the drawer would
+        // paint a stale first frame.
+        setCurrentClimb(item, options);
         return item;
       },
       refreshPlaylistSuggestionSource,
@@ -139,22 +138,21 @@ export function usePlaylistActivation({
     refreshErrorMessage,
   });
 
-  // Open the drawer immediately, then let the shared hook do its state work.
-  // The drawer receives the climb directly via open() and renders correctly
-  // before DELTA_UPDATE_CURRENT_CLIMB propagates (setAsCurrent:false prevents
-  // the drawer from re-dispatching and wiping the suggestion source).
-  // The queue dispatch inside queueApi.setCurrentClimb is wrapped in
-  // startTransition so React processes those re-renders at low priority after
-  // the animation frame runs.
+  // Open the drawer immediately, then let the shared hook commit the climb. The
+  // open and the synchronous setCurrentClimb dispatch land in the same React
+  // batch, so the drawer (rendering from currentClimbQueueItem) paints the
+  // activated climb on the first frame. `committedExternally` tells the drawer
+  // the caller already dispatched, so it doesn't re-commit or treat this as a
+  // preview.
   return useCallback(
     (climb: Climb) => {
       // Always-live: every tap activates the climb for the whole session (no
       // driver/preview gate). The drawer opens first (same frame as the tap),
-      // then the shared activation builds the suggestion source and dispatches
-      // the queue update under startTransition.
+      // then the shared activation builds the suggestion source and commits the
+      // queue update.
       const item = climbToQueueItem(toSchemaClimb(climb));
       pendingQueueItemRef.current = item;
-      openPlayDrawer(toSchemaClimb(climb), { setAsCurrent: false, previewQueueItem: item });
+      openPlayDrawer(toSchemaClimb(climb), { committedExternally: true });
       return activate(climb).catch((error: unknown) => {
         console.error('Playlist climb activation failed:', error);
         reportHandledError(error, { tags: { source: 'playlist', op: 'activate-climb' } });

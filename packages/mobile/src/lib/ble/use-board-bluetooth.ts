@@ -149,6 +149,28 @@ export const convertToMirroredFramesString = (frames: string, holdsData: HoldPla
     .join('');
 };
 
+/**
+ * Diagnostic context attached to Climb Sent to Board Success/Failure so PostHog
+ * can tell WHAT was sent and WHY apart. Optional — callers that don't have it
+ * (e.g. a manual mirror re-send) just omit it.
+ */
+export type BleSendContext = {
+  /** Where the send came from: the queue auto-sender, an undo, or a clear. */
+  sendSource: 'auto' | 'undo' | 'clear';
+  targetQueueItemUuid?: string;
+  climbUuid?: string;
+  /** The climb's own board metadata, when known — lets a board/climb mismatch be seen. */
+  climbBoardType?: string;
+  climbLayoutId?: number | null;
+};
+
+export type SendFramesToBoard = (
+  frames: string,
+  mirrored?: boolean,
+  signal?: AbortSignal,
+  sendContext?: BleSendContext,
+) => Promise<boolean | undefined>;
+
 type UseBoardBluetoothOptions = {
   boardName?: string;
   layoutId?: number;
@@ -162,6 +184,9 @@ type UseBoardBluetoothOptions = {
   analyticsBoardId?: number | null;
   onConnectionChange?: (connected: boolean) => void;
   onConnectSuccess?: (serial: string | null) => void;
+  /** Reads whether this connection was made via the mismatch "Connect anyway"
+   *  override, attached to connection + send analytics. */
+  getConnectedViaMismatchOverride?: () => boolean;
 };
 
 const KEEP_AWAKE_TAG = 'boardsesh-ble';
@@ -216,6 +241,7 @@ export function useBoardBluetooth({
   analyticsBoardId,
   onConnectionChange,
   onConnectSuccess,
+  getConnectedViaMismatchOverride,
 }: UseBoardBluetoothOptions) {
   const { t } = useTranslation('settings');
   // Connect-failure copy lives in the shared `common.bluetooth.*` keys so web
@@ -359,7 +385,7 @@ export function useBoardBluetooth({
   }, [clearConnectionAfterDrop]);
 
   const sendFramesToBoard = useCallback(
-    async (frames: string, mirrored: boolean = false, signal?: AbortSignal) => {
+    async (frames: string, mirrored: boolean = false, signal?: AbortSignal, sendContext?: BleSendContext) => {
       if (!adapterRef.current || !boardName || layoutId === undefined || sizeId === undefined) return;
       const boardAnalyticsProperties = {
         boardName,
@@ -367,6 +393,8 @@ export function useBoardBluetooth({
         sizeId,
         mirrored,
         boardId: analyticsBoardId ?? undefined,
+        connectedViaMismatchOverride: getConnectedViaMismatchOverride?.() ?? false,
+        ...sendContext,
       };
 
       // Lazily create the per-connection-generation controller so connect()
@@ -400,7 +428,7 @@ export function useBoardBluetooth({
             // letting the AutoSender buzz success on a dark board.
             if (sent === false) {
               console.warn('[BLE] All MoonBoard placements skipped — climb has unrecognised hold data');
-              Alert.alert(t('ble.notAvailable'), t('ble.errorIncompatible'));
+              Alert.alert(t('ble.sendFailedTitle'), t('ble.errorIncompatible'));
               track(SHARED_EVENTS.ClimbSentToBoardFailure, {
                 ...boardAnalyticsProperties,
                 failureReason: 'incompatible_climb',
@@ -430,7 +458,7 @@ export function useBoardBluetooth({
               console.error(
                 `[BLE] Cannot mirror frames: holdsData is missing or empty for ${boardName} layout=${layoutId}`,
               );
-              Alert.alert(t('ble.notAvailable'), t('ble.errorIncompatible'));
+              Alert.alert(t('ble.sendFailedTitle'), t('ble.errorIncompatible'));
               track(SHARED_EVENTS.ClimbSentToBoardFailure, {
                 ...boardAnalyticsProperties,
                 failureReason: 'missing_mirror_data',
@@ -451,7 +479,7 @@ export function useBoardBluetooth({
             console.error(
               `[BLE] LED placement map is empty for ${boardName} layout=${layoutId} size=${sizeId}. Board configuration may be incorrect or LED data may need regeneration.`,
             );
-            Alert.alert(t('ble.notAvailable'), t('ble.errorLedMissing'));
+            Alert.alert(t('ble.sendFailedTitle'), t('ble.errorLedMissing'));
             track(SHARED_EVENTS.ClimbSentToBoardFailure, {
               ...boardAnalyticsProperties,
               failureReason: 'missing_led_placements',
@@ -471,10 +499,13 @@ export function useBoardBluetooth({
 
           if (skippedCount > 0 && result.packet.length === 0) {
             console.warn(`[BLE] All ${result.totalPlacements} placements skipped — climb incompatible with board`);
-            Alert.alert(t('ble.notAvailable'), t('ble.errorIncompatible'));
+            Alert.alert(t('ble.sendFailedTitle'), t('ble.errorIncompatible'));
             track(SHARED_EVENTS.ClimbSentToBoardFailure, {
               ...boardAnalyticsProperties,
               failureReason: 'incompatible_climb',
+              skippedPositionCount: result.skippedPositionCount,
+              skippedRoleCount: result.skippedRoleCount,
+              totalPlacements: result.totalPlacements,
             });
             return false;
           }
@@ -540,7 +571,17 @@ export function useBoardBluetooth({
       );
       return queuedSend;
     },
-    [boardName, layoutId, sizeId, holdsData, ledColorOverrides, analyticsBoardId, handleDisconnection, t],
+    [
+      boardName,
+      layoutId,
+      sizeId,
+      holdsData,
+      ledColorOverrides,
+      analyticsBoardId,
+      handleDisconnection,
+      getConnectedViaMismatchOverride,
+      t,
+    ],
   );
 
   const connect = useCallback(
@@ -691,6 +732,7 @@ export function useBoardBluetooth({
           apiLevel: apiLevelRef.current,
           deviceNamePresent: !!connection.deviceName,
           boardId: analyticsBoardId ?? undefined,
+          connectedViaMismatchOverride: getConnectedViaMismatchOverride?.() ?? false,
         });
         return true;
       } catch (error) {
@@ -759,6 +801,7 @@ export function useBoardBluetooth({
       analyticsBoardId,
       onConnectionChange,
       onConnectSuccess,
+      getConnectedViaMismatchOverride,
       sendFramesToBoard,
       sanitizedColorOverrides,
       colorSignature,

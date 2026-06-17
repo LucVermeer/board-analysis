@@ -9,11 +9,14 @@ import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { useBoardPresenceCurrent } from '@boardsesh/board-presence-react';
 import type { BoardPresenceClimb, ClimbQueueItemInput } from '@boardsesh/shared-schema';
 import { emitWallConfirm } from '@boardsesh/play-view';
-import { useBoardBluetooth, boardConfigKey } from '../lib/ble/use-board-bluetooth';
+import { useBoardBluetooth, boardConfigKey, type SendFramesToBoard } from '../lib/ble/use-board-bluetooth';
 import { useResolvedBleDeviceBoards } from '../lib/ble/resolve-serials';
 import {
   decideBlePickerSelection,
+  classifyClimbBoardCompatibility,
+  findNextCompatibleQueueItem,
   type BleBoardConfig,
+  type ActiveBoardForCompatibility,
   type PickerSelectionDecision,
 } from '../lib/ble/board-config-match';
 import { summarizePickerResolution, type PickerResolutionStats } from '../lib/ble/picker-resolution-stats';
@@ -24,9 +27,10 @@ import type { GetBoardQueryResponse } from '../lib/graphql/operations';
 import { getBoardRenderData } from '../lib/board-details';
 import { registerBluetoothConnection } from '../lib/ble/bluetooth-status-store';
 import { reportHandledError } from '../lib/error-reporting';
-import { useQueue, useQueueSessionControls } from './queue-provider';
+import { useQueue, useQueueActions, useQueueSessionControls } from './queue-provider';
 import { useBoardPresenceControls } from './board-presence-provider';
 import { useQueueSnackbar } from './queue-snackbar-provider';
+import { useToast } from './toast-provider';
 import { toClimbInput } from '../lib/climb-to-queue-item';
 import { hapticSuccess } from '../lib/haptics';
 import { DevicePickerSheet } from '../components/ble/DevicePickerSheet';
@@ -38,7 +42,7 @@ type BluetoothContextValue = {
   loading: boolean;
   connect: (initialFrames?: string, mirrored?: boolean, targetSerial?: string) => Promise<boolean>;
   disconnect: () => Promise<void>;
-  sendFramesToBoard: (frames: string, mirrored?: boolean, signal?: AbortSignal) => Promise<boolean | undefined>;
+  sendFramesToBoard: SendFramesToBoard;
   clearBoard: () => Promise<boolean | undefined>;
   /**
    * Force the auto-sender to re-push the current climb to the wall once, even
@@ -138,8 +142,10 @@ function BluetoothAutoSender({
   reassertNonce,
   connectInitialSendRef,
   colorSignature,
+  activeConfig,
+  onSkipSpillClimb,
 }: {
-  sendFramesToBoard: (frames: string, mirrored?: boolean, signal?: AbortSignal) => Promise<boolean | undefined>;
+  sendFramesToBoard: SendFramesToBoard;
   /**
    * Fired once a climb is on the wall (a fresh write or a deduped re-broadcast).
    * Receives the full lit queue item so consumers can both emit the local
@@ -151,10 +157,19 @@ function BluetoothAutoSender({
   // freshly mounted AutoSender doesn't repeat a byte-identical first send.
   connectInitialSendRef: React.MutableRefObject<{ frames: string; mirrored: boolean; colorSignature: string } | null>;
   colorSignature: string;
+  // Active board (name + layout) so a climb set for a different board can be
+  // detected and skipped before it dark-fires the wall. Undefined until the board
+  // config resolves — then everything classifies as "unknown" (sent as today).
+  activeConfig: ActiveBoardForCompatibility | undefined;
+  // Called when the current climb is a "spill" (belongs to another board). Hands
+  // the provider the next compatible queue item to advance to (or null) plus the
+  // skip count, so it can re-point the queue + toast without the AutoSender
+  // owning queue actions or i18n.
+  onSkipSpillClimb: (args: { skipped: ClimbQueueItem; next: ClimbQueueItem | null; skippedCount: number }) => void;
 }) {
   type AutoSendRequest = {
     item: ClimbQueueItem;
-    sendFramesToBoard: (frames: string, mirrored?: boolean, signal?: AbortSignal) => Promise<boolean | undefined>;
+    sendFramesToBoard: SendFramesToBoard;
     colorSignature: string;
   };
 
@@ -164,6 +179,25 @@ function BluetoothAutoSender({
   useEffect(() => {
     onWallConfirmedRef.current = onWallConfirmed;
   }, [onWallConfirmed]);
+
+  // Live refs so the drain loop reads the latest board config + skip handler +
+  // queue without listing them as effect deps (which would re-run the loop on
+  // every queue keystroke). A board change re-creates sendFramesToBoard, which
+  // IS a dep, so the loop still re-evaluates compatibility when the board flips.
+  const activeConfigRef = useRef(activeConfig);
+  activeConfigRef.current = activeConfig;
+  const onSkipSpillClimbRef = useRef(onSkipSpillClimb);
+  useEffect(() => {
+    onSkipSpillClimbRef.current = onSkipSpillClimb;
+  }, [onSkipSpillClimb]);
+  const queueRef = useRef(state.queue);
+  queueRef.current = state.queue;
+  // Dedup spill reports: the async drain can re-enter for the same incompatible
+  // current before the advance lands (a colour/reassert re-render races the
+  // setCurrentClimb). Report a given spill uuid once, then clear the moment a
+  // compatible/unknown climb is processed — so deliberately navigating BACK to a
+  // skipped spill re-advances and re-toasts instead of silently sticking.
+  const lastSkipReportedUuidRef = useRef<string | null>(null);
 
   const isWritingRef = useRef(false);
   const pendingSendRef = useRef<AutoSendRequest | null>(null);
@@ -229,6 +263,31 @@ function BluetoothAutoSender({
           if (signal?.aborted) return;
           const { item, sendFramesToBoard: requestSendFramesToBoard, colorSignature: requestColorSignature } = toSend;
 
+          // Spill guard: a climb set for a DIFFERENT board/layout than the
+          // connected board would skip every LED placement and dark-fire the
+          // wall (surfacing as the incompatible_climb failure). Don't write it —
+          // hand the provider the next compatible queue item to advance to (the
+          // queue snapshot + active config live in refs so this stays off the
+          // effect deps). Only a KNOWN mismatch is skipped; unknown/missing
+          // metadata is sent as today.
+          if (classifyClimbBoardCompatibility(activeConfigRef.current, item.climb) === 'incompatible') {
+            if (lastSkipReportedUuidRef.current !== item.uuid) {
+              lastSkipReportedUuidRef.current = item.uuid;
+              const { item: nextItem, skippedCount } = findNextCompatibleQueueItem(
+                queueRef.current,
+                item.uuid,
+                activeConfigRef.current,
+              );
+              onSkipSpillClimbRef.current({ skipped: item, next: nextItem, skippedCount });
+            }
+            toSend = pendingSendRef.current;
+            pendingSendRef.current = null;
+            continue;
+          }
+          // Reaching here means the item is compatible/unknown and will be sent —
+          // clear the spill dedup so a later return to a skipped spill re-reports.
+          lastSkipReportedUuidRef.current = null;
+
           // connect() may have just written these exact frames as its
           // initialFrames (connect-and-light flows like the play drawer).
           // Seed the dedup signature so this freshly mounted AutoSender
@@ -269,7 +328,13 @@ function BluetoothAutoSender({
           }
 
           try {
-            const result = await requestSendFramesToBoard(item.climb.frames, !!item.climb.mirrored, signal);
+            const result = await requestSendFramesToBoard(item.climb.frames, !!item.climb.mirrored, signal, {
+              sendSource: 'auto',
+              targetQueueItemUuid: item.uuid,
+              climbUuid: item.climb.uuid,
+              climbBoardType: item.climb.boardType,
+              climbLayoutId: item.climb.layoutId,
+            });
 
             // After the await, the AutoSender may have unmounted — skip
             // post-send side effects.
@@ -337,6 +402,10 @@ export function BluetoothProvider({
   } = useBoardPresenceControls();
   const { currentClimb: wallCurrentClimb } = useBoardPresenceCurrent();
   const { showUndoWallChangeSnackbar } = useQueueSnackbar();
+  // Queue actions (no state subscription, so the provider doesn't re-render on
+  // queue changes) + toast, for advancing past a spill climb and telling the user.
+  const { setCurrentClimb } = useQueueActions();
+  const { showToast } = useToast();
   const { overrides: holdColorOverrides, signature: holdColorSignature } = useHoldColorOverrides();
   const bluetoothColorOverrides = useMemo(
     () => getBluetoothColorOverrides(holdColorOverrides),
@@ -397,6 +466,11 @@ export function BluetoothProvider({
   const previousPresenceBoardIdRef = useRef<number | null>(presenceBoardId);
   const boardConfigIdentity = `${boardName ?? ''}:${layoutId ?? ''}:${sizeId ?? ''}:${setIds ?? ''}`;
   const previousBoardConfigIdentityRef = useRef(boardConfigIdentity);
+  // True while this connection was made via "Connect anyway" on the board-config
+  // mismatch dialog (our records say this controller belongs to another setup).
+  // Cleared on disconnect/drop and on board-config change. Attached to connection
+  // + send analytics so override sessions are filterable.
+  const connectedViaMismatchOverrideRef = useRef(false);
   const undoWallChangeToastArmIdRef = useRef<number | null>(null);
   const nextUndoWallChangeToastArmIdRef = useRef(0);
   const undoWallChangeToastArmTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -446,6 +520,7 @@ export function BluetoothProvider({
     previousBoardConfigIdentityRef.current = boardConfigIdentity;
     if (previousBoardConfigIdentity !== boardConfigIdentity) {
       clearPendingWallReportAndUndoToastArm();
+      connectedViaMismatchOverrideRef.current = false;
     }
   }, [boardConfigIdentity, clearPendingWallReportAndUndoToastArm]);
 
@@ -654,6 +729,10 @@ export function BluetoothProvider({
     );
   }, [boardName, layoutId, sizeId, setIds]);
 
+  // Stable reader for the override flag, so the hook can attach it to connection
+  // and send analytics without re-creating its callbacks when the flag flips.
+  const getConnectedViaMismatchOverride = useCallback(() => connectedViaMismatchOverrideRef.current, []);
+
   const {
     isConnected,
     loading,
@@ -673,6 +752,7 @@ export function BluetoothProvider({
     analyticsBoardId: presenceBoardId,
     ledColorOverrides: bluetoothColorOverrides,
     onConnectSuccess: handleConnectSuccess,
+    getConnectedViaMismatchOverride,
   });
 
   const resolvedPickerBoards = useResolvedBleDeviceBoards(pickerState?.devices ?? EMPTY_PICKER_DEVICES);
@@ -812,6 +892,17 @@ export function BluetoothProvider({
       } catch (error) {
         console.error('Failed to switch to correct board config:', error);
         reportHandledError(error, { tags: { source: 'board-config', op: 'switch' } });
+        track(SHARED_EVENTS.BleBoardConfigMismatchResolved, {
+          serial: decision.serial,
+          currentBoardName: currentBoardConfigRef.current?.boardName,
+          currentLayoutId: currentBoardConfigRef.current?.layoutId,
+          recordedBoardName: decision.config.boardName,
+          recordedLayoutId: decision.config.layoutId,
+          recordedEntryKind: decision.entry.kind,
+          // Reaching this catch means the switch button was offered (and tapped).
+          canSwitch: true,
+          action: 'switch_failed',
+        });
         Alert.alert(t('boardConfigMismatch.title'), t('boardConfigMismatch.mobileSwitchFailed'));
       }
     },
@@ -841,18 +932,43 @@ export function BluetoothProvider({
       const canSwitch =
         decision.entry.kind === 'saved' ||
         (decision.entry.kind === 'recorded' && decision.entry.config.boardUuid != null);
+
+      const mismatchAnalytics = {
+        serial: decision.serial,
+        currentBoardName: activeBoardConfig?.boardName,
+        currentLayoutId: activeBoardConfig?.layoutId,
+        recordedBoardName: decision.config.boardName,
+        recordedLayoutId: decision.config.layoutId,
+        recordedEntryKind: decision.entry.kind,
+        canSwitch,
+      };
+      track(SHARED_EVENTS.BleBoardConfigMismatchShown, mismatchAnalytics);
+      const trackResolved = (action: 'cancel' | 'connect_anyway' | 'switch_setup') =>
+        track(SHARED_EVENTS.BleBoardConfigMismatchResolved, { ...mismatchAnalytics, action });
+
+      // "Connect anyway" is a warning, not a destructive action — connecting to a
+      // working board the user owns isn't dangerous, just possibly mis-mapped.
       const buttons = [
-        { text: t('boardConfigMismatch.cancel'), style: 'cancel' as const },
+        { text: t('boardConfigMismatch.cancel'), style: 'cancel' as const, onPress: () => trackResolved('cancel') },
         {
-          text: t('boardConfigMismatch.connectAnyway'),
-          style: 'destructive' as const,
-          onPress: () => activePickerState.handleSelect(deviceId),
+          text: t('boardConfigMismatch.mobileConnectAnyway'),
+          onPress: () => {
+            trackResolved('connect_anyway');
+            connectedViaMismatchOverrideRef.current = true;
+            activePickerState.handleSelect(deviceId);
+          },
         },
         ...(canSwitch
           ? [
               {
-                text: t('boardConfigMismatch.switchToCorrect'),
-                onPress: () => void handleMismatchSwitch(decision),
+                text:
+                  decision.entry.kind === 'saved'
+                    ? t('boardConfigMismatch.mobileSwitchSetup')
+                    : t('boardConfigMismatch.mobileUseRecordedSetup'),
+                onPress: () => {
+                  trackResolved('switch_setup');
+                  void handleMismatchSwitch(decision);
+                },
               },
             ]
           : []),
@@ -860,7 +976,7 @@ export function BluetoothProvider({
       Alert.alert(
         t('boardConfigMismatch.title'),
         [
-          t('boardConfigMismatch.intro'),
+          t('boardConfigMismatch.mobileConnectAnywayWarning'),
           t('boardConfigMismatch.mobileCurrentLabel', { config: currentLabel }),
           t('boardConfigMismatch.mobileRecordedLabel', { config: recordedLabel }),
         ].join('\n\n'),
@@ -879,7 +995,10 @@ export function BluetoothProvider({
     }
 
     lastAcceptedReportSignatureRef.current = null;
-    const writeSucceeded = await sendFramesToBoard(frames, false).catch((error: unknown) => {
+    const writeSucceeded = await sendFramesToBoard(frames, false, undefined, {
+      sendSource: 'undo',
+      climbUuid: undoTarget.climbUuid,
+    }).catch((error: unknown) => {
       console.warn('[board-presence] undo BLE resend failed', error);
       return false;
     });
@@ -908,6 +1027,48 @@ export function BluetoothProvider({
   }, [sendFramesToBoard]);
 
   const clearBoard = useCallback(() => sendFramesToBoard(''), [sendFramesToBoard]);
+
+  // Advance the queue past a "spill" climb (one set for a different board/layout
+  // than the connected board) instead of dark-firing the wall, and tell the user.
+  // The auto-sender detects the mismatch (and dedups repeat reports for the same
+  // spill), computes the next compatible item, and calls this once; here we
+  // re-point the queue so the auto-sender lights the next climb, or clear the wall
+  // when nothing compatible remains.
+  const handleSkipSpillClimb = useCallback(
+    ({
+      skipped,
+      next,
+      skippedCount,
+    }: {
+      skipped: ClimbQueueItem;
+      next: ClimbQueueItem | null;
+      skippedCount: number;
+    }) => {
+      track(SHARED_EVENTS.BleQueueClimbSkipped, {
+        boardName: boardNameRef.current,
+        layoutId: layoutIdRef.current,
+        sizeId: sizeIdRef.current,
+        skippedClimbUuid: skipped.climb.uuid,
+        skippedClimbBoardType: skipped.climb.boardType,
+        skippedClimbLayoutId: skipped.climb.layoutId ?? undefined,
+        skippedCount,
+        advancedToClimbUuid: next?.climb.uuid ?? null,
+        inSession: sessionIdRef.current != null,
+      });
+
+      showToast(
+        t('boardConfigMismatch.mobileSkippedSpillToast', { count: skippedCount, name: skipped.climb.name }),
+        'info',
+      );
+
+      if (next) {
+        setCurrentClimb(next);
+      } else {
+        void clearBoard();
+      }
+    },
+    [setCurrentClimb, showToast, clearBoard, t],
+  );
 
   // Bumped by `reassertWall()` to force the auto-sender to re-push the current
   // climb once, bypassing the byte-identical dedup.
@@ -938,6 +1099,7 @@ export function BluetoothProvider({
   const wrappedDisconnect = useCallback(async () => {
     clearPendingWallReportAndUndoToastArm();
     releaseBoardHolder();
+    connectedViaMismatchOverrideRef.current = false;
     isUserDisconnectRef.current = true;
     track(SHARED_EVENTS.BluetoothDisconnected, { boardName, reason: 'user', inSession: sessionIdRef.current != null });
     try {
@@ -974,6 +1136,7 @@ export function BluetoothProvider({
   useEffect(() => {
     if (wasConnectedRef.current && !isConnected && !isUserDisconnectRef.current) {
       clearPendingWallReportAndUndoToastArm();
+      connectedViaMismatchOverrideRef.current = false;
       // An unexpected drop also frees our board hold (the booted phone is no
       // longer writing the wall). Compare-and-delete server-side, so if another
       // phone already took over this is a no-op.
@@ -1026,6 +1189,8 @@ export function BluetoothProvider({
           reassertNonce={reassertNonce}
           connectInitialSendRef={connectInitialSendRef}
           colorSignature={holdColorSignature}
+          activeConfig={currentBoardConfig}
+          onSkipSpillClimb={handleSkipSpillClimb}
         />
       )}
       {children}

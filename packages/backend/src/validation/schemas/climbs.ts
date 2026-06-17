@@ -13,6 +13,11 @@ const MAX_HOLD_FILTER_ENTRIES = 300;
  */
 export const ClimbInputSchema = z.object({
   uuid: ExternalUUIDSchema,
+  // Board the climb belongs to. Round-tripped through the queue so a connected
+  // board can skip a climb set for a different board/layout. Nullish: older
+  // clients and pre-metadata queue items omit it.
+  boardType: z.string().max(50).nullish(),
+  layoutId: z.number().int().positive().nullish(),
   setter_username: z
     .string()
     .max(100)

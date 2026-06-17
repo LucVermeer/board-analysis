@@ -71,6 +71,8 @@ const BOARD_FIELDS = `
 
 const CLIMB_SEARCH_FIELDS = `
   uuid
+  boardType
+  layoutId
   setter_username
   userId
   name
@@ -94,6 +96,8 @@ const CLIMB_SEARCH_FIELDS = `
 
 const CLIMB_DETAIL_FIELDS = `
   uuid
+  boardType
+  layoutId
   setter_username
   userId
   name
@@ -1093,6 +1097,8 @@ export type SessionUpdateEvent = {
 // re-opened drawer can't render the grade.
 const SUBSCRIPTION_CLIMB_FIELDS = `
   uuid
+  boardType
+  layoutId
   name
   frames
   setter_username

@@ -16,6 +16,10 @@ const cfg = vi.hoisted(() => ({
   nativeTabBar: false,
 }));
 
+// useAccessoryClimbTap builds a preview queue item via climbToQueueItem, which
+// pulls expo-crypto's randomUUID — stub it so the native module isn't loaded.
+vi.mock('expo-crypto', () => ({ randomUUID: () => 'preview-uuid' }));
+
 vi.mock('react-native', () => ({
   Platform: { OS: 'ios' },
   View: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
