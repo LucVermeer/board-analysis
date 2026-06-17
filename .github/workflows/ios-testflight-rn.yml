@@ -137,9 +137,11 @@ jobs:
           echo "ASC_KEY_PATH=$key_path" >> "$GITHUB_ENV"
 
       # Build number = latest TestFlight build for this marketing version + 1,
-      # queried from App Store Connect via fastlane. Falls back to
-      # offset + run_number (the previous deterministic scheme) if the query
-      # fails, so pulling the API key never breaks the build.
+      # queried from App Store Connect via fastlane. The ASC key is REQUIRED by
+      # this workflow (it uploads to TestFlight), so the "Setup App Store Connect
+      # API key" step above fails fast if the secret is missing. If the key is
+      # present but the query itself fails (transient ASC/network error), the lane
+      # falls back to offset + run_number so a flaky query doesn't break the build.
       - name: Compute build number
         id: build_number
         working-directory: fastlane
@@ -171,7 +173,10 @@ jobs:
       - name: Set build number
         working-directory: packages/mobile/ios
         run: |
-          agvtool new-version -all ${{ steps.build_number.outputs.value }}
+          set -euo pipefail
+          build_number=${{ steps.build_number.outputs.value }}
+          [ -n "${build_number}" ] || { echo "::error::Computed build number is empty"; exit 1; }
+          agvtool new-version -all "${build_number}"
 
       - name: Import code signing certificate
         env:

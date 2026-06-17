@@ -158,7 +158,9 @@ jobs:
 
       - name: Set version code
         run: |
+          set -euo pipefail
           code=${{ steps.version_code.outputs.value }}
+          [ -n "${code}" ] || { echo "::error::Computed version code is empty"; exit 1; }
           sed -Ei "s/^([[:space:]]*)versionCode .*/\\1versionCode ${code}/" packages/mobile/android/app/build.gradle
           echo "versionCode set to ${code} (versionName comes from app.config.ts)"
 

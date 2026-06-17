@@ -38,11 +38,13 @@ APP_IDENTIFIER = "com.boardsesh.app"
 APPLE_METADATA_DIR = File.join(__dir__, "metadata")
 ANDROID_METADATA_DIR = File.join(__dir__, "metadata", "android")
 
-# Marketing version, read from the Expo app config — the single source of truth
-# both native build workflows already parse for the version string.
+# Marketing version, read from the Expo app config. Anchored to a top-level
+# `version:` line whose value starts with a digit (semver), so a nested plugin
+# `version:` can't be matched by accident. The build workflows parse the same
+# field — keep them in sync if the config layout changes.
 def mobile_app_version
   config_path = File.join(REPO_ROOT, "packages", "mobile", "app.config.ts")
-  match = File.read(config_path).match(/\bversion:\s*['"]([^'"]+)['"]/)
+  match = File.read(config_path).match(/^[ \t]*version:\s*['"](\d[^'"]*)['"]/)
   UI.user_error!("Could not find version in #{config_path}") unless match
   match[1]
 end
