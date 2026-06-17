@@ -9,6 +9,7 @@ import { ActivityIndicator } from '../ActivityIndicator';
 import { useTheme } from '../../providers/theme-provider';
 import { spacing, borderRadius, opacity, materialElevationByLevel } from '../../theme/tokens';
 import { withAlpha } from '../../theme/colors';
+import { useVariantValue } from '../../theme/variants';
 import { hapticSelection } from '../../lib/haptics';
 import { gradeChartColor, layoutChartColor, flashRedpointColor, type ColoredBar } from './profile-chart-colors';
 import {
@@ -96,7 +97,11 @@ type FrameProps = {
 
 /** Measures available width and renders loading / empty / chart states. */
 function ChartFrame({ height, loading, emptyLabel, isEmpty, zoomable, children }: FrameProps) {
-  const { systemColors, chartColors, variant } = useTheme();
+  const { systemColors, chartColors } = useTheme();
+  // Material casts a shadow under the floating chrome; Liquid Glass stays flat
+  // (its border carries the edge). Routed through the variant selector so the
+  // mobile-variant guard stays happy.
+  const floatingElevation = useVariantValue({ material: materialElevationByLevel.level2, liquidGlass: null });
   const { t } = useTranslation('common');
   const [width, setWidth] = useState(0);
   const [zoomScale, setZoomScale] = useState(MIN_ZOOM_SCALE);
@@ -188,7 +193,7 @@ function ChartFrame({ height, loading, emptyLabel, isEmpty, zoomable, children }
               backgroundColor: systemColors.elevatedSurface,
               borderColor: systemColors.separator,
             },
-            variant === 'material' ? materialElevationByLevel.level2 : null,
+            floatingElevation,
           ]}
           accessibilityRole="button"
           accessibilityLabel={t('resetZoom')}
@@ -202,7 +207,8 @@ function ChartFrame({ height, loading, emptyLabel, isEmpty, zoomable, children }
 }
 
 function TooltipBubble({ model, totalLabel }: { model: ChartTooltipModel | undefined; totalLabel: string }) {
-  const { systemColors, variant } = useTheme();
+  const { systemColors } = useTheme();
+  const floatingElevation = useVariantValue({ material: materialElevationByLevel.level2, liquidGlass: null });
   if (!model) return null;
 
   return (
@@ -213,7 +219,7 @@ function TooltipBubble({ model, totalLabel }: { model: ChartTooltipModel | undef
           backgroundColor: systemColors.elevatedSurface,
           borderColor: systemColors.separator,
         },
-        variant === 'material' ? materialElevationByLevel.level2 : null,
+        floatingElevation,
       ]}
     >
       <Text variant="caption1" style={styles.tooltipTitle} numberOfLines={1}>
@@ -358,7 +364,11 @@ export const StackedBarChart = memo(function StackedBarChart({
   const selectedTooltip = selectedIndex == null ? undefined : tooltipModels[selectedIndex];
 
   return (
-    <View accessibilityRole={accessibilityLabel ? 'image' : undefined} accessibilityLabel={accessibilityLabel}>
+    <View
+      accessible={accessibilityLabel ? true : undefined}
+      accessibilityRole={accessibilityLabel ? 'image' : undefined}
+      accessibilityLabel={accessibilityLabel}
+    >
       <View style={styles.chartShell} importantForAccessibility={accessibilityLabel ? 'no-hide-descendants' : 'auto'}>
         <ChartFrame
           height={height}
