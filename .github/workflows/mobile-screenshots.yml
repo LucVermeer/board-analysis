@@ -517,8 +517,21 @@ jobs:
             # `pipefail` — `set -euo pipefail` aborts the step before anything runs. No
             # pipes here, so `set -eu` is equivalent.
             set -eu
-            adb shell wm size 1080x1920
-            adb shell wm density 420
+            # `sys.boot_completed` fires before the window manager is fully up, so an
+            # `adb shell wm …` right after the runner reports "booted" can hit a
+            # transient "device offline" (exit 1) and abort the step under `set -e`.
+            # Wait for the device, then retry the display setup until it sticks.
+            adb wait-for-device
+            wm_ready=0
+            for attempt in 1 2 3 4 5 6; do
+              if adb shell wm size 1080x1920 && adb shell wm density 420; then
+                wm_ready=1
+                break
+              fi
+              echo "display setup not ready (attempt ${attempt}/6); retrying in 5s…"
+              sleep 5
+            done
+            [ "$wm_ready" = 1 ] || { echo "::error::adb wm display setup failed after retries"; exit 1; }
             vp run mobile:screenshots -- \
               --platform android \
               --flow "${{ inputs.flow || 'app-store' }}" \
