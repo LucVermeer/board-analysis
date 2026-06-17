@@ -350,6 +350,21 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
     addToQueue({ uuid: randomUUID(), climb: climbActions.climb });
   }, [climbActions, addToQueue]);
 
+  const handleClimbActionsPreview = useCallback(() => {
+    if (!climbActions) return;
+    // View-only: open with a previewQueueItem (badge + "Set active") instead of
+    // committing. Mirror the board-sheet override rule so a cross-board climb
+    // still renders the switch-board overlay; same-board needs no override.
+    const boardConfigOverride = boardConfigsMatch(climbActions.boardConfig, activeBoardConfigRef.current)
+      ? undefined
+      : climbActions.boardConfig;
+    openPlayDrawer(climbActions.climb, {
+      previewQueueItem: climbToQueueItem(climbActions.climb),
+      boardConfig: boardConfigOverride,
+      source: 'climb_view',
+    });
+  }, [climbActions, openPlayDrawer]);
+
   const handleClimbActionsToggleFavorite = useCallback(() => {
     if (!climbActions) return;
     const isNowFavorited = !favoritesStore.getIsFavorited(climbActions.climb.uuid);
@@ -660,6 +675,7 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
           setIds={climbActions.boardConfig.setIds}
           angle={climbActions.boardConfig.angle}
           currentUserId={profile?.id ?? null}
+          onPreview={handleClimbActionsPreview}
           onAddToQueue={handleClimbActionsAddToQueue}
           onOpenPlaylist={handleClimbActionsOpenPlaylist}
           onToggleFavorite={handleClimbActionsToggleFavorite}

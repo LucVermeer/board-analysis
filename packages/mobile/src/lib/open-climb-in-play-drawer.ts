@@ -38,14 +38,15 @@ export type OpenClimbArgs =
 
 export type OpenClimbOptions = {
   /**
-   * When `true`, the opened climb is set as the current climb (and appended to
-   * the queue) — a tap-to-activate. Defaults to `false` (view-only preview: the
-   * drawer shows it with a "Preview" badge + "Set active" and leaves the queue
-   * untouched), preserving the original behaviour for every existing caller.
-   * Ignored on the `ref` fallback, which routes through the climb page and opens
-   * with its own default.
+   * When `true`, the climb opens **view-only**: the drawer shows it with a
+   * "Preview" badge + a "Set active" button and leaves the queue untouched.
+   * Defaults to `false` — the climb is set as the current climb (and appended to
+   * the queue), so pressing a climb plays it. Used by the explicit "Preview"
+   * climb action and the deep-link / standalone climb-page route. Ignored on the
+   * `ref` fallback, which routes through the climb page and opens with its own
+   * default.
    */
-  setAsCurrent?: boolean;
+  preview?: boolean;
 };
 
 /**
@@ -53,8 +54,8 @@ export type OpenClimbOptions = {
  * (commit) or shown view-only (preview). A preview anchors navigation on a fresh
  * queue item without committing it; an active open lets the drawer commit.
  */
-function openModeOptions(climb: Climb, setAsCurrent: boolean): Pick<OpenPlayDrawerOptions, 'previewQueueItem'> {
-  return setAsCurrent ? {} : { previewQueueItem: climbToQueueItem(climb) };
+function openModeOptions(climb: Climb, preview: boolean): Pick<OpenPlayDrawerOptions, 'previewQueueItem'> {
+  return preview ? { previewQueueItem: climbToQueueItem(climb) } : {};
 }
 
 /**
@@ -67,11 +68,11 @@ function openModeOptions(climb: Climb, setAsCurrent: boolean): Pick<OpenPlayDraw
  */
 export function openClimbInPlayDrawer(args: OpenClimbArgs, deps: OpenClimbDeps, options?: OpenClimbOptions): void {
   const { openPlayDrawer, router } = deps;
-  const setAsCurrent = options?.setAsCurrent ?? false;
+  const preview = options?.preview ?? false;
 
   if (args.kind === 'climb') {
     openPlayDrawer(args.climb, {
-      ...openModeOptions(args.climb, setAsCurrent),
+      ...openModeOptions(args.climb, preview),
       boardConfig: args.boardConfig,
       source: 'climb_view',
     });
@@ -83,7 +84,7 @@ export function openClimbInPlayDrawer(args: OpenClimbArgs, deps: OpenClimbDeps, 
     const config = getBoardConfigForPlaylist(args.tick.boardType, args.tick.layoutId);
     if (climb && config) {
       openPlayDrawer(climb, {
-        ...openModeOptions(climb, setAsCurrent),
+        ...openModeOptions(climb, preview),
         boardConfig: {
           boardName: config.boardName,
           layoutId: config.layoutId,
