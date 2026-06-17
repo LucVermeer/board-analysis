@@ -19,9 +19,18 @@ const hook = vi.hoisted(() => ({
   refetch: vi.fn(),
 }));
 
+// Capture the focus callback so a test can replay focus events and assert the
+// skip-first-focus refetch guard (the real useFocusEffect runs it on focus).
+const focusEffect = vi.hoisted(() => ({ cb: null as null | (() => void) }));
+
 vi.mock('@boardsesh/playlists-react', () => ({ useUserPlaylists: () => hook }));
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
-vi.mock('expo-router', () => ({ router: { push: vi.fn() }, useFocusEffect: () => undefined }));
+vi.mock('expo-router', () => ({
+  router: { push: vi.fn() },
+  useFocusEffect: (cb: () => void) => {
+    focusEffect.cb = cb;
+  },
+}));
 
 // react-native primitives → DOM. FlatList renders its data (or the empty
 // component) plus the footer so the error/retry affordances are assertable.
@@ -124,6 +133,7 @@ beforeEach(() => {
   hook.loadMore.mockClear();
   hook.retryLoadMore.mockClear();
   hook.refetch.mockClear();
+  focusEffect.cb = null;
 });
 
 describe('AllPlaylistsScreen', () => {
@@ -155,5 +165,21 @@ describe('AllPlaylistsScreen', () => {
     const retryButton = getByLabelText('library.allPlaylists.loadMoreError library.errors.tryAgain');
     fireEvent.click(retryButton);
     expect(hook.retryLoadMore).toHaveBeenCalledTimes(1);
+  });
+
+  it('skips the first focus but refetches on a return focus (e.g. after a detail edit)', () => {
+    hook.playlists = [{ uuid: 'a', name: 'Alpha', climbCount: 1 }];
+    render(<AllPlaylistsScreen />);
+
+    // The component registered a focus callback; the mount load already ran, so
+    // the first focus must NOT refetch.
+    expect(focusEffect.cb).toBeTypeOf('function');
+    focusEffect.cb?.();
+    expect(hook.refetch).not.toHaveBeenCalled();
+
+    // A later focus (returning from a pushed detail screen) refetches so an edit
+    // there lands here.
+    focusEffect.cb?.();
+    expect(hook.refetch).toHaveBeenCalledTimes(1);
   });
 });

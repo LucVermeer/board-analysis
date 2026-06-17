@@ -346,13 +346,8 @@ export default function PlaylistDetail() {
           isPublic: values.isPublic,
         });
         queryClient.setQueryData(['playlist', playlistUuid], updated);
-        // The list surfaces don't share this detail cache: the Add-to-Playlist
-        // picker reads the react-query ['userPlaylists'] list (5-min staleTime),
-        // so patch the edited row there too — otherwise the name/icon/colour
-        // stays stale in the picker until the staleTime lapses (matching how the
-        // create flow and bumpPlaylistClimbCount keep that cache honest). The
-        // Discover hub's owned/pinned shelves and the "My Playlists" list refetch
-        // on focus return.
+        // Also patch the Add-to-Playlist picker's react-query list (the shelves
+        // refetch on focus, but this cache wouldn't until its staleTime lapses).
         queryClient.setQueryData<Playlist[]>(['userPlaylists'], (prev) =>
           prev?.map((entry) => (entry.uuid === updated.uuid || entry.id === updated.id ? updated : entry)),
         );

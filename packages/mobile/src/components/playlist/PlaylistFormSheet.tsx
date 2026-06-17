@@ -22,9 +22,11 @@ export type { PlaylistFormValues };
 // it's DOM-only on web); these are one-tap shortcuts for the common ones.
 const SUGGESTED_ICONS = ['🔥', '💪', '🎯', '⭐', '🧗', '🪨', '🏆'] as const;
 
-// Long enough to hold one ZWJ/variation-selector emoji (e.g. 🧗‍♀️) while keeping
-// the slot to a single glyph in practice.
-const ICON_MAX = 8;
+// Generous enough to hold a single multi-codepoint emoji whole — including long
+// ZWJ sequences like a family emoji (👨‍👩‍👧‍👦, 11 UTF-16 units) — so the cap never
+// truncates one mid-sequence into a broken glyph. Still well under the backend's
+// 50-char limit.
+const ICON_MAX = 16;
 
 type PlaylistFormSheetProps = {
   mode: 'create' | 'edit';
