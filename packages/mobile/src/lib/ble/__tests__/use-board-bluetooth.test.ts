@@ -475,6 +475,77 @@ describe('useBoardBluetooth', () => {
     expect(result.current.isConnected).toBe(false);
   });
 
+  it('tracks incompatible_climb with skip counts and the provided send context', async () => {
+    const fakeAdapter = makeFakeAdapter();
+    vi.mocked(createBluetoothAdapter).mockReturnValue(
+      fakeAdapter as unknown as ReturnType<typeof createBluetoothAdapter>,
+    );
+    mockGetLedPlacements.mockReturnValue({ 100: 7 });
+    // Empty packet + skipped placements = every placement was dropped → incompatible.
+    mockGetAuroraBluetoothPacket.mockReturnValue({
+      packet: new Uint8Array([]),
+      skippedPositionCount: 3,
+      skippedRoleCount: 1,
+      totalPlacements: 4,
+    });
+
+    const { result } = renderHook(() =>
+      useBoardBluetooth({
+        boardName: 'kilter',
+        layoutId: 1,
+        sizeId: 1,
+        getConnectedViaMismatchOverride: () => true,
+      }),
+    );
+    await act(async () => {
+      await result.current.connect();
+    });
+
+    let sendResult: boolean | undefined;
+    await act(async () => {
+      sendResult = await result.current.sendFramesToBoard('p100r12', false, undefined, {
+        sendSource: 'auto',
+        targetQueueItemUuid: 'q-1',
+        climbUuid: 'c-1',
+        climbBoardType: 'tension',
+        climbLayoutId: 1,
+      });
+    });
+
+    expect(sendResult).toBe(false);
+    expect(Alert.alert).toHaveBeenCalledWith('ble.sendFailedTitle', 'ble.errorIncompatible');
+    const failure = mockTrack.mock.calls.find(([name]) => name === 'Climb Sent to Board Failure');
+    expect(failure?.[1]).toMatchObject({
+      failureReason: 'incompatible_climb',
+      skippedPositionCount: 3,
+      skippedRoleCount: 1,
+      totalPlacements: 4,
+      sendSource: 'auto',
+      targetQueueItemUuid: 'q-1',
+      climbUuid: 'c-1',
+      climbBoardType: 'tension',
+      climbLayoutId: 1,
+      connectedViaMismatchOverride: true,
+    });
+  });
+
+  it('attaches connectedViaMismatchOverride to the connection-success event', async () => {
+    const fakeAdapter = makeFakeAdapter();
+    vi.mocked(createBluetoothAdapter).mockReturnValue(
+      fakeAdapter as unknown as ReturnType<typeof createBluetoothAdapter>,
+    );
+
+    const { result } = renderHook(() =>
+      useBoardBluetooth({ boardName: 'kilter', layoutId: 1, sizeId: 1, getConnectedViaMismatchOverride: () => true }),
+    );
+    await act(async () => {
+      await result.current.connect();
+    });
+
+    const successCall = mockTrack.mock.calls.find(([name]) => name === 'Bluetooth Connection Success');
+    expect(successCall?.[1]).toMatchObject({ connectedViaMismatchOverride: true });
+  });
+
   it('emits apiLevel and deviceNamePresent on the connection-success event', async () => {
     const fakeAdapter = makeFakeAdapter({
       requestAndConnect: vi.fn().mockResolvedValue({ deviceId: 'dev-1', deviceName: 'Kilter A1#0042@3' }),

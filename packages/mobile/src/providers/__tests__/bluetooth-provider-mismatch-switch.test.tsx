@@ -727,7 +727,12 @@ describe('BluetoothProvider spill skip', () => {
     renderProvider(KILTER_PROPS);
     await act(async () => {});
 
-    expect(bluetooth.state.sendFramesToBoard).toHaveBeenCalledWith('frames-ok', false, expect.anything());
+    expect(bluetooth.state.sendFramesToBoard).toHaveBeenCalledWith(
+      'frames-ok',
+      false,
+      expect.anything(),
+      expect.objectContaining({ sendSource: 'auto', climbUuid: 'ok' }),
+    );
     expect(queue.setCurrentClimb).not.toHaveBeenCalled();
     expect(toast.showToast).not.toHaveBeenCalled();
   });
@@ -747,7 +752,12 @@ describe('BluetoothProvider spill skip', () => {
     queue.currentClimbQueueItem = compatible;
     rerender(createElement(BluetoothProvider, { ...KILTER_PROPS, children: createElement('div', null) }));
     await act(async () => {});
-    expect(bluetooth.state.sendFramesToBoard).toHaveBeenCalledWith('frames-ok', false, expect.anything());
+    expect(bluetooth.state.sendFramesToBoard).toHaveBeenCalledWith(
+      'frames-ok',
+      false,
+      expect.anything(),
+      expect.objectContaining({ sendSource: 'auto', climbUuid: 'ok' }),
+    );
 
     // Navigating back to the spill skips + toasts again — not a silent stick.
     queue.currentClimbQueueItem = spill;
@@ -764,7 +774,12 @@ describe('BluetoothProvider spill skip', () => {
     renderProvider(KILTER_PROPS);
     await act(async () => {});
 
-    expect(bluetooth.state.sendFramesToBoard).toHaveBeenCalledWith('frames-unknown', false, expect.anything());
+    expect(bluetooth.state.sendFramesToBoard).toHaveBeenCalledWith(
+      'frames-unknown',
+      false,
+      expect.anything(),
+      expect.objectContaining({ sendSource: 'auto', climbUuid: 'unknown' }),
+    );
     expect(queue.setCurrentClimb).not.toHaveBeenCalled();
     expect(toast.showToast).not.toHaveBeenCalled();
   });

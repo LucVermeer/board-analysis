@@ -9,7 +9,7 @@ import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { useBoardPresenceCurrent } from '@boardsesh/board-presence-react';
 import type { BoardPresenceClimb, ClimbQueueItemInput } from '@boardsesh/shared-schema';
 import { emitWallConfirm } from '@boardsesh/play-view';
-import { useBoardBluetooth, boardConfigKey } from '../lib/ble/use-board-bluetooth';
+import { useBoardBluetooth, boardConfigKey, type SendFramesToBoard } from '../lib/ble/use-board-bluetooth';
 import { useResolvedBleDeviceBoards } from '../lib/ble/resolve-serials';
 import {
   decideBlePickerSelection,
@@ -42,7 +42,7 @@ type BluetoothContextValue = {
   loading: boolean;
   connect: (initialFrames?: string, mirrored?: boolean, targetSerial?: string) => Promise<boolean>;
   disconnect: () => Promise<void>;
-  sendFramesToBoard: (frames: string, mirrored?: boolean, signal?: AbortSignal) => Promise<boolean | undefined>;
+  sendFramesToBoard: SendFramesToBoard;
   clearBoard: () => Promise<boolean | undefined>;
   /**
    * Force the auto-sender to re-push the current climb to the wall once, even
@@ -145,7 +145,7 @@ function BluetoothAutoSender({
   activeConfig,
   onSkipSpillClimb,
 }: {
-  sendFramesToBoard: (frames: string, mirrored?: boolean, signal?: AbortSignal) => Promise<boolean | undefined>;
+  sendFramesToBoard: SendFramesToBoard;
   /**
    * Fired once a climb is on the wall (a fresh write or a deduped re-broadcast).
    * Receives the full lit queue item so consumers can both emit the local
@@ -169,7 +169,7 @@ function BluetoothAutoSender({
 }) {
   type AutoSendRequest = {
     item: ClimbQueueItem;
-    sendFramesToBoard: (frames: string, mirrored?: boolean, signal?: AbortSignal) => Promise<boolean | undefined>;
+    sendFramesToBoard: SendFramesToBoard;
     colorSignature: string;
   };
 
@@ -328,7 +328,13 @@ function BluetoothAutoSender({
           }
 
           try {
-            const result = await requestSendFramesToBoard(item.climb.frames, !!item.climb.mirrored, signal);
+            const result = await requestSendFramesToBoard(item.climb.frames, !!item.climb.mirrored, signal, {
+              sendSource: 'auto',
+              targetQueueItemUuid: item.uuid,
+              climbUuid: item.climb.uuid,
+              climbBoardType: item.climb.boardType,
+              climbLayoutId: item.climb.layoutId,
+            });
 
             // After the await, the AutoSender may have unmounted — skip
             // post-send side effects.
@@ -723,6 +729,10 @@ export function BluetoothProvider({
     );
   }, [boardName, layoutId, sizeId, setIds]);
 
+  // Stable reader for the override flag, so the hook can attach it to connection
+  // and send analytics without re-creating its callbacks when the flag flips.
+  const getConnectedViaMismatchOverride = useCallback(() => connectedViaMismatchOverrideRef.current, []);
+
   const {
     isConnected,
     loading,
@@ -742,6 +752,7 @@ export function BluetoothProvider({
     analyticsBoardId: presenceBoardId,
     ledColorOverrides: bluetoothColorOverrides,
     onConnectSuccess: handleConnectSuccess,
+    getConnectedViaMismatchOverride,
   });
 
   const resolvedPickerBoards = useResolvedBleDeviceBoards(pickerState?.devices ?? EMPTY_PICKER_DEVICES);
@@ -984,7 +995,10 @@ export function BluetoothProvider({
     }
 
     lastAcceptedReportSignatureRef.current = null;
-    const writeSucceeded = await sendFramesToBoard(frames, false).catch((error: unknown) => {
+    const writeSucceeded = await sendFramesToBoard(frames, false, undefined, {
+      sendSource: 'undo',
+      climbUuid: undoTarget.climbUuid,
+    }).catch((error: unknown) => {
       console.warn('[board-presence] undo BLE resend failed', error);
       return false;
     });
