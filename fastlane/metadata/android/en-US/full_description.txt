@@ -1,12 +1,12 @@
 Search a climb and watch your wall light the holds over Bluetooth. Tap a problem, the holds glow, you pull on. Spend your session climbing instead of reading numbers off a screen.
 
-The native app holds a steadier link to your board than a browser tab can. Pick your board once and get climbing.
+Pick your board once and get climbing.
 
 LIGHT THE HOLDS
 Search any climb and Boardsesh sends it to the wall over Bluetooth, lighting the holds on Kilter, Tension, MoonBoard, Decoy, Touchstone, Grasshopper and So iLL. Full LED control on all seven, not browse-only.
 
-WHY THE APP
-Chrome on Android can reach Bluetooth, so the website connects. The app keeps a steadier connection that survives the screen going dark, so the holds stay lit through your burns without you babysitting a browser tab.
+STAYS CONNECTED
+Boardsesh holds the link to your board in the background, so the holds stay lit through your burns even when the screen turns off or you switch apps. You are not reconnecting between climbs.
 
 CLIMB WITH YOUR CREW
 Start a session and everyone in it can send the next climb to the wall. No driver to hand the phone around, no turn to wait for. Whoever is connected over Bluetooth lights it.

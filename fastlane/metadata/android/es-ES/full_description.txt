@@ -1,12 +1,12 @@
 Busca una vía y mira cómo tu muro ilumina las presas por Bluetooth. Toca un bloque, las presas se encienden, te cuelgas. Pasa la sesión escalando en vez de leer números en una pantalla.
 
-La app nativa mantiene el enlace con tu muro aunque se apague la pantalla, así las presas siguen encendidas durante tus pegadas. Elige tu muro una vez y a escalar.
+Elige tu muro una vez y a escalar.
 
 ILUMINA LAS PRESAS
 Busca cualquier vía y Boardsesh la manda al muro por Bluetooth, encendiendo las presas en Kilter, Tension, MoonBoard, Decoy, Touchstone, Grasshopper y So iLL. Enciendes las presas en los siete por Bluetooth, no solo las consultas.
 
-POR QUÉ LA APP
-Chrome en Android llega al Bluetooth, así que la web conecta. La app suma un servicio en segundo plano que mantiene viva la conexión Bluetooth con el muro cuando se apaga la pantalla o dejas la app de fondo, así las presas siguen encendidas durante tus pegadas sin que tengas que estar pendiente de una pestaña.
+SIEMPRE CONECTADO
+Boardsesh mantiene viva la conexión con tu muro en segundo plano, así las presas siguen encendidas durante tus pegadas aunque se apague la pantalla o cambies de app. No tienes que reconectar entre vía y vía.
 
 ESCALA CON TU PEÑA
 Abre una sesión y todos los que estén dentro pueden mandar la siguiente vía al muro. Nadie tiene que ir pasando el móvil ni esperar su turno. La enciende quien esté conectado por Bluetooth.

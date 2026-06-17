@@ -1,12 +1,12 @@
 Cherche une voie et regarde ton mur allumer les prises en Bluetooth. Tu tapes un bloc, les prises s'allument, tu pars dessus. Tu passes ta séance à grimper, pas à lire des chiffres sur un écran.
 
-L'appli native garde un lien plus stable avec ta board qu'un onglet de navigateur. Choisis ta board une fois et grimpe.
+Choisis ta board une fois et grimpe.
 
 ALLUME LES PRISES
 Cherche n'importe quelle voie et Boardsesh l'envoie au mur en Bluetooth, en allumant les prises sur Kilter, Tension, MoonBoard, Decoy, Touchstone, Grasshopper et So iLL. Contrôle complet des LED sur les sept, pas seulement la consultation.
 
-POURQUOI L'APPLI
-Chrome sur Android peut atteindre le Bluetooth, donc le site web se connecte. L'appli garde une connexion plus stable qui survit à l'écran qui s'éteint, pour que les prises restent allumées pendant tes essais sans avoir à surveiller un onglet de navigateur.
+TOUJOURS CONNECTÉ
+Boardsesh garde le lien avec ta board en arrière-plan, pour que les prises restent allumées pendant tes essais même quand l'écran s'éteint ou que tu changes d'appli. Pas besoin de te reconnecter entre les voies.
 
 GRIMPE AVEC TA CREW
 Lance une séance et tout le monde dedans peut envoyer la prochaine voie au mur. Pas de pilote à qui passer le téléphone, pas de tour à attendre. Celui qui est connecté en Bluetooth l'allume.
