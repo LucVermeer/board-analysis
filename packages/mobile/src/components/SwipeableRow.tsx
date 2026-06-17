@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, type ReactNode } from 'react';
-import { Pressable, View, StyleSheet } from 'react-native';
+import { Pressable, View, StyleSheet, type AccessibilityActionEvent } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import {
   Gesture,
@@ -30,6 +30,12 @@ type SwipeableRowProps = {
   pressAccessibilityLabel?: string;
   /** When false, the swipe is disabled and any open swipe snaps shut. */
   enabled?: boolean;
+  /**
+   * Identity of the row's current data. FlashList recycles this component onto a
+   * new item; when `resetKey` changes the swipe snaps shut so an open swipe can't
+   * leak onto the recycled row.
+   */
+  resetKey?: string | number;
 };
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
@@ -53,6 +59,7 @@ function SwipeableRowComponent({
   onPress,
   pressAccessibilityLabel,
   enabled = true,
+  resetKey,
 }: SwipeableRowProps) {
   const translateX = useSharedValue(0);
   const isSwipeOpen = useSharedValue(false);
@@ -71,6 +78,13 @@ function SwipeableRowComponent({
       isSwipeOpen.value = false;
     }
   }, [enabled, translateX, isSwipeOpen]);
+
+  // Instant reset when this cell is recycled onto a different row (FlashList
+  // reuses the instance), so an open swipe doesn't carry over to the new data.
+  useEffect(() => {
+    translateX.value = 0;
+    isSwipeOpen.value = false;
+  }, [resetKey, translateX, isSwipeOpen]);
 
   const panGesture = useMemo(
     () =>
@@ -123,11 +137,20 @@ function SwipeableRowComponent({
     onActionRef.current?.();
   }, [translateX, isSwipeOpen]);
 
+  // The pan gesture is unreachable for VoiceOver/TalkBack, so expose the action
+  // as an accessibility action on the row (the only way AT users can delete /
+  // unfollow). Gated on `enabled` so it isn't offered mid-mutation.
+  const handleAccessibilityAction = useCallback((event: AccessibilityActionEvent) => {
+    if (event.nativeEvent.actionName === 'rowAction') onActionRef.current?.();
+  }, []);
+
   const rowContent = (
     <AnimatedPressable
       onPress={handlePress}
       accessibilityRole={onPress ? 'button' : undefined}
       accessibilityLabel={pressAccessibilityLabel}
+      accessibilityActions={enabled ? [{ name: 'rowAction', label: actionLabel }] : undefined}
+      onAccessibilityAction={enabled ? handleAccessibilityAction : undefined}
       style={[styles.row, rowAnimatedStyle]}
     >
       {children}

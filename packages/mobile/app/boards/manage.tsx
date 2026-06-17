@@ -16,14 +16,11 @@ import { Icon } from '../../src/components/Icon';
 import { Button } from '../../src/components/Button';
 import { ActivityIndicator } from '../../src/components/ActivityIndicator';
 import { BoardManageRow } from '../../src/components/board-discovery/BoardManageRow';
+import { buildManageItems, type ManageItem } from '../../src/components/board-discovery/manage-items';
 import { iosSystemColors } from '../../src/theme/ios-colors';
 import { spacing } from '../../src/theme/tokens';
 
 const EMPTY_BOARDS: UserBoard[] = [];
-
-type ManageItem =
-  | { type: 'header'; key: string; title: string }
-  | { type: 'board'; key: string; board: UserBoard; isOwned: boolean; isActive: boolean };
 
 const keyExtractor = (item: ManageItem) => item.key;
 const getItemType = (item: ManageItem) => item.type;
@@ -38,7 +35,12 @@ export default function ManageBoards() {
   const bottomChrome = useBottomChromeMetrics();
   const paddingBottom = bottomChrome.scrollBottomPadding + spacing[4];
 
-  const { data: profile, isLoading: isProfileLoading } = useProfile({ enabled: isAuthenticated });
+  const {
+    data: profile,
+    isLoading: isProfileLoading,
+    isError: isProfileError,
+    refetch: refetchProfile,
+  } = useProfile({ enabled: isAuthenticated });
   const currentUserId = profile?.id;
   const { data: activeBoard } = useActiveBoard();
   const activeUuid = activeBoard?.uuid;
@@ -62,27 +64,16 @@ export default function ManageBoards() {
     if (isError) void refreshAuthState();
   }, [isError, refreshAuthState]);
 
-  // myBoards returns owned-first; split into the two managed groups. Each board
-  // carries everything the row needs (no per-row lookups), and `isActive` is
-  // precomputed so a row never scans for the active board.
-  const items = useMemo<ManageItem[]>(() => {
-    const result: ManageItem[] = [];
-    const owned = myBoards.filter((board) => board.ownerId === currentUserId);
-    const followed = myBoards.filter((board) => board.ownerId !== currentUserId);
-    if (owned.length > 0) {
-      result.push({ type: 'header', key: 'header:owned', title: t('mobile.manage.ownedHeader') });
-      for (const board of owned) {
-        result.push({ type: 'board', key: board.uuid, board, isOwned: true, isActive: board.uuid === activeUuid });
-      }
-    }
-    if (followed.length > 0) {
-      result.push({ type: 'header', key: 'header:following', title: t('mobile.manage.followingHeader') });
-      for (const board of followed) {
-        result.push({ type: 'board', key: board.uuid, board, isOwned: false, isActive: board.uuid === activeUuid });
-      }
-    }
-    return result;
-  }, [myBoards, currentUserId, activeUuid, t]);
+  // Split into owned + followed groups (pure helper, unit-tested). Each board
+  // carries precomputed isOwned/isActive so a row never scans for them.
+  const items = useMemo(
+    () =>
+      buildManageItems(myBoards, currentUserId, activeUuid, {
+        ownedHeader: t('mobile.manage.ownedHeader'),
+        followingHeader: t('mobile.manage.followingHeader'),
+      }),
+    [myBoards, currentUserId, activeUuid, t],
+  );
 
   const onCreate = useCallback(() => {
     router.push('/boards/create');
@@ -180,9 +171,9 @@ export default function ManageBoards() {
   }
 
   // Wait for the profile too: owned-vs-followed is keyed on currentUserId, so
-  // rendering before it resolves would briefly file the user's own boards under
+  // rendering before it resolves would file the user's own boards under
   // "Following" (myBoards can win the race on a cold open / deep link).
-  if ((isLoading && myBoards.length === 0) || (!isError && isProfileLoading && !currentUserId)) {
+  if ((isLoading && myBoards.length === 0) || (isProfileLoading && !currentUserId)) {
     return (
       <View style={[styles.centered, { backgroundColor: systemColors.background }]}>
         <ActivityIndicator size="large" />
@@ -190,7 +181,10 @@ export default function ManageBoards() {
     );
   }
 
-  if (isError && myBoards.length === 0) {
+  // Boards failed with nothing cached, OR the profile settled without an id —
+  // without currentUserId we can't classify owned vs followed, so never render
+  // the list; offer a retry that refetches both.
+  if ((isError && myBoards.length === 0) || !currentUserId) {
     return (
       <View style={[styles.centered, { backgroundColor: systemColors.background }]}>
         <Icon name="error" size={40} color={iosSystemColors.systemRed} />
@@ -201,7 +195,10 @@ export default function ManageBoards() {
           title={t('mobile.errorRetry')}
           variant="outlined"
           loading={isRefetching}
-          onPress={() => void refetch()}
+          onPress={() => {
+            void refetch();
+            if (isProfileError || !currentUserId) void refetchProfile();
+          }}
           style={styles.stateButton}
         />
       </View>

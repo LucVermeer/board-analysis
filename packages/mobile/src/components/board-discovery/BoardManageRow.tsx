@@ -5,6 +5,7 @@ import type { UserBoard } from '@boardsesh/shared-schema';
 import { toBoardName } from '@boardsesh/board-config';
 import { SwipeableRow } from '../SwipeableRow';
 import { BoardImageNative } from '../BoardImageNative';
+import { boardTypeLabel } from './board-builder-labels';
 import { getBoardRenderData } from '../../lib/board-details';
 import { Text } from '../Text';
 import { Icon } from '../Icon';
@@ -54,10 +55,22 @@ function BoardManageRowComponent({
     return getBoardRenderData({ boardName, layoutId: board.layoutId, sizeId: board.sizeId, setIds: setIdValues });
   }, [boardName, board.layoutId, board.sizeId, board.setIds]);
 
+  // Board art isn't square; fit it inside the square thumb at its native aspect
+  // (passing height:'100%' would override BoardImageNative's aspectRatio and stretch it).
+  const thumbFit = useMemo(() => {
+    if (!renderData) return null;
+    const aspect = renderData.boardWidth / renderData.boardHeight;
+    return aspect >= 1
+      ? { width: THUMB_SIZE, height: THUMB_SIZE / aspect }
+      : { width: THUMB_SIZE * aspect, height: THUMB_SIZE };
+  }, [renderData]);
+
+  // Proper-cased board name for trademark correctness when used as a fallback.
+  const boardTypeText = boardName ? boardTypeLabel(boardName) : board.boardType;
   // Owned: size / location tells one of your walls apart. Followed: whose board it is.
   const subtitle = isOwned
-    ? (board.sizeName ?? board.locationName ?? board.boardType)
-    : (board.ownerDisplayName ?? board.boardType);
+    ? (board.sizeName ?? board.locationName ?? boardTypeText)
+    : (board.ownerDisplayName ?? boardTypeText);
 
   const content = (
     <View style={[styles.row, { backgroundColor: systemColors.background, borderBottomColor: systemColors.separator }]}>
@@ -71,7 +84,7 @@ function BoardManageRowComponent({
           },
         ]}
       >
-        {renderData && boardName ? (
+        {renderData && boardName && thumbFit ? (
           // 400px source matches the discovery cards / climb thumbnails so the
           // board-art cache entry is shared across surfaces.
           <BoardImageNative
@@ -83,7 +96,7 @@ function BoardManageRowComponent({
             boardWidth={renderData.boardWidth}
             boardHeight={renderData.boardHeight}
             renderWidth={400}
-            style={styles.thumbImage}
+            style={thumbFit}
           />
         ) : (
           <Icon name="boards" size={26} color={systemColors.tertiaryLabel} />
@@ -129,6 +142,7 @@ function BoardManageRowComponent({
       actionIcon={isOwned ? 'delete' : 'minus.circle'}
       actionColor={isOwned ? iosSystemColors.systemRed : iosSystemColors.systemOrange}
       enabled={!isMutating}
+      resetKey={board.uuid}
     >
       {content}
     </SwipeableRow>
@@ -153,10 +167,6 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  thumbImage: {
-    width: '100%',
-    height: '100%',
   },
   textCol: {
     flex: 1,
