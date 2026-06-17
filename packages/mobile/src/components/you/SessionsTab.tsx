@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, RefreshControl, StyleSheet } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -23,6 +23,7 @@ import { useBottomChromeMetrics } from '../../hooks/use-bottom-chrome-metrics';
 import { useDrawerHost } from '../../providers/drawer-host-provider';
 import { spacing, borderRadius } from '../../theme/tokens';
 import { useTheme } from '../../providers/theme-provider';
+import { SCREENSHOT_MODE } from '../../lib/screenshot-mode';
 
 type FeedRow = { type: 'header'; bucket: FeedRecencyBucket } | { type: 'session'; item: SessionFeedItem };
 type CommentTarget = { entityId: string; entityType: SocialEntityType };
@@ -168,6 +169,19 @@ export function SessionsTab({ userId, topInset = 0 }: SessionsTabProps) {
     },
     [router],
   );
+
+  // Screenshot mode: open the most recent session's detail once the feed lands,
+  // so the session-detail shot is deterministic (Maestro can't tap a session card
+  // on this iOS build). This tab only mounts via the `screenshotTab=sessions`
+  // deep-link param, so it never disturbs the default profile shot. Fires once.
+  const screenshotSessionOpenedRef = useRef(false);
+  useEffect(() => {
+    if (!SCREENSHOT_MODE || screenshotSessionOpenedRef.current) return;
+    const firstSession = sessions[0];
+    if (!firstSession) return;
+    screenshotSessionOpenedRef.current = true;
+    handleOpenSession(firstSession);
+  }, [sessions, handleOpenSession]);
 
   const handleEndReached = useCallback(() => {
     if (feed.hasNextPage && !feed.isFetchingNextPage) void feed.fetchNextPage();

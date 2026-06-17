@@ -68,6 +68,7 @@ vi.mock('react-native-safe-area-context', () => ({
 vi.mock('expo-router', () => ({
   Stack: { Screen: () => null },
   useRouter: () => ({ push: vi.fn() }),
+  useLocalSearchParams: () => ({}),
 }));
 
 vi.mock('expo-crypto', () => ({ randomUUID: () => 'queue-item-1' }));

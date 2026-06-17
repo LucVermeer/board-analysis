@@ -77,15 +77,18 @@ Requires Bluetooth Low Energy (BLE) for board connection. Works without a board 
 - JPEG or PNG, 16:9 or 9:16 aspect ratio
 - Minimum 320px, maximum 3840px per side
 
-**Screens to capture:**
+**Screens to capture** (8 = the Play Store phone max; captured + uploaded by `vp run mobile:screenshots --platform android`, in store display order):
 
-1. Board selection screen (Kilter, Tension, MoonBoard options)
-2. Climb list with filters (grade range, rating, hold count)
-3. Climb detail view with holds lit up on the board image
-4. Queue panel with multiple climbs lined up
-5. Bluetooth scanning / device connection screen
-6. Party Mode session with shared queue and participants
-7. Logbook / profile with send history and grade progression
+1. `00-home` — activity feed, your crew's sessions
+2. `01-climbs` — browse the board's climbs
+3. `02-board-view` — a climb with the holds lit (the signature view)
+4. `03-discover` — the playlist library
+5. `04-workout-generator` — the Record tab's workout generator
+6. `05-profile` — your stats and progression
+7. `06-board-sheet` — the board switcher
+8. `07-session-detail` — a session recap: stats, leaderboard, sends
+
+(Party Mode, playlist detail, and the logbook are on the iOS 10-shot set but don't fit Android's 8-shot cap.)
 
 ## What's New (Version 1.0)
 

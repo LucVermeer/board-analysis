@@ -3,7 +3,7 @@ import { View, StyleSheet, RefreshControl, Keyboard } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Stack, useRouter } from 'expo-router';
+import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import type { Climb, BoardName } from '@boardsesh/shared-schema';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
@@ -58,6 +58,7 @@ import { getFilterSummary, buildClimbFilterSummary } from '../../../src/lib/filt
 import { getActiveFilterTokens } from '../../../src/lib/filter-tokens';
 import { normalizeSearchName, visibleSearchTextNeedsSync } from '../../../src/lib/search-name';
 import { track } from '../../../src/lib/analytics';
+import { SCREENSHOT_MODE } from '../../../src/lib/screenshot-mode';
 import { iosSystemColors } from '../../../src/theme/ios-colors';
 import { spacing } from '../../../src/theme/tokens';
 import { glassSize } from '../../../src/theme/layout';
@@ -122,6 +123,9 @@ const ActiveAwareClimbListRow = memo(function ActiveAwareClimbListRow(
 
 function ClimbListInner() {
   const router = useRouter();
+  // Screenshot mode opens the first climb's board view via this deep-link param
+  // (see the auto-open effect below). Absent on the plain `/climbs` list shot.
+  const { screenshotOpenFirst } = useLocalSearchParams<{ screenshotOpenFirst?: string }>();
   const { t } = useTranslation('climbs');
   const { openClimbActions, openAddToPlaylist, openBoardSheet } = useDrawerHost();
   // The board capsule opens the wall's "now on the wall" sheet (the board
@@ -542,6 +546,21 @@ function ClimbListInner() {
     },
     [activateClimbListClimb, blurSearchInputs],
   );
+
+  // Screenshot mode: deterministically open the first climb's play drawer (the
+  // board-view shot) instead of a Maestro coordinate tap, which can't match RN
+  // rows on this iOS build and was capturing the climb list twice. Gated on the
+  // deep-link param so the plain `/climbs` list shot is untouched; fires once the
+  // board's results land, and at most once. Dead-strips in normal builds.
+  const screenshotBoardViewOpenedRef = useRef(false);
+  useEffect(() => {
+    if (!SCREENSHOT_MODE || !screenshotOpenFirst) return;
+    if (screenshotBoardViewOpenedRef.current) return;
+    const firstClimb = visibleClimbs[0];
+    if (!searchReady || !firstClimb) return;
+    screenshotBoardViewOpenedRef.current = true;
+    handleClimbPress(firstClimb);
+  }, [screenshotOpenFirst, searchReady, visibleClimbs, handleClimbPress]);
 
   const handleAddToQueue = useCallback(
     (climb: Climb) => {

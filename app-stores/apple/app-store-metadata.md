@@ -62,6 +62,23 @@ Requires Bluetooth Low Energy (BLE) for board connection. Works without a board 
 
 First release. Connect to your Kilter, Tension, or MoonBoard over Bluetooth. Browse and search climbs, build queues, track sends, and run shared sessions with Party Mode.
 
+## Screenshots
+
+iPhone 6.9" (1320×2868), captured + uploaded by `vp run mobile:screenshots` (Maestro → fastlane; see `packages/mobile/.maestro/README.md`). Ten slots, in store display order (the filename prefix sets the order):
+
+1. `00-home` — activity feed, your crew's sessions
+2. `01-climbs` — browse the board's climbs
+3. `02-board-view` — a climb with the holds lit (the signature view)
+4. `03-party` — a live, shared Party Mode session (filled by the party flow)
+5. `04-session-detail` — a session recap: stats, leaderboard, sends
+6. `05-workout-generator` — the Record tab's workout generator
+7. `06-discover` — the playlist library
+8. `07-playlist-detail` — a smart playlist (crowd favourites)
+9. `08-logbook` — your logged sends and progression
+10. `09-profile` — your stats and progression
+
+Apple allows up to 10 and this set fills all 10; the board-switcher sheet shot was retired to make room. Google Play caps phones at 8, so its set drops party, playlist detail, and logbook (see the Play metadata).
+
 ## Review Notes
 
 **Demo Account**

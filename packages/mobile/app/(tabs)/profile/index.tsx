@@ -1,6 +1,7 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useLocalSearchParams } from 'expo-router';
 import type BottomSheet from '@gorhom/bottom-sheet';
 import { useProfile, useYouProfileData } from '../../../src/lib/graphql/hooks';
 import { useTheme } from '../../../src/providers/theme-provider';
@@ -10,6 +11,13 @@ import { ProgressTab } from '../../../src/components/you/ProgressTab';
 import { SessionsTab } from '../../../src/components/you/SessionsTab';
 import { LogbookTab } from '../../../src/components/you/LogbookTab';
 import { SocialTab } from '../../../src/components/you/SocialTab';
+import { SCREENSHOT_MODE } from '../../../src/lib/screenshot-mode';
+
+// Screenshot mode selects the visible sub-tab via a `screenshotTab` deep-link
+// param so the logbook/sessions shots are deterministic.
+function isProfileTabKey(value: string | string[] | undefined): value is ProfileTabKey {
+  return value === 'progress' || value === 'sessions' || value === 'logbook' || value === 'social';
+}
 
 export default function YouScreen() {
   const { systemColors } = useTheme();
@@ -20,7 +28,17 @@ export default function YouScreen() {
   const youData = useYouProfileData(userId);
 
   const filterSheetRef = useRef<BottomSheet | null>(null);
-  const [activeTab, setActiveTab] = useState<ProfileTabKey>('progress');
+  const { screenshotTab } = useLocalSearchParams<{ screenshotTab?: string }>();
+  const [activeTab, setActiveTab] = useState<ProfileTabKey>(() =>
+    SCREENSHOT_MODE && isProfileTabKey(screenshotTab) ? screenshotTab : 'progress',
+  );
+  // The profile tab stays mounted across screenshot shots, so re-sync the visible
+  // sub-tab whenever the deep-link param changes (initial mount is covered by the
+  // useState initialiser). Inert in normal builds — manual tab taps own the state.
+  useEffect(() => {
+    if (!SCREENSHOT_MODE) return;
+    setActiveTab(isProfileTabKey(screenshotTab) ? screenshotTab : 'progress');
+  }, [screenshotTab]);
 
   // The measured chrome height insets each sub-tab's scroll content; seed it to
   // the safe-area top plus the islands row + segmented control so the first paint
