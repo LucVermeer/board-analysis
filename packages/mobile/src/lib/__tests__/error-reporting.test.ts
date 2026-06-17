@@ -35,6 +35,20 @@ describe('reportHandledError', () => {
     expect(mockedCaptureError).not.toHaveBeenCalled();
   });
 
+  it('drops the auth error before the network check, even when it looks transport-shaped', () => {
+    // A ClientError whose response carries no numeric status is otherwise treated
+    // as a transport/network failure and downgraded to a warning. The auth check
+    // runs first, so this is dropped entirely — locks in that ordering so a future
+    // reorder can't start leaking auth errors as network warnings.
+    const authError = Object.assign(new Error('Authentication required to perform this operation'), {
+      response: {
+        errors: [{ message: 'Authentication required to perform this operation', path: ['myBoards'] }],
+      },
+    });
+    reportHandledError(authError, { tags: { source: 'react-query' } });
+    expect(mockedCaptureError).not.toHaveBeenCalled();
+  });
+
   it('downgrades offline fetch failures to a warning and tags them network', () => {
     const offline = new TypeError('Network request failed');
     reportHandledError(offline, { tags: { source: 'react-query' } });

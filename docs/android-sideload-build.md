@@ -207,8 +207,8 @@ signing key, not a code regression — it can't be fixed in-repo. Work the table
 below: enumerate every key currently shipping `com.boardsesh.app`, confirm each
 SHA-1 has an Android OAuth client in project **401523882502**, and add any that's
 missing. (Because handled exceptions without a JS stack group together, that same
-PostHog issue also absorbs unrelated messages like "Bluetooth connection timed
-out" — don't read the whole bucket as Google Sign-In.)
+PostHog issue can also absorb unrelated handled errors — filter to
+`source = native-auth` rather than reading the whole bucket as Google Sign-In.)
 
 `com.boardsesh.app` is signed by up to three different keys, each needing its own
 Android OAuth client (same package, different SHA-1 — they coexist):
