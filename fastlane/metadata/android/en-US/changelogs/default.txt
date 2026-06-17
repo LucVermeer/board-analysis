@@ -1,0 +1,10 @@
+Boardsesh 2.0 is a full native rewrite. The old app wrapped the website; this one is native, so it connects faster, holds the Bluetooth link steadier, and keeps holds lit while you climb.
+
+New in 2.0:
+- Quicker, steadier board connection
+- Native feel: smoother lists, faster search, background support
+- Search, filter, and queue climbs, cycle with one tap
+- Party Mode for your crew
+- Logbook synced to Aurora Climbing for Kilter and Tension
+
+Open source. No ads, no subscriptions.

@@ -1,5 +1,14 @@
 # Google Play Store Metadata - Boardsesh
 
+> **Listing text is source-controlled in `fastlane/metadata/android/en-US/`** and
+> pushed to Google Play by the `android metadata` lane (see `fastlane/Fastfile`
+> and the `Mobile Store Metadata` workflow). Edit the `.txt` files there, not the
+> prose below — the App Name, Short Description, Full Description, and What's New
+> copy live in `title.txt`, `short_description.txt`, `full_description.txt`, and
+> `changelogs/default.txt` respectively. This doc keeps the operational material
+> that `supply` can't upload: the feature-graphic brief, testing instructions,
+> data-safety form, and the screenshot map.
+
 ## Basic Info
 
 | Field              | Value                            |
@@ -18,56 +27,26 @@
 
 ## Short Description
 
-```
-Connect to your Kilter, Tension, or MoonBoard and light up holds via Bluetooth.
-```
-
-(79 characters)
+Canonical: [`fastlane/metadata/android/en-US/short_description.txt`](../../fastlane/metadata/android/en-US/short_description.txt) (Play limit: 80 characters). App Name lives in [`title.txt`](../../fastlane/metadata/android/en-US/title.txt) (Play limit: 30 characters).
 
 ## Full Description
 
-```
-Boardsesh connects your phone to your Kilter Board, Tension Board, or MoonBoard over Bluetooth and lights up the holds on your wall. Search tens of thousands of community-set climbs, filter by grade and quality, build a queue, and start climbing.
+Canonical: [`fastlane/metadata/android/en-US/full_description.txt`](../../fastlane/metadata/android/en-US/full_description.txt) (Play limit: 4000 characters).
 
-ONE APP FOR EVERY BOARD
+## Listing images
 
-Pick your board, pick your angle, and browse. Boardsesh pulls from the same climb databases you already know (Aurora Climbing for Kilter and Tension, MoonBoard for Moon). Filter by grade range, rating, hold count, and more. When you find something worth trying, tap to light it up on the wall.
+Source-controlled under `fastlane/metadata/android/en-US/images/` and pushed by
+the `android images` lane (see `fastlane/Fastfile` and the `Mobile Store Metadata`
+workflow), so the Play store listing icon is updated from code, not the Play
+Console UI.
 
-BUILD A QUEUE, SKIP THE PHONE FUMBLING
+- `icon.png` (512x512, 32-bit PNG, under 1MB): committed, resized from `packages/mobile/assets/icon.png`.
+- `featureGraphic.png` (1024x500, no transparency): committed, the app logo (`packages/mobile/assets/adaptive-icon.png`) centered on a #0A0A0A background. A clean stopgap; swap in a designed banner (brief below) when one is ready.
 
-Line up your climbs before you get to the gym or between burns. Reorder your list, swipe to remove, and cycle through with one tap. No more unlocking your phone mid-session to find the next problem.
+The lane only uploads images that exist locally and never deletes a remote one,
+so swapping either file and re-running is all it takes to update the listing.
 
-CLIMB WITH YOUR CREW
-
-Party Mode lets you run a shared session over the internet. Everyone in the session sees the same queue and can add climbs, reorder, and vote. One person's phone controls the board. Works across the gym or across the country.
-
-TRACK YOUR SENDS
-
-Log every attempt and send. See your progression over time, check your hardest grades, and look back at what you climbed last week or last year. Your logbook syncs with your Aurora Climbing account.
-
-WHY A NATIVE APP?
-
-While Web Bluetooth works in Chrome on Android, the native app provides better BLE reliability, persistent connections that survive screen-off, background support so your board stays lit while you climb, native deep linking into climbs and sessions, and a proper app experience with notifications and home screen presence. You get a more stable connection and fewer dropped signals mid-session.
-
-FREE AND OPEN SOURCE
-
-No ads, no subscriptions, no paywalls. Boardsesh is open source and built by climbers. The code is on GitHub if you want to contribute or just see how it works.
-
-Supported boards:
-- Kilter Board (all sizes and angles)
-- Tension Board (all sizes and angles)
-- MoonBoard (2016, 2017, 2019, 2024 setups)
-
-Requires Bluetooth Low Energy (BLE) for board connection. Works without a board for browsing, queuing, and logbook features.
-```
-
-(2139 characters)
-
-## Feature Graphic
-
-**Specs:** 1024x500 PNG or JPG, no transparency, no rounded corners applied by developer (Play Store rounds them).
-
-**Design brief:** The feature graphic should show the Boardsesh logo/wordmark centered on a dark background (#0A0A0A or similar). Optionally include a faded image of a climbing wall or lit-up board holds behind the logo. Keep text minimal: the app name and a short tagline at most (e.g. "Light up your board"). Avoid screenshots in the feature graphic. Use high contrast so the logo reads well at small sizes in the Play Store browse view.
+**Feature graphic design brief:** show the Boardsesh logo/wordmark centered on a dark background (#0A0A0A or similar). Optionally include a faded image of a climbing wall or lit-up board holds behind the logo. Keep text minimal: the app name and a short tagline at most (e.g. "Light up your board"). Avoid screenshots in the feature graphic. Use high contrast so the logo reads well at small sizes in the Play Store browse view.
 
 ## Screenshots
 
@@ -90,11 +69,9 @@ Requires Bluetooth Low Energy (BLE) for board connection. Works without a board 
 
 (Party Mode, playlist detail, and the logbook are on the iOS 10-shot set but don't fit Android's 8-shot cap.)
 
-## What's New (Version 1.0)
+## What's New
 
-```
-First release. Connect to your Kilter, Tension, or MoonBoard over Bluetooth. Browse and search climbs, build queues, track sends, and run shared sessions with Party Mode.
-```
+Canonical: [`fastlane/metadata/android/en-US/changelogs/default.txt`](../../fastlane/metadata/android/en-US/changelogs/default.txt). Ships with the AAB at release time — `android-apk-rn.yml` stages it as the release's `whatsNewDirectory` (Play limit: 500 characters). Update it on every release.
 
 ## Testing Instructions
 

@@ -1,11 +1,19 @@
 # App Store Metadata - Boardsesh
 
+> **Listing text is source-controlled in `fastlane/metadata/en-US/`** and pushed to
+> App Store Connect by the `ios metadata` lane (see `fastlane/Fastfile` and the
+> `Mobile Store Metadata` workflow). Edit the `.txt` files there, not the prose
+> below — the App Name, Subtitle, Description, Keywords, and What's New copy live
+> in `name.txt`, `subtitle.txt`, `description.txt`, `keywords.txt`, and
+> `release_notes.txt` respectively. This doc keeps the operational material that
+> `deliver` can't upload: review notes, privacy labels, and the screenshot map.
+
 ## Basic Info
 
 | Field              | Value                                          |
 | ------------------ | ---------------------------------------------- |
-| App Name           | Boardsesh                                      |
-| Subtitle           | Train on Kilter, Tension & more                |
+| App Name           | Boardsesh (name.txt)                           |
+| Subtitle           | see subtitle.txt                               |
 | Bundle ID          | com.boardsesh.app                              |
 | Category           | Health & Fitness (primary), Sports (secondary) |
 | Age Rating         | 4+                                             |
@@ -16,51 +24,15 @@
 
 ## Keywords
 
-```
-kilter board,tension board,moonboard,climbing,training,bluetooth,LED,bouldering,spray wall,queue
-```
-
-(97 characters)
+Canonical: [`fastlane/metadata/en-US/keywords.txt`](../../fastlane/metadata/en-US/keywords.txt) (App Store limit: 100 characters, comma-separated, no spaces after commas).
 
 ## Description
 
-Boardsesh connects your phone to your Kilter Board, Tension Board, or MoonBoard over Bluetooth and lights up the holds on your wall. Search tens of thousands of community-set climbs, filter by grade and quality, build a queue, and start climbing.
+Canonical: [`fastlane/metadata/en-US/description.txt`](../../fastlane/metadata/en-US/description.txt). App Name and Subtitle live in [`name.txt`](../../fastlane/metadata/en-US/name.txt) and [`subtitle.txt`](../../fastlane/metadata/en-US/subtitle.txt).
 
-**One app for every board**
+## What's New
 
-Pick your board, pick your angle, and browse. Boardsesh pulls from the same climb databases you already know (Aurora Climbing for Kilter and Tension, MoonBoard for Moon). Filter by grade range, rating, hold count, and more. When you find something worth trying, tap to light it up on the wall.
-
-**Build a queue, skip the phone fumbling**
-
-Line up your climbs before you get to the gym or between burns. Reorder your list, swipe to remove, and cycle through with one tap. No more unlocking your phone mid-session to find the next problem.
-
-**Climb with your crew**
-
-Party Mode lets you run a shared session over the internet. Everyone in the session sees the same queue and can add climbs, reorder, and vote. One person's phone controls the board. Works across the gym or across the country.
-
-**Track your sends**
-
-Log every attempt and send. See your progression over time, check your hardest grades, and look back at what you climbed last week or last year. Your logbook syncs with your Aurora Climbing account.
-
-**Why a native app?**
-
-iOS Safari does not support Web Bluetooth, which means a website cannot talk to your board's LED controller on iPhone. Boardsesh exists as a native app specifically so you can connect to your board from your phone. On Android and desktop, you can also use boardsesh.com directly in the browser.
-
-**Free and open source**
-
-No ads, no subscriptions, no paywalls. Boardsesh is open source and built by climbers. The code is on GitHub if you want to contribute or just see how it works.
-
-Supported boards:
-
-- Kilter Board (all sizes and angles)
-- Tension Board (all sizes and angles)
-- MoonBoard (2016, 2017, 2019, 2024 setups)
-
-Requires Bluetooth Low Energy (BLE) for board connection. Works without a board for browsing, queuing, and logbook features.
-
-## What's New (Version 1.0)
-
-First release. Connect to your Kilter, Tension, or MoonBoard over Bluetooth. Browse and search climbs, build queues, track sends, and run shared sessions with Party Mode.
+Canonical: [`fastlane/metadata/en-US/release_notes.txt`](../../fastlane/metadata/en-US/release_notes.txt) — the "What's New in This Version" text. Update it on every release before running the `ios metadata` lane.
 
 ## Screenshots
 
