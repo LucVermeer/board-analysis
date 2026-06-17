@@ -218,6 +218,12 @@ enum SharedQueueState {
             URLQueryItem(name: "set_ids", value: setIds),
             URLQueryItem(name: "frames", value: item.frames),
             URLQueryItem(name: "thumbnail", value: "1"),
+            // 2.0: let the server composite the board photo behind the holds
+            // overlay (matches the legacy Capacitor app, which renders correctly).
+            // On-device bundled-board-art compositing is deferred — see the
+            // "offline board art" revisit issue. The widget then just displays the
+            // finished image; no local webp decode/composite needed.
+            URLQueryItem(name: "include_background", value: "1"),
         ]
 
         return components?.url

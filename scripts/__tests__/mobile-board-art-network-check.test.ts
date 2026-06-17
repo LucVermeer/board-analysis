@@ -29,10 +29,12 @@ describe('mobile board-art network check', () => {
     );
   });
 
-  it('flags server-rendered background compositing from mobile/native code', () => {
-    expect(check('URLQueryItem(name: "include_background", value: "1")')).toContainEqual(
-      expect.stringContaining('server-rendered-background'),
-    );
+  // 2.0: the Live Activity thumbnail fetches the server-composited board image
+  // (include_background=1), matching the legacy Capacitor app. The
+  // `server-rendered-background` rule was removed; re-adding offline board art is
+  // tracked in the revisit issue.
+  it('allows server-rendered background compositing (include_background)', () => {
+    expect(check('URLQueryItem(name: "include_background", value: "1")')).toEqual([]);
   });
 
   it('allows intended remote user media image sources', () => {

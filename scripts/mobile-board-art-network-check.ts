@@ -73,11 +73,11 @@ const RULES: readonly Rule[] = [
     message: 'Do not render board backgrounds through react-native-svg Image href; use bundled file paths.',
     test: (lineText) => /\bSvgImage\b/.test(lineText),
   },
-  {
-    name: 'server-rendered-background',
-    message: 'Mobile/native board-render requests must not ask the server to composite background board art.',
-    test: (lineText) => lineText.includes('include_background') && /["']1["']/.test(lineText),
-  },
+  // NOTE: the `server-rendered-background` rule (forbidding include_background=1)
+  // was removed for the 2.0 release. The Live Activity thumbnail now fetches the
+  // server-composited board image, matching the legacy Capacitor app, because the
+  // on-device bundled-art compositing never rendered correctly in production.
+  // Re-adding offline board art (and this guard) is tracked in issue #2982.
 ] as const;
 
 function shouldScanPath(filePath: string): boolean {

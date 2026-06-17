@@ -147,6 +147,8 @@ final class LiveActivityWidgetTests: XCTestCase {
         XCTAssertTrue(url?.absoluteString.contains("board_name=kilter") ?? false)
         XCTAssertTrue(url?.absoluteString.contains("frames=p1r12p2r13") ?? false)
         XCTAssertTrue(url?.absoluteString.contains("thumbnail=1") ?? false)
-        XCTAssertFalse(url?.absoluteString.contains("include_background=1") ?? true)
+        // 2.0: the thumbnail is composited server-side (matches the Capacitor app);
+        // the on-device bundled-art compositing is deferred to the revisit issue.
+        XCTAssertTrue(url?.absoluteString.contains("include_background=1") ?? false)
     }
 }

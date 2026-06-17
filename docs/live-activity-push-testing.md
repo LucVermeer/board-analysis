@@ -414,17 +414,26 @@ If you see `0 sent, N failed`, check the [Common Issues](#common-issues) section
 
 ### Board-photo thumbnail compositing
 
-The thumbnail in the Live Activity is built in two layers, never as a single network fetch (the no-network-board-art rule — see `scripts/mobile-board-art-network-check.ts`):
+For the 2.0 release the thumbnail is the **server-composited** board image, matching the
+legacy Capacitor app (which renders correctly). `ThumbnailFetcher` fetches
+`/api/internal/board-render?...&thumbnail=1&include_background=1` — the server (`sharp`)
+draws the board photo behind this climb's holds overlay and returns a finished image,
+which `ThumbnailFetcher` writes straight to the App Group `thumbnails/` dir for the widget
+to display. No on-device webp decode or compositing.
 
-1. The **climb's holds overlay** is fetched from `/api/internal/board-render?...&thumbnail=1` (no `include_background`) — a transparent PNG of just this climb's holds.
-2. The **board background** is the bundled board art (the per-set hold renders, mostly transparent webp shipped in the IPA). JS resolves these in `use-live-activity.ts` (`resolveBoardBackgroundPaths`) and stages their file paths into the App Group (`SharedConstants.boardBackgroundPathsKey`) at `startSession`.
+This deliberately reverses the earlier "no-network-board-art" rule. The on-device
+bundled-art path (`resolveBoardBackgroundPaths` staging + `compositeWithBoardBackground`)
+never rendered the board reliably in production, so it's deferred. Re-adding offline board
+art (and the `server-rendered-background` guard rule in `scripts/mobile-board-art-network-check.ts`)
+is tracked in issue #2982.
 
-`ThumbnailFetcher.compositeWithBoardBackground` (main-app process) draws the background layer(s) under the overlay, downscales to the widget display size, and writes a transparent PNG to the App Group `thumbnails/` dir — what the widget renders.
+If the Live Activity shows only the climb's holds and no board behind them, the server
+fetch failed or returned the overlay only. Check:
 
-If the Live Activity shows only the climb's holds and no board behind them, the background layers didn't resolve or stage. Check:
-
-- `[background-image-cache] No bundled asset for "…"` warnings (a board added to the schema but its art not bundled — re-run `scripts/sync-mobile-board-backgrounds.sh`).
-- That `boardBackgroundPaths` is non-empty in the `startSession` payload for the active board.
+- `include_background=1` is present in the `boardRenderUrl` request and the server returns a
+  composited image (not a 4xx).
+- The cached thumbnail isn't a stale pre-2.0 image — `cacheVersion` (`ThumbnailFetcher`)
+  bumps to purge old overlay-only caches on update.
 
 ## Debugging
 
