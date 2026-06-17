@@ -1,0 +1,38 @@
+Light up the holds for any climb on your wall. Boardsesh connects your phone to your Kilter, Tension, or MoonBoard over Bluetooth, so you search a climb and the wall shows you where to go. Browse tens of thousands of community-set climbs, filter by grade and quality, build a queue, and start sending.
+
+ONE APP FOR THE BOARDS YOU CLIMB ON
+
+Pick your board, pick your angle, and browse. Boardsesh works with the LED climbing walls you climb on. For Kilter and Tension it reads the Aurora Climbing database you already know, and for MoonBoard it uses Moon's setups. Filter by grade range, rating, hold count, and more. Find something worth trying and tap to light it up on the wall.
+
+BUILD A QUEUE, SKIP THE PHONE FUMBLING
+
+Line up your climbs before you get to the gym or between burns. Reorder your list, swipe to remove, and cycle through with one tap. No more unlocking your phone mid-session to find the next problem.
+
+CLIMB WITH YOUR CREW
+
+Party Mode lets you run a shared session over the internet. Everyone in the session sees the same queue and can add climbs, reorder, and vote. One person's phone controls the board. Works across the gym or across the country.
+
+TRACK YOUR SENDS
+
+Log every attempt and send. See your progression over time, check your hardest grades, and look back at what you climbed last week or last year. For Kilter and Tension your logbook syncs with your Aurora Climbing account.
+
+WHY A NATIVE APP?
+
+Web Bluetooth works in Chrome on Android, so you can also run Boardsesh at boardsesh.com in the browser. The native app holds a steadier connection. It stays linked to your board when the screen turns off, keeps the holds lit while you climb, and opens climbs and sessions straight from a link. Fewer dropped signals between burns.
+
+FREE AND OPEN SOURCE
+
+No ads, no subscriptions, no paywalls. Boardsesh is open source and built by climbers. The code is on GitHub if you want to contribute or just see how it works.
+
+SUPPORTED BOARDS
+
+Works with the LED climbing walls you climb on, including:
+- Kilter (all sizes and angles)
+- Tension (all sizes and angles)
+- MoonBoard (2016, 2017, 2019, 2024 setups)
+- So iLL
+- Touchstone
+- Decoy
+- Grasshopper
+
+Requires Bluetooth Low Energy (BLE) for board connection. Works without a board for browsing, queuing, and logbook features.

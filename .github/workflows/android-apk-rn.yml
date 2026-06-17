@@ -71,6 +71,13 @@ jobs:
       - name: Install Node.js dependencies (workspace root)
         run: bun install --frozen-lockfile
 
+      - name: Setup Ruby and fastlane
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.4'
+          bundler-cache: true
+          working-directory: fastlane
+
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
@@ -127,16 +134,31 @@ jobs:
           GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
         run: bunx expo prebuild --platform android --clean --no-install
 
-      - name: Set version code
-        # versionCode = offset + run_number. The offset keeps this line strictly
-        # above the Capacitor app's versionCode so an install upgrades in place.
-        # NOTE: github.run_number resets to 1 if this workflow file is renamed or
-        # recreated — if you ever do that, bump version_code_offset past the
-        # current production ceiling via the workflow_dispatch input, or new
-        # builds will be un-installable over existing ones.
+      # versionCode = max versionCode across Play tracks + 1, queried from Google
+      # Play via fastlane. Querying the live tracks keeps the result strictly
+      # above the Capacitor app's versionCode (an install upgrades in place).
+      # Falls back to offset + run_number (the previous deterministic scheme)
+      # when there's no Play service account yet or the query fails, so the build
+      # stays green before the Play bootstrap.
+      # NOTE: github.run_number resets to 1 if this workflow file is renamed or
+      # recreated — if you do that AND the fallback is in use, bump
+      # version_code_offset past the current production ceiling via the
+      # workflow_dispatch input, or new builds will be un-installable.
+      - name: Compute version code
+        id: version_code
+        working-directory: fastlane
+        env:
+          GOOGLE_PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
         run: |
+          set -euo pipefail
           offset=${{ github.event.inputs.version_code_offset || '2000000' }}
-          code=$(( offset + ${{ github.run_number }} ))
+          export VERSION_CODE_FALLBACK=$(( offset + ${{ github.run_number }} ))
+          bundle exec fastlane android next_version_code
+          echo "versionCode: $(grep '^value=' "$GITHUB_OUTPUT" | tail -1 | cut -d= -f2)"
+
+      - name: Set version code
+        run: |
+          code=${{ steps.version_code.outputs.value }}
           sed -Ei "s/^([[:space:]]*)versionCode .*/\\1versionCode ${code}/" packages/mobile/android/app/build.gradle
           echo "versionCode set to ${code} (versionName comes from app.config.ts)"
 
@@ -303,6 +325,15 @@ jobs:
             echo "::warning::GOOGLE_PLAY_SERVICE_ACCOUNT_JSON not set — skipping Play upload (first upload is manual; see docs/android-sideload-build.md)."
           fi
 
+      # Play "What's new" for this release, from the source-controlled changelog
+      # (fastlane/metadata/android/en-US/changelogs/default.txt). r0adkll expects
+      # <dir>/whatsnew-<locale>; Play caps the note at 500 characters.
+      - name: Stage Play release notes
+        if: github.ref == 'refs/heads/main' && env.PLAY_UPLOAD_ENABLED == 'true'
+        run: |
+          mkdir -p "${RUNNER_TEMP}/play-whatsnew"
+          cp fastlane/metadata/android/en-US/changelogs/default.txt "${RUNNER_TEMP}/play-whatsnew/whatsnew-en-US"
+
       - name: Upload AAB to Play internal track
         id: play_upload
         if: github.ref == 'refs/heads/main' && env.PLAY_UPLOAD_ENABLED == 'true'
@@ -314,6 +345,7 @@ jobs:
           releaseFiles: packages/mobile/android/app/build/outputs/bundle/release/*.aab
           tracks: internal
           status: completed
+          whatsNewDirectory: ${{ runner.temp }}/play-whatsnew
 
       - name: Warn when Play upload fails
         if: github.ref == 'refs/heads/main' && env.PLAY_UPLOAD_ENABLED == 'true' && steps.play_upload.outcome == 'failure'

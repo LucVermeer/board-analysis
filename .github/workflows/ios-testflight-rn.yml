@@ -100,13 +100,58 @@ jobs:
         working-directory: packages/mobile/ios
         run: pod install
 
+      - name: Setup Ruby and fastlane
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.4'
+          bundler-cache: true
+          working-directory: fastlane
+
+      - name: Setup App Store Connect API key
+        env:
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_API_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_API_KEY_BASE64 }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "$APP_STORE_CONNECT_API_KEY_ID" ]; then
+            echo "::error::Missing APP_STORE_CONNECT_API_KEY_ID."
+            exit 1
+          fi
+
+          if [ -z "$APP_STORE_CONNECT_API_KEY_BASE64" ]; then
+            echo "::error::Missing APP_STORE_CONNECT_API_KEY_BASE64."
+            exit 1
+          fi
+
+          mkdir -p ~/.private_keys
+          key_path="$HOME/.private_keys/AuthKey_${APP_STORE_CONNECT_API_KEY_ID}.p8"
+          printf '%s' "$APP_STORE_CONNECT_API_KEY_BASE64" | base64 --decode > "$key_path"
+
+          if ! grep -q 'BEGIN PRIVATE KEY' "$key_path"; then
+            echo "::error::APP_STORE_CONNECT_API_KEY_BASE64 did not decode to an App Store Connect private key."
+            exit 1
+          fi
+
+          # Used by the fastlane build-number lane and the archive export below.
+          echo "ASC_KEY_PATH=$key_path" >> "$GITHUB_ENV"
+
+      # Build number = latest TestFlight build for this marketing version + 1,
+      # queried from App Store Connect via fastlane. Falls back to
+      # offset + run_number (the previous deterministic scheme) if the query
+      # fails, so pulling the API key never breaks the build.
       - name: Compute build number
         id: build_number
+        working-directory: fastlane
+        env:
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
         run: |
+          set -euo pipefail
           offset=${{ github.event.inputs.build_number_offset || '100000' }}
-          bn=$(( offset + ${{ github.run_number }} ))
-          echo "value=$bn" >> "$GITHUB_OUTPUT"
-          echo "Build number: $bn"
+          export BUILD_NUMBER_FALLBACK=$(( offset + ${{ github.run_number }} ))
+          bundle exec fastlane ios next_build_number
+          echo "Build number: $(grep '^value=' "$GITHUB_OUTPUT" | tail -1 | cut -d= -f2)"
 
       - name: Resolve mobile app version
         run: |
@@ -280,32 +325,6 @@ jobs:
           </dict>
           </plist>
           PLIST
-
-      - name: Setup App Store Connect API key
-        env:
-          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
-          APP_STORE_CONNECT_API_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_API_KEY_BASE64 }}
-        run: |
-          set -euo pipefail
-
-          if [ -z "$APP_STORE_CONNECT_API_KEY_ID" ]; then
-            echo "::error::Missing APP_STORE_CONNECT_API_KEY_ID."
-            exit 1
-          fi
-
-          if [ -z "$APP_STORE_CONNECT_API_KEY_BASE64" ]; then
-            echo "::error::Missing APP_STORE_CONNECT_API_KEY_BASE64."
-            exit 1
-          fi
-
-          mkdir -p ~/.private_keys
-          key_path="$HOME/.private_keys/AuthKey_${APP_STORE_CONNECT_API_KEY_ID}.p8"
-          printf '%s' "$APP_STORE_CONNECT_API_KEY_BASE64" | base64 --decode > "$key_path"
-
-          if ! grep -q 'BEGIN PRIVATE KEY' "$key_path"; then
-            echo "::error::APP_STORE_CONNECT_API_KEY_BASE64 did not decode to an App Store Connect private key."
-            exit 1
-          fi
 
       # The @sentry/react-native build phases upload JS source maps + native
       # dSYMs during `xcodebuild archive`. Without a token the upload errors and

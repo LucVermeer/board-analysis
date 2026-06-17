@@ -1,0 +1,9 @@
+First release. Light up the holds for any climb on your Kilter, Tension, or MoonBoard over Bluetooth.
+
+In this build:
+- Search tens of thousands of community-set climbs and filter by grade, rating, and holds
+- Build a queue and cycle through it with one tap
+- Run a shared session with Party Mode so your crew climbs the same list
+- Log every attempt and send, synced to Aurora Climbing for Kilter and Tension
+
+Open source. No ads, no subscriptions.
