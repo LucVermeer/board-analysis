@@ -1,6 +1,8 @@
 import Foundation
 import UIKit
 import os.log
+import SDWebImage
+import SDWebImageWebPCoder
 
 // MARK: - ThumbnailFetcher
 
@@ -244,11 +246,27 @@ actor ThumbnailFetcher {
     }
 
     /// Decoded background layer for a path, memoized in `backgroundLayerCache`.
+    ///
+    /// The bundled board art is lossy VP8 webp, which Apple's ImageIO
+    /// (`UIImage(contentsOfFile:)`) does not reliably decode — it returns nil, so
+    /// the composite was silently dropping the board photo and caching the
+    /// holds-only overlay. Decode webp through libwebp (`SDImageWebPCoder`, the
+    /// same coder expo-image falls back to for these files) instead. Call the
+    /// coder directly rather than via `SDImageCodersManager.shared`: expo-image's
+    /// registered webp coder defaults to Apple's ImageIO codec, which would fail
+    /// the same way. Non-webp paths (defensive) fall back to `UIImage(data:)`.
     private func backgroundLayer(at path: String) -> UIImage? {
         if let cached = backgroundLayerCache[path] { return cached }
-        guard let image = UIImage(contentsOfFile: path) else { return nil }
-        backgroundLayerCache[path] = image
-        return image
+        guard let data = fileManager.contents(atPath: path) else { return nil }
+        let image: UIImage?
+        if SDImageWebPCoder.shared.canDecode(from: data) {
+            image = SDImageWebPCoder.shared.decodedImage(with: data, options: nil)
+        } else {
+            image = UIImage(data: data)
+        }
+        guard let decoded = image else { return nil }
+        backgroundLayerCache[path] = decoded
+        return decoded
     }
 
     /// Drops all cached background layers. Called on a board/session change so
@@ -280,10 +298,10 @@ actor ThumbnailFetcher {
     /// transparent pixels), not an opaque board photo, and the server overlay is
     /// likewise transparent. The composite must keep its alpha so the widget's
     /// dark `activityBackgroundTint` shows through; flattening to JPEG would turn
-    /// the transparent board into a solid black block. iOS ImageIO can't encode
-    /// the smaller webp (decode-only — no runtime encoder without libwebp), so
-    /// PNG + the downscale above is the alpha-preserving, dependency-free option;
-    /// the cache also stays bounded to `maxCachedThumbnails`.
+    /// the transparent board into a solid black block. PNG + the downscale above
+    /// is the simplest alpha-preserving output (we could now re-encode webp via the
+    /// linked `SDImageWebPCoder`, but the downscaled PNG is already tiny), and the
+    /// cache also stays bounded to `maxCachedThumbnails`.
     private func compositeWithBoardBackground(overlayData: Data) -> Data? {
         let paths = stagedBackgroundPaths()
         // Evict cached layers for boards we've navigated away from (and clear
@@ -304,7 +322,7 @@ actor ThumbnailFetcher {
 
         let backgroundLayers = paths.compactMap { backgroundLayer(at: $0) }
         guard !backgroundLayers.isEmpty else {
-            logger.error("composite skipped: \(paths.count, privacy: .public) staged path(s) but 0 decoded via UIImage(contentsOfFile:) — first: \(paths.first ?? "?", privacy: .public)")
+            logger.error("composite skipped: \(paths.count, privacy: .public) staged path(s) but 0 decoded via SDImageWebPCoder — first: \(paths.first ?? "?", privacy: .public)")
             return nil
         }
         logger.notice("composite: \(backgroundLayers.count, privacy: .public)/\(paths.count, privacy: .public) background layer(s) under overlay")
