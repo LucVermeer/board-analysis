@@ -10,21 +10,26 @@ type DrawerHeaderProps = {
   /** Centered column content (e.g. title + subtitle, or a name input + counts). */
   center: ReactNode;
   /** Left-aligned element on the same row as `center`/`trailing` (e.g. an on-wall
-   *  status). When provided it REPLACES the auto-width spacer, so `center` is no
-   *  longer mirror-centered against `trailing` — pass it only when an off-centre
-   *  name is acceptable. Omit it (the default) to keep `center` optically centered. */
+   *  status). When provided, BOTH flanks take the wider of the two natural widths
+   *  so `center` stays optically screen-centered (the leading element sits left,
+   *  the trailing element right, the centered name between them). Omit it (the
+   *  default) to keep the original behaviour: an auto-width spacer mirroring
+   *  `trailing`. */
   leading?: ReactNode;
   /** Right-aligned element (e.g. a grade, an angle, a validity check). Its width
-   *  is measured at runtime and mirrored into the leading spacer so `center`
+   *  is measured at runtime and mirrored into the leading slot so `center`
    *  stays centered regardless of the trailing element's width. */
   trailing?: ReactNode;
   trailingMinWidth?: number;
 };
 
 /**
- * Shared drawer header chassis: a centered column flanked by a measured-width
- * trailing slot and a matching leading spacer. Used by the Play Drawer (name +
- * stats + grade) and the Create Drawer (name input + start/finish + validity).
+ * Shared drawer header chassis: a centered column flanked by measured-width
+ * leading/trailing slots. With no `leading`, an auto-width spacer mirrors the
+ * trailing element (Create Drawer; ordinary Play Drawer headers). With a
+ * `leading` element, both flanks size to the wider of the two so the title stays
+ * centered. Used by the Play Drawer (name + stats + grade, plus an optional
+ * on-wall status on the left).
  */
 export const DrawerHeader = memo(function DrawerHeader({
   center,
@@ -33,24 +38,49 @@ export const DrawerHeader = memo(function DrawerHeader({
   trailingMinWidth = DEFAULT_TRAILING_MIN_WIDTH,
 }: DrawerHeaderProps) {
   const [trailingWidth, setTrailingWidth] = useState(trailingMinWidth);
+  const [leadingWidth, setLeadingWidth] = useState(0);
 
   const handleTrailingLayout = useCallback((event: LayoutChangeEvent) => {
     const measured = Math.ceil(event.nativeEvent.layout.width);
     setTrailingWidth((previous) => (previous === measured ? previous : measured));
   }, []);
 
+  const handleLeadingLayout = useCallback((event: LayoutChangeEvent) => {
+    const measured = Math.ceil(event.nativeEvent.layout.width);
+    setLeadingWidth((previous) => (previous === measured ? previous : measured));
+  }, []);
+
+  // With a leading element both flanks share the wider natural width, so the
+  // centered name stays screen-centered instead of drifting toward the narrower
+  // (grade) side. The inner measure views size to their content (flexShrink 0),
+  // so the onLayout widths are intrinsic — not the constrained slot width.
+  const hasLeading = leading != null;
+  const sideWidth = Math.max(leadingWidth, trailingWidth);
+
   return (
     <View style={styles.container}>
       <View style={styles.headerRow}>
-        {leading != null ? (
-          <View style={styles.leading}>{leading}</View>
+        {hasLeading ? (
+          <View style={[styles.side, { width: sideWidth }]}>
+            <View style={styles.sideMeasure} onLayout={handleLeadingLayout}>
+              {leading}
+            </View>
+          </View>
         ) : (
           <View style={[styles.leadingSpacer, { width: trailingWidth }]} />
         )}
         <View style={styles.centerColumn}>{center}</View>
-        <View style={[styles.trailing, { minWidth: trailingMinWidth }]} onLayout={handleTrailingLayout}>
-          {trailing}
-        </View>
+        {hasLeading ? (
+          <View style={[styles.side, styles.sideTrailing, { width: sideWidth }]}>
+            <View style={styles.sideMeasure} onLayout={handleTrailingLayout}>
+              {trailing}
+            </View>
+          </View>
+        ) : (
+          <View style={[styles.trailing, { minWidth: trailingMinWidth }]} onLayout={handleTrailingLayout}>
+            {trailing}
+          </View>
+        )}
       </View>
     </View>
   );
@@ -71,10 +101,6 @@ const styles = StyleSheet.create({
   leadingSpacer: {
     flexShrink: 0,
   },
-  leading: {
-    flexShrink: 1,
-    alignItems: 'flex-start',
-  },
   centerColumn: {
     flex: 1,
     minWidth: 0,
@@ -83,5 +109,16 @@ const styles = StyleSheet.create({
   trailing: {
     flexShrink: 0,
     alignItems: 'flex-end',
+  },
+  // Equal-width flanks used when a leading element is present.
+  side: {
+    flexShrink: 0,
+    alignItems: 'flex-start',
+  },
+  sideTrailing: {
+    alignItems: 'flex-end',
+  },
+  sideMeasure: {
+    flexShrink: 0,
   },
 });
