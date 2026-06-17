@@ -1,26 +1,24 @@
 appId: com.boardsesh.app
-name: login (subflow — waits for screenshot-mode auto sign-in)
+name: ready (subflow — waits for the screenshot-mode auto sign-in to land on a tab)
 ---
-# The screenshot build signs in automatically on boot (see
-# packages/mobile/src/lib/screenshot-mode.ts SCREENSHOT_USER_* + app/auth/login.tsx),
-# so this subflow no longer types credentials — it just waits for the auto sign-in
-# to redirect out of the auth screen. The caller has already waited for the auth
-# screen to render (the cold Metro bundle gate).
+# The screenshot build auto-signs-in on boot (packages/mobile/src/lib/screenshot-mode.ts
+# SCREENSHOT_USER_* + app/auth/login.tsx), so there's no login form to drive. This subflow
+# just waits for the app to finish loading the (pre-warmed) Metro bundle and land on the
+# home tab — detected by the native tab bar, which is only present once signed in.
 #
-# Why not type the form: filling the password field makes iOS offer to save the
-# password, and that "Save Password?" system dialog then covers every captured
-# screen AND sits over the board picker so the board-pick tap misses (leaving the
-# climbs / board-view shots in the no-board state). Auto sign-in avoids the form
-# entirely, so the dialog never appears.
+# We deliberately do NOT wait on the auth form: auto sign-in redirects within the network
+# round-trip, so the form flashes faster than Maestro polls and a `visible: auth-email-input`
+# wait times out (the field is already gone — this is the bug this replaced). The native
+# tab bar is a UIKit element, so it surfaces to Maestro (unlike plain RN views).
 #
-# A "Sign in to your Apple Account" system alert can linger on the simulator from a
-# prior Apple-auth attempt and cover the auth screen; dismiss it if present.
+# A "Sign in to your Apple Account" system alert can linger from a prior Apple-auth attempt
+# and cover the screen; dismiss it if present.
 - tapOn:
     text: 'Close'
     optional: true
-# The email field disappearing is the reliable "auto sign-in succeeded +
-# redirected" signal — more robust than racing a specific tab's content load.
+# The "Climbs" tab item appears only once auto sign-in lands on a tab — a reliable
+# "loaded + authenticated" signal. Generous timeout covers a cold Metro bundle on a slow runner.
 - extendedWaitUntil:
-    notVisible:
-      id: 'auth-email-input'
-    timeout: 60000
+    visible:
+      text: 'Climbs'
+    timeout: 300000
