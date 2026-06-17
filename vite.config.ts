@@ -542,6 +542,10 @@ export default defineConfig({
         command: 'tsx scripts/mobile-dev-client-build.ts',
         cache: false,
       },
+      'mobile:make-dev-icons': {
+        command: 'tsx scripts/mobile-make-dev-icons.ts',
+        cache: false,
+      },
       'testflight:feedback-issues': {
         command: 'tsx scripts/testflight-feedback-to-issues.ts',
         cache: false,

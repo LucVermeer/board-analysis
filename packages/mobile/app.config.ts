@@ -103,6 +103,22 @@ export default ({ config }: ConfigContext): ExpoConfig & { newArchEnabled?: bool
   // ./plugins/with-screenshot-dev-menu. Off for every other build.
   const isScreenshotBuild = process.env.BOARDSESH_SCREENSHOT_BUILD === '1';
 
+  // The "Boardsesh Dev" variant (set by .github/workflows/android-apk-dev-client.yml
+  // and `expo prebuild` runs that pass BOARDSESH_APP_VARIANT=dev). It ships under a
+  // separate Android package so the dev-client APK installs side-by-side with the
+  // production app, shows a distinct name, and wears reddish hue-shifted icons
+  // (packages/mobile/dev-assets, regenerate via `vp run mobile:make-dev-icons`).
+  // Deliberately scoped to Android identity + icons: `scheme`, ios.bundleIdentifier,
+  // and the iOS entitlement/App-Group block stay on the production values (changing
+  // the scheme breaks OAuth deep-link redirects; the iOS entitlements are irrelevant
+  // to an Android-only build). See docs/android-sideload-build.md.
+  const isDevVariant = process.env.BOARDSESH_APP_VARIANT === 'dev';
+  const appName = isDevVariant ? 'Boardsesh Dev' : 'Boardsesh';
+  const androidPackage = isDevVariant ? 'com.boardsesh.app.dev' : 'com.boardsesh.app';
+  const iconPath = isDevVariant ? './dev-assets/icon.png' : './assets/icon.png';
+  const adaptiveIconPath = isDevVariant ? './dev-assets/adaptive-icon.png' : './assets/adaptive-icon.png';
+  const splashIconPath = isDevVariant ? './dev-assets/splash-icon.png' : './assets/splash-icon.png';
+
   // Only register the Google Sign-In config plugin when we can supply a valid
   // iosUrlScheme; without Google credentials the entry is omitted (Apple-only).
   const googleIosUrlScheme = resolveGoogleIosUrlScheme();
@@ -113,13 +129,13 @@ export default ({ config }: ConfigContext): ExpoConfig & { newArchEnabled?: bool
 
   return {
     ...config,
-    name: 'Boardsesh',
+    name: appName,
     slug: 'boardsesh',
     owner: 'boardsesh',
     version: '2.0.0',
     scheme: 'com.boardsesh.app',
     orientation: 'portrait',
-    icon: './assets/icon.png',
+    icon: iconPath,
     userInterfaceStyle: 'automatic',
     newArchEnabled: true,
     // Mobile-only; opting out of web keeps `expo export --platform=all` from
@@ -191,7 +207,7 @@ export default ({ config }: ConfigContext): ExpoConfig & { newArchEnabled?: bool
       },
     },
     android: {
-      package: 'com.boardsesh.app',
+      package: androidPackage,
       playStoreUrl: ANDROID_PLAY_STORE_URL,
       // App Links for the multiplayer join flow:
       // https://www.boardsesh.com/join/{sessionId} (and the apex domain).
@@ -225,7 +241,7 @@ export default ({ config }: ConfigContext): ExpoConfig & { newArchEnabled?: bool
       // TODO(Phase 6): add `monochromeImage` (single-colour silhouette) for
       // Android 13+ themed icons, supplied by a designer (no AI-generated art).
       adaptiveIcon: {
-        foregroundImage: './assets/adaptive-icon.png',
+        foregroundImage: adaptiveIconPath,
         backgroundColor: '#000000',
       },
       permissions: [
@@ -291,11 +307,11 @@ export default ({ config }: ConfigContext): ExpoConfig & { newArchEnabled?: bool
       [
         'expo-splash-screen',
         {
-          image: './assets/splash-icon.png',
+          image: splashIconPath,
           imageWidth: 200,
           resizeMode: 'contain',
           backgroundColor: '#000000',
-          dark: { image: './assets/splash-icon.png', backgroundColor: '#000000' },
+          dark: { image: splashIconPath, backgroundColor: '#000000' },
         },
       ],
       'expo-updates',
