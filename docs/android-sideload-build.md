@@ -5,6 +5,10 @@ Android APK for the Expo React Native app in `packages/mobile/` and attaches it
 to a GitHub Release. This is the Android counterpart to `ios-testflight-rn.yml`
 (iOS).
 
+There's also a separate **dev-client** build for Metro-server testing —
+`android-apk-dev-client.yml`, installs side-by-side as "Boardsesh Dev". See
+[Dev-client APK](#dev-client-apk-boardsesh-dev) below.
+
 ## Why a workflow and not EAS
 
 `packages/mobile/` is a managed Expo project — there is no committed `android/`
@@ -202,3 +206,53 @@ Android, or it would fight the gradle version source.
 
 For production later, promote from internal and use Play's staged rollout (set
 `track: production` + `status: inProgress` + `userFraction` on the upload step).
+
+## Dev-client APK ("Boardsesh Dev")
+
+`.github/workflows/android-apk-dev-client.yml` is a separate build for testers
+who need to run local JS without compiling the app themselves. It produces a
+**debug / dev-client** APK: `./gradlew assembleDebug` of the prebuilt project
+embeds `expo-dev-client`'s launcher, so the APK ships no bundled JS — it opens
+the "Development servers" screen and loads JavaScript from a Metro dev server.
+Start Metro with `vp run dev:mobile`, then enter its URL in the launcher (or
+switch between worktrees' servers from the dev menu).
+
+It installs **side-by-side** with the production app. `app.config.ts` reads
+`BOARDSESH_APP_VARIANT=dev` (set as a job env var) and switches to:
+
+- **name** `Boardsesh Dev`
+- **android.package** `com.boardsesh.app.dev` (distinct package → coexists with
+  `com.boardsesh.app`)
+- **icons** the reddish hue-shifted set in `packages/mobile/dev-assets/`
+
+`scheme`, the iOS bundle id, and the iOS entitlement/App-Group block stay on the
+production values — the variant is Android-identity + icons only.
+
+The reddish icons are generated from the production brand PNGs by
+`scripts/mobile-make-dev-icons.ts` (a hue rotation via `sharp`, not new art).
+Regenerate them when the brand mark changes:
+
+```
+vp run mobile:make-dev-icons
+```
+
+The three PNGs under `packages/mobile/dev-assets/` are committed so local
+`BOARDSESH_APP_VARIANT=dev` prebuilds resolve them. They live outside `assets/`
+on purpose: `assetBundlePatterns: ['assets/**']` would otherwise pull them into
+every production OTA bundle.
+
+**No signing secrets.** Debug builds self-sign with the deterministic Expo
+template `debug.keystore`, so the signature is stable run-to-run and a newer dev
+APK upgrades the previous `com.boardsesh.app.dev` install in place. The workflow
+runs without the `Production` environment and uploads both a 30-day artifact and
+a per-run **prerelease** tagged `rn-android-dev-<run_number>`.
+
+Known limitations of the dev variant:
+
+- **Native Google Sign-In** won't work until a Google OAuth Android client is
+  registered for `com.boardsesh.app.dev` + the template debug keystore's SHA-1
+  (see [Google Sign-In requires SHA-1 registration](#google-sign-in-requires-sha-1-registration-per-signing-key)).
+  Everything else — Metro switching, BLE, the rest of the UI — works.
+- **App Links autoVerify** won't verify for the dev package (the served
+  `assetlinks.json` is scoped to production), so `boardsesh.com/join/...` links
+  open via the chooser rather than directly.
