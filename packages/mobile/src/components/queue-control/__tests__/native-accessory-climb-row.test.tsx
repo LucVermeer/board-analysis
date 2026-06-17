@@ -32,6 +32,10 @@ function styleDataValue(styleValue: unknown): string {
   return JSON.stringify(styleValue);
 }
 
+// useAccessoryClimbTap builds a preview queue item via climbToQueueItem, which
+// pulls expo-crypto's randomUUID — stub it so the native module isn't loaded.
+vi.mock('expo-crypto', () => ({ randomUUID: () => 'preview-uuid' }));
+
 vi.mock('react-native', () => ({
   Platform: { OS: 'ios' },
   PlatformColor: (name: string) => name,

@@ -15,7 +15,12 @@ type BluetoothHookOptions = {
   onConnectSuccess?: (serial: string | null) => void;
   holdsData?: unknown;
 };
-type SendFramesToBoard = (frames: string, mirrored?: boolean, signal?: AbortSignal) => Promise<boolean | undefined>;
+type SendFramesToBoard = (
+  frames: string,
+  mirrored?: boolean,
+  signal?: AbortSignal,
+  sendContext?: unknown,
+) => Promise<boolean | undefined>;
 
 const wallConfirm = vi.hoisted(() => ({
   emitWallConfirm: vi.fn(),
@@ -165,8 +170,9 @@ vi.mock('../../components/ble/DevicePickerSheet', () => ({
 
 vi.mock('../queue-provider', () => ({
   useQueue: () => ({
-    state: { currentClimbQueueItem: queue.currentClimbQueueItem },
+    state: { currentClimbQueueItem: queue.currentClimbQueueItem, queue: [] },
   }),
+  useQueueActions: () => ({ setCurrentClimb: vi.fn() }),
   useQueueSessionControls: () => ({
     sessionId: queue.sessionId,
     participantId: queue.participantId,
@@ -175,6 +181,10 @@ vi.mock('../queue-provider', () => ({
     reportWallDisconnect: queue.reportWallDisconnect,
     setSessionBoardSerial: queue.setSessionBoardSerial,
   }),
+}));
+
+vi.mock('../toast-provider', () => ({
+  useToast: () => ({ showToast: vi.fn() }),
 }));
 
 const boardDetails = vi.hoisted(() => ({
@@ -306,7 +316,12 @@ describe('BluetoothProvider wall-confirm integration', () => {
     renderProvider();
 
     await waitFor(() => {
-      expect(bluetooth.state.sendFramesToBoard).toHaveBeenCalledWith('p1r12', false, expect.any(AbortSignal));
+      expect(bluetooth.state.sendFramesToBoard).toHaveBeenCalledWith(
+        'p1r12',
+        false,
+        expect.any(AbortSignal),
+        expect.objectContaining({ sendSource: 'auto' }),
+      );
     });
 
     expect(wallConfirm.emitWallConfirm).toHaveBeenCalledWith('climb-1');
@@ -338,7 +353,12 @@ describe('BluetoothProvider wall-confirm integration', () => {
     renderProvider();
 
     await waitFor(() => {
-      expect(bluetooth.state.sendFramesToBoard).toHaveBeenCalledWith('p1r12', false, expect.any(AbortSignal));
+      expect(bluetooth.state.sendFramesToBoard).toHaveBeenCalledWith(
+        'p1r12',
+        false,
+        expect.any(AbortSignal),
+        expect.objectContaining({ sendSource: 'auto' }),
+      );
     });
     expect(bluetooth.state.connectInitialSendRef.current).toBeNull();
   });
@@ -365,7 +385,12 @@ describe('BluetoothProvider wall-confirm integration', () => {
     renderProvider();
 
     await waitFor(() => {
-      expect(bluetooth.state.sendFramesToBoard).toHaveBeenCalledWith('p1r12', false, expect.any(AbortSignal));
+      expect(bluetooth.state.sendFramesToBoard).toHaveBeenCalledWith(
+        'p1r12',
+        false,
+        expect.any(AbortSignal),
+        expect.objectContaining({ sendSource: 'auto' }),
+      );
     });
     expect(wallConfirm.emitWallConfirm).toHaveBeenCalledWith('climb-1');
     expect(queue.confirmClimbOnWall).toHaveBeenCalledWith('climb-1');
@@ -400,7 +425,13 @@ describe('BluetoothProvider wall-confirm integration', () => {
     await waitFor(() => {
       expect(bluetooth.state.sendFramesToBoard).toHaveBeenCalledTimes(2);
     });
-    expect(bluetooth.state.sendFramesToBoard).toHaveBeenNthCalledWith(2, 'p1r12', false, expect.any(AbortSignal));
+    expect(bluetooth.state.sendFramesToBoard).toHaveBeenNthCalledWith(
+      2,
+      'p1r12',
+      false,
+      expect.any(AbortSignal),
+      expect.objectContaining({ sendSource: 'auto' }),
+    );
   });
 
   it('keeps auto-sending while a restored session is waiting for JOIN to resolve identity', async () => {
@@ -414,7 +445,12 @@ describe('BluetoothProvider wall-confirm integration', () => {
     renderProvider();
 
     await waitFor(() => {
-      expect(bluetooth.state.sendFramesToBoard).toHaveBeenCalledWith('p1r12', false, expect.any(AbortSignal));
+      expect(bluetooth.state.sendFramesToBoard).toHaveBeenCalledWith(
+        'p1r12',
+        false,
+        expect.any(AbortSignal),
+        expect.objectContaining({ sendSource: 'auto' }),
+      );
     });
     expect(wallConfirm.emitWallConfirm).toHaveBeenCalledWith('climb-1');
     expect(queue.confirmClimbOnWall).toHaveBeenCalledWith('climb-1');
@@ -1023,7 +1059,13 @@ describe('BluetoothProvider wall-confirm integration', () => {
       const undoResult = await capturedBluetooth?.undoWallChange();
 
       expect(undoResult).toBe(true);
-      expect(bluetooth.state.sendFramesToBoard).toHaveBeenNthCalledWith(2, 'previous-frames', false);
+      expect(bluetooth.state.sendFramesToBoard).toHaveBeenNthCalledWith(
+        2,
+        'previous-frames',
+        false,
+        undefined,
+        expect.objectContaining({ sendSource: 'undo' }),
+      );
       expect(presence.reportClimbForBoard).toHaveBeenNthCalledWith(
         2,
         99,

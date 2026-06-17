@@ -50,6 +50,10 @@ const feed = vi.hoisted(() => ({
   fetchNextPage: vi.fn(),
 }));
 
+// openClimbInPlayDrawer builds a preview queue item via climbToQueueItem, which
+// pulls expo-crypto's randomUUID — stub it so the native module isn't loaded.
+vi.mock('expo-crypto', () => ({ randomUUID: () => 'preview-uuid' }));
+
 vi.mock('react-native', () => ({
   View: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
   // Expose onRefresh so the test can fire a pull-to-refresh without a real list.
