@@ -10,7 +10,11 @@ import {
   type LedColorOverrides,
 } from '@boardsesh/ble-protocol/aurora';
 import { getMoonboardBluetoothPacket, isMoonboardDeviceName } from '@boardsesh/ble-protocol/moonboard';
-import { classifyBleFailure, isDisconnectionError } from '@boardsesh/ble-protocol/connection-error';
+import {
+  classifyBleFailure,
+  isDisconnectionError,
+  type BleFailureCategory,
+} from '@boardsesh/ble-protocol/connection-error';
 import { boardSupportsMirroring } from '@boardsesh/play-view';
 import type { AuroraBoardName } from '@boardsesh/shared-schema';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
@@ -29,6 +33,20 @@ import type { HoldPlacement } from '../../components/board-renderer/types';
 import { track } from '../analytics';
 import { reportHandledError } from '../error-reporting';
 import { buildHoldColorOverrideSignature, type HoldColorOverrides } from '../hold-color-overrides';
+
+// Exported for testing. Decides how a connect-failure category reaches error
+// tracking:
+//  - null  → don't report. The user dismissed the device picker
+//    ('user_cancelled') — that's the app doing exactly what was asked, not a fault.
+//  - 'warning' → environmental, not an app bug: the board is off, out of range,
+//    or the GATT connect timed out ('board_not_found' / 'connect_failed').
+//  - 'error' → a genuine fault worth surfacing ('unavailable' / 'service_missing'
+//    / 'unknown').
+export function bleConnectReportLevel(category: BleFailureCategory): 'warning' | 'error' | null {
+  if (category === 'user_cancelled') return null;
+  if (category === 'board_not_found' || category === 'connect_failed') return 'warning';
+  return 'error';
+}
 
 // Exported for testing — isolates the .packet extraction so regressions are caught.
 //
@@ -736,8 +754,23 @@ export function useBoardBluetooth({
         });
         return true;
       } catch (error) {
-        console.error('Error connecting to Bluetooth:', error);
-        reportHandledError(error, { tags: { source: 'ble-connect' } });
+        // Classify once, up front: it decides both whether this reaches error
+        // tracking and the user copy below. A user dismissing the device picker
+        // ('user_cancelled') isn't a failure — don't log it as one or report it.
+        // board_not_found / connect_failed are environmental (board off, out of
+        // range, GATT timeout), not app bugs, so they go in as warnings. Genuine
+        // faults (unavailable / service_missing / unknown) stay at error level.
+        const failureCategory = classifyBleFailure(error);
+        const reportLevel = bleConnectReportLevel(failureCategory);
+        if (reportLevel === null) {
+          console.warn('Bluetooth device selection cancelled by user');
+        } else {
+          console.error('Error connecting to Bluetooth:', error);
+          reportHandledError(error, {
+            level: reportLevel,
+            tags: { source: 'ble-connect', failure_category: failureCategory },
+          });
+        }
         setIsConnected(false);
 
         // Dismiss the picker sheet if it's still showing. When a reconnect-by-
@@ -751,14 +784,12 @@ export function useBoardBluetooth({
         pickerRejectRef.current = null;
         setPickerState(null);
 
-        // Classify the failure into actionable user copy via the shared,
-        // deliberately-tight predicate. A previous bare `/cancel/i` regex here
-        // also matched CoreBluetooth's "operation cancelled" / ble-plx's
-        // "Operation was cancelled", so those real failures showed nothing —
-        // the connect just looked like a dead tap. Only an explicit
-        // user-cancel stays silent now. Literal-key switch (the i18n linter
-        // forbids `t(variable)`).
-        const failureCategory = classifyBleFailure(error);
+        // failureCategory (classified above) maps to actionable user copy via the
+        // shared, deliberately-tight predicate. A previous bare `/cancel/i` regex
+        // here also matched CoreBluetooth's "operation cancelled" / ble-plx's
+        // "Operation was cancelled", so those real failures showed nothing — the
+        // connect just looked like a dead tap. Only an explicit user-cancel stays
+        // silent now. Literal-key switch (the i18n linter forbids `t(variable)`).
         switch (failureCategory) {
           case 'user_cancelled':
             break;

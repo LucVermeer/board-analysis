@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { extractGraphqlMessage, isGraphqlRateLimitedError } from '../extract-error-message';
+import { extractGraphqlMessage, isExpectedAuthError, isGraphqlRateLimitedError } from '../extract-error-message';
 
 describe('GraphQL error extraction', () => {
   it('extracts the first graphql-request response message', () => {
@@ -43,5 +43,39 @@ describe('GraphQL error extraction', () => {
     };
 
     expect(isGraphqlRateLimitedError(error)).toBe(false);
+  });
+});
+
+describe('isExpectedAuthError', () => {
+  it('matches the backend requireAuthenticated message', () => {
+    const error = {
+      response: {
+        status: 200,
+        errors: [{ message: 'Authentication required to perform this operation', path: ['myBoards'] }],
+      },
+    };
+
+    expect(isExpectedAuthError(error)).toBe(true);
+  });
+
+  it('matches an UNAUTHENTICATED extensions code', () => {
+    const error = {
+      response: { errors: [{ message: 'Nope', extensions: { code: 'UNAUTHENTICATED' } }] },
+    };
+
+    expect(isExpectedAuthError(error)).toBe(true);
+  });
+
+  it('does not match other server errors', () => {
+    const error = {
+      response: { errors: [{ message: 'Something else broke', extensions: { code: 'INTERNAL_SERVER_ERROR' } }] },
+    };
+
+    expect(isExpectedAuthError(error)).toBe(false);
+  });
+
+  it('returns false for non-GraphQL errors', () => {
+    expect(isExpectedAuthError(new Error('plain'))).toBe(false);
+    expect(isExpectedAuthError(null)).toBe(false);
   });
 });

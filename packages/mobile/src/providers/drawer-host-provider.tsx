@@ -138,7 +138,15 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
   const queueSheetRef = useRef<QueueSheetHandle>(null);
   const boardSheetRef = useRef<BoardSheetHandle>(null);
   const { data: activeBoard } = useActiveBoard();
-  const { data: myBoardsConn } = useMyBoards();
+  // Auth gates two things here. (1) myBoards requires authentication: running it
+  // while logged out throws "Authentication required to perform this operation"
+  // (pure noise in error tracking) and returns nothing useful — every other call
+  // site gates the same way. (2) "Add beta video" keys off auth state, not
+  // profile?.id, which can lag behind a fresh sign-in (profile query still
+  // resolving) and would show the action in the play drawer but not here.
+  // PlayDrawer uses the same predicate.
+  const { isAuthenticated } = useAuth();
+  const { data: myBoardsConn } = useMyBoards(undefined, { enabled: isAuthenticated });
   const [boardConfigOverride, setBoardConfigOverride] = useState<BoardConfig | null>(null);
   const [logAscentInput, setLogAscentInput] = useState<LogAscentInput | null>(null);
   const [climbActions, setClimbActions] = useState<{
@@ -170,10 +178,6 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
   boardPresenceBoardIdRef.current = boardPresenceBoardId;
   const { mutate: toggleFavoriteMutate } = useToggleFavorite();
   const { data: profile } = useProfile();
-  // Gate "Add beta video" on auth state, not profile?.id — the latter can lag
-  // behind a fresh sign-in (profile query still resolving), which would show the
-  // action in the play drawer but not here. PlayDrawer uses the same predicate.
-  const { isAuthenticated } = useAuth();
 
   // Climb to open after the boardConfig override has committed. We can't
   // open synchronously inside openPlayDrawer when an override is supplied

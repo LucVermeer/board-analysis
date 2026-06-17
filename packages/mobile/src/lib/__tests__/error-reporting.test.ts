@@ -22,6 +22,33 @@ describe('reportHandledError', () => {
     expect(mockedCaptureError).not.toHaveBeenCalled();
   });
 
+  it('drops expected auth-required GraphQL errors (a session-only query ran logged-out)', () => {
+    // graphql-request ClientError shape: the backend returns HTTP 200 with the
+    // guard message in response.errors[]. Must drop before the network check.
+    const authError = Object.assign(new Error('Authentication required to perform this operation'), {
+      response: {
+        status: 200,
+        errors: [{ message: 'Authentication required to perform this operation', path: ['myBoards'] }],
+      },
+    });
+    reportHandledError(authError, { tags: { source: 'react-query' } });
+    expect(mockedCaptureError).not.toHaveBeenCalled();
+  });
+
+  it('drops the auth error before the network check, even when it looks transport-shaped', () => {
+    // A ClientError whose response carries no numeric status is otherwise treated
+    // as a transport/network failure and downgraded to a warning. The auth check
+    // runs first, so this is dropped entirely — locks in that ordering so a future
+    // reorder can't start leaking auth errors as network warnings.
+    const authError = Object.assign(new Error('Authentication required to perform this operation'), {
+      response: {
+        errors: [{ message: 'Authentication required to perform this operation', path: ['myBoards'] }],
+      },
+    });
+    reportHandledError(authError, { tags: { source: 'react-query' } });
+    expect(mockedCaptureError).not.toHaveBeenCalled();
+  });
+
   it('downgrades offline fetch failures to a warning and tags them network', () => {
     const offline = new TypeError('Network request failed');
     reportHandledError(offline, { tags: { source: 'react-query' } });

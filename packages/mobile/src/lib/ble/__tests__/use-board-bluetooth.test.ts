@@ -112,7 +112,12 @@ import {
   subscribeNativeBleConnected,
 } from '../adapter-factory';
 import { parseBoardTypeFromDeviceName, parseSerialNumber } from '@boardsesh/ble-protocol/aurora';
-import { convertToMirroredFramesString, dispatchMoonboardPacket, useBoardBluetooth } from '../use-board-bluetooth';
+import {
+  bleConnectReportLevel,
+  convertToMirroredFramesString,
+  dispatchMoonboardPacket,
+  useBoardBluetooth,
+} from '../use-board-bluetooth';
 
 // ── Factory helpers ────────────────────────────────────────────────────────
 
@@ -1170,5 +1175,22 @@ describe('dispatchMoonboardPacket', () => {
 
     expect(result).toBe(true);
     expect(write).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('bleConnectReportLevel', () => {
+  it('does not report a user-cancelled picker dismissal (null)', () => {
+    expect(bleConnectReportLevel('user_cancelled')).toBeNull();
+  });
+
+  it('downgrades environmental failures to warning', () => {
+    expect(bleConnectReportLevel('board_not_found')).toBe('warning');
+    expect(bleConnectReportLevel('connect_failed')).toBe('warning');
+  });
+
+  it('keeps genuine faults at error level', () => {
+    expect(bleConnectReportLevel('unavailable')).toBe('error');
+    expect(bleConnectReportLevel('service_missing')).toBe('error');
+    expect(bleConnectReportLevel('unknown')).toBe('error');
   });
 });

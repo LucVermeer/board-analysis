@@ -35,3 +35,24 @@ export function isGraphqlRateLimitedError(error: unknown): boolean {
 
   return getGraphqlErrors(error).some((graphqlError) => graphqlError.extensions?.code === 'RATE_LIMITED');
 }
+
+// The backend's `requireAuthenticated` guard throws this exact message (a plain
+// Error, so no extensions.code) whenever a session-only resolver runs without a
+// signed-in user. graphql-request surfaces it as a ClientError carrying
+// response.errors[].
+const AUTH_REQUIRED_MESSAGE = 'Authentication required to perform this operation';
+
+/**
+ * An *expected* authentication failure: a session-only query ran without a
+ * session (e.g. on a logged-out cold start) or raced a token expiry. Call sites
+ * should gate authed queries with React Query `enabled`, and the 401 interceptor
+ * already forces sign-out, so these carry no action — error tracking drops them.
+ * Matches only the exact backend message / UNAUTHENTICATED code so genuine
+ * authorization faults still surface.
+ */
+export function isExpectedAuthError(error: unknown): boolean {
+  return getGraphqlErrors(error).some(
+    (graphqlError) =>
+      graphqlError.message === AUTH_REQUIRED_MESSAGE || graphqlError.extensions?.code === 'UNAUTHENTICATED',
+  );
+}
