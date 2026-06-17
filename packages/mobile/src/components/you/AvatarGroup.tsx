@@ -5,7 +5,10 @@ import { brandColors } from '../../theme/colors';
 import { iosSystemColors } from '../../theme/ios-colors';
 import { useTheme } from '../../providers/theme-provider';
 
-type Participant = { userId: string; displayName?: string | null; avatarUrl?: string | null };
+// userId is the profile to open on tap; it's nullable because some rosters
+// include unauthenticated connections (e.g. session presence), which have no
+// linked profile. PressableAvatar degrades those to a plain, non-tappable avatar.
+type Participant = { userId?: string | null; displayName?: string | null; avatarUrl?: string | null };
 
 type AvatarGroupProps = {
   participants: Participant[];
@@ -30,7 +33,7 @@ export function AvatarGroup({ participants, size = 32, max = 3 }: AvatarGroupPro
     <View style={styles.row}>
       {shown.map((participant, index) => (
         <View
-          key={participant.userId}
+          key={participant.userId ?? `anon-${index}`}
           style={[
             styles.ring,
             {

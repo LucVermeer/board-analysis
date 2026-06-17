@@ -15,7 +15,7 @@ vi.mock('react-native', () => ({
 vi.mock('../../PressableAvatar', () => ({
   PressableAvatar: (props: Record<string, unknown>) => {
     mockPressableAvatar(props);
-    return createElement('div', { 'data-testid': 'pressable-avatar', 'data-user': String(props.userId ?? '') });
+    return createElement('div', { 'data-testid': 'pressable-avatar' });
   },
 }));
 vi.mock('../../Text', () => ({
@@ -51,6 +51,47 @@ describe('AvatarGroup', () => {
     expect(mockPressableAvatar).toHaveBeenCalledTimes(3);
     const userIds = mockPressableAvatar.mock.calls.map((call) => (call[0] as Participant).userId);
     expect(userIds).toEqual(['u1', 'u2', 'u3']);
+  });
+
+  it('forwards uri and name to each avatar', () => {
+    render(
+      createElement(AvatarGroup, {
+        participants: [
+          { userId: 'u1', displayName: 'Alice', avatarUrl: 'https://example.test/a.png' },
+          { userId: 'u2', displayName: 'Bob', avatarUrl: null },
+        ],
+      }),
+    );
+    expect(mockPressableAvatar).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: 'u1', name: 'Alice', uri: 'https://example.test/a.png' }),
+    );
+  });
+
+  it('honours a custom max, collapsing the rest into the overflow tile', () => {
+    const { container } = render(createElement(AvatarGroup, { participants: ['u1', 'u2'].map(participant), max: 1 }));
+    expect(mockPressableAvatar).toHaveBeenCalledTimes(1);
+    expect(mockPressableAvatar).toHaveBeenCalledWith(expect.objectContaining({ userId: 'u1' }));
+    expect(container.textContent).toContain('+1');
+  });
+
+  it('renders a non-interactive avatar for a participant without a userId (e.g. an anonymous guest)', () => {
+    // A null userId (unauthenticated session connection) must not crash the keyed
+    // list and must not become a tappable link to a non-existent profile.
+    render(
+      createElement(AvatarGroup, {
+        participants: [
+          { userId: 'u1', displayName: 'Alice', avatarUrl: null },
+          { userId: null, displayName: 'Guest', avatarUrl: null },
+        ],
+      }),
+    );
+    const userIds = mockPressableAvatar.mock.calls.map((call) => (call[0] as Participant).userId);
+    expect(userIds).toEqual(['u1', null]);
+  });
+
+  it('renders without throwing when the participant list is empty', () => {
+    expect(() => render(createElement(AvatarGroup, { participants: [] }))).not.toThrow();
+    expect(mockPressableAvatar).toHaveBeenCalledWith(expect.objectContaining({ userId: undefined }));
   });
 
   it('caps shown avatars at max and renders the +N overflow tile as non-interactive', () => {
