@@ -53,9 +53,10 @@ export const DrawerHeader = memo(function DrawerHeader({
   // With a leading element both flanks share the wider natural width, so the
   // centered name stays screen-centered instead of drifting toward the narrower
   // (grade) side. The inner measure views size to their content (flexShrink 0),
-  // so the onLayout widths are intrinsic — not the constrained slot width.
+  // so the onLayout widths are intrinsic — not the constrained slot width. The
+  // `trailingMinWidth` floor matches the no-leading branch's trailing minWidth.
   const hasLeading = leading != null;
-  const sideWidth = Math.max(leadingWidth, trailingWidth);
+  const sideWidth = Math.max(leadingWidth, trailingWidth, trailingMinWidth);
 
   return (
     <View style={styles.container}>

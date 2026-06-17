@@ -73,17 +73,18 @@ export type PlayDrawerOpenOptions = {
   /**
    * View-only preview: show this item in the drawer WITHOUT committing it to the
    * queue. The drawer renders a "Preview" badge + a "Set active" button so the
-   * user can promote it. Used by genuinely view-only surfaces — the workout
-   * builder, logbook / feed / climb-view browse, and the peer-driven wall climb
-   * behind the accessory bar. The lightbulb keeps acting on the active climb,
-   * not this preview. (The wall climb opts into `previewIsWallClimb` below, which
-   * swaps the "Preview / Set active" banner for a read-only "Now on the wall".)
+   * user can promote it. Used by the explicit "Preview" climb action, the
+   * deep-link / standalone climb-page route, the workout builder, and the
+   * peer-driven wall climb behind the accessory bar. The lightbulb keeps acting
+   * on the active climb, not this preview. (The wall climb opts into
+   * `previewIsWallClimb` below, which swaps the "Preview / Set active" banner for
+   * the read-only "On the wall" status.)
    */
   previewQueueItem?: ClimbQueueItem | null;
   /**
    * The preview is the live wall climb behind the accessory bar — a peer (or
    * another climber on this board) is driving the wall and this climb is lit
-   * right now. Renders the read-only "Now on the wall" status banner instead of
+   * right now. Renders the read-only "On the wall" status banner instead of
    * "Preview / Set active": it isn't a browse preview to promote, it's already
    * on the wall. Only meaningful alongside `previewQueueItem`.
    */
@@ -150,7 +151,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
     null,
   );
   // True when the preview is the live wall climb (accessory bar). Swaps the
-  // "Preview / Set active" banner for the read-only "Now on the wall" status.
+  // "Preview / Set active" banner for the read-only "On the wall" status.
   const [drawerPreviewIsWallClimb, setDrawerPreviewIsWallClimb] = useState(false);
   const [isMirrored, setIsMirrored] = useState(false);
   // Local optimistic override for the heart. `null` means "no local change —
