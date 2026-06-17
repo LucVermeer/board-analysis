@@ -484,7 +484,7 @@
   },
   "playView": {
     "previewBadge": "Aperçu",
-    "onWallBadge": "Sur le mur maintenant",
+    "onWallBadge": "Sur le mur",
     "setActive": "Activer",
     "previousFrame": "Image précédente",
     "nextFrame": "Image suivante",
