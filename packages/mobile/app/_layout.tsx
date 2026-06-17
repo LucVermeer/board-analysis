@@ -42,6 +42,7 @@ import { PersistentQueueBar } from '../src/components/queue-control/persistent-q
 import { UserDrawerProvider } from '../src/components/user-drawer/UserDrawerProvider';
 import { useMobileClimbActionsData } from '../src/lib/graphql/hooks';
 import { useActiveBoard } from '../src/lib/graphql/use-active-board';
+import { ScreenshotBoardAutoActivator } from '../src/components/screenshot-board-auto-activator';
 import { Text } from '../src/components/Text';
 import { Icon } from '../src/components/Icon';
 import { brandColors } from '../src/theme/colors';
@@ -212,6 +213,10 @@ function BoardProviderWrapper({ children }: { children: ReactNode }) {
   const { data: activeBoard } = useActiveBoard();
   return (
     <BoardProvider boardName={toBoardName(activeBoard?.boardType)} boardUuid={activeBoard?.uuid}>
+      {/* Screenshot builds only (inlined check → dead-strips in normal builds):
+          auto-activate the user's first board so board-backed shots aren't stuck
+          on the "No board selected" picker. */}
+      {process.env.EXPO_PUBLIC_SCREENSHOT_MODE === '1' && <ScreenshotBoardAutoActivator />}
       {children}
     </BoardProvider>
   );
