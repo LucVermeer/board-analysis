@@ -257,13 +257,28 @@ platform :android do
     )
   end
 
-  desc "Print the next Android versionCode (max across release tracks + 1)"
+  desc "Print the next Android versionCode (sideload floor raised to the Play ceiling, never below it)"
   lane :next_version_code do
+    # VERSION_CODE_FALLBACK is the deterministic sideload line: offset (2_000_000)
+    # + github.run_number, set by android-apk-rn.yml. It is the versionCode that
+    # has shipped on every GitHub Release sideload APK, so it is the LIVE ceiling
+    # of the channel users actually sideload — currently ~2_000_2xx.
+    #
+    # It is a FLOOR, not a "fallback". The Google Play internal track sits in the
+    # low hundreds (it started fresh from the bootstrap upload), so deriving the
+    # shared versionCode from Play alone drags it far BELOW the sideload ceiling:
+    # build 285 shipped 2_000_285, then build 289 (which first read Play) shipped
+    # 190, and Android then rejects every sideload upgrade with
+    # INSTALL_FAILED_VERSION_DOWNGRADE (190 < 2_000_285). The Play query may only
+    # RAISE the number above this floor, never lower it. See
+    # docs/android-sideload-build.md.
     fallback = ENV["VERSION_CODE_FALLBACK"].to_s
+    floor = fallback.empty? ? nil : fallback.to_i
+
     json_key_data = ENV["GOOGLE_PLAY_SERVICE_ACCOUNT_JSON"].to_s
-    code =
+    play_next =
       begin
-        # No service account yet (first-upload bootstrap) -> fall back below.
+        # No service account yet (first-upload bootstrap) -> floor only.
         UI.user_error!("GOOGLE_PLAY_SERVICE_ACCOUNT_JSON is empty.") if json_key_data.empty?
         codes = []
         %w[production beta alpha internal].each do |track|
@@ -283,14 +298,23 @@ platform :android do
           end
         end
         UI.user_error!("No version codes on any track.") if codes.empty?
-        # Querying the live tracks keeps the result above the legacy Capacitor ceiling.
         codes.map(&:to_i).max + 1
       rescue => error
         UI.important("google_play_track_version_codes failed: #{error.message}")
-        UI.user_error!("No version code from Google Play and VERSION_CODE_FALLBACK is unset.") if fallback.empty?
-        UI.important("Falling back to VERSION_CODE_FALLBACK=#{fallback}")
-        fallback.to_i
+        nil
       end
+
+    # max(sideload floor, Play ceiling + 1). Keeps every sideload upgrade valid
+    # while staying strictly above whatever Play already has, so the AAB uploads
+    # cleanly too. Errors only when BOTH inputs are missing.
+    code = [floor, play_next].compact.max
+    UI.user_error!("No version code: Google Play query returned nothing and VERSION_CODE_FALLBACK is unset.") if code.nil?
+
+    if floor && play_next && play_next > floor
+      UI.important("Play ceiling (#{play_next}) is above the sideload floor (#{floor}); using #{code}.")
+    elsif floor && play_next
+      UI.important("Play ceiling (#{play_next}) is at/below the sideload floor (#{floor}); holding the floor at #{code}.")
+    end
 
     UI.success("Android versionCode: #{code}")
     emit_ci_output(code)

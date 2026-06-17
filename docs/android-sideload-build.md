@@ -67,23 +67,45 @@ own signing.
 Both the Capacitor app (`mobile/`, `android-release.yml`) and the RN rewrite
 (`packages/mobile/`) ship the **same package `com.boardsesh.app`** signed with
 the **same key**, so an RN APK upgrades a Capacitor install in place. To keep
-that direction valid, the RN build sets:
+that direction valid, the RN build computes the versionCode as:
 
 ```
-versionCode = version_code_offset (default 2000000) + github.run_number
+versionCode = max(
+  version_code_offset (default 2000000) + github.run_number,  # sideload floor
+  max(Play track versionCodes) + 1                            # Play ceiling
+)
 ```
 
-The offset keeps the RN line strictly above the Capacitor line (which uses a raw
-`run_number` in the low thousands), so RN always supersedes. The trade-off is
-deliberate: **the RN rewrite is the successor.** A Capacitor release can no
-longer upgrade a device already on the RN build.
+The `offset + run_number` term is the **sideload floor** — the deterministic
+line that every GitHub Release APK has shipped on, and the channel users
+actually sideload. The offset keeps it strictly above the Capacitor line (which
+uses a raw `run_number` in the low thousands), so RN always supersedes. The
+trade-off is deliberate: **the RN rewrite is the successor.** A Capacitor
+release can no longer upgrade a device already on the RN build.
+
+`fastlane android next_version_code` (see `fastlane/Fastfile`) resolves the
+number. The Play query may only **raise** the result above the sideload floor,
+never lower it.
+
+> **Why the floor is a hard floor, not a fallback.** Build 285 shipped
+> versionCode `2000285`. Build 289 was the first to read the Play track and —
+> because that lane returned the Play ceiling **instead of** the floor — shipped
+> versionCode `190` (Play's internal track started fresh in the low hundreds).
+> `190 < 2000285`, so every sideloader hit `INSTALL_FAILED_VERSION_DOWNGRADE` and
+> could no longer install the new APK over their existing one. The fix takes the
+> **max** of the floor and the Play ceiling, so the sideload line can never
+> regress while still staying above whatever Play already has (the AAB uploads
+> cleanly too). Builds 289–298 are the affected range; build 299+ jumps back to
+> `2000299`, which supersedes both the last good sideload build (`2000285`) and
+> the broken `190` builds, so every device converges on one upgrade.
 
 Two invariants to respect:
 
 1. **Don't rename `android-apk-rn.yml`.** `github.run_number` resets to 1 on
-   rename/recreate. If you must, bump `version_code_offset` (the
-   `workflow_dispatch` input) past the current production ceiling first, or new
-   builds become un-installable over existing ones.
+   rename/recreate, which would drop the sideload floor below installed builds.
+   If you must, bump `version_code_offset` (the `workflow_dispatch` input) past
+   the current production ceiling first, or new builds become un-installable
+   over existing ones.
 2. **Capacitor publishing is already disabled.** `android-release.yml` still
    builds the Capacitor app for CI validation, but its GitHub-Release and
    Play-Store-upload steps were removed so it can't publish a lower-versionCode
@@ -198,11 +220,13 @@ these v2/v3-signed release APKs.
 
 No separate version source: the app version is read from
 `packages/mobile/app.config.ts`, and the AAB inherits the exact `versionCode`
-the "Set version code" step seds in (`offset + run_number`), shared with the
-APK. Play enforces strictly-increasing `versionCode` per track, which
-`run_number` monotonicity satisfies. `eas.json`'s `appVersionSource: remote`
-governs only `eas build`/`eas submit` — do **not** enable EAS auto-increment for
-Android, or it would fight the gradle version source.
+the "Set version code" step seds in (`max(offset + run_number, Play ceiling + 1)`
+— see [versionCode and coexistence](#versioncode-and-coexistence-with-the-capacitor-app)),
+shared with the APK. Play enforces strictly-increasing `versionCode` per track,
+which the floor's `run_number` monotonicity satisfies. `eas.json`'s
+`appVersionSource: remote` governs only `eas build`/`eas submit` — do **not**
+enable EAS auto-increment for Android, or it would fight the gradle version
+source.
 
 For production later, promote from internal and use Play's staged rollout (set
 `track: production` + `status: inProgress` + `userFraction` on the upload step).
