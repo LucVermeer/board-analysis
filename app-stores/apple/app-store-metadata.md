@@ -6,10 +6,14 @@
 > below — the App Name, Subtitle, Description, Keywords, Promotional Text, and
 > What's New copy live in `name.txt`, `subtitle.txt`, `description.txt`,
 > `keywords.txt`, `promotional_text.txt`, and `release_notes.txt` respectively.
-> The listing is localized: `en-US` (default), `es-ES`, and `fr-FR` each have
-> their own folder under `fastlane/metadata/`, and `deliver` uploads every locale
-> folder it finds. This doc keeps the operational material that `deliver` can't
-> upload: review notes, privacy labels, and the screenshot map.
+> The listing is localized: `en-US` (default), `es-ES`, `es-MX`, and `fr-FR` each
+> have their own folder under `fastlane/metadata/`, and `deliver` uploads every
+> locale folder it finds. There's one Spanish app translation but no universal
+> App Store Spanish (unlike `en-US`, which covers every English storefront), so the
+> same `es` copy serves both `es-ES` (Spain) and `es-MX` (Mexico/Latin America) —
+> matching the two Spanish screenshot locales. This doc keeps the operational
+> material that `deliver` can't upload: review notes, privacy labels, and the
+> screenshot map.
 
 ## Basic Info
 
