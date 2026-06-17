@@ -734,28 +734,30 @@ function UnrenderablePlaylistClimbRow({
   }, [onRemove, climb.uuid]);
 
   return (
-    <View style={[styles.unrenderableOuter, { opacity: opacity.disabled }]}>
+    <View style={styles.unrenderableOuter}>
       <View
         style={[styles.unrenderableRow, { backgroundColor: systemColors.background }]}
         accessible={!editMode}
         accessibilityRole={editMode ? undefined : 'text'}
         accessibilityLabel={editMode ? undefined : accessibilityLabel}
       >
-        <View
-          style={[
-            styles.unrenderableThumbnail,
-            { backgroundColor: systemColors.secondaryBackground, borderColor: systemColors.separator },
-          ]}
-        >
-          <Icon name="warning" size={24} color={systemColors.secondaryLabel} />
-        </View>
-        <View style={styles.unrenderableText}>
-          <Text variant="body" numberOfLines={1} color={systemColors.label} style={styles.unrenderableTitle}>
-            {climb.name}
-          </Text>
-          <Text variant="footnote" numberOfLines={2} color={systemColors.secondaryLabel}>
-            {subtitle}
-          </Text>
+        <View style={[styles.unrenderableContent, { opacity: opacity.disabled }]}>
+          <View
+            style={[
+              styles.unrenderableThumbnail,
+              { backgroundColor: systemColors.secondaryBackground, borderColor: systemColors.separator },
+            ]}
+          >
+            <Icon name="warning" size={24} color={systemColors.secondaryLabel} />
+          </View>
+          <View style={styles.unrenderableText}>
+            <Text variant="body" numberOfLines={1} color={systemColors.label} style={styles.unrenderableTitle}>
+              {climb.name}
+            </Text>
+            <Text variant="footnote" numberOfLines={2} color={systemColors.secondaryLabel}>
+              {subtitle}
+            </Text>
+          </View>
         </View>
         {editMode ? (
           <Pressable
@@ -993,6 +995,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: spacing[2],
     paddingVertical: spacing[2],
+    gap: spacing[2],
+  },
+  unrenderableContent: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: spacing[3],
   },
   unrenderableThumbnail: {
