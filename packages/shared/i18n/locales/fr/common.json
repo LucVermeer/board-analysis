@@ -90,7 +90,9 @@
       "language": {
         "title": "Langue",
         "system": "Système",
-        "description": "Système suit la langue de votre appareil."
+        "description": "Système suit la langue de votre appareil.",
+        "contributeTitle": "Aidez à traduire Boardsesh",
+        "contributeSubtitle": "Les traductions sont maintenues par la communauté. Ouvrez les fichiers {{language}} sur GitHub pour corriger ou ajouter une phrase."
       },
       "diagnostics": {
         "title": "Confidentialité",

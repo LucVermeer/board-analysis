@@ -6,7 +6,8 @@ import type { ThemeOverride, UiVariantPreference } from '@boardsesh/key-value-st
 import { SUPPORTED_LOCALES, LOCALE_LABELS } from '@boardsesh/i18n';
 import { useTheme } from '../../../src/providers/theme-provider';
 import { useLocalePreference } from '../../../src/providers/i18n-provider';
-import type { LocaleOverride } from '../../../src/lib/i18n/locale-preference';
+import { resolveLanguage, type LocaleOverride } from '../../../src/lib/i18n/locale-preference';
+import { openExternalUrl } from '../../../src/lib/open-url';
 import { useAuth } from '../../../src/providers/auth-provider';
 import { useProfile } from '../../../src/lib/graphql/hooks';
 import { borderRadius, spacing } from '../../../src/theme/tokens';
@@ -25,6 +26,11 @@ import { useToast } from '../../../src/providers/toast-provider';
 import { useFeatureFlag } from '../../../src/providers/feature-flags-provider';
 import { replayOnboarding } from '../../../src/lib/onboarding/onboarding-storage';
 import { reportError } from '../../../src/lib/error-reporting';
+
+// Translations live in the shared catalog at packages/shared/i18n/locales/<locale>/.
+// We deep-link to the active language's folder so a community member lands on the
+// exact files to edit.
+const GITHUB_LOCALES_TREE_URL = 'https://github.com/boardsesh/boardsesh/tree/main/packages/shared/i18n/locales';
 
 export default function MoreScreen() {
   const { systemColors, brandColors, themeOverride, setThemeOverride, uiVariantPreference, setUiVariant } = useTheme();
@@ -47,6 +53,14 @@ export default function MoreScreen() {
     { key: 'system', label: t('mobile.more.language.system') },
     ...SUPPORTED_LOCALES.map((locale) => ({ key: locale, label: LOCALE_LABELS[locale] })),
   ];
+
+  // The community keeps the es/fr translations current; deep-link the CTA to the
+  // folder for whatever language the app is currently showing ('system' resolves
+  // to the device locale).
+  const activeLocale = resolveLanguage(localePreference);
+  const handleHelpTranslate = () => {
+    void openExternalUrl(`${GITHUB_LOCALES_TREE_URL}/${activeLocale}`, 'more-help-translate');
+  };
 
   const appearanceOptions: { key: ThemeOverride; label: string }[] = [
     { key: 'system', label: t('mobile.more.appearance.system') },
@@ -194,6 +208,16 @@ export default function MoreScreen() {
         <Text variant="footnote" color={systemColors.secondaryLabel} style={styles.languageHint}>
           {t('mobile.more.language.description')}
         </Text>
+        <View style={[styles.card, styles.contributeCard, { backgroundColor: systemColors.secondaryBackground }]}>
+          <ListRow
+            title={t('mobile.more.language.contributeTitle')}
+            subtitle={t('mobile.more.language.contributeSubtitle', { language: LOCALE_LABELS[activeLocale] })}
+            leading={<Icon name="github" size={22} color={systemColors.secondaryLabel} />}
+            showChevron
+            showSeparator={false}
+            onPress={handleHelpTranslate}
+          />
+        </View>
       </View>
 
       <View style={styles.section}>
@@ -309,6 +333,9 @@ const styles = StyleSheet.create({
   languageHint: {
     marginTop: spacing[2],
     paddingHorizontal: spacing[4],
+  },
+  contributeCard: {
+    marginTop: spacing[3],
   },
   accountEmail: {
     paddingHorizontal: spacing[4],
