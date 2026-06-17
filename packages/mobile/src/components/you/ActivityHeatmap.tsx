@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import { View, StyleSheet, type LayoutChangeEvent } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import Svg, { Rect } from 'react-native-svg';
@@ -105,39 +105,37 @@ export function ActivityHeatmap({ heatmap }: ActivityHeatmapProps) {
             column.map((day, rowIndex) => {
               const cellX = columnIndex * (cell + CELL_GAP);
               const cellY = rowIndex * (cell + CELL_GAP);
+              // Single pass: the base cell plus, only for today, an inset ring
+              // sibling — no second traversal of the ~371-cell grid.
               return (
-                <Rect
-                  key={day.date}
-                  x={cellX}
-                  y={cellY}
-                  width={cell}
-                  height={cell}
-                  rx={cornerRadius}
-                  ry={cornerRadius}
-                  fill={colorForCount(day.count)}
-                  stroke={chartColors.separator}
-                  strokeWidth={StyleSheet.hairlineWidth}
-                />
+                <Fragment key={day.date}>
+                  <Rect
+                    x={cellX}
+                    y={cellY}
+                    width={cell}
+                    height={cell}
+                    rx={cornerRadius}
+                    ry={cornerRadius}
+                    fill={colorForCount(day.count)}
+                    stroke={chartColors.separator}
+                    strokeWidth={StyleSheet.hairlineWidth}
+                  />
+                  {day.date === todayKey ? (
+                    <Rect
+                      x={cellX + ringWidth / 2}
+                      y={cellY + ringWidth / 2}
+                      width={cell - ringWidth}
+                      height={cell - ringWidth}
+                      rx={cornerRadius}
+                      ry={cornerRadius}
+                      fill="none"
+                      stroke={brandColors.tint}
+                      strokeWidth={ringWidth}
+                    />
+                  ) : null}
+                </Fragment>
               );
             }),
-          )}
-          {shown.map((column, columnIndex) =>
-            column.map((day, rowIndex) =>
-              day.date === todayKey ? (
-                <Rect
-                  key={`today-${day.date}`}
-                  x={columnIndex * (cell + CELL_GAP) + ringWidth / 2}
-                  y={rowIndex * (cell + CELL_GAP) + ringWidth / 2}
-                  width={cell - ringWidth}
-                  height={cell - ringWidth}
-                  rx={cornerRadius}
-                  ry={cornerRadius}
-                  fill="none"
-                  stroke={brandColors.tint}
-                  strokeWidth={ringWidth}
-                />
-              ) : null,
-            ),
           )}
         </Svg>
       ) : null}

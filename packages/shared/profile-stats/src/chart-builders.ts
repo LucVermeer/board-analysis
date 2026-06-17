@@ -518,10 +518,12 @@ export function buildActivityHeatmap(
     countsByDay.set(day, (countsByDay.get(day) ?? 0) + 1);
   }
 
-  // Week-align the grid to whole weeks (Sunday→Saturday) so it lays out as clean
+  // Week-align the grid to whole ISO weeks (Mon→Sun) so it lays out as clean
   // 7-row columns. End on the current week, start `weeksWindow` weeks earlier.
-  const gridEnd = dayjs().endOf('week');
-  const gridStart = gridEnd.subtract(weeksWindow * 7 - 1, 'day').startOf('week');
+  // ISO weeks (not locale `week`) keep the grid deterministic regardless of the
+  // runtime locale's first-day-of-week, and match every other builder here.
+  const gridEnd = dayjs().endOf('isoWeek');
+  const gridStart = gridEnd.subtract(weeksWindow * 7 - 1, 'day').startOf('isoWeek');
 
   const days: RawActivityDay[] = [];
   let maxCount = 0;

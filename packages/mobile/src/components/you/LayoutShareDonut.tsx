@@ -1,4 +1,4 @@
-import { useMemo, type ReactNode } from 'react';
+import { useCallback, useMemo, type ReactNode } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { PieChart } from 'react-native-gifted-charts';
@@ -44,30 +44,34 @@ export function LayoutShareDonut({ layoutPercentages, totalAscents }: LayoutShar
     [orderedLayouts, colorScheme],
   );
 
-  if (layoutPercentages.length <= 1) return null;
-
-  const centerLabel = (): ReactNode => (
-    <View style={styles.center} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
-      <Text
-        variant="title3"
-        color={systemColors.label}
-        numberOfLines={1}
-        adjustsFontSizeToFit
-        maxFontSizeMultiplier={1.3}
-      >
-        {totalAscents}
-      </Text>
-      <Text
-        variant="caption2"
-        color={systemColors.secondaryLabel}
-        numberOfLines={1}
-        maxFontSizeMultiplier={1.2}
-        style={styles.centerCaption}
-      >
-        {t('stats.problems')}
-      </Text>
-    </View>
+  // Stable identity so PieChart isn't handed a fresh component each render.
+  const centerLabel = useCallback(
+    (): ReactNode => (
+      <View style={styles.center} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
+        <Text
+          variant="title3"
+          color={systemColors.label}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          maxFontSizeMultiplier={1.3}
+        >
+          {totalAscents}
+        </Text>
+        <Text
+          variant="caption2"
+          color={systemColors.secondaryLabel}
+          numberOfLines={1}
+          maxFontSizeMultiplier={1.2}
+          style={styles.centerCaption}
+        >
+          {t('stats.problems')}
+        </Text>
+      </View>
+    ),
+    [totalAscents, systemColors.label, systemColors.secondaryLabel, t],
   );
+
+  if (layoutPercentages.length <= 1) return null;
 
   return (
     <View style={styles.container}>

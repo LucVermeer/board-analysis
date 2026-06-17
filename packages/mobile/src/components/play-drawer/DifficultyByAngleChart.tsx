@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { memo, useMemo, useState, type ReactNode } from 'react';
 import { StyleSheet, View, type LayoutChangeEvent } from 'react-native';
 import { BarChart } from 'react-native-gifted-charts';
 import { Text } from '../Text';
@@ -27,21 +27,57 @@ const MIN_BAR_WIDTH = 10;
 // the bar drawn in the grade's scheme-aware colour with the grade label above it.
 // The hardest angle is flagged with a non-colour cue (bold label + larger cap) so
 // it survives colour-blindness and both schemes/variants.
-export function DifficultyByAngleChart({ data, accessibilityLabel }: DifficultyByAngleChartProps) {
+export const DifficultyByAngleChart = memo(function DifficultyByAngleChart({
+  data,
+  accessibilityLabel,
+}: DifficultyByAngleChartProps) {
   const { chartColors, colorScheme } = useTheme();
   const reduceMotion = useReduceMotion();
   const [width, setWidth] = useState(0);
 
-  if (data.length === 0) return null;
+  // Bars + axis scale only depend on the data + scheme — memoize so a parent
+  // re-render (or a width change) doesn't rebuild them (and their top-label
+  // closures) every time.
+  const model = useMemo(() => {
+    if (data.length === 0) return null;
+    const difficulties = data.map((bar) => bar.difficulty);
+    const baseline = Math.min(...difficulties) - 1;
+    const range = Math.max(Math.max(...difficulties) - baseline, 1);
+    // The single hardest angle (first max wins on ties) gets the redundant cue.
+    const hardestAngle = data.reduce((peak, bar) => (bar.difficulty > peak.difficulty ? bar : peak)).angle;
+    const barData = data.map((bar) => {
+      const fill = gradeChartColor(bar.gradeName, colorScheme);
+      const isHardest = bar.angle === hardestAngle;
+      const topRadius = isHardest ? PEAK_BAR_RADIUS : BAR_RADIUS;
+      return {
+        value: bar.difficulty - baseline,
+        frontColor: fill,
+        label: `${bar.angle}°`,
+        barBorderTopLeftRadius: topRadius,
+        barBorderTopRightRadius: topRadius,
+        barBorderBottomLeftRadius: 0,
+        barBorderBottomRightRadius: 0,
+        topLabelComponentHeight: TOP_LABEL_HEIGHT,
+        topLabelComponent: (): ReactNode => (
+          <Text
+            variant="caption2"
+            color={fill}
+            style={isHardest ? styles.topLabelPeak : styles.topLabel}
+            numberOfLines={1}
+          >
+            {bar.gradeName}
+          </Text>
+        ),
+      };
+    });
+    // +1 headroom so the tallest (hardest-angle) bar doesn't pin to the top edge
+    // and crowd its grade top-label.
+    return { barData, chartMaxValue: range + 1 };
+  }, [data, colorScheme]);
 
-  const difficulties = data.map((bar) => bar.difficulty);
-  const baseline = Math.min(...difficulties) - 1;
-  const range = Math.max(Math.max(...difficulties) - baseline, 1);
-  // +1 headroom so the tallest (hardest-angle) bar doesn't pin to the top edge
-  // and crowd its grade top-label.
-  const chartMaxValue = range + 1;
-  // The single hardest angle (first max wins on ties) gets the redundant cue.
-  const hardestAngle = data.reduce((peak, bar) => (bar.difficulty > peak.difficulty ? bar : peak)).angle;
+  const onLayout = (event: LayoutChangeEvent) => setWidth(event.nativeEvent.layout.width);
+
+  if (!model) return null;
 
   const count = data.length;
   const barSpacing = count > 8 ? 6 : 12;
@@ -50,34 +86,6 @@ export function DifficultyByAngleChart({ data, accessibilityLabel }: DifficultyB
     width > 0
       ? Math.max(MIN_BAR_WIDTH, Math.floor((width - initialSpacing * 2 - barSpacing * count) / count))
       : MIN_BAR_WIDTH;
-
-  const barData = data.map((bar) => {
-    const fill = gradeChartColor(bar.gradeName, colorScheme);
-    const isHardest = bar.angle === hardestAngle;
-    const topRadius = isHardest ? PEAK_BAR_RADIUS : BAR_RADIUS;
-    return {
-      value: bar.difficulty - baseline,
-      frontColor: fill,
-      label: `${bar.angle}°`,
-      barBorderTopLeftRadius: topRadius,
-      barBorderTopRightRadius: topRadius,
-      barBorderBottomLeftRadius: 0,
-      barBorderBottomRightRadius: 0,
-      topLabelComponentHeight: TOP_LABEL_HEIGHT,
-      topLabelComponent: (): ReactNode => (
-        <Text
-          variant="caption2"
-          color={fill}
-          style={isHardest ? styles.topLabelPeak : styles.topLabel}
-          numberOfLines={1}
-        >
-          {bar.gradeName}
-        </Text>
-      ),
-    };
-  });
-
-  const onLayout = (event: LayoutChangeEvent) => setWidth(event.nativeEvent.layout.width);
 
   return (
     <View
@@ -89,13 +97,13 @@ export function DifficultyByAngleChart({ data, accessibilityLabel }: DifficultyB
     >
       {width > 0 ? (
         <BarChart
-          data={barData}
+          data={model.barData}
           width={width - 8}
           height={CHART_HEIGHT}
           barWidth={barWidth}
           spacing={barSpacing}
           initialSpacing={initialSpacing}
-          maxValue={chartMaxValue}
+          maxValue={model.chartMaxValue}
           topLabelContainerStyle={styles.topLabelContainer}
           hideRules
           hideYAxisText
@@ -111,7 +119,7 @@ export function DifficultyByAngleChart({ data, accessibilityLabel }: DifficultyB
       ) : null}
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   container: {
