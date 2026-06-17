@@ -56,9 +56,6 @@ directly into its shots — no Maestro element races a transient auth screen.
 - `SCREENSHOT_USER_EMAIL` — test account email (default `test@boardsesh.com`).
 - `SCREENSHOT_USER_PASSWORD` — test account password. **Not committed** — pass it
   at runtime (prod differs from the local-DB `test`).
-- `MAESTRO_BOARD_PICK_POINT` — the percentage tap point for the board picker, passed
-  by the orchestrator per iOS device (the one surviving coordinate tap; everything
-  else the iOS flow needs is a deep link).
 - `EXPO_PUBLIC_SCREENSHOT_LOCALE` — the app locale baked into the bundle for the
   current capture pass (the orchestrator reruns the flow once per locale; see
   `screenshot-mode.ts`).
@@ -99,15 +96,19 @@ on boot. They live only in screenshot-only builds; the separate prod-stripping o
   `://profile?screenshotTab=sessions` opens the Sessions tab and auto-opens the
   newest session's detail. For any screen shot twice, the plain visit runs before
   the param visit so no stale param leaks in.
+- **Board activation**: the active board is auto-selected on boot in screenshot
+  mode — `auth-provider.tsx` activates the user's first saved board (Marco's board)
+  right after the auto-sign-in, so board-backed screens (Climbs, Board View) render
+  real content. This replaced a fragile board-picker coordinate tap that missed on a
+  loaded runner and left those screens stuck on the "No board selected" empty state.
 - **Coordinate taps**: on this iOS 26 / RN Fabric build Maestro's accessibility
   tree only exposes native text inputs and system dialogs — plain Views, Text,
   reanimated pressables and gesture rows don't surface, so app buttons can't be
-  matched by id/text. After moving the board view to a deep link, iOS keeps just
-  **one** `point:` tap — the board pick — supplied per device by the orchestrator as
-  `MAESTRO_BOARD_PICK_POINT` (so a single flow captures the whole device matrix);
-  Android additionally keeps the board-switcher tap (`78%,10%`) for its board-sheet
-  shot. Re-check the points if a device's layout differs. There's no login step at all
-  — the app auto-signs-in on boot and never shows a login screen.
+  matched by id/text. The iOS flow now has **no** `point:` taps (every screen is a
+  deep link, the board is active from boot). Android keeps just the board-switcher
+  tap (`78%,10%`) for its board-sheet shot; re-check it if the emulator layout
+  differs. There's no login step at all — the app auto-signs-in on boot and never
+  shows a login screen.
 - Screenshot mode (the build-time `EXPO_PUBLIC_SCREENSHOT_MODE=1` flag) auto-signs-in
   on boot with the baked `SCREENSHOT_USER_*` credentials, locks the theme to dark, the
   locale to `EXPO_PUBLIC_SCREENSHOT_LOCALE`, and the platform variant, pre-selects the
