@@ -1,0 +1,33 @@
+Cherche une voie et regarde ton mur allumer les prises. Tu tapes un bloc, les prises s’allument, tu pars dessus. Boardsesh relie ton téléphone à ta board en Bluetooth, pour que ta séance se passe à grimper plutôt qu’à lire des chiffres sur un écran.
+
+UNE SEULE APPLI POUR TOUTES TES BOARDS
+Kilter, Tension et MoonBoard ont chacune leur appli pour leur propre board. Boardsesh marche avec toutes, plus Decoy, Touchstone, Grasshopper et So iLL, au même endroit. Cherche n’importe quelle voie et Boardsesh l’envoie au mur en Bluetooth, en allumant les prises. Contrôle complet des LED sur les sept boards.
+
+L’intérêt d’une seule appli, c’est les deux choses qu’une appli mono-board ne te donne pas : un historique de board toujours actif, et des séances que tu pilotes avec ta crew.
+
+L’HISTORIQUE DE BOARD, TOUJOURS ACTIF
+Chaque board sur laquelle tu te connectes a un fil live de ce qui est allumé sur ce mur en ce moment : la voie en cours, qui l’a allumée, la cotation et l’inclinaison, qui l’a ouverte, et les sends récents. Tu ne lances rien. C’est juste là quand tu es sur cette board, et ça se met à jour au fil des essais.
+
+LES SÉANCES AVEC TA CREW
+Lance une séance et toi et ta crew partagez une seule file que tout le monde peut piloter. N’importe qui envoie la prochaine voie au mur : pas de pilote à qui passer le téléphone, pas de tour à attendre. Celui qui est connecté en Bluetooth l’allume. À la fin, tu reçois un récap et un suivi : sends et essais, éventail de cotations, ton plus gros send, et ta progression dans le temps.
+
+Pilote la séance depuis ton écran verrouillé (iOS 17+)
+Les Live Activities mettent la voie en cours, ta place dans la file et suivant/précédent sur l’écran verrouillé et la Dynamic Island, pour enchaîner les voies sans ouvrir l’appli.
+
+Monte une séance d’entraînement
+Choisis Volume, Pyramide, Échelle ou Focus de cotation, fixe une cotation cible et un échauffement, prévisualise les voies, puis envoie-les au mur une par une.
+
+Suis ton escalade
+Note tes sends, tes flashs et tes essais, reçois un récap avec la durée, l’éventail de cotations et ton plus gros send, et vois tes sends et tes cotations s’afficher dans l’onglet Progression.
+
+Emporte ton historique avec toi
+Enregistre ta séance dans Apple Health, et importe ton ancien carnet Kilter et Tension depuis Aurora Climbing.
+
+Trouve plus à grimper
+Suis ta crew et les ouvreurs, cherche des grimpeurs, et épingle des playlists depuis Discover.
+
+Gratuit, sans pub, sans abonnement. Open source sur GitHub.
+
+Boards prises en charge : Kilter, Tension, MoonBoard (2010, 2016, 2024, Masters 2017, Masters 2019), Decoy, Touchstone, Grasshopper et So iLL.
+
+Boardsesh fonctionne avec ces boards et n’est ni affilié à, ni soutenu par Aurora Climbing ou Moon Climbing.

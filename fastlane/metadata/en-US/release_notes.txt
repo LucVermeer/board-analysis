@@ -1,11 +1,8 @@
-Boardsesh 2.0 is a full native rewrite. The old app wrapped the website in a shell; this one is built native, so it connects to your board faster, holds the Bluetooth link steadier, and keeps the holds lit while you climb.
+Sessions are always live now. Start a session and your crew shares one queue everyone can drive. Anyone sends the next climb to the wall, with no driver to hand the phone around and no turn to wait for. Whoever's connected over Bluetooth lights it.
 
-New in 2.0:
-- Quicker, more reliable board connection over Bluetooth
-- A native feel throughout: smoother lists, faster search, real background support
-- Search tens of thousands of community-set climbs and filter by grade, rating, and holds
-- Build a queue and cycle through it with one tap, no phone fumbling between burns
-- Run a shared session with Party Mode so your crew climbs the same list
-- Log every attempt and send, synced to Aurora Climbing for Kilter and Tension
-
-Open source. No ads, no subscriptions.
+Also in this release:
+- Board history, always on: every board you connect to has a live feed of the climb lit right now, who lit it, the grade, angle and setter, updating as burns happen.
+- Run the session from your lock screen and Dynamic Island on iOS 17+ with Live Activities.
+- Build a workout with Volume, Pyramid, Ladder or Grade Focus, then send the climbs one burn at a time.
+- Track sends, flashes and attempts, and see your sends and grades chart out on the Progress tab.
+- Save your sessions to Apple Health, and import your past Kilter and Tension logbook from Aurora Climbing.

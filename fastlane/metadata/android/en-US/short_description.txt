@@ -1,1 +1,1 @@
-Light up holds on Kilter, Tension, MoonBoard and any LED climbing wall.
+Light up any LED board over Bluetooth.
