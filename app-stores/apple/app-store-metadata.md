@@ -12,8 +12,8 @@
 
 | Field              | Value                                          |
 | ------------------ | ---------------------------------------------- |
-| App Name           | Boardsesh                                      |
-| Subtitle           | Light up climbs on any board (subtitle.txt)    |
+| App Name           | Boardsesh (name.txt)                           |
+| Subtitle           | see subtitle.txt                               |
 | Bundle ID          | com.boardsesh.app                              |
 | Category           | Health & Fitness (primary), Sports (secondary) |
 | Age Rating         | 4+                                             |

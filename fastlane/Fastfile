@@ -149,7 +149,9 @@ platform :ios do
         )
         latest.to_i + 1
       rescue => error
-        UI.important("latest_testflight_build_number failed: #{error.message}")
+        # Covers both a failed ASC query and missing credentials (asc_api_key's
+        # ENV.fetch raises here too, since it's evaluated inside this begin).
+        UI.important("Could not resolve the build number from App Store Connect: #{error.message}")
         UI.user_error!("No build number from App Store Connect and BUILD_NUMBER_FALLBACK is unset.") if fallback.empty?
         UI.important("Falling back to BUILD_NUMBER_FALLBACK=#{fallback}")
         fallback.to_i
@@ -232,12 +234,15 @@ platform :android do
       skip_upload_metadata: true,
       skip_upload_changelogs: true,
       # Upload the app images present under <locale>/images/ (icon.png 512x512,
-      # featureGraphic.png 1024x500 when added). Phone screenshots stay untouched.
+      # featureGraphic.png 1024x500 when added).
       skip_upload_images: false,
+      # Phone screenshots are owned by the screenshots lane; leave them alone.
       skip_upload_screenshots: true,
-      # No sync_image_upload: only push images that exist locally and never
-      # delete a remote one, so committing just icon.png updates the icon and
-      # leaves any existing feature graphic in place.
+      # supply never deletes app images, so committing just icon.png updates the
+      # icon and leaves any live feature graphic untouched. sync_image_upload only
+      # toggles a sha256 skip-if-unchanged for images, so it's deliberately
+      # omitted (don't flip it on: for screenshots, false means delete-all-then-
+      # reupload, which is why the screenshots lane sets it true).
       timeout: 300
     )
   end

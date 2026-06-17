@@ -9,9 +9,10 @@ name: Mobile Store Metadata
 # editing the .txt and re-running. Manual dispatch only (the listing copy
 # changes far less often than screenshots or builds).
 #
-# The Android "What's new" / release notes are NOT pushed here — they ship with
-# the AAB at release time via android-apk-rn.yml (whatsNewDirectory), sourced
-# from the same changelogs/default.txt.
+# iOS "What's New" (release_notes.txt) is part of the deliver text and IS pushed
+# here. The Android "What's new", by contrast, is NOT pushed here: it ships with
+# the AAB at release time via android-apk-rn.yml (whatsNewDirectory), sourced from
+# the same changelogs/default.txt.
 
 on:
   workflow_dispatch:
