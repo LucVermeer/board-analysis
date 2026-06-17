@@ -60,6 +60,7 @@
     "flashVsRedpoint": "Flash vs Trabajado",
     "vPoints": "V-Points",
     "vPointsTotal": "{{value}} en total",
+    "weekAxisLabel": "Semana",
     "chartTooltipTotal": "Total",
     "gradeDistributionAria": "Distribución por grados en todas las tablas de escalada",
     "weeklyAttemptsAria": "Intentos semanales por dificultad",
