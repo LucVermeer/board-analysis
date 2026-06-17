@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, useCallback, type ReactNode } from 'react';
 import { AppState } from 'react-native';
 import { useSegments, Redirect } from 'expo-router';
-import { useQueryClient, type QueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { getAuthToken, isTokenExpiringSoon } from '../lib/auth-store';
 import {
@@ -17,12 +17,11 @@ import { SCREENSHOT_USER_EMAIL, SCREENSHOT_USER_PASSWORD } from '../lib/screensh
 import { reset as resetAnalytics, track } from '../lib/analytics';
 import { reportError } from '../lib/error-reporting';
 import { setOnForcedSignOut } from '../lib/auth-interceptor';
-import { getHttpClient, resetHttpClient } from '../lib/graphql/client';
+import { resetHttpClient } from '../lib/graphql/client';
 import { disposeWsClient } from '../lib/graphql/ws-client';
 import { clearStoredSessionId } from '../lib/session-store';
-import { clearStoredActiveBoard, setStoredActiveBoard } from '../lib/active-board-store';
+import { clearStoredActiveBoard } from '../lib/active-board-store';
 import { ACTIVE_BOARD_QUERY_KEY } from '../lib/graphql/use-active-board';
-import { GET_MY_BOARDS, type GetMyBoardsQueryResponse } from '@boardsesh/graphql/operations/boards';
 
 type AuthState = {
   isAuthenticated: boolean;
@@ -34,27 +33,6 @@ type AuthState = {
   signOut: (method?: 'manual' | 'account_deleted') => Promise<void>;
   refreshAuthState: () => Promise<void>;
 };
-
-// Screenshot builds only: fetch the signed-in user's saved boards and make the
-// first one active, so board-backed screens (Climbs, Board View) render real
-// content on first paint instead of the "No board selected" empty state. This is
-// the screenshot-mode analogue of auto-sign-in and replaces the Maestro flow's
-// fragile board-picker coordinate tap (which missed on a loaded runner, leaving
-// every board-dependent shot stuck on the picker). Best-effort: a failure just
-// leaves no active board, never blocks the already-successful sign-in. Dead-strips
-// in normal builds — only called from the inlined SCREENSHOT_MODE branch below.
-async function activateFirstBoardForScreenshots(queryClient: QueryClient): Promise<void> {
-  try {
-    const { myBoards } = await getHttpClient().request<GetMyBoardsQueryResponse>(GET_MY_BOARDS);
-    const firstBoard = myBoards?.boards?.[0];
-    if (firstBoard) {
-      await setStoredActiveBoard(firstBoard);
-      queryClient.setQueryData(ACTIVE_BOARD_QUERY_KEY, firstBoard);
-    }
-  } catch (boardError) {
-    reportError(boardError);
-  }
-}
 
 const AuthContext = createContext<AuthState | null>(null);
 
@@ -148,9 +126,6 @@ export function AuthProvider({ children, onReady }: AuthProviderProps) {
         if (process.env.EXPO_PUBLIC_SCREENSHOT_MODE === '1' && SCREENSHOT_USER_EMAIL && SCREENSHOT_USER_PASSWORD) {
           const screenshotSignIn = await authSignInWithCredentials(SCREENSHOT_USER_EMAIL, SCREENSHOT_USER_PASSWORD);
           if (screenshotSignIn.success) {
-            // Make the first saved board active before the loading gate clears, so
-            // board-backed screens never flash the "No board selected" picker.
-            await activateFirstBoardForScreenshots(queryClient);
             setIsAuthenticated(true);
             return;
           }
@@ -181,7 +156,7 @@ export function AuthProvider({ children, onReady }: AuthProviderProps) {
     } finally {
       setIsLoading(false);
     }
-  }, [handleSignedOutTransition, queryClient]);
+  }, [handleSignedOutTransition]);
 
   useEffect(() => {
     // Belt-and-braces: checkAuth already resolves its own rejections, but keep
