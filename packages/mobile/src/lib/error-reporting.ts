@@ -1,4 +1,5 @@
 import { captureError } from './posthog-client';
+import { isExpectedAuthError } from './graphql/extract-error-message';
 
 export type ErrorReportContext = {
   level?: 'fatal' | 'error' | 'warning' | 'info' | 'debug';
@@ -51,6 +52,7 @@ function isNetworkError(error: unknown): boolean {
  * inline message, or degraded state) rather than letting crash. Applies the
  * noise policy so error tracking stays signal-rich:
  *   - cancellations are dropped entirely,
+ *   - expected auth-required GraphQL failures are dropped entirely,
  *   - offline/network failures are downgraded to `warning` and tagged `network`,
  *   - everything else reports at the caller's level (default `error`).
  * Use this from React Query caches, GraphQL-WS, and catch blocks; use the raw
@@ -58,6 +60,7 @@ function isNetworkError(error: unknown): boolean {
  */
 export function reportHandledError(error: unknown, context?: ErrorReportContext): void {
   if (isCancellation(error)) return;
+  if (isExpectedAuthError(error)) return;
   if (isNetworkError(error)) {
     reportError(error, {
       ...context,

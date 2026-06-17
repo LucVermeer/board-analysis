@@ -198,6 +198,18 @@ the code below keys off "not a known status code" rather than a specific code.)
 `native_error_code`, and a local dev build prints a hint — see
 `nativeSignInErrorCode` in `packages/mobile/src/lib/native-auth-analytics.ts`.
 
+**Spotting it in PostHog.** This lands in error tracking as a handled exception
+tagged `source: native-auth`, `provider: google` — message `DEVELOPER_ERROR` on
+the classic flow, or a generic `Error` with the troubleshooting URL on the
+Credential Manager flow. It was the single highest-volume mobile issue in June
+2026 (163 occurrences, 11 users). A spike here is almost always an unregistered
+signing key, not a code regression — it can't be fixed in-repo. Work the table
+below: enumerate every key currently shipping `com.boardsesh.app`, confirm each
+SHA-1 has an Android OAuth client in project **401523882502**, and add any that's
+missing. (Because handled exceptions without a JS stack group together, that same
+PostHog issue also absorbs unrelated messages like "Bluetooth connection timed
+out" — don't read the whole bucket as Google Sign-In.)
+
 `com.boardsesh.app` is signed by up to three different keys, each needing its own
 Android OAuth client (same package, different SHA-1 — they coexist):
 
