@@ -90,7 +90,9 @@
       "language": {
         "title": "Language",
         "system": "System",
-        "description": "System follows your device language."
+        "description": "System follows your device language.",
+        "contributeTitle": "Help translate Boardsesh",
+        "contributeSubtitle": "These come from the community. Open the {{language}} files on GitHub to fix or add a phrase."
       },
       "diagnostics": {
         "title": "Privacy",

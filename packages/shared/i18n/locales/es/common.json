@@ -288,7 +288,9 @@
       "language": {
         "title": "Idioma",
         "system": "Sistema",
-        "description": "Sistema usa el idioma de tu dispositivo."
+        "description": "Sistema usa el idioma de tu dispositivo.",
+        "contributeTitle": "Ayuda a traducir Boardsesh",
+        "contributeSubtitle": "Las traducciones las mantiene la comunidad. Abre los archivos de {{language}} en GitHub para corregir o añadir una frase."
       },
       "diagnostics": {
         "title": "Privacidad",
