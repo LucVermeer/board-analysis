@@ -41,7 +41,9 @@ import { isSupportedLocale, type Locale } from '@boardsesh/i18n';
  */
 const screenshotLocaleEnv = process.env.EXPO_PUBLIC_SCREENSHOT_LOCALE;
 export const SCREENSHOT_LOCALE_OVERRIDE: Locale | null =
-  SCREENSHOT_MODE && isSupportedLocale(screenshotLocaleEnv) ? screenshotLocaleEnv : null;
+  process.env.EXPO_PUBLIC_SCREENSHOT_MODE === '1' && isSupportedLocale(screenshotLocaleEnv)
+    ? screenshotLocaleEnv
+    : null;
 
 /**
  * Theme the screenshots build locks to so a capture can't flip mid-run when
