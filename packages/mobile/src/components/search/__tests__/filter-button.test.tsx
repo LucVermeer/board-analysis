@@ -3,7 +3,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, fireEvent } from '@testing-library/react';
 import { createElement } from 'react';
 
-const cfg = vi.hoisted(() => ({ variant: 'liquidGlass' as 'liquidGlass' | 'material' }));
+const cfg = vi.hoisted(() => ({
+  variant: 'liquidGlass' as 'liquidGlass' | 'material',
+  // The provider hands components the already scheme-resolved brand fill; dark
+  // mode swaps this to #7C3AED. Tests vary it to prove the FAB tints from whatever
+  // fill it's given rather than a hardcoded hue.
+  primaryFill: '#6D28D9',
+}));
 
 // GlassIconButton → a <button> surfacing the props FilterButton forwards: the
 // badge count, the icon tint, the glass tint, and the accessibility label.
@@ -67,7 +73,7 @@ vi.mock('../../GlassIconButton', () => ({
 vi.mock('../../../providers/theme-provider', () => ({
   useTheme: () => ({
     systemColors: { fill: '#EEE', secondaryLabel: '#999' },
-    brandColors: { primary: '#6D28D9', primaryFill: '#6D28D9', onPrimary: '#FFFFFF' },
+    brandColors: { primary: '#6D28D9', primaryFill: cfg.primaryFill, onPrimary: '#FFFFFF' },
     variant: cfg.variant,
   }),
 }));
@@ -96,6 +102,7 @@ const button = (root: HTMLElement) => root.querySelector('[data-icon="filter"]')
 describe('FilterButton', () => {
   beforeEach(() => {
     cfg.variant = 'liquidGlass';
+    cfg.primaryFill = '#6D28D9';
   });
 
   it('renders the filter glyph and fires onPress', () => {
@@ -150,6 +157,16 @@ describe('FilterButton', () => {
     // the fallback stays opaque so Reduce Transparency / Android read as a solid violet.
     expect(filterButton.getAttribute('data-tint')).toBe('#6D28D9@0.6');
     expect(filterButton.getAttribute('data-fallback')).toBe('#6D28D9');
+  });
+
+  it('tints the floating affordance from the scheme-resolved brand fill (dark mode)', () => {
+    // In dark mode the provider resolves brandColors.primaryFill to #7C3AED. The
+    // FAB must follow that fill (tint + opaque fallback), not a hardcoded violet.
+    cfg.primaryFill = '#7C3AED';
+    const { container } = render(<FilterButton activeFilterCount={0} onPress={() => {}} prominence="floating" />);
+    const filterButton = button(container);
+    expect(filterButton.getAttribute('data-tint')).toBe('#7C3AED@0.6');
+    expect(filterButton.getAttribute('data-fallback')).toBe('#7C3AED');
   });
 
   it('uses a white glyph on the violet glass tint when active (Liquid Glass)', () => {
