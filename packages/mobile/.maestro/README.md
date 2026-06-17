@@ -28,9 +28,10 @@ simulator keychain first so login authenticates cleanly against prod.
 
 ## Flows
 
-- `login.yaml` — reusable subflow. Fills the test credentials, submits via the
-  keyboard return key, and dismisses the iOS "Save Password" prompt. Only runs
-  when the auth screen is showing (the Keychain token survives `clearState`).
+- `login.yaml` — reusable subflow. The screenshot build auto-signs-in on boot (see
+  `screenshot-mode.ts` `SCREENSHOT_USER_*` + `app/auth/login.tsx`), so this no longer
+  types credentials — it just waits for the auto sign-in to redirect out of the auth
+  screen. Typing the form would pop iOS's "Save Password?" dialog over every shot.
 - `app-store.yaml` (iOS) — log in, then capture Home, Discover, Profile, Logbook,
   session detail, Climbs, the workout generator, playlist detail, and the board view
   (10 store slots; the `03` live-party slot is filled by the party flow, PR2).
@@ -39,11 +40,16 @@ simulator keychain first so login authenticates cleanly against prod.
 - `onboarding.yaml` / `onboarding-android.yaml` — capture app screens for
   onboarding-card illustrations (`--flow onboarding`).
 
-## Required env (passed by the orchestrator via `maestro test -e`)
+## Required env
 
 - `SCREENSHOT_USER_EMAIL` — test account email (default `test@boardsesh.com`).
 - `SCREENSHOT_USER_PASSWORD` — test account password. **Not committed** — pass it
   at runtime (prod differs from the local-DB `test`).
+
+The orchestrator bakes these into the bundle as `EXPO_PUBLIC_SCREENSHOT_USER_EMAIL` /
+`_PASSWORD` (iOS via the Metro env, Android via the CI `.env`) so the app auto-signs-in
+on boot. They live only in screenshot-only builds; the separate prod-stripping of
+`EXPO_PUBLIC_SCREENSHOT_*` keeps them out of shipped bundles.
 
 ## Notes
 
@@ -81,9 +87,10 @@ simulator keychain first so login authenticates cleanly against prod.
   matched by id/text. After moving the board view to a deep link, iOS keeps just
   **one** `point:` tap — the board pick (`24%,45%`) — **pinned to the iPhone 16 Pro
   Max**; Android additionally keeps the board-switcher tap (`78%,10%`) for its
-  board-sheet shot. Re-check them if the device changes. Login works because it
-  drives `TextInput`s (by testID) and the keyboard return key, not buttons.
-- Screenshot mode (the build-time `EXPO_PUBLIC_SCREENSHOT_MODE=1` flag) locks the
-  theme to dark + the platform variant, pre-selects the Record-tab workout, drives
-  the deep-link params above, and stops the onboarding gate from auto-presenting the
-  tour. See `packages/mobile/src/lib/screenshot-mode.ts`.
+  board-sheet shot. Re-check them if the device changes. There's no login tap at all
+  — the screenshot build auto-signs-in on boot, so the flow never touches the form.
+- Screenshot mode (the build-time `EXPO_PUBLIC_SCREENSHOT_MODE=1` flag) auto-signs-in
+  on boot with the baked `SCREENSHOT_USER_*` credentials, locks the theme to dark + the
+  platform variant, pre-selects the Record-tab workout, drives the deep-link params
+  above, and stops the onboarding gate from auto-presenting the tour. See
+  `packages/mobile/src/lib/screenshot-mode.ts`.
