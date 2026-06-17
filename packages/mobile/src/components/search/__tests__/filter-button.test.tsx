@@ -142,11 +142,13 @@ describe('FilterButton', () => {
     expect(filterButton.getAttribute('data-fallback')).toBe('#EEE');
   });
 
-  it('uses a filled brand surface for the floating Liquid Glass affordance', () => {
+  it('uses a translucent violet glass tint over an opaque fallback for the floating Liquid Glass affordance', () => {
     const { container } = render(<FilterButton activeFilterCount={0} onPress={() => {}} prominence="floating" />);
     const filterButton = button(container);
     expect(filterButton.getAttribute('data-icon-color')).toBe('#FFFFFF');
-    expect(filterButton.getAttribute('data-tint')).toBe('#6D28D9');
+    // Translucent tint so the Liquid Glass lenses through (purple glass, not a flat fill);
+    // the fallback stays opaque so Reduce Transparency / Android read as a solid violet.
+    expect(filterButton.getAttribute('data-tint')).toBe('#6D28D9@0.6');
     expect(filterButton.getAttribute('data-fallback')).toBe('#6D28D9');
   });
 
@@ -164,7 +166,7 @@ describe('FilterButton', () => {
     const { container } = render(<FilterButton activeFilterCount={2} onPress={() => {}} prominence="floating" />);
     const filterButton = button(container);
     expect(filterButton.getAttribute('data-icon-color')).toBe('#FFFFFF');
-    expect(filterButton.getAttribute('data-tint')).toBe('#6D28D9');
+    expect(filterButton.getAttribute('data-tint')).toBe('#6D28D9@0.6');
     expect(filterButton.getAttribute('data-fallback')).toBe('#6D28D9');
     expect(filterButton.getAttribute('data-badge-bg')).toBe('#FFFFFF');
     expect(filterButton.getAttribute('data-badge-color')).toBe('#6D28D9');

@@ -31,7 +31,9 @@ export function FilterButton({ activeFilterCount, onPress, onLongPress, prominen
 
   if (floatingLiquidGlass) {
     iconColor = brandColors.onPrimary;
-    tintColor = brandColors.primaryFill;
+    // Translucent violet so the Liquid Glass lenses through (purple GLASS, not a
+    // flat fill); the opaque fallback keeps Reduce Transparency / Android legible.
+    tintColor = withAlpha(brandColors.primaryFill, 0.6);
     fallbackColor = brandColors.primaryFill;
   } else if (active) {
     // Liquid Glass paints the active button on a violet glass tint, so a violet
