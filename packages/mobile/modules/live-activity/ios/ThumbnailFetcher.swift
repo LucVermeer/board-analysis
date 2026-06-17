@@ -27,16 +27,16 @@ actor ThumbnailFetcher {
     /// with new compositing logic discards thumbnails written by older builds
     /// instead of serving them stale. The App Group container survives app
     /// updates, so without this an upgrading user keeps seeing the previous
-    /// build's images. v1 = overlay-only (no board art); v2 = board background
-    /// composited behind the holds overlay — but v2 builds decoded the bundled
-    /// webp via Apple ImageIO (`UIImage(contentsOfFile:)`), which fails on the
-    /// lossy VP8 board art, so v2 actually cached overlay-only images while
-    /// recording version 2. v3 = backgrounds decoded via libwebp
-    /// (`SDImageWebPCoder`), so the board photo finally composites. The bump
-    /// forces v2 builds' stale overlay-only thumbnails to be purged on update.
-    /// Mirrors `RENDERER_VERSION` in use-native-climb-render.ts, which solved the
-    /// same transition in-app.
-    static let cacheVersion = 3
+    /// build's images. v1 = overlay-only (no board art); v2/v3 = on-device
+    /// compositing of the bundled board art behind the holds overlay, which never
+    /// rendered correctly in production (v2 decoded the bundled webp via Apple
+    /// ImageIO, which fails on the lossy VP8 art; v3 switched to libwebp but still
+    /// fell back to overlay-only). v4 = the server returns the fully composited
+    /// thumbnail (include_background=1), so the board photo always shows. The bump
+    /// purges v2/v3 builds' stale overlay-only thumbnails on update. Mirrors
+    /// `RENDERER_VERSION` in use-native-climb-render.ts, which solved the same
+    /// transition in-app.
+    static let cacheVersion = 4
 
     // MARK: - Dependencies
 
@@ -223,11 +223,12 @@ actor ThumbnailFetcher {
                 return nil
             }
 
-            // Composite the holds overlay over the bundled board background(s)
-            // when they're staged; otherwise persist the raw overlay (the
-            // graceful holds-only fallback for an unbundled board).
-            let imageData = compositeWithBoardBackground(overlayData: data) ?? data
-            try imageData.write(to: fileURL, options: .atomic)
+            // 2.0: the server returns the fully composited thumbnail (board photo
+            // behind the holds overlay, via include_background=1 in boardRenderUrl),
+            // matching the legacy Capacitor app. Persist it directly — no on-device
+            // webp decode/composite. The bundled-board-art compositing below is
+            // retained but unused, pending the "offline board art" revisit issue.
+            try data.write(to: fileURL, options: .atomic)
 
             // Evict after writing so we stay within the cache limit.
             // Note: called within the actor, so file I/O runs on the actor's
