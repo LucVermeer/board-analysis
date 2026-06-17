@@ -400,6 +400,7 @@ export default defineConfig({
       },
       'typecheck:climb-filters': {
         command: 'bun run --filter=@boardsesh/climb-filters typecheck',
+        dependsOn: ['codegen'],
       },
       'typecheck:i18n': {
         command: 'bun run --filter=@boardsesh/i18n typecheck',
