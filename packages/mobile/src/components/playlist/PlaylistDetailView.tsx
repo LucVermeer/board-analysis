@@ -725,7 +725,7 @@ function UnrenderablePlaylistClimbRow({
   onRemove: (climbUuid: string) => void;
 }) {
   const { t } = useTranslation('playlists');
-  const { systemColors } = useTheme();
+  const { systemColors, opacity } = useTheme();
   const subtitle = t('detail.unrenderableClimb.subtitle');
   const accessibilityLabel = `${climb.name}. ${subtitle}`;
 
@@ -734,7 +734,7 @@ function UnrenderablePlaylistClimbRow({
   }, [onRemove, climb.uuid]);
 
   return (
-    <View style={styles.unrenderableOuter}>
+    <View style={[styles.unrenderableOuter, { opacity: opacity.disabled }]}>
       <View
         style={[styles.unrenderableRow, { backgroundColor: systemColors.background }]}
         accessible={!editMode}
@@ -987,7 +987,6 @@ const styles = StyleSheet.create({
   unrenderableOuter: {
     position: 'relative',
     overflow: 'hidden',
-    opacity: 0.72,
   },
   unrenderableRow: {
     flexDirection: 'row',

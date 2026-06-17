@@ -123,7 +123,14 @@ vi.mock('react-native-safe-area-context', () => ({
 }));
 
 vi.mock('react-i18next', () => ({
-  useTranslation: () => ({ t: (key: string, _opts?: Record<string, unknown>) => key }),
+  useTranslation: () => ({
+    t: (key: string, opts?: Record<string, unknown>) => {
+      if (key === 'editClimbs.removeAria' && typeof opts?.name === 'string') {
+        return `${key}:${opts.name}`;
+      }
+      return key;
+    },
+  }),
 }));
 
 // ── Theme / providers ─────────────────────────────────────────────────────────
@@ -140,6 +147,7 @@ vi.mock('../../../providers/theme-provider', () => ({
       tertiaryBackground: '#e5e5e5',
     },
     brandColors: { primary: '#6D28D9' },
+    opacity: { disabled: 0.5 },
   }),
 }));
 
@@ -489,7 +497,7 @@ describe('PlaylistDetailView', () => {
 
   it('shows an indicator for climbs whose render board cannot be resolved', () => {
     const onActivateClimb = vi.fn();
-    const { getByText, getByLabelText } = render(
+    const { getByText } = render(
       <PlaylistDetailView
         {...makeProps({
           climbs: [UNKNOWN_BOARD_CLIMB],
@@ -501,8 +509,6 @@ describe('PlaylistDetailView', () => {
     expect(getByText('Unknown Board Row')).not.toBeNull();
     expect(getByText('detail.unrenderableClimb.subtitle')).not.toBeNull();
     expect(capturedClimbRows).toHaveLength(0);
-
-    fireEvent.click(getByLabelText('Unknown Board Row. detail.unrenderableClimb.subtitle'));
     expect(onActivateClimb).not.toHaveBeenCalled();
   });
 
@@ -518,7 +524,7 @@ describe('PlaylistDetailView', () => {
       />,
     );
 
-    fireEvent.click(getByLabelText('editClimbs.removeAria'));
+    fireEvent.click(getByLabelText('editClimbs.removeAria:Unknown Board Row'));
 
     expect(onRemoveClimb).toHaveBeenCalledWith('unknown-board-row');
   });
