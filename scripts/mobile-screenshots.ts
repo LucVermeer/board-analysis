@@ -432,20 +432,30 @@ function runIos(options: ScreenshotOptions): number {
       return 1;
     }
 
-    // Compile the bundle now so the dev-client load below isn't a cold bundle on
-    // Maestro's auth-screen wait (the slow-CI-runner timeout this guards against).
+    // Compile the bundle now so the dev-client launch below isn't a cold bundle
+    // when we wait for the app to reach home (the slow-CI-runner case this guards).
     prewarmMetroBundle();
 
     // Just launch the app — no `simctl openurl`. The screenshots build bakes
     // DEV_CLIENT_DEFAULT_LAUNCHER_URL=http://localhost:8081 into Info.plist (see
     // ./plugins/with-screenshot-dev-menu), so the dev-client auto-connects to
-    // Metro on a plain launch and lands on the auth screen — without ever opening
-    // the custom-scheme URL. That matters because a fresh CI sim raises an "Open
-    // in Boardsesh?" confirmation for ANY openurl of the scheme, and Maestro can't
-    // dismiss it reliably (it can queue two, occluding the form). Avoiding openurl
-    // sidesteps the whole class. Dev-menu chrome is suppressed via the same plugin.
+    // Metro on a plain launch and — auto-signed-in (see auth-provider's
+    // SCREENSHOT_MODE branch) — lands straight on home, without ever opening the
+    // custom-scheme URL or showing a login screen. That matters because a fresh CI
+    // sim raises an "Open in Boardsesh?" confirmation for ANY openurl of the
+    // scheme, and Maestro can't dismiss it reliably. Dev-menu chrome is suppressed
+    // via the same plugin.
     console.log(`${LOG} Launching the app (auto-loads Metro via DEV_CLIENT_DEFAULT_LAUNCHER_URL)...`);
     runCapture('xcrun', ['simctl', 'launch', device.udid, APP_ID]);
+
+    // The app auto-signs-in and boots straight to home, so wait for it to get
+    // there before Maestro runs — this is what login.yaml's readiness wait used to
+    // do (now deleted; there's no login screen to gate on).
+    console.log(`${LOG} Waiting for the app to auto-sign-in and reach home...`);
+    if (!waitForHomeReady(device.udid)) {
+      console.error(`${LOG} FAILED: app did not reach the home screen (auto sign-in / bundle load).`);
+      return 1;
+    }
 
     const flowFile = flowFileForPlatform(options, 'ios');
     if (!existsSync(flowFile)) {
@@ -837,6 +847,35 @@ function stopMetro(metro: ChildProcess | null): void {
 
 function sleepSeconds(seconds: number): void {
   spawnSync('sleep', [String(seconds)]);
+}
+
+/**
+ * After launch, wait until the app reaches the home screen, so the first
+ * screenshot isn't a blank/loading frame. The screenshot build auto-signs-in and
+ * boots straight to home (no login screen), so this replaces the old Maestro
+ * login.yaml readiness gate. Matches the app's `$screen /home` analytics line in
+ * the simulator's unified log.
+ */
+function waitForHomeReady(udid: string, timeoutSeconds = 180): boolean {
+  const deadline = Date.now() + timeoutSeconds * 1000;
+  while (Date.now() < deadline) {
+    const { stdout } = runCapture('xcrun', [
+      'simctl',
+      'spawn',
+      udid,
+      'log',
+      'show',
+      '--style',
+      'compact',
+      '--last',
+      '8s',
+      '--predicate',
+      'process == "Boardsesh"',
+    ]);
+    if (stdout.includes('$screen /home')) return true;
+    sleepSeconds(3);
+  }
+  return false;
 }
 
 export function main(argv: readonly string[] = process.argv.slice(2)): number {

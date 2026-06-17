@@ -28,16 +28,17 @@ simulator keychain first so login authenticates cleanly against prod.
 
 ## Flows
 
-- `login.yaml` — reusable subflow. The screenshot build auto-signs-in on boot (see
-  `screenshot-mode.ts` `SCREENSHOT_USER_*` + `app/auth/login.tsx`), so it never types
-  into the form (which would pop iOS's "Save Password?" dialog over every shot). It waits
-  for the auth field (`auth-email-input`) to appear — the one element that reliably
-  surfaces to Maestro on this build (native tab-bar labels don't) — then for the auto
-  sign-in to redirect out of it. `login.tsx` delays that sign-in ~3.5s so the field stays
-  on screen long enough to catch.
-- `app-store.yaml` (iOS) — log in, then capture Home, Discover, Profile, Logbook,
-  session detail, Climbs, the workout generator, playlist detail, and the board view
-  (10 store slots; the `03` live-party slot is filled by the party flow, PR2).
+There is no login flow. The screenshot build auto-signs-in on boot — the auth provider's
+`SCREENSHOT_MODE` branch (`auth-provider.tsx`, fed by `screenshot-mode.ts` `SCREENSHOT_USER_*`)
+signs in during its initial auth check, before the loading gate clears, so the app renders
+straight into Home: no login screen ever mounts, no form is typed, and iOS never offers to
+save the password. The orchestrator launches the app and waits for the `$screen /home` log
+before running Maestro (replacing the old `login.yaml` readiness gate), so each flow opens
+directly into its shots — no Maestro element races a transient auth screen.
+
+- `app-store.yaml` (iOS) — capture Home, Discover, Profile, Logbook, session detail,
+  Climbs, the workout generator, playlist detail, and the board view (10 store slots; the
+  `03` live-party slot is filled by the party flow, PR2).
 - `app-store-android.yaml` — the eight Play Store shots: Home, Discover, Profile,
   session detail, Climbs, the workout generator, board view, and the board sheet.
 - `onboarding.yaml` / `onboarding-android.yaml` — capture app screens for
@@ -64,10 +65,10 @@ on boot. They live only in screenshot-only builds; the separate prod-stripping o
   Re-opening the deep link reloads the JS runtime (clears the play drawer between
   drawer-opening shots; iOS now shoots the board view last so it doesn't need it,
   while Android relaunches before its board-sheet shot). The orchestrator pre-warms
-  the Metro bundle before
-  Maestro runs, but the first load still waits up to 300s as a safety net for a
-  cold bundle on a slow CI runner. The orchestrator uninstalls + reinstalls and
-  resets the keychain, so the app cold-loads signed out with fresh app data (no
+  the Metro bundle, then (iOS) launches the app and waits for the `$screen /home`
+  log — up to 180s as a safety net for a cold bundle on a slow CI runner — before
+  running Maestro. The orchestrator uninstalls + reinstalls and resets the keychain,
+  so the app cold-loads with fresh app data and the auth provider re-signs-in (no
   Maestro `clearState` needed).
 - The Android app is a standalone screenshot APK, so Android flows use
   `launchApp`. The orchestrator uninstalls + reinstalls the APK and clears app
@@ -90,8 +91,8 @@ on boot. They live only in screenshot-only builds; the separate prod-stripping o
   matched by id/text. After moving the board view to a deep link, iOS keeps just
   **one** `point:` tap — the board pick (`24%,45%`) — **pinned to the iPhone 16 Pro
   Max**; Android additionally keeps the board-switcher tap (`78%,10%`) for its
-  board-sheet shot. Re-check them if the device changes. There's no login tap at all
-  — the screenshot build auto-signs-in on boot, so the flow never touches the form.
+  board-sheet shot. Re-check them if the device changes. There's no login step at all
+  — the app auto-signs-in on boot and never shows a login screen.
 - Screenshot mode (the build-time `EXPO_PUBLIC_SCREENSHOT_MODE=1` flag) auto-signs-in
   on boot with the baked `SCREENSHOT_USER_*` credentials, locks the theme to dark + the
   platform variant, pre-selects the Record-tab workout, drives the deep-link params
