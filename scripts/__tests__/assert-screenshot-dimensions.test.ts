@@ -134,6 +134,35 @@ describe('findScreenshotTreeOffenders', () => {
     expect(offenders.some((offender) => offender.file === 'fr-FR' && /missing/.test(offender.reason))).toBe(true);
   });
 
+  it('flags an unknown App Store locale directory', () => {
+    const tree = screenshotTree({
+      'de-DE': {
+        'iphone-16-pro-max': [
+          {
+            name: 'de-DE/iphone-16-pro-max/00-home.png',
+            buffer: pngHeader({ width: 1320, height: 2868 }),
+          },
+        ],
+        'iphone-14-plus': [
+          {
+            name: 'de-DE/iphone-14-plus/00-home.png',
+            buffer: pngHeader({ width: 1284, height: 2778 }),
+          },
+        ],
+        'iphone-16-pro': [
+          {
+            name: 'de-DE/iphone-16-pro/00-home.png',
+            buffer: pngHeader({ width: 1206, height: 2622 }),
+          },
+        ],
+      },
+    });
+    const offenders = findScreenshotTreeOffenders(tree);
+    expect(
+      offenders.some((offender) => offender.file === 'de-DE' && /unknown App Store locale/.test(offender.reason)),
+    ).toBe(true);
+  });
+
   it('flags inconsistent device sets across locales', () => {
     const tree = screenshotTree({
       'es-ES': {

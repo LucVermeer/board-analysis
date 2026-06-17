@@ -171,8 +171,13 @@ function sortedKeys(record: Record<string, unknown>): string[] {
   return Object.keys(record).sort();
 }
 
-function basenames(files: readonly PngFile[], deviceSlug: string): string[] {
-  return files.map((file) => file.name.split('/').at(-1) ?? file.name.replace(`${deviceSlug}/`, '')).sort();
+function basenames(files: readonly PngFile[]): string[] {
+  // file.name is "<locale>/<device>/<file>.png" (Apple) or "<device>/<file>.png"
+  // (Play), so the last path segment is the bare filename used to compare coverage
+  // across locales/devices. split() always returns at least one element, so the
+  // `?? file.name` fallback only satisfies `.at(-1)`'s `string | undefined` type —
+  // it never actually runs.
+  return files.map((file) => file.name.split('/').at(-1) ?? file.name).sort();
 }
 
 function listsMatch(first: readonly string[], second: readonly string[]): boolean {
@@ -225,8 +230,8 @@ export function findScreenshotTreeOffenders(tree: ScreenshotTree): Offender[] {
       }
       if (referenceDevices.includes(deviceName) && firstExpectedLocale) {
         const referenceFiles = tree[firstExpectedLocale]?.[deviceName] ?? [];
-        const expectedFiles = basenames(referenceFiles, deviceName);
-        const actualFiles = basenames(files, deviceName);
+        const expectedFiles = basenames(referenceFiles);
+        const actualFiles = basenames(files);
         if (expectedFiles.length > 0 && !listsMatch(actualFiles, expectedFiles)) {
           offenders.push({
             file: `${expectedLocale}/${deviceName}`,

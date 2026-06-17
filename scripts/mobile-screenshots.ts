@@ -1015,9 +1015,14 @@ function waitForMetro(): boolean {
   return false;
 }
 
-/** Wait for a just-stopped Metro process group to release its listening port. */
+/**
+ * Wait for a just-stopped Metro process group to release its listening port.
+ * Capped at 60s: on a loaded CI runner the TCP stack can take a while to free the
+ * port between locale runs, and failing the next locale here would throw away the
+ * 60+ minutes already spent on earlier locales.
+ */
 function waitForPortToClose(port: number): boolean {
-  for (let attempt = 0; attempt < 30; attempt++) {
+  for (let attempt = 0; attempt < 60; attempt++) {
     if (!portInUse(port)) return true;
     sleepSeconds(1);
   }
@@ -1078,6 +1083,20 @@ export function main(argv: readonly string[] = process.argv.slice(2)): number {
   } catch (error) {
     console.error(`${LOG} ${error instanceof Error ? error.message : String(error)}`);
     return 1;
+  }
+
+  // --devices (the iOS device matrix) and --locales (the iOS locale matrix) only
+  // feed runIos; runAndroid captures the single --device into one en-US tree. Warn
+  // if they were passed for an android-only run so they don't look silently
+  // honoured. (`--platform all` still runs iOS, which does consume them.)
+  if (options.platform === 'android') {
+    const ignoredIosFlags = ['--devices', '--locales'].filter((flag) => argv.includes(flag));
+    if (ignoredIosFlags.length > 0) {
+      console.warn(
+        `${LOG} ${ignoredIosFlags.join(' and ')} only affect iOS captures and are ignored for --platform android; ` +
+          `use --device to pick the Android device.`,
+      );
+    }
   }
 
   const platforms: Array<'ios' | 'android'> = options.platform === 'all' ? ['ios', 'android'] : [options.platform];
