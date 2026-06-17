@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useState } from 'react';
+import { Fragment, useCallback, useMemo, useState } from 'react';
 import { View, StyleSheet, type LayoutChangeEvent } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import Svg, { Rect } from 'react-native-svg';
@@ -73,12 +73,15 @@ export function ActivityHeatmap({ heatmap }: ActivityHeatmapProps) {
     return `${now.getFullYear()}-${month}-${dayOfMonth}`;
   }, []);
 
-  const colorForCount = (count: number): string => {
-    if (count <= 0) return emptyFill;
-    const ratio = count / heatmap.maxCount;
-    const stepIndex = Math.min(stepFills.length - 1, Math.max(0, Math.ceil(ratio * stepFills.length) - 1));
-    return stepFills[stepIndex];
-  };
+  const colorForCount = useCallback(
+    (count: number): string => {
+      if (count <= 0) return emptyFill;
+      const ratio = count / heatmap.maxCount;
+      const stepIndex = Math.min(stepFills.length - 1, Math.max(0, Math.ceil(ratio * stepFills.length) - 1));
+      return stepFills[stepIndex];
+    },
+    [emptyFill, stepFills, heatmap.maxCount],
+  );
 
   const fitWeeks =
     width > 0 ? Math.min(columns.length, Math.max(1, Math.floor((width + CELL_GAP) / TARGET_COLUMN))) : 0;

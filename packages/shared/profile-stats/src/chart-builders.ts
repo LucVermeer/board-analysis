@@ -505,10 +505,14 @@ const HEATMAP_WEEKS = 53;
  * activity (attempts included: you still showed up). Days are emitted oldest→
  * newest and zero-filled so the renderer can chunk them into 7-row week columns
  * without gap handling. Returns null when no activity falls inside the window.
+ *
+ * `today` defaults to now; pass a fixed day for deterministic tests so the
+ * window anchor doesn't drift with the wall clock.
  */
 export function buildActivityHeatmap(
   filteredLogbook: LogbookEntry[],
   weeksWindow: number = HEATMAP_WEEKS,
+  today: dayjs.Dayjs = dayjs(),
 ): RawActivityHeatmap | null {
   if (filteredLogbook.length === 0) return null;
 
@@ -522,7 +526,7 @@ export function buildActivityHeatmap(
   // 7-row columns. End on the current week, start `weeksWindow` weeks earlier.
   // ISO weeks (not locale `week`) keep the grid deterministic regardless of the
   // runtime locale's first-day-of-week, and match every other builder here.
-  const gridEnd = dayjs().endOf('isoWeek');
+  const gridEnd = today.endOf('isoWeek');
   const gridStart = gridEnd.subtract(weeksWindow * 7 - 1, 'day').startOf('isoWeek');
 
   const days: RawActivityDay[] = [];

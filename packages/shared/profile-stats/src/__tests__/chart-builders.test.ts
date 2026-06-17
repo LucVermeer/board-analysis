@@ -558,4 +558,21 @@ describe('buildActivityHeatmap', () => {
     expect(result.weeks).toBe(4);
     expect(result.days.length).toBe(28);
   });
+
+  it('anchors the grid to a provided `today` (deterministic, ISO-week aligned)', () => {
+    const today = dayjs('2024-06-12'); // a Wednesday
+    const result = buildActivityHeatmap([makeEntry({ climbed_at: '2024-06-12T12:00:00Z' })], 53, today)!;
+    expect(result.weeks).toBe(53);
+    expect(result.days.length).toBe(53 * 7);
+    // End/start derive purely from `today` (no tick parsing), so these are
+    // timezone-independent: the grid ends on that ISO week's Sunday.
+    expect(result.endDate).toBe(today.endOf('isoWeek').format('YYYY-MM-DD'));
+    expect(result.startDate).toBe(
+      today
+        .endOf('isoWeek')
+        .subtract(53 * 7 - 1, 'day')
+        .startOf('isoWeek')
+        .format('YYYY-MM-DD'),
+    );
+  });
 });
