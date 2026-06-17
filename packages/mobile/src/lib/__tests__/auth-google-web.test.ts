@@ -59,6 +59,10 @@ describe('signInWithGoogleWeb', () => {
     const [startUrl, redirect] = openAuthSessionAsyncMock.mock.calls[0];
     expect(startUrl).toContain('https://web.test/auth/native-start?provider=google');
     expect(startUrl).toContain(encodeURIComponent('https://web.test/api/auth/native/callback?next=%2F'));
+    // Keep in sync with the web app's NATIVE_OAUTH_CALLBACK_SCHEME
+    // (packages/web/app/lib/auth/native-oauth-config.ts) — the redirect the web
+    // /api/auth/native/callback route deep-links back to. If web changes it, this
+    // must change too, or openAuthSessionAsync never captures the token.
     expect(redirect).toBe('com.boardsesh.app://auth/callback');
     expect(fetchMock).toHaveBeenCalledWith(
       'https://backend.test/auth/native/exchange',
@@ -106,6 +110,17 @@ describe('signInWithGoogleWeb', () => {
       status: 401,
       error: 'Invalid or expired transfer token',
     });
+    expect(storeTokensMock).not.toHaveBeenCalled();
+  });
+
+  it('returns invalid_response when a 200 exchange body is not JSON', async () => {
+    openAuthSessionAsyncMock.mockResolvedValue({
+      type: 'success',
+      url: 'com.boardsesh.app://auth/callback?transferToken=tok',
+    });
+    vi.spyOn(global, 'fetch').mockResolvedValue(new Response('not json', { status: 200 }));
+
+    expect(await signInWithGoogleWeb()).toEqual({ success: false, status: 200, error: 'invalid_response' });
     expect(storeTokensMock).not.toHaveBeenCalled();
   });
 

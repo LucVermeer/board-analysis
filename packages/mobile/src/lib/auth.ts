@@ -233,7 +233,13 @@ async function exchangeTransferToken(transferToken: string): Promise<OAuthSignIn
     return { success: false, status: response.status, error: serverError };
   }
 
-  const data = (await response.json()) as { jwt: string; refreshToken: string; expiresAt: string };
+  let data: { jwt: string; refreshToken: string; expiresAt: string };
+  try {
+    data = (await response.json()) as { jwt: string; refreshToken: string; expiresAt: string };
+  } catch {
+    // A 200 with an unreadable body — keep this function's "never throws" contract.
+    return { success: false, status: response.status, error: 'invalid_response' };
+  }
   await storeTokens(data.jwt, data.refreshToken, data.expiresAt);
   return { success: true };
 }
