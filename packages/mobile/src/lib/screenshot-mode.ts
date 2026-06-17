@@ -7,15 +7,30 @@ import {
 
 /**
  * Build-time screenshot mode. The dedicated screenshots build (see
- * `scripts/mobile-screenshots.ts`) is compiled with
- * `EXPO_PUBLIC_SCREENSHOT_MODE=1`; every normal build leaves the var unset, so
- * `SCREENSHOT_MODE` is `false` and the branches that read it dead-strip. This is
- * the native analogue of the web app-store flow's `sessionStorage` flags
- * (`boardsesh:e2e-bluetooth-picker`, `boardsesh:e2e-suppress-install-card`): a
- * presentation-stability switch, not a data-mocking layer — the seeded backend
- * stays the source of truth.
+ * `scripts/mobile-screenshots.ts`) is compiled with `EXPO_PUBLIC_SCREENSHOT_MODE=1`;
+ * every normal build leaves the var unset. It's the native analogue of the web
+ * app-store flow's `sessionStorage` flags (`boardsesh:e2e-bluetooth-picker`,
+ * `boardsesh:e2e-suppress-install-card`): a presentation-stability switch, not a
+ * data-mocking layer — the seeded backend stays the source of truth.
+ *
+ * The boolean is intentionally NOT exported from here. Each consumer inlines the
+ * raw comparison directly in its guard / ternary condition:
+ *
+ *   if (process.env.EXPO_PUBLIC_SCREENSHOT_MODE === '1') { … }
+ *   if (process.env.EXPO_PUBLIC_SCREENSHOT_MODE !== '1') return;
+ *
+ * babel-preset-expo replaces `process.env.EXPO_PUBLIC_*` with a literal per
+ * module, so in a minified release build the condition folds in place
+ * (`undefined === '1'` → `false`) and terser dead-strips the branch — needing
+ * only literal folding, no cross-module or cross-statement constant propagation.
+ * Routing the flag through a shared export — or even a module-local
+ * `const SCREENSHOT_MODE = …` — makes the strip lean on the minifier's
+ * variable-propagation passes instead of plain literal folding. Keep the raw
+ * `process.env.EXPO_PUBLIC_SCREENSHOT_MODE` comparison at each call site.
+ *
+ * The typed override helpers below stay shared: they're only read inside the
+ * now-DCE-able branches, so they strip along with them.
  */
-export const SCREENSHOT_MODE = process.env.EXPO_PUBLIC_SCREENSHOT_MODE === '1';
 
 /**
  * Theme the screenshots build locks to so a capture can't flip mid-run when

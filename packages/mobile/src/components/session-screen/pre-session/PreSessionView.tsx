@@ -34,7 +34,7 @@ import {
   DEFAULT_VOLUME_OPTIONS,
 } from '@boardsesh/playlist-generator';
 import { assertNever } from '../../../lib/assert-never';
-import { SCREENSHOT_MODE, SCREENSHOT_WORKOUT } from '../../../lib/screenshot-mode';
+import { SCREENSHOT_WORKOUT } from '../../../lib/screenshot-mode';
 import { GeneratorPickerCard, type GeneratorSelection } from './GeneratorPickerCard';
 import { WorkoutPreviewRow } from './WorkoutPreviewRow';
 import { useWorkoutPreview } from './use-workout-preview';
@@ -47,7 +47,7 @@ import type { PreviewItem } from './workout-preview-pool';
 // The DEFAULT_*_OPTIONS omit `targetGrade` (see playlist-generator types), so each
 // branch adds a mid-grade default — mirroring buildDefaultOptions in GeneratorPickerCard.
 function initialGeneratorSelection(): GeneratorSelection {
-  if (!SCREENSHOT_MODE || !SCREENSHOT_WORKOUT) return { type: 'off' };
+  if (process.env.EXPO_PUBLIC_SCREENSHOT_MODE !== '1' || !SCREENSHOT_WORKOUT) return { type: 'off' };
   const targetGrade = 15;
   switch (SCREENSHOT_WORKOUT) {
     case 'volume':

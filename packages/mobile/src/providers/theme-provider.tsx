@@ -44,7 +44,7 @@ import {
 import { variantFeatures, type VariantFeatures } from '../theme/variants/variant-features';
 import { secureStorePreferences } from '../lib/preferences/secure-store-adapter';
 import { assertNever } from '../lib/assert-never';
-import { SCREENSHOT_MODE, SCREENSHOT_THEME_OVERRIDE, SCREENSHOT_VARIANT_PREFERENCE } from '../lib/screenshot-mode';
+import { SCREENSHOT_THEME_OVERRIDE, SCREENSHOT_VARIANT_PREFERENCE } from '../lib/screenshot-mode';
 
 type ColorScheme = 'light' | 'dark';
 
@@ -218,14 +218,14 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
   // theme is locked to a fixed value (light by default) so captures can't flip
   // mid-run when the keychain read resolves.
   const [themeOverride, setThemeOverrideState] = useState<ThemeOverride>(
-    SCREENSHOT_MODE ? SCREENSHOT_THEME_OVERRIDE : 'system',
+    process.env.EXPO_PUBLIC_SCREENSHOT_MODE === '1' ? SCREENSHOT_THEME_OVERRIDE : 'system',
   );
   // `'auto'` until SecureStore hydrates — same value as a brand-new user, so the
   // first paint resolves to the platform default (Liquid Glass on iOS 26,
   // Material elsewhere) via the synchronous capability check, no flash. Locked
   // in screenshot mode for the same reason as the theme override.
   const [uiVariantPreference, setUiVariantPreferenceState] = useState<UiVariantPreference>(
-    SCREENSHOT_MODE ? SCREENSHOT_VARIANT_PREFERENCE : 'auto',
+    process.env.EXPO_PUBLIC_SCREENSHOT_MODE === '1' ? SCREENSHOT_VARIANT_PREFERENCE : 'auto',
   );
   // Guards the hydration effect against stomping a user choice that lands
   // before the SecureStore read resolves (a tap on a settings toggle can
@@ -237,7 +237,7 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
     // Screenshot mode pins the theme + variant to fixed values, so skip the
     // SecureStore reads entirely — otherwise a saved override could flip the
     // look between the first paint and the capture.
-    if (SCREENSHOT_MODE) return;
+    if (process.env.EXPO_PUBLIC_SCREENSHOT_MODE === '1') return;
     let cancelled = false;
     secureStorePreferences
       .get<ThemeOverride>(THEME_OVERRIDE_KEY)

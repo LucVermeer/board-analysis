@@ -23,7 +23,6 @@ import { useBottomChromeMetrics } from '../../hooks/use-bottom-chrome-metrics';
 import { useDrawerHost } from '../../providers/drawer-host-provider';
 import { spacing, borderRadius } from '../../theme/tokens';
 import { useTheme } from '../../providers/theme-provider';
-import { SCREENSHOT_MODE } from '../../lib/screenshot-mode';
 
 type FeedRow = { type: 'header'; bucket: FeedRecencyBucket } | { type: 'session'; item: SessionFeedItem };
 type CommentTarget = { entityId: string; entityType: SocialEntityType };
@@ -176,7 +175,7 @@ export function SessionsTab({ userId, topInset = 0 }: SessionsTabProps) {
   // deep-link param, so it never disturbs the default profile shot. Fires once.
   const screenshotSessionOpenedRef = useRef(false);
   useEffect(() => {
-    if (!SCREENSHOT_MODE || screenshotSessionOpenedRef.current) return;
+    if (process.env.EXPO_PUBLIC_SCREENSHOT_MODE !== '1' || screenshotSessionOpenedRef.current) return;
     const firstSession = sessions[0];
     if (!firstSession) return;
     screenshotSessionOpenedRef.current = true;

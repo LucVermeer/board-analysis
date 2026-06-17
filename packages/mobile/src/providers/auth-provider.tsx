@@ -13,7 +13,7 @@ import {
   type CredentialsSignInResult,
   type OAuthSignInResult,
 } from '../lib/auth';
-import { SCREENSHOT_MODE, SCREENSHOT_USER_EMAIL, SCREENSHOT_USER_PASSWORD } from '../lib/screenshot-mode';
+import { SCREENSHOT_USER_EMAIL, SCREENSHOT_USER_PASSWORD } from '../lib/screenshot-mode';
 import { reset as resetAnalytics, track } from '../lib/analytics';
 import { reportError } from '../lib/error-reporting';
 import { setOnForcedSignOut } from '../lib/auth-interceptor';
@@ -120,8 +120,10 @@ export function AuthProvider({ children, onReady }: AuthProviderProps) {
         // Screenshot build: sign in programmatically here, before the loading gate
         // clears, so the app renders straight into /home — the login screen never
         // mounts. No form is shown, so there's no Maestro timing race and no iOS
-        // "Save Password?" dialog. Inert in normal builds (SCREENSHOT_MODE === false).
-        if (SCREENSHOT_MODE && SCREENSHOT_USER_EMAIL && SCREENSHOT_USER_PASSWORD) {
+        // "Save Password?" dialog. Inert in normal builds (dead-strips when
+        // EXPO_PUBLIC_SCREENSHOT_MODE is unset — the comparison stays inlined here so the
+        // release minifier folds it in place rather than across a module boundary).
+        if (process.env.EXPO_PUBLIC_SCREENSHOT_MODE === '1' && SCREENSHOT_USER_EMAIL && SCREENSHOT_USER_PASSWORD) {
           const screenshotSignIn = await authSignInWithCredentials(SCREENSHOT_USER_EMAIL, SCREENSHOT_USER_PASSWORD);
           if (screenshotSignIn.success) {
             setIsAuthenticated(true);

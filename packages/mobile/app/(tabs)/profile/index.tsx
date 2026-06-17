@@ -11,7 +11,6 @@ import { ProgressTab } from '../../../src/components/you/ProgressTab';
 import { SessionsTab } from '../../../src/components/you/SessionsTab';
 import { LogbookTab } from '../../../src/components/you/LogbookTab';
 import { SocialTab } from '../../../src/components/you/SocialTab';
-import { SCREENSHOT_MODE } from '../../../src/lib/screenshot-mode';
 
 // Screenshot mode selects the visible sub-tab via a `screenshotTab` deep-link
 // param so the logbook/sessions shots are deterministic.
@@ -30,13 +29,13 @@ export default function YouScreen() {
   const filterSheetRef = useRef<BottomSheet | null>(null);
   const { screenshotTab } = useLocalSearchParams<{ screenshotTab?: string }>();
   const [activeTab, setActiveTab] = useState<ProfileTabKey>(() =>
-    SCREENSHOT_MODE && isProfileTabKey(screenshotTab) ? screenshotTab : 'progress',
+    process.env.EXPO_PUBLIC_SCREENSHOT_MODE === '1' && isProfileTabKey(screenshotTab) ? screenshotTab : 'progress',
   );
   // The profile tab stays mounted across screenshot shots, so re-sync the visible
   // sub-tab whenever the deep-link param changes (initial mount is covered by the
   // useState initialiser). Inert in normal builds — manual tab taps own the state.
   useEffect(() => {
-    if (!SCREENSHOT_MODE) return;
+    if (process.env.EXPO_PUBLIC_SCREENSHOT_MODE !== '1') return;
     setActiveTab(isProfileTabKey(screenshotTab) ? screenshotTab : 'progress');
   }, [screenshotTab]);
 
