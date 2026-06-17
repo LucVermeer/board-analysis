@@ -1,5 +1,5 @@
 import { View, StyleSheet } from 'react-native';
-import { Avatar } from '../Avatar';
+import { PressableAvatar } from '../PressableAvatar';
 import { Text } from '../Text';
 import { brandColors } from '../../theme/colors';
 import { iosSystemColors } from '../../theme/ios-colors';
@@ -19,7 +19,7 @@ export function AvatarGroup({ participants, size = 32, max = 3 }: AvatarGroupPro
 
   if (participants.length <= 1) {
     const only = participants[0];
-    return <Avatar uri={only?.avatarUrl} name={only?.displayName} size={size} />;
+    return <PressableAvatar userId={only?.userId} uri={only?.avatarUrl} name={only?.displayName} size={size} />;
   }
 
   const shown = participants.slice(0, max);
@@ -40,7 +40,12 @@ export function AvatarGroup({ participants, size = 32, max = 3 }: AvatarGroupPro
             },
           ]}
         >
-          <Avatar uri={participant.avatarUrl} name={participant.displayName} size={size} />
+          <PressableAvatar
+            userId={participant.userId}
+            uri={participant.avatarUrl}
+            name={participant.displayName}
+            size={size}
+          />
         </View>
       ))}
       {overflow > 0 && (

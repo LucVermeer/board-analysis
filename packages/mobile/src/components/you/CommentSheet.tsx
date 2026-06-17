@@ -4,7 +4,7 @@ import BottomSheet, { BottomSheetTextInput } from '@gorhom/bottom-sheet';
 import { useTranslation } from 'react-i18next';
 import type { SocialEntityType } from '@boardsesh/shared-schema';
 import { Text } from '../Text';
-import { Avatar } from '../Avatar';
+import { PressableAvatar } from '../PressableAvatar';
 import { Icon } from '../Icon';
 import { Sheet } from '../Sheet';
 import { ActivityIndicator } from '../ActivityIndicator';
@@ -100,7 +100,12 @@ export function CommentSheet({ sheetRef, entityId, entityType = 'session', onClo
       ) : (
         comments.map((comment) => (
           <View key={comment.uuid} style={styles.commentRow}>
-            <Avatar uri={comment.userAvatarUrl} name={comment.userDisplayName} size={32} />
+            <PressableAvatar
+              userId={comment.userId}
+              uri={comment.userAvatarUrl}
+              name={comment.userDisplayName}
+              size={32}
+            />
             <View style={styles.commentBody}>
               <View style={styles.commentMeta}>
                 <Text variant="subheadline" style={styles.commentName}>
