@@ -375,7 +375,11 @@
     "mobileSwitchFailed": "Impossible de passer à la configuration de ce board. Essayez Connecter quand même.",
     "cancel": "Annuler",
     "connectAnyway": "Connecter quand même",
-    "switchToCorrect": "Passer à la bonne configuration"
+    "switchToCorrect": "Passer à la bonne configuration",
+    "mobileConnectAnyway": "Connecter quand même",
+    "mobileConnectAnywayWarning": "D'après nos enregistrements, ce contrôleur appartient à une autre configuration de board. Connecter quand même pourrait allumer les voies de façon incorrecte.",
+    "mobileSwitchSetup": "Changer de board",
+    "mobileUseRecordedSetup": "Utiliser la configuration enregistrée"
   },
   "devicePicker": {
     "title": "Sélectionnez votre board",
@@ -404,7 +408,7 @@
     "relightBoard": "Rallumer le panneau",
     "turnOff": "Éteindre le panneau",
     "holdForControls": "Maintenir pour les commandes",
-    "notAvailable": "Le Bluetooth n'est pas disponible",
+    "sendFailedTitle": "Impossible d'allumer le board",
     "connectionFailedTitle": "Connexion impossible",
     "permissionRequired": "Autorisation Bluetooth requise",
     "errorPermissionDenied": "Autorisez le Bluetooth pour connecter un panneau.",

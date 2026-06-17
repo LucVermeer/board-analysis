@@ -375,7 +375,11 @@
     "mobileSwitchFailed": "No se pudo cambiar a la configuración de ese tablero. Prueba Conectar igualmente.",
     "cancel": "Cancelar",
     "connectAnyway": "Conectar igualmente",
-    "switchToCorrect": "Cambiar a la configuración correcta"
+    "switchToCorrect": "Cambiar a la configuración correcta",
+    "mobileConnectAnyway": "Conectar igualmente",
+    "mobileConnectAnywayWarning": "Nuestros registros muestran que este controlador pertenece a otra configuración de tablero. Conectar igualmente podría iluminar las vías de forma incorrecta.",
+    "mobileSwitchSetup": "Cambiar de tablero",
+    "mobileUseRecordedSetup": "Usar la configuración registrada"
   },
   "devicePicker": {
     "title": "Selecciona tu tablero",
@@ -404,7 +408,7 @@
     "relightBoard": "Reiluminar tablero",
     "turnOff": "Apagar el tablero",
     "holdForControls": "Mantén pulsado para los controles",
-    "notAvailable": "Bluetooth no está disponible",
+    "sendFailedTitle": "No se pudo iluminar el tablero",
     "connectionFailedTitle": "No se pudo conectar",
     "permissionRequired": "Permiso de Bluetooth necesario",
     "errorPermissionDenied": "Permite los permisos de Bluetooth para conectar un tablero.",

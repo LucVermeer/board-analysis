@@ -400,7 +400,7 @@ export function useBoardBluetooth({
             // letting the AutoSender buzz success on a dark board.
             if (sent === false) {
               console.warn('[BLE] All MoonBoard placements skipped — climb has unrecognised hold data');
-              Alert.alert(t('ble.notAvailable'), t('ble.errorIncompatible'));
+              Alert.alert(t('ble.sendFailedTitle'), t('ble.errorIncompatible'));
               track(SHARED_EVENTS.ClimbSentToBoardFailure, {
                 ...boardAnalyticsProperties,
                 failureReason: 'incompatible_climb',
@@ -430,7 +430,7 @@ export function useBoardBluetooth({
               console.error(
                 `[BLE] Cannot mirror frames: holdsData is missing or empty for ${boardName} layout=${layoutId}`,
               );
-              Alert.alert(t('ble.notAvailable'), t('ble.errorIncompatible'));
+              Alert.alert(t('ble.sendFailedTitle'), t('ble.errorIncompatible'));
               track(SHARED_EVENTS.ClimbSentToBoardFailure, {
                 ...boardAnalyticsProperties,
                 failureReason: 'missing_mirror_data',
@@ -451,7 +451,7 @@ export function useBoardBluetooth({
             console.error(
               `[BLE] LED placement map is empty for ${boardName} layout=${layoutId} size=${sizeId}. Board configuration may be incorrect or LED data may need regeneration.`,
             );
-            Alert.alert(t('ble.notAvailable'), t('ble.errorLedMissing'));
+            Alert.alert(t('ble.sendFailedTitle'), t('ble.errorLedMissing'));
             track(SHARED_EVENTS.ClimbSentToBoardFailure, {
               ...boardAnalyticsProperties,
               failureReason: 'missing_led_placements',
@@ -471,7 +471,7 @@ export function useBoardBluetooth({
 
           if (skippedCount > 0 && result.packet.length === 0) {
             console.warn(`[BLE] All ${result.totalPlacements} placements skipped — climb incompatible with board`);
-            Alert.alert(t('ble.notAvailable'), t('ble.errorIncompatible'));
+            Alert.alert(t('ble.sendFailedTitle'), t('ble.errorIncompatible'));
             track(SHARED_EVENTS.ClimbSentToBoardFailure, {
               ...boardAnalyticsProperties,
               failureReason: 'incompatible_climb',

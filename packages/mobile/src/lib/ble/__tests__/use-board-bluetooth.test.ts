@@ -328,7 +328,7 @@ describe('useBoardBluetooth', () => {
     });
 
     expect(sendResult).toBe(false);
-    expect(Alert.alert).toHaveBeenCalledWith('ble.notAvailable', 'ble.errorIncompatible');
+    expect(Alert.alert).toHaveBeenCalledWith('ble.sendFailedTitle', 'ble.errorIncompatible');
     // The board must never receive the original (un-mirrored) frames.
     expect(fakeAdapter.write).not.toHaveBeenCalled();
     const failureCall = mockTrack.mock.calls.find(([name]) => name === 'Climb Sent to Board Failure');

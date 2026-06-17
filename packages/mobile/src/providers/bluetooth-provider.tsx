@@ -460,6 +460,11 @@ export function BluetoothProvider({
   const previousPresenceBoardIdRef = useRef<number | null>(presenceBoardId);
   const boardConfigIdentity = `${boardName ?? ''}:${layoutId ?? ''}:${sizeId ?? ''}:${setIds ?? ''}`;
   const previousBoardConfigIdentityRef = useRef(boardConfigIdentity);
+  // True while this connection was made via "Connect anyway" on the board-config
+  // mismatch dialog (our records say this controller belongs to another setup).
+  // Cleared on disconnect/drop and on board-config change. Attached to connection
+  // + send analytics so override sessions are filterable.
+  const connectedViaMismatchOverrideRef = useRef(false);
   const undoWallChangeToastArmIdRef = useRef<number | null>(null);
   const nextUndoWallChangeToastArmIdRef = useRef(0);
   const undoWallChangeToastArmTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -509,6 +514,7 @@ export function BluetoothProvider({
     previousBoardConfigIdentityRef.current = boardConfigIdentity;
     if (previousBoardConfigIdentity !== boardConfigIdentity) {
       clearPendingWallReportAndUndoToastArm();
+      connectedViaMismatchOverrideRef.current = false;
     }
   }, [boardConfigIdentity, clearPendingWallReportAndUndoToastArm]);
 
@@ -875,6 +881,17 @@ export function BluetoothProvider({
       } catch (error) {
         console.error('Failed to switch to correct board config:', error);
         reportHandledError(error, { tags: { source: 'board-config', op: 'switch' } });
+        track(SHARED_EVENTS.BleBoardConfigMismatchResolved, {
+          serial: decision.serial,
+          currentBoardName: currentBoardConfigRef.current?.boardName,
+          currentLayoutId: currentBoardConfigRef.current?.layoutId,
+          recordedBoardName: decision.config.boardName,
+          recordedLayoutId: decision.config.layoutId,
+          recordedEntryKind: decision.entry.kind,
+          // Reaching this catch means the switch button was offered (and tapped).
+          canSwitch: true,
+          action: 'switch_failed',
+        });
         Alert.alert(t('boardConfigMismatch.title'), t('boardConfigMismatch.mobileSwitchFailed'));
       }
     },
@@ -904,18 +921,43 @@ export function BluetoothProvider({
       const canSwitch =
         decision.entry.kind === 'saved' ||
         (decision.entry.kind === 'recorded' && decision.entry.config.boardUuid != null);
+
+      const mismatchAnalytics = {
+        serial: decision.serial,
+        currentBoardName: activeBoardConfig?.boardName,
+        currentLayoutId: activeBoardConfig?.layoutId,
+        recordedBoardName: decision.config.boardName,
+        recordedLayoutId: decision.config.layoutId,
+        recordedEntryKind: decision.entry.kind,
+        canSwitch,
+      };
+      track(SHARED_EVENTS.BleBoardConfigMismatchShown, mismatchAnalytics);
+      const trackResolved = (action: 'cancel' | 'connect_anyway' | 'switch_setup') =>
+        track(SHARED_EVENTS.BleBoardConfigMismatchResolved, { ...mismatchAnalytics, action });
+
+      // "Connect anyway" is a warning, not a destructive action — connecting to a
+      // working board the user owns isn't dangerous, just possibly mis-mapped.
       const buttons = [
-        { text: t('boardConfigMismatch.cancel'), style: 'cancel' as const },
+        { text: t('boardConfigMismatch.cancel'), style: 'cancel' as const, onPress: () => trackResolved('cancel') },
         {
-          text: t('boardConfigMismatch.connectAnyway'),
-          style: 'destructive' as const,
-          onPress: () => activePickerState.handleSelect(deviceId),
+          text: t('boardConfigMismatch.mobileConnectAnyway'),
+          onPress: () => {
+            trackResolved('connect_anyway');
+            connectedViaMismatchOverrideRef.current = true;
+            activePickerState.handleSelect(deviceId);
+          },
         },
         ...(canSwitch
           ? [
               {
-                text: t('boardConfigMismatch.switchToCorrect'),
-                onPress: () => void handleMismatchSwitch(decision),
+                text:
+                  decision.entry.kind === 'saved'
+                    ? t('boardConfigMismatch.mobileSwitchSetup')
+                    : t('boardConfigMismatch.mobileUseRecordedSetup'),
+                onPress: () => {
+                  trackResolved('switch_setup');
+                  void handleMismatchSwitch(decision);
+                },
               },
             ]
           : []),
@@ -923,7 +965,7 @@ export function BluetoothProvider({
       Alert.alert(
         t('boardConfigMismatch.title'),
         [
-          t('boardConfigMismatch.intro'),
+          t('boardConfigMismatch.mobileConnectAnywayWarning'),
           t('boardConfigMismatch.mobileCurrentLabel', { config: currentLabel }),
           t('boardConfigMismatch.mobileRecordedLabel', { config: recordedLabel }),
         ].join('\n\n'),
@@ -1043,6 +1085,7 @@ export function BluetoothProvider({
   const wrappedDisconnect = useCallback(async () => {
     clearPendingWallReportAndUndoToastArm();
     releaseBoardHolder();
+    connectedViaMismatchOverrideRef.current = false;
     isUserDisconnectRef.current = true;
     track(SHARED_EVENTS.BluetoothDisconnected, { boardName, reason: 'user', inSession: sessionIdRef.current != null });
     try {
@@ -1079,6 +1122,7 @@ export function BluetoothProvider({
   useEffect(() => {
     if (wasConnectedRef.current && !isConnected && !isUserDisconnectRef.current) {
       clearPendingWallReportAndUndoToastArm();
+      connectedViaMismatchOverrideRef.current = false;
       // An unexpected drop also frees our board hold (the booted phone is no
       // longer writing the wall). Compare-and-delete server-side, so if another
       // phone already took over this is a no-op.

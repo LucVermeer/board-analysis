@@ -357,8 +357,25 @@ describe('BluetoothProvider mismatch switch', () => {
     const buttons = lastAlertButtons();
     expect(buttons).toHaveLength(3);
     expect(buttons[0]?.style).toBe('cancel');
-    expect(buttons[1]?.style).toBe('destructive');
+    // "Connect anyway" is a warning now, not a destructive (red) action.
+    expect(buttons[1]?.style).toBeUndefined();
     expect(buttons[2]?.text).toBeTruthy();
+  });
+
+  it('tracks the mismatch dialog shown, and resolved with the action taken', () => {
+    bluetooth.state.pickerState = makeMismatchingPickerState();
+    resolvedBoards.value = new Map([['SN-2', { kind: 'saved', board: makeBoard() }]]);
+
+    renderProvider(KILTER_PROPS);
+    pickerSheet.props?.onSelect('device-2');
+
+    const shown = analytics.track.mock.calls.find(([name]) => name === 'BLE Board Config Mismatch Shown');
+    expect(shown?.[1]).toMatchObject({ serial: 'SN-2', canSwitch: true, recordedEntryKind: 'saved' });
+
+    // Connect anyway → resolved:connect_anyway, no destructive styling, proceeds.
+    lastAlertButtons()[1]?.onPress?.();
+    const resolved = analytics.track.mock.calls.find(([name]) => name === 'BLE Board Config Mismatch Resolved');
+    expect(resolved?.[1]).toMatchObject({ action: 'connect_anyway', serial: 'SN-2' });
   });
 
   it('switches the active board and silently auto-connects once after the config matches', async () => {
@@ -373,6 +390,10 @@ describe('BluetoothProvider mismatch switch', () => {
     const switchButton = lastAlertButtons()[2];
     expect(switchButton).toBeDefined();
     switchButton?.onPress?.();
+
+    expect(
+      analytics.track.mock.calls.find(([name]) => name === 'BLE Board Config Mismatch Resolved')?.[1],
+    ).toMatchObject({ action: 'switch_setup' });
 
     await waitFor(() => {
       expect(activeBoard.setActiveBoard).toHaveBeenCalledWith(savedBoard);
