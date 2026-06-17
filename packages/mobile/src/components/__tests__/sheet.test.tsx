@@ -22,7 +22,8 @@ function readPaddingBottom(style: unknown): number | undefined {
 const captures = vi.hoisted(() => ({
   footerOnLayout: null as null | ((event: { nativeEvent: { layout: { height: number } } }) => void),
   scrollPaddingBottom: undefined as number | undefined,
-  viewPaddingBottom: undefined as number | undefined,
+  bodyPaddingBottom: undefined as number | undefined,
+  footerChromePaddingBottom: undefined as number | undefined,
   footerComponents: [] as Array<ComponentType<{ animatedFooterPosition?: unknown }> | undefined>,
 }));
 
@@ -38,7 +39,7 @@ vi.mock('react-native', () => ({
     // simulate the footer measuring and assert the body padding follows.
     if (onLayout) {
       captures.footerOnLayout = onLayout;
-      captures.viewPaddingBottom = readPaddingBottom(style);
+      captures.footerChromePaddingBottom = readPaddingBottom(style);
     }
     return createElement('div', null, children);
   },
@@ -67,7 +68,11 @@ vi.mock('@gorhom/bottom-sheet', () => ({
     captures.scrollPaddingBottom = readPaddingBottom(contentContainerStyle);
     return createElement('div', { 'data-scroll': 'true' }, children);
   },
-  BottomSheetView: ({ children }: { children?: ReactNode }) => createElement('div', { 'data-view': 'true' }, children),
+  BottomSheetView: ({ children, style }: { children?: ReactNode; style?: unknown }) => {
+    // The non-scrollable branch reserves footer room on this view's style.
+    captures.bodyPaddingBottom = readPaddingBottom(style);
+    return createElement('div', { 'data-view': 'true' }, children);
+  },
   BottomSheetFooter: ({ children }: { children?: ReactNode }) =>
     createElement('div', { 'data-footer': 'true' }, children),
   BottomSheetBackdrop: () => null,
@@ -101,15 +106,18 @@ vi.mock('../../providers/theme-provider', () => ({
   }),
 }));
 
-import { Sheet } from '../Sheet';
+import { ESTIMATED_FOOTER_HEIGHT, Sheet } from '../Sheet';
 
+// Mirror the values the theme/token mocks above feed into the footer chrome.
+const SPACING_3 = 12;
 const SPACING_4 = 16;
-const ESTIMATED_FOOTER_HEIGHT = 80;
+const INSET_BOTTOM = 34;
 
 beforeEach(() => {
   captures.footerOnLayout = null;
   captures.scrollPaddingBottom = undefined;
-  captures.viewPaddingBottom = undefined;
+  captures.bodyPaddingBottom = undefined;
+  captures.footerChromePaddingBottom = undefined;
   captures.footerComponents = [];
 });
 
@@ -124,6 +132,22 @@ describe('Sheet footer wiring', () => {
     // Before the footer measures, the body padding is the estimate + gap — not a
     // bare spacing[4], which would let the last row sit under the footer.
     expect(captures.scrollPaddingBottom).toBe(ESTIMATED_FOOTER_HEIGHT + SPACING_4);
+    // The footer wrapper itself carries safe-area-aware bottom padding so the CTA
+    // clears the home indicator.
+    expect(captures.footerChromePaddingBottom).toBe(INSET_BOTTOM + SPACING_3);
+  });
+
+  it('reserves footer room on the non-scrollable body too', () => {
+    render(
+      <Sheet footer={<div data-testid="footer">save</div>}>
+        <div>body</div>
+      </Sheet>,
+    );
+
+    // The BottomSheetView branch (non-scrollable) must reserve the same room as
+    // the scrollable branch, or its last row hides under the sticky footer.
+    expect(captures.bodyPaddingBottom).toBe(ESTIMATED_FOOTER_HEIGHT + SPACING_4);
+    expect(captures.footerComponents.filter(Boolean).length).toBeGreaterThan(0);
   });
 
   it('updates the reserved padding once the footer reports its real height', () => {

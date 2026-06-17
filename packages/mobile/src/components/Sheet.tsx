@@ -36,7 +36,7 @@ const useOverlay = Platform.OS === 'ios';
 // paddingBottom at just spacing[4], so the last content row briefly sits under
 // the sticky footer until layout settles. Roughly one button row plus padding;
 // handleFooterLayout corrects it to the real height on first layout.
-const ESTIMATED_FOOTER_HEIGHT = 80;
+export const ESTIMATED_FOOTER_HEIGHT = 80;
 
 // gorhom's BottomSheetFooterContainer is memoised on the *identity* of the
 // `footerComponent` we hand it. If that component is a fresh closure every parent
@@ -170,14 +170,17 @@ export const Sheet = forwardRef<BottomSheet, SheetProps>(function Sheet(
   // single-finger scrolling on Android and let the body overflow, pushing the
   // footer off-screen. The live footer content + chrome reach SheetFooter through
   // this context value (see the SheetFooterContext comment for why).
-  const footerContextValue = useMemo<SheetFooterContextValue>(
-    () => ({
-      footer,
-      onLayout: handleFooterLayout,
-      backgroundColor: systemColors.secondaryBackground,
-      borderTopColor: systemColors.separator,
-      paddingBottom: insets.bottom + spacing[3],
-    }),
+  const footerContextValue = useMemo<SheetFooterContextValue | null>(
+    () =>
+      footer
+        ? {
+            footer,
+            onLayout: handleFooterLayout,
+            backgroundColor: systemColors.secondaryBackground,
+            borderTopColor: systemColors.separator,
+            paddingBottom: insets.bottom + spacing[3],
+          }
+        : null,
     [footer, handleFooterLayout, systemColors.secondaryBackground, systemColors.separator, insets.bottom],
   );
 
@@ -187,6 +190,9 @@ export const Sheet = forwardRef<BottomSheet, SheetProps>(function Sheet(
   // there (documented on the contentContainerStyle prop).
   const footerSpacing = footer ? { paddingBottom: footerHeight + spacing[4] } : null;
 
+  // The provider wraps the sheet unconditionally (its value is null when there is
+  // no footer) so that toggling a footer on/off never changes the tree depth above
+  // BottomSheet — a conditional wrapper would remount the sheet and close it.
   const sheet = (
     <SheetFooterContext.Provider value={footerContextValue}>
       <BottomSheet
