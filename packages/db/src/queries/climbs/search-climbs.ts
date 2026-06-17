@@ -47,6 +47,11 @@ function mapResultToClimbRow(result: RawSelectResult, params: BoardRouteParams):
     userId: result.userId ?? null,
     name: result.name || '',
     frames: result.frames || '',
+    // The search is scoped to one board + layout (the WHERE filter), so every
+    // row belongs to it — stamp from the route params like `angle`. Lets the
+    // queue's BLE spill guard tell a climb set for another board apart.
+    boardType: params.board_name,
+    layoutId: params.layout_id,
     angle: params.angle,
     ascensionist_count: Number(result.ascensionist_count || 0),
     difficulty: getGradeLabel(toIntegerOrNull(result.difficulty_id)),

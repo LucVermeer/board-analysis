@@ -4,6 +4,8 @@
 // Fragment for reusable climb fields
 const CLIMB_FIELDS = `
   uuid
+  boardType
+  layoutId
   setter_username
   name
   frames

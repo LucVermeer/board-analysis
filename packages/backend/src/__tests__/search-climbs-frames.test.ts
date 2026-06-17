@@ -102,3 +102,22 @@ describe('searchClimbs surfaces frames_count/frames_pace (issue #2690)', () => {
     expect(result.climbs[0].framesPace).toBe(1200);
   });
 });
+
+describe('searchClimbs stamps boardType/layoutId from the searched board', () => {
+  beforeEach(() => {
+    mockDb.select.mockReset();
+  });
+
+  // The search WHERE filters on board + layout, so every row belongs to the
+  // searched board. mapResultToClimbRow stamps them from params (like angle) so
+  // queued climbs carry the board metadata the BLE spill guard reads.
+  it('carries the route board/layout onto each result climb', async () => {
+    mockDb.select.mockReturnValue(makeChain([rawRow('c1'), rawRow('c2')]));
+
+    const searchParams: ClimbSearchParams = { page: 0, pageSize: 1 };
+    const result = await searchClimbs(params, searchParams);
+
+    expect(result.climbs[0].boardType).toBe('kilter');
+    expect(result.climbs[0].layoutId).toBe(1);
+  });
+});

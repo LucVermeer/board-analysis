@@ -23,6 +23,8 @@ function makeSubscriptionItem(overrides: Partial<SubscriptionQueueItem['climb']>
       stars: 3,
       difficulty_error: '0.5',
       benchmark_difficulty: null,
+      boardType: 'kilter',
+      layoutId: 1,
       mirrored: true,
       is_no_match: true,
       framesCount: 4,
@@ -57,5 +59,20 @@ describe('toClimbQueueItem (SEED-2 fields)', () => {
     expect(result.climb.is_no_match).toBeNull();
     expect(result.climb.framesCount).toBeNull();
     expect(result.climb.framesPace).toBeNull();
+  });
+
+  it('carries boardType/layoutId so a peer-synced spill climb can be skipped on another board', () => {
+    const result = toClimbQueueItem(makeSubscriptionItem({ boardType: 'tension', layoutId: 8 }));
+
+    expect(result.climb.boardType).toBe('tension');
+    expect(result.climb.layoutId).toBe(8);
+  });
+
+  it('leaves board metadata undefined when a pre-metadata peer omits it (treated as sendable)', () => {
+    const result = toClimbQueueItem(makeSubscriptionItem({ boardType: undefined, layoutId: undefined }));
+
+    expect(result.climb.boardType).toBeUndefined();
+    // layoutId falls through as undefined; the spill guard reads nullish as "unknown".
+    expect(result.climb.layoutId).toBeUndefined();
   });
 });
