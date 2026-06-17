@@ -262,8 +262,15 @@ jobs:
           install_profile SHARE_EXTENSION_PROFILE_BASE64 share-extension IOS_SHARE_EXTENSION_PROFILE_NAME IOS_SHARE_EXTENSION_PROFILE_BUNDLE_ID com.boardsesh.app.share-extension
 
       - name: Configure per-target code signing
+        # `ruby/setup-ruby` makes its freshly-installed Ruby the active one, and
+        # that Ruby has no global xcodeproj gem (the macOS runner's system Ruby
+        # did). xcodeproj is a fastlane dependency, so run under `bundle exec`
+        # with the fastlane Gemfile while keeping the repo root as cwd so the
+        # relative project path below still resolves.
+        env:
+          BUNDLE_GEMFILE: ${{ github.workspace }}/fastlane/Gemfile
         run: |
-          ruby <<'RUBY'
+          bundle exec ruby <<'RUBY'
           require 'xcodeproj'
           project = Xcodeproj::Project.open('packages/mobile/ios/Boardsesh.xcodeproj')
 
