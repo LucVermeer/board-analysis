@@ -126,7 +126,8 @@ export default function PlaylistDetail() {
   const resolveViewOnlyBoard = useCallback(
     (climb: Climb) => {
       if (!shouldOpenViewOnly) return null;
-      return resolvePlaylistClimbRenderBoard(climb, renderBoard)?.renderBoard ?? renderBoard;
+      const resolvedRenderBoard = resolvePlaylistClimbRenderBoard(climb, renderBoard);
+      return resolvedRenderBoard?.incompatible ? resolvedRenderBoard.renderBoard : null;
     },
     [shouldOpenViewOnly, renderBoard],
   );

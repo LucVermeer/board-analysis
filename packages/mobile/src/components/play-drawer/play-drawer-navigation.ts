@@ -13,6 +13,9 @@ export function getViewOnlyPreviewNavigationTarget({
   previewSuggestionSource: PlaylistSuggestionSource | null;
   targetItem: ClimbQueueItem | null;
 }): ViewOnlyPreviewNavigationTarget {
+  // Mobile only sets previewSuggestionSource for the wrong-board view-only
+  // drawer path. Normal playlist activation commits navigation through the
+  // queue and must leave this value null.
   if (!previewSuggestionSource || !previewItem) return { viewOnly: false };
   return { viewOnly: true, targetItem };
 }
