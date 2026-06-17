@@ -1,39 +1,44 @@
 appId: com.boardsesh.app
 name: app-store screenshots
 ---
-# App Store / Play Store hero shots against the prod backend + curated test user.
+# App Store hero shots against the prod backend + curated test user.
 #
-# IMPORTANT — coordinate taps: on this iOS 26 / RN Fabric build, Maestro's
-# accessibility tree only exposes native text inputs and system dialogs; plain
-# Views, Text, reanimated pressables and gesture rows do NOT surface, so app
-# buttons can't be matched by id/text. Board-dependent interactions therefore use
-# percentage coordinate taps, pinned to the orchestrator's device (iPhone 16 Pro
-# Max). If you change the device, re-check the three `point:` taps below:
-#   board pick = '24%,45%' (first "Your boards" card on /boards)
-#   board sheet = '78%,10%' (board-switcher glyph in the climbs top chrome)
-#   board view  = '50%,26%' (first climb row in the list)
+# Capture mechanism on this iOS 26 / RN Fabric build: Maestro's accessibility tree only
+# exposes native text inputs + system dialogs — plain Views/Text/pressables and gesture
+# rows do NOT surface, so app controls can't be matched by id/text. We drive the app two
+# ways:
+#   1. Deep links (com.boardsesh.app://...), including screenshot-mode query params that
+#      the build only honours when EXPO_PUBLIC_SCREENSHOT_MODE=1 (see
+#      packages/mobile/src/lib/screenshot-mode.ts):
+#        ://climbs?screenshotOpenFirst=1    -> auto-opens the first climb's board view
+#        ://profile?screenshotTab=logbook   -> profile Logbook tab
+#        ://profile?screenshotTab=sessions  -> profile Sessions tab; auto-opens newest session
+#   2. ONE coordinate tap that survives — the board picker (board pick = '24%,45%', the
+#      first "Your boards" card on /boards). Pinned to the orchestrator's device
+#      (iPhone 16 Pro Max); re-check it if you change the device.
+#   The old board-view '50%,26%' and board-sheet '78%,10%' taps are GONE: the board view
+#   is now a deterministic deep link (it used to mis-tap and duplicate the climb-list
+#   shot), and the board-switcher sheet shot was retired.
 #
-# Other notes:
-# - The .app is a Debug dev-client that auto-loads Metro on launch (the build bakes
-#   DEV_CLIENT_DEFAULT_LAUNCHER_URL into Info.plist), so the ORCHESTRATOR just
-#   `simctl launch`es it — no `simctl openurl`, which on a fresh CI sim raises an
-#   "Open in Boardsesh?" confirmation Maestro can't reliably dismiss. So this flow
-#   just waits for the auth screen.
-# - The orchestrator uninstalled + reinstalled the app (fresh AsyncStorage, so no
-#   stale active board — re-picked via the board picker below) and reset the
-#   simulator keychain, so this cold-loads signed out and login authenticates
-#   against the target backend.
+# Notes:
+# - The .app is a Debug dev-client that auto-loads Metro on launch, so the orchestrator
+#   just simctl-launches it; this flow waits for the signed-out auth screen, then logs in.
+# - Fresh install (orchestrator uninstalled/reinstalled + reset keychain): cold-loads
+#   signed out, no active board (re-picked below), login authenticates against the backend.
+# - iOS shows an "Open in 'Boardsesh'?" confirmation for the first in-flow route deep link
+#   on a fresh sim; each openLink is followed by an optional tapOn "Open".
+# - Order: board-INDEPENDENT shots (home/discover/profile/logbook/session) run first so a
+#   board-pick miss can't lose them; board-DEPENDENT shots (climbs/workout/playlist/board
+#   view) run after the board is active. For any screen visited twice, the PLAIN visit
+#   runs before the screenshot-param visit so no stale param leaks into it. Board view is
+#   LAST because the play drawer it opens overlays the whole app.
 # - The Record/session screen renders the WORKOUT GENERATOR because Metro bundles
-#   EXPO_PUBLIC_SCREENSHOT_WORKOUT (default volume) — its shelf is a
-#   gesture-handler ScrollView Maestro can't tap, so the selection is pre-seeded.
-# - iOS shows an "Open in 'Boardsesh'?" confirmation for the first in-flow route
-#   deep link on a fresh sim (until the scheme is trusted); each openLink is
-#   followed by an optional tapOn "Open".
-# - Board-independent captures (home/discover/profile) run first so a board-pick
-#   miss can't lose them.
+#   EXPO_PUBLIC_SCREENSHOT_WORKOUT (default volume).
+# - Filenames are numbered for store DISPLAY order (00..09), not capture order. 03 is the
+#   live-party shot, added by the party-session flow (see app-store-party.yaml / PR2).
 #
-# Cold Metro bundle on the first load can take a while; wait for the signed-out
-# auth screen (the orchestrator guarantees a logged-out start), then log in.
+# Cold Metro bundle on the first load can take a while; wait for the signed-out auth
+# screen, then log in.
 - extendedWaitUntil:
     visible:
       id: 'auth-email-input'
@@ -44,25 +49,46 @@ name: app-store screenshots
 - waitForAnimationToEnd
 - takeScreenshot: 00-home
 
-# Discover — playlists.
+# Discover — the playlist library (smart "Your Picks" + saved playlists).
 - openLink: com.boardsesh.app://discover
 - tapOn:
     text: 'Open'
     optional: true
 - waitForAnimationToEnd
-- takeScreenshot: 03-discover
+- takeScreenshot: 06-discover
 
-# Profile — stats, sessions, logbook.
+# Profile — progress tab (stats charts). Plain link FIRST so no stale screenshotTab
+# param carries over to it.
 - openLink: com.boardsesh.app://profile
 - tapOn:
     text: 'Open'
     optional: true
 - waitForAnimationToEnd
-- takeScreenshot: 05-profile
+- takeScreenshot: 09-profile
 
-# Activate a board so Climbs / board-view / board-sheet / generator render real
-# content. Open the board picker and tap the first card under "Your boards"
-# (top-left), which activates it and dismisses back to Climbs.
+# Logbook — the climbing history, every logged send. The screenshot-mode param selects
+# the Logbook sub-tab.
+- openLink: com.boardsesh.app://profile?screenshotTab=logbook
+- tapOn:
+    text: 'Open'
+    optional: true
+- waitForAnimationToEnd
+- takeScreenshot: 08-logbook
+
+# Session detail — the Sessions sub-tab auto-opens the newest session's recap in
+# screenshot mode (summary + grade chart + leaderboard + ticks). Two settle-waits bracket
+# the feed load and the detail push (Maestro has no sleep; tune if a capture lands early).
+- openLink: com.boardsesh.app://profile?screenshotTab=sessions
+- tapOn:
+    text: 'Open'
+    optional: true
+- waitForAnimationToEnd
+- waitForAnimationToEnd
+- takeScreenshot: 04-session-detail
+
+# Activate a board so the board-backed shots render real content: open the board picker
+# and tap the first card under "Your boards" (the one surviving coordinate tap), which
+# activates it and dismisses back to Climbs.
 - openLink: com.boardsesh.app://boards
 - tapOn:
     text: 'Open'
@@ -72,7 +98,8 @@ name: app-store screenshots
     point: '24%,45%'
 - waitForAnimationToEnd
 
-# Climbs — the main browse surface (now board-backed).
+# Climbs — the main browse surface (now board-backed). Plain link FIRST (the list shot),
+# before the board-view param visit below.
 - openLink: com.boardsesh.app://climbs
 - tapOn:
     text: 'Open'
@@ -80,42 +107,32 @@ name: app-store screenshots
 - waitForAnimationToEnd
 - takeScreenshot: 01-climbs
 
-# Workout generator — the Record/session screen with a workout pre-selected
-# (volume): target grade, warm-up, set config + the generated preview queue.
+# Workout generator — the Record screen with a workout pre-selected (volume): target
+# grade, warm-up, set config + the generated preview queue.
 - openLink: com.boardsesh.app://record
 - tapOn:
     text: 'Open'
     optional: true
 - waitForAnimationToEnd
-- takeScreenshot: 04-workout-generator
+- takeScreenshot: 05-workout-generator
 
-# Board view — open the first climb (the signature feature: wall with holds lit).
-- openLink: com.boardsesh.app://climbs
+# Playlist detail — a smart playlist (crowd favourites): full-bleed gradient hero + climb
+# grid. Computed relative to the active board, so it needs the board picked above.
+- openLink: com.boardsesh.app://discover/smart/RECOMMENDED_CROWD_FAVORITES
 - tapOn:
     text: 'Open'
     optional: true
 - waitForAnimationToEnd
+- waitForAnimationToEnd
+- takeScreenshot: 07-playlist-detail
+
+# Board view — the signature feature: the wall with holds lit. The screenshot-mode param
+# auto-opens the first climb's play drawer (no coordinate tap). LAST, because the play
+# drawer overlays the app and would bleed into later shots.
+- openLink: com.boardsesh.app://climbs?screenshotOpenFirst=1
 - tapOn:
-    point: '50%,26%'
+    text: 'Open'
+    optional: true
+- waitForAnimationToEnd
 - waitForAnimationToEnd
 - takeScreenshot: 02-board-view
-
-# Board sheet — LAST, because the drawer-host overlays (board sheet, play drawer)
-# persist across deep-link tab switches. Reload the bundle first (a fresh JS
-# runtime; the Keychain login + active board survive it) to clear the play drawer
-# left open by the board-view step, then open Climbs and tap the board-switcher
-# glyph. The bundle is warm by now, so the reload is quick.
-- openLink: ${MAESTRO_DEV_CLIENT_URL}
-- tapOn:
-    text: 'Open'
-    optional: true
-- waitForAnimationToEnd
-- openLink: com.boardsesh.app://climbs
-- tapOn:
-    text: 'Open'
-    optional: true
-- waitForAnimationToEnd
-- tapOn:
-    point: '78%,10%'
-- waitForAnimationToEnd
-- takeScreenshot: 06-board-sheet

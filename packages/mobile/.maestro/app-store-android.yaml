@@ -1,14 +1,28 @@
 appId: com.boardsesh.app
 name: app-store screenshots android
 ---
-# Play Store screenshots from the standalone screenshot APK. Unlike iOS, this
-# APK already contains the screenshot-mode JS bundle, so launch the app directly
-# instead of opening an expo-development-client URL.
+# Play Store screenshots from the standalone screenshot APK. Unlike iOS, this APK already
+# contains the screenshot-mode JS bundle (the workflow builds it with
+# EXPO_PUBLIC_SCREENSHOT_MODE=1), so launch the app directly instead of opening an
+# expo-development-client URL, and there's no "Open in Boardsesh?" deep-link dialog.
 #
-# Coordinate taps are pinned to the CI Pixel 2 emulator at 1080x1920:
+# Google Play caps phone screenshots at 8. This set is the seven hero screens plus the
+# session-detail recap (the one extra over iOS's 10-shot set; party/playlist/logbook are
+# iOS-only for now — no room here).
+#
+# Screenshot-mode deep-link params (honoured because the APK is built with
+# EXPO_PUBLIC_SCREENSHOT_MODE=1):
+#   ://climbs?screenshotOpenFirst=1    -> auto-opens the first climb's board view
+#   ://profile?screenshotTab=sessions  -> profile Sessions tab; auto-opens newest session
+#
+# One coordinate tap survives, pinned to the CI Pixel 2 emulator at 1080x1920:
 #   board pick = '24%,45%' (first "Your boards" card on /boards)
 #   board sheet = '78%,10%' (board-switcher glyph in the climbs top chrome)
-#   board view  = '50%,26%' (first climb row in the list)
+# The old board-view '50%,26%' tap is gone — it mis-tapped and duplicated the climb-list
+# shot; the board view is now a deterministic deep link.
+#
+# Order: board-independent shots first (home/discover/profile/session); board-dependent
+# shots after the board is picked. Plain visits run before screenshot-param visits.
 - launchApp
 - extendedWaitUntil:
     visible:
@@ -20,44 +34,50 @@ name: app-store screenshots android
 - waitForAnimationToEnd
 - takeScreenshot: 00-home
 
-# Discover — playlists.
+# Discover — playlist library.
 - openLink: com.boardsesh.app://discover
 - waitForAnimationToEnd
 - takeScreenshot: 03-discover
 
-# Profile — stats, sessions, logbook.
+# Profile — progress tab (stats, sessions, logbook). Plain link FIRST so no stale
+# screenshotTab param carries over.
 - openLink: com.boardsesh.app://profile
 - waitForAnimationToEnd
 - takeScreenshot: 05-profile
 
-# Activate a board so Climbs / board-view / board-sheet / generator render real
-# content. Open the board picker and tap the first card under "Your boards".
+# Session detail — the Sessions sub-tab auto-opens the newest session's recap in
+# screenshot mode. Two settle-waits bracket the feed load and the detail push.
+- openLink: com.boardsesh.app://profile?screenshotTab=sessions
+- waitForAnimationToEnd
+- waitForAnimationToEnd
+- takeScreenshot: 07-session-detail
+
+# Activate a board so the board-backed shots render real content. Open the board picker
+# and tap the first card under "Your boards".
 - openLink: com.boardsesh.app://boards
 - waitForAnimationToEnd
 - tapOn:
     point: '24%,45%'
 - waitForAnimationToEnd
 
-# Climbs — the main browse surface.
+# Climbs — the main browse surface. Plain link FIRST (the list shot).
 - openLink: com.boardsesh.app://climbs
 - waitForAnimationToEnd
 - takeScreenshot: 01-climbs
 
-# Workout generator — the Record/session screen with a workout pre-selected.
+# Workout generator — the Record screen with a workout pre-selected.
 - openLink: com.boardsesh.app://record
 - waitForAnimationToEnd
 - takeScreenshot: 04-workout-generator
 
-# Board view — open the first climb.
-- openLink: com.boardsesh.app://climbs
+# Board view — open the first climb (wall with holds lit) via the screenshot-mode param.
+- openLink: com.boardsesh.app://climbs?screenshotOpenFirst=1
 - waitForAnimationToEnd
-- tapOn:
-    point: '50%,26%'
 - waitForAnimationToEnd
 - takeScreenshot: 02-board-view
 
-# Board sheet — relaunch first so the play drawer from the board-view shot is
-# gone, then open Climbs and tap the board-switcher glyph.
+# Board sheet — relaunch first so the play drawer from the board-view shot is gone, then
+# open Climbs and tap the board-switcher glyph.
 - launchApp
 - waitForAnimationToEnd
 - openLink: com.boardsesh.app://climbs

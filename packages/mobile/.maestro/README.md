@@ -31,8 +31,11 @@ simulator keychain first so login authenticates cleanly against prod.
 - `login.yaml` — reusable subflow. Fills the test credentials, submits via the
   keyboard return key, and dismisses the iOS "Save Password" prompt. Only runs
   when the auth screen is showing (the Keychain token survives `clearState`).
-- `app-store.yaml` / `app-store-android.yaml` — log in, then capture Home,
-  Discover, Profile, Climbs, Record, board view, and board sheet.
+- `app-store.yaml` (iOS) — log in, then capture Home, Discover, Profile, Logbook,
+  session detail, Climbs, the workout generator, playlist detail, and the board view
+  (10 store slots; the `03` live-party slot is filled by the party flow, PR2).
+- `app-store-android.yaml` — the eight Play Store shots: Home, Discover, Profile,
+  session detail, Climbs, the workout generator, board view, and the board sheet.
 - `onboarding.yaml` / `onboarding-android.yaml` — capture app screens for
   onboarding-card illustrations (`--flow onboarding`).
 
@@ -49,8 +52,10 @@ simulator keychain first so login authenticates cleanly against prod.
   would land on the launcher. The orchestrator passes that env via `maestro test
 -e` (an `expo-development-client` deep link pointing at its Metro port, default
   8081, override with `BOARDSESH_METRO_PORT`), so the flow isn't pinned to a port.
-  Re-opening the deep link reloads the JS runtime (used to clear the play drawer
-  before the board-sheet shot). The orchestrator pre-warms the Metro bundle before
+  Re-opening the deep link reloads the JS runtime (clears the play drawer between
+  drawer-opening shots; iOS now shoots the board view last so it doesn't need it,
+  while Android relaunches before its board-sheet shot). The orchestrator pre-warms
+  the Metro bundle before
   Maestro runs, but the first load still waits up to 300s as a safety net for a
   cold bundle on a slow CI runner. The orchestrator uninstalls + reinstalls and
   resets the keychain, so the app cold-loads signed out with fresh app data (no
@@ -60,14 +65,25 @@ simulator keychain first so login authenticates cleanly against prod.
   data before capture.
 - Navigation uses custom-scheme deep links (`com.boardsesh.app://<route>`); Expo
   Router maps tab routes with the `(tabs)` group stripped (`://climbs`, `://home`,
-  `://boards`, …). Each `openLink` is followed by an optional `tapOn "Open"` to
-  clear iOS's "Open in 'Boardsesh'?" confirmation.
+  `://boards`, …). Each iOS `openLink` is followed by an optional `tapOn "Open"` to
+  clear iOS's "Open in 'Boardsesh'?" confirmation (Android has no such dialog).
+- Detail screens Maestro can't tap into are reached with screenshot-mode deep-link
+  params the build only honours when `EXPO_PUBLIC_SCREENSHOT_MODE=1`:
+  `://climbs?screenshotOpenFirst=1` auto-opens the first climb's board view (this
+  replaced a flaky `50%,26%` tap that was duplicating the climb-list shot),
+  `://profile?screenshotTab=logbook` opens the Logbook tab, and
+  `://profile?screenshotTab=sessions` opens the Sessions tab and auto-opens the
+  newest session's detail. For any screen shot twice, the plain visit runs before
+  the param visit so no stale param leaks in.
 - **Coordinate taps**: on this iOS 26 / RN Fabric build Maestro's accessibility
   tree only exposes native text inputs and system dialogs — plain Views, Text,
   reanimated pressables and gesture rows don't surface, so app buttons can't be
-  matched by id/text. The board pick and the climb tap (board view) therefore use
-  percentage `point:` taps **pinned to the iPhone 16 Pro Max**. Re-check them if
-  the device changes. Login works because it drives `TextInput`s (by testID) and
-  the keyboard return key, not buttons.
-- Screenshot mode (build-time flag) locks the theme to light + the platform
-  variant and stops the onboarding gate from auto-presenting the tour.
+  matched by id/text. After moving the board view to a deep link, iOS keeps just
+  **one** `point:` tap — the board pick (`24%,45%`) — **pinned to the iPhone 16 Pro
+  Max**; Android additionally keeps the board-switcher tap (`78%,10%`) for its
+  board-sheet shot. Re-check them if the device changes. Login works because it
+  drives `TextInput`s (by testID) and the keyboard return key, not buttons.
+- Screenshot mode (the build-time `EXPO_PUBLIC_SCREENSHOT_MODE=1` flag) locks the
+  theme to dark + the platform variant, pre-selects the Record-tab workout, drives
+  the deep-link params above, and stops the onboarding gate from auto-presenting the
+  tour. See `packages/mobile/src/lib/screenshot-mode.ts`.
