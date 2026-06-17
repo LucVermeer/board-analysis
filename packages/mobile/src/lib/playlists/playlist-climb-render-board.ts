@@ -1,6 +1,6 @@
 import type { BoardName } from '@boardsesh/shared-schema';
 import type { Climb } from '@boardsesh/queue';
-import { canAddClimbToBoard } from '@boardsesh/board-config';
+import { canAddClimbToBoard, type BoardCompatibilityTarget } from '@boardsesh/board-config';
 import { getProductSize, getSetsForLayoutAndSize, getSizesForLayoutId } from '@boardsesh/board-constants/product-sizes';
 import { getBoardRenderData } from '../board-details';
 import { getBoardConfigForPlaylist } from './board-details-for-playlist';
@@ -31,7 +31,7 @@ function toRenderBoard(boardName: BoardName, layoutId: number, sizeId: number, s
   };
 }
 
-function getRenderBoardTarget(renderBoard: PlaylistRenderBoard) {
+export function getPlaylistRenderBoardTarget(renderBoard: PlaylistRenderBoard): BoardCompatibilityTarget {
   const boardName = renderBoard.boardName as BoardName;
   const setIds = parseSetIds(renderBoard.setIds);
   const renderData = getBoardRenderData({
@@ -107,7 +107,7 @@ function resolveUpsizedRenderBoard(
       candidateSetIds,
       activeBoard.angle,
     );
-    const fit = canAddClimbToBoard(climb, getRenderBoardTarget(candidateRenderBoard));
+    const fit = canAddClimbToBoard(climb, getPlaylistRenderBoardTarget(candidateRenderBoard));
 
     if (fit.ok) {
       return {
@@ -132,6 +132,7 @@ function resolveUpsizedRenderBoard(
 export function resolvePlaylistClimbRenderBoard(
   climb: Climb,
   activeBoard: PlaylistRenderBoard | null,
+  activeBoardTarget?: BoardCompatibilityTarget,
 ): PlaylistClimbRenderBoardResult | null {
   if (!activeBoard) {
     return resolveGenericRenderBoard(climb);
@@ -147,7 +148,7 @@ export function resolvePlaylistClimbRenderBoard(
     return resolveIncompatibleRenderBoard(climb, activeBoardName);
   }
 
-  const exactFit = canAddClimbToBoard(climb, getRenderBoardTarget(activeBoard));
+  const exactFit = canAddClimbToBoard(climb, activeBoardTarget ?? getPlaylistRenderBoardTarget(activeBoard));
   if (exactFit.ok) {
     return {
       renderBoard: activeBoard,

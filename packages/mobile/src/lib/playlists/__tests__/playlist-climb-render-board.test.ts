@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import type { BoardName } from '@boardsesh/shared-schema';
 import type { Climb } from '@boardsesh/queue';
 import { getBoardConfigForPlaylist } from '../board-details-for-playlist';
 import type { PlaylistRenderBoard } from '../use-playlist-render-board';
-import { resolvePlaylistClimbRenderBoard } from '../playlist-climb-render-board';
+import { getPlaylistRenderBoardTarget, resolvePlaylistClimbRenderBoard } from '../playlist-climb-render-board';
 
 function makeClimb(overrides: Partial<Climb> = {}): Climb {
   return {
@@ -45,6 +46,24 @@ describe('resolvePlaylistClimbRenderBoard', () => {
       fit: 'exact',
       incompatible: false,
     });
+  });
+
+  it('honors a precomputed active-board compatibility target', () => {
+    const activeBoard = getKnownBoard('kilter', 1, 45);
+    const actualTarget = getPlaylistRenderBoardTarget(activeBoard);
+    const firstHoldId = actualTarget.holdsData?.[0]?.id;
+    if (firstHoldId == null) {
+      throw new Error('Expected kilter layout 1 to expose renderable holds');
+    }
+
+    const result = resolvePlaylistClimbRenderBoard(makeClimb({ frames: `p${firstHoldId}r42` }), activeBoard, {
+      board_name: activeBoard.boardName as BoardName,
+      layout_id: activeBoard.layoutId,
+      holdsData: [{ id: -1 }],
+    });
+
+    expect(result?.fit).not.toBe('exact');
+    expect(result?.incompatible).toBe(true);
   });
 
   it('uses the smallest larger size when the climb needs more board than the active size', () => {

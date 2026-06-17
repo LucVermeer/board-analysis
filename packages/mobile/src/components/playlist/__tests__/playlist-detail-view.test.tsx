@@ -36,17 +36,18 @@ vi.mock('react-native', () => ({
   View: ({
     children,
     pointerEvents,
-    style,
     onLayout,
+    accessibilityLabel,
   }: {
     children?: ReactNode;
     pointerEvents?: string;
-    style?: unknown;
     onLayout?: (e: unknown) => void;
+    accessibilityLabel?: string;
   }) => {
     const attrs: Record<string, unknown> = {};
     if (pointerEvents) attrs['data-pointer-events'] = pointerEvents;
     if (onLayout) attrs['data-has-layout'] = 'true';
+    if (accessibilityLabel) attrs['aria-label'] = accessibilityLabel;
     return createElement('div', attrs, children);
   },
   Pressable: ({
@@ -68,7 +69,7 @@ vi.mock('react-native', () => ({
 // ── Reanimated ────────────────────────────────────────────────────────────────
 vi.mock('react-native-reanimated', () => ({
   default: {
-    View: ({ children, style }: { children?: ReactNode; style?: unknown }) =>
+    View: ({ children }: { children?: ReactNode; style?: unknown }) =>
       createElement('div', { 'data-animated-view': 'true' }, children),
   },
   useAnimatedStyle: () => ({}),
@@ -122,7 +123,7 @@ vi.mock('react-native-safe-area-context', () => ({
 }));
 
 vi.mock('react-i18next', () => ({
-  useTranslation: () => ({ t: (key: string, opts?: Record<string, unknown>) => key }),
+  useTranslation: () => ({ t: (key: string, _opts?: Record<string, unknown>) => key }),
 }));
 
 // ── Theme / providers ─────────────────────────────────────────────────────────
@@ -308,6 +309,15 @@ const TENSION_CLIMB: Climb = {
   angle: 35,
 };
 
+const UNKNOWN_BOARD_CLIMB: Climb = {
+  ...CLIMB,
+  uuid: 'unknown-board-row',
+  name: 'Unknown Board Row',
+  boardType: 'unknown-board',
+  layoutId: 999,
+  angle: 40,
+};
+
 function makeProps(overrides: Partial<PlaylistDetailViewProps> = {}): PlaylistDetailViewProps {
   return {
     hero: {
@@ -475,6 +485,44 @@ describe('PlaylistDetailView', () => {
       angle: 35,
       unsupported: true,
     });
+  });
+
+  it('shows an indicator for climbs whose render board cannot be resolved', () => {
+    const onActivateClimb = vi.fn();
+    const { getByText, container } = render(
+      <PlaylistDetailView
+        {...makeProps({
+          climbs: [UNKNOWN_BOARD_CLIMB],
+          onActivateClimb,
+        })}
+      />,
+    );
+
+    expect(getByText('Unknown Board Row')).not.toBeNull();
+    expect(getByText('detail.unrenderableClimb.subtitle')).not.toBeNull();
+    expect(capturedClimbRows).toHaveLength(0);
+
+    fireEvent.click(
+      container.querySelector('[aria-label="Unknown Board Row. detail.unrenderableClimb.subtitle"]') as HTMLElement,
+    );
+    expect(onActivateClimb).not.toHaveBeenCalled();
+  });
+
+  it('lets owners remove unresolved climbs in edit mode', () => {
+    const onRemoveClimb = vi.fn();
+    const { container } = render(
+      <PlaylistDetailView
+        {...makeProps({
+          climbs: [UNKNOWN_BOARD_CLIMB],
+          editMode: true,
+          onRemoveClimb,
+        })}
+      />,
+    );
+
+    fireEvent.click(container.querySelector('[aria-label="editClimbs.removeAria"]') as HTMLElement);
+
+    expect(onRemoveClimb).toHaveBeenCalledWith('unknown-board-row');
   });
 
   it('keeps edit row board props stable across parent rerenders', () => {

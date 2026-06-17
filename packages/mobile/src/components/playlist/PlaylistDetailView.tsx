@@ -1,4 +1,4 @@
-import { type ReactNode, useCallback, useMemo, useRef, useState } from 'react';
+import { type ReactNode, useCallback, useMemo, useState } from 'react';
 import {
   type ColorValue,
   type LayoutChangeEvent,
@@ -30,6 +30,7 @@ import { type IconName } from '../icon-map';
 import { ActivityIndicator } from '../ActivityIndicator';
 import { ClimbListRow } from '../ClimbListRow';
 import { ClimbListRowSkeleton } from '../ClimbListRowSkeleton';
+import { THUMBNAIL_HEIGHT, THUMBNAIL_WIDTH } from '../climb-list-thumbnail-metrics';
 import { GlassIconButton } from '../GlassIconButton';
 import { ProgressiveBlur } from '../ProgressiveBlur';
 import { Button } from '../Button';
@@ -42,7 +43,10 @@ import { PLAYLIST_COLORS, isValidHexColor } from './playlist-colors';
 import { withAlpha } from '../../theme/colors';
 import { toQueueClimb, toSchemaClimb } from '../../lib/climb-types';
 import type { PlaylistRenderBoard, PlaylistBoardBanner } from '../../lib/playlists/use-playlist-render-board';
-import { resolvePlaylistClimbRenderBoard } from '../../lib/playlists/playlist-climb-render-board';
+import {
+  getPlaylistRenderBoardTarget,
+  resolvePlaylistClimbRenderBoard,
+} from '../../lib/playlists/playlist-climb-render-board';
 import { useTheme } from '../../providers/theme-provider';
 import { selectByVariant } from '../../theme/variants';
 import { useBottomChromeMetrics } from '../../hooks/use-bottom-chrome-metrics';
@@ -135,11 +139,16 @@ export type PlaylistDetailViewProps = {
 const noopReorder = (_climbUuid: string, _newIndex: number) => {};
 const noopRemove = (_climbUuid: string) => {};
 
-type ResolvedPlaylistClimbRow = {
-  renderBoard: PlaylistRenderBoard;
-  editBoard: PlaylistEditRowBoard;
-  incompatible: boolean;
-};
+type ResolvedPlaylistClimbRow =
+  | {
+      kind: 'renderable';
+      renderBoard: PlaylistRenderBoard;
+      editBoard: PlaylistEditRowBoard;
+      incompatible: boolean;
+    }
+  | {
+      kind: 'unrenderable';
+    };
 
 /**
  * Shared hero + paginated climb list for the playlist-detail and
@@ -259,12 +268,18 @@ export function PlaylistDetailView({
 
   const resolvedRowsByClimbUuid = useMemo(() => {
     const resolvedRows = new Map<string, ResolvedPlaylistClimbRow>();
+    const activeBoardTarget = renderBoard ? getPlaylistRenderBoardTarget(renderBoard) : undefined;
+
     for (const climb of climbs) {
-      const resolvedBoard = resolvePlaylistClimbRenderBoard(climb, renderBoard);
-      if (!resolvedBoard) continue;
+      const resolvedBoard = resolvePlaylistClimbRenderBoard(climb, renderBoard, activeBoardTarget);
+      if (!resolvedBoard) {
+        resolvedRows.set(climb.uuid, { kind: 'unrenderable' });
+        continue;
+      }
 
       const board = resolvedBoard.renderBoard;
       resolvedRows.set(climb.uuid, {
+        kind: 'renderable',
         renderBoard: board,
         editBoard: {
           boardName: board.boardName as BoardName,
@@ -283,6 +298,10 @@ export function PlaylistDetailView({
     ({ item, index }: { item: Climb; index: number }) => {
       const resolvedRow = resolvedRowsByClimbUuid.get(item.uuid);
       if (!resolvedRow) return null;
+
+      if (resolvedRow.kind === 'unrenderable') {
+        return <UnrenderablePlaylistClimbRow climb={item} editMode={editMode} onRemove={onRemoveClimb ?? noopRemove} />;
+      }
 
       if (editMode) {
         return (
@@ -696,6 +715,65 @@ function BoardMismatchBanner({
   );
 }
 
+function UnrenderablePlaylistClimbRow({
+  climb,
+  editMode,
+  onRemove,
+}: {
+  climb: Climb;
+  editMode: boolean;
+  onRemove: (climbUuid: string) => void;
+}) {
+  const { t } = useTranslation('playlists');
+  const { systemColors } = useTheme();
+  const subtitle = t('detail.unrenderableClimb.subtitle');
+  const accessibilityLabel = `${climb.name}. ${subtitle}`;
+
+  const handleRemove = useCallback(() => {
+    onRemove(climb.uuid);
+  }, [onRemove, climb.uuid]);
+
+  return (
+    <View style={styles.unrenderableOuter}>
+      <View
+        style={[styles.unrenderableRow, { backgroundColor: systemColors.background }]}
+        accessible={!editMode}
+        accessibilityRole={editMode ? undefined : 'text'}
+        accessibilityLabel={editMode ? undefined : accessibilityLabel}
+      >
+        <View
+          style={[
+            styles.unrenderableThumbnail,
+            { backgroundColor: systemColors.secondaryBackground, borderColor: systemColors.separator },
+          ]}
+        >
+          <Icon name="warning" size={24} color={systemColors.secondaryLabel} />
+        </View>
+        <View style={styles.unrenderableText}>
+          <Text variant="body" numberOfLines={1} color={systemColors.label} style={styles.unrenderableTitle}>
+            {climb.name}
+          </Text>
+          <Text variant="footnote" numberOfLines={2} color={systemColors.secondaryLabel}>
+            {subtitle}
+          </Text>
+        </View>
+        {editMode ? (
+          <Pressable
+            onPress={handleRemove}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={t('editClimbs.removeAria', { name: climb.name })}
+            style={({ pressed }) => [styles.unrenderableRemove, pressed && styles.unrenderablePressed]}
+          >
+            <Icon name="minus.circle" size={24} color={iosSystemColors.systemRed} />
+          </Pressable>
+        ) : null}
+      </View>
+      <View style={[styles.unrenderableSeparator, { backgroundColor: systemColors.separator }]} />
+    </View>
+  );
+}
+
 function keyExtractor(item: Climb) {
   return item.uuid;
 }
@@ -905,5 +983,48 @@ const styles = StyleSheet.create({
   emptyText: {
     opacity: 0.5,
     textAlign: 'center',
+  },
+  unrenderableOuter: {
+    position: 'relative',
+    overflow: 'hidden',
+    opacity: 0.72,
+  },
+  unrenderableRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing[2],
+    paddingVertical: spacing[2],
+    gap: spacing[3],
+  },
+  unrenderableThumbnail: {
+    width: THUMBNAIL_WIDTH,
+    height: THUMBNAIL_HEIGHT,
+    borderRadius: borderRadius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  unrenderableText: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
+  },
+  unrenderableTitle: {
+    fontWeight: '600',
+  },
+  unrenderableRemove: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  unrenderablePressed: {
+    opacity: 0.6,
+  },
+  unrenderableSeparator: {
+    height: StyleSheet.hairlineWidth,
+    marginLeft: THUMBNAIL_WIDTH + spacing[2] + spacing[3],
   },
 });

@@ -109,6 +109,9 @@
       "subtitle": "These are {{board}} climbs. Switch boards to queue them.",
       "cta": "Switch board"
     },
+    "unrenderableClimb": {
+      "subtitle": "Board data is missing for this climb."
+    },
     "menu": {
       "generate": "Generate",
       "editClimbs": "Edit climbs",

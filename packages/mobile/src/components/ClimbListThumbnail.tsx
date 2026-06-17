@@ -4,6 +4,7 @@ import type { BoardName } from '@boardsesh/shared-schema';
 import { useNativeClimbRender } from '../hooks/use-native-climb-render';
 import { borderRadius } from '../theme/tokens';
 import { LayeredClimbImage } from './LayeredClimbImage';
+import { THUMBNAIL_HEIGHT, THUMBNAIL_WIDTH } from './climb-list-thumbnail-metrics';
 
 /**
  * Portrait dimensions of the list thumbnail cell. Exported so ClimbListRow
@@ -11,8 +12,7 @@ import { LayeredClimbImage } from './LayeredClimbImage';
  * edge from a single source of truth. Portrait (not square) so the portrait
  * board image fills the cell instead of letterboxing to ~40px wide.
  */
-export const THUMBNAIL_WIDTH = 76;
-export const THUMBNAIL_HEIGHT = 96;
+export { THUMBNAIL_HEIGHT, THUMBNAIL_WIDTH };
 
 type ClimbListThumbnailProps = {
   frames: string;
