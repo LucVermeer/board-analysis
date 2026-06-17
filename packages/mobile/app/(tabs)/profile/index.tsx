@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import type BottomSheet from '@gorhom/bottom-sheet';
 import { useProfile, useYouProfileData } from '../../../src/lib/graphql/hooks';
 import { useTheme } from '../../../src/providers/theme-provider';
@@ -19,8 +20,13 @@ function isProfileTabKey(value: string | string[] | undefined): value is Profile
 }
 
 export default function YouScreen() {
+  const { t } = useTranslation('you');
   const { systemColors } = useTheme();
   const insets = useSafeAreaInsets();
+
+  // The own profile's identity title. The reused sub-tabs render it in-body
+  // (collapsing under the floating chrome); another climber's profile omits it.
+  const dashboardTitle = t('metadata.dashboard.title');
 
   const { data: profile } = useProfile();
   const userId = profile?.id;
@@ -55,10 +61,18 @@ export default function YouScreen() {
   return (
     <View style={[styles.container, { backgroundColor: systemColors.background }]}>
       <View style={styles.page}>
-        {activeTab === 'progress' ? <ProgressTab data={youData} topInset={chromeHeight} /> : null}
-        {activeTab === 'sessions' ? <SessionsTab userId={userId} topInset={chromeHeight} /> : null}
-        {activeTab === 'logbook' ? <LogbookTab userId={userId} topInset={chromeHeight} /> : null}
-        {activeTab === 'social' ? <SocialTab userId={userId} topInset={chromeHeight} /> : null}
+        {activeTab === 'progress' ? (
+          <ProgressTab data={youData} topInset={chromeHeight} screenTitle={dashboardTitle} />
+        ) : null}
+        {activeTab === 'sessions' ? (
+          <SessionsTab userId={userId} topInset={chromeHeight} screenTitle={dashboardTitle} />
+        ) : null}
+        {activeTab === 'logbook' ? (
+          <LogbookTab userId={userId} topInset={chromeHeight} screenTitle={dashboardTitle} />
+        ) : null}
+        {activeTab === 'social' ? (
+          <SocialTab userId={userId} topInset={chromeHeight} screenTitle={dashboardTitle} />
+        ) : null}
       </View>
 
       <ProfileTopChrome
