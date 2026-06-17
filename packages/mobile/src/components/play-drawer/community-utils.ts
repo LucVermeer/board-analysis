@@ -9,11 +9,30 @@ export type AngleGradeBar = {
   difficulty: number;
   /** Formatted grade label shown above the bar (e.g. "V6"). */
   gradeName: string;
-  /** Grade colour for the bar fill. */
-  color: string;
   /** Ascensionist count (sends) at this angle — drives bar height. */
   sends: number;
 };
+
+// Round a raw step up to a friendly 1/2/5 × 10ⁿ value so axis ticks read
+// 0/5/10/15 instead of 0/3/6/9.
+export function niceStep(rawStep: number): number {
+  if (rawStep <= 1) return 1;
+  const magnitude = Math.pow(10, Math.floor(Math.log10(rawStep)));
+  for (const multiple of [1, 2, 5]) {
+    if (rawStep <= multiple * magnitude) return multiple * magnitude;
+  }
+  return 10 * magnitude;
+}
+
+// Integer y-scale for an ascent-count column chart: ~4–5 whole-number sections
+// with the top tick strictly above the tallest bar so its top-label has headroom.
+export function buildAscentScale(maxSends: number): { maxValue: number; noOfSections: number; step: number } {
+  const peak = Math.max(maxSends, 1);
+  const step = niceStep(Math.ceil(peak / 4));
+  let noOfSections = Math.ceil(peak / step);
+  if (step * noOfSections <= peak) noOfSections += 1;
+  return { maxValue: step * noOfSections, noOfSections, step };
+}
 
 const GRADE_BY_ID = new Map<number, BoulderGrade>(BOULDER_GRADES.map((grade) => [grade.difficulty_id, grade]));
 
@@ -45,7 +64,6 @@ export function buildAngleGradeBars(
         angle: entry.angle,
         difficulty,
         gradeName,
-        color: getGradeColor(grade?.difficulty_name) ?? DEFAULT_GRADE_COLOR,
         sends: entry.ascensionistCount ?? 0,
       };
     })

@@ -2,7 +2,7 @@ import { memo, useMemo, useState, type ReactNode } from 'react';
 import { StyleSheet, View, type LayoutChangeEvent } from 'react-native';
 import { BarChart } from 'react-native-gifted-charts';
 import { Text } from '../Text';
-import type { AngleGradeBar } from './community-utils';
+import { buildAscentScale, type AngleGradeBar } from './community-utils';
 import { useTheme } from '../../providers/theme-provider';
 import { useReduceMotion } from '../../hooks/use-reduce-motion';
 import { gradeChartColor } from '../you/profile-chart-colors';
@@ -26,28 +26,6 @@ const Y_AXIS_LABEL_WIDTH = 32;
 // Compact tick label: whole numbers below 1k, "1.2k" above so labels stay narrow.
 function formatCount(value: number): string {
   return value >= 1000 ? `${Math.round(value / 100) / 10}k` : String(value);
-}
-
-// Round a raw step up to a friendly 1/2/5 × 10ⁿ value so ticks read 0/5/10/15
-// instead of 0/3/6/9.
-function niceStep(rawStep: number): number {
-  if (rawStep <= 1) return 1;
-  const magnitude = Math.pow(10, Math.floor(Math.log10(rawStep)));
-  for (const multiple of [1, 2, 5]) {
-    if (rawStep <= multiple * magnitude) return multiple * magnitude;
-  }
-  return 10 * magnitude;
-}
-
-// Integer y-scale for the ascent counts: ~4 whole-number sections with the top
-// tick strictly above the tallest bar so its grade top-label has headroom.
-function buildAscentScale(maxSends: number): { maxValue: number; noOfSections: number; labels: string[] } {
-  const peak = Math.max(maxSends, 1);
-  const step = niceStep(Math.ceil(peak / 4));
-  let noOfSections = Math.ceil(peak / step);
-  if (step * noOfSections <= peak) noOfSections += 1;
-  const labels = Array.from({ length: noOfSections + 1 }, (_, index) => formatCount(index * step));
-  return { maxValue: step * noOfSections, noOfSections, labels };
 }
 
 // Ascents-by-angle column chart: x-axis angles, bar height = the number of
@@ -98,7 +76,10 @@ export const DifficultyByAngleChart = memo(function DifficultyByAngleChart({
         ),
       };
     });
-    return { barData, maxValue: scale.maxValue, noOfSections: scale.noOfSections, yAxisLabelTexts: scale.labels };
+    const yAxisLabelTexts = Array.from({ length: scale.noOfSections + 1 }, (_, index) =>
+      formatCount(index * scale.step),
+    );
+    return { barData, maxValue: scale.maxValue, noOfSections: scale.noOfSections, yAxisLabelTexts };
   }, [data, colorScheme]);
 
   const onLayout = (event: LayoutChangeEvent) => setWidth(event.nativeEvent.layout.width);
