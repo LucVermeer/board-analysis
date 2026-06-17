@@ -815,16 +815,28 @@ describe('DrawerHostProvider play drawer board overrides', () => {
     const secondClimb = makeQueueItem('queue-y', 'same-override-2').climb as unknown as Climb;
 
     act(() => {
-      hosts.at(-1)?.openPlayDrawer(firstClimb, { setAsCurrent: false, boardConfig: override });
+      hosts.at(-1)?.openPlayDrawer(firstClimb, {
+        previewQueueItem: makeQueueItem('preview-x', 'same-override-1'),
+        boardConfig: override,
+      });
     });
-    await waitFor(() => expect(playDrawer.open).toHaveBeenCalledWith(firstClimb, { setAsCurrent: false }));
+    await waitFor(() =>
+      expect(playDrawer.open).toHaveBeenCalledWith(firstClimb, {
+        previewQueueItem: expect.objectContaining({ climb: expect.objectContaining({ uuid: 'same-override-1' }) }),
+      }),
+    );
 
     playDrawer.open.mockClear();
     act(() => {
-      hosts.at(-1)?.openPlayDrawer(secondClimb, { setAsCurrent: false, boardConfig: override });
+      hosts.at(-1)?.openPlayDrawer(secondClimb, {
+        previewQueueItem: makeQueueItem('preview-y', 'same-override-2'),
+        boardConfig: override,
+      });
     });
 
-    expect(playDrawer.open).toHaveBeenCalledWith(secondClimb, { setAsCurrent: false });
+    expect(playDrawer.open).toHaveBeenCalledWith(secondClimb, {
+      previewQueueItem: expect.objectContaining({ climb: expect.objectContaining({ uuid: 'same-override-2' }) }),
+    });
   });
 });
 

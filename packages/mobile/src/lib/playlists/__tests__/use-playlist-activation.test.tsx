@@ -258,10 +258,9 @@ describe('usePlaylistActivation (mobile wrapper)', () => {
 
     const viewOnlyOptions = mocks.openPlayDrawer.mock.calls[0][1];
     expect(mocks.openPlayDrawer).toHaveBeenCalledWith(climbA, {
-      setAsCurrent: false,
       boardConfig: { ...VIEW_ONLY_BOARD, angle: 20 },
       previewQueueItem: expect.objectContaining({ climb: climbA, suggested: true }),
-      previewPlaylistSuggestionSource: expect.objectContaining({
+      playlistSuggestionSource: expect.objectContaining({
         playlistUuid: 'playlist:pl-1',
         activatedClimbUuid: 'a',
         boardKey: 'tension:9:5:1,2',
@@ -286,10 +285,9 @@ describe('usePlaylistActivation (mobile wrapper)', () => {
 
     expect(viewOnlyResolver).toHaveBeenCalledWith(climb);
     expect(mocks.openPlayDrawer).toHaveBeenCalledWith(climb, {
-      setAsCurrent: false,
       boardConfig: { boardName: 'tension', layoutId: 9, sizeId: 8, setIds: '4,5', angle: 20 },
       previewQueueItem: expect.objectContaining({ climb, suggested: true }),
-      previewPlaylistSuggestionSource: expect.objectContaining({
+      playlistSuggestionSource: expect.objectContaining({
         boardKey: 'tension:9:8:4,5',
       }),
     });

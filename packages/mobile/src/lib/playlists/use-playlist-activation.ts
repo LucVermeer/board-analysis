@@ -195,7 +195,7 @@ export function usePlaylistActivation({
           ...resolvedViewOnlyBoard,
           angle: climb.angle,
         };
-        const previewPlaylistSuggestionSource = createPlaylistSuggestionSource({
+        const previewSuggestionSource = createPlaylistSuggestionSource({
           playlistUuid: sourceId,
           activatedClimb: climb,
           climbs: allClimbs,
@@ -207,10 +207,9 @@ export function usePlaylistActivation({
           }),
         });
         openPlayDrawer(schemaClimb, {
-          setAsCurrent: false,
           boardConfig: viewOnlyBoardConfig,
           previewQueueItem: item,
-          previewPlaylistSuggestionSource,
+          playlistSuggestionSource: previewSuggestionSource,
         });
         return Promise.resolve();
       }
