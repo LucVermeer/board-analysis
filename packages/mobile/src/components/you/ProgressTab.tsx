@@ -10,6 +10,8 @@ import { SectionHeader } from '../SectionHeader';
 import { ActivityIndicator } from '../ActivityIndicator';
 import { StatsSummaryCard } from './StatsSummaryCard';
 import { StackedBarChart, GroupedBarChart, TotalAreaChart, type ChartLegendItem } from './YouCharts';
+import { ActivityHeatmap } from './ActivityHeatmap';
+import { LayoutShareDonut } from './LayoutShareDonut';
 import { layoutChartColor, flashRedpointColor } from './profile-chart-colors';
 import { useBottomChromeMetrics } from '../../hooks/use-bottom-chrome-metrics';
 import { spacing } from '../../theme/tokens';
@@ -94,6 +96,27 @@ export const ProgressTab = memo(function ProgressTab({ data, topInset }: Progres
             percentile={data.percentile}
           />
 
+          {data.activityHeatmap && (
+            <>
+              <SectionHeader title={t('stats.calendar')} />
+              <Card style={styles.chartCard}>
+                <ActivityHeatmap heatmap={data.activityHeatmap} />
+              </Card>
+            </>
+          )}
+
+          {data.statisticsSummary.layoutPercentages.length > 1 && (
+            <>
+              <SectionHeader title={t('stats.boards')} />
+              <Card style={styles.chartCard}>
+                <LayoutShareDonut
+                  layoutPercentages={data.statisticsSummary.layoutPercentages}
+                  totalAscents={data.statisticsSummary.totalAscents}
+                />
+              </Card>
+            </>
+          )}
+
           <SectionHeader title={t('stats.activity')} />
           <Card style={styles.chartCard}>
             {/* Weekly labels ("W23 '24") are wide, so cap to ~6 evenly-spaced
@@ -104,6 +127,7 @@ export const ProgressTab = memo(function ProgressTab({ data, topInset }: Progres
               emptyLabel={noAscentData}
               maxXLabels={6}
               showYAxisScale
+              accessibilityLabel={t('stats.weeklyAttemptsAria')}
             />
           </Card>
 
@@ -115,13 +139,14 @@ export const ProgressTab = memo(function ProgressTab({ data, topInset }: Progres
               emptyLabel={noAscentData}
               legend={gradeDistLegend}
               showYAxisScale
+              accessibilityLabel={t('stats.gradeDistributionAria')}
             />
           </Card>
 
           {data.aggregatedFlashRedpointBars && (
             <>
               <SectionHeader title={t('stats.flashVsRedpoint')} />
-              <Card style={styles.chartCard}>
+              <Card style={styles.chartCard} accessibilityLabel={t('stats.flashRedpointAria')}>
                 <GroupedBarChart
                   bars={data.aggregatedFlashRedpointBars}
                   emptyLabel={noAscentData}

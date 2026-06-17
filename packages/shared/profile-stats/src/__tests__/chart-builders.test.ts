@@ -9,6 +9,7 @@ import {
   buildFlashRedpointBars,
   buildStatisticsSummary,
   buildVPointsTimeline,
+  buildActivityHeatmap,
 } from '../chart-builders';
 import type { LogbookEntry } from '../types';
 
@@ -481,5 +482,56 @@ describe('buildVPointsTimeline', () => {
     )!;
     expect(result.weekLabels).toHaveLength(1);
     expect(result.series[0].data).toEqual([1]);
+  });
+});
+
+describe('buildActivityHeatmap', () => {
+  it('returns null for an empty logbook', () => {
+    expect(buildActivityHeatmap([])).toBeNull();
+  });
+
+  it('returns null when all activity predates the trailing window', () => {
+    expect(buildActivityHeatmap([makeEntry({ climbed_at: dayjs().subtract(3, 'year').toISOString() })])).toBeNull();
+  });
+
+  it('counts ascents per day on a whole-week-aligned grid', () => {
+    const today = dayjs();
+    const result = buildActivityHeatmap([
+      makeEntry({ climbed_at: today.toISOString() }),
+      makeEntry({ climbed_at: today.toISOString() }),
+      makeEntry({ climbed_at: today.subtract(1, 'day').toISOString() }),
+    ])!;
+    expect(result.days.length % 7).toBe(0);
+    expect(result.weeks).toBe(result.days.length / 7);
+    expect(result.maxCount).toBe(2);
+    expect(result.days.find((day) => day.date === today.format('YYYY-MM-DD'))!.count).toBe(2);
+  });
+
+  it('counts attempts as activity (you still showed up)', () => {
+    const result = buildActivityHeatmap([makeEntry({ status: 'attempt', climbed_at: dayjs().toISOString() })])!;
+    expect(result.maxCount).toBe(1);
+  });
+
+  it('honours a custom window size', () => {
+    const result = buildActivityHeatmap([makeEntry({ climbed_at: dayjs().toISOString() })], 4)!;
+    expect(result.weeks).toBe(4);
+    expect(result.days.length).toBe(28);
+  });
+
+  it('anchors the grid to a provided `today` (deterministic, ISO-week aligned)', () => {
+    const today = dayjs('2024-06-12'); // a Wednesday
+    const result = buildActivityHeatmap([makeEntry({ climbed_at: '2024-06-12T12:00:00Z' })], 53, today)!;
+    expect(result.weeks).toBe(53);
+    expect(result.days.length).toBe(53 * 7);
+    // End/start derive purely from `today` (no tick parsing), so these are
+    // timezone-independent: the grid ends on that ISO week's Sunday.
+    expect(result.endDate).toBe(today.endOf('isoWeek').format('YYYY-MM-DD'));
+    expect(result.startDate).toBe(
+      today
+        .endOf('isoWeek')
+        .subtract(53 * 7 - 1, 'day')
+        .startOf('isoWeek')
+        .format('YYYY-MM-DD'),
+    );
   });
 });

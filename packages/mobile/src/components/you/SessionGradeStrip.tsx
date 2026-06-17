@@ -3,13 +3,15 @@ import { View, StyleSheet } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import type { SessionGradeDistributionItem } from '@boardsesh/shared-schema';
 import { Text } from '../Text';
-import { buildSessionGradeBars, gradeBadgeColor } from './profile-chart-colors';
+import { buildSessionGradeBars, gradeChartColor } from './profile-chart-colors';
 import { useGradeFormat } from '../../hooks/use-grade-format';
 import { useTheme } from '../../providers/theme-provider';
-import { spacing } from '../../theme/tokens';
+import { spacing, borderRadius, opacity } from '../../theme/tokens';
 
 const BAR_MAX_HEIGHT = 20;
-const BAR_MIN_HEIGHT = 6;
+const BAR_MIN_HEIGHT = 8;
+// Floor for the count-driven fill opacity so the rarest grades stay visible.
+const BAR_MIN_OPACITY = opacity.peek;
 
 type SessionGradeStripProps = {
   distribution: SessionGradeDistributionItem[];
@@ -26,7 +28,7 @@ type SessionGradeStripProps = {
  * isn't a spread), and self-hides on an empty distribution.
  */
 export const SessionGradeStrip = memo(function SessionGradeStrip({ distribution, totalSends }: SessionGradeStripProps) {
-  const { systemColors } = useTheme();
+  const { systemColors, colorScheme } = useTheme();
   const { t } = useTranslation('feed');
   const { formatGrade } = useGradeFormat();
 
@@ -36,7 +38,17 @@ export const SessionGradeStrip = memo(function SessionGradeStrip({ distribution,
 
   if (!bars || bars.length < 2) return null;
 
-  const maxCount = Math.max(...bars.map((bar) => bar.segments[0]?.value ?? 0));
+  // Single pass: capture both the tallest count (drives heights + opacity) and
+  // the most-climbed grade's label (the modal grade, announced to a11y).
+  let maxCount = 0;
+  let modalLabel = bars[0].label;
+  for (const bar of bars) {
+    const count = bar.segments[0]?.value ?? 0;
+    if (count > maxCount) {
+      maxCount = count;
+      modalLabel = bar.label;
+    }
+  }
   const minLabel = bars[0].label;
   const maxLabel = bars[bars.length - 1].label;
 
@@ -46,21 +58,30 @@ export const SessionGradeStrip = memo(function SessionGradeStrip({ distribution,
       pointerEvents="none"
       accessibilityRole="image"
       accessibilityLabel={t('sessionFeedCard.gradeSpread', { min: minLabel, max: maxLabel, sends: totalSends })}
+      // Name the most-climbed (modal) grade as the strip's value. The label is a
+      // grade token (e.g. "V6"), not a translatable string — no i18n key needed.
+      accessibilityValue={{ text: modalLabel }}
     >
       <View style={styles.bars}>
         {bars.map((bar) => {
           const value = bar.segments[0]?.value ?? 0;
-          const color = bar.segments[0]?.color ?? gradeBadgeColor(bar.key);
-          const height =
-            maxCount > 0 ? Math.max(BAR_MIN_HEIGHT, Math.round((value / maxCount) * BAR_MAX_HEIGHT)) : BAR_MIN_HEIGHT;
-          return <View key={bar.key} style={[styles.bar, { height, backgroundColor: color }]} />;
+          // Scheme-aware fill: keep the segment's explicit grade colour when set,
+          // otherwise derive a contrast-clamped fill for the current scheme so
+          // the strip keeps contrast on dark cards.
+          const color = bar.segments[0]?.color ?? gradeChartColor(bar.key, colorScheme);
+          const ratio = maxCount > 0 ? value / maxCount : 1;
+          const height = maxCount > 0 ? Math.max(BAR_MIN_HEIGHT, Math.round(ratio * BAR_MAX_HEIGHT)) : BAR_MIN_HEIGHT;
+          // Modulate fill opacity by relative count: the tallest grade reads full,
+          // rarer grades fade toward BAR_MIN_OPACITY (reuses maxCount, no new scan).
+          const fillOpacity = BAR_MIN_OPACITY + (1 - BAR_MIN_OPACITY) * ratio;
+          return <View key={bar.key} style={[styles.bar, { height, backgroundColor: color, opacity: fillOpacity }]} />;
         })}
       </View>
       <View style={styles.labels}>
-        <Text variant="caption2" color={systemColors.tertiaryLabel}>
+        <Text variant="caption2" color={systemColors.secondaryLabel}>
           {minLabel}
         </Text>
-        <Text variant="caption2" color={systemColors.tertiaryLabel}>
+        <Text variant="caption2" color={systemColors.secondaryLabel}>
           {maxLabel}
         </Text>
       </View>
@@ -69,8 +90,9 @@ export const SessionGradeStrip = memo(function SessionGradeStrip({ distribution,
 });
 
 const styles = StyleSheet.create({
-  container: { marginTop: spacing[2], gap: 3 },
+  container: { marginTop: spacing[2], gap: spacing[1] },
   bars: { flexDirection: 'row', alignItems: 'flex-end', gap: 2, height: BAR_MAX_HEIGHT },
-  bar: { flex: 1, borderRadius: 2 },
+  // Round only the top caps so the bars sit flush on the baseline.
+  bar: { flex: 1, borderTopLeftRadius: borderRadius.sm, borderTopRightRadius: borderRadius.sm },
   labels: { flexDirection: 'row', justifyContent: 'space-between' },
 });

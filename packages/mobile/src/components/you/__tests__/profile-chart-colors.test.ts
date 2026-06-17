@@ -29,8 +29,8 @@ describe('profile chart colors', () => {
   });
 
   it('uses scheme-aware categorical layout colors', () => {
-    expect(layoutChartColor('kilter-1', 'light')).toBe('#007C92');
-    expect(layoutChartColor('kilter-1', 'dark')).toBe('#22D3EE');
+    expect(layoutChartColor('kilter-1', 'light')).toBe('#0284C7');
+    expect(layoutChartColor('kilter-1', 'dark')).toBe('#38BDF8');
     expect(layoutChartColor('unknown-layout', 'light')).toMatch(/^#/);
     expect(layoutChartColor('unknown-layout', 'dark')).toMatch(/^#/);
     expect(layoutChartColor('unknown-layout', 'light')).not.toBe(layoutChartColor('unknown-layout', 'dark'));

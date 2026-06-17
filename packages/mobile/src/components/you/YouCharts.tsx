@@ -7,6 +7,8 @@ import { Text } from '../Text';
 import { Icon } from '../Icon';
 import { ActivityIndicator } from '../ActivityIndicator';
 import { useTheme } from '../../providers/theme-provider';
+import { spacing, borderRadius, opacity, materialElevationByLevel } from '../../theme/tokens';
+import { useVariantValue } from '../../theme/variants';
 import { hapticSelection } from '../../lib/haptics';
 import { gradeChartColor, layoutChartColor, flashRedpointColor, type ColoredBar } from './profile-chart-colors';
 import {
@@ -22,6 +24,13 @@ const AXIS_LABEL_SIZE = 11;
 const STACK_BAR_RADIUS = 3;
 const MIN_ZOOM_SCALE = 1;
 const MAX_ZOOM_SCALE = 2.75;
+// Floor for grouped flash|redpoint bars so a dense V0-V17 axis keeps each bar
+// above the iOS 44pt / Android 48dp touch target instead of shrinking to 4px.
+const MIN_GROUPED_BAR = 6;
+// Selection lowlight for the interactive grouped chart: the flash/redpoint fills
+// already carry their own 0.85 alpha, so a deeper dim keeps unselected pairs
+// readable on the dark violet card while the focused pair still pops.
+const CHART_LOWLIGHT_OPACITY = 0.5;
 
 export type ChartLegendItem = { color: string; label: string };
 
@@ -85,7 +94,11 @@ type FrameProps = {
 
 /** Measures available width and renders loading / empty / chart states. */
 function ChartFrame({ height, loading, emptyLabel, isEmpty, zoomable, children }: FrameProps) {
-  const { systemColors } = useTheme();
+  const { systemColors, chartColors } = useTheme();
+  // Material casts a shadow under the floating chrome; Liquid Glass stays flat
+  // (its border carries the edge). Routed through the variant selector so the
+  // mobile-variant guard stays happy.
+  const floatingElevation = useVariantValue({ material: materialElevationByLevel.level2, liquidGlass: null });
   const { t } = useTranslation('common');
   const [width, setWidth] = useState(0);
   const [zoomScale, setZoomScale] = useState(MIN_ZOOM_SCALE);
@@ -157,11 +170,14 @@ function ChartFrame({ height, loading, emptyLabel, isEmpty, zoomable, children }
       onResponderTerminationRequest={shouldReleaseResponder}
     >
       {loading ? (
-        <ActivityIndicator size="small" />
+        <ActivityIndicator size="small" color={chartColors.secondaryLabel} />
       ) : isEmpty ? (
-        <Text variant="footnote" color={systemColors.tertiaryLabel}>
-          {emptyLabel}
-        </Text>
+        <View style={styles.emptyState} accessibilityRole="image" accessibilityLabel={emptyLabel}>
+          <Icon name="chart.bar" size={22} color={systemColors.tertiaryLabel} />
+          <Text variant="footnote" color={systemColors.tertiaryLabel}>
+            {emptyLabel}
+          </Text>
+        </View>
       ) : width > 0 ? (
         children(width, zoomScale, canZoom && isZoomed)
       ) : null}
@@ -174,6 +190,7 @@ function ChartFrame({ height, loading, emptyLabel, isEmpty, zoomable, children }
               backgroundColor: systemColors.elevatedSurface,
               borderColor: systemColors.separator,
             },
+            floatingElevation,
           ]}
           accessibilityRole="button"
           accessibilityLabel={t('resetZoom')}
@@ -188,6 +205,7 @@ function ChartFrame({ height, loading, emptyLabel, isEmpty, zoomable, children }
 
 function TooltipBubble({ model, totalLabel }: { model: ChartTooltipModel | undefined; totalLabel: string }) {
   const { systemColors } = useTheme();
+  const floatingElevation = useVariantValue({ material: materialElevationByLevel.level2, liquidGlass: null });
   if (!model) return null;
 
   return (
@@ -198,6 +216,7 @@ function TooltipBubble({ model, totalLabel }: { model: ChartTooltipModel | undef
           backgroundColor: systemColors.elevatedSurface,
           borderColor: systemColors.separator,
         },
+        floatingElevation,
       ]}
     >
       <Text variant="caption1" style={styles.tooltipTitle} numberOfLines={1}>
@@ -249,6 +268,12 @@ type StackedBarsProps = {
   fitYAxisToData?: boolean;
   showYAxisScale?: boolean;
   minBarWidth?: number;
+  /**
+   * Screen-reader summary for the whole chart. When set, the outer wrapper
+   * announces it as an image and the inner SVG primitives are hidden from
+   * accessibility so VoiceOver/TalkBack don't traverse the bars individually.
+   */
+  accessibilityLabel?: string;
 };
 
 /** Stacked bars (weekly activity, grade distribution). */
@@ -265,6 +290,7 @@ export const StackedBarChart = memo(function StackedBarChart({
   fitYAxisToData,
   showYAxisScale,
   minBarWidth = 4,
+  accessibilityLabel,
 }: StackedBarsProps) {
   // gifted-charts colour props require plain strings (not PlatformColor); `chartColors`
   // is the matching string table per variant+scheme, resolved once by the provider.
@@ -335,8 +361,12 @@ export const StackedBarChart = memo(function StackedBarChart({
   const selectedTooltip = selectedIndex == null ? undefined : tooltipModels[selectedIndex];
 
   return (
-    <View>
-      <View style={styles.chartShell}>
+    <View
+      accessible={accessibilityLabel ? true : undefined}
+      accessibilityRole={accessibilityLabel ? 'image' : undefined}
+      accessibilityLabel={accessibilityLabel}
+    >
+      <View style={styles.chartShell} importantForAccessibility={accessibilityLabel ? 'no-hide-descendants' : 'auto'}>
         <ChartFrame
           height={height}
           loading={loading}
@@ -348,9 +378,18 @@ export const StackedBarChart = memo(function StackedBarChart({
             const fitted = fitBars(width, stackData.length, minBarWidth);
             const barWidth = Math.max(minBarWidth, Math.round(fitted.barWidth * zoomScale));
             const spacing = Math.max(2, Math.round(fitted.spacing * zoomScale));
+            // gifted sizes each x-axis label box to ~one bar by default, so a wide
+            // week label ("W23 '24") on a 5px bar clips to "...". Give every KEPT
+            // label the full downsample-step width so it renders in full; blanked
+            // labels keep a 0 box so they don't steal layout.
+            const effectiveMaxLabels = maxXLabels ?? MAX_X_LABELS;
+            const labelStep =
+              stackData.length > effectiveMaxLabels ? Math.ceil(stackData.length / effectiveMaxLabels) : 1;
+            const labelBudget = labelStep * (barWidth + spacing);
+            const sizedData = stackData.map((bar) => (bar.label ? { ...bar, labelWidth: labelBudget } : bar));
             return (
               <BarChart
-                stackData={stackData}
+                stackData={sizedData}
                 width={width - 8}
                 height={height - 28}
                 barWidth={barWidth}
@@ -363,14 +402,14 @@ export const StackedBarChart = memo(function StackedBarChart({
                 yAxisThickness={0}
                 xAxisThickness={StyleSheet.hairlineWidth}
                 xAxisColor={chartColors.separator}
-                xAxisLabelTextStyle={{ color: chartColors.secondaryLabel, fontSize: AXIS_LABEL_SIZE }}
-                yAxisTextStyle={{ color: chartColors.secondaryLabel, fontSize: AXIS_LABEL_SIZE }}
+                xAxisLabelTextStyle={{ color: chartColors.tertiaryLabel, fontSize: AXIS_LABEL_SIZE }}
+                yAxisTextStyle={{ color: chartColors.tertiaryLabel, fontSize: AXIS_LABEL_SIZE }}
                 rulesColor={chartColors.separator}
                 rulesType="solid"
                 focusBarOnPress={interactive}
                 highlightedBarIndex={selectedIndex ?? -1}
                 highlightEnabled={interactive && selectedIndex != null}
-                lowlightOpacity={0.42}
+                lowlightOpacity={opacity.peek}
                 onBackgroundPress={interactive ? () => setSelectedIndex(null) : undefined}
                 isAnimated={false}
                 disableScroll={!scrollEnabled}
@@ -420,8 +459,8 @@ export const GroupedBarChart = memo(function GroupedBarChart({
   const { t } = useTranslation('profile');
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const isEmpty = !bars || bars.length === 0;
-  const groupGap = 14;
-  const innerGap = 2;
+  const groupGap = 16;
+  const innerGap = 3;
   const tooltipModels = useMemo(
     () => (bars ?? []).map((bar) => createGroupedTooltipModel(bar, (key) => flashRedpointColor(key, colorScheme))),
     [bars, colorScheme],
@@ -451,10 +490,10 @@ export const GroupedBarChart = memo(function GroupedBarChart({
             const list = bars ?? [];
             const initial = 8;
             const baseBarWidth = Math.max(
-              4,
+              MIN_GROUPED_BAR,
               Math.floor((width - initial * 2 - groupGap * list.length - innerGap * list.length) / (list.length * 2)),
             );
-            const barWidth = Math.max(4, Math.round(baseBarWidth * zoomScale));
+            const barWidth = Math.max(MIN_GROUPED_BAR, Math.round(baseBarWidth * zoomScale));
             const zoomedGroupGap = Math.max(groupGap, Math.round(groupGap * zoomScale));
             const zoomedInnerGap = Math.max(innerGap, Math.round(innerGap * zoomScale));
             const data = list.flatMap((bar, barIndex) =>
@@ -465,6 +504,14 @@ export const GroupedBarChart = memo(function GroupedBarChart({
                 label: valueIndex === 0 ? bar.label : undefined,
                 labelWidth: barWidth * 2 + zoomedInnerGap,
                 onPress: interactive ? () => handlePress(barIndex) : undefined,
+                topLabelComponent:
+                  value.value > 0
+                    ? () => (
+                        <Text variant="caption2" color={chartColors.secondaryLabel} style={styles.barTopLabel}>
+                          {value.value}
+                        </Text>
+                      )
+                    : undefined,
               })),
             );
             return (
@@ -474,7 +521,8 @@ export const GroupedBarChart = memo(function GroupedBarChart({
                 height={height - 28}
                 barWidth={barWidth}
                 initialSpacing={initial}
-                barBorderRadius={2}
+                barBorderRadius={STACK_BAR_RADIUS}
+                topLabelContainerStyle={{ width: barWidth }}
                 hideRules
                 hideYAxisText
                 maxValue={yAxisMaxValue}
@@ -485,7 +533,7 @@ export const GroupedBarChart = memo(function GroupedBarChart({
                 focusBarOnPress={interactive}
                 highlightedBarIndex={selectedIndex == null ? -1 : [selectedIndex * 2, selectedIndex * 2 + 1]}
                 highlightEnabled={interactive && selectedIndex != null}
-                lowlightOpacity={0.42}
+                lowlightOpacity={CHART_LOWLIGHT_OPACITY}
                 onBackgroundPress={interactive ? () => setSelectedIndex(null) : undefined}
                 isAnimated={false}
                 disableScroll={!scrollEnabled}
@@ -513,6 +561,9 @@ type AreaProps = {
   emptyLabel?: string;
   interactive?: boolean;
   zoomable?: boolean;
+  /** Max x-axis labels before downsampling blanks the rest (default 6 here —
+   *  week labels are wide, so fewer-but-readable beats a dense dotted axis). */
+  maxXLabels?: number;
 };
 
 /**
@@ -529,8 +580,9 @@ export const TotalAreaChart = memo(function TotalAreaChart({
   emptyLabel,
   interactive = true,
   zoomable = true,
+  maxXLabels = 6,
 }: AreaProps) {
-  const { chartColors } = useTheme();
+  const { chartColors, colorScheme } = useTheme();
   const isEmpty = !timeline || timeline.series.length === 0;
 
   // Data + axis labels are width-independent — memoize off the timeline.
@@ -545,12 +597,39 @@ export const TotalAreaChart = memo(function TotalAreaChart({
     const yAxisLabelTexts = Array.from({ length: sections + 1 }, (_, index) =>
       formatThousands((maxValue * index) / sections),
     );
-    const data = totals.map((value, index) => ({
-      value,
-      label: downsampleLabel(index, weekLabels.length, weekLabels[index]),
-    }));
-    return { data, maxValue, sections, yAxisLabelTexts, pointCount: weekLabels.length };
-  }, [timeline]);
+    const latestTotal = totals[totals.length - 1] ?? 0;
+    // Mark only the final datum: a coloured end dot + a value pill so the eye
+    // lands on the current cumulative total. Interior points stay hidden.
+    const data = totals.map((value, index) => {
+      const isLast = index === totals.length - 1;
+      return {
+        value,
+        label: downsampleLabel(index, weekLabels.length, weekLabels[index], maxXLabels),
+        hideDataPoint: !isLast,
+        ...(isLast
+          ? {
+              dataPointColor: color,
+              dataPointRadius: 4,
+              dataPointLabelShiftY: -14,
+              dataPointLabelShiftX: -12,
+              dataPointLabelComponent: () => (
+                <View
+                  style={[
+                    styles.endValuePill,
+                    { backgroundColor: chartColors.elevatedSurface, borderColor: chartColors.separator },
+                  ]}
+                >
+                  <Text variant="caption2" color={chartColors.label} style={styles.endValueText}>
+                    {formatThousands(latestTotal)}
+                  </Text>
+                </View>
+              ),
+            }
+          : {}),
+      };
+    });
+    return { data, maxValue, sections, yAxisLabelTexts, pointCount: weekLabels.length, latestTotal };
+  }, [timeline, color, maxXLabels, chartColors.elevatedSurface, chartColors.separator, chartColors.label]);
 
   return (
     <ChartFrame
@@ -563,23 +642,47 @@ export const TotalAreaChart = memo(function TotalAreaChart({
       {(width, zoomScale, scrollEnabled) => {
         if (!model) return null;
         const baseSpacing = Math.max(1, Math.floor((width - 48) / Math.max(1, model.pointCount - 1)));
-        const spacing = Math.max(1, Math.round(baseSpacing * zoomScale));
+        const lineSpacing = Math.max(1, Math.round(baseSpacing * zoomScale));
+        // lineDataItem has no labelWidth, so the default axis label box is ~one
+        // point wide and a "W23 '24" label collapses to a dot. Render kept labels
+        // through a fixed-width labelComponent (step budget) so they're legible.
+        const labelStep = model.pointCount > maxXLabels ? Math.ceil(model.pointCount / maxXLabels) : 1;
+        const labelBudget = labelStep * lineSpacing;
+        const sizedData = model.data.map((point) =>
+          point.label
+            ? {
+                ...point,
+                labelComponent: () => (
+                  <Text
+                    variant="caption2"
+                    color={chartColors.tertiaryLabel}
+                    style={[styles.lineAxisLabel, { width: labelBudget }]}
+                    numberOfLines={1}
+                  >
+                    {point.label}
+                  </Text>
+                ),
+              }
+            : point,
+        );
         return (
           <LineChart
             areaChart
-            data={model.data}
+            data={sizedData}
             width={width - 48}
             height={height - 28}
-            spacing={spacing}
+            spacing={lineSpacing}
             initialSpacing={4}
+            endSpacing={spacing[4]}
             color={color}
             startFillColor={color}
             endFillColor={color}
-            startOpacity={0.35}
-            endOpacity={0.05}
+            startOpacity={colorScheme === 'dark' ? 0.55 : 0.42}
+            endOpacity={colorScheme === 'dark' ? 0.1 : 0.04}
+            gradientDirection="vertical"
             thickness={2}
-            hideDataPoints
             curved
+            curvature={0.2}
             maxValue={model.maxValue}
             noOfSections={model.sections}
             yAxisLabelTexts={model.yAxisLabelTexts}
@@ -590,6 +693,33 @@ export const TotalAreaChart = memo(function TotalAreaChart({
             rulesType="solid"
             yAxisTextStyle={{ color: chartColors.tertiaryLabel, fontSize: AXIS_LABEL_SIZE }}
             xAxisLabelTextStyle={{ color: chartColors.tertiaryLabel, fontSize: AXIS_LABEL_SIZE }}
+            pointerConfig={{
+              pointerStripColor: chartColors.separator,
+              pointerStripWidth: 1,
+              stripOverPointer: true,
+              pointerColor: color,
+              radius: 4,
+              pointerLabelWidth: 96,
+              pointerLabelHeight: 44,
+              activatePointersOnLongPress: false,
+              autoAdjustPointerLabelPosition: true,
+              pointerVanishDelay: 1600,
+              pointerLabelComponent: (items: { value: number; label?: string }[]) => (
+                <View
+                  style={[
+                    styles.tooltip,
+                    { backgroundColor: chartColors.elevatedSurface, borderColor: chartColors.separator },
+                  ]}
+                >
+                  <Text variant="caption2" color={chartColors.secondaryLabel} numberOfLines={1}>
+                    {items[0]?.label}
+                  </Text>
+                  <Text variant="caption1" style={styles.tooltipValue}>
+                    {formatThousands(items[0]?.value ?? 0)}
+                  </Text>
+                </View>
+              ),
+            }}
             isAnimated={false}
             disableScroll={!scrollEnabled}
           />
@@ -604,6 +734,28 @@ const styles = StyleSheet.create({
     position: 'relative',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  emptyState: {
+    alignItems: 'center',
+    gap: spacing[2],
+  },
+  barTopLabel: {
+    marginBottom: 2,
+    textAlign: 'center',
+    fontWeight: '600',
+  },
+  lineAxisLabel: {
+    textAlign: 'center',
+  },
+  endValuePill: {
+    borderRadius: borderRadius.full,
+    paddingHorizontal: spacing[1],
+    paddingVertical: 1,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  endValueText: {
+    fontWeight: '700',
+    textAlign: 'center',
   },
   resetZoomButton: {
     position: 'absolute',

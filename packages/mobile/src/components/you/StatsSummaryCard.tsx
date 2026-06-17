@@ -6,9 +6,8 @@ import { Text } from '../Text';
 import { Icon } from '../Icon';
 import { type IconName } from '../icon-map';
 import { Card } from '../Card';
-import { LayoutPercentageBar } from './LayoutPercentageBar';
 import { gradeBadgeColor } from './profile-chart-colors';
-import { spacing, borderRadius } from '../../theme/tokens';
+import { spacing, borderRadius, opacity } from '../../theme/tokens';
 import { useTheme } from '../../providers/theme-provider';
 import { useVariantValue } from '../../theme/variants';
 
@@ -39,11 +38,33 @@ export function StatsSummaryCard({ statisticsSummary, hardestSend, hardestFlash,
   const countTileColor = isMaterial ? m3.surfaceVariant : systemColors.fill;
   const countTextColor = isMaterial ? m3.onSurfaceVariant : undefined;
   const countLabelColor = isMaterial ? m3.onSurfaceVariant : systemColors.secondaryLabel;
+  // Hairline the neutral count tile so it reads as a defined surface against the
+  // card (it's the only tile without a saturated/tonal fill to delimit it). The
+  // grade tiles carry their own fill and stay borderless.
+  const countTileBorderColor = isMaterial ? m3.outlineVariant : systemColors.separator;
+
+  // Percentile scale tonal family. On Material the track + fill stay in the M3
+  // tonal palette (neutral surfaceVariant track · tonal primary fill) so the bar
+  // reads as a calibrated scale on the white card instead of a saturated
+  // brand-violet stripe. On Liquid Glass it keeps the original look (system fill
+  // track, brand-violet fill). The median tick + "you are here" knob are pure
+  // overlays positioned by percent, coloured from the matching token family.
+  const percentileTrackColor = isMaterial ? m3.surfaceVariant : systemColors.fill;
+  const percentileFillColor = isMaterial ? m3.primary : brandColors.primary;
+  const percentileTickColor = isMaterial ? m3.outlineVariant : systemColors.separator;
+  const percentileKnobColor = isMaterial ? m3.primary : brandColors.primary;
+  const percentileKnobRingColor = isMaterial ? m3.surface : systemColors.elevatedSurface;
 
   return (
     <Card style={styles.card}>
       <View style={styles.tiles}>
-        <View style={[styles.tile, { backgroundColor: countTileColor }]}>
+        <View
+          style={[
+            styles.tile,
+            styles.countTile,
+            { backgroundColor: countTileColor, borderColor: countTileBorderColor },
+          ]}
+        >
           <Text variant="title2" color={countTextColor}>
             {statisticsSummary.totalAscents}
           </Text>
@@ -81,11 +102,30 @@ export function StatsSummaryCard({ statisticsSummary, hardestSend, hardestFlash,
               {t('stats.topPercent', { value: topPercent.toFixed(topPercent < 1 ? 1 : 0) })}
             </Text>
           </View>
-          <View style={[styles.percentileTrack, { backgroundColor: systemColors.fill }]}>
+          <View
+            style={[styles.percentileTrack, { backgroundColor: percentileTrackColor }]}
+            accessibilityRole="progressbar"
+            accessibilityValue={{ min: 0, max: 100, now: percentile.percentile }}
+          >
             <View
               style={[
                 styles.percentileFill,
-                { width: `${percentile.percentile}%`, backgroundColor: brandColors.primary },
+                { width: `${percentile.percentile}%`, backgroundColor: percentileFillColor },
+              ]}
+            />
+            {/* 50% median reference tick — calibrates the bar as a scale, not just
+                a fill. Centred hairline so the knob can be read as above/below median. */}
+            <View style={[styles.percentileMedianTick, { backgroundColor: percentileTickColor }]} />
+            {/* "You are here" knob at the climber's percentile. Ring in the card
+                surface colour so it reads as punched through the fill. */}
+            <View
+              style={[
+                styles.percentileKnob,
+                {
+                  left: `${percentile.percentile}%`,
+                  backgroundColor: percentileKnobColor,
+                  borderColor: percentileKnobRingColor,
+                },
               ]}
             />
           </View>
@@ -94,8 +134,6 @@ export function StatsSummaryCard({ statisticsSummary, hardestSend, hardestFlash,
           </Text>
         </View>
       )}
-
-      <LayoutPercentageBar layoutPercentages={statisticsSummary.layoutPercentages} />
     </Card>
   );
 }
@@ -153,7 +191,11 @@ const styles = StyleSheet.create({
     paddingVertical: spacing[3],
     paddingHorizontal: spacing[2],
     alignItems: 'center',
+    justifyContent: 'center',
     gap: spacing[1],
+  },
+  countTile: {
+    borderWidth: StyleSheet.hairlineWidth,
   },
   gradeRow: {
     flexDirection: 'row',
@@ -161,7 +203,7 @@ const styles = StyleSheet.create({
     gap: spacing[1],
   },
   gradeTileLabel: {
-    opacity: 0.85,
+    opacity: opacity.subtle,
   },
   percentile: {
     marginTop: spacing[5],
@@ -183,6 +225,22 @@ const styles = StyleSheet.create({
   percentileFill: {
     height: '100%',
     borderRadius: borderRadius.full,
+  },
+  percentileMedianTick: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: '50%',
+    width: StyleSheet.hairlineWidth,
+  },
+  percentileKnob: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    width: spacing[1],
+    marginLeft: -spacing[1] / 2,
+    borderRadius: borderRadius.full,
+    borderWidth: StyleSheet.hairlineWidth,
   },
   percentileCaption: {
     marginTop: spacing[1],

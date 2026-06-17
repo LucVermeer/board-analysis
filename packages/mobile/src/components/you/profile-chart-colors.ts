@@ -27,8 +27,11 @@ type ColorSchemeName = 'light' | 'dark';
 // separation so stacked segments remain readable on M3 white and dark violet
 // cards.
 const layoutColors: Record<string, Record<ColorSchemeName, string>> = {
-  'kilter-1': { light: '#007C92', dark: '#22D3EE' },
-  'kilter-8': { light: '#087F5B', dark: '#34D399' },
+  // Kilter Original (sky blue) vs Kilter Homewall (grass green) — the two
+  // dominant layouts get a clear blue-vs-green hue split so they stop reading as
+  // adjacent cyan/green in the board-share donut (and the grade-distribution legend).
+  'kilter-1': { light: '#0284C7', dark: '#38BDF8' },
+  'kilter-8': { light: '#16A34A', dark: '#4ADE80' },
   'tension-9': { light: '#B42318', dark: '#FB7185' },
   'tension-10': { light: '#C2410C', dark: '#FDBA74' },
   'tension-11': { light: '#A16207', dark: '#FDE047' },
@@ -97,7 +100,12 @@ export function gradeChartColor(gradeKey: string, colorScheme: ColorSchemeName =
   const hDeg = Math.round(h * 360);
   const sourceSaturation = Math.round(s * 100);
   const sourceLightness = Math.round(l * 100);
-  const saturation = Math.max(sourceSaturation, colorScheme === 'dark' ? 78 : 82);
+  // Dark grade hexes come in near-100% saturated, which makes the warm V-grade
+  // bars shout over the violet brand on the near-black page. Clamp dark
+  // saturation to a calmer band (still hue-distinct across V0–V17); light mode
+  // keeps its punchier floor. Lightness is unchanged so contrast holds.
+  const saturation =
+    colorScheme === 'dark' ? Math.min(Math.max(sourceSaturation, 60), 75) : Math.max(sourceSaturation, 82);
   const lightness =
     colorScheme === 'dark'
       ? Math.min(Math.max(sourceLightness, 58), 72)
