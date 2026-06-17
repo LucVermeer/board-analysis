@@ -34,7 +34,7 @@
  */
 
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -45,6 +45,10 @@ const MAESTRO_DIR = resolve(MOBILE_DIR, '.maestro');
 const BUILD_SIM_APP_SCRIPT = resolve(ROOT_DIR, 'scripts', 'mobile-build-sim-app.ts');
 const APP_CACHE_DIR = resolve(MOBILE_DIR, '.app-cache');
 const OUTPUT_ROOT = resolve(ROOT_DIR, 'app-stores');
+// Metro's stdout is tee'd here so waitForHomeReady can poll it for the app's
+// "$screen /home" readiness marker — the JS console logs land in Metro's output,
+// not the device's unified log.
+const METRO_LOG_PATH = join(tmpdir(), 'boardsesh-screenshot-metro.log');
 // Metro dev server port the dev-client loads its JS bundle from. Defaults to
 // 8081; override with BOARDSESH_METRO_PORT when it's taken (this repo runs a
 // Metro per worktree). The orchestrator passes the matching dev-client URL to
@@ -452,7 +456,7 @@ function runIos(options: ScreenshotOptions): number {
     // there before Maestro runs — this is what login.yaml's readiness wait used to
     // do (now deleted; there's no login screen to gate on).
     console.log(`${LOG} Waiting for the app to auto-sign-in and reach home...`);
-    if (!waitForHomeReady(device.udid)) {
+    if (!waitForHomeReady()) {
       console.error(`${LOG} FAILED: app did not reach the home screen (auto sign-in / bundle load).`);
       return 1;
     }
@@ -767,7 +771,11 @@ function portInUse(port: number): boolean {
  * group; `CI=1` keeps expo non-interactive (no keypress menu / TTY expectations).
  */
 function startMetro(env: NodeJS.ProcessEnv): ChildProcess {
-  return spawn('bunx', ['expo', 'start', '--port', String(METRO_PORT)], {
+  // Pipe Metro's output through `tee` to METRO_LOG_PATH so waitForHomeReady can poll
+  // it for the app's "$screen /home" marker — the JS console logs land in Metro's
+  // stdout, NOT the device's unified log. `2>&1 | tee` keeps the output in the run
+  // log too; `tee` (no -a) truncates the file, so each run starts clean.
+  return spawn('sh', ['-c', `bunx expo start --port ${METRO_PORT} 2>&1 | tee ${METRO_LOG_PATH}`], {
     cwd: MOBILE_DIR,
     env: { ...env, CI: '1' },
     stdio: 'inherit',
@@ -853,27 +861,16 @@ function sleepSeconds(seconds: number): void {
  * After launch, wait until the app reaches the home screen, so the first
  * screenshot isn't a blank/loading frame. The screenshot build auto-signs-in and
  * boots straight to home (no login screen), so this replaces the old Maestro
- * login.yaml readiness gate. Matches the app's `$screen /home` analytics line in
- * the simulator's unified log.
+ * login.yaml readiness gate. The app's `$screen /home` analytics line lands in
+ * Metro's stdout (NOT the device's unified log), which startMetro tee's to
+ * METRO_LOG_PATH — so poll that file.
  */
-function waitForHomeReady(udid: string, timeoutSeconds = 180): boolean {
+function waitForHomeReady(timeoutSeconds = 180): boolean {
   const deadline = Date.now() + timeoutSeconds * 1000;
   while (Date.now() < deadline) {
-    const { stdout } = runCapture('xcrun', [
-      'simctl',
-      'spawn',
-      udid,
-      'log',
-      'show',
-      '--style',
-      'compact',
-      '--last',
-      '8s',
-      '--predicate',
-      'process == "Boardsesh"',
-    ]);
-    if (stdout.includes('$screen /home')) return true;
-    sleepSeconds(3);
+    const metroLog = existsSync(METRO_LOG_PATH) ? readFileSync(METRO_LOG_PATH, 'utf8') : '';
+    if (metroLog.includes('$screen /home')) return true;
+    sleepSeconds(2);
   }
   return false;
 }
