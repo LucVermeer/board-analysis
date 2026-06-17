@@ -1,26 +1,32 @@
 appId: com.boardsesh.app
-name: ready (subflow — waits for the screenshot-mode auto sign-in to land on a tab)
+name: ready (subflow — waits for the screenshot-mode auto sign-in)
 ---
 # The screenshot build auto-signs-in on boot (packages/mobile/src/lib/screenshot-mode.ts
-# SCREENSHOT_USER_* + app/auth/login.tsx), so there's no login form to drive. This subflow
-# just waits for the app to finish loading the (pre-warmed) Metro bundle and land on the
-# home tab — detected by the native tab bar, which is only present once signed in.
+# SCREENSHOT_USER_* + app/auth/login.tsx) — programmatically, so the flow never types into
+# the form and iOS never offers to save the password. This subflow waits for the (pre-warmed)
+# Metro bundle to load and for that auto sign-in to redirect into the app.
 #
-# We deliberately do NOT wait on the auth form: auto sign-in redirects within the network
-# round-trip, so the form flashes faster than Maestro polls and a `visible: auth-email-input`
-# wait times out (the field is already gone — this is the bug this replaced). The native
-# tab bar is a UIKit element, so it surfaces to Maestro (unlike plain RN views).
+# Why gate on the auth field: on this iOS 26 / RN Fabric build Maestro's a11y tree only
+# exposes native text inputs and system dialogs — native tab-bar LABELS do NOT surface
+# (`text: Climbs` and `text: Discover` both miss on a fully-loaded home). `auth-email-input`
+# is a native text input with a testID, so it's the one element reliably visible during boot.
+# app/auth/login.tsx delays the auto sign-in ~3.5s so the auth screen stays up long enough
+# for the `visible` gate below to catch it before it redirects.
 #
 # A "Sign in to your Apple Account" system alert can linger from a prior Apple-auth attempt
 # and cover the screen; dismiss it if present.
 - tapOn:
     text: 'Close'
     optional: true
-# The "Discover" tab label appears only once auto sign-in lands on a tab — a reliable
-# "loaded + authenticated" signal. (NOT "Climbs": that tab uses role="search", so iOS 26
-# renders it as a magnifying-glass glyph with no text label.) Generous timeout covers a
-# cold Metro bundle on a slow runner.
+# Cold-bundle gate: wait for the auth screen. Generous timeout covers a cold Metro bundle on
+# a slow runner; the delayed auto sign-in keeps the field on screen long enough to catch.
 - extendedWaitUntil:
     visible:
-      text: 'Discover'
+      id: 'auth-email-input'
     timeout: 300000
+# Auto sign-in has fired by now; wait for it to redirect out of auth before the first shot,
+# so screenshots capture the app, not the (briefly held) login screen.
+- extendedWaitUntil:
+    notVisible:
+      id: 'auth-email-input'
+    timeout: 60000
