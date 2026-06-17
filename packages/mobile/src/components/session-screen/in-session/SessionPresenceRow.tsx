@@ -30,7 +30,10 @@ export function SessionPresenceRow({ users }: SessionPresenceRowProps) {
   const participants = useMemo(
     () =>
       ordered.map((user) => ({
-        userId: user.id,
+        // user.id is the connection id; user.userId is the stable DB user id the
+        // profile route expects. Unauthenticated connections have no userId, so
+        // their avatar stays non-tappable rather than linking to a dead profile.
+        userId: user.userId,
         displayName: user.username,
         avatarUrl: user.avatarUrl,
       })),

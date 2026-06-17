@@ -66,7 +66,7 @@ vi.mock('@gorhom/bottom-sheet', () => ({
 vi.mock('../../Text', () => ({
   Text: ({ children }: { children?: ReactNode }) => createElement('span', null, children),
 }));
-vi.mock('../../Avatar', () => ({ Avatar: () => createElement('div', null) }));
+vi.mock('../../PressableAvatar', () => ({ PressableAvatar: () => createElement('div', null) }));
 vi.mock('../../Icon', () => ({ Icon: () => createElement('i', null) }));
 vi.mock('../../ActivityIndicator', () => ({ ActivityIndicator: () => createElement('div', null) }));
 
