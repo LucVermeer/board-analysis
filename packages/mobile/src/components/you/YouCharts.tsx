@@ -529,7 +529,7 @@ export const GroupedBarChart = memo(function GroupedBarChart({
                 yAxisThickness={0}
                 xAxisThickness={StyleSheet.hairlineWidth}
                 xAxisColor={chartColors.separator}
-                xAxisLabelTextStyle={{ color: chartColors.secondaryLabel, fontSize: AXIS_LABEL_SIZE }}
+                xAxisLabelTextStyle={{ color: chartColors.tertiaryLabel, fontSize: AXIS_LABEL_SIZE }}
                 focusBarOnPress={interactive}
                 highlightedBarIndex={selectedIndex == null ? -1 : [selectedIndex * 2, selectedIndex * 2 + 1]}
                 highlightEnabled={interactive && selectedIndex != null}

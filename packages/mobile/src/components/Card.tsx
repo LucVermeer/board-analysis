@@ -46,6 +46,7 @@ function CardMaterial({
   accessibilityActions,
   onAccessibilityAction,
 }: CardProps) {
+  const { m3 } = useTheme();
   const handlePress = () => {
     if (haptic) hapticLight();
     onPress?.();
@@ -65,7 +66,7 @@ function CardMaterial({
       accessibilityState={accessibilityState}
       accessibilityActions={accessibilityActions}
       onAccessibilityAction={onAccessibilityAction}
-      style={style}
+      style={[styles.materialCard, { borderColor: m3.outlineVariant }, style]}
     >
       <PaperCard.Content style={styles.materialContent}>{children}</PaperCard.Content>
     </PaperCard>
@@ -91,7 +92,9 @@ function CardGlass({
     onPress?.();
   };
 
-  const backgroundStyle = { backgroundColor: systemColors.secondaryBackground };
+  // Hairline edge so the card reads as a distinct surface on the near-black page
+  // (the soft shadow alone barely registers on dark).
+  const backgroundStyle = { backgroundColor: systemColors.secondaryBackground, borderColor: systemColors.separator };
 
   if (onPress) {
     return (
@@ -118,6 +121,7 @@ function CardGlass({
 const styles = StyleSheet.create({
   card: {
     borderRadius: borderRadius.lg,
+    borderWidth: StyleSheet.hairlineWidth,
     padding: 16,
     ...Platform.select({
       ios: {
@@ -130,6 +134,9 @@ const styles = StyleSheet.create({
         elevation: 2,
       },
     }),
+  },
+  materialCard: {
+    borderWidth: StyleSheet.hairlineWidth,
   },
   materialContent: {
     padding: 16,

@@ -14,7 +14,7 @@ const CELL_GAP = 3;
 const TARGET_COLUMN = 16;
 const INTENSITY_STEPS = [0.4, 0.6, 0.8, 1] as const;
 // Opaque-composite alphas for the empty floor (kept faint, scheme-tuned).
-const EMPTY_FLOOR_ALPHA_DARK = 0.1;
+const EMPTY_FLOOR_ALPHA_DARK = 0.14;
 const EMPTY_FLOOR_ALPHA_LIGHT = 0.08;
 
 type ActivityHeatmapProps = {
@@ -132,7 +132,7 @@ export function ActivityHeatmap({ heatmap }: ActivityHeatmapProps) {
                       rx={cornerRadius}
                       ry={cornerRadius}
                       fill="none"
-                      stroke={brandColors.tint}
+                      stroke={brandColors.accent}
                       strokeWidth={ringWidth}
                     />
                   ) : null}

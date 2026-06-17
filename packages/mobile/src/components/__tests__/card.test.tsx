@@ -31,7 +31,11 @@ vi.mock('../PressableSurface', () => ({
 
 vi.mock('../../lib/haptics', () => ({ hapticLight: vi.fn() }));
 vi.mock('../../providers/theme-provider', () => ({
-  useTheme: () => ({ variant: ctrl.variant, systemColors: { secondaryBackground: '#eee' } }),
+  useTheme: () => ({
+    variant: ctrl.variant,
+    systemColors: { secondaryBackground: '#eee', separator: '#ccc' },
+    m3: { outlineVariant: '#ddd' },
+  }),
 }));
 
 import { Card } from '../Card';

@@ -97,7 +97,12 @@ export function gradeChartColor(gradeKey: string, colorScheme: ColorSchemeName =
   const hDeg = Math.round(h * 360);
   const sourceSaturation = Math.round(s * 100);
   const sourceLightness = Math.round(l * 100);
-  const saturation = Math.max(sourceSaturation, colorScheme === 'dark' ? 78 : 82);
+  // Dark grade hexes come in near-100% saturated, which makes the warm V-grade
+  // bars shout over the violet brand on the near-black page. Clamp dark
+  // saturation to a calmer band (still hue-distinct across V0–V17); light mode
+  // keeps its punchier floor. Lightness is unchanged so contrast holds.
+  const saturation =
+    colorScheme === 'dark' ? Math.min(Math.max(sourceSaturation, 60), 75) : Math.max(sourceSaturation, 82);
   const lightness =
     colorScheme === 'dark'
       ? Math.min(Math.max(sourceLightness, 58), 72)
