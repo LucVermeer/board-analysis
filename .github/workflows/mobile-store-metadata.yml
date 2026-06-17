@@ -6,8 +6,12 @@ name: Mobile Store Metadata
 # (fastlane/metadata/android/en-US/). Listing text only — no binary, no
 # screenshots, no review submission, no staged rollout. The text lands on the
 # editable App Store version / Play draft listing, so a wrong value is fixed by
-# editing the .txt and re-running. Manual dispatch only (the listing copy
-# changes far less often than screenshots or builds).
+# editing the .txt and re-running.
+#
+# Runs automatically when the committed listing copy changes on main
+# (fastlane/metadata/** or the Fastfile lane logic), pushing to both stores. Also
+# dispatchable by hand to push a single store on demand. A push build always
+# targets `all`; a manual build uses the chosen platform input.
 #
 # iOS "What's New" (release_notes.txt) is part of the deliver text and IS pushed
 # here. The Android "What's new", by contrast, is NOT pushed here: it ships with
@@ -15,6 +19,11 @@ name: Mobile Store Metadata
 # the same changelogs/default.txt.
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'fastlane/metadata/**'
+      - 'fastlane/Fastfile'
   workflow_dispatch:
     inputs:
       platform:
@@ -39,6 +48,10 @@ jobs:
     # App Store Connect / Google Play credentials (same secrets as the
     # screenshot upload job in mobile-screenshots.yml).
     environment: Production
+    # Manual runs honour the chosen platform input; automatic push runs have no
+    # input, so default to pushing both stores.
+    env:
+      PLATFORM: ${{ github.event.inputs.platform || 'all' }}
 
     steps:
       - name: Checkout repository
@@ -52,7 +65,7 @@ jobs:
           working-directory: fastlane
 
       - name: Decode App Store Connect API key
-        if: ${{ inputs.platform == 'ios' || inputs.platform == 'all' }}
+        if: ${{ env.PLATFORM == 'ios' || env.PLATFORM == 'all' }}
         env:
           APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
           APP_STORE_CONNECT_API_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_API_KEY_BASE64 }}
@@ -67,7 +80,7 @@ jobs:
           echo "ASC_KEY_PATH=$key_path" >> "$GITHUB_ENV"
 
       - name: Upload App Store listing text
-        if: ${{ inputs.platform == 'ios' || inputs.platform == 'all' }}
+        if: ${{ env.PLATFORM == 'ios' || env.PLATFORM == 'all' }}
         working-directory: fastlane
         env:
           APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
@@ -84,7 +97,7 @@ jobs:
         run: rm -f "$HOME/.private_keys/AuthKey_"*.p8 2>/dev/null || true
 
       - name: Upload Play Store listing text
-        if: ${{ inputs.platform == 'android' || inputs.platform == 'all' }}
+        if: ${{ env.PLATFORM == 'android' || env.PLATFORM == 'all' }}
         working-directory: fastlane
         env:
           GOOGLE_PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
@@ -96,7 +109,7 @@ jobs:
           bundle exec fastlane android metadata
 
       - name: Upload Play Store listing images
-        if: ${{ inputs.platform == 'android' || inputs.platform == 'all' }}
+        if: ${{ env.PLATFORM == 'android' || env.PLATFORM == 'all' }}
         working-directory: fastlane
         env:
           GOOGLE_PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}

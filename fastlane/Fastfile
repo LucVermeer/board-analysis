@@ -35,8 +35,16 @@ APP_IDENTIFIER = "com.boardsesh.app"
 # truth for the listing copy — see app-stores/apple|google/*.md for the pointers
 # and the operational material (review notes, privacy labels) that can't be
 # uploaded.
-APPLE_METADATA_DIR = File.join(__dir__, "metadata")
-ANDROID_METADATA_DIR = File.join(__dir__, "metadata", "android")
+#
+# Anchor to REPO_ROOT (an absolute path), NOT __dir__. fastlane evaluates the
+# Fastfile through instance_eval, where __dir__ resolves to "." rather than this
+# file's directory — so File.join(__dir__, ...) yields a *relative* path like
+# "./metadata/android". deliver runs from fastlane/ so "./metadata" happens to
+# resolve, but supply runs from the repo root, where "./metadata/android" does
+# not exist ("Could not find folder ./metadata/android"). REPO_ROOT is already
+# absolutised via File.expand_path, so these paths resolve from any CWD.
+APPLE_METADATA_DIR = File.join(REPO_ROOT, "fastlane", "metadata")
+ANDROID_METADATA_DIR = File.join(REPO_ROOT, "fastlane", "metadata", "android")
 
 # Marketing version, read from the Expo app config. Anchored to a top-level
 # `version:` line whose value starts with a digit (semver), so a nested plugin
