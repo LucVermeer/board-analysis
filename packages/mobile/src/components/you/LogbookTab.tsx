@@ -33,9 +33,12 @@ type LogbookTabProps = {
    * read-only in the play drawer instead of the editable LogbookEditSheet.
    */
   viewerIsOwner?: boolean;
+  /** In-body identity title (the own "You" tab passes "You"). Omitted on another
+   *  climber's profile, where the name lives in the public-profile header. */
+  screenTitle?: string;
 };
 
-export function LogbookTab({ userId, topInset = 0, viewerIsOwner = true }: LogbookTabProps) {
+export function LogbookTab({ userId, topInset = 0, viewerIsOwner = true, screenTitle }: LogbookTabProps) {
   const { t } = useTranslation('you');
   const { systemColors, brandColors } = useTheme();
   const router = useRouter();
@@ -110,13 +113,13 @@ export function LogbookTab({ userId, topInset = 0, viewerIsOwner = true }: Logbo
     [handleActivate, handleOpenActions, handleEdit, viewerIsOwner],
   );
 
-  // The screen's identity, in-body under the floating chrome. Memoized so
-  // FlashList doesn't re-render the header on every LogbookTab render. Always
-  // present so it sits above the empty state too. ScreenTitle hides itself on
-  // Material (the M3 app bar owns the title).
+  // The screen's identity (when supplied), in-body under the floating chrome.
+  // Memoized so FlashList doesn't re-render the header on every LogbookTab render.
+  // ScreenTitle hides itself on Material (the M3 app bar owns the title); the
+  // whole header is omitted on another climber's profile (no title passed).
   const listHeader = useMemo(
-    () => <ScreenTitle style={styles.screenTitle}>{t('metadata.dashboard.title')}</ScreenTitle>,
-    [t],
+    () => (screenTitle ? <ScreenTitle style={styles.screenTitle}>{screenTitle}</ScreenTitle> : null),
+    [screenTitle],
   );
 
   if (!userId || feed.isPending) {

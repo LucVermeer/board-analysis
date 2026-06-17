@@ -24,9 +24,12 @@ type ProgressTabProps = {
   /** Measured chrome height — the scroll content insets its top by this so the
    *  first card rests below the floating chrome and the rest scroll under it. */
   topInset: number;
+  /** In-body identity title (the own "You" tab passes "You"). Omitted on another
+   *  climber's profile, where the name lives in the public-profile header. */
+  screenTitle?: string;
 };
 
-export const ProgressTab = memo(function ProgressTab({ data, topInset }: ProgressTabProps) {
+export const ProgressTab = memo(function ProgressTab({ data, topInset, screenTitle }: ProgressTabProps) {
   const { t } = useTranslation('profile');
   const { t: tYou } = useTranslation('you');
   const { systemColors, colorScheme, brandColors } = useTheme();
@@ -35,7 +38,6 @@ export const ProgressTab = memo(function ProgressTab({ data, topInset }: Progres
 
   const totalAscents = data.statisticsSummary.totalAscents;
   const noAscentData = t('empty.noAscentData');
-  const dashboardTitle = tYou('metadata.dashboard.title');
 
   // Legends so the layout-colored grade-distribution bars and the
   // flash-vs-redpoint pairs can be decoded (charts are color-only otherwise).
@@ -74,10 +76,11 @@ export const ProgressTab = memo(function ProgressTab({ data, topInset }: Progres
         <RefreshControl refreshing={data.refreshing} onRefresh={data.refetch} tintColor={brandColors.primary} />
       }
     >
-      {/* The screen's identity, in-body under the floating chrome — collapses into
-          the header capsule as it scrolls up behind the glass. ScreenTitle hides
-          itself on Material (the M3 app bar owns the title). */}
-      <ScreenTitle style={styles.screenTitle}>{dashboardTitle}</ScreenTitle>
+      {/* The screen's identity (when supplied), in-body under the floating chrome —
+          collapses into the header capsule as it scrolls up behind the glass.
+          ScreenTitle hides itself on Material (the M3 app bar owns the title).
+          Omitted on another climber's profile, where the name lives in the header. */}
+      {screenTitle ? <ScreenTitle style={styles.screenTitle}>{screenTitle}</ScreenTitle> : null}
 
       {totalAscents === 0 ? (
         <View style={styles.empty}>

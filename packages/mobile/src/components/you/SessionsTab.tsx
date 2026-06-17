@@ -35,6 +35,9 @@ type SessionsTabProps = {
   /** Measured chrome height — the list insets its top by this so the first row
    *  rests below the floating chrome and the rest scroll under it. */
   topInset?: number;
+  /** In-body identity title (the own "You" tab passes "You"). Omitted on another
+   *  climber's profile, where the name lives in the public-profile header. */
+  screenTitle?: string;
 };
 
 // String-literal `t(...)` per call so the catalog keys stay statically greppable.
@@ -87,7 +90,7 @@ function SessionCardSkeleton() {
   );
 }
 
-export function SessionsTab({ userId, topInset = 0 }: SessionsTabProps) {
+export function SessionsTab({ userId, topInset = 0, screenTitle }: SessionsTabProps) {
   const { t } = useTranslation('you');
   const { systemColors, brandColors } = useTheme();
   const router = useRouter();
@@ -207,17 +210,17 @@ export function SessionsTab({ userId, topInset = 0 }: SessionsTabProps) {
   // The screen's identity, in-body under the floating chrome, plus the feed
   // rollup when there are sessions. Memoized so FlashList doesn't re-measure /
   // re-render the header on every SessionsTab render — only when the rollup data
-  // (sessions/now) changes. The large title always renders so it sits above the
-  // empty state too.
+  // (sessions/now) changes. The title renders above the empty state too when
+  // supplied; it's omitted on another climber's profile.
   const listHeader = useMemo(
     () => (
       <>
-        {/* ScreenTitle hides itself on Material (the M3 app bar owns the title). */}
-        <ScreenTitle style={styles.screenTitle}>{t('metadata.dashboard.title')}</ScreenTitle>
+        {/* ScreenTitle hides itself on Material; omitted on another climber's profile. */}
+        {screenTitle ? <ScreenTitle style={styles.screenTitle}>{screenTitle}</ScreenTitle> : null}
         {sessions.length > 0 ? <SessionsFeedHeader sessions={sessions} now={now} /> : null}
       </>
     ),
-    [t, sessions, now],
+    [screenTitle, sessions, now],
   );
 
   if (!userId) {

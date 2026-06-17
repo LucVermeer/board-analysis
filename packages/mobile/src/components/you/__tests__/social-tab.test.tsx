@@ -295,6 +295,19 @@ describe('SocialTab', () => {
     expect(getByText('1 follower · 2 following')).toBeTruthy();
   });
 
+  it('renders the in-body identity title only when a screenTitle is supplied', () => {
+    // The own "You" tab passes a title; another climber's profile reuses the same
+    // tab without one and must not surface the owner's "You" heading. Probe with a
+    // distinctive string so it can't collide with any other catalog copy.
+    const probe = 'Profile identity probe';
+
+    const { queryByText, rerender } = render(<SocialTab userId="me" />);
+    expect(queryByText(probe)).toBeNull();
+
+    rerender(<SocialTab userId="me" screenTitle={probe} />);
+    expect(queryByText(probe)).not.toBeNull();
+  });
+
   it('debounces climber search and follows a result from the Find segment', () => {
     const { getByText, getByPlaceholderText } = render(<SocialTab userId="me" />);
 
