@@ -221,6 +221,27 @@ platform :android do
     )
   end
 
+  desc "Upload Play Store listing images (high-res icon, feature graphic) — no binary, no text, no screenshots"
+  lane :images do
+    upload_to_play_store(
+      package_name: APP_IDENTIFIER,
+      json_key_data: ENV.fetch("GOOGLE_PLAY_SERVICE_ACCOUNT_JSON"),
+      metadata_path: ANDROID_METADATA_DIR,
+      skip_upload_apk: true,
+      skip_upload_aab: true,
+      skip_upload_metadata: true,
+      skip_upload_changelogs: true,
+      # Upload the app images present under <locale>/images/ (icon.png 512x512,
+      # featureGraphic.png 1024x500 when added). Phone screenshots stay untouched.
+      skip_upload_images: false,
+      skip_upload_screenshots: true,
+      # No sync_image_upload: only push images that exist locally and never
+      # delete a remote one, so committing just icon.png updates the icon and
+      # leaves any existing feature graphic in place.
+      timeout: 300
+    )
+  end
+
   desc "Print the next Android versionCode (max across release tracks + 1)"
   lane :next_version_code do
     fallback = ENV["VERSION_CODE_FALLBACK"].to_s

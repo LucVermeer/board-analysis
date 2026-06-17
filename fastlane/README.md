@@ -1,9 +1,10 @@
 # fastlane
 
-Store-automation lanes for the React Native app (`packages/mobile`). Two
-platforms (`ios`, `android`), each with: a screenshot upload lane, a listing-text
-(metadata) upload lane, and a build-number resolver. Nothing here uploads a
-binary, submits for review, or does a staged rollout.
+Store-automation lanes for the React Native app (`packages/mobile`). Both
+platforms have a screenshot upload lane, a listing-text (metadata) upload lane,
+and a build-number resolver; Android also has a listing-image lane (Play
+high-res icon / feature graphic). Nothing here uploads a binary, submits for
+review, or does a staged rollout.
 
 ```bash
 # screenshots (PNGs from app-stores/*/screenshots/<device>/)
@@ -13,6 +14,9 @@ cd fastlane && bundle exec fastlane android screenshots
 # listing text (from fastlane/metadata/)
 cd fastlane && bundle exec fastlane ios metadata
 cd fastlane && bundle exec fastlane android metadata
+
+# Play listing images — high-res icon / feature graphic (from fastlane/metadata/android/en-US/images/)
+cd fastlane && bundle exec fastlane android images
 
 # next build number / versionCode (prints to stdout; used by the build workflows)
 cd fastlane && bundle exec fastlane ios next_build_number
@@ -63,6 +67,29 @@ fastlane/metadata/
 Both push to the editable/draft listing, so a wrong value is reversible: edit
 the `.txt` and re-run. In CI they run from the `Mobile Store Metadata` workflow
 (manual dispatch, `platform: ios | android | all`).
+
+## Listing images (Play only) — `android images`
+
+Google Play's listing images are source-controlled under
+`fastlane/metadata/android/en-US/images/`:
+
+```
+images/
+  icon.png            # 512x512, 32-bit PNG, < 1MB (Play high-res listing icon)
+  featureGraphic.png  # 1024x500 (optional; add a real asset, see play-store-metadata.md)
+```
+
+`android images` uploads whatever images are present there and leaves phone
+screenshots and any image you didn't commit untouched (no `sync_image_upload`,
+so a missing `featureGraphic.png` never deletes the live one). `icon.png` is
+derived from `packages/mobile/assets/icon.png` (the app launcher icon) resized to
+512x512 — regenerate it with `sharp` if the app icon changes.
+
+This is the only way to update the Play **store-listing** icon from code instead
+of the Play Console UI. Note the launcher icon inside the app comes from the
+build (`adaptive-icon.png`), and the **iOS App Store icon cannot be set via
+fastlane at all** — App Store Connect reads it from the uploaded build's
+1024x1024 marketing icon.
 
 ## Build numbers — `ios next_build_number`, `android next_version_code`
 
