@@ -489,7 +489,7 @@ describe('PlaylistDetailView', () => {
 
   it('shows an indicator for climbs whose render board cannot be resolved', () => {
     const onActivateClimb = vi.fn();
-    const { getByText, container } = render(
+    const { getByText, getByLabelText } = render(
       <PlaylistDetailView
         {...makeProps({
           climbs: [UNKNOWN_BOARD_CLIMB],
@@ -502,15 +502,13 @@ describe('PlaylistDetailView', () => {
     expect(getByText('detail.unrenderableClimb.subtitle')).not.toBeNull();
     expect(capturedClimbRows).toHaveLength(0);
 
-    fireEvent.click(
-      container.querySelector('[aria-label="Unknown Board Row. detail.unrenderableClimb.subtitle"]') as HTMLElement,
-    );
+    fireEvent.click(getByLabelText('Unknown Board Row. detail.unrenderableClimb.subtitle'));
     expect(onActivateClimb).not.toHaveBeenCalled();
   });
 
   it('lets owners remove unresolved climbs in edit mode', () => {
     const onRemoveClimb = vi.fn();
-    const { container } = render(
+    const { getByLabelText } = render(
       <PlaylistDetailView
         {...makeProps({
           climbs: [UNKNOWN_BOARD_CLIMB],
@@ -520,7 +518,7 @@ describe('PlaylistDetailView', () => {
       />,
     );
 
-    fireEvent.click(container.querySelector('[aria-label="editClimbs.removeAria"]') as HTMLElement);
+    fireEvent.click(getByLabelText('editClimbs.removeAria'));
 
     expect(onRemoveClimb).toHaveBeenCalledWith('unknown-board-row');
   });
