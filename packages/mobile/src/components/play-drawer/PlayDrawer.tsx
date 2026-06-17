@@ -21,6 +21,7 @@ import { BoardRenderUnavailable } from './BoardRenderUnavailable';
 import { PlaybackControls } from './PlaybackControls';
 import { useMobilePlayback } from './use-mobile-playback';
 import { PlayDrawerHeader } from './PlayDrawerHeader';
+import { PlayDrawerPreviewBanner } from './PlayDrawerPreviewBanner';
 import { PlayDrawerActionBar } from './PlayDrawerActionBar';
 import { SwitchBoardOverlay } from './SwitchBoardOverlay';
 import { LogAscentSheet } from '../LogAscentSheet';
@@ -61,26 +62,28 @@ type BoardConfig = {
 
 export type PlayDrawerOpenOptions = {
   /**
-   * When `true` (default), the opened climb is dispatched through
-   * `setCurrentClimb`, which both makes it the active climb and appends
-   * it to the queue. Pass `false` when the drawer is being opened for a
-   * climb that's already current (e.g. from the persistent queue bar),
-   * to avoid duplicating that climb at the end of the queue — the queue
-   * item wrapper carries a fresh uuid, so the reducer's idempotency
-   * guards key off uuid and don't catch the duplicate.
+   * The caller already dispatched `setCurrentClimb` for this climb (the
+   * drawer-host queue / suggestion / board-sheet taps and playlist activation
+   * do this). The drawer renders from `currentClimbQueueItem` and skips its own
+   * commit so the item isn't dispatched twice. No Preview badge — the shown
+   * climb IS the active climb.
    */
-  setAsCurrent?: boolean;
+  committedExternally?: boolean;
   /**
-   * Playlist source that seeds the drawer's next/previous suggestions when a
-   * climb is opened with `setAsCurrent: false` (the suggestion source the
-   * activation builds isn't on the queue yet). Drives swipe-through-playlist in
-   * the drawer without re-dispatching.
+   * View-only preview: show this item in the drawer WITHOUT committing it to the
+   * queue. The drawer renders a "Preview" badge + a "Set active" button so the
+   * user can promote it. Used by genuinely view-only surfaces — the workout
+   * builder, logbook / feed / climb-view browse, and the peer-driven wall climb
+   * behind the accessory bar. The lightbulb keeps acting on the active climb,
+   * not this preview.
    */
-  previewPlaylistSuggestionSource?: PlaylistSuggestionSource | null;
-  /** Queue item to display as the drawer's navigation anchor without
-   * re-dispatching it (used with `setAsCurrent: false` so prev/next anchor on
-   * the right queue entry). */
   previewQueueItem?: ClimbQueueItem | null;
+  /**
+   * Playlist source that seeds the drawer's next/previous suggestions for a
+   * preview open (the suggestion source isn't on the queue yet). Drives
+   * swipe-through-playlist in the drawer without re-dispatching.
+   */
+  playlistSuggestionSource?: PlaylistSuggestionSource | null;
 };
 
 export type PlayDrawerHandle = {
@@ -189,6 +192,10 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
 
   const displayedQueueItem = drawerPreviewItem ?? state.currentClimbQueueItem;
   const displayedClimb = displayedQueueItem?.climb;
+  // A view-only preview is showing (not the active/wall climb). Commit paths
+  // never set `drawerPreviewItem`, so this is true only for genuine previews
+  // (workout builder, logbook/cross-board, the peer-driven accessory wall climb).
+  const isPreview = drawerPreviewItem != null;
 
   // Real favorite status for the heart, keyed on (boardName, climbUuid, angle).
   // Gated on the sheet being open so it doesn't fetch while the drawer is closed.
@@ -280,18 +287,13 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
 
   const openDrawer = useCallback(
     (selectedClimb: Climb, options?: PlayDrawerOpenOptions) => {
-      const previewPlaylistSuggestionSource = options?.previewPlaylistSuggestionSource ?? null;
-      const shouldShowCurrentQueueItem =
-        options?.setAsCurrent === false &&
-        options.previewQueueItem == null &&
-        previewPlaylistSuggestionSource === null &&
-        state.currentClimbQueueItem?.climb.uuid === selectedClimb.uuid;
-      const selectedItem = shouldShowCurrentQueueItem
-        ? null
-        : (options?.previewQueueItem ??
-          climbToQueueItem(selectedClimb, { suggested: previewPlaylistSuggestionSource !== null }));
-      setDrawerPreviewSuggestionSource(previewPlaylistSuggestionSource);
-      setDrawerPreviewItem(selectedItem);
+      const previewItem = options?.previewQueueItem ?? null;
+      const playlistSuggestionSource = options?.playlistSuggestionSource ?? null;
+      // A view-only preview is shown without committing; the badge keys off this.
+      // Commit paths (committedExternally) and fresh active opens leave it null so
+      // the drawer renders the real currentClimbQueueItem.
+      setDrawerPreviewItem(previewItem);
+      setDrawerPreviewSuggestionSource(previewItem ? playlistSuggestionSource : null);
       setIsMirrored(false);
       // Drop any stale optimistic heart so the opened climb shows its real
       // (server) favorite status rather than a leftover from the last climb.
@@ -299,10 +301,15 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
       setIsTickBarActive(false);
       setIsSheetOpen(true);
       setActiveSubDrawer('none');
-      if (selectedItem && (options?.setAsCurrent ?? true)) {
-        // Fresh activation from the list/search clears any playlist suggestion
-        // source (web passes the same null option on every non-playlist set).
-        setCurrentClimb(selectedItem, { playlistSuggestionSource: null });
+      if (!previewItem && !options?.committedExternally) {
+        // Fresh active open (search / list / LogbookTab / accessory-of-current):
+        // make it current unless it already is, so re-opening the current climb
+        // doesn't re-append it. A fresh-uuid item on a genuinely new selection is
+        // intentional (re-tapping starts a fresh pass — see queue setCurrentClimb).
+        const isAlreadyCurrent = state.currentClimbQueueItem?.climb.uuid === selectedClimb.uuid;
+        if (!isAlreadyCurrent) {
+          setCurrentClimb(climbToQueueItem(selectedClimb), { playlistSuggestionSource: null });
+        }
       }
       sheetRef.current?.present();
     },
@@ -367,6 +374,16 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
     setIsMirrored(false);
     // The favorite override is cleared by the climb-change effect.
   }, [nextClimb]);
+
+  // Promote the previewed climb to the active/current queue item. The Preview
+  // badge clears and the lightbulb (which acts on the current climb) now drives
+  // this climb.
+  const handleSetActive = useCallback(() => {
+    if (!drawerPreviewItem) return;
+    setCurrentClimb(drawerPreviewItem, { playlistSuggestionSource: drawerPreviewSuggestionSource });
+    setDrawerPreviewItem(null);
+    setDrawerPreviewSuggestionSource(null);
+  }, [drawerPreviewItem, drawerPreviewSuggestionSource, setCurrentClimb]);
 
   const handleMirror = useCallback(() => {
     const nextMirrored = !isMirrored;
@@ -495,7 +512,9 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   const handleSimilarClimbPress = useCallback(
     (similarClimb: Climb) => {
       const queueItem = climbToQueueItem(similarClimb);
-      setDrawerPreviewItem(queueItem);
+      // Tapping a similar climb activates it (commit), so it's never a preview —
+      // clear any preview that was showing.
+      setDrawerPreviewItem(null);
       setDrawerPreviewSuggestionSource(null);
       setIsMirrored(false);
       // The favorite override is cleared by the climb-change effect.
@@ -584,6 +603,13 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
                   isNoMatch={displayedClimb.is_no_match}
                   benchmarkDifficulty={displayedClimb.benchmark_difficulty}
                 />
+
+                {isPreview ? (
+                  // Cross-board previews use the switch-board overlay instead, so
+                  // hide "Set active" there — promoting a foreign-board climb would
+                  // only spill it into the queue.
+                  <PlayDrawerPreviewBanner showSetActive={!boardMismatch} onSetActive={handleSetActive} />
+                ) : null}
 
                 <View style={styles.boardSection}>
                   {boardRenderData ? (

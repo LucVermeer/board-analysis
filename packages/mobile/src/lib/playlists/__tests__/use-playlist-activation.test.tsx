@@ -117,52 +117,44 @@ describe('usePlaylistActivation (mobile wrapper)', () => {
     await result.current(climb);
     // The drawer opens FIRST — before the shared activation's setCurrentClimb +
     // suggestion-source work — so BottomSheetModal.present() fires on the same
-    // frame as the tap. setAsCurrent:false stops the drawer re-dispatching and
-    // wiping the suggestion source the activation builds. previewQueueItem is
-    // the navigation anchor the queue dispatch will reuse.
-    expect(mocks.openPlayDrawer).toHaveBeenCalledWith(climb, {
-      setAsCurrent: false,
-      previewQueueItem: expect.objectContaining({ climb }),
-    });
-    // The shared activation still runs (suggestion source + the queue dispatch,
-    // which is wrapped in startTransition).
+    // frame as the tap. `committedExternally` tells the drawer the caller already
+    // dispatches the climb, so it renders from currentClimbQueueItem (no preview)
+    // and doesn't re-dispatch.
+    expect(mocks.openPlayDrawer).toHaveBeenCalledWith(climb, { committedExternally: true });
+    // The shared activation still runs (suggestion source + the synchronous queue
+    // dispatch).
     expect(mocks.activate).toHaveBeenCalledWith(climb);
   });
 
-  it('dispatches the exact previewQueueItem instance the drawer pinned', async () => {
+  it('dispatches the exact item the activation pinned', async () => {
     const { result } = renderActivation();
     const climb = makeClimb('a');
     await result.current(climb);
-    const previewItem = mocks.openPlayDrawer.mock.calls[0][1].previewQueueItem;
 
+    // The first dispatch reuses the item pinned during activate (same climb uuid),
+    // so the drawer's nav anchor and the queue entry share one uuid.
     const item = await captured().queueApi!.setCurrentClimb(climb, { playlistSuggestionSource: null });
-    // Same instance, not a second item with a fresh uuid — otherwise the drawer
-    // anchors prev/remaining-count on an orphan uuid that is never in the queue.
-    expect(mocks.setCurrentClimb.mock.calls[0][0]).toBe(previewItem);
-    expect(item).toBe(previewItem);
+    expect(mocks.setCurrentClimb.mock.calls[0][0]).toBe(item);
+    expect(item?.climb).toEqual(climb);
   });
 
   it('reuses the pinned item once — a second dispatch builds a fresh item', async () => {
     const { result } = renderActivation();
     const climb = makeClimb('a');
     await result.current(climb);
-    const previewItem = mocks.openPlayDrawer.mock.calls[0][1].previewQueueItem;
 
     const first = await captured().queueApi!.setCurrentClimb(climb, { playlistSuggestionSource: null });
     const second = await captured().queueApi!.setCurrentClimb(climb, { playlistSuggestionSource: null });
-    expect(first).toBe(previewItem);
-    expect(second).not.toBe(previewItem);
-    expect(second?.uuid).not.toBe(previewItem.uuid);
+    expect(second).not.toBe(first);
+    expect(second?.uuid).not.toBe(first?.uuid);
   });
 
   it('ignores the pinned item when the dispatched climb differs', async () => {
     const { result } = renderActivation();
     await result.current(makeClimb('a'));
-    const previewItem = mocks.openPlayDrawer.mock.calls[0][1].previewQueueItem;
 
     const climbB = makeClimb('b');
     const item = await captured().queueApi!.setCurrentClimb(climbB, { playlistSuggestionSource: null });
-    expect(item).not.toBe(previewItem);
     expect(item?.climb).toEqual(climbB);
   });
 
@@ -174,10 +166,7 @@ describe('usePlaylistActivation (mobile wrapper)', () => {
     // Every tap drives the shared activation — there is no non-driver preview
     // branch that skips it anymore.
     expect(mocks.activate).toHaveBeenCalledWith(climb);
-    expect(mocks.openPlayDrawer).toHaveBeenCalledWith(climb, {
-      setAsCurrent: false,
-      previewQueueItem: expect.objectContaining({ climb }),
-    });
+    expect(mocks.openPlayDrawer).toHaveBeenCalledWith(climb, { committedExternally: true });
   });
 
   it('fetchClimbsForBoard pages the playlist via the injected fetchPage', async () => {

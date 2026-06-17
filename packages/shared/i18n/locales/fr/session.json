@@ -483,6 +483,8 @@
     }
   },
   "playView": {
+    "previewBadge": "Aperçu",
+    "setActive": "Activer",
     "previousFrame": "Image précédente",
     "nextFrame": "Image suivante",
     "play": "Lire",

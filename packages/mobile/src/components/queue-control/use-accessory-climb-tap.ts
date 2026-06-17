@@ -4,6 +4,7 @@ import { runOnJS } from 'react-native-reanimated';
 import type { ClimbQueueItem } from '@boardsesh/queue';
 import { useQueue } from '../../providers/queue-provider';
 import { useDrawerHost } from '../../providers/drawer-host-provider';
+import { climbToQueueItem } from '../../lib/climb-to-queue-item';
 import { hapticLight } from '../../lib/haptics';
 import { useWallOrQueueCurrentClimb } from './use-wall-or-queue-climb';
 
@@ -29,15 +30,27 @@ export function useAccessoryClimbTap(): AccessoryClimbTap {
   // Open whatever the accessory is showing: the wall's lit climb when a feed is
   // live, else the local queue head — useWallOrQueueCurrentClimb already folds the
   // local head in as its fallback, so this is the single source of truth for the
-  // open target. setAsCurrent stays false so opening the head doesn't duplicate it
-  // at the end of the queue.
+  // open target.
   const accessoryClimb = useWallOrQueueCurrentClimb(currentClimbQueueItem?.climb ?? null);
 
   const handleOpenPlay = useCallback(() => {
     if (!accessoryClimb) return;
     hapticLight();
-    openPlayDrawer(accessoryClimb, { setAsCurrent: false });
-  }, [openPlayDrawer, accessoryClimb]);
+    // When the bar mirrors the local queue head, open it active (it already IS
+    // current, so openDrawer won't re-append it). When a live feed makes the bar
+    // show a peer-driven WALL climb that isn't your current, open it as a
+    // view-only preview (badged) — you're looking at someone else's wall, not
+    // taking it over until you choose to. Both are queue-bar opens, so keep the
+    // `current_queue_item` analytics source.
+    if (accessoryClimb.uuid === currentClimbQueueItem?.climb.uuid) {
+      openPlayDrawer(accessoryClimb, { source: 'current_queue_item' });
+    } else {
+      openPlayDrawer(accessoryClimb, {
+        previewQueueItem: climbToQueueItem(accessoryClimb),
+        source: 'current_queue_item',
+      });
+    }
+  }, [openPlayDrawer, accessoryClimb, currentClimbQueueItem]);
 
   const openGesture = useMemo(
     () =>

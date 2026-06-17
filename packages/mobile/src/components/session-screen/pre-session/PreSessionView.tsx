@@ -149,7 +149,7 @@ export function PreSessionView({ showChrome = false }: PreSessionViewProps) {
   const handlePreviewPress = useCallback(
     (item: ClimbQueueItem) => {
       setActivePreviewUuid(item.uuid);
-      openPlayDrawer(item.climb as Climb, { setAsCurrent: false, previewQueueItem: item });
+      openPlayDrawer(item.climb as Climb, { previewQueueItem: item });
     },
     [openPlayDrawer],
   );

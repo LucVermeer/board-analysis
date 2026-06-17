@@ -91,10 +91,10 @@ export type OpenPlayDrawerOptions = PlayDrawerOpenOptions & {
   boardConfig?: BoardConfig;
   /** Analytics-only tag for the `Play Drawer Opened` event's `source`. Lets a
    *  real climb-view (feed/session/beta/playlist) be distinguished from a
-   *  queue-nav / accessory tap — both pass `setAsCurrent: false`, so the
-   *  default `current_queue_item`/`mobile` heuristic can't tell them apart.
-   *  Pulled out before the rest of the options reach `PlayDrawer.open`, so it
-   *  never leaks into the drawer itself. */
+   *  queue-nav / accessory tap — the latter open `committedExternally` or with a
+   *  `previewQueueItem`, so the default `current_queue_item`/`mobile` heuristic
+   *  can't tell them apart. Pulled out before the rest of the options reach
+   *  `PlayDrawer.open`, so it never leaks into the drawer itself. */
   source?: 'climb_view' | 'current_queue_item' | 'mobile';
 };
 
@@ -243,7 +243,9 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
       climbUuid: climb.uuid,
       boardName: boardConfig?.boardName,
       layoutId: boardConfig?.layoutId,
-      source: openSource ?? (openOptions.setAsCurrent === false ? 'current_queue_item' : 'mobile'),
+      source:
+        openSource ??
+        (openOptions.committedExternally || openOptions.previewQueueItem != null ? 'current_queue_item' : 'mobile'),
     });
     if (override) {
       pendingOverrideOpenRef.current = { climb, options: openOptions };
@@ -453,7 +455,7 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
   const handleQueueClimbPress = useCallback(
     (item: ClimbQueueItem) => {
       setCurrentClimb(item);
-      openPlayDrawer(item.climb, { setAsCurrent: false, previewQueueItem: item });
+      openPlayDrawer(item.climb, { committedExternally: true });
       requestCloseQueueSheet();
     },
     [setCurrentClimb, openPlayDrawer, requestCloseQueueSheet],
@@ -467,7 +469,7 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
       const item = climbToQueueItem(climb, { suggested: true });
       const schemaClimb = item.climb as Climb;
       setCurrentClimb(item, { playlistSuggestionSource: source });
-      openPlayDrawer(schemaClimb, { setAsCurrent: false, previewQueueItem: item });
+      openPlayDrawer(schemaClimb, { committedExternally: true });
       requestCloseQueueSheet();
     },
     [setCurrentClimb, openPlayDrawer, requestCloseQueueSheet],
@@ -551,8 +553,7 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
         : action.boardConfig;
       setCurrentClimb(item);
       openPlayDrawer(action.climb, {
-        setAsCurrent: false,
-        previewQueueItem: item,
+        committedExternally: true,
         boardConfig: boardConfigOverride,
       });
     },
