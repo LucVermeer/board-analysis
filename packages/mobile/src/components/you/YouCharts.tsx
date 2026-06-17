@@ -2,7 +2,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode
 import { Pressable, View, StyleSheet, type GestureResponderEvent, type LayoutChangeEvent } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { BarChart, LineChart } from 'react-native-gifted-charts';
-import type { RawGroupedBar, RawVPointsTimeline } from '@boardsesh/profile-stats';
+import type { RawGroupedBar, RawHistogram, RawVPointsTimeline } from '@boardsesh/profile-stats';
 import { Text } from '../Text';
 import { Icon } from '../Icon';
 import { ActivityIndicator } from '../ActivityIndicator';
@@ -599,11 +599,91 @@ export const TotalAreaChart = memo(function TotalAreaChart({
   );
 });
 
+type HistogramProps = {
+  histogram: RawHistogram | null;
+  /** Colour for the leading bucket (1 try = a flash) — ties to the flash hue. */
+  flashColor: string;
+  /** Colour for the remaining buckets (2…6+ tries). */
+  barColor: string;
+  height?: number;
+  loading?: boolean;
+  emptyLabel?: string;
+};
+
+/**
+ * Single-series histogram (tries-to-send). The first bucket — 1 try — is a
+ * flash, so it's drawn in the flash hue; the rest use the neutral bar colour.
+ * Each non-empty bucket carries its count as a top label. Six fixed buckets, so
+ * no zoom/scroll/tooltip needed.
+ */
+export const HistogramBarChart = memo(function HistogramBarChart({
+  histogram,
+  flashColor,
+  barColor,
+  height = 160,
+  loading,
+  emptyLabel,
+}: HistogramProps) {
+  const { chartColors } = useTheme();
+  const isEmpty = !histogram || histogram.total === 0;
+
+  const data = useMemo(
+    () =>
+      (histogram?.buckets ?? []).map((bucket) => ({
+        value: bucket.value,
+        label: bucket.label,
+        frontColor: bucket.key === '1' ? flashColor : barColor,
+        topLabelComponent:
+          bucket.value > 0
+            ? () => (
+                <Text variant="caption2" color={chartColors.secondaryLabel} style={styles.histogramTopLabel}>
+                  {bucket.value}
+                </Text>
+              )
+            : undefined,
+      })),
+    [histogram, flashColor, barColor, chartColors.secondaryLabel],
+  );
+
+  return (
+    <ChartFrame height={height} loading={loading} isEmpty={isEmpty} emptyLabel={emptyLabel}>
+      {(width) => {
+        const fitted = fitBars(width, data.length, 10);
+        return (
+          <BarChart
+            data={data}
+            width={width - 8}
+            height={height - 28}
+            barWidth={fitted.barWidth}
+            spacing={fitted.spacing}
+            initialSpacing={10}
+            barBorderRadius={STACK_BAR_RADIUS}
+            hideRules
+            hideYAxisText
+            yAxisThickness={0}
+            xAxisThickness={StyleSheet.hairlineWidth}
+            xAxisColor={chartColors.separator}
+            xAxisLabelTextStyle={{ color: chartColors.secondaryLabel, fontSize: AXIS_LABEL_SIZE }}
+            isAnimated={false}
+            disableScroll
+            disablePress
+          />
+        );
+      }}
+    </ChartFrame>
+  );
+});
+
 const styles = StyleSheet.create({
   frame: {
     position: 'relative',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  histogramTopLabel: {
+    marginBottom: 2,
+    textAlign: 'center',
+    fontWeight: '600',
   },
   resetZoomButton: {
     position: 'absolute',

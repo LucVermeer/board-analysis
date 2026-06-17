@@ -17,6 +17,9 @@ import type {
   RawVPointsSeries,
   RawStatisticsSummary,
   RawLayoutPercentage,
+  RawHistogram,
+  RawActivityDay,
+  RawActivityHeatmap,
 } from './types';
 
 dayjs.extend(isoWeek);
@@ -446,4 +449,100 @@ export function buildStatisticsSummary(
   );
 
   return { totalAscents, layoutPercentages };
+}
+
+// ── Tries-to-send histogram ─────────────────────────────────────────
+
+/**
+ * Buckets every ascent (flash + send, but NOT attempts) by how many tries it
+ * took: `1` (a flash), `2`…`5`, and `6+`. A flash is exactly one try, so the
+ * first column is the flash count. Operates on the already board/timeframe
+ * -filtered logbook (same input as `buildWeeklyBars`). Returns null when nothing
+ * qualifies so the renderer can hide the section.
+ */
+const TRIES_BUCKETS: ReadonlyArray<{ key: string; label: string }> = [
+  { key: '1', label: '1' },
+  { key: '2', label: '2' },
+  { key: '3', label: '3' },
+  { key: '4', label: '4' },
+  { key: '5', label: '5' },
+  { key: '6plus', label: '6+' },
+];
+
+export function buildTriesToSendHistogram(filteredLogbook: LogbookEntry[]): RawHistogram | null {
+  if (filteredLogbook.length === 0) return null;
+
+  const counts = Array.from<number>({ length: TRIES_BUCKETS.length }).fill(0);
+  let total = 0;
+  for (const entry of filteredLogbook) {
+    // Attempts never became sends, so they carry no "tries to send" value.
+    if (entry.status === 'attempt') continue;
+    const tries = Math.max(1, Math.floor(entry.tries) || 1);
+    // tries 1→index 0 … 5→index 4, 6+→index 5 (last bucket).
+    const index = Math.min(tries, TRIES_BUCKETS.length) - 1;
+    counts[index] += 1;
+    total += 1;
+  }
+
+  if (total === 0) return null;
+
+  const buckets = TRIES_BUCKETS.map((bucket, index) => ({
+    key: bucket.key,
+    label: bucket.label,
+    value: counts[index],
+  }));
+
+  return { buckets, total };
+}
+
+// ── Activity heatmap (GitHub-style calendar) ────────────────────────
+
+const HEATMAP_WEEKS = 53;
+
+/**
+ * Per-day ascent counts over a trailing, week-aligned window ending this week —
+ * the data for a GitHub-style activity calendar. Every logged entry counts as
+ * activity (attempts included: you still showed up). Days are emitted oldest→
+ * newest and zero-filled so the renderer can chunk them into 7-row week columns
+ * without gap handling. Returns null when no activity falls inside the window.
+ */
+export function buildActivityHeatmap(
+  filteredLogbook: LogbookEntry[],
+  weeksWindow: number = HEATMAP_WEEKS,
+): RawActivityHeatmap | null {
+  if (filteredLogbook.length === 0) return null;
+
+  const countsByDay = new Map<string, number>();
+  for (const entry of filteredLogbook) {
+    const day = parseTickTime(entry.climbed_at).format('YYYY-MM-DD');
+    countsByDay.set(day, (countsByDay.get(day) ?? 0) + 1);
+  }
+
+  // Week-align the grid to whole weeks (Sunday→Saturday) so it lays out as clean
+  // 7-row columns. End on the current week, start `weeksWindow` weeks earlier.
+  const gridEnd = dayjs().endOf('week');
+  const gridStart = gridEnd.subtract(weeksWindow * 7 - 1, 'day').startOf('week');
+
+  const days: RawActivityDay[] = [];
+  let maxCount = 0;
+  let cursor = gridStart;
+  while (cursor.isBefore(gridEnd) || cursor.isSame(gridEnd, 'day')) {
+    const key = cursor.format('YYYY-MM-DD');
+    const count = countsByDay.get(key) ?? 0;
+    if (count > maxCount) maxCount = count;
+    days.push({ date: key, count });
+    cursor = cursor.add(1, 'day');
+  }
+
+  // Every day in range was empty (e.g. an all-time logbook whose climbs predate
+  // the window) — nothing to draw.
+  if (maxCount === 0) return null;
+
+  return {
+    days,
+    weeks: Math.ceil(days.length / 7),
+    maxCount,
+    startDate: gridStart.format('YYYY-MM-DD'),
+    endDate: gridEnd.format('YYYY-MM-DD'),
+  };
 }

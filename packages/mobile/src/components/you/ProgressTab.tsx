@@ -9,7 +9,8 @@ import { Card } from '../Card';
 import { SectionHeader } from '../SectionHeader';
 import { ActivityIndicator } from '../ActivityIndicator';
 import { StatsSummaryCard } from './StatsSummaryCard';
-import { StackedBarChart, GroupedBarChart, TotalAreaChart, type ChartLegendItem } from './YouCharts';
+import { StackedBarChart, GroupedBarChart, TotalAreaChart, HistogramBarChart, type ChartLegendItem } from './YouCharts';
+import { ActivityHeatmap } from './ActivityHeatmap';
 import { layoutChartColor, flashRedpointColor } from './profile-chart-colors';
 import { useBottomChromeMetrics } from '../../hooks/use-bottom-chrome-metrics';
 import { spacing } from '../../theme/tokens';
@@ -94,6 +95,15 @@ export const ProgressTab = memo(function ProgressTab({ data, topInset }: Progres
             percentile={data.percentile}
           />
 
+          {data.activityHeatmap && (
+            <>
+              <SectionHeader title={t('stats.calendar')} />
+              <Card style={styles.chartCard}>
+                <ActivityHeatmap heatmap={data.activityHeatmap} />
+              </Card>
+            </>
+          )}
+
           <SectionHeader title={t('stats.activity')} />
           <Card style={styles.chartCard}>
             {/* Weekly labels ("W23 '24") are wide, so cap to ~6 evenly-spaced
@@ -126,6 +136,20 @@ export const ProgressTab = memo(function ProgressTab({ data, topInset }: Progres
                   bars={data.aggregatedFlashRedpointBars}
                   emptyLabel={noAscentData}
                   legend={flashRedpointLegend}
+                />
+              </Card>
+            </>
+          )}
+
+          {data.triesHistogram && (
+            <>
+              <SectionHeader title={t('stats.triesToSend')} />
+              <Card style={styles.chartCard} accessibilityLabel={t('stats.triesToSendAria')}>
+                <HistogramBarChart
+                  histogram={data.triesHistogram}
+                  flashColor={flashRedpointColor('flash', colorScheme)}
+                  barColor={brandColors.primary}
+                  emptyLabel={noAscentData}
                 />
               </Card>
             </>
