@@ -346,6 +346,16 @@ export default function PlaylistDetail() {
           isPublic: values.isPublic,
         });
         queryClient.setQueryData(['playlist', playlistUuid], updated);
+        // The list surfaces don't share this detail cache: the Add-to-Playlist
+        // picker reads the react-query ['userPlaylists'] list (5-min staleTime),
+        // so patch the edited row there too — otherwise the name/icon/colour
+        // stays stale in the picker until the staleTime lapses (matching how the
+        // create flow and bumpPlaylistClimbCount keep that cache honest). The
+        // Discover hub's owned/pinned shelves and the "My Playlists" list refetch
+        // on focus return.
+        queryClient.setQueryData<Playlist[]>(['userPlaylists'], (prev) =>
+          prev?.map((entry) => (entry.uuid === updated.uuid || entry.id === updated.id ? updated : entry)),
+        );
         setEditVisible(false);
         showToast(t('edit.messages.updated'), 'success');
       } catch (err) {

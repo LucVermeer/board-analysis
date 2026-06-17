@@ -21,7 +21,7 @@ const hook = vi.hoisted(() => ({
 
 vi.mock('@boardsesh/playlists-react', () => ({ useUserPlaylists: () => hook }));
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
-vi.mock('expo-router', () => ({ router: { push: vi.fn() } }));
+vi.mock('expo-router', () => ({ router: { push: vi.fn() }, useFocusEffect: () => undefined }));
 
 // react-native primitives → DOM. FlatList renders its data (or the empty
 // component) plus the footer so the error/retry affordances are assertable.

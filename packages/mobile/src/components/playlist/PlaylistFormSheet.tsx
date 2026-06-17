@@ -17,10 +17,14 @@ import { buildPlaylistFormValues, NAME_MAX, DESCRIPTION_MAX, type PlaylistFormVa
 
 export type { PlaylistFormValues };
 
-// Preset emoji palette for the icon picker. Mobile has no emoji-mart equivalent
-// (it's DOM-only on web); a tap-to-pick row keeps the picker native and the
-// value controlled.
-const PRESET_ICONS = ['🔥', '💪', '🎯', '⭐', '🧗', '🪨', '📈', '❄️', '🌙', '⚡', '🏆', '🎸'] as const;
+// Quick-pick emoji suggestions shown under the free-entry slot. The slot itself
+// takes any emoji via the system keyboard (mobile has no emoji-mart equivalent —
+// it's DOM-only on web); these are one-tap shortcuts for the common ones.
+const SUGGESTED_ICONS = ['🔥', '💪', '🎯', '⭐', '🧗', '🪨', '🏆'] as const;
+
+// Long enough to hold one ZWJ/variation-selector emoji (e.g. 🧗‍♀️) while keeping
+// the slot to a single glyph in practice.
+const ICON_MAX = 8;
 
 type PlaylistFormSheetProps = {
   mode: 'create' | 'edit';
@@ -175,7 +179,18 @@ export function PlaylistFormSheet({ mode, visible, submitting, playlist, onSubmi
                 onPress={() => setColor(selected ? undefined : swatch)}
                 accessibilityRole="button"
                 accessibilityState={{ selected }}
-                style={[styles.swatch, { backgroundColor: swatch }, selected && styles.swatchSelected]}
+                style={[
+                  styles.swatch,
+                  // Hairline outline (theme-aware, so it can't live in the
+                  // StyleSheet) keeps the dark swatches visible on the dark sheet.
+                  // The selected style's 3px white border overrides it.
+                  {
+                    backgroundColor: swatch,
+                    borderWidth: StyleSheet.hairlineWidth,
+                    borderColor: systemColors.separator,
+                  },
+                  selected && styles.swatchSelected,
+                ]}
               >
                 {selected ? <Icon name="check.small" size={18} color={iosSystemColors.white} /> : null}
               </Pressable>
@@ -183,13 +198,50 @@ export function PlaylistFormSheet({ mode, visible, submitting, playlist, onSubmi
           })}
         </View>
 
-        {/* Emoji picker — shown for create + edit (visibility stays edit-only,
-            since new playlists are always created private). */}
+        {/* Emoji icon — a free-entry slot (system keyboard → any emoji) with a
+            row of quick-pick suggestions. Shown for create + edit. */}
         <Text variant="footnote" style={styles.label}>
           {t('edit.fields.icon')}
         </Text>
+        <View style={styles.iconRow}>
+          <BottomSheetTextInput
+            value={icon ?? ''}
+            // Store the trimmed value (capped to a single glyph by maxLength); the
+            // header preview mirrors it live. Empty clears back to the generic tag.
+            onChangeText={(text) => {
+              const trimmed = text.trim();
+              setIcon(trimmed.length > 0 ? trimmed : undefined);
+            }}
+            placeholder="🙂"
+            placeholderTextColor={systemColors.tertiaryLabel}
+            maxLength={ICON_MAX}
+            textAlign="center"
+            autoCorrect={false}
+            autoCapitalize="none"
+            returnKeyType="done"
+            accessibilityLabel={t('edit.fields.icon')}
+            style={[
+              styles.emojiInput,
+              { backgroundColor: systemColors.fill, borderColor: systemColors.separator, color: systemColors.label },
+            ]}
+          />
+          {icon ? (
+            <Pressable
+              onPress={() => setIcon(undefined)}
+              accessibilityRole="button"
+              style={[styles.removeChip, { borderColor: systemColors.separator }]}
+            >
+              <Text variant="footnote" color={iosSystemColors.systemRed}>
+                {t('edit.fields.removeIcon')}
+              </Text>
+            </Pressable>
+          ) : null}
+        </View>
+        <Text variant="caption1" style={styles.iconHint}>
+          {t('edit.fields.iconHint')}
+        </Text>
         <View style={styles.swatchRow}>
-          {PRESET_ICONS.map((preset) => {
+          {SUGGESTED_ICONS.map((preset) => {
             const selected = icon === preset;
             return (
               <Pressable
@@ -211,17 +263,6 @@ export function PlaylistFormSheet({ mode, visible, submitting, playlist, onSubmi
               </Pressable>
             );
           })}
-          {icon ? (
-            <Pressable
-              onPress={() => setIcon(undefined)}
-              accessibilityRole="button"
-              style={[styles.removeChip, { borderColor: systemColors.separator }]}
-            >
-              <Text variant="footnote" color={iosSystemColors.systemRed}>
-                {t('edit.fields.removeIcon')}
-              </Text>
-            </Pressable>
-          ) : null}
         </View>
 
         {isEdit ? (
@@ -283,6 +324,24 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: spacing[3],
     marginTop: spacing[1],
+  },
+  iconRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[3],
+    marginTop: spacing[1],
+  },
+  emojiInput: {
+    width: 56,
+    height: 56,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    fontSize: 28,
+    paddingVertical: 0,
+  },
+  iconHint: {
+    opacity: 0.5,
+    marginTop: spacing[2],
   },
   swatch: {
     width: 36,
