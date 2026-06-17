@@ -59,6 +59,10 @@ export const climbTypeDefs = /* GraphQL */ `
   """
   input ClimbInput {
     uuid: ID!
+    "Board type the climb belongs to (kilter / tension). Round-tripped so a connected board can skip a climb set for another board."
+    boardType: String
+    "Layout the climb belongs to. Round-tripped so a connected board can skip a climb set for another layout."
+    layoutId: Int
     setter_username: String!
     "Boardsesh user ID of the climb owner (null for Aurora-synced climbs)."
     userId: ID

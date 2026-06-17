@@ -703,6 +703,8 @@ export type ClimbInput = {
   angle: Scalars['Int']['input'];
   ascensionist_count: Scalars['Int']['input'];
   benchmark_difficulty?: InputMaybe<Scalars['String']['input']>;
+  /** Board type the climb belongs to (kilter / tension). Round-tripped so a connected board can skip a climb set for another board. */
+  boardType?: InputMaybe<Scalars['String']['input']>;
   description?: InputMaybe<Scalars['String']['input']>;
   difficulty: Scalars['String']['input'];
   difficulty_error: Scalars['String']['input'];
@@ -714,6 +716,8 @@ export type ClimbInput = {
   /** Whether this climb is still a draft. */
   is_draft?: InputMaybe<Scalars['Boolean']['input']>;
   is_no_match?: InputMaybe<Scalars['Boolean']['input']>;
+  /** Layout the climb belongs to. Round-tripped so a connected board can skip a climb set for another layout. */
+  layoutId?: InputMaybe<Scalars['Int']['input']>;
   mirrored?: InputMaybe<Scalars['Boolean']['input']>;
   name: Scalars['String']['input'];
   /** ISO timestamp of when this climb was first published. */

@@ -16,6 +16,12 @@ import type { ClimbQueueItem } from '@boardsesh/queue';
 export function toClimbInput(climb: Climb): ClimbInput {
   return {
     uuid: climb.uuid,
+    // Board the climb belongs to. Round-tripped through the queue so a connected
+    // board can skip a climb set for a different board/layout (a "spill" climb
+    // from a party peer on another board, or a queue left over from a board
+    // switch) instead of dark-firing the wall.
+    boardType: climb.boardType,
+    layoutId: climb.layoutId,
     setter_username: climb.setter_username,
     userId: climb.userId,
     name: climb.name,
@@ -53,6 +59,10 @@ export function climbToQueueItem(climb: Climb, options?: { suggested?: boolean; 
     suggested: options?.suggested,
     climb: {
       uuid: climb.uuid,
+      // Board metadata so the BLE auto-sender can detect a board/layout mismatch
+      // before writing (see toClimbInput above).
+      layoutId: climb.layoutId,
+      boardType: climb.boardType,
       name: climb.name,
       frames: climb.frames,
       setter_username: climb.setter_username,

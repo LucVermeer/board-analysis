@@ -67,6 +67,11 @@ export const SHARED_EVENTS = {
   BlePickerDevicesResolved: 'BLE Picker Devices Resolved',
   ClimbSentToBoardSuccess: 'Climb Sent to Board Success',
   ClimbSentToBoardFailure: 'Climb Sent to Board Failure',
+  // A queued climb set for a DIFFERENT board/layout than the connected board was
+  // skipped instead of dark-firing the wall. Props: skippedClimbUuid,
+  // skippedCount, advancedToClimbUuid (null when no compatible climb remained),
+  // active board config, and the skipped climb's board config.
+  BleQueueClimbSkipped: 'BLE Queue Climb Skipped',
   // Search
   ClimbSearchPerformed: 'Climb Search Performed',
   SearchHoldFilterChanged: 'Search Hold Filter Changed',

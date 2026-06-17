@@ -23,12 +23,16 @@ const alert = vi.hoisted(() => ({
 
 const queue = vi.hoisted(() => ({
   currentClimbQueueItem: null as ClimbQueueItem | null,
+  queue: [] as ClimbQueueItem[],
   sessionId: null as string | null,
   lastConnectedBoardSerial: null as string | null,
   confirmClimbOnWall: vi.fn(async () => {}),
   reportWallDisconnect: vi.fn(async () => {}),
   setSessionBoardSerial: vi.fn(async () => {}),
+  setCurrentClimb: vi.fn(),
 }));
+
+const toast = vi.hoisted(() => ({ showToast: vi.fn() }));
 
 const bluetooth = vi.hoisted(() => {
   const mock = {
@@ -129,7 +133,10 @@ vi.mock('../../components/ble/DevicePickerSheet', () => ({
 
 vi.mock('../queue-provider', () => ({
   useQueue: () => ({
-    state: { currentClimbQueueItem: queue.currentClimbQueueItem },
+    state: { currentClimbQueueItem: queue.currentClimbQueueItem, queue: queue.queue },
+  }),
+  useQueueActions: () => ({
+    setCurrentClimb: queue.setCurrentClimb,
   }),
   useQueueSessionControls: () => ({
     sessionId: queue.sessionId,
@@ -138,6 +145,10 @@ vi.mock('../queue-provider', () => ({
     reportWallDisconnect: queue.reportWallDisconnect,
     setSessionBoardSerial: queue.setSessionBoardSerial,
   }),
+}));
+
+vi.mock('../toast-provider', () => ({
+  useToast: () => ({ showToast: toast.showToast }),
 }));
 
 vi.mock('../../lib/board-details', () => ({
@@ -600,5 +611,140 @@ describe('BluetoothProvider mismatch switch', () => {
     // The picker is only cancelled once the switch goes through — on failure it
     // stays open so the user can still pick a device or use Connect anyway.
     expect(pickerState.handleCancel).not.toHaveBeenCalled();
+  });
+});
+
+function makeBoardItem(uuid: string, boardType: string | undefined, layoutId: number | undefined): ClimbQueueItem {
+  return {
+    uuid: `queue-${uuid}`,
+    climb: {
+      uuid,
+      name: `Climb ${uuid}`,
+      frames: `frames-${uuid}`,
+      boardType,
+      layoutId,
+      setter_username: 'setter',
+      angle: 40,
+      ascensionist_count: 0,
+      difficulty: 'V3',
+      quality_average: '3.0',
+      stars: 3,
+      difficulty_error: '0.3',
+      benchmark_difficulty: null,
+    },
+  };
+}
+
+describe('BluetoothProvider spill skip', () => {
+  beforeEach(() => {
+    queue.currentClimbQueueItem = null;
+    queue.queue = [];
+    queue.sessionId = null;
+    queue.setCurrentClimb.mockClear();
+    toast.showToast.mockClear();
+    analytics.track.mockClear();
+    bluetooth.state.isConnected = true;
+    bluetooth.state.sendFramesToBoard.mockClear();
+    bluetooth.state.sendFramesToBoard.mockResolvedValue(true);
+  });
+
+  afterEach(() => {
+    cleanup();
+    bluetooth.state.isConnected = false;
+  });
+
+  it('skips an incompatible current climb, advances to the next compatible one, and toasts + tracks', async () => {
+    // Active board is kilter / layout 1 (KILTER_PROPS). The current is a tension
+    // spill; the next compatible kilter climb follows.
+    const spill = makeBoardItem('spill', 'tension', 1);
+    const compatible = makeBoardItem('ok', 'kilter', 1);
+    queue.currentClimbQueueItem = spill;
+    queue.queue = [spill, compatible];
+
+    renderProvider(KILTER_PROPS);
+    await act(async () => {});
+
+    // The spill frames were never written to the board.
+    expect(bluetooth.state.sendFramesToBoard).not.toHaveBeenCalledWith(
+      'frames-spill',
+      expect.anything(),
+      expect.anything(),
+    );
+    // The queue advanced to the compatible climb and the user was told.
+    expect(queue.setCurrentClimb).toHaveBeenCalledWith(compatible);
+    expect(toast.showToast).toHaveBeenCalledTimes(1);
+    const skipCall = analytics.track.mock.calls.find(([name]) => name === 'BLE Queue Climb Skipped');
+    expect(skipCall).toBeDefined();
+    expect(skipCall?.[1]).toMatchObject({
+      skippedClimbUuid: 'spill',
+      skippedCount: 1,
+      advancedToClimbUuid: 'ok',
+    });
+  });
+
+  it('clears the board (no advance) when no compatible climb remains', async () => {
+    const spill = makeBoardItem('spill', 'tension', 1);
+    queue.currentClimbQueueItem = spill;
+    queue.queue = [spill];
+
+    renderProvider(KILTER_PROPS);
+    await act(async () => {});
+
+    expect(queue.setCurrentClimb).not.toHaveBeenCalled();
+    // clearBoard sends empty frames to dark the wall.
+    expect(bluetooth.state.sendFramesToBoard).toHaveBeenCalledWith('');
+    expect(toast.showToast).toHaveBeenCalledTimes(1);
+    const skipCall = analytics.track.mock.calls.find(([name]) => name === 'BLE Queue Climb Skipped');
+    expect(skipCall?.[1]).toMatchObject({ skippedClimbUuid: 'spill', advancedToClimbUuid: null });
+  });
+
+  it('sends a compatible current climb normally (no skip)', async () => {
+    const compatible = makeBoardItem('ok', 'kilter', 1);
+    queue.currentClimbQueueItem = compatible;
+    queue.queue = [compatible];
+
+    renderProvider(KILTER_PROPS);
+    await act(async () => {});
+
+    expect(bluetooth.state.sendFramesToBoard).toHaveBeenCalledWith('frames-ok', false, expect.anything());
+    expect(queue.setCurrentClimb).not.toHaveBeenCalled();
+    expect(toast.showToast).not.toHaveBeenCalled();
+  });
+
+  it('re-reports a spill if the user returns to it after advancing away', async () => {
+    const spill = makeBoardItem('spill', 'tension', 1);
+    const compatible = makeBoardItem('ok', 'kilter', 1);
+    queue.currentClimbQueueItem = spill;
+    queue.queue = [spill, compatible];
+
+    const { rerender } = renderProvider(KILTER_PROPS);
+    await act(async () => {});
+    expect(toast.showToast).toHaveBeenCalledTimes(1);
+
+    // The advance lands: the compatible climb becomes current and is sent, which
+    // clears the spill dedup.
+    queue.currentClimbQueueItem = compatible;
+    rerender(createElement(BluetoothProvider, { ...KILTER_PROPS, children: createElement('div', null) }));
+    await act(async () => {});
+    expect(bluetooth.state.sendFramesToBoard).toHaveBeenCalledWith('frames-ok', false, expect.anything());
+
+    // Navigating back to the spill skips + toasts again — not a silent stick.
+    queue.currentClimbQueueItem = spill;
+    rerender(createElement(BluetoothProvider, { ...KILTER_PROPS, children: createElement('div', null) }));
+    await act(async () => {});
+    expect(toast.showToast).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not skip a climb with unknown board metadata', async () => {
+    const unknown = makeBoardItem('unknown', undefined, undefined);
+    queue.currentClimbQueueItem = unknown;
+    queue.queue = [unknown];
+
+    renderProvider(KILTER_PROPS);
+    await act(async () => {});
+
+    expect(bluetooth.state.sendFramesToBoard).toHaveBeenCalledWith('frames-unknown', false, expect.anything());
+    expect(queue.setCurrentClimb).not.toHaveBeenCalled();
+    expect(toast.showToast).not.toHaveBeenCalled();
   });
 });

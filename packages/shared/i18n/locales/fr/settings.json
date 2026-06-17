@@ -370,6 +370,8 @@
     "mobileRecordedLabel": "Enregistré pour ce contrôleur : {{config}}",
     "mobileConfigValue": "{{board}} layout {{layoutId}}, taille {{sizeId}}, sets {{setIds}}",
     "mobileUnknownConfig": "Configuration du board inconnue",
+    "mobileSkippedSpillToast_one": "{{name}} ignorée — elle est pour un autre board",
+    "mobileSkippedSpillToast_other": "{{count}} voies ignorées, prévues pour un autre board",
     "mobileSwitchFailed": "Impossible de passer à la configuration de ce board. Essayez Connecter quand même.",
     "cancel": "Annuler",
     "connectAnyway": "Connecter quand même",
