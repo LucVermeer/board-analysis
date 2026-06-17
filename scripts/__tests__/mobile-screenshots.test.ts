@@ -1,13 +1,24 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildScreenshotEnv, deviceSlug, parseArgs, type ScreenshotOptions } from '../mobile-screenshots';
+import {
+  buildScreenshotEnv,
+  deviceSlug,
+  parseArgs,
+  resolveAppStoreLocaleTargets,
+  type ScreenshotOptions,
+} from '../mobile-screenshots';
+
+const commonDevices = ['iPhone 16 Pro Max', 'iPhone 14 Plus', 'iPhone 16 Pro'];
+const allAppLocales: ScreenshotOptions['appLocales'] = ['en-US', 'es', 'fr'];
 
 function makeOptions(overrides: Partial<ScreenshotOptions> = {}): ScreenshotOptions {
   return {
     platform: 'ios',
     flow: 'app-store',
     backend: 'local',
-    device: 'iPhone 16 Pro Max',
+    devices: commonDevices,
+    androidDevice: 'Pixel 2',
+    appLocales: allAppLocales,
     variant: null,
     theme: 'dark',
     workout: 'volume',
@@ -37,7 +48,7 @@ describe('deviceSlug', () => {
 });
 
 describe('parseArgs', () => {
-  it('defaults to ios / app-store / local / dark when no flags are given', () => {
+  it('defaults to ios / app-store / local / common devices / all locales / dark when no flags are given', () => {
     expect(parseArgs([])).toEqual(makeOptions());
   });
 
@@ -58,8 +69,10 @@ describe('parseArgs', () => {
         'light',
         '--variant',
         'material',
-        '--device',
-        'Pixel 8',
+        '--devices',
+        'iPhone 16 Pro Max, iPhone 16 Pro',
+        '--locales',
+        'es,fr',
         '--workout',
         'ladder',
         '--app-path',
@@ -70,7 +83,9 @@ describe('parseArgs', () => {
       platform: 'android',
       flow: 'onboarding',
       backend: 'prod',
-      device: 'Pixel 8',
+      devices: ['iPhone 16 Pro Max', 'iPhone 16 Pro'],
+      androidDevice: 'Pixel 2',
+      appLocales: ['es', 'fr'],
       variant: 'material',
       theme: 'light',
       workout: 'ladder',
@@ -80,7 +95,13 @@ describe('parseArgs', () => {
   });
 
   it('defaults Android captures to the Play phone emulator device', () => {
-    expect(parseArgs(['--platform', 'android']).device).toBe('Pixel 2');
+    expect(parseArgs(['--platform', 'android']).androidDevice).toBe('Pixel 2');
+  });
+
+  it('uses --device as the Android label and a backwards-compatible single-iOS-device alias', () => {
+    const options = parseArgs(['--device', 'iPhone 16 Pro Max']);
+    expect(options.devices).toEqual(['iPhone 16 Pro Max']);
+    expect(options.androidDevice).toBe('iPhone 16 Pro Max');
   });
 
   it('maps --workout off to null', () => {
@@ -90,6 +111,15 @@ describe('parseArgs', () => {
   it('rejects an invalid enum value', () => {
     expect(() => parseArgs(['--theme', 'sepia'])).toThrow(/--theme must be one of/);
     expect(() => parseArgs(['--platform', 'windows'])).toThrow(/--platform must be one of/);
+  });
+
+  it('maps --devices common and --locales all to the defaults', () => {
+    expect(parseArgs(['--devices', 'common', '--locales', 'all'])).toEqual(makeOptions());
+  });
+
+  it('rejects invalid locales and empty comma lists', () => {
+    expect(() => parseArgs(['--locales', 'de'])).toThrow(/supported app locales/);
+    expect(() => parseArgs(['--devices', ','])).toThrow(/at least one device/);
   });
 
   it('rejects an unknown flag and a value-less flag', () => {
@@ -103,6 +133,11 @@ describe('buildScreenshotEnv', () => {
     const env = buildScreenshotEnv(makeOptions({ theme: 'dark' }), baseEnv());
     expect(env.EXPO_PUBLIC_SCREENSHOT_MODE).toBe('1');
     expect(env.EXPO_PUBLIC_SCREENSHOT_THEME).toBe('dark');
+  });
+
+  it('bakes the screenshot locale when a locale target is supplied', () => {
+    const env = buildScreenshotEnv(makeOptions(), baseEnv(), 'fr');
+    expect(env.EXPO_PUBLIC_SCREENSHOT_LOCALE).toBe('fr');
   });
 
   it('points a local build at the local backend defaults', () => {
@@ -153,5 +188,15 @@ describe('buildScreenshotEnv', () => {
     );
     expect(overridden.EXPO_PUBLIC_SCREENSHOT_USER_EMAIL).toBe('shots@boardsesh.com');
     expect(overridden.EXPO_PUBLIC_SCREENSHOT_USER_PASSWORD).toBe('secret');
+  });
+});
+
+describe('resolveAppStoreLocaleTargets', () => {
+  it('maps app locales to App Store Connect locale directories', () => {
+    expect(resolveAppStoreLocaleTargets(['en-US', 'es', 'fr'])).toEqual([
+      { appLocale: 'en-US', appStoreLocales: ['en-US'] },
+      { appLocale: 'es', appStoreLocales: ['es-ES', 'es-MX'] },
+      { appLocale: 'fr', appStoreLocales: ['fr-FR'] },
+    ]);
   });
 });

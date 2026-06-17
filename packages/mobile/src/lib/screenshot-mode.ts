@@ -4,6 +4,7 @@ import {
   type ThemeOverride,
   type UiVariantPreference,
 } from '@boardsesh/key-value-storage';
+import { isSupportedLocale, type Locale } from '@boardsesh/i18n';
 
 /**
  * Build-time screenshot mode. The dedicated screenshots build (see
@@ -16,6 +17,16 @@ import {
  * stays the source of truth.
  */
 export const SCREENSHOT_MODE = process.env.EXPO_PUBLIC_SCREENSHOT_MODE === '1';
+
+/**
+ * Language the screenshots build locks to. The capture orchestrator starts Metro
+ * once per app locale, so the override is baked into the bundle alongside theme
+ * and workout. Normal builds leave this unset and keep device/user language
+ * detection.
+ */
+const screenshotLocaleEnv = process.env.EXPO_PUBLIC_SCREENSHOT_LOCALE;
+export const SCREENSHOT_LOCALE_OVERRIDE: Locale | null =
+  SCREENSHOT_MODE && isSupportedLocale(screenshotLocaleEnv) ? screenshotLocaleEnv : null;
 
 /**
  * Theme the screenshots build locks to so a capture can't flip mid-run when
