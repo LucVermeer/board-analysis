@@ -13,7 +13,7 @@
 import { useCallback, useMemo, useRef } from 'react';
 import { usePlaylistClimbActivation, fetchPlaylistSuggestionClimbs } from '@boardsesh/playlists-react';
 import { getQueueBoardKey, type Climb, type ClimbQueueItem } from '@boardsesh/queue';
-import { useActiveClimbUuid, useQueueActions } from '../../providers/queue-provider';
+import { useActiveClimbUuid, usePlaylistSuggestionSource, useQueueActions } from '../../providers/queue-provider';
 import { useDrawerHost } from '../../providers/drawer-host-provider';
 import { useActiveBoard } from '../graphql/use-active-board';
 import { climbToQueueItem } from '../climb-to-queue-item';
@@ -53,16 +53,21 @@ export function usePlaylistActivation({
   fetchPage,
   refreshErrorMessage,
 }: UsePlaylistActivationOptions): (climb: Climb) => Promise<void> {
-  const { setCurrentClimb, refreshPlaylistSuggestionSource } = useQueueActions();
+  const { setCurrentClimb, setPlaylistSuggestionSource, refreshPlaylistSuggestionSource } = useQueueActions();
   const { openPlayDrawer } = useDrawerHost();
   const activeBoard = useActiveBoard().data ?? null;
 
-  // Mirror the active climb uuid into a ref so the returned callback can guard a
-  // re-tap of the already-active climb without taking a dependency on it (keeps
-  // the callback identity stable).
+  // Mirror the active climb uuid + the live suggestion source into refs so the
+  // returned callback can decide how to handle a re-tap of the already-active
+  // climb without taking a dependency on either (keeps the callback identity
+  // stable). The source tells us whether the drawer's next/previous already
+  // follow THIS list or some other one.
   const activeClimbUuid = useActiveClimbUuid();
   const activeClimbUuidRef = useRef(activeClimbUuid);
   activeClimbUuidRef.current = activeClimbUuid;
+  const playlistSuggestionSource = usePlaylistSuggestionSource();
+  const playlistSuggestionSourceRef = useRef(playlistSuggestionSource);
+  playlistSuggestionSourceRef.current = playlistSuggestionSource;
 
   // The queue item the returned callback built for this tap. queueApi.setCurrentClimb
   // dispatches that exact instance so the drawer's navigation anchor and the queue
@@ -80,6 +85,16 @@ export function usePlaylistActivation({
       setCurrentClimb: async (climb: Climb, options: Parameters<typeof setCurrentClimb>[1]) => {
         const pendingItem = pendingQueueItemRef.current;
         pendingQueueItemRef.current = null;
+        // The tapped climb is already the active climb (re-tapped from a list
+        // whose suggestions don't yet follow it). Don't re-append it — that would
+        // duplicate it in the queue and reset the pass. Just point the suggestion
+        // source at the tapped list so the drawer's next/previous follow it; the
+        // shared hook's async refresh then upgrades that source in place. Return a
+        // non-null item so the hook treats activation as succeeded.
+        if (activeClimbUuidRef.current === climb.uuid) {
+          setPlaylistSuggestionSource(options?.playlistSuggestionSource ?? null);
+          return pendingItem ?? climbToQueueItem(toSchemaClimb(climb));
+        }
         const item =
           pendingItem && pendingItem.climb.uuid === climb.uuid ? pendingItem : climbToQueueItem(toSchemaClimb(climb));
         // Commit synchronously: the drawer now renders from currentClimbQueueItem
@@ -91,7 +106,7 @@ export function usePlaylistActivation({
       },
       refreshPlaylistSuggestionSource,
     }),
-    [setCurrentClimb, refreshPlaylistSuggestionSource],
+    [setCurrentClimb, setPlaylistSuggestionSource, refreshPlaylistSuggestionSource],
   );
 
   const resolveTarget = useCallback(
@@ -153,27 +168,38 @@ export function usePlaylistActivation({
   // preview.
   return useCallback(
     (climb: Climb) => {
-      // Re-tapping the already-active climb just reopens its drawer. Building a
-      // fresh queue item and re-activating would duplicate it in the queue and
-      // reset the active pass. The drawer renders from currentClimbQueueItem
-      // (committedExternally), which already points at this climb — so don't set
-      // pendingQueueItemRef here, or a stale item could be reused on the next tap.
-      if (activeClimbUuidRef.current === climb.uuid) {
-        openPlayDrawer(toSchemaClimb(climb), { committedExternally: true });
+      const schemaClimb = toSchemaClimb(climb);
+      const isAlreadyActive = activeClimbUuidRef.current === climb.uuid;
+      const source = playlistSuggestionSourceRef.current;
+      const suggestionsAlreadyFollowThisList =
+        source?.playlistUuid === sourceId && source?.activatedClimbUuid === climb.uuid;
+
+      // Pure reopen: the tapped climb is already active AND the drawer's
+      // next/previous already follow THIS list anchored on it. Re-activating
+      // would duplicate it in the queue and pointlessly rebuild the same source,
+      // so just reopen — the drawer renders from currentClimbQueueItem
+      // (committedExternally), which already points at this climb.
+      if (isAlreadyActive && suggestionsAlreadyFollowThisList) {
+        openPlayDrawer(schemaClimb, { committedExternally: true });
         return Promise.resolve();
       }
-      // Always-live: every tap activates the climb for the whole session (no
-      // driver/preview gate). The drawer opens first (same frame as the tap),
-      // then the shared activation builds the suggestion source and commits the
-      // queue update.
-      const item = climbToQueueItem(toSchemaClimb(climb));
-      pendingQueueItemRef.current = item;
-      openPlayDrawer(toSchemaClimb(climb), { committedExternally: true });
+
+      // Otherwise activate. Pin a fresh queue item only for a genuinely new
+      // activation, so the drawer's nav anchor and the appended queue entry share
+      // one uuid. When the climb is already active (tapped from a different list),
+      // queueApi refreshes the suggestion source in place instead of appending, so
+      // there's nothing to pin — and pinning a stale item could be reused on the
+      // next tap. The drawer opens first (same frame as the tap), then the shared
+      // activation builds the suggestion source.
+      if (!isAlreadyActive) {
+        pendingQueueItemRef.current = climbToQueueItem(schemaClimb);
+      }
+      openPlayDrawer(schemaClimb, { committedExternally: true });
       return activate(climb).catch((error: unknown) => {
         console.error('Playlist climb activation failed:', error);
         reportHandledError(error, { tags: { source: 'playlist', op: 'activate-climb' } });
       });
     },
-    [activate, openPlayDrawer],
+    [activate, openPlayDrawer, sourceId],
   );
 }

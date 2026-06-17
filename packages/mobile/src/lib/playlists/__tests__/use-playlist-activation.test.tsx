@@ -12,12 +12,16 @@ import { usePlaylistActivation } from '../use-playlist-activation';
 // second React copy and trip the dispatcher.)
 type ActiveBoard = { boardType: string; layoutId: number; sizeId: number; setIds: string; angle: number } | null;
 
+type SuggestionSource = { playlistUuid: string; activatedClimbUuid: string; boardKey: string } | null;
+
 const mocks = vi.hoisted(() => ({
   setCurrentClimb: vi.fn(),
+  setPlaylistSuggestionSource: vi.fn(),
   refreshPlaylistSuggestionSource: vi.fn(),
   openPlayDrawer: vi.fn(),
   activeBoard: { boardType: 'kilter', layoutId: 1, sizeId: 2, setIds: '3', angle: 40 } as ActiveBoard,
   activeClimbUuid: null as string | null,
+  suggestionSource: null as SuggestionSource,
   activate: vi.fn<(climb: Climb) => Promise<void>>(),
   fetchSuggestion: vi.fn(),
   captured: undefined as UsePlaylistClimbActivationOptions | undefined,
@@ -34,9 +38,11 @@ vi.mock('@boardsesh/playlists-react', () => ({
 vi.mock('../../../providers/queue-provider', () => ({
   useQueueActions: () => ({
     setCurrentClimb: mocks.setCurrentClimb,
+    setPlaylistSuggestionSource: mocks.setPlaylistSuggestionSource,
     refreshPlaylistSuggestionSource: mocks.refreshPlaylistSuggestionSource,
   }),
   useActiveClimbUuid: () => mocks.activeClimbUuid,
+  usePlaylistSuggestionSource: () => mocks.suggestionSource,
 }));
 vi.mock('../../../providers/drawer-host-provider', () => ({
   useDrawerHost: () => ({ openPlayDrawer: mocks.openPlayDrawer }),
@@ -85,6 +91,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.activeBoard = { boardType: 'kilter', layoutId: 1, sizeId: 2, setIds: '3', angle: 40 };
   mocks.activeClimbUuid = null;
+  mocks.suggestionSource = null;
   mocks.captured = undefined;
   mocks.activate.mockResolvedValue(undefined);
   mocks.queueItemCounter = 0;
@@ -172,22 +179,47 @@ describe('usePlaylistActivation (mobile wrapper)', () => {
     expect(mocks.openPlayDrawer).toHaveBeenCalledWith(climb, { committedExternally: true });
   });
 
-  it('re-tapping the already-active climb just reopens the drawer (no re-activate)', async () => {
+  it('re-tapping the active climb whose suggestions already follow this list just reopens', async () => {
     mocks.activeClimbUuid = 'a';
+    // Suggestions already anchored on 'a' from this very list (sourceId 'pl-1').
+    mocks.suggestionSource = { playlistUuid: 'pl-1', activatedClimbUuid: 'a', boardKey: 'kilter:1:2:3' };
     const { result } = renderActivation();
     const climb = makeClimb('a');
     await result.current(climb);
 
-    // The drawer reopens for the active climb, but the shared activation does NOT
-    // run — re-activating would duplicate it in the queue and reset the pass.
+    // Pure reopen — the shared activation does NOT run (re-activating would
+    // duplicate it in the queue / pointlessly rebuild the same source).
     expect(mocks.openPlayDrawer).toHaveBeenCalledWith(climb, { committedExternally: true });
     expect(mocks.activate).not.toHaveBeenCalled();
+  });
 
-    // No item was pinned, so the next genuine activation builds a fresh one rather
-    // than reusing a stale pinned item for the same climb uuid.
-    const item = await captured().queueApi!.setCurrentClimb(climb, { playlistSuggestionSource: null });
+  it('re-tapping the active climb from a DIFFERENT list re-activates to follow it', async () => {
+    mocks.activeClimbUuid = 'a';
+    // 'a' is active, but its suggestions follow another list ('climblist'), not
+    // this one ('pl-1'). The drawer's next/previous must switch to follow 'pl-1'.
+    mocks.suggestionSource = { playlistUuid: 'climblist', activatedClimbUuid: 'a', boardKey: 'kilter:1:2:3' };
+    const { result } = renderActivation();
+    const climb = makeClimb('a');
+    await result.current(climb);
+
+    expect(mocks.activate).toHaveBeenCalledWith(climb);
+    expect(mocks.openPlayDrawer).toHaveBeenCalledWith(climb, { committedExternally: true });
+  });
+
+  it('queueApi refreshes the source in place for the active climb (no duplicate append)', async () => {
+    mocks.activeClimbUuid = 'a';
+    renderActivation();
+    const climb = makeClimb('a');
+    const source = { playlistUuid: 'pl-1', activatedClimbUuid: 'a', boardKey: 'kilter:1:2:3', climbs: [] };
+
+    const item = await captured().queueApi!.setCurrentClimb(climb, { playlistSuggestionSource: source });
+
+    // The active climb is not re-dispatched (would append a duplicate); only the
+    // suggestion source is updated, and a non-null item is still returned so the
+    // shared hook proceeds to its async refresh.
+    expect(mocks.setCurrentClimb).not.toHaveBeenCalled();
+    expect(mocks.setPlaylistSuggestionSource).toHaveBeenCalledWith(source);
     expect(item?.climb).toEqual(climb);
-    expect(mocks.setCurrentClimb.mock.calls[0][0]).toBe(item);
   });
 
   it('activates a non-active climb even when a different climb is active', async () => {
