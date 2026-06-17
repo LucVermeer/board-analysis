@@ -22,6 +22,7 @@ import { PlaybackControls } from './PlaybackControls';
 import { useMobilePlayback } from './use-mobile-playback';
 import { PlayDrawerHeader } from './PlayDrawerHeader';
 import { PlayDrawerPreviewBanner } from './PlayDrawerPreviewBanner';
+import { PlayDrawerOnWallBanner } from './PlayDrawerOnWallBanner';
 import { PlayDrawerActionBar } from './PlayDrawerActionBar';
 import { SwitchBoardOverlay } from './SwitchBoardOverlay';
 import { LogAscentSheet } from '../LogAscentSheet';
@@ -75,9 +76,18 @@ export type PlayDrawerOpenOptions = {
    * user can promote it. Used by genuinely view-only surfaces — the workout
    * builder, logbook / feed / climb-view browse, and the peer-driven wall climb
    * behind the accessory bar. The lightbulb keeps acting on the active climb,
-   * not this preview.
+   * not this preview. (The wall climb opts into `previewIsWallClimb` below, which
+   * swaps the "Preview / Set active" banner for a read-only "Now on the wall".)
    */
   previewQueueItem?: ClimbQueueItem | null;
+  /**
+   * The preview is the live wall climb behind the accessory bar — a peer (or
+   * another climber on this board) is driving the wall and this climb is lit
+   * right now. Renders the read-only "Now on the wall" status banner instead of
+   * "Preview / Set active": it isn't a browse preview to promote, it's already
+   * on the wall. Only meaningful alongside `previewQueueItem`.
+   */
+  previewIsWallClimb?: boolean;
   /**
    * Playlist source that seeds the drawer's next/previous suggestions for a
    * preview open (the suggestion source isn't on the queue yet). Drives
@@ -139,6 +149,9 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   const [drawerPreviewSuggestionSource, setDrawerPreviewSuggestionSource] = useState<PlaylistSuggestionSource | null>(
     null,
   );
+  // True when the preview is the live wall climb (accessory bar). Swaps the
+  // "Preview / Set active" banner for the read-only "Now on the wall" status.
+  const [drawerPreviewIsWallClimb, setDrawerPreviewIsWallClimb] = useState(false);
   const [isMirrored, setIsMirrored] = useState(false);
   // Local optimistic override for the heart. `null` means "no local change —
   // show the server's favorite status". A tap sets it optimistically, the
@@ -294,6 +307,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
       // the drawer renders the real currentClimbQueueItem.
       setDrawerPreviewItem(previewItem);
       setDrawerPreviewSuggestionSource(previewItem ? playlistSuggestionSource : null);
+      setDrawerPreviewIsWallClimb(previewItem ? (options?.previewIsWallClimb ?? false) : false);
       setIsMirrored(false);
       // Drop any stale optimistic heart so the opened climb shows its real
       // (server) favorite status rather than a leftover from the last climb.
@@ -350,6 +364,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   const handleClose = useCallback(() => {
     setDrawerPreviewItem(null);
     setDrawerPreviewSuggestionSource(null);
+    setDrawerPreviewIsWallClimb(false);
     setIsMirrored(false);
     setIsTickBarActive(false);
     setIsSheetOpen(false);
@@ -362,6 +377,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   const handlePrev = useCallback(() => {
     // Always-live: navigation commits the shared current climb for everyone.
     setDrawerPreviewItem(null);
+    setDrawerPreviewIsWallClimb(false);
     previousClimb();
     setIsMirrored(false);
     // The favorite override is cleared by the climb-change effect.
@@ -370,6 +386,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   const handleNext = useCallback(() => {
     // Always-live: navigation commits the shared current climb for everyone.
     setDrawerPreviewItem(null);
+    setDrawerPreviewIsWallClimb(false);
     nextClimb();
     setIsMirrored(false);
     // The favorite override is cleared by the climb-change effect.
@@ -383,6 +400,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
     setCurrentClimb(drawerPreviewItem, { playlistSuggestionSource: drawerPreviewSuggestionSource });
     setDrawerPreviewItem(null);
     setDrawerPreviewSuggestionSource(null);
+    setDrawerPreviewIsWallClimb(false);
   }, [drawerPreviewItem, drawerPreviewSuggestionSource, setCurrentClimb]);
 
   const handleMirror = useCallback(() => {
@@ -605,10 +623,16 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
                 />
 
                 {isPreview ? (
-                  // Cross-board previews use the switch-board overlay instead, so
-                  // hide "Set active" there — promoting a foreign-board climb would
-                  // only spill it into the queue.
-                  <PlayDrawerPreviewBanner showSetActive={!boardMismatch} onSetActive={handleSetActive} />
+                  drawerPreviewIsWallClimb ? (
+                    // The accessory-bar wall climb is physically lit right now, so
+                    // it's a read-only status, not a promotable preview — no button.
+                    <PlayDrawerOnWallBanner />
+                  ) : (
+                    // Cross-board previews use the switch-board overlay instead, so
+                    // hide "Set active" there — promoting a foreign-board climb would
+                    // only spill it into the queue.
+                    <PlayDrawerPreviewBanner showSetActive={!boardMismatch} onSetActive={handleSetActive} />
+                  )
                 ) : null}
 
                 <View style={styles.boardSection}>

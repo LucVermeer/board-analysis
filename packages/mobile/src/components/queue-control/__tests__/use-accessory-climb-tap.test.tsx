@@ -93,13 +93,15 @@ describe('useAccessoryClimbTap', () => {
     });
   });
 
-  it('opens a peer-driven wall climb as a preview when a board feed is live', () => {
+  it('opens a peer-driven wall climb as a read-only "Now on the wall" view when a board feed is live', () => {
     wall.climb = makeClimb('wall');
     renderHook(() => useAccessoryClimbTap());
     tap.onEnd?.();
-    // The wall climb isn't the local current, so it opens view-only (badged).
+    // The wall climb isn't the local current and is physically lit, so it opens
+    // view-only with `previewIsWallClimb` (no "Set active" takeover).
     expect(drawer.openPlayDrawer).toHaveBeenCalledWith(expect.objectContaining({ uuid: 'climb-wall' }), {
       previewQueueItem: expect.objectContaining({ climb: expect.objectContaining({ uuid: 'climb-wall' }) }),
+      previewIsWallClimb: true,
       source: 'current_queue_item',
     });
   });

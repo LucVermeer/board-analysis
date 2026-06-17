@@ -484,6 +484,7 @@
   },
   "playView": {
     "previewBadge": "Vista previa",
+    "onWallBadge": "Ahora en el muro",
     "setActive": "Activar",
     "previousFrame": "Fotograma anterior",
     "nextFrame": "Fotograma siguiente",

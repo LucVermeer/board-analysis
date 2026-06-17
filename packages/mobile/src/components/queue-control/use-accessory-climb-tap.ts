@@ -39,14 +39,16 @@ export function useAccessoryClimbTap(): AccessoryClimbTap {
     // When the bar mirrors the local queue head, open it active (it already IS
     // current, so openDrawer won't re-append it). When a live feed makes the bar
     // show a peer-driven WALL climb that isn't your current, open it as a
-    // view-only preview (badged) — you're looking at someone else's wall, not
-    // taking it over until you choose to. Both are queue-bar opens, so keep the
+    // read-only "Now on the wall" view (`previewIsWallClimb`) — it's physically
+    // lit right now, so there's no "Set active" takeover; you're just looking at
+    // someone else's wall. Both are queue-bar opens, so keep the
     // `current_queue_item` analytics source.
     if (accessoryClimb.uuid === currentClimbQueueItem?.climb.uuid) {
       openPlayDrawer(accessoryClimb, { source: 'current_queue_item' });
     } else {
       openPlayDrawer(accessoryClimb, {
         previewQueueItem: climbToQueueItem(accessoryClimb),
+        previewIsWallClimb: true,
         source: 'current_queue_item',
       });
     }
