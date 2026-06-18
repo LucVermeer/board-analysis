@@ -71,7 +71,7 @@ export type LogAscentInput = {
   consensusGradeName?: string;
 };
 
-function boardConfigsMatch(left: BoardConfig | null, right: BoardConfig | null): boolean {
+export function boardConfigsMatch(left: BoardConfig | null, right: BoardConfig | null): boolean {
   if (!left || !right) return false;
   return (
     left.boardName === right.boardName &&

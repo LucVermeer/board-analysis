@@ -3,8 +3,8 @@
 // colour) plus a `run()` that performs the action and then calls `onAfterAction` (the
 // reaction menu passes its animated dismiss).
 //
-// The hook self-sources every opener (queue / playlist / tick / beta video) from
-// `useDrawerHost`, the favourite state + mutation from `useFavoriteStatus` /
+// The hook self-sources every opener (preview / queue / playlist / tick / beta video)
+// from `useDrawerHost`, the favourite state + mutation from `useFavoriteStatus` /
 // `useToggleFavorite`, the native share from `useShareClimb`, and the create-climb
 // routes from the router, so a caller only
 // supplies the climb, its board config, and the two contextual flags (`currentUserId`,
@@ -20,14 +20,16 @@ import type { Climb } from '@boardsesh/shared-schema';
 import { computeCanUpdate, type SavedClimbSnapshot } from '@boardsesh/create-climb-react';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
 import type { IconName } from '../icon-map';
-import { useDrawerHost, type BoardConfig } from '../../providers/drawer-host-provider';
+import { useDrawerHost, boardConfigsMatch, type BoardConfig } from '../../providers/drawer-host-provider';
 import { useQueueActions } from '../../providers/queue-provider';
 import { useToggleFavorite, useFavoriteStatus } from '../../lib/graphql/hooks';
+import { climbToQueueItem } from '../../lib/climb-to-queue-item';
 import { useTheme } from '../../providers/theme-provider';
 import { useShareClimb } from '../../hooks/use-share-climb';
 import { track } from '../../lib/analytics';
 
 export type ClimbActionId =
+  | 'preview'
   | 'queue'
   | 'playlist'
   | 'favorite'
@@ -85,7 +87,13 @@ export function useClimbActions({
   const { actionColors } = useTheme();
   const { addToQueue } = useQueueActions();
   const { mutate: toggleFavoriteMutate } = useToggleFavorite();
-  const { openAddToPlaylist, openLogAscent, openAddBetaVideo } = useDrawerHost();
+  const {
+    openPlayDrawer,
+    openAddToPlaylist,
+    openLogAscent,
+    openAddBetaVideo,
+    boardConfig: activeBoardConfig,
+  } = useDrawerHost();
   // Native share sheet — the same action the play drawer uses.
   const shareClimb = useShareClimb({
     climb,
@@ -132,6 +140,25 @@ export function useClimbActions({
     })();
 
     const items: ClimbActionItem[] = [];
+
+    // View-only open: a previewQueueItem (badge + "Set active") rather than committing.
+    // Mirror the board-sheet override rule so a cross-board climb still renders the
+    // switch-board overlay; same-board needs no override.
+    items.push({
+      id: 'preview',
+      title: t('mobile.climbActions.preview'),
+      icon: 'visibility',
+      color: accentColor,
+      run: () => {
+        const override = boardConfigsMatch(boardConfig, activeBoardConfig) ? undefined : boardConfig;
+        openPlayDrawer(climb, {
+          previewQueueItem: climbToQueueItem(climb),
+          boardConfig: override,
+          source: 'climb_view',
+        });
+        after();
+      },
+    });
 
     items.push({
       id: 'queue',
@@ -312,8 +339,10 @@ export function useClimbActions({
     addToQueue,
     toggleFavoriteMutate,
     isFavorited,
+    openPlayDrawer,
     openAddToPlaylist,
     openLogAscent,
     openAddBetaVideo,
+    activeBoardConfig,
   ]);
 }
