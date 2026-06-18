@@ -54,6 +54,7 @@ import { loadRequiredFonts } from '../src/lib/required-fonts';
 import { AnalyticsProvider } from '../src/components/analytics/AnalyticsProvider';
 import { AnalyticsScreenTracker } from '../src/components/analytics/AnalyticsScreenTracker';
 import { OnboardingGate } from '../src/components/onboarding/OnboardingGate';
+import { AccessoryOnboardingTip } from '../src/components/onboarding/AccessoryOnboardingTip';
 
 void SplashScreen.preventAutoHideAsync();
 
@@ -402,6 +403,11 @@ function RootLayout() {
                                                           </Stack>
                                                         </ThemedNavigation>
                                                         <PersistentQueueBar />
+                                                        {/* One-time tip floating above the tab bar / accessory bar,
+                                                            mounted next to PersistentQueueBar so it watches climb
+                                                            presence globally and overlays both the native (iOS 26) and
+                                                            JS bottom-bar variants. */}
+                                                        <AccessoryOnboardingTip />
                                                         <OnboardingGate ready={authReady && fontsReady} />
                                                       </UserDrawerProvider>
                                                     </TabBarHeightProvider>

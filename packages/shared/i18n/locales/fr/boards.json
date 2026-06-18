@@ -59,6 +59,7 @@
     "errorTitle": "Impossible de charger tes boards",
     "errorRetry": "Réessayer",
     "boardSwitchError": "Impossible d'enregistrer ce board. Réessaie.",
+    "onboardingPrompt": "Suis le mur où tu grimpes : c'est ça qui active son historique.",
     "discovery": {
       "findNearby": "À proximité",
       "bluetooth": "Bluetooth",

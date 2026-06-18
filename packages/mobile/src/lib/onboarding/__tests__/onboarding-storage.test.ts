@@ -12,8 +12,22 @@ vi.mock('../../preferences/secure-store-adapter', () => ({
   },
 }));
 
-import { ONBOARDING_SEEN_KEY } from '@boardsesh/key-value-storage';
-import { clearOnboardingSeen, hasSeenOnboarding, markOnboardingSeen, replayOnboarding } from '../onboarding-storage';
+import {
+  ONBOARDING_BOARD_TIP_KEY,
+  ONBOARDING_SEEN_KEY,
+  ONBOARDING_TIP_WORKOUT_KEY,
+} from '@boardsesh/key-value-storage';
+import {
+  clearBoardRevealTipPending,
+  clearOnboardingSeen,
+  hasBoardRevealTipPending,
+  hasSeenOnboarding,
+  hasSeenTip,
+  markOnboardingSeen,
+  markTipSeen,
+  replayOnboarding,
+  setBoardRevealTipPending,
+} from '../onboarding-storage';
 
 describe('onboarding storage', () => {
   beforeEach(() => {
@@ -105,6 +119,52 @@ describe('onboarding storage', () => {
       resolveClear();
       await pending;
       expect(navigate).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('board-history reveal banner flag', () => {
+    it('arms the banner', async () => {
+      setMock.mockResolvedValue(undefined);
+      await setBoardRevealTipPending();
+      expect(setMock).toHaveBeenCalledWith(ONBOARDING_BOARD_TIP_KEY, true);
+    });
+
+    it('reports pending only when the flag is true', async () => {
+      getMock.mockResolvedValue(true);
+      await expect(hasBoardRevealTipPending()).resolves.toBe(true);
+      getMock.mockResolvedValue(null);
+      await expect(hasBoardRevealTipPending()).resolves.toBe(false);
+    });
+
+    it('treats a read error as not-pending (a missed banner beats a stuck one)', async () => {
+      getMock.mockRejectedValue(new Error('keychain unavailable'));
+      await expect(hasBoardRevealTipPending()).resolves.toBe(false);
+    });
+
+    it('clears the banner flag once shown', async () => {
+      removeMock.mockResolvedValue(undefined);
+      await clearBoardRevealTipPending();
+      expect(removeMock).toHaveBeenCalledWith(ONBOARDING_BOARD_TIP_KEY);
+    });
+  });
+
+  describe('just-in-time tip flags', () => {
+    it('reports a tip seen only when the flag is true', async () => {
+      getMock.mockResolvedValue(true);
+      await expect(hasSeenTip(ONBOARDING_TIP_WORKOUT_KEY)).resolves.toBe(true);
+      getMock.mockResolvedValue(null);
+      await expect(hasSeenTip(ONBOARDING_TIP_WORKOUT_KEY)).resolves.toBe(false);
+    });
+
+    it('treats a read error as seen (a flaky store must not nag the same tip)', async () => {
+      getMock.mockRejectedValue(new Error('keychain unavailable'));
+      await expect(hasSeenTip(ONBOARDING_TIP_WORKOUT_KEY)).resolves.toBe(true);
+    });
+
+    it('marks a tip seen by its key', async () => {
+      setMock.mockResolvedValue(undefined);
+      await markTipSeen(ONBOARDING_TIP_WORKOUT_KEY);
+      expect(setMock).toHaveBeenCalledWith(ONBOARDING_TIP_WORKOUT_KEY, true);
     });
   });
 });

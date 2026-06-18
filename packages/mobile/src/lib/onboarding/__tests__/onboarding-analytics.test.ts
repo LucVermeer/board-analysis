@@ -3,14 +3,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const trackMock = vi.hoisted(() => vi.fn());
 vi.mock('../../analytics', () => ({ track: trackMock }));
 
-import {
-  trackStepAdvanced,
-  trackStepViewed,
-  trackTourCompleted,
-  trackTourSkipped,
-  trackTourStarted,
-} from '../onboarding-analytics';
-import { ONBOARDING_CARDS, ONBOARDING_TOTAL_STEPS } from '../onboarding-cards';
+import { trackStepViewed, trackTourCompleted, trackTourSkipped, trackTourStarted } from '../onboarding-analytics';
+import { ONBOARDING_PROMPT_CARD, ONBOARDING_TOTAL_STEPS } from '../onboarding-cards';
 
 describe('onboarding analytics', () => {
   beforeEach(() => trackMock.mockClear());
@@ -27,20 +21,11 @@ describe('onboarding analytics', () => {
   });
 
   it('fires "Onboarding Tour Step Viewed" with stepId/stepIndex/totalSteps', () => {
-    trackStepViewed(ONBOARDING_CARDS[1], 1);
+    trackStepViewed(ONBOARDING_PROMPT_CARD, 0);
     expect(trackMock).toHaveBeenCalledWith('Onboarding Tour Step Viewed', {
-      stepId: ONBOARDING_CARDS[1].id,
-      stepIndex: 1,
+      stepId: ONBOARDING_PROMPT_CARD.id,
+      stepIndex: 0,
       totalSteps: ONBOARDING_TOTAL_STEPS,
-    });
-  });
-
-  it('fires "Onboarding Tour Step Advanced" with fromStepId/toStepId/trigger', () => {
-    trackStepAdvanced(ONBOARDING_CARDS[0], ONBOARDING_CARDS[1], 'swipe');
-    expect(trackMock).toHaveBeenCalledWith('Onboarding Tour Step Advanced', {
-      fromStepId: ONBOARDING_CARDS[0].id,
-      toStepId: ONBOARDING_CARDS[1].id,
-      trigger: 'swipe',
     });
   });
 
@@ -50,10 +35,10 @@ describe('onboarding analytics', () => {
   });
 
   it('fires "Onboarding Tour Skipped" with atStepId/stepIndex', () => {
-    trackTourSkipped(ONBOARDING_CARDS[2], 2);
+    trackTourSkipped(ONBOARDING_PROMPT_CARD, 0);
     expect(trackMock).toHaveBeenCalledWith('Onboarding Tour Skipped', {
-      atStepId: ONBOARDING_CARDS[2].id,
-      stepIndex: 2,
+      atStepId: ONBOARDING_PROMPT_CARD.id,
+      stepIndex: 0,
     });
   });
 });

@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook } from '@testing-library/react';
-import { ONBOARDING_CARDS } from '../onboarding-cards';
 
 // Controllable translator: each render reads the current `t` from this ref, so a
 // test can hold the identity stable (memo should reuse) or swap it (memo should
@@ -16,50 +15,50 @@ vi.mock('react-i18next', () => ({
 
 import { useOnboardingCopy } from '../use-onboarding-copy';
 
+const PROMPT_KEYS = ['title', 'body', 'footnote', 'findBoard', 'lookAround'] as const;
+
 describe('useOnboardingCopy', () => {
   beforeEach(() => {
     translatorRef.t = (key: string) => key;
   });
 
-  it('resolves title + body for every card id', () => {
+  it('resolves every prompt copy field', () => {
     const { result } = renderHook(() => useOnboardingCopy());
-    for (const card of ONBOARDING_CARDS) {
-      expect(result.current[card.id]).toEqual({
-        title: `mobile.onboarding.cards.${card.id}.title`,
-        body: `mobile.onboarding.cards.${card.id}.body`,
-      });
-    }
+    expect(result.current).toEqual({
+      title: 'mobile.onboarding.prompt.title',
+      body: 'mobile.onboarding.prompt.body',
+      footnote: 'mobile.onboarding.prompt.footnote',
+      findBoard: 'mobile.onboarding.prompt.findBoard',
+      lookAround: 'mobile.onboarding.prompt.lookAround',
+    });
   });
 
-  it('uses static literal keys per card (orphan-checker contract)', () => {
+  it('uses static literal keys (orphan-checker contract)', () => {
     const seen: string[] = [];
     translatorRef.t = (key: string) => {
       seen.push(key);
       return key;
     };
     renderHook(() => useOnboardingCopy());
-    // Eight keys total: title + body for each of the four cards.
-    for (const card of ONBOARDING_CARDS) {
-      expect(seen).toContain(`mobile.onboarding.cards.${card.id}.title`);
-      expect(seen).toContain(`mobile.onboarding.cards.${card.id}.body`);
+    for (const key of PROMPT_KEYS) {
+      expect(seen).toContain(`mobile.onboarding.prompt.${key}`);
     }
-    expect(seen).toHaveLength(ONBOARDING_CARDS.length * 2);
+    expect(seen).toHaveLength(PROMPT_KEYS.length);
   });
 
-  it('returns a stable map while the translator identity is unchanged (memoised)', () => {
+  it('returns a stable object while the translator identity is unchanged (memoised)', () => {
     const { result, rerender } = renderHook(() => useOnboardingCopy());
     const first = result.current;
     rerender();
-    // Same `t` reference across renders → useMemo([t]) must reuse the map.
+    // Same `t` reference across renders → useMemo([t]) must reuse the object.
     expect(result.current).toBe(first);
   });
 
   it('recomputes when the translator identity changes (deps on [t])', () => {
     const { result, rerender } = renderHook(() => useOnboardingCopy());
     const first = result.current;
-    // Swap the translator for a new function reference (a fresh `t` is how a
-    // real language switch surfaces to the hook). The memo dep changes, so the
-    // map must be rebuilt rather than served stale.
+    // Swap the translator for a new function reference (how a real language
+    // switch surfaces to the hook). The memo dep changes, so it must rebuild.
     translatorRef.t = (key: string) => key;
     rerender();
     expect(result.current).not.toBe(first);

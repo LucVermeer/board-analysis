@@ -1,34 +1,38 @@
 import type { ImageSourcePropType } from 'react-native';
 import type { IconName } from '../../components/icon-map';
+// Real board-presence "now on the wall" capture, cropped by
+// `vp run mobile:onboarding-assets` from the onboarding screenshot flow. ESM
+// import (not require) so the vitest asset alias can redirect it in tests.
+import boardHistoryImage from '../../../assets/onboarding/board-history.png';
 
 /**
- * The four first-run walkthrough cards. Order is the page order. `id` is a
- * stable analytics key (mirrors web's tour step ids) and `icon` resolves to an
- * SF Symbol on iOS / MDI glyph on Android via the shared icon-map. An optional
- * `image` (a real captured app screen, produced by `--flow onboarding` in
- * `scripts/mobile-screenshots.ts`) takes precedence over the glyph when present;
- * cards without one keep rendering the icon, so this is purely additive. Card
- * COPY is resolved separately via `useOnboardingCopy` with static `t()` literals
- * so the i18n orphan checker can see every key — the project lint hard-fails on
- * `t(variable)`, so the keys can't live here as data.
- *
- * Pure data — kept out of the component so it can be unit-tested and so the
- * carousel's `renderItem` stays a hoisted, dependency-free callback.
+ * The single first-run framing card. It names the headline payoff (live board
+ * history) and its CTA hands the user straight into the real /boards picker —
+ * following a named board is what turns board history on, so teaching it and
+ * activating it are the same motion. `id` is the stable analytics step id
+ * (mirrors web's tour step ids); `icon` resolves to an SF Symbol on iOS / MDI
+ * glyph on Android via the shared icon-map. An optional `image` (a real captured
+ * board-presence screen, produced by `--flow onboarding` in
+ * `scripts/mobile-screenshots.ts`) takes precedence over the glyph when present,
+ * so wiring the screenshot in later is purely additive. Card COPY is resolved
+ * separately via `useOnboardingCopy` with static `t()` literals so the i18n
+ * orphan checker can see every key — the project lint hard-fails on `t(variable)`.
  */
-export type OnboardingCardId = 'welcome' | 'connect' | 'find' | 'play';
+export type OnboardingCardId = 'welcome';
 
 export type OnboardingCard = {
   id: OnboardingCardId;
   icon: IconName;
-  /** Real app-screen illustration; falls back to `icon` when absent. */
+  /** Real board-presence illustration; falls back to `icon` when absent. */
   image?: ImageSourcePropType;
 };
 
-export const ONBOARDING_CARDS: readonly OnboardingCard[] = [
-  { id: 'welcome', icon: 'lightbulb.fill' },
-  { id: 'connect', icon: 'bluetooth' },
-  { id: 'find', icon: 'search' },
-  { id: 'play', icon: 'playlist' },
-] as const;
+export const ONBOARDING_PROMPT_CARD: OnboardingCard = {
+  id: 'welcome',
+  icon: 'lightbulb.fill',
+  image: boardHistoryImage,
+};
 
-export const ONBOARDING_TOTAL_STEPS = ONBOARDING_CARDS.length;
+// A single framing screen — kept for the web-mirrored analytics shape
+// (stepIndex / totalSteps).
+export const ONBOARDING_TOTAL_STEPS = 1;

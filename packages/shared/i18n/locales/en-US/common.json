@@ -151,31 +151,23 @@
       "close": "Close"
     },
     "onboarding": {
-      "skip": "Skip",
-      "next": "Next",
-      "getStarted": "Connect a board",
       "replaySection": "Walkthrough",
       "replayTitle": "Replay walkthrough",
-      "replaySubtitle": "See the welcome tour again",
+      "replaySubtitle": "See the walkthrough again",
       "replayError": "Couldn't reopen the walkthrough. Try again.",
-      "pageIndicator": "Page {{current}} of {{total}}",
-      "cards": {
-        "welcome": {
-          "title": "Light up your home board",
-          "body": "Boardsesh drives your wall — search, queue, and play, all from your phone."
-        },
-        "connect": {
-          "title": "Pair over Bluetooth",
-          "body": "Connect your board once and the holds light up as you climb."
-        },
-        "find": {
-          "title": "Search by grade, send the wall",
-          "body": "Filter thousands of problems by grade, angle, and setter to find your next send."
-        },
-        "play": {
-          "title": "Tap a climb, light the holds",
-          "body": "Build a queue, hit play, and the wall shows you exactly where to grab."
-        }
+      "prompt": {
+        "title": "See what's lit on your wall, live",
+        "body": "Follow your gym's board and Boardsesh shows what's lit right now: who lit it, the grade, who set it, recent sends. You don't start anything; it's just there.",
+        "footnote": "Plus crew sessions, the workout builder, and send tracking once you're on a wall.",
+        "findBoard": "Find my board",
+        "lookAround": "Look around first"
+      },
+      "boardRevealTip": "Tap to see what other Boardsesh users have sent to the wall.",
+      "tips": {
+        "workout": "Build a workout: Volume, Pyramid, Ladder or Grade Focus. Set a grade, preview the burns, send them one at a time.",
+        "crew": "Climbing with people? Start a session and share one queue. Anyone sends the next burn, no passing the phone.",
+        "record": "Your sends chart out here on Progress: grade spread and hardest send. Import your Kilter and Tension logbook from Aurora to start with your history.",
+        "accessory": "The bar at the bottom is always what's on the board. Flip climbs from there."
       }
     },
     "nav": {

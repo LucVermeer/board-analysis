@@ -45,6 +45,9 @@ type ClimbTopChromeProps = {
   canCreate: boolean;
   onCreate: () => void;
   onOpenBoardDetail: () => void;
+  /** Show a brand-coloured dot on the board button — the one-time onboarding cue
+   *  pointing a new user at the "now on the wall" sheet. */
+  showBoardBadge?: boolean;
   onHeightChange: (height: number) => void;
   searchFieldRef: RefObject<SearchHeaderHandle | null>;
   searchInitialValue: string;
@@ -75,6 +78,7 @@ export function ClimbTopChrome({
   canCreate,
   onCreate,
   onOpenBoardDetail,
+  showBoardBadge = false,
   onHeightChange,
   searchFieldRef,
   searchInitialValue,
@@ -149,7 +153,11 @@ export function ClimbTopChrome({
           style={[styles.materialAppbar, { backgroundColor: systemColors.secondaryBackground }]}
         >
           <UserAvatarToolbarAction variant="material" />
-          <BoardSwitcherButton onPress={onOpenBoardDetail} accessibilityHint={t('mobile.search.boardSwitcherHint')} />
+          <BoardSwitcherButton
+            onPress={onOpenBoardDetail}
+            accessibilityHint={t('mobile.search.boardSwitcherHint')}
+            badge={showBoardBadge}
+          />
           {canCreate ? (
             <Appbar.Action
               icon={iconMap.plus.android}
@@ -242,6 +250,7 @@ export function ClimbTopChrome({
       onCreate={onCreate}
       createAccessibilityLabel={t('mobile.create.fab.ariaLabel')}
       onOpenBoardSwitcher={onOpenBoardDetail}
+      boardBadge={showBoardBadge}
       onHeightChange={onHeightChange}
     >
       {usesCustomSearch ? (

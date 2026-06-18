@@ -4,7 +4,7 @@
 // skipped) the welcome walkthrough, so it never shows again. Absent means a
 // fresh install — show it once.
 
-import { ONBOARDING_SEEN_KEY } from '@boardsesh/key-value-storage';
+import { ONBOARDING_BOARD_TIP_KEY, ONBOARDING_SEEN_KEY } from '@boardsesh/key-value-storage';
 import { secureStorePreferences } from '../preferences/secure-store-adapter';
 
 /**
@@ -42,4 +42,48 @@ export async function clearOnboardingSeen(): Promise<void> {
 export async function replayOnboarding(navigate: () => void): Promise<void> {
   await clearOnboardingSeen();
   navigate();
+}
+
+// --- Board-history reveal banner (Climbs) -------------------------------------
+// A one-shot flag set when the user binds their first board from the onboarding
+// handoff, so the Climbs landing can surface the board-history reveal banner
+// exactly once. Read errors fall to `false` (no banner) — a missed banner is far
+// less bad than a stuck one.
+
+/** Arm the Climbs reveal banner (called on board-bind from onboarding). */
+export async function setBoardRevealTipPending(): Promise<void> {
+  await secureStorePreferences.set(ONBOARDING_BOARD_TIP_KEY, true);
+}
+
+/** Whether the Climbs reveal banner is still pending. */
+export async function hasBoardRevealTipPending(): Promise<boolean> {
+  try {
+    return (await secureStorePreferences.get<boolean>(ONBOARDING_BOARD_TIP_KEY)) === true;
+  } catch {
+    return false;
+  }
+}
+
+/** Clear the Climbs reveal banner flag once it has been shown or dismissed. */
+export async function clearBoardRevealTipPending(): Promise<void> {
+  await secureStorePreferences.remove(ONBOARDING_BOARD_TIP_KEY);
+}
+
+// --- Just-in-time feature tips ------------------------------------------------
+// Generic "seen once" flags for the contextual tips (workout / crew / record),
+// keyed by the per-tip constants in `@boardsesh/key-value-storage`. A read error
+// reports "seen" so a flaky SecureStore never nags the same tip repeatedly.
+
+/** Whether a one-shot just-in-time tip has already been shown. */
+export async function hasSeenTip(key: string): Promise<boolean> {
+  try {
+    return (await secureStorePreferences.get<boolean>(key)) === true;
+  } catch {
+    return true;
+  }
+}
+
+/** Mark a one-shot just-in-time tip as shown so it never fires again. */
+export async function markTipSeen(key: string): Promise<void> {
+  await secureStorePreferences.set(key, true);
 }

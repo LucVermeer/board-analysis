@@ -9,13 +9,22 @@ type BoardLabelFields = Pick<UserBoard, 'name' | 'angle' | 'boardType' | 'sizeNa
 const ctrl = vi.hoisted(() => ({ board: null as BoardLabelFields | null }));
 const haptics = vi.hoisted(() => ({ light: vi.fn() }));
 
+vi.mock('react-native', () => ({
+  StyleSheet: { create: (styles: Record<string, unknown>) => styles },
+  View: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
+}));
+
 vi.mock('@boardsesh/board-config', () => ({
   formatBoardDisplayName: (boardType: string) => `Display:${boardType}`,
 }));
 
 vi.mock('../../../providers/theme-provider', () => ({
-  useTheme: () => ({ systemColors: { label: '#000' } }),
+  useTheme: () => ({ systemColors: { label: '#000' }, brandColors: { primary: '#6D28D9' } }),
 }));
+
+// The reveal badge is its own variant-aware component (paper / reanimated); stub
+// it to a marker so the badge-present assertion stays decoupled from its render.
+vi.mock('../../Badge', () => ({ Badge: () => createElement('span', { 'data-badge-dot': 'true' }) }));
 
 vi.mock('../../../lib/graphql/use-active-board', () => ({
   useActiveBoard: () => ({ data: ctrl.board }),
@@ -86,5 +95,17 @@ describe('BoardToolbarAction', () => {
       createElement(BoardToolbarAction, { onPress: vi.fn(), accessibilityHint: 'Opens switcher' }),
     );
     expect(boardButton(container)?.getAttribute('data-hint')).toBe('Opens switcher');
+  });
+
+  it('renders no onboarding badge by default', () => {
+    ctrl.board = typedBoard;
+    const { container } = render(createElement(BoardToolbarAction, { onPress: vi.fn() }));
+    expect(container.querySelector('[data-badge-dot]')).toBeNull();
+  });
+
+  it('renders the onboarding badge when badge is true', () => {
+    ctrl.board = typedBoard;
+    const { container } = render(createElement(BoardToolbarAction, { onPress: vi.fn(), badge: true }));
+    expect(container.querySelector('[data-badge-dot]')).not.toBeNull();
   });
 });

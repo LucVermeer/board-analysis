@@ -3,7 +3,7 @@
  * board it dismisses back to the tab it was opened from, passed as a `returnTo`
  * route param. Allow-list the value so a malformed or deep-linked param can't
  * redirect the user to an unexpected screen, and default to Climbs (the screen
- * the switcher has always returned to).
+ * the switcher has always returned to, including the onboarding hand-off).
  */
 export type BoardReturnTo = '/(tabs)/climbs' | '/(tabs)/discover';
 

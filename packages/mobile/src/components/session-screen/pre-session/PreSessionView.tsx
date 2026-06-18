@@ -39,6 +39,9 @@ import { GeneratorPickerCard, type GeneratorSelection } from './GeneratorPickerC
 import { WorkoutPreviewRow } from './WorkoutPreviewRow';
 import { useWorkoutPreview } from './use-workout-preview';
 import type { PreviewItem } from './workout-preview-pool';
+import { OnboardingTipBanner } from '../../onboarding/OnboardingTipBanner';
+import { hasSeenTip, markTipSeen } from '../../../lib/onboarding/onboarding-storage';
+import { ONBOARDING_TIP_CREW_KEY, ONBOARDING_TIP_WORKOUT_KEY } from '@boardsesh/key-value-storage';
 
 // Screenshot mode pre-selects a workout so the Record screen renders the
 // generator (chart + generated preview) on load. The workout shelf is a
@@ -85,6 +88,7 @@ function previewKeyExtractor(previewItem: PreviewItem): string {
 
 export function PreSessionView({ showChrome = false }: PreSessionViewProps) {
   const { t } = useTranslation('session');
+  const { t: tCommon } = useTranslation('common');
   const { systemColors, variant } = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -94,6 +98,35 @@ export function PreSessionView({ showChrome = false }: PreSessionViewProps) {
   const { startSession, setQueue } = useQueueActions();
   const { openPlayDrawer } = useDrawerHost();
   const { showToast } = useToast();
+
+  // Just-in-time feature tips on the Record tab, shown one at a time (never
+  // stacked) once a board is active: the workout builder first, then crew
+  // sessions. Each fires once — dismissing marks it seen; the next opens on the
+  // following visit. Only on the tab (showChrome), not the overlay host.
+  const [activeTip, setActiveTip] = useState<'workout' | 'crew' | null>(null);
+  useEffect(() => {
+    if (!showChrome || !activeBoard) return;
+    let cancelled = false;
+    void (async () => {
+      if (!(await hasSeenTip(ONBOARDING_TIP_WORKOUT_KEY))) {
+        if (!cancelled) setActiveTip('workout');
+        return;
+      }
+      if (!(await hasSeenTip(ONBOARDING_TIP_CREW_KEY))) {
+        if (!cancelled) setActiveTip('crew');
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [showChrome, activeBoard]);
+  const dismissTip = useCallback(() => {
+    setActiveTip((current) => {
+      if (current === 'workout') void markTipSeen(ONBOARDING_TIP_WORKOUT_KEY);
+      else if (current === 'crew') void markTipSeen(ONBOARDING_TIP_CREW_KEY);
+      return null;
+    });
+  }, []);
 
   // Measured chrome height (incl. the top safe-area inset) so the list pads its
   // top by it. Only used when the floating chrome renders (tab mode).
@@ -248,6 +281,21 @@ export function PreSessionView({ showChrome = false }: PreSessionViewProps) {
   const listHeader = useMemo(
     () => (
       <View style={styles.header}>
+        {activeTip ? (
+          <View style={styles.cardInset}>
+            <OnboardingTipBanner
+              text={
+                activeTip === 'workout'
+                  ? tCommon('mobile.onboarding.tips.workout')
+                  : tCommon('mobile.onboarding.tips.crew')
+              }
+              dismissLabel={tCommon('actions.close')}
+              onDismiss={dismissTip}
+              icon={activeTip === 'crew' ? 'people' : 'lightbulb.fill'}
+            />
+          </View>
+        ) : null}
+
         {/* The screen's identity in-body under the floating chrome, collapsing
             into the centred header capsule as it scrolls up. ScreenTitle hides
             itself on Material (the M3 app bar owns the title). */}
@@ -287,6 +335,8 @@ export function PreSessionView({ showChrome = false }: PreSessionViewProps) {
     ),
     [
       activeBoard,
+      activeTip,
+      dismissTip,
       handleOpenBoardSwitcher,
       previewStateMessage,
       selection,
@@ -294,6 +344,7 @@ export function PreSessionView({ showChrome = false }: PreSessionViewProps) {
       showPreviewSection,
       systemColors.secondaryLabel,
       t,
+      tCommon,
       variant,
     ],
   );

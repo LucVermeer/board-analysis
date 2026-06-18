@@ -20,8 +20,10 @@ type OnboardingCardProps = {
   title: string;
   /** Already-translated body copy. */
   body: string;
-  /** Page width — each card fills exactly one viewport so paging snaps cleanly. */
-  width: number;
+  /** Already-translated secondary line under the body (optional). */
+  footnote?: string;
+  /** Fixed page width when used as a carousel page; omit to fill the parent. */
+  width?: number;
   /** Tint for the illustration glyph (variant accent: systemColors.accent / colors.primary). */
   iconColor: string;
   /** Body/subtext colour (secondary label / onSurfaceVariant). */
@@ -29,14 +31,29 @@ type OnboardingCardProps = {
 };
 
 /**
- * One full-width welcome page: a tinted glyph above a large title and body. The
- * whole card is one accessibility element so VoiceOver/TalkBack reads the
- * heading and body together as the user pages across. Memoised so FlatList row
- * recycling doesn't re-render unchanged pages.
+ * A tinted glyph (or a real captured screenshot) above a large title, body, and
+ * an optional secondary line. The whole card is one accessibility element so
+ * VoiceOver/TalkBack reads the heading and copy together. Memoised so it doesn't
+ * re-render on unrelated parent updates.
  */
-function OnboardingCardComponent({ icon, image, title, body, width, iconColor, bodyColor }: OnboardingCardProps) {
+function OnboardingCardComponent({
+  icon,
+  image,
+  title,
+  body,
+  footnote,
+  width,
+  iconColor,
+  bodyColor,
+}: OnboardingCardProps) {
+  const accessibilityLabel = footnote ? `${title}. ${body}. ${footnote}` : `${title}. ${body}`;
   return (
-    <View style={[styles.page, { width }]} accessible accessibilityRole="text" accessibilityLabel={`${title}. ${body}`}>
+    <View
+      style={[styles.page, width != null ? { width } : null]}
+      accessible
+      accessibilityRole="text"
+      accessibilityLabel={accessibilityLabel}
+    >
       <View style={styles.illustration} importantForAccessibility="no-hide-descendants">
         {image ? (
           <Image source={image} style={styles.illustrationImage} contentFit="contain" accessible={false} />
@@ -50,6 +67,11 @@ function OnboardingCardComponent({ icon, image, title, body, width, iconColor, b
       <Text variant="body" color={bodyColor} style={styles.body}>
         {body}
       </Text>
+      {footnote ? (
+        <Text variant="footnote" color={bodyColor} style={styles.footnote}>
+          {footnote}
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -80,5 +102,11 @@ const styles = StyleSheet.create({
   body: {
     textAlign: 'center',
     maxWidth: 340,
+  },
+  footnote: {
+    textAlign: 'center',
+    maxWidth: 340,
+    marginTop: spacing[4],
+    opacity: 0.75,
   },
 });

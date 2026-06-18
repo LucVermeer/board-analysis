@@ -1,4 +1,4 @@
-import { memo, useMemo } from 'react';
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { View, RefreshControl, ScrollView, StyleSheet } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import type { useYouProfileData } from '../../lib/graphql/hooks';
@@ -14,6 +14,9 @@ import { ActivityHeatmap } from './ActivityHeatmap';
 import { LayoutShareDonut } from './LayoutShareDonut';
 import { layoutChartColor, flashRedpointColor } from './profile-chart-colors';
 import { useBottomChromeMetrics } from '../../hooks/use-bottom-chrome-metrics';
+import { OnboardingTipBanner } from '../onboarding/OnboardingTipBanner';
+import { hasSeenTip, markTipSeen } from '../../lib/onboarding/onboarding-storage';
+import { ONBOARDING_TIP_RECORD_KEY } from '@boardsesh/key-value-storage';
 import { spacing } from '../../theme/tokens';
 import { useTheme } from '../../providers/theme-provider';
 
@@ -32,12 +35,32 @@ type ProgressTabProps = {
 export const ProgressTab = memo(function ProgressTab({ data, topInset, screenTitle }: ProgressTabProps) {
   const { t } = useTranslation('profile');
   const { t: tYou } = useTranslation('you');
+  const { t: tCommon } = useTranslation('common');
   const { systemColors, colorScheme, brandColors } = useTheme();
   const bottomChrome = useBottomChromeMetrics();
   const paddingBottom = bottomChrome.scrollBottomPadding + spacing[6];
 
   const totalAscents = data.statisticsSummary.totalAscents;
   const noAscentData = t('empty.noAscentData');
+
+  // One-time record/tracking tip, shown once the user actually has sends to
+  // chart (so "your sends chart out here" is true). Fires once, then never again.
+  const [recordTipVisible, setRecordTipVisible] = useState(false);
+  const hasAscents = totalAscents > 0;
+  useEffect(() => {
+    if (!hasAscents) return;
+    let cancelled = false;
+    void hasSeenTip(ONBOARDING_TIP_RECORD_KEY).then((seen) => {
+      if (!cancelled && !seen) setRecordTipVisible(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [hasAscents]);
+  const dismissRecordTip = useCallback(() => {
+    setRecordTipVisible(false);
+    void markTipSeen(ONBOARDING_TIP_RECORD_KEY);
+  }, []);
 
   // Legends so the layout-colored grade-distribution bars and the
   // flash-vs-redpoint pairs can be decoded (charts are color-only otherwise).
@@ -81,6 +104,17 @@ export const ProgressTab = memo(function ProgressTab({ data, topInset, screenTit
           ScreenTitle hides itself on Material (the M3 app bar owns the title).
           Omitted on another climber's profile, where the name lives in the header. */}
       {screenTitle ? <ScreenTitle style={styles.screenTitle}>{screenTitle}</ScreenTitle> : null}
+
+      {recordTipVisible ? (
+        <View style={styles.tipInset}>
+          <OnboardingTipBanner
+            text={tCommon('mobile.onboarding.tips.record')}
+            dismissLabel={tCommon('actions.close')}
+            onDismiss={dismissRecordTip}
+            icon="chart.bar"
+          />
+        </View>
+      ) : null}
 
       {totalAscents === 0 ? (
         <View style={styles.empty}>
@@ -185,6 +219,7 @@ const styles = StyleSheet.create({
     paddingBottom: spacing[2],
   },
   chartCard: { marginHorizontal: spacing[4] },
+  tipInset: { marginHorizontal: spacing[4], marginBottom: spacing[3] },
   vpTotal: { marginBottom: spacing[2] },
   empty: {
     alignItems: 'center',

@@ -155,6 +155,15 @@ vi.mock('../GeneratorPickerCard', () => ({
   },
 }));
 
+// The onboarding tip banner renders the real Icon (and @expo/vector-icons), and
+// its storage hooks reach SecureStore — both irrelevant to these logic tests, so
+// stub them like the other child components.
+vi.mock('../../../onboarding/OnboardingTipBanner', () => ({ OnboardingTipBanner: () => null }));
+vi.mock('../../../../lib/onboarding/onboarding-storage', () => ({
+  hasSeenTip: vi.fn(async () => true),
+  markTipSeen: vi.fn(async () => {}),
+}));
+
 import { PreSessionView } from '../PreSessionView';
 
 beforeEach(() => {

@@ -59,6 +59,7 @@
     "errorTitle": "No se pudieron cargar tus boards",
     "errorRetry": "Reintentar",
     "boardSwitchError": "No se pudo guardar ese board. Inténtalo de nuevo.",
+    "onboardingPrompt": "Sigue el muro donde escalas: eso es lo que activa su historial.",
     "discovery": {
       "findNearby": "Buscar cerca",
       "bluetooth": "Bluetooth",

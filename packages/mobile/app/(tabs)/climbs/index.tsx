@@ -3,7 +3,7 @@ import { View, StyleSheet, RefreshControl, Keyboard } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
+import { Stack, useFocusEffect, useRouter, useLocalSearchParams } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import type { Climb, BoardName } from '@boardsesh/shared-schema';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
@@ -45,6 +45,8 @@ import { usePlaylistActivation } from '../../../src/lib/playlists/use-playlist-a
 import { toQueueClimb, toQueueClimbs } from '../../../src/lib/climb-types';
 import { parseSetIdsParam, prewarmCreateBoardHolds } from '../../../src/lib/create-board-holds';
 import { useActiveBoard, useSetActiveBoard } from '../../../src/lib/graphql/use-active-board';
+import { OnboardingTipBanner } from '../../../src/components/onboarding/OnboardingTipBanner';
+import { clearBoardRevealTipPending, hasBoardRevealTipPending } from '../../../src/lib/onboarding/onboarding-storage';
 import { useMyBoards } from '../../../src/lib/graphql/hooks';
 import { useAuth } from '../../../src/providers/auth-provider';
 import { ensureBackgroundsCached } from '../../../src/lib/background-image-cache';
@@ -127,16 +129,24 @@ function ClimbListInner() {
   // (see the auto-open effect below). Absent on the plain `/climbs` list shot.
   // screenshotBoardIndex picks which followed board to render (default [0]); the
   // second board-view shot passes 1 to render myBoards[1].
-  const { screenshotOpenFirst, screenshotBoardIndex } = useLocalSearchParams<{
+  const { screenshotOpenFirst, screenshotBoardIndex, screenshotOpenBoardSheet } = useLocalSearchParams<{
     screenshotOpenFirst?: string;
     screenshotBoardIndex?: string;
+    screenshotOpenBoardSheet?: string;
   }>();
   const { t } = useTranslation('climbs');
+  const { t: tCommon } = useTranslation('common');
   const { openClimbActions, openAddToPlaylist, openBoardSheet } = useDrawerHost();
+  // One-time board-history reveal: armed when the user binds a board from the
+  // onboarding hand-off and consumed on focus (see the useFocusEffect below).
+  // Declared here so handleOpenBoardDetail can clear it — tapping the board
+  // button dismisses the badge + banner once the cue has done its job.
+  const [revealTipVisible, setRevealTipVisible] = useState(false);
   // The board capsule opens the wall's "now on the wall" sheet (the board
   // switcher lives inside it).
   const handleOpenBoardDetail = useCallback(() => {
     openBoardSheet();
+    setRevealTipVisible(false);
   }, [openBoardSheet]);
   const { systemColors, variant, brandColors, features } = useTheme();
   const { addToQueue } = useQueueActions();
@@ -286,6 +296,27 @@ function ClimbListInner() {
   }, [isAuthenticated]);
 
   const { data: activeBoard, isLoading: isBoardLoading } = useActiveBoard();
+
+  // One-time board-history reveal banner: armed when the user binds a board from
+  // the onboarding hand-off (app/boards/index.tsx) and consumed on focus so it
+  // shows on the Climbs landing, pointing at the board's "now on the wall" sheet.
+  // The `revealTipVisible` state is declared earlier so handleOpenBoardDetail can
+  // clear it on tap.
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      void hasBoardRevealTipPending().then((pending) => {
+        if (cancelled || !pending) return;
+        setRevealTipVisible(true);
+        void clearBoardRevealTipPending();
+      });
+      return () => {
+        cancelled = true;
+      };
+    }, []),
+  );
+  const dismissRevealTip = useCallback(() => setRevealTipVisible(false), []);
+  const showRevealTip = revealTipVisible && !!activeBoard;
 
   // Screenshot mode: a second board-view shot renders myBoards[1] (the user's 2nd
   // followed board) via ?screenshotBoardIndex=1. Boards are sorted by follow date
@@ -596,6 +627,18 @@ function ClimbListInner() {
     handleClimbPress(firstClimb);
   }, [screenshotOpenFirst, searchReady, visibleClimbs, handleClimbPress, screenshotTargetBoard, activeBoard]);
 
+  // Screenshot mode: deterministically open the board-presence "now on the wall"
+  // sheet (the onboarding hero shot) once the active board resolves, instead of a
+  // coordinate tap. Gated on the deep-link param so normal `/climbs` is untouched;
+  // dead-strips in normal builds.
+  const screenshotBoardSheetOpenedRef = useRef(false);
+  useEffect(() => {
+    if (process.env.EXPO_PUBLIC_SCREENSHOT_MODE !== '1' || !screenshotOpenBoardSheet) return;
+    if (!activeBoard || screenshotBoardSheetOpenedRef.current) return;
+    screenshotBoardSheetOpenedRef.current = true;
+    openBoardSheet();
+  }, [screenshotOpenBoardSheet, activeBoard, openBoardSheet]);
+
   const handleAddToQueue = useCallback(
     (climb: Climb) => {
       addToQueue({ uuid: randomUUID(), climb });
@@ -737,6 +780,16 @@ function ClimbListInner() {
   const listHeader = useMemo(
     () => (
       <>
+        {showRevealTip ? (
+          <OnboardingTipBanner
+            text={tCommon('mobile.onboarding.boardRevealTip')}
+            icon="boards"
+            dismissLabel={tCommon('actions.close')}
+            onPress={handleOpenBoardDetail}
+            onDismiss={dismissRevealTip}
+            style={styles.revealBanner}
+          />
+        ) : null}
         {/* The filter summary now lives persistently in the floating chrome's
             centre (glass) / Appbar (Material), so the list itself opens straight
             into the recent-filter pills and climbs. */}
@@ -751,7 +804,18 @@ function ClimbListInner() {
         ) : null}
       </>
     ),
-    [showRecentPills, recentFilters, filters, name, handleApplyRecentFilter, handleClearRecentFilters],
+    [
+      showRevealTip,
+      handleOpenBoardDetail,
+      dismissRevealTip,
+      tCommon,
+      showRecentPills,
+      recentFilters,
+      filters,
+      name,
+      handleApplyRecentFilter,
+      handleClearRecentFilters,
+    ],
   );
 
   const listFooter = useMemo(
@@ -842,6 +906,10 @@ function ClimbListInner() {
               the climb list with no extra wiring here. */}
           <Button
             title={t('mobile.emptyState.noBoard.cta')}
+            // Plain board picker — this empty state is reachable any time the user
+            // has no active board, not just first-run, so it must NOT tag the bind
+            // as onboarding (which would fire the activation event + arm the
+            // reveal banner outside the first-run hand-off).
             onPress={() => router.push('/boards')}
             variant="filled"
             size="large"
@@ -913,6 +981,7 @@ function ClimbListInner() {
         canCreate={isAuthenticated && hasBoardConfig}
         onCreate={handleCreateClimb}
         onOpenBoardDetail={handleOpenBoardDetail}
+        showBoardBadge={showRevealTip}
         onHeightChange={setSearchBarHeight}
         searchFieldRef={searchHeaderRef}
         searchInitialValue={name}
@@ -1005,5 +1074,10 @@ const styles = StyleSheet.create({
   },
   emptyCta: {
     marginTop: spacing[4],
+  },
+  revealBanner: {
+    marginHorizontal: spacing[4],
+    marginTop: spacing[2],
+    marginBottom: spacing[2],
   },
 });

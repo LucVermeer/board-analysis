@@ -536,9 +536,9 @@
   "mobile": {
     "emptyState": {
       "noBoard": {
-        "title": "Aucun board sélectionné",
-        "subtitle": "Ajoutez un board pour parcourir les blocs",
-        "cta": "Choisir un board"
+        "title": "Suis ton mur",
+        "subtitle": "Choisis le board où tu grimpes pour parcourir ses blocs et voir ce qui est allumé en ce moment.",
+        "cta": "Trouver mon board"
       },
       "noClimbs": {
         "title": "Aucun bloc trouvé",
