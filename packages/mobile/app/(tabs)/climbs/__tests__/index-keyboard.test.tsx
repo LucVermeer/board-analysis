@@ -166,7 +166,10 @@ vi.mock('../../../../src/hooks/use-bottom-chrome-metrics', () => ({
   }),
 }));
 
-vi.mock('../../../../src/lib/graphql/hooks', () => ({ useGrades: () => ({ data: [] }) }));
+vi.mock('../../../../src/lib/graphql/hooks', () => ({
+  useGrades: () => ({ data: [] }),
+  useMyBoards: () => ({ data: undefined }),
+}));
 vi.mock('../../../../src/hooks/use-grade-format', () => ({
   useGradeFormat: () => ({ formatGradeByDifficultyId: (difficultyId: number) => String(difficultyId) }),
 }));
@@ -205,6 +208,7 @@ vi.mock('../../../../src/lib/graphql/use-active-board', () => ({
     data: { boardType: 'kilter', layoutId: 1, sizeId: 10, setIds: '1', angle: 40 },
     isLoading: false,
   }),
+  useSetActiveBoard: () => async () => {},
 }));
 
 vi.mock('../../../../src/providers/auth-provider', () => ({ useAuth: () => ({ isAuthenticated: true }) }));

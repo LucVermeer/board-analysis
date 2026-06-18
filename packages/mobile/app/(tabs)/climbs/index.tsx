@@ -44,7 +44,8 @@ import { getHttpClient } from '../../../src/lib/graphql/client';
 import { usePlaylistActivation } from '../../../src/lib/playlists/use-playlist-activation';
 import { toQueueClimb, toQueueClimbs } from '../../../src/lib/climb-types';
 import { parseSetIdsParam, prewarmCreateBoardHolds } from '../../../src/lib/create-board-holds';
-import { useActiveBoard } from '../../../src/lib/graphql/use-active-board';
+import { useActiveBoard, useSetActiveBoard } from '../../../src/lib/graphql/use-active-board';
+import { useMyBoards } from '../../../src/lib/graphql/hooks';
 import { useAuth } from '../../../src/providers/auth-provider';
 import { ensureBackgroundsCached } from '../../../src/lib/background-image-cache';
 import {
@@ -124,7 +125,12 @@ function ClimbListInner() {
   const router = useRouter();
   // Screenshot mode opens the first climb's board view via this deep-link param
   // (see the auto-open effect below). Absent on the plain `/climbs` list shot.
-  const { screenshotOpenFirst } = useLocalSearchParams<{ screenshotOpenFirst?: string }>();
+  // screenshotBoardIndex picks which followed board to render (default [0]); the
+  // second board-view shot passes 1 to render myBoards[1].
+  const { screenshotOpenFirst, screenshotBoardIndex } = useLocalSearchParams<{
+    screenshotOpenFirst?: string;
+    screenshotBoardIndex?: string;
+  }>();
   const { t } = useTranslation('climbs');
   const { openClimbActions, openAddToPlaylist, openBoardSheet } = useDrawerHost();
   // The board capsule opens the wall's "now on the wall" sheet (the board
@@ -280,6 +286,24 @@ function ClimbListInner() {
   }, [isAuthenticated]);
 
   const { data: activeBoard, isLoading: isBoardLoading } = useActiveBoard();
+
+  // Screenshot mode: a second board-view shot renders myBoards[1] (the user's 2nd
+  // followed board) via ?screenshotBoardIndex=1. Boards are sorted by follow date
+  // so [0]/[1] are deterministic; the auto-activator sets [0] on boot for every
+  // other shot. All of this dead-strips in normal builds (the gate is inlined).
+  const setActiveBoard = useSetActiveBoard();
+  const { data: screenshotBoardConnection } = useMyBoards(undefined, {
+    enabled: process.env.EXPO_PUBLIC_SCREENSHOT_MODE === '1' && isAuthenticated && !!screenshotBoardIndex,
+  });
+  const screenshotTargetBoard = useMemo(() => {
+    if (process.env.EXPO_PUBLIC_SCREENSHOT_MODE !== '1' || !screenshotBoardIndex) return null;
+    const index = Number.parseInt(screenshotBoardIndex, 10);
+    if (!Number.isInteger(index) || index < 0) return null;
+    const sorted = [...(screenshotBoardConnection?.boards ?? [])].sort(
+      (first, second) => new Date(first.createdAt).getTime() - new Date(second.createdAt).getTime(),
+    );
+    return sorted[index] ?? null;
+  }, [screenshotBoardIndex, screenshotBoardConnection]);
 
   const boardName = activeBoard?.boardType ?? '';
   const layoutId = activeBoard?.layoutId ?? 0;
@@ -546,20 +570,31 @@ function ClimbListInner() {
     [activateClimbListClimb, blurSearchInputs],
   );
 
+  // Screenshot mode: when a specific board index is requested, switch the active
+  // board to it first; the open-first effect below waits until it's active.
+  useEffect(() => {
+    if (!screenshotTargetBoard || activeBoard?.uuid === screenshotTargetBoard.uuid) return;
+    void setActiveBoard(screenshotTargetBoard);
+  }, [screenshotTargetBoard, activeBoard, setActiveBoard]);
+
   // Screenshot mode: deterministically open the first climb's play drawer (the
   // board-view shot) instead of a Maestro coordinate tap, which can't match RN
   // rows on this iOS build and was capturing the climb list twice. Gated on the
   // deep-link param so the plain `/climbs` list shot is untouched; fires once the
-  // board's results land, and at most once. Dead-strips in normal builds.
-  const screenshotBoardViewOpenedRef = useRef(false);
+  // board's results land. Keyed by the active board's uuid (not a one-shot bool)
+  // so a SECOND board-view shot on a different board re-fires. Dead-strips in
+  // normal builds.
+  const screenshotOpenedForBoardRef = useRef<string | null>(null);
   useEffect(() => {
     if (process.env.EXPO_PUBLIC_SCREENSHOT_MODE !== '1' || !screenshotOpenFirst) return;
-    if (screenshotBoardViewOpenedRef.current) return;
+    // When a specific board is requested, wait until it's the active board.
+    if (screenshotTargetBoard && activeBoard?.uuid !== screenshotTargetBoard.uuid) return;
+    if (!activeBoard || screenshotOpenedForBoardRef.current === activeBoard.uuid) return;
     const firstClimb = visibleClimbs[0];
     if (!searchReady || !firstClimb) return;
-    screenshotBoardViewOpenedRef.current = true;
+    screenshotOpenedForBoardRef.current = activeBoard.uuid;
     handleClimbPress(firstClimb);
-  }, [screenshotOpenFirst, searchReady, visibleClimbs, handleClimbPress]);
+  }, [screenshotOpenFirst, searchReady, visibleClimbs, handleClimbPress, screenshotTargetBoard, activeBoard]);
 
   const handleAddToQueue = useCallback(
     (climb: Climb) => {

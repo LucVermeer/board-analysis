@@ -45,10 +45,10 @@ Canonical: [`fastlane/metadata/en-US/release_notes.txt`](../../fastlane/metadata
 
 iPhone 6.9" (1320×2868), captured + uploaded by `vp run mobile:screenshots` (Maestro → fastlane; see `packages/mobile/.maestro/README.md`). Ten slots, in store display order (the filename prefix sets the order):
 
-1. `00-home` — activity feed, your crew's sessions
+1. `00-home` — the global "Everyone" activity feed
 2. `01-climbs` — browse the board's climbs
 3. `02-board-view` — a climb with the holds lit (the signature view)
-4. `03-party` — a live, shared Party Mode session (filled by the party flow)
+4. `03-board-view-2` — a climb lit on a second board (`myBoards[1]`), showing multi-board support
 5. `04-session-detail` — a session recap: stats, leaderboard, sends
 6. `05-workout-generator` — the Record tab's workout generator
 7. `06-discover` — the playlist library
