@@ -14,19 +14,19 @@
 
 ## Basic Info
 
-| Field              | Value                            |
-| ------------------ | -------------------------------- |
-| App Name           | Boardsesh                        |
-| Package Name       | com.boardsesh.app                |
-| Category           | Health & Fitness                 |
-| Tags               | Sports, Fitness                  |
-| Content Rating     | Everyone (IARC)                  |
-| Pricing            | Free                             |
-| Contains Ads       | No                               |
-| In-app Purchases   | No                               |
-| Contact Email      | TODO: fill in team contact email |
-| Support URL        | https://boardsesh.com            |
-| Privacy Policy URL | https://boardsesh.com/privacy    |
+| Field              | Value                         |
+| ------------------ | ----------------------------- |
+| App Name           | Boardsesh                     |
+| Package Name       | com.boardsesh.app             |
+| Category           | Health & Fitness              |
+| Tags               | Sports, Fitness               |
+| Content Rating     | Everyone (IARC)               |
+| Pricing            | Free                          |
+| Contains Ads       | No                            |
+| In-app Purchases   | No                            |
+| Contact Email      | sales@boardsesh.com           |
+| Support URL        | https://boardsesh.com         |
+| Privacy Policy URL | https://boardsesh.com/privacy |
 
 ## Short Description
 

@@ -3,7 +3,7 @@ Cherche une voie et regarde ton mur allumer les prises. Tu tapes un bloc, les pr
 UNE SEULE APPLI POUR TOUTES TES BOARDS
 Kilter, Tension et MoonBoard ont chacune leur appli pour leur propre board. Boardsesh marche avec toutes, plus Decoy, Touchstone, Grasshopper et So iLL, au même endroit. Cherche n’importe quelle voie et Boardsesh l’envoie au mur en Bluetooth, en allumant les prises. Contrôle complet des LED sur les sept boards.
 
-L’intérêt d’une seule appli, c’est les deux choses qu’une appli mono-board ne te donne pas : un historique de board toujours actif, et des séances que tu pilotes avec ta crew.
+Une seule appli te donne deux choses qu’une appli mono-board ne peut pas : un historique de board toujours actif, et des séances que tu pilotes avec ta crew.
 
 L’HISTORIQUE DE BOARD, TOUJOURS ACTIF
 Chaque board sur laquelle tu te connectes a un fil live de ce qui est allumé sur ce mur en ce moment : la voie en cours, qui l’a allumée, la cotation et l’inclinaison, qui l’a ouverte, et les sends récents. Tu ne lances rien. C’est juste là quand tu es sur cette board, et ça se met à jour au fil des essais.

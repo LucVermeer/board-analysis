@@ -1,1 +1,1 @@
-Allume n’importe quelle board LED en Bluetooth.
+Allume n'importe quel mur LED en Bluetooth. Une file, des sends avec ta crew.
