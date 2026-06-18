@@ -8,4 +8,4 @@ export * from './board-utils';
 export * from './swipe-carousel';
 export * from './wall-confirm-bus';
 export * from './wall-confirm-fallback';
-export { buildClimbViewPath, buildReadableClimbViewPath } from './url-utils';
+export { buildClimbViewPath } from './url-utils';

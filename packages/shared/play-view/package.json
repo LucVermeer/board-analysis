@@ -9,6 +9,11 @@
       "types": "./src/index.ts",
       "import": "./src/index.ts",
       "default": "./src/index.ts"
+    },
+    "./readable-url-utils": {
+      "types": "./src/readable-url-utils.ts",
+      "import": "./src/readable-url-utils.ts",
+      "default": "./src/readable-url-utils.ts"
     }
   },
   "scripts": {

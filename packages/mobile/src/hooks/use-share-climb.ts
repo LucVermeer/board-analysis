@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { Platform, Share } from 'react-native';
-import { buildReadableClimbViewPath } from '@boardsesh/play-view';
+import { buildReadableClimbViewPath } from '@boardsesh/play-view/readable-url-utils';
 import type { Climb } from '@boardsesh/shared-schema';
 import { WEB_BASE_URL } from '../lib/env';
 
