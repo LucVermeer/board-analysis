@@ -28,4 +28,4 @@ Follow your crew and setters, search climbers, and pin playlists from Discover.
 FREE, NO ADS, NO SUBSCRIPTIONS
 Open source on GitHub.
 
-Boardsesh works with these boards and is not affiliated with or endorsed by Aurora Climbing or Moon Climbing.
+Boardsesh is a community effort that works with these boards and is not affiliated with or endorsed by any board manufacturer.
