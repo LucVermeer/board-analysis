@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { buildClimbViewPath, buildReadableClimbViewPath } from '../url-utils';
+import { buildReadableClimbViewPath } from '../readable-url-utils';
+import { buildClimbViewPath } from '../url-utils';
 
 describe('buildClimbViewPath', () => {
   it('builds a correct climb view path', () => {
@@ -67,5 +68,35 @@ describe('buildReadableClimbViewPath', () => {
         climbName: 'Test Climb',
       }),
     ).toBe('/kilter/8/25/26,9999/35/view/test-climb-abc123');
+  });
+
+  it('falls back to numeric path when set ids contain invalid text', () => {
+    expect(
+      buildReadableClimbViewPath({
+        boardName: 'kilter',
+        layoutId: 8,
+        sizeId: 25,
+        setIds: '26,abc',
+        angle: 35,
+        climbUuid: 'abc123',
+        climbName: 'Test Climb',
+      }),
+    ).toBe('/kilter/8/25/26,abc/35/view/test-climb-abc123');
+  });
+
+  it('builds readable MoonBoard paths', () => {
+    expect(
+      buildReadableClimbViewPath({
+        boardName: 'moonboard',
+        layoutId: 3,
+        sizeId: 1,
+        setIds: '5,6,7,8',
+        angle: 40,
+        climbUuid: 'moon123',
+        climbName: 'Wood Test',
+      }),
+    ).toBe(
+      '/moonboard/2024/standard-11x18-grid/wooden-holds_hold-set-f_hold-set-e_hold-set-d/40/view/wood-test-moon123',
+    );
   });
 });

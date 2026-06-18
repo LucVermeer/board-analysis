@@ -50,7 +50,9 @@ vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => k
 vi.mock('expo-router', () => ({ useRouter: () => ({ push: vi.fn() }) }));
 vi.mock('expo-clipboard', () => ({ setStringAsync: clipboard.setStringAsync }));
 vi.mock('expo-web-browser', () => ({ openBrowserAsync: vi.fn() }));
-vi.mock('@boardsesh/play-view', () => ({ buildReadableClimbViewPath: urlBuilder.buildReadableClimbViewPath }));
+vi.mock('@boardsesh/play-view/readable-url-utils', () => ({
+  buildReadableClimbViewPath: urlBuilder.buildReadableClimbViewPath,
+}));
 vi.mock('@boardsesh/create-climb-react', () => ({ computeCanUpdate: () => ctrl.canUpdate }));
 vi.mock('@boardsesh/analytics', () => ({ SHARED_EVENTS: {} }));
 vi.mock('../../providers/toast-provider', () => ({ useToast: () => ({ showToast: vi.fn() }) }));

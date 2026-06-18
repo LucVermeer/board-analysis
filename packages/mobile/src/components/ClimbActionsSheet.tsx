@@ -6,7 +6,7 @@ import { useRouter } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
 import * as WebBrowser from 'expo-web-browser';
 import type { BoardName, Climb } from '@boardsesh/shared-schema';
-import { buildReadableClimbViewPath } from '@boardsesh/play-view';
+import { buildReadableClimbViewPath } from '@boardsesh/play-view/readable-url-utils';
 import { computeCanUpdate, type SavedClimbSnapshot } from '@boardsesh/create-climb-react';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { ModalSheet } from './ModalSheet';
