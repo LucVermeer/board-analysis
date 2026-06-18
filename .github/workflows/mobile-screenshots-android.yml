@@ -230,6 +230,30 @@ jobs:
           SCREENSHOT_ANDROID_DEVICE: ${{ inputs.android_device || 'Pixel 2' }}
           SCREENSHOT_APK_PATH: /tmp/boardsesh-screenshot.apk
 
+      # Hard backstop against a blank capture (the play-drawer modal occasionally
+      # didn't composite into adb screencap — a blank board-view hero even reached
+      # the store once). A blank frame is just the status bar and compresses to
+      # ~16KB; every real screen here is >140KB. Fail the run if any shot is
+      # suspiciously small, so the upload below (gated on success()) can't push a
+      # blank. Bump min_bytes if a legitimately sparse screen is ever added.
+      - name: Assert screenshots are not blank
+        if: ${{ inputs.flow != 'onboarding' }}
+        run: |
+          set -euo pipefail
+          shots_dir=app-stores/google/screenshots
+          min_bytes=61440
+          fail=0
+          while IFS= read -r -d '' shot; do
+            size=$(stat -c%s "$shot")
+            if [ "$size" -lt "$min_bytes" ]; then
+              echo "::error::Blank/near-empty screenshot: $shot is ${size} bytes (< ${min_bytes}); likely a failed modal capture."
+              fail=1
+            else
+              echo "ok: $shot (${size} bytes)"
+            fi
+          done < <(find "$shots_dir" -type f -name '*.png' -print0)
+          [ "$fail" -eq 0 ] || exit 1
+
       - name: Assert screenshot dimensions
         # The onboarding flow captures different screens than the Play Store set, so
         # the dimension gate doesn't apply to it.
