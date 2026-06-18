@@ -97,6 +97,17 @@ name: app-store screenshots android
     visible:
       id: 'play-drawer-board-overlay'
     timeout: 60000
+# The play-drawer modal composites onto a layer adb screencap doesn't read until
+# the window redraws, so it captured blank even with the board painted (it only
+# captured before because the onboarding tip's root view forced a recomposite). A
+# small horizontal swipe on the board forces the modal window to redraw; the
+# carousel springs back to the same climb (sub-threshold), and waitForAnimationToEnd
+# holds until it settles — with the board now in the captured frame.
+- swipe:
+    start: '55%, 45%'
+    end: '42%, 45%'
+- waitForAnimationToEnd:
+    timeout: 30000
 - waitForAnimationToEnd:
     timeout: 30000
 - takeScreenshot: 02-board-view
