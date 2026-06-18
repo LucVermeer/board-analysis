@@ -6,23 +6,19 @@ import type { ClimbActionId } from '../use-climb-actions';
 
 const ctrl = vi.hoisted(() => ({ canUpdate: false }));
 const openers = vi.hoisted(() => ({
-  openPlayDrawer: vi.fn(),
   openAddToPlaylist: vi.fn(),
   openLogAscent: vi.fn(),
   openAddBetaVideo: vi.fn(),
   addToQueue: vi.fn(),
   toggleFavoriteMutate: vi.fn(),
   push: vi.fn(),
-  showToast: vi.fn(),
-  setStringAsync: vi.fn(async () => {}),
+  shareClimb: vi.fn(async () => {}),
 }));
 
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock('expo-router', () => ({ useRouter: () => ({ push: openers.push }) }));
 vi.mock('expo-crypto', () => ({ randomUUID: () => 'queue-uuid' }));
-vi.mock('expo-clipboard', () => ({ setStringAsync: openers.setStringAsync }));
 vi.mock('expo-web-browser', () => ({ openBrowserAsync: vi.fn(async () => {}) }));
-vi.mock('@boardsesh/play-view', () => ({ buildClimbViewPath: () => '/view/x' }));
 vi.mock('@boardsesh/create-climb-react', () => ({ computeCanUpdate: () => ctrl.canUpdate }));
 vi.mock('@boardsesh/analytics', () => ({ SHARED_EVENTS: {} }));
 vi.mock('../../../providers/drawer-host-provider', () => ({
@@ -35,7 +31,6 @@ vi.mock('../../../providers/drawer-host-provider', () => ({
 vi.mock('../../../providers/queue-provider', () => ({
   useQueueActions: () => ({ addToQueue: openers.addToQueue }),
 }));
-vi.mock('../../../providers/toast-provider', () => ({ useToast: () => ({ showToast: openers.showToast }) }));
 vi.mock('../../../providers/theme-provider', () => ({
   useTheme: () => ({
     actionColors: { success: '#0a0', favorite: '#f00', accent: '#00f', neutral: '#fff', pin: '#6D28D9' },
@@ -45,8 +40,7 @@ vi.mock('../../../lib/graphql/hooks', () => ({
   useToggleFavorite: () => ({ mutate: openers.toggleFavoriteMutate }),
   useFavoriteStatus: () => ({ data: false }),
 }));
-vi.mock('../../../lib/climb-to-queue-item', () => ({ climbToQueueItem: (climb: unknown) => ({ uuid: 'qi', climb }) }));
-vi.mock('../../../lib/env', () => ({ WEB_BASE_URL: 'https://boardsesh.test' }));
+vi.mock('../../../hooks/use-share-climb', () => ({ useShareClimb: () => openers.shareClimb }));
 vi.mock('../../../lib/analytics', () => ({ track: vi.fn() }));
 
 import { useClimbActions } from '../use-climb-actions';
@@ -82,7 +76,7 @@ describe('useClimbActions gating', () => {
       'favorite',
       'tick',
       'fork',
-      'copyLink',
+      'share',
     ]);
   });
 
@@ -141,5 +135,11 @@ describe('useClimbActions colours and dispatch', () => {
     const { result } = renderHook(() => useClimbActions({ climb, boardConfig: kilterBoard, isAuthenticated: false }));
     result.current.find((action) => action.id === 'playlist')?.run();
     expect(openers.openAddToPlaylist).toHaveBeenCalledWith(climb, kilterBoard);
+  });
+
+  it('share.run opens the native share sheet', () => {
+    const { result } = renderHook(() => useClimbActions({ climb, boardConfig: kilterBoard, isAuthenticated: false }));
+    result.current.find((action) => action.id === 'share')?.run();
+    expect(openers.shareClimb).toHaveBeenCalledTimes(1);
   });
 });

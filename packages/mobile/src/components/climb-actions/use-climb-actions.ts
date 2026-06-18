@@ -5,7 +5,8 @@
 //
 // The hook self-sources every opener (queue / playlist / tick / beta video) from
 // `useDrawerHost`, the favourite state + mutation from `useFavoriteStatus` /
-// `useToggleFavorite`, and the create-climb routes from the router, so a caller only
+// `useToggleFavorite`, the native share from `useShareClimb`, and the create-climb
+// routes from the router, so a caller only
 // supplies the climb, its board config, and the two contextual flags (`currentUserId`,
 // `isAuthenticated`) plus the logbook-only `onEditEntry`.
 
@@ -14,19 +15,16 @@ import type { OpaqueColorValue } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useRouter } from 'expo-router';
 import { randomUUID } from 'expo-crypto';
-import * as Clipboard from 'expo-clipboard';
 import * as WebBrowser from 'expo-web-browser';
 import type { Climb } from '@boardsesh/shared-schema';
-import { buildClimbViewPath } from '@boardsesh/play-view';
 import { computeCanUpdate, type SavedClimbSnapshot } from '@boardsesh/create-climb-react';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
 import type { IconName } from '../icon-map';
 import { useDrawerHost, type BoardConfig } from '../../providers/drawer-host-provider';
 import { useQueueActions } from '../../providers/queue-provider';
-import { useToast } from '../../providers/toast-provider';
 import { useToggleFavorite, useFavoriteStatus } from '../../lib/graphql/hooks';
 import { useTheme } from '../../providers/theme-provider';
-import { WEB_BASE_URL } from '../../lib/env';
+import { useShareClimb } from '../../hooks/use-share-climb';
 import { track } from '../../lib/analytics';
 
 export type ClimbActionId =
@@ -38,7 +36,7 @@ export type ClimbActionId =
   | 'betaVideo'
   | 'edit'
   | 'fork'
-  | 'copyLink'
+  | 'share'
   | 'openInApp';
 
 export type ClimbActionItem = {
@@ -84,11 +82,19 @@ export function useClimbActions({
 }: UseClimbActionsArgs): ClimbActionItem[] {
   const { t } = useTranslation('climbs');
   const router = useRouter();
-  const { showToast } = useToast();
   const { actionColors } = useTheme();
   const { addToQueue } = useQueueActions();
   const { mutate: toggleFavoriteMutate } = useToggleFavorite();
   const { openAddToPlaylist, openLogAscent, openAddBetaVideo } = useDrawerHost();
+  // Native share sheet — the same action the play drawer uses.
+  const shareClimb = useShareClimb({
+    climb,
+    boardName: boardConfig?.boardName ?? '',
+    layoutId: boardConfig?.layoutId ?? 0,
+    sizeId: boardConfig?.sizeId ?? 0,
+    setIds: boardConfig?.setIds ?? '',
+    angle: boardConfig?.angle ?? 0,
+  });
   // Server-truth favourite state, so the favorite row shows a filled heart when the
   // climb is already favourited. Only fetched while the menu is open (the hook is
   // mounted only then). useToggleFavorite invalidates this query, so it stays fresh.
@@ -261,19 +267,16 @@ export function useClimbActions({
     });
 
     items.push({
-      id: 'copyLink',
-      title: t('mobile.climbActions.copyLink'),
-      icon: 'copy',
+      id: 'share',
+      title: t('share.actionLabel'),
+      icon: 'share',
       color: accentColor,
       run: () => {
-        // Dismiss the overlay immediately, then do the async copy + toast.
+        // Dismiss the overlay, then open the native share sheet (same as the play
+        // drawer). .catch so a dismissed/failed share isn't an unhandled rejection.
         after();
-        void (async () => {
-          const url = `${WEB_BASE_URL}${buildClimbViewPath(boardName, layoutId, sizeId, setIds, angle, climb.uuid)}`;
-          await Clipboard.setStringAsync(url);
-          track(SHARED_EVENTS.ClimbShared, { method: 'copy_link', climbUuid: climb.uuid, boardName, layoutId });
-          showToast(t('mobile.climbActions.linkCopied'), 'info');
-        })();
+        track(SHARED_EVENTS.ClimbShared, { method: 'share', climbUuid: climb.uuid, boardName, layoutId });
+        void shareClimb().catch(() => {});
       },
     });
 
@@ -288,7 +291,8 @@ export function useClimbActions({
           // (openBrowserAsync only resolves when the browser is closed).
           after();
           track(SHARED_EVENTS.OpenInAuroraApp, { climbUuid: climb.uuid, boardName, layoutId });
-          void WebBrowser.openBrowserAsync(auroraAppUrl);
+          // .catch so a browser-open rejection doesn't become an unhandled rejection.
+          void WebBrowser.openBrowserAsync(auroraAppUrl).catch(() => {});
         },
       });
     }
@@ -304,7 +308,7 @@ export function useClimbActions({
     t,
     actionColors,
     router,
-    showToast,
+    shareClimb,
     addToQueue,
     toggleFavoriteMutate,
     isFavorited,
