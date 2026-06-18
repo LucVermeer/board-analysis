@@ -1,1 +1,1 @@
-Light up any LED board over Bluetooth.
+Light any LED board over Bluetooth. Share one queue and send with your crew.

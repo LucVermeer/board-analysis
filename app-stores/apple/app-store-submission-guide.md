@@ -15,18 +15,11 @@ Make sure your signing certificate and provisioning profile are installed in Xco
 
 ---
 
-## 1. Generate Assets (App Icon, Splash Screen)
+## 1. App Icon and Splash Screen
 
-From the repo root:
+The app icon and splash screen are defined in `packages/mobile/app.config.ts` (`icon: ./assets/icon.png` and the `expo-splash-screen` plugin pointing at `splash-icon.png`). There is no separate asset-generation step.
 
-```bash
-cd mobile
-bun run generate-assets
-```
-
-This generates all required icon sizes and splash screen assets from the source images in `mobile/resources/`. The output goes into `mobile/ios/App/App/Assets.xcassets/`.
-
-Verify the generated assets look correct before proceeding.
+`expo prebuild` reads `app.config.ts` and generates the native iOS asset catalog and `Info.plist` (these aren't committed). The build flow in section 3 runs prebuild for you. If you've changed the source images, just regenerate the build — the new icon and splash flow through automatically.
 
 ---
 
@@ -138,17 +131,29 @@ see `fastlane/README.md`.
 
 ## 3. Build & Archive
 
-1. Open `mobile/ios/App/App.xcworkspace` in Xcode.
-2. In the top toolbar, set the build target to **Any iOS Device (arm64)** (not a simulator).
-3. Menu: **Product > Archive**.
-4. Wait for the build and archive to complete. This can take a few minutes.
-5. When done, the Xcode Organizer window opens automatically showing your new archive.
+Production builds go through **EAS Build**, not a manual Xcode archive:
 
-If the archive fails:
+```bash
+eas build --profile production -p ios
+```
+
+This is what the `.github/workflows/ios-testflight-rn.yml` pipeline runs. EAS runs `expo prebuild`, installs CocoaPods, and produces the signed archive; version and build numbers are managed remotely (`appVersionSource: "remote"` in `eas.json`).
+
+### Local Xcode build (optional)
+
+To build locally instead:
+
+```bash
+vp run mobile:ios
+```
+
+This runs `expo prebuild` (which generates the `packages/mobile/ios/` project and installs pods during prebuild) and then a cached Xcode build of that generated project. If you need an archive from Xcode, open the prebuild-generated `packages/mobile/ios/` workspace, set the target to **Any iOS Device (arm64)**, and run **Product > Archive**.
+
+If a build fails:
 
 - Check that your signing certificate is valid and not expired.
 - Check that the provisioning profile matches the bundle ID `com.boardsesh.app`.
-- Check that Capacitor native dependencies are installed: `cd mobile/ios/App && pod install`.
+- Re-run `expo prebuild` to regenerate the native project and reinstall pods.
 
 ---
 
@@ -184,14 +189,7 @@ Go to https://appstoreconnect.apple.com and sign in with your Apple Developer ac
 ### For all submissions
 
 1. Select the app, then go to the current version (e.g., 1.0).
-2. Fill in each field using the values from `mobile/metadata/app-store-metadata.md`:
-   - **Subtitle**: Train on Kilter, Tension & more
-   - **Description**: Copy the full description from the metadata file.
-   - **Keywords**: Copy the keyword string from the metadata file.
-   - **Support URL**: https://boardsesh.com
-   - **Marketing URL**: https://boardsesh.com
-   - **What's New**: Copy from the metadata file.
-   - **Review Notes**: Copy the full review notes section from the metadata file.
+2. The listing text (subtitle, description, keywords, what's new, support/marketing URLs, review notes) lives in `fastlane/metadata/en-US/` and is uploaded by the `ios metadata` fastlane lane — you normally don't fill these in by hand. For the operational steps and the canonical field reference, see `app-stores/apple/app-store-metadata.md`. If you do edit a field manually in App Store Connect, use the values from those fastlane files so the next lane run doesn't overwrite your changes.
 3. Upload screenshots for each required device size — or run the automated
    upload (see "Automated upload to App Store Connect" under section 2).
 4. Set the **App Category** to Health & Fitness (primary) and Sports (secondary).
@@ -270,13 +268,13 @@ App Store Connect asks about data collection during submission. Answer based on 
 
 ### 4.2 Minimum Functionality (web wrapper)
 
-Apple rejects apps that are just websites wrapped in a WebView without meaningful native functionality. Our defense:
+Apple rejects apps that are just websites wrapped in a WebView without meaningful native functionality. This is a fully native React Native app — it renders native UI and has no web view at all — so the web-wrapper risk is weak. Our defense:
 
-- **This app requires native CoreBluetooth to communicate with Kilter Board and Tension Board hardware.** The Web Bluetooth API is not supported on iOS (https://caniuse.com/web-bluetooth). This is the sole reason the native app exists.
+- **This is a native React Native app with no WebView.** The screens are native RN components, not a hosted website. There is no embedded browser anywhere in the app.
+- **BLE is native-only and core to the app.** The app talks to Kilter Board and Tension Board hardware over native CoreBluetooth via `react-native-ble-plx`, which bridges to `CBCentralManager` (device discovery) and `CBPeripheral` (characteristic writes to the board's Nordic UART Service). There is no web fallback — Web Bluetooth is not supported on iOS (https://caniuse.com/web-bluetooth).
 - The app declares `bluetooth-le` in `UIRequiredDeviceCapabilities` and `bluetooth-central` in `UIBackgroundModes`, signaling that BLE is core functionality.
-- The Capacitor BluetoothLe plugin (CapacitorCommunityBluetoothLe) provides the CoreBluetooth bridge. The native implementation uses `CBCentralManager` for device discovery and `CBPeripheral` for characteristic writes to the board's Nordic UART Service.
 - Include a screenshot of the Bluetooth pairing flow in the screenshots.
-- If questioned, respond with: "This app requires native CoreBluetooth to communicate with Kilter Board hardware. Web Bluetooth is not supported on iOS. The app uses CBCentralManager to scan for boards advertising the Aurora BLE service (UUID 4488b571-7806-4df6-bcff-a2897e4953ff) and writes LED lighting commands to the Nordic UART RX characteristic (UUID 6e400002-b5a3-f393-e0a9-e50e24dcca9e). This functionality is not available in any iOS browser."
+- If questioned, respond with: "This is a native React Native app with no web view. It requires native CoreBluetooth (via react-native-ble-plx) to communicate with Kilter Board hardware. Web Bluetooth is not supported on iOS. The app uses CBCentralManager to scan for boards advertising the Aurora BLE service (UUID 4488b571-7806-4df6-bcff-a2897e4953ff) and writes LED lighting commands to the Nordic UART RX characteristic (UUID 6e400002-b5a3-f393-e0a9-e50e24dcca9e). This functionality is not available in any iOS browser."
 
 ### 5.1.1(v) Account Deletion
 
@@ -288,8 +286,8 @@ Apple requires all apps with account creation to also support account deletion.
 ### 2.1 Performance (App Completeness)
 
 - Test the app on a real device (not just simulator) before submitting.
-- Make sure the app loads within a few seconds on a good network connection.
-- If the Capacitor WebView takes too long to load, Apple may reject for performance. Consider adding a native splash screen that stays visible until the web content is ready.
+- Make sure the app launches and reaches an interactive screen within a few seconds on a good network connection.
+- The splash screen is configured by the `expo-splash-screen` plugin in `app.config.ts`; verify it dismisses cleanly once the first screen is ready.
 
 ### 2.5.1 Software Requirements
 
@@ -315,7 +313,7 @@ Apple requires all apps with account creation to also support account deletion.
 
 Apple reviewers sometimes ask for more detail about Bluetooth usage. Be ready to explain:
 
-- **Framework used:** CoreBluetooth, accessed via the CapacitorCommunityBluetoothLe plugin. The native implementation uses `CBCentralManager` (Central role) and `CBPeripheral` for GATT operations.
+- **Framework used:** Native CoreBluetooth, accessed via `react-native-ble-plx`. The native implementation uses `CBCentralManager` (Central role) and `CBPeripheral` for GATT operations.
 - **Services and characteristics:** The app scans for devices advertising the Aurora service (UUID `4488b571-7806-4df6-bcff-a2897e4953ff`). After connecting, it discovers the Nordic UART Service (UUID `6e400001-b5a3-f393-e0a9-e50e24dcca9e`) and writes to the RX characteristic (UUID `6e400002-b5a3-f393-e0a9-e50e24dcca9e`).
 - **Data direction:** One-way only — phone to board. The app sends LED lighting commands (hold positions and colors) so the board illuminates the correct holds for a climb.
 - **No personal data:** No personal, health, or identifying information is transmitted over Bluetooth. Only LED position and color bytes.

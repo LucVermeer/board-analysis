@@ -3,7 +3,7 @@ Busca una vía y mira cómo tu muro ilumina las presas. Toca un bloque, las pres
 UNA APP PARA TODOS TUS MUROS
 Kilter, Tension y MoonBoard tienen cada uno su propia app para su propio muro. Boardsesh funciona con todos ellos, más Decoy, Touchstone, Grasshopper y So iLL, en un solo sitio. Busca cualquier vía y Boardsesh la manda al muro por Bluetooth, encendiendo las presas. Control total de los LED en los siete muros.
 
-La gracia de tener una sola app son las dos cosas que una app de un solo muro no te da: el historial del muro siempre activo y las sesiones que llevas con tu peña.
+Una sola app te da dos cosas que una app de un solo muro no puede: el historial del muro siempre activo y las sesiones que llevas con tu peña.
 
 HISTORIAL DEL MURO, SIEMPRE ACTIVO
 Cada muro al que te conectas tiene un feed en directo de lo que está encendido en esa pared ahora mismo: la vía que hay puesta en este momento, quién la encendió, el grado y el ángulo, quién la montó y los encadenes recientes. No tienes que abrir nada. Está ahí cuando estás en ese muro, actualizándose según caen las pegadas.

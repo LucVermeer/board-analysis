@@ -3,7 +3,7 @@ Search a climb and watch your wall light the holds. Tap a problem, the holds glo
 ONE APP FOR EVERY BOARD YOU CLIMB
 Kilter, Tension and MoonBoard each have their own app for their own board. Boardsesh works across all of them, plus Decoy, Touchstone, Grasshopper and So iLL, in one place. Search any climb and Boardsesh sends it to the wall over Bluetooth, lighting the holds. Full LED control on all seven boards.
 
-The payoff of one app is the two things a single-board app can't give you: board history that's always on, and sessions you drive with your crew.
+One app gets you two things a single-board app can't: board history that's always on, and sessions you drive with your crew.
 
 BOARD HISTORY, ALWAYS ON
 Every board you connect to has a live feed of what's lit on that wall right now: the climb up at the moment, who lit it, the grade and angle, who set it, and recent sends. You don't start anything. It's just there when you're on that board, updating as burns happen.

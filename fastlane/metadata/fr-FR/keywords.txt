@@ -1,1 +1,1 @@
-MoonBoard,kilter,tension,bloc,escalade,grimpe,beta,send,bluetooth,led,seance,mur,ouvreur
+MoonBoard,Kilter,Tension,bloc,escalade,grimpe,beta,voie,cotation,bluetooth,led,seance,ouvreur
