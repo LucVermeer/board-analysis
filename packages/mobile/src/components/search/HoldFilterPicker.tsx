@@ -1,17 +1,17 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react';
-import { View, Pressable, StyleSheet } from 'react-native';
-import type { BottomSheetModal } from '@gorhom/bottom-sheet';
+import { useCallback, useMemo } from 'react';
+import { View, Pressable, ScrollView, StyleSheet } from 'react-native';
+import Animated, { FadeInDown, FadeOutDown } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import type { BoardName, HoldFilterEntry, HoldFilterMode, HoldFilterType } from '@boardsesh/shared-schema';
 import { buildHoldFilterOptions } from '@boardsesh/climb-filters';
-import { ModalSheet } from '../ModalSheet';
 import { Text } from '../Text';
 import { Icon } from '../Icon';
 import { SegmentedControl } from '../SegmentedControl';
 import { useTheme } from '../../providers/theme-provider';
 import { hapticSelection } from '../../lib/haptics';
 import { useHoldColorOverrides, type HoldMarkerShape } from '../../lib/hold-color-overrides';
-import { spacing, borderRadius } from '../../theme/tokens';
+import { spacing, borderRadius, shadowColor } from '../../theme/tokens';
 import { HoldMarkerShapeSvg } from '../board-renderer/HoldMarkerShape';
 import { getHoldFilterTypeShape } from './hold-filter-visuals';
 
@@ -33,8 +33,13 @@ type HoldFilterPickerProps = {
  * Per-hold hold-type picker. Opened by tapping a hold on the interactive board.
  * Hosts an Include / Exclude apply-mode toggle plus one swatch per hold type
  * (board-filtered) and a Clear button — the native port of the web
- * `HoldTypePicker` search toolbar. Works in both UI variants: the chrome comes
- * from `ModalSheet` (glass / Material via theme) and `SegmentedControl`.
+ * `HoldTypePicker` search toolbar.
+ *
+ * Renders as an inline panel docked to the bottom of the host board sheet
+ * (visible when `holdId != null`), NOT as its own bottom-sheet modal: a third
+ * stacked `BottomSheetModal` over the 95% board sheet would not reliably
+ * surface (see #2687 lineage). The host owns dismissal — a tap on the board
+ * backdrop or the close button calls `onClose`.
  */
 export function HoldFilterPicker({
   holdId,
@@ -48,21 +53,13 @@ export function HoldFilterPicker({
 }: HoldFilterPickerProps) {
   const { t } = useTranslation('climbs');
   const { systemColors } = useTheme();
+  const insets = useSafeAreaInsets();
   const {
     overrides: holdColorOverrides,
     shapes: holdShapeOverrides,
     brushThickness,
     shapeSize,
   } = useHoldColorOverrides();
-  const sheetRef = useRef<BottomSheetModal>(null);
-
-  useEffect(() => {
-    if (holdId != null) {
-      sheetRef.current?.present();
-    } else {
-      sheetRef.current?.dismiss();
-    }
-  }, [holdId]);
 
   const options = useMemo(() => buildHoldFilterOptions(boardName, holdColorOverrides), [boardName, holdColorOverrides]);
   const shapeByType = useMemo(() => {
@@ -72,7 +69,6 @@ export function HoldFilterPicker({
     }
     return map;
   }, [options, holdShapeOverrides]);
-  const snapPoints = useMemo(() => ['62%', '90%'], []);
 
   const typeLabels = useMemo<Record<HoldFilterType, string>>(
     () => ({
@@ -103,20 +99,34 @@ export function HoldFilterPicker({
     [onToggleType],
   );
 
-  return (
-    <ModalSheet
-      ref={sheetRef}
-      snapPoints={snapPoints}
-      onDismiss={onClose}
-      enablePanDownToClose
-      stackBehavior="push"
-      scrollable
-    >
-      <View style={styles.content}>
-        <Text variant="headline" style={styles.title}>
-          {t('mobile.holdFilter.pickerTitle')}
-        </Text>
+  if (holdId == null) return null;
 
+  return (
+    <Animated.View
+      entering={FadeInDown.duration(200)}
+      exiting={FadeOutDown.duration(160)}
+      style={[
+        styles.panel,
+        { backgroundColor: systemColors.secondaryBackground, paddingBottom: insets.bottom + spacing[3] },
+      ]}
+    >
+      <View style={styles.handleRow}>
+        <Text variant="headline">{t('mobile.holdFilter.pickerTitle')}</Text>
+        <Pressable
+          onPress={onClose}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={t('mobile.filter.done')}
+        >
+          <Icon name="close" size={22} color={systemColors.secondaryLabel} />
+        </Pressable>
+      </View>
+
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
         <SegmentedControl
           options={applyModeOptions}
           selectedKey={applyMode}
@@ -205,19 +215,40 @@ export function HoldFilterPicker({
         <Text variant="footnote" style={[styles.help, { color: systemColors.secondaryLabel }]}>
           {t('mobile.holdFilter.pickerHelp')}
         </Text>
-      </View>
-    </ModalSheet>
+      </ScrollView>
+    </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
-  content: {
+  panel: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    maxHeight: '70%',
     paddingHorizontal: spacing[4],
-    paddingTop: spacing[2],
-    gap: spacing[3],
+    paddingTop: spacing[3],
+    borderTopLeftRadius: borderRadius.xl,
+    borderTopRightRadius: borderRadius.xl,
+    gap: spacing[2],
+    shadowColor,
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 12,
+    elevation: 16,
   },
-  title: {
-    textAlign: 'center',
+  handleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  scroll: {
+    flexShrink: 1,
+  },
+  scrollContent: {
+    gap: spacing[3],
+    paddingBottom: spacing[2],
   },
   grid: {
     flexDirection: 'row',

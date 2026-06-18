@@ -131,80 +131,93 @@ export function HoldFilterEditorSheet({
   const filteredCount = countFilteredHolds(holdsFilter);
 
   return (
-    <>
-      <ModalSheet
-        ref={sheetRef}
-        snapPoints={['95%']}
-        onDismiss={onDismiss}
-        enablePanDownToClose={activeHoldId == null}
-        stackBehavior="push"
-      >
-        <View style={styles.container}>
-          {!boardHolds ? (
-            <View style={styles.loading}>
-              <ActivityIndicator size="large" />
-            </View>
-          ) : (
-            <>
-              <View style={styles.header}>
-                <Text variant="title3">{t('mobile.holdFilter.title')}</Text>
-                <View style={styles.headerActions}>
-                  {filteredCount > 0 ? (
-                    <Pressable onPress={handleClearAll} hitSlop={8} accessibilityRole="button">
-                      <Text variant="subheadline" color={brandColors.primary}>
-                        {t('mobile.filter.clearAll')}
-                      </Text>
-                    </Pressable>
-                  ) : null}
-                  <Pressable onPress={onClose} hitSlop={8} accessibilityRole="button">
-                    <Text variant="subheadline" color={brandColors.primary} style={styles.doneLabel}>
-                      {t('mobile.filter.done')}
+    <ModalSheet
+      ref={sheetRef}
+      snapPoints={['95%']}
+      onDismiss={onDismiss}
+      enablePanDownToClose={activeHoldId == null}
+      stackBehavior="push"
+    >
+      <View style={styles.container}>
+        {!boardHolds ? (
+          <View style={styles.loading}>
+            <ActivityIndicator size="large" />
+          </View>
+        ) : (
+          <>
+            <View style={styles.header}>
+              <Text variant="title3">{t('mobile.holdFilter.title')}</Text>
+              <View style={styles.headerActions}>
+                {filteredCount > 0 ? (
+                  <Pressable onPress={handleClearAll} hitSlop={8} accessibilityRole="button">
+                    <Text variant="subheadline" color={brandColors.primary}>
+                      {t('mobile.filter.clearAll')}
                     </Text>
                   </Pressable>
-                </View>
+                ) : null}
+                <Pressable onPress={onClose} hitSlop={8} accessibilityRole="button">
+                  <Text variant="subheadline" color={brandColors.primary} style={styles.doneLabel}>
+                    {t('mobile.filter.done')}
+                  </Text>
+                </Pressable>
               </View>
+            </View>
 
-              <View style={styles.boardSection}>
-                <InteractiveFilterBoard
-                  boardName={boardName}
-                  layoutId={boardConfig.layoutId}
-                  sizeId={boardConfig.sizeId}
-                  setIds={boardConfig.setIds}
-                  boardWidth={boardHolds.boardWidth}
-                  boardHeight={boardHolds.boardHeight}
-                  holdTargets={boardHolds.holdTargets}
-                  holdsFilter={holdsFilter}
-                  activeHoldId={activeHoldId}
-                  onHoldTap={handleHoldTap}
-                  showHoldMarkers={false}
-                  renderWidth={boardRender.width}
-                  renderHeight={boardRender.height}
-                />
-              </View>
+            <View style={styles.boardSection}>
+              <InteractiveFilterBoard
+                boardName={boardName}
+                layoutId={boardConfig.layoutId}
+                sizeId={boardConfig.sizeId}
+                setIds={boardConfig.setIds}
+                boardWidth={boardHolds.boardWidth}
+                boardHeight={boardHolds.boardHeight}
+                holdTargets={boardHolds.holdTargets}
+                holdsFilter={holdsFilter}
+                activeHoldId={activeHoldId}
+                onHoldTap={handleHoldTap}
+                showHoldMarkers={false}
+                renderWidth={boardRender.width}
+                renderHeight={boardRender.height}
+              />
+            </View>
 
-              <View style={[styles.footer, { paddingBottom: insets.bottom + spacing[3] }]}>
-                <Text variant="footnote" color={systemColors.secondaryLabel} style={styles.footerText}>
-                  {filteredCount > 0
-                    ? t('mobile.holdFilter.summaryCount', { count: filteredCount })
-                    : t('mobile.holdFilter.hint')}
-                </Text>
-              </View>
-            </>
-          )}
-        </View>
-      </ModalSheet>
+            <View style={[styles.footer, { paddingBottom: insets.bottom + spacing[3] }]}>
+              <Text variant="footnote" color={systemColors.secondaryLabel} style={styles.footerText}>
+                {filteredCount > 0
+                  ? t('mobile.holdFilter.summaryCount', { count: filteredCount })
+                  : t('mobile.holdFilter.hint')}
+              </Text>
+            </View>
 
-      <HoldFilterPicker
-        holdId={activeHoldId}
-        boardName={boardName}
-        entry={activeEntry}
-        applyMode={applyMode}
-        onApplyModeChange={setApplyMode}
-        onToggleType={handleToggleType}
-        onClear={handleClearHold}
-        onClose={closePicker}
-      />
-    </>
+            {/* Tap-anywhere-on-the-board backdrop that dismisses the inline
+                  picker. Sits above the board/footer but below the picker panel
+                  (which follows in tree order), mirroring the old modal scrim. */}
+            {activeHoldId != null ? (
+              <Pressable
+                style={StyleSheet.absoluteFill}
+                onPress={closePicker}
+                accessibilityElementsHidden
+                importantForAccessibility="no-hide-descendants"
+              />
+            ) : null}
+
+            {/* Inline hold-type picker, docked to the bottom of this sheet.
+                  Rendered here (not as a stacked modal) so it reliably surfaces
+                  over the 95% board sheet. */}
+            <HoldFilterPicker
+              holdId={activeHoldId}
+              boardName={boardName}
+              entry={activeEntry}
+              applyMode={applyMode}
+              onApplyModeChange={setApplyMode}
+              onToggleType={handleToggleType}
+              onClear={handleClearHold}
+              onClose={closePicker}
+            />
+          </>
+        )}
+      </View>
+    </ModalSheet>
   );
 }
 

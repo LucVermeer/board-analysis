@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, fireEvent } from '@testing-library/react';
-import { createElement, forwardRef, type ReactNode } from 'react';
+import { createElement, type ReactNode } from 'react';
 import type { HoldFilterEntry, HoldFilterMode, HoldFilterType } from '@boardsesh/shared-schema';
 
 const haptics = vi.hoisted(() => ({ selection: vi.fn() }));
@@ -15,6 +15,7 @@ type PressableMockProps = {
 };
 vi.mock('react-native', () => ({
   View: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
+  ScrollView: ({ children }: { children?: ReactNode }) => createElement('div', { 'data-scroll': 'true' }, children),
   Pressable: ({ children, onPress, disabled, accessibilityLabel, accessibilityState }: PressableMockProps) =>
     createElement(
       'button',
@@ -29,6 +30,19 @@ vi.mock('react-native', () => ({
   StyleSheet: { create: (styles: Record<string, unknown>) => styles },
 }));
 
+vi.mock('react-native-reanimated', () => ({
+  // Animated.View → plain div; the entrance/exit animation is irrelevant here.
+  default: {
+    View: ({ children }: { children?: ReactNode }) => createElement('div', { 'data-animated': 'true' }, children),
+  },
+  FadeInDown: { duration: () => ({}) },
+  FadeOutDown: { duration: () => ({}) },
+}));
+
+vi.mock('react-native-safe-area-context', () => ({
+  useSafeAreaInsets: () => ({ top: 0, right: 0, bottom: 0, left: 0 }),
+}));
+
 type SvgMockProps = {
   children?: ReactNode;
 };
@@ -38,13 +52,6 @@ vi.mock('react-native-svg', () => ({
   Circle: () => createElement('circle', { 'data-svg-shape': 'circle' }),
   Polygon: () => createElement('polygon', { 'data-svg-shape': 'polygon' }),
   Rect: () => createElement('rect', { 'data-svg-shape': 'rect' }),
-}));
-
-// ModalSheet wraps gorhom; render children inline so the swatches are queryable.
-vi.mock('../../ModalSheet', () => ({
-  ModalSheet: forwardRef<unknown, { children?: ReactNode }>(function ModalSheetMock({ children }, _ref) {
-    return createElement('div', { 'data-sheet': 'true' }, children);
-  }),
 }));
 
 vi.mock('../../Text', () => ({
@@ -83,7 +90,8 @@ vi.mock('../../../lib/haptics', () => ({ hapticSelection: () => haptics.selectio
 
 vi.mock('../../../theme/tokens', () => ({
   spacing: { 2: 8, 3: 12, 4: 16 },
-  borderRadius: { md: 8 },
+  borderRadius: { md: 8, xl: 16 },
+  shadowColor: '#000',
 }));
 
 vi.mock('react-i18next', () => ({
@@ -133,6 +141,22 @@ function swatch(container: HTMLElement, typeKey: string): HTMLButtonElement | nu
 describe('HoldFilterPicker', () => {
   beforeEach(() => {
     haptics.selection.mockClear();
+  });
+
+  it('renders nothing when no hold is active', () => {
+    const { container } = render(
+      <HoldFilterPicker
+        holdId={null}
+        boardName="kilter"
+        entry={{}}
+        applyMode="include"
+        onApplyModeChange={vi.fn()}
+        onToggleType={vi.fn()}
+        onClear={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+    expect(container.querySelector('button')).toBeNull();
   });
 
   it('renders one swatch per board hold type plus ANY', () => {
