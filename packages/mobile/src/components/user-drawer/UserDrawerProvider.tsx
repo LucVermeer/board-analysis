@@ -40,6 +40,7 @@ function currentBoardReturnTo(segments: readonly string[]): '/(tabs)/discover' |
 
 export function UserDrawerProvider({ children }: { children: ReactNode }) {
   const { t } = useTranslation('common');
+  const { t: tSettings } = useTranslation('settings');
   const { systemColors, brandColors } = useTheme();
   const { isAuthenticated, signOut } = useAuth();
   const profileQuery = useProfile({ enabled: isAuthenticated });
@@ -112,6 +113,11 @@ export function UserDrawerProvider({ children }: { children: ReactNode }) {
     router.push('/(tabs)/profile/more');
   }, [closeUserDrawer]);
 
+  const openEditProfile = useCallback(() => {
+    closeUserDrawer();
+    router.push('/(tabs)/profile/edit');
+  }, [closeUserDrawer]);
+
   const openPlaylists = useCallback(() => {
     closeUserDrawer();
     router.push('/(tabs)/discover/all');
@@ -175,19 +181,41 @@ export function UserDrawerProvider({ children }: { children: ReactNode }) {
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
             >
-              <View style={styles.profileHeader}>
-                <Avatar uri={profile?.avatarUrl} name={profileDisplayName} size={60} />
-                <View style={styles.profileText}>
-                  <Text variant="headline" numberOfLines={1} style={styles.profileName}>
-                    {profileDisplayName}
-                  </Text>
-                  {profileEmail ? (
-                    <Text variant="subheadline" color={systemColors.secondaryLabel} numberOfLines={1}>
-                      {profileEmail}
+              {profile?.id ? (
+                <Pressable
+                  style={styles.profileHeader}
+                  onPress={openEditProfile}
+                  accessibilityRole="button"
+                  accessibilityLabel={tSettings('profile.editAction')}
+                >
+                  <Avatar uri={profile.avatarUrl} name={profileDisplayName} size={60} />
+                  <View style={styles.profileText}>
+                    <Text variant="headline" numberOfLines={1} style={styles.profileName}>
+                      {profileDisplayName}
                     </Text>
-                  ) : null}
+                    {profileEmail ? (
+                      <Text variant="subheadline" color={systemColors.secondaryLabel} numberOfLines={1}>
+                        {profileEmail}
+                      </Text>
+                    ) : null}
+                  </View>
+                  <Icon name="chevron.right" size={16} color={systemColors.tertiaryLabel} />
+                </Pressable>
+              ) : (
+                <View style={styles.profileHeader}>
+                  <Avatar uri={profile?.avatarUrl} name={profileDisplayName} size={60} />
+                  <View style={styles.profileText}>
+                    <Text variant="headline" numberOfLines={1} style={styles.profileName}>
+                      {profileDisplayName}
+                    </Text>
+                    {profileEmail ? (
+                      <Text variant="subheadline" color={systemColors.secondaryLabel} numberOfLines={1}>
+                        {profileEmail}
+                      </Text>
+                    ) : null}
+                  </View>
                 </View>
-              </View>
+              )}
 
               <View style={[styles.menuGroup, { backgroundColor: systemColors.elevatedSurface }]}>
                 <DrawerRow icon="boards" title={t('userDrawer.changeBoard')} onPress={() => openBoards()} />

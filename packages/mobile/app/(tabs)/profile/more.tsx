@@ -12,6 +12,7 @@ import { useProfile } from '../../../src/lib/graphql/hooks';
 import { borderRadius, spacing } from '../../../src/theme/tokens';
 import { DevMetadataPanel } from '../../../src/components/DevMetadataPanel';
 import { Icon } from '../../../src/components/Icon';
+import { Avatar } from '../../../src/components/Avatar';
 import { Text } from '../../../src/components/Text';
 import { ListRow } from '../../../src/components/ListRow';
 import { SectionHeader } from '../../../src/components/SectionHeader';
@@ -255,6 +256,17 @@ export default function MoreScreen() {
 
       <View style={styles.section}>
         <SectionHeader title={tProfile('mobile.account')} />
+        {profile?.id ? (
+          <View style={[styles.card, { backgroundColor: systemColors.secondaryBackground }]}>
+            <ListRow
+              title={tSettings('profile.editAction')}
+              leading={<Avatar uri={profile.avatarUrl} name={profile.displayName ?? profile.email ?? null} size={28} />}
+              showChevron
+              showSeparator={false}
+              onPress={() => router.push('/(tabs)/profile/edit')}
+            />
+          </View>
+        ) : null}
         {profile?.email ? (
           <Text variant="footnote" color={systemColors.secondaryLabel} style={styles.accountEmail}>
             {profile.email}
@@ -312,6 +324,7 @@ const styles = StyleSheet.create({
   },
   accountEmail: {
     paddingHorizontal: spacing[4],
+    marginTop: spacing[3],
     marginBottom: spacing[3],
   },
   signOut: {

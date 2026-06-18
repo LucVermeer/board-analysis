@@ -12,12 +12,14 @@
   "profile": {
     "title": "Profile",
     "subtitle": "Customize how you appear on Boardsesh",
+    "editAction": "Edit Profile",
     "avatar": {
       "label": "Avatar",
       "upload": "Upload",
       "change": "Change",
       "remove": "Remove",
-      "hint": "JPG, PNG, GIF, or WebP. Up to 10MB — auto-compressed."
+      "hint": "JPG, PNG, GIF, or WebP. Up to 10MB — auto-compressed.",
+      "permissionDenied": "Allow photo access in Settings to choose an avatar."
     },
     "displayName": {
       "label": "Display Name",

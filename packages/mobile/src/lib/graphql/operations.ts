@@ -1,6 +1,7 @@
 import { gql } from 'graphql-request';
 import type {
   UserProfile,
+  UpdateProfileInput,
   UserBoard,
   UserBoardConnection,
   Climb,
@@ -137,6 +138,25 @@ export const GET_PROFILE = gql`
 
 export type GetProfileQueryResponse = {
   profile: UserProfile | null;
+};
+
+export const UPDATE_PROFILE = gql`
+  mutation UpdateProfile($input: UpdateProfileInput!) {
+    updateProfile(input: $input) {
+      id
+      email
+      displayName
+      avatarUrl
+    }
+  }
+`;
+
+export type UpdateProfileMutationVariables = {
+  input: UpdateProfileInput;
+};
+
+export type UpdateProfileMutationResponse = {
+  updateProfile: UserProfile;
 };
 
 export const GET_PUBLIC_PROFILE = gql`

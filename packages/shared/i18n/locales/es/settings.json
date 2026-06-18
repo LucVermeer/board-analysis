@@ -12,12 +12,14 @@
   "profile": {
     "title": "Perfil",
     "subtitle": "Personaliza cómo apareces en Boardsesh",
+    "editAction": "Editar perfil",
     "avatar": {
       "label": "Foto de perfil",
       "upload": "Subir",
       "change": "Cambiar",
       "remove": "Quitar",
-      "hint": "JPG, PNG, GIF o WebP. Hasta 10 MB — se comprime automáticamente."
+      "hint": "JPG, PNG, GIF o WebP. Hasta 10 MB — se comprime automáticamente.",
+      "permissionDenied": "Permite el acceso a las fotos en Ajustes para elegir una foto de perfil."
     },
     "displayName": {
       "label": "Nombre",
