@@ -1,5 +1,5 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
-import { View, Pressable, StyleSheet, useWindowDimensions } from 'react-native';
+import { Platform, View, Pressable, StyleSheet, useWindowDimensions } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -117,6 +117,10 @@ type PlayDrawerProps = {
   mismatchBoardLabel?: string;
   /** Switch to the climb's board (one-tap if owned, else the board picker). */
   onSwitchBoard?: () => void;
+  /** Opens the climb reaction menu (DrawerHostProvider's openClimbActions, passed as a
+   *  prop to avoid a host↔PlayDrawer require cycle). On iOS the ellipsis uses this
+   *  instead of the in-drawer bottom sheet. */
+  onOpenClimbActions?: (climb: Climb) => void;
 };
 
 // Full-screen now-playing takeover: a single 100% snap, no peek detent. The
@@ -139,6 +143,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
     boardMismatch = false,
     mismatchBoardLabel,
     onSwitchBoard,
+    onOpenClimbActions,
   },
   ref,
 ) {
@@ -485,8 +490,14 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   }, [bluetoothConnected]);
 
   const handleOpenActions = useCallback(() => {
+    // iOS: open the floating reaction menu (over the drawer) instead of the in-drawer
+    // bottom sheet. Android keeps the bottom sheet.
+    if (Platform.OS === 'ios' && onOpenClimbActions && displayedClimb) {
+      onOpenClimbActions(displayedClimb);
+      return;
+    }
     setActiveSubDrawer('actions');
-  }, []);
+  }, [onOpenClimbActions, displayedClimb]);
 
   const handleOpenAddBetaVideo = useCallback(() => {
     setAddBetaVideoOpen(true);

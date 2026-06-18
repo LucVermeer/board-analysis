@@ -603,6 +603,7 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
           boardMismatch={boardMismatch}
           mismatchBoardLabel={mismatchBoardLabel}
           onSwitchBoard={handleSwitchBoardFromDrawer}
+          onOpenClimbActions={openClimbActions}
         />
       ) : null}
       {logAscentInput ? (
