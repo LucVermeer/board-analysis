@@ -187,6 +187,8 @@ This project uses [Vite+](https://viteplus.dev) (`vp`) as its unified toolchain 
 - `vp lint` - Lint all packages
 - `vp fmt` - Format all files with Oxfmt
 - `vp run dev` - Start development databases, backend, and web server
+- `vp run dev:mobile` - Start the React Native (Expo) Metro dev server
+- `vp run mobile:android-shots` - Boot an Android emulator, run the app against Metro, and capture screenshots via adb (Linux/KVM friendly). One-time setup: `vp run mobile:android-doctor`. Full guide: `docs/android-emulator-screenshots.md`
 - `vp run dev:backend` - Start database and backend only
 - `vp run dev:web` - Start database and web server only
 - `vp run db:up` - Start development databases and run migrations only

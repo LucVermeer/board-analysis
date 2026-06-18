@@ -50,12 +50,12 @@ const OUTPUT_ROOT = resolve(ROOT_DIR, 'app-stores');
 // Metro's stdout is tee'd here so waitForHomeReady can poll it for the app's
 // "$screen /home" readiness marker — the JS console logs land in Metro's output,
 // not the device's unified log.
-const METRO_LOG_PATH = join(tmpdir(), 'boardsesh-screenshot-metro.log');
+export const METRO_LOG_PATH = join(tmpdir(), 'boardsesh-screenshot-metro.log');
 // Metro dev server port the dev-client loads its JS bundle from. Defaults to
 // 8081; override with BOARDSESH_METRO_PORT when it's taken (this repo runs a
 // Metro per worktree). The orchestrator passes the matching dev-client URL to
 // Maestro via `-e MAESTRO_DEV_CLIENT_URL`, so the flows never hard-code a port.
-const METRO_PORT = Number.parseInt(process.env.BOARDSESH_METRO_PORT ?? '', 10) || 8081;
+export const METRO_PORT = Number.parseInt(process.env.BOARDSESH_METRO_PORT ?? '', 10) || 8081;
 // Output is grouped by store (the directory name), not by platform id.
 const STORE_BY_PLATFORM: Record<'ios' | 'android', string> = { ios: 'apple', android: 'google' };
 const LOG = '[mobile:screenshots]';
@@ -76,8 +76,8 @@ const DEFAULT_ANDROID_APK = resolve(
 // so localhost is correct for a sim build pointed at the local dev backend.
 const LOCAL_BACKEND_URL = 'http://localhost:8080';
 const LOCAL_WEB_URL = 'http://localhost:3000';
-const DEFAULT_USER_EMAIL = 'test@boardsesh.com';
-const DEFAULT_USER_PASSWORD = 'test';
+export const DEFAULT_USER_EMAIL = 'test@boardsesh.com';
+export const DEFAULT_USER_PASSWORD = 'test';
 const MAESTRO_INSTALL_HINT = 'Install Maestro: curl -Ls "https://get.maestro.mobile.dev" | bash';
 
 export type ScreenshotPlatform = 'ios' | 'android' | 'all';
@@ -679,6 +679,10 @@ function runAndroid(options: ScreenshotOptions): number {
         deviceId,
         'test',
         flowFile,
+        // The flows declare `appId: ${APP_ID}`; the standalone store APK is the
+        // production package (the local dev-client path passes the .dev package).
+        '-e',
+        `APP_ID=${APP_ID}`,
         '-e',
         `SCREENSHOT_USER_EMAIL=${email}`,
         '-e',
@@ -748,7 +752,7 @@ function resolveAndroidAppPath(options: ScreenshotOptions): string {
   );
 }
 
-function applyCleanAndroidStatusBar(deviceId: string): void {
+export function applyCleanAndroidStatusBar(deviceId: string): void {
   runCapture('adb', ['-s', deviceId, 'shell', 'settings', 'put', 'global', 'sysui_demo_allowed', '1']);
   runCapture('adb', [
     '-s',
@@ -828,7 +832,7 @@ function applyCleanAndroidStatusBar(deviceId: string): void {
   runCapture('adb', ['-s', deviceId, 'shell', 'cmd', 'notification', 'dismiss-all']);
 }
 
-function clearAndroidStatusBar(deviceId: string): void {
+export function clearAndroidStatusBar(deviceId: string): void {
   runCapture('adb', [
     '-s',
     deviceId,
@@ -921,12 +925,12 @@ function resolveAppPath(options: ScreenshotOptions): string {
 }
 
 /** expo-development-client deep link that loads the JS bundle from our Metro. */
-function metroDevClientUrl(): string {
+export function metroDevClientUrl(): string {
   return `${APP_ID}://expo-development-client/?url=${encodeURIComponent(`http://localhost:${METRO_PORT}`)}`;
 }
 
 /** True if anything is already listening on the port (a foreign Metro). */
-function portInUse(port: number): boolean {
+export function portInUse(port: number): boolean {
   return spawnSync('lsof', ['-nP', `-iTCP:${port}`, '-sTCP:LISTEN', '-t']).status === 0;
 }
 
@@ -934,7 +938,7 @@ function portInUse(port: number): boolean {
  * Start Metro in the background. `detached` so cleanup can kill the whole process
  * group; `CI=1` keeps expo non-interactive (no keypress menu / TTY expectations).
  */
-function startMetro(env: NodeJS.ProcessEnv): ChildProcess {
+export function startMetro(env: NodeJS.ProcessEnv): ChildProcess {
   // Pipe Metro's output through `tee` to METRO_LOG_PATH so waitForHomeReady can poll
   // it for the app's "$screen /home" marker — the JS console logs land in Metro's
   // stdout, NOT the device's unified log. `2>&1 | tee` keeps the output in the run
@@ -956,14 +960,14 @@ function startMetro(env: NodeJS.ProcessEnv): ChildProcess {
  * so Metro caches the right variant. Best-effort: a miss just falls back to
  * Maestro cold-loading the bundle (its wait is generous).
  */
-function prewarmMetroBundle(): void {
+export function prewarmMetroBundle(platform: 'ios' | 'android' = 'ios'): void {
   const manifest = runCapture('curl', [
     '-fsS',
     '--max-time',
     '30',
     `http://localhost:${METRO_PORT}/`,
     '-H',
-    'expo-platform: ios',
+    `expo-platform: ${platform}`,
     '-H',
     'Accept: application/expo+json,application/json',
   ]);
@@ -989,7 +993,7 @@ function prewarmMetroBundle(): void {
 }
 
 /** Poll Metro's /status until it answers (or ~120s elapse). */
-function waitForMetro(): boolean {
+export function waitForMetro(): boolean {
   const statusUrl = `http://localhost:${METRO_PORT}/status`;
   for (let attempt = 0; attempt < 60; attempt++) {
     if (runCapture('curl', ['-fsS', '-o', '/dev/null', statusUrl]).status === 0) {
@@ -1015,7 +1019,7 @@ function waitForPortToClose(port: number): boolean {
   return false;
 }
 
-function stopMetro(metro: ChildProcess | null): void {
+export function stopMetro(metro: ChildProcess | null): void {
   if (!metro || metro.pid === undefined) return;
   console.log(`${LOG} Stopping Metro...`);
   try {
@@ -1040,7 +1044,7 @@ function sleepSeconds(seconds: number): void {
  * analytics line lands in Metro's stdout (NOT the device's unified log), which
  * startMetro tee's to METRO_LOG_PATH — so count occurrences in that file.
  */
-function homeReadyMarkerCount(): number {
+export function homeReadyMarkerCount(): number {
   const metroLog = existsSync(METRO_LOG_PATH) ? readFileSync(METRO_LOG_PATH, 'utf8') : '';
   return metroLog.split('$screen /home').length - 1;
 }
@@ -1053,7 +1057,7 @@ function homeReadyMarkerCount(): number {
  * so wait for a NEW marker past `baselineCount` rather than any marker — the log
  * still holds the previous device's `$screen /home`.
  */
-function waitForHomeReady(baselineCount = 0, timeoutSeconds = 180): boolean {
+export function waitForHomeReady(baselineCount = 0, timeoutSeconds = 180): boolean {
   const deadline = Date.now() + timeoutSeconds * 1000;
   while (Date.now() < deadline) {
     if (homeReadyMarkerCount() > baselineCount) return true;

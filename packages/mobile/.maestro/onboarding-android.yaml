@@ -1,4 +1,4 @@
-appId: com.boardsesh.app
+appId: ${APP_ID}
 name: onboarding illustrations android
 ---
 # Android version of onboarding.yaml for the standalone screenshot APK. The

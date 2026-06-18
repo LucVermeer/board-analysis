@@ -1,4 +1,4 @@
-appId: com.boardsesh.app
+appId: ${APP_ID}
 name: app-store screenshots android
 ---
 # Play Store screenshots from the standalone screenshot APK. Unlike iOS, this APK already
