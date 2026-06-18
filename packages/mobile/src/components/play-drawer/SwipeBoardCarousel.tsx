@@ -211,8 +211,10 @@ export const SwipeBoardCarousel = React.memo(function SwipeBoardCarousel({
               style={boardStyle}
               // Anchor for screenshot/e2e flows: present only once the lit-holds
               // overlay has rendered, so the board-view capture waits for the
-              // wall to actually appear instead of shooting a blank drawer.
-              overlayTestID="play-drawer-board-overlay"
+              // wall to actually appear instead of shooting a blank drawer. Only
+              // wired in screenshot mode so the marker + onLoad dead-strip out of
+              // normal builds.
+              overlayTestID={process.env.EXPO_PUBLIC_SCREENSHOT_MODE === '1' ? 'play-drawer-board-overlay' : undefined}
             />
           </Animated.View>
         </Animated.View>

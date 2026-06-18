@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
 
@@ -52,6 +52,14 @@ const LayeredClimbImage = React.memo(function LayeredClimbImage({
   overlayTestID,
 }: LayeredClimbImageProps) {
   const shouldShowEmptyFallback = backgroundPaths.length === 0 && missingBackgroundCount === 0;
+  // Only relevant when overlayTestID is set (the play-drawer board): expose the
+  // testID anchor on a marker that mounts AFTER the overlay image has actually
+  // painted, not when the <Image> first mounts. expo-image reports "visible" to
+  // Maestro the moment it's in the tree (even with a cached source, before the
+  // pixels land), so anchoring on the raw <Image> let a screenshot fire on a
+  // blank drawer. Gating on onLoad makes the anchor mean "the lit board is on
+  // screen".
+  const [overlayPainted, setOverlayPainted] = useState(false);
 
   return (
     <View style={[styles.stack, mirrored && styles.mirrored]}>
@@ -90,7 +98,6 @@ const LayeredClimbImage = React.memo(function LayeredClimbImage({
       {dimBackground && <View style={[styles.layer, styles.dim]} pointerEvents="none" />}
       {overlayUri && (
         <Image
-          testID={overlayTestID}
           source={{ uri: overlayUri }}
           style={styles.layer}
           contentFit="contain"
@@ -101,8 +108,12 @@ const LayeredClimbImage = React.memo(function LayeredClimbImage({
           // list/accessory, native for play) so no main-thread downscale
           // is needed — skip expo-image's resample.
           allowDownscaling={false}
+          onLoad={overlayTestID ? () => setOverlayPainted(true) : undefined}
         />
       )}
+      {/* Screenshot/e2e anchor — see overlayPainted above. Transparent, full-bleed
+          (so it has on-screen bounds Maestro can see), and pointer-transparent. */}
+      {overlayTestID && overlayPainted && <View testID={overlayTestID} style={styles.layer} pointerEvents="none" />}
     </View>
   );
 });
