@@ -45,7 +45,10 @@ vi.mock('../../../providers/theme-provider', () => ({
     actionColors: { success: '#0a0', favorite: '#f00', accent: '#00f', neutral: '#fff', pin: '#6D28D9' },
   }),
 }));
-vi.mock('../../../lib/graphql/hooks', () => ({ useToggleFavorite: () => ({ mutate: openers.toggleFavoriteMutate }) }));
+vi.mock('../../../lib/graphql/hooks', () => ({
+  useToggleFavorite: () => ({ mutate: openers.toggleFavoriteMutate }),
+  useFavoriteStatus: () => ({ data: false }),
+}));
 vi.mock('../../../lib/climb-to-queue-item', () => ({ climbToQueueItem: (climb: unknown) => ({ uuid: 'qi', climb }) }));
 vi.mock('../../../lib/env', () => ({ WEB_BASE_URL: 'https://boardsesh.test' }));
 vi.mock('../../../lib/analytics', () => ({ track: vi.fn() }));
@@ -78,7 +81,6 @@ beforeEach(() => {
 describe('useClimbActions gating', () => {
   it('returns the universal actions for a plain Kilter climb (no edit/beta/openInApp/editEntry)', () => {
     expect(ids({ climb, boardConfig: kilterBoard, isAuthenticated: false })).toEqual([
-      'preview',
       'queue',
       'playlist',
       'favorite',
