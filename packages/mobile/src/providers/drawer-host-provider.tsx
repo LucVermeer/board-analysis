@@ -72,7 +72,7 @@ export type LogAscentInput = {
   consensusGradeName?: string;
 };
 
-function boardConfigsMatch(left: BoardConfig | null, right: BoardConfig | null): boolean {
+export function boardConfigsMatch(left: BoardConfig | null, right: BoardConfig | null): boolean {
   if (!left || !right) return false;
   return (
     left.boardName === right.boardName &&
@@ -112,6 +112,10 @@ type DrawerHostValue = {
   /** Opens the add-to-playlist bottom sheet for the given climb. Snapshots the
    *  active boardConfig (for the angle) at open time. */
   openAddToPlaylist: (climb: Climb, boardConfigOverride?: BoardConfig) => void;
+  /** Opens the share-your-beta sheet for the given climb. Snapshots the active
+   *  boardConfig (for the angle) at open time. Used by the iOS climb context menu's
+   *  shared action list (useClimbActions). */
+  openAddBetaVideo: (climb: Climb, boardConfigOverride?: BoardConfig) => void;
   /** Opens the queue list sheet (from the play-drawer queue button or the
    *  "Climb added to queue" snackbar's Open action). */
   openQueueSheet: () => void;
@@ -347,6 +351,15 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
 
   const closeAddToPlaylist = useCallback(() => {
     setPlaylistClimb(null);
+  }, []);
+
+  // Public parameterized beta-video opener (mirrors openAddToPlaylist) for the iOS
+  // context menu's shared action list. The sheet path keeps its own
+  // handleClimbActionsAddBetaVideo (which snapshots from climbActions state).
+  const openAddBetaVideo = useCallback((climb: Climb, boardConfigOverride?: BoardConfig) => {
+    const boardConfig = boardConfigOverride ?? activeBoardConfigRef.current;
+    if (!boardConfig) return;
+    setBetaVideoClimb({ climb, boardConfig });
   }, []);
 
   const handleClimbActionsAddToQueue = useCallback(() => {
@@ -623,6 +636,7 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
       openClimbActions,
       closeClimbActions,
       openAddToPlaylist,
+      openAddBetaVideo,
       openQueueSheet,
       openBoardSheet,
     }),
@@ -633,6 +647,7 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
       openClimbActions,
       closeClimbActions,
       openAddToPlaylist,
+      openAddBetaVideo,
       openQueueSheet,
       openBoardSheet,
     ],

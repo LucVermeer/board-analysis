@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, type ReactNode } from 'react';
-import { View, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
+import { Platform, View, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 import Animated, {
   useAnimatedStyle,
   useAnimatedReaction,
@@ -13,7 +13,9 @@ import ReanimatedSwipeable, { type SwipeableMethods } from 'react-native-gesture
 import type { Climb, BoardName } from '@boardsesh/shared-schema';
 import { Icon } from './Icon';
 import { ClimbListItemContent } from './ClimbListItemContent';
+import { ClimbContextMenu } from './climb-actions/ClimbContextMenu';
 import { climbListRowStyles } from './climb-list-row-styles';
+import type { BoardConfig } from '../providers/drawer-host-provider';
 import { hapticLight, hapticMedium, hapticSuccess } from '../lib/haptics';
 import { useTheme } from '../providers/theme-provider';
 import { iosSystemColors } from '../theme/ios-colors';
@@ -331,10 +333,18 @@ const ClimbListRow = React.memo(function ClimbListRow({
     [handleLongPress],
   );
 
-  // Long-press wins over tap; a quick tap fires once the long-press fails.
+  // Long-press wins over tap; a quick tap fires once the long-press fails. On iOS the
+  // native UIContextMenu (ClimbContextMenu below) owns the long-press, so the row only
+  // needs the tap gesture there; Android keeps the RNGH long-press → actions sheet.
   const tapGesture = useMemo(
-    () => Gesture.Exclusive(longPressGesture, singleTapGesture),
+    () => (Platform.OS === 'ios' ? singleTapGesture : Gesture.Exclusive(longPressGesture, singleTapGesture)),
     [longPressGesture, singleTapGesture],
+  );
+
+  // Snapshot the board config for the iOS context menu's action list + preview.
+  const boardConfig = useMemo<BoardConfig>(
+    () => ({ boardName, layoutId, sizeId, setIds, angle }),
+    [boardName, layoutId, sizeId, setIds, angle],
   );
 
   // Left actions (revealed by a left-to-right swipe) = Queue; right actions
@@ -386,26 +396,28 @@ const ClimbListRow = React.memo(function ClimbListRow({
         onSwipeableOpen={handleSwipeableOpened}
         onSwipeableClose={handleSwipeableClosed}
       >
-        <GestureDetector gesture={tapGesture}>
-          <View
-            testID="climb-row"
-            style={[climbListRowStyles.contentRow, { backgroundColor: systemColors.background }, contentRowStyle]}
-            accessible
-            accessibilityRole="button"
-            accessibilityLabel={climb.name}
-            accessibilityState={{ selected: !!selected }}
-          >
-            {/* Active-climb highlight: violet wash + left accent bar */}
-            {selected ? (
-              <View style={[styles.selectedFill, { backgroundColor: highlight.fill }]} pointerEvents="none" />
-            ) : null}
-            {selected ? (
-              <View style={[styles.selectedAccent, { backgroundColor: highlight.accent }]} pointerEvents="none" />
-            ) : null}
+        <ClimbContextMenu climb={climb} boardConfig={boardConfig} disabled={!!unsupported}>
+          <GestureDetector gesture={tapGesture}>
+            <View
+              testID="climb-row"
+              style={[climbListRowStyles.contentRow, { backgroundColor: systemColors.background }, contentRowStyle]}
+              accessible
+              accessibilityRole="button"
+              accessibilityLabel={climb.name}
+              accessibilityState={{ selected: !!selected }}
+            >
+              {/* Active-climb highlight: violet wash + left accent bar */}
+              {selected ? (
+                <View style={[styles.selectedFill, { backgroundColor: highlight.fill }]} pointerEvents="none" />
+              ) : null}
+              {selected ? (
+                <View style={[styles.selectedAccent, { backgroundColor: highlight.accent }]} pointerEvents="none" />
+              ) : null}
 
-            {rowContent}
-          </View>
-        </GestureDetector>
+              {rowContent}
+            </View>
+          </GestureDetector>
+        </ClimbContextMenu>
       </ReanimatedSwipeable>
 
       {/* Separator — inset to start at the text column (after the thumbnail) */}
