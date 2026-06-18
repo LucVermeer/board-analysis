@@ -209,6 +209,10 @@ export const SwipeBoardCarousel = React.memo(function SwipeBoardCarousel({
               boardHeight={boardHeight}
               mirrored={mirrored}
               style={boardStyle}
+              // Anchor for screenshot/e2e flows: present only once the lit-holds
+              // overlay has rendered, so the board-view capture waits for the
+              // wall to actually appear instead of shooting a blank drawer.
+              overlayTestID="play-drawer-board-overlay"
             />
           </Animated.View>
         </Animated.View>

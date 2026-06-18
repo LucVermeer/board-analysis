@@ -31,6 +31,12 @@ type BoardImageNativeProps = {
    */
   renderWidth?: number;
   style?: ViewStyle;
+  /**
+   * testID forwarded to the holds-overlay layer, which only mounts once the async
+   * overlay render is ready — lets screenshot/e2e flows wait for the lit board to
+   * appear. The full-size play-drawer board sets this; thumbnails leave it unset.
+   */
+  overlayTestID?: string;
 };
 
 /**
@@ -56,6 +62,7 @@ const BoardImageNative = React.memo(function BoardImageNative({
   filledStyle = false,
   renderWidth,
   style,
+  overlayTestID,
 }: BoardImageNativeProps) {
   const { overlayUri, backgroundPaths, missingBackgroundCount } = useNativeClimbRender({
     frames,
@@ -80,6 +87,7 @@ const BoardImageNative = React.memo(function BoardImageNative({
         backgroundPaths={backgroundPaths}
         missingBackgroundCount={missingBackgroundCount}
         mirrored={mirrored}
+        overlayTestID={overlayTestID}
       />
     </View>
   );

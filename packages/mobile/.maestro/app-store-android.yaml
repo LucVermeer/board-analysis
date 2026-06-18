@@ -84,15 +84,19 @@ name: app-store screenshots android
 - takeScreenshot: 04-workout-generator
 
 # Board view — open the first climb (wall with holds lit) via the screenshot-mode param.
-# Wait for the list to load first so there's a climb to auto-open, then let the play drawer
-# slide in and the board art render on the slow software renderer.
+# The play drawer presents immediately over a placeholder, then the board mounts and the
+# Rust holds-overlay renders a beat later (slow on the software renderer) — so a bare
+# waitForAnimationToEnd shot caught a blank drawer. Anchor on the overlay layer itself,
+# which only mounts once the lit board has rendered, then let the fade settle.
 - openLink: com.boardsesh.app://climbs?screenshotOpenFirst=1
 - extendedWaitUntil:
     visible:
       id: 'climb-row'
     timeout: 60000
-- waitForAnimationToEnd:
-    timeout: 30000
+- extendedWaitUntil:
+    visible:
+      id: 'play-drawer-board-overlay'
+    timeout: 60000
 - waitForAnimationToEnd:
     timeout: 30000
 - takeScreenshot: 02-board-view

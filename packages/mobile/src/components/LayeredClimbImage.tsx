@@ -22,6 +22,12 @@ type LayeredClimbImageProps = {
    */
   dimBackground?: boolean;
   recyclingKey?: string;
+  /**
+   * testID for the holds-overlay layer. Only rendered once the async overlay PNG
+   * is ready, so screenshot/e2e flows can anchor on "the lit climb has rendered"
+   * (the full-size play view sets this; thumbnails leave it unset).
+   */
+  overlayTestID?: string;
 };
 
 /**
@@ -43,6 +49,7 @@ const LayeredClimbImage = React.memo(function LayeredClimbImage({
   mirrored,
   dimBackground,
   recyclingKey,
+  overlayTestID,
 }: LayeredClimbImageProps) {
   const shouldShowEmptyFallback = backgroundPaths.length === 0 && missingBackgroundCount === 0;
 
@@ -83,6 +90,7 @@ const LayeredClimbImage = React.memo(function LayeredClimbImage({
       {dimBackground && <View style={[styles.layer, styles.dim]} pointerEvents="none" />}
       {overlayUri && (
         <Image
+          testID={overlayTestID}
           source={{ uri: overlayUri }}
           style={styles.layer}
           contentFit="contain"
