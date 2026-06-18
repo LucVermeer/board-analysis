@@ -29,9 +29,6 @@ type ClimbActionsSheetProps = {
   angle: number;
   /** Current signed-in user id — gates the owner-only Edit row. */
   currentUserId?: string | null;
-  /** When provided, shows a "Preview" row that opens the climb view-only (a
-   *  "Preview" badge + "Set active") instead of the default tap-to-activate. */
-  onPreview?: () => void;
   onAddToQueue?: () => void;
   onOpenPlaylist?: () => void;
   onToggleFavorite?: () => void;
@@ -61,7 +58,6 @@ function ClimbActionsSheet({
   setIds,
   angle,
   currentUserId,
-  onPreview,
   onAddToQueue,
   onOpenPlaylist,
   onToggleFavorite,
@@ -90,11 +86,6 @@ function ClimbActionsSheet({
       isPresentedRef.current = false;
     }
   }, [visible, climb]);
-
-  const handlePreview = useCallback(() => {
-    onPreview?.();
-    onClose();
-  }, [onPreview, onClose]);
 
   const handleAddToQueue = useCallback(() => {
     onAddToQueue?.();
@@ -229,14 +220,6 @@ function ClimbActionsSheet({
         />
       )}
       <View style={styles.content}>
-        {onPreview && (
-          <ListRow
-            title={t('mobile.climbActions.preview')}
-            leading={<Icon name="visibility" size={22} color={accentActionIconColor} />}
-            onPress={handlePreview}
-            showSeparator
-          />
-        )}
         {onAddToQueue && (
           <ListRow
             title={t('mobile.climbRow.addToQueue')}

@@ -32,7 +32,7 @@ export function ProfileClimbsTab({ userId, topInset = 0 }: ProfileClimbsTabProps
   const { t } = useTranslation('you');
   const { systemColors } = useTheme();
   const router = useRouter();
-  const { openPlayDrawer } = useDrawerHost();
+  const { openPlayDrawer, openClimbActions } = useDrawerHost();
   const bottomChrome = useBottomChromeMetrics();
   const paddingBottom = bottomChrome.scrollBottomPadding + spacing[4];
 
@@ -66,6 +66,24 @@ export function ProfileClimbsTab({ userId, topInset = 0 }: ProfileClimbsTabProps
     [openPlayDrawer, router],
   );
 
+  // Long press → reaction menu. Resolves the same per-climb board config handlePress
+  // uses (the userClimbs payload carries no size/sets).
+  const handleOpenActions = useCallback(
+    (climb: Climb) => {
+      if (!climb.boardType) return;
+      const config = getBoardConfigForPlaylist(climb.boardType, climb.layoutId);
+      if (!config) return;
+      openClimbActions(climb, {
+        boardName: config.boardName,
+        layoutId: config.layoutId,
+        sizeId: config.sizeId,
+        setIds: config.setIds.join(','),
+        angle: climb.angle,
+      });
+    },
+    [openClimbActions],
+  );
+
   const handleEndReached = useCallback(() => {
     if (feed.hasNextPage && !feed.isFetchingNextPage) void feed.fetchNextPage();
   }, [feed]);
@@ -84,10 +102,11 @@ export function ProfileClimbsTab({ userId, topInset = 0 }: ProfileClimbsTabProps
           setIds={config.setIds.join(',')}
           angle={item.angle}
           onPress={handlePress}
+          onOpenActions={handleOpenActions}
         />
       );
     },
-    [handlePress],
+    [handlePress, handleOpenActions],
   );
 
   if (!userId || feed.isPending) {

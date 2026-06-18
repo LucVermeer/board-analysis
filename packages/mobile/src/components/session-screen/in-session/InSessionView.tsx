@@ -38,7 +38,7 @@ import { iosSystemColors } from '../../../theme/ios-colors';
 import { springs } from '../../../theme/animations';
 import { borderRadius, spacing } from '../../../theme/tokens';
 import { gradeBadgeColor } from '../../you/profile-chart-colors';
-import { hapticSelection } from '../../../lib/haptics';
+import { hapticSelection, hapticMedium } from '../../../lib/haptics';
 import { reportHandledError } from '../../../lib/error-reporting';
 import { RecordTopChrome } from '../RecordTopChrome';
 import { SessionAnalytics } from './SessionAnalytics';
@@ -137,6 +137,7 @@ const SessionHistoryRow = memo(function SessionHistoryRow({
   const { t } = useTranslation('session');
   const { systemColors, brandColors } = useTheme();
   const { formatGrade, formatGradeByDifficultyId } = useGradeFormat();
+  const { openClimbActions } = useDrawerHost();
   const statusIconName = statusIcon(status);
   const statusColor = statusTint(status, brandColors);
   let statusLabel: string;
@@ -168,10 +169,23 @@ const SessionHistoryRow = memo(function SessionHistoryRow({
     onPress(tick);
   };
 
+  const handleLongPress = () => {
+    if (!climb || !boardConfig) return;
+    hapticMedium();
+    openClimbActions(climb, {
+      boardName: boardConfig.boardName,
+      layoutId: boardConfig.layoutId,
+      sizeId: boardConfig.sizeId,
+      setIds: boardConfig.setIds.join(','),
+      angle: tick.angle,
+    });
+  };
+
   return (
     <View>
       <PressableSurface
         onPress={handlePress}
+        onLongPress={handleLongPress}
         feedback="opacity"
         opacityTo={0.7}
         accessibilityRole="button"

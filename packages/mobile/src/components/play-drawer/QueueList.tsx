@@ -51,6 +51,8 @@ type QueueListProps = {
   autoScrollOnMount?: boolean;
   onToggleSelect: (uuid: string) => void;
   onClimbPress: (item: ClimbQueueItem) => void;
+  /** Long press a queue row → open the climb reaction menu. */
+  onOpenActions?: (item: ClimbQueueItem) => void;
   onRemove: (uuid: string) => void;
   onShowFullHistory: () => void;
   onTickHistory: (item: ClimbQueueItem) => void;
@@ -72,6 +74,7 @@ export function QueueList({
   autoScrollOnMount,
   onToggleSelect,
   onClimbPress,
+  onOpenActions,
   onRemove,
   onShowFullHistory,
   onTickHistory,
@@ -252,6 +255,7 @@ export function QueueList({
               isEditMode={isEditMode}
               isSelected={selectedItems.has(row.item.uuid)}
               onPress={onClimbPress}
+              onOpenActions={onOpenActions}
               onRemove={onRemove}
               onToggleSelect={onToggleSelect}
               onTickHistory={onTickHistory}
@@ -268,6 +272,7 @@ export function QueueList({
               isEditMode={isEditMode}
               isSelected={selectedItems.has(row.item.uuid)}
               onPress={onClimbPress}
+              onOpenActions={onOpenActions}
               onRemove={onRemove}
               onToggleSelect={onToggleSelect}
             />
@@ -283,6 +288,7 @@ export function QueueList({
               isEditMode={isEditMode}
               isSelected={selectedItems.has(row.item.uuid)}
               onPress={onClimbPress}
+              onOpenActions={onOpenActions}
               onRemove={onRemove}
               onToggleSelect={onToggleSelect}
               drag={dragControls}
@@ -325,6 +331,7 @@ export function QueueList({
       isEditMode,
       selectedItems,
       onClimbPress,
+      onOpenActions,
       onRemove,
       onToggleSelect,
       onTickHistory,

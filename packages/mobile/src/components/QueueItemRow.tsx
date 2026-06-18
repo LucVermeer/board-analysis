@@ -45,6 +45,8 @@ type QueueItemRowProps = {
   board: QueueItemRowBoard;
   isCurrentClimb: boolean;
   onPress: (item: ClimbQueueItem) => void;
+  /** Long press → open the climb reaction menu (omit to disable long-press). */
+  onOpenActions?: (item: ClimbQueueItem) => void;
   onRemove: (uuid: string) => void;
   isEditMode?: boolean;
   isSelected?: boolean;
@@ -103,6 +105,7 @@ function QueueItemRowComponent({
   board,
   isCurrentClimb,
   onPress,
+  onOpenActions,
   onRemove,
   isEditMode = false,
   isSelected = false,
@@ -260,6 +263,12 @@ function QueueItemRowComponent({
     onTickHistory?.(itemRef.current);
   }, [onTickHistory]);
 
+  const handleLongPress = useCallback(() => {
+    if (isEditMode || !onOpenActions) return;
+    hapticMedium();
+    onOpenActions(itemRef.current);
+  }, [isEditMode, onOpenActions]);
+
   // Take the layout event directly so the same stable function can be passed to
   // `onLayout` — an inline `(event) => ...` wrapper would be a fresh arrow each
   // render, defeating the row's memoization on the wrapping `Animated.View`.
@@ -278,6 +287,7 @@ function QueueItemRowComponent({
   const rowContent = (
     <AnimatedPressable
       onPress={handlePress}
+      onLongPress={handleLongPress}
       accessibilityRole="button"
       accessibilityLabel={`${climbName}, ${t('mobile.queue.positionLabel', { position })}`}
       accessibilityState={{ selected: isEditMode ? isSelected : isCurrentClimb }}

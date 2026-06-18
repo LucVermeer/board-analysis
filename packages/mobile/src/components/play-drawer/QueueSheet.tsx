@@ -34,6 +34,8 @@ type QueueSheetProps = {
    *  no longer needs this to unmount, so callers may omit it. */
   onDismissed?: () => void;
   onClimbPress: (item: ClimbQueueItem) => void;
+  /** Long press a queue row → open the climb reaction menu. */
+  onOpenActions?: (item: ClimbQueueItem) => void;
   onSuggestionPress: (climb: Climb, source: PlaylistSuggestionSource) => void;
   onTickHistory: (item: ClimbQueueItem) => void;
 };
@@ -52,7 +54,7 @@ export type QueueSheetHandle = {
 };
 
 export const QueueSheet = forwardRef<QueueSheetHandle, QueueSheetProps>(function QueueSheet(
-  { board, onClose, onDismissed, onClimbPress, onSuggestionPress, onTickHistory },
+  { board, onClose, onDismissed, onClimbPress, onOpenActions, onSuggestionPress, onTickHistory },
   ref,
 ) {
   const { t } = useTranslation('session');
@@ -218,6 +220,7 @@ export const QueueSheet = forwardRef<QueueSheetHandle, QueueSheetProps>(function
         autoScrollOnMount={isPresented}
         onToggleSelect={handleToggleSelect}
         onClimbPress={onClimbPress}
+        onOpenActions={onOpenActions}
         onRemove={handleRemove}
         onShowFullHistory={handleShowFullHistory}
         onTickHistory={onTickHistory}

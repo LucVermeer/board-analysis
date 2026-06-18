@@ -153,12 +153,13 @@ vi.mock('../../components/play-drawer/QueueSheet', async () => {
 vi.mock('../../components/LogAscentSheet', () => ({
   LogAscentSheet: () => createElement('div', { 'data-log-ascent': 'true' }),
 }));
-vi.mock('../../components/ClimbActionsSheet', () => ({
-  ClimbActionsSheet: (props: Record<string, unknown>) => {
+vi.mock('../../components/climb-actions/ClimbReactionMenu', () => ({
+  ClimbReactionMenu: (props: Record<string, unknown>) => {
     climbActions.props = props;
     return createElement('div', { 'data-climb-actions': 'true' });
   },
 }));
+vi.mock('../../hooks/use-reduce-motion', () => ({ useReduceMotion: () => false }));
 vi.mock('../../components/AddToPlaylistSheet', () => ({
   AddToPlaylistSheet: (props: Record<string, unknown>) => {
     playlistSheet.props = props;
@@ -563,11 +564,7 @@ describe('DrawerHostProvider board sheet climb actions', () => {
     await waitFor(() => expect(container.querySelector('[data-climb-actions]')).not.toBeNull());
     expect(climbActions.props).toMatchObject({
       climb,
-      boardName: 'kilter',
-      layoutId: 1,
-      sizeId: 10,
-      setIds: '1,2',
-      angle: 30,
+      boardConfig: { boardName: 'kilter', layoutId: 1, sizeId: 10, setIds: '1,2', angle: 30 },
     });
   });
 });
@@ -644,7 +641,7 @@ describe('DrawerHostProvider climb actions', () => {
     boardSheet.dismiss.mockClear();
   });
 
-  it('opens the climb actions sheet for a climb against the active board, then closes it', async () => {
+  it('opens the climb reaction menu for a climb against the active board, then closes it', async () => {
     const hosts: Array<ReturnType<typeof useDrawerHost>> = [];
     const { container } = renderHost((host) => hosts.push(host));
     await waitFor(() => expect(hosts.at(-1)).toBeDefined());
@@ -657,16 +654,11 @@ describe('DrawerHostProvider climb actions', () => {
     });
 
     await waitFor(() => expect(container.querySelector('[data-climb-actions]')).not.toBeNull());
-    // Snapshots the active board config (kilter / 1 / 10 / 1,2 / 40) at open time
-    // and forwards it to the sheet so the preview thumbnail + actions resolve.
+    // Snapshots the active board config (kilter / 1 / 10 / 1,2 / 40) at open time and
+    // forwards it to the reaction menu so the preview + actions resolve.
     expect(climbActions.props).toMatchObject({
-      visible: true,
       climb,
-      boardName: 'kilter',
-      layoutId: 1,
-      sizeId: 10,
-      setIds: '1,2',
-      angle: 40,
+      boardConfig: { boardName: 'kilter', layoutId: 1, sizeId: 10, setIds: '1,2', angle: 40 },
     });
 
     act(() => {
@@ -675,19 +667,16 @@ describe('DrawerHostProvider climb actions', () => {
     await waitFor(() => expect(container.querySelector('[data-climb-actions]')).toBeNull());
   });
 
-  it('opens add-to-playlist from climb actions with the same climb and board snapshot', async () => {
+  it('opens add-to-playlist against the active board snapshot', async () => {
+    // The reaction menu opens the playlist picker via the provider's openAddToPlaylist;
+    // assert that opener directly.
     const hosts: Array<ReturnType<typeof useDrawerHost>> = [];
     const { container } = renderHost((host) => hosts.push(host));
     await waitFor(() => expect(hosts.at(-1)).toBeDefined());
 
     const climb = makeQueueItem('queue-x', 'climb-x').climb as unknown as Climb;
     act(() => {
-      hosts.at(-1)?.openClimbActions(climb);
-    });
-    await waitFor(() => expect(climbActions.props).not.toBeNull());
-
-    act(() => {
-      (climbActions.props?.onOpenPlaylist as (() => void) | undefined)?.();
+      hosts.at(-1)?.openAddToPlaylist(climb);
     });
 
     await waitFor(() => expect(container.querySelector('[data-add-to-playlist]')).not.toBeNull());
@@ -702,27 +691,19 @@ describe('DrawerHostProvider climb actions', () => {
     });
   });
 
-  it('opens add beta video from climb actions, snapshotting the climb even as the actions sheet closes', async () => {
+  it('opens add beta video against the active board snapshot', async () => {
+    // The reaction menu opens the share-your-beta sheet via openAddBetaVideo; assert
+    // that opener snapshots the active board config onto the sheet.
     const hosts: Array<ReturnType<typeof useDrawerHost>> = [];
     const { container } = renderHost((host) => hosts.push(host));
     await waitFor(() => expect(hosts.at(-1)).toBeDefined());
 
     const climb = makeQueueItem('queue-x', 'climb-x').climb as unknown as Climb;
     act(() => {
-      hosts.at(-1)?.openClimbActions(climb);
-    });
-    await waitFor(() => expect(climbActions.props).not.toBeNull());
-
-    // Mirror ClimbActionsSheet.handleAddBetaVideo: fire onAddBetaVideo, then
-    // onClose (which clears climbActions). The beta-video sheet must still receive
-    // the snapshotted climb + board config — the ordering must not be load-bearing.
-    act(() => {
-      (climbActions.props?.onAddBetaVideo as (() => void) | undefined)?.();
-      (climbActions.props?.onClose as (() => void) | undefined)?.();
+      hosts.at(-1)?.openAddBetaVideo(climb);
     });
 
     await waitFor(() => expect(container.querySelector('[data-add-beta-video]')).not.toBeNull());
-    expect(container.querySelector('[data-climb-actions]')).toBeNull();
     expect(betaVideoSheet.props).toMatchObject({
       visible: true,
       climb,

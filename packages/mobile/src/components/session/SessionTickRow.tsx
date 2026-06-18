@@ -13,12 +13,14 @@ import { ClimbListItemContent } from '../ClimbListItemContent';
 import { gradeBadgeColor } from '../you/profile-chart-colors';
 import { useGradeFormat } from '../../hooks/use-grade-format';
 import { useTheme } from '../../providers/theme-provider';
+import { useDrawerHost } from '../../providers/drawer-host-provider';
 import { brandColors, withAlpha } from '../../theme/colors';
 import { iosSystemColors } from '../../theme/ios-colors';
 import { spacing, borderRadius } from '../../theme/tokens';
 import { getBoardConfigForPlaylist } from '../../lib/playlists/board-details-for-playlist';
 import { sessionTickToClimb } from '../../lib/session-tick-mapping';
-import { hapticSelection } from '../../lib/haptics';
+import { tickToClimb } from '../../lib/tick-to-climb';
+import { hapticSelection, hapticMedium } from '../../lib/haptics';
 
 type TickStatusMeta = { icon: IconName; color: string };
 
@@ -90,6 +92,7 @@ export const SessionTickRow = memo(function SessionTickRow({
   const { t } = useTranslation('session');
   const { systemColors } = useTheme();
   const { formatGrade, formatGradeByDifficultyId } = useGradeFormat();
+  const { openClimbActions } = useDrawerHost();
 
   const meta = statusMeta(tick.status);
   const attemptText = formatAttemptText(tick, t);
@@ -107,6 +110,23 @@ export const SessionTickRow = memo(function SessionTickRow({
     onPress(tick);
   }, [onPress, tick]);
 
+  // Long press → reaction menu. tickToClimb gives the full schema Climb the menu
+  // needs (sessionTickToClimb returns only the permissive list-visual shape); the
+  // board config + angle match the play-drawer open. No-ops without frames.
+  const handleLongPress = useCallback(() => {
+    const menuClimb = tickToClimb(tick);
+    const config = getBoardConfigForPlaylist(tick.boardType, tick.layoutId);
+    if (!menuClimb || !config) return;
+    hapticMedium();
+    openClimbActions(menuClimb, {
+      boardName: config.boardName,
+      layoutId: config.layoutId,
+      sizeId: config.sizeId,
+      setIds: config.setIds.join(','),
+      angle: tick.angle,
+    });
+  }, [tick, openClimbActions]);
+
   const climb = sessionTickToClimb(tick);
   // getBoardConfigForPlaylist memoises internally (static board metadata), so
   // this per-row call is O(1) after the first lookup for the board.
@@ -117,6 +137,7 @@ export const SessionTickRow = memo(function SessionTickRow({
       <View>
         <PressableSurface
           onPress={handlePress}
+          onLongPress={handleLongPress}
           feedback="opacity"
           opacityTo={0.7}
           accessibilityRole="button"
