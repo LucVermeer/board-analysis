@@ -244,22 +244,16 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
-      # On a capture failure, surface Maestro's debug output (the failure
-      # screenshot + view hierarchy) so we can see what was on screen and whether
-      # the app/JS loaded. Best-effort — never fails the job. The Maestro tests
-      # dir is under $HOME (upload-artifact doesn't expand ~), so copy it first.
-      - name: Collect capture debug artifacts
-        if: failure()
-        run: |
-          mkdir -p capture-debug
-          cp -R "$HOME/.maestro/tests" capture-debug/maestro-tests 2>/dev/null || echo "no maestro tests dir"
-          adb logcat -d > capture-debug/logcat.txt 2>&1 || echo "logcat capture skipped"
-
-      - name: Upload capture debug artifacts
-        if: failure()
+      # Device logcat + Maestro view hierarchy from the capture (collected inside
+      # ci-android-screenshot-capture.sh while the emulator is still alive — a
+      # post-step `adb logcat` would be too late, the runner kills the emulator
+      # when the capture step ends). Lets a screen that rendered empty (network
+      # error vs slow load) be debugged without a rerun.
+      - name: Upload Android capture debug
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: capture-debug-android
-          path: capture-debug/**
+          name: android-capture-debug
+          path: android-capture-debug/**
           if-no-files-found: warn
           retention-days: 14

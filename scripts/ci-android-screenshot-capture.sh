@@ -18,6 +18,27 @@ flow="${SCREENSHOT_FLOW:-app-store}"
 device="${SCREENSHOT_ANDROID_DEVICE:-Pixel 2}"
 apk_path="${SCREENSHOT_APK_PATH:-/tmp/boardsesh-screenshot.apk}"
 
+# Diagnostics land here; the workflow uploads it as an artifact (always()). The
+# device-side app logs (network errors, screen markers) are the only window into
+# why a screen captured empty, since the emulator is killed when this step ends.
+debug_dir="${GITHUB_WORKSPACE:-$PWD}/android-capture-debug"
+mkdir -p "$debug_dir"
+
+logcat_pid=""
+cleanup() {
+  [ -n "$logcat_pid" ] && kill "$logcat_pid" 2>/dev/null || true
+  # Maestro writes the view hierarchy + failure screenshot under ~/.maestro/tests;
+  # copy it out (best-effort) so we can see what Maestro could match on a failure.
+  cp -R "$HOME/.maestro/tests" "$debug_dir/maestro-tests" 2>/dev/null || true
+}
+trap cleanup EXIT
+
+# Stream the app's logcat to a file for the whole capture (cleared first so it's
+# just this run). Backgrounded; killed in cleanup.
+adb logcat -c 2>/dev/null || true
+adb logcat -v time > "$debug_dir/logcat.txt" 2>&1 &
+logcat_pid=$!
+
 # `sys.boot_completed` fires before the window manager is fully up, so an
 # `adb shell wm …` right after the runner reports "booted" can hit a transient
 # "device offline" (exit 1). Wait for the device, then retry the display setup

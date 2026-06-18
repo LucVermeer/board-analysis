@@ -628,3 +628,14 @@ jobs:
           path: app-stores/google/screenshots/**
           if-no-files-found: warn
           retention-days: 14
+
+      # Device logcat + Maestro view hierarchy from the capture, so a screen that
+      # rendered empty (network error vs slow load) is debuggable without a rerun.
+      - name: Upload Android capture debug
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-capture-debug
+          path: android-capture-debug/**
+          if-no-files-found: warn
+          retention-days: 14
