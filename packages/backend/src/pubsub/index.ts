@@ -22,8 +22,11 @@ type BoardPresenceSubscriber = (event: BoardPresenceEvent) => void;
 // "now on the wall" feed is ephemeral; this buffer backfills late joiners
 // before the `boardNowPlaying` subscription takes over.
 const BOARD_HISTORY_SIZE = 50; // Keep the last 50 climbs per board
-const BOARD_HISTORY_TTL = 86_400; // 24 hours
-const BOARD_SEQ_TTL = 86_400; // 24 hours
+const BOARD_HISTORY_TTL = 604_800; // 1 week
+// Must track BOARD_HISTORY_TTL: the per-board seq counter and the history buffer
+// expire together, so the seq never resets to 1 while history rows still exist
+// (which would collide / mis-order the keyset cursor).
+const BOARD_SEQ_TTL = 604_800; // 1 week
 // Proof-of-presence window: how long after connecting (resolveBoardForSerial /
 // resolveBoardForConfig) a user may report climbs to that board's feed. Long
 // enough for a climbing session; a reconnect re-stamps it.
@@ -717,7 +720,7 @@ class PubSub {
   /**
    * Atomically allocate the next monotonic sequence number for a board.
    * Redis `INCR` (cluster-safe across instances); falls back to an in-memory
-   * counter in local-only mode. The key expires after 24h of inactivity so
+   * counter in local-only mode. The key expires after a week of inactivity so
    * an idle board's counter doesn't leak in Redis — a new climb that day just
    * restarts at 1, which is fine because the history buffer expires together.
    */
@@ -745,7 +748,7 @@ class PubSub {
 
   /**
    * Append a climb to a board's durable FIFO history (newest-first, capped at
-   * 50, 24h TTL). No-op without Redis — late joiners then just rely on the
+   * 50, 1-week TTL). No-op without Redis — late joiners then just rely on the
    * live subscription.
    */
   async storeBoardClimb(boardId: string, climb: BoardPresenceClimb): Promise<void> {
