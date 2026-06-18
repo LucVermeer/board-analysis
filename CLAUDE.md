@@ -191,7 +191,7 @@ For indexable pages:
 
 ## Mobile Development (packages/mobile/)
 
-React Native + Expo SDK 53, React Native 0.79, Expo Router 5.
+React Native + Expo SDK 56, React Native 0.85, Expo Router 56.
 
 ### Stack
 
@@ -246,6 +246,10 @@ Use `vp run mobile:ios` for local `packages/mobile` iOS builds instead of raw `e
 - Pass `--app-path <Boardsesh.app>` to install a prebuilt/cached app (CI's common path). Without it, the script builds one via `vp run mobile:build-sim-app` (`scripts/mobile-build-sim-app.ts` → `expo prebuild` + `pod install` + `xcodebuild build -sdk iphonesimulator -configuration Debug`; **not** `expo run:ios`, whose launch step hangs in CI). Use `--clean` for a deterministic from-scratch build.
 - The default Apple capture is `--devices common --locales all`: iPhone 16 Pro Max, iPhone 14 Plus, and iPhone 16 Pro for app locales `en-US`, `es`, and `fr`. The Spanish app locale is written to both App Store Connect folders, `es-ES` and `es-MX`.
 - `.github/workflows/mobile-screenshots.yml` caches the `.app` (`actions/cache`) keyed on **native inputs only**: `packages/mobile/app.config.ts`, `plugins/**`, `modules/**`, `package.json`, `patches/**`, and the root `package.json` (which pins `@expo/cli` / `react-native-screens`), plus `runner.os`/`runner.arch`. JS/TS-only and web-only changes (including `bun.lock` churn) are a cache hit and skip the ~30-min native build; any native-input change busts the key and rebuilds. Bump the `-v1-` salt to force a rebuild. A native-dep change must invalidate the key — when adding native config, confirm it's covered by one of those globs.
+
+### Android emulator screenshots (local, dev-client + Metro)
+
+For quick ad-hoc shots of the live app on an Android emulator (the fast KVM path on Linux/Intel), `vp run mobile:android-shots` (`scripts/mobile-android-shots.ts`) boots an x86*64 emulator, installs a cached **dev-client** APK (`com.boardsesh.app.dev`, universal `arm64-v8a`+`x86_64`), starts Metro, and captures with `adb exec-out screencap`. Same `EXPO_PUBLIC_SCREENSHOT*_`env as iOS; the deep-link scheme is`com.boardsesh.app://`for both variants (only the package differs). The APK comes from the latest`rn-android-dev-_`release (or a local Gradle fallback). One-time setup:`vp run mobile:android-doctor`(bootstraps the SDK + JDK 21 under`~/.cache/boardsesh/`). Full guide: `docs/android-emulator-screenshots.md`. This is distinct from `vp run mobile:screenshots --platform android`, which installs a standalone store APK with bundled JS.
 
 ### OTA preview distribution (EAS Update)
 

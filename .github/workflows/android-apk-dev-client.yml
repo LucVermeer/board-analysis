@@ -150,7 +150,12 @@ jobs:
           # Gradle version; keep runtime Sentry (via the DSN) but never let the
           # upload task fail the build. Mirrors the production workflow.
           SENTRY_DISABLE_AUTO_UPLOAD: 'true'
-        run: ./gradlew assembleDebug -PreactNativeArchitectures=arm64-v8a -PboardseshAbiFilters=arm64-v8a --no-daemon --console=plain --stacktrace
+        # Universal (arm64-v8a + x86_64): runs on physical arm64 devices, Apple-Silicon
+        # emulators, AND x86_64 emulators (the fast KVM path on Linux/Intel, used by the
+        # local screenshot flow — see docs/android-emulator-screenshots.md). Both props
+        # must list both ABIs: -PreactNativeArchitectures governs the RN/Hermes core libs,
+        # -PboardseshAbiFilters the board-renderer CMake module.
+        run: ./gradlew assembleDebug -PreactNativeArchitectures=arm64-v8a,x86_64 -PboardseshAbiFilters=arm64-v8a,x86_64 --no-daemon --console=plain --stacktrace
 
       - name: Stage APK asset
         run: |
@@ -179,7 +184,7 @@ jobs:
             **Dev-client** Android build from commit ${{ github.sha }} — for testing, not the Play Store.
 
             **Package:** `com.boardsesh.app.dev` — installs **side-by-side** with the production app (shows as "Boardsesh Dev" with a red icon).
-            **APK architecture:** arm64-v8a
+            **APK architecture:** universal (`arm64-v8a` + `x86_64`) — runs on physical arm64 devices, Apple-Silicon emulators, and x86_64 emulators (Linux/Intel + KVM).
 
             This APK has no bundled JS: it opens expo-dev-client's launcher and loads
             JavaScript from a Metro dev server. Start Metro (`vp run dev:mobile`),

@@ -251,7 +251,10 @@ who need to run local JS without compiling the app themselves. It produces a
 embeds `expo-dev-client`'s launcher, so the APK ships no bundled JS — it opens
 the "Development servers" screen and loads JavaScript from a Metro dev server.
 Start Metro with `vp run dev:mobile`, then enter its URL in the launcher (or
-switch between worktrees' servers from the dev menu).
+switch between worktrees' servers from the dev menu). The APK is **universal**
+(`arm64-v8a` + `x86_64`), so it also runs on an x86_64 emulator — see
+[Android emulator screenshots](./android-emulator-screenshots.md) for the local
+`vp run mobile:android-shots` flow that downloads and drives it automatically.
 
 It installs **side-by-side** with the production app. `app.config.ts` reads
 `BOARDSESH_APP_VARIANT=dev` (set as a job env var) and switches to:

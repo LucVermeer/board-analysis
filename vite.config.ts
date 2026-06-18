@@ -527,6 +527,18 @@ export default defineConfig({
         command: 'tsx scripts/mobile-build-sim-app.ts',
         cache: false,
       },
+      'mobile:android-shots': {
+        command: 'tsx scripts/mobile-android-shots.ts',
+        cache: false,
+      },
+      'mobile:android-doctor': {
+        command: 'tsx scripts/mobile-android-doctor.ts',
+        cache: false,
+      },
+      'mobile:android-apk': {
+        command: 'tsx scripts/mobile-android-apk.ts',
+        cache: false,
+      },
       'check:screenshot-dimensions': {
         command: 'tsx scripts/assert-screenshot-dimensions.ts',
         cache: false,
