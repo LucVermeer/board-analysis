@@ -1,30 +1,27 @@
 ONE APP FOR EVERY BOARD YOU CLIMB
-Kilter, Tension, MoonBoard, Decoy, Touchstone, Grasshopper and So iLL each have their own app for their own board. Boardsesh works across all of them in one place. Search any climb and Boardsesh sends it to the wall over Bluetooth, lighting the holds. Full LED control on all seven boards.
-
-One app gets you two things a single-board app can't: board history that's always on, and sessions you drive with your crew.
+Kilter, Tension, MoonBoard, Decoy, Touchstone, Grasshopper and So iLL each have their own app for their own board. Boardsesh works across all of them in one place. Search any climb and Boardsesh sends it to the wall over Bluetooth, lighting the holds. Your full history of climbs across all boards in one convinient app.
 
 BOARD HISTORY, ALWAYS ON
-Every board you connect to has a live feed of what's lit on that wall right now: the climb up at the moment, who lit it, the grade and angle, who set it, and recent sends. That history is always there, updating as climbs are changed.
+When sharing a board, it's always hard to remember what the last climb was, and the board is often changed by mistake.
+In Boardsesh every board you connect to has a live feed of what's lit on that wall right now: it's name, who lit it, the grade, and recent sends. That history is always there, updating as climbs are changed, no more confusion.
 
 SESSIONS WITH YOUR CREW
-Start a session and you and your crew share one queue everyone can drive. Anyone can send the next climb to the wall: no driver to hand the phone around, no turn to wait for. Whoever's connected over Bluetooth lights it. When you're done you get a recap and tracking: sends and attempts, grade spread, your hardest send, and progress over time.
+Start a session and you and your crew can share one queue everyone can drive. Anyone can send the next climb to the wall. When you're done you get a recap and tracking: sends and attempts, grade spread, your hardest send, and progress over time.
 
-Run the session from your lock screen (iOS 17+)
-Live Activities put the current climb, your place in the queue, and next/previous on the lock screen and Dynamic Island, so you flip climbs without opening the app.
+CONTROL FROM YOUR LOCK SCREEN (iOS 17+)
+iOS Live Activities tell you what climb is on from your lock screen, and allow you to change it without leaving your lock screen.
 
-Build a workout
+BUILD A WORKOUT
 Pick Volume, Pyramid, Ladder or Grade Focus, set a target grade and warm-up, preview the climbs, then send them to the wall one burn at a time.
 
-Track your climbing
+TRACK YOUR CLIMBING
 Record sends, flashes and attempts, get a recap with duration, grade spread and your hardest send, and see your sends and grades chart out on the Progress tab.
 
-Bring your history with you
-Save your session to Apple Health, and import your past Kilter and Tension logbook from Aurora Climbing.
+BRING YOUR HISTORY WITH YOU
+Save your session to Apple Health, and import your logbooks from the other apps
 
-Find more to climb
+FIND MORE TO CLIMB
 Follow your crew and setters, search climbers, and pin playlists from Discover.
-
-Free, no ads, no subscriptions. Open source on GitHub.
 
 Supported boards: Kilter, Tension, MoonBoard (2010, 2016, 2024, Masters 2017, Masters 2019), Decoy, Touchstone, Grasshopper and So iLL.
 
