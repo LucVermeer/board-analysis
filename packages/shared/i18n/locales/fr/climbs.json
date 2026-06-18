@@ -684,6 +684,7 @@
       "benchmark": "Benchmark"
     },
     "climbActions": {
+      "preview": "Aperçu",
       "copyLink": "Copier le lien",
       "linkCopied": "Lien copié",
       "tick": "Enregistrer une croix",

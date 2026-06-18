@@ -42,32 +42,32 @@ beforeEach(() => {
 });
 
 describe('openClimbInPlayDrawer', () => {
-  it('kind:climb opens the drawer as a view-only preview with the given board config, tagged as a climb-view', () => {
+  it('kind:climb opens active by default (no preview), tagged as a climb-view', () => {
     const deps = makeDeps();
     const climb = { uuid: 'c-1', name: 'X' } as Climb;
     const boardConfig = { boardName: 'kilter', layoutId: 1, sizeId: 10, setIds: '1,20,33', angle: 40 };
-    // Default (setAsCurrent omitted) is a view-only preview.
+    // Default is now "set active": no previewQueueItem (pressing a climb plays it).
     openClimbInPlayDrawer({ kind: 'climb', climb, boardConfig }, deps);
     expect(deps.openPlayDrawer).toHaveBeenCalledWith(climb, {
-      previewQueueItem: expect.objectContaining({ climb: expect.objectContaining({ uuid: 'c-1' }) }),
       boardConfig,
       source: 'climb_view',
     });
     expect(deps.router.push).not.toHaveBeenCalled();
   });
 
-  it('kind:climb with setAsCurrent opens active (no preview)', () => {
+  it('kind:climb with preview:true opens a view-only preview (previewQueueItem set)', () => {
     const deps = makeDeps();
     const climb = { uuid: 'c-1', name: 'X' } as Climb;
     const boardConfig = { boardName: 'kilter', layoutId: 1, sizeId: 10, setIds: '1,20,33', angle: 40 };
-    openClimbInPlayDrawer({ kind: 'climb', climb, boardConfig }, deps, { setAsCurrent: true });
+    openClimbInPlayDrawer({ kind: 'climb', climb, boardConfig }, deps, { preview: true });
     expect(deps.openPlayDrawer).toHaveBeenCalledWith(climb, {
+      previewQueueItem: expect.objectContaining({ climb: expect.objectContaining({ uuid: 'c-1' }) }),
       boardConfig,
       source: 'climb_view',
     });
   });
 
-  it('kind:tick with frames opens a view-only preview with a resolved board config (no route push)', () => {
+  it('kind:tick with frames opens active by default with a resolved board config (no route push)', () => {
     mockedGetBoardConfig.mockReturnValue(KILTER_CONFIG);
     const deps = makeDeps();
     openClimbInPlayDrawer({ kind: 'tick', tick: makeTick({ angle: 50 }) }, deps);
@@ -77,8 +77,16 @@ describe('openClimbInPlayDrawer', () => {
       boardConfig: { boardName: 'kilter', layoutId: 1, sizeId: 10, setIds: '1,20,33', angle: 50 },
       source: 'climb_view',
     });
-    expect(options.previewQueueItem?.climb?.uuid).toBe('climb-1');
+    expect(options.previewQueueItem).toBeUndefined();
     expect(deps.router.push).not.toHaveBeenCalled();
+  });
+
+  it('kind:tick with preview:true opens a view-only preview', () => {
+    mockedGetBoardConfig.mockReturnValue(KILTER_CONFIG);
+    const deps = makeDeps();
+    openClimbInPlayDrawer({ kind: 'tick', tick: makeTick({ angle: 50 }) }, deps, { preview: true });
+    const [, options] = deps.openPlayDrawer.mock.calls[0];
+    expect(options.previewQueueItem?.climb?.uuid).toBe('climb-1');
   });
 
   it('kind:tick without frames falls back to the climb route', () => {

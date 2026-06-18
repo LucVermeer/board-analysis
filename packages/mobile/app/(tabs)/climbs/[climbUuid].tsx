@@ -56,7 +56,9 @@ export default function ClimbDetail() {
     if (firedRef.current) return;
     if (!climb || !hasRequiredParams) return;
     firedRef.current = true;
-    // setAsCurrent:false so a deep-linked climb doesn't disturb the queue.
+    // preview:true so a deep-linked climb doesn't disturb the queue (in a session
+    // it would change the shared current climb for everyone). The drawer shows it
+    // with a "Preview" badge + "Set active" to opt into playing it.
     openClimbInPlayDrawer(
       {
         kind: 'climb',
@@ -70,6 +72,7 @@ export default function ClimbDetail() {
         },
       },
       { openPlayDrawer, router },
+      { preview: true },
     );
     if (router.canGoBack()) {
       router.back();

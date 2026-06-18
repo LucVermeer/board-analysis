@@ -684,6 +684,7 @@
       "benchmark": "Benchmark"
     },
     "climbActions": {
+      "preview": "Vista previa",
       "copyLink": "Copiar enlace",
       "linkCopied": "Enlace copiado",
       "tick": "Registrar un envío",

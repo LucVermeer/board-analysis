@@ -484,6 +484,7 @@
   },
   "playView": {
     "previewBadge": "Preview",
+    "onWallBadge": "On the wall",
     "setActive": "Set active",
     "previousFrame": "Previous frame",
     "nextFrame": "Next frame",

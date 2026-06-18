@@ -16,10 +16,12 @@ type PlayDrawerPreviewBannerProps = {
 
 /**
  * Banner shown in the play drawer when the displayed climb is a *preview* — a
- * climb the user is browsing (workout builder, logbook/cross-board, the
- * peer-driven wall climb) that is NOT their active/wall climb. The lightbulb acts
- * on the active climb, not this preview, so the banner makes that explicit and
- * offers a one-tap "Set active" to promote it.
+ * climb the user is browsing (workout builder, logbook/cross-board) that is NOT
+ * their active/wall climb. The lightbulb acts on the active climb, not this
+ * preview, so the banner makes that explicit and offers a one-tap "Set active"
+ * to promote it. The peer-driven accessory-bar wall climb is *not* a preview in
+ * this sense — it's physically lit — so it renders {@link PlayDrawerOnWallBanner}
+ * (read-only, no "Set active") instead.
  */
 export const PlayDrawerPreviewBanner = memo(function PlayDrawerPreviewBanner({
   showSetActive,

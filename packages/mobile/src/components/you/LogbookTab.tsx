@@ -59,7 +59,8 @@ export function LogbookTab({ userId, topInset = 0, viewerIsOwner = true, screenT
   const handleActivate = useCallback(
     (ascent: AscentFeedItem) => {
       track(SHARED_EVENTS.LogbookRowClicked, { climbUuid: ascent.climbUuid });
-      openClimbInPlayDrawer({ kind: 'tick', tick: ascent }, { openPlayDrawer, router }, { setAsCurrent: true });
+      // Default open mode is now "set active", so no option is needed here.
+      openClimbInPlayDrawer({ kind: 'tick', tick: ascent }, { openPlayDrawer, router });
     },
     [openPlayDrawer, router],
   );
