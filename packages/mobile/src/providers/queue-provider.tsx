@@ -37,7 +37,7 @@ import {
 import { useQueueMutations, type PublishPlaybackStateInput } from '@boardsesh/queue-react';
 import type { SessionSummary, SubscriptionQueueEvent, SessionUser, UserBoard } from '@boardsesh/shared-schema';
 import { execute, GraphQLOperationError, isRateLimitedExtension } from '@boardsesh/graphql-client';
-import { buildBoardPath, parseBoardPath } from '@boardsesh/board-config';
+import { buildBoardPath, parseBoardPath, parseNamedBoardPath } from '@boardsesh/board-config';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { JOIN_SESSION, LEAVE_SESSION } from '@boardsesh/graphql/operations/queue-session';
 import { getWsClient } from '../lib/graphql/ws-client';
@@ -788,6 +788,24 @@ export function QueueProvider({ children }: { children: ReactNode }) {
             // broadcasting. A null local participant id (peer event before our
             // JOIN_SESSION resolved) can't be the originator, so we apply it.
             if (event.changedByParticipantId && event.changedByParticipantId === participantIdRef.current) return;
+            // Named-board hosts (`/b/{slug}`) broadcast a slug path the tuple
+            // parser rejects. Follow the angle when we're on the SAME named board
+            // (slug match) — the angle table differs per board, so never cross
+            // boards (mirrors the tuple-identity guard below).
+            const named = parseNamedBoardPath(event.boardPath);
+            if (named) {
+              if (named.angle == null) return;
+              const nextNamedAngle = named.angle;
+              void (async () => {
+                const stored = await getStoredActiveBoard();
+                if (sessionIdRef.current !== sessionId) return;
+                if (!stored || stored.angle === nextNamedAngle) return;
+                if (stored.isAngleAdjustable === false) return;
+                if (!stored.slug || stored.slug !== named.slug) return;
+                await setActiveBoardRef.current({ ...stored, angle: nextNamedAngle });
+              })();
+              return;
+            }
             const parsed = parseBoardPath(event.boardPath);
             if (!parsed || parsed.angle == null) return;
             const nextAngle = parsed.angle;

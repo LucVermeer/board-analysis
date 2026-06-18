@@ -13,7 +13,7 @@
 // wires the real `useMyBoards` data + `useCreateBoard` mutation into `deps`.
 
 import type { CreateBoardInput, UserBoard } from '@boardsesh/shared-schema';
-import { parseBoardPath, formatBoardDisplayName } from '@boardsesh/board-config';
+import { parseBoardPath, parseNamedBoardPath, formatBoardDisplayName } from '@boardsesh/board-config';
 import { findOwnedBoardForConfig } from '../components/board-discovery/board-items';
 
 /** A board config parsed out of a session boardPath, with a concrete angle. */
@@ -31,6 +31,10 @@ export type ResolveBoardDeps = {
   ownedBoards: UserBoard[];
   /** Persists a new board server-side and returns the full UserBoard. */
   createBoard: (input: CreateBoardInput) => Promise<UserBoard>;
+  /** Resolve a named board (`/b/{slug}`) to its full entity, or null when the
+   *  slug no longer resolves. Backs the named-board branch of
+   *  {@link resolveBoardForSession} (the `fetchBoardBySlug` GraphQL lookup). */
+  fetchBoardBySlug: (slug: string) => Promise<UserBoard | null>;
 };
 
 /**
@@ -85,11 +89,28 @@ export function buildCreateBoardInput(config: ResolvedBoardConfig): CreateBoardI
 
 /**
  * Resolve a session `boardPath` into a full `UserBoard`:
- * 1. Parse the path → config (throws on an unparseable / angle-less path).
- * 2. Reuse a matching owned board (angle overridden from the path), or
- * 3. Create a new board via `deps.createBoard`.
+ * - Named-board shape (`/b/{slug}` — how named gym boards, incl. MoonBoard, are
+ *   referenced): look the slug up via `deps.fetchBoardBySlug` and use that shared
+ *   board entity directly, applying the path's angle (or the entity's own angle
+ *   when the path carries none). We intentionally skip the owned-reuse/create
+ *   path here — a named gym board is the shared board you're climbing on, not a
+ *   personal copy to mint.
+ * - Tuple shape (`{board}/{layout}/{size}/{sets}/{angle}`):
+ *   1. Parse the path → config (throws on an unparseable / angle-less path).
+ *   2. Reuse a matching owned board (angle overridden from the path), or
+ *   3. Create a new board via `deps.createBoard`.
  */
 export async function resolveBoardForSession(boardPath: string, deps: ResolveBoardDeps): Promise<UserBoard> {
+  const named = parseNamedBoardPath(boardPath);
+  if (named) {
+    const board = await deps.fetchBoardBySlug(named.slug);
+    if (!board) {
+      throw new Error(`Cannot resolve a board from session boardPath: ${boardPath}`);
+    }
+    const angle = named.angle ?? board.angle;
+    return board.angle === angle ? board : { ...board, angle };
+  }
+
   const config = parseBoardConfigFromPath(boardPath);
   if (!config) {
     throw new Error(`Cannot resolve a board from session boardPath: ${boardPath}`);

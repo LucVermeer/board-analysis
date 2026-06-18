@@ -108,6 +108,7 @@ describe('resolveBoardForSession', () => {
     const result = await resolveBoardForSession('kilter/8/17/27,28/30', {
       ownedBoards: [owned],
       createBoard,
+      fetchBoardBySlug: vi.fn(),
     });
     expect(result).toMatchObject({ uuid: 'board-uuid', angle: 30 });
     expect(createBoard).not.toHaveBeenCalled();
@@ -119,6 +120,7 @@ describe('resolveBoardForSession', () => {
     const result = await resolveBoardForSession('kilter/8/17/27,28/30', {
       ownedBoards: [],
       createBoard,
+      fetchBoardBySlug: vi.fn(),
     });
     expect(createBoard).toHaveBeenCalledWith({
       boardType: 'kilter',
@@ -133,8 +135,48 @@ describe('resolveBoardForSession', () => {
   });
 
   it('throws on an unparseable board path', async () => {
-    await expect(resolveBoardForSession('garbage', { ownedBoards: [], createBoard: vi.fn() })).rejects.toThrow(
-      /Cannot resolve a board/,
-    );
+    await expect(
+      resolveBoardForSession('garbage', { ownedBoards: [], createBoard: vi.fn(), fetchBoardBySlug: vi.fn() }),
+    ).rejects.toThrow(/Cannot resolve a board/);
+  });
+
+  describe('named-board (/b/{slug}) paths', () => {
+    it('resolves a named board via fetchBoardBySlug, applying the path angle', async () => {
+      const namedBoard = makeBoard({ uuid: 'named-uuid', boardType: 'moonboard', slug: 'my-gym-moonboard', angle: 25 });
+      const fetchBoardBySlug = vi.fn().mockResolvedValue(namedBoard);
+      const createBoard = vi.fn();
+      const result = await resolveBoardForSession('/b/my-gym-moonboard/40/list', {
+        ownedBoards: [],
+        createBoard,
+        fetchBoardBySlug,
+      });
+      expect(fetchBoardBySlug).toHaveBeenCalledWith('my-gym-moonboard');
+      expect(result).toMatchObject({ uuid: 'named-uuid', angle: 40 });
+      // The shared entity is used directly — never minted as a personal copy.
+      expect(createBoard).not.toHaveBeenCalled();
+    });
+
+    it("falls back to the board entity's stored angle for a bare /b/{slug}", async () => {
+      const namedBoard = makeBoard({ uuid: 'named-uuid', slug: 'my-gym-moonboard', angle: 25 });
+      const fetchBoardBySlug = vi.fn().mockResolvedValue(namedBoard);
+      const result = await resolveBoardForSession('/b/my-gym-moonboard', {
+        ownedBoards: [],
+        createBoard: vi.fn(),
+        fetchBoardBySlug,
+      });
+      expect(result).toBe(namedBoard);
+      expect(result.angle).toBe(25);
+    });
+
+    it('throws when the slug no longer resolves to a board', async () => {
+      const fetchBoardBySlug = vi.fn().mockResolvedValue(null);
+      await expect(
+        resolveBoardForSession('/b/deleted-board/40', {
+          ownedBoards: [],
+          createBoard: vi.fn(),
+          fetchBoardBySlug,
+        }),
+      ).rejects.toThrow(/Cannot resolve a board/);
+    });
   });
 });
