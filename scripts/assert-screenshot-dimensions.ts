@@ -47,16 +47,14 @@ export const EXPECTED_APP_STORE_LOCALES = ['en-US', 'es-ES', 'es-MX', 'fr-FR'] a
  * slug can't sneak un-validated sizes past the gate.
  */
 export const ACCEPTED_SIZES: Record<string, readonly Dimensions[]> = {
-  // 6.9" iPhone slot. Apple accepts the iPhone 16 Pro Max native 1320x2868 or
-  // the prior-gen 1290x2796 in this slot.
+  // 6.9" iPhone slot — the ONLY size we capture. Apple auto-scales it down to every
+  // smaller iPhone, so one 6.9" set covers the whole device range and extra sizes add
+  // no store/ranking value (see app-store-submission-guide.md). Apple accepts the
+  // iPhone 16 Pro Max native 1320x2868 or the prior-gen 1290x2796 here.
   'iphone-16-pro-max': [
     { width: 1320, height: 2868 },
     { width: 1290, height: 2796 },
   ],
-  // 6.5"/6.7" iPhone Plus slot.
-  'iphone-14-plus': [{ width: 1284, height: 2778 }],
-  // Current non-Max Pro slot.
-  'iphone-16-pro': [{ width: 1206, height: 2622 }],
 };
 
 /** Read width/height from a PNG buffer's IHDR. Throws on a non-PNG / truncated file. */

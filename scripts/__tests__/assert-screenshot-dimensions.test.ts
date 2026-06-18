@@ -54,17 +54,17 @@ describe('findOffenders', () => {
     expect(offenders).toEqual([]);
   });
 
-  it('accepts the common iPhone Plus and Pro sizes', () => {
+  it('fails closed for the dropped Plus/Pro slugs (only 6.9" is captured now)', () => {
     expect(
       findOffenders('iphone-14-plus', [
         { name: 'iphone-14-plus/00-home.png', buffer: pngHeader({ width: 1284, height: 2778 }) },
-      ]),
-    ).toEqual([]);
+      ])[0].reason,
+    ).toMatch(/no accepted-size list/);
     expect(
       findOffenders('iphone-16-pro', [
         { name: 'iphone-16-pro/00-home.png', buffer: pngHeader({ width: 1206, height: 2622 }) },
-      ]),
-    ).toEqual([]);
+      ])[0].reason,
+    ).toMatch(/no accepted-size list/);
   });
 
   it('flags a wrong size, reporting both file and dimensions', () => {
@@ -101,18 +101,6 @@ describe('findScreenshotTreeOffenders', () => {
             buffer: pngHeader({ width: 1320, height: 2868 }),
           },
         ],
-        'iphone-14-plus': [
-          {
-            name: `${locale}/iphone-14-plus/00-home.png`,
-            buffer: pngHeader({ width: 1284, height: 2778 }),
-          },
-        ],
-        'iphone-16-pro': [
-          {
-            name: `${locale}/iphone-16-pro/00-home.png`,
-            buffer: pngHeader({ width: 1206, height: 2622 }),
-          },
-        ],
       };
     }
     for (const [locale, devices] of Object.entries(overrides)) {
@@ -143,18 +131,6 @@ describe('findScreenshotTreeOffenders', () => {
             buffer: pngHeader({ width: 1320, height: 2868 }),
           },
         ],
-        'iphone-14-plus': [
-          {
-            name: 'de-DE/iphone-14-plus/00-home.png',
-            buffer: pngHeader({ width: 1284, height: 2778 }),
-          },
-        ],
-        'iphone-16-pro': [
-          {
-            name: 'de-DE/iphone-16-pro/00-home.png',
-            buffer: pngHeader({ width: 1206, height: 2622 }),
-          },
-        ],
       },
     });
     const offenders = findScreenshotTreeOffenders(tree);
@@ -166,10 +142,11 @@ describe('findScreenshotTreeOffenders', () => {
   it('flags inconsistent device sets across locales', () => {
     const tree = screenshotTree({
       'es-ES': {
-        'iphone-16-pro-max': [
+        // A different device slug than the reference's iphone-16-pro-max.
+        'iphone-14-plus': [
           {
-            name: 'es-ES/iphone-16-pro-max/00-home.png',
-            buffer: pngHeader({ width: 1320, height: 2868 }),
+            name: 'es-ES/iphone-14-plus/00-home.png',
+            buffer: pngHeader({ width: 1284, height: 2778 }),
           },
         ],
       },
@@ -183,22 +160,11 @@ describe('findScreenshotTreeOffenders', () => {
   it('flags inconsistent PNG sets across locales', () => {
     const tree = screenshotTree({
       'es-MX': {
+        // Same device as the reference but a different PNG set (01-climbs vs 00-home).
         'iphone-16-pro-max': [
           {
             name: 'es-MX/iphone-16-pro-max/01-climbs.png',
             buffer: pngHeader({ width: 1320, height: 2868 }),
-          },
-        ],
-        'iphone-14-plus': [
-          {
-            name: 'es-MX/iphone-14-plus/00-home.png',
-            buffer: pngHeader({ width: 1284, height: 2778 }),
-          },
-        ],
-        'iphone-16-pro': [
-          {
-            name: 'es-MX/iphone-16-pro/00-home.png',
-            buffer: pngHeader({ width: 1206, height: 2622 }),
           },
         ],
       },

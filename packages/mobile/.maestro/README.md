@@ -28,10 +28,11 @@ orchestrator builds with the prod `EXPO_PUBLIC_BACKEND_URL` and resets the
 simulator keychain first so login authenticates cleanly against prod.
 `--backend local` (the default) points at the seeded dev DB instead.
 
-By default the orchestrator captures the common Apple device matrix
-(`--devices common`: iPhone 16 Pro Max, iPhone 14 Plus, iPhone 16 Pro) and every
-app locale (`--locales all`: en-US, es, fr). Spanish is written to both App Store
-Connect Spanish folders (`es-ES` and `es-MX`).
+By default the orchestrator captures one device size (`--devices common`: the
+6.9" iPhone 16 Pro Max — App Store Connect scales it down to every smaller iPhone,
+so extra sizes add no value) across every app locale (`--locales all`: en-US, es,
+fr). Spanish is written to both App Store Connect Spanish folders (`es-ES` and
+`es-MX`).
 
 ## Flows
 

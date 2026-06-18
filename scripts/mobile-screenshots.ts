@@ -91,21 +91,15 @@ export interface IosScreenshotDevice {
   typeId: string;
 }
 
-// The flow needs no per-device coordinate taps any more: every screen is a deep
-// link, and the active board is auto-selected on boot in screenshot mode (see
-// auth-provider.tsx), so there's no board-picker tap to tune per device.
+// Just the 6.9" iPhone 16 Pro Max. App Store Connect auto-scales the largest size
+// down to every smaller iPhone, so a single 6.9" set covers the whole range — extra
+// device sizes are invisible to users and add no ranking value, only CI time (see
+// app-stores/apple/app-store-submission-guide.md). Locale, not device size, is the
+// axis that helps the listing, so the orchestrator still captures every app locale.
 export const IOS_SCREENSHOT_DEVICES: readonly IosScreenshotDevice[] = [
   {
     name: 'iPhone 16 Pro Max',
     typeId: 'com.apple.CoreSimulator.SimDeviceType.iPhone-16-Pro-Max',
-  },
-  {
-    name: 'iPhone 14 Plus',
-    typeId: 'com.apple.CoreSimulator.SimDeviceType.iPhone-14-Plus',
-  },
-  {
-    name: 'iPhone 16 Pro',
-    typeId: 'com.apple.CoreSimulator.SimDeviceType.iPhone-16-Pro',
   },
 ];
 
