@@ -16,7 +16,7 @@ import { SessionAnalyticsSection } from './SessionAnalyticsSection';
 import { SessionBetaCarousel } from './SessionBetaCarousel';
 import { SessionLeaderboard } from './SessionLeaderboard';
 import { SessionTickRow } from './SessionTickRow';
-import { useSessionDetail } from '../../lib/graphql/hooks';
+import { useSessionDetail, useBulkVoteSummaries } from '../../lib/graphql/hooks';
 import { openClimbInPlayDrawer } from '../../lib/open-climb-in-play-drawer';
 import { useBottomChromeMetrics } from '../../hooks/use-bottom-chrome-metrics';
 import { useDrawerHost } from '../../providers/drawer-host-provider';
@@ -47,6 +47,8 @@ export default function SessionDetailScreen() {
   const paddingBottom = bottomChrome.floatingControlBottom + spacing[6];
 
   const { data: session, isPending } = useSessionDetail(sessionId);
+  const { data: voteSummaries } = useBulkVoteSummaries('session', sessionId ? [sessionId] : [], !!sessionId);
+  const sessionVoteSummary = voteSummaries?.[0];
 
   const commentSheetRef = useRef<BottomSheet | null>(null);
   const [commentTarget, setCommentTarget] = useState<{ entityId: string; entityType: SocialEntityType } | null>(null);
@@ -126,6 +128,7 @@ export default function SessionDetailScreen() {
         title={title}
         titleIsDate={!session.sessionName}
         onOpenComments={handleOpenSessionComments}
+        voteSummary={sessionVoteSummary}
       />
 
       <SessionAnalyticsSection gradeDistribution={session.gradeDistribution} />

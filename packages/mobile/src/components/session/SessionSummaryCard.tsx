@@ -30,6 +30,7 @@ type SessionSummaryCardProps = {
    *  human "Sunday morning" instead of repeating the date. */
   titleIsDate: boolean;
   onOpenComments: (entityId: string) => void;
+  voteSummary?: { upvotes: number; userVote: number | null };
 };
 
 /**
@@ -39,7 +40,7 @@ type SessionSummaryCardProps = {
  * separate hero, a tiles card, and a standalone social row. Only the hardest-grade
  * tile carries colour, so the grade stays the one accent.
  */
-export function SessionSummaryCard({ session, title, titleIsDate, onOpenComments }: SessionSummaryCardProps) {
+export function SessionSummaryCard({ session, title, titleIsDate, onOpenComments, voteSummary }: SessionSummaryCardProps) {
   const { systemColors } = useTheme();
   const { t } = useTranslation('you');
   const { t: tSession } = useTranslation('session');
@@ -109,8 +110,8 @@ export function SessionSummaryCard({ session, title, titleIsDate, onOpenComments
       <View style={styles.social}>
         <FeedSocialRow
           entityId={session.sessionId}
-          upvotes={session.upvotes}
-          userVote={null}
+          upvotes={voteSummary?.upvotes ?? session.upvotes}
+          userVote={voteSummary?.userVote ?? null}
           commentCount={session.commentCount}
           onOpenComments={onOpenComments}
         />

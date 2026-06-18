@@ -178,6 +178,25 @@ describe('SessionSummaryCard', () => {
     expect(mockFeedSocialRow).toHaveBeenCalledWith(expect.objectContaining({ entityId: 'sess-42' }));
   });
 
+  it('wires onOpenComments through to FeedSocialRow', () => {
+    const onOpenComments = vi.fn();
+    render(
+      createElement(SessionSummaryCard, {
+        session: session({ sessionId: 'sess-42' }),
+        title: 'Sesh',
+        titleIsDate: false,
+        onOpenComments,
+      }),
+    );
+    const capturedProps = mockFeedSocialRow.mock.calls[0][0] as {
+      entityId: string;
+      onOpenComments: (id: string) => void;
+    };
+    expect(typeof capturedProps.onOpenComments).toBe('function');
+    capturedProps.onOpenComments('sess-42');
+    expect(onOpenComments).toHaveBeenCalledWith('sess-42');
+  });
+
   it('passes participants to AvatarGroup', () => {
     const participants = [{ userId: 'u1', displayName: 'Alice', avatarUrl: null, sends: 3, flashes: 1, attempts: 7 }];
     render_(session({ participants }), 'Party', false);
