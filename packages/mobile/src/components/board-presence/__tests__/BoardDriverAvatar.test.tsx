@@ -79,6 +79,17 @@ describe('BoardDriverAvatar', () => {
     expect(container.querySelector('[data-avatar="true"]')).toBeTruthy();
   });
 
+  it('shows a corner text label (e.g. elapsed time) in place of the glyph when provided', () => {
+    const { container } = render(
+      createElement(BoardDriverAvatar, { userId: 'u1', name: 'Marco', status: 'connected', cornerLabel: '3h' }),
+    );
+
+    // The label takes the badge slot — the Bluetooth glyph and "?" are gone.
+    expect(container.textContent).toContain('3h');
+    expect(bluetoothBadge(container)).toBeFalsy();
+    expect(idleGlyph(container)).toBeFalsy();
+  });
+
   it('stays non-interactive for an anonymous holder (no userId) while keeping the badge', () => {
     const { container } = render(createElement(BoardDriverAvatar, { name: null, status: 'connected' }));
 

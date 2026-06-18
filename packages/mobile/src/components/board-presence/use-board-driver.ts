@@ -7,18 +7,31 @@ const IDLE_THRESHOLD_MS = 15 * 60 * 1000;
 const IDLE_RECHECK_MS = 60 * 1000;
 
 export type BoardDriver = {
-  /** Null for an anonymous holder (renders a non-pressable "?" avatar). */
+  /** Null for an anonymous sender (renders a non-pressable "?" avatar). */
   userId: string | null;
   displayName: string | null;
   avatarUrl: string | null;
   /** True once the wall hasn't changed for IDLE_THRESHOLD_MS. */
   isIdle: boolean;
+  /**
+   * True when an active connection holder is on the board (someone's BLE-writing
+   * now), vs identity recovered only from the last lit climb. The lightbulb pip
+   * gates on this; the on-wall banner shows the lit climb's sender regardless.
+   */
+  isHeld: boolean;
+  /** Epoch ms of the last send (current climb, else holder), or null if unknown. */
+  lastSentAtMs: number | null;
 };
 
 /**
- * Resolves the board's current BLE driver from board presence: identity comes
- * from the freshest current climb, falling back to the holder record for a late
- * joiner whose feed hasn't backfilled. Returns null when the wall is free.
+ * Resolves who lit the board from board presence. Identity comes from the
+ * freshest current climb, falling back to the connection-holder record. Returns
+ * null only when the wall is genuinely free (no current climb AND no holder).
+ *
+ * Note it does NOT require a holder: a climb stays lit ("on the wall") after its
+ * sender stops being the active BLE writer, so on-wall surfaces still attribute
+ * it to the sender via `currentClimb`. Callers that specifically mean "who's
+ * connected right now" gate on `isHeld`.
  *
  * Reads the context directly (non-throwing) rather than via
  * `useBoardPresenceCurrent()`, which throws with no provider in scope — gorhom
@@ -31,23 +44,25 @@ export function useBoardDriver(): BoardDriver | null {
   const currentClimb = current?.currentClimb ?? null;
   const [now, setNow] = useState(() => Date.now());
 
-  const held = holder !== null;
+  const present = holder !== null || currentClimb !== null;
   useEffect(() => {
-    if (!held) return;
+    if (!present) return;
     const interval = setInterval(() => setNow(Date.now()), IDLE_RECHECK_MS);
     return () => clearInterval(interval);
-  }, [held]);
+  }, [present]);
 
-  if (!holder) return null;
+  if (!present) return null;
 
-  const lastSentAtIso = currentClimb?.sentAt ?? holder.lastSentAt ?? null;
+  const lastSentAtIso = currentClimb?.sentAt ?? holder?.lastSentAt ?? null;
   const lastSentAtMs = lastSentAtIso ? Date.parse(lastSentAtIso) : NaN;
   const isIdle = Number.isFinite(lastSentAtMs) && now - lastSentAtMs > IDLE_THRESHOLD_MS;
 
   return {
-    userId: currentClimb?.sentByUserId ?? holder.userId ?? null,
-    displayName: currentClimb?.sentByDisplayName ?? holder.displayName ?? null,
-    avatarUrl: currentClimb?.sentByAvatarUrl ?? holder.avatarUrl ?? null,
+    userId: currentClimb?.sentByUserId ?? holder?.userId ?? null,
+    displayName: currentClimb?.sentByDisplayName ?? holder?.displayName ?? null,
+    avatarUrl: currentClimb?.sentByAvatarUrl ?? holder?.avatarUrl ?? null,
     isIdle,
+    isHeld: holder !== null,
+    lastSentAtMs: Number.isFinite(lastSentAtMs) ? lastSentAtMs : null,
   };
 }

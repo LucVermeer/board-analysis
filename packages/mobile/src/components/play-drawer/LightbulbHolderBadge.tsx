@@ -16,7 +16,10 @@ import { useBoardDriver } from '../board-presence/use-board-driver';
  */
 function LightbulbHolderBadgeComponent({ size = 18 }: { size?: number }) {
   const driver = useBoardDriver();
-  if (!driver) return null;
+  // The pip means "who's connected/holding the wall right now", so it only shows
+  // for an active holder — not for a climb left lit by someone who's since
+  // dropped (that identity still rides the on-wall banner via useBoardDriver).
+  if (!driver?.isHeld) return null;
 
   return (
     <BoardDriverAvatar
