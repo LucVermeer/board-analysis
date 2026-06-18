@@ -193,6 +193,10 @@ export function ClimbReactionMenu({
             falls through to the backdrop Pressable. */}
         <View
           pointerEvents="box-none"
+          // Contain VoiceOver focus to the floating content (don't let it wander into
+          // the screen behind), and let the VO escape gesture dismiss the overlay.
+          accessibilityViewIsModal={Platform.OS === 'ios'}
+          onAccessibilityEscape={dismiss}
           style={[styles.content, { paddingTop: insets.top + spacing[5], paddingBottom: insets.bottom + spacing[5] }]}
         >
           <Animated.View pointerEvents="box-none" style={[styles.preview, previewStyle]}>
