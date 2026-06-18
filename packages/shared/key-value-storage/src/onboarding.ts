@@ -21,3 +21,7 @@ export const ONBOARDING_BOARD_TIP_KEY = 'onboarding_board_tip_pending';
 export const ONBOARDING_TIP_WORKOUT_KEY = 'onboarding_tip_workout_seen';
 export const ONBOARDING_TIP_CREW_KEY = 'onboarding_tip_crew_seen';
 export const ONBOARDING_TIP_RECORD_KEY = 'onboarding_tip_record_seen';
+// One-shot tip for the bottom accessory bar (current-climb / queue platter):
+// teaches that the bar always mirrors what's on the wall. Fires the first time a
+// current climb exists (so the bar is on screen), then never again.
+export const ONBOARDING_TIP_ACCESSORY_KEY = 'onboarding_tip_accessory_seen';
