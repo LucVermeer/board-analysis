@@ -211,23 +211,23 @@ export function ClimbReactionMenu({
                 style={artStyle}
               />
             ) : null}
-            <View style={styles.infoRow}>
-              <View style={styles.infoText}>
-                <View style={styles.nameRow}>
-                  <Text variant="headline" numberOfLines={1} style={styles.name}>
-                    {climb.name}
-                  </Text>
-                  <ClimbAttributeIcons isNoMatch={climb.is_no_match} benchmarkDifficulty={climb.benchmark_difficulty} />
-                </View>
-                {byline ? (
-                  <Text variant="footnote" numberOfLines={1} style={styles.byline}>
-                    {byline}
+            <View style={styles.previewText}>
+              <View style={styles.nameRow}>
+                <Text variant="headline" numberOfLines={1} style={styles.name}>
+                  {climb.name}
+                </Text>
+                <ClimbAttributeIcons isNoMatch={climb.is_no_match} benchmarkDifficulty={climb.benchmark_difficulty} />
+                {formattedGrade || climb.difficulty ? (
+                  <Text variant="headline" numberOfLines={1} style={[styles.grade, { color: gradeColor }]}>
+                    {formattedGrade ?? climb.difficulty}
                   </Text>
                 ) : null}
               </View>
-              <Text variant="title3" numberOfLines={1} style={[styles.grade, { color: gradeColor }]}>
-                {formattedGrade ?? climb.difficulty}
-              </Text>
+              {byline ? (
+                <Text variant="footnote" numberOfLines={1} style={styles.byline}>
+                  {byline}
+                </Text>
+              ) : null}
             </View>
           </Animated.View>
 
@@ -276,22 +276,17 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 320,
   },
-  infoRow: {
-    flexDirection: 'row',
+  previewText: {
     alignItems: 'center',
-    width: '100%',
-    gap: spacing[3],
-  },
-  infoText: {
-    flex: 1,
-    minWidth: 0,
     gap: 2,
+    width: '100%',
   },
   nameRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing[1],
-    minWidth: 0,
+    justifyContent: 'center',
+    gap: spacing[2],
+    width: '100%',
   },
   name: {
     fontWeight: '700',
@@ -299,10 +294,10 @@ const styles = StyleSheet.create({
   },
   byline: {
     opacity: 0.6,
+    textAlign: 'center',
   },
   grade: {
     fontWeight: '800',
-    textAlign: 'right',
   },
   menuWrap: {
     width: '100%',
