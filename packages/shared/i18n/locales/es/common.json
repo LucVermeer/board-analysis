@@ -360,7 +360,7 @@
         "findBoard": "Buscar mi tabla",
         "lookAround": "Echar un vistazo primero"
       },
-      "boardRevealTip": "Esto es {{board}} ahora mismo. Se actualiza según escala la gente. Toca para ver lo que hay en el muro.",
+      "boardRevealTip": "Toca {{icon}} para ver lo que otros usuarios de Boardsesh han mandado al muro.",
       "tips": {
         "workout": "Móntate un entreno: Volumen, Pirámide, Escalera o Grado fijo. Fija un grado, previsualiza las vías y mándalas pegada a pegada.",
         "crew": "¿Escalas con gente? Abre una sesión y compartid una cola: cualquiera manda la siguiente vía, sin ir pasando el móvil.",

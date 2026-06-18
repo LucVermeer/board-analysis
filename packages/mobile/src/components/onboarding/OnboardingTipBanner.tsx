@@ -1,4 +1,4 @@
-import { memo, useCallback } from 'react';
+import { memo, useCallback, type ReactNode } from 'react';
 import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Text } from '../Text';
 import { Icon } from '../Icon';
@@ -8,8 +8,10 @@ import { hapticSelection } from '../../lib/haptics';
 import { borderRadius, spacing } from '../../theme/tokens';
 
 type OnboardingTipBannerProps = {
-  /** Already-translated one-line tip copy. */
-  text: string;
+  /** Already-translated tip copy; a string, or rich content (e.g. an inline icon). */
+  text: ReactNode;
+  /** Spoken label for the banner; required when `text` isn't a plain string. */
+  accessibilityLabel?: string;
   /** Already-translated accessibility label for the close button. */
   dismissLabel: string;
   /** Hide the banner. */
@@ -31,6 +33,7 @@ type OnboardingTipBannerProps = {
  */
 function OnboardingTipBannerComponent({
   text,
+  accessibilityLabel,
   dismissLabel,
   onDismiss,
   onPress,
@@ -38,6 +41,8 @@ function OnboardingTipBannerComponent({
   style,
 }: OnboardingTipBannerProps) {
   const { brandColors, systemColors } = useTheme();
+  // Fall back to the text when it's a plain string; rich content passes a label.
+  const a11yLabel = accessibilityLabel ?? (typeof text === 'string' ? text : undefined);
 
   const handlePress = useCallback(() => {
     if (!onPress) return;
@@ -63,11 +68,16 @@ function OnboardingTipBannerComponent({
       ]}
     >
       {onPress ? (
-        <Pressable style={styles.tappable} onPress={handlePress} accessibilityRole="button" accessibilityLabel={text}>
+        <Pressable
+          style={styles.tappable}
+          onPress={handlePress}
+          accessibilityRole="button"
+          accessibilityLabel={a11yLabel}
+        >
           {body}
         </Pressable>
       ) : (
-        <View style={styles.tappable} accessible accessibilityLabel={text}>
+        <View style={styles.tappable} accessible accessibilityLabel={a11yLabel}>
           {body}
         </View>
       )}
