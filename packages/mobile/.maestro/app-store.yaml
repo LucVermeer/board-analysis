@@ -30,8 +30,9 @@ name: app-store screenshots
 # - Fresh install (orchestrator uninstalled/reinstalled + reset keychain): cold-loads with
 #   no active board (re-picked below), and the keychain reset forces the auto-sign-in to
 #   re-authenticate against the target backend rather than reuse a stale token.
-# - iOS shows an "Open in 'Boardsesh'?" confirmation for the first in-flow route deep link
-#   on a fresh sim; each openLink is followed by an optional tapOn "Open".
+# - iOS re-pops an "Open in 'Boardsesh'?" confirmation on the first 1-2 in-session deep
+#   links (inconsistently); the flow primes it away up front (the prime block below) so the
+#   captured screens never catch it. Each openLink keeps an optional tapOn "Open" as backup.
 # - Order: for any screen visited twice, the PLAIN visit runs before the screenshot-param
 #   visit so no stale param leaks into it. Board view is LAST because the play drawer it
 #   opens overlays the whole app. (The active board is set at boot, so the board-backed
@@ -45,26 +46,41 @@ name: app-store screenshots
 # the orchestrator waits for home (the `$screen /home` log) before running Maestro, so the
 # flow opens right into the shots.
 
-# Home — the global "Everyone" feed. The home screen defaults to it in screenshot
-# mode (see home/index.tsx) for a livelier hero than the test user's own crew.
-- waitForAnimationToEnd
-- takeScreenshot: 00-home
-
-# Discover — the playlist library (smart "Your Picks" + saved playlists).
-# This is the FIRST in-session deep link, so it pops iOS's "Open in 'Boardsesh'?"
-# confirmation, which BLOCKS the navigation until confirmed. The later openLinks
-# just use an optional tap, but here a racy optional tap left the dialog sitting
-# over the home feed (e.g. es / iPhone 16 Pro Max) AND stranded the shot on home.
-# So wait for the dialog explicitly and tap Open — it reliably appears on the fresh
-# sim the orchestrator guarantees (uninstall + reinstall + keychain reset), and iOS
-# remembers the choice for the rest of the session, so the later links don't
-# re-prompt and can't cascade a popup onto a captured screen.
-- openLink: com.boardsesh.app://discover
+# Prime the "Open in 'Boardsesh'?" dialog. simctl openurl of the custom scheme makes iOS
+# re-pop that confirmation on the first one or two in-session deep links (inconsistently —
+# en-US saw it once, es twice) and it BLOCKS the navigation until tapped. Dismiss it on
+# throwaway /home navigations BEFORE any capture, so no shot can catch the popup and every
+# real openLink below navigates cleanly (it's also why Discover needs no special handling
+# any more). The first openurl always pops it (wait + tap); the repeat mops up any
+# re-prompts (optional, after a settle so the dialog has appeared). iOS then remembers it.
+- openLink: com.boardsesh.app://home
 - extendedWaitUntil:
     visible: 'Open'
     timeout: 12000
 - tapOn:
     text: 'Open'
+- waitForAnimationToEnd
+- repeat:
+    times: 3
+    commands:
+      - openLink: com.boardsesh.app://home
+      - waitForAnimationToEnd
+      - tapOn:
+          text: 'Open'
+          optional: true
+      - waitForAnimationToEnd
+
+# Home — the global "Everyone" feed. The home screen defaults to it in screenshot
+# mode (see home/index.tsx) for a livelier hero than the test user's own crew.
+- waitForAnimationToEnd
+- takeScreenshot: 00-home
+
+# Discover — the playlist library (smart "Your Picks" + saved playlists). The dialog was
+# primed away above, so this navigates cleanly; the optional tap is just a backup.
+- openLink: com.boardsesh.app://discover
+- tapOn:
+    text: 'Open'
+    optional: true
 - waitForAnimationToEnd
 - takeScreenshot: 06-discover
 
