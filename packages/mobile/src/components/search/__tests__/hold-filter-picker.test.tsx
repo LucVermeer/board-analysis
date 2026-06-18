@@ -15,7 +15,6 @@ type PressableMockProps = {
 };
 vi.mock('react-native', () => ({
   View: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
-  ScrollView: ({ children }: { children?: ReactNode }) => createElement('div', { 'data-scroll': 'true' }, children),
   Pressable: ({ children, onPress, disabled, accessibilityLabel, accessibilityState }: PressableMockProps) =>
     createElement(
       'button',
@@ -27,16 +26,7 @@ vi.mock('react-native', () => ({
       },
       children,
     ),
-  StyleSheet: { create: (styles: Record<string, unknown>) => styles },
-}));
-
-vi.mock('react-native-reanimated', () => ({
-  // Animated.View → plain div; the entrance/exit animation is irrelevant here.
-  default: {
-    View: ({ children }: { children?: ReactNode }) => createElement('div', { 'data-animated': 'true' }, children),
-  },
-  FadeInDown: { duration: () => ({}) },
-  FadeOutDown: { duration: () => ({}) },
+  StyleSheet: { create: (styles: Record<string, unknown>) => styles, hairlineWidth: 1 },
 }));
 
 vi.mock('react-native-safe-area-context', () => ({
@@ -89,9 +79,8 @@ vi.mock('../../../providers/theme-provider', () => ({
 vi.mock('../../../lib/haptics', () => ({ hapticSelection: () => haptics.selection() }));
 
 vi.mock('../../../theme/tokens', () => ({
-  spacing: { 2: 8, 3: 12, 4: 16 },
-  borderRadius: { md: 8, xl: 16 },
-  shadowColor: '#000',
+  spacing: { 1: 4, 2: 8, 3: 12, 4: 16 },
+  borderRadius: { md: 8 },
 }));
 
 vi.mock('react-i18next', () => ({
@@ -103,6 +92,7 @@ vi.mock('react-i18next', () => ({
 import { HoldFilterPicker } from '../HoldFilterPicker';
 
 type PickerOverrides = {
+  holdId?: number | null;
   entry?: HoldFilterEntry;
   applyMode?: HoldFilterMode;
   onToggleType?: (type: HoldFilterType) => void;
@@ -116,14 +106,13 @@ function renderPicker(overrides: PickerOverrides = {}) {
   const onClear = overrides.onClear ?? vi.fn();
   const result = render(
     <HoldFilterPicker
-      holdId={42}
+      holdId={overrides.holdId === undefined ? 42 : overrides.holdId}
       boardName="kilter"
       entry={overrides.entry ?? {}}
       applyMode={overrides.applyMode ?? 'include'}
       onApplyModeChange={onApplyModeChange}
       onToggleType={onToggleType}
       onClear={onClear}
-      onClose={vi.fn()}
     />,
   );
   return { ...result, onToggleType, onApplyModeChange, onClear };
@@ -143,20 +132,15 @@ describe('HoldFilterPicker', () => {
     haptics.selection.mockClear();
   });
 
-  it('renders nothing when no hold is active', () => {
-    const { container } = render(
-      <HoldFilterPicker
-        holdId={null}
-        boardName="kilter"
-        entry={{}}
-        applyMode="include"
-        onApplyModeChange={vi.fn()}
-        onToggleType={vi.fn()}
-        onClear={vi.fn()}
-        onClose={vi.fn()}
-      />,
-    );
-    expect(container.querySelector('button')).toBeNull();
+  it('disables the swatches and skips toggling when no hold is active', () => {
+    const onToggleType = vi.fn();
+    const { container } = renderPicker({ holdId: null, onToggleType });
+    const handSwatch = swatch(container, 'mobile.holdFilter.type.hand');
+    expect(handSwatch).not.toBeNull();
+    expect(handSwatch!.disabled).toBe(true);
+    // A disabled button still fires onClick in jsdom, but the picker gates the
+    // swatch on an active hold; nothing should call back through.
+    expect(onToggleType).not.toHaveBeenCalled();
   });
 
   it('renders one swatch per board hold type plus ANY', () => {

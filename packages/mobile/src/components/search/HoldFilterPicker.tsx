@@ -1,6 +1,5 @@
 import { useCallback, useMemo } from 'react';
-import { View, Pressable, ScrollView, StyleSheet } from 'react-native';
-import Animated, { FadeInDown, FadeOutDown } from 'react-native-reanimated';
+import { View, Pressable, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import type { BoardName, HoldFilterEntry, HoldFilterMode, HoldFilterType } from '@boardsesh/shared-schema';
@@ -11,12 +10,12 @@ import { SegmentedControl } from '../SegmentedControl';
 import { useTheme } from '../../providers/theme-provider';
 import { hapticSelection } from '../../lib/haptics';
 import { useHoldColorOverrides, type HoldMarkerShape } from '../../lib/hold-color-overrides';
-import { spacing, borderRadius, shadowColor } from '../../theme/tokens';
+import { spacing, borderRadius } from '../../theme/tokens';
 import { HoldMarkerShapeSvg } from '../board-renderer/HoldMarkerShape';
 import { getHoldFilterTypeShape } from './hold-filter-visuals';
 
 type HoldFilterPickerProps = {
-  /** The hold being edited, or null when the picker is closed. */
+  /** The hold being edited, or null when no hold is selected on the board. */
   holdId: number | null;
   boardName: BoardName;
   /** Current filter entry for the active hold. */
@@ -26,20 +25,18 @@ type HoldFilterPickerProps = {
   /** Toggle one type's filter on the active hold (the picker owns the cycle). */
   onToggleType: (type: HoldFilterType) => void;
   onClear: () => void;
-  onClose: () => void;
 };
 
 /**
- * Per-hold hold-type picker. Opened by tapping a hold on the interactive board.
- * Hosts an Include / Exclude apply-mode toggle plus one swatch per hold type
- * (board-filtered) and a Clear button — the native port of the web
- * `HoldTypePicker` search toolbar.
+ * Hold-type filter controls, docked below the board in the filter sheet — the
+ * same layout shape as the create-climb action bar (an Include / Exclude
+ * apply-mode toggle above a single row of hold-type chips). Always on screen;
+ * it edits whichever hold is selected on the board. Until a hold is tapped the
+ * chips are disabled and a hint explains the gesture.
  *
- * Renders as an inline panel docked to the bottom of the host board sheet
- * (visible when `holdId != null`), NOT as its own bottom-sheet modal: a third
- * stacked `BottomSheetModal` over the 95% board sheet would not reliably
- * surface (see #2687 lineage). The host owns dismissal — a tap on the board
- * backdrop or the close button calls `onClose`.
+ * This is NOT a stacked sub-sheet: a third `BottomSheetModal` over the 95%
+ * board sheet would not reliably surface, so the controls live inline in the
+ * board sheet instead.
  */
 export function HoldFilterPicker({
   holdId,
@@ -49,7 +46,6 @@ export function HoldFilterPicker({
   onApplyModeChange,
   onToggleType,
   onClear,
-  onClose,
 }: HoldFilterPickerProps) {
   const { t } = useTranslation('climbs');
   const { systemColors } = useTheme();
@@ -60,6 +56,8 @@ export function HoldFilterPicker({
     brushThickness,
     shapeSize,
   } = useHoldColorOverrides();
+
+  const isActive = holdId != null;
 
   const options = useMemo(() => buildHoldFilterOptions(boardName, holdColorOverrides), [boardName, holdColorOverrides]);
   const shapeByType = useMemo(() => {
@@ -99,101 +97,70 @@ export function HoldFilterPicker({
     [onToggleType],
   );
 
-  if (holdId == null) return null;
-
   return (
-    <Animated.View
-      entering={FadeInDown.duration(200)}
-      exiting={FadeOutDown.duration(160)}
-      style={[
-        styles.panel,
-        { backgroundColor: systemColors.secondaryBackground, paddingBottom: insets.bottom + spacing[3] },
-      ]}
+    <View
+      style={[styles.section, { borderTopColor: systemColors.separator, paddingBottom: insets.bottom + spacing[3] }]}
     >
-      <View style={styles.handleRow}>
-        <Text variant="headline">{t('mobile.holdFilter.pickerTitle')}</Text>
-        <Pressable
-          onPress={onClose}
-          hitSlop={8}
-          accessibilityRole="button"
-          accessibilityLabel={t('mobile.filter.done')}
-        >
-          <Icon name="close" size={22} color={systemColors.secondaryLabel} />
-        </Pressable>
+      <SegmentedControl
+        options={applyModeOptions}
+        selectedKey={applyMode}
+        onSelect={onApplyModeChange}
+        trackColor={systemColors.fill}
+        accessibilityLabel={t('mobile.holdFilter.applyModeLabel')}
+      />
+
+      <View style={styles.chipRow}>
+        {options.map((option) => {
+          const mode = entry[option.type];
+          const selected = mode !== undefined;
+          const excluded = mode === 'exclude';
+          const stateSuffix = excluded
+            ? t('mobile.holdFilter.excludedSuffix')
+            : selected
+              ? t('mobile.holdFilter.includedSuffix')
+              : '';
+          const swatchColor = option.color;
+          const swatchShape = shapeByType.get(option.type) ?? 'circle';
+          const markerDiameter = 22 * shapeSize;
+          const markerStrokeWidth = Math.max(2, 2 * brushThickness);
+          return (
+            <Pressable
+              key={option.type}
+              onPress={() => handleSwatch(option.type)}
+              disabled={!isActive}
+              accessibilityRole="button"
+              accessibilityState={{ selected, disabled: !isActive }}
+              accessibilityLabel={stateSuffix ? `${typeLabels[option.type]}, ${stateSuffix}` : typeLabels[option.type]}
+              style={[
+                styles.chip,
+                { backgroundColor: systemColors.fill },
+                selected && { borderColor: swatchColor, borderWidth: 2 },
+                !isActive && styles.chipDisabled,
+              ]}
+            >
+              <View style={styles.chipSwatch}>
+                <HoldMarkerShapeSvg
+                  shape={swatchShape}
+                  color={excluded ? '#000000' : swatchColor}
+                  diameter={markerDiameter}
+                  strokeWidth={excluded ? 0 : markerStrokeWidth}
+                  fillOpacity={excluded ? 0.55 : selected ? 0.32 : 0}
+                />
+                {excluded ? (
+                  <View style={styles.excludeIcon}>
+                    <Icon name="close" size={12} color="#FFFFFF" />
+                  </View>
+                ) : null}
+              </View>
+              <Text variant="caption1" style={styles.chipLabel} numberOfLines={1}>
+                {typeLabels[option.type]}
+              </Text>
+            </Pressable>
+          );
+        })}
       </View>
 
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        <SegmentedControl
-          options={applyModeOptions}
-          selectedKey={applyMode}
-          onSelect={onApplyModeChange}
-          trackColor={systemColors.fill}
-          accessibilityLabel={t('mobile.holdFilter.applyModeLabel')}
-        />
-
-        <View style={styles.grid}>
-          {options.map((option) => {
-            const mode = entry[option.type];
-            const isActive = mode !== undefined;
-            const excluded = mode === 'exclude';
-            const accessibilityState = { selected: isActive };
-            const stateSuffix = excluded
-              ? t('mobile.holdFilter.excludedSuffix')
-              : isActive
-                ? t('mobile.holdFilter.includedSuffix')
-                : '';
-            const swatchColor = option.color;
-            const swatchShape = shapeByType.get(option.type) ?? 'circle';
-            const markerDiameter = 20 * shapeSize;
-            const markerStrokeWidth = Math.max(2, 2 * brushThickness);
-            return (
-              <Pressable
-                key={option.type}
-                onPress={() => handleSwatch(option.type)}
-                accessibilityRole="button"
-                accessibilityState={accessibilityState}
-                accessibilityLabel={
-                  stateSuffix ? `${typeLabels[option.type]}, ${stateSuffix}` : typeLabels[option.type]
-                }
-                style={[
-                  styles.cell,
-                  { backgroundColor: systemColors.fill },
-                  isActive && { borderColor: swatchColor, borderWidth: 2 },
-                ]}
-              >
-                <View
-                  style={[
-                    styles.swatch,
-                    {
-                      backgroundColor: systemColors.secondaryBackground,
-                    },
-                  ]}
-                >
-                  <HoldMarkerShapeSvg
-                    shape={swatchShape}
-                    color={excluded ? '#000000' : swatchColor}
-                    diameter={markerDiameter}
-                    strokeWidth={excluded ? 0 : markerStrokeWidth}
-                    fillOpacity={excluded ? 0.55 : isActive ? 0.32 : 0}
-                  />
-                  {excluded ? (
-                    <View style={styles.excludeIcon}>
-                      <Icon name="close" size={12} color="#FFFFFF" />
-                    </View>
-                  ) : null}
-                </View>
-                <Text variant="subheadline" style={styles.cellLabel}>
-                  {typeLabels[option.type]}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-
+      {isActive ? (
         <Pressable
           onPress={() => {
             if (isEmpty) return;
@@ -211,78 +178,54 @@ export function HoldFilterPicker({
             {t('mobile.holdFilter.clearHold')}
           </Text>
         </Pressable>
-
-        <Text variant="footnote" style={[styles.help, { color: systemColors.secondaryLabel }]}>
-          {t('mobile.holdFilter.pickerHelp')}
+      ) : (
+        <Text variant="footnote" style={[styles.hint, { color: systemColors.secondaryLabel }]}>
+          {t('mobile.holdFilter.hint')}
         </Text>
-      </ScrollView>
-    </Animated.View>
+      )}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  panel: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    maxHeight: '70%',
+  section: {
     paddingHorizontal: spacing[4],
     paddingTop: spacing[3],
-    borderTopLeftRadius: borderRadius.xl,
-    borderTopRightRadius: borderRadius.xl,
-    gap: spacing[2],
-    shadowColor,
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.18,
-    shadowRadius: 12,
-    elevation: 16,
-  },
-  handleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  scroll: {
-    flexShrink: 1,
-  },
-  scrollContent: {
     gap: spacing[3],
-    paddingBottom: spacing[2],
+    borderTopWidth: StyleSheet.hairlineWidth,
+    // borderTopColor applied inline from systemColors.separator (scheme-aware).
   },
-  grid: {
+  chipRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    alignItems: 'stretch',
     gap: spacing[2],
   },
-  cell: {
-    // Grow to share the row evenly; the minWidth keeps ~3 per row while letting
-    // a short final row (or a board with fewer swatches) stretch to fill.
-    flexGrow: 1,
-    flexBasis: '28%',
-    minWidth: 96,
-    flexDirection: 'row',
+  chip: {
+    flex: 1,
     alignItems: 'center',
-    gap: spacing[2],
-    paddingVertical: spacing[3],
-    paddingHorizontal: spacing[2],
+    justifyContent: 'center',
+    gap: spacing[1],
+    paddingVertical: spacing[2],
+    paddingHorizontal: spacing[1],
     borderRadius: borderRadius.md,
     borderColor: 'transparent',
     borderWidth: 2,
-    minHeight: 48,
+    minHeight: 64,
   },
-  swatch: {
-    width: 42,
-    height: 42,
+  chipDisabled: {
+    opacity: 0.4,
+  },
+  chipSwatch: {
+    width: 28,
+    height: 28,
     alignItems: 'center',
     justifyContent: 'center',
   },
   excludeIcon: {
     position: 'absolute',
   },
-  cellLabel: {
+  chipLabel: {
     fontWeight: '600',
-    flexShrink: 1,
   },
   clearRow: {
     flexDirection: 'row',
@@ -295,8 +238,9 @@ const styles = StyleSheet.create({
   clearDisabled: {
     opacity: 0.4,
   },
-  help: {
+  hint: {
     textAlign: 'center',
+    minHeight: 44,
     paddingHorizontal: spacing[4],
   },
 });

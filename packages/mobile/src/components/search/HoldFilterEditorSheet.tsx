@@ -27,7 +27,9 @@ type HoldFilterEditorSheetProps = {
 };
 
 const SHEET_HEIGHT_RATIO = 0.95;
-const CHROME_BUDGET = 132;
+// Header + the below-board hold-type controls (toggle + chip row + clear/hint)
+// + safe area, so the board is sized to leave the controls fully on-screen.
+const CHROME_BUDGET = 320;
 const DEFER_BOARD_RENDER_MS = 120;
 
 export function HoldFilterEditorSheet({
@@ -40,7 +42,7 @@ export function HoldFilterEditorSheet({
 }: HoldFilterEditorSheetProps) {
   const sheetRef = useRef<BottomSheetModal>(null);
   const { t } = useTranslation('climbs');
-  const { systemColors, brandColors } = useTheme();
+  const { brandColors } = useTheme();
   const insets = useSafeAreaInsets();
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const boardName = boardConfig.boardName as BoardName;
@@ -125,19 +127,11 @@ export function HoldFilterEditorSheet({
     track(SHARED_EVENTS.SearchHoldFilterCleared, { boardLayout });
   }, [boardLayout, onHoldsFilterChange]);
 
-  const closePicker = useCallback(() => setActiveHoldId(null), []);
-
   const activeEntry: HoldFilterEntry = activeHoldId != null ? (holdsFilter[String(activeHoldId)] ?? {}) : {};
   const filteredCount = countFilteredHolds(holdsFilter);
 
   return (
-    <ModalSheet
-      ref={sheetRef}
-      snapPoints={['95%']}
-      onDismiss={onDismiss}
-      enablePanDownToClose={activeHoldId == null}
-      stackBehavior="push"
-    >
+    <ModalSheet ref={sheetRef} snapPoints={['95%']} onDismiss={onDismiss} stackBehavior="push">
       <View style={styles.container}>
         {!boardHolds ? (
           <View style={styles.loading}>
@@ -181,29 +175,9 @@ export function HoldFilterEditorSheet({
               />
             </View>
 
-            <View style={[styles.footer, { paddingBottom: insets.bottom + spacing[3] }]}>
-              <Text variant="footnote" color={systemColors.secondaryLabel} style={styles.footerText}>
-                {filteredCount > 0
-                  ? t('mobile.holdFilter.summaryCount', { count: filteredCount })
-                  : t('mobile.holdFilter.hint')}
-              </Text>
-            </View>
-
-            {/* Tap-anywhere-on-the-board backdrop that dismisses the inline
-                  picker. Sits above the board/footer but below the picker panel
-                  (which follows in tree order), mirroring the old modal scrim. */}
-            {activeHoldId != null ? (
-              <Pressable
-                style={StyleSheet.absoluteFill}
-                onPress={closePicker}
-                accessibilityElementsHidden
-                importantForAccessibility="no-hide-descendants"
-              />
-            ) : null}
-
-            {/* Inline hold-type picker, docked to the bottom of this sheet.
-                  Rendered here (not as a stacked modal) so it reliably surfaces
-                  over the 95% board sheet. */}
+            {/* Hold-type controls docked below the board (create-climb-style
+                action bar), editing whichever hold is selected. Inline — not a
+                stacked sub-sheet — so it reliably shows over the board sheet. */}
             <HoldFilterPicker
               holdId={activeHoldId}
               boardName={boardName}
@@ -212,7 +186,6 @@ export function HoldFilterEditorSheet({
               onApplyModeChange={setApplyMode}
               onToggleType={handleToggleType}
               onClear={handleClearHold}
-              onClose={closePicker}
             />
           </>
         )}
@@ -250,13 +223,5 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  footer: {
-    paddingHorizontal: spacing[4],
-    paddingTop: spacing[2],
-    alignItems: 'center',
-  },
-  footerText: {
-    textAlign: 'center',
   },
 });
