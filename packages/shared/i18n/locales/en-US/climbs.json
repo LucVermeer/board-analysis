@@ -684,7 +684,6 @@
       "benchmark": "Benchmark"
     },
     "climbActions": {
-      "preview": "Preview",
       "copyLink": "Copy link",
       "linkCopied": "Link copied",
       "tick": "Log a tick",

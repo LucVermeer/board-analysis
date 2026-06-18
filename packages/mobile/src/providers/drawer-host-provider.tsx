@@ -71,7 +71,7 @@ export type LogAscentInput = {
   consensusGradeName?: string;
 };
 
-export function boardConfigsMatch(left: BoardConfig | null, right: BoardConfig | null): boolean {
+function boardConfigsMatch(left: BoardConfig | null, right: BoardConfig | null): boolean {
   if (!left || !right) return false;
   return (
     left.boardName === right.boardName &&
@@ -355,9 +355,8 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
     setPlaylistClimb(null);
   }, []);
 
-  // Public parameterized beta-video opener (mirrors openAddToPlaylist) for the iOS
-  // context menu's shared action list. The sheet path keeps its own
-  // handleClimbActionsAddBetaVideo (which snapshots from climbActions state).
+  // Single parameterized beta-video opener (mirrors openAddToPlaylist), used both by
+  // the reaction menu's shared action list (useClimbActions) and by PlayDrawer.
   const openAddBetaVideo = useCallback((climb: Climb, boardConfigOverride?: BoardConfig) => {
     const boardConfig = boardConfigOverride ?? activeBoardConfigRef.current;
     if (!boardConfig) return;
@@ -622,17 +621,6 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
           consensusGradeName={logAscentInput.consensusGradeName}
         />
       ) : null}
-      {climbActions ? (
-        <ClimbReactionMenu
-          climb={climbActions.climb}
-          boardConfig={climbActions.boardConfig}
-          currentUserId={profile?.id ?? null}
-          isAuthenticated={isAuthenticated}
-          onEditEntry={climbActions.onEditEntry}
-          reduceMotion={reduceMotion}
-          onClose={closeClimbActions}
-        />
-      ) : null}
       {betaVideoClimb ? (
         <AddBetaVideoSheet
           visible
@@ -677,6 +665,20 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
         onOpenPlaylist={handleBoardSheetOpenPlaylist}
         onOpenActions={handleBoardSheetOpenActions}
       />
+      {/* Rendered after the queue/board sheets so its iOS FullWindowOverlay mounts as a
+          later sibling and floats above them when a row inside those sheets is
+          long-pressed (RN-screens doesn't strictly guarantee cross-overlay z-order). */}
+      {climbActions ? (
+        <ClimbReactionMenu
+          climb={climbActions.climb}
+          boardConfig={climbActions.boardConfig}
+          currentUserId={profile?.id ?? null}
+          isAuthenticated={isAuthenticated}
+          onEditEntry={climbActions.onEditEntry}
+          reduceMotion={reduceMotion}
+          onClose={closeClimbActions}
+        />
+      ) : null}
       <QueueAddedSnackbar
         visible={snackbarVisible}
         nonce={snackbarNonce}

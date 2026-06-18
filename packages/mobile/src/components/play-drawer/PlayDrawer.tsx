@@ -761,11 +761,13 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
         </BottomSheetScrollView>
       </BottomSheetModal>
 
-      {/* Sub-drawer: Climb actions. Always mounted and toggled via `visible`
-          (it presents as a BottomSheetModal with stackBehavior=push, the only
-          way to render above the play drawer's own modal — same as the angle
-          selector and tick sheet). A conditionally-mounted modal here would drop
-          its present() over the already-open play drawer and never appear. */}
+      {/* Sub-drawer: Climb actions — the Android / fallback path. On iOS the ellipsis
+          routes to ClimbReactionMenu via onOpenClimbActions (see handleOpenActions), so
+          activeSubDrawer never becomes 'actions' there and this sheet stays idle.
+          Always mounted and toggled via `visible` (it presents as a BottomSheetModal
+          with stackBehavior=push, the only way to render above the play drawer's own
+          modal — same as the angle selector and tick sheet). A conditionally-mounted
+          modal here would drop its present() over the already-open play drawer. */}
       <ClimbActionsSheet
         visible={activeSubDrawer === 'actions'}
         climb={displayedClimb ?? null}

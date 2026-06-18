@@ -111,7 +111,9 @@ vi.mock('../../../lib/session-tick-mapping', () => ({
     is_no_match: false,
   }),
 }));
-vi.mock('../../../lib/haptics', () => ({ hapticSelection: () => {} }));
+vi.mock('../../../lib/haptics', () => ({ hapticSelection: () => {}, hapticMedium: () => {} }));
+vi.mock('../../../providers/drawer-host-provider', () => ({ useDrawerHost: () => ({ openClimbActions: () => {} }) }));
+vi.mock('../../../lib/tick-to-climb', () => ({ tickToClimb: () => null }));
 
 import { SessionTickRow } from '../SessionTickRow';
 

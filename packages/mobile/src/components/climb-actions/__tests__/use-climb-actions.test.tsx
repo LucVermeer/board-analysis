@@ -25,16 +25,12 @@ vi.mock('expo-web-browser', () => ({ openBrowserAsync: vi.fn(async () => {}) }))
 vi.mock('@boardsesh/play-view', () => ({ buildClimbViewPath: () => '/view/x' }));
 vi.mock('@boardsesh/create-climb-react', () => ({ computeCanUpdate: () => ctrl.canUpdate }));
 vi.mock('@boardsesh/analytics', () => ({ SHARED_EVENTS: {} }));
-vi.mock('@boardsesh/climb-actions', () => ({ favoritesStore: { getIsFavorited: () => false } }));
 vi.mock('../../../providers/drawer-host-provider', () => ({
   useDrawerHost: () => ({
-    openPlayDrawer: openers.openPlayDrawer,
     openAddToPlaylist: openers.openAddToPlaylist,
     openLogAscent: openers.openLogAscent,
     openAddBetaVideo: openers.openAddBetaVideo,
-    boardConfig: null,
   }),
-  boardConfigsMatch: () => false,
 }));
 vi.mock('../../../providers/queue-provider', () => ({
   useQueueActions: () => ({ addToQueue: openers.addToQueue }),

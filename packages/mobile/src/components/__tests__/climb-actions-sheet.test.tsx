@@ -234,20 +234,4 @@ describe('ClimbActionsSheet present-on-visible (always-mounted toggle)', () => {
     expect(onEditEntry).toHaveBeenCalledTimes(1);
     expect(onClose).toHaveBeenCalledTimes(1);
   });
-
-  it('hides the Preview row unless onPreview is provided', () => {
-    render(<ClimbActionsSheet visible={true} {...baseProps} />);
-    expect(screen.queryByText('mobile.climbActions.preview')).toBeNull();
-  });
-
-  it('fires onPreview then onClose from the Preview row (view-only open)', () => {
-    const onPreview = vi.fn();
-    const onClose = vi.fn();
-    render(<ClimbActionsSheet visible={true} {...baseProps} onClose={onClose} onPreview={onPreview} />);
-
-    fireEvent.click(screen.getByText('mobile.climbActions.preview'));
-
-    expect(onPreview).toHaveBeenCalledTimes(1);
-    expect(onClose).toHaveBeenCalledTimes(1);
-  });
 });

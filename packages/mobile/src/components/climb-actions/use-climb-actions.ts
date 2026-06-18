@@ -266,15 +266,13 @@ export function useClimbActions({
       icon: 'copy',
       color: accentColor,
       run: () => {
+        // Dismiss the overlay immediately, then do the async copy + toast.
+        after();
         void (async () => {
-          try {
-            const url = `${WEB_BASE_URL}${buildClimbViewPath(boardName, layoutId, sizeId, setIds, angle, climb.uuid)}`;
-            await Clipboard.setStringAsync(url);
-            track(SHARED_EVENTS.ClimbShared, { method: 'copy_link', climbUuid: climb.uuid, boardName, layoutId });
-            showToast(t('mobile.climbActions.linkCopied'), 'info');
-          } finally {
-            after();
-          }
+          const url = `${WEB_BASE_URL}${buildClimbViewPath(boardName, layoutId, sizeId, setIds, angle, climb.uuid)}`;
+          await Clipboard.setStringAsync(url);
+          track(SHARED_EVENTS.ClimbShared, { method: 'copy_link', climbUuid: climb.uuid, boardName, layoutId });
+          showToast(t('mobile.climbActions.linkCopied'), 'info');
         })();
       },
     });
@@ -286,14 +284,11 @@ export function useClimbActions({
         icon: 'open.external',
         color: accentColor,
         run: () => {
-          void (async () => {
-            try {
-              track(SHARED_EVENTS.OpenInAuroraApp, { climbUuid: climb.uuid, boardName, layoutId });
-              await WebBrowser.openBrowserAsync(auroraAppUrl);
-            } finally {
-              after();
-            }
-          })();
+          // Dismiss the overlay first so it doesn't linger behind the in-app browser
+          // (openBrowserAsync only resolves when the browser is closed).
+          after();
+          track(SHARED_EVENTS.OpenInAuroraApp, { climbUuid: climb.uuid, boardName, layoutId });
+          void WebBrowser.openBrowserAsync(auroraAppUrl);
         },
       });
     }
