@@ -31,7 +31,7 @@ vi.mock('../../Text', () => ({
 vi.mock('../../../providers/theme-provider', () => ({
   useTheme: () => ({
     brandColors: { warning: '#B45309' },
-    systemColors: { secondaryBackground: '#FFFFFF', background: '#F4F1FB' },
+    systemColors: { secondaryBackground: '#FFFFFF', background: '#F4F1FB', secondaryLabel: '#8E8E93' },
   }),
 }));
 vi.mock('../../../theme/ios-colors', () => ({ iosSystemColors: { systemGray: '#8E8E93' } }));

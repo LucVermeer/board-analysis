@@ -143,10 +143,10 @@ export const boardPresenceQueries = {
   /**
    * The board's current connection holder (who's connected + writing now), or
    * null when free. Late-joiner initial state before the `boardNowPlaying` /
-   * `BoardConnectionChanged` stream warms up. Auth-optional. The holder is the
-   * last sender, so the newest live climb carries their display identity +
-   * last-send time; an anonymous holder (a `conn:` emitter) has a null userId
-   * and null attribution (clients render a "?").
+   * `BoardConnectionChanged` stream warms up. Auth-optional. Display identity is
+   * adopted from the newest climb only when that climb was sent by this holder
+   * (else just the userId is known); an anonymous holder (a `conn:` emitter) has
+   * a null userId and null attribution (clients render a "?").
    */
   boardConnection: async (
     _: unknown,
@@ -159,13 +159,21 @@ export const boardPresenceQueries = {
     await requireAnonReadableBoard(boardId, ctx.userId);
     const emitterId = await pubsub.getBoardWriter(String(boardId));
     if (emitterId === null) return null;
+    const userId = emitterId.startsWith('conn:') ? null : emitterId;
     const recent = await pubsub.getRecentBoardClimbs(String(boardId));
     const last = recent[0];
+    // Only adopt the newest climb's display identity when that climb was sent by
+    // THIS holder. The newest climb can belong to a previous sender (the current
+    // holder took the wall but their send hasn't landed in the feed yet), and
+    // pairing their name/avatar/time with the holder's userId would mislabel the
+    // (now tappable) avatar and point it at the wrong profile. When they don't
+    // match we still report the holder's userId; clients render a "?".
+    const lastBySameHolder = userId !== null && last?.sentByUserId === userId;
     return {
-      userId: emitterId.startsWith('conn:') ? null : emitterId,
-      displayName: last?.sentByDisplayName ?? null,
-      avatarUrl: last?.sentByAvatarUrl ?? null,
-      lastSentAt: last?.sentAt ?? null,
+      userId,
+      displayName: lastBySameHolder ? (last.sentByDisplayName ?? null) : null,
+      avatarUrl: lastBySameHolder ? (last.sentByAvatarUrl ?? null) : null,
+      lastSentAt: lastBySameHolder ? (last.sentAt ?? null) : null,
     };
   },
 };

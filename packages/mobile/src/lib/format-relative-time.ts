@@ -27,6 +27,7 @@ export type CompactAgoUnit = 'now' | 'minutes' | 'hours' | 'days' | 'weeks';
  * clock skew where `fromMs` is slightly in the future) to "now".
  */
 export function compactAgoParts(fromMs: number, nowMs: number): { unit: CompactAgoUnit; count: number } {
+  if (!Number.isFinite(fromMs) || !Number.isFinite(nowMs)) return { unit: 'now', count: 0 };
   const diffMs = Math.max(0, nowMs - fromMs);
   const minutes = Math.floor(diffMs / 60_000);
   if (minutes < 1) return { unit: 'now', count: 0 };

@@ -40,7 +40,7 @@ export const PlayDrawerOnWallBanner = memo(function PlayDrawerOnWallBanner() {
   const isStale = driver != null && (!driver.isHeld || driver.isIdle) && driver.lastSentAtMs != null;
 
   let litAgo: string | null = null;
-  if (isStale && driver.lastSentAtMs != null) {
+  if (isStale && driver?.lastSentAtMs != null) {
     const { unit, count } = compactAgoParts(driver.lastSentAtMs, Date.now());
     litAgo =
       unit === 'now'
@@ -61,7 +61,7 @@ export const PlayDrawerOnWallBanner = memo(function PlayDrawerOnWallBanner() {
         userId={driver?.userId ?? null}
         uri={driver?.avatarUrl ?? null}
         name={name}
-        status="connected"
+        status={litAgo ? 'none' : 'connected'}
         cornerLabel={litAgo}
         accessibilityLabel={accessibilityLabel}
       />

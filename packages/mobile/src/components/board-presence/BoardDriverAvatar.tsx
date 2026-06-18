@@ -4,7 +4,6 @@ import { PressableAvatar } from '../PressableAvatar';
 import { Text } from '../Text';
 import { Icon } from '../Icon';
 import { useTheme } from '../../providers/theme-provider';
-import { iosSystemColors } from '../../theme/ios-colors';
 
 /**
  * Corner status badge content:
@@ -96,7 +95,7 @@ function BoardDriverAvatarComponent({
           ) : status === 'idle' ? (
             <Text
               variant="caption2"
-              color={iosSystemColors.systemGray}
+              color={systemColors.secondaryLabel}
               style={[styles.idleGlyph, { fontSize: glyphSize, lineHeight: glyphSize }]}
             >
               {'?'}

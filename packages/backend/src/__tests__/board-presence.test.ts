@@ -1606,6 +1606,9 @@ describe('board-presence connection holder', () => {
 
       const holder = await boardPresenceQueries.boardConnection(undefined, { boardId }, authCtx());
       expect(holder?.userId).toBe(TEST_USER_ID);
+      // The newest climb was sent by this holder, so their display identity is
+      // adopted from it (rather than nulled as it would be for a mismatched sender).
+      expect(holder?.displayName).toBe(SENDER_DISPLAY_NAME);
 
       expect(await boardPresenceMutations.reportBoardDisconnect(undefined, { boardId }, authCtx())).toBe(true);
       expect(await boardPresenceQueries.boardConnection(undefined, { boardId }, authCtx())).toBeNull();
