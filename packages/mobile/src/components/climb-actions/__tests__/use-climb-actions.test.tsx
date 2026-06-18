@@ -6,6 +6,7 @@ import type { ClimbActionId } from '../use-climb-actions';
 
 const ctrl = vi.hoisted(() => ({ canUpdate: false }));
 const openers = vi.hoisted(() => ({
+  openPlayDrawer: vi.fn(),
   openAddToPlaylist: vi.fn(),
   openLogAscent: vi.fn(),
   openAddBetaVideo: vi.fn(),
@@ -23,14 +24,18 @@ vi.mock('@boardsesh/create-climb-react', () => ({ computeCanUpdate: () => ctrl.c
 vi.mock('@boardsesh/analytics', () => ({ SHARED_EVENTS: {} }));
 vi.mock('../../../providers/drawer-host-provider', () => ({
   useDrawerHost: () => ({
+    openPlayDrawer: openers.openPlayDrawer,
     openAddToPlaylist: openers.openAddToPlaylist,
     openLogAscent: openers.openLogAscent,
     openAddBetaVideo: openers.openAddBetaVideo,
+    boardConfig: null,
   }),
+  boardConfigsMatch: () => false,
 }));
 vi.mock('../../../providers/queue-provider', () => ({
   useQueueActions: () => ({ addToQueue: openers.addToQueue }),
 }));
+vi.mock('../../../lib/climb-to-queue-item', () => ({ climbToQueueItem: (climb: unknown) => ({ uuid: 'qi', climb }) }));
 vi.mock('../../../providers/theme-provider', () => ({
   useTheme: () => ({
     actionColors: { success: '#0a0', favorite: '#f00', accent: '#00f', neutral: '#fff', pin: '#6D28D9' },
@@ -71,6 +76,7 @@ beforeEach(() => {
 describe('useClimbActions gating', () => {
   it('returns the universal actions for a plain Kilter climb (no edit/beta/openInApp/editEntry)', () => {
     expect(ids({ climb, boardConfig: kilterBoard, isAuthenticated: false })).toEqual([
+      'preview',
       'queue',
       'playlist',
       'favorite',
@@ -141,5 +147,12 @@ describe('useClimbActions colours and dispatch', () => {
     const { result } = renderHook(() => useClimbActions({ climb, boardConfig: kilterBoard, isAuthenticated: false }));
     result.current.find((action) => action.id === 'share')?.run();
     expect(openers.shareClimb).toHaveBeenCalledTimes(1);
+  });
+
+  it('preview.run opens the climb view-only in the play drawer', () => {
+    const { result } = renderHook(() => useClimbActions({ climb, boardConfig: kilterBoard, isAuthenticated: false }));
+    result.current.find((action) => action.id === 'preview')?.run();
+    expect(openers.openPlayDrawer).toHaveBeenCalledTimes(1);
+    expect(openers.openPlayDrawer).toHaveBeenCalledWith(climb, expect.objectContaining({ source: 'climb_view' }));
   });
 });
