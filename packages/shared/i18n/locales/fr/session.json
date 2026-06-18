@@ -292,7 +292,7 @@
       "ascensionists_one": "{{count}} grimpeur",
       "ascensionists_other": "{{count}} grimpeurs",
       "avgQuality": "Qualite moyenne",
-      "gradeByAngle": "Cotation par angle"
+      "ascentsByAngle": "Ascensions par angle"
     },
     "betaVideos": {
       "title": "Videos Beta",
