@@ -5,10 +5,25 @@ import type { SharedValue } from 'react-native-reanimated';
 import type { GestureType } from 'react-native-gesture-handler';
 
 // Chainable no-op gesture builder; Race tags its result so we can assert which
-// branch the hook returned without driving real gestures.
+// branch the hook returned without driving real gestures. The builder records
+// simultaneousWithExternalGesture args so we can assert the pinch relation.
 const raceCalls: unknown[][] = [];
+const simultaneousCalls: unknown[] = [];
 vi.mock('react-native-gesture-handler', () => {
-  const builder: Record<string, unknown> = new Proxy({}, { get: () => () => builder });
+  const builder: Record<string, unknown> = new Proxy(
+    {},
+    {
+      get: (_target, prop) => {
+        if (prop === 'simultaneousWithExternalGesture') {
+          return (ref: unknown) => {
+            simultaneousCalls.push(ref);
+            return builder;
+          };
+        }
+        return () => builder;
+      },
+    },
+  );
   return {
     Gesture: {
       Tap: () => builder,
@@ -70,5 +85,19 @@ describe('useZoomedHoldTapGesture', () => {
     const first = result.current;
     rerender();
     expect(result.current).toBe(first);
+  });
+
+  it('declares the tap + long-press legs simultaneous with the pinch when pinchRef is provided', () => {
+    simultaneousCalls.length = 0;
+    const pinchRef = { current: undefined } as unknown as { current: GestureType | undefined };
+    renderHook(() => useZoomedHoldTapGesture(baseOptions({ onTap: vi.fn(), onLongPress: vi.fn(), pinchRef })));
+    // Both legs must reference the pinch so a re-pinch while zoomed isn't blocked.
+    expect(simultaneousCalls.filter((ref) => ref === pinchRef)).toHaveLength(2);
+  });
+
+  it('wires no pinch relation when pinchRef is omitted', () => {
+    simultaneousCalls.length = 0;
+    renderHook(() => useZoomedHoldTapGesture(baseOptions({ onTap: vi.fn(), onLongPress: vi.fn() })));
+    expect(simultaneousCalls).toHaveLength(0);
   });
 });

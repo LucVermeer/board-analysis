@@ -1,5 +1,6 @@
-import React, { useMemo } from 'react';
+import React, { type MutableRefObject, useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
+import type { GestureType } from 'react-native-gesture-handler';
 import type { BoardHoldTarget } from '../../lib/create-board-holds';
 import { holdGeometry } from './holdLayout';
 import { HoldTarget } from './HoldTarget';
@@ -16,6 +17,9 @@ type HoldTargetLayerProps = {
   showHoldMarkers?: boolean;
   onPaint: (holdId: number) => void;
   onLongPress: (holdId: number) => void;
+  /** The board's ancestor pinch, forwarded to each hold so per-hold gestures
+   *  declare themselves simultaneous with it (reliable pinch-to-zoom). */
+  pinchRef?: MutableRefObject<GestureType | undefined>;
 };
 
 const FAINT_DOT = 'rgba(255,255,255,0.22)';
@@ -37,6 +41,7 @@ export const HoldTargetLayer = React.memo(function HoldTargetLayer({
   showHoldMarkers = true,
   onPaint,
   onLongPress,
+  pinchRef,
 }: HoldTargetLayerProps) {
   const targets = useMemo(() => {
     if (measuredWidth <= 0) return null;
@@ -55,6 +60,7 @@ export const HoldTargetLayer = React.memo(function HoldTargetLayer({
           dotColor={showAllHolds ? BRIGHT_DOT : FAINT_DOT}
           onPaint={onPaint}
           onLongPress={onLongPress}
+          pinchRef={pinchRef}
         />
       );
     });
@@ -68,6 +74,7 @@ export const HoldTargetLayer = React.memo(function HoldTargetLayer({
     showHoldMarkers,
     onPaint,
     onLongPress,
+    pinchRef,
   ]);
 
   return (

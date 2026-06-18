@@ -1,6 +1,6 @@
-import React, { useMemo } from 'react';
+import React, { type MutableRefObject, useMemo } from 'react';
 import { View } from 'react-native';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { Gesture, GestureDetector, type GestureType } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-reanimated';
 
 type HoldTargetProps = {
@@ -14,6 +14,10 @@ type HoldTargetProps = {
   dotColor: string;
   onPaint: (holdId: number) => void;
   onLongPress: (holdId: number) => void;
+  /** The board's ancestor pinch, so this per-hold tap/long-press declares itself
+   *  simultaneous with it. Without that, two fingers on two hold targets each
+   *  claim a pointer and the pinch can't acquire both — zoom stalls on Android. */
+  pinchRef?: MutableRefObject<GestureType | undefined>;
 };
 
 /**
@@ -36,6 +40,7 @@ export const HoldTarget = React.memo(function HoldTarget({
   dotColor,
   onPaint,
   onLongPress,
+  pinchRef,
 }: HoldTargetProps) {
   const gesture = useMemo(() => {
     const tap = Gesture.Tap()
@@ -51,9 +56,16 @@ export const HoldTarget = React.memo(function HoldTarget({
         'worklet';
         runOnJS(onLongPress)(holdId);
       });
+    // Let the ancestor pinch recognize even while this finger sits on the hold —
+    // applied per-leg because the relation method lives on the individual
+    // gestures, not the Exclusive composite.
+    if (pinchRef) {
+      tap.simultaneousWithExternalGesture(pinchRef);
+      longPress.simultaneousWithExternalGesture(pinchRef);
+    }
     // Long-press wins; tap fires only if the long-press fails (released early).
     return Gesture.Exclusive(longPress, tap);
-  }, [holdId, onPaint, onLongPress]);
+  }, [holdId, onPaint, onLongPress, pinchRef]);
 
   return (
     <GestureDetector gesture={gesture}>

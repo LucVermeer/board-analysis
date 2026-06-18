@@ -1,4 +1,4 @@
-import { useMemo, useRef } from 'react';
+import { type MutableRefObject, useMemo, useRef } from 'react';
 import { Gesture, type ComposedGesture, type GestureType } from 'react-native-gesture-handler';
 import { runOnJS, type SharedValue } from 'react-native-reanimated';
 import { resolveHoldAtPoint, type HoldHitTarget } from './holdLayout';
@@ -36,6 +36,10 @@ type UseZoomedHoldTapGestureOptions = {
   /** Long-press handler (role sheet). Falls back to onTap when omitted, matching
    *  HoldTargetLayer which wires both. */
   onLongPress?: (holdId: number) => void;
+  /** The board's ancestor pinch. The overlay's tap/long-press declare themselves
+   *  simultaneous with it so a pinch-to-zoom-further while already zoomed isn't
+   *  blocked by this overlay. */
+  pinchRef?: MutableRefObject<GestureType | undefined>;
 };
 
 /**
@@ -73,6 +77,7 @@ export function useZoomedHoldTapGesture({
   hitTargets,
   onTap,
   onLongPress,
+  pinchRef,
 }: UseZoomedHoldTapGestureOptions): ComposedGesture | GestureType {
   const hasTap = onTap != null;
 
@@ -122,8 +127,16 @@ export function useZoomedHoldTapGesture({
         runOnJS(handleLongPress)(boardX, boardY);
       });
 
+    // Keep a re-pinch (while already zoomed) unblocked by this overlay's
+    // tap/long-press. Applied per-leg — the relation method is on the individual
+    // gestures, not the Race composite.
+    if (pinchRef) {
+      tap.simultaneousWithExternalGesture(pinchRef);
+      longPress.simultaneousWithExternalGesture(pinchRef);
+    }
+
     // handleTap/handleLongPress are intentionally not deps — captured once and
     // read render-scoped values through callbacksRef (see use-carousel-gesture).
     return Gesture.Race(zoomPanGesture, longPress, tap);
-  }, [hasTap, zoomPanGesture, scaleSV, translateXSV, translateYSV, containerWidthSV, containerHeightSV]);
+  }, [hasTap, zoomPanGesture, scaleSV, translateXSV, translateYSV, containerWidthSV, containerHeightSV, pinchRef]);
 }
