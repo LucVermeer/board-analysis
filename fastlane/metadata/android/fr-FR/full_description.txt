@@ -1,30 +1,26 @@
 Cherche une voie, regarde ton mur s'allumer. Moins de temps sur ton téléphone, plus de temps sur le mur.
 
-Choisis ta board une fois et grimpe.
-
 ALLUME LES PRISES
 Cherche n'importe quelle voie et Boardsesh allume les prises sur le mur en Bluetooth, sur Kilter, Tension, MoonBoard, Decoy, Touchstone, Grasshopper et So iLL. Contrôle complet des LED sur les sept, pas seulement la consultation.
 
 UNE SEULE APPLI POUR TOUTES LES BOARDS QUE TU GRIMPES
-Kilter, Tension et MoonBoard ont chacune leur appli pour leur propre board. Boardsesh marche avec toutes, plus Decoy, Touchstone, Grasshopper et So iLL, au même endroit. Un seul login, une seule file, un seul endroit où vit ton historique, quel que soit le mur sur lequel tu arrives.
+Kilter, Tension et MoonBoard ont chacune leur appli pour leur propre board. Boardsesh marche avec toutes, plus Decoy, Touchstone, Grasshopper et So iLL, au même endroit. Tout ton historique d'escalade sur chaque board vit ici.
+
+L'HISTORIQUE DE BOARD, TOUJOURS ACTIF
+Partage une board et tu perds vite le fil de la dernière voie, et quelqu'un finit toujours par l'effacer par accident.
+Dans Boardsesh, chaque board sur laquelle tu te connectes a un fil live de ce qui est allumé sur ce mur en ce moment : le nom de la voie, qui l'a allumée, qui l'a ouverte, la cotation et l'inclinaison, et les sends récents. Ça se met à jour au fil des changements sur le mur, pour que tu saches toujours ce qu'il y a dessus.
 
 TOUJOURS CONNECTÉ
-Boardsesh garde le lien avec ta board en arrière-plan, pour que les prises restent allumées pendant tes essais même quand l'écran s'éteint ou que tu changes d'appli. Pas besoin de te reconnecter entre les voies.
+Boardsesh garde le lien avec ta board en arrière-plan, pour que les prises restent allumées pendant tes essais même quand l'écran s'éteint ou que tu changes d'appli. Une notification persistante met Précédent et Suivant sur ton écran verrouillé, pour que tu avances dans la file sans rouvrir l'appli. Pas besoin de te reconnecter entre les voies.
 
-VOIS CE QUI EST ALLUMÉ SUR CE MUR
-Arrive sur une board et un fil live est déjà là : la voie allumée en ce moment, qui l'a allumée, qui l'a ouverte, la cotation et l'inclinaison, et les sends récents. Rien à lancer. C'est lié au mur et ça se met à jour au fil des essais.
-
-GRIMPE AVEC TA CREW
-Lance une séance et tout le monde dedans partage une seule file. N'importe qui allume la prochaine voie, donc le téléphone ne passe jamais de main en main et personne n'attend son tour. Celui qui est connecté en Bluetooth l'allume.
-
-REÇOIS UN RÉCAP
-Quand la séance se termine, ta crew reçoit un récap : sends et essais, éventail de cotations, plus gros send, et comment ton niveau évolue semaine après semaine dans l'onglet Progression.
+LES SÉANCES AVEC TA CREW
+Lance une séance et toi et ta crew partagez une seule file que tout le monde peut piloter. N'importe qui peut allumer la prochaine voie au mur. À la fin, tu reçois un récap et un suivi : sends et essais, éventail de cotations, ton plus gros send, et ta progression dans le temps.
 
 MONTE UNE SÉANCE D'ENTRAÎNEMENT
 Choisis Volume, Pyramide, Échelle ou Cotation ciblée, fixe une cotation cible et un échauffement, prévisualise les voies, puis envoie-les au mur une par une.
 
 SUIS TON ESCALADE
-Note tes sends, tes flashs et tes essais. Récupère tes anciennes voies Kilter et Tension en important ton carnet depuis Aurora Climbing.
+Note tes sends, tes flashs et tes essais, et regarde tes sends et tes cotations grimper dans l'onglet Progression. Récupère tes anciennes voies Kilter et Tension en important ton carnet depuis Aurora Climbing.
 
 TROUVE PLUS À GRIMPER
 Suis ta crew et les ouvreurs, cherche des grimpeurs, et épingle des playlists depuis Discover.
