@@ -10,6 +10,7 @@ import {
   type ViewStyle,
 } from 'react-native';
 import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
+import { useTranslation } from 'react-i18next';
 import { BlurView } from '@react-native-community/blur';
 import { FullWindowOverlay } from 'react-native-screens';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -22,6 +23,7 @@ import { GlassSurface } from '../GlassSurface';
 import { BoardImageNative } from '../BoardImageNative';
 import { ClimbAttributeIcons } from '../ClimbAttributeIcons';
 import { getBoardRenderData } from '../../lib/board-details';
+import { formatSends, formatQuality } from '../../lib/format-climb-stats';
 import { useGradeFormat } from '../../hooks/use-grade-format';
 import { useTheme } from '../../providers/theme-provider';
 import type { BoardConfig } from '../../providers/drawer-host-provider';
@@ -80,6 +82,7 @@ export function ClimbReactionMenu({
   onClose,
 }: ClimbReactionMenuProps) {
   const { colorScheme } = useTheme();
+  const { t } = useTranslation('climbs');
   const insets = useSafeAreaInsets();
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const { formatGrade } = useGradeFormat();
@@ -114,10 +117,20 @@ export function ClimbReactionMenu({
   const gradeColor = getGradeColor(climb.difficulty) ?? DEFAULT_GRADE_COLOR;
   const formattedGrade = formatGrade(climb.difficulty);
 
+  // Subtle byline under the name: sends · quality★ · setter (each dropped when
+  // absent). Mirrors the climb-list row's primary subtitle.
+  const byline = useMemo(() => {
+    const parts: string[] = [];
+    if (!climb.is_draft && climb.ascensionist_count) parts.push(formatSends(climb.ascensionist_count, t));
+    if (parseFloat(climb.quality_average) > 0) parts.push(`${formatQuality(climb.quality_average)}★`);
+    if (climb.setter_username) parts.push(climb.setter_username);
+    return parts.join(' · ');
+  }, [climb.is_draft, climb.ascensionist_count, climb.quality_average, climb.setter_username, t]);
+
   // Enlarged board art, reusing the list thumbnail's cache (filledStyle + renderWidth
   // 400) so no new render is needed. Sized to the screen so it stays "blown up" but
-  // leaves room for the menu.
-  const artMaxSize = Math.min(196, Math.round(windowHeight * 0.26), Math.round(windowWidth * 0.55));
+  // leaves room for the menu (~20% larger than the first pass).
+  const artMaxSize = Math.min(235, Math.round(windowHeight * 0.31), Math.round(windowWidth * 0.66));
   const boardRenderData = useMemo(() => {
     const setIdValues = boardConfig.setIds
       .split(',')
@@ -198,14 +211,21 @@ export function ClimbReactionMenu({
                 style={artStyle}
               />
             ) : null}
-            <View style={styles.previewText}>
-              <View style={styles.nameRow}>
-                <Text variant="title3" numberOfLines={2} style={styles.name}>
-                  {climb.name}
-                </Text>
-                <ClimbAttributeIcons isNoMatch={climb.is_no_match} benchmarkDifficulty={climb.benchmark_difficulty} />
+            <View style={styles.infoRow}>
+              <View style={styles.infoText}>
+                <View style={styles.nameRow}>
+                  <Text variant="headline" numberOfLines={1} style={styles.name}>
+                    {climb.name}
+                  </Text>
+                  <ClimbAttributeIcons isNoMatch={climb.is_no_match} benchmarkDifficulty={climb.benchmark_difficulty} />
+                </View>
+                {byline ? (
+                  <Text variant="footnote" numberOfLines={1} style={styles.byline}>
+                    {byline}
+                  </Text>
+                ) : null}
               </View>
-              <Text variant="title2" numberOfLines={1} style={[styles.grade, { color: gradeColor }]}>
+              <Text variant="title3" numberOfLines={1} style={[styles.grade, { color: gradeColor }]}>
                 {formattedGrade ?? climb.difficulty}
               </Text>
             </View>
@@ -253,24 +273,36 @@ const styles = StyleSheet.create({
   preview: {
     alignItems: 'center',
     gap: spacing[3],
-    maxWidth: 280,
+    width: '100%',
+    maxWidth: 320,
   },
-  previewText: {
+  infoRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing[1],
+    width: '100%',
+    gap: spacing[3],
+  },
+  infoText: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
   },
   nameRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing[1],
+    minWidth: 0,
   },
   name: {
     fontWeight: '700',
-    textAlign: 'center',
     flexShrink: 1,
+  },
+  byline: {
+    opacity: 0.6,
   },
   grade: {
     fontWeight: '800',
+    textAlign: 'right',
   },
   menuWrap: {
     width: '100%',
