@@ -670,6 +670,7 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
           long-pressed (RN-screens doesn't strictly guarantee cross-overlay z-order). */}
       {climbActions ? (
         <ClimbReactionMenu
+          key={climbActions.climb.uuid}
           climb={climbActions.climb}
           boardConfig={climbActions.boardConfig}
           currentUserId={profile?.id ?? null}

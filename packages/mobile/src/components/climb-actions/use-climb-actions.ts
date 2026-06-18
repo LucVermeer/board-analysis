@@ -291,7 +291,8 @@ export function useClimbActions({
           // (openBrowserAsync only resolves when the browser is closed).
           after();
           track(SHARED_EVENTS.OpenInAuroraApp, { climbUuid: climb.uuid, boardName, layoutId });
-          void WebBrowser.openBrowserAsync(auroraAppUrl);
+          // .catch so a browser-open rejection doesn't become an unhandled rejection.
+          void WebBrowser.openBrowserAsync(auroraAppUrl).catch(() => {});
         },
       });
     }
