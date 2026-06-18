@@ -1,1 +1,1 @@
-Light any LED board over Bluetooth. Share one queue and send with your crew.
+Light Kilter, Tension, MoonBoard & more. Share one queue, climb as a crew.
