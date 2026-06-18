@@ -42,6 +42,7 @@ import { resolvePlaylistEmojiIcon } from './playlist-icon';
 import { PLAYLIST_COLORS, isValidHexColor } from './playlist-colors';
 import { withAlpha } from '../../theme/colors';
 import { toQueueClimb, toSchemaClimb } from '../../lib/climb-types';
+import { useDrawerHost } from '../../providers/drawer-host-provider';
 import type { PlaylistRenderBoard, PlaylistBoardBanner } from '../../lib/playlists/use-playlist-render-board';
 import {
   getPlaylistRenderBoardTarget,
@@ -242,6 +243,7 @@ export function PlaylistDetailView({
   // Stable per-row activate handler so the memoized `ClimbListRow`s aren't handed
   // a fresh closure each render — every renderItem rebuild (e.g. when the sticky
   // header `collapsed` flips during scroll) would otherwise re-render every row.
+  const { openClimbActions } = useDrawerHost();
   const handleActivate = useCallback((tapped: SchemaClimb) => onActivateClimb(toQueueClimb(tapped)), [onActivateClimb]);
 
   // Activate-all only needs to know whether the board-switch banner is present;
@@ -294,6 +296,18 @@ export function PlaylistDetailView({
     return resolvedRows;
   }, [climbs, renderBoard]);
 
+  // Long press → reaction menu, using the row's resolved render board (a playlist can
+  // mix boards, so this isn't always the active board).
+  const handleOpenActions = useCallback(
+    (tapped: SchemaClimb) => {
+      const resolved = resolvedRowsByClimbUuid.get(tapped.uuid);
+      if (!resolved || resolved.kind !== 'renderable') return;
+      const { boardName, layoutId, sizeId, setIds, angle } = resolved.renderBoard;
+      openClimbActions(tapped, { boardName, layoutId, sizeId, setIds, angle });
+    },
+    [openClimbActions, resolvedRowsByClimbUuid],
+  );
+
   const renderItem = useCallback(
     ({ item, index }: { item: Climb; index: number }) => {
       const resolvedRow = resolvedRowsByClimbUuid.get(item.uuid);
@@ -325,11 +339,12 @@ export function PlaylistDetailView({
           setIds={resolvedRow.renderBoard.setIds}
           angle={resolvedRow.renderBoard.angle}
           onPress={handleActivate}
+          onOpenActions={handleOpenActions}
           unsupported={resolvedRow.incompatible}
         />
       );
     },
-    [resolvedRowsByClimbUuid, editMode, dragControls, onRemoveClimb, onReorderClimb, handleActivate],
+    [resolvedRowsByClimbUuid, editMode, dragControls, onRemoveClimb, onReorderClimb, handleActivate, handleOpenActions],
   );
 
   // Cog shown beside the playlist name only in edit mode — opens the

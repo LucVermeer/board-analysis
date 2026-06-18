@@ -23,11 +23,13 @@ import { SessionGradeStrip } from './SessionGradeStrip';
 import { gradeBadgeColor } from './profile-chart-colors';
 import { mapBetaLink } from '../../lib/beta-video-url';
 import { getBoardConfigForPlaylist } from '../../lib/playlists/board-details-for-playlist';
+import { tickToClimb } from '../../lib/tick-to-climb';
 import { spacing, borderRadius } from '../../theme/tokens';
 import { useTheme } from '../../providers/theme-provider';
 import { useGradeFormat } from '../../hooks/use-grade-format';
 import { useToast } from '../../providers/toast-provider';
-import { hapticLight } from '../../lib/haptics';
+import { useDrawerHost } from '../../providers/drawer-host-provider';
+import { hapticLight, hapticMedium } from '../../lib/haptics';
 
 type SessionFeedCardProps = {
   session: SessionFeedItem;
@@ -84,6 +86,7 @@ export const SessionFeedCard = memo(function SessionFeedCard({
   const { systemColors } = useTheme();
   const { formatGrade } = useGradeFormat();
   const { showToast } = useToast();
+  const { openClimbActions } = useDrawerHost();
 
   const names = session.participants
     .map((participant) => participant.displayName)
@@ -135,6 +138,22 @@ export const SessionFeedCard = memo(function SessionFeedCard({
     }
     handleCardPress();
   }, [handleCardPress, hardestSend, onOpenClimb]);
+
+  // Long press the hardest-send hero → open the climb reaction menu.
+  const handleHeroLongPress = useCallback(() => {
+    if (!hardestSend) return;
+    const climb = tickToClimb(hardestSend);
+    const config = getBoardConfigForPlaylist(hardestSend.boardType, hardestSend.layoutId);
+    if (!climb || !config) return;
+    hapticMedium();
+    openClimbActions(climb, {
+      boardName: config.boardName,
+      layoutId: config.layoutId,
+      sizeId: config.sizeId,
+      setIds: config.setIds.join(','),
+      angle: hardestSend.angle,
+    });
+  }, [hardestSend, openClimbActions]);
 
   const handleOpenBeta = useCallback(async () => {
     if (!betaUrl) return;
@@ -223,6 +242,7 @@ export const SessionFeedCard = memo(function SessionFeedCard({
         ) : hardestSend ? (
           <PressableSurface
             onPress={handleHeroPress}
+            onLongPress={handleHeroLongPress}
             feedback="opacity"
             accessibilityRole="button"
             accessibilityLabel={heroClimbLabel}

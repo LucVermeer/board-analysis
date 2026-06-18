@@ -421,6 +421,15 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
     [setCurrentClimb, openPlayDrawer, requestCloseQueueSheet],
   );
 
+  // Long-press a queue row → open the climb reaction menu over the queue sheet. The
+  // queue renders against the active board, so the default boardConfig is correct.
+  const handleQueueOpenActions = useCallback(
+    (item: ClimbQueueItem) => {
+      openClimbActions(item.climb);
+    },
+    [openClimbActions],
+  );
+
   // Tap a suggestion → activate it with a suggestion source built from the
   // suggestions list (so the play drawer can keep swiping forward through them)
   // and show it.
@@ -651,6 +660,7 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
           board={queueBoard}
           onClose={requestCloseQueueSheet}
           onClimbPress={handleQueueClimbPress}
+          onOpenActions={handleQueueOpenActions}
           onSuggestionPress={handleQueueSuggestionPress}
           onTickHistory={handleQueueTickHistory}
         />
