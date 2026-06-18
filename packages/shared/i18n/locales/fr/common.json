@@ -162,10 +162,10 @@
         "findBoard": "Trouver mon board",
         "lookAround": "Jeter un œil d'abord"
       },
-      "homeRevealTip": "Voici {{board}} en ce moment. Ça se met à jour au fil des essais — touche le nom du board pour voir ce qui est sur le mur.",
+      "homeRevealTip": "Voici {{board}} en ce moment. Ça se met à jour au fil des essais. Touche pour voir ce qui est sur le mur.",
       "tips": {
-        "workout": "Monte une séance : Volume, Pyramide, Échelle ou Focus de cotation. Fixe une cotation, prévisualise les voies, envoie-les une par une.",
-        "crew": "Tu grimpes à plusieurs ? Lance une séance et partagez une file — n'importe qui envoie la prochaine voie, sans passer le téléphone.",
+        "workout": "Monte une séance : Volume, Pyramide, Échelle ou Cotation ciblée. Fixe une cotation, prévisualise les voies, envoie-les une par une.",
+        "crew": "Tu grimpes à plusieurs ? Lance une séance et partagez une file. N'importe qui envoie la prochaine voie, sans passer le téléphone.",
         "record": "Tes sends s'affichent ici dans Progression : éventail de cotations et ton plus gros send. Importe ton carnet Kilter et Tension depuis Aurora pour partir avec ton historique."
       }
     },

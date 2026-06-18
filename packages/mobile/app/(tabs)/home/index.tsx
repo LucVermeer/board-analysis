@@ -3,7 +3,7 @@ import { FlatList, Linking, Pressable, RefreshControl, StyleSheet, View } from '
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import type BottomSheet from '@gorhom/bottom-sheet';
 import type { SessionFeedItem, SessionFeedTickHighlight, SocialEntityType, UserBoard } from '@boardsesh/shared-schema';
@@ -92,21 +92,24 @@ export default function HomeTab() {
   const [commentTarget, setCommentTarget] = useState<CommentTarget | null>(null);
 
   // One-time board-history reveal banner: armed when the user binds their first
-  // board from the onboarding handoff (see app/boards/index.tsx). Consume the
-  // flag on mount so it shows exactly once, then points at the live board feed.
+  // board from the onboarding handoff (see app/boards/index.tsx). Consume the flag
+  // on FOCUS, not mount: the handoff dismisses /boards back onto the already-mounted
+  // Home tab, so a mount-only effect would never re-run and the banner never show.
   const { data: activeBoard } = useActiveBoard();
   const [revealTipVisible, setRevealTipVisible] = useState(false);
-  useEffect(() => {
-    let cancelled = false;
-    void hasBoardRevealTipPending().then((pending) => {
-      if (cancelled || !pending) return;
-      setRevealTipVisible(true);
-      void clearBoardRevealTipPending();
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      void hasBoardRevealTipPending().then((pending) => {
+        if (cancelled || !pending) return;
+        setRevealTipVisible(true);
+        void clearBoardRevealTipPending();
+      });
+      return () => {
+        cancelled = true;
+      };
+    }, []),
+  );
   const dismissRevealTip = useCallback(() => setRevealTipVisible(false), []);
   const showRevealTip = revealTipVisible && activeBoard != null;
   const revealBoardName = activeBoard?.gymName ?? activeBoard?.name ?? '';

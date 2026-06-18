@@ -58,9 +58,10 @@ async function main(): Promise<void> {
   await mkdir(OUTPUT_DIR, { recursive: true });
   const outputPath = resolve(OUTPUT_DIR, `${name}.png`);
 
-  // Crop the full-device shot to the card's 2:3 portrait, keeping the TOP (the
-  // "now on the wall" hero — the lit board + current climb), dropping the lower
-  // history list. fit:'cover' keeps the full width and trims the vertical overflow.
+  // Crop the full-device shot to the card's 2:3 portrait. With the default `bottom`
+  // gravity, fit:'cover' keeps the full width and retains the BOTTOM of the shot —
+  // the board-presence "now on the wall" sheet — trimming the climbs list above it.
+  // Pass --gravity top/centre/attention for screens whose subject sits elsewhere.
   await sharp(source)
     .resize(CARD_WIDTH, CARD_HEIGHT, { fit: 'cover', position: gravity })
     .png({ compressionLevel: 9 })

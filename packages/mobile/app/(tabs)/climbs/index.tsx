@@ -855,7 +855,11 @@ function ClimbListInner() {
               the climb list with no extra wiring here. */}
           <Button
             title={t('mobile.emptyState.noBoard.cta')}
-            onPress={() => router.push({ pathname: '/boards', params: { source: 'onboarding' } })}
+            // Plain board picker — this empty state is reachable any time the user
+            // has no active board, not just first-run, so it must NOT tag the bind
+            // as onboarding (which would fire the activation event + arm the Home
+            // reveal banner the user is never routed to see).
+            onPress={() => router.push('/boards')}
             variant="filled"
             size="large"
             style={styles.emptyCta}

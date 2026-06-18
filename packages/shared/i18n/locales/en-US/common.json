@@ -157,16 +157,16 @@
       "replayError": "Couldn't reopen the walkthrough. Try again.",
       "prompt": {
         "title": "See what's lit on your wall, live",
-        "body": "Follow your gym's board and Boardsesh shows what's lit right now — who lit it, the grade, who set it, recent sends. You don't start anything; it's just there.",
-        "footnote": "Plus crew sessions, the workout builder, and send tracking — once you're on a wall.",
+        "body": "Follow your gym's board and Boardsesh shows what's lit right now: who lit it, the grade, who set it, recent sends. You don't start anything; it's just there.",
+        "footnote": "Plus crew sessions, the workout builder, and send tracking once you're on a wall.",
         "findBoard": "Find my board",
         "lookAround": "Look around first"
       },
-      "homeRevealTip": "This is {{board}} right now. It updates as people climb — tap the board name to see what's on the wall.",
+      "homeRevealTip": "This is {{board}} right now. It updates as people climb. Tap to see what's on the wall.",
       "tips": {
-        "workout": "Build a workout — Volume, Pyramid, Ladder or Grade Focus. Set a grade, preview the burns, send them one at a time.",
-        "crew": "Climbing with people? Start a session and share one queue — anyone sends the next burn, no passing the phone.",
-        "record": "Your sends chart out here on Progress — grade spread and hardest send. Import your Kilter and Tension logbook from Aurora to start with your history."
+        "workout": "Build a workout: Volume, Pyramid, Ladder or Grade Focus. Set a grade, preview the burns, send them one at a time.",
+        "crew": "Climbing with people? Start a session and share one queue. Anyone sends the next burn, no passing the phone.",
+        "record": "Your sends chart out here on Progress: grade spread and hardest send. Import your Kilter and Tension logbook from Aurora to start with your history."
       }
     },
     "nav": {

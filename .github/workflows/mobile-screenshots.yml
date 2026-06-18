@@ -90,23 +90,38 @@ jobs:
           set -euo pipefail
           platforms="${{ inputs.platforms || 'both' }}"
           locales="${{ inputs.locales || '' }}"
+          flow="${{ inputs.flow || 'app-store' }}"
+          upload="${{ inputs.upload || 'false' }}"
           # Empty locales = the full store set; otherwise split "en-US,es" into a
-          # JSON array for the iOS capture matrix.
+          # JSON array for the iOS capture matrix. `|| true` keeps a no-match grep
+          # (all-blank input) from aborting the step under pipefail; the empty result
+          # is then caught explicitly below with a clear error.
           if [ -z "$locales" ]; then
             ios_locales='["en-US","es","fr"]'
           else
-            ios_locales=$(printf '%s' "$locales" | tr ',' '\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | grep -v '^$' | jq -R . | jq -cs .)
+            ios_locales=$(printf '%s' "$locales" | tr ',' '\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | grep -v '^$' | jq -R . | jq -cs . || true)
+            if [ -z "$ios_locales" ] || [ "$ios_locales" = "[]" ]; then
+              echo "::error::locales='$locales' resolved to no valid entries."
+              exit 1
+            fi
           fi
           run_ios=true
           run_android=true
           if [ "$platforms" = "android" ]; then run_ios=false; fi
           if [ "$platforms" = "ios" ]; then run_android=false; fi
+          # Uploading mutates live store listings and needs the full store set, so
+          # refuse a contradictory narrowed/onboarding upload up front (this cheap
+          # ubuntu job) instead of failing ~40 min later inside fastlane.
+          if [ "$upload" = "true" ] && { [ "$platforms" != "both" ] || [ -n "$locales" ] || [ "$flow" = "onboarding" ]; }; then
+            echo "::error::upload=true requires the full App Store set: platforms=both, flow=app-store, and empty locales. Narrowed / onboarding runs are capture-only."
+            exit 1
+          fi
           {
             echo "ios_locales=$ios_locales"
             echo "run_ios=$run_ios"
             echo "run_android=$run_android"
           } >> "$GITHUB_OUTPUT"
-          echo "Resolved: platforms=$platforms run_ios=$run_ios run_android=$run_android ios_locales=$ios_locales"
+          echo "Resolved: platforms=$platforms run_ios=$run_ios run_android=$run_android ios_locales=$ios_locales upload=$upload flow=$flow"
 
   # Build (or restore) the prebuilt simulator dev-client .app ONCE, so the three
   # ios-capture shards don't each cold-build it on a cache miss (the thundering
