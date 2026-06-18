@@ -7,6 +7,7 @@ import { getAuthToken, isTokenExpiringSoon } from '../lib/auth-store';
 import {
   signInWithApple as authSignInWithApple,
   signInWithGoogle as authSignInWithGoogle,
+  signInWithGoogleWeb as authSignInWithGoogleWeb,
   signOut as authSignOut,
   signInWithCredentials as authSignInWithCredentials,
   registerWithCredentials as authRegisterWithCredentials,
@@ -28,6 +29,8 @@ type AuthState = {
   isLoading: boolean;
   signInWithApple: () => Promise<OAuthSignInResult>;
   signInWithGoogle: () => Promise<OAuthSignInResult>;
+  // Browser-OAuth fallback for when native Google sign-in can't present (iOS 26.5.1).
+  signInWithGoogleWeb: () => Promise<OAuthSignInResult>;
   signInWithCredentials: (email: string, password: string) => Promise<CredentialsSignInResult>;
   register: (email: string, password: string, name?: string) => Promise<CredentialsSignInResult>;
   signOut: (method?: 'manual' | 'account_deleted') => Promise<void>;
@@ -192,6 +195,17 @@ export function AuthProvider({ children, onReady }: AuthProviderProps) {
     return result;
   }, [checkAuth]);
 
+  // Browser-based Google fallback (native SDK can't present the OAuth browser on
+  // iOS 26.5.1). Same success contract as the native flow: re-run checkAuth so the
+  // provider flips to the authenticated UI.
+  const signInWithGoogleWeb = useCallback(async (): Promise<OAuthSignInResult> => {
+    const result = await authSignInWithGoogleWeb();
+    if (result.success) {
+      await checkAuth();
+    }
+    return result;
+  }, [checkAuth]);
+
   const signInWithCredentials = useCallback(
     async (email: string, password: string): Promise<CredentialsSignInResult> => {
       const result = await authSignInWithCredentials(email, password);
@@ -265,6 +279,7 @@ export function AuthProvider({ children, onReady }: AuthProviderProps) {
       isLoading,
       signInWithApple,
       signInWithGoogle,
+      signInWithGoogleWeb,
       signInWithCredentials,
       register,
       signOut,
@@ -275,6 +290,7 @@ export function AuthProvider({ children, onReady }: AuthProviderProps) {
       isLoading,
       signInWithApple,
       signInWithGoogle,
+      signInWithGoogleWeb,
       signInWithCredentials,
       register,
       signOut,

@@ -1,11 +1,13 @@
 import { Platform } from 'react-native';
 import * as AppleAuthentication from 'expo-apple-authentication';
+import * as WebBrowser from 'expo-web-browser';
 import { getRandomBytes, digestStringAsync, CryptoDigestAlgorithm, CryptoEncoding } from 'expo-crypto';
 import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 import { createTimeoutSignal } from './abort-timeout';
 import { storeTokens, clearTokens, getRefreshToken } from './auth-store';
 import { nativeSignInErrorCode } from './native-auth-analytics';
-import { BACKEND_URL } from './env';
+import { parseDeepLinkQueryParams } from './deep-link-query';
+import { BACKEND_URL, WEB_BASE_URL } from './env';
 
 export type AuthProvider = 'google' | 'apple';
 
@@ -191,6 +193,92 @@ export async function signInWithGoogle(): Promise<OAuthSignInResult> {
     }
     throw error;
   }
+}
+
+// The browser-OAuth fallback's deep-link return URL. Matches the web app's
+// NATIVE_OAUTH_CALLBACK_SCHEME (packages/web/app/lib/auth/native-oauth-config.ts):
+// /api/auth/native/callback redirects here with `?transferToken=…` on success.
+const NATIVE_OAUTH_REDIRECT = 'com.boardsesh.app://auth/callback';
+
+/**
+ * Exchange a single-use transfer token (minted by the web app's
+ * /api/auth/native/callback after a browser Google sign-in) for our mobile JWT
+ * pair, and store it. Mirrors oauthNativeSignIn's failure shape so the analytics
+ * classifier is reused.
+ */
+async function exchangeTransferToken(transferToken: string): Promise<OAuthSignInResult> {
+  let response: Response;
+  try {
+    response = await fetch(`${BACKEND_URL}/auth/native/exchange`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ transferToken }),
+      signal: createTimeoutSignal(15_000),
+    });
+  } catch {
+    // Network failure / timeout. The caller maps this to a translated message.
+    return { success: false, status: null, error: 'network' };
+  }
+
+  if (!response.ok) {
+    let serverError = `HTTP ${response.status}`;
+    try {
+      const parsed = (await response.json()) as { error?: unknown };
+      if (typeof parsed.error === 'string' && parsed.error.length > 0) {
+        serverError = parsed.error;
+      }
+    } catch {
+      // Body wasn't JSON; fall back to the HTTP status string above.
+    }
+    return { success: false, status: response.status, error: serverError };
+  }
+
+  let data: { jwt: string; refreshToken: string; expiresAt: string };
+  try {
+    data = (await response.json()) as { jwt: string; refreshToken: string; expiresAt: string };
+  } catch {
+    // A 200 with an unreadable body — keep this function's "never throws" contract.
+    return { success: false, status: response.status, error: 'invalid_response' };
+  }
+  await storeTokens(data.jwt, data.refreshToken, data.expiresAt);
+  return { success: true };
+}
+
+/**
+ * Browser-based Google sign-in — the fallback for when native GoogleSignin can't
+ * present its OAuth browser (iOS 26.5.1 fails with GIDSignIn "Unable to open
+ * Safari" before any network call). Opens the web app's /auth/native-start page in
+ * an auth-session browser, which runs the proven NextAuth Google flow, mints a
+ * single-use transfer token on success, and redirects back to NATIVE_OAUTH_REDIRECT;
+ * we then exchange that token for our JWT pair. Reuses the same handoff the web app
+ * already serves (the Strava/Aurora pattern) — no @react-native-google-signin
+ * involvement, so it's immune to the native SDK's iOS-version breakage.
+ *
+ * Never throws: every outcome maps to an OAuthSignInResult (success / cancelled /
+ * failure) so the caller treats it exactly like the native path.
+ */
+export async function signInWithGoogleWeb(): Promise<OAuthSignInResult> {
+  const nativeCallbackUrl = `${WEB_BASE_URL}/api/auth/native/callback?next=${encodeURIComponent('/')}`;
+  const startUrl = `${WEB_BASE_URL}/auth/native-start?provider=google&callbackUrl=${encodeURIComponent(nativeCallbackUrl)}`;
+
+  let result: WebBrowser.WebBrowserAuthSessionResult;
+  try {
+    result = await WebBrowser.openAuthSessionAsync(startUrl, NATIVE_OAUTH_REDIRECT);
+  } catch {
+    // The auth-session browser couldn't open — treat as a network-class failure.
+    return { success: false, status: null, error: 'network' };
+  }
+
+  // Dismissed before the redirect was captured — the user backed out.
+  if (result.type !== 'success') return { success: false, cancelled: true };
+
+  const params = parseDeepLinkQueryParams(result.url);
+  const error = params.get('error');
+  if (error) return { success: false, status: null, error };
+  const transferToken = params.get('transferToken');
+  if (!transferToken) return { success: false, status: null, error: 'no_transfer_token' };
+
+  return exchangeTransferToken(transferToken);
 }
 
 export type CredentialsSignInResult = { success: true } | NativeAuthFailure;
