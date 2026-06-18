@@ -44,15 +44,15 @@ name: onboarding illustrations
           optional: true
       - waitForAnimationToEnd
 
-# Browse hero (alternate illustration): the climbs list.
+# Browse hero (alternate illustration): the climbs list. NOTE: `id: climb-list`
+# is a testID on a Fabric FlashList View, which Maestro's iOS accessibility tree
+# does NOT expose (same caveat app-store.yaml documents) — so settle on animation,
+# never an id assertion, or the flow times out on a screen that actually rendered.
 - openLink: com.boardsesh.app://climbs
 - tapOn:
     text: 'Open'
     optional: true
-- extendedWaitUntil:
-    visible:
-      id: 'climb-list'
-    timeout: 30000
+- waitForAnimationToEnd
 - waitForAnimationToEnd
 - takeScreenshot: onboarding-welcome
 
