@@ -197,8 +197,17 @@ export const SwipeBoardCarousel = React.memo(function SwipeBoardCarousel({
   return (
     <GestureDetector gesture={composedGesture}>
       <View style={styles.container} onLayout={handleLayout}>
-        <Animated.View style={[styles.boardWrapper, boardBox ? { width: boardBox.width } : null, currentStyle]}>
-          <Animated.View style={animatedZoomStyle}>
+        {process.env.EXPO_PUBLIC_SCREENSHOT_MODE === '1' ? (
+          // Screenshot mode: render the board in PLAIN (non-reanimated) Views.
+          // The swipe/zoom `Animated.View` wrappers promote the board to a render
+          // layer that Android's `adb screencap` (Maestro's capture) intermittently
+          // misses inside the play-drawer modal — the board-view shot came out blank
+          // ~half the time even with a redraw swipe. The transforms are identity at
+          // rest, so the static board is pixel-identical without them; the simpler
+          // board-presence sheet (no carousel) already captures reliably, confirming
+          // the carousel layer is the culprit. overlayTestID anchors on the painted
+          // holds overlay.
+          <View style={[styles.boardWrapper, boardBox ? { width: boardBox.width } : null]}>
             <BoardImageNative
               frames={currentFrameOverride ?? currentFrames}
               boardName={boardName}
@@ -209,13 +218,26 @@ export const SwipeBoardCarousel = React.memo(function SwipeBoardCarousel({
               boardHeight={boardHeight}
               mirrored={mirrored}
               style={boardStyle}
-              // Anchor for screenshot/e2e flows: present only once the lit-holds
-              // overlay has painted (see LayeredClimbImage). Screenshot-mode only,
-              // so the marker + onLoad dead-strip out of normal builds.
-              overlayTestID={process.env.EXPO_PUBLIC_SCREENSHOT_MODE === '1' ? 'play-drawer-board-overlay' : undefined}
+              overlayTestID="play-drawer-board-overlay"
             />
+          </View>
+        ) : (
+          <Animated.View style={[styles.boardWrapper, boardBox ? { width: boardBox.width } : null, currentStyle]}>
+            <Animated.View style={animatedZoomStyle}>
+              <BoardImageNative
+                frames={currentFrameOverride ?? currentFrames}
+                boardName={boardName}
+                layoutId={layoutId}
+                sizeId={sizeId}
+                setIds={setIds}
+                boardWidth={boardWidth}
+                boardHeight={boardHeight}
+                mirrored={mirrored}
+                style={boardStyle}
+              />
+            </Animated.View>
           </Animated.View>
-        </Animated.View>
+        )}
 
         <Animated.View style={[styles.peekWrapper, peekStyle]} pointerEvents="none">
           {peekFrames && (
