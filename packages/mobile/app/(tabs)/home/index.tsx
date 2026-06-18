@@ -94,7 +94,10 @@ export default function HomeTab() {
   // or the "Everyone" global feed). It defaults to the inferred home board once
   // it resolves; the view stays on `crew`.
   const { board: homeBoard, isResolving: isResolvingHomeBoard, boards: ownedBoards } = useHomeBoard();
-  const [mode, setMode] = useState<FeedMode>('crew');
+  // Screenshot builds open on the global "Everyone" feed (gym + no board) — a
+  // livelier hero shot than the test user's own crew. Inlined so it dead-strips
+  // in normal builds, where the default stays `crew`.
+  const [mode, setMode] = useState<FeedMode>(process.env.EXPO_PUBLIC_SCREENSHOT_MODE === '1' ? 'gym' : 'crew');
   const [selectedBoard, setSelectedBoard] = useState<UserBoard | null>(null);
   // Once home-board inference settles, point the crew/gym filter at the home
   // board. The view stays on `crew`; with no home board it's the unfiltered crew.
@@ -102,6 +105,9 @@ export default function HomeTab() {
   useEffect(() => {
     if (hasDefaultedScope.current || isResolvingHomeBoard) return;
     hasDefaultedScope.current = true;
+    // Screenshot mode stays on the global "Everyone" feed, so don't scope the
+    // gym view to the home board (that would turn it into one board's feed).
+    if (process.env.EXPO_PUBLIC_SCREENSHOT_MODE === '1') return;
     if (homeBoard) setSelectedBoard(homeBoard);
   }, [homeBoard, isResolvingHomeBoard]);
 

@@ -10,13 +10,14 @@ name: app-store screenshots
 # the build only honours when EXPO_PUBLIC_SCREENSHOT_MODE=1 (see
 # packages/mobile/src/lib/screenshot-mode.ts):
 #     ://climbs?screenshotOpenFirst=1    -> auto-opens the first climb's board view
+#     ://climbs?screenshotBoardIndex=1   -> renders myBoards[1] (the 2nd followed board)
 #     ://profile?screenshotTab=logbook   -> profile Logbook tab
 #     ://profile?screenshotTab=sessions  -> profile Sessions tab; auto-opens newest session
-# There are NO coordinate taps. The active board is auto-selected on boot in screenshot
-# mode (auth-provider.tsx activates the user's first saved board, like the auto-sign-in),
-# so the board-backed screens render real content without a fragile board-picker tap. The
-# old board-pick / board-view / board-sheet coordinate taps are all gone — a missed pick
-# used to leave Climbs/Board View stuck on the "No board selected" empty state.
+# There are NO coordinate taps. The active board is auto-activated on boot in screenshot
+# mode (ScreenshotBoardAutoActivator activates the user's first followed board), so the
+# board-backed screens render real content without a fragile board-picker tap. The old
+# board-pick / board-view / board-sheet coordinate taps are all gone — a missed pick used
+# to leave Climbs/Board View stuck on the "No board selected" empty state.
 #
 # This flow is captured once per (device, locale) pair: the orchestrator bakes
 # EXPO_PUBLIC_SCREENSHOT_LOCALE into the Metro bundle per locale and reruns it on each
@@ -37,14 +38,15 @@ name: app-store screenshots
 #   shots no longer depend on an in-flow board-pick step.)
 # - The Record/session screen renders the WORKOUT GENERATOR because Metro bundles
 #   EXPO_PUBLIC_SCREENSHOT_WORKOUT (default volume).
-# - Filenames are numbered for store DISPLAY order (00..09), not capture order. 03 is the
-#   live-party shot, added by the party-session flow (see app-store-party.yaml / PR2).
+# - Filenames are numbered for store DISPLAY order (00..09), not capture order. Slot 03 is
+#   the second board-view (myBoards[1]); it was reserved for a party shot the flow never took.
 #
 # The screenshot build auto-signs-in on boot and lands straight on home (no login screen);
 # the orchestrator waits for home (the `$screen /home` log) before running Maestro, so the
 # flow opens right into the shots.
 
-# Home — feed populated by the prod test user's follows.
+# Home — the global "Everyone" feed. The home screen defaults to it in screenshot
+# mode (see home/index.tsx) for a livelier hero than the test user's own crew.
 - waitForAnimationToEnd
 - takeScreenshot: 00-home
 
@@ -136,3 +138,16 @@ name: app-store screenshots
 - waitForAnimationToEnd
 - waitForAnimationToEnd
 - takeScreenshot: 02-board-view
+
+# Board view on the SECOND followed board (myBoards[1]) — a second wall lit up, so
+# the listing shows Boardsesh works across boards. screenshotBoardIndex=1 switches
+# the active board to the user's 2nd follow (sorted by follow date) before opening
+# its first climb. LAST too (also opens the play drawer). Slot 03 was the reserved
+# party shot, which the main flow never captured.
+- openLink: com.boardsesh.app://climbs?screenshotOpenFirst=1&screenshotBoardIndex=1
+- tapOn:
+    text: 'Open'
+    optional: true
+- waitForAnimationToEnd
+- waitForAnimationToEnd
+- takeScreenshot: 03-board-view-2
