@@ -16,7 +16,7 @@ import { computeBoardPresenceStats } from './stats';
 export const boardPresenceQueries = {
   /**
    * Backfill the recent "now on the wall" history for a board from the Redis
-   * FIFO (last ~50, 24h window). Used by late joiners before the live
+   * FIFO (last ~50, 1-week window). Used by late joiners before the live
    * `boardNowPlaying` subscription takes over. Empty without Redis.
    *
    * Auth-optional: this is the backfill half of the live "now on the wall" feed,
@@ -38,7 +38,7 @@ export const boardPresenceQueries = {
 
   /**
    * Durable history of what was pushed to a board, from `board_climb_events`
-   * (survives past the 24h Redis window). Newest-first, keyset-paged via
+   * (survives past the 1-week Redis window). Newest-first, keyset-paged via
    * `before`: an opaque cursor that is the `seq` of the last row of the
    * previous page.
    *
@@ -51,7 +51,7 @@ export const boardPresenceQueries = {
    * Intentionally public: a board's send log is shared, leaderboard-style data,
    * so any authenticated user may read any active board's history (no
    * membership check). Proof-of-presence gates *writes* (see reportBoardClimb),
-   * not reads. `boardRecentClimbs` is the hot 24h cache for the same data.
+   * not reads. `boardRecentClimbs` is the hot 1-week cache for the same data.
    */
   boardHistory: async (
     _: unknown,
