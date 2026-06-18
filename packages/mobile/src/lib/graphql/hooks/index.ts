@@ -13,6 +13,7 @@ import type {
   UpdateBoardInput,
   SetterStatsInput,
   UserProfile,
+  PublicUserProfile,
   UpdateProfileInput,
   SessionSummary,
   SessionHealthExport,
@@ -102,12 +103,11 @@ export function useProfile(options?: { enabled?: boolean }) {
 }
 
 /**
- * Update the current user's display name and/or avatar URL. Invalidating
- * `['profile']` is sufficient to refresh every consumer of the current user:
- * the toolbar avatar (UserAvatarToolbarAction), the account drawer header, and
- * PartyProfileProvider's `username`/`avatarUrl` (which derive from the same
- * query). The avatar image itself is uploaded separately via `uploadAvatar`
- * (REST), and its absolute URL is then persisted here.
+ * Update the current user's display name and/or avatar URL. The mutation result
+ * is written into the `['profile']` cache immediately, then invalidated so every
+ * current-user consumer refreshes against the backend. The avatar image itself
+ * is uploaded separately via `uploadAvatar` (REST), and its absolute URL is then
+ * persisted here.
  */
 export function useUpdateProfile() {
   const queryClient = useQueryClient();
@@ -116,8 +116,19 @@ export function useUpdateProfile() {
       const response = await getHttpClient().request<UpdateProfileMutationResponse>(UPDATE_PROFILE, { input });
       return response.updateProfile;
     },
-    onSuccess: () => {
+    onSuccess: (updatedProfile) => {
+      queryClient.setQueryData<GetProfileQueryResponse>(['profile'], { profile: updatedProfile });
+      queryClient.setQueryData<PublicUserProfile | null>(['publicProfile', updatedProfile.id], (cachedProfile) =>
+        cachedProfile
+          ? {
+              ...cachedProfile,
+              displayName: updatedProfile.displayName,
+              avatarUrl: updatedProfile.avatarUrl,
+            }
+          : cachedProfile,
+      );
       void queryClient.invalidateQueries({ queryKey: ['profile'] });
+      void queryClient.invalidateQueries({ queryKey: ['publicProfile', updatedProfile.id] });
     },
   });
 }
