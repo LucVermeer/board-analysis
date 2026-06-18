@@ -104,16 +104,21 @@ vi.mock('@shopify/flash-list', () => ({
     ListEmptyComponent?: ReactNode;
     ListFooterComponent?: ReactNode;
     onEndReached?: () => void;
-  }) =>
-    createElement(
+  }) => {
+    const rowNodes = data?.map((item, index) => {
+      const key =
+        typeof item === 'object' && item !== null && 'uuid' in item ? String((item as { uuid?: unknown }).uuid) : index;
+      return renderItem ? createElement('div', { key }, renderItem({ item, index })) : null;
+    });
+    return createElement(
       'div',
       { 'data-list': 'true', onClick: onEndReached },
       ListHeaderComponent ?? null,
-      data && data.length > 0 && renderItem
-        ? data.map((item, index) => createElement('div', { key: index }, renderItem({ item, index })))
-        : (ListEmptyComponent ?? null),
+      data?.length === 0 ? (ListEmptyComponent ?? null) : null,
+      rowNodes ?? null,
       ListFooterComponent ?? null,
-    ),
+    );
+  },
 }));
 
 vi.mock('expo-router', () => ({ useRouter: () => ({ back: ctrl.back }) }));

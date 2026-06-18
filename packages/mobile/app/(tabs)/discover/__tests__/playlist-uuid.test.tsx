@@ -3,10 +3,38 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, fireEvent, waitFor } from '@testing-library/react';
 import { createElement, type ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { Climb } from '@boardsesh/queue';
+
+type TestRenderBoard = {
+  boardName: string;
+  layoutId: number;
+  sizeId: number;
+  setIds: string;
+  angle: number;
+};
+
+type TestBoardBanner = {
+  title: string;
+  subtitle: string;
+  cta: string;
+  onPress: () => void;
+};
+
+type CapturedActivationOptions = {
+  viewOnlyBoard?: TestRenderBoard | ((climb: Climb) => TestRenderBoard | null) | null;
+};
 
 // The metadata query goes through getHttpClient().request — mock it so we can
 // make GET_PLAYLIST reject (the error path) or resolve (the not-found path).
 const requestMock = vi.hoisted(() => vi.fn());
+const playlistMocks = vi.hoisted(() => ({
+  allClimbs: [] as Climb[],
+  activationOptions: null as CapturedActivationOptions | null,
+  renderBoardResult: {
+    renderBoard: null as TestRenderBoard | null,
+    banner: null as TestBoardBanner | null,
+  },
+}));
 vi.mock('../../../../src/lib/graphql/client', () => ({
   getHttpClient: () => ({ request: requestMock }),
 }));
@@ -24,7 +52,7 @@ vi.mock('@boardsesh/playlists-react', () => ({
       fetchNextPage: vi.fn(),
       refetch: climbsRefetch,
     },
-    allClimbs: [],
+    allClimbs: playlistMocks.allClimbs,
   }),
   usePlaylistMutations: () => ({
     updatePlaylist: updatePlaylistMock,
@@ -70,9 +98,14 @@ vi.mock('../../../../src/providers/theme-provider', () => ({
 }));
 vi.mock('../../../../src/providers/auth-provider', () => ({ useAuth: () => ({ isAuthenticated: true }) }));
 vi.mock('../../../../src/providers/toast-provider', () => ({ useToast: () => ({ showToast: vi.fn() }) }));
-vi.mock('../../../../src/lib/playlists/use-playlist-activation', () => ({ usePlaylistActivation: () => vi.fn() }));
+vi.mock('../../../../src/lib/playlists/use-playlist-activation', () => ({
+  usePlaylistActivation: (options: CapturedActivationOptions) => {
+    playlistMocks.activationOptions = options;
+    return vi.fn();
+  },
+}));
 vi.mock('../../../../src/lib/playlists/use-playlist-render-board', () => ({
-  usePlaylistRenderBoard: () => ({ renderBoard: null, banner: null }),
+  usePlaylistRenderBoard: () => playlistMocks.renderBoardResult,
 }));
 vi.mock('../../../../src/lib/playlists/recents-store', () => ({ recordPlaylistOpen: vi.fn() }));
 vi.mock('../../../../src/lib/climb-types', () => ({ toQueueClimbs: (climbs: unknown) => climbs }));
@@ -132,7 +165,47 @@ beforeEach(() => {
   requestMock.mockReset();
   climbsRefetch.mockClear();
   updatePlaylistMock.mockReset();
+  playlistMocks.allClimbs = [];
+  playlistMocks.activationOptions = null;
+  playlistMocks.renderBoardResult = { renderBoard: null, banner: null };
 });
+
+function makePlaylist(overrides: Record<string, unknown> = {}) {
+  return {
+    uuid: 'p-1',
+    name: 'Playlist',
+    description: null,
+    color: '#8C4A52',
+    icon: null,
+    climbCount: 2,
+    boardType: 'tension',
+    layoutId: 9,
+    isPublic: false,
+    userRole: 'owner',
+    isPinnedByMe: false,
+    isFollowedByMe: false,
+    followerCount: 0,
+    ...overrides,
+  };
+}
+
+function makeClimb(uuid: string, boardType: string, layoutId: number, angle: number): Climb {
+  return {
+    uuid,
+    name: uuid,
+    setter_username: 'setter',
+    frames: '',
+    angle,
+    ascensionist_count: 0,
+    difficulty: 'V3',
+    quality_average: '3.0',
+    stars: 3,
+    difficulty_error: '0',
+    benchmark_difficulty: null,
+    boardType,
+    layoutId,
+  };
+}
 
 describe('PlaylistDetail metadata error handling', () => {
   it('renders an error + retry state (not a fallback-titled hero) when GET_PLAYLIST rejects', async () => {
@@ -170,6 +243,30 @@ describe('PlaylistDetail metadata error handling', () => {
 
     expect(await findByText('detail.errors.notFoundTitle')).toBeTruthy();
     expect(queryByText('detail.errors.loadTitle')).toBeNull();
+  });
+
+  it('only opens incompatible rows view-only when the playlist board is mismatched', async () => {
+    const compatibleClimb = makeClimb('compatible-kilter', 'kilter', 1, 40);
+    const incompatibleClimb = makeClimb('incompatible-tension', 'tension', 9, 35);
+    playlistMocks.allClimbs = [compatibleClimb, incompatibleClimb];
+    playlistMocks.renderBoardResult = {
+      renderBoard: { boardName: 'kilter', layoutId: 1, sizeId: 10, setIds: '1,20', angle: 40 },
+      banner: { title: 'title', subtitle: 'subtitle', cta: 'cta', onPress: vi.fn() },
+    };
+    requestMock.mockResolvedValue({ playlist: makePlaylist() });
+
+    renderDetail();
+
+    await waitFor(() => expect(playlistMocks.activationOptions?.viewOnlyBoard).toEqual(expect.any(Function)));
+    const resolveViewOnlyBoard = playlistMocks.activationOptions?.viewOnlyBoard;
+    if (typeof resolveViewOnlyBoard !== 'function') throw new Error('Expected a view-only resolver');
+
+    expect(resolveViewOnlyBoard(compatibleClimb)).toBeNull();
+    expect(resolveViewOnlyBoard(incompatibleClimb)).toMatchObject({
+      boardName: 'tension',
+      layoutId: 9,
+      angle: 35,
+    });
   });
 });
 

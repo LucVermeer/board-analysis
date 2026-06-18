@@ -32,6 +32,7 @@ import { GlassIconButton } from '../../../src/components/GlassIconButton';
 import { getHttpClient } from '../../../src/lib/graphql/client';
 import { usePlaylistActivation } from '../../../src/lib/playlists/use-playlist-activation';
 import { usePlaylistRenderBoard } from '../../../src/lib/playlists/use-playlist-render-board';
+import { resolvePlaylistClimbRenderBoard } from '../../../src/lib/playlists/playlist-climb-render-board';
 import { recordPlaylistOpen } from '../../../src/lib/playlists/recents-store';
 import { reportHandledError } from '../../../src/lib/error-reporting';
 import { toQueueClimbs } from '../../../src/lib/climb-types';
@@ -114,19 +115,30 @@ export default function PlaylistDetail() {
     [playlistUuid],
   );
 
-  const activate = usePlaylistActivation({
-    sourceId: `playlist:${playlistUuid}`,
-    allClimbs,
-    fetchPage,
-    refreshErrorMessage: 'Failed to refresh playlist suggestions:',
-  });
-
   // Prefer the active board for row rendering; mixed-board climbs resolve their
   // own board per row and dim when they do not fit the active board. The banner
   // still prompts a switch for list-level board mismatches.
   const { renderBoard, banner: boardBanner } = usePlaylistRenderBoard(
     playlist ? { boardType: playlist.boardType, layoutId: playlist.layoutId } : null,
   );
+
+  const shouldOpenViewOnly = !!boardBanner;
+  const resolveViewOnlyBoard = useCallback(
+    (climb: Climb) => {
+      if (!shouldOpenViewOnly) return null;
+      const resolvedRenderBoard = resolvePlaylistClimbRenderBoard(climb, renderBoard);
+      return resolvedRenderBoard?.incompatible ? resolvedRenderBoard.renderBoard : null;
+    },
+    [shouldOpenViewOnly, renderBoard],
+  );
+
+  const activate = usePlaylistActivation({
+    sourceId: `playlist:${playlistUuid}`,
+    allClimbs,
+    fetchPage,
+    viewOnlyBoard: resolveViewOnlyBoard,
+    refreshErrorMessage: 'Failed to refresh playlist suggestions:',
+  });
 
   const isOwner = playlist?.userRole === 'owner';
   const isFollowable = !!playlist?.isPublic && !isOwner;
