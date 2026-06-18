@@ -20,7 +20,7 @@ type AvatarProps = {
  * bucket via the shared allowlist. Third-party avatar URLs are passed
  * through — the backend can only resize what it stores.
  */
-function sizedAvatarUri(uri: string, displaySize: number): string {
+export function sizedAvatarUri(uri: string, displaySize: number): string {
   if (!uri.includes('/static/avatars/')) return uri;
   const bucket = snapToAllowedImageSize(Math.ceil(displaySize * PixelRatio.get()));
   const separator = uri.includes('?') ? '&' : '?';

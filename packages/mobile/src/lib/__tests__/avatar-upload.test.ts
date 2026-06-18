@@ -32,6 +32,12 @@ describe('absolutizeAvatarUrl', () => {
     expect(absolutizeAvatarUrl('/static/avatars/abc.jpg')).toBe(`${BACKEND}/static/avatars/abc.jpg`);
   });
 
+  it('preserves version query params on backend-relative paths', () => {
+    expect(absolutizeAvatarUrl('/static/avatars/abc.jpg?v=upload-123')).toBe(
+      `${BACKEND}/static/avatars/abc.jpg?v=upload-123`,
+    );
+  });
+
   it('passes an already-absolute URL through unchanged', () => {
     const external = 'https://lh3.googleusercontent.com/a/abc';
     expect(absolutizeAvatarUrl(external)).toBe(external);
@@ -40,11 +46,13 @@ describe('absolutizeAvatarUrl', () => {
 
 describe('uploadAvatar', () => {
   it('POSTs multipart form data to the avatars endpoint and returns the absolute URL', async () => {
-    mockAuthenticatedFetch.mockResolvedValue(jsonResponse({ success: true, avatarUrl: '/static/avatars/me.jpg' }));
+    mockAuthenticatedFetch.mockResolvedValue(
+      jsonResponse({ success: true, avatarUrl: '/static/avatars/me.jpg?v=upload-123' }),
+    );
 
     const result = await uploadAvatar(file, userId);
 
-    expect(result).toBe(`${BACKEND}/static/avatars/me.jpg`);
+    expect(result).toBe(`${BACKEND}/static/avatars/me.jpg?v=upload-123`);
     expect(mockAuthenticatedFetch).toHaveBeenCalledTimes(1);
     const [calledUrl, options] = (mockAuthenticatedFetch as Mock).mock.calls[0] as [string, RequestInit];
     expect(calledUrl).toBe(`${BACKEND}/api/avatars`);
