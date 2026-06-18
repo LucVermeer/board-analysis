@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { Platform, Share } from 'react-native';
-import { buildClimbViewPath } from '@boardsesh/play-view';
+import { buildReadableClimbViewPath } from '@boardsesh/play-view';
 import type { Climb } from '@boardsesh/shared-schema';
 import { WEB_BASE_URL } from '../lib/env';
 
@@ -16,7 +16,15 @@ type ShareClimbArgs = {
 export function useShareClimb({ climb, boardName, layoutId, sizeId, setIds, angle }: ShareClimbArgs) {
   return useCallback(async () => {
     if (!climb) return;
-    const url = `${WEB_BASE_URL}${buildClimbViewPath(boardName, layoutId, sizeId, setIds, angle, climb.uuid)}`;
+    const url = `${WEB_BASE_URL}${buildReadableClimbViewPath({
+      boardName,
+      layoutId,
+      sizeId,
+      setIds,
+      angle,
+      climbUuid: climb.uuid,
+      climbName: climb.name,
+    })}`;
     await Share.share(Platform.OS === 'ios' ? { message: climb.name, url } : { message: `${climb.name}\n${url}` });
   }, [climb, boardName, layoutId, sizeId, setIds, angle]);
 }

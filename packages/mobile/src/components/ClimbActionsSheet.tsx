@@ -6,7 +6,7 @@ import { useRouter } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
 import * as WebBrowser from 'expo-web-browser';
 import type { BoardName, Climb } from '@boardsesh/shared-schema';
-import { buildClimbViewPath } from '@boardsesh/play-view';
+import { buildReadableClimbViewPath } from '@boardsesh/play-view';
 import { computeCanUpdate, type SavedClimbSnapshot } from '@boardsesh/create-climb-react';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { ModalSheet } from './ModalSheet';
@@ -132,7 +132,15 @@ function ClimbActionsSheet({
   const handleCopyLink = useCallback(async () => {
     if (!climb) return;
     try {
-      const url = `${WEB_BASE_URL}${buildClimbViewPath(boardName, layoutId, sizeId, setIds, angle, climb.uuid)}`;
+      const url = `${WEB_BASE_URL}${buildReadableClimbViewPath({
+        boardName,
+        layoutId,
+        sizeId,
+        setIds,
+        angle,
+        climbUuid: climb.uuid,
+        climbName: climb.name,
+      })}`;
       await Clipboard.setStringAsync(url);
       track(SHARED_EVENTS.ClimbShared, { method: 'copy_link', climbUuid: climb.uuid, boardName, layoutId });
       showToast(t('mobile.climbActions.linkCopied'), 'info');

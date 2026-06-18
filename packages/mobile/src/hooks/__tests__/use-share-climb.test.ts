@@ -42,6 +42,9 @@ const baseArgs = {
   angle: 40,
 };
 
+const expectedReadableShareUrl =
+  'https://www.boardsesh.com/kilter/original/12x14-commerical/screw_bolt/40/view/test-climb-climb-uuid-123';
+
 describe('useShareClimb', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -67,10 +70,8 @@ describe('useShareClimb', () => {
       if (!firstCall) throw new Error('Share.share was not called');
       const payload = firstCall[0];
       if (!('url' in payload)) throw new Error('Expected iOS payload shape { message, url }');
-      expect(payload.url).toMatch(/^https:\/\/www\.boardsesh\.com\//);
-      expect(payload.url).toContain('climb-uuid-123');
-      expect(payload.url).toContain('kilter');
-      expect(payload.url).toContain('40');
+      expect(payload.url).toBe(expectedReadableShareUrl);
+      expect(payload.url).not.toContain('/1/7/1,20/');
       expect(payload.message).toBe('Test Climb');
       expect(payload.message).not.toMatch(/https?:\/\//);
       expect(payload).not.toHaveProperty('title');
@@ -93,9 +94,8 @@ describe('useShareClimb', () => {
       const payload = firstCall[0];
       if (!('message' in payload)) throw new Error('Expected Android payload shape { message }');
       expect(payload.message).toContain('Test Climb');
-      expect(payload.message).toMatch(/https:\/\/www\.boardsesh\.com\//);
-      expect(payload.message).toContain('climb-uuid-123');
-      expect(payload.message).toContain('kilter');
+      expect(payload.message).toContain(expectedReadableShareUrl);
+      expect(payload.message).not.toContain('/1/7/1,20/');
       expect(payload).not.toHaveProperty('url');
     });
   });
