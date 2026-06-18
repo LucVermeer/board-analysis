@@ -69,6 +69,18 @@ vi.mock('expo-router', () => ({
   Stack: { Screen: () => null },
   useRouter: () => ({ push: vi.fn() }),
   useLocalSearchParams: () => ({}),
+  useFocusEffect: () => {},
+}));
+
+// The onboarding reveal banner + its storage pull expo-haptics / expo-secure-store
+// (expo-modules-core EventEmitter) into the graph — irrelevant to the keyboard
+// test, so stub both.
+vi.mock('../../../../src/components/onboarding/OnboardingTipBanner', () => ({
+  OnboardingTipBanner: () => null,
+}));
+vi.mock('../../../../src/lib/onboarding/onboarding-storage', () => ({
+  hasBoardRevealTipPending: vi.fn(async () => false),
+  clearBoardRevealTipPending: vi.fn(async () => {}),
 }));
 
 vi.mock('expo-crypto', () => ({ randomUUID: () => 'queue-item-1' }));

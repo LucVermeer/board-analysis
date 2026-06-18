@@ -3,7 +3,7 @@ import { View, StyleSheet, RefreshControl, Keyboard } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
+import { Stack, useFocusEffect, useRouter, useLocalSearchParams } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import type { Climb, BoardName } from '@boardsesh/shared-schema';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
@@ -45,6 +45,8 @@ import { usePlaylistActivation } from '../../../src/lib/playlists/use-playlist-a
 import { toQueueClimb, toQueueClimbs } from '../../../src/lib/climb-types';
 import { parseSetIdsParam, prewarmCreateBoardHolds } from '../../../src/lib/create-board-holds';
 import { useActiveBoard, useSetActiveBoard } from '../../../src/lib/graphql/use-active-board';
+import { OnboardingTipBanner } from '../../../src/components/onboarding/OnboardingTipBanner';
+import { clearBoardRevealTipPending, hasBoardRevealTipPending } from '../../../src/lib/onboarding/onboarding-storage';
 import { useMyBoards } from '../../../src/lib/graphql/hooks';
 import { useAuth } from '../../../src/providers/auth-provider';
 import { ensureBackgroundsCached } from '../../../src/lib/background-image-cache';
@@ -133,6 +135,7 @@ function ClimbListInner() {
     screenshotOpenBoardSheet?: string;
   }>();
   const { t } = useTranslation('climbs');
+  const { t: tCommon } = useTranslation('common');
   const { openClimbActions, openAddToPlaylist, openBoardSheet } = useDrawerHost();
   // The board capsule opens the wall's "now on the wall" sheet (the board
   // switcher lives inside it).
@@ -287,6 +290,27 @@ function ClimbListInner() {
   }, [isAuthenticated]);
 
   const { data: activeBoard, isLoading: isBoardLoading } = useActiveBoard();
+
+  // One-time board-history reveal banner: armed when the user binds a board from
+  // the onboarding hand-off (app/boards/index.tsx) and consumed on focus so it
+  // shows on the Climbs landing, pointing at the board's "now on the wall" sheet.
+  const [revealTipVisible, setRevealTipVisible] = useState(false);
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      void hasBoardRevealTipPending().then((pending) => {
+        if (cancelled || !pending) return;
+        setRevealTipVisible(true);
+        void clearBoardRevealTipPending();
+      });
+      return () => {
+        cancelled = true;
+      };
+    }, []),
+  );
+  const dismissRevealTip = useCallback(() => setRevealTipVisible(false), []);
+  const showRevealTip = revealTipVisible && !!activeBoard;
+  const revealBoardName = activeBoard?.gymName ?? activeBoard?.name ?? '';
 
   // Screenshot mode: a second board-view shot renders myBoards[1] (the user's 2nd
   // followed board) via ?screenshotBoardIndex=1. Boards are sorted by follow date
@@ -750,6 +774,16 @@ function ClimbListInner() {
   const listHeader = useMemo(
     () => (
       <>
+        {showRevealTip ? (
+          <OnboardingTipBanner
+            text={tCommon('mobile.onboarding.boardRevealTip', { board: revealBoardName })}
+            dismissLabel={tCommon('actions.close')}
+            onPress={handleOpenBoardDetail}
+            onDismiss={dismissRevealTip}
+            icon="boards"
+            style={styles.revealBanner}
+          />
+        ) : null}
         {/* The filter summary now lives persistently in the floating chrome's
             centre (glass) / Appbar (Material), so the list itself opens straight
             into the recent-filter pills and climbs. */}
@@ -764,7 +798,19 @@ function ClimbListInner() {
         ) : null}
       </>
     ),
-    [showRecentPills, recentFilters, filters, name, handleApplyRecentFilter, handleClearRecentFilters],
+    [
+      showRevealTip,
+      revealBoardName,
+      handleOpenBoardDetail,
+      dismissRevealTip,
+      tCommon,
+      showRecentPills,
+      recentFilters,
+      filters,
+      name,
+      handleApplyRecentFilter,
+      handleClearRecentFilters,
+    ],
   );
 
   const listFooter = useMemo(
@@ -1022,5 +1068,10 @@ const styles = StyleSheet.create({
   },
   emptyCta: {
     marginTop: spacing[4],
+  },
+  revealBanner: {
+    marginHorizontal: spacing[4],
+    marginTop: spacing[2],
+    marginBottom: spacing[2],
   },
 });

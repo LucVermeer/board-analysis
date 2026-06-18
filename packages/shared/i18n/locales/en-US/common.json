@@ -162,7 +162,7 @@
         "findBoard": "Find my board",
         "lookAround": "Look around first"
       },
-      "homeRevealTip": "This is {{board}} right now. It updates as people climb. Tap to see what's on the wall.",
+      "boardRevealTip": "This is {{board}} right now. It updates as people climb. Tap to see what's on the wall.",
       "tips": {
         "workout": "Build a workout: Volume, Pyramid, Ladder or Grade Focus. Set a grade, preview the burns, send them one at a time.",
         "crew": "Climbing with people? Start a session and share one queue. Anyone sends the next burn, no passing the phone.",

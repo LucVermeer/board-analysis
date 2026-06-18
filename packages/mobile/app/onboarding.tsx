@@ -16,8 +16,9 @@ import { reportError } from '../src/lib/error-reporting';
  * active UI variant (Liquid Glass / HIG vs Material 3) and injects it. Both
  * exits persist the "seen" flag so the prompt shows exactly once; the primary
  * CTA hands off to the real /boards picker (tagged `source=onboarding` so the
- * picker auto-resolves location and lands the bound board on Home), while the
- * quiet exit drops to Home where the empty state re-nudges.
+ * picker auto-resolves location, frames the header, and fires the activation
+ * event), returning to Climbs where the board's climbs and the one-time reveal
+ * banner live. The quiet exit drops to Home.
  */
 export default function OnboardingScreen() {
   const { systemColors } = useTheme();
@@ -60,9 +61,10 @@ export default function OnboardingScreen() {
 
   const findBoard = useCallback(() => {
     persistSeen();
-    // `source=onboarding` lets /boards auto-request location and route the bound
-    // board to the gym-scoped Home feed (where board history reveals itself).
-    router.replace({ pathname: '/boards', params: { source: 'onboarding', returnTo: '/(tabs)/home' } });
+    // `source=onboarding` drives the framing header + location pre-resolve + the
+    // activation event; returnTo defaults to Climbs, where the user browses the
+    // board they just picked and the one-time reveal banner points at its wall.
+    router.replace({ pathname: '/boards', params: { source: 'onboarding' } });
   }, [persistSeen]);
 
   return (
