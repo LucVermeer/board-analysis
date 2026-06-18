@@ -2,7 +2,7 @@ import { useCallback, useMemo } from 'react';
 import { View, Pressable, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
-import type { BoardName, HoldFilterEntry, HoldFilterMode, HoldFilterType } from '@boardsesh/shared-schema';
+import type { BoardName, HoldFilterMode, HoldFilterType } from '@boardsesh/shared-schema';
 import { buildHoldFilterOptions } from '@boardsesh/climb-filters';
 import { Text } from '../Text';
 import { Icon } from '../Icon';
@@ -15,37 +15,31 @@ import { HoldMarkerShapeSvg } from '../board-renderer/HoldMarkerShape';
 import { getHoldFilterTypeShape } from './hold-filter-visuals';
 
 type HoldFilterPickerProps = {
-  /** The hold being edited, or null when no hold is selected on the board. */
-  holdId: number | null;
   boardName: BoardName;
-  /** Current filter entry for the active hold. */
-  entry: HoldFilterEntry;
+  /** The active brush: the hold type tapping a hold will apply. */
+  selectedType: HoldFilterType;
+  onSelectType: (type: HoldFilterType) => void;
+  /** Whether tapping a hold marks the brush type as included or excluded. */
   applyMode: HoldFilterMode;
   onApplyModeChange: (mode: HoldFilterMode) => void;
-  /** Toggle one type's filter on the active hold (the picker owns the cycle). */
-  onToggleType: (type: HoldFilterType) => void;
-  onClear: () => void;
 };
 
 /**
- * Hold-type filter controls, docked below the board in the filter sheet — the
- * same layout shape as the create-climb action bar (an Include / Exclude
- * apply-mode toggle above a single row of hold-type chips). Always on screen;
- * it edits whichever hold is selected on the board. Until a hold is tapped the
- * chips are disabled and a hint explains the gesture.
+ * Hold-type brush selector, docked below the board — the same paint-brush model
+ * as the create-climb action bar: pick an Include / Exclude mode and a hold-type
+ * chip, then tap holds on the board to stamp that type onto them (tapping a hold
+ * that already carries the brush removes it). The selected chip is highlighted
+ * and previews the current mode (an X overlay while excluding).
  *
- * This is NOT a stacked sub-sheet: a third `BottomSheetModal` over the 95%
- * board sheet would not reliably surface, so the controls live inline in the
- * board sheet instead.
+ * This is NOT a stacked sub-sheet: a third `BottomSheetModal` over the 95% board
+ * sheet would not reliably surface, so the controls live inline in the sheet.
  */
 export function HoldFilterPicker({
-  holdId,
   boardName,
-  entry,
+  selectedType,
+  onSelectType,
   applyMode,
   onApplyModeChange,
-  onToggleType,
-  onClear,
 }: HoldFilterPickerProps) {
   const { t } = useTranslation('climbs');
   const { systemColors } = useTheme();
@@ -56,8 +50,6 @@ export function HoldFilterPicker({
     brushThickness,
     shapeSize,
   } = useHoldColorOverrides();
-
-  const isActive = holdId != null;
 
   const options = useMemo(() => buildHoldFilterOptions(boardName, holdColorOverrides), [boardName, holdColorOverrides]);
   const shapeByType = useMemo(() => {
@@ -87,14 +79,12 @@ export function HoldFilterPicker({
     [t],
   );
 
-  const isEmpty = Object.keys(entry).length === 0;
-
-  const handleSwatch = useCallback(
+  const handleSelect = useCallback(
     (type: HoldFilterType) => {
       hapticSelection();
-      onToggleType(type);
+      onSelectType(type);
     },
-    [onToggleType],
+    [onSelectType],
   );
 
   return (
@@ -111,9 +101,8 @@ export function HoldFilterPicker({
 
       <View style={styles.chipRow}>
         {options.map((option) => {
-          const mode = entry[option.type];
-          const selected = mode !== undefined;
-          const excluded = mode === 'exclude';
+          const selected = option.type === selectedType;
+          const excluded = selected && applyMode === 'exclude';
           const stateSuffix = excluded
             ? t('mobile.holdFilter.excludedSuffix')
             : selected
@@ -126,16 +115,14 @@ export function HoldFilterPicker({
           return (
             <Pressable
               key={option.type}
-              onPress={() => handleSwatch(option.type)}
-              disabled={!isActive}
+              onPress={() => handleSelect(option.type)}
               accessibilityRole="button"
-              accessibilityState={{ selected, disabled: !isActive }}
+              accessibilityState={{ selected }}
               accessibilityLabel={stateSuffix ? `${typeLabels[option.type]}, ${stateSuffix}` : typeLabels[option.type]}
               style={[
                 styles.chip,
                 { backgroundColor: systemColors.fill },
                 selected && { borderColor: swatchColor, borderWidth: 2 },
-                !isActive && styles.chipDisabled,
               ]}
             >
               <View style={styles.chipSwatch}>
@@ -160,29 +147,9 @@ export function HoldFilterPicker({
         })}
       </View>
 
-      {isActive ? (
-        <Pressable
-          onPress={() => {
-            if (isEmpty) return;
-            hapticSelection();
-            onClear();
-          }}
-          disabled={isEmpty}
-          accessibilityRole="button"
-          accessibilityState={{ disabled: isEmpty }}
-          accessibilityLabel={t('mobile.holdFilter.clearHold')}
-          style={[styles.clearRow, isEmpty && styles.clearDisabled]}
-        >
-          <Icon name="ascent.attempt" size={16} color={systemColors.secondaryLabel} />
-          <Text variant="subheadline" color={systemColors.secondaryLabel}>
-            {t('mobile.holdFilter.clearHold')}
-          </Text>
-        </Pressable>
-      ) : (
-        <Text variant="footnote" style={[styles.hint, { color: systemColors.secondaryLabel }]}>
-          {t('mobile.holdFilter.hint')}
-        </Text>
-      )}
+      <Text variant="footnote" style={[styles.hint, { color: systemColors.secondaryLabel }]}>
+        {t('mobile.holdFilter.hint')}
+      </Text>
     </View>
   );
 }
@@ -212,9 +179,6 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     minHeight: 64,
   },
-  chipDisabled: {
-    opacity: 0.4,
-  },
   chipSwatch: {
     width: 28,
     height: 28,
@@ -227,20 +191,8 @@ const styles = StyleSheet.create({
   chipLabel: {
     fontWeight: '600',
   },
-  clearRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing[2],
-    paddingVertical: spacing[2],
-    minHeight: 44,
-  },
-  clearDisabled: {
-    opacity: 0.4,
-  },
   hint: {
     textAlign: 'center',
-    minHeight: 44,
     paddingHorizontal: spacing[4],
   },
 });

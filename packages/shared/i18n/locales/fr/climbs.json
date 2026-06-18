@@ -755,7 +755,6 @@
       "applyModeLabel": "Inclure ou exclure",
       "includedSuffix": "incluse",
       "excludedSuffix": "exclue",
-      "clearHold": "Effacer la prise",
       "hint": "Touchez les prises du mur pour filtrer selon le type requis.",
       "summaryCount_one": "{{count}} prise",
       "summaryCount_other": "{{count}} prises",

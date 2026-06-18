@@ -47,7 +47,7 @@ export function HoldFilterEditorSheet({
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const boardName = boardConfig.boardName as BoardName;
   const boardLayout = getLayout(boardName, boardConfig.layoutId)?.name ?? '';
-  const [activeHoldId, setActiveHoldId] = useState<number | null>(null);
+  const [selectedType, setSelectedType] = useState<HoldFilterType>('HAND');
   const [applyMode, setApplyMode] = useState<HoldFilterMode>('include');
   const [contentReady, setContentReady] = useState(false);
 
@@ -57,7 +57,6 @@ export function HoldFilterEditorSheet({
       const timeout = setTimeout(() => setContentReady(true), DEFER_BOARD_RENDER_MS);
       return () => clearTimeout(timeout);
     } else {
-      setActiveHoldId(null);
       setContentReady(false);
       sheetRef.current?.dismiss();
     }
@@ -86,16 +85,13 @@ export function HoldFilterEditorSheet({
     return { width: availWidth, height: availWidth / boardAspect };
   }, [boardHolds, windowWidth, windowHeight, insets.bottom]);
 
-  const handleHoldTap = useCallback((holdId: number) => {
-    setActiveHoldId(holdId);
-  }, []);
-
-  const handleToggleType = useCallback(
-    (type: HoldFilterType) => {
-      if (activeHoldId == null) return;
-      const holdKey = String(activeHoldId);
+  // Paint the selected brush (type + include/exclude) onto the tapped hold:
+  // toggle that type at the current mode, dropping the hold if it ends up empty.
+  const handleHoldTap = useCallback(
+    (holdId: number) => {
+      const holdKey = String(holdId);
       const existing: HoldFilterEntry = holdsFilter[holdKey] ?? {};
-      const nextEntry = toggleHoldFilterType(existing, type, applyMode);
+      const nextEntry = toggleHoldFilterType(existing, selectedType, applyMode);
       const next: HoldsFilter = { ...holdsFilter };
       if (Object.keys(nextEntry).length === 0) {
         delete next[holdKey];
@@ -104,30 +100,19 @@ export function HoldFilterEditorSheet({
       }
       onHoldsFilterChange(next);
       track(SHARED_EVENTS.SearchHoldFilterChanged, {
-        type,
+        type: selectedType,
         mode: applyMode,
         boardLayout,
       });
     },
-    [activeHoldId, applyMode, boardLayout, holdsFilter, onHoldsFilterChange],
+    [selectedType, applyMode, boardLayout, holdsFilter, onHoldsFilterChange],
   );
-
-  const handleClearHold = useCallback(() => {
-    if (activeHoldId == null) return;
-    const holdKey = String(activeHoldId);
-    if (!(holdKey in holdsFilter)) return;
-    const next: HoldsFilter = { ...holdsFilter };
-    delete next[holdKey];
-    onHoldsFilterChange(next);
-    track(SHARED_EVENTS.SearchHoldFilterCleared, { boardLayout });
-  }, [activeHoldId, boardLayout, holdsFilter, onHoldsFilterChange]);
 
   const handleClearAll = useCallback(() => {
     onHoldsFilterChange({});
     track(SHARED_EVENTS.SearchHoldFilterCleared, { boardLayout });
   }, [boardLayout, onHoldsFilterChange]);
 
-  const activeEntry: HoldFilterEntry = activeHoldId != null ? (holdsFilter[String(activeHoldId)] ?? {}) : {};
   const filteredCount = countFilteredHolds(holdsFilter);
 
   return (
@@ -167,7 +152,6 @@ export function HoldFilterEditorSheet({
                 boardHeight={boardHolds.boardHeight}
                 holdTargets={boardHolds.holdTargets}
                 holdsFilter={holdsFilter}
-                activeHoldId={activeHoldId}
                 onHoldTap={handleHoldTap}
                 showHoldMarkers={false}
                 renderWidth={boardRender.width}
@@ -175,17 +159,15 @@ export function HoldFilterEditorSheet({
               />
             </View>
 
-            {/* Hold-type controls docked below the board (create-climb-style
-                action bar), editing whichever hold is selected. Inline — not a
-                stacked sub-sheet — so it reliably shows over the board sheet. */}
+            {/* Hold-type brush selector docked below the board (create-climb-style
+                action bar): pick a type + include/exclude, then tap holds to paint
+                them. Inline — not a stacked sub-sheet — so it reliably shows. */}
             <HoldFilterPicker
-              holdId={activeHoldId}
               boardName={boardName}
-              entry={activeEntry}
+              selectedType={selectedType}
+              onSelectType={setSelectedType}
               applyMode={applyMode}
               onApplyModeChange={setApplyMode}
-              onToggleType={handleToggleType}
-              onClear={handleClearHold}
             />
           </>
         )}

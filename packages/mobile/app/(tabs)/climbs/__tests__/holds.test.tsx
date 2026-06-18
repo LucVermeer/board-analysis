@@ -8,9 +8,9 @@ import type { HoldFilterType, HoldsFilter } from '@boardsesh/shared-schema';
 // screen losing focus (Done / swipe-back) and assert the handoff fires.
 const focus = vi.hoisted(() => ({ cleanup: null as null | (() => void) }));
 
-// The active hold the picker is editing. The screen sets this via onHoldTap; the
-// stubbed InteractiveFilterBoard exposes a button that taps a fixed hold id so we
-// can open the picker and drive type toggles deterministically.
+// The hold the board stub paints. The stubbed InteractiveFilterBoard exposes a
+// button that taps this fixed hold id, so a test can paint the active brush onto
+// it deterministically.
 const TAPPED_HOLD_ID = 42;
 
 const trackMock = vi.hoisted(() => vi.fn());
@@ -114,23 +114,15 @@ vi.mock('../../../../src/components/search/InteractiveFilterBoard', () => ({
     createElement('button', { 'data-board-tap': 'true', onClick: () => onHoldTap(TAPPED_HOLD_ID) }, 'board'),
 }));
 
-// The picker stub exposes a button per call that toggles a STARTING type filter,
-// so a test can drive the screen's handleToggleType without the real bottom sheet.
+// The picker stub exposes a button that selects the STARTING brush, so a test
+// can set the active brush before painting a hold via the board stub.
 vi.mock('../../../../src/components/search/HoldFilterPicker', () => ({
-  HoldFilterPicker: ({
-    holdId,
-    onToggleType,
-  }: {
-    holdId: number | null;
-    onToggleType: (type: HoldFilterType) => void;
-  }) =>
-    holdId != null
-      ? createElement(
-          'button',
-          { 'data-toggle-start': 'true', onClick: () => onToggleType('STARTING' as HoldFilterType) },
-          'toggle',
-        )
-      : null,
+  HoldFilterPicker: ({ onSelectType }: { onSelectType: (type: HoldFilterType) => void }) =>
+    createElement(
+      'button',
+      { 'data-select-start': 'true', onClick: () => onSelectType('STARTING' as HoldFilterType) },
+      'select start',
+    ),
 }));
 
 import HoldFilterScreen from '../holds';
@@ -142,12 +134,12 @@ beforeEach(() => {
 });
 
 describe('HoldFilterScreen', () => {
-  it('emits a hold-filter-changed analytics event with the layout name when a type is toggled', () => {
+  it('emits a hold-filter-changed analytics event with the layout name when a hold is painted', () => {
     const { getByText } = render(<HoldFilterScreen />);
 
-    // Tap a hold to open the picker, then toggle the STARTING filter on it.
+    // Pick the STARTING brush, then tap a hold to paint it.
+    fireEvent.click(getByText('select start'));
     fireEvent.click(getByText('board'));
-    fireEvent.click(getByText('toggle'));
 
     expect(trackMock).toHaveBeenCalledTimes(1);
     expect(trackMock).toHaveBeenCalledWith('Search Hold Filter Changed', {
@@ -160,9 +152,9 @@ describe('HoldFilterScreen', () => {
   it('hands the current filter back when the screen loses focus', () => {
     const { getByText } = render(<HoldFilterScreen />);
 
-    // Edit the filter so the handoff carries a non-empty value.
+    // Pick a brush and paint a hold so the handoff carries a non-empty value.
+    fireEvent.click(getByText('select start'));
     fireEvent.click(getByText('board'));
-    fireEvent.click(getByText('toggle'));
 
     // Simulate the focus-effect cleanup (Done pops / swipe-back).
     expect(focus.cleanup).toBeTypeOf('function');

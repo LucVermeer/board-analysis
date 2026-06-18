@@ -755,7 +755,6 @@
       "applyModeLabel": "Incluir o excluir",
       "includedSuffix": "incluida",
       "excludedSuffix": "excluida",
-      "clearHold": "Borrar presa",
       "hint": "Toca las presas del muro para filtrar por el tipo que deben ser.",
       "summaryCount_one": "{{count}} presa",
       "summaryCount_other": "{{count}} presas",

@@ -755,7 +755,6 @@
       "applyModeLabel": "Include or exclude",
       "includedSuffix": "included",
       "excludedSuffix": "excluded",
-      "clearHold": "Clear hold",
       "hint": "Tap holds on the board to filter by which type they must be.",
       "summaryCount_one": "{{count}} hold",
       "summaryCount_other": "{{count}} holds",

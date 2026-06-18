@@ -62,7 +62,7 @@ export default function HoldFilterScreen() {
   const holdsFilterRef = useRef(holdsFilter);
   holdsFilterRef.current = holdsFilter;
 
-  const [activeHoldId, setActiveHoldId] = useState<number | null>(null);
+  const [selectedType, setSelectedType] = useState<HoldFilterType>('HAND');
   const [applyMode, setApplyMode] = useState<HoldFilterMode>('include');
 
   const boardHolds = useMemo(() => {
@@ -100,17 +100,14 @@ export default function HoldFilterScreen() {
     router.back();
   }, [router]);
 
-  const handleHoldTap = useCallback((holdId: number) => {
-    setActiveHoldId(holdId);
-  }, []);
-
-  const handleToggleType = useCallback(
-    (type: HoldFilterType) => {
-      if (activeHoldId == null) return;
-      const holdKey = String(activeHoldId);
+  // Paint the selected brush (type + include/exclude) onto the tapped hold:
+  // toggle that type at the current mode, dropping the hold if it ends up empty.
+  const handleHoldTap = useCallback(
+    (holdId: number) => {
+      const holdKey = String(holdId);
       setHoldsFilter((previous) => {
         const existing: HoldFilterEntry = previous[holdKey] ?? {};
-        const nextEntry = toggleHoldFilterType(existing, type, applyMode);
+        const nextEntry = toggleHoldFilterType(existing, selectedType, applyMode);
         const next: HoldsFilter = { ...previous };
         if (Object.keys(nextEntry).length === 0) {
           delete next[holdKey];
@@ -120,32 +117,19 @@ export default function HoldFilterScreen() {
         return next;
       });
       track(SHARED_EVENTS.SearchHoldFilterChanged, {
-        type,
+        type: selectedType,
         mode: applyMode,
         boardLayout,
       });
     },
-    [activeHoldId, applyMode, boardLayout],
+    [selectedType, applyMode, boardLayout],
   );
-
-  const handleClearHold = useCallback(() => {
-    if (activeHoldId == null) return;
-    const holdKey = String(activeHoldId);
-    setHoldsFilter((previous) => {
-      if (!(holdKey in previous)) return previous;
-      const next: HoldsFilter = { ...previous };
-      delete next[holdKey];
-      return next;
-    });
-    track(SHARED_EVENTS.SearchHoldFilterCleared, { boardLayout });
-  }, [activeHoldId, boardLayout]);
 
   const handleClearAll = useCallback(() => {
     setHoldsFilter({});
     track(SHARED_EVENTS.SearchHoldFilterCleared, { boardLayout });
   }, [boardLayout]);
 
-  const activeEntry: HoldFilterEntry = activeHoldId != null ? (holdsFilter[String(activeHoldId)] ?? {}) : {};
   const filteredCount = countFilteredHolds(holdsFilter);
 
   if (!boardHolds || !boardName) {
@@ -190,7 +174,6 @@ export default function HoldFilterScreen() {
           boardHeight={boardHolds.boardHeight}
           holdTargets={boardHolds.holdTargets}
           holdsFilter={holdsFilter}
-          activeHoldId={activeHoldId}
           onHoldTap={handleHoldTap}
           renderWidth={boardRender.width}
           renderHeight={boardRender.height}
@@ -198,13 +181,11 @@ export default function HoldFilterScreen() {
       </View>
 
       <HoldFilterPicker
-        holdId={activeHoldId}
         boardName={boardName}
-        entry={activeEntry}
+        selectedType={selectedType}
+        onSelectType={setSelectedType}
         applyMode={applyMode}
         onApplyModeChange={setApplyMode}
-        onToggleType={handleToggleType}
-        onClear={handleClearHold}
       />
     </View>
   );
