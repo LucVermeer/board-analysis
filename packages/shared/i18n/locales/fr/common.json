@@ -153,7 +153,7 @@
     "onboarding": {
       "replaySection": "Tutoriel",
       "replayTitle": "Revoir le tutoriel",
-      "replaySubtitle": "Affiche à nouveau l'écran de bienvenue",
+      "replaySubtitle": "Affiche à nouveau le tutoriel",
       "replayError": "Impossible de rouvrir le tutoriel. Réessaie.",
       "prompt": {
         "title": "Vois ce qui est allumé sur ton mur, en direct",
@@ -162,7 +162,7 @@
         "findBoard": "Trouver mon board",
         "lookAround": "Jeter un œil d'abord"
       },
-      "boardRevealTip": "Touche {{icon}} pour voir ce que d'autres utilisateurs de Boardsesh ont envoyé au mur.",
+      "boardRevealTip": "Touche pour voir ce que d'autres utilisateurs de Boardsesh ont envoyé au mur.",
       "tips": {
         "workout": "Monte une séance : Volume, Pyramide, Échelle ou Cotation ciblée. Fixe une cotation, prévisualise les voies, envoie-les une par une.",
         "crew": "Tu grimpes à plusieurs ? Lance une séance et partagez une file. N'importe qui envoie la prochaine voie, sans passer le téléphone.",

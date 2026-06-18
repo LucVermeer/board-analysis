@@ -82,15 +82,15 @@ export default function BoardSelection() {
         await setActiveBoard(board);
         if (fromOnboarding) {
           // The real activation metric — board history turns on the moment a
-          // named board is bound — and the one-time Home reveal banner is armed
+          // named board is bound — and the one-time Climbs reveal banner is armed
           // for the board they just followed.
           track(SHARED_EVENTS.OnboardingBoardActivated, { boardType: board.boardType, source: 'onboarding' });
           void setBoardRevealTipPending();
         }
         // Dismiss the boards modal back onto the tab it was opened from — Climbs
-        // by default, Home when the onboarding handoff opened it, Discover when
-        // the pill there opened it (replaces with that tab if it isn't already
-        // underneath, e.g. opened from a deep link).
+        // by default (including the onboarding hand-off), Discover when the pill
+        // there opened it (replaces with that tab if it isn't already underneath,
+        // e.g. opened from a deep link).
         router.dismissTo(boardReturnTo);
       } catch {
         showToast(t('mobile.boardSwitchError'), 'error');

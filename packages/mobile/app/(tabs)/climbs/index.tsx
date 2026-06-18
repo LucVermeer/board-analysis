@@ -310,17 +310,6 @@ function ClimbListInner() {
   );
   const dismissRevealTip = useCallback(() => setRevealTipVisible(false), []);
   const showRevealTip = revealTipVisible && !!activeBoard;
-  // The reveal copy carries an inline board glyph at the {{icon}} slot ("Tap
-  // [board] to see…"). Resolve with a private-use sentinel, split to place the
-  // <Icon>, and derive a plain a11y label with the glyph dropped (mobile has no
-  // <Trans>, so this is the idiomatic inline-component interpolation here).
-  const iconSlot = '\uE000';
-  const revealCopy = tCommon('mobile.onboarding.boardRevealTip', { icon: iconSlot });
-  const [revealCopyBefore, revealCopyAfter = ''] = revealCopy.split(iconSlot);
-  const revealCopyA11y = revealCopy
-    .replace(iconSlot, '')
-    .replace(/\s{2,}/g, ' ')
-    .trim();
 
   // Screenshot mode: a second board-view shot renders myBoards[1] (the user's 2nd
   // followed board) via ?screenshotBoardIndex=1. Boards are sorted by follow date
@@ -786,15 +775,8 @@ function ClimbListInner() {
       <>
         {showRevealTip ? (
           <OnboardingTipBanner
-            text={
-              <>
-                {revealCopyBefore}
-                <Icon name="boards" size={15} color={brandColors.primary} />
-                {revealCopyAfter}
-              </>
-            }
-            accessibilityLabel={revealCopyA11y}
-            icon="people"
+            text={tCommon('mobile.onboarding.boardRevealTip')}
+            icon="boards"
             dismissLabel={tCommon('actions.close')}
             onPress={handleOpenBoardDetail}
             onDismiss={dismissRevealTip}
@@ -817,10 +799,6 @@ function ClimbListInner() {
     ),
     [
       showRevealTip,
-      revealCopyBefore,
-      revealCopyAfter,
-      revealCopyA11y,
-      brandColors.primary,
       handleOpenBoardDetail,
       dismissRevealTip,
       tCommon,
@@ -923,8 +901,8 @@ function ClimbListInner() {
             title={t('mobile.emptyState.noBoard.cta')}
             // Plain board picker — this empty state is reachable any time the user
             // has no active board, not just first-run, so it must NOT tag the bind
-            // as onboarding (which would fire the activation event + arm the Home
-            // reveal banner the user is never routed to see).
+            // as onboarding (which would fire the activation event + arm the
+            // reveal banner outside the first-run hand-off).
             onPress={() => router.push('/boards')}
             variant="filled"
             size="large"

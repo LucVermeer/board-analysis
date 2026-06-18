@@ -351,7 +351,7 @@
     "onboarding": {
       "replaySection": "Tutorial",
       "replayTitle": "Repetir el tutorial",
-      "replaySubtitle": "Vuelve a ver la pantalla de bienvenida",
+      "replaySubtitle": "Vuelve a ver el tutorial",
       "replayError": "No se pudo abrir el tutorial. Inténtalo de nuevo.",
       "prompt": {
         "title": "Mira lo que está encendido en tu muro, en directo",
@@ -360,7 +360,7 @@
         "findBoard": "Buscar mi tabla",
         "lookAround": "Echar un vistazo primero"
       },
-      "boardRevealTip": "Toca {{icon}} para ver lo que otros usuarios de Boardsesh han mandado al muro.",
+      "boardRevealTip": "Toca para ver lo que otros usuarios de Boardsesh han mandado al muro.",
       "tips": {
         "workout": "Móntate un entreno: Volumen, Pirámide, Escalera o Grado fijo. Fija un grado, previsualiza las vías y mándalas pegada a pegada.",
         "crew": "¿Escalas con gente? Abre una sesión y compartid una cola: cualquiera manda la siguiente vía, sin ir pasando el móvil.",

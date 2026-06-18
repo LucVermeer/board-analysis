@@ -9,9 +9,9 @@
 
 export const ONBOARDING_SEEN_KEY = 'onboarding_seen';
 
-// One-shot "show the board-history reveal banner on Home" flag. Set when the
+// One-shot "show the board-history reveal banner on Climbs" flag. Set when the
 // user binds their first board from the onboarding handoff; consumed (read +
-// cleared) the first time Home renders the banner. Separate from
+// cleared) the first time the Climbs landing renders the banner. Separate from
 // ONBOARDING_SEEN_KEY so the prompt still shows exactly once while this banner
 // fires only after an actual board bind.
 export const ONBOARDING_BOARD_TIP_KEY = 'onboarding_board_tip_pending';

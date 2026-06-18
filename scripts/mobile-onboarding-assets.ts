@@ -5,9 +5,9 @@
  * produced by .maestro/onboarding.yaml via `vp run mobile:screenshots --flow onboarding`)
  * into the onboarding framing card's 2:3 portrait hero. Linux-safe (sharp), so it
  * runs wherever the macOS/CI capture artifacts land — including downloaded CI
- * artifacts. Output is committed under packages/mobile/assets/onboarding/ and
- * wired into ONBOARDING_PROMPT_CARD.image; the card falls back to a glyph until
- * the PNG exists, so this is a non-blocking follow-up to the copy change.
+ * artifacts. The cropped PNG is committed under packages/mobile/assets/onboarding/
+ * and already ESM-imported by ONBOARDING_PROMPT_CARD.image (onboarding-cards.ts);
+ * re-running this just refreshes that committed asset (e.g. after a UI change).
  *
  * Usage:
  *   vp run mobile:onboarding-assets                                  # default source + name
@@ -68,9 +68,8 @@ async function main(): Promise<void> {
     .toFile(outputPath);
 
   console.log(`[mobile:onboarding-assets] ${source} -> ${outputPath} (${CARD_WIDTH}x${CARD_HEIGHT})`);
-  console.log('[mobile:onboarding-assets] Commit it, then wire the require() in onboarding-cards.ts:');
-  console.log("  export const ONBOARDING_PROMPT_CARD: OnboardingCard = { id: 'welcome', icon: 'lightbulb.fill',");
-  console.log(`    image: require('../../../assets/onboarding/${name}.png') };`);
+  console.log('[mobile:onboarding-assets] Commit the refreshed asset — onboarding-cards.ts already imports it:');
+  console.log(`  import boardHistoryImage from '../../../assets/onboarding/${name}.png';`);
 }
 
 main().catch((error: unknown) => {

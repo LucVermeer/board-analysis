@@ -44,18 +44,18 @@ export async function replayOnboarding(navigate: () => void): Promise<void> {
   navigate();
 }
 
-// --- Board-history reveal banner (Home) ---------------------------------------
+// --- Board-history reveal banner (Climbs) -------------------------------------
 // A one-shot flag set when the user binds their first board from the onboarding
-// handoff, so Home can surface the "this is <board> right now" reveal banner
+// handoff, so the Climbs landing can surface the board-history reveal banner
 // exactly once. Read errors fall to `false` (no banner) — a missed banner is far
 // less bad than a stuck one.
 
-/** Arm the Home reveal banner (called on board-bind from onboarding). */
+/** Arm the Climbs reveal banner (called on board-bind from onboarding). */
 export async function setBoardRevealTipPending(): Promise<void> {
   await secureStorePreferences.set(ONBOARDING_BOARD_TIP_KEY, true);
 }
 
-/** Whether the Home reveal banner is still pending. */
+/** Whether the Climbs reveal banner is still pending. */
 export async function hasBoardRevealTipPending(): Promise<boolean> {
   try {
     return (await secureStorePreferences.get<boolean>(ONBOARDING_BOARD_TIP_KEY)) === true;
@@ -64,7 +64,7 @@ export async function hasBoardRevealTipPending(): Promise<boolean> {
   }
 }
 
-/** Clear the Home reveal banner flag once it has been shown or dismissed. */
+/** Clear the Climbs reveal banner flag once it has been shown or dismissed. */
 export async function clearBoardRevealTipPending(): Promise<void> {
   await secureStorePreferences.remove(ONBOARDING_BOARD_TIP_KEY);
 }

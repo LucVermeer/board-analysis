@@ -1,4 +1,4 @@
-import { memo, useCallback, type ReactNode } from 'react';
+import { memo, useCallback } from 'react';
 import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Text } from '../Text';
 import { Icon } from '../Icon';
@@ -8,10 +8,8 @@ import { hapticSelection } from '../../lib/haptics';
 import { borderRadius, spacing } from '../../theme/tokens';
 
 type OnboardingTipBannerProps = {
-  /** Already-translated tip copy; a string, or rich content (e.g. an inline icon). */
-  text: ReactNode;
-  /** Spoken label for the banner; required when `text` isn't a plain string. */
-  accessibilityLabel?: string;
+  /** Already-translated one-line tip copy. */
+  text: string;
   /** Already-translated accessibility label for the close button. */
   dismissLabel: string;
   /** Hide the banner. */
@@ -25,15 +23,14 @@ type OnboardingTipBannerProps = {
 };
 
 /**
- * A single dismissible, one-line just-in-time tip. Used for the post-onboarding
- * Home reveal banner and the contextual feature tips (workout / crew / record).
+ * A single dismissible, one-line just-in-time tip. Used for the board-history
+ * reveal banner on Climbs and the contextual feature tips (workout / crew / record).
  * No animation, so it's Reduce-Motion-safe by construction; the copy + close
  * button are separate accessibility elements. The host owns the "show once"
  * flag — this is purely presentational.
  */
 function OnboardingTipBannerComponent({
   text,
-  accessibilityLabel,
   dismissLabel,
   onDismiss,
   onPress,
@@ -41,8 +38,6 @@ function OnboardingTipBannerComponent({
   style,
 }: OnboardingTipBannerProps) {
   const { brandColors, systemColors } = useTheme();
-  // Fall back to the text when it's a plain string; rich content passes a label.
-  const a11yLabel = accessibilityLabel ?? (typeof text === 'string' ? text : undefined);
 
   const handlePress = useCallback(() => {
     if (!onPress) return;
@@ -68,16 +63,11 @@ function OnboardingTipBannerComponent({
       ]}
     >
       {onPress ? (
-        <Pressable
-          style={styles.tappable}
-          onPress={handlePress}
-          accessibilityRole="button"
-          accessibilityLabel={a11yLabel}
-        >
+        <Pressable style={styles.tappable} onPress={handlePress} accessibilityRole="button" accessibilityLabel={text}>
           {body}
         </Pressable>
       ) : (
-        <View style={styles.tappable} accessible accessibilityLabel={a11yLabel}>
+        <View style={styles.tappable} accessible accessibilityLabel={text}>
           {body}
         </View>
       )}

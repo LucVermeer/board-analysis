@@ -153,7 +153,7 @@
     "onboarding": {
       "replaySection": "Walkthrough",
       "replayTitle": "Replay walkthrough",
-      "replaySubtitle": "See the welcome screen again",
+      "replaySubtitle": "See the walkthrough again",
       "replayError": "Couldn't reopen the walkthrough. Try again.",
       "prompt": {
         "title": "See what's lit on your wall, live",
@@ -162,7 +162,7 @@
         "findBoard": "Find my board",
         "lookAround": "Look around first"
       },
-      "boardRevealTip": "Tap {{icon}} to see what other Boardsesh users have sent to the wall.",
+      "boardRevealTip": "Tap to see what other Boardsesh users have sent to the wall.",
       "tips": {
         "workout": "Build a workout: Volume, Pyramid, Ladder or Grade Focus. Set a grade, preview the burns, send them one at a time.",
         "crew": "Climbing with people? Start a session and share one queue. Anyone sends the next burn, no passing the phone.",

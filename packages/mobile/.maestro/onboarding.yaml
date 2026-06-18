@@ -2,17 +2,16 @@ appId: com.boardsesh.app
 name: onboarding illustrations
 ---
 # Captures the real board-presence "now on the wall" screen as the hero for the
-# single first-run framing card (OnboardingPrompt). The card falls back to an SF
-# Symbol / MDI glyph when no image is committed (see onboarding-cards.ts), so this
-# capture is additive — wiring the cropped PNG into ONBOARDING_PROMPT_CARD.image
-# is the only follow-up.
+# single first-run framing card (OnboardingPrompt). The cropped PNG is already
+# committed and ESM-imported by ONBOARDING_PROMPT_CARD.image (onboarding-cards.ts);
+# re-running this flow refreshes that hero after the screen's UI changes.
 #
 # The orchestrator writes raw, full-device PNGs under
 # app-stores/apple/screenshots/<app-store-locale>/<device>/ (same tree as the
 # app-store flow — it does NOT crop). Turn them into the card asset with
 #   vp run mobile:onboarding-assets
-# (Linux-safe sharp crop to the card's 2:3 portrait) which writes
-# packages/mobile/assets/onboarding/, then add the require() in onboarding-cards.ts.
+# (Linux-safe sharp crop to the card's 2:3 portrait) which overwrites the committed
+# packages/mobile/assets/onboarding/board-history.png that onboarding-cards.ts imports.
 #
 # Capture mechanism mirrors app-store.yaml: driven entirely by deep links + the
 # screenshot-mode params the build honours when EXPO_PUBLIC_SCREENSHOT_MODE=1
