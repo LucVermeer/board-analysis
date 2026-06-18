@@ -1,15 +1,13 @@
-Search a climb and watch your wall light the holds. Tap a problem, the holds glow, you pull on. Boardsesh connects your phone to your board over Bluetooth, so you spend your session climbing instead of reading numbers off a screen.
-
 ONE APP FOR EVERY BOARD YOU CLIMB
-Kilter, Tension and MoonBoard each have their own app for their own board. Boardsesh works across all of them, plus Decoy, Touchstone, Grasshopper and So iLL, in one place. Search any climb and Boardsesh sends it to the wall over Bluetooth, lighting the holds. Full LED control on all seven boards.
+Kilter, Tension, MoonBoard, Decoy, Touchstone, Grasshopper and So iLL each have their own app for their own board. Boardsesh works across all of them in one place. Search any climb and Boardsesh sends it to the wall over Bluetooth, lighting the holds. Full LED control on all seven boards.
 
 One app gets you two things a single-board app can't: board history that's always on, and sessions you drive with your crew.
 
 BOARD HISTORY, ALWAYS ON
-Every board you connect to has a live feed of what's lit on that wall right now: the climb up at the moment, who lit it, the grade and angle, who set it, and recent sends. You don't start anything. It's just there when you're on that board, updating as burns happen.
+Every board you connect to has a live feed of what's lit on that wall right now: the climb up at the moment, who lit it, the grade and angle, who set it, and recent sends. That history is always there, updating as climbs are changed.
 
 SESSIONS WITH YOUR CREW
-Start a session and you and your crew share one queue everyone can drive. Anyone sends the next climb to the wall: no driver to hand the phone around, no turn to wait for. Whoever's connected over Bluetooth lights it. When you're done you get a recap and tracking: sends and attempts, grade spread, your hardest send, and progress over time.
+Start a session and you and your crew share one queue everyone can drive. Anyone can send the next climb to the wall: no driver to hand the phone around, no turn to wait for. Whoever's connected over Bluetooth lights it. When you're done you get a recap and tracking: sends and attempts, grade spread, your hardest send, and progress over time.
 
 Run the session from your lock screen (iOS 17+)
 Live Activities put the current climb, your place in the queue, and next/previous on the lock screen and Dynamic Island, so you flip climbs without opening the app.
