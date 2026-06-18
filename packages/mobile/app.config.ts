@@ -389,6 +389,9 @@ export default ({ config }: ConfigContext): ExpoConfig & { newArchEnabled?: bool
       // Register this before @bacons/apple-targets so Expo's mod chain runs it
       // after the widget target has been created, while keeping the provider last.
       './plugins/with-boardsesh-widget-build-settings',
+      // Boardsesh is iPhone-only. Keep App Store Connect from validating the
+      // generated app target as a "Designed for iPhone/iPad" macOS binary.
+      './plugins/with-ios-app-store-build-settings',
       // Adds the BoardseshWidgets Xcode target on every `expo prebuild`. The
       // widget bundle hosts the Live Activity UI (lock screen + Dynamic
       // Island) plus the Next/Previous AppIntents. Target sources live in
