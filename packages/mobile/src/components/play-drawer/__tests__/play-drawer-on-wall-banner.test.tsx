@@ -19,36 +19,40 @@ vi.mock('react-native-reanimated', () => {
   };
 });
 
-// t interpolates the holder name so "Lit by {name}" is assertable.
+// t interpolates the driver name so the a11y label is assertable.
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
     t: (key: string, opts?: { name?: string }) => {
-      if (key === 'mobile.boardPresence.litByLine') return `Lit by ${opts?.name}`;
-      if (key === 'playView.onWallBadge') return 'On the wall';
+      if (key === 'mobile.boardPresence.drivenByA11y') return `${opts?.name} is lighting the wall. Open profile.`;
+      if (key === 'mobile.boardPresence.drivenByAnonA11y') return 'Someone is lighting the wall.';
       return key;
     },
   }),
 }));
 
-vi.mock('../../Text', () => ({
-  Text: ({ children }: { children?: ReactNode }) => createElement('span', null, children),
-}));
-
-// Icon renders an identifiable marker so the glyph name is assertable.
-vi.mock('../../Icon', () => ({
-  Icon: ({ name }: { name: string }) => createElement('i', { 'data-icon': name }),
-}));
-
-vi.mock('../../../providers/theme-provider', () => ({
-  useTheme: () => ({ brandColors: { warning: '#B45309' } }),
-}));
-
-vi.mock('../../../theme/tokens', () => ({
-  spacing: { 1: 4, 2: 8, 4: 16 },
+// The avatar atom renders its props as data attributes so the banner's
+// prop-passing (identity + status + a11y label) is assertable without the deep
+// PressableAvatar / expo-router tree.
+type DriverAvatarProps = {
+  userId?: string | null;
+  name?: string | null;
+  status?: string;
+  accessibilityLabel?: string;
+};
+vi.mock('../../board-presence/BoardDriverAvatar', () => ({
+  BoardDriverAvatar: ({ userId, name, status, accessibilityLabel }: DriverAvatarProps) =>
+    createElement('div', {
+      'data-driver-avatar': 'true',
+      'data-user-id': userId ?? '',
+      'data-name': name ?? '',
+      'data-status': status,
+      'data-a11y': accessibilityLabel,
+    }),
 }));
 
 // A real context (created inside the hoisted factory) so the test can inject a
-// holder via its Provider; imported back below to reach the same instance.
+// holder via its Provider; imported back below to reach the same instance. The
+// useBoardDriver hook (not mocked) reads this same context.
 vi.mock('@boardsesh/board-presence-react', async () => {
   const React = await import('react');
   return { BoardPresenceCurrentContext: React.createContext<unknown>(null) };
@@ -57,18 +61,27 @@ vi.mock('@boardsesh/board-presence-react', async () => {
 import { BoardPresenceCurrentContext } from '@boardsesh/board-presence-react';
 import { PlayDrawerOnWallBanner } from '../PlayDrawerOnWallBanner';
 
+const driverAvatar = (container: HTMLElement) =>
+  container.querySelector('[data-driver-avatar="true"]') as HTMLElement | null;
+
 describe('PlayDrawerOnWallBanner', () => {
-  it('shows the broadcast glyph and a quiet "On the wall" line for an anonymous holder', () => {
+  it('renders an anonymous, non-pressable driver avatar when no holder is known', () => {
     const { container } = render(createElement(PlayDrawerOnWallBanner));
-    expect(container.textContent).toContain('On the wall');
-    expect(container.querySelector('[data-icon="bluetooth.connected"]')).toBeTruthy();
+    const avatar = driverAvatar(container);
+
+    expect(avatar).toBeTruthy();
+    // No holder → no user id (not pressable), connected Bluetooth badge, anon a11y.
+    expect(avatar?.getAttribute('data-user-id')).toBe('');
+    expect(avatar?.getAttribute('data-status')).toBe('connected');
+    expect(avatar?.getAttribute('data-a11y')).toBe('Someone is lighting the wall.');
   });
 
-  it('attributes the climb to the holder when their name is known', () => {
+  it('attributes the wall to the holder and links their profile when known', () => {
     // Runtime uses the mocked context; the cast only satisfies the real type.
-    const presenceValue = { currentClimb: { sentByDisplayName: 'Marco' }, holder: null } as unknown as ContextType<
-      typeof BoardPresenceCurrentContext
-    >;
+    const presenceValue = {
+      currentClimb: { sentByDisplayName: 'Marco', sentByUserId: 'u1' },
+      holder: { userId: 'u1', displayName: 'Marco' },
+    } as unknown as ContextType<typeof BoardPresenceCurrentContext>;
     const { container } = render(
       createElement(
         BoardPresenceCurrentContext.Provider,
@@ -76,11 +89,15 @@ describe('PlayDrawerOnWallBanner', () => {
         createElement(PlayDrawerOnWallBanner),
       ),
     );
-    expect(container.textContent).toContain('Lit by Marco');
-    expect(container.textContent).not.toContain('On the wall');
+    const avatar = driverAvatar(container);
+
+    expect(avatar?.getAttribute('data-name')).toBe('Marco');
+    expect(avatar?.getAttribute('data-user-id')).toBe('u1');
+    expect(avatar?.getAttribute('data-status')).toBe('connected');
+    expect(avatar?.getAttribute('data-a11y')).toBe('Marco is lighting the wall. Open profile.');
   });
 
-  it('renders no button and no "Set active" — it is read-only status, not a promotable preview', () => {
+  it('renders no button text and no "Set active" — it is read-only status, not a promotable preview', () => {
     const { container } = render(createElement(PlayDrawerOnWallBanner));
     expect(container.querySelector('button')).toBeNull();
     expect(container.textContent).not.toContain('playView.setActive');

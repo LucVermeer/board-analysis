@@ -31,6 +31,7 @@ import { Icon } from '../Icon';
 import { ActivityIndicator } from '../ActivityIndicator';
 import { ClimbListRow, type ClimbListRowRenderContentArgs } from '../ClimbListRow';
 import { PressableAvatar } from '../PressableAvatar';
+import { BoardDriverAvatar } from './BoardDriverAvatar';
 import { AccessoryClimbThumbnail } from '../queue-control/AccessoryClimbThumbnail';
 import { useTheme } from '../../providers/theme-provider';
 import { useToast } from '../../providers/toast-provider';
@@ -713,6 +714,14 @@ type HeroContentProps = Omit<HeroProps, 'climb' | 'surfaceColor'> & {
   renderClimb: Climb;
   thumbnailSize?: number;
   isActionLoading?: boolean;
+  /**
+   * Make the driver avatar open the climber's profile on tap. Off inside an
+   * interactive ClimbListRow, whose own tap gesture owns the row (a nested
+   * pressable would double-fire the climb action + the profile push, and the
+   * row's collapsed a11y node would hide it anyway). The row opens the climb;
+   * the avatar there is identity only.
+   */
+  pressableAvatar?: boolean;
 };
 
 function NowOnTheWallHeroContent({
@@ -726,9 +735,10 @@ function NowOnTheWallHeroContent({
   gradeColor,
   thumbnailSize,
   isActionLoading = false,
+  pressableAvatar = true,
 }: HeroContentProps) {
   const { t } = useTranslation('session');
-  const litBy = climb.sentByDisplayName?.trim();
+  const litBy = climb.sentByDisplayName?.trim() || null;
   const setter = climb.setter?.trim();
 
   return (
@@ -758,9 +768,19 @@ function NowOnTheWallHeroContent({
           </Text>
         ) : null}
         {litBy ? (
-          <Text variant="caption1" color={accentColor} numberOfLines={1}>
-            {t('mobile.boardPresence.litByLine', { name: litBy })}
-          </Text>
+          <View style={styles.heroDriverRow}>
+            <BoardDriverAvatar
+              size={20}
+              userId={pressableAvatar ? climb.sentByUserId : null}
+              uri={climb.sentByAvatarUrl}
+              name={litBy}
+              status="connected"
+              accessibilityLabel={t('mobile.boardPresence.drivenByA11y', { name: litBy })}
+            />
+            <Text variant="caption1" color={accentColor} numberOfLines={1} style={styles.heroDriverName}>
+              {litBy}
+            </Text>
+          </View>
         ) : null}
       </View>
     </>
@@ -824,6 +844,8 @@ const InteractiveHeroRow = memo(function InteractiveHeroRowInner({
         gradeColor={gradeColor}
         thumbnailSize={52}
         isActionLoading={isActionLoading}
+        // The row's tap opens the climb; the avatar is identity only here.
+        pressableAvatar={false}
       />
     ),
     [accentColor, climb, climbBoardConfig, formattedGrade, gradeColor, isActionLoading, labelColor, secondaryColor],
@@ -895,6 +917,8 @@ type HistoryRowProps = {
 type HistoryRowContentProps = HistoryRowProps & {
   renderClimb: Climb;
   isActionLoading?: boolean;
+  /** See HeroContentProps.pressableAvatar — off inside an interactive row. */
+  pressableAvatar?: boolean;
 };
 
 function HistoryRowContent({
@@ -906,9 +930,10 @@ function HistoryRowContent({
   formattedGrade,
   gradeColor,
   isActionLoading = false,
+  pressableAvatar = true,
 }: HistoryRowContentProps) {
   const { t } = useTranslation('session');
-  const litBy = climb.sentByDisplayName?.trim();
+  const litBy = climb.sentByDisplayName?.trim() || null;
 
   return (
     <>
@@ -918,9 +943,21 @@ function HistoryRowContent({
           {climb.name ?? ''}
         </Text>
         {litBy ? (
-          <Text variant="caption1" color={secondaryColor} numberOfLines={1}>
-            {t('mobile.boardPresence.litByLine', { name: litBy })}
-          </Text>
+          <View style={styles.historyDriverRow}>
+            {/* Past send — no Bluetooth glyph (nobody's driving it now); just a
+                pressable face for attribution. */}
+            <BoardDriverAvatar
+              size={18}
+              userId={pressableAvatar ? climb.sentByUserId : null}
+              uri={climb.sentByAvatarUrl}
+              name={litBy}
+              status="none"
+              accessibilityLabel={t('mobile.boardPresence.drivenByA11y', { name: litBy })}
+            />
+            <Text variant="caption1" color={secondaryColor} numberOfLines={1} style={styles.historyDriverName}>
+              {litBy}
+            </Text>
+          </View>
         ) : null}
       </View>
       {formattedGrade ? (
@@ -990,6 +1027,8 @@ const InteractiveHistoryRow = memo(function InteractiveHistoryRowInner({
         formattedGrade={formattedGrade}
         gradeColor={gradeColor}
         isActionLoading={isActionLoading}
+        // The row's tap opens the climb; the avatar is identity only here.
+        pressableAvatar={false}
       />
     ),
     [climb, climbBoardConfig, formattedGrade, gradeColor, isActionLoading, labelColor, secondaryColor],
@@ -1180,6 +1219,16 @@ const styles = StyleSheet.create({
   heroName: {
     flex: 1,
   },
+  heroDriverRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[2],
+    // Headroom for the badge that pokes ~2pt past the avatar's top-right corner.
+    paddingTop: 2,
+  },
+  heroDriverName: {
+    flexShrink: 1,
+  },
   heroGrade: {
     fontVariant: ['tabular-nums'],
     fontWeight: '700',
@@ -1257,6 +1306,14 @@ const styles = StyleSheet.create({
   },
   historyName: {
     fontWeight: '600',
+  },
+  historyDriverRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[2],
+  },
+  historyDriverName: {
+    flexShrink: 1,
   },
   historyGrade: {
     fontVariant: ['tabular-nums'],

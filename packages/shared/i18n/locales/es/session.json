@@ -376,7 +376,8 @@
       "switchBoardAria": "Cambiar a otro muro",
       "close": "Cerrar",
       "setByLine": "Abierto por {{setter}}",
-      "litByLine": "Encendido por {{name}}",
+      "drivenByA11y": "{{name}} está encendiendo el muro. Abre el perfil.",
+      "drivenByAnonA11y": "Alguien está encendiendo el muro.",
       "sentByLine": "Encadenado por {{name}}",
       "emptyTitle": "Aún no hay nadie en este muro",
       "emptyBody": "Conéctate y envía un bloque para empezar el historial.",
@@ -484,7 +485,6 @@
   },
   "playView": {
     "previewBadge": "Vista previa",
-    "onWallBadge": "En el muro",
     "setActive": "Activar",
     "previousFrame": "Fotograma anterior",
     "nextFrame": "Fotograma siguiente",

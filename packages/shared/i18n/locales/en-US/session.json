@@ -376,7 +376,8 @@
       "switchBoardAria": "Switch to a different board",
       "close": "Close",
       "setByLine": "Set by {{setter}}",
-      "litByLine": "Lit by {{name}}",
+      "drivenByA11y": "{{name}} is lighting the wall. Open profile.",
+      "drivenByAnonA11y": "Someone is lighting the wall.",
       "sentByLine": "Sent by {{name}}",
       "emptyTitle": "Nobody's on this wall yet",
       "emptyBody": "Connect and send a climb to kick off the history.",
@@ -484,7 +485,6 @@
   },
   "playView": {
     "previewBadge": "Preview",
-    "onWallBadge": "On the wall",
     "setActive": "Set active",
     "previousFrame": "Previous frame",
     "nextFrame": "Next frame",

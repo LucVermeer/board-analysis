@@ -123,7 +123,7 @@ describe('useLightbulbControl lit state', () => {
   it('stays off when a stranger holds the wall while solo', () => {
     // The bug fix: subscribed and a holder exists, but I'm not in a session, so
     // the holder isn't someone I'm climbing with — the bulb reads off (the avatar
-    // still shows separately via BoardConnectionBadge).
+    // still shows separately via the lightbulb holder pip, LightbulbHolderBadge).
     ctrl.boardId = 42;
     ctrl.sessionId = null;
     ctrl.presence = holderPresenceFor('stranger-user');

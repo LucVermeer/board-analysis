@@ -704,6 +704,10 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
                       lightbulbConnected={bluetoothConnected}
                       lightbulbPending={lightbulbPending}
                       lightbulbLongPressEnabled={bluetoothConnected}
+                      // The on-wall banner owns the driver's face in the header
+                      // when it's up; suppress the lightbulb pip so the same
+                      // avatar never shows twice in the drawer.
+                      showHolderBadge={!(isPreview && drawerPreviewIsWallClimb)}
                       ascentCount={ascentCount}
                       onPrevClick={handlePrev}
                       onNextClick={handleNext}

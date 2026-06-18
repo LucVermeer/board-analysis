@@ -492,6 +492,7 @@ export const boardPresenceMutations = {
       setter: catalogClimb.setterUsername ?? null,
       sentByDisplayName: sender?.displayName ?? sender?.name ?? null,
       sentByAvatarUrl: sender?.avatarUrl ?? sender?.image ?? null,
+      sentByUserId: ctx.userId ?? null,
       sentAt,
       seq,
     };

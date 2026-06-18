@@ -376,7 +376,8 @@
       "switchBoardAria": "Passer à un autre mur",
       "close": "Fermer",
       "setByLine": "Ouvert par {{setter}}",
-      "litByLine": "Allumé par {{name}}",
+      "drivenByA11y": "{{name}} allume le mur. Ouvre le profil.",
+      "drivenByAnonA11y": "Quelqu'un allume le mur.",
       "sentByLine": "Enchaîné par {{name}}",
       "emptyTitle": "Personne sur ce mur pour l'instant",
       "emptyBody": "Connecte-toi et envoie un bloc pour lancer l'historique.",
@@ -484,7 +485,6 @@
   },
   "playView": {
     "previewBadge": "Aperçu",
-    "onWallBadge": "Sur le mur",
     "setActive": "Activer",
     "previousFrame": "Image précédente",
     "nextFrame": "Image suivante",

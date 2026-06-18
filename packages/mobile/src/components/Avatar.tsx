@@ -9,6 +9,8 @@ type AvatarProps = {
   uri?: string | null;
   name?: string | null;
   size?: number;
+  /** Overrides the derived label (defaults to `name`). */
+  accessibilityLabel?: string;
 };
 
 /**
@@ -25,10 +27,10 @@ function sizedAvatarUri(uri: string, displaySize: number): string {
   return `${uri}${separator}size=${bucket}`;
 }
 
-export function Avatar({ uri, name, size = 40 }: AvatarProps) {
+export function Avatar({ uri, name, size = 40, accessibilityLabel: accessibilityLabelProp }: AvatarProps) {
   const borderRadius = size / 2;
 
-  const accessibilityLabel = name ?? undefined;
+  const accessibilityLabel = accessibilityLabelProp ?? name ?? undefined;
 
   if (uri) {
     return (

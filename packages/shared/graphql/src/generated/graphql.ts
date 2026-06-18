@@ -501,6 +501,8 @@ export type BoardPresenceClimb = {
   sentByAvatarUrl?: Maybe<Scalars['String']['output']>;
   /** Display name of the Boardsesh user who lit it. Server-derived from the caller; never client-supplied. */
   sentByDisplayName?: Maybe<Scalars['String']['output']>;
+  /** Boardsesh user id of the climber who lit it, for linking to their profile. Server-derived; null for an anonymous sender. */
+  sentByUserId?: Maybe<Scalars['ID']['output']>;
   /** Monotonic per-board sequence number for ordering and late-joiner dedup */
   seq: Scalars['Int']['output'];
   /** Catalog route setter display name (who set the climb) */

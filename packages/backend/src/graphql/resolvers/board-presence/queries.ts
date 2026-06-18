@@ -78,9 +78,29 @@ export const boardPresenceQueries = {
 
     const cappedLimit = Math.min(Math.max(limit ?? 50, 1), 100);
     const boardMatch = eq(dbSchema.boardClimbEvents.boardId, boardId);
+    // Join the sender (nullable — a user can be deleted, leaving userId null) so
+    // history rows carry the same display identity + profile link as the live
+    // feed. Profile fields win over the auth-account name/image, matching the
+    // attribution precedence in reportBoardClimb.
     const rows = await db
-      .select()
+      .select({
+        climbUuid: dbSchema.boardClimbEvents.climbUuid,
+        name: dbSchema.boardClimbEvents.name,
+        grade: dbSchema.boardClimbEvents.grade,
+        frames: dbSchema.boardClimbEvents.frames,
+        angle: dbSchema.boardClimbEvents.angle,
+        setter: dbSchema.boardClimbEvents.setter,
+        confirmedAt: dbSchema.boardClimbEvents.confirmedAt,
+        seq: dbSchema.boardClimbEvents.seq,
+        sentByUserId: dbSchema.boardClimbEvents.userId,
+        senderName: dbSchema.users.name,
+        senderImage: dbSchema.users.image,
+        profileDisplayName: dbSchema.userProfiles.displayName,
+        profileAvatarUrl: dbSchema.userProfiles.avatarUrl,
+      })
       .from(dbSchema.boardClimbEvents)
+      .leftJoin(dbSchema.users, eq(dbSchema.boardClimbEvents.userId, dbSchema.users.id))
+      .leftJoin(dbSchema.userProfiles, eq(dbSchema.boardClimbEvents.userId, dbSchema.userProfiles.userId))
       .where(beforeSeq !== null ? and(boardMatch, lt(dbSchema.boardClimbEvents.seq, beforeSeq)) : boardMatch)
       .orderBy(desc(dbSchema.boardClimbEvents.seq))
       .limit(cappedLimit);
@@ -94,8 +114,9 @@ export const boardPresenceQueries = {
       frames: row.frames,
       angle: row.angle,
       setter: row.setter,
-      sentByDisplayName: null,
-      sentByAvatarUrl: null,
+      sentByDisplayName: row.profileDisplayName ?? row.senderName ?? null,
+      sentByAvatarUrl: row.profileAvatarUrl ?? row.senderImage ?? null,
+      sentByUserId: row.sentByUserId ?? null,
       sentAt: row.confirmedAt,
       seq: Number(row.seq),
     }));

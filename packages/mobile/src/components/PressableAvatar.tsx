@@ -14,6 +14,12 @@ type PressableAvatarProps = {
   uri?: string | null;
   name?: string | null;
   size?: number;
+  /**
+   * Overrides the default "View {name}'s profile" press label — e.g. to add the
+   * driver context the avatar replaces. Also labels the non-interactive avatar
+   * when there's no `userId`, so the meaning survives an anonymous holder.
+   */
+  accessibilityLabel?: string;
 };
 
 /**
@@ -24,7 +30,13 @@ type PressableAvatarProps = {
  * It's a dumb navigation wrapper: the self-profile and not-found cases are
  * handled by the route itself, so call sites only need to pass the row's userId.
  */
-export const PressableAvatar = memo(function PressableAvatar({ userId, uri, name, size = 40 }: PressableAvatarProps) {
+export const PressableAvatar = memo(function PressableAvatar({
+  userId,
+  uri,
+  name,
+  size = 40,
+  accessibilityLabel,
+}: PressableAvatarProps) {
   const router = useRouter();
   const { t } = useTranslation('common');
 
@@ -35,7 +47,7 @@ export const PressableAvatar = memo(function PressableAvatar({ userId, uri, name
   }, [router, userId]);
 
   if (!userId) {
-    return <Avatar uri={uri} name={name} size={size} />;
+    return <Avatar uri={uri} name={name} size={size} accessibilityLabel={accessibilityLabel} />;
   }
 
   // Pad small avatars up to a 44pt target without enlarging the visible art.
@@ -48,7 +60,9 @@ export const PressableAvatar = memo(function PressableAvatar({ userId, uri, name
       rippleBorderless
       hitSlop={hitSlop}
       accessibilityRole="button"
-      accessibilityLabel={t('mobile.avatar.viewProfile', { name: name ?? t('mobile.avatar.thisClimber') })}
+      accessibilityLabel={
+        accessibilityLabel ?? t('mobile.avatar.viewProfile', { name: name ?? t('mobile.avatar.thisClimber') })
+      }
     >
       <Avatar uri={uri} name={name} size={size} />
     </PressableSurface>

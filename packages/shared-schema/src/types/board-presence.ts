@@ -14,6 +14,8 @@ export type BoardPresenceClimb = {
   /** Server-derived from the caller; never client-supplied. */
   sentByDisplayName?: string | null;
   sentByAvatarUrl?: string | null;
+  /** Boardsesh user id of the sender, for profile links. Server-derived; null when anonymous. */
+  sentByUserId?: string | null;
   /** ISO 8601, server-stamped. */
   sentAt: string;
   /** Monotonic per-board sequence for ordering + dedup. */
