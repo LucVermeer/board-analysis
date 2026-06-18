@@ -49,10 +49,20 @@ name: app-store screenshots
 - takeScreenshot: 00-home
 
 # Discover — the playlist library (smart "Your Picks" + saved playlists).
+# This is the FIRST in-session deep link, so it pops iOS's "Open in 'Boardsesh'?"
+# confirmation, which BLOCKS the navigation until confirmed. The later openLinks
+# just use an optional tap, but here a racy optional tap left the dialog sitting
+# over the home feed (e.g. es / iPhone 16 Pro Max) AND stranded the shot on home.
+# So wait for the dialog explicitly and tap Open — it reliably appears on the fresh
+# sim the orchestrator guarantees (uninstall + reinstall + keychain reset), and iOS
+# remembers the choice for the rest of the session, so the later links don't
+# re-prompt and can't cascade a popup onto a captured screen.
 - openLink: com.boardsesh.app://discover
+- extendedWaitUntil:
+    visible: 'Open'
+    timeout: 12000
 - tapOn:
     text: 'Open'
-    optional: true
 - waitForAnimationToEnd
 - takeScreenshot: 06-discover
 
