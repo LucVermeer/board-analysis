@@ -27,7 +27,9 @@ type HoldFilterEditorSheetProps = {
 };
 
 const SHEET_HEIGHT_RATIO = 0.95;
-const CHROME_BUDGET = 132;
+// Header + the below-board hold-type controls (toggle + chip row + clear/hint)
+// + safe area, so the board is sized to leave the controls fully on-screen.
+const CHROME_BUDGET = 320;
 const DEFER_BOARD_RENDER_MS = 120;
 
 export function HoldFilterEditorSheet({
@@ -40,12 +42,12 @@ export function HoldFilterEditorSheet({
 }: HoldFilterEditorSheetProps) {
   const sheetRef = useRef<BottomSheetModal>(null);
   const { t } = useTranslation('climbs');
-  const { systemColors, brandColors } = useTheme();
+  const { brandColors } = useTheme();
   const insets = useSafeAreaInsets();
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const boardName = boardConfig.boardName as BoardName;
   const boardLayout = getLayout(boardName, boardConfig.layoutId)?.name ?? '';
-  const [activeHoldId, setActiveHoldId] = useState<number | null>(null);
+  const [selectedType, setSelectedType] = useState<HoldFilterType>('HAND');
   const [applyMode, setApplyMode] = useState<HoldFilterMode>('include');
   const [contentReady, setContentReady] = useState(false);
 
@@ -55,7 +57,6 @@ export function HoldFilterEditorSheet({
       const timeout = setTimeout(() => setContentReady(true), DEFER_BOARD_RENDER_MS);
       return () => clearTimeout(timeout);
     } else {
-      setActiveHoldId(null);
       setContentReady(false);
       sheetRef.current?.dismiss();
     }
@@ -84,16 +85,13 @@ export function HoldFilterEditorSheet({
     return { width: availWidth, height: availWidth / boardAspect };
   }, [boardHolds, windowWidth, windowHeight, insets.bottom]);
 
-  const handleHoldTap = useCallback((holdId: number) => {
-    setActiveHoldId(holdId);
-  }, []);
-
-  const handleToggleType = useCallback(
-    (type: HoldFilterType) => {
-      if (activeHoldId == null) return;
-      const holdKey = String(activeHoldId);
+  // Paint the selected brush (type + include/exclude) onto the tapped hold:
+  // toggle that type at the current mode, dropping the hold if it ends up empty.
+  const handleHoldTap = useCallback(
+    (holdId: number) => {
+      const holdKey = String(holdId);
       const existing: HoldFilterEntry = holdsFilter[holdKey] ?? {};
-      const nextEntry = toggleHoldFilterType(existing, type, applyMode);
+      const nextEntry = toggleHoldFilterType(existing, selectedType, applyMode);
       const next: HoldsFilter = { ...holdsFilter };
       if (Object.keys(nextEntry).length === 0) {
         delete next[holdKey];
@@ -102,109 +100,79 @@ export function HoldFilterEditorSheet({
       }
       onHoldsFilterChange(next);
       track(SHARED_EVENTS.SearchHoldFilterChanged, {
-        type,
+        type: selectedType,
         mode: applyMode,
         boardLayout,
       });
     },
-    [activeHoldId, applyMode, boardLayout, holdsFilter, onHoldsFilterChange],
+    [selectedType, applyMode, boardLayout, holdsFilter, onHoldsFilterChange],
   );
-
-  const handleClearHold = useCallback(() => {
-    if (activeHoldId == null) return;
-    const holdKey = String(activeHoldId);
-    if (!(holdKey in holdsFilter)) return;
-    const next: HoldsFilter = { ...holdsFilter };
-    delete next[holdKey];
-    onHoldsFilterChange(next);
-    track(SHARED_EVENTS.SearchHoldFilterCleared, { boardLayout });
-  }, [activeHoldId, boardLayout, holdsFilter, onHoldsFilterChange]);
 
   const handleClearAll = useCallback(() => {
     onHoldsFilterChange({});
     track(SHARED_EVENTS.SearchHoldFilterCleared, { boardLayout });
   }, [boardLayout, onHoldsFilterChange]);
 
-  const closePicker = useCallback(() => setActiveHoldId(null), []);
-
-  const activeEntry: HoldFilterEntry = activeHoldId != null ? (holdsFilter[String(activeHoldId)] ?? {}) : {};
   const filteredCount = countFilteredHolds(holdsFilter);
 
   return (
-    <>
-      <ModalSheet
-        ref={sheetRef}
-        snapPoints={['95%']}
-        onDismiss={onDismiss}
-        enablePanDownToClose={activeHoldId == null}
-        stackBehavior="push"
-      >
-        <View style={styles.container}>
-          {!boardHolds ? (
-            <View style={styles.loading}>
-              <ActivityIndicator size="large" />
-            </View>
-          ) : (
-            <>
-              <View style={styles.header}>
-                <Text variant="title3">{t('mobile.holdFilter.title')}</Text>
-                <View style={styles.headerActions}>
-                  {filteredCount > 0 ? (
-                    <Pressable onPress={handleClearAll} hitSlop={8} accessibilityRole="button">
-                      <Text variant="subheadline" color={brandColors.primary}>
-                        {t('mobile.filter.clearAll')}
-                      </Text>
-                    </Pressable>
-                  ) : null}
-                  <Pressable onPress={onClose} hitSlop={8} accessibilityRole="button">
-                    <Text variant="subheadline" color={brandColors.primary} style={styles.doneLabel}>
-                      {t('mobile.filter.done')}
+    <ModalSheet ref={sheetRef} snapPoints={['95%']} onDismiss={onDismiss} stackBehavior="push">
+      <View style={styles.container}>
+        {!boardHolds ? (
+          <View style={styles.loading}>
+            <ActivityIndicator size="large" />
+          </View>
+        ) : (
+          <>
+            <View style={styles.header}>
+              <Text variant="title3">{t('mobile.holdFilter.title')}</Text>
+              <View style={styles.headerActions}>
+                {filteredCount > 0 ? (
+                  <Pressable onPress={handleClearAll} hitSlop={8} accessibilityRole="button">
+                    <Text variant="subheadline" color={brandColors.primary}>
+                      {t('mobile.filter.clearAll')}
                     </Text>
                   </Pressable>
-                </View>
+                ) : null}
+                <Pressable onPress={onClose} hitSlop={8} accessibilityRole="button">
+                  <Text variant="subheadline" color={brandColors.primary} style={styles.doneLabel}>
+                    {t('mobile.filter.done')}
+                  </Text>
+                </Pressable>
               </View>
+            </View>
 
-              <View style={styles.boardSection}>
-                <InteractiveFilterBoard
-                  boardName={boardName}
-                  layoutId={boardConfig.layoutId}
-                  sizeId={boardConfig.sizeId}
-                  setIds={boardConfig.setIds}
-                  boardWidth={boardHolds.boardWidth}
-                  boardHeight={boardHolds.boardHeight}
-                  holdTargets={boardHolds.holdTargets}
-                  holdsFilter={holdsFilter}
-                  activeHoldId={activeHoldId}
-                  onHoldTap={handleHoldTap}
-                  showHoldMarkers={false}
-                  renderWidth={boardRender.width}
-                  renderHeight={boardRender.height}
-                />
-              </View>
+            <View style={styles.boardSection}>
+              <InteractiveFilterBoard
+                boardName={boardName}
+                layoutId={boardConfig.layoutId}
+                sizeId={boardConfig.sizeId}
+                setIds={boardConfig.setIds}
+                boardWidth={boardHolds.boardWidth}
+                boardHeight={boardHolds.boardHeight}
+                holdTargets={boardHolds.holdTargets}
+                holdsFilter={holdsFilter}
+                onHoldTap={handleHoldTap}
+                showHoldMarkers={false}
+                renderWidth={boardRender.width}
+                renderHeight={boardRender.height}
+              />
+            </View>
 
-              <View style={[styles.footer, { paddingBottom: insets.bottom + spacing[3] }]}>
-                <Text variant="footnote" color={systemColors.secondaryLabel} style={styles.footerText}>
-                  {filteredCount > 0
-                    ? t('mobile.holdFilter.summaryCount', { count: filteredCount })
-                    : t('mobile.holdFilter.hint')}
-                </Text>
-              </View>
-            </>
-          )}
-        </View>
-      </ModalSheet>
-
-      <HoldFilterPicker
-        holdId={activeHoldId}
-        boardName={boardName}
-        entry={activeEntry}
-        applyMode={applyMode}
-        onApplyModeChange={setApplyMode}
-        onToggleType={handleToggleType}
-        onClear={handleClearHold}
-        onClose={closePicker}
-      />
-    </>
+            {/* Hold-type brush selector docked below the board (create-climb-style
+                action bar): pick a type + include/exclude, then tap holds to paint
+                them. Inline — not a stacked sub-sheet — so it reliably shows. */}
+            <HoldFilterPicker
+              boardName={boardName}
+              selectedType={selectedType}
+              onSelectType={setSelectedType}
+              applyMode={applyMode}
+              onApplyModeChange={setApplyMode}
+            />
+          </>
+        )}
+      </View>
+    </ModalSheet>
   );
 }
 
@@ -237,13 +205,5 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  footer: {
-    paddingHorizontal: spacing[4],
-    paddingTop: spacing[2],
-    alignItems: 'center',
-  },
-  footerText: {
-    textAlign: 'center',
   },
 });

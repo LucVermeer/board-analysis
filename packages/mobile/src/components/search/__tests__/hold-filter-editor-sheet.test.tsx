@@ -51,23 +51,21 @@ vi.mock('../InteractiveFilterBoard', () => ({
 }));
 
 type PickerMockProps = {
-  holdId: number | null;
+  selectedType: HoldFilterType;
   applyMode: HoldFilterMode;
-  onToggleType: (type: HoldFilterType) => void;
+  onSelectType: (type: HoldFilterType) => void;
 };
 vi.mock('../HoldFilterPicker', () => ({
-  HoldFilterPicker: ({ holdId, applyMode, onToggleType }: PickerMockProps) =>
-    holdId == null
-      ? null
-      : createElement(
-          'button',
-          {
-            'data-picker-hold-id': String(holdId),
-            'data-picker-mode': applyMode,
-            onClick: () => onToggleType('HAND'),
-          },
-          'toggle hand',
-        ),
+  HoldFilterPicker: ({ selectedType, applyMode, onSelectType }: PickerMockProps) =>
+    createElement(
+      'button',
+      {
+        'data-picker-type': selectedType,
+        'data-picker-mode': applyMode,
+        onClick: () => onSelectType('FOOT'),
+      },
+      'select foot',
+    ),
 }));
 
 vi.mock('../../../providers/theme-provider', () => ({
@@ -156,7 +154,7 @@ describe('HoldFilterEditorSheet', () => {
     expect(container.querySelector('[data-board="true"]')).not.toBeNull();
   });
 
-  it('propagates hold type changes to the parent callback', () => {
+  it('paints the default brush onto a tapped hold', () => {
     const onHoldsFilterChange = vi.fn();
     const { container } = renderSheet({ onHoldsFilterChange });
 
@@ -164,8 +162,21 @@ describe('HoldFilterEditorSheet', () => {
       vi.advanceTimersByTime(120);
     });
     fireEvent.click(container.querySelector('[data-board="true"]') as HTMLButtonElement);
-    fireEvent.click(container.querySelector('[data-picker-hold-id="42"]') as HTMLButtonElement);
 
     expect(onHoldsFilterChange).toHaveBeenCalledWith({ 42: { HAND: 'include' } });
+  });
+
+  it('paints the selected brush type after choosing a different chip', () => {
+    const onHoldsFilterChange = vi.fn();
+    const { container } = renderSheet({ onHoldsFilterChange });
+
+    act(() => {
+      vi.advanceTimersByTime(120);
+    });
+    // Pick the FOOT brush, then tap a hold to paint it.
+    fireEvent.click(container.querySelector('[data-picker-type]') as HTMLButtonElement);
+    fireEvent.click(container.querySelector('[data-board="true"]') as HTMLButtonElement);
+
+    expect(onHoldsFilterChange).toHaveBeenCalledWith({ 42: { FOOT: 'include' } });
   });
 });

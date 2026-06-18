@@ -26,12 +26,12 @@ type Params = {
 };
 
 // Vertical space (px) reserved for the on-screen chrome around the board so the
-// full board fits without scroll: the header row (~44) plus its top padding
-// (spacing[2]), and the footer summary (~44) plus its top padding — roughly 132
-// at the current type scale. A rough constant is fine: the board still fits as
-// long as the budget is in the right ballpark, and `availHeight` is clamped
-// below.
-const CHROME_BUDGET = 132;
+// full board fits without scroll: the header row plus its top padding, and the
+// below-board hold-type controls (include/exclude toggle + chip row +
+// clear/hint) plus the bottom safe area. A rough constant is fine: the board
+// still fits as long as the budget is in the right ballpark, and `availHeight`
+// is clamped below.
+const CHROME_BUDGET = 320;
 
 /**
  * Full-screen route variant for the hold-type search filter. Route-based flows
@@ -62,7 +62,7 @@ export default function HoldFilterScreen() {
   const holdsFilterRef = useRef(holdsFilter);
   holdsFilterRef.current = holdsFilter;
 
-  const [activeHoldId, setActiveHoldId] = useState<number | null>(null);
+  const [selectedType, setSelectedType] = useState<HoldFilterType>('HAND');
   const [applyMode, setApplyMode] = useState<HoldFilterMode>('include');
 
   const boardHolds = useMemo(() => {
@@ -100,17 +100,14 @@ export default function HoldFilterScreen() {
     router.back();
   }, [router]);
 
-  const handleHoldTap = useCallback((holdId: number) => {
-    setActiveHoldId(holdId);
-  }, []);
-
-  const handleToggleType = useCallback(
-    (type: HoldFilterType) => {
-      if (activeHoldId == null) return;
-      const holdKey = String(activeHoldId);
+  // Paint the selected brush (type + include/exclude) onto the tapped hold:
+  // toggle that type at the current mode, dropping the hold if it ends up empty.
+  const handleHoldTap = useCallback(
+    (holdId: number) => {
+      const holdKey = String(holdId);
       setHoldsFilter((previous) => {
         const existing: HoldFilterEntry = previous[holdKey] ?? {};
-        const nextEntry = toggleHoldFilterType(existing, type, applyMode);
+        const nextEntry = toggleHoldFilterType(existing, selectedType, applyMode);
         const next: HoldsFilter = { ...previous };
         if (Object.keys(nextEntry).length === 0) {
           delete next[holdKey];
@@ -120,34 +117,19 @@ export default function HoldFilterScreen() {
         return next;
       });
       track(SHARED_EVENTS.SearchHoldFilterChanged, {
-        type,
+        type: selectedType,
         mode: applyMode,
         boardLayout,
       });
     },
-    [activeHoldId, applyMode, boardLayout],
+    [selectedType, applyMode, boardLayout],
   );
-
-  const handleClearHold = useCallback(() => {
-    if (activeHoldId == null) return;
-    const holdKey = String(activeHoldId);
-    setHoldsFilter((previous) => {
-      if (!(holdKey in previous)) return previous;
-      const next: HoldsFilter = { ...previous };
-      delete next[holdKey];
-      return next;
-    });
-    track(SHARED_EVENTS.SearchHoldFilterCleared, { boardLayout });
-  }, [activeHoldId, boardLayout]);
 
   const handleClearAll = useCallback(() => {
     setHoldsFilter({});
     track(SHARED_EVENTS.SearchHoldFilterCleared, { boardLayout });
   }, [boardLayout]);
 
-  const closePicker = useCallback(() => setActiveHoldId(null), []);
-
-  const activeEntry: HoldFilterEntry = activeHoldId != null ? (holdsFilter[String(activeHoldId)] ?? {}) : {};
   const filteredCount = countFilteredHolds(holdsFilter);
 
   if (!boardHolds || !boardName) {
@@ -192,30 +174,18 @@ export default function HoldFilterScreen() {
           boardHeight={boardHolds.boardHeight}
           holdTargets={boardHolds.holdTargets}
           holdsFilter={holdsFilter}
-          activeHoldId={activeHoldId}
           onHoldTap={handleHoldTap}
           renderWidth={boardRender.width}
           renderHeight={boardRender.height}
         />
       </View>
 
-      <View style={[styles.footer, { paddingBottom: insets.bottom + spacing[3] }]}>
-        <Text variant="footnote" color={systemColors.secondaryLabel} style={styles.footerText}>
-          {filteredCount > 0
-            ? t('mobile.holdFilter.summaryCount', { count: filteredCount })
-            : t('mobile.holdFilter.hint')}
-        </Text>
-      </View>
-
       <HoldFilterPicker
-        holdId={activeHoldId}
         boardName={boardName}
-        entry={activeEntry}
+        selectedType={selectedType}
+        onSelectType={setSelectedType}
         applyMode={applyMode}
         onApplyModeChange={setApplyMode}
-        onToggleType={handleToggleType}
-        onClear={handleClearHold}
-        onClose={closePicker}
       />
     </View>
   );
@@ -249,13 +219,5 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  footer: {
-    paddingHorizontal: spacing[4],
-    paddingTop: spacing[2],
-    alignItems: 'center',
-  },
-  footerText: {
-    textAlign: 'center',
   },
 });
