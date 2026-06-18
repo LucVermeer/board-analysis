@@ -9,4 +9,6 @@ La même appli, refaite pour voler :
 - Suis tes sends, tes flashs et tes essais, et regarde tes cotations se tracer dans l'onglet Progression.
 - Enregistre tes sessions dans Apple Health et importe ton ancien carnet Kilter et Tension depuis Aurora Climbing.
 
+Et maintenant Boardsesh parle français, traduit par la communauté de grimpeurs.
+
 Gratuit, sans pub, open source.
