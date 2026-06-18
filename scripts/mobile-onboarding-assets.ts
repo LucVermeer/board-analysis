@@ -42,6 +42,10 @@ function parseArg(flag: string): string | undefined {
 async function main(): Promise<void> {
   const source = resolve(ROOT_DIR, parseArg('--source') ?? DEFAULT_SOURCE);
   const name = parseArg('--name') ?? 'board-history';
+  // The board-presence "now on the wall" content sits in a bottom sheet, so the
+  // default keeps the lower portion. Override with top / centre / attention /
+  // entropy for other screens.
+  const gravity = parseArg('--gravity') ?? 'bottom';
 
   if (!existsSync(source)) {
     console.error(`[mobile:onboarding-assets] Source not found: ${source}`);
@@ -58,7 +62,7 @@ async function main(): Promise<void> {
   // "now on the wall" hero — the lit board + current climb), dropping the lower
   // history list. fit:'cover' keeps the full width and trims the vertical overflow.
   await sharp(source)
-    .resize(CARD_WIDTH, CARD_HEIGHT, { fit: 'cover', position: 'top' })
+    .resize(CARD_WIDTH, CARD_HEIGHT, { fit: 'cover', position: gravity })
     .png({ compressionLevel: 9 })
     .toFile(outputPath);
 

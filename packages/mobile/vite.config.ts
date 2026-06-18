@@ -82,6 +82,15 @@ export default defineConfig({
         find: /^(.*\/)?theme\/animations$/,
         replacement: fileURLToPath(new URL('./test/theme-animations-stub.ts', import.meta.url)),
       },
+      // Static image imports (.png/.jpg/.webp/...) resolve to a Metro asset id (a
+      // number) at runtime. Vitest has no Metro asset pipeline and Rolldown's
+      // static analysis chokes parsing the binary as a module, so redirect every
+      // asset import to a dummy. Like the theme/animations alias, the regex must
+      // match the WHOLE specifier (vite replaces only the matched part).
+      {
+        find: /^.*\.(png|jpe?g|gif|webp|svg)$/,
+        replacement: fileURLToPath(new URL('./test/asset-stub.ts', import.meta.url)),
+      },
     ],
     // .tsx test files can opt into a jsdom environment per file via the
     // `// @vitest-environment jsdom` pragma — needed to render React
