@@ -30,7 +30,7 @@ type SessionSummaryViewProps = {
 export default function SessionSummaryView({ summary }: SessionSummaryViewProps) {
   const { t } = useTranslation('session');
   const { formatGrade, loaded: gradeFormatLoaded } = useGradeFormat();
-  const maxGradeCount = Math.max(...summary.gradeDistribution.map((g) => g.count), 1);
+  const maxGradeCount = Math.max(...summary.gradeDistribution.map((g) => g.flash + g.send), 1);
 
   const formatDuration = (minutes: number | null | undefined) => {
     if (!minutes) return null;
@@ -147,7 +147,7 @@ export default function SessionSummaryView({ summary }: SessionSummaryViewProps)
                   )}
                   <LinearProgress
                     variant="determinate"
-                    value={(g.count / maxGradeCount) * 100}
+                    value={((g.flash + g.send) / maxGradeCount) * 100}
                     sx={{
                       flex: 1,
                       height: 16,
@@ -160,7 +160,7 @@ export default function SessionSummaryView({ summary }: SessionSummaryViewProps)
                     }}
                   />
                   <Typography variant="body2" color="text.secondary" sx={{ minWidth: 20 }}>
-                    {g.count}
+                    {g.flash + g.send}
                   </Typography>
                 </Box>
               ))}

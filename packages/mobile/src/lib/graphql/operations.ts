@@ -444,21 +444,29 @@ export type GetClimbQueryResponse = {
 const SESSION_SUMMARY_FIELDS = `
   sessionId
   totalSends
+  totalFlashes
   totalAttempts
   gradeDistribution {
     grade
-    count
+    flash
+    send
+    attempt
   }
   hardestClimb {
     climbUuid
     climbName
     grade
+    frames
+    layoutId
+    boardType
+    isMirror
   }
   participants {
     userId
     displayName
     avatarUrl
     sends
+    flashes
     attempts
   }
   startedAt

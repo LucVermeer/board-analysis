@@ -142,16 +142,6 @@ export const sessionTypeDefs = /* GraphQL */ `
   # ============================================
 
   """
-  Grade count for session summary grade distribution.
-  """
-  type SessionGradeCount {
-    "Grade name (e.g., 'V5')"
-    grade: String!
-    "Number of sends at this grade"
-    count: Int!
-  }
-
-  """
   Hardest climb sent during a session.
   """
   type SessionHardestClimb {
@@ -161,6 +151,14 @@ export const sessionTypeDefs = /* GraphQL */ `
     climbName: String!
     "Grade name"
     grade: String!
+    "Lit-hold frames string, for rendering a board thumbnail (null for legacy climbs)"
+    frames: String
+    "Board layout id, needed to render the thumbnail"
+    layoutId: Int
+    "Board type the send was logged on (e.g. 'kilter', 'tension')"
+    boardType: String
+    "Whether the send was on the mirrored climb"
+    isMirror: Boolean
   }
 
   """
@@ -173,8 +171,10 @@ export const sessionTypeDefs = /* GraphQL */ `
     displayName: String
     "Avatar URL"
     avatarUrl: String
-    "Total sends"
+    "Total sends (flash + send)"
     sends: Int!
+    "Total flashes"
+    flashes: Int!
     "Total attempts"
     attempts: Int!
   }
@@ -187,10 +187,12 @@ export const sessionTypeDefs = /* GraphQL */ `
     sessionId: ID!
     "Total successful sends"
     totalSends: Int!
+    "Total flashes (first-try sends)"
+    totalFlashes: Int!
     "Total attempts (including sends)"
     totalAttempts: Int!
-    "Grade distribution of sends"
-    gradeDistribution: [SessionGradeCount!]!
+    "Grade distribution with flash/send/attempt breakdown"
+    gradeDistribution: [SessionGradeDistributionItem!]!
     "Hardest climb sent during the session"
     hardestClimb: SessionHardestClimb
     "Participants with their stats"

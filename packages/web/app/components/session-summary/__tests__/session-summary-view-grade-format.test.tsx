@@ -44,8 +44,8 @@ const makeSummary = (overrides: Partial<SessionSummary> = {}): SessionSummary =>
     goal: null,
     hardestClimb: { climbName: 'Hard One', grade: '7a/V6' },
     gradeDistribution: [
-      { grade: '6a/V3', count: 3 },
-      { grade: '7a/V6', count: 1 },
+      { grade: '6a/V3', flash: 1, send: 2, attempt: 0 },
+      { grade: '7a/V6', flash: 0, send: 1, attempt: 0 },
     ],
     participants: [],
     ...overrides,
