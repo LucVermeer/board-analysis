@@ -9,4 +9,6 @@ La misma app, reconstruida para volar:
 - Apunta encadenes, flashes e intentos y mira cómo tus grados se dibujan en la pestaña Progreso.
 - Guarda tus sesiones en Apple Health e importa tu logbook de Kilter y Tension desde Aurora Climbing.
 
+Y ahora Boardsesh habla español, traducido por la comunidad de escaladores.
+
 Gratis, sin anuncios, código abierto.
