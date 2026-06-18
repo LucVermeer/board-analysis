@@ -166,6 +166,27 @@ jobs:
           fi
           cp -f "${apks[0]}" /tmp/boardsesh-screenshot.apk
 
+      # The release APK is now in /tmp, so the Gradle build tree is dead weight.
+      # Reclaim it plus the big preinstalled toolchains we never use, so the
+      # emulator system-image install has room — a full (cache-miss) build left
+      # the runner too full and `sdkmanager` failed with "No space left on
+      # device", aborting capture before it started. Leave ~/.gradle/caches so the
+      # post-step can still save the build cache. Best-effort.
+      - name: Free disk space for the emulator
+        run: |
+          set -eu
+          echo "Disk before cleanup:"; df -h /
+          rm -rf packages/mobile/android/app/build packages/mobile/android/build 2>/dev/null || true
+          sudo rm -rf \
+            /usr/share/dotnet \
+            /usr/local/lib/android/sdk/ndk \
+            /opt/ghc /usr/local/.ghcup \
+            /opt/hostedtoolcache/CodeQL \
+            /usr/local/share/powershell \
+            /usr/local/share/chromium 2>/dev/null || true
+          sudo docker image prune --all --force 2>/dev/null || true
+          echo "Disk after cleanup:"; df -h /
+
       - name: Install Maestro
         env:
           MAESTRO_VERSION: 2.6.1
