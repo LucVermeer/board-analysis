@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef } from 'react';
-import { Platform, View, StyleSheet } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import Animated, {
   useAnimatedStyle,
@@ -18,10 +18,7 @@ import { Text } from '../Text';
 import { Icon } from '../Icon';
 import { type IconName } from '../icon-map';
 import { ClimbListItemContent, type ClimbListItemClimb } from '../ClimbListItemContent';
-import { ClimbContextMenu } from '../climb-actions/ClimbContextMenu';
 import { useSwipeArm } from '../use-swipe-arm';
-import { tickToClimb } from '../../lib/tick-to-climb';
-import type { BoardConfig } from '../../providers/drawer-host-provider';
 import { gradeBadgeColor } from './profile-chart-colors';
 import { brandColors, withAlpha } from '../../theme/colors';
 import { iosSystemColors } from '../../theme/ios-colors';
@@ -131,24 +128,6 @@ export const LogbookRow = memo(function LogbookRow({ ascent, onActivate, onOpenA
   const climb = ascentToClimb(ascent);
   const boardConfig = getBoardConfigForPlaylist(ascent.boardType, ascent.layoutId);
 
-  // The iOS long-press context menu acts on a full Climb (not the visual-only
-  // ClimbListItemClimb) and a string-set-ids BoardConfig — the same shapes the Android
-  // actions sheet receives via LogbookTab (tickToClimb + getBoardConfigForPlaylist).
-  const menuClimb = useMemo(() => tickToClimb(ascent), [ascent]);
-  const menuBoardConfig = useMemo<BoardConfig | null>(
-    () =>
-      boardConfig
-        ? {
-            boardName: boardConfig.boardName,
-            layoutId: boardConfig.layoutId,
-            sizeId: boardConfig.sizeId,
-            setIds: boardConfig.setIds.join(','),
-            angle: ascent.angle,
-          }
-        : null,
-    [boardConfig, ascent.angle],
-  );
-
   const swipeableRef = useRef<SwipeableMethods>(null);
 
   // Lazy swipe panel: the heavy animated inner only mounts once a drag actually
@@ -236,15 +215,10 @@ export const LogbookRow = memo(function LogbookRow({ ascent, onActivate, onOpenA
     [handleLongPress],
   );
 
-  // Long-press wins over tap; a quick tap fires once the long-press fails. With no
-  // long-press handler (beta-share picker) the row is tap-only. On iOS the native
-  // UIContextMenu (ClimbContextMenu below) owns the long-press, so the row is tap-only
-  // there too; Android keeps the RNGH long-press → actions sheet.
+  // Long-press wins over tap; a quick tap fires once the long-press fails. With
+  // no long-press handler (beta-share picker) the row is tap-only.
   const tapGesture = useMemo(
-    () =>
-      Platform.OS === 'ios' || !onOpenActions
-        ? singleTapGesture
-        : Gesture.Exclusive(longPressGesture, singleTapGesture),
+    () => (onOpenActions ? Gesture.Exclusive(longPressGesture, singleTapGesture) : singleTapGesture),
     [onOpenActions, longPressGesture, singleTapGesture],
   );
 
@@ -322,18 +296,11 @@ export const LogbookRow = memo(function LogbookRow({ ascent, onActivate, onOpenA
         onSwipeableOpen={handleSwipeableOpened}
         onSwipeableClose={handleSwipeableClosed}
       >
-        <ClimbContextMenu
-          climb={menuClimb}
-          boardConfig={menuBoardConfig}
-          onEditEntry={onEdit ? handleEdit : undefined}
-          disabled={!onOpenActions}
-        >
-          <GestureDetector gesture={tapGesture}>
-            <View accessible accessibilityRole="button" accessibilityLabel={ascent.climbName}>
-              {rowContent}
-            </View>
-          </GestureDetector>
-        </ClimbContextMenu>
+        <GestureDetector gesture={tapGesture}>
+          <View accessible accessibilityRole="button" accessibilityLabel={ascent.climbName}>
+            {rowContent}
+          </View>
+        </GestureDetector>
       </ReanimatedSwipeable>
       <View style={[separatorStyle, { backgroundColor: systemColors.separator }]} />
     </View>

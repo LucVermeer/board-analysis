@@ -12,7 +12,6 @@
  */
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { randomUUID } from 'expo-crypto';
 import { router } from 'expo-router';
 import type { BoardName, Climb } from '@boardsesh/shared-schema';
 import { buildBoardPath, formatBoardDisplayName } from '@boardsesh/board-config';
@@ -28,13 +27,13 @@ import type { QueueItemRowBoard } from '../components/QueueItemRow';
 import { useActiveBoard, useSetActiveBoard } from '../lib/graphql/use-active-board';
 import { formatActiveBoardLabel } from '../lib/boards/active-board-label';
 import { track } from '../lib/analytics';
-import { ClimbActionsSheet } from '../components/ClimbActionsSheet';
+import { ClimbReactionMenu } from '../components/climb-actions/ClimbReactionMenu';
 import { AddBetaVideoSheet } from '../components/AddBetaVideoSheet';
 import { AddToPlaylistSheet } from '../components/AddToPlaylistSheet';
-import { useToggleFavorite, useProfile, useMyBoards } from '../lib/graphql/hooks';
+import { useProfile, useMyBoards } from '../lib/graphql/hooks';
 import { boardLooselyMatches } from '../lib/boards/board-matches';
 import { useAuth } from './auth-provider';
-import { favoritesStore } from '@boardsesh/climb-actions';
+import { useReduceMotion } from '../hooks/use-reduce-motion';
 import { climbToQueueItem } from '../lib/climb-to-queue-item';
 import { useQueueActions, useQueueSessionControls } from './queue-provider';
 import { useQueueSnackbar } from './queue-snackbar-provider';
@@ -180,8 +179,11 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
   } = useBoardPresenceControls();
   const boardPresenceBoardIdRef = useRef(boardPresenceBoardId);
   boardPresenceBoardIdRef.current = boardPresenceBoardId;
-  const { mutate: toggleFavoriteMutate } = useToggleFavorite();
   const { data: profile } = useProfile();
+  // Read at the app root (resolved by interaction time) and passed to the reaction
+  // menu so its mount-time enter animation uses the real value, not the hook's
+  // conservative `true` default.
+  const reduceMotion = useReduceMotion();
 
   // Climb to open after the boardConfig override has committed. We can't
   // open synchronously inside openPlayDrawer when an override is supplied
@@ -361,80 +363,6 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
     if (!boardConfig) return;
     setBetaVideoClimb({ climb, boardConfig });
   }, []);
-
-  const handleClimbActionsAddToQueue = useCallback(() => {
-    if (!climbActions) return;
-    addToQueue({ uuid: randomUUID(), climb: climbActions.climb });
-  }, [climbActions, addToQueue]);
-
-  const handleClimbActionsPreview = useCallback(() => {
-    if (!climbActions) return;
-    // View-only: open with a previewQueueItem (badge + "Set active") instead of
-    // committing. Mirror the board-sheet override rule so a cross-board climb
-    // still renders the switch-board overlay; same-board needs no override.
-    const boardConfigOverride = boardConfigsMatch(climbActions.boardConfig, activeBoardConfigRef.current)
-      ? undefined
-      : climbActions.boardConfig;
-    openPlayDrawer(climbActions.climb, {
-      previewQueueItem: climbToQueueItem(climbActions.climb),
-      boardConfig: boardConfigOverride,
-      source: 'climb_view',
-    });
-  }, [climbActions, openPlayDrawer]);
-
-  const handleClimbActionsToggleFavorite = useCallback(() => {
-    if (!climbActions) return;
-    const isNowFavorited = !favoritesStore.getIsFavorited(climbActions.climb.uuid);
-    track(SHARED_EVENTS.FavoriteToggle, {
-      action: isNowFavorited ? 'added' : 'removed',
-      climbUuid: climbActions.climb.uuid,
-      boardName: climbActions.boardConfig.boardName,
-      layoutId: climbActions.boardConfig.layoutId,
-      source: 'mobile_climb_actions',
-    });
-    toggleFavoriteMutate({
-      input: {
-        boardName: climbActions.boardConfig.boardName,
-        climbUuid: climbActions.climb.uuid,
-        angle: climbActions.boardConfig.angle,
-      },
-    });
-  }, [climbActions, toggleFavoriteMutate]);
-
-  const handleClimbActionsTick = useCallback(() => {
-    if (!climbActions) return;
-    setLogAscentInput({
-      climbUuid: climbActions.climb.uuid,
-      boardName: climbActions.boardConfig.boardName,
-      angle: climbActions.boardConfig.angle,
-      isMirror: false,
-      isBenchmark: !!climbActions.climb.benchmark_difficulty,
-      layoutId: climbActions.boardConfig.layoutId,
-      sizeId: climbActions.boardConfig.sizeId,
-      setIds: climbActions.boardConfig.setIds,
-      consensusGradeName: climbActions.climb.difficulty,
-    });
-  }, [climbActions]);
-
-  const handleClimbActionsOpenPlaylist = useCallback(() => {
-    if (!climbActions) return;
-    setPlaylistClimb({
-      climb: climbActions.climb,
-      boardConfig: climbActions.boardConfig,
-    });
-  }, [climbActions]);
-
-  const handleClimbActionsAddBetaVideo = useCallback(() => {
-    if (!climbActions) return;
-    // ClimbActionsSheet fires this then calls onClose (which clears climbActions).
-    // We snapshot climb + boardConfig into betaVideoClimb here, so the beta-video
-    // sheet holds its own copy and never reads from climbActions after it's null —
-    // the open-then-close ordering in ClimbActionsSheet stays incidental, not load-bearing.
-    setBetaVideoClimb({
-      climb: climbActions.climb,
-      boardConfig: climbActions.boardConfig,
-    });
-  }, [climbActions]);
 
   const closeAddBetaVideo = useCallback(() => {
     setBetaVideoClimb(null);
@@ -685,22 +613,13 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
         />
       ) : null}
       {climbActions ? (
-        <ClimbActionsSheet
-          visible
+        <ClimbReactionMenu
           climb={climbActions.climb}
-          boardName={climbActions.boardConfig.boardName as BoardName}
-          layoutId={climbActions.boardConfig.layoutId}
-          sizeId={climbActions.boardConfig.sizeId}
-          setIds={climbActions.boardConfig.setIds}
-          angle={climbActions.boardConfig.angle}
+          boardConfig={climbActions.boardConfig}
           currentUserId={profile?.id ?? null}
-          onPreview={handleClimbActionsPreview}
-          onAddToQueue={handleClimbActionsAddToQueue}
-          onOpenPlaylist={handleClimbActionsOpenPlaylist}
-          onToggleFavorite={handleClimbActionsToggleFavorite}
-          onTick={handleClimbActionsTick}
+          isAuthenticated={isAuthenticated}
           onEditEntry={climbActions.onEditEntry}
-          onAddBetaVideo={isAuthenticated ? handleClimbActionsAddBetaVideo : undefined}
+          reduceMotion={reduceMotion}
           onClose={closeClimbActions}
         />
       ) : null}
