@@ -1,9 +1,9 @@
-Search a climb and watch your wall light the holds over Bluetooth. Tap a problem, the holds glow, you pull on. Spend your session climbing instead of reading numbers off a screen.
+Search a climb, watch your wall light up. Less time on your phone, more time on the wall.
 
 Pick your board once and get climbing.
 
 LIGHT THE HOLDS
-Search any climb and Boardsesh sends it to the wall over Bluetooth, lighting the holds on Kilter, Tension, MoonBoard, Decoy, Touchstone, Grasshopper and So iLL. Full LED control on all seven, not browse-only.
+Search any climb and Boardsesh lights the holds on the wall over Bluetooth, on Kilter, Tension, MoonBoard, Decoy, Touchstone, Grasshopper and So iLL. Full LED control on all seven, not browse-only.
 
 ONE APP FOR EVERY BOARD YOU CLIMB
 Kilter, Tension and MoonBoard each ship their own app for their own board. Boardsesh works across all of them, plus Decoy, Touchstone, Grasshopper and So iLL, in one place. One login, one queue, one place your history lives, whichever wall you walk up to.
@@ -12,16 +12,16 @@ STAYS CONNECTED
 Boardsesh holds the link to your board in the background, so the holds stay lit through your burns even when the screen turns off or you switch apps. You are not reconnecting between climbs.
 
 SEE WHAT IS LIT ON THIS WALL
-Walk up to a board and a live feed is already there: the climb lit right now, who lit it, the grade and angle, who set it, and recent sends. Nothing to start. It is tied to the wall and updates as burns happen.
+Walk up to a board and a live feed is already there: the climb lit right now, who lit it, who set it, the grade and angle, and recent sends. Nothing to start. It is tied to the wall and updates as burns happen.
 
 CLIMB WITH YOUR CREW
-Start a session and everyone in it shares one queue. Anyone sends the next climb to the wall, so there is no driver to hand the phone around and no turn to wait for. Whoever is connected over Bluetooth lights it.
+Start a session and everyone in it shares one queue. Anyone lights the next climb, so the phone never gets passed around and nobody waits a turn. Whoever is connected over Bluetooth lights it.
 
 GET A RECAP
 When the session ends, your crew gets a recap: sends and attempts, grade spread, hardest send, and how your climbing stacks up week after week on the Progress tab.
 
 BUILD A WORKOUT
-Pick Volume, Pyramid, Ladder or Grade Focus, set a target grade and warm-up, preview the climbs, then send them to the wall one burn at a time.
+Pick Volume, Pyramid, Ladder or Grade Focus, set a target grade and warm-up, preview the climbs, then push them to the wall one at a time.
 
 TRACK YOUR CLIMBING
 Record sends, flashes and attempts. Bring your past Kilter and Tension climbs across by importing your logbook from Aurora Climbing.

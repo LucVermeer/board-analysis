@@ -1,1 +1,1 @@
-MoonBoard,Kilter,Tension,bouldering,climb,beta,send,bluetooth,led,workout,training,setter,session
+MoonBoard,Kilter,Tension,kilterboard,bouldering,beta,send,tick,logbook,led,workout,setter,party
