@@ -316,6 +316,17 @@ export default ({ config }: ConfigContext): ExpoConfig & { newArchEnabled?: bool
       ],
       'expo-updates',
       'expo-web-browser',
+      // Photo-library access for picking a profile avatar (Edit Profile screen).
+      // Library-only — the editor doesn't open the camera, so we don't request
+      // NSCameraUsageDescription. Adds NSPhotoLibraryUsageDescription on iOS and
+      // the READ_MEDIA_IMAGES permission on Android; native change, ships on the
+      // next build (not OTA).
+      [
+        'expo-image-picker',
+        {
+          photosPermission: 'Boardsesh uses your photo library so you can pick a profile picture.',
+        },
+      ],
       'react-native-ble-plx',
       // Makes Boardsesh a share target so a beta video link shared from
       // Instagram/TikTok (the OS share sheet) opens the app. iOS gets a no-UI

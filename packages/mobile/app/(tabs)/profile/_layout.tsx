@@ -17,6 +17,7 @@ export default function ProfileLayout() {
           this stack. It sets its own header title from the loaded session. */}
       <Stack.Screen name="session/[sessionId]" options={{ headerShown: true }} />
       <Stack.Screen name="more" options={{ title: t('mobile.more.title') }} />
+      <Stack.Screen name="edit" options={{ title: tSettings('profile.editAction') }} />
       <Stack.Screen name="integrations" options={{ title: tSettings('integrations.title') }} />
       {/* i18n-ignore-next-line — preview-only screen */}
       <Stack.Screen name="branch-switcher" options={{ title: 'Branch Switcher' }} />

@@ -13,6 +13,7 @@ import type {
   UpdateBoardInput,
   SetterStatsInput,
   UserProfile,
+  UpdateProfileInput,
   SessionSummary,
   SessionHealthExport,
 } from '@boardsesh/shared-schema';
@@ -45,6 +46,7 @@ import {
 import { getHttpClient } from '../client';
 import {
   GET_PROFILE,
+  UPDATE_PROFILE,
   GET_MY_BOARDS,
   GET_BOARD,
   SEARCH_BOARDS,
@@ -62,6 +64,7 @@ import {
   END_SESSION,
   TOGGLE_FAVORITE,
   type GetProfileQueryResponse,
+  type UpdateProfileMutationResponse,
   type GetMyBoardsQueryResponse,
   type GetBoardQueryResponse,
   type SearchBoardsQueryResponse,
@@ -95,6 +98,27 @@ export function useProfile(options?: { enabled?: boolean }) {
     queryFn: () => getHttpClient().request<GetProfileQueryResponse>(GET_PROFILE),
     select: (data) => data.profile,
     enabled: options?.enabled ?? true,
+  });
+}
+
+/**
+ * Update the current user's display name and/or avatar URL. Invalidating
+ * `['profile']` is sufficient to refresh every consumer of the current user:
+ * the toolbar avatar (UserAvatarToolbarAction), the account drawer header, and
+ * PartyProfileProvider's `username`/`avatarUrl` (which derive from the same
+ * query). The avatar image itself is uploaded separately via `uploadAvatar`
+ * (REST), and its absolute URL is then persisted here.
+ */
+export function useUpdateProfile() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: UpdateProfileInput) => {
+      const response = await getHttpClient().request<UpdateProfileMutationResponse>(UPDATE_PROFILE, { input });
+      return response.updateProfile;
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['profile'] });
+    },
   });
 }
 

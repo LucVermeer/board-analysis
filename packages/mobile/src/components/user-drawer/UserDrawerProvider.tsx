@@ -40,6 +40,7 @@ function currentBoardReturnTo(segments: readonly string[]): '/(tabs)/discover' |
 
 export function UserDrawerProvider({ children }: { children: ReactNode }) {
   const { t } = useTranslation('common');
+  const { t: tSettings } = useTranslation('settings');
   const { systemColors, brandColors } = useTheme();
   const { isAuthenticated, signOut } = useAuth();
   const profileQuery = useProfile({ enabled: isAuthenticated });
@@ -113,6 +114,11 @@ export function UserDrawerProvider({ children }: { children: ReactNode }) {
     router.push('/(tabs)/profile/more');
   }, [closeUserDrawer]);
 
+  const openEditProfile = useCallback(() => {
+    closeUserDrawer();
+    router.push('/(tabs)/profile/edit');
+  }, [closeUserDrawer]);
+
   const openPlaylists = useCallback(() => {
     closeUserDrawer();
     router.push('/(tabs)/discover/all');
@@ -176,19 +182,32 @@ export function UserDrawerProvider({ children }: { children: ReactNode }) {
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
             >
-              <View style={styles.profileHeader}>
-                <Avatar uri={profile?.avatarUrl} name={profileDisplayName} size={60} />
-                <View style={styles.profileText}>
-                  <Text variant="headline" numberOfLines={1} style={styles.profileName}>
-                    {profileDisplayName}
-                  </Text>
-                  {profileEmail ? (
-                    <Text variant="subheadline" color={systemColors.secondaryLabel} numberOfLines={1}>
-                      {profileEmail}
-                    </Text>
-                  ) : null}
+              {/* Tappable to edit only when signed in; otherwise a plain header.
+                  Both branches render the same body, differing only in the
+                  wrapper + chevron. */}
+              {profile?.id ? (
+                <Pressable
+                  style={styles.profileHeader}
+                  onPress={openEditProfile}
+                  accessibilityRole="button"
+                  accessibilityLabel={tSettings('profile.editAction')}
+                >
+                  <ProfileHeaderBody
+                    avatarUrl={profile.avatarUrl}
+                    displayName={profileDisplayName}
+                    email={profileEmail}
+                  />
+                  <Icon name="chevron.right" size={16} color={systemColors.tertiaryLabel} />
+                </Pressable>
+              ) : (
+                <View style={styles.profileHeader}>
+                  <ProfileHeaderBody
+                    avatarUrl={profile?.avatarUrl}
+                    displayName={profileDisplayName}
+                    email={profileEmail}
+                  />
                 </View>
-              </View>
+              )}
 
               <View style={[styles.menuGroup, { backgroundColor: systemColors.elevatedSurface }]}>
                 <DrawerRow icon="boards" title={t('userDrawer.changeBoard')} onPress={openBoards} />
@@ -228,6 +247,33 @@ export function UserDrawerProvider({ children }: { children: ReactNode }) {
       </Modal>
       <FeedbackSheet sheetRef={feedbackSheetRef} mode={feedbackMode} />
     </UserDrawerContext.Provider>
+  );
+}
+
+type ProfileHeaderBodyProps = {
+  avatarUrl: string | null | undefined;
+  displayName: string;
+  email: string | null;
+};
+
+// The avatar + name + email block shared by the tappable (signed-in) and plain
+// (signed-out) header variants, so the markup lives in one place.
+function ProfileHeaderBody({ avatarUrl, displayName, email }: ProfileHeaderBodyProps) {
+  const { systemColors } = useTheme();
+  return (
+    <>
+      <Avatar uri={avatarUrl} name={displayName} size={60} />
+      <View style={styles.profileText}>
+        <Text variant="headline" numberOfLines={1} style={styles.profileName}>
+          {displayName}
+        </Text>
+        {email ? (
+          <Text variant="subheadline" color={systemColors.secondaryLabel} numberOfLines={1}>
+            {email}
+          </Text>
+        ) : null}
+      </View>
+    </>
   );
 }
 
