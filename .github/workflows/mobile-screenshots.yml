@@ -41,10 +41,18 @@ on:
         options:
           - app-store
           - onboarding
-      # No iOS devices/locales inputs: the dimension gate + upload require the full
-      # set (the 6.9" iPhone 16 Pro Max × en-US/es-ES/es-MX/fr-FR), so CI always runs
-      # the complete locale matrix below. For a narrowed local run, pass --devices /
-      # --locales to `vp run mobile:screenshots` directly.
+      platforms:
+        description: 'Which platforms to capture'
+        type: choice
+        default: both
+        options:
+          - both
+          - ios
+          - android
+      locales:
+        description: 'iOS locales to capture (comma-separated, e.g. "en-US" or "en-US,es,fr"). Empty = the full en-US,es,fr set. A narrowed set (or the onboarding flow) skips the App Store dimension gate, which needs all four store locales at once.'
+        type: string
+        default: ''
       android_device:
         description: 'Android emulator device label used for screenshot output'
         type: string
@@ -65,6 +73,41 @@ permissions:
   contents: read
 
 jobs:
+  # Resolve the dispatch filters once so the platform jobs can gate on them.
+  # Defaults are "everything": the nightly cron (no inputs) and a no-arg dispatch
+  # both yield both platforms and the full en-US,es,fr iOS locale matrix — same as
+  # before. The inputs only ever NARROW the run (e.g. iOS-only, single locale).
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      ios_locales: ${{ steps.compute.outputs.ios_locales }}
+      run_ios: ${{ steps.compute.outputs.run_ios }}
+      run_android: ${{ steps.compute.outputs.run_android }}
+    steps:
+      - name: Compute filters
+        id: compute
+        run: |
+          set -euo pipefail
+          platforms="${{ inputs.platforms || 'both' }}"
+          locales="${{ inputs.locales || '' }}"
+          # Empty locales = the full store set; otherwise split "en-US,es" into a
+          # JSON array for the iOS capture matrix.
+          if [ -z "$locales" ]; then
+            ios_locales='["en-US","es","fr"]'
+          else
+            ios_locales=$(printf '%s' "$locales" | tr ',' '\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | grep -v '^$' | jq -R . | jq -cs .)
+          fi
+          run_ios=true
+          run_android=true
+          if [ "$platforms" = "android" ]; then run_ios=false; fi
+          if [ "$platforms" = "ios" ]; then run_android=false; fi
+          {
+            echo "ios_locales=$ios_locales"
+            echo "run_ios=$run_ios"
+            echo "run_android=$run_android"
+          } >> "$GITHUB_OUTPUT"
+          echo "Resolved: platforms=$platforms run_ios=$run_ios run_android=$run_android ios_locales=$ios_locales"
+
   # Build (or restore) the prebuilt simulator dev-client .app ONCE, so the three
   # ios-capture shards don't each cold-build it on a cache miss (the thundering
   # herd). It's a dev-client shell that loads its JS from Metro, so the native
@@ -76,6 +119,8 @@ jobs:
   # hit and skips the ~30-min native build. Bump `-v1-` to force a rebuild.
   # runner.arch is in the key because a simulator .app is arch-specific.
   ios-build:
+    needs: setup
+    if: ${{ needs.setup.outputs.run_ios == 'true' }}
     runs-on: macos-26
     timeout-minutes: 60
     outputs:
@@ -136,7 +181,7 @@ jobs:
           key: ${{ steps.appkey.outputs.key }}
 
   ios-capture:
-    needs: ios-build
+    needs: [setup, ios-build]
     runs-on: macos-26
     timeout-minutes: 60
     strategy:
@@ -148,7 +193,9 @@ jobs:
       # time. Locale is the axis that matters, so it stays a full sweep. Matrix = 3
       # shards (one per locale), still one simulator per shard.
       matrix:
-        locale: [en-US, es, fr]
+        # Locales come from the setup job: the full en-US,es,fr set by default, or
+        # the narrowed `locales` input when one is given.
+        locale: ${{ fromJSON(needs.setup.outputs.ios_locales) }}
         device:
           - { name: iPhone 16 Pro Max, slug: iphone-16-pro-max }
 
@@ -270,10 +317,11 @@ jobs:
           retention-days: 1
 
   ios-finalize:
-    needs: ios-capture
+    needs: [setup, ios-capture]
     # Run even if a capture shard failed, so the dimension gate still reports the
     # gap (a missing locale fails it loudly rather than uploading a partial set).
-    if: always()
+    # Skipped entirely when iOS isn't part of this run (android-only dispatch).
+    if: ${{ always() && needs.setup.outputs.run_ios == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -312,6 +360,10 @@ jobs:
       # rejected by Apple (or upload a partial set). Requires all four App Store
       # locales at once, which is why it runs here after the merge, not per-shard.
       - name: Assert screenshot dimensions
+        # The gate needs the full App Store set (all four store locales, app-store
+        # flow). Skip it for the onboarding flow or a narrowed `locales` run, which
+        # are capture-only — the per-shard artifacts are still produced + uploaded.
+        if: ${{ inputs.flow != 'onboarding' && (inputs.locales == '' || inputs.locales == null) }}
         run: vp run check:screenshot-dimensions -- --platform ios
 
       # --- Upload to App Store Connect (manual dispatch only; never on cron) ---
@@ -375,6 +427,8 @@ jobs:
           retention-days: 14
 
   android:
+    needs: setup
+    if: ${{ needs.setup.outputs.run_android == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 75
 
@@ -543,6 +597,9 @@ jobs:
               --app-path /tmp/boardsesh-screenshot.apk
 
       - name: Assert screenshot dimensions
+        # The onboarding flow captures different screens than the Play Store set, so
+        # the dimension gate doesn't apply to it.
+        if: ${{ inputs.flow != 'onboarding' }}
         run: vp run check:screenshot-dimensions -- --platform android
 
       - name: Set up Ruby + fastlane
