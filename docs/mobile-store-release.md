@@ -39,8 +39,10 @@ value is fixed by editing the file and re-running.
 - **Mobile Store Metadata** (`mobile-store-metadata.yml`, input `platform: all`)
   — pushes listing **text** (iOS + Android) and the **Play icon + feature
   graphic**. This is the workflow that updates the Play store-listing logo.
-- **Mobile Screenshots** (`mobile-screenshots.yml`, input `upload: true`) —
-  captures and uploads screenshots.
+- **Mobile Screenshots** (`mobile-screenshots-ios.yml` and
+  `mobile-screenshots-android.yml`, input `upload: true`) — capture and upload
+  screenshots. iOS and Android are separate workflows so either platform can be
+  rerun without waiting on the other.
 
 The iOS "What's New" (`release_notes.txt`) is pushed by Mobile Store Metadata.
 The Android "What's new" is **not** — it already shipped with the AAB in step 1.

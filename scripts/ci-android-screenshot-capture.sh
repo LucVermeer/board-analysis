@@ -45,12 +45,11 @@ logcat_pid=$!
 # until it sticks.
 adb wait-for-device
 
-# Force GPU composition by disabling hardware overlays. The play drawer is a
-# bottom-sheet modal whose content composites onto a hardware overlay plane that
-# `adb screencap` (Maestro's capture) does NOT read — so the board-view shot came
-# out blank even though the board had rendered. SurfaceFlinger transaction 1008
-# (DISABLE_HARDWARE_OVERLAYS, i32 1) routes everything through the GPU so the
-# capture sees the full composited frame. Best-effort.
+# Belt-and-suspenders: force GPU composition by disabling hardware overlays, so a
+# HW-composited layer can't hide from `adb screencap`. A no-op on the swiftshader
+# CI emulator (no overlays) — the board-view's actual blank-capture fix is the
+# pre-screenshot redraw swipe in app-store-android.yaml — but cheap insurance for
+# any HW-accelerated config. Best-effort.
 adb shell service call SurfaceFlinger 1008 i32 1 2>/dev/null || true
 
 wm_ready=0
