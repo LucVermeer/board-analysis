@@ -21,6 +21,7 @@ const BOARD_PRESENCE_CLIMB_FIELDS = `
   setter
   sentByDisplayName
   sentByAvatarUrl
+  sentByUserId
   sentAt
   seq
 `;

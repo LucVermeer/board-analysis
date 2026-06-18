@@ -54,10 +54,10 @@ vi.mock('../../ble/BleLightbulbButton', () => ({
       'data-long-press-enabled': onLongPress ? 'true' : 'false',
     }),
 }));
-// The holder badge self-reads board presence; stub it so the row renders without
+// The holder pip self-reads board presence; stub it so the row renders without
 // the presence provider. It renders nothing when the wall is free anyway.
-vi.mock('../BoardConnectionBadge', () => ({
-  BoardConnectionBadge: () => createElement('div', { 'data-board-connection-badge': 'true' }),
+vi.mock('../LightbulbHolderBadge', () => ({
+  LightbulbHolderBadge: () => createElement('div', { 'data-lightbulb-holder-badge': 'true' }),
 }));
 vi.mock('../../drawer-action-bar/DrawerActionBar', () => ({
   SIZES: { lg: { dim: 48, icon: 28 }, sm: { dim: 44, icon: 22 } },
@@ -117,6 +117,16 @@ describe('PlayDrawerActionBar', () => {
     expect(tick.getAttribute('data-color')).toBe('#047857');
     // The old solid-white-on-green tick is gone — no white tick glyph remains.
     expect(container.querySelector('[data-icon="tick.outline"][data-color="#FFFFFF"]')).toBeNull();
+  });
+
+  it('suppresses the lightbulb holder pip when the banner owns the driver face', () => {
+    // Default: the pip shows on the lightbulb.
+    const withPip = render(createElement(PlayDrawerActionBar, baseProps));
+    expect(withPip.container.querySelector('[data-lightbulb-holder-badge="true"]')).toBeTruthy();
+
+    // Banner up → showHolderBadge false → no second face in the drawer.
+    const noPip = render(createElement(PlayDrawerActionBar, { ...baseProps, showHolderBadge: false }));
+    expect(noPip.container.querySelector('[data-lightbulb-holder-badge="true"]')).toBeNull();
   });
 
   it('keeps the 32pt angle pill tappable at the 44pt floor via hit-slop', () => {

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
-import { formatRelativeTime } from '../format-relative-time';
+import { formatRelativeTime, compactAgoParts } from '../format-relative-time';
 
 describe('formatRelativeTime', () => {
   // Pin "now" so the relative deltas are deterministic.
@@ -62,5 +62,36 @@ describe('formatRelativeTime', () => {
     } finally {
       vi.unstubAllGlobals();
     }
+  });
+});
+
+describe('compactAgoParts', () => {
+  const MIN = 60_000;
+  const HOUR = 60 * MIN;
+  const DAY = 24 * HOUR;
+  const WEEK = 7 * DAY;
+  const NOW = 1_700_000_000_000;
+
+  it('buckets sub-minute durations as "now"', () => {
+    expect(compactAgoParts(NOW - 30_000, NOW)).toEqual({ unit: 'now', count: 0 });
+    expect(compactAgoParts(NOW, NOW)).toEqual({ unit: 'now', count: 0 });
+  });
+
+  it('buckets minutes, hours, days and weeks with a floored count', () => {
+    expect(compactAgoParts(NOW - 5 * MIN, NOW)).toEqual({ unit: 'minutes', count: 5 });
+    expect(compactAgoParts(NOW - 59 * MIN, NOW)).toEqual({ unit: 'minutes', count: 59 });
+    expect(compactAgoParts(NOW - (2 * HOUR + 30 * MIN), NOW)).toEqual({ unit: 'hours', count: 2 });
+    expect(compactAgoParts(NOW - 3 * DAY, NOW)).toEqual({ unit: 'days', count: 3 });
+    expect(compactAgoParts(NOW - 2 * WEEK, NOW)).toEqual({ unit: 'weeks', count: 2 });
+  });
+
+  it('crosses each boundary at the expected threshold', () => {
+    expect(compactAgoParts(NOW - 60 * MIN, NOW)).toEqual({ unit: 'hours', count: 1 });
+    expect(compactAgoParts(NOW - 24 * HOUR, NOW)).toEqual({ unit: 'days', count: 1 });
+    expect(compactAgoParts(NOW - 7 * DAY, NOW)).toEqual({ unit: 'weeks', count: 1 });
+  });
+
+  it('clamps a future timestamp (clock skew) to "now"', () => {
+    expect(compactAgoParts(NOW + 5 * MIN, NOW)).toEqual({ unit: 'now', count: 0 });
   });
 });

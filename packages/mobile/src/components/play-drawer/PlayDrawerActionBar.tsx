@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { Icon } from '../Icon';
 import { Text } from '../Text';
 import { BleLightbulbButton } from '../ble/BleLightbulbButton';
-import { BoardConnectionBadge } from './BoardConnectionBadge';
+import { LightbulbHolderBadge } from './LightbulbHolderBadge';
 import { ActionButton, SIZES, type ButtonSize, drawerActionBarStyles } from '../drawer-action-bar/DrawerActionBar';
 import { useTheme } from '../../providers/theme-provider';
 // Aliased: foregrounds in this file read scheme-aware brand from `useTheme()`.
@@ -35,6 +35,10 @@ type PlayDrawerActionBarProps = {
   lightbulbAccessibilityLabel?: string;
   lightbulbLongPressAccessibilityHint?: string;
   lightbulbLongPressEnabled?: boolean;
+  /** Show the holder avatar pip on the lightbulb. Suppressed when the on-wall
+   *  banner already carries the driver's face in the header, so the same face
+   *  never appears twice in the drawer. */
+  showHolderBadge?: boolean;
   ascentCount: number;
   currentAngle?: number;
   onPrevClick: () => void;
@@ -64,6 +68,7 @@ export const PlayDrawerActionBar = memo(function PlayDrawerActionBar({
   lightbulbAccessibilityLabel,
   lightbulbLongPressAccessibilityHint,
   lightbulbLongPressEnabled = lightbulbActive,
+  showHolderBadge = true,
   ascentCount,
   currentAngle,
   onPrevClick,
@@ -192,12 +197,16 @@ export const PlayDrawerActionBar = memo(function PlayDrawerActionBar({
             size={SIZES.lg.icon}
             containerSize={SIZES.lg.dim}
           />
-          {/* "Who's connected" badge — the board-presence holder's avatar overlaid
+          {/* "Who's connected" pip — the board-presence holder's avatar overlaid
               on the lightbulb's top-right. Self-reads board presence and renders
-              nothing when the wall is free, so it never disturbs the slot's layout. */}
-          <View style={styles.connectionBadge} pointerEvents="none">
-            <BoardConnectionBadge size={18} />
-          </View>
+              nothing when the wall is free, so it never disturbs the slot's layout.
+              Suppressed when the on-wall banner already shows the driver in the
+              header, so the same face never appears twice in the drawer. */}
+          {showHolderBadge ? (
+            <View style={styles.connectionBadge} pointerEvents="none">
+              <LightbulbHolderBadge size={18} />
+            </View>
+          ) : null}
         </View>
       </View>
 

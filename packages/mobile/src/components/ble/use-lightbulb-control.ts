@@ -66,7 +66,7 @@ export function useLightbulbControl(options: UseLightbulbControlOptions): Lightb
   // logged-in holder matches by userId; an anonymous holder falls back to the
   // session wall-lit flag (in a session only). A holder who isn't in my session —
   // or any holder while I'm solo — no longer lights the bulb, but its avatar still
-  // shows via BoardConnectionBadge.
+  // shows via the lightbulb holder pip (LightbulbHolderBadge).
   const holder = boardPresenceCurrent?.holder ?? null;
   const holderUserId = holder?.userId ?? null;
   const sessionHolderPresent = sessionId !== null && holderUserId !== null && sessionMemberUserIds.has(holderUserId);

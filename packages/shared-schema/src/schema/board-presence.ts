@@ -33,6 +33,8 @@ export const boardPresenceTypeDefs = /* GraphQL */ `
     sentByDisplayName: String
     "Avatar URL of the user who lit it. Server-derived."
     sentByAvatarUrl: String
+    "Boardsesh user id of the climber who lit it, for linking to their profile. Server-derived; null for an anonymous sender."
+    sentByUserId: ID
     "ISO 8601 timestamp when the report was received (server-stamped)"
     sentAt: String!
     "Monotonic per-board sequence number for ordering and late-joiner dedup"

@@ -780,6 +780,7 @@ describe('board-presence resolvers', () => {
       expect(event.__typename).toBe('BoardClimbSet');
       expect(event.climb.sentByDisplayName).toBe(SENDER_DISPLAY_NAME);
       expect(event.climb.sentByAvatarUrl).toBe(SENDER_AVATAR_URL);
+      expect(event.climb.sentByUserId).toBe(TEST_USER_ID);
       expect(event.climb.climbUuid).toBe(TEST_CLIMB_UUID);
       expect(event.climb.name).toBe('Real Catalog Climb');
       expect(event.climb.frames).toBe('p1145r12');
@@ -860,9 +861,10 @@ describe('board-presence resolvers', () => {
       const climbSet = received.find((event): event is BoardClimbSet => event.__typename === 'BoardClimbSet');
       expect(climbSet).toBeDefined();
       expect(climbSet!.climb.climbUuid).toBe(TEST_CLIMB_UUID);
-      // Anonymous emitter → null attribution (no user profile).
+      // Anonymous emitter → null attribution (no user profile, no profile link).
       expect(climbSet!.climb.sentByDisplayName).toBeNull();
       expect(climbSet!.climb.sentByAvatarUrl).toBeNull();
+      expect(climbSet!.climb.sentByUserId).toBeNull();
       unsubscribe();
     });
 
@@ -877,6 +879,36 @@ describe('board-presence resolvers', () => {
           authCtx({ isAuthenticated: false, userId: undefined }),
         ),
       ).rejects.toThrow('Not connected to this board');
+    });
+
+    it('enriches durable boardHistory rows with the sender profile and a profile-linkable user id', async () => {
+      // board_climb_events stores only userId; the resolver joins users +
+      // user_profiles so history rows carry the same identity (and the user id the
+      // avatar links to) as the live feed, instead of the old null attribution.
+      const boardId = await makeBoard();
+      const seq = await pubsub.nextBoardSeq(String(boardId));
+      await db.insert(dbSchema.boardClimbEvents).values({
+        boardId,
+        boardType: 'kilter',
+        climbUuid: TEST_CLIMB_UUID,
+        angle: 40,
+        userId: TEST_USER_ID,
+        sessionId: null,
+        seq,
+        frames: 'p1145r12',
+        name: 'Real Catalog Climb',
+        grade: 'V6',
+        setter: null,
+        confirmedAt: new Date().toISOString(),
+      });
+
+      const history = await boardPresenceQueries.boardHistory(undefined, { boardId }, authCtx());
+      const row = history.find((entry) => entry.seq === seq);
+
+      expect(row).toBeDefined();
+      expect(row!.sentByUserId).toBe(TEST_USER_ID);
+      expect(row!.sentByDisplayName).toBe(SENDER_DISPLAY_NAME);
+      expect(row!.sentByAvatarUrl).toBe(SENDER_AVATAR_URL);
     });
 
     // The connection-holder hand-off broadcast is Redis-only (see the
@@ -1574,6 +1606,9 @@ describe('board-presence connection holder', () => {
 
       const holder = await boardPresenceQueries.boardConnection(undefined, { boardId }, authCtx());
       expect(holder?.userId).toBe(TEST_USER_ID);
+      // The newest climb was sent by this holder, so their display identity is
+      // adopted from it (rather than nulled as it would be for a mismatched sender).
+      expect(holder?.displayName).toBe(SENDER_DISPLAY_NAME);
 
       expect(await boardPresenceMutations.reportBoardDisconnect(undefined, { boardId }, authCtx())).toBe(true);
       expect(await boardPresenceQueries.boardConnection(undefined, { boardId }, authCtx())).toBeNull();
