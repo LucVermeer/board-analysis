@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { createElement, type ReactNode, type Ref } from 'react';
 import type { Climb } from '@boardsesh/shared-schema';
 
@@ -11,6 +11,8 @@ import type { Climb } from '@boardsesh/shared-schema';
 const modal = vi.hoisted(() => ({ present: vi.fn(), dismiss: vi.fn() }));
 const preview = vi.hoisted(() => ({ props: null as Record<string, unknown> | null }));
 const ctrl = vi.hoisted(() => ({ variant: 'liquidGlass' as 'liquidGlass' | 'material', canUpdate: false }));
+const clipboard = vi.hoisted(() => ({ setStringAsync: vi.fn() }));
+const urlBuilder = vi.hoisted(() => ({ buildReadableClimbViewPath: vi.fn(() => '/readable/view/x') }));
 
 vi.mock('react-native', () => ({
   View: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
@@ -46,9 +48,9 @@ vi.mock('../Icon', () => ({
 }));
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock('expo-router', () => ({ useRouter: () => ({ push: vi.fn() }) }));
-vi.mock('expo-clipboard', () => ({ setStringAsync: vi.fn() }));
+vi.mock('expo-clipboard', () => ({ setStringAsync: clipboard.setStringAsync }));
 vi.mock('expo-web-browser', () => ({ openBrowserAsync: vi.fn() }));
-vi.mock('@boardsesh/play-view', () => ({ buildClimbViewPath: () => '/view/x' }));
+vi.mock('@boardsesh/play-view', () => ({ buildReadableClimbViewPath: urlBuilder.buildReadableClimbViewPath }));
 vi.mock('@boardsesh/create-climb-react', () => ({ computeCanUpdate: () => ctrl.canUpdate }));
 vi.mock('@boardsesh/analytics', () => ({ SHARED_EVENTS: {} }));
 vi.mock('../../providers/toast-provider', () => ({ useToast: () => ({ showToast: vi.fn() }) }));
@@ -101,6 +103,8 @@ const baseProps = {
 beforeEach(() => {
   modal.present.mockClear();
   modal.dismiss.mockClear();
+  clipboard.setStringAsync.mockClear();
+  urlBuilder.buildReadableClimbViewPath.mockClear();
   preview.props = null;
   ctrl.variant = 'liquidGlass';
   ctrl.canUpdate = false;
@@ -217,6 +221,27 @@ describe('ClimbActionsSheet present-on-visible (always-mounted toggle)', () => {
     fireEvent.click(screen.getByText('actions.playlist.popover.title'));
 
     expect(onOpenPlaylist).toHaveBeenCalledTimes(1);
+  });
+
+  it('copies a readable climb URL', async () => {
+    const onClose = vi.fn();
+    render(<ClimbActionsSheet visible={true} {...baseProps} onClose={onClose} />);
+
+    fireEvent.click(screen.getByText('mobile.climbActions.copyLink'));
+
+    await waitFor(() => {
+      expect(clipboard.setStringAsync).toHaveBeenCalledWith('https://boardsesh.test/readable/view/x');
+    });
+    expect(urlBuilder.buildReadableClimbViewPath).toHaveBeenCalledWith({
+      boardName: 'kilter',
+      layoutId: 1,
+      sizeId: 10,
+      setIds: '1,2',
+      angle: 40,
+      climbUuid: 'climb-1',
+      climbName: 'Test Climb',
+    });
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 
   it('hides the Edit entry row unless onEditEntry is provided', () => {
