@@ -1,32 +1,31 @@
-Busca una vía y mira cómo tu muro ilumina las presas por Bluetooth. Toca un bloque, las presas se encienden, te cuelgas. Pasa la sesión escalando en vez de leer números en una pantalla.
-
-Elige tu muro una vez y a escalar.
+Busca una vía y mira cómo se enciende tu muro. Menos tiempo en el móvil, más tiempo en el muro.
 
 ILUMINA LAS PRESAS
-Busca cualquier vía y Boardsesh la manda al muro por Bluetooth, encendiendo las presas en Kilter, Tension, MoonBoard, Decoy, Touchstone, Grasshopper y So iLL. Control total de los LED en los siete, no solo los consultas.
+Busca cualquier vía y Boardsesh enciende las presas del muro por Bluetooth, en Kilter, Tension, MoonBoard, Decoy, Touchstone, Grasshopper y So iLL. Control total de los LED en las siete, no solo para mirar.
 
-UNA APP PARA TODOS TUS MUROS
-Kilter, Tension y MoonBoard traen cada uno su propia app para su propio muro. Boardsesh funciona con todos ellos, más Decoy, Touchstone, Grasshopper y So iLL, en un solo sitio. Sea cual sea la pared a la que te acerques, escalas desde la misma app. Y eso te da dos cosas que una app de un solo muro no te da: el historial de la pared siempre encendido y sesiones para escalar con tu peña.
+UNA APP PARA CADA TABLA QUE ESCALAS
+Kilter, Tension y MoonBoard traen cada uno su propia app para su propia tabla. Boardsesh funciona con todas ellas, más Decoy, Touchstone, Grasshopper y So iLL, en un solo sitio. Todo tu historial de escalada en cada tabla vive aquí.
 
-EL HISTORIAL DE LA PARED, SIEMPRE ENCENDIDO
-Acércate a un muro y ya hay un feed en directo, ligado a esa pared: la vía encendida ahora mismo, quién la encendió, el grado y el ángulo, quién la montó y los encadenes recientes. No tienes que abrir nada. Está ahí cuando estás en esa pared y se actualiza según caen las pegadas.
+HISTORIAL DEL MURO, SIEMPRE ACTIVO
+Si compartes muro, enseguida pierdes la cuenta de la última vía, y siempre hay alguien que la borra sin querer.
+En Boardsesh cada tabla a la que te conectas tiene un feed en directo de lo que hay encendido en esa pared ahora mismo: el nombre de la vía, quién la encendió, quién la montó, el grado y el ángulo, y los encadenes recientes. Se actualiza según cambia la pared, así que siempre sabes qué hay puesto.
 
-SESIONES CON TU PEÑA
-Abre una sesión y tú y tu peña compartís una sola cola que conduce cualquiera. El que quiera manda la siguiente vía al muro, así que no hay quien lleve el móvil ni turnos que esperar. Al terminar os lleváis un resumen: encadenes e intentos, reparto de grados, tu vía más dura y cómo crece tu escalada semana tras semana en la pestaña Progreso.
+SIGUE CONECTADO
+Boardsesh mantiene viva la conexión con tu tabla en segundo plano, así las presas siguen encendidas durante tus pegadas aunque se apague la pantalla o cambies de app. Una notificación permanente pone Anterior y Siguiente en tu pantalla de bloqueo, para que te muevas por la cola sin volver a abrir la app. No tienes que reconectar entre vía y vía.
 
-SIEMPRE CONECTADO
-Boardsesh mantiene viva la conexión con tu muro en segundo plano, así las presas siguen encendidas durante tus pegadas aunque se apague la pantalla o cambies de app. No tienes que reconectar entre vía y vía.
+SESIONES CON TU EQUIPO
+Abre una sesión y tú y tu equipo compartís una cola que cualquiera puede llevar. Cualquiera enciende la siguiente vía en el muro. Al terminar te llevas un resumen y el seguimiento: encadenes e intentos, reparto de grados, tu vía más dura y el progreso a lo largo del tiempo.
 
-MÓNTATE UN ENTRENO
-Elige Volumen, Pirámide, Escalera o Foco de Grado, fija un grado objetivo y el calentamiento, previsualiza las vías y mándalas al muro pegada a pegada.
+MÓNTATE UN ENTRENAMIENTO
+Elige Volumen, Pirámide, Escalera o Foco en grado, fija un grado objetivo y el calentamiento, previsualiza las vías y mándalas al muro de una en una.
 
 REGISTRA TU ESCALADA
-Apunta encadenes, flashes e intentos. Trae tus vías antiguas de Kilter y Tension importando tu logbook desde Aurora Climbing.
+Apunta encadenes, flashes e intentos, y mira cómo suben tus encadenes y grados en la pestaña Progreso. Trae tus vías antiguas de Kilter y Tension importando tu logbook desde Aurora Climbing.
 
 ENCUENTRA MÁS PARA ESCALAR
-Sigue a tu peña y a los aperturistas, busca escaladores y fija playlists desde Discover.
+Sigue a tu equipo y a los aperturistas, busca escaladores y fija playlists desde Discover.
 
 GRATIS, SIN ANUNCIOS, SIN SUSCRIPCIONES
 Código abierto en GitHub.
 
-Boardsesh funciona con estos muros y no está afiliado ni respaldado por Aurora Climbing ni Moon Climbing.
+Boardsesh funciona con estas tablas y no está afiliado ni respaldado por Aurora Climbing ni Moon Climbing.
