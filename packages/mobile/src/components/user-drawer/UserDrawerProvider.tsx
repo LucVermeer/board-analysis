@@ -181,6 +181,9 @@ export function UserDrawerProvider({ children }: { children: ReactNode }) {
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
             >
+              {/* Tappable to edit only when signed in; otherwise a plain header.
+                  Both branches render the same body, differing only in the
+                  wrapper + chevron. */}
               {profile?.id ? (
                 <Pressable
                   style={styles.profileHeader}
@@ -188,32 +191,20 @@ export function UserDrawerProvider({ children }: { children: ReactNode }) {
                   accessibilityRole="button"
                   accessibilityLabel={tSettings('profile.editAction')}
                 >
-                  <Avatar uri={profile.avatarUrl} name={profileDisplayName} size={60} />
-                  <View style={styles.profileText}>
-                    <Text variant="headline" numberOfLines={1} style={styles.profileName}>
-                      {profileDisplayName}
-                    </Text>
-                    {profileEmail ? (
-                      <Text variant="subheadline" color={systemColors.secondaryLabel} numberOfLines={1}>
-                        {profileEmail}
-                      </Text>
-                    ) : null}
-                  </View>
+                  <ProfileHeaderBody
+                    avatarUrl={profile.avatarUrl}
+                    displayName={profileDisplayName}
+                    email={profileEmail}
+                  />
                   <Icon name="chevron.right" size={16} color={systemColors.tertiaryLabel} />
                 </Pressable>
               ) : (
                 <View style={styles.profileHeader}>
-                  <Avatar uri={profile?.avatarUrl} name={profileDisplayName} size={60} />
-                  <View style={styles.profileText}>
-                    <Text variant="headline" numberOfLines={1} style={styles.profileName}>
-                      {profileDisplayName}
-                    </Text>
-                    {profileEmail ? (
-                      <Text variant="subheadline" color={systemColors.secondaryLabel} numberOfLines={1}>
-                        {profileEmail}
-                      </Text>
-                    ) : null}
-                  </View>
+                  <ProfileHeaderBody
+                    avatarUrl={profile?.avatarUrl}
+                    displayName={profileDisplayName}
+                    email={profileEmail}
+                  />
                 </View>
               )}
 
@@ -255,6 +246,33 @@ export function UserDrawerProvider({ children }: { children: ReactNode }) {
       </Modal>
       <FeedbackSheet sheetRef={feedbackSheetRef} mode={feedbackMode} />
     </UserDrawerContext.Provider>
+  );
+}
+
+type ProfileHeaderBodyProps = {
+  avatarUrl: string | null | undefined;
+  displayName: string;
+  email: string | null;
+};
+
+// The avatar + name + email block shared by the tappable (signed-in) and plain
+// (signed-out) header variants, so the markup lives in one place.
+function ProfileHeaderBody({ avatarUrl, displayName, email }: ProfileHeaderBodyProps) {
+  const { systemColors } = useTheme();
+  return (
+    <>
+      <Avatar uri={avatarUrl} name={displayName} size={60} />
+      <View style={styles.profileText}>
+        <Text variant="headline" numberOfLines={1} style={styles.profileName}>
+          {displayName}
+        </Text>
+        {email ? (
+          <Text variant="subheadline" color={systemColors.secondaryLabel} numberOfLines={1}>
+            {email}
+          </Text>
+        ) : null}
+      </View>
+    </>
   );
 }
 

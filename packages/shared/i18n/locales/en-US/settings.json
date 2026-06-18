@@ -19,6 +19,7 @@
       "change": "Change",
       "remove": "Remove",
       "hint": "JPG, PNG, GIF, or WebP. Up to 10MB — auto-compressed.",
+      "hintMobile": "Cropped square and compressed automatically.",
       "permissionDenied": "Allow photo access in Settings to choose an avatar."
     },
     "displayName": {

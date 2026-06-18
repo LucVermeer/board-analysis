@@ -19,6 +19,7 @@
       "change": "Cambiar",
       "remove": "Quitar",
       "hint": "JPG, PNG, GIF o WebP. Hasta 10 MB — se comprime automáticamente.",
+      "hintMobile": "Se recorta en cuadrado y se comprime automáticamente.",
       "permissionDenied": "Permite el acceso a las fotos en Ajustes para elegir una foto de perfil."
     },
     "displayName": {

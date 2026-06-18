@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -40,8 +40,14 @@ async function compressAvatar(uri: string, width: number, height: number): Promi
     }
   }
   const image = await context.renderAsync();
-  const result = await image.saveAsync({ compress: COMPRESSION_QUALITY, format: SaveFormat.JPEG });
-  return result.uri;
+  try {
+    const result = await image.saveAsync({ compress: COMPRESSION_QUALITY, format: SaveFormat.JPEG });
+    return result.uri;
+  } finally {
+    // Release the native bitmap the rendered ref holds; the saved file URI is a
+    // path on disk and stays valid after the ref is gone.
+    image.release();
+  }
 }
 
 export function EditProfileScreen() {
@@ -58,15 +64,22 @@ export function EditProfileScreen() {
   const [isSaving, setIsSaving] = useState(false);
 
   // Seed the name field from the loaded profile exactly once. The query is
-  // usually warm (the avatar/drawer already read it), but guard the case where
-  // it resolves after mount, and stop re-seeding once the user starts editing.
+  // usually warm (the avatar/drawer already read it), but on a cold load the
+  // field is editable before `profile` resolves — so also skip the seed if the
+  // user has already typed, or the late resolve would clobber their edit.
   const seededRef = useRef(false);
+  const nameEditedRef = useRef(false);
   useEffect(() => {
-    if (!seededRef.current && profile) {
+    if (!seededRef.current && !nameEditedRef.current && profile) {
       setDisplayName(profile.displayName ?? '');
       seededRef.current = true;
     }
   }, [profile]);
+
+  const handleChangeName = useCallback((text: string) => {
+    nameEditedRef.current = true;
+    setDisplayName(text);
+  }, []);
 
   const trimmedName = displayName.trim();
   const nameTooLong = trimmedName.length > DISPLAY_NAME_MAX;
@@ -99,8 +112,15 @@ export function EditProfileScreen() {
     }
   };
 
+  // Synchronous reentrancy guard: `canSave`/`isSaving` are state read from the
+  // render closure and don't update until the next render, so a fast double-tap
+  // could enter `handleSave` twice (double upload + double router.back). The ref
+  // flips immediately.
+  const savingRef = useRef(false);
+
   const handleSave = async () => {
-    if (!canSave || !profile?.id) return;
+    if (savingRef.current || !canSave || !profile?.id) return;
+    savingRef.current = true;
     setIsSaving(true);
     try {
       const input: UpdateProfileInput = {};
@@ -119,7 +139,9 @@ export function EditProfileScreen() {
         }
       }
 
-      // Nothing left to persist (e.g. avatar-only attempt whose upload failed).
+      // Nothing left to persist — e.g. an avatar-only save whose upload failed.
+      // Stay on the screen (no router.back) so the user can retry; the warning
+      // toast already fired, and `finally` still resets the saving state.
       if (input.displayName === undefined && input.avatarUrl === undefined) {
         return;
       }
@@ -133,6 +155,7 @@ export function EditProfileScreen() {
       showToast(t('profile.saveError'), 'error');
     } finally {
       setIsSaving(false);
+      savingRef.current = false;
     }
   };
 
@@ -158,7 +181,7 @@ export function EditProfileScreen() {
           disabled={isSaving}
         />
         <Text variant="footnote" color={systemColors.tertiaryLabel} style={styles.avatarHint}>
-          {t('profile.avatar.hint')}
+          {t('profile.avatar.hintMobile')}
         </Text>
       </View>
 
@@ -166,7 +189,7 @@ export function EditProfileScreen() {
         <AuthTextInput
           label={t('profile.displayName.label')}
           value={displayName}
-          onChangeText={setDisplayName}
+          onChangeText={handleChangeName}
           placeholder={t('profile.displayName.placeholder')}
           error={nameTooLong ? t('profile.validation.displayNameTooLong') : undefined}
           editable={!isSaving}
