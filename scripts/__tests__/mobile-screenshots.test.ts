@@ -8,7 +8,7 @@ import {
   type ScreenshotOptions,
 } from '../mobile-screenshots';
 
-const commonDevices = ['iPhone 16 Pro Max', 'iPhone 14 Plus', 'iPhone 16 Pro'];
+const commonDevices = ['iPhone 16 Pro Max'];
 const allAppLocales: ScreenshotOptions['appLocales'] = ['en-US', 'es', 'fr'];
 
 function makeOptions(overrides: Partial<ScreenshotOptions> = {}): ScreenshotOptions {

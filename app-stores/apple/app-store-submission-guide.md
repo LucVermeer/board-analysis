@@ -39,12 +39,17 @@ user) and saves PNGs to `app-stores/apple/screenshots/<app-store-locale>/<device
 
 ### Required screenshot sizes
 
-| Device                           | Resolution | Required?                             |
-| -------------------------------- | ---------- | ------------------------------------- |
-| 6.9" iPhone (iPhone 16 Pro Max)  | 1320x2868  | Yes — captured by the Maestro flow    |
-| 6.5/6.7" iPhone (iPhone 14 Plus) | 1284x2778  | Optional, captured for common devices |
-| 6.3" iPhone (iPhone 16 Pro)      | 1206x2622  | Optional, captured for common devices |
-| 13" iPad (iPad Pro)              | 2064x2752  | Not required while tablet is disabled |
+| Device                          | Resolution | Required?                             |
+| ------------------------------- | ---------- | ------------------------------------- |
+| 6.9" iPhone (iPhone 16 Pro Max) | 1320x2868  | Yes — the only size the flow captures |
+| 13" iPad (iPad Pro)             | 2064x2752  | Not required while tablet is disabled |
+
+We capture a single device size, the 6.9" iPhone 16 Pro Max. App Store Connect
+**auto-scales the largest screenshot down** to every smaller iPhone, so one 6.9"
+set covers the whole device range — extra device sizes are invisible to users and
+add no ranking value, only CI time. The axis that helps the listing is locale, so
+that stays a full sweep. (See
+<https://developer.apple.com/help/app-store-connect/manage-app-information/upload-app-previews-and-screenshots/>.)
 
 The app currently has `supportsTablet: false`, so iPad screenshots are not part
 of the automated set. `--locales all` captures `en-US`, `es`, and `fr`; the
