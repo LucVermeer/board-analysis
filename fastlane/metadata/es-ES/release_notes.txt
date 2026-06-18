@@ -1,8 +1,12 @@
-Las sesiones ahora están siempre en directo. Abre una sesión y tu peña comparte una cola que cualquiera puede llevar. Cualquiera manda la siguiente vía al muro, sin tener que ir pasando el móvil ni esperar turno. La enciende quien esté conectado por Bluetooth.
+Boardsesh 2.0 es la versión nativa, reescrita de cero. Va rápido donde antes se atascaba: las listas ruedan suaves y la búsqueda es instantánea.
 
-También en esta versión:
-- Historial del muro, siempre activo: cada muro al que te conectas tiene un feed en directo de la vía encendida ahora mismo, quién la encendió, el grado, el ángulo y el aperturista, actualizándose según caen las pegadas.
-- Lleva la sesión desde la pantalla bloqueada y el Dynamic Island en iOS 17+ con las Live Activities.
-- Móntate un entreno con Volumen, Pirámide, Escalera o Foco de Grado y manda las vías pegada a pegada.
-- Registra encadenes, flashes e intentos, y mira tus encadenes y grados en la pestaña Progreso.
-- Guarda tus sesiones en Apple Health e importa tu logbook antiguo de Kilter y Tension desde Aurora Climbing.
+La misma app, reconstruida para volar:
+- Busca una vía y enciende las presas por Bluetooth en Kilter, Tension, MoonBoard, Decoy, Touchstone, Grasshopper y So iLL.
+- Escala con tu peña en una sesión en vivo: una cola compartida a la que cualquiera añade, reordena y lleva. Quien esté conectado enciende el panel, así no hay que pasarse el teléfono ni esperar tu turno.
+- Llégate a cualquier panel y mira lo que hay puesto ahora mismo: la vía encendida, quién la encendió, el grado, el ángulo y el aperturista, en vivo mientras la peña escala.
+- Lleva la sesión desde la pantalla de bloqueo y el Dynamic Island en iOS 17+ con Live Activities.
+- Monta un entrenamiento Volumen, Pirámide, Escalera o Grado fijo y envía las vías de una en una.
+- Apunta encadenes, flashes e intentos y mira cómo tus grados se dibujan en la pestaña Progreso.
+- Guarda tus sesiones en Apple Health e importa tu logbook de Kilter y Tension desde Aurora Climbing.
+
+Gratis, sin anuncios, código abierto.
