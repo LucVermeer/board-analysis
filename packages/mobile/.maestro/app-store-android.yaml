@@ -10,70 +10,119 @@ name: app-store screenshots android
 # session-detail recap (the one extra over iOS's 10-shot set; party/playlist/logbook are
 # iOS-only for now — no room here).
 #
+# WAITING (why this differs from the iOS flow): the CI emulator runs on a software GL
+# renderer (swiftshader) against the PROD backend, so it is far slower than the iOS sim,
+# and — unlike iOS — there's no Metro `$screen /home` gate before the flow runs (this is a
+# release APK; the marker is __DEV__-only). So a bare `waitForAnimationToEnd` captured the
+# splash screen and skeleton loaders. Each shot now waits for real content:
+#   - testID anchors where they exist (`home-screen` clears the splash; `climb-row` proves
+#     the climb list loaded, replacing `climb-list-row-skeleton`).
+#   - `waitForAnimationToEnd: { timeout }` everywhere else — it's pixel-diff based, so it
+#     blocks on the skeleton shimmer until the data swaps in and the screen goes static,
+#     then continues (it never fails the flow, just proceeds on timeout).
+#
 # Screenshot-mode deep-link params (honoured because the APK is built with
 # EXPO_PUBLIC_SCREENSHOT_MODE=1):
-#   ://climbs?screenshotOpenFirst=1    -> auto-opens the first climb's board view
-#   ://profile?screenshotTab=sessions  -> profile Sessions tab; auto-opens newest session
+#   ://climbs?screenshotOpenFirst=1       -> auto-opens the first climb's board view
+#   ://climbs?screenshotOpenBoardSheet=1  -> opens the board-presence "now on the wall" sheet
+#   ://profile?screenshotTab=sessions     -> profile Sessions tab; auto-opens newest session
+# The board itself is auto-selected on boot in screenshot mode (auth-provider activates the
+# user's first saved board), so the board-backed shots need no in-flow board-pick step.
 #
-# One coordinate tap survives, pinned to the CI Pixel 2 emulator at 1080x1920:
-#   board sheet = '78%,10%' (board-switcher glyph in the climbs top chrome)
-# The board itself is auto-selected on boot in screenshot mode (auth-provider.tsx activates
-# the user's first saved board), so there's no board-pick tap. The old board-view '50%,26%'
-# tap is gone too — the board view is now a deterministic deep link.
-#
-# Order: plain visits run before screenshot-param visits (no stale param leaks). The board
-# is active from boot, so the board-backed shots need no in-flow board-pick step.
-- launchApp
-# Auto-signs-in on boot and lands straight on home (no login screen).
+# Order: plain visits run before screenshot-param visits (no stale param leaks); board view
+# is near the end because the play drawer it opens overlays the whole app.
 
-# Home — feed populated by the prod test user's follows.
-- waitForAnimationToEnd
+- launchApp
+# Auto-signs-in on boot and lands on home. Wait for the home container to clear the native
+# splash, then let the "Everyone" feed shimmer settle into real cards.
+- extendedWaitUntil:
+    visible:
+      id: 'home-screen'
+    timeout: 90000
+- waitForAnimationToEnd:
+    timeout: 30000
 - takeScreenshot: 00-home
 
-# Discover — playlist library.
+# Discover — playlist library ("For You" smart playlists + saved/community playlists).
 - openLink: com.boardsesh.app://discover
-- waitForAnimationToEnd
+- waitForAnimationToEnd:
+    timeout: 30000
 - takeScreenshot: 03-discover
 
-# Profile — progress tab (stats, sessions, logbook). Plain link FIRST so no stale
-# screenshotTab param carries over.
+# Profile — progress tab (stats charts). Plain link FIRST so no stale screenshotTab param
+# carries over.
 - openLink: com.boardsesh.app://profile
-- waitForAnimationToEnd
+- waitForAnimationToEnd:
+    timeout: 30000
 - takeScreenshot: 05-profile
 
-# Session detail — the Sessions sub-tab auto-opens the newest session's recap in
-# screenshot mode. Two settle-waits bracket the feed load and the detail push.
+# Session detail — the Sessions sub-tab auto-opens the newest session's recap in screenshot
+# mode, but only once the session list has loaded. Two settle-waits bracket the feed load
+# and the detail push.
 - openLink: com.boardsesh.app://profile?screenshotTab=sessions
-- waitForAnimationToEnd
-- waitForAnimationToEnd
+- waitForAnimationToEnd:
+    timeout: 30000
+- waitForAnimationToEnd:
+    timeout: 30000
 - takeScreenshot: 07-session-detail
 
-# The active board is already selected (auto-activated on boot in screenshot mode), so the
-# board-backed shots below render real content with no board-picker step.
-
-# Climbs — the main browse surface. Plain link FIRST (the list shot).
+# Climbs — the main browse surface. Plain link FIRST (the list shot). Wait for a real row
+# (skeleton gone) so the list isn't captured mid-load.
 - openLink: com.boardsesh.app://climbs
-- waitForAnimationToEnd
+- extendedWaitUntil:
+    visible:
+      id: 'climb-row'
+    timeout: 60000
+- waitForAnimationToEnd:
+    timeout: 30000
 - takeScreenshot: 01-climbs
 
 # Workout generator — the Record screen with a workout pre-selected.
 - openLink: com.boardsesh.app://record
-- waitForAnimationToEnd
+- waitForAnimationToEnd:
+    timeout: 30000
 - takeScreenshot: 04-workout-generator
 
 # Board view — open the first climb (wall with holds lit) via the screenshot-mode param.
+# The play drawer presents immediately over a placeholder, then the board mounts and the
+# Rust holds-overlay renders a beat later (slow on the software renderer) — so a bare
+# waitForAnimationToEnd shot caught a blank drawer. Anchor on the overlay layer itself,
+# which only mounts once the lit board has rendered, then let the fade settle.
 - openLink: com.boardsesh.app://climbs?screenshotOpenFirst=1
-- waitForAnimationToEnd
-- waitForAnimationToEnd
+- extendedWaitUntil:
+    visible:
+      id: 'climb-row'
+    timeout: 60000
+- extendedWaitUntil:
+    visible:
+      id: 'play-drawer-board-overlay'
+    timeout: 60000
+# The play-drawer modal composites onto a layer adb screencap doesn't read until
+# the window redraws, so it captured blank even with the board painted (it only
+# captured before because the onboarding tip's root view forced a recomposite). A
+# small horizontal swipe on the board forces the modal window to redraw; the
+# carousel springs back to the same climb (sub-threshold), and waitForAnimationToEnd
+# holds until it settles — with the board now in the captured frame.
+- swipe:
+    start: '55%, 45%'
+    end: '42%, 45%'
+- waitForAnimationToEnd:
+    timeout: 30000
+- waitForAnimationToEnd:
+    timeout: 30000
 - takeScreenshot: 02-board-view
 
 # Board sheet — relaunch first so the play drawer from the board-view shot is gone, then
-# open Climbs and tap the board-switcher glyph.
+# open the board-presence sheet deterministically via the screenshot-mode param (no fragile
+# coordinate tap).
 - launchApp
-- waitForAnimationToEnd
-- openLink: com.boardsesh.app://climbs
-- waitForAnimationToEnd
-- tapOn:
-    point: '78%,10%'
-- waitForAnimationToEnd
+- extendedWaitUntil:
+    visible:
+      id: 'home-screen'
+    timeout: 90000
+- openLink: com.boardsesh.app://climbs?screenshotOpenBoardSheet=1
+- waitForAnimationToEnd:
+    timeout: 30000
+- waitForAnimationToEnd:
+    timeout: 30000
 - takeScreenshot: 06-board-sheet

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
 
@@ -22,6 +22,12 @@ type LayeredClimbImageProps = {
    */
   dimBackground?: boolean;
   recyclingKey?: string;
+  /**
+   * testID for the holds-overlay layer. Only rendered once the async overlay PNG
+   * is ready, so screenshot/e2e flows can anchor on "the lit climb has rendered"
+   * (the full-size play view sets this; thumbnails leave it unset).
+   */
+  overlayTestID?: string;
 };
 
 /**
@@ -43,8 +49,17 @@ const LayeredClimbImage = React.memo(function LayeredClimbImage({
   mirrored,
   dimBackground,
   recyclingKey,
+  overlayTestID,
 }: LayeredClimbImageProps) {
   const shouldShowEmptyFallback = backgroundPaths.length === 0 && missingBackgroundCount === 0;
+  // Only relevant when overlayTestID is set (the play-drawer board): expose the
+  // testID anchor on a marker that mounts AFTER the overlay image has actually
+  // painted, not when the <Image> first mounts. expo-image reports "visible" to
+  // Maestro the moment it's in the tree (even with a cached source, before the
+  // pixels land), so anchoring on the raw <Image> let a screenshot fire on a
+  // blank drawer. Gating on onLoad makes the anchor mean "the lit board is on
+  // screen".
+  const [overlayPainted, setOverlayPainted] = useState(false);
 
   return (
     <View style={[styles.stack, mirrored && styles.mirrored]}>
@@ -93,8 +108,12 @@ const LayeredClimbImage = React.memo(function LayeredClimbImage({
           // list/accessory, native for play) so no main-thread downscale
           // is needed — skip expo-image's resample.
           allowDownscaling={false}
+          onLoad={overlayTestID ? () => setOverlayPainted(true) : undefined}
         />
       )}
+      {/* Screenshot/e2e anchor — see overlayPainted above. Transparent, full-bleed
+          (so it has on-screen bounds Maestro can see), and pointer-transparent. */}
+      {overlayTestID && overlayPainted && <View testID={overlayTestID} style={styles.layer} pointerEvents="none" />}
     </View>
   );
 });

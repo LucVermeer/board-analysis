@@ -209,6 +209,10 @@ export const SwipeBoardCarousel = React.memo(function SwipeBoardCarousel({
               boardHeight={boardHeight}
               mirrored={mirrored}
               style={boardStyle}
+              // Anchor for screenshot/e2e flows: present only once the lit-holds
+              // overlay has painted (see LayeredClimbImage). Screenshot-mode only,
+              // so the marker + onLoad dead-strip out of normal builds.
+              overlayTestID={process.env.EXPO_PUBLIC_SCREENSHOT_MODE === '1' ? 'play-drawer-board-overlay' : undefined}
             />
           </Animated.View>
         </Animated.View>

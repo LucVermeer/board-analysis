@@ -45,8 +45,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     # Scopes the job to the Production GitHub Environment so it can read the
-    # App Store Connect / Google Play credentials (same secrets as the
-    # screenshot upload job in mobile-screenshots.yml).
+    # App Store Connect / Google Play credentials (same secrets as the screenshot
+    # upload jobs in mobile-screenshots-ios.yml / mobile-screenshots-android.yml).
     environment: Production
     # Manual runs honour the chosen platform input; automatic push runs have no
     # input, so default to pushing both stores.
