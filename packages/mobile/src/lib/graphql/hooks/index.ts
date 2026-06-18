@@ -40,9 +40,11 @@ import {
   UPDATE_BOARD,
   DELETE_BOARD,
   UNFOLLOW_BOARD,
+  GET_BOARD_BY_SLUG,
   type UpdateBoardMutationResponse,
   type DeleteBoardMutationResponse,
   type UnfollowBoardMutationResponse,
+  type GetBoardBySlugQueryResponse,
 } from '@boardsesh/graphql/operations/boards';
 import { getHttpClient } from '../client';
 import {
@@ -152,6 +154,28 @@ export function useBoard(boardUuid: string | null) {
     queryFn: () => getHttpClient().request<GetBoardQueryResponse>(GET_BOARD, { boardUuid }),
     select: (data) => data.board,
     enabled: !!boardUuid,
+  });
+}
+
+/**
+ * Resolve a named board by its URL slug (the `/b/{slug}` board-entity routes).
+ * Returns the full shared board entity including its stored angle — used to turn
+ * a session whose `boardPath` is a named-board shape into a usable board. The
+ * non-hook {@link fetchBoardBySlug} backs the same lookup at join time, where a
+ * hook can't run.
+ */
+export function fetchBoardBySlug(slug: string): Promise<UserBoard | null> {
+  return getHttpClient()
+    .request<GetBoardBySlugQueryResponse>(GET_BOARD_BY_SLUG, { slug })
+    .then((data) => data.boardBySlug);
+}
+
+export function useBoardBySlug(slug: string | null, options?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: ['boardBySlug', slug],
+    queryFn: () => getHttpClient().request<GetBoardBySlugQueryResponse>(GET_BOARD_BY_SLUG, { slug }),
+    select: (data) => data.boardBySlug,
+    enabled: (options?.enabled ?? true) && !!slug,
   });
 }
 
