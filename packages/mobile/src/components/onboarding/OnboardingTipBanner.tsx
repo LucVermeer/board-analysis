@@ -18,6 +18,9 @@ type OnboardingTipBannerProps = {
   onPress?: () => void;
   /** Leading glyph; defaults to a lightbulb. */
   icon?: IconName;
+  /** Opaque surface for floating use (over arbitrary content) instead of the
+   *  translucent in-list brand tint, which is too see-through off a solid list. */
+  solid?: boolean;
   /** Layout override (margins) from the host surface. */
   style?: StyleProp<ViewStyle>;
 };
@@ -35,6 +38,7 @@ function OnboardingTipBannerComponent({
   onDismiss,
   onPress,
   icon = 'lightbulb.fill',
+  solid = false,
   style,
 }: OnboardingTipBannerProps) {
   const { brandColors, systemColors } = useTheme();
@@ -58,7 +62,10 @@ function OnboardingTipBannerComponent({
     <View
       style={[
         styles.surface,
-        { backgroundColor: `${brandColors.primary}14`, borderColor: `${brandColors.primary}33` },
+        {
+          backgroundColor: solid ? systemColors.secondaryBackground : `${brandColors.primary}14`,
+          borderColor: `${brandColors.primary}33`,
+        },
         style,
       ]}
     >

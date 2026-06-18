@@ -67,6 +67,7 @@ export function AccessoryOnboardingTip() {
         dismissLabel={t('actions.close')}
         onDismiss={dismissTip}
         icon="chevron.down"
+        solid
       />
     </View>
   );
