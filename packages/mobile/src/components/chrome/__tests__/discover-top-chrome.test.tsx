@@ -109,6 +109,9 @@ vi.mock('../../user-drawer/UserAvatarToolbarAction', () => ({
   UserAvatarToolbarAction: ({ variant }: { variant: 'glass' | 'material' }) =>
     createElement('button', { 'data-pressable': 'ariaLabels.userMenu', 'data-avatar-variant': variant }),
 }));
+// The onboarding reveal badge pulls in reanimated/paper through BoardToolbarAction;
+// stub it so this layout suite stays free of the native animation runtime.
+vi.mock('../../Badge', () => ({ Badge: () => createElement('span', { 'data-badge-dot': 'true' }) }));
 
 import { DiscoverTopChrome } from '../DiscoverTopChrome';
 

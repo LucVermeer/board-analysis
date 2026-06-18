@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from 'react';
-import { StyleSheet } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { useTheme } from '../../providers/theme-provider';
 import { useActiveBoard } from '../../lib/graphql/use-active-board';
 import { formatActiveBoardLabel } from '../../lib/boards/active-board-label';
@@ -8,12 +8,16 @@ import { spacing } from '../../theme/tokens';
 import { PressableSurface } from '../PressableSurface';
 import { Text } from '../Text';
 import { Icon } from '../Icon';
+import { Badge } from '../Badge';
 
 type BoardSwitcherButtonProps = {
   /** What a tap does — open the board switcher (the `/boards` modal). */
   onPress: () => void;
   /** VoiceOver / TalkBack hint, e.g. "Opens the board switcher". */
   accessibilityHint?: string;
+  /** Show a brand-coloured dot near the trailing caret — the one-time onboarding
+   *  cue pointing a new user at this control. */
+  badge?: boolean;
 };
 
 /**
@@ -25,8 +29,8 @@ type BoardSwitcherButtonProps = {
  * itself, renders nothing when none is set, and fires the haptic here while the
  * caller injects what a tap does. Lives where `Appbar.Content` did, `flex: 1`.
  */
-export function BoardSwitcherButton({ onPress, accessibilityHint }: BoardSwitcherButtonProps) {
-  const { systemColors } = useTheme();
+export function BoardSwitcherButton({ onPress, accessibilityHint, badge = false }: BoardSwitcherButtonProps) {
+  const { systemColors, brandColors } = useTheme();
   const { data: activeBoard } = useActiveBoard();
 
   const boardLabel = useMemo(() => formatActiveBoardLabel(activeBoard), [activeBoard]);
@@ -51,7 +55,16 @@ export function BoardSwitcherButton({ onPress, accessibilityHint }: BoardSwitche
       <Text variant="title3" numberOfLines={1} ellipsizeMode="tail" color={systemColors.label} style={styles.label}>
         {boardLabel}
       </Text>
-      <Icon name="chevron.down" size={18} color={systemColors.secondaryLabel as string} />
+      <View style={styles.caret}>
+        <Icon name="chevron.down" size={18} color={systemColors.secondaryLabel as string} />
+        {badge ? (
+          // The dot rides the top-right of the trailing caret so it reads as "tap
+          // here". The Appbar row doesn't clip, so the corner offset is safe.
+          <View style={styles.badge} pointerEvents="none">
+            <Badge visible color={brandColors.primary} size="small" />
+          </View>
+        ) : null}
+      </View>
     </PressableSurface>
   );
 }
@@ -74,5 +87,15 @@ const styles = StyleSheet.create({
   },
   label: {
     flexShrink: 1,
+  },
+  // Anchors the onboarding badge to the trailing caret (not the full-width row),
+  // so the dot sits over the affordance the climber taps.
+  caret: {
+    position: 'relative',
+  },
+  badge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
   },
 });

@@ -137,10 +137,16 @@ function ClimbListInner() {
   const { t } = useTranslation('climbs');
   const { t: tCommon } = useTranslation('common');
   const { openClimbActions, openAddToPlaylist, openBoardSheet } = useDrawerHost();
+  // One-time board-history reveal: armed when the user binds a board from the
+  // onboarding hand-off and consumed on focus (see the useFocusEffect below).
+  // Declared here so handleOpenBoardDetail can clear it — tapping the board
+  // button dismisses the badge + banner once the cue has done its job.
+  const [revealTipVisible, setRevealTipVisible] = useState(false);
   // The board capsule opens the wall's "now on the wall" sheet (the board
   // switcher lives inside it).
   const handleOpenBoardDetail = useCallback(() => {
     openBoardSheet();
+    setRevealTipVisible(false);
   }, [openBoardSheet]);
   const { systemColors, variant, brandColors, features } = useTheme();
   const { addToQueue } = useQueueActions();
@@ -294,7 +300,8 @@ function ClimbListInner() {
   // One-time board-history reveal banner: armed when the user binds a board from
   // the onboarding hand-off (app/boards/index.tsx) and consumed on focus so it
   // shows on the Climbs landing, pointing at the board's "now on the wall" sheet.
-  const [revealTipVisible, setRevealTipVisible] = useState(false);
+  // The `revealTipVisible` state is declared earlier so handleOpenBoardDetail can
+  // clear it on tap.
   useFocusEffect(
     useCallback(() => {
       let cancelled = false;
@@ -974,6 +981,7 @@ function ClimbListInner() {
         canCreate={isAuthenticated && hasBoardConfig}
         onCreate={handleCreateClimb}
         onOpenBoardDetail={handleOpenBoardDetail}
+        showBoardBadge={showRevealTip}
         onHeightChange={setSearchBarHeight}
         searchFieldRef={searchHeaderRef}
         searchInitialValue={name}

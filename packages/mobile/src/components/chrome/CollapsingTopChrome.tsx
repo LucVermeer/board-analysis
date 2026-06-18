@@ -27,6 +27,8 @@ type CollapsingTopChromeProps = {
   onOpenBoardSwitcher: () => void;
   /** Optional VoiceOver hint for the board glyph. */
   boardPillAccessibilityHint?: string;
+  /** Show a brand-coloured dot on the board glyph — the one-time onboarding cue. */
+  boardBadge?: boolean;
   /** Report the measured chrome height so the list can inset its top padding. */
   onHeightChange: (height: number) => void;
   /** Optional persistent plain centre title (Climbs filter summary). */
@@ -72,6 +74,7 @@ export function CollapsingTopChrome({
   createAccessibilityLabel,
   onOpenBoardSwitcher,
   boardPillAccessibilityHint,
+  boardBadge = false,
   onHeightChange,
   centerTitle,
   trailingAction,
@@ -140,7 +143,11 @@ export function CollapsingTopChrome({
           pointerEvents="none"
         />
         {activeBoard ? (
-          <BoardToolbarAction onPress={onOpenBoardSwitcher} accessibilityHint={boardPillAccessibilityHint} />
+          <BoardToolbarAction
+            onPress={onOpenBoardSwitcher}
+            accessibilityHint={boardPillAccessibilityHint}
+            badge={boardBadge}
+          />
         ) : null}
         {bluetooth && !hideLight ? <LightbulbToolbarAction /> : null}
         {trailingAction}
