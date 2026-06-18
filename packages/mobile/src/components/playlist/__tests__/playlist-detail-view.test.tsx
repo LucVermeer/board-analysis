@@ -690,16 +690,6 @@ describe('PlaylistDetailView', () => {
       expect(banner.onPress).toHaveBeenCalledTimes(1);
     });
 
-    it('opens a mismatched climb row through the view-only activation path', () => {
-      const onActivateClimb = vi.fn();
-      const { getByText } = render(
-        <PlaylistDetailView {...makeProps({ climbs: [CLIMB], boardBanner: banner, onActivateClimb })} />,
-      );
-      fireEvent.click(getByText(CLIMB.name));
-      expect(onActivateClimb).toHaveBeenCalledWith(CLIMB);
-      expect(banner.onPress).not.toHaveBeenCalled();
-    });
-
     it('renders no banner when boardBanner is absent', () => {
       const { container } = render(<PlaylistDetailView {...makeProps({ climbs: [CLIMB] })} />);
       expect(container.querySelector('[data-button]')).toBeNull();

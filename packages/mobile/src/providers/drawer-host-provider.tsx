@@ -360,8 +360,10 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
 
   // Single parameterized beta-video opener (mirrors openAddToPlaylist), used both by
   // the reaction menu's shared action list (useClimbActions) and by PlayDrawer.
+  // Falls back to the stored active board, not the override-inclusive one, so a
+  // temporary drawer board override can't leak into the beta-video surface.
   const openAddBetaVideo = useCallback((climb: Climb, boardConfigOverride?: BoardConfig) => {
-    const boardConfig = boardConfigOverride ?? activeBoardConfigRef.current;
+    const boardConfig = boardConfigOverride ?? storedActiveBoardConfigRef.current;
     if (!boardConfig) return;
     setBetaVideoClimb({ climb, boardConfig });
   }, []);
