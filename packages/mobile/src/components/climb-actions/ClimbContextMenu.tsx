@@ -3,12 +3,10 @@ import { Platform } from 'react-native';
 import ContextMenu, { type ContextMenuAction } from 'react-native-context-menu-view';
 import type { Climb } from '@boardsesh/shared-schema';
 import { iconMap } from '../icon-map';
-import { useTheme } from '../../providers/theme-provider';
 import { useAuth } from '../../providers/auth-provider';
 import { useProfile } from '../../lib/graphql/hooks';
 import type { BoardConfig } from '../../providers/drawer-host-provider';
 import { useClimbActions } from './use-climb-actions';
-import { ClimbContextPreview } from './ClimbContextPreview';
 
 type ClimbContextMenuProps = {
   /** Null (e.g. a tick whose climb can't be resolved) → passthrough, no menu. */
@@ -23,18 +21,23 @@ type ClimbContextMenuProps = {
 };
 
 /**
- * iOS long-press → native `UIContextMenu`: the wrapped row floats a larger version of
- * the climb (`ClimbContextPreview`), the background blurs, and a native menu of the
- * climb actions appears — the iMessage-reaction interaction. Android keeps the bottom
- * sheet (this component is a passthrough off iOS), so it is only mounted by the rows on
- * iOS; the Platform guard is a safety net.
+ * iOS long-press → native `UIContextMenu`: the row lifts and floats with the
+ * background blurred, and a native menu of the climb actions appears — the
+ * iMessage-reaction interaction. Android keeps the bottom sheet (this component is a
+ * passthrough off iOS), so it is only mounted by the rows on iOS; the Platform guard
+ * is a safety net.
  *
- * Actions come from the shared `useClimbActions` hook (the same list the sheet renders),
- * mapped to native menu items with SF Symbols from the app `iconMap`. The native menu
- * dismisses itself, so no `onAfterAction` is passed.
+ * The floated preview is the system snapshot of the wrapped row. We deliberately do
+ * NOT pass a custom `preview`: `react-native-context-menu-view` doesn't reparent the
+ * `preview` child on the React Native New Architecture, so it leaks into the row
+ * layout and the board art renders twice. Snapshotting the row is the reliable path
+ * (and reuses the row's already-rendered art for free).
+ *
+ * Actions come from the shared `useClimbActions` hook (the same list the sheet
+ * renders), mapped to native menu items with SF Symbols from the app `iconMap`. The
+ * native menu dismisses itself, so no `onAfterAction` is passed.
  */
 export function ClimbContextMenu({ climb, boardConfig, onEditEntry, disabled, children }: ClimbContextMenuProps) {
-  const { systemColors } = useTheme();
   const { isAuthenticated } = useAuth();
   const { data: profile } = useProfile();
 
@@ -64,11 +67,8 @@ export function ClimbContextMenu({ climb, boardConfig, onEditEntry, disabled, ch
       actions={menuActions}
       // Dispatch by index into the same flat list we passed (no submenus).
       onPress={(event) => actions[event.nativeEvent.index]?.run()}
-      // Tapping the floated preview opens the climb view-only (the "preview" action).
+      // Tapping the floated row opens the climb view-only (the "preview" action).
       onPreviewPress={() => actions.find((action) => action.id === 'preview')?.run()}
-      preview={<ClimbContextPreview climb={climb} boardConfig={boardConfig} />}
-      previewBackgroundColor={systemColors.secondaryBackground}
-      borderRadius={20}
     >
       {children}
     </ContextMenu>
