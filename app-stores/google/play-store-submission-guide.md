@@ -92,26 +92,41 @@ never uploads.
 
 The Play Store requires AAB format, not APK. (APKs are fine for sideloading and testing, but Play Store submissions must use AAB.)
 
-### Production build (EAS Build)
+### Manual build (EAS Build)
 
-`packages/mobile/` is a managed Expo project. Production AABs go through EAS
-Build:
+`packages/mobile/` is a managed Expo project, so you can produce a one-off
+production AAB with EAS Build:
 
 ```bash
 eas build --profile production -p android
 ```
 
 EAS runs `expo prebuild`, compiles the generated Android project, signs it, and
-returns a downloadable `.aab`. The `eas.json` `production` profile uses
-`appVersionSource: "remote"`, so the version name and version code are managed
-remotely — you do not edit `versionCode` by hand.
+returns a downloadable `.aab`. This is a manual escape hatch; the automated
+release path is the CI workflow below, which builds the AAB on GitHub's runners
+instead. The `eas.json` `production` profile uses `appVersionSource: "remote"`,
+so the version name and version code are managed remotely (you do not edit
+`versionCode` by hand).
 
-### CI build
+### CI build (the actual release path)
 
-The GitHub Actions workflow (`.github/workflows/android-release.yml`) runs the
-same `eas build --profile production -p android` on the production pipeline. If
-the `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON` secret is configured, EAS Submit can also
-upload the AAB to the Google Play internal testing track automatically.
+The React Native app (`packages/mobile/`) ships through
+`.github/workflows/android-apk-rn.yml`, which runs on every push to `main` that
+touches `packages/mobile/` or the shared packages (and on manual dispatch). It
+does **not** use EAS Build: it runs `expo prebuild` to generate the Android
+project, builds a signed AAB with Gradle (`./gradlew bundleRelease`), and, when
+the `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON` secret is set, uploads that AAB to the
+Google Play **internal** track via the `r0adkll/upload-google-play` action, with
+the "What's new" note staged from
+`fastlane/metadata/android/en-US/changelogs/default.txt`. The same run also
+publishes the signed sideload APK as a GitHub Release. Without the
+service-account secret the build still succeeds and the Play upload is skipped
+(the first internal-track upload is a one-time manual step in Play Console; see
+`docs/android-sideload-build.md`).
+
+Don't watch `.github/workflows/android-release.yml` for a Play submission. That
+is the retired Capacitor build (it triggers on `mobile/**`, not
+`packages/mobile/**`) and produces no RN AAB.
 
 ### Local build
 
