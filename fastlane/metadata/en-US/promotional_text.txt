@@ -1,1 +1,1 @@
-New: sessions are always live. Start one and your whole crew shares one queue. Anyone sends the next climb to the wall. No driver, no waiting your turn.
+New: Boards now heve a life history. See whats on the board at any time.
