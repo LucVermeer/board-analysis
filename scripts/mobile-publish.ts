@@ -84,8 +84,11 @@ function publishToSelfHostedChannel(channelName: string, platform: string, expli
 
   // eoas publish targets a server branch; the channel baked into the binary
   // maps to a same-named branch (channel "production" → branch "production").
+  // Pin the major (matches the eas-cli@16 convention below): eoas 3.x is already
+  // in alpha, and an unpinned @latest could pull a breaking release into the
+  // production publish path with no change in this repo.
   const eoasArgs = [
-    'eoas@latest',
+    'eoas@2',
     'publish',
     '--branch',
     channelName,
@@ -109,12 +112,17 @@ function publishToSelfHostedChannel(channelName: string, platform: string, expli
   console.log(`[mobile:publish] Running: bunx ${eoasArgs.join(' ')}`);
   console.log('');
 
+  // EXPO_UPDATES_URL must resolve in app.config so eoas finds the server.
+  // EAS_BUILD must be unset or app.config returns the EAS URL and eoas would
+  // publish against the wrong host — strip it defensively so a stray value in
+  // the caller's env can't redirect a production publish.
+  const eoasEnv = { ...process.env };
+  delete eoasEnv.EAS_BUILD;
+
   const result = spawnSync('bunx', eoasArgs, {
     cwd: MOBILE_DIR,
     stdio: 'inherit',
-    // EXPO_UPDATES_URL must resolve in app.config so eoas finds the server;
-    // EAS_BUILD must stay unset so the self-hosted updates block is selected.
-    env: { ...process.env },
+    env: eoasEnv,
   });
 
   if (result.status !== 0) {

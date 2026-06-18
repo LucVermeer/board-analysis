@@ -18,9 +18,12 @@ there's no MAU/bandwidth billing.
 | Publish        | `vp run mobile:publish` (→ `eas update`) | `vp run mobile:publish -- --channel production` (→ `eoas publish`)                              |
 
 The split is decided in `packages/mobile/app.config.ts` (`resolveUpdatesConfig`): when
-`EAS_BUILD` is set it returns the EAS URL; otherwise it uses `EXPO_UPDATES_URL` (the self-hosted
-server). Until `EXPO_UPDATES_URL` is set, it falls back to the EAS URL so builds still succeed and
-OTA is simply inert.
+`EAS_BUILD` is set it returns the EAS URL; otherwise it uses the self-hosted server — but **only
+when both `EXPO_UPDATES_URL` and the signing cert `certs/certificate.pem` are present** (fail
+closed). Until both exist it falls back to the EAS URL so builds still succeed and OTA is simply
+inert. The cert gate matters: baking the self-hosted update URL into a binary _without_ code
+signing would let a compromised manifest host (or a network MITM) push arbitrary JS to every
+install, since the device couldn't verify the manifest came from us.
 
 ## How the production path works
 
@@ -57,11 +60,13 @@ so `EXPO_UPDATES_URL` must be present. Kept manual on purpose: a `main` push alr
    Railway/object-storage rules in `CLAUDE.md`).
 2. **Code-signing keys** — from `packages/mobile/`:
    ```sh
-   bunx eoas generate-certs
+   bunx eoas@2 generate-certs
    ```
    Produces `certs/certificate.pem` (commit — already whitelisted in `.gitignore`),
    `certs/private-key.pem` + `certs/public-key.pem` (**never commit** — gitignored; these go to
-   the server).
+   the server). The committed cert is what flips production builds onto the self-hosted path:
+   `resolveUpdatesConfig` stays on EAS until the cert exists, so generate + commit it before
+   relying on the `EXPO_UPDATES_URL` variable.
 3. **Deploy the server** — [Railway template](https://axelmarciano.github.io/expo-open-ota/docs/deployment/railway)
    or Docker/Helm. Required env (see the
    [env reference](https://axelmarciano.github.io/expo-open-ota/docs/reference/environment)):
@@ -83,10 +88,12 @@ so `EXPO_UPDATES_URL` must be present. Kept manual on purpose: a `main` push alr
 
 ## Verify end to end
 
-1. Local config check: `cd packages/mobile && EXPO_UPDATES_URL=https://example.test/manifest
-EXPO_UPDATES_CHANNEL=production bunx expo prebuild --platform ios --clean --no-install`, then
-   confirm `ios/Boardsesh/Supporting/Expo.plist` has `EXUpdatesRequestHeaders` →
-   `expo-channel-name=production`. Repeat `--platform android` and grep `AndroidManifest.xml`.
+1. Local config check (the cert gate means you must generate certs first, else the config falls
+   back to EAS and injects no channel header): `cd packages/mobile && bunx eoas@2 generate-certs`,
+   then `EXPO_UPDATES_URL=https://example.test/manifest EXPO_UPDATES_CHANNEL=production bunx expo
+prebuild --platform ios --clean --no-install`, then confirm `ios/Boardsesh/Supporting/Expo.plist`
+   has `EXUpdatesRequestHeaders` → `expo-channel-name=production` and an `EXUpdatesCodeSigning*`
+   entry. Repeat `--platform android` and grep `AndroidManifest.xml`.
 2. Ship one native TestFlight build from `main` (bakes in channel + server URL + cert).
 3. Make a trivial JS change, run the publish command above, relaunch the TestFlight app, and
    confirm the OTA downloads and applies.
