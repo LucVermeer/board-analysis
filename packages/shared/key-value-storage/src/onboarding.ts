@@ -8,3 +8,16 @@
 // (anything with `:` or other punctuation throws at the platform boundary).
 
 export const ONBOARDING_SEEN_KEY = 'onboarding_seen';
+
+// One-shot "show the board-history reveal banner on Home" flag. Set when the
+// user binds their first board from the onboarding handoff; consumed (read +
+// cleared) the first time Home renders the banner. Separate from
+// ONBOARDING_SEEN_KEY so the prompt still shows exactly once while this banner
+// fires only after an actual board bind.
+export const ONBOARDING_BOARD_TIP_KEY = 'onboarding_board_tip_pending';
+
+// Just-in-time feature tips, each shown once on the surface where the feature
+// lives. Boolean-true means seen. Keys use only [\w.-] for expo-secure-store.
+export const ONBOARDING_TIP_WORKOUT_KEY = 'onboarding_tip_workout_seen';
+export const ONBOARDING_TIP_CREW_KEY = 'onboarding_tip_crew_seen';
+export const ONBOARDING_TIP_RECORD_KEY = 'onboarding_tip_record_seen';

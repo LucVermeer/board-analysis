@@ -7,6 +7,10 @@ import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { track } from '../analytics';
 import { ONBOARDING_TOTAL_STEPS, type OnboardingCard } from './onboarding-cards';
 
+// The mobile tour is now a single framing screen: Started + one Step Viewed on
+// mount, then Completed (primary CTA) or Skipped (quiet exit). There's no
+// multi-step advance, so `trackStepAdvanced` was removed.
+
 export function trackTourStarted(): void {
   // The mobile tour always starts fresh on a first run (no resume / restart
   // semantics), and the only entry points are the first-run gate and the
@@ -23,14 +27,6 @@ export function trackStepViewed(card: OnboardingCard, stepIndex: number): void {
     stepId: card.id,
     stepIndex,
     totalSteps: ONBOARDING_TOTAL_STEPS,
-  });
-}
-
-export function trackStepAdvanced(fromCard: OnboardingCard, toCard: OnboardingCard, trigger: 'next' | 'swipe'): void {
-  track(SHARED_EVENTS.OnboardingTourStepAdvanced, {
-    fromStepId: fromCard.id,
-    toStepId: toCard.id,
-    trigger,
   });
 }
 

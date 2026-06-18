@@ -1,33 +1,54 @@
 appId: com.boardsesh.app
 name: onboarding illustrations
 ---
-# Captures real app screens intended as onboarding-card illustrations (the cards
-# fall back to SF Symbol / MDI glyphs when no image is present — see
-# onboarding-cards.ts).
+# Captures the real board-presence "now on the wall" screen as the hero for the
+# single first-run framing card (OnboardingPrompt). The card falls back to an SF
+# Symbol / MDI glyph when no image is committed (see onboarding-cards.ts), so this
+# capture is additive — wiring the cropped PNG into ONBOARDING_PROMPT_CARD.image
+# is the only follow-up.
 #
-# NOTE: the orchestrator writes these as raw, full-device PNGs under
-# app-stores/<store>/screenshots/<app-store-locale>/<device>/ (same tree as the
-# app-store flow — it does NOT crop). Turning them into card assets is a manual
-# follow-up: crop to the card content region, move into packages/mobile/assets/
-# onboarding/, and wire them up in onboarding-cards.ts. This flow is also
-# unvalidated end-to-end (see the a11y caveat in README.md re: matching
-# `climb-list`).
+# The orchestrator writes raw, full-device PNGs under
+# app-stores/apple/screenshots/<app-store-locale>/<device>/ (same tree as the
+# app-store flow — it does NOT crop). Turn them into the card asset with
+#   vp run mobile:onboarding-assets
+# (Linux-safe sharp crop to the card's 2:3 portrait) which writes
+# packages/mobile/assets/onboarding/, then add the require() in onboarding-cards.ts.
 #
-# Card -> screen mapping (welcome/connect/find/play):
-#   welcome -> climbs list   (the browse hero)
-#   play    -> discover      (playlists)
-# TODO(connect): BLE device picker — needs screenshot-mode demo BLE devices
-#   (the simulator has no Bluetooth). Mirror web's e2e-bluetooth-picker flag.
-# TODO(find): board/climb detail — needs a deterministic deep link to a seeded
-#   climb (com.boardsesh.app://climbs/<uuid>) or a stable climb-row testID to tap.
+# Capture mechanism mirrors app-store.yaml: driven entirely by deep links + the
+# screenshot-mode params the build honours when EXPO_PUBLIC_SCREENSHOT_MODE=1
+# (see packages/mobile/src/lib/screenshot-mode.ts). The active board is
+# auto-activated on boot, so the board-backed shot renders real content; the new
+#   ://climbs?screenshotOpenBoardSheet=1
+# param opens the board-presence sheet deterministically (no coordinate tap).
 #
-# The .app is a Debug dev-client that auto-loads Metro on launch (build bakes
-# DEV_CLIENT_DEFAULT_LAUNCHER_URL), so the orchestrator just `simctl launch`es it —
-# no openurl, no "Open in Boardsesh?" dialog on a fresh CI sim. The build auto-signs-in
-# and boots straight to home (no login screen); the orchestrator waits for home before
+# The .app is a Debug dev-client that auto-loads Metro on launch and auto-signs-in
+# (boots straight to home); the orchestrator gates on `$screen /home` before
 # running Maestro, so this flow opens right into the deep links below.
 
+# Prime the "Open in 'Boardsesh'?" confirmation away on throwaway /home
+# navigations before any capture (see app-store.yaml for the full rationale).
+- openLink: com.boardsesh.app://home
+- extendedWaitUntil:
+    visible: 'Open'
+    timeout: 12000
+- tapOn:
+    text: 'Open'
+- waitForAnimationToEnd
+- repeat:
+    times: 3
+    commands:
+      - openLink: com.boardsesh.app://home
+      - waitForAnimationToEnd
+      - tapOn:
+          text: 'Open'
+          optional: true
+      - waitForAnimationToEnd
+
+# Browse hero (alternate illustration): the climbs list.
 - openLink: com.boardsesh.app://climbs
+- tapOn:
+    text: 'Open'
+    optional: true
 - extendedWaitUntil:
     visible:
       id: 'climb-list'
@@ -35,6 +56,12 @@ name: onboarding illustrations
 - waitForAnimationToEnd
 - takeScreenshot: onboarding-welcome
 
-- openLink: com.boardsesh.app://discover
+# Board-history hero (the framing card image): the board-presence "now on the
+# wall" sheet, opened deterministically via the screenshot-mode param.
+- openLink: com.boardsesh.app://climbs?screenshotOpenBoardSheet=1
+- tapOn:
+    text: 'Open'
+    optional: true
 - waitForAnimationToEnd
-- takeScreenshot: onboarding-play
+- waitForAnimationToEnd
+- takeScreenshot: onboarding-board-history

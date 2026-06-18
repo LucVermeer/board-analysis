@@ -536,9 +536,9 @@
   "mobile": {
     "emptyState": {
       "noBoard": {
-        "title": "No board selected",
-        "subtitle": "Add a board first to browse climbs",
-        "cta": "Choose your board"
+        "title": "Follow your wall",
+        "subtitle": "Pick the board you climb on to browse its problems and see what's lit on it right now.",
+        "cta": "Find my board"
       },
       "noClimbs": {
         "title": "No climbs found",

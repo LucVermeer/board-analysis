@@ -127,9 +127,10 @@ function ClimbListInner() {
   // (see the auto-open effect below). Absent on the plain `/climbs` list shot.
   // screenshotBoardIndex picks which followed board to render (default [0]); the
   // second board-view shot passes 1 to render myBoards[1].
-  const { screenshotOpenFirst, screenshotBoardIndex } = useLocalSearchParams<{
+  const { screenshotOpenFirst, screenshotBoardIndex, screenshotOpenBoardSheet } = useLocalSearchParams<{
     screenshotOpenFirst?: string;
     screenshotBoardIndex?: string;
+    screenshotOpenBoardSheet?: string;
   }>();
   const { t } = useTranslation('climbs');
   const { openClimbActions, openAddToPlaylist, openBoardSheet } = useDrawerHost();
@@ -596,6 +597,18 @@ function ClimbListInner() {
     handleClimbPress(firstClimb);
   }, [screenshotOpenFirst, searchReady, visibleClimbs, handleClimbPress, screenshotTargetBoard, activeBoard]);
 
+  // Screenshot mode: deterministically open the board-presence "now on the wall"
+  // sheet (the onboarding hero shot) once the active board resolves, instead of a
+  // coordinate tap. Gated on the deep-link param so normal `/climbs` is untouched;
+  // dead-strips in normal builds.
+  const screenshotBoardSheetOpenedRef = useRef(false);
+  useEffect(() => {
+    if (process.env.EXPO_PUBLIC_SCREENSHOT_MODE !== '1' || !screenshotOpenBoardSheet) return;
+    if (!activeBoard || screenshotBoardSheetOpenedRef.current) return;
+    screenshotBoardSheetOpenedRef.current = true;
+    openBoardSheet();
+  }, [screenshotOpenBoardSheet, activeBoard, openBoardSheet]);
+
   const handleAddToQueue = useCallback(
     (climb: Climb) => {
       addToQueue({ uuid: randomUUID(), climb });
@@ -842,7 +855,7 @@ function ClimbListInner() {
               the climb list with no extra wiring here. */}
           <Button
             title={t('mobile.emptyState.noBoard.cta')}
-            onPress={() => router.push('/boards')}
+            onPress={() => router.push({ pathname: '/boards', params: { source: 'onboarding' } })}
             variant="filled"
             size="large"
             style={styles.emptyCta}

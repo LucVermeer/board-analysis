@@ -102,6 +102,10 @@ export const SHARED_EVENTS = {
   OnboardingTourStepAdvanced: 'Onboarding Tour Step Advanced',
   OnboardingTourCompleted: 'Onboarding Tour Completed',
   OnboardingTourSkipped: 'Onboarding Tour Skipped',
+  // Activation: the user bound a board straight from the first-run handoff — the
+  // real activation metric (board history turns on here), distinct from tapping
+  // through the framing screen. Props: { boardType, source: 'onboarding' }.
+  OnboardingBoardActivated: 'Onboarding Board Activated',
   BetaVideoAdded: 'Beta Video Added',
   // Board presence — "now on the wall" (board-level collaboration, keyed on the
   // shared board_id resolved from the BLE serial). `boardId` is attached as an

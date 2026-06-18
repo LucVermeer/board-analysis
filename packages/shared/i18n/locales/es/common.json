@@ -349,31 +349,22 @@
       "close": "Cerrar"
     },
     "onboarding": {
-      "skip": "Omitir",
-      "next": "Siguiente",
-      "getStarted": "Conecta una tabla",
       "replaySection": "Tutorial",
       "replayTitle": "Repetir el tutorial",
-      "replaySubtitle": "Vuelve a ver el recorrido de bienvenida",
+      "replaySubtitle": "Vuelve a ver la pantalla de bienvenida",
       "replayError": "No se pudo abrir el tutorial. Inténtalo de nuevo.",
-      "pageIndicator": "Página {{current}} de {{total}}",
-      "cards": {
-        "welcome": {
-          "title": "Ilumina tu tabla",
-          "body": "Boardsesh controla tu muro: busca, encola y juega, todo desde tu móvil."
-        },
-        "connect": {
-          "title": "Conecta por Bluetooth",
-          "body": "Conecta tu tabla una vez y las presas se iluminan mientras escalas."
-        },
-        "find": {
-          "title": "Busca por grado, encadena el muro",
-          "body": "Filtra miles de bloques por grado, ángulo y equipador para encontrar tu próximo encadene."
-        },
-        "play": {
-          "title": "Toca un bloque, ilumina las presas",
-          "body": "Crea una cola, dale a reproducir y el muro te muestra exactamente dónde agarrar."
-        }
+      "prompt": {
+        "title": "Mira lo que está encendido en tu muro, en directo",
+        "body": "Sigue la tabla de tu rocódromo y Boardsesh te muestra lo que está encendido ahora mismo: quién la encendió, el grado, quién la montó y los encadenes recientes. No tienes que abrir nada; está ahí.",
+        "footnote": "Además, sesiones con tu peña, el generador de entrenos y el registro de encadenes, cuando estés en un muro.",
+        "findBoard": "Buscar mi tabla",
+        "lookAround": "Echar un vistazo primero"
+      },
+      "homeRevealTip": "Esto es {{board}} ahora mismo. Se actualiza según escala la gente: toca el nombre de la tabla para ver lo que hay en el muro.",
+      "tips": {
+        "workout": "Móntate un entreno: Volumen, Pirámide, Escalera o Foco de Grado. Fija un grado, previsualiza las vías y mándalas pegada a pegada.",
+        "crew": "¿Escalas con gente? Abre una sesión y compartid una cola: cualquiera manda la siguiente vía, sin ir pasando el móvil.",
+        "record": "Tus encadenes salen aquí en Progreso: reparto de grados y tu vía más dura. Importa tu logbook de Kilter y Tension desde Aurora para empezar con tu historial."
       }
     },
     "nav": {

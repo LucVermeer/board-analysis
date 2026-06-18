@@ -536,9 +536,9 @@
   "mobile": {
     "emptyState": {
       "noBoard": {
-        "title": "Tabla no seleccionada",
-        "subtitle": "Agrega una tabla primero para explorar bloques",
-        "cta": "Elige tu tabla"
+        "title": "Sigue tu muro",
+        "subtitle": "Elige la tabla donde escalas para explorar sus bloques y ver lo que está encendido ahora mismo.",
+        "cta": "Buscar mi tabla"
       },
       "noClimbs": {
         "title": "No se encontraron bloques",

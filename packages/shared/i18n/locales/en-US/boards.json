@@ -59,6 +59,7 @@
     "errorTitle": "Couldn't load your boards",
     "errorRetry": "Try again",
     "boardSwitchError": "Couldn't save that board. Try again.",
+    "onboardingPrompt": "Follow the wall you climb on — that's what turns its history on.",
     "discovery": {
       "findNearby": "Find nearby",
       "bluetooth": "Bluetooth",

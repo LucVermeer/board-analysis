@@ -21,6 +21,9 @@ import { userBoardToItem, popularConfigToItem } from '../../src/components/board
 import type { DiscoveryBoardItem } from '../../src/components/board-discovery/BoardDiscoveryCard';
 import { useBottomChromeMetrics } from '../../src/hooks/use-bottom-chrome-metrics';
 import { resolveBoardReturnTo } from '../../src/lib/boards/board-return-to';
+import { setBoardRevealTipPending } from '../../src/lib/onboarding/onboarding-storage';
+import { track } from '../../src/lib/analytics';
+import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { iosSystemColors } from '../../src/theme/ios-colors';
 import { spacing } from '../../src/theme/tokens';
 
@@ -28,8 +31,11 @@ export default function BoardSelection() {
   const { isAuthenticated, refreshAuthState } = useAuth();
   const bottomChrome = useBottomChromeMetrics();
   const router = useRouter();
-  const { returnTo } = useLocalSearchParams<{ returnTo?: string }>();
+  const { returnTo, source } = useLocalSearchParams<{ returnTo?: string; source?: string }>();
   const boardReturnTo = resolveBoardReturnTo(returnTo);
+  // Arriving from the first-run framing screen: this is the activation flow, so
+  // pre-resolve location, show the framing header, and tag the board-bind.
+  const fromOnboarding = source === 'onboarding';
   const { t } = useTranslation('boards');
   const { showToast } = useToast();
 
@@ -74,15 +80,23 @@ export default function BoardSelection() {
         // only once the write succeeds (a failed write must not strand the user
         // on a board that won't survive the next cold start).
         await setActiveBoard(board);
+        if (fromOnboarding) {
+          // The real activation metric — board history turns on the moment a
+          // named board is bound — and the one-time Home reveal banner is armed
+          // for the board they just followed.
+          track(SHARED_EVENTS.OnboardingBoardActivated, { boardType: board.boardType, source: 'onboarding' });
+          void setBoardRevealTipPending();
+        }
         // Dismiss the boards modal back onto the tab it was opened from — Climbs
-        // by default, Discover when the pill there opened it (replaces with that
-        // tab if it isn't already underneath, e.g. opened from a deep link).
+        // by default, Home when the onboarding handoff opened it, Discover when
+        // the pill there opened it (replaces with that tab if it isn't already
+        // underneath, e.g. opened from a deep link).
         router.dismissTo(boardReturnTo);
       } catch {
         showToast(t('mobile.boardSwitchError'), 'error');
       }
     },
-    [setActiveBoard, router, boardReturnTo, showToast, t],
+    [setActiveBoard, router, boardReturnTo, showToast, t, fromOnboarding],
   );
 
   const myBoardItems = useMemo(
@@ -136,6 +150,11 @@ export default function BoardSelection() {
     ) : null;
 
   const requestLocation = location.request;
+  // Onboarding handoff: pre-resolve location on mount so the Find Nearby card is
+  // already loading instead of waiting for a tap the user might not discover.
+  useEffect(() => {
+    if (fromOnboarding) void requestLocation();
+  }, [fromOnboarding, requestLocation]);
   const onModeFindNearby = useCallback(() => {
     void requestLocation();
   }, [requestLocation]);
@@ -239,6 +258,12 @@ export default function BoardSelection() {
         contentContainerStyle={[styles.container, { paddingBottom: scrollBottomPadding }]}
         showsVerticalScrollIndicator={false}
       >
+        {fromOnboarding ? (
+          <Text variant="subheadline" style={styles.onboardingHeader}>
+            {t('mobile.onboardingPrompt')}
+          </Text>
+        ) : null}
+
         {/* Mode cards */}
         <View style={styles.modeRow}>
           <BoardModeCard
@@ -312,6 +337,10 @@ const styles = StyleSheet.create({
   container: {
     paddingVertical: spacing[4],
     gap: spacing[5],
+  },
+  onboardingHeader: {
+    paddingHorizontal: spacing[4],
+    opacity: 0.7,
   },
   modeRow: {
     flexDirection: 'row',

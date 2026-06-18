@@ -40,6 +40,9 @@ import { navigateToSessionFeedItem } from '../../../src/lib/session-feed-navigat
 import { iosSystemColors } from '../../../src/theme/ios-colors';
 import { borderRadius, spacing } from '../../../src/theme/tokens';
 import { BETA_CARD_HEIGHT, BETA_CARD_WIDTH } from '../../../src/components/play-drawer/BetaVideoCard';
+import { OnboardingTipBanner } from '../../../src/components/onboarding/OnboardingTipBanner';
+import { clearBoardRevealTipPending, hasBoardRevealTipPending } from '../../../src/lib/onboarding/onboarding-storage';
+import { useActiveBoard } from '../../../src/lib/graphql/use-active-board';
 
 const RECENT_BETA_LIMIT = 20;
 const SHELF_GAP = spacing[3];
@@ -81,12 +84,32 @@ export default function HomeTab() {
   const router = useRouter();
   const { isAuthenticated } = useAuth();
   const { systemColors, brandColors } = useTheme();
-  const { openPlayDrawer } = useDrawerHost();
+  const { openPlayDrawer, openBoardSheet } = useDrawerHost();
   const bottomChrome = useBottomChromeMetrics();
   const insets = useSafeAreaInsets();
   const listRef = useRef<FlashListRef<SessionFeedItem>>(null);
   const commentSheetRef = useRef<BottomSheet | null>(null);
   const [commentTarget, setCommentTarget] = useState<CommentTarget | null>(null);
+
+  // One-time board-history reveal banner: armed when the user binds their first
+  // board from the onboarding handoff (see app/boards/index.tsx). Consume the
+  // flag on mount so it shows exactly once, then points at the live board feed.
+  const { data: activeBoard } = useActiveBoard();
+  const [revealTipVisible, setRevealTipVisible] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    void hasBoardRevealTipPending().then((pending) => {
+      if (cancelled || !pending) return;
+      setRevealTipVisible(true);
+      void clearBoardRevealTipPending();
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const dismissRevealTip = useCallback(() => setRevealTipVisible(false), []);
+  const showRevealTip = revealTipVisible && activeBoard != null;
+  const revealBoardName = activeBoard?.gymName ?? activeBoard?.name ?? '';
 
   // Feed scope. `mode` chooses the view — `crew` (people you follow) is the
   // default; `gym` is everyone on the selected board. `selectedBoard` is the
@@ -315,6 +338,16 @@ export default function HomeTab() {
   const header = useMemo(
     () => (
       <View style={styles.header}>
+        {showRevealTip ? (
+          <OnboardingTipBanner
+            text={tCommon('mobile.onboarding.homeRevealTip', { board: revealBoardName })}
+            dismissLabel={tCommon('actions.close')}
+            onPress={openBoardSheet}
+            onDismiss={dismissRevealTip}
+            icon="boards"
+            style={styles.revealBanner}
+          />
+        ) : null}
         <RecentBetaShelf
           heading={betaHeading}
           videos={betaVideos.data ?? []}
@@ -336,6 +369,11 @@ export default function HomeTab() {
       betaVideos.refetch,
       handleBetaOpenClimb,
       sessionsHeading,
+      showRevealTip,
+      revealBoardName,
+      openBoardSheet,
+      dismissRevealTip,
+      tCommon,
     ],
   );
 
@@ -727,6 +765,10 @@ const styles = StyleSheet.create({
     // A small gap below the floating header band (the list already insets by the
     // band via contentContainerStyle).
     paddingTop: spacing[2],
+  },
+  revealBanner: {
+    marginHorizontal: spacing[4],
+    marginBottom: spacing[3],
   },
   shelfSection: {
     paddingBottom: spacing[5],
