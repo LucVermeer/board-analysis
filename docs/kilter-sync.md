@@ -214,18 +214,28 @@ Kilter's catalog has duplicate climbs at different UUIDs with identical hold lay
 2. **Fingerprint hit** — a new UUID whose `(layout_id, fingerprint)` matches an existing or already-seen-this-run canonical becomes an alias (`board_climb_aliases`), not a new row.
 3. **Miss** — insert a new canonical row + a self-alias.
 
-**Stats accumulation (worked example).** Two listed climbs `A` (count 18) and `B` (count 5) with identical holds collapse onto one canonical: `A` is canonical with `kilter_ascensionist_count = 18`, `B` aliases to `A` and its 5 ascents accumulate → 23. The accumulation is computed **in memory per `(canonical, angle)` and written as an overwrite** (not `+=`), so re-running recomputes the same 23 — idempotent. Display fields (`difficulty/quality/fa`) come only from the canonical climb's own stat row.
+**Stats accumulation (worked example).** Two listed climbs `A` (count 18) and `B` (count 5) with identical holds collapse onto one canonical: `A` is canonical with `kilter_ascensionist_count = 18`, `B` aliases to `A` and its 5 ascents accumulate → 23. The accumulation is computed **in memory per `(canonical, angle)` and written as an overwrite** (not `+=`), so re-running recomputes the same 23 — idempotent. If the same source climb stat appears through multiple Grips `product_layout_uuid`s that collapse to one Boardsesh layout, it is counted once by `(source climb UUID, angle)`. Display fields (`difficulty/quality/fa`) come only from the canonical climb's own stat row.
 
 ### `ascensionist_count` — aurora/kilter are aliased, not summed
 
-`board_climb_stats.ascensionist_count` is the materialized count the search hot path reads. There are three owned columns (`aurora_`, `kilter_`, `boardsesh_`), but for the **Kilter board `aurora_` and `kilter_` are the SAME ascents**: the legacy column was filled from the pre-split `kilterboardapp.com` and `kilter_` is filled from `kiltergrips.com`, which Kilter migrated the same logs into. They match within snapshot noise (median ratio 1.0). **Summing them double-counts** — every Kilter benchmark would read ~2× its real ascents — so the formula takes Kilter (the live source) and falls back to aurora, then adds the independent Boardsesh contribution:
+`board_climb_stats.ascensionist_count` is the materialized count the search hot path reads. There are three owned columns (`aurora_`, `kilter_`, `boardsesh_`), but for the **Kilter board `aurora_` and `kilter_` are the SAME ascents**: the legacy column was filled from the pre-split `kilterboardapp.com` and `kilter_` is filled from `kiltergrips.com`, which Kilter migrated the same logs into. They match within snapshot noise (median ratio 1.0). **Summing them double-counts** — every Kilter benchmark would read ~2× its real ascents — so the formula takes the higher upstream count, then adds the independent Boardsesh contribution:
 
 ```
-ascensionist_count = COALESCE(kilter_ascensionist_count, aurora_ascensionist_count, 0)
+ascensionist_count = GREATEST(COALESCE(kilter_ascensionist_count, 0), COALESCE(aurora_ascensionist_count, 0))
                    + COALESCE(boardsesh_ascensionist_count, 0)
 ```
 
 For boards with only one catalog source (e.g. Tension, `kilter_` is NULL) this collapses to `aurora_ + boardsesh_` — behaviour unchanged. The same formula is used at all three writers: the catalog sync (`catalog-sync.ts`), aurora-sync (`shared-sync.ts`), and the Boardsesh-tick recompute (`recompute-climb-stats.ts`). `boardsesh_ascensionist_count` stays additive because Boardsesh-native ticks aren't (yet) pushed to Kilter; revisit when push-back lands.
+
+### Stats repair
+
+A single Boardsesh layout maps to several Grips `product_layout_uuid`s (size variants). Before the `(source climb UUID, angle)` dedup landed, the catalog sync folded each repeated source stat once per variant, so `kilter_ascensionist_count` (and thus `ascensionist_count`) was inflated by the number of variants a climb appeared in. The fix prevents new inflation; existing rows need a one-time `repair-stats` pass (`stats-repair.ts`).
+
+`repair-stats` re-fetches every listed Grips layout, dedupes stats the same way the live sync now does, and **overwrites** `kilter_ascensionist_count` from the deduped value (also re-asserting Grips `display_difficulty / difficulty_average / quality_average` on canonical rows). It is idempotent — re-running converges and the second run is a no-op.
+
+- **Dry-run is the default and is read-only.** It reports `changedKilterRows`, `maxKilterDrop` / `maxKilterRise` (largest per-row decrease/increase), `statsDeduped`, `statsUnresolved`, and a `topBefore` list. Review these before applying — a large `maxKilterDrop` can also signal a partial Grips fetch (delisted climbs, rate-limit truncation), so treat it as a stop-and-investigate signal rather than blindly applying.
+- **`--apply` writes inside a single transaction** (overwrite + materialized-total recompute are atomic) and prints `topAfter`. A fetch error aborts before any write, since writes only run after the full fetch loop completes.
+- Run it with the **daemon paused** so a concurrent catalog sync doesn't interleave, and run it **unscoped** (no `--layouts`) for the production cleanup — the materialized-total recompute pass touches all Kilter rows, so a scoped run can leave inconsistent state. Rows for climbs Grips no longer lists aren't re-fetched, so this tool does not correct delisted-climb inflation.
 
 ### Quality scale — every board on 1–5
 
@@ -300,9 +310,14 @@ bunx kilter-sync list                # List all stored kilter credentials
 bunx kilter-sync user <userId>       # Force a sync for one user
 bunx kilter-sync daemon              # Run the daemon (one-user-per-cycle, quiet hours)
 bunx kilter-sync catalog --user <id> # Sync the public climb catalog (Flow A)
+bunx kilter-sync repair-stats --user <id>          # Dry-run: report deduped Kilter counts vs DB (no writes)
+bunx kilter-sync repair-stats --user <id> --apply  # Write the deduped counts + recompute totals
+bunx kilter-sync repair-stats --user <id> --layouts <uuid,uuid>  # Scope to specific Grips product_layout_uuids
 bunx kilter-sync locations --user <id> # Sync public Kilter gym/board locations
 bunx kilter-sync locations --skip-if-missing-credentials # No-op when no token source is configured
 ```
+
+`repair-stats` is a one-time cleanup for the catalog-stats inflation (see [Stats repair](#stats-repair)). It defaults to a read-only dry-run; nothing is written without `--apply`.
 
 Run with 1Password like aurora-sync:
 

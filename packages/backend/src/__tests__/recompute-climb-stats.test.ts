@@ -1,9 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vite-plus/test';
 import { logger } from '../utils/logger';
 
-// Captured SQL fragments per call to tx.execute.
-const executedSql: string[] = [];
-
 const { mockDb } = vi.hoisted(() => {
   // The `sql` template returns an object whose `.queryChunks` array holds the
   // alternating raw SQL strings and parameter sentinels. For assertion
@@ -22,26 +19,8 @@ vi.mock('../db/client', () => ({
 
 import { recomputeClimbStats } from '../graphql/resolvers/ticks/recompute-climb-stats';
 
-function chainStub(): { insert: ReturnType<typeof vi.fn>; execute: ReturnType<typeof vi.fn> } {
-  const chain: Record<string, unknown> = {};
-  for (const method of ['values', 'onConflictDoNothing']) {
-    chain[method] = vi.fn(() => chain);
-  }
-  return {
-    insert: vi.fn(() => chain),
-    execute: vi.fn(async (query: unknown) => {
-      // Drizzle's sql template exposes `queryChunks` or `.toSQL()`. Use a
-      // best-effort serialize that walks the object's string-like fields.
-      const stringified = JSON.stringify(query);
-      executedSql.push(stringified);
-      return [];
-    }),
-  };
-}
-
 describe('recomputeClimbStats', () => {
   beforeEach(() => {
-    executedSql.length = 0;
     vi.clearAllMocks();
   });
 
@@ -142,13 +121,12 @@ describe('recomputeClimbStats', () => {
     // Hard invariants the delete-last-tick path depends on:
     // 1. boardsesh_ascensionist_count defaults to 0 when no senders remain.
     expect(sql).toMatch(/boardsesh_ascensionist_count\s*=\s*COALESCE\(agg\.distinct_senders,\s*0\)/);
-    // 2. ascensionist_count is Kilter's count plus Boardsesh's. Aurora and
-    //    Kilter are the SAME upstream Kilter ascents pulled from two backends
-    //    (legacy kilterboardapp.com vs Kilter Grips), so they must NOT be
-    //    summed — we COALESCE to whichever backend reported (preferring the
-    //    newer Kilter Grips column), default 0, then add Boardsesh's distinct
-    //    senders. Each defaulted to 0 so the result never NULLs out.
-    expect(sql).toContain('COALESCE(s.kilter_ascensionist_count, s.aurora_ascensionist_count, 0)');
+    // 2. ascensionist_count is the higher upstream count plus Boardsesh's.
+    //    Aurora and Kilter are the SAME upstream Kilter ascents pulled from
+    //    two backends, so they must NOT be summed.
+    expect(sql).toContain(
+      'GREATEST(COALESCE(s.kilter_ascensionist_count, 0), COALESCE(s.aurora_ascensionist_count, 0))',
+    );
     expect(sql).toContain('COALESCE(agg.distinct_senders, 0)');
     // 3. The ticks filter is sargable — predicate on WHERE, not FILTER.
     expect(sql).toMatch(/WHERE[\s\S]*bt\.status IN \('flash','send'\)/);

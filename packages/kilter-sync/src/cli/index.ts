@@ -13,15 +13,29 @@ import { KILTER_BOARD_TYPE } from '../api/types';
 const program = new Command();
 program.name('kilter-sync').description('Kilter Grips sync utility (Keycloak + PowerSync + REST)').version('1.0.0');
 
+function getDatabaseUrl(): string {
+  const connectionString = process.env.DATABASE_URL || process.env.DB_URL;
+  if (!connectionString) {
+    console.error('DATABASE_URL or DB_URL is required');
+    process.exit(1);
+  }
+  return connectionString;
+}
+
+function parseLayoutUuids(layouts: string | undefined): string[] | undefined {
+  return layouts
+    ? layouts
+        .split(',')
+        .map((value) => value.trim())
+        .filter(Boolean)
+    : undefined;
+}
+
 program
   .command('list')
   .description('List all users with kilter credentials')
   .action(async () => {
-    const connectionString = process.env.DATABASE_URL;
-    if (!connectionString) {
-      console.error('DATABASE_URL is required');
-      process.exit(1);
-    }
+    const connectionString = getDatabaseUrl();
     const client = postgres(connectionString, { max: 1, prepare: false });
     try {
       const db = drizzle(client);
@@ -108,12 +122,7 @@ program
           process.exitCode = 1;
           return;
         }
-        const layoutUuids = opts.layouts
-          ? opts.layouts
-              .split(',')
-              .map((value) => value.trim())
-              .filter(Boolean)
-          : undefined;
+        const layoutUuids = parseLayoutUuids(opts.layouts);
         const summary = await runner.runCatalogSync(tokenProvider, {
           applyDeletions: opts.applyDeletions,
           layoutUuids,
@@ -128,6 +137,30 @@ program
       }
     },
   );
+
+program
+  .command('repair-stats')
+  .description('Repair Kilter catalog stats after deduping repeated Grips layout stat rows')
+  .requiredOption('--user <userId>', 'use this linked user’s stored Kilter credential (refresh grant)')
+  .option('--layouts <uuids>', 'comma-separated product_layout_uuids to repair (default: all listed)')
+  .option('--apply', 'write repaired kilter_ascensionist_count and ascensionist_count values (default: dry-run)')
+  .action(async (opts: { user: string; layouts?: string; apply?: boolean }) => {
+    const runner = new SyncRunner({ onLog: (message) => console.info(message) });
+    try {
+      const tokenProvider = await runner.buildUserTokenProvider(opts.user);
+      const summary = await runner.repairCatalogStats(tokenProvider, {
+        apply: opts.apply,
+        layoutUuids: parseLayoutUuids(opts.layouts),
+      });
+      const mode = opts.apply ? 'applied' : 'dry-run';
+      console.log(`✓ Kilter stats repair ${mode}:`, JSON.stringify(summary, null, 2));
+    } catch (err) {
+      console.error('✗ Kilter stats repair failed:', err instanceof Error ? err.message : err);
+      process.exitCode = 1;
+    } finally {
+      await runner.stop();
+    }
+  });
 
 program
   .command('locations')

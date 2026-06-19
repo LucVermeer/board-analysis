@@ -107,17 +107,17 @@ The direct command supports the Aurora boards that still use Aurora's API for lo
 `ascensionist_count` is the materialized count derived from per-source columns,
 each owned by a single writer:
 
-| Column                         | Owner                           | Updated by                                                                                                                    |
-| ------------------------------ | ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `aurora_ascensionist_count`    | Aurora sync                     | `upsertClimbStats` (this file's daemon) — written verbatim from Aurora's payload                                              |
-| `kilter_ascensionist_count`    | Kilter Grips sync               | `packages/kilter-sync` catalog sync                                                                                           |
-| `boardsesh_ascensionist_count` | Boardsesh `recomputeClimbStats` | `packages/backend/src/graphql/resolvers/ticks/recompute-climb-stats.ts` — `COUNT(DISTINCT user_id)` over flash/send ticks     |
-| `ascensionist_count`           | All writers, kept in lockstep   | recomputed as `COALESCE(kilter_ascensionist_count, aurora_ascensionist_count, 0) + COALESCE(boardsesh_ascensionist_count, 0)` |
+| Column                         | Owner                           | Updated by                                                                                                                                           |
+| ------------------------------ | ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `aurora_ascensionist_count`    | Aurora sync                     | `upsertClimbStats` (this file's daemon) — written verbatim from Aurora's payload                                                                     |
+| `kilter_ascensionist_count`    | Kilter Grips sync               | `packages/kilter-sync` catalog sync                                                                                                                  |
+| `boardsesh_ascensionist_count` | Boardsesh `recomputeClimbStats` | `packages/backend/src/graphql/resolvers/ticks/recompute-climb-stats.ts` — `COUNT(DISTINCT user_id)` over flash/send ticks                            |
+| `ascensionist_count`           | All writers, kept in lockstep   | recomputed as `GREATEST(COALESCE(kilter_ascensionist_count, 0), COALESCE(aurora_ascensionist_count, 0)) + COALESCE(boardsesh_ascensionist_count, 0)` |
 
 `aurora_` and `kilter_` are **not summed**: for the Kilter board they are the
 same ascents from two backends across the Aurora→Kilter Grips split, so the sum
-takes Kilter (live) and falls back to aurora. For Aurora-only boards (Tension
-etc.) `kilter_` is NULL and it collapses to `aurora_`. See kilter-sync.md.
+takes the higher upstream count. For Aurora-only boards (Tension etc.)
+`kilter_` is NULL and it collapses to `aurora_`. See kilter-sync.md.
 
 The search hot path reads `ascensionist_count` through the covering index from
 migration 0067, so it stays a regular column (not `GENERATED`) — every writer

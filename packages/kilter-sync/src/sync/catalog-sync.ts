@@ -132,6 +132,10 @@ export type StatAccum = {
   hasOwnRowStats: boolean;
 };
 
+export function catalogStatSourceKey(stat: KilterCatalogStat): string {
+  return `${stat.climbUuid.toLowerCase()}|${stat.angle}`;
+}
+
 /**
  * Fold one Grips (climb, angle) stat row into the per-(canonical, angle)
  * accumulator. `kilterCount` sums ascents across every source UUID that
@@ -188,6 +192,21 @@ export function foldCatalogStat(
     if (accum.faUsername == null) accum.faUsername = stat.faUsername;
     if (accum.faAt == null) accum.faAt = stat.faAt;
   }
+}
+
+export function foldCatalogStatOnce(
+  accumByKey: Map<string, StatAccum>,
+  seenSourceStats: Set<string>,
+  stat: KilterCatalogStat,
+  canonicalUuid: string,
+): boolean {
+  const sourceKey = catalogStatSourceKey(stat);
+  if (seenSourceStats.has(sourceKey)) {
+    return false;
+  }
+  seenSourceStats.add(sourceKey);
+  foldCatalogStat(accumByKey, stat, canonicalUuid);
+  return true;
 }
 
 /**
@@ -376,12 +395,13 @@ async function syncBoardLayoutGroup(
 
   // Stats for the whole group (after every climb is in climbUuidToCanonical).
   const statsByCanonicalAngle = new Map<string, StatAccum>();
+  const seenSourceStats = new Set<string>();
   for (const gripsLayoutUuid of gripsLayoutUuids) {
     const stats = await withToken(state, (token) => fetchLayoutClimbStats(token, gripsLayoutUuid));
     for (const stat of stats) {
       const canonicalUuid = climbUuidToCanonical.get(stat.climbUuid.toLowerCase());
       if (!canonicalUuid) continue; // stat for a filtered/unknown climb
-      foldCatalogStat(statsByCanonicalAngle, stat, canonicalUuid);
+      foldCatalogStatOnce(statsByCanonicalAngle, seenSourceStats, stat, canonicalUuid);
     }
   }
 
@@ -408,11 +428,10 @@ async function syncBoardLayoutGroup(
           target: [boardClimbStats.boardType, boardClimbStats.climbUuid, boardClimbStats.angle],
           set: {
             kilterAscensionistCount: sql`excluded.kilter_ascensionist_count`,
-            // aurora_ and kilter_ are the SAME ascents for the Kilter board (the
-            // pre-split kilterboardapp.com vs kiltergrips.com — Kilter migrated
-            // the logs). Take Kilter (the live source) and fall back to aurora,
-            // never sum, or every Kilter climb would show ~2× its real ascents.
-            ascensionistCount: sql`COALESCE(excluded.kilter_ascensionist_count, ${boardClimbStats.auroraAscensionistCount}, 0) + COALESCE(${boardClimbStats.boardseshAscensionistCount}, 0)`,
+            // Kilter and Aurora are alternate upstream snapshots of the same
+            // Kilter ascents, so take the higher upstream count and add the
+            // independent Boardsesh count.
+            ascensionistCount: sql`GREATEST(COALESCE(excluded.kilter_ascensionist_count, 0), COALESCE(${boardClimbStats.auroraAscensionistCount}, 0)) + COALESCE(${boardClimbStats.boardseshAscensionistCount}, 0)`,
             // Kilter-origin canonicals: clobber with Grips values. Aurora-origin
             // canonicals (no Grips display row): excluded is null → keep existing.
             displayDifficulty: sql`COALESCE(excluded.display_difficulty, ${boardClimbStats.displayDifficulty})`,
