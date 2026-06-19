@@ -17,13 +17,13 @@ Boardsesh is a monorepo. Next.js 16 web app + React Native (Expo) mobile app for
 
 ## PR Lifecycle (mandatory)
 
-After every PR is created, **always call `mcp__github__subscribe_pr_activity`** and stay subscribed until the PR is merged or closed.
+We'll always create a PR, never asks if a PR should be created, open as a draft. After every PR is created, **always** subscribe to PR feedback until the PR is merged or closed.
 
 - **CI failures**: diagnose and push a fix. Retry until green. If a failure is genuinely out of scope, explain and block on the user.
 - **Merge conflicts**: rebase on `main` and `git push --force-with-lease` — don't ask first.
 - **Review feedback**: fix minor, cosmetic, and style comments autonomously and push. For correctness disagreements, architectural changes, or ambiguous instructions, use `AskUserQuestion` before acting.
 - **Release notes**: every PR description must include the `## Release Notes` section from the PR template. Write in climber voice — describe what the user gets, not what the code does. Internal-only changes (refactor, CI, deps, tests) get `none`.
-- **Ready to merge signal**: once CI is green, no unresolved review comments remain, and there are no conflicts, post exactly this message to the user: `**Ready to merge.** CI green, no conflicts, all feedback addressed.` Do not add caveats or padding.
+- **Ready to merge signal**: once CI is green, no unresolved review comments remain, and there are no conflicts, remove the draft status from the PR marking it ready for review.
 
 ## Monorepo Structure
 
