@@ -1,4 +1,6 @@
 import { execSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import { resolve } from 'node:path';
 import type { ExpoConfig, ConfigContext } from 'expo/config';
 
 const DEFAULT_EAS_PROJECT_ID = '87499648-655e-4fb8-9856-65da37e55fb1';
@@ -8,6 +10,58 @@ const ANDROID_PLAY_STORE_URL = 'https://play.google.com/store/apps/details?id=co
 const HEALTH_UPDATE_USAGE_DESCRIPTION = 'Boardsesh saves your finished climbing sessions to Apple Health as workouts.';
 const HEALTH_SHARE_USAGE_DESCRIPTION =
   'Boardsesh reads your body weight to estimate calories and your saved Boardsesh workouts to prevent duplicates.';
+
+// Public code-signing certificate for self-hosted OTA. `bunx eoas@2 generate-certs`
+// writes certs/certificate.pem (committed) + the private/public keys (server-only,
+// gitignored). Its presence is a hard gate (see resolveUpdatesConfig) so we never
+// ship a self-hosted OTA binary that can't verify update signatures.
+const CODE_SIGNING_CERT_PATH = './certs/certificate.pem';
+
+// Resolves the expo-updates block. Two distinct hosting paths:
+//   • Preview/dev builds (made with `eas build`, EAS_BUILD set) stay on EAS
+//     free-tier hosting at u.expo.dev — channel comes from eas.json. Unchanged.
+//   • Production builds (bare `expo prebuild` in the TestFlight/Android
+//     workflows) point at our self-hosted expo-open-ota server. The server URL
+//     is supplied via EXPO_UPDATES_URL and the path is gated on the signing cert
+//     existing (fail closed — see below). Until both are in place we fall back to
+//     the EAS URL so the build still succeeds and OTA is simply inert. `eoas
+//     publish` also reads updates.url to find the server, so the same env var
+//     must be present at publish time.
+function resolveUpdatesConfig(easProjectId: string): ExpoConfig['updates'] {
+  const easUrl = `https://u.expo.dev/${easProjectId}`;
+
+  if (process.env.EAS_BUILD) {
+    return { url: easUrl };
+  }
+
+  const selfHostUrl = process.env.EXPO_UPDATES_URL;
+  const certExists = existsSync(resolve(process.cwd(), CODE_SIGNING_CERT_PATH));
+
+  // Fail closed: only point a production binary at the self-hosted server when
+  // BOTH the server URL and the public signing cert are present. Baking the
+  // self-hosted update URL without code signing would let a compromised manifest
+  // host (or a network MITM) push arbitrary JS to every installed app — the
+  // device would have no way to verify the manifest came from us. Until the cert
+  // is generated and committed we stay on the EAS URL (nothing is published there
+  // for production, so OTA is simply inert), keeping every build safe to ship.
+  if (!selfHostUrl || !certExists) {
+    return { url: easUrl };
+  }
+
+  const channel = process.env.EXPO_UPDATES_CHANNEL;
+
+  return {
+    url: selfHostUrl,
+    enabled: true,
+    // Written into Expo.plist (EXUpdatesRequestHeaders) and AndroidManifest by
+    // `expo prebuild`; the self-hosted server maps this channel to a branch.
+    ...(channel ? { requestHeaders: { 'expo-channel-name': channel } } : {}),
+    // Verifies the manifest signature on-device so a compromised manifest host
+    // can't push arbitrary JS. Private key lives only on the server.
+    codeSigningCertificate: CODE_SIGNING_CERT_PATH,
+    codeSigningMetadata: { keyid: 'main', alg: 'rsa-v1_5-sha256' as const },
+  };
+}
 
 function resolveDevMetadata(): {
   branchName: string | null;
@@ -150,7 +204,7 @@ export default ({ config }: ConfigContext): ExpoConfig & { newArchEnabled?: bool
     ...(EAS_PROJECT_ID
       ? {
           runtimeVersion: { policy: 'appVersion' as const },
-          updates: { url: `https://u.expo.dev/${EAS_PROJECT_ID}` },
+          updates: resolveUpdatesConfig(EAS_PROJECT_ID),
         }
       : {}),
     ios: {

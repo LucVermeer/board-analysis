@@ -24,6 +24,11 @@ dist
 # misc
 .DS_Store
 *.pem
+# Self-hosted OTA code signing: the public certificate is committed so the app
+# can verify update signatures; the private/public signing keys stay server-only.
+!packages/mobile/certs/certificate.pem
+packages/mobile/certs/private-key.pem
+packages/mobile/certs/public-key.pem
 /tmp/
 
 # debug
