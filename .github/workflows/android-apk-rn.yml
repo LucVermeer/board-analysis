@@ -33,41 +33,133 @@ concurrency:
 permissions:
   contents: write # required for softprops/action-gh-release
 
+# ─── SHARED BUILD ENV (workflow-level) ───────────────────────────────────────
+# Declared at the workflow level so the cheap `gate` job (fingerprint resolve)
+# and the `build-and-release` job (expo prebuild) resolve a byte-identical config
+# and can't drift. MUST stay identical to ios-testflight-rn.yml /
+# mobile-ota-production.yml — scripts/mobile-ci-env-parity.test.ts fails the
+# build if they do. Config-affecting vars (EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
+# GOOGLE_MAPS_API_KEY, EXPO_UPDATES_URL, EXPO_UPDATES_CHANNEL) move the
+# fingerprint runtimeVersion directly; the rest reach it via the hashed .env file
+# the jobs write. Don't add other fingerprint-affecting vars here (EAS_BUILD,
+# EAS_BUILD_PROFILE, BOARDSESH_APP_VARIANT, …) — they're unset in the build too.
+env:
+  EXPO_PUBLIC_BACKEND_URL: https://ws.boardsesh.com
+  EXPO_PUBLIC_WS_URL: wss://ws.boardsesh.com/graphql
+  EXPO_PUBLIC_WEB_URL: https://www.boardsesh.com
+  EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID: 401523882502-0f6d7te1vekvkpmg18t8di6l0ig560q7.apps.googleusercontent.com
+  EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID: 401523882502-h92kdkck1qhmdbgq7ltek87g4rg8rg3h.apps.googleusercontent.com
+  EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID: 401523882502-hvfhh79p4q1qq0md7lk646c6sgmsi9q0.apps.googleusercontent.com
+  # Self-hosted OTA (expo-open-ota). EXPO_UPDATES_URL is the server's manifest
+  # endpoint (e.g. https://ota.boardsesh.com/manifest), set as a repo variable
+  # so the domain isn't hardcoded; until it's set, app.config.ts falls back to
+  # the EAS URL and OTA stays inert (harmless). The channel is baked into the
+  # binary via AndroidManifest by `expo prebuild`. See docs/mobile-ota-updates.md.
+  EXPO_UPDATES_CHANNEL: production
+  EXPO_UPDATES_URL: ${{ vars.EXPO_UPDATES_URL }}
+  # NOTE: currently inert at runtime — the mobile app has no
+  # @sentry/react-native wiring (no Sentry.init, no src/lib/sentry.ts), so this
+  # DSN is not read by the running app; client-side errors go to PostHog only
+  # (reportError → captureError). Kept so adding Sentry later needs no workflow
+  # change. Same DSN/project as web + backend; not secret — already hardcoded
+  # in packages/web and packages/backend source.
+  EXPO_PUBLIC_SENTRY_DSN: https://f55e6626faf787ae5291ad75b010ea14@o4510644927660032.ingest.us.sentry.io/4510644930150400
+  # PostHog product analytics. Intentionally the SAME project token as web
+  # (vars.NEXT_PUBLIC_POSTHOG_KEY) so a signed-in user's web + mobile activity
+  # resolves to one person. EXPO_PUBLIC_* vars are inlined into the JS bundle at
+  # build time; without this, analytics.ts sees no key and isAnalyticsEnabled is
+  # false, so every track() silently no-ops (the app shipped zero events before).
+  EXPO_PUBLIC_POSTHOG_KEY: ${{ vars.NEXT_PUBLIC_POSTHOG_KEY }}
+  # Android Google Maps key, baked into the resolved android.config at prebuild
+  # time when present (the build succeeds without it; the board-search map just
+  # stays blank). It changes the Android fingerprint, so both the gate's resolve
+  # and the build's prebuild read it from here. iOS never sets it (Apple Maps),
+  # which is why the per-platform fingerprints differ.
+  GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
+
 jobs:
+  # Fingerprint gate: resolve the Android runtimeVersion fingerprint and skip the
+  # native build when a binary with that fingerprint already shipped (a
+  # fingerprint-android-<hash> tag exists). The OTA publish
+  # (mobile-ota-production.yml) still delivers the JS to matching binaries. The
+  # build job re-resolves and tags THAT value on success. Gate + build both run
+  # on Linux, so the fingerprints match exactly. See docs/mobile-ota-updates.md.
+  gate:
+    # Push is always on main; a manual dispatch (any branch) always builds, so
+    # `workflow_dispatch` keeps producing an APK artifact off a feature branch.
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    outputs:
+      should_build: ${{ steps.fp.outputs.should_build }}
+      fingerprint: ${{ steps.fp.outputs.fingerprint }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Install Node.js dependencies (workspace root)
+        run: bun install --frozen-lockfile
+
+      # The .env is hashed into the fingerprint, so it must be byte-identical to
+      # the build job's (same heredoc + same workflow env) or the gate would
+      # resolve a different fingerprint than the build bakes.
+      - name: Write .env for Expo build-time inlining
+        working-directory: packages/mobile
+        run: |
+          cat > .env <<EOF
+          EXPO_PUBLIC_BACKEND_URL=$EXPO_PUBLIC_BACKEND_URL
+          EXPO_PUBLIC_WS_URL=$EXPO_PUBLIC_WS_URL
+          EXPO_PUBLIC_WEB_URL=$EXPO_PUBLIC_WEB_URL
+          EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID=$EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID
+          EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID=$EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID
+          EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID=$EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID
+          EXPO_PUBLIC_SENTRY_DSN=$EXPO_PUBLIC_SENTRY_DSN
+          EXPO_PUBLIC_POSTHOG_KEY=$EXPO_PUBLIC_POSTHOG_KEY
+          EOF
+
+      - name: Resolve fingerprint and check for an existing native build
+        id: fp
+        run: |
+          set -uo pipefail
+          # GOOGLE_MAPS_API_KEY is inherited from the workflow env (it changes the
+          # Android fingerprint, so the resolve must match the build's prebuild).
+          raw="$(cd packages/mobile && bunx expo-updates runtimeversion:resolve --platform android 2>/dev/null || true)"
+          fp="$(printf '%s' "$raw" | jq -r '.runtimeVersion // empty' 2>/dev/null || true)"
+          if ! printf '%s' "$fp" | grep -qiE '^[0-9a-f]{8,}$'; then
+            echo "::warning::Could not resolve the Android fingerprint — building to be safe."
+            echo "should_build=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "fingerprint=$fp" >> "$GITHUB_OUTPUT"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "should_build=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::Manual dispatch — building Android regardless of fingerprint $fp."
+            exit 0
+          fi
+          tag="fingerprint-android-$fp"
+          if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null 2>&1; then
+            echo "should_build=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Android fingerprint $fp already built (tag $tag) — skipping the native build; the OTA delivers the JS."
+          else
+            echo "should_build=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::Android fingerprint $fp is new — running the native build."
+          fi
+
   build-and-release:
+    needs: gate
+    if: needs.gate.outputs.should_build == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     # Scopes the job to the Production GitHub Environment so it can read the
     # signing and deployment-notification secrets.
     environment: Production
-
-    env:
-      EXPO_PUBLIC_BACKEND_URL: https://ws.boardsesh.com
-      EXPO_PUBLIC_WS_URL: wss://ws.boardsesh.com/graphql
-      EXPO_PUBLIC_WEB_URL: https://www.boardsesh.com
-      EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID: 401523882502-0f6d7te1vekvkpmg18t8di6l0ig560q7.apps.googleusercontent.com
-      EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID: 401523882502-h92kdkck1qhmdbgq7ltek87g4rg8rg3h.apps.googleusercontent.com
-      EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID: 401523882502-hvfhh79p4q1qq0md7lk646c6sgmsi9q0.apps.googleusercontent.com
-      # Self-hosted OTA (expo-open-ota). EXPO_UPDATES_URL is the server's manifest
-      # endpoint (e.g. https://ota.boardsesh.com/manifest), set as a repo variable
-      # so the domain isn't hardcoded; until it's set, app.config.ts falls back to
-      # the EAS URL and OTA stays inert (harmless). The channel is baked into the
-      # binary via AndroidManifest by `expo prebuild`. See docs/mobile-ota-updates.md.
-      EXPO_UPDATES_CHANNEL: production
-      EXPO_UPDATES_URL: ${{ vars.EXPO_UPDATES_URL }}
-      # NOTE: currently inert at runtime — the mobile app has no
-      # @sentry/react-native wiring (no Sentry.init, no src/lib/sentry.ts), so this
-      # DSN is not read by the running app; client-side errors go to PostHog only
-      # (reportError → captureError). Kept so adding Sentry later needs no workflow
-      # change. Same DSN/project as web + backend; not secret — already hardcoded
-      # in packages/web and packages/backend source.
-      EXPO_PUBLIC_SENTRY_DSN: https://f55e6626faf787ae5291ad75b010ea14@o4510644927660032.ingest.us.sentry.io/4510644930150400
-      # PostHog product analytics. Intentionally the SAME project token as web
-      # (vars.NEXT_PUBLIC_POSTHOG_KEY) so a signed-in user's web + mobile activity
-      # resolves to one person. EXPO_PUBLIC_* vars are inlined into the JS bundle at
-      # build time; without this, analytics.ts sees no key and isAnalyticsEnabled is
-      # false, so every track() silently no-ops (the app shipped zero events before).
-      EXPO_PUBLIC_POSTHOG_KEY: ${{ vars.NEXT_PUBLIC_POSTHOG_KEY }}
+    # Shared EXPO_PUBLIC_* / EXPO_UPDATES_* / GOOGLE_MAPS_API_KEY env lives at the
+    # workflow level (above) so the gate and build jobs resolve a byte-identical
+    # fingerprint.
 
     steps:
       - name: Checkout repository
@@ -133,12 +225,27 @@ jobs:
           echo "SENTRY_DISABLE_AUTO_UPLOAD=true" >> "$GITHUB_ENV"
           echo "::warning::Sentry source-map upload is disabled for Android release builds until the Gradle upload task is compatible with the generated Gradle version."
 
+      # Re-resolve the fingerprint (Linux, same runner class as the gate) before
+      # prebuild, and tag this value on a successful release (final tag step).
+      # GOOGLE_MAPS_API_KEY is inherited from the workflow env.
+      - name: Resolve fingerprint for tagging
+        run: |
+          set -uo pipefail
+          raw="$(cd packages/mobile && bunx expo-updates runtimeversion:resolve --platform android 2>/dev/null || true)"
+          fp="$(printf '%s' "$raw" | jq -r '.runtimeVersion // empty' 2>/dev/null || true)"
+          if ! printf '%s' "$fp" | grep -qiE '^[0-9a-f]{8,}$'; then
+            echo "::warning::Could not resolve the Android fingerprint on the build runner — the fingerprint tag will be skipped (the next push rebuilds)."
+          else
+            echo "FINGERPRINT_ANDROID=$fp" >> "$GITHUB_ENV"
+            if [ "$fp" != "${{ needs.gate.outputs.fingerprint }}" ]; then
+              echo "::warning::Android fingerprint differs between the gate (${{ needs.gate.outputs.fingerprint }}) and this build ($fp) — both run on Linux, so this is unexpected; investigate."
+            fi
+          fi
+
       - name: Expo prebuild (generate android/)
         working-directory: packages/mobile
-        env:
-          # Android Google Maps key, baked in at prebuild time when present. Build
-          # succeeds without it; the board-search map just stays blank.
-          GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
+        # GOOGLE_MAPS_API_KEY is inherited from the workflow env (baked into the
+        # resolved android.config at prebuild time when present).
         run: bunx expo prebuild --platform android --clean --no-install
 
       # versionCode = max(sideload floor, Play track ceiling + 1), resolved by
@@ -292,6 +399,28 @@ jobs:
           jq -n --arg content "$CONTENT" '{content: $content, allowed_mentions: {parse: []}}' \
             | curl -sS --fail-with-body -X POST -H "Content-Type: application/json" -d @- "$DISCORD_DEPLOY_WEBHOOK" || \
               echo "::warning::Failed to post Discord notification (see status above)"
+
+      # Record that a binary with this fingerprint shipped, so future JS-only
+      # pushes with the same fingerprint skip this build (the gate checks for the
+      # tag). Gated on the GitHub Release (the always-on sideload channel) — a
+      # failed build must not tag, or the next push would wrongly skip. If the
+      # later Play upload flakes, the sideload APK with this fingerprint still
+      # shipped; to force a rebuild for Play, delete the tag (see
+      # docs/mobile-ota-updates.md). Idempotent for concurrent runs.
+      - name: Tag the shipped Android fingerprint
+        if: github.ref == 'refs/heads/main' && steps.github_release.outcome == 'success' && env.FINGERPRINT_ANDROID != ''
+        run: |
+          set -uo pipefail
+          tag="fingerprint-android-${FINGERPRINT_ANDROID}"
+          git tag "$tag" "$GITHUB_SHA" 2>/dev/null || true
+          if git push origin "refs/tags/$tag"; then
+            echo "::notice::Tagged $tag — future JS-only pushes with this fingerprint skip the Android native build."
+          elif git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null 2>&1; then
+            echo "::notice::$tag already exists (concurrent run) — nothing to do."
+          else
+            echo "::error::Failed to push $tag."
+            exit 1
+          fi
 
       # The Play Store distributes app bundles, not APKs. Build the AAB from the
       # SAME prebuild + same env-conditional signingConfig + same versionCode as
