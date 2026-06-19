@@ -83,16 +83,14 @@ name: app-store screenshots android
     timeout: 30000
 - takeScreenshot: 04-workout-generator
 
-# Board view — the full-screen play drawer intermittently fails to composite into
-# adb screencap, so a single shot came out blank ~half the time (the carousel-free
-# board sheet below — which relaunches first — never flakes; only the full-screen
-# drawer is racy, and only at the capture moment: the in-app overlay marker is found
-# on blank runs too, so the render is fine). Rather than chase the race, capture it
-# 4 times, each via a fresh relaunch + reopen (the reliable sheet pattern, and far
-# sturdier than back/tap which dropped off the climbs list). The workflow's "keep
-# the best board-view" step then promotes the largest (non-blank) 02-board-view*.png
-# to 02-board-view.png and drops the rest. Every wait below is a reliably-found
-# anchor (home-screen, climb-row, the overlay marker), so no round aborts the flow.
+# Board view — the full-screen play drawer intermittently failed to composite into
+# adb screencap when captured mid-session (~half the time blank). Capturing it via a
+# fresh relaunch + reopen — the same pattern the never-flaky board sheet uses — fixed
+# the render (a verify run got 4/4 non-blank that way). Two rounds, not more: each
+# extra relaunch risks a flaky "Unable to launch app", and the workflow's "keep the
+# best board-view" step already promotes the largest (non-blank) 02-board-view*.png
+# to 02-board-view.png (with the blank gate as the backstop). Every wait is a
+# reliably-found anchor (home-screen, climb-row, overlay marker), so no round aborts.
 - launchApp
 - extendedWaitUntil:
     visible:
@@ -129,42 +127,6 @@ name: app-store screenshots android
 - waitForAnimationToEnd:
     timeout: 30000
 - takeScreenshot: 02-board-view-r1
-# Round 3
-- launchApp
-- extendedWaitUntil:
-    visible:
-      id: 'home-screen'
-    timeout: 90000
-- openLink: com.boardsesh.app://climbs?screenshotOpenFirst=1
-- extendedWaitUntil:
-    visible:
-      id: 'climb-row'
-    timeout: 60000
-- extendedWaitUntil:
-    visible:
-      id: 'play-drawer-board-overlay'
-    timeout: 60000
-- waitForAnimationToEnd:
-    timeout: 30000
-- takeScreenshot: 02-board-view-r2
-# Round 4
-- launchApp
-- extendedWaitUntil:
-    visible:
-      id: 'home-screen'
-    timeout: 90000
-- openLink: com.boardsesh.app://climbs?screenshotOpenFirst=1
-- extendedWaitUntil:
-    visible:
-      id: 'climb-row'
-    timeout: 60000
-- extendedWaitUntil:
-    visible:
-      id: 'play-drawer-board-overlay'
-    timeout: 60000
-- waitForAnimationToEnd:
-    timeout: 30000
-- takeScreenshot: 02-board-view-r3
 
 # Board sheet — relaunch first so the play drawer from the board-view shot is gone, then
 # open the board-presence sheet deterministically via the screenshot-mode param (no fragile
