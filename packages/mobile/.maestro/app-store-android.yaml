@@ -83,11 +83,19 @@ name: app-store screenshots android
     timeout: 30000
 - takeScreenshot: 04-workout-generator
 
-# Board view — open the first climb (wall with holds lit) via the screenshot-mode param.
-# The play drawer presents immediately over a placeholder, then the board mounts and the
-# Rust holds-overlay renders a beat later (slow on the software renderer) — so a bare
-# waitForAnimationToEnd shot caught a blank drawer. Anchor on the overlay layer itself,
-# which only mounts once the lit board has rendered, then let the fade settle.
+# Board view — the full-screen play drawer intermittently fails to composite into
+# adb screencap, so a single shot came out blank ~half the time (the carousel-free
+# board sheet below never flakes — it's the full-screen drawer that's racy). Rather
+# than chase the compositing race, capture it up to 4 times, reopening the drawer
+# each round; the workflow's "keep the best board-view" step then promotes the
+# largest (non-blank) 02-board-view*.png to 02-board-view.png and drops the rest.
+# A fresh launch first mirrors the reliable board-sheet path; the overlay anchor
+# waits for the lit board to paint each round (the marker re-arms on each reopen).
+- launchApp
+- extendedWaitUntil:
+    visible:
+      id: 'home-screen'
+    timeout: 90000
 - openLink: com.boardsesh.app://climbs?screenshotOpenFirst=1
 - extendedWaitUntil:
     visible:
@@ -97,20 +105,50 @@ name: app-store screenshots android
     visible:
       id: 'play-drawer-board-overlay'
     timeout: 60000
-# The play-drawer modal composites onto a layer adb screencap doesn't read until
-# the window redraws, so it captured blank even with the board painted (it only
-# captured before because the onboarding tip's root view forced a recomposite). A
-# small horizontal swipe on the board forces the modal window to redraw; the
-# carousel springs back to the same climb (sub-threshold), and waitForAnimationToEnd
-# holds until it settles — with the board now in the captured frame.
-- swipe:
-    start: '55%, 45%'
-    end: '42%, 45%'
-- waitForAnimationToEnd:
-    timeout: 30000
 - waitForAnimationToEnd:
     timeout: 30000
 - takeScreenshot: 02-board-view
+# Reopen + recapture (×3). `back` closes the drawer; tapping the first row reopens
+# it (screenshotOpenFirst only auto-opens once per board, so re-tap instead).
+- back
+- waitForAnimationToEnd:
+    timeout: 15000
+- tapOn:
+    id: 'climb-row'
+    index: 0
+- extendedWaitUntil:
+    visible:
+      id: 'play-drawer-board-overlay'
+    timeout: 60000
+- waitForAnimationToEnd:
+    timeout: 30000
+- takeScreenshot: 02-board-view-r1
+- back
+- waitForAnimationToEnd:
+    timeout: 15000
+- tapOn:
+    id: 'climb-row'
+    index: 0
+- extendedWaitUntil:
+    visible:
+      id: 'play-drawer-board-overlay'
+    timeout: 60000
+- waitForAnimationToEnd:
+    timeout: 30000
+- takeScreenshot: 02-board-view-r2
+- back
+- waitForAnimationToEnd:
+    timeout: 15000
+- tapOn:
+    id: 'climb-row'
+    index: 0
+- extendedWaitUntil:
+    visible:
+      id: 'play-drawer-board-overlay'
+    timeout: 60000
+- waitForAnimationToEnd:
+    timeout: 30000
+- takeScreenshot: 02-board-view-r3
 
 # Board sheet — relaunch first so the play drawer from the board-view shot is gone, then
 # open the board-presence sheet deterministically via the screenshot-mode param (no fragile
