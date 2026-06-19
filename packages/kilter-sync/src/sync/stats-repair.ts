@@ -1,7 +1,7 @@
 import { and, eq, sql } from 'drizzle-orm';
 import type { PgDatabase, PgQueryResultHKT } from 'drizzle-orm/pg-core';
 import { boardClimbAliases, boardClimbs, boardClimbStats } from '@boardsesh/db/schema';
-import { commandCountFromResult } from '@boardsesh/db/client';
+import { commandCountFromResult, rowsFromResult } from '@boardsesh/db/client';
 
 import type { KilterTokenProvider } from '../api/token-provider';
 import { fetchLayoutClimbStats } from '../api/kilter-rest';
@@ -48,6 +48,7 @@ export type KilterStatsRepairSummary = {
   changedKilterRows: number;
   formulaRowsRecomputed: number;
   maxKilterDrop: number;
+  maxKilterRise: number;
   topBefore: KilterStatsRepairTopRow[];
   topAfter: KilterStatsRepairTopRow[] | null;
 };
@@ -69,6 +70,7 @@ type RepairStatValue = {
 type CompareRow = {
   changed_rows: number | string | null;
   max_drop: number | string | null;
+  max_rise: number | string | null;
 };
 
 type FormulaCountRow = {
@@ -84,10 +86,6 @@ type TopRow = {
   kilter_ascensionist_count: number | string | null;
   boardsesh_ascensionist_count: number | string | null;
 };
-
-function rowsFromResult<T>(result: unknown): T[] {
-  return Array.isArray(result) ? (result as T[]) : [];
-}
 
 async function processBatches<T>(rows: T[], fn: (chunk: T[]) => Promise<void>): Promise<void> {
   for (let i = 0; i < rows.length; i += BATCH) {
@@ -142,6 +140,11 @@ async function loadTopStats(db: DrizzleDb): Promise<KilterStatsRepairTopRow[]> {
   return rows.map(mapTopRow);
 }
 
+// Maps every source climb UUID (lowercased) to its canonical UUID for one board
+// layout, from board_climbs self-rows + persisted board_climb_aliases. Precondition:
+// run after a catalog sync has persisted this run's fingerprint aliases — the repair
+// reads only persisted aliases, it does not re-derive fingerprints. A source UUID
+// with no mapping here is counted in summary.statsUnresolved (observable, not silent).
 async function loadCanonicalMap(db: DrizzleDb, layoutId: number): Promise<Map<string, string>> {
   const map = new Map<string, string>();
   const climbRows = await db
@@ -194,9 +197,10 @@ function statValueFromAccum(accum: StatAccum): RepairStatValue {
 async function compareExistingStats(
   db: DrizzleDb,
   statValues: RepairStatValue[],
-): Promise<{ changedRows: number; maxKilterDrop: number }> {
+): Promise<{ changedRows: number; maxKilterDrop: number; maxKilterRise: number }> {
   let changedRows = 0;
   let maxKilterDrop = 0;
+  let maxKilterRise = 0;
 
   await processBatches(statValues, async (chunk) => {
     const incoming = chunk.map((statValue) => ({
@@ -216,7 +220,10 @@ async function compareExistingStats(
                ) AS changed_rows,
                MAX(COALESCE(s.kilter_ascensionist_count, 0) - i.kilter_count) FILTER (
                  WHERE COALESCE(s.kilter_ascensionist_count, 0) > i.kilter_count
-               ) AS max_drop
+               ) AS max_drop,
+               MAX(i.kilter_count - COALESCE(s.kilter_ascensionist_count, 0)) FILTER (
+                 WHERE i.kilter_count > COALESCE(s.kilter_ascensionist_count, 0)
+               ) AS max_rise
           FROM incoming i
      LEFT JOIN board_climb_stats s
             ON s.board_type = ${KILTER}
@@ -227,9 +234,10 @@ async function compareExistingStats(
     const row = rows[0];
     changedRows += Number(row?.changed_rows ?? 0);
     maxKilterDrop = Math.max(maxKilterDrop, Number(row?.max_drop ?? 0));
+    maxKilterRise = Math.max(maxKilterRise, Number(row?.max_rise ?? 0));
   });
 
-  return { changedRows, maxKilterDrop };
+  return { changedRows, maxKilterDrop, maxKilterRise };
 }
 
 async function countFormulaMismatches(db: DrizzleDb): Promise<number> {
@@ -339,14 +347,18 @@ export async function repairKilterCatalogStats(args: KilterStatsRepairArgs): Pro
   }
 
   const statValues = [...statsByCanonicalAngle.values()].map(statValueFromAccum);
-  const { changedRows, maxKilterDrop } = await compareExistingStats(args.db, statValues);
+  const { changedRows, maxKilterDrop, maxKilterRise } = await compareExistingStats(args.db, statValues);
   const formulaRowsBeforeApply = await countFormulaMismatches(args.db);
 
   let formulaRowsRecomputed = 0;
   let topAfter: KilterStatsRepairTopRow[] | null = null;
   if (args.apply) {
-    await upsertRepairedStats(args.db, statValues);
-    formulaRowsRecomputed = await recomputeMaterializedTotals(args.db);
+    // Atomic: a crash between the kilter-count overwrite and the materialized
+    // recompute would otherwise leave ascensionist_count stale until re-run.
+    await args.db.transaction(async (tx) => {
+      await upsertRepairedStats(tx, statValues);
+      formulaRowsRecomputed = await recomputeMaterializedTotals(tx);
+    });
     topAfter = await loadTopStats(args.db);
   }
 
@@ -361,6 +373,7 @@ export async function repairKilterCatalogStats(args: KilterStatsRepairArgs): Pro
     changedKilterRows: changedRows,
     formulaRowsRecomputed: args.apply ? formulaRowsRecomputed : formulaRowsBeforeApply,
     maxKilterDrop,
+    maxKilterRise,
     topBefore,
     topAfter,
   };

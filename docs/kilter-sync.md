@@ -227,6 +227,16 @@ ascensionist_count = GREATEST(COALESCE(kilter_ascensionist_count, 0), COALESCE(a
 
 For boards with only one catalog source (e.g. Tension, `kilter_` is NULL) this collapses to `aurora_ + boardsesh_` — behaviour unchanged. The same formula is used at all three writers: the catalog sync (`catalog-sync.ts`), aurora-sync (`shared-sync.ts`), and the Boardsesh-tick recompute (`recompute-climb-stats.ts`). `boardsesh_ascensionist_count` stays additive because Boardsesh-native ticks aren't (yet) pushed to Kilter; revisit when push-back lands.
 
+### Stats repair
+
+A single Boardsesh layout maps to several Grips `product_layout_uuid`s (size variants). Before the `(source climb UUID, angle)` dedup landed, the catalog sync folded each repeated source stat once per variant, so `kilter_ascensionist_count` (and thus `ascensionist_count`) was inflated by the number of variants a climb appeared in. The fix prevents new inflation; existing rows need a one-time `repair-stats` pass (`stats-repair.ts`).
+
+`repair-stats` re-fetches every listed Grips layout, dedupes stats the same way the live sync now does, and **overwrites** `kilter_ascensionist_count` from the deduped value (also re-asserting Grips `display_difficulty / difficulty_average / quality_average` on canonical rows). It is idempotent — re-running converges and the second run is a no-op.
+
+- **Dry-run is the default and is read-only.** It reports `changedKilterRows`, `maxKilterDrop` / `maxKilterRise` (largest per-row decrease/increase), `statsDeduped`, `statsUnresolved`, and a `topBefore` list. Review these before applying — a large `maxKilterDrop` can also signal a partial Grips fetch (delisted climbs, rate-limit truncation), so treat it as a stop-and-investigate signal rather than blindly applying.
+- **`--apply` writes inside a single transaction** (overwrite + materialized-total recompute are atomic) and prints `topAfter`. A fetch error aborts before any write, since writes only run after the full fetch loop completes.
+- Run it with the **daemon paused** so a concurrent catalog sync doesn't interleave, and run it **unscoped** (no `--layouts`) for the production cleanup — the materialized-total recompute pass touches all Kilter rows, so a scoped run can leave inconsistent state. Rows for climbs Grips no longer lists aren't re-fetched, so this tool does not correct delisted-climb inflation.
+
 ### Quality scale — every board on 1–5
 
 Kilter Grips reports `quality_average` on a 1–5 scale (MoonBoard too), but Aurora reports 1–3. To keep `board_climb_stats.quality_average` one scale the UI renders uniformly, every writer stores 1–5: aurora-sync normalises its writes via `normalizeQualityTo5` (`×5/3`, continuous — it's a stored average, so unlike `convertQuality` it isn't rounded to integer star steps); Kilter Grips and Boardsesh-tick quality are already 1–5 and stored as-is.
@@ -300,9 +310,14 @@ bunx kilter-sync list                # List all stored kilter credentials
 bunx kilter-sync user <userId>       # Force a sync for one user
 bunx kilter-sync daemon              # Run the daemon (one-user-per-cycle, quiet hours)
 bunx kilter-sync catalog --user <id> # Sync the public climb catalog (Flow A)
+bunx kilter-sync repair-stats --user <id>          # Dry-run: report deduped Kilter counts vs DB (no writes)
+bunx kilter-sync repair-stats --user <id> --apply  # Write the deduped counts + recompute totals
+bunx kilter-sync repair-stats --user <id> --layouts <uuid,uuid>  # Scope to specific Grips product_layout_uuids
 bunx kilter-sync locations --user <id> # Sync public Kilter gym/board locations
 bunx kilter-sync locations --skip-if-missing-credentials # No-op when no token source is configured
 ```
+
+`repair-stats` is a one-time cleanup for the catalog-stats inflation (see [Stats repair](#stats-repair)). It defaults to a read-only dry-run; nothing is written without `--apply`.
 
 Run with 1Password like aurora-sync:
 

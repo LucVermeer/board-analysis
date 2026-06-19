@@ -1,9 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vite-plus/test';
 import { logger } from '../utils/logger';
 
-// Captured SQL fragments per call to tx.execute.
-const executedSql: string[] = [];
-
 const { mockDb } = vi.hoisted(() => {
   // The `sql` template returns an object whose `.queryChunks` array holds the
   // alternating raw SQL strings and parameter sentinels. For assertion
@@ -22,26 +19,8 @@ vi.mock('../db/client', () => ({
 
 import { recomputeClimbStats } from '../graphql/resolvers/ticks/recompute-climb-stats';
 
-function chainStub(): { insert: ReturnType<typeof vi.fn>; execute: ReturnType<typeof vi.fn> } {
-  const chain: Record<string, unknown> = {};
-  for (const method of ['values', 'onConflictDoNothing']) {
-    chain[method] = vi.fn(() => chain);
-  }
-  return {
-    insert: vi.fn(() => chain),
-    execute: vi.fn(async (query: unknown) => {
-      // Drizzle's sql template exposes `queryChunks` or `.toSQL()`. Use a
-      // best-effort serialize that walks the object's string-like fields.
-      const stringified = JSON.stringify(query);
-      executedSql.push(stringified);
-      return [];
-    }),
-  };
-}
-
 describe('recomputeClimbStats', () => {
   beforeEach(() => {
-    executedSql.length = 0;
     vi.clearAllMocks();
   });
 

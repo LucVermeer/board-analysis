@@ -85,8 +85,11 @@ function createDbShim(args: { selectResults: SelectResult[]; executeResults: Exe
     }),
   }));
 
+  const db = { select, execute, insert, transaction: vi.fn() };
+  db.transaction.mockImplementation(async (cb: (tx: typeof db) => Promise<unknown>) => cb(db));
+
   return {
-    db: { select, execute, insert },
+    db,
     insertValues,
   };
 }
@@ -111,7 +114,7 @@ describe('repairKilterCatalogStats', () => {
   it('dry-runs deduped Kilter counts without writing', async () => {
     const { db, insertValues } = createDbShim({
       selectResults: [[{ uuid: 'canon' }], [{ aliasUuid: 'alias-b', canonicalUuid: 'canon' }]],
-      executeResults: [[], [{ changed_rows: '1', max_drop: '12' }], [{ rows_to_recompute: '2' }]],
+      executeResults: [[], [{ changed_rows: '1', max_drop: '12', max_rise: '4' }], [{ rows_to_recompute: '2' }]],
     });
 
     const summary = await repairKilterCatalogStats({
@@ -128,6 +131,7 @@ describe('repairKilterCatalogStats', () => {
     expect(summary.changedKilterRows).toBe(1);
     expect(summary.formulaRowsRecomputed).toBe(2);
     expect(summary.maxKilterDrop).toBe(12);
+    expect(summary.maxKilterRise).toBe(4);
     expect(insertValues).toHaveLength(0);
   });
 
