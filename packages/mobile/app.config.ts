@@ -203,7 +203,18 @@ export default ({ config }: ConfigContext): ExpoConfig & { newArchEnabled?: bool
     assetBundlePatterns: ['assets/**/*'],
     ...(EAS_PROJECT_ID
       ? {
-          runtimeVersion: { policy: 'appVersion' as const },
+          // `fingerprint` (not `appVersion`): the runtimeVersion is a hash of the
+          // native project (deps, config plugins, entitlements, native dirs).
+          // OTA updates only reach a binary whose native fingerprint matches, so a
+          // JS-only change keeps the same fingerprint (OTA lands) while any native
+          // change yields a new fingerprint (the OTA is intrinsically incompatible
+          // with old binaries and isn't delivered — they keep their embedded bundle
+          // until a store build with the new fingerprint ships). This removes the
+          // `appVersion` footgun where a native change without a `version` bump
+          // could push JS to a binary lacking the native capability it needs.
+          // Resolved by Expo's bundled @expo/fingerprint; verify with
+          // `bunx expo-updates runtimeversion:resolve --platform ios|android`.
+          runtimeVersion: { policy: 'fingerprint' as const },
           updates: resolveUpdatesConfig(EAS_PROJECT_ID),
         }
       : {}),
