@@ -945,6 +945,42 @@ class PubSub {
     }
   }
 
+  /**
+   * Remember which shared board_id a party session is on, written as a
+   * side-effect of `reportBoardClimb` (the only moment a session is provably
+   * tied to a board). The APNs Live Activity path needs this to resolve the
+   * board's current holder for a given session — `QueueState` and the push-token
+   * rows carry sessionId but not boardId.
+   *
+   * Redis-only and TTL'd to the same window as proof-of-presence so an idle
+   * session's mapping doesn't leak; a fresh send re-stamps it. No-op without
+   * Redis: the holder lookup then degrades to "unknown" and the APNs path omits
+   * boardConnection (device falls back to its own App-Group state).
+   */
+  async setSessionBoard(sessionId: string, boardId: string): Promise<void> {
+    if (!this.redisAdapter || !this.isRedisConnected()) return;
+    try {
+      const { publisher } = redisClientManager.getClients();
+      await publisher.set(`session:${sessionId}:board`, boardId, 'EX', BOARD_MEMBERSHIP_TTL);
+    } catch (error) {
+      if (this.redisRequired) throw error;
+      logger.error('[PubSub] Failed to set session board:', error);
+    }
+  }
+
+  /** The shared board_id this session is on, or null when unknown. */
+  async getSessionBoard(sessionId: string): Promise<string | null> {
+    if (!this.redisAdapter || !this.isRedisConnected()) return null;
+    try {
+      const { publisher } = redisClientManager.getClients();
+      return await publisher.get(`session:${sessionId}:board`);
+    } catch (error) {
+      if (this.redisRequired) throw error;
+      logger.error('[PubSub] Failed to get session board:', error);
+      return null;
+    }
+  }
+
   private setLocalBoardMembership(localKey: string, expiry: number): void {
     this.localBoardMembership.set(localKey, expiry);
     if (this.localBoardMembershipCleanupExpiry !== null && expiry >= this.localBoardMembershipCleanupExpiry) {

@@ -76,6 +76,15 @@ enum SharedConstants {
     /// Distinguishes real party sessions from local-only Live Activities whose
     /// generated sessionId is only an ActivityKit identifier.
     static let partySessionKey = "bs_party_session"
+    /// Last-known board-connection state from THIS device's POV
+    /// ("connectedByMe" | "heldByPeer" | "disconnected"). Mirrors the pushed
+    /// `ClimbSessionAttributes.ContentState.boardConnection` into the App Group
+    /// so widget intents (which run without the pushed state) and the native
+    /// WebSocket content-state builder have a fallback source of truth.
+    static let boardConnectionKey = "bs_board_connection"
+    /// Display name of the peer holding the board when `boardConnectionKey` is
+    /// "heldByPeer" (absent otherwise). Companion to `boardConnectionKey`.
+    static let holderDisplayNameKey = "bs_holder_display_name"
 
     // MARK: Darwin Notification
 
@@ -224,6 +233,11 @@ enum SharedQueueState {
             // "offline board art" revisit issue. The widget then just displays the
             // finished image; no local webp decode/composite needed.
             URLQueryItem(name: "include_background", value: "1"),
+            // Darken the board photo behind the holds so the lit climb reads
+            // clearly at thumbnail size — mirrors the mobile climb list's
+            // LayeredClimbImage `dim` (rgba(0,0,0,0.18)). Bump
+            // ThumbnailFetcher.cacheVersion whenever this value changes.
+            URLQueryItem(name: "dim_background", value: "0.18"),
         ]
 
         return components?.url
@@ -247,6 +261,31 @@ enum SharedWidgetWallControlState {
     static func save(navigationAllowed: Bool, isPartySession: Bool, to defaults: UserDefaults) {
         defaults.set(navigationAllowed, forKey: SharedConstants.widgetNavigationAllowedKey)
         defaults.set(isPartySession, forKey: SharedConstants.partySessionKey)
+    }
+
+    /// Mirror of the pushed `ContentState.boardConnection` / `.holderDisplayName`
+    /// into the App Group, so widget intents (which run without the pushed
+    /// state) and the native WebSocket content-state builder have a fallback
+    /// source of truth. Pass nil to clear (e.g. a heldByPeer state with an
+    /// anonymous holder leaves the display name absent).
+    static func saveBoardConnection(_ boardConnection: String?, holderDisplayName: String?, to defaults: UserDefaults) {
+        if let boardConnection {
+            defaults.set(boardConnection, forKey: SharedConstants.boardConnectionKey)
+        } else {
+            defaults.removeObject(forKey: SharedConstants.boardConnectionKey)
+        }
+        if let holderDisplayName {
+            defaults.set(holderDisplayName, forKey: SharedConstants.holderDisplayNameKey)
+        } else {
+            defaults.removeObject(forKey: SharedConstants.holderDisplayNameKey)
+        }
+    }
+
+    static func loadBoardConnection(from defaults: UserDefaults) -> (boardConnection: String?, holderDisplayName: String?) {
+        (
+            defaults.string(forKey: SharedConstants.boardConnectionKey),
+            defaults.string(forKey: SharedConstants.holderDisplayNameKey)
+        )
     }
 
     static func load(from defaults: UserDefaults) -> SharedWidgetWallControl {

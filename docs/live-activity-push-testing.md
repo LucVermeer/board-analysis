@@ -77,9 +77,19 @@ Device-to-server (widget buttons):
        - rejected unless the token row has a bound authenticated userId
        - re-asserts (re-broadcasts CurrentClimbChanged for) the current climb
        |
-  On success (200), the widget shows the lightbulb on. Navigation is
-  always enabled — sessions are always-live, any member may navigate.
+  On success (200), the widget shows the lightbulb on.
 ```
+
+**Per-token board connection:** the server-to-device push stamps each token's
+`boardConnection` ("connectedByMe" | "heldByPeer" | "disconnected") so the
+lightbulb + Previous/Next reflect who holds the board. The send path resolves the
+session's holder once (`session:{id}:board` → `resolveBoardHolder`) and groups
+tokens by derived state, so the holder's device gets `connectedByMe` and peers get
+`heldByPeer` (with the holder's name). A board hand-off kicks an extra debounced
+push from `reportBoardClimb` (it isn't a queue event). When the holder can't be
+resolved, the fields are omitted and the device keeps its own App-Group state. See
+`packages/backend/src/services/apns/board-connection.ts` and the ownership section
+in `docs/live-activity-board-control.md`.
 
 Latency on the BLE side from a suspended-app cold-launch is ~1.5–2.5 s: background-launch (~0.5–1 s) + CoreBluetooth state restoration (~0.5–1 s) + UART chunk flush (~0.2–0.5 s). Subsequent taps inside the same wake window are faster because the peripheral stays connected.
 

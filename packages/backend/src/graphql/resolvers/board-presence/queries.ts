@@ -10,7 +10,7 @@ import { db } from '../../../db/client';
 import * as dbSchema from '@boardsesh/db/schema';
 import { pubsub } from '../../../pubsub/index';
 import { applyRateLimit, requireAuthenticated } from '../shared/helpers';
-import { requireActiveBoardById, requireAnonReadableBoard } from './shared';
+import { requireActiveBoardById, requireAnonReadableBoard, resolveBoardHolder } from './shared';
 import { computeBoardPresenceStats } from './stats';
 
 export const boardPresenceQueries = {
@@ -157,23 +157,6 @@ export const boardPresenceQueries = {
     // Validates the id and, for anonymous viewers, restricts to public /
     // system-shared boards.
     await requireAnonReadableBoard(boardId, ctx.userId);
-    const emitterId = await pubsub.getBoardWriter(String(boardId));
-    if (emitterId === null) return null;
-    const userId = emitterId.startsWith('conn:') ? null : emitterId;
-    const recent = await pubsub.getRecentBoardClimbs(String(boardId));
-    const last = recent[0];
-    // Only adopt the newest climb's display identity when that climb was sent by
-    // THIS holder. The newest climb can belong to a previous sender (the current
-    // holder took the wall but their send hasn't landed in the feed yet), and
-    // pairing their name/avatar/time with the holder's userId would mislabel the
-    // (now tappable) avatar and point it at the wrong profile. When they don't
-    // match we still report the holder's userId; clients render a "?".
-    const lastBySameHolder = userId !== null && last?.sentByUserId === userId;
-    return {
-      userId,
-      displayName: lastBySameHolder ? (last.sentByDisplayName ?? null) : null,
-      avatarUrl: lastBySameHolder ? (last.sentByAvatarUrl ?? null) : null,
-      lastSentAt: lastBySameHolder ? (last.sentAt ?? null) : null,
-    };
+    return resolveBoardHolder(boardId);
   },
 };

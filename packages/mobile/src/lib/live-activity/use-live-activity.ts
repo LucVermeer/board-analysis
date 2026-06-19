@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Platform } from 'react-native';
 import type { ClimbQueueItem } from '@boardsesh/queue';
 import { parseSetIds, toBoardName } from '@boardsesh/board-config';
+import type { BoardConnection } from '../../components/play-drawer/lightbulb-control';
 import { getAuthToken } from '../auth-store';
 import { BACKEND_URL, WEB_BASE_URL } from '../env';
 import {
@@ -35,6 +36,10 @@ type UseLiveActivityOptions = {
   isSessionActive: boolean;
   widgetNavigationAllowed: boolean;
   isPartySession: boolean;
+  /** Board-connection ownership; drives the widget bulb + Previous/Next visibility. */
+  boardConnection: BoardConnection;
+  /** Display name of the peer holding the board (heldByPeer only). */
+  holderDisplayName?: string | null;
   /** Localized strings for the Android foreground-service notification (ignored on iOS). */
   androidNotification?: AndroidNotificationStrings;
 };
@@ -122,6 +127,8 @@ export function useLiveActivity({
   isSessionActive,
   widgetNavigationAllowed,
   isPartySession,
+  boardConnection,
+  holderDisplayName,
   androidNotification,
 }: UseLiveActivityOptions): void {
   const isActiveRef = useRef(false);
@@ -141,6 +148,10 @@ export function useLiveActivity({
   widgetNavigationAllowedRef.current = widgetNavigationAllowed;
   const isPartySessionRef = useRef(isPartySession);
   isPartySessionRef.current = isPartySession;
+  const boardConnectionRef = useRef(boardConnection);
+  boardConnectionRef.current = boardConnection;
+  const holderDisplayNameRef = useRef(holderDisplayName);
+  holderDisplayNameRef.current = holderDisplayName;
   const queueRef = useRef(queue);
   queueRef.current = queue;
   const currentClimbRef = useRef(currentClimbQueueItem);
@@ -227,6 +238,8 @@ export function useLiveActivity({
             setIds: stableBoard.setIds,
             widgetNavigationAllowed: widgetNavigationAllowedRef.current,
             isPartySession: isPartySessionRef.current,
+            boardConnection: boardConnectionRef.current,
+            holderDisplayName: holderDisplayNameRef.current,
             boardBackgroundPaths,
             androidNotification: androidNotificationRef.current,
           });
@@ -251,6 +264,8 @@ export function useLiveActivity({
             queue: serializedQueueRef.current,
             widgetNavigationAllowed: widgetNavigationAllowedRef.current,
             isPartySession: isPartySessionRef.current,
+            boardConnection: boardConnectionRef.current,
+            holderDisplayName: holderDisplayNameRef.current,
           });
         })
         .catch((error) => {
@@ -317,8 +332,10 @@ export function useLiveActivity({
       queue: serializedQueue,
       widgetNavigationAllowed,
       isPartySession,
+      boardConnection,
+      holderDisplayName,
     });
-  }, [isPartySession, serializedQueue, stableBoard, widgetNavigationAllowed]);
+  }, [boardConnection, holderDisplayName, isPartySession, serializedQueue, stableBoard, widgetNavigationAllowed]);
 
   // Effect 2: Climb navigation — lightweight update with only scalar data.
   useEffect(() => {
@@ -342,6 +359,16 @@ export function useLiveActivity({
       climbUuid: displayItem.climb.uuid,
       widgetNavigationAllowed,
       isPartySession,
+      boardConnection,
+      holderDisplayName,
     });
-  }, [currentClimbQueueItem, isPartySession, queue, stableBoard, widgetNavigationAllowed]);
+  }, [
+    boardConnection,
+    currentClimbQueueItem,
+    holderDisplayName,
+    isPartySession,
+    queue,
+    stableBoard,
+    widgetNavigationAllowed,
+  ]);
 }

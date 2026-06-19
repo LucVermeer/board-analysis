@@ -32,11 +32,14 @@ actor ThumbnailFetcher {
     /// rendered correctly in production (v2 decoded the bundled webp via Apple
     /// ImageIO, which fails on the lossy VP8 art; v3 switched to libwebp but still
     /// fell back to overlay-only). v4 = the server returns the fully composited
-    /// thumbnail (include_background=1), so the board photo always shows. The bump
-    /// purges v2/v3 builds' stale overlay-only thumbnails on update. Mirrors
+    /// thumbnail (include_background=1), so the board photo always shows. v5 =
+    /// the render now passes dim_background=0.18 (board photo darkened behind the
+    /// holds for readability), so v4 thumbnails are visually stale and must be
+    /// refetched. The cache key is the climbUuid (not the URL), so the new param
+    /// alone would otherwise keep serving the old image. Mirrors
     /// `RENDERER_VERSION` in use-native-climb-render.ts, which solved the same
     /// transition in-app.
-    static let cacheVersion = 4
+    static let cacheVersion = 5
 
     // MARK: - Dependencies
 

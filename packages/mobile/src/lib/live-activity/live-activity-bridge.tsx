@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQueue } from '../../providers/queue-provider';
+import { useBoardConnectionState } from '../../components/ble/use-board-connection-state';
 import { useLiveActivity } from './use-live-activity';
 import { addWidgetQueueNavigateListener } from './live-activity-plugin';
 
@@ -23,8 +24,11 @@ type LiveActivityBridgeProps = {
 export function LiveActivityBridge({ boardName, layoutId, sizeId, setIds }: LiveActivityBridgeProps) {
   const { state, sessionId, dispatchWidgetNavigation } = useQueue();
   const { t } = useTranslation('session');
-  // Always-live: widget Next/Previous drive the shared current climb for the
-  // whole session, just like in-app navigation — no driver/preview gate.
+  // Board-connection ownership (shared with the in-app lightbulb). Drives the
+  // Live Activity lightbulb + Previous/Next visibility: controls show only while
+  // THIS device holds the BLE link (connectedByMe); once a peer takes the wall
+  // the bulb goes out and the controls hide, leaving just the current climb.
+  const { boardConnection, holderDisplayName } = useBoardConnectionState();
 
   // Localized strings for the Android foreground-service notification (channel +
   // Previous/Next actions). Built here because hooks need a component context;
@@ -48,10 +52,13 @@ export function LiveActivityBridge({ boardName, layoutId, sizeId, setIds }: Live
     // Session presence follows real (explicitly started/joined) sessions only —
     // a solo queue never raises the lock-screen widget / Dynamic Island.
     isSessionActive: sessionId !== null,
-    // Always-live: the widget navigate endpoint is no longer driver-gated, so
-    // every member (and solo) may navigate from the widget.
-    widgetNavigationAllowed: true,
+    // Widget Previous/Next are enabled only while this device holds the board
+    // (connectedByMe) — they write BLE to the wall, so a non-holder can't drive.
+    // This also gates the App Intents' `navigationAllowed` guard natively.
+    widgetNavigationAllowed: boardConnection === 'connectedByMe',
     isPartySession: sessionId !== null,
+    boardConnection,
+    holderDisplayName,
     androidNotification,
   });
 

@@ -31,6 +31,11 @@ const widget = vi.hoisted(() => ({
   useLiveActivity: vi.fn(),
 }));
 
+const boardState = vi.hoisted(() => ({
+  boardConnection: 'connectedByMe' as 'connectedByMe' | 'heldByPeer' | 'disconnected',
+  holderDisplayName: null as string | null,
+}));
+
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
@@ -40,6 +45,18 @@ vi.mock('../../../providers/queue-provider', () => ({
     state: queue.state,
     sessionId: queue.sessionId,
     dispatchWidgetNavigation: queue.dispatchWidgetNavigation,
+  }),
+}));
+
+vi.mock('../../../components/ble/use-board-connection-state', () => ({
+  useBoardConnectionState: () => ({
+    bluetooth: null,
+    localConnected: boardState.boardConnection === 'connectedByMe',
+    pending: false,
+    sessionId: queue.sessionId,
+    boardConnection: boardState.boardConnection,
+    lit: boardState.boardConnection !== 'disconnected',
+    holderDisplayName: boardState.holderDisplayName,
   }),
 }));
 
@@ -71,6 +88,46 @@ describe('LiveActivityBridge widget navigation (always-live)', () => {
     queue.dispatchWidgetNavigation.mockClear();
     widget.listener = null;
     widget.useLiveActivity.mockClear();
+    boardState.boardConnection = 'connectedByMe';
+    boardState.holderDisplayName = null;
+  });
+
+  it('passes connectedByMe + enables widget navigation when this device holds the board', () => {
+    renderBridge();
+
+    expect(widget.useLiveActivity).toHaveBeenCalledWith(
+      expect.objectContaining({
+        boardConnection: 'connectedByMe',
+        widgetNavigationAllowed: true,
+        holderDisplayName: null,
+      }),
+    );
+  });
+
+  it('hides widget navigation (and surfaces the holder) once a peer takes the board', () => {
+    boardState.boardConnection = 'heldByPeer';
+    boardState.holderDisplayName = 'Alex';
+    renderBridge();
+
+    expect(widget.useLiveActivity).toHaveBeenCalledWith(
+      expect.objectContaining({
+        boardConnection: 'heldByPeer',
+        widgetNavigationAllowed: false,
+        holderDisplayName: 'Alex',
+      }),
+    );
+  });
+
+  it('hides widget navigation when nobody is driving the board', () => {
+    boardState.boardConnection = 'disconnected';
+    renderBridge();
+
+    expect(widget.useLiveActivity).toHaveBeenCalledWith(
+      expect.objectContaining({
+        boardConnection: 'disconnected',
+        widgetNavigationAllowed: false,
+      }),
+    );
   });
 
   it('navigates to the absolute index the widget reports (not a relative step)', () => {
@@ -142,6 +199,8 @@ describe('LiveActivityBridge session-presence gating', () => {
     queue.sessionId = 'session-1';
     queue.state = { queue: [], currentClimbQueueItem: null };
     widget.useLiveActivity.mockClear();
+    boardState.boardConnection = 'connectedByMe';
+    boardState.holderDisplayName = null;
   });
 
   it('keeps a solo queue (no session) out of session presence', () => {
