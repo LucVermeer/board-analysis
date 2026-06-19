@@ -83,6 +83,13 @@ export default function DiscoverLibrary() {
   const { brandColors, variant } = useTheme();
   const isMaterial = selectByVariant(variant, { material: true, liquidGlass: false });
   const bottomChrome = useBottomChromeMetrics();
+  // The screen sits above the in-flow Material tab bar, so the FAB's `bottom` is
+  // measured from the tab-bar top — NOT the screen bottom. fixedFooterBottom is the
+  // footer metric for exactly this case: it clears the docked queue accessory bar
+  // (and is 0 when no climb is queued), without re-adding the tab-bar height the way
+  // floatingControlBottom (built for full-screen overlays) does. +16dp = standard
+  // FAB gap above the accessory bar / tab bar.
+  const createFabBottom = bottomChrome.fixedFooterBottom + spacing[4];
   const insets = useSafeAreaInsets();
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   const { data: token = null, isLoading: tokenLoading } = useAuthToken();
@@ -636,7 +643,7 @@ export default function DiscoverLibrary() {
           accessibilityLabel={t('library.createFab.ariaLabel')}
           variant="primary"
           mode="elevated"
-          style={[styles.createFab, { bottom: bottomChrome.floatingControlBottom + spacing[2] }]}
+          style={[styles.createFab, { bottom: createFabBottom }]}
         />
       ) : null}
 
