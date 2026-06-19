@@ -54,7 +54,9 @@ OTA whose fingerprint no current binary has yet, so it only lands once the match
 ships. Until the server is wired (no `EXPO_UPDATES_URL` variable or committed cert), the workflow
 skips with a green no-op. The matching native builds (`ios-testflight-rn` / `android-apk-rn`) run
 on the same push but are **fingerprint-gated** — they only build when the fingerprint is new (see
-[Native-build gating](#native-build-gating-ota-only-when-the-fingerprint-is-unchanged) below).
+[Native-build gating](#native-build-gating-ota-only-when-the-fingerprint-is-unchanged) below). A
+successful publish (and any failure) posts to the Discord deploy channel via the
+`DISCORD_DEPLOY_WEBHOOK` secret, the same channel the native build workflows use.
 
 **Manual** (one branch, ad hoc) — once the server is deployed and you're logged in (`bunx eas
 login`, or `EXPO_TOKEN` set):

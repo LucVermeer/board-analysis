@@ -131,6 +131,7 @@ jobs:
       # iOS binary) and the Android publish WITH it (to match the Android binary). A
       # single `--platform all` publish with one env could only ever match one side.
       - name: Publish iOS OTA
+        id: publish_ios
         if: steps.gate.outputs.configured == 'true' && (env.INPUT_PLATFORM == 'all' || env.INPUT_PLATFORM == 'ios')
         run: |
           args=(--channel production --platform ios)
@@ -138,6 +139,7 @@ jobs:
           vp run mobile:publish -- "${args[@]}"
 
       - name: Publish Android OTA
+        id: publish_android
         if: steps.gate.outputs.configured == 'true' && (env.INPUT_PLATFORM == 'all' || env.INPUT_PLATFORM == 'android')
         env:
           # Must match the Android native prebuild (android-apk-rn.yml) so the
@@ -147,3 +149,48 @@ jobs:
           args=(--channel production --platform android)
           if [ -n "$INPUT_MESSAGE" ]; then args+=(--message "$INPUT_MESSAGE"); fi
           vp run mobile:publish -- "${args[@]}"
+
+      # Announce the publish to the Discord deploy channel (same webhook + pattern
+      # as ios-testflight-rn.yml / android-apk-rn.yml). Only when an OTA actually
+      # went out: gate wired AND at least one platform succeeded. A `--platform ios`
+      # run reports just "iOS" (the Android step is skipped, not success).
+      - name: Notify deployments channel
+        if: github.ref == 'refs/heads/main' && steps.gate.outputs.configured == 'true' && (steps.publish_ios.outcome == 'success' || steps.publish_android.outcome == 'success')
+        env:
+          DISCORD_DEPLOY_WEBHOOK: ${{ secrets.DISCORD_DEPLOY_WEBHOOK }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          COMMIT_SHA: ${{ github.sha }}
+          IOS_OUTCOME: ${{ steps.publish_ios.outcome }}
+          ANDROID_OUTCOME: ${{ steps.publish_android.outcome }}
+        run: |
+          if [ -z "$DISCORD_DEPLOY_WEBHOOK" ]; then
+            echo "DISCORD_DEPLOY_WEBHOOK not set — skipping notification"
+            exit 0
+          fi
+          platforms=""
+          [ "$IOS_OUTCOME" = "success" ] && platforms="iOS"
+          [ "$ANDROID_OUTCOME" = "success" ] && platforms="${platforms:+$platforms, }Android"
+          # INPUT_MESSAGE is the dispatch input (job env); fall back to the commit
+          # subject, which is the default update message mobile-publish.ts uses.
+          MESSAGE="${INPUT_MESSAGE:-$(git log -1 --pretty=%s)}"
+          CONTENT=$(printf '🚀 **Production OTA published** on `%s`\n• platforms: %s\n• channel: production\n• message: %s\n<%s>' \
+            "${COMMIT_SHA:0:7}" "$platforms" "$MESSAGE" "$RUN_URL")
+          jq -n --arg content "$CONTENT" '{content: $content, allowed_mentions: {parse: []}}' \
+            | curl -sS --fail-with-body -X POST -H "Content-Type: application/json" -d @- "$DISCORD_DEPLOY_WEBHOOK" || \
+              echo "::warning::Failed to post Discord notification (see status above)"
+
+      - name: Notify deployments channel of failure
+        if: github.ref == 'refs/heads/main' && failure()
+        env:
+          DISCORD_DEPLOY_WEBHOOK: ${{ secrets.DISCORD_DEPLOY_WEBHOOK }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          COMMIT_SHA: ${{ github.sha }}
+        run: |
+          if [ -z "$DISCORD_DEPLOY_WEBHOOK" ]; then
+            echo "DISCORD_DEPLOY_WEBHOOK not set — skipping notification"
+            exit 0
+          fi
+          CONTENT=$(printf '🚨 **Production OTA publish failed** on `%s`\n<%s>' "${COMMIT_SHA:0:7}" "$RUN_URL")
+          jq -n --arg content "$CONTENT" '{content: $content, allowed_mentions: {parse: []}}' \
+            | curl -sS --fail-with-body -X POST -H "Content-Type: application/json" -d @- "$DISCORD_DEPLOY_WEBHOOK" || \
+              echo "::warning::Failed to post Discord notification (see status above)"
