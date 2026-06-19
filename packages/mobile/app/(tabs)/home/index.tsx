@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { FlatList, Linking, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
+import { FlatList, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
@@ -35,6 +35,7 @@ import { UserAvatarToolbarAction } from '../../../src/components/user-drawer/Use
 import { dedupeSessionsById } from '../../../src/lib/feed-time-buckets';
 import { deriveFeedScopeInput, type FeedMode } from '../../../src/lib/feed/feed-scope';
 import { openClimbInPlayDrawer } from '../../../src/lib/open-climb-in-play-drawer';
+import { openValidatedUrl } from '../../../src/lib/open-external-link';
 import { hapticLight } from '../../../src/lib/haptics';
 import { navigateToSessionFeedItem } from '../../../src/lib/session-feed-navigation';
 import { iosSystemColors } from '../../../src/theme/ios-colors';
@@ -65,14 +66,6 @@ function detectPlatform(url: string): { name: 'instagram' | 'tiktok'; icon: Icon
   if (isInstagramUrl(url)) return { name: 'instagram', icon: 'instagram' };
   if (isTikTokUrl(url)) return { name: 'tiktok', icon: 'tiktok' };
   return null;
-}
-
-function isSafeBetaVideoUrl(url: string): boolean {
-  try {
-    return new URL(url).protocol === 'https:' && isBetaVideoUrl(url);
-  } catch {
-    return false;
-  }
 }
 
 export default function HomeTab() {
@@ -621,18 +614,8 @@ function RecentBetaCard({
 
   const handleOpenVideo = useCallback(async () => {
     hapticLight();
-    try {
-      if (!isSafeBetaVideoUrl(video.betaLink.link)) {
-        showToast(t('mobile.home.betaOpenError'), 'error');
-        return;
-      }
-      const canOpen = await Linking.canOpenURL(video.betaLink.link);
-      if (!canOpen) {
-        showToast(t('mobile.home.betaOpenError'), 'error');
-        return;
-      }
-      await Linking.openURL(video.betaLink.link);
-    } catch {
+    const opened = await openValidatedUrl(video.betaLink.link, isBetaVideoUrl);
+    if (!opened) {
       showToast(t('mobile.home.betaOpenError'), 'error');
     }
   }, [showToast, t, video.betaLink.link]);

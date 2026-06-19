@@ -1,10 +1,10 @@
 import { memo, useCallback, useState } from 'react';
-import { Pressable, View, StyleSheet, Linking } from 'react-native';
+import { Pressable, View, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
 import { useTranslation } from 'react-i18next';
 import type { BetaLink } from '@boardsesh/shared-schema';
-import { isInstagramUrl, isTikTokUrl } from '@boardsesh/shared-schema';
+import { isBetaVideoUrl, isInstagramUrl, isTikTokUrl } from '@boardsesh/shared-schema';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { Text } from '../Text';
 import { Icon } from '../Icon';
@@ -12,6 +12,7 @@ import { Avatar } from '../Avatar';
 import type { IconName } from '../icon-map';
 import { useToast } from '../../providers/toast-provider';
 import { track } from '../../lib/analytics';
+import { openValidatedUrl } from '../../lib/open-external-link';
 import { iosSystemColors } from '../../theme/ios-colors';
 import { spacing, borderRadius } from '../../theme/tokens';
 
@@ -41,14 +42,8 @@ export const BetaVideoCard = memo(function BetaVideoCard({ link, uploaderName, u
       climbUuid: link.climb_uuid,
       platform: detectPlatform(link.link)?.name ?? null,
     });
-    try {
-      const canOpen = await Linking.canOpenURL(link.link);
-      if (!canOpen) {
-        showToast(t('mobile.betaVideos.openError'), 'error');
-        return;
-      }
-      await Linking.openURL(link.link);
-    } catch {
+    const opened = await openValidatedUrl(link.link, isBetaVideoUrl);
+    if (!opened) {
       showToast(t('mobile.betaVideos.openError'), 'error');
     }
   }, [link.climb_uuid, link.link, showToast, t]);

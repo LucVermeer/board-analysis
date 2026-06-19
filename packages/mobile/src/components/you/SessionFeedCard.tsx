@@ -1,5 +1,5 @@
 import { memo, useCallback, useState } from 'react';
-import { View, StyleSheet, Linking } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
 import { useTranslation } from 'react-i18next';
 import { isBetaVideoUrl, isInstagramUrl, isTikTokUrl } from '@boardsesh/shared-schema';
@@ -22,6 +22,7 @@ import { FeedSocialRow } from './FeedSocialRow';
 import { SessionGradeStrip } from './SessionGradeStrip';
 import { gradeBadgeColor } from './profile-chart-colors';
 import { mapBetaLink } from '../../lib/beta-video-url';
+import { openValidatedUrl } from '../../lib/open-external-link';
 import { getBoardConfigForPlaylist } from '../../lib/playlists/board-details-for-playlist';
 import { tickToClimb } from '../../lib/tick-to-climb';
 import { spacing, borderRadius } from '../../theme/tokens';
@@ -59,14 +60,6 @@ function tickStatusLabel(status: string, t: (key: string) => string): string {
 
 function compactJoin(parts: Array<string | null | undefined>): string {
   return parts.filter((part): part is string => !!part).join(' · ');
-}
-
-function isSafeBetaVideoUrl(url: string): boolean {
-  try {
-    return new URL(url).protocol === 'https:' && isBetaVideoUrl(url);
-  } catch {
-    return false;
-  }
 }
 
 function detectPlatform(url: string): { icon: IconName } | null {
@@ -158,13 +151,8 @@ export const SessionFeedCard = memo(function SessionFeedCard({
   const handleOpenBeta = useCallback(async () => {
     if (!betaUrl) return;
     hapticLight();
-    try {
-      if (!isSafeBetaVideoUrl(betaUrl) || !(await Linking.canOpenURL(betaUrl))) {
-        showToast(t('mobile.home.betaOpenError'), 'error');
-        return;
-      }
-      await Linking.openURL(betaUrl);
-    } catch {
+    const opened = await openValidatedUrl(betaUrl, isBetaVideoUrl);
+    if (!opened) {
       showToast(t('mobile.home.betaOpenError'), 'error');
     }
   }, [betaUrl, showToast, t]);
