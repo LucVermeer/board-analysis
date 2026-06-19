@@ -21,11 +21,41 @@
  */
 
 import { execFileSync, spawnSync } from 'node:child_process';
-import { resolve, dirname } from 'node:path';
+import { closeSync, openSync, readSync } from 'node:fs';
+import { resolve, dirname, join, delimiter } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const MOBILE_DIR = resolve(ROOT_DIR, 'packages', 'mobile');
+
+// vp (Vite+) prepends its own bun shim directory to PATH, and that shim's `bunx`
+// is a `/bin/sh` wrapper that forwards to `bun` WITHOUT switching to x-mode — so
+// `bunx <pkg>` runs as `bun <pkg>` (script mode) and dies with
+// `Script not found "<pkg>"`. The real bunx (from bun / setup-bun) is a binary
+// symlink, never a `#!` script. Under `vp run` this breaks BOTH the eoas/eas
+// invocation below AND the `expo export` eoas spawns via --packageRunner bunx
+// (it inherits this env). Drop any PATH entry whose `bunx` is a `#!` script shim
+// so a working bunx wins — fixes CI (vp on PATH) and local `vp run mobile:publish`.
+function bunxIsScriptShim(dir: string): boolean {
+  let fd: number | undefined;
+  try {
+    fd = openSync(join(dir, 'bunx'), 'r');
+    const head = Buffer.alloc(2);
+    readSync(fd, head, 0, 2, 0);
+    return head[0] === 0x23 && head[1] === 0x21; // "#!"
+  } catch {
+    return false; // no readable bunx here → not a shim we need to drop
+  } finally {
+    if (fd !== undefined) closeSync(fd);
+  }
+}
+
+function pathWithoutBrokenBunxShims(rawPath: string | undefined): string {
+  return (rawPath ?? '')
+    .split(delimiter)
+    .filter((dir) => dir.length > 0 && !bunxIsScriptShim(dir))
+    .join(delimiter);
+}
 
 function resolveCurrentBranchName(): string | null {
   try {
@@ -118,6 +148,9 @@ function publishToSelfHostedChannel(channelName: string, platform: string, expli
   // the caller's env can't redirect a production publish.
   const eoasEnv = { ...process.env };
   delete eoasEnv.EAS_BUILD;
+  // Drop vp's broken bunx shim dir so bunx — and the `bunx expo export` eoas
+  // spawns via --packageRunner bunx — resolve a working bunx.
+  eoasEnv.PATH = pathWithoutBrokenBunxShims(process.env.PATH);
 
   const result = spawnSync('bunx', eoasArgs, {
     cwd: MOBILE_DIR,
@@ -241,7 +274,7 @@ console.log('');
 const result = spawnSync('bunx', easArgs, {
   cwd: MOBILE_DIR,
   stdio: 'inherit',
-  env: { ...process.env },
+  env: { ...process.env, PATH: pathWithoutBrokenBunxShims(process.env.PATH) },
 });
 
 if (result.status !== 0) {
