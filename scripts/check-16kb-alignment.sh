@@ -38,7 +38,16 @@ for archive in "$@"; do
   dir="$workdir/$(basename "$archive").extracted"
   mkdir -p "$dir"
   # APKs store libs under lib/<abi>/*.so; AABs under base/lib/<abi>/*.so. Pull both.
-  unzip -qo "$archive" '*.so' -d "$dir" || true
+  # unzip exits 11 when the archive has no matching .so (handled by the no-.so
+  # warning below); any other non-zero code is a real extraction failure — surface
+  # it instead of silently reporting a false-green "0 libs checked".
+  unzip_status=0
+  unzip -qo "$archive" '*.so' -d "$dir" || unzip_status=$?
+  if [ "$unzip_status" -ne 0 ] && [ "$unzip_status" -ne 11 ]; then
+    echo "::error::Failed to extract $archive (unzip exit $unzip_status)"
+    overall_fail=1
+    continue
+  fi
 
   found_so=0
   while IFS= read -r -d '' so; do
