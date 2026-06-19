@@ -4827,13 +4827,22 @@ export type SessionFeedTickHighlight = {
   uuid: Scalars['ID']['output'];
 };
 
-/** Grade count for session summary grade distribution. */
+/** Per-grade ascent breakdown for the session summary. */
 export type SessionGradeCount = {
   __typename?: 'SessionGradeCount';
-  /** Number of sends at this grade */
+  /** Failed attempts at this grade (implicit from multi-try sends) */
+  attempt: Scalars['Int']['output'];
+  /**
+   * Total ascents at this grade (flash + send).
+   * @deprecated Use flash + send. Kept additive so older mobile clients selecting { grade count } keep validating against the schema while they catch up.
+   */
   count: Scalars['Int']['output'];
+  /** Flashes at this grade */
+  flash: Scalars['Int']['output'];
   /** Grade name (e.g., 'V5') */
   grade: Scalars['String']['output'];
+  /** Sends (non-flash) at this grade */
+  send: Scalars['Int']['output'];
 };
 
 /** Grade distribution item with flash/send/attempt breakdown. */
@@ -4848,12 +4857,20 @@ export type SessionGradeDistributionItem = {
 /** Hardest climb sent during a session. */
 export type SessionHardestClimb = {
   __typename?: 'SessionHardestClimb';
+  /** Board type the send was logged on (e.g. 'kilter', 'tension') */
+  boardType?: Maybe<Scalars['String']['output']>;
   /** Climb name */
   climbName: Scalars['String']['output'];
   /** Climb UUID */
   climbUuid: Scalars['String']['output'];
+  /** Lit-hold frames string, for rendering a board thumbnail (null for legacy climbs) */
+  frames?: Maybe<Scalars['String']['output']>;
   /** Grade name */
   grade: Scalars['String']['output'];
+  /** Whether the send was on the mirrored climb */
+  isMirror?: Maybe<Scalars['Boolean']['output']>;
+  /** Board layout id, needed to render the thumbnail */
+  layoutId?: Maybe<Scalars['Int']['output']>;
 };
 
 /**
@@ -4916,7 +4933,9 @@ export type SessionParticipant = {
   avatarUrl?: Maybe<Scalars['String']['output']>;
   /** Display name */
   displayName?: Maybe<Scalars['String']['output']>;
-  /** Total sends */
+  /** Total flashes */
+  flashes: Scalars['Int']['output'];
+  /** Total sends (flash + send) */
   sends: Scalars['Int']['output'];
   /** User ID */
   userId: Scalars['String']['output'];
@@ -4973,7 +4992,7 @@ export type SessionSummary = {
   endedAt?: Maybe<Scalars['String']['output']>;
   /** Session goal text */
   goal?: Maybe<Scalars['String']['output']>;
-  /** Grade distribution of sends */
+  /** Grade distribution with flash/send/attempt breakdown (count kept for back-compat) */
   gradeDistribution: Array<SessionGradeCount>;
   /** Hardest climb sent during the session */
   hardestClimb?: Maybe<SessionHardestClimb>;
@@ -4985,6 +5004,8 @@ export type SessionSummary = {
   startedAt?: Maybe<Scalars['String']['output']>;
   /** Total attempts (including sends) */
   totalAttempts: Scalars['Int']['output'];
+  /** Total flashes (first-try sends) */
+  totalFlashes: Scalars['Int']['output'];
   /** Total successful sends */
   totalSends: Scalars['Int']['output'];
 };
@@ -7380,19 +7401,36 @@ export type SessionSummaryFieldsFragment = {
   __typename?: 'SessionSummary';
   sessionId: string;
   totalSends: number;
+  totalFlashes: number;
   totalAttempts: number;
   startedAt?: string | null;
   endedAt?: string | null;
   durationMinutes?: number | null;
   goal?: string | null;
-  gradeDistribution: Array<{ __typename?: 'SessionGradeCount'; grade: string; count: number }>;
-  hardestClimb?: { __typename?: 'SessionHardestClimb'; climbUuid: string; climbName: string; grade: string } | null;
+  gradeDistribution: Array<{
+    __typename?: 'SessionGradeCount';
+    grade: string;
+    flash: number;
+    send: number;
+    attempt: number;
+  }>;
+  hardestClimb?: {
+    __typename?: 'SessionHardestClimb';
+    climbUuid: string;
+    climbName: string;
+    grade: string;
+    frames?: string | null;
+    layoutId?: number | null;
+    boardType?: string | null;
+    isMirror?: boolean | null;
+  } | null;
   participants: Array<{
     __typename?: 'SessionParticipant';
     userId: string;
     displayName?: string | null;
     avatarUrl?: string | null;
     sends: number;
+    flashes: number;
     attempts: number;
   }>;
 };
@@ -7408,19 +7446,36 @@ export type EndSessionMutation = {
     __typename?: 'SessionSummary';
     sessionId: string;
     totalSends: number;
+    totalFlashes: number;
     totalAttempts: number;
     startedAt?: string | null;
     endedAt?: string | null;
     durationMinutes?: number | null;
     goal?: string | null;
-    gradeDistribution: Array<{ __typename?: 'SessionGradeCount'; grade: string; count: number }>;
-    hardestClimb?: { __typename?: 'SessionHardestClimb'; climbUuid: string; climbName: string; grade: string } | null;
+    gradeDistribution: Array<{
+      __typename?: 'SessionGradeCount';
+      grade: string;
+      flash: number;
+      send: number;
+      attempt: number;
+    }>;
+    hardestClimb?: {
+      __typename?: 'SessionHardestClimb';
+      climbUuid: string;
+      climbName: string;
+      grade: string;
+      frames?: string | null;
+      layoutId?: number | null;
+      boardType?: string | null;
+      isMirror?: boolean | null;
+    } | null;
     participants: Array<{
       __typename?: 'SessionParticipant';
       userId: string;
       displayName?: string | null;
       avatarUrl?: string | null;
       sends: number;
+      flashes: number;
       attempts: number;
     }>;
   } | null;
@@ -7436,19 +7491,36 @@ export type GetSessionSummaryQuery = {
     __typename?: 'SessionSummary';
     sessionId: string;
     totalSends: number;
+    totalFlashes: number;
     totalAttempts: number;
     startedAt?: string | null;
     endedAt?: string | null;
     durationMinutes?: number | null;
     goal?: string | null;
-    gradeDistribution: Array<{ __typename?: 'SessionGradeCount'; grade: string; count: number }>;
-    hardestClimb?: { __typename?: 'SessionHardestClimb'; climbUuid: string; climbName: string; grade: string } | null;
+    gradeDistribution: Array<{
+      __typename?: 'SessionGradeCount';
+      grade: string;
+      flash: number;
+      send: number;
+      attempt: number;
+    }>;
+    hardestClimb?: {
+      __typename?: 'SessionHardestClimb';
+      climbUuid: string;
+      climbName: string;
+      grade: string;
+      frames?: string | null;
+      layoutId?: number | null;
+      boardType?: string | null;
+      isMirror?: boolean | null;
+    } | null;
     participants: Array<{
       __typename?: 'SessionParticipant';
       userId: string;
       displayName?: string | null;
       avatarUrl?: string | null;
       sends: number;
+      flashes: number;
       attempts: number;
     }>;
   } | null;
@@ -8095,6 +8167,7 @@ export const SessionSummaryFieldsFragmentDoc = {
         selections: [
           { kind: 'Field', name: { kind: 'Name', value: 'sessionId' } },
           { kind: 'Field', name: { kind: 'Name', value: 'totalSends' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'totalFlashes' } },
           { kind: 'Field', name: { kind: 'Name', value: 'totalAttempts' } },
           {
             kind: 'Field',
@@ -8103,7 +8176,9 @@ export const SessionSummaryFieldsFragmentDoc = {
               kind: 'SelectionSet',
               selections: [
                 { kind: 'Field', name: { kind: 'Name', value: 'grade' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'count' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'flash' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'send' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'attempt' } },
               ],
             },
           },
@@ -8116,6 +8191,10 @@ export const SessionSummaryFieldsFragmentDoc = {
                 { kind: 'Field', name: { kind: 'Name', value: 'climbUuid' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'climbName' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'grade' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'frames' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'layoutId' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'boardType' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'isMirror' } },
               ],
             },
           },
@@ -8129,6 +8208,7 @@ export const SessionSummaryFieldsFragmentDoc = {
                 { kind: 'Field', name: { kind: 'Name', value: 'displayName' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'avatarUrl' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'sends' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'flashes' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'attempts' } },
               ],
             },
@@ -12188,6 +12268,7 @@ export const EndSessionDocument = {
         selections: [
           { kind: 'Field', name: { kind: 'Name', value: 'sessionId' } },
           { kind: 'Field', name: { kind: 'Name', value: 'totalSends' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'totalFlashes' } },
           { kind: 'Field', name: { kind: 'Name', value: 'totalAttempts' } },
           {
             kind: 'Field',
@@ -12196,7 +12277,9 @@ export const EndSessionDocument = {
               kind: 'SelectionSet',
               selections: [
                 { kind: 'Field', name: { kind: 'Name', value: 'grade' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'count' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'flash' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'send' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'attempt' } },
               ],
             },
           },
@@ -12209,6 +12292,10 @@ export const EndSessionDocument = {
                 { kind: 'Field', name: { kind: 'Name', value: 'climbUuid' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'climbName' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'grade' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'frames' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'layoutId' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'boardType' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'isMirror' } },
               ],
             },
           },
@@ -12222,6 +12309,7 @@ export const EndSessionDocument = {
                 { kind: 'Field', name: { kind: 'Name', value: 'displayName' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'avatarUrl' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'sends' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'flashes' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'attempts' } },
               ],
             },
@@ -12279,6 +12367,7 @@ export const GetSessionSummaryDocument = {
         selections: [
           { kind: 'Field', name: { kind: 'Name', value: 'sessionId' } },
           { kind: 'Field', name: { kind: 'Name', value: 'totalSends' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'totalFlashes' } },
           { kind: 'Field', name: { kind: 'Name', value: 'totalAttempts' } },
           {
             kind: 'Field',
@@ -12287,7 +12376,9 @@ export const GetSessionSummaryDocument = {
               kind: 'SelectionSet',
               selections: [
                 { kind: 'Field', name: { kind: 'Name', value: 'grade' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'count' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'flash' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'send' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'attempt' } },
               ],
             },
           },
@@ -12300,6 +12391,10 @@ export const GetSessionSummaryDocument = {
                 { kind: 'Field', name: { kind: 'Name', value: 'climbUuid' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'climbName' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'grade' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'frames' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'layoutId' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'boardType' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'isMirror' } },
               ],
             },
           },
@@ -12313,6 +12408,7 @@ export const GetSessionSummaryDocument = {
                 { kind: 'Field', name: { kind: 'Name', value: 'displayName' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'avatarUrl' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'sends' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'flashes' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'attempts' } },
               ],
             },

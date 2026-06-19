@@ -203,7 +203,21 @@
     "shareToStrava": "Partager sur Strava",
     "sharingToStrava": "Partage sur Strava…",
     "sharedToStrava": "Partagé sur Strava",
-    "shareToStravaFailed": "Impossible de partager sur Strava"
+    "shareToStravaFailed": "Impossible de partager sur Strava",
+    "flashes": "Flashs",
+    "heroNiceSession": "Belle séance.",
+    "heroCrushedIt": "Tu as tout déroulé.",
+    "heroCrewSession": "Belle séance d'équipe.",
+    "heroLoggedWork": "Du bon boulot.",
+    "featuredSendsLabel_one": "enchaînement",
+    "featuredSendsLabel_other": "enchaînements",
+    "featuredAttemptsLabel_one": "essai",
+    "featuredAttemptsLabel_other": "essais",
+    "hardestSendTitle": "Enchaînement le plus dur",
+    "effortTitle": "À retenter",
+    "effortBody": "Ce projet ne bouge pas. Tu l'auras.",
+    "crew": "L'équipe",
+    "crewStatLine": "{{sends}} enchaînements · {{flashes}} flashs · {{attempts}} essais"
   },
   "overview": {
     "goal": "Objectif : {{goal}}"

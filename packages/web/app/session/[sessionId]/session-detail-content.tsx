@@ -339,10 +339,14 @@ export default function SessionDetailContent({
       ? {
           sessionId,
           totalSends,
+          totalFlashes,
           totalAttempts,
           gradeDistribution: gradeDistribution.map((g) => ({
             grade: g.grade,
             count: (g.flash ?? 0) + (g.send ?? 0),
+            flash: g.flash ?? 0,
+            send: g.send ?? 0,
+            attempt: g.attempt ?? 0,
           })),
           hardestClimb: null,
           participants: [],

@@ -36,7 +36,7 @@ function boardLabel(boardPath: string | null | undefined): string {
   return `${capitalized} Board session`;
 }
 
-/** "V5 ×3, V4 ×2" from the summary grade distribution. */
+/** "V5 ×3, V4 ×2" from the summary grade distribution (count = flash + send). */
 function formatGradeDistribution(summary: SessionSummary): string {
   return summary.gradeDistribution.map((entry) => `${entry.grade} ×${entry.count}`).join(', ');
 }
@@ -327,6 +327,7 @@ export async function syncPartySessionForUser(
   const participant = summary.participants.find((entry) => entry.userId === userId) ?? {
     userId,
     sends: 0,
+    flashes: 0,
     attempts: 0,
   };
   const activity = buildSessionActivity(summary, boardPath, participant, options.timezone);

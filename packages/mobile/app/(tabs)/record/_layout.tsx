@@ -8,7 +8,7 @@ import { useStackScreenOptions } from '../../../src/hooks/use-stack-screen-optio
  * modal, and gives future deep links / nested routes a place to land.
  */
 export default function RecordLayout() {
-  const { t } = useTranslation('common');
+  const { t } = useTranslation('session');
   const screenOptions = useStackScreenOptions();
 
   return (
