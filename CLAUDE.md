@@ -15,6 +15,15 @@ Boardsesh is a monorepo. Next.js 16 web app + React Native (Expo) mobile app for
 - No buzzwords. Concrete numbers, plain language.
 - Default to action. Full autonomy except no data deletion without asking.
 
+## PR Lifecycle (mandatory)
+
+After every PR is created, **always call `subscribe_pr_activity`** and stay subscribed until the PR is merged or closed.
+
+- **CI failures**: diagnose and push a fix. Retry until green. If a failure is genuinely out of scope, explain and block on the user.
+- **Merge conflicts**: rebase on `main` and push — don't ask first.
+- **Review feedback**: fix minor, cosmetic, and correctness comments autonomously and push. For architectural disagreements or ambiguous instructions, use `AskUserQuestion` before acting.
+- **Ready to merge signal**: once CI is green, no unresolved review comments remain, and there are no conflicts, post exactly this message to the user: `**Ready to merge.** CI green, no conflicts, all feedback addressed.` Do not add caveats or padding.
+
 ## Monorepo Structure
 
 ```
