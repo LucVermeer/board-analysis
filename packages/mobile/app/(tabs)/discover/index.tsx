@@ -642,9 +642,12 @@ export default function DiscoverLibrary() {
           icon={iconMap.plus.android}
           onPress={handleCreatePress}
           accessibilityLabel={t('library.createFab.ariaLabel')}
-          variant="primary"
+          // Solid brand fill (the app's filled-button colour), not Paper's default
+          // `primaryContainer` tonal variant — that muted tone reads as washed-out /
+          // semi-transparent over the dark feed.
+          color={brandColors.onPrimary as string}
           mode="elevated"
-          style={[styles.createFab, { bottom: createFabBottom }]}
+          style={[styles.createFab, { bottom: createFabBottom, backgroundColor: brandColors.primaryFill }]}
         />
       ) : null}
 
