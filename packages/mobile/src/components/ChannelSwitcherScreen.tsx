@@ -1,6 +1,7 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { View, ScrollView, ActivityIndicator, Alert, Pressable, StyleSheet, TextInput } from 'react-native';
 import * as Updates from 'expo-updates';
+import { reportError } from '../lib/error-reporting';
 import { Text } from './Text';
 import { SectionHeader } from './SectionHeader';
 import { ListRow } from './ListRow';
@@ -38,6 +39,10 @@ export function ChannelSwitcherScreen() {
   const [override, setOverride] = useState<string | null>(null);
   const [customChannel, setCustomChannel] = useState('');
   const [switchingChannel, setSwitchingChannel] = useState<string | null>(null);
+  // Synchronous re-entrancy guard: `switchingChannel` only updates after the async
+  // confirm dialog resolves, so a ref blocks a second switch starting while the
+  // dialog (or an in-flight switch) is open.
+  const inFlightRef = useRef(false);
 
   useEffect(() => {
     let active = true;
@@ -60,17 +65,24 @@ export function ChannelSwitcherScreen() {
 
   const switchToChannel = useCallback(
     async (channel: string) => {
+      if (inFlightRef.current) return;
+      inFlightRef.current = true;
       hapticLight();
-      const confirmed = await confirm({
-        title: 'Switch OTA channel',
-        message: `Pull the latest update from "${channel}" and restart? It must have an update published for this build's fingerprint.`,
-        confirmLabel: 'Switch',
-        cancelLabel: 'Cancel',
-      });
-      if (!confirmed) return;
-
-      setSwitchingChannel(channel);
+      // `committed` flips once the update for `channel` is downloaded. Before it,
+      // any failure fully reverts; after it, the update will launch on reload (or
+      // the next cold start), so we keep the override instead of stranding a half-
+      // applied switch.
+      let committed = false;
       try {
+        const confirmed = await confirm({
+          title: 'Switch OTA channel',
+          message: `Pull the latest update from "${channel}" and restart? It must have an update published for this build's fingerprint.`,
+          confirmLabel: 'Switch',
+          cancelLabel: 'Cancel',
+        });
+        if (!confirmed) return;
+
+        setSwitchingChannel(channel);
         applyChannelOverride(channel);
 
         const checkResult = await Updates.checkForUpdateAsync();
@@ -80,60 +92,79 @@ export function ChannelSwitcherScreen() {
           );
         }
 
-        // Commit the channel only once the update is downloaded and we're about to
-        // reload onto it — a failed fetch must never persist the new channel.
         await Updates.fetchUpdateAsync();
-        await setPreference(OTA_CHANNEL_OVERRIDE_KEY, channel);
+        committed = true;
+        await setPreference(OTA_CHANNEL_OVERRIDE_KEY, channel).catch(reportError);
         setOverride(channel);
         await Updates.reloadAsync();
       } catch (switchError: unknown) {
-        // Any failure after applyChannelOverride(channel) reverts both the native
-        // override and our persisted mirror to the previously-active channel, so the
-        // app is never stranded on a channel with no usable update.
-        applyChannelOverride(override);
-        if (override) {
-          await setPreference(OTA_CHANNEL_OVERRIDE_KEY, override).catch(() => undefined);
+        if (committed) {
+          // Update is downloaded; it applies on the next restart. Keep the override.
+          setOverride(channel);
+          Alert.alert('Restart to finish', `Downloaded "${channel}". Restart the app to switch onto it.`);
         } else {
-          await removePreference(OTA_CHANNEL_OVERRIDE_KEY).catch(() => undefined);
+          // Pre-commit failure: revert the native override AND the persisted mirror
+          // to the previously-active channel so nothing is stranded.
+          applyChannelOverride(override);
+          await (
+            override ? setPreference(OTA_CHANNEL_OVERRIDE_KEY, override) : removePreference(OTA_CHANNEL_OVERRIDE_KEY)
+          ).catch(reportError);
+          hapticError();
+          Alert.alert(
+            'Switch failed',
+            switchError instanceof Error
+              ? switchError.message
+              : 'Could not switch channel. This build may not support channel overrides.',
+          );
         }
+      } finally {
         setSwitchingChannel(null);
-        hapticError();
-        Alert.alert(
-          'Switch failed',
-          switchError instanceof Error
-            ? switchError.message
-            : 'Could not switch channel. This build may not support channel overrides.',
-        );
+        inFlightRef.current = false;
       }
     },
     [confirm, override, runtimeVersion],
   );
 
   const resetToBuildChannel = useCallback(async () => {
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
     hapticLight();
-    const confirmed = await confirm({
-      title: 'Reset to build channel',
-      message: `Clear the override and return to "${buildChannel}"? The app will restart.`,
-      confirmLabel: 'Reset',
-      cancelLabel: 'Cancel',
-    });
-    if (!confirmed) return;
-
-    setSwitchingChannel(buildChannel);
+    let committed = false;
     try {
+      const confirmed = await confirm({
+        title: 'Reset to build channel',
+        message: `Clear the override and return to "${buildChannel}"? The app will restart.`,
+        confirmLabel: 'Reset',
+        cancelLabel: 'Cancel',
+      });
+      if (!confirmed) return;
+
+      setSwitchingChannel(buildChannel);
       applyChannelOverride(null);
-      await removePreference(OTA_CHANNEL_OVERRIDE_KEY);
       const checkResult = await Updates.checkForUpdateAsync();
       if (checkResult.isAvailable) {
         await Updates.fetchUpdateAsync();
       }
+      committed = true;
+      await removePreference(OTA_CHANNEL_OVERRIDE_KEY).catch(reportError);
+      setOverride(null);
       await Updates.reloadAsync();
     } catch (resetError: unknown) {
+      if (committed) {
+        setOverride(null);
+        Alert.alert('Restart to finish', `Cleared the override. Restart the app to return to "${buildChannel}".`);
+      } else {
+        // Pre-commit failure: re-apply the previous override so we don't leave the
+        // app pointed at the build channel before a successful reload.
+        applyChannelOverride(override);
+        hapticError();
+        Alert.alert('Reset failed', resetError instanceof Error ? resetError.message : 'Could not reset channel.');
+      }
+    } finally {
       setSwitchingChannel(null);
-      hapticError();
-      Alert.alert('Reset failed', resetError instanceof Error ? resetError.message : 'Could not reset channel.');
+      inFlightRef.current = false;
     }
-  }, [confirm, buildChannel]);
+  }, [confirm, buildChannel, override]);
 
   const channels = Array.from(new Set<string>([...PRESET_CHANNELS, ...(override ? [override] : [])]));
 
