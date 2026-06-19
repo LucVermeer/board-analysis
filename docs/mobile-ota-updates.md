@@ -52,7 +52,9 @@ install, since the device couldn't verify the manifest came from us.
 runtimeVersion is a fingerprint, this is safe to run on every push: a native change publishes an
 OTA whose fingerprint no current binary has yet, so it only lands once the matching store build
 ships. Until the server is wired (no `EXPO_UPDATES_URL` variable or committed cert), the workflow
-skips with a green no-op.
+skips with a green no-op. The matching native builds (`ios-testflight-rn` / `android-apk-rn`) run
+on the same push but are **fingerprint-gated** — they only build when the fingerprint is new (see
+[Native-build gating](#native-build-gating-ota-only-when-the-fingerprint-is-unchanged) below).
 
 **Manual** (one branch, ad hoc) — once the server is deployed and you're logged in (`bunx eas
 login`, or `EXPO_TOKEN` set):
@@ -86,6 +88,53 @@ enforced/handled in CI:
   Apple Maps) and it changes the resolved config — hence the fingerprint — for **both** platforms.
   So the workflow publishes iOS **without** the key and Android **with** it, in separate steps. A
   single `--platform all` publish with one env could only ever match one side.
+
+## Native-build gating (OTA-only when the fingerprint is unchanged)
+
+The OTA publish is cheap and runs on every push, but the native builds (`ios-testflight-rn`,
+~60 min on macOS; `android-apk-rn`, on Linux) only need to run when the fingerprint actually
+changes. A JS/TS-only change keeps the same fingerprint, so installed binaries pull the new JS over
+the air and a fresh native build is wasted. Each native workflow gates itself on the fingerprint —
+the self-hosted equivalent of Expo's `continuous-deploy-fingerprint`:
+
+1. A cheap Linux **`gate` job** resolves the platform fingerprint with `bunx expo-updates
+runtimeversion:resolve` using the same **workflow-level** env the build uses (iOS without
+   `GOOGLE_MAPS_API_KEY`, Android with it). The shared env sits at the workflow level so the gate
+   and build can't drift, and the gate writes the same `.env` the build does — the `.env` is itself
+   hashed into the fingerprint, so an absent or different one would resolve a different hash.
+2. If a git tag `fingerprint-<platform>-<hash>` already exists, a binary with that fingerprint has
+   already shipped → the native build **skips** (the OTA delivers the JS). Otherwise it **runs**.
+3. On a successful build + store upload, the build job pushes `fingerprint-<platform>-<hash>`.
+
+**Why a wrong skip is impossible.** The gate resolves on Linux, but the iOS binary is baked on
+macOS. Rather than trust cross-OS fingerprint determinism for correctness, the build job
+re-resolves the fingerprint **on its own runner** and tags _that_ value, while the gate checks the
+_Linux_ value. Tags therefore only ever hold build-OS fingerprints. If Linux and macOS ever
+disagree, the gate never finds a matching tag and iOS simply always builds (wasteful, but safe) —
+it can never wrongly skip and strand users on an old binary. The build emits a `::warning::` when
+the two fingerprints disagree, so the degraded "always build" mode is visible. Android builds on
+Linux like its gate, so they always agree. (Expo's own action trusts cross-OS determinism here;
+ours is strictly safer.)
+
+**Fail-safe.** If the gate can't resolve the fingerprint, it builds. A manual `workflow_dispatch`
+bypasses the tag check and always builds — for iOS that means dispatching on `main` (the iOS build
+is `main`-only by design, since it uploads to TestFlight); the Android workflow additionally builds
+from a `workflow_dispatch` on any branch (artifact-only, matching its pre-existing behavior).
+
+**Manual overrides.**
+
+- Force a rebuild of a fingerprint that already has a tag:
+  `git push --delete origin fingerprint-<platform>-<hash>`, then re-push to `main` (or run the
+  workflow via dispatch).
+- The Android tag is recorded only after **all** of its channels ship for that fingerprint: the
+  sideload APK (GitHub Release), the AAB build, and a Play upload that didn't fail. So a failed AAB
+  build or a flaky Play upload leaves no tag and the next push **automatically rebuilds and
+  retries** — no manual step. Before the Play bootstrap (Play upload disabled), the tag is still
+  recorded once the APK + AAB build, since Play isn't a channel yet.
+
+Resolve the current fingerprint locally to predict what the gate will see: `cd packages/mobile &&
+bunx expo-updates runtimeversion:resolve --platform ios` (add the production env to match CI
+exactly — see the parity check above).
 
 ## One-time setup (infra — done outside this repo)
 
@@ -149,11 +198,6 @@ prebuild --platform ios --clean --no-install`, then confirm `ios/Boardsesh/Suppo
 
 ## Deferred
 
-- **Native-build gating** — record each shipped fingerprint as a git tag on a successful native
-  build, then skip the ~60-min `ios-testflight-rn` / `android-apk-rn` builds on `main` when the
-  current fingerprint already has a tag (OTA-only) and run them otherwise. The self-hosted
-  equivalent of Expo's `continuous-deploy-fingerprint` action; lands after the basic pipeline is
-  proven. Today both the native builds and the OTA publish fire on every mobile push to `main`.
 - **`beta` channel**: TestFlight on `beta`, App Store on `production`, promote at GA.
 - **Migrate the preview/dev-branch flow + in-app `BranchSwitcher`** (`src/lib/eas-api.ts`) off EAS
   hosting onto expo-open-ota, to drop the Expo dependency entirely.

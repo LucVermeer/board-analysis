@@ -32,10 +32,11 @@ const NATIVE_IOS = 'ios-testflight-rn.yml';
 const NATIVE_ANDROID = 'android-apk-rn.yml';
 const OTA = 'mobile-ota-production.yml';
 
-// Job-level env keys that feed the resolved config (fingerprint) and/or the
+// Workflow-level env keys that feed the resolved config (fingerprint) and/or the
 // inlined JS bundle (runtime correctness). Every one must be declared identically
-// in all three workflows. GOOGLE_MAPS_API_KEY is handled separately (it's
-// step-scoped and Android-only — see the dedicated test below).
+// in all three workflows. They live at the workflow level (not job level) so the
+// fingerprint `gate` job and the build job within a workflow can't drift.
+// GOOGLE_MAPS_API_KEY is handled separately (Android-only — see below).
 const SHARED_ENV_KEYS = [
   'EXPO_PUBLIC_BACKEND_URL',
   'EXPO_PUBLIC_WS_URL',
@@ -53,9 +54,9 @@ function readWorkflow(name: string): string {
   return readFileSync(resolve(WORKFLOW_DIR, name), 'utf8');
 }
 
-/** Extract a job-level `env:` value (6-space indent) by key, or null if absent. */
-function jobEnvValue(source: string, key: string): string | null {
-  const match = source.match(new RegExp(`^ {6}${key}:[ \\t]*(.+?)\\s*$`, 'm'));
+/** Extract a workflow-level `env:` value (2-space indent) by key, or null. */
+function workflowEnvValue(source: string, key: string): string | null {
+  const match = source.match(new RegExp(`^ {2}${key}:[ \\t]*(.+?)\\s*$`, 'm'));
   return match ? match[1] : null;
 }
 
@@ -63,10 +64,10 @@ describe('mobile CI env parity (OTA fingerprint invariant)', () => {
   const workflows = [NATIVE_IOS, NATIVE_ANDROID, OTA];
 
   it.each(SHARED_ENV_KEYS)('declares %s identically across all three workflows', (key) => {
-    const values = workflows.map((name) => ({ name, value: jobEnvValue(readWorkflow(name), key) }));
+    const values = workflows.map((name) => ({ name, value: workflowEnvValue(readWorkflow(name), key) }));
 
     for (const { name, value } of values) {
-      expect(value, `${key} missing from ${name} job env`).not.toBeNull();
+      expect(value, `${key} missing from ${name} workflow env`).not.toBeNull();
     }
 
     const distinct = new Set(values.map((entry) => entry.value));
@@ -97,8 +98,36 @@ describe('mobile CI env parity (OTA fingerprint invariant)', () => {
 
   it('keeps the OTA publish on the self-hosted server (production channel)', () => {
     const ota = readWorkflow(OTA);
-    expect(jobEnvValue(ota, 'EXPO_UPDATES_CHANNEL')).toBe('production');
+    expect(workflowEnvValue(ota, 'EXPO_UPDATES_CHANNEL')).toBe('production');
     expect(ota).toMatch(/--channel production --platform ios/);
     expect(ota).toMatch(/--channel production --platform android/);
+  });
+
+  it('gates each native build on its platform fingerprint (resolve + per-platform tag)', () => {
+    // The gate resolves the runtimeVersion fingerprint and skips the native build
+    // when a fingerprint-<platform>-<hash> tag already exists; the build records
+    // that tag on success. Per-platform because the fingerprints differ
+    // (GOOGLE_MAPS_API_KEY perturbs only Android) — a shared tag would be wrong.
+    const ios = readWorkflow(NATIVE_IOS);
+    const android = readWorkflow(NATIVE_ANDROID);
+
+    expect(ios).toMatch(/runtimeversion:resolve --platform ios/);
+    expect(ios).toMatch(/fingerprint-ios-/);
+    expect(android).toMatch(/runtimeversion:resolve --platform android/);
+    expect(android).toMatch(/fingerprint-android-/);
+  });
+
+  it('resolves the iOS fingerprint without GOOGLE_MAPS_API_KEY and Android with it', () => {
+    // GOOGLE_MAPS_API_KEY changes the resolved android.config — hence the
+    // fingerprint — so the gate must mirror the per-platform split the native
+    // builds bake in: never set on iOS (Apple Maps), set on Android, or a gate
+    // resolves a fingerprint the binary never had and skips/builds wrongly.
+    const ios = readWorkflow(NATIVE_IOS);
+    const android = readWorkflow(NATIVE_ANDROID);
+
+    // No env assignment of the key anywhere in the iOS workflow (a comment that
+    // merely names it is fine — match a YAML/shell key, not the bare word).
+    expect(ios).not.toMatch(/^\s*GOOGLE_MAPS_API_KEY:/m);
+    expect(android).toMatch(/^\s*GOOGLE_MAPS_API_KEY:\s*\$\{\{\s*secrets\.GOOGLE_MAPS_API_KEY\s*\}\}/m);
   });
 });
