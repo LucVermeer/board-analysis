@@ -127,6 +127,7 @@ export default function RoleManagement() {
       setSearchQuery('');
       setSearchResults([]);
       setGrantBoardType('');
+      setGrantRole('community_leader');
       setSnackbar(t('roles.snackbar.granted'));
       void fetchRoles();
     } catch {
@@ -160,6 +161,8 @@ export default function RoleManagement() {
     setSelectedUser(null);
     setSearchQuery('');
     setSearchResults([]);
+    setGrantBoardType('');
+    setGrantRole('community_leader');
   }, []);
 
   const fallbackInitial = t('roles.labels.fallbackUserInitial');

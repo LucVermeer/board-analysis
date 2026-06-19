@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { View, ScrollView, ActivityIndicator, Alert, Pressable, StyleSheet, TextInput } from 'react-native';
 import * as Updates from 'expo-updates';
-import { reportError } from '../lib/error-reporting';
+import { reportHandledError } from '../lib/error-reporting';
 import { Text } from './Text';
 import { SectionHeader } from './SectionHeader';
 import { ListRow } from './ListRow';
@@ -11,15 +11,13 @@ import { useTheme } from '../providers/theme-provider';
 import { useConfirm } from '../providers/dialog-provider';
 import { hapticLight, hapticError } from '../lib/haptics';
 import { getPreference, setPreference, removePreference } from '../lib/preference-store';
-
-// The currently-applied runtime channel override, persisted for display. The
-// actual override is stored natively by expo-updates and survives cold starts;
-// this mirror just lets the UI show which channel a tester picked.
-const OTA_CHANNEL_OVERRIDE_KEY = 'dev_ota_channel_override';
-
-// The channels our OTA server publishes to (see docs/mobile-ota-updates.md). A
-// tester can also type any other channel name in the custom field.
-const PRESET_CHANNELS = ['production', 'preview-1', 'preview-2', 'preview-3', 'preview-4'] as const;
+import {
+  OTA_CHANNEL_OVERRIDE_KEY,
+  buildChannelList,
+  performChannelSwitch,
+  performChannelReset,
+  type ChannelSwitchDeps,
+} from '../lib/channel-switch';
 
 // Switch channels by overriding ONLY the `expo-channel-name` request header,
 // keeping the build's update URL (so the embedded code-signing cert still
@@ -43,6 +41,10 @@ export function ChannelSwitcherScreen() {
   // confirm dialog resolves, so a ref blocks a second switch starting while the
   // dialog (or an in-flight switch) is open.
   const inFlightRef = useRef(false);
+  // Mirror of `override` for the imperative revert path — reading the latest value
+  // from a ref avoids reverting to a stale render-closure value if the mount load
+  // resolved after this callback was created.
+  const overrideRef = useRef<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -54,6 +56,10 @@ export function ChannelSwitcherScreen() {
     };
   }, []);
 
+  useEffect(() => {
+    overrideRef.current = override;
+  }, [override]);
+
   const buildChannel = Updates.channel ?? 'unknown';
   const runtimeVersion = Updates.runtimeVersion ?? 'unknown';
   const updatesUsable = Updates.isEnabled && !__DEV__;
@@ -63,113 +69,107 @@ export function ChannelSwitcherScreen() {
   // when it matches the build-time channel.
   const activeChannel = override ?? buildChannel;
 
+  const makeDeps = useCallback(
+    (): ChannelSwitchDeps => ({
+      applyOverride: applyChannelOverride,
+      checkForUpdate: () => Updates.checkForUpdateAsync(),
+      fetchUpdate: () => Updates.fetchUpdateAsync(),
+      reload: () => Updates.reloadAsync(),
+      writeMirror: (channel) => setPreference(OTA_CHANNEL_OVERRIDE_KEY, channel),
+      clearMirror: () => removePreference(OTA_CHANNEL_OVERRIDE_KEY),
+      onMirrorError: reportHandledError,
+    }),
+    [],
+  );
+
   const switchToChannel = useCallback(
     async (channel: string) => {
       if (inFlightRef.current) return;
       inFlightRef.current = true;
-      hapticLight();
-      // `committed` flips once the update for `channel` is downloaded. Before it,
-      // any failure fully reverts; after it, the update will launch on reload (or
-      // the next cold start), so we keep the override instead of stranding a half-
-      // applied switch.
-      let committed = false;
+      const previousOverride = overrideRef.current;
       try {
+        hapticLight();
         const confirmed = await confirm({
+          // i18n-ignore-next-line — tester-only screen
           title: 'Switch OTA channel',
+          // i18n-ignore-next-line — tester-only screen
           message: `Pull the latest update from "${channel}" and restart? It must have an update published for this build's fingerprint.`,
+          // i18n-ignore-next-line — tester-only screen
           confirmLabel: 'Switch',
+          // i18n-ignore-next-line — tester-only screen
           cancelLabel: 'Cancel',
         });
         if (!confirmed) return;
 
         setSwitchingChannel(channel);
-        applyChannelOverride(channel);
-
-        const checkResult = await Updates.checkForUpdateAsync();
-        if (!checkResult.isAvailable) {
-          throw new Error(
-            `No update on "${channel}" for runtime ${runtimeVersion}. Publish an OTA to that channel at this build's fingerprint first.`,
-          );
-        }
-
-        await Updates.fetchUpdateAsync();
-        committed = true;
-        await setPreference(OTA_CHANNEL_OVERRIDE_KEY, channel).catch(reportError);
-        setOverride(channel);
-        await Updates.reloadAsync();
-      } catch (switchError: unknown) {
-        if (committed) {
-          // Update is downloaded; it applies on the next restart. Keep the override.
-          setOverride(channel);
-          Alert.alert('Restart to finish', `Downloaded "${channel}". Restart the app to switch onto it.`);
-        } else {
-          // Pre-commit failure: revert the native override AND the persisted mirror
-          // to the previously-active channel so nothing is stranded.
-          applyChannelOverride(override);
-          await (
-            override ? setPreference(OTA_CHANNEL_OVERRIDE_KEY, override) : removePreference(OTA_CHANNEL_OVERRIDE_KEY)
-          ).catch(reportError);
+        const result = await performChannelSwitch(channel, previousOverride, runtimeVersion, makeDeps());
+        if (result.status === 'reverted') {
           hapticError();
           Alert.alert(
+            // i18n-ignore-next-line — tester-only screen
             'Switch failed',
-            switchError instanceof Error
-              ? switchError.message
+            result.error instanceof Error
+              ? result.error.message
               : 'Could not switch channel. This build may not support channel overrides.',
           );
+        } else {
+          // 'switched' (the app reloads) or 'pending-restart' — reflect the new channel.
+          setOverride(channel);
+          if (result.status === 'pending-restart') {
+            // i18n-ignore-next-line — tester-only screen
+            Alert.alert('Restart to finish', `Downloaded "${channel}". Restart the app to switch onto it.`);
+          }
         }
       } finally {
         setSwitchingChannel(null);
         inFlightRef.current = false;
       }
     },
-    [confirm, override, runtimeVersion],
+    [confirm, runtimeVersion, makeDeps],
   );
 
   const resetToBuildChannel = useCallback(async () => {
     if (inFlightRef.current) return;
     inFlightRef.current = true;
-    hapticLight();
-    let committed = false;
+    const previousOverride = overrideRef.current;
     try {
+      hapticLight();
       const confirmed = await confirm({
+        // i18n-ignore-next-line — tester-only screen
         title: 'Reset to build channel',
+        // i18n-ignore-next-line — tester-only screen
         message: `Clear the override and return to "${buildChannel}"? The app will restart.`,
+        // i18n-ignore-next-line — tester-only screen
         confirmLabel: 'Reset',
+        // i18n-ignore-next-line — tester-only screen
         cancelLabel: 'Cancel',
       });
       if (!confirmed) return;
 
       setSwitchingChannel(buildChannel);
-      applyChannelOverride(null);
-      const checkResult = await Updates.checkForUpdateAsync();
-      if (checkResult.isAvailable) {
-        await Updates.fetchUpdateAsync();
-      }
-      committed = true;
-      await removePreference(OTA_CHANNEL_OVERRIDE_KEY).catch(reportError);
-      setOverride(null);
-      await Updates.reloadAsync();
-    } catch (resetError: unknown) {
-      if (committed) {
-        setOverride(null);
-        Alert.alert('Restart to finish', `Cleared the override. Restart the app to return to "${buildChannel}".`);
-      } else {
-        // Pre-commit failure: re-apply the previous override so we don't leave the
-        // app pointed at the build channel before a successful reload.
-        applyChannelOverride(override);
+      const result = await performChannelReset(previousOverride, makeDeps());
+      if (result.status === 'failed') {
         hapticError();
-        Alert.alert('Reset failed', resetError instanceof Error ? resetError.message : 'Could not reset channel.');
+        // i18n-ignore-next-line — tester-only screen
+        Alert.alert('Reset failed', result.error instanceof Error ? result.error.message : 'Could not reset channel.');
+      } else {
+        setOverride(null);
+        if (result.status === 'pending-restart') {
+          // i18n-ignore-next-line — tester-only screen
+          Alert.alert('Restart to finish', `Cleared the override. Restart the app to return to "${buildChannel}".`);
+        }
       }
     } finally {
       setSwitchingChannel(null);
       inFlightRef.current = false;
     }
-  }, [confirm, buildChannel, override]);
+  }, [confirm, buildChannel, makeDeps]);
 
-  const channels = Array.from(new Set<string>([...PRESET_CHANNELS, ...(override ? [override] : [])]));
+  const channels = buildChannelList(override);
 
   return (
     <ScrollView contentInsetAdjustmentBehavior="automatic">
+      {/* i18n-ignore-next-line — tester-only screen */}
       <SectionHeader title="Current Update" />
       <View
         style={[
@@ -181,20 +181,25 @@ export function ChannelSwitcherScreen() {
           },
         ]}
       >
+        {/* i18n-ignore-next-line — tester-only screen */}
         <InfoRow label="Build channel" value={buildChannel} />
-        <InfoRow label="Active channel" value={override ?? `${buildChannel} (default)`} />
+        {/* i18n-ignore-next-line — tester-only screen */}
+        <InfoRow label="Selected channel" value={override ?? `${buildChannel} (default)`} />
+        {/* i18n-ignore-next-line — tester-only screen */}
         <InfoRow label="Runtime version" value={runtimeVersion} showSeparator={false} />
       </View>
 
       {!updatesUsable ? (
         <View style={[styles.notice, { marginHorizontal: spacing[4] }]}>
           <Text variant="footnote" color={systemColors.secondaryLabel}>
+            {/* i18n-ignore-next-line — tester-only screen */}
             OTA updates are disabled in this build (development or updates not enabled), so channel switching is
             unavailable here. Use a TestFlight/store build.
           </Text>
         </View>
       ) : (
         <>
+          {/* i18n-ignore-next-line — tester-only screen */}
           <SectionHeader title="Switch Channel" />
           <View
             style={[
@@ -229,16 +234,20 @@ export function ChannelSwitcherScreen() {
             })}
           </View>
 
+          {/* i18n-ignore-next-line — tester-only screen */}
           <SectionHeader title="Custom Channel" />
           <View style={[styles.customRow, { marginHorizontal: spacing[4] }]}>
             <TextInput
               value={customChannel}
               onChangeText={setCustomChannel}
+              // i18n-ignore-next-line — tester-only screen
               placeholder="channel name"
               placeholderTextColor={systemColors.secondaryLabel}
               autoCapitalize="none"
               autoCorrect={false}
               editable={!isSwitching}
+              // i18n-ignore-next-line — tester-only screen
+              accessibilityLabel="Custom OTA channel name"
               style={[
                 styles.input,
                 {
@@ -254,6 +263,10 @@ export function ChannelSwitcherScreen() {
                 if (trimmed) void switchToChannel(trimmed);
               }}
               disabled={isSwitching || customChannel.trim().length === 0}
+              accessibilityRole="button"
+              // i18n-ignore-next-line — tester-only screen
+              accessibilityLabel="Switch to the entered channel"
+              accessibilityState={{ disabled: isSwitching || customChannel.trim().length === 0 }}
               style={[
                 styles.goButton,
                 {
@@ -265,23 +278,30 @@ export function ChannelSwitcherScreen() {
             >
               <Icon name="transfer" size={16} color={systemColors.label} />
               <Text variant="footnote" color={systemColors.label}>
+                {/* i18n-ignore-next-line — tester-only screen */}
                 Switch
               </Text>
             </Pressable>
           </View>
 
-          {override ? (
-            <Pressable
-              onPress={() => void resetToBuildChannel()}
-              disabled={isSwitching}
-              style={[styles.resetButton, { marginHorizontal: spacing[4], opacity: isSwitching ? 0.5 : 1 }]}
-            >
-              <Icon name="refresh" size={16} color={systemColors.label} />
-              <Text variant="footnote" color={systemColors.label}>
-                Reset to build channel ({buildChannel})
-              </Text>
-            </Pressable>
-          ) : null}
+          {/* Always offered (not gated on `override`) so a native override stranded
+              after an app-data clear — when the display mirror is gone — stays
+              clearable. */}
+          <Pressable
+            onPress={() => void resetToBuildChannel()}
+            disabled={isSwitching}
+            accessibilityRole="button"
+            // i18n-ignore-next-line — tester-only screen
+            accessibilityLabel="Reset to build channel"
+            accessibilityState={{ disabled: isSwitching }}
+            style={[styles.resetButton, { marginHorizontal: spacing[4], opacity: isSwitching ? 0.5 : 1 }]}
+          >
+            <Icon name="refresh" size={16} color={systemColors.label} />
+            <Text variant="footnote" color={systemColors.label}>
+              {/* i18n-ignore-next-line — tester-only screen */}
+              Reset to build channel ({buildChannel})
+            </Text>
+          </Pressable>
         </>
       )}
 
