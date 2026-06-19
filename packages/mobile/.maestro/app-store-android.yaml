@@ -83,11 +83,20 @@ name: app-store screenshots android
     timeout: 30000
 - takeScreenshot: 04-workout-generator
 
-# Board view — open the first climb (wall with holds lit) via the screenshot-mode param.
-# The play drawer presents immediately over a placeholder, then the board mounts and the
-# Rust holds-overlay renders a beat later (slow on the software renderer) — so a bare
-# waitForAnimationToEnd shot caught a blank drawer. Anchor on the overlay layer itself,
-# which only mounts once the lit board has rendered, then let the fade settle.
+# Board view — the full-screen play drawer intermittently failed to composite into
+# adb screencap when captured mid-session (~half the time blank). Capturing it via a
+# FRESH relaunch + reopen — the same pattern the never-flaky board sheet uses — fixes
+# the render: every fresh-launch capture in verification was a full ~1.1MB frame.
+# Just ONE round: back-to-back relaunches flaked with "Unable to launch app" (the
+# app hadn't fully terminated), and this single launch isn't adjacent to another, so
+# it stays as reliable as the start/sheet launches. The blank gate below is the
+# backstop. Every wait is a reliably-found anchor (home-screen, climb-row, overlay
+# marker), so the round never aborts the flow.
+- launchApp
+- extendedWaitUntil:
+    visible:
+      id: 'home-screen'
+    timeout: 90000
 - openLink: com.boardsesh.app://climbs?screenshotOpenFirst=1
 - extendedWaitUntil:
     visible:
@@ -97,17 +106,6 @@ name: app-store screenshots android
     visible:
       id: 'play-drawer-board-overlay'
     timeout: 60000
-# The play-drawer modal composites onto a layer adb screencap doesn't read until
-# the window redraws, so it captured blank even with the board painted (it only
-# captured before because the onboarding tip's root view forced a recomposite). A
-# small horizontal swipe on the board forces the modal window to redraw; the
-# carousel springs back to the same climb (sub-threshold), and waitForAnimationToEnd
-# holds until it settles — with the board now in the captured frame.
-- swipe:
-    start: '55%, 45%'
-    end: '42%, 45%'
-- waitForAnimationToEnd:
-    timeout: 30000
 - waitForAnimationToEnd:
     timeout: 30000
 - takeScreenshot: 02-board-view
