@@ -547,6 +547,10 @@ export default defineConfig({
         command: 'tsx scripts/mobile-publish.ts',
         cache: false,
       },
+      'mobile:ota-setup': {
+        command: 'tsx scripts/mobile-ota-setup.ts',
+        cache: false,
+      },
       'mobile:preview-build': {
         command: 'tsx scripts/mobile-preview-build.ts',
         cache: false,
