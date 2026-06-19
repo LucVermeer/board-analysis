@@ -428,6 +428,17 @@ jobs:
           SENTRY_DISABLE_AUTO_UPLOAD: 'true'
         run: ./gradlew bundleRelease --no-daemon --console=plain --stacktrace
 
+      # Block the GitHub Release / Play upload if any bundled native lib isn't 16 KB
+      # page aligned (Android 15+ / API 35+ requirement). Covers both the sideload
+      # APK and the Play AAB, so it checks the board-renderer JNI wrapper + prebuilt
+      # Rust FFI lib, React Native's own libs, and every third-party lib in one pass.
+      - name: Verify 16 KB native-library alignment (APK + AAB)
+        run: |
+          set -euo pipefail
+          aab="$(find packages/mobile/android/app/build/outputs/bundle/release -name '*.aab' | head -n 1)"
+          apk=packages/mobile/android/app/build/outputs/apk/release/boardsesh-rn-android-arm64-v8a.apk
+          ./scripts/check-16kb-alignment.sh "$apk" "$aab"
+
       - name: Upload AAB as artifact
         uses: actions/upload-artifact@v4
         if: always()
