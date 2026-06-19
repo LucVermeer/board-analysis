@@ -279,7 +279,7 @@ export const tickQueries = {
     },
     ctx?: ConnectionContext,
   ): Promise<{
-    items: unknown[];
+    items: AscentFeedRow[];
     totalCount: number;
     hasMore: boolean;
   }> => {
@@ -542,7 +542,9 @@ export const tickQueries = {
           boardDisplayName: canShowBoard ? boardName : null,
           layoutId,
           angle: tick.angle,
-          isMirror: tick.isMirror,
+          // is_mirror is nullable (default false, no NOT NULL); GraphQL exposes it
+          // as Boolean!, so coerce a null to false here.
+          isMirror: tick.isMirror ?? false,
           status: tick.status,
           attemptCount: tick.attemptCount,
           quality: tick.quality,
@@ -603,7 +605,7 @@ export const tickQueries = {
         { userId, input: { climbName: quotedName, statusMode: 'send', limit: 50 } },
         ctx,
       );
-      gathered.push(...(feed.items as AscentFeedRow[]));
+      gathered.push(...feed.items);
     }
 
     // Exact-match the quoted name(s) against the fetched rows — drops ILIKE

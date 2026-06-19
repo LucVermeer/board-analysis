@@ -66,6 +66,16 @@ export default function ShareBetaScreen() {
   // modal, so a toast renders behind the sheet where the user never sees it.
   const [attachError, setAttachError] = useState<string | null>(null);
 
+  // A warm share reuses this already-open modal (the provider swaps the link via
+  // setParams instead of remounting), so reset the previous reel's search + inline
+  // error when the link changes — otherwise a stale search would suppress the new
+  // reel's suggestions, or an old attach error would linger for an unrelated link.
+  useEffect(() => {
+    setSearchText('');
+    setCommittedQuery('');
+    setAttachError(null);
+  }, [link]);
+
   // Nothing to attach (shouldn't happen — the provider validates first); just
   // dismiss rather than show a dead screen.
   useEffect(() => {
@@ -134,8 +144,8 @@ export default function ShareBetaScreen() {
   // listed twice (once under "Suggested", once below).
   const suggestedClimbUuids = useMemo(() => new Set(suggestions.map((ascent) => ascent.climbUuid)), [suggestions]);
   const listData = useMemo(
-    () => (suggestions.length > 0 ? items.filter((ascent) => !suggestedClimbUuids.has(ascent.climbUuid)) : items),
-    [items, suggestions.length, suggestedClimbUuids],
+    () => (suggestedClimbUuids.size > 0 ? items.filter((ascent) => !suggestedClimbUuids.has(ascent.climbUuid)) : items),
+    [items, suggestedClimbUuids],
   );
   const showSuggestions = suggestions.length > 0;
 
