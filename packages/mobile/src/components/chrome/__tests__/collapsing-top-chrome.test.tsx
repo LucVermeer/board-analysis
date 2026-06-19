@@ -19,6 +19,7 @@ const ctrl = vi.hoisted(() => ({
   board: null as BoardFields | null,
   bluetooth: null as BluetoothCtx,
   setActiveBoard: vi.fn(),
+  variant: 'liquidGlass' as 'liquidGlass' | 'material',
 }));
 const haptics = vi.hoisted(() => ({ light: vi.fn() }));
 
@@ -49,14 +50,40 @@ vi.mock('react-native-safe-area-context', () => ({
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock('@boardsesh/board-config', () => ({ formatBoardDisplayName: (boardType: string) => `Display:${boardType}` }));
 
+// Material branch renders an M3 Appbar (via react-native-paper). Stub it so the
+// jsdom suite doesn't pull in Paper's native runtime.
+vi.mock('react-native-paper', () => ({
+  Appbar: {
+    Header: ({ children }: { children?: ReactNode }) =>
+      createElement('div', { 'data-appbar-header': 'true' }, children),
+    Content: ({ title }: { title?: ReactNode }) => createElement('span', { 'data-appbar-title': 'true' }, title),
+    Action: ({
+      icon,
+      onPress,
+      accessibilityLabel,
+    }: {
+      icon?: ReactNode | ((props: { color: string; size: number }) => ReactNode);
+      onPress?: () => void;
+      accessibilityLabel?: string;
+    }) =>
+      createElement(
+        'button',
+        { onClick: onPress, 'data-appbar-action': accessibilityLabel ?? '' },
+        typeof icon === 'function' ? icon({ color: '#000', size: 24 }) : icon,
+      ),
+  },
+}));
+
 vi.mock('../../../providers/theme-provider', () => ({
   useTheme: () => ({
+    variant: ctrl.variant,
     systemColors: {
       label: '#000',
       secondaryLabel: '#888',
       separator: '#ccc',
       elevatedSurface: '#fff',
       background: '#fff',
+      secondaryBackground: '#fff',
     },
     brandColors: { warning: '#FF9500' },
   }),
@@ -153,6 +180,7 @@ describe('CollapsingTopChrome', () => {
   beforeEach(() => {
     ctrl.board = null;
     ctrl.bluetooth = null;
+    ctrl.variant = 'liquidGlass';
     haptics.light.mockClear();
   });
 
@@ -269,5 +297,30 @@ describe('CollapsingTopChrome', () => {
     const { container } = render(<CollapsingTopChrome {...makeProps({ onHeightChange })} />);
     fireEvent.click(container.querySelector('[data-has-layout="true"]') as HTMLElement);
     expect(onHeightChange).toHaveBeenCalledWith(64);
+  });
+
+  describe('Material variant', () => {
+    beforeEach(() => {
+      ctrl.variant = 'material';
+    });
+
+    it('renders an M3 app bar (avatar + board switcher) instead of the floating glass islands', () => {
+      ctrl.board = board;
+      const { container } = render(<CollapsingTopChrome {...makeProps()} />);
+      // The M3 small app bar replaces the floating glass islands.
+      expect(container.querySelector('[data-appbar-header]')).not.toBeNull();
+      expect(container.querySelector('[data-avatar-variant="material"]')).not.toBeNull();
+      // The board switcher carries the board label (a `•`-bearing PressableSurface).
+      expect(boardAction(container)).not.toBeNull();
+      // No floating GlassSurface island on Material.
+      expect(container.querySelector('[data-glass]')).toBeNull();
+    });
+
+    it('reports the app bar height through onHeightChange', () => {
+      const onHeightChange = vi.fn();
+      const { container } = render(<CollapsingTopChrome {...makeProps({ onHeightChange })} />);
+      fireEvent.click(container.querySelector('[data-has-layout="true"]') as HTMLElement);
+      expect(onHeightChange).toHaveBeenCalledWith(64);
+    });
   });
 });

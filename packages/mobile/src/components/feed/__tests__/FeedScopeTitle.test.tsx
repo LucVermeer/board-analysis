@@ -12,6 +12,7 @@ const capture = vi.hoisted(() => ({
   onSelectIndex: undefined as ((index: number) => void) | undefined,
   accessibilityLabel: undefined as string | undefined,
 }));
+const ctrl = vi.hoisted(() => ({ variant: 'liquidGlass' as 'liquidGlass' | 'material' }));
 
 vi.mock('react-native', () => ({
   View: ({ children }: { children?: ReactNode }) => createElement('div', { 'data-view': 'true' }, children),
@@ -45,6 +46,7 @@ vi.mock('../../GlassSurface', () => ({ GlassSurface: () => createElement('div', 
 vi.mock('../../../hooks/use-native-glass', () => ({ useNativeGlass: () => false }));
 vi.mock('../../../providers/theme-provider', () => ({
   useTheme: () => ({
+    variant: ctrl.variant,
     systemColors: { label: '#000', secondaryLabel: '#999', separator: '#ccc', elevatedSurface: '#fff' },
   }),
 }));
@@ -62,6 +64,7 @@ beforeEach(() => {
   capture.actions = undefined;
   capture.onSelectIndex = undefined;
   capture.accessibilityLabel = undefined;
+  ctrl.variant = 'liquidGlass';
 });
 
 describe('FeedScopeTitle', () => {
@@ -77,5 +80,25 @@ describe('FeedScopeTitle', () => {
     expect(capture.accessibilityLabel).toBe('My crew');
     capture.onSelectIndex?.(1);
     expect(onSelectIndex).toHaveBeenCalledWith(1);
+  });
+
+  it('renders the floating glass pill on Liquid Glass', () => {
+    const { container } = render(
+      createElement(FeedScopeTitle, { title: 'My crew', actions: ACTIONS, onSelectIndex: () => {} }),
+    );
+    expect(container.querySelector('[data-glass]')).not.toBeNull();
+  });
+
+  it('renders the flat M3 title-menu (no glass pill) on Material, still forwarding its actions', () => {
+    ctrl.variant = 'material';
+    const { container } = render(
+      createElement(FeedScopeTitle, { title: 'My crew', actions: ACTIONS, onSelectIndex: () => {} }),
+    );
+    // The Material app-bar title is flat — no floating GlassSurface pill.
+    expect(container.querySelector('[data-glass]')).toBeNull();
+    // Still a menu anchored to the title, still forwarding its actions + label.
+    expect(container.querySelector('[data-app-menu]')).not.toBeNull();
+    expect(capture.actions).toBe(ACTIONS);
+    expect(capture.accessibilityLabel).toBe('My crew');
   });
 });

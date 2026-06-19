@@ -5,6 +5,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { router, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
+import { FAB } from 'react-native-paper';
 import {
   useDiscoverPlaylists,
   useUserPlaylists,
@@ -33,8 +34,11 @@ import { useAuthToken } from '../../../src/lib/graphql/use-auth-token';
 import { useProfile } from '../../../src/lib/graphql/hooks';
 import { useActiveBoard } from '../../../src/lib/graphql/use-active-board';
 import { useBottomChromeMetrics } from '../../../src/hooks/use-bottom-chrome-metrics';
+import { iconMap } from '../../../src/components/icon-map';
+import { selectByVariant } from '../../../src/theme/variants';
 import { iosSystemColors } from '../../../src/theme/ios-colors';
 import { spacing } from '../../../src/theme/tokens';
+import { MATERIAL_ACTIVE_CONTEXT_BAR_HEIGHT } from '../../../src/theme/layout';
 
 const FOR_YOU_SMART_PLAYLIST_TYPES: SmartPlaylistType[] = [
   'LIKED_CLIMBS',
@@ -77,8 +81,16 @@ function pinnedSmartPlaylistsStorageKey(userId: string): string {
 
 export default function DiscoverLibrary() {
   const { t } = useTranslation('playlists');
-  const { brandColors } = useTheme();
+  const { brandColors, variant } = useTheme();
+  const isMaterial = selectByVariant(variant, { material: true, liquidGlass: false });
   const bottomChrome = useBottomChromeMetrics();
+  // The screen sits ABOVE the in-flow Material tab bar, so the FAB's `bottom` is
+  // measured from the tab-bar top. It only needs to clear the docked queue accessory
+  // bar (a root overlay that covers the screen's bottom edge when a climb is queued),
+  // plus a 16dp gap. Computed directly rather than via floatingControlBottom /
+  // fixedFooterBottom, which re-add the tab-bar height (built for full-screen overlays)
+  // and floated the FAB ~tab-bar-height too high above the accessory bar.
+  const createFabBottom = (bottomChrome.jsQueueToolbarVisible ? MATERIAL_ACTIVE_CONTEXT_BAR_HEIGHT : 0) + spacing[4];
   const insets = useSafeAreaInsets();
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   const { data: token = null, isLoading: tokenLoading } = useAuthToken();
@@ -622,6 +634,23 @@ export default function DiscoverLibrary() {
         onHeightChange={setChromeHeight}
       />
 
+      {/* Material's primary create affordance is an M3 FAB — the canonical place for
+          a screen's "new" action. Liquid Glass keeps the create "+" island in the
+          floating chrome (via CollapsingTopChrome), so the FAB is material-only. */}
+      {isMaterial && isAuthenticated ? (
+        <FAB
+          icon={iconMap.plus.android}
+          onPress={handleCreatePress}
+          accessibilityLabel={t('library.createFab.ariaLabel')}
+          // Solid brand fill (the app's filled-button colour), not Paper's default
+          // `primaryContainer` tonal variant — that muted tone reads as washed-out /
+          // semi-transparent over the dark feed.
+          color={brandColors.onPrimary as string}
+          mode="elevated"
+          style={[styles.createFab, { bottom: createFabBottom, backgroundColor: brandColors.primaryFill }]}
+        />
+      ) : null}
+
       <PlaylistFormSheet
         mode="create"
         visible={createVisible}
@@ -636,6 +665,13 @@ export default function DiscoverLibrary() {
 const styles = StyleSheet.create({
   flex: {
     flex: 1,
+  },
+  // Material create FAB: bottom-trailing, the list scrolls under it; the host sets
+  // `bottom` from the variant-correct floating-control offset (clears tab bar +
+  // queue accessory).
+  createFab: {
+    position: 'absolute',
+    right: spacing[4],
   },
   screenTitle: {
     paddingHorizontal: spacing[4],

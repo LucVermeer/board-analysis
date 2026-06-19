@@ -1,6 +1,9 @@
-import { type ReactNode, isValidElement } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { type ReactNode, isValidElement, useCallback } from 'react';
+import { type LayoutChangeEvent, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Appbar } from 'react-native-paper';
 import { useTheme } from '../../providers/theme-provider';
+import { selectByVariant } from '../../theme/variants';
 import { useActiveBoard } from '../../lib/graphql/use-active-board';
 import { useOptionalBluetoothContext } from '../../providers/bluetooth-provider';
 import { useNativeGlass } from '../../hooks/use-native-glass';
@@ -8,9 +11,11 @@ import { shadows } from '../../theme/tokens';
 import { Icon } from '../Icon';
 import { GlassSurface } from '../GlassSurface';
 import { BoardToolbarAction } from './BoardToolbarAction';
+import { BoardSwitcherButton } from './BoardSwitcherButton';
 import { GlassActionToolbar, GlassToolbarAction, TOP_ACTION_SIZE } from './GlassActionToolbar';
 import { AngleToolbarAction } from './AngleToolbarAction';
 import { LightbulbToolbarAction } from './LightbulbToolbarAction';
+import { MaterialAngleAction, MaterialLightbulbAction } from './MaterialBoardActions';
 import { CollapsingLargeTitleHeader } from './CollapsingLargeTitleHeader';
 import { UserAvatarToolbarAction } from '../user-drawer/UserAvatarToolbarAction';
 
@@ -84,10 +89,58 @@ export function CollapsingTopChrome({
   hideLight = false,
   children,
 }: CollapsingTopChromeProps) {
-  const { systemColors } = useTheme();
+  const { systemColors, variant } = useTheme();
+  const insets = useSafeAreaInsets();
   const nativeGlass = useNativeGlass();
   const { data: activeBoard } = useActiveBoard();
   const bluetooth = useOptionalBluetoothContext();
+
+  const handleLayout = useCallback(
+    (event: LayoutChangeEvent) => onHeightChange(event.nativeEvent.layout.height),
+    [onHeightChange],
+  );
+
+  // Material (Android default): a real M3 small top app bar instead of the floating
+  // glass islands. Climbs/Record short-circuit to their own Appbar before delegating
+  // here, so in practice only Discover reaches this branch — the avatar, board
+  // switcher, angle, and lightbulb come from the shared Material helpers. The create
+  // action is the screen's Material FAB (see `DiscoverLibrary`), not an app-bar
+  // control, so `canCreate` / `onCreate` are intentionally unused here. The `children`
+  // / `centerTitle` / leading / trailing props are liquid-glass-only affordances
+  // (Climbs' search row, Record's session controls) and never reach this branch.
+  const isMaterial = selectByVariant(variant, { material: true, liquidGlass: false });
+  if (isMaterial) {
+    return (
+      <View
+        pointerEvents="box-none"
+        style={[
+          styles.materialContainer,
+          {
+            paddingTop: insets.top,
+            backgroundColor: systemColors.secondaryBackground,
+            borderBottomColor: systemColors.separator,
+          },
+        ]}
+        onLayout={handleLayout}
+      >
+        <Appbar.Header
+          statusBarHeight={0}
+          mode="small"
+          elevated
+          style={[styles.materialAppbar, { backgroundColor: systemColors.secondaryBackground }]}
+        >
+          <UserAvatarToolbarAction variant="material" />
+          <BoardSwitcherButton
+            onPress={onOpenBoardSwitcher}
+            accessibilityHint={boardPillAccessibilityHint}
+            badge={boardBadge}
+          />
+          <MaterialAngleAction />
+          <MaterialLightbulbAction />
+        </Appbar.Header>
+      </View>
+    );
+  }
 
   const canOpenAngle = activeBoard?.isAngleAdjustable !== false && activeBoard?.angle != null;
   // A fragment/element of leading actions reads as one element, so callers passing
@@ -174,5 +227,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'flex-end',
     overflow: 'hidden',
+  },
+  // Material small app bar (mirrors ClimbTopChrome / RecordTopChrome): absolutely
+  // positioned so the list scrolls under it, height reported via onLayout.
+  materialContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 20,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  materialAppbar: {
+    elevation: 0,
+    shadowOpacity: 0,
   },
 });

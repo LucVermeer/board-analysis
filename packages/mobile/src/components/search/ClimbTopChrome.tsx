@@ -7,7 +7,7 @@
 // persistently in the centre. The Material variant keeps a dedicated
 // Appbar.Header with the board as its subtitle plus grade / filter quick chips.
 
-import { type RefObject, useCallback, useState } from 'react';
+import { type RefObject, useCallback } from 'react';
 import { Keyboard, type LayoutChangeEvent, StyleSheet, View } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -17,16 +17,17 @@ import type { Grade } from '@boardsesh/shared-schema';
 import type { GradeBound } from '@boardsesh/climb-filters';
 import { useTheme } from '../../providers/theme-provider';
 import { selectByVariant } from '../../theme/variants';
-import { useActiveBoard, useSetActiveBoard } from '../../lib/graphql/use-active-board';
 import { spacing } from '../../theme/tokens';
-import { hapticLight } from '../../lib/haptics';
-import { useLightbulbControl } from '../ble/use-lightbulb-control';
 import { SearchHeader, type SearchHeaderHandle } from '../SearchHeader';
-import { Text } from '../Text';
 import { iconMap } from '../icon-map';
-import { BoardSwitcherButton, CollapsingTopChrome, TOP_ACTION_SIZE } from '../chrome';
+import {
+  BoardSwitcherButton,
+  CollapsingTopChrome,
+  MaterialAngleAction,
+  MaterialLightbulbAction,
+  TOP_ACTION_SIZE,
+} from '../chrome';
 import { GradeRangeRail } from '../grade';
-import { AngleSelectorSheet } from '../play-drawer/AngleSelectorSheet';
 import { UserAvatarToolbarAction } from '../user-drawer/UserAvatarToolbarAction';
 import { FilterButton } from './FilterButton';
 import { GradeFilterControl } from './GradeFilterControl';
@@ -274,85 +275,6 @@ export function ClimbTopChrome({
   );
 }
 
-function MaterialAngleAction() {
-  const { systemColors } = useTheme();
-  const { t: tSession } = useTranslation('session');
-  const { data: activeBoard } = useActiveBoard();
-  const setActiveBoard = useSetActiveBoard();
-  const [visible, setVisible] = useState(false);
-
-  const canAdjust = activeBoard?.isAngleAdjustable !== false && activeBoard?.angle != null;
-  const angleIcon = useCallback(
-    () => (
-      <Text variant="caption1" style={[styles.materialAngleText, { color: systemColors.label }]}>
-        {activeBoard?.angle}°
-      </Text>
-    ),
-    [activeBoard?.angle, systemColors.label],
-  );
-  const handleOpen = useCallback(() => {
-    if (!activeBoard || activeBoard.isAngleAdjustable === false || activeBoard.angle == null) return;
-    hapticLight();
-    setVisible(true);
-  }, [activeBoard]);
-  const handleClose = useCallback(() => setVisible(false), []);
-  const handleAngleChange = useCallback(
-    (newAngle: number) => {
-      if (!activeBoard || activeBoard.isAngleAdjustable === false || newAngle === activeBoard.angle) return;
-      void setActiveBoard({ ...activeBoard, angle: newAngle });
-    },
-    [activeBoard, setActiveBoard],
-  );
-
-  if (!activeBoard || !canAdjust) return null;
-
-  return (
-    <>
-      <Appbar.Action
-        icon={angleIcon}
-        onPress={handleOpen}
-        accessibilityLabel={tSession('mobile.angleSelector.title')}
-      />
-      <AngleSelectorSheet
-        visible={visible}
-        onClose={handleClose}
-        boardName={activeBoard.boardType}
-        layoutId={activeBoard.layoutId}
-        currentAngle={activeBoard.angle}
-        onAngleChange={handleAngleChange}
-      />
-    </>
-  );
-}
-
-function MaterialLightbulbAction() {
-  const { systemColors, brandColors } = useTheme();
-  const { t: tCommon } = useTranslation('common');
-  const { t: tSettings } = useTranslation('settings');
-  const { bluetooth, lit, localConnected, onPress } = useLightbulbControl({ source: 'lightbulb_toolbar' });
-
-  const handlePress = useCallback(() => {
-    hapticLight();
-    onPress();
-  }, [onPress]);
-
-  if (!bluetooth) return null;
-
-  const iconName = lit ? iconMap['lightbulb.fill'].android : iconMap.lightbulb.android;
-  const iconColor = lit ? brandColors.warning : systemColors.label;
-
-  return (
-    <Appbar.Action
-      icon={iconName}
-      color={iconColor as string}
-      onPress={handlePress}
-      // The label reflects what tapping does (this device's link), not the fill —
-      // the bulb can read lit because a session peer holds the wall.
-      accessibilityLabel={localConnected ? tCommon('lightControl.disconnect') : tSettings('ble.connectBoard')}
-    />
-  );
-}
-
 const styles = StyleSheet.create({
   searchStack: {
     paddingHorizontal: spacing[4],
@@ -413,9 +335,5 @@ const styles = StyleSheet.create({
   },
   materialGradeRail: {
     marginTop: spacing[1],
-  },
-  materialAngleText: {
-    fontWeight: '700',
-    textAlign: 'center',
   },
 });
