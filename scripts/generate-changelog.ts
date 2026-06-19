@@ -64,6 +64,7 @@ const MERGED_PRS_QUERY = `query($owner: String!, $name: String!, $cursor: String
         title
         body
         mergedAt
+        updatedAt
         url
         labels(first: 20) { nodes { name } }
       }
@@ -76,6 +77,7 @@ type RawPrNode = {
   title: string;
   body: string | null;
   mergedAt: string | null;
+  updatedAt: string | null;
   url: string;
   labels?: { nodes?: { name?: string }[] };
 };
@@ -119,14 +121,16 @@ function fetchMergedPullRequests(): RawPullRequest[] | null {
         });
       }
 
-      // Stop paging once the whole page is older than the cutoff. Ordering is by
-      // UPDATED_AT (not mergedAt) so a recently-touched old PR could appear late;
-      // checking the page's newest mergedAt avoids cutting the crawl short on a
-      // single stale row while still bounding it.
-      const newestMergedOnPage = (connection.nodes ?? [])
-        .map((node) => (node.mergedAt ? new Date(node.mergedAt).getTime() : 0))
-        .reduce((max, current) => Math.max(max, current), 0);
-      if (newestMergedOnPage > 0 && newestMergedOnPage < cutoff) break;
+      // Stop paging once we've crossed the cutoff. Break on the field we ORDER BY
+      // (updatedAt), not mergedAt: a PR merged after the cutoff always has
+      // updatedAt >= mergedAt > cutoff, so once a page's OLDEST updatedAt is
+      // before the cutoff, no later page (lower updatedAt) can hold a PR merged
+      // after it. Breaking on mergedAt instead would let a page of recently
+      // relabeled old PRs cut the crawl short and silently drop newer merges.
+      const oldestUpdatedOnPage = (connection.nodes ?? [])
+        .map((node) => (node.updatedAt ? new Date(node.updatedAt).getTime() : Number.POSITIVE_INFINITY))
+        .reduce((min, current) => Math.min(min, current), Number.POSITIVE_INFINITY);
+      if (Number.isFinite(oldestUpdatedOnPage) && oldestUpdatedOnPage < cutoff) break;
 
       if (!connection.pageInfo?.hasNextPage || !connection.pageInfo.endCursor) break;
       cursor = connection.pageInfo.endCursor;

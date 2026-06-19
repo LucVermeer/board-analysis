@@ -519,7 +519,10 @@ jobs:
     # commits, so intermediate WIP/fixup commits land on main verbatim and much of
     # the existing history is non-conventional — blocking on it would red most PRs.
     # The local commit-msg hook nudges new commits toward the convention.
-    if: needs.changes.outputs.anyJs == 'true' || needs.changes.outputs.rootCi == 'true'
+    # Also gate on mobile/sharedDeps so the PR-title check runs whenever the
+    # release-notes job does — a non-JS mobile/shared change still produces a
+    # changelog entry whose category comes from the (conventional) PR title.
+    if: needs.changes.outputs.anyJs == 'true' || needs.changes.outputs.rootCi == 'true' || needs.changes.outputs.mobile == 'true' || needs.changes.outputs.sharedDeps == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
