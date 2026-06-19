@@ -27,15 +27,17 @@ const CODE_SIGNING_CERT_PATH = './certs/certificate.pem';
 //     the EAS URL so the build still succeeds and OTA is simply inert. `eoas
 //     publish` also reads updates.url to find the server, so the same env var
 //     must be present at publish time.
-function resolveUpdatesConfig(easProjectId: string): ExpoConfig['updates'] {
+// `projectRoot` is the ConfigContext's project root (packages/mobile) — the same
+// base Expo resolves `codeSigningCertificate` against. We resolve the cert
+// existence check against it too, rather than `process.cwd()`, so the fail-closed
+// gate can't silently mis-fire if `expo prebuild` is ever invoked from a different
+// directory (e.g. the monorepo root). Exported for unit tests.
+export function resolveUpdatesConfig(easProjectId: string, projectRoot: string): ExpoConfig['updates'] {
   const easUrl = `https://u.expo.dev/${easProjectId}`;
 
   if (process.env.EAS_BUILD) {
     return { url: easUrl };
   }
-
-  const selfHostUrl = process.env.EXPO_UPDATES_URL;
-  const certExists = existsSync(resolve(process.cwd(), CODE_SIGNING_CERT_PATH));
 
   // Fail closed: only point a production binary at the self-hosted server when
   // BOTH the server URL and the public signing cert are present. Baking the
@@ -44,7 +46,13 @@ function resolveUpdatesConfig(easProjectId: string): ExpoConfig['updates'] {
   // device would have no way to verify the manifest came from us. Until the cert
   // is generated and committed we stay on the EAS URL (nothing is published there
   // for production, so OTA is simply inert), keeping every build safe to ship.
-  if (!selfHostUrl || !certExists) {
+  const selfHostUrl = process.env.EXPO_UPDATES_URL;
+  if (!selfHostUrl) {
+    return { url: easUrl };
+  }
+  // Check the cert only once the server URL is set (skips the filesystem stat in
+  // the common no-infra case, and avoids touching projectRoot when unused).
+  if (!existsSync(resolve(projectRoot, CODE_SIGNING_CERT_PATH))) {
     return { url: easUrl };
   }
 
@@ -147,7 +155,7 @@ function resolveGoogleIosUrlScheme(): string | null {
   return match ? `com.googleusercontent.apps.${match[1]}` : null;
 }
 
-export default ({ config }: ConfigContext): ExpoConfig & { newArchEnabled?: boolean } => {
+export default ({ config, projectRoot }: ConfigContext): ExpoConfig & { newArchEnabled?: boolean } => {
   const devMetadata = resolveDevMetadata();
   const hasDevMetadata = devMetadata.branchName || devMetadata.qaNotes || devMetadata.qaNotesFilePath;
   const tailscaleHosts = resolveTailscaleHosts();
@@ -215,7 +223,7 @@ export default ({ config }: ConfigContext): ExpoConfig & { newArchEnabled?: bool
           // Resolved by Expo's bundled @expo/fingerprint; verify with
           // `bunx expo-updates runtimeversion:resolve --platform ios|android`.
           runtimeVersion: { policy: 'fingerprint' as const },
-          updates: resolveUpdatesConfig(EAS_PROJECT_ID),
+          updates: resolveUpdatesConfig(EAS_PROJECT_ID, projectRoot),
         }
       : {}),
     ios: {
