@@ -821,29 +821,15 @@ describe('tickQueries — behavior fixes', () => {
     });
   });
 
-  describe('userAscentsFeed — climbUuids filter (internal, share-beta caption match)', () => {
-    it('restricts the feed to the given climb uuids', async () => {
-      const climbA = CLIMB_PREFIX + 'filter-a';
-      const climbB = CLIMB_PREFIX + 'filter-b';
-      await insertClimb(climbA, 'Filter Climb A');
-      await insertClimb(climbB, 'Filter Climb B');
-      await insertTick({ uuid: 'tick-filter-a', climbUuid: climbA, climbedAt: '2024-01-01 10:00:00', status: 'send' });
-      await insertTick({ uuid: 'tick-filter-b', climbUuid: climbB, climbedAt: '2024-01-02 10:00:00', status: 'send' });
-
-      const result = await callUserAscentsFeed(TEST_USER_ID, { climbUuids: [climbA], limit: 50 });
-
-      expect(result.items.map((item) => item.climbName)).toEqual(['Filter Climb A']);
-    });
-  });
-
-  describe('userAscentCaptionMatches — whole-logbook caption suggestions', () => {
-    it('matches a sent climb by name anywhere in the logbook and returns board art', async () => {
+  describe('userAscentCaptionMatches — quoted-name caption suggestions', () => {
+    it('matches the quoted climb name anywhere in the logbook and returns board art', async () => {
       const climbUuid = CLIMB_PREFIX + 'caption-purple';
       await insertClimb(climbUuid, 'Purple Nurple');
       // An old send (not "recent") — must still surface from a caption match.
       await insertTick({ uuid: 'tick-caption-1', climbUuid, climbedAt: '2024-01-01 10:00:00', status: 'send' });
 
-      const result = await callUserAscentCaptionMatches(TEST_USER_ID, 'Finally sent Purple Nurple today 🔥');
+      // Boardsesh's caption format: name in quotes, with the user's words around it.
+      const result = await callUserAscentCaptionMatches(TEST_USER_ID, 'Finally sent "Purple Nurple" @ 40° 🔥');
 
       expect(result).toHaveLength(1);
       expect(result[0].climbName).toBe('Purple Nurple');
@@ -852,12 +838,33 @@ describe('tickQueries — behavior fixes', () => {
       expect(result[0].frames).toBe('p1r1');
     });
 
+    it('matches a climb logged ONLY as a flash (statusMode send includes flashes)', async () => {
+      const climbUuid = CLIMB_PREFIX + 'caption-flash-only';
+      await insertClimb(climbUuid, 'Flash Only Send');
+      await insertTick({ uuid: 'tick-caption-flash', climbUuid, climbedAt: '2024-01-01 10:00:00', status: 'flash' });
+
+      const result = await callUserAscentCaptionMatches(TEST_USER_ID, 'flashed "Flash Only Send" first go');
+
+      expect(result).toHaveLength(1);
+      expect(result[0].climbUuid).toBe(climbUuid);
+      expect(result[0].status).toBe('flash');
+    });
+
+    it('returns nothing when the caption has no quoted name', async () => {
+      const climbUuid = CLIMB_PREFIX + 'caption-noquote';
+      await insertClimb(climbUuid, 'Purple Nurple');
+      await insertTick({ uuid: 'tick-caption-nq', climbUuid, climbedAt: '2024-01-01 10:00:00', status: 'send' });
+
+      // Name present but unquoted (e.g. a non-Boardsesh / MoonBoard caption).
+      expect(await callUserAscentCaptionMatches(TEST_USER_ID, 'finally sent Purple Nurple today')).toEqual([]);
+    });
+
     it('does not suggest attempt-only climbs (beta attaches to sends/flashes)', async () => {
       const climbUuid = CLIMB_PREFIX + 'caption-attempt';
       await insertClimb(climbUuid, 'Crimp Master');
       await insertTick({ uuid: 'tick-caption-att', climbUuid, climbedAt: '2024-01-01 10:00:00', status: 'attempt' });
 
-      const result = await callUserAscentCaptionMatches(TEST_USER_ID, 'still projecting Crimp Master');
+      const result = await callUserAscentCaptionMatches(TEST_USER_ID, 'still projecting "Crimp Master"');
 
       expect(result).toEqual([]);
     });
@@ -868,7 +875,7 @@ describe('tickQueries — behavior fixes', () => {
       await insertTick({ uuid: 'tick-dup-1', climbUuid, climbedAt: '2024-01-01 10:00:00', status: 'send' });
       await insertTick({ uuid: 'tick-dup-2', climbUuid, climbedAt: '2024-02-01 10:00:00', status: 'flash' });
 
-      const result = await callUserAscentCaptionMatches(TEST_USER_ID, 'Slab Master again');
+      const result = await callUserAscentCaptionMatches(TEST_USER_ID, 'sent "Slab Master" again');
 
       expect(result).toHaveLength(1);
       expect(result[0].climbUuid).toBe(climbUuid);
@@ -889,7 +896,7 @@ describe('tickQueries — behavior fixes', () => {
         status: 'send',
       });
 
-      const result = await callUserAscentCaptionMatches(TEST_USER_ID, 'sent Shared Caption Climb');
+      const result = await callUserAscentCaptionMatches(TEST_USER_ID, 'sent "Shared Caption Climb"');
 
       expect(result).toEqual([]);
     });
@@ -906,7 +913,7 @@ describe('tickQueries — behavior fixes', () => {
         status: 'send',
       });
 
-      const result = await callUserAscentCaptionMatches(TEST_USER_ID, 'sent Mega Classic finally');
+      const result = await callUserAscentCaptionMatches(TEST_USER_ID, 'sent "Mega Classic" finally');
 
       expect(result).toHaveLength(1);
       expect(result[0].climbName).toBe('Mega Classic');

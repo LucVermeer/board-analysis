@@ -1,11 +1,21 @@
-// Match a shared reel's caption against a climber's logged climbs by name.
-// Pure + dependency-free so both the mobile share flow and the backend
-// caption-match resolver run the exact same logic over their own data shapes.
+// Recover the climb a shared reel is about from its caption. Boardsesh's own
+// "share your beta" caption embeds the climb name in double quotes
+// (`"Purple Nurple" @ 40° on the Kilter Board.`), and a climber may add their own
+// words before/after — so we pull whatever sits inside the quotes and match that
+// against their logbook. Pure + dependency-free so the backend resolver and any
+// client run identical logic.
 
-// Climb names shorter than this (after normalization) match too much random
-// caption text to be trustworthy, so we skip them and let the user pick
-// manually. Tunable; 4 keeps out "up", "yes", "g2"-style names.
+// Quoted names shorter than this (after normalization) are too generic to trust
+// as a climb match. 4 keeps out stray `"up"`, `"yes"`, `"g2"`-style quotes.
 export const MIN_MATCHABLE_NAME_LENGTH = 4;
+
+// A quoted name longer than this isn't a climb name (someone quoted a sentence);
+// skip it rather than push an oversized value into the name lookup.
+const MAX_MATCHABLE_NAME_LENGTH = 120;
+
+// Content between straight or curly double quotes. Global so matchAll finds every
+// quoted segment in the caption.
+const QUOTED_SEGMENT = /["“”]([^"“”]+)["“”]/g;
 
 /** The minimal shape the matcher reads off a logged climb / ascent. */
 export type CaptionMatchableClimb = {
@@ -15,8 +25,7 @@ export type CaptionMatchableClimb = {
 
 /**
  * Lowercase, strip diacritics, and reduce to single-spaced alphanumerics so a
- * caption like "Sent *Purple Nurple* 🔥 @ 40°" and a climb name "Purple Nurple"
- * compare cleanly.
+ * quoted `"Café Crux"` and a climb name `Café Crux` compare cleanly.
  */
 function normalizeForMatch(value: string): string {
   return value
@@ -29,30 +38,49 @@ function normalizeForMatch(value: string): string {
 }
 
 /**
- * Find which of the climber's logged climbs the shared reel is about by looking
- * for their climb names inside the post caption. Matches whole names on word
- * boundaries (so "Crimp" doesn't match "Crimpy McCrimpface"), de-dupes by climb,
- * and ranks longer (more specific) names first — the strongest match leads.
- *
- * Returns [] when there's no caption or no confident hit. Generic over the row
- * shape so callers keep their full type (a mobile AscentFeedItem, a backend name
- * row) on the way out; only `climbName` + `climbUuid` are read.
+ * Pull the quoted climb-name candidate(s) out of a caption — the raw (trimmed)
+ * text inside each pair of double quotes, de-duped (by normalized form) and with
+ * too-short / too-long segments dropped. Returns [] when the caption has no
+ * usable quoted name (e.g. a non-Boardsesh reel). Raw text is preserved so the
+ * caller can do a (diacritic-faithful) name lookup.
+ */
+export function extractQuotedClimbNames(caption: string | null | undefined): string[] {
+  if (!caption) return [];
+  const names: string[] = [];
+  const seen = new Set<string>();
+  for (const match of caption.matchAll(QUOTED_SEGMENT)) {
+    const raw = match[1].trim();
+    if (raw.length > MAX_MATCHABLE_NAME_LENGTH) continue;
+    const normalized = normalizeForMatch(raw);
+    if (normalized.length < MIN_MATCHABLE_NAME_LENGTH) continue;
+    if (seen.has(normalized)) continue;
+    seen.add(normalized);
+    names.push(raw);
+  }
+  return names;
+}
+
+/**
+ * Find which of the climber's logged climbs the shared reel is about: the climbs
+ * whose name exactly matches (normalized) a quoted name in the caption. De-dupes
+ * by climb and ranks longer (more specific) names first. Returns [] when the
+ * caption has no quoted name or nothing matches. Generic over the row shape so
+ * callers keep their full type on the way out; only `climbName` + `climbUuid`
+ * are read.
  */
 export function matchClimbsToCaption<T extends CaptionMatchableClimb>(
   caption: string | null | undefined,
   climbs: T[],
 ): T[] {
-  if (!caption) return [];
-  const haystack = ` ${normalizeForMatch(caption)} `;
-  if (haystack.trim().length === 0) return [];
+  const quotedNames = new Set(extractQuotedClimbNames(caption).map(normalizeForMatch));
+  if (quotedNames.size === 0) return [];
 
   const seen = new Set<string>();
   const scored: { climb: T; score: number }[] = [];
 
   for (const climb of climbs) {
     const name = normalizeForMatch(climb.climbName);
-    if (name.length < MIN_MATCHABLE_NAME_LENGTH) continue;
-    if (!haystack.includes(` ${name} `)) continue;
+    if (!quotedNames.has(name)) continue;
     if (seen.has(climb.climbUuid)) continue;
     seen.add(climb.climbUuid);
     scored.push({ climb, score: name.length });

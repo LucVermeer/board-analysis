@@ -4,6 +4,7 @@ import {
   type BoardName,
   SUPPORTED_BOARDS,
   matchClimbsToCaption,
+  extractQuotedClimbNames,
 } from '@boardsesh/shared-schema';
 import { db } from '../../../db/client';
 import * as dbSchema from '@boardsesh/db/schema';
@@ -17,6 +18,35 @@ import {
 } from '../shared/sql-expressions';
 import { GetTicksInputSchema, BoardNameSchema, AscentFeedInputSchema } from '../../../validation/schemas';
 import { escapeLikePattern } from '../../../utils/like-pattern';
+
+// Shape of a row produced by the userAscentsFeed item mapper. Declared so
+// userAscentCaptionMatches (which reuses that builder) returns a typed ascent
+// row instead of unknown[]. Mirrors the GraphQL AscentFeedItem fields.
+type AscentFeedRow = {
+  uuid: string;
+  climbUuid: string;
+  climbName: string;
+  setterUsername: string | null;
+  boardType: string;
+  boardId: number | null;
+  boardDisplayName: string | null;
+  layoutId: number | null;
+  angle: number;
+  isMirror: boolean;
+  status: string;
+  attemptCount: number;
+  quality: number | null;
+  difficulty: number | null;
+  difficultyName: string | null;
+  consensusDifficulty: number | null;
+  consensusDifficultyName: string | null;
+  qualityAverage: number | null;
+  isBenchmark: boolean;
+  isNoMatch: boolean;
+  comment: string;
+  climbedAt: string;
+  frames: string | null;
+};
 
 export const tickQueries = {
   /**
@@ -234,7 +264,6 @@ export const tickQueries = {
         statusMode?: string;
         flashOnly?: boolean;
         climbName?: string;
-        climbUuids?: string[];
         sortBy?: string;
         sortOrder?: string;
         secondarySortBy?: string;
@@ -262,7 +291,6 @@ export const tickQueries = {
     const boardTypes = validatedInput.boardTypes;
     const layoutIds = validatedInput.layoutIds;
     const climbName = validatedInput.climbName;
-    const climbUuids = validatedInput.climbUuids;
     const sortBy = validatedInput.sortBy ?? 'recent';
     const sortOrder = validatedInput.sortOrder ?? 'desc';
     const secondarySortBy = validatedInput.secondarySortBy;
@@ -297,7 +325,6 @@ export const tickQueries = {
     // Build shared WHERE conditions
     const tickConditions = [
       eq(dbSchema.boardseshTicks.userId, userId),
-      ...(climbUuids && climbUuids.length > 0 ? [inArray(dbSchema.boardseshTicks.climbUuid, climbUuids)] : []),
       ...(boardType ? [eq(dbSchema.boardseshTicks.boardType, boardType)] : []),
       ...(boardTypes && boardTypes.length > 0 && !boardType
         ? [inArray(dbSchema.boardseshTicks.boardType, boardTypes)]
@@ -543,71 +570,46 @@ export const tickQueries = {
 
   /**
    * Suggest which of a climber's logged ascents a shared reel is about, by
-   * matching the reel's caption against their whole logbook's climb names
-   * (the mobile share-beta picker). Public, like userAscentsFeed.
+   * pulling the climb name out of the caption's quotes and looking it up in their
+   * logbook (the mobile share-beta picker). Public, like userAscentsFeed.
    *
-   * Two cheap steps so we never ship the whole logbook's hold frames: match
-   * caption → climb names over a names-only query (sends/flashes only, since
-   * beta only attaches to ascents), then re-fetch full ascent rows — with board
-   * art — for just the handful of matched climbs by reusing the feed builder.
+   * Boardsesh's share caption embeds the climb name in double quotes
+   * (`"Purple Nurple" @ 40° on the …`), so we extract the quoted name(s) and fetch
+   * the matching send/flash ascents — with board art — by the indexed, per-user
+   * climbName filter (no whole-logbook scan), then keep exact name matches. A
+   * caption with no quoted climb name (e.g. a non-Boardsesh reel, or a MoonBoard
+   * caption, which isn't quoted) yields no suggestions; the climber searches.
    */
   userAscentCaptionMatches: async (
     _: unknown,
     { userId, caption }: { userId: string; caption: string },
     ctx?: ConnectionContext,
-  ): Promise<unknown[]> => {
-    if (!caption || caption.trim().length === 0) return [];
+  ): Promise<AscentFeedRow[]> => {
+    const quotedNames = extractQuotedClimbNames(caption);
+    if (quotedNames.length === 0) return [];
 
-    // Names-only, canonical-resolved (mirrors the feed's alias→canonical join) so
-    // matching uses the same names the climber sees. Sends/flashes only.
-    const nameRows = await db
-      .select({
-        climbUuid: dbSchema.boardseshTicks.climbUuid,
-        climbName: dbSchema.boardClimbs.name,
-      })
-      .from(dbSchema.boardseshTicks)
-      .leftJoin(
-        dbSchema.boardClimbAliases,
-        and(
-          eq(dbSchema.boardseshTicks.climbUuid, dbSchema.boardClimbAliases.aliasUuid),
-          eq(dbSchema.boardseshTicks.boardType, dbSchema.boardClimbAliases.boardType),
-        ),
-      )
-      .leftJoin(
-        dbSchema.boardClimbs,
-        and(
-          sql`COALESCE(${dbSchema.boardClimbAliases.canonicalUuid}, ${dbSchema.boardseshTicks.climbUuid}) = ${dbSchema.boardClimbs.uuid}`,
-          eq(dbSchema.boardseshTicks.boardType, dbSchema.boardClimbs.boardType),
-        ),
-      )
-      .where(
-        and(eq(dbSchema.boardseshTicks.userId, userId), inArray(dbSchema.boardseshTicks.status, ['flash', 'send'])),
+    // A caption virtually always quotes a single climb; cap lookups defensively.
+    const MAX_NAME_LOOKUPS = 4;
+    const MAX_SUGGESTIONS = 8;
+
+    const gathered: AscentFeedRow[] = [];
+    for (const quotedName of quotedNames.slice(0, MAX_NAME_LOOKUPS)) {
+      // statusMode 'send' = flash + send (beta attaches to ascents, not attempts,
+      // so a flash-only climb is still included). The climbName filter is an
+      // indexed, per-user ILIKE that returns a handful of rows — not the whole
+      // logbook — and resolves aliased/deduped climbs to their canonical name.
+      const feed = await tickQueries.userAscentsFeed(
+        _,
+        { userId, input: { climbName: quotedName, statusMode: 'send', limit: 50 } },
+        ctx,
       );
-
-    const matchable = nameRows
-      .filter((row): row is { climbUuid: string; climbName: string } => !!row.climbName)
-      .map((row) => ({ climbUuid: row.climbUuid, climbName: row.climbName }));
-
-    // Cap suggestions so the share sheet stays tight even if a generic caption
-    // brushes many short names; matchClimbsToCaption ranks the strongest first.
-    const MAX_CAPTION_MATCH_SUGGESTIONS = 8;
-    const matched = matchClimbsToCaption(caption, matchable).slice(0, MAX_CAPTION_MATCH_SUGGESTIONS);
-    if (matched.length === 0) return [];
-
-    const feed = await tickQueries.userAscentsFeed(
-      _,
-      { userId, input: { climbUuids: matched.map((climb) => climb.climbUuid), statusMode: 'send', limit: 50 } },
-      ctx,
-    );
-    const feedItems = feed.items as Array<{ climbUuid: string }>;
-
-    // One row per matched climb (the most recent send — feed is recency-sorted),
-    // returned in the matcher's ranking order.
-    const firstByClimb = new Map<string, { climbUuid: string }>();
-    for (const item of feedItems) {
-      if (!firstByClimb.has(item.climbUuid)) firstByClimb.set(item.climbUuid, item);
+      gathered.push(...(feed.items as AscentFeedRow[]));
     }
-    return matched.map((climb) => firstByClimb.get(climb.climbUuid)).filter((item) => item !== undefined);
+
+    // Exact-match the quoted name(s) against the fetched rows — drops ILIKE
+    // substring over-matches and comment-only hits — then de-dupe by climb
+    // (keeping the most recent send, since the feed is recency-sorted) and rank.
+    return matchClimbsToCaption(caption, gathered).slice(0, MAX_SUGGESTIONS);
   },
 
   /**
