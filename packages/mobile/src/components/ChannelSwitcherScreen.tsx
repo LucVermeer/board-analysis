@@ -1,7 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { View, ScrollView, ActivityIndicator, Alert, Pressable, StyleSheet, TextInput } from 'react-native';
 import * as Updates from 'expo-updates';
-import Constants from 'expo-constants';
 import { Text } from './Text';
 import { SectionHeader } from './SectionHeader';
 import { ListRow } from './ListRow';
@@ -21,25 +20,16 @@ const OTA_CHANNEL_OVERRIDE_KEY = 'dev_ota_channel_override';
 // tester can also type any other channel name in the custom field.
 const PRESET_CHANNELS = ['production', 'preview-1', 'preview-2', 'preview-3', 'preview-4'] as const;
 
-// The self-hosted (or EAS) updates URL baked into this build. We keep the same
-// URL and only swap the `expo-channel-name` header, so the embedded code-signing
-// cert keeps verifying the manifest.
-function resolveUpdateUrl(): string | null {
-  const url = Constants.expoConfig?.updates?.url;
-  return typeof url === 'string' && url.length > 0 ? url : null;
-}
-
-function applyOverride(channel: string | null): void {
-  const updateUrl = resolveUpdateUrl();
-  if (channel === null || updateUrl === null) {
-    // null clears the override and reverts to the build-time channel + URL.
-    Updates.setUpdateURLAndRequestHeadersOverride(null);
-    return;
-  }
-  Updates.setUpdateURLAndRequestHeadersOverride({
-    updateUrl,
-    requestHeaders: { 'expo-channel-name': channel },
-  });
+// Switch channels by overriding ONLY the `expo-channel-name` request header,
+// keeping the build's update URL (so the embedded code-signing cert still
+// verifies the manifest). Unlike setUpdateURLAndRequestHeadersOverride, the
+// header-only override needs NO `disableAntiBrickingMeasures` — expo-updates
+// permits overriding a header that was baked in at build time, and production
+// builds bake `expo-channel-name`. It throws if that header wasn't embedded
+// (e.g. EAS-hosted builds); callers catch and surface that. `null` clears the
+// override and reverts to the build-time channel.
+function applyChannelOverride(channel: string | null): void {
+  Updates.setUpdateRequestHeadersOverride(channel === null ? null : { 'expo-channel-name': channel });
 }
 
 export function ChannelSwitcherScreen() {
@@ -61,7 +51,6 @@ export function ChannelSwitcherScreen() {
 
   const buildChannel = Updates.channel ?? 'unknown';
   const runtimeVersion = Updates.runtimeVersion ?? 'unknown';
-  const updateUrl = resolveUpdateUrl();
   const updatesUsable = Updates.isEnabled && !__DEV__;
   const isSwitching = switchingChannel !== null;
 
@@ -80,14 +69,9 @@ export function ChannelSwitcherScreen() {
       });
       if (!confirmed) return;
 
-      if (!updateUrl) {
-        Alert.alert('Channel switch unavailable', 'This build has no OTA update URL configured.');
-        return;
-      }
-
       setSwitchingChannel(channel);
       try {
-        applyOverride(channel);
+        applyChannelOverride(channel);
 
         const checkResult = await Updates.checkForUpdateAsync();
         if (!checkResult.isAvailable) {
@@ -103,10 +87,10 @@ export function ChannelSwitcherScreen() {
         setOverride(channel);
         await Updates.reloadAsync();
       } catch (switchError: unknown) {
-        // Any failure after applyOverride(channel) reverts both the native override
-        // and our persisted mirror to the previously-active channel, so the app is
-        // never stranded on a channel with no usable update.
-        applyOverride(override);
+        // Any failure after applyChannelOverride(channel) reverts both the native
+        // override and our persisted mirror to the previously-active channel, so the
+        // app is never stranded on a channel with no usable update.
+        applyChannelOverride(override);
         if (override) {
           await setPreference(OTA_CHANNEL_OVERRIDE_KEY, override).catch(() => undefined);
         } else {
@@ -118,11 +102,11 @@ export function ChannelSwitcherScreen() {
           'Switch failed',
           switchError instanceof Error
             ? switchError.message
-            : 'Could not switch channel. This build may not support runtime overrides.',
+            : 'Could not switch channel. This build may not support channel overrides.',
         );
       }
     },
-    [confirm, updateUrl, override, runtimeVersion],
+    [confirm, override, runtimeVersion],
   );
 
   const resetToBuildChannel = useCallback(async () => {
@@ -137,7 +121,7 @@ export function ChannelSwitcherScreen() {
 
     setSwitchingChannel(buildChannel);
     try {
-      applyOverride(null);
+      applyChannelOverride(null);
       await removePreference(OTA_CHANNEL_OVERRIDE_KEY);
       const checkResult = await Updates.checkForUpdateAsync();
       if (checkResult.isAvailable) {
