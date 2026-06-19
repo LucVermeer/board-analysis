@@ -4,6 +4,7 @@ import {
   GET_USER_PROFILE_STATS,
   GET_USER_CLIMB_PERCENTILE,
   GET_USER_ASCENTS_FEED,
+  GET_USER_ASCENT_CAPTION_MATCHES,
   GET_ACTIVITY_FEED,
   GET_SESSION_GROUPED_FEED,
   type GetUserTicksQueryResponse,
@@ -11,6 +12,8 @@ import {
   type GetUserClimbPercentileQueryResponse,
   type GetUserAscentsFeedQueryResponse,
   type GetUserAscentsFeedQueryVariables,
+  type GetUserAscentCaptionMatchesQueryResponse,
+  type GetUserAscentCaptionMatchesQueryVariables,
   type GetActivityFeedQueryResponse,
   type GetSessionGroupedFeedQueryResponse,
 } from '@boardsesh/graphql/operations';
@@ -105,6 +108,29 @@ export function useUserAscentsFeed(userId: string | undefined, input?: GetUserAs
         ? allPages.reduce((total, page) => total + page.userAscentsFeed.items.length, 0)
         : undefined,
     enabled: !!userId,
+  });
+}
+
+/**
+ * Whole-logbook caption matches for the share-beta picker. The backend matches
+ * the shared reel's caption against the user's entire logbook of sends/flashes
+ * and returns full ascent rows (with board art) for the matched climbs — so a
+ * climb older than the recent feed page still gets suggested. Disabled until a
+ * non-empty caption is available.
+ */
+export function useAscentCaptionMatches(userId: string | undefined, caption: string | null | undefined) {
+  const trimmedCaption = caption?.trim() ?? '';
+  return useQuery({
+    queryKey: ['ascentCaptionMatches', userId, trimmedCaption],
+    queryFn: async () => {
+      const response = await getHttpClient().request<
+        GetUserAscentCaptionMatchesQueryResponse,
+        GetUserAscentCaptionMatchesQueryVariables
+      >(GET_USER_ASCENT_CAPTION_MATCHES, { userId: userId!, caption: trimmedCaption });
+      return response.userAscentCaptionMatches;
+    },
+    enabled: !!userId && trimmedCaption.length > 0,
+    staleTime: PROFILE_STALE_TIME_MS,
   });
 }
 

@@ -3705,6 +3705,13 @@ export type Query = {
    */
   userActiveBoards: Array<Scalars['String']['output']>;
   /**
+   * Suggest the user's logged ascents that a shared reel caption is about, by
+   * matching the caption against their whole logbook's climb names. Returns full
+   * ascent rows (with board art) for the matched climbs, strongest match first.
+   * Powers the mobile share-beta picker.
+   */
+  userAscentCaptionMatches: Array<AscentFeedItem>;
+  /**
    * Get public ascent activity feed for a user.
    * Includes enriched climb data for display.
    */
@@ -4154,6 +4161,12 @@ export type QueryTicksArgs = {
 /** Root query type for all read operations. */
 export type QueryTrendingFeedArgs = {
   input?: InputMaybe<ActivityFeedInput>;
+};
+
+/** Root query type for all read operations. */
+export type QueryUserAscentCaptionMatchesArgs = {
+  caption: Scalars['String']['input'];
+  userId: Scalars['ID']['input'];
 };
 
 /** Root query type for all read operations. */
@@ -8871,6 +8884,12 @@ export type QueryResolvers<
   >;
   unreadNotificationCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   userActiveBoards?: Resolver<Array<ResolversTypes['String']>, ParentType, ContextType>;
+  userAscentCaptionMatches?: Resolver<
+    Array<ResolversTypes['AscentFeedItem']>,
+    ParentType,
+    ContextType,
+    RequireFields<QueryUserAscentCaptionMatchesArgs, 'caption' | 'userId'>
+  >;
   userAscentsFeed?: Resolver<
     ResolversTypes['AscentFeedResult'],
     ParentType,

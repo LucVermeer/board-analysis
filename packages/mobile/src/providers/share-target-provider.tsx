@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, type ReactNode } from 'react';
-import { useRouter } from 'expo-router';
+import { useRouter, useSegments } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { reportHandledError } from '../lib/error-reporting';
 import { useShareIntent, type ShareIntent } from 'expo-share-intent';
@@ -49,9 +49,16 @@ export function extractSharedLink(shareIntent: Pick<ShareIntent, 'webUrl' | 'tex
  */
 export function ShareTargetProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
+  const segments = useSegments();
   const { isAuthenticated } = useAuth();
   const { t } = useTranslation('session');
   const { showToast } = useToast();
+
+  // Whether the /share-beta modal is the focused route, read by the navigate
+  // handler without resubscribing. Root-level modal → its first segment is the
+  // route name.
+  const onShareBetaRef = useRef(false);
+  onShareBetaRef.current = segments[0] === 'share-beta';
   // resetOnBackground defaults to true; turn it off so the OAuth round-trip
   // (which backgrounds the app) can't wipe a share before we've consumed it.
   const { hasShareIntent, shareIntent, resetShareIntent } = useShareIntent({ resetOnBackground: false });
@@ -63,9 +70,16 @@ export function ShareTargetProvider({ children }: { children: ReactNode }) {
 
   const navigateToShare = useCallback(
     (link: string) => {
-      // navigate (not push): reuses the modal if it's already open for the same
-      // link instead of stacking duplicates, and still opens it in the
-      // post-login replay case.
+      // If the share modal is already open (rapid successive shares, or the
+      // post-login replay landing on it), swap the link in place instead of
+      // pushing a second modal. Each shared reel carries a different `link`, so
+      // router.navigate would stack a fresh /share-beta rather than reuse the
+      // open one — that stacking is what made the app sluggish. share-beta.tsx
+      // reacts to the updated `link` param.
+      if (onShareBetaRef.current) {
+        router.setParams({ link });
+        return;
+      }
       router.navigate({ pathname: '/share-beta', params: { link } });
     },
     [router],

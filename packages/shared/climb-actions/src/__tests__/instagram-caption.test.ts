@@ -36,7 +36,7 @@ describe('buildInstagramCaption', () => {
   });
 
   // The share-back flow recovers the climb from the reel caption by matching the
-  // climb name (matchAscentsToCaption), so every caption MUST contain it verbatim.
+  // climb name (matchClimbsToCaption), so every caption MUST contain it verbatim.
   it('always embeds the climb name so share-back auto-match can recover the climb', () => {
     for (const boardType of ['kilter', 'tension', 'moonboard', 'unknownboard']) {
       expect(buildInstagramCaption({ climbName: 'Purple Nurple', angle: 40, boardType })).toContain('Purple Nurple');

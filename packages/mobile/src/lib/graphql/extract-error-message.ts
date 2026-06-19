@@ -56,3 +56,29 @@ export function isExpectedAuthError(error: unknown): boolean {
       graphqlError.message === AUTH_REQUIRED_MESSAGE || graphqlError.extensions?.code === 'UNAUTHENTICATED',
   );
 }
+
+// attachBetaLink rejections the user resolves themselves by picking a different
+// climb or post: a bad/private Instagram link, the same or another climb already
+// owns the video, the tick is an attempt (not a send), or the tick is for a
+// different climb/board/angle. These surface as an inline message on the share
+// sheet and carry no engineering signal. Deliberately excludes BETA_LINK_INTERNAL
+// / BETA_LINK_INSERT_FAILED (genuine write faults) and FORBIDDEN, which still report.
+const EXPECTED_BETA_VALIDATION_CODES = new Set([
+  'INSTAGRAM_BETA_VALIDATION',
+  'BETA_LINK_TICK_NOT_ASCENT',
+  'BETA_LINK_TICK_MISMATCH',
+  'BETA_LINK_TICK_ALREADY_LINKED',
+]);
+
+/**
+ * An *expected* beta-video attach rejection — a user-facing validation the
+ * climber fixes themselves (the share sheet shows the backend's guidance inline).
+ * Error tracking drops these so the genuine attach faults stay visible.
+ */
+export function isExpectedBetaValidationError(error: unknown): boolean {
+  return getGraphqlErrors(error).some(
+    (graphqlError) =>
+      typeof graphqlError.extensions?.code === 'string' &&
+      EXPECTED_BETA_VALIDATION_CODES.has(graphqlError.extensions.code),
+  );
+}

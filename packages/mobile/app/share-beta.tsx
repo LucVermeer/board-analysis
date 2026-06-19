@@ -15,8 +15,13 @@ import { LogbookRow } from '../src/components/you/LogbookRow';
 import { useTheme } from '../src/providers/theme-provider';
 import { useAuth } from '../src/providers/auth-provider';
 import { useToast } from '../src/providers/toast-provider';
-import { useProfile, useUserAscentsFeed, useAttachBetaLink, useBetaLinkPreview } from '../src/lib/graphql/hooks';
-import { partitionAscentsForShare } from '../src/lib/match-ascents-to-caption';
+import {
+  useProfile,
+  useUserAscentsFeed,
+  useAscentCaptionMatches,
+  useAttachBetaLink,
+  useBetaLinkPreview,
+} from '../src/lib/graphql/hooks';
 import { extractGraphqlMessage } from '../src/lib/graphql/extract-error-message';
 import { spacing, borderRadius } from '../src/theme/tokens';
 import { iosSystemColors } from '../src/theme/ios-colors';
@@ -55,6 +60,21 @@ export default function ShareBetaScreen() {
     const handle = setTimeout(() => setCommittedQuery(searchText.trim()), SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(handle);
   }, [searchText]);
+  const isSearching = committedQuery.length > 0;
+
+  // attachBetaLink rejections shown inline (not via toast): this is a native
+  // modal, so a toast renders behind the sheet where the user never sees it.
+  const [attachError, setAttachError] = useState<string | null>(null);
+
+  // A warm share reuses this already-open modal (the provider swaps the link via
+  // setParams instead of remounting), so reset the previous reel's search + inline
+  // error when the link changes — otherwise a stale search would suppress the new
+  // reel's suggestions, or an old attach error would linger for an unrelated link.
+  useEffect(() => {
+    setSearchText('');
+    setCommittedQuery('');
+    setAttachError(null);
+  }, [link]);
 
   // Nothing to attach (shouldn't happen — the provider validates first); just
   // dismiss rather than show a dead screen.
@@ -72,8 +92,15 @@ export default function ShareBetaScreen() {
   );
   const feed = useUserAscentsFeed(profile?.id, feedInput);
   // Memoized so the identity is stable while the query data is unchanged —
-  // keeps the caption→suggestion partition below from recomputing every render.
+  // keeps the caption→suggestion de-dup below from recomputing every render.
   const items = useMemo(() => feed.data?.pages.flatMap((page) => page.userAscentsFeed.items) ?? [], [feed.data]);
+
+  // "Suggested" section: the backend matches the reel caption against the user's
+  // entire logbook and returns full ascent rows (with board art) — so a climb
+  // older than this feed page still surfaces. Suppressed while searching; the
+  // user's query drives the list then.
+  const matches = useAscentCaptionMatches(profile?.id, isSearching ? null : caption);
+  const suggestions = useMemo(() => (isSearching ? [] : (matches.data ?? [])), [isSearching, matches.data]);
 
   const handleEndReached = useCallback(() => {
     if (feed.hasNextPage && !feed.isFetchingNextPage) void feed.fetchNextPage();
@@ -82,21 +109,25 @@ export default function ShareBetaScreen() {
   const handleAttach = useCallback(
     (ascent: AscentFeedItem) => {
       if (!link || attach.isPending) return;
+      setAttachError(null);
       attach.mutate(
         { boardType: ascent.boardType, climbUuid: ascent.climbUuid, link, angle: ascent.angle, tickUuid: ascent.uuid },
         {
           onSuccess: () => {
             void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            // Toast is fine on success — router.back() dismisses the modal first,
+            // so it lands on the screen underneath where the toast is visible.
             showToast(t('mobile.betaVideos.attachSuccess'), 'success');
             router.back();
           },
           onError: (error: unknown) => {
             // Surface the backend message verbatim — it carries the useful
             // guidance ("post isn't available", "already attached to <climb>",
-            // "temporarily blocking us"). Keep the modal open so the user can
-            // pick a different climb or retry.
+            // "temporarily blocking us"). Show it INLINE, not as a toast: the
+            // modal stays open so the user can pick another climb, and a toast
+            // would render behind the sheet where they'd never see it.
             void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-            showToast(extractGraphqlMessage(error) ?? t('mobile.betaVideos.attachError'), 'error');
+            setAttachError(extractGraphqlMessage(error) ?? t('mobile.betaVideos.attachError'));
           },
         },
       );
@@ -109,13 +140,12 @@ export default function ShareBetaScreen() {
     [handleAttach],
   );
 
-  // Auto-match the climb from the reel caption, partitioning the list into a
-  // "Suggested" group + the rest. Memoized (matcher is pure) so typing/preview
-  // state changes don't re-normalize every climb name. Hidden while searching.
-  const isSearching = committedQuery.length > 0;
-  const { suggestions, listData } = useMemo(
-    () => partitionAscentsForShare(caption, items, isSearching),
-    [caption, items, isSearching],
+  // Drop suggested climbs from the browse list so a recent + matched climb isn't
+  // listed twice (once under "Suggested", once below).
+  const suggestedClimbUuids = useMemo(() => new Set(suggestions.map((ascent) => ascent.climbUuid)), [suggestions]);
+  const listData = useMemo(
+    () => (suggestedClimbUuids.size > 0 ? items.filter((ascent) => !suggestedClimbUuids.has(ascent.climbUuid)) : items),
+    [items, suggestedClimbUuids],
   );
   const showSuggestions = suggestions.length > 0;
 
@@ -198,6 +228,15 @@ export default function ShareBetaScreen() {
         returnKeyType="search"
         style={[styles.input, { color: systemColors.label, borderColor: systemColors.separator }]}
       />
+
+      {attachError && (
+        <View style={[styles.errorBanner, { backgroundColor: systemColors.secondaryBackground }]}>
+          <Icon name="error" size={18} color={brandColors.error} />
+          <Text variant="footnote" color={brandColors.error} style={styles.errorText}>
+            {attachError}
+          </Text>
+        </View>
+      )}
 
       <View style={styles.listWrapper} pointerEvents={attach.isPending ? 'none' : 'auto'}>
         {!profile?.id || feed.isPending ? (
@@ -298,6 +337,17 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginBottom: spacing[2],
   },
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[2],
+    marginHorizontal: spacing[4],
+    marginBottom: spacing[2],
+    paddingHorizontal: spacing[3],
+    paddingVertical: spacing[2],
+    borderRadius: borderRadius.md,
+  },
+  errorText: { flex: 1 },
   listWrapper: { flex: 1 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing[4], padding: spacing[6] },
   centeredText: { textAlign: 'center' },

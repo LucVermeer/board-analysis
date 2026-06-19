@@ -3702,6 +3702,13 @@ export type Query = {
    */
   userActiveBoards: Array<Scalars['String']['output']>;
   /**
+   * Suggest the user's logged ascents that a shared reel caption is about, by
+   * matching the caption against their whole logbook's climb names. Returns full
+   * ascent rows (with board art) for the matched climbs, strongest match first.
+   * Powers the mobile share-beta picker.
+   */
+  userAscentCaptionMatches: Array<AscentFeedItem>;
+  /**
    * Get public ascent activity feed for a user.
    * Includes enriched climb data for display.
    */
@@ -4151,6 +4158,12 @@ export type QueryTicksArgs = {
 /** Root query type for all read operations. */
 export type QueryTrendingFeedArgs = {
   input?: InputMaybe<ActivityFeedInput>;
+};
+
+/** Root query type for all read operations. */
+export type QueryUserAscentCaptionMatchesArgs = {
+  caption: Scalars['String']['input'];
+  userId: Scalars['ID']['input'];
 };
 
 /** Root query type for all read operations. */
@@ -7890,6 +7903,41 @@ export type GetUserAscentsFeedQuery = {
       frames?: string | null;
     }>;
   };
+};
+
+export type GetUserAscentCaptionMatchesQueryVariables = Exact<{
+  userId: Scalars['ID']['input'];
+  caption: Scalars['String']['input'];
+}>;
+
+export type GetUserAscentCaptionMatchesQuery = {
+  __typename?: 'Query';
+  userAscentCaptionMatches: Array<{
+    __typename?: 'AscentFeedItem';
+    uuid: string;
+    climbUuid: string;
+    climbName: string;
+    setterUsername?: string | null;
+    boardType: string;
+    boardId?: number | null;
+    boardDisplayName?: string | null;
+    layoutId?: number | null;
+    angle: number;
+    isMirror: boolean;
+    status: TickStatus;
+    attemptCount: number;
+    quality?: number | null;
+    difficulty?: number | null;
+    difficultyName?: string | null;
+    consensusDifficulty?: number | null;
+    consensusDifficultyName?: string | null;
+    qualityAverage?: number | null;
+    isBenchmark: boolean;
+    isNoMatch: boolean;
+    comment: string;
+    climbedAt: string;
+    frames?: string | null;
+  }>;
 };
 
 export type GetUserGroupedAscentsFeedQueryVariables = Exact<{
@@ -13407,6 +13455,77 @@ export const GetUserAscentsFeedDocument = {
     },
   ],
 } as unknown as DocumentNode<GetUserAscentsFeedQuery, GetUserAscentsFeedQueryVariables>;
+export const GetUserAscentCaptionMatchesDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'query',
+      name: { kind: 'Name', value: 'GetUserAscentCaptionMatches' },
+      variableDefinitions: [
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'userId' } },
+          type: { kind: 'NonNullType', type: { kind: 'NamedType', name: { kind: 'Name', value: 'ID' } } },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'caption' } },
+          type: { kind: 'NonNullType', type: { kind: 'NamedType', name: { kind: 'Name', value: 'String' } } },
+        },
+      ],
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'userAscentCaptionMatches' },
+            arguments: [
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'userId' },
+                value: { kind: 'Variable', name: { kind: 'Name', value: 'userId' } },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'caption' },
+                value: { kind: 'Variable', name: { kind: 'Name', value: 'caption' } },
+              },
+            ],
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'climbUuid' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'climbName' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'setterUsername' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'boardType' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'boardId' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'boardDisplayName' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'layoutId' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'angle' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'isMirror' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'status' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'attemptCount' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'quality' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'difficulty' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'difficultyName' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'consensusDifficulty' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'consensusDifficultyName' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'qualityAverage' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'isBenchmark' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'isNoMatch' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'comment' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'climbedAt' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'frames' } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<GetUserAscentCaptionMatchesQuery, GetUserAscentCaptionMatchesQueryVariables>;
 export const GetUserGroupedAscentsFeedDocument = {
   kind: 'Document',
   definitions: [

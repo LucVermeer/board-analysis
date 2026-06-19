@@ -14,8 +14,12 @@ vi.mock('expo-share-intent', () => ({
 }));
 
 const navigateMock = vi.fn();
+const setParamsMock = vi.fn();
+// Current route segments the provider reads to decide navigate vs setParams.
+const segmentsState: { value: string[] } = { value: [] };
 vi.mock('expo-router', () => ({
-  useRouter: () => ({ navigate: navigateMock }),
+  useRouter: () => ({ navigate: navigateMock, setParams: setParamsMock }),
+  useSegments: () => segmentsState.value,
 }));
 
 // In-memory AsyncStorage stand-in.
@@ -62,9 +66,11 @@ function renderProvider() {
 
 beforeEach(() => {
   navigateMock.mockReset();
+  setParamsMock.mockReset();
   resetShareIntentMock.mockReset();
   showToastMock.mockReset();
   storage.clear();
+  segmentsState.value = [];
   shareState.hasShareIntent = false;
   shareState.shareIntent = { webUrl: null, text: null };
   authState.isAuthenticated = true;
@@ -126,6 +132,21 @@ describe('ShareTargetProvider', () => {
     });
     expect(resetShareIntentMock).toHaveBeenCalled();
     expect(storage.has(PENDING_SHARE_KEY)).toBe(false);
+  });
+
+  it('swaps the link in place (setParams) when the share modal is already open', async () => {
+    authState.isAuthenticated = true;
+    segmentsState.value = ['share-beta'];
+    shareState.hasShareIntent = true;
+    shareState.shareIntent = { webUrl: INSTAGRAM_LINK, text: null };
+
+    renderProvider();
+
+    await waitFor(() => {
+      expect(setParamsMock).toHaveBeenCalledWith({ link: INSTAGRAM_LINK });
+    });
+    // No second modal pushed — the open one is reused.
+    expect(navigateMock).not.toHaveBeenCalled();
   });
 
   it('stashes a shared link for replay when signed out', async () => {

@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { extractGraphqlMessage, isExpectedAuthError, isGraphqlRateLimitedError } from '../extract-error-message';
+import {
+  extractGraphqlMessage,
+  isExpectedAuthError,
+  isExpectedBetaValidationError,
+  isGraphqlRateLimitedError,
+} from '../extract-error-message';
 
 describe('GraphQL error extraction', () => {
   it('extracts the first graphql-request response message', () => {
@@ -77,5 +82,29 @@ describe('isExpectedAuthError', () => {
   it('returns false for non-GraphQL errors', () => {
     expect(isExpectedAuthError(new Error('plain'))).toBe(false);
     expect(isExpectedAuthError(null)).toBe(false);
+  });
+});
+
+describe('isExpectedBetaValidationError', () => {
+  it.each([
+    'INSTAGRAM_BETA_VALIDATION',
+    'BETA_LINK_TICK_NOT_ASCENT',
+    'BETA_LINK_TICK_MISMATCH',
+    'BETA_LINK_TICK_ALREADY_LINKED',
+  ])('matches the expected user-facing attach rejection %s', (code) => {
+    const error = { response: { errors: [{ message: 'nope', extensions: { code } }] } };
+    expect(isExpectedBetaValidationError(error)).toBe(true);
+  });
+
+  it('does not match genuine attach faults that should still report', () => {
+    for (const code of ['BETA_LINK_INTERNAL', 'BETA_LINK_INSERT_FAILED', 'FORBIDDEN', 'INTERNAL_SERVER_ERROR']) {
+      const error = { response: { errors: [{ message: 'boom', extensions: { code } }] } };
+      expect(isExpectedBetaValidationError(error)).toBe(false);
+    }
+  });
+
+  it('returns false for non-GraphQL errors', () => {
+    expect(isExpectedBetaValidationError(new Error('plain'))).toBe(false);
+    expect(isExpectedBetaValidationError(null)).toBe(false);
   });
 });

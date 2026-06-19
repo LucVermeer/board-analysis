@@ -3896,6 +3896,14 @@ type Query {
   userAscentsFeed(userId: ID!, input: AscentFeedInput): AscentFeedResult!
 
   """
+  Suggest the user's logged ascents that a shared reel caption is about, by
+  matching the caption against their whole logbook's climb names. Returns full
+  ascent rows (with board art) for the matched climbs, strongest match first.
+  Powers the mobile share-beta picker.
+  """
+  userAscentCaptionMatches(userId: ID!, caption: String!): [AscentFeedItem!]!
+
+  """
   Get public ascent feed grouped by climb and day.
   Useful for summary displays.
   """
