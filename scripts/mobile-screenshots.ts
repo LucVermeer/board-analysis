@@ -310,7 +310,7 @@ export function buildScreenshotEnv(
   return env;
 }
 
-interface DeviceInfo {
+export interface DeviceInfo {
   udid: string;
   name: string;
   state: string;
@@ -375,7 +375,7 @@ function newestIosRuntime(): string | null {
   return ios.length > 0 ? ios[ios.length - 1].identifier : null;
 }
 
-function resolveIosScreenshotDevices(deviceNames: readonly string[]): IosScreenshotDevice[] {
+export function resolveIosScreenshotDevices(deviceNames: readonly string[]): IosScreenshotDevice[] {
   return deviceNames.map((deviceName) => {
     const knownDevice = IOS_SCREENSHOT_DEVICES.find((device) => device.name === deviceName);
     if (knownDevice) return knownDevice;
@@ -396,7 +396,7 @@ export function resolveAppStoreLocaleTargets(appLocales: readonly Locale[]): App
   }));
 }
 
-function findOrCreateIosDevice(screenshotDevice: IosScreenshotDevice): DeviceInfo {
+export function findOrCreateIosDevice(screenshotDevice: IosScreenshotDevice): DeviceInfo {
   const devices = listSimulatorDevices();
   const booted = devices.find((device) => device.name === screenshotDevice.name && device.state === 'Booted');
   if (booted) return booted;
@@ -424,7 +424,26 @@ function findOrCreateIosDevice(screenshotDevice: IosScreenshotDevice): DeviceInf
   return created;
 }
 
-function bootDevice(device: DeviceInfo): void {
+/**
+ * The booted simulator an ad-hoc tool should attach to. With one simulator booted,
+ * returns it (matching Android's resolveRunningEmulator). With several booted,
+ * disambiguates by `name` (the configured screenshot device) and throws when that
+ * still isn't unique. Returns null when nothing is booted.
+ */
+export function resolveBootedIosDevice(name?: string): DeviceInfo | null {
+  const booted = listSimulatorDevices().filter((device) => device.state === 'Booted');
+  if (booted.length === 0) return null;
+  if (booted.length === 1) return booted[0];
+  if (name) {
+    const named = booted.filter((device) => device.name === name);
+    if (named.length === 1) return named[0];
+  }
+  throw new Error(
+    `Multiple booted simulators (${booted.map((device) => device.name).join(', ')}); pass --device "<name>" to pick one.`,
+  );
+}
+
+export function bootDevice(device: DeviceInfo): void {
   if (device.state !== 'Booted') {
     console.log(`${LOG} Booting ${device.name} (${device.udid})...`);
     // `boot` errors if already booted; ignore that specific case.
@@ -435,7 +454,7 @@ function bootDevice(device: DeviceInfo): void {
   spawnSync('open', ['-a', 'Simulator'], { stdio: 'ignore' });
 }
 
-function applyCleanStatusBar(udid: string): void {
+export function applyCleanStatusBar(udid: string): void {
   runCapture('xcrun', [
     'simctl',
     'status_bar',
@@ -456,7 +475,7 @@ function applyCleanStatusBar(udid: string): void {
   ]);
 }
 
-function clearStatusBar(udid: string): void {
+export function clearStatusBar(udid: string): void {
   runCapture('xcrun', ['simctl', 'status_bar', udid, 'clear']);
 }
 
@@ -905,7 +924,7 @@ function runIos(options: ScreenshotOptions): number {
  * Resolve the Boardsesh.app to install: a prebuilt/cached one (--app-path, the CI
  * common path) or a freshly built Debug simulator app (local one-command DX).
  */
-function resolveAppPath(options: ScreenshotOptions): string {
+export function resolveAppPath(options: ScreenshotOptions): string {
   if (options.appPath) {
     if (!existsSync(options.appPath)) {
       throw new Error(`--app-path not found: ${options.appPath}`);

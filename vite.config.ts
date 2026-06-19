@@ -531,6 +531,10 @@ export default defineConfig({
         command: 'tsx scripts/mobile-android-shots.ts',
         cache: false,
       },
+      'mobile:ios-shots': {
+        command: 'tsx scripts/mobile-ios-shots.ts',
+        cache: false,
+      },
       'mobile:android-doctor': {
         command: 'tsx scripts/mobile-android-doctor.ts',
         cache: false,
