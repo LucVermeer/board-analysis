@@ -11,6 +11,11 @@ This is the iOS twin of `vp run mobile:android-shots` (see `docs/android-emulato
 It is **macOS only**. For the full App Store capture matrix (all locales/devices, written to
 `app-stores/apple/`), use `vp run mobile:screenshots` instead.
 
+Example output — the Home feed captured with `screenshot --to home` (iPhone 16 Pro Max,
+screenshot-mode auto-login):
+
+<img src="images/ios-home-screenshot.png" alt="Boardsesh iOS Home feed" width="280">
+
 ## Requirements
 
 - macOS with Xcode + Command Line Tools and an installed iOS simulator runtime.
