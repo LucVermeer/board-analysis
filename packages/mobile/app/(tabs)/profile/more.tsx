@@ -1,4 +1,5 @@
-import { router } from 'expo-router';
+import { useCallback, useState } from 'react';
+import { router, useFocusEffect } from 'expo-router';
 import { Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import type { GradeDisplayFormat } from '@boardsesh/play-view';
@@ -27,6 +28,8 @@ import { useToast } from '../../../src/providers/toast-provider';
 import { useFeatureFlag } from '../../../src/providers/feature-flags-provider';
 import { replayOnboarding } from '../../../src/lib/onboarding/onboarding-storage';
 import { reportError } from '../../../src/lib/error-reporting';
+import { latestEntryDate } from '../../../src/lib/changelog';
+import { getLastSeenChangelogDate, hasUnseenChangelog } from '../../../src/lib/changelog-seen';
 
 // Translations live in the shared catalog at packages/shared/i18n/locales/<locale>/.
 // We deep-link to the active language's folder so a community member lands on the
@@ -46,6 +49,24 @@ export default function MoreScreen() {
   const { localePreference, setLocalePreference } = useLocalePreference();
   const { showToast } = useToast();
   const stravaEnabled = useFeatureFlag('strava-integration') === true;
+
+  // Whether the bundled changelog has an entry the user hasn't opened yet — drives
+  // the "New" pill on the What's New row. Re-read every time this screen regains
+  // focus: opening the changelog clears the flag, but a native-stack push leaves
+  // More mounted underneath, so a mount-only read would never see the cleared
+  // state when the user pops back.
+  const [changelogUnseen, setChangelogUnseen] = useState(false);
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+      void getLastSeenChangelogDate().then((lastSeen) => {
+        if (active) setChangelogUnseen(hasUnseenChangelog(latestEntryDate, lastSeen));
+      });
+      return () => {
+        active = false;
+      };
+    }, []),
+  );
 
   // 'System' follows the device language; the rest are the supported locales,
   // labelled in their own script (English / Español / Français) from
@@ -245,6 +266,29 @@ export default function MoreScreen() {
         </View>
       </View>
 
+      <View style={styles.section}>
+        <SectionHeader title={t('mobile.more.aboutSection')} />
+        <View style={[styles.card, { backgroundColor: systemColors.secondaryBackground }]}>
+          <ListRow
+            title={t('mobile.more.changelogTitle')}
+            subtitle={t('mobile.more.changelogSubtitle')}
+            leading={<Icon name="flash" size={22} color={systemColors.secondaryLabel} />}
+            trailing={
+              changelogUnseen ? (
+                <View style={[styles.newPill, { backgroundColor: brandColors.primaryFill }]}>
+                  <Text variant="caption2" color={brandColors.onPrimary} style={styles.newPillLabel}>
+                    {t('mobile.more.newPill')}
+                  </Text>
+                </View>
+              ) : undefined
+            }
+            showChevron
+            showSeparator={false}
+            onPress={() => router.push('/changelog')}
+          />
+        </View>
+      </View>
+
       {__DEV__ ? (
         <View style={styles.section}>
           <SectionHeader title={t('mobile.more.development')} />
@@ -348,6 +392,15 @@ const styles = StyleSheet.create({
   },
   contributeCard: {
     marginTop: spacing[3],
+  },
+  newPill: {
+    paddingHorizontal: spacing[2],
+    paddingVertical: 2,
+    borderRadius: borderRadius.full,
+  },
+  newPillLabel: {
+    fontWeight: '700',
+    textTransform: 'uppercase',
   },
   accountEmail: {
     paddingHorizontal: spacing[4],

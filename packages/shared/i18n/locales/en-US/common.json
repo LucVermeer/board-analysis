@@ -103,7 +103,11 @@
         "title": "Connected apps",
         "subtitle": "Board accounts, Apple Health",
         "subtitleWithStrava": "Board accounts, Apple Health, Strava"
-      }
+      },
+      "aboutSection": "About",
+      "changelogTitle": "What's New",
+      "changelogSubtitle": "Recent updates and fixes",
+      "newPill": "New"
     },
     "about": {
       "title": "About",
@@ -122,7 +126,9 @@
       "partnerTitle": "Partner with us officially",
       "partnerBody": "Boardsesh works with Kilter, Tension, and MoonBoard from the outside. If you build boards and want to make something official together, we're keen to talk.",
       "acknowledgementsLink": "Acknowledgements",
-      "acknowledgementsLinkBody": "The people behind Boardsesh"
+      "acknowledgementsLinkBody": "The people behind Boardsesh",
+      "changelogLink": "What's New",
+      "changelogLinkBody": "Recent updates and fixes"
     },
     "acknowledgements": {
       "title": "Acknowledgements",
@@ -177,6 +183,19 @@
       "profile": "Profile",
       "holdFilter": "Hold types",
       "zoneFilter": "Board region"
+    },
+    "changelog": {
+      "title": "What's New",
+      "intro": "Recent updates and fixes, newest first.",
+      "currentBuild": "You're on the build from {{date}}",
+      "currentBuildVersion": "You're on version {{version}}",
+      "category": {
+        "new": "New",
+        "improved": "Improved",
+        "fixed": "Fixed"
+      },
+      "viewPr": "View on GitHub",
+      "empty": "No changes logged yet — we've been too busy climbing. Check back after the next send."
     }
   },
   "lightControl": {

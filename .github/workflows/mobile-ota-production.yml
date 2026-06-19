@@ -124,6 +124,20 @@ jobs:
           EXPO_PUBLIC_POSTHOG_KEY=$EXPO_PUBLIC_POSTHOG_KEY
           EOF
 
+      # Regenerate the bundled "What's New" changelog from merged-PR Release Notes
+      # so this OTA ships the entries for everything up to this commit. It rewrites
+      # packages/mobile/src/data/changelog.generated.json in the workspace, which
+      # the eoas publish steps below bundle. It does NOT commit anything back — the
+      # committed snapshot is refreshed out-of-band by refresh-acknowledgements.yml
+      # (with [skip ci]), so this path can never re-trigger the OTA workflow.
+      # Degrades gracefully: a gh/network failure keeps the committed file and
+      # exits 0. The default GITHUB_TOKEN can read public PRs.
+      - name: Generate changelog from PR history
+        if: steps.gate.outputs.configured == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: vp run generate:changelog
+
       # iOS and Android are published in SEPARATE steps with platform-specific env.
       # GOOGLE_MAPS_API_KEY is set only on the Android native prebuild (iOS uses
       # Apple Maps), and it changes the resolved config — hence the fingerprint —

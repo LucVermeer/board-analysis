@@ -103,7 +103,11 @@
         "title": "Applications connectées",
         "subtitle": "Apple Health et Strava",
         "subtitleWithStrava": "Comptes de board, Apple Health, Strava"
-      }
+      },
+      "aboutSection": "À propos",
+      "changelogTitle": "Nouveautés",
+      "changelogSubtitle": "Dernières améliorations et corrections",
+      "newPill": "Nouveau"
     },
     "about": {
       "title": "À propos de Boardsesh",
@@ -122,7 +126,9 @@
       "partnerTitle": "Devenez partenaire officiel",
       "partnerBody": "Boardsesh fonctionne avec Kilter, Tension et MoonBoard depuis l'extérieur. Si vous fabriquez des boards et voulez construire quelque chose d'officiel ensemble, on serait ravis d'en parler.",
       "acknowledgementsLink": "Remerciements",
-      "acknowledgementsLinkBody": "Les personnes derrière Boardsesh"
+      "acknowledgementsLinkBody": "Les personnes derrière Boardsesh",
+      "changelogLink": "Nouveautés",
+      "changelogLinkBody": "Dernières améliorations et corrections"
     },
     "acknowledgements": {
       "title": "Remerciements",
@@ -177,6 +183,19 @@
       "profile": "Profil",
       "holdFilter": "Types de prise",
       "zoneFilter": "Zone du mur"
+    },
+    "changelog": {
+      "title": "Nouveautés",
+      "intro": "Dernières améliorations et corrections, les plus récentes en premier.",
+      "currentBuild": "Vous utilisez la version du {{date}}",
+      "currentBuildVersion": "Vous utilisez la version {{version}}",
+      "category": {
+        "new": "Nouveau",
+        "improved": "Amélioré",
+        "fixed": "Corrigé"
+      },
+      "viewPr": "Voir sur GitHub",
+      "empty": "Aucun changement pour l'instant : on était trop occupés à grimper. Reviens après le prochain enchaînement."
     }
   },
   "lightControl": {
