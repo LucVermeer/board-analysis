@@ -1,17 +1,25 @@
 package com.boardsesh.liveactivity
 
+import android.app.Notification
+import android.app.NotificationManager
+import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.graphics.Bitmap
 import androidx.core.app.ServiceCompat
 import androidx.test.core.app.ApplicationProvider
 import io.mockk.every
 import io.mockk.just
 import io.mockk.mockkStatic
 import io.mockk.Runs
+import io.mockk.slot
 import io.mockk.unmockkStatic
 import io.mockk.verify
 import org.junit.After
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -20,6 +28,7 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
+import java.util.concurrent.Executor
 
 /**
  * The startInForeground retry path: a connectedDevice FGS promotes with the typed
@@ -33,12 +42,18 @@ class BoardSessionServiceTest {
 
     private val connectedDevice = ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
 
+    private val context: Context get() = ApplicationProvider.getApplicationContext()
+
     @Before
     fun setUp() {
         mockkStatic(ServiceCompat::class)
         // stopForeground is invoked on the teardown path; stub so the static mock
         // doesn't reject the unstubbed call.
         every { ServiceCompat.stopForeground(any(), any<Int>()) } just Runs
+        // The thumbnail cache + in-flight set are process-static; reset so one
+        // test's warmed bitmap can't turn another's expected fetch into a hit.
+        BoardSessionService.resetImageStateForTest()
+        context.getSystemService(NotificationManager::class.java).cancelAll()
     }
 
     @After
@@ -51,6 +66,56 @@ class BoardSessionServiceTest {
             .apply { this.action = action }
         return Robolectric.buildService(BoardSessionService::class.java, intent).create().startCommand(0, 1).get()
     }
+
+    // Starts a service with board config so the climb thumbnail URL can be built,
+    // wiring the image seams to run on the calling thread (deterministic async).
+    private fun startWithBoardConfig(
+        imageFetcher: (String) -> Bitmap?,
+        executor: Executor = Executor { it.run() },
+    ): BoardSessionService {
+        val intent = Intent(context, BoardSessionService::class.java).apply {
+            action = BoardSessionService.ACTION_START
+            putExtra(BoardSessionService.EXTRA_SERVER_URL, "https://example.com")
+            putExtra(BoardSessionService.EXTRA_BOARD_NAME, "kilter")
+            putExtra(BoardSessionService.EXTRA_LAYOUT_ID, 1)
+            putExtra(BoardSessionService.EXTRA_SIZE_ID, 10)
+            putExtra(BoardSessionService.EXTRA_SET_IDS, "1,2")
+        }
+        val controller = Robolectric.buildService(BoardSessionService::class.java, intent).create()
+        val service = controller.get()
+        service.imageExecutor = executor
+        service.postToMain = { it.run() }
+        service.imageFetcher = imageFetcher
+        controller.startCommand(0, 1)
+        return service
+    }
+
+    private fun updateIntent(
+        connection: String,
+        hasPrevious: Boolean = false,
+        hasNext: Boolean = false,
+        climbUuid: String = "",
+        holderName: String? = null,
+        queue: List<Pair<String, String>> = emptyList(),
+    ): Intent = Intent(context, BoardSessionService::class.java).apply {
+        action = BoardSessionService.ACTION_UPDATE
+        putExtra(BoardSessionService.EXTRA_CLIMB_NAME, "Test Climb")
+        putExtra(BoardSessionService.EXTRA_SUBTITLE, "V5 · 40°")
+        putExtra(BoardSessionService.EXTRA_HAS_PREVIOUS, hasPrevious)
+        putExtra(BoardSessionService.EXTRA_HAS_NEXT, hasNext)
+        putExtra(BoardSessionService.EXTRA_CURRENT_INDEX, 1)
+        putExtra(BoardSessionService.EXTRA_TOTAL_CLIMBS, 3)
+        putExtra(BoardSessionService.EXTRA_CLIMB_UUID, climbUuid)
+        putExtra(BoardSessionService.EXTRA_BOARD_CONNECTION, connection)
+        holderName?.let { putExtra(BoardSessionService.EXTRA_HOLDER_NAME, it) }
+        if (queue.isNotEmpty()) {
+            putStringArrayListExtra(BoardSessionService.EXTRA_QUEUE_UUIDS, ArrayList(queue.map { it.first }))
+            putStringArrayListExtra(BoardSessionService.EXTRA_QUEUE_FRAMES, ArrayList(queue.map { it.second }))
+        }
+    }
+
+    private fun actionTitles(notification: Notification): List<String> =
+        notification.actions?.map { it.title.toString() } ?: emptyList()
 
     @Test
     @Config(sdk = [31])
@@ -106,5 +171,178 @@ class BoardSessionServiceTest {
         val service = startService(BoardSessionService.ACTION_STOP)
 
         assertTrue(shadowOf(service).isStoppedBySelf)
+    }
+
+    @Test
+    @Config(sdk = [30])
+    fun `connectedByMe shows Previous, the lit lightbulb, and Next`() {
+        val captured = slot<Notification>()
+        every { ServiceCompat.startForeground(any(), any(), capture(captured), any()) } just Runs
+
+        val intent = Intent(context, BoardSessionService::class.java).apply { action = BoardSessionService.ACTION_START }
+        val controller = Robolectric.buildService(BoardSessionService::class.java, intent).create()
+        val service = controller.get()
+        controller.startCommand(0, 1)
+
+        service.onStartCommand(updateIntent("connectedByMe", hasPrevious = true, hasNext = true), 0, 2)
+
+        // Driver gets the full transport: Previous, the (relight) lightbulb, Next.
+        assertEquals(listOf("Previous", "Relight wall", "Next"), actionTitles(captured.captured))
+    }
+
+    @Test
+    @Config(sdk = [30])
+    fun `heldByPeer hides Previous and Next, leaving only the reconnect lightbulb`() {
+        val captured = slot<Notification>()
+        every { ServiceCompat.startForeground(any(), any(), capture(captured), any()) } just Runs
+
+        val intent = Intent(context, BoardSessionService::class.java).apply { action = BoardSessionService.ACTION_START }
+        val controller = Robolectric.buildService(BoardSessionService::class.java, intent).create()
+        val service = controller.get()
+        controller.startCommand(0, 1)
+
+        // Even with hasNext/hasPrevious true, a non-driver only sees the bulb.
+        service.onStartCommand(updateIntent("heldByPeer", hasPrevious = true, hasNext = true, holderName = "Alex"), 0, 2)
+
+        assertEquals(listOf("Connect to board"), actionTitles(captured.captured))
+    }
+
+    @Test
+    @Config(sdk = [30])
+    fun `disconnected leaves only the reconnect lightbulb`() {
+        val captured = slot<Notification>()
+        every { ServiceCompat.startForeground(any(), any(), capture(captured), any()) } just Runs
+
+        val intent = Intent(context, BoardSessionService::class.java).apply { action = BoardSessionService.ACTION_START }
+        val controller = Robolectric.buildService(BoardSessionService::class.java, intent).create()
+        val service = controller.get()
+        controller.startCommand(0, 1)
+
+        service.onStartCommand(updateIntent("disconnected", hasPrevious = true, hasNext = true), 0, 2)
+
+        assertEquals(listOf("Connect to board"), actionTitles(captured.captured))
+    }
+
+    @Test
+    @Config(sdk = [30])
+    fun `Previous and Next carry the target index, not the current one`() {
+        val captured = slot<Notification>()
+        every { ServiceCompat.startForeground(any(), any(), capture(captured), any()) } just Runs
+
+        val intent = Intent(context, BoardSessionService::class.java).apply { action = BoardSessionService.ACTION_START }
+        val controller = Robolectric.buildService(BoardSessionService::class.java, intent).create()
+        val service = controller.get()
+        controller.startCommand(0, 1)
+
+        // updateIntent sets currentIndex = 1; the bridge navigates to the absolute
+        // queue[index], so Previous must target 0 and Next must target 2.
+        service.onStartCommand(updateIntent("connectedByMe", hasPrevious = true, hasNext = true), 0, 2)
+
+        val actions = captured.captured.actions
+        val previous = actions.first { it.title.toString() == "Previous" }
+        val next = actions.first { it.title.toString() == "Next" }
+        assertEquals(0, shadowOf(previous.actionIntent).savedIntent.getIntExtra(BoardSessionService.EXTRA_CURRENT_INDEX, -1))
+        assertEquals(2, shadowOf(next.actionIntent).savedIntent.getIntExtra(BoardSessionService.EXTRA_CURRENT_INDEX, -1))
+    }
+
+    @Test
+    @Config(sdk = [30])
+    fun `the lightbulb action carries the current board connection so the receiver picks reassert vs reconnect`() {
+        val captured = slot<Notification>()
+        every { ServiceCompat.startForeground(any(), any(), capture(captured), any()) } just Runs
+
+        val intent = Intent(context, BoardSessionService::class.java).apply { action = BoardSessionService.ACTION_START }
+        val controller = Robolectric.buildService(BoardSessionService::class.java, intent).create()
+        val service = controller.get()
+        controller.startCommand(0, 1)
+
+        service.onStartCommand(updateIntent("connectedByMe", hasPrevious = true, hasNext = true), 0, 2)
+
+        val bulb = captured.captured.actions.first { it.title.toString() == "Relight wall" }
+        val savedIntent = shadowOf(bulb.actionIntent).savedIntent
+        assertEquals(BoardSessionService.ACTION_BULB, savedIntent.action)
+        assertEquals("connectedByMe", savedIntent.getStringExtra(BoardSessionService.EXTRA_BOARD_CONNECTION))
+    }
+
+    @Test
+    @Config(sdk = [30])
+    fun `the lightbulb action's connection extra updates after a handoff`() {
+        val captured = slot<Notification>()
+        every { ServiceCompat.startForeground(any(), any(), capture(captured), any()) } just Runs
+
+        val intent = Intent(context, BoardSessionService::class.java).apply { action = BoardSessionService.ACTION_START }
+        val controller = Robolectric.buildService(BoardSessionService::class.java, intent).create()
+        val service = controller.get()
+        controller.startCommand(0, 1)
+
+        // This device drives: the lit bulb carries connectedByMe (→ reassert).
+        service.onStartCommand(updateIntent("connectedByMe"), 0, 2)
+        val litBulb = captured.captured.actions.first { it.title.toString() == "Relight wall" }
+        assertEquals(
+            "connectedByMe",
+            shadowOf(litBulb.actionIntent).savedIntent.getStringExtra(BoardSessionService.EXTRA_BOARD_CONNECTION),
+        )
+
+        // A peer takes over: FLAG_UPDATE_CURRENT must refresh the extra so the
+        // outline bulb dispatches reconnect, not a stale reassert (the Android
+        // PendingIntent footgun).
+        service.onStartCommand(updateIntent("heldByPeer", holderName = "Alex"), 0, 3)
+        val outlineBulb = captured.captured.actions.first { it.title.toString() == "Connect to board" }
+        assertEquals(
+            "heldByPeer",
+            shadowOf(outlineBulb.actionIntent).savedIntent.getStringExtra(BoardSessionService.EXTRA_BOARD_CONNECTION),
+        )
+    }
+
+    @Test
+    @Config(sdk = [30])
+    fun `fetches and re-posts the climb thumbnail on the async path`() {
+        every { ServiceCompat.startForeground(any(), any(), any(), any()) } just Runs
+        val fetched = mutableListOf<String>()
+        val stub = Bitmap.createBitmap(4, 5, Bitmap.Config.ARGB_8888)
+
+        val service = startWithBoardConfig(imageFetcher = { url -> fetched.add(url); stub })
+        // START carried no climb; no URL to fetch yet.
+        assertTrue(fetched.isEmpty())
+
+        service.onStartCommand(updateIntent("connectedByMe", climbUuid = "c1", queue = listOf("c1" to "p1r15")), 0, 2)
+
+        assertEquals(1, fetched.size)
+        val url = fetched.single()
+        assertTrue(url.contains("/api/internal/board-render"))
+        assertTrue(url.contains("board_name=kilter"))
+        assertTrue(url.contains("frames=p1r15"))
+        assertTrue(url.contains("include_background=1"))
+        // The decoded bitmap is applied via a NotificationManager.notify re-post
+        // (not startForeground, which is mocked).
+        val manager = context.getSystemService(NotificationManager::class.java)
+        assertNotNull(shadowOf(manager).getNotification(BoardSessionService.NOTIFICATION_ID))
+    }
+
+    @Test
+    @Config(sdk = [30])
+    fun `drops a stale thumbnail when the climb moved on before the fetch finished`() {
+        every { ServiceCompat.startForeground(any(), any(), any(), any()) } just Runs
+        val tasks = mutableListOf<Runnable>()
+        val stub = Bitmap.createBitmap(4, 5, Bitmap.Config.ARGB_8888)
+
+        // Defer fetches so we can run them out of order relative to the climb change.
+        val service = startWithBoardConfig(imageFetcher = { stub }, executor = Executor { tasks.add(it) })
+
+        // Move to climb A (queues fetch A), then to climb B (queues fetch B; B is
+        // now the current image key).
+        service.onStartCommand(updateIntent("connectedByMe", climbUuid = "A", queue = listOf("A" to "fa")), 0, 2)
+        service.onStartCommand(updateIntent("connectedByMe", climbUuid = "B", queue = listOf("A" to "fa", "B" to "fb")), 0, 3)
+        assertEquals(2, tasks.size)
+
+        val manager = context.getSystemService(NotificationManager::class.java)
+
+        // Running the stale fetch (A) must NOT re-post — the current climb is B.
+        tasks[0].run()
+        assertNull(shadowOf(manager).getNotification(BoardSessionService.NOTIFICATION_ID))
+
+        // The current fetch (B) re-posts.
+        tasks[1].run()
+        assertNotNull(shadowOf(manager).getNotification(BoardSessionService.NOTIFICATION_ID))
     }
 }

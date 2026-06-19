@@ -486,7 +486,10 @@
         "channelDescription": "Mantiene tu tablero conectado y muestra los controles de la sesión mientras Boardsesh está en segundo plano.",
         "contentTitleFallback": "Sesión de escalada",
         "previous": "Anterior",
-        "next": "Siguiente"
+        "next": "Siguiente",
+        "relight": "Reactivar el muro",
+        "reconnect": "Conectar al tablero",
+        "onWall": "{{name}} está en el muro"
       },
       "inStatsFlashes": "Flashes",
       "inLeaderboardTitle": "Quién escala",

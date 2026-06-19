@@ -26,6 +26,9 @@ type AndroidNotificationStrings = {
   contentTitleFallback: string;
   previousLabel: string;
   nextLabel: string;
+  relightLabel: string;
+  reconnectLabel: string;
+  onWallTemplate: string;
 };
 
 type UseLiveActivityOptions = {

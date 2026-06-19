@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useQueue } from '../../providers/queue-provider';
 import { useBoardConnectionState } from '../../components/ble/use-board-connection-state';
 import { useLiveActivity } from './use-live-activity';
-import { addWidgetQueueNavigateListener } from './live-activity-plugin';
+import { addWidgetQueueNavigateListener, addBoardControlListener } from './live-activity-plugin';
 
 type LiveActivityBridgeProps = {
   boardName: string;
@@ -28,11 +28,12 @@ export function LiveActivityBridge({ boardName, layoutId, sizeId, setIds }: Live
   // Live Activity lightbulb + Previous/Next visibility: controls show only while
   // THIS device holds the BLE link (connectedByMe); once a peer takes the wall
   // the bulb goes out and the controls hide, leaving just the current climb.
-  const { boardConnection, holderDisplayName } = useBoardConnectionState();
+  const { bluetooth, boardConnection, holderDisplayName } = useBoardConnectionState();
 
   // Localized strings for the Android foreground-service notification (channel +
-  // Previous/Next actions). Built here because hooks need a component context;
-  // ignored on iOS, where ActivityKit renders its own Swift UI.
+  // Previous/Next + lightbulb actions, and the "on the wall" line). Built here
+  // because hooks need a component context; ignored on iOS, where ActivityKit
+  // renders its own Swift UI.
   const androidNotification = useMemo(
     () => ({
       channelName: t('mobile.session.notification.channelName'),
@@ -40,6 +41,9 @@ export function LiveActivityBridge({ boardName, layoutId, sizeId, setIds }: Live
       contentTitleFallback: t('mobile.session.notification.contentTitleFallback'),
       previousLabel: t('mobile.session.notification.previous'),
       nextLabel: t('mobile.session.notification.next'),
+      relightLabel: t('mobile.session.notification.relight'),
+      reconnectLabel: t('mobile.session.notification.reconnect'),
+      onWallTemplate: t('mobile.session.notification.onWall'),
     }),
     [t],
   );
@@ -91,6 +95,33 @@ export function LiveActivityBridge({ boardName, layoutId, sizeId, setIds }: Live
       // crash or wrap around.
       if (event.currentIndex < 0 || event.currentIndex >= queue.length) return;
       dispatchWidgetNavigationRef.current(queue[event.currentIndex], event.correlationId);
+    });
+    return unsubscribe;
+  }, []);
+
+  // Android-only: a tap on the foreground-service notification's lightbulb. The
+  // tri-state-driven receiver tells us which action it wants:
+  //  - reconnect (bulb was out): connect to the last board, taking it back from a
+  //    peer (Aurora is last-connection-wins). The BLE auto-sender then re-lights
+  //    the current climb on connect.
+  //  - reassert (bulb was lit): re-push the current climb to the wall.
+  // Mirrors the iOS ReconnectBoardIntent / take-control. A ref keeps the listener
+  // subscribed once while reading the latest bluetooth context (its identity
+  // changes when a board is (de)selected).
+  const bluetoothRef = useRef(bluetooth);
+  bluetoothRef.current = bluetooth;
+
+  useEffect(() => {
+    const unsubscribe = addBoardControlListener((event) => {
+      const bt = bluetoothRef.current;
+      if (!bt) return;
+      if (event.action === 'reconnect') {
+        bt.armUndoWallChangeToast();
+        void bt.connect(undefined, undefined, bt.reconnectSerialForCurrentBoard ?? undefined);
+      } else if (event.action === 'reassert') {
+        bt.armUndoWallChangeToast();
+        bt.reassertWall();
+      }
     });
     return unsubscribe;
   }, []);

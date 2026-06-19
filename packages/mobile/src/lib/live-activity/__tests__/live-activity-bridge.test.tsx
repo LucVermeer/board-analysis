@@ -10,6 +10,11 @@ type QueueNavigateEvent = {
   correlationId: string;
 };
 
+type BoardControlEvent = {
+  action: 'reconnect' | 'reassert';
+  correlationId: string;
+};
+
 function makeItem(index: number): ClimbQueueItem {
   return {
     uuid: `queue-item-${index}`,
@@ -28,12 +33,25 @@ const queue = vi.hoisted(() => ({
 
 const widget = vi.hoisted(() => ({
   listener: null as null | ((event: QueueNavigateEvent) => void),
+  boardControlListener: null as null | ((event: BoardControlEvent) => void),
   useLiveActivity: vi.fn(),
+}));
+
+// Stand-in for the bluetooth context the lightbulb tap drives.
+const bt = vi.hoisted(() => ({
+  isConnected: true,
+  loading: false,
+  connect: vi.fn(),
+  disconnect: vi.fn(),
+  armUndoWallChangeToast: vi.fn(),
+  reassertWall: vi.fn(),
+  reconnectSerialForCurrentBoard: 'serial-123' as string | null,
 }));
 
 const boardState = vi.hoisted(() => ({
   boardConnection: 'connectedByMe' as 'connectedByMe' | 'heldByPeer' | 'disconnected',
   holderDisplayName: null as string | null,
+  hasBluetooth: true,
 }));
 
 vi.mock('react-i18next', () => ({
@@ -50,7 +68,7 @@ vi.mock('../../../providers/queue-provider', () => ({
 
 vi.mock('../../../components/ble/use-board-connection-state', () => ({
   useBoardConnectionState: () => ({
-    bluetooth: null,
+    bluetooth: boardState.hasBluetooth ? bt : null,
     localConnected: boardState.boardConnection === 'connectedByMe',
     pending: false,
     sessionId: queue.sessionId,
@@ -71,6 +89,12 @@ vi.mock('../live-activity-plugin', () => ({
       widget.listener = null;
     };
   },
+  addBoardControlListener: (listener: (event: BoardControlEvent) => void) => {
+    widget.boardControlListener = listener;
+    return () => {
+      widget.boardControlListener = null;
+    };
+  },
 }));
 
 const climbItem = makeItem(0);
@@ -87,9 +111,15 @@ describe('LiveActivityBridge widget navigation (always-live)', () => {
     queue.state = { queue: threeItemQueue, currentClimbQueueItem: threeItemQueue[0] };
     queue.dispatchWidgetNavigation.mockClear();
     widget.listener = null;
+    widget.boardControlListener = null;
     widget.useLiveActivity.mockClear();
     boardState.boardConnection = 'connectedByMe';
     boardState.holderDisplayName = null;
+    boardState.hasBluetooth = true;
+    bt.connect.mockClear();
+    bt.armUndoWallChangeToast.mockClear();
+    bt.reassertWall.mockClear();
+    bt.reconnectSerialForCurrentBoard = 'serial-123';
   });
 
   it('passes connectedByMe + enables widget navigation when this device holds the board', () => {
@@ -191,6 +221,86 @@ describe('LiveActivityBridge widget navigation (always-live)', () => {
         isPartySession: false,
       }),
     );
+  });
+});
+
+describe('LiveActivityBridge lightbulb (boardControl)', () => {
+  beforeEach(() => {
+    queue.sessionId = 'session-1';
+    queue.state = { queue: [climbItem], currentClimbQueueItem: climbItem };
+    widget.boardControlListener = null;
+    widget.useLiveActivity.mockClear();
+    boardState.boardConnection = 'connectedByMe';
+    boardState.holderDisplayName = null;
+    boardState.hasBluetooth = true;
+    bt.connect.mockClear();
+    bt.armUndoWallChangeToast.mockClear();
+    bt.reassertWall.mockClear();
+    bt.reconnectSerialForCurrentBoard = 'serial-123';
+  });
+
+  it('forwards the localized lightbulb labels + on-wall template to the notification', () => {
+    renderBridge();
+
+    expect(widget.useLiveActivity).toHaveBeenCalledWith(
+      expect.objectContaining({
+        androidNotification: expect.objectContaining({
+          relightLabel: 'mobile.session.notification.relight',
+          reconnectLabel: 'mobile.session.notification.reconnect',
+          onWallTemplate: 'mobile.session.notification.onWall',
+        }),
+      }),
+    );
+  });
+
+  it('reconnect: re-lights via connect to the remembered board serial', () => {
+    renderBridge();
+
+    act(() => {
+      widget.boardControlListener?.({ action: 'reconnect', correlationId: 'bulb-1' });
+    });
+
+    expect(bt.armUndoWallChangeToast).toHaveBeenCalledTimes(1);
+    expect(bt.connect).toHaveBeenCalledTimes(1);
+    expect(bt.connect).toHaveBeenCalledWith(undefined, undefined, 'serial-123');
+    expect(bt.reassertWall).not.toHaveBeenCalled();
+  });
+
+  it('reconnect: falls back to undefined serial (board picker) when none is remembered', () => {
+    bt.reconnectSerialForCurrentBoard = null;
+    renderBridge();
+
+    act(() => {
+      widget.boardControlListener?.({ action: 'reconnect', correlationId: 'bulb-2' });
+    });
+
+    expect(bt.connect).toHaveBeenCalledWith(undefined, undefined, undefined);
+  });
+
+  it('reassert: re-pushes the current climb without reconnecting', () => {
+    renderBridge();
+
+    act(() => {
+      widget.boardControlListener?.({ action: 'reassert', correlationId: 'bulb-3' });
+    });
+
+    expect(bt.armUndoWallChangeToast).toHaveBeenCalledTimes(1);
+    expect(bt.reassertWall).toHaveBeenCalledTimes(1);
+    expect(bt.connect).not.toHaveBeenCalled();
+  });
+
+  it('is a no-op (no throw) when no board is selected', () => {
+    boardState.hasBluetooth = false;
+    renderBridge();
+
+    expect(() => {
+      act(() => {
+        widget.boardControlListener?.({ action: 'reconnect', correlationId: 'bulb-4' });
+        widget.boardControlListener?.({ action: 'reassert', correlationId: 'bulb-5' });
+      });
+    }).not.toThrow();
+    expect(bt.connect).not.toHaveBeenCalled();
+    expect(bt.reassertWall).not.toHaveBeenCalled();
   });
 });
 

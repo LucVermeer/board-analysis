@@ -6,6 +6,7 @@ import {
   type LiveActivityUpdateOptions,
   type LiveActivityClimbUpdateOptions,
   type WidgetQueueNavigateEvent,
+  type BoardControlEvent,
 } from '../../../modules/live-activity/src/index';
 
 // Platform-agnostic wrapper around the "session presence" native surface:
@@ -56,4 +57,17 @@ export function addWidgetQueueNavigateListener(callback: (event: WidgetQueueNavi
   return () => subscription.remove();
 }
 
-export type { WidgetQueueNavigateEvent };
+// Android-only: lightbulb taps on the foreground-service notification. Reads
+// sessionPresenceNative directly (not the platform-keyed sessionModule) because
+// only that module's typed addListener declares the 'boardControl' overload; it
+// is null on iOS (where 'LiveActivity' is the live module, driving the
+// equivalent through App Intents) and in Expo Go, so this is a safe no-op there.
+export function addBoardControlListener(callback: (event: BoardControlEvent) => void): () => void {
+  if (!sessionPresenceNative) {
+    return () => {};
+  }
+  const subscription = sessionPresenceNative.addListener('boardControl', callback);
+  return () => subscription.remove();
+}
+
+export type { WidgetQueueNavigateEvent, BoardControlEvent };
