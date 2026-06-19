@@ -1,20 +1,13 @@
 {
-  "generatedAt": "2026-06-19T23:20:38.188Z",
+  "generatedAt": "2026-06-19T23:47:59.054Z",
   "entries": [
     {
       "prNumber": 3072,
       "category": "fixed",
-      "title": "none (CI / release-plumbing only)",
+      "title": "🤖 Generated with [Claude Code](https://claude.com/claude-code)",
       "mergedAt": "2026-06-19T23:19:28Z",
       "prUrl": "https://github.com/boardsesh/boardsesh/pull/3072",
-      "body": "🤖 Generated with [Claude Code](https://claude.com/claude-code)\nhttps://claude.ai/code/session_0142LzvfoFMQ3sQMtkFFugTJ"
-    },
-    {
-      "prNumber": 3070,
-      "category": "fixed",
-      "title": "none (CI / release-plumbing only)",
-      "mergedAt": "2026-06-19T23:08:27Z",
-      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3070"
+      "body": "https://claude.ai/code/session_0142LzvfoFMQ3sQMtkFFugTJ"
     },
     {
       "prNumber": 3069,
