@@ -128,11 +128,16 @@ from a `workflow_dispatch` on any branch (artifact-only, matching its pre-existi
 - Force a rebuild of a fingerprint that already has a tag:
   `git push --delete origin fingerprint-<platform>-<hash>`, then re-push to `main` (or run the
   workflow via dispatch).
-- The Android tag is recorded only after **all** of its channels ship for that fingerprint: the
-  sideload APK (GitHub Release), the AAB build, and a Play upload that didn't fail. So a failed AAB
-  build or a flaky Play upload leaves no tag and the next push **automatically rebuilds and
-  retries** — no manual step. Before the Play bootstrap (Play upload disabled), the tag is still
-  recorded once the APK + AAB build, since Play isn't a channel yet.
+- The Android tag is recorded once the **sideload APK (GitHub Release) and the AAB build** succeed
+  — the reliable signal that a binary with this fingerprint exists. It is **not** gated on the Play
+  upload: that step is best-effort and can fail for Console-policy reasons (e.g. the
+  Foreground-services declaration) unrelated to the binary, and coupling the tag to it would let a
+  persistent Play issue rebuild Android forever. A failed Play upload is recovered by re-uploading
+  the retained AAB artifact (or rerunning the workflow), not by withholding the fingerprint tag.
+- The Android **gate** job runs in the `Production` environment so it can read
+  `GOOGLE_MAPS_API_KEY` (a Production-scoped secret that changes the Android fingerprint) and
+  resolve the same hash the build bakes. Without it the gate computes a map-less fingerprint that
+  never matches the binary, and Android never skips.
 
 Resolve the current fingerprint locally to predict what the gate will see: `cd packages/mobile &&
 bunx expo-updates runtimeversion:resolve --platform ios` (add the production env to match CI

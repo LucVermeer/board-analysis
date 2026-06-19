@@ -88,6 +88,14 @@ jobs:
     # Push is always on main; a manual dispatch (any branch) always builds, so
     # `workflow_dispatch` keeps producing an APK artifact off a feature branch.
     if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    # GOOGLE_MAPS_API_KEY is a Production-environment secret, and it changes the
+    # resolved android.config — hence the fingerprint. Without `environment:
+    # Production` the gate reads an EMPTY key and resolves a map-less hash that
+    # never matches the with-maps binary, so Android would always rebuild. Scope
+    # to Production on main only: the env is main-only by branch policy, and a
+    # non-main dispatch always builds anyway (it never reaches the tag check, so
+    # it doesn't need the key).
+    environment: ${{ github.ref == 'refs/heads/main' && 'Production' || '' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -475,17 +483,21 @@ jobs:
 
       # Record that a binary with this fingerprint shipped, so future JS-only
       # pushes with the same fingerprint skip this build (the gate checks for the
-      # tag). Placed AFTER the AAB build + Play upload and gated on every channel
-      # so a partial ship never tags (which would wrongly skip the next push):
-      #   - github_release succeeded → the always-on sideload APK shipped;
-      #   - build_aab succeeded → a failed AAB must NOT tag, or Play never gets
-      #     this fingerprint and the next push wrongly skips it;
-      #   - play_upload did not FAIL → 'skipped' (Play disabled before bootstrap)
-      #     is fine, but an actual upload failure leaves no tag so the next push
-      #     rebuilds and Play retries automatically.
+      # tag). Gated on the reliable, always-on signals that a native binary with
+      # this fingerprint exists and is distributed:
+      #   - github_release succeeded → the sideload APK shipped;
+      #   - build_aab succeeded → a failed AAB build must NOT tag (else the next
+      #     push wrongly skips before any AAB exists).
+      # NOT gated on the Play upload: it's best-effort (continue-on-error) and can
+      # fail for Console-policy reasons (e.g. the Foreground-services declaration)
+      # that have nothing to do with the binary. Coupling the fingerprint tag to
+      # Play would let a persistent Play-Console issue permanently disable Android
+      # gating (rebuild forever). The Play channel keeps its own failure warning +
+      # manual-retry path; a missed Play upload is recovered by re-uploading the
+      # retained AAB artifact, not by rebuilding identical native binaries.
       # Idempotent for concurrent runs.
       - name: Tag the shipped Android fingerprint
-        if: github.ref == 'refs/heads/main' && steps.github_release.outcome == 'success' && steps.build_aab.outcome == 'success' && steps.play_upload.outcome != 'failure' && env.FINGERPRINT_ANDROID != ''
+        if: github.ref == 'refs/heads/main' && steps.github_release.outcome == 'success' && steps.build_aab.outcome == 'success' && env.FINGERPRINT_ANDROID != ''
         run: |
           set -uo pipefail
           tag="fingerprint-android-${FINGERPRINT_ANDROID}"
