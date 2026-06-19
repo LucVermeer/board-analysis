@@ -230,27 +230,6 @@ jobs:
           SCREENSHOT_ANDROID_DEVICE: ${{ inputs.android_device || 'Pixel 2' }}
           SCREENSHOT_APK_PATH: /tmp/boardsesh-screenshot.apk
 
-      # The flow captures the flaky board-view several times (02-board-view,
-      # 02-board-view-r1..r3). Promote the largest — the non-blank render, since a
-      # blank compresses to ~16KB vs >140KB — to the canonical 02-board-view.png and
-      # drop the extras, so the count/dimension gates and upload see exactly one.
-      - name: Keep the best board-view capture
-        if: ${{ inputs.flow != 'onboarding' }}
-        run: |
-          set -euo pipefail
-          device_dir=$(find app-stores/google/screenshots -mindepth 1 -maxdepth 1 -type d | head -1)
-          [ -n "$device_dir" ] || { echo "::error::no screenshots directory"; exit 1; }
-          shopt -s nullglob
-          candidates=("$device_dir"/02-board-view*.png)
-          [ "${#candidates[@]}" -ge 1 ] || { echo "::error::no board-view captures"; exit 1; }
-          best=$(ls -S "${candidates[@]}" | head -1)
-          echo "Picked $best ($(stat -c%s "$best") bytes) of ${#candidates[@]} board-view captures:"
-          ls -S -l "${candidates[@]}" | awk '{print "  " $5 "  " $NF}'
-          tmp=$(mktemp)
-          cp "$best" "$tmp"
-          rm -f "$device_dir"/02-board-view*.png
-          mv "$tmp" "$device_dir/02-board-view.png"
-
       # Hard backstop against a blank capture (the play-drawer modal occasionally
       # didn't composite into adb screencap — a blank board-view hero even reached
       # the store once). A blank frame is just the status bar and compresses to
