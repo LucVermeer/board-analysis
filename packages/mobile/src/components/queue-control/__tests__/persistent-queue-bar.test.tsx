@@ -22,7 +22,10 @@ vi.mock('expo-crypto', () => ({ randomUUID: () => 'preview-uuid' }));
 
 vi.mock('react-native', () => ({
   Platform: { OS: 'ios' },
-  View: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
+  // Expose `style` as `data-style` so positioning assertions can query the outer
+  // plain View shell (which now owns the absolute layout, not the Animated.View).
+  View: ({ children, style }: { children?: ReactNode; style?: unknown }) =>
+    createElement('div', { 'data-style': JSON.stringify(style) }, children),
   StyleSheet: { create: (styles: Record<string, unknown>) => styles },
 }));
 
@@ -187,8 +190,13 @@ describe('PersistentQueueBar', () => {
     expect(capsule?.getAttribute('data-fill-width')).toBe('true');
     expect(capsule?.getAttribute('data-height')).toBe('48');
     expect(capsule?.getAttribute('data-surface-treatment')).toBe('docked');
-    expect(container.querySelector('[data-animated]')?.getAttribute('data-style')).toContain('"left":0');
-    expect(container.querySelector('[data-animated]')?.getAttribute('data-style')).toContain('"right":0');
+    // Positioning lives on the outer plain View shell (parentElement of the
+    // Animated.View), not on the Animated.View itself — the Reanimated entering
+    // bug was fixed by separating the positioning View from the animated View.
+    expect(container.querySelector('[data-animated]')?.parentElement?.getAttribute('data-style')).toContain('"left":0');
+    expect(container.querySelector('[data-animated]')?.parentElement?.getAttribute('data-style')).toContain(
+      '"right":0',
+    );
     expect(container.querySelector('[data-tick-inline]')).not.toBeNull();
     expect(container.querySelector('[data-tick]')).toBeNull();
   });
@@ -221,6 +229,8 @@ describe('PersistentQueueBar', () => {
     cfg.variant = 'material';
     cfg.measuredTabBarHeight = 80;
     const { container } = render(<PersistentQueueBar />);
-    expect(container.querySelector('[data-animated]')?.getAttribute('data-style')).toContain('"bottom":79');
+    expect(container.querySelector('[data-animated]')?.parentElement?.getAttribute('data-style')).toContain(
+      '"bottom":79',
+    );
   });
 });

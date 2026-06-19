@@ -71,9 +71,13 @@ export function ActiveContextBar({
     ? (measuredTabBarHeight ?? bottomChrome.tabBarBottom) - TABBAR_SEAM_OVERLAP
     : bottomChrome.tabBarBottom + gapAboveTabBar;
 
+  // Outer shell: plain View so `pointerEvents="box-none"` is respected on Android.
+  // Reanimated's `entering` animations ignore pointerEvents on the animated view
+  // itself, causing the overlay to block all touches below it (Android 16 / API 36
+  // regresses this the hardest). The inner Animated.View is sized to its content
+  // so even without pointerEvents it only covers the visible bar. #5728
   return (
-    <Animated.View
-      entering={reduceMotion ? undefined : FadeIn.duration(timing.normal)}
+    <View
       pointerEvents="box-none"
       style={[
         styles.toolbar,
@@ -84,24 +88,26 @@ export function ActiveContextBar({
         },
       ]}
     >
-      {fillPrimary ? (
-        <View style={styles.fillRow} pointerEvents="box-none" importantForAccessibility="auto">
-          {primary}
-        </View>
-      ) : (
-        <Animated.View style={styles.row} pointerEvents="box-none" importantForAccessibility="auto">
-          <View style={styles.sideSlot} pointerEvents={leading ? 'box-none' : 'none'}>
-            {leading}
-          </View>
-          <View style={styles.centerSlot} pointerEvents="box-none">
+      <Animated.View entering={reduceMotion ? undefined : FadeIn.duration(timing.normal)}>
+        {fillPrimary ? (
+          <View style={styles.fillRow} pointerEvents="box-none" importantForAccessibility="auto">
             {primary}
           </View>
-          <View style={[styles.heroSlot, { width: trailingWidth }]} pointerEvents="box-none">
-            {trailing}
+        ) : (
+          <View style={styles.row} pointerEvents="box-none" importantForAccessibility="auto">
+            <View style={styles.sideSlot} pointerEvents={leading ? 'box-none' : 'none'}>
+              {leading}
+            </View>
+            <View style={styles.centerSlot} pointerEvents="box-none">
+              {primary}
+            </View>
+            <View style={[styles.heroSlot, { width: trailingWidth }]} pointerEvents="box-none">
+              {trailing}
+            </View>
           </View>
-        </Animated.View>
-      )}
-    </Animated.View>
+        )}
+      </Animated.View>
+    </View>
   );
 }
 
