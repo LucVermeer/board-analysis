@@ -511,6 +511,92 @@ jobs:
       - name: Metro bundle check
         run: vp run check:mobile-bundle
 
+  commit-lint:
+    needs: [changes]
+    # Conventional Commit gate. The PR TITLE is the authoritative hard check — it's
+    # the merge/squash subject and the source of the changelog category. The
+    # per-commit range check is ADVISORY (continue-on-error): the repo uses merge
+    # commits, so intermediate WIP/fixup commits land on main verbatim and much of
+    # the existing history is non-conventional — blocking on it would red most PRs.
+    # The local commit-msg hook nudges new commits toward the convention.
+    if: needs.changes.outputs.anyJs == 'true' || needs.changes.outputs.rootCi == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 50
+      - name: Fetch base ref
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: git fetch --depth=50 origin "$BASE_REF":"refs/remotes/origin/$BASE_REF"
+      - uses: oven-sh/setup-bun@v2
+      - uses: voidzero-dev/setup-vp@v1
+        with:
+          node-version: 'lts'
+          cache: true
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Lint PR title (hard gate)
+        if: github.event_name == 'pull_request'
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          # The PR title is the merge/squash subject and the source of the changelog
+          # category, so it must be conventional. This is the blocking check.
+          vp run check:commit-message -- --pr-title "$PR_TITLE"
+      - name: Lint PR commit subjects (advisory)
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          # Surface non-conventional commits without blocking the merge (see job note).
+          vp run check:commit-message -- --range "origin/$BASE_REF..HEAD"
+      - name: Lint commit subjects (push, advisory)
+        if: github.event_name != 'pull_request'
+        continue-on-error: true
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          # On a normal push, github.event.before is the previous tip; validate the
+          # newly pushed commits. On a branch's first push it can be all-zeros — fall
+          # back to just the head commit to avoid an unbounded range.
+          if [ -z "$BEFORE_SHA" ] || [ "$BEFORE_SHA" = "0000000000000000000000000000000000000000" ]; then
+            vp run check:commit-message -- --range "$HEAD_SHA~1..$HEAD_SHA"
+          else
+            vp run check:commit-message -- --range "$BEFORE_SHA..$HEAD_SHA"
+          fi
+
+  release-notes:
+    needs: [changes]
+    # PR-only. Gated on the mobile/shared filter: those PRs ship via OTA, so they
+    # must carry user-facing Release Notes (escape hatch: the skip-changelog
+    # label, or `none` under the heading).
+    if: github.event_name == 'pull_request' && (needs.changes.outputs.mobile == 'true' || needs.changes.outputs.sharedDeps == 'true')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+      - uses: oven-sh/setup-bun@v2
+      - uses: voidzero-dev/setup-vp@v1
+        with:
+          node-version: 'lts'
+          cache: true
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Check PR has Release Notes
+        env:
+          # Write the body to a file (via env, not interpolated into the script) so
+          # a markdown body with backticks/quotes can't break the shell.
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_LABELS: ${{ toJSON(github.event.pull_request.labels) }}
+        run: |
+          printf '%s' "$PR_BODY" > pr-body.txt
+          vp run check:release-notes -- --body-file pr-body.txt
+
   test-report:
     needs: [test-default, test-backend, test-ocr]
     # Only post a report when at least one test job actually ran. If all three
@@ -555,6 +641,8 @@ jobs:
       - test-backend
       - test-ocr
       - mobile-bundle
+      - commit-lint
+      - release-notes
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 2

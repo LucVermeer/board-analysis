@@ -17,3 +17,4 @@ export {
   ONBOARDING_TIP_RECORD_KEY,
   ONBOARDING_TIP_ACCESSORY_KEY,
 } from './onboarding';
+export { CHANGELOG_LAST_SEEN_KEY } from './changelog';

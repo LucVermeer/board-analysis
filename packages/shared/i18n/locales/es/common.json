@@ -301,7 +301,11 @@
         "title": "Aplicaciones conectadas",
         "subtitle": "Apple Health y Strava",
         "subtitleWithStrava": "Cuentas de tabla, Apple Health, Strava"
-      }
+      },
+      "aboutSection": "Acerca de",
+      "changelogTitle": "Novedades",
+      "changelogSubtitle": "Últimas mejoras y correcciones",
+      "newPill": "Nuevo"
     },
     "about": {
       "title": "Sobre Boardsesh",
@@ -320,7 +324,9 @@
       "partnerTitle": "Colabora oficialmente con nosotros",
       "partnerBody": "Boardsesh funciona con Kilter, Tension y MoonBoard desde fuera. Si fabricas tableros y quieres crear algo oficial juntos, nos encantaría hablar.",
       "acknowledgementsLink": "Agradecimientos",
-      "acknowledgementsLinkBody": "Las personas detrás de Boardsesh"
+      "acknowledgementsLinkBody": "Las personas detrás de Boardsesh",
+      "changelogLink": "Novedades",
+      "changelogLinkBody": "Últimas mejoras y correcciones"
     },
     "acknowledgements": {
       "title": "Agradecimientos",
@@ -375,6 +381,19 @@
       "profile": "Perfil",
       "holdFilter": "Tipos de presa",
       "zoneFilter": "Zona del muro"
+    },
+    "changelog": {
+      "title": "Novedades",
+      "intro": "Últimas mejoras y correcciones, las más recientes primero.",
+      "currentBuild": "Estás en la versión del {{date}}",
+      "currentBuildVersion": "Estás en la versión {{version}}",
+      "category": {
+        "new": "Nuevo",
+        "improved": "Mejorado",
+        "fixed": "Corregido"
+      },
+      "viewPr": "Ver en GitHub",
+      "empty": "Aún no hay cambios registrados: hemos estado escalando demasiado. Vuelve después del próximo encadene."
     }
   },
   "lightControl": {
