@@ -400,28 +400,6 @@ jobs:
             | curl -sS --fail-with-body -X POST -H "Content-Type: application/json" -d @- "$DISCORD_DEPLOY_WEBHOOK" || \
               echo "::warning::Failed to post Discord notification (see status above)"
 
-      # Record that a binary with this fingerprint shipped, so future JS-only
-      # pushes with the same fingerprint skip this build (the gate checks for the
-      # tag). Gated on the GitHub Release (the always-on sideload channel) — a
-      # failed build must not tag, or the next push would wrongly skip. If the
-      # later Play upload flakes, the sideload APK with this fingerprint still
-      # shipped; to force a rebuild for Play, delete the tag (see
-      # docs/mobile-ota-updates.md). Idempotent for concurrent runs.
-      - name: Tag the shipped Android fingerprint
-        if: github.ref == 'refs/heads/main' && steps.github_release.outcome == 'success' && env.FINGERPRINT_ANDROID != ''
-        run: |
-          set -uo pipefail
-          tag="fingerprint-android-${FINGERPRINT_ANDROID}"
-          git tag "$tag" "$GITHUB_SHA" 2>/dev/null || true
-          if git push origin "refs/tags/$tag"; then
-            echo "::notice::Tagged $tag — future JS-only pushes with this fingerprint skip the Android native build."
-          elif git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null 2>&1; then
-            echo "::notice::$tag already exists (concurrent run) — nothing to do."
-          else
-            echo "::error::Failed to push $tag."
-            exit 1
-          fi
-
       # The Play Store distributes app bundles, not APKs. Build the AAB from the
       # SAME prebuild + same env-conditional signingConfig + same versionCode as
       # the APK above (the `release` build type is shared), so the two channels
@@ -432,6 +410,7 @@ jobs:
       # APK build: the Sentry Gradle upload task is currently incompatible with
       # the generated Gradle version.
       - name: Build signed release AAB
+        id: build_aab
         working-directory: packages/mobile/android
         env:
           ANDROID_KEYSTORE_PATH: ${{ github.workspace }}/packages/mobile/android/app/release.keystore
@@ -493,6 +472,32 @@ jobs:
         if: github.ref == 'refs/heads/main' && env.PLAY_UPLOAD_ENABLED == 'true' && steps.play_upload.outcome == 'failure'
         run: |
           echo "::warning::Play upload failed after the signed APK/AAB were built and the GitHub Release was published. If Play reports 'You must let us know whether your app uses any Foreground Service permissions', complete Play Console > App content > Foreground services for FOREGROUND_SERVICE_CONNECTED_DEVICE, then rerun the workflow or upload the AAB artifact manually."
+
+      # Record that a binary with this fingerprint shipped, so future JS-only
+      # pushes with the same fingerprint skip this build (the gate checks for the
+      # tag). Placed AFTER the AAB build + Play upload and gated on every channel
+      # so a partial ship never tags (which would wrongly skip the next push):
+      #   - github_release succeeded → the always-on sideload APK shipped;
+      #   - build_aab succeeded → a failed AAB must NOT tag, or Play never gets
+      #     this fingerprint and the next push wrongly skips it;
+      #   - play_upload did not FAIL → 'skipped' (Play disabled before bootstrap)
+      #     is fine, but an actual upload failure leaves no tag so the next push
+      #     rebuilds and Play retries automatically.
+      # Idempotent for concurrent runs.
+      - name: Tag the shipped Android fingerprint
+        if: github.ref == 'refs/heads/main' && steps.github_release.outcome == 'success' && steps.build_aab.outcome == 'success' && steps.play_upload.outcome != 'failure' && env.FINGERPRINT_ANDROID != ''
+        run: |
+          set -uo pipefail
+          tag="fingerprint-android-${FINGERPRINT_ANDROID}"
+          git tag "$tag" "$GITHUB_SHA" 2>/dev/null || true
+          if git push origin "refs/tags/$tag"; then
+            echo "::notice::Tagged $tag — future JS-only pushes with this fingerprint skip the Android native build."
+          elif git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null 2>&1; then
+            echo "::notice::$tag already exists (concurrent run) — nothing to do."
+          else
+            echo "::error::Failed to push $tag."
+            exit 1
+          fi
 
       - name: Clean up keystore
         if: always()

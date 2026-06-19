@@ -117,17 +117,20 @@ Linux like its gate, so they always agree. (Expo's own action trusts cross-OS de
 ours is strictly safer.)
 
 **Fail-safe.** If the gate can't resolve the fingerprint, it builds. A manual `workflow_dispatch`
-always builds (it bypasses the tag check), so it stays a reliable force-build escape hatch.
+bypasses the tag check and always builds — for iOS that means dispatching on `main` (the iOS build
+is `main`-only by design, since it uploads to TestFlight); the Android workflow additionally builds
+from a `workflow_dispatch` on any branch (artifact-only, matching its pre-existing behavior).
 
 **Manual overrides.**
 
 - Force a rebuild of a fingerprint that already has a tag:
   `git push --delete origin fingerprint-<platform>-<hash>`, then re-push to `main` (or run the
   workflow via dispatch).
-- The Android tag is recorded once the **GitHub Release** (sideload APK) publishes, which always
-  runs; the later Play upload is best-effort. If Play upload flakes, the sideload APK with that
-  fingerprint still shipped — to make Play catch up, either re-upload the AAB artifact by hand or
-  delete the tag to force a rebuild on the next push.
+- The Android tag is recorded only after **all** of its channels ship for that fingerprint: the
+  sideload APK (GitHub Release), the AAB build, and a Play upload that didn't fail. So a failed AAB
+  build or a flaky Play upload leaves no tag and the next push **automatically rebuilds and
+  retries** — no manual step. Before the Play bootstrap (Play upload disabled), the tag is still
+  recorded once the APK + AAB build, since Play isn't a channel yet.
 
 Resolve the current fingerprint locally to predict what the gate will see: `cd packages/mobile &&
 bunx expo-updates runtimeversion:resolve --platform ios` (add the production env to match CI

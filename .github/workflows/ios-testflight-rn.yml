@@ -67,6 +67,10 @@ jobs:
   # fingerprint divergence can only ever make iOS over-build, never wrongly skip.
   # See docs/mobile-ota-updates.md.
   gate:
+    # main-only: the iOS build is main-only by design (it uploads to TestFlight),
+    # so a dispatch forces a build only from main — there's no point running the
+    # gate off a feature branch where build-and-upload would skip anyway. (Android
+    # additionally builds artifacts from a feature-branch dispatch; iOS does not.)
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 15
