@@ -151,6 +151,10 @@ function HomeTopChromeMaterial({
           onSelectIndex={onSelectScopeIndex}
           accessibilityHint={scopeAccessibilityHint}
         />
+        {/* Flex spacer holds the find-climbers action to the trailing edge — the
+            scope title-menu is a Paper Menu (content-width anchor), so it can't flex
+            into the slot itself the way Appbar.Content / BoardSwitcherButton do. */}
+        <View style={styles.materialSpacer} />
         <Appbar.Action
           icon={iconMap['person.badge.plus'].android}
           color={systemColors.label as string}
@@ -206,5 +210,10 @@ const styles = StyleSheet.create({
   materialAppbar: {
     elevation: 0,
     shadowOpacity: 0,
+  },
+  // Pushes the find-climbers action to the trailing edge (the scope title-menu can't
+  // flex, so the spacer takes the slack instead).
+  materialSpacer: {
+    flex: 1,
   },
 });

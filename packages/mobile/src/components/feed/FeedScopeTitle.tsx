@@ -119,13 +119,15 @@ const styles = StyleSheet.create({
     maxWidth: 240,
   },
   title: { fontWeight: '700', flexShrink: 1 },
-  // Material: the anchor fills the app-bar title slot and centres its row, so the
-  // avatar/search actions hold the edges and the title aligns with them.
+  // Material: a leading, content-width menu anchor (Paper's Menu wraps it in a
+  // content-width View, so flex: 1 here wouldn't reach the app-bar row). The host
+  // right-aligns the trailing action with a flex spacer; `maxWidth` keeps a long
+  // scope name from crowding it. The row centres the title + caret vertically.
   materialMenu: {
-    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing[1],
+    maxWidth: 220,
   },
   materialTitle: { fontWeight: '700', flexShrink: 1 },
 });
