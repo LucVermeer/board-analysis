@@ -433,9 +433,14 @@ jobs:
       # APK and the Play AAB, so it checks the board-renderer JNI wrapper + prebuilt
       # Rust FFI lib, React Native's own libs, and every third-party lib in one pass.
       - name: Verify 16 KB native-library alignment (APK + AAB)
+        # `mapfile` is a bash builtin; don't rely on the runner's default shell.
+        shell: bash
         run: |
           set -euo pipefail
-          # Check every release APK (any ABI split) and the AAB, not a hardcoded name.
+          # Check every release APK (any ABI split) and the AAB, not a hardcoded
+          # name. The guard audits ALL bundled libs — ours plus React Native's and
+          # every third-party native module — so a non-16-KB upstream lib will also
+          # block the release (intentional: Play rejects the whole upload).
           mapfile -t archives < <(
             find packages/mobile/android/app/build/outputs/apk/release -maxdepth 1 -name '*.apk'
             find packages/mobile/android/app/build/outputs/bundle/release -maxdepth 1 -name '*.aab'

@@ -75,12 +75,16 @@ for archive in "$@"; do
   done < <(find "$dir" -type f -name '*.so' -print0)
 
   if [ "$found_so" -eq 0 ]; then
-    echo "::warning::No .so files found in $archive"
+    # A release APK/AAB always ships native libs; zero .so means a stripped or
+    # malformed artifact. Fail rather than pass silently (false green).
+    echo "::error::No .so files found in $archive"
+    overall_fail=1
   fi
 done
 
 if [ "$checked_any" -eq 0 ]; then
-  echo "::warning::No native libraries were checked."
+  echo "::error::No native libraries were checked."
+  overall_fail=1
 fi
 
 if [ "$overall_fail" -ne 0 ]; then
