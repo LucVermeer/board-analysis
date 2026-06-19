@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { Linking, Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import type { PublicUserProfile } from '@boardsesh/shared-schema';
@@ -12,6 +12,7 @@ import { useToggleUserFollow } from '../../lib/graphql/hooks';
 import { useTheme } from '../../providers/theme-provider';
 import { useToast } from '../../providers/toast-provider';
 import { hapticLight } from '../../lib/haptics';
+import { openValidatedUrl } from '../../lib/open-external-link';
 import { spacing, borderRadius } from '../../theme/tokens';
 import { selectByVariant } from '../../theme/variants';
 
@@ -138,13 +139,8 @@ function InstagramLink({ url }: { url: string }) {
 
   const handleOpen = useCallback(async () => {
     hapticLight();
-    try {
-      if (!isInstagramUrl(url) || !(await Linking.canOpenURL(url))) {
-        showToast(t('mobile.social.instagramOpenError'), 'error');
-        return;
-      }
-      await Linking.openURL(url);
-    } catch {
+    const opened = await openValidatedUrl(url, isInstagramUrl);
+    if (!opened) {
       showToast(t('mobile.social.instagramOpenError'), 'error');
     }
   }, [showToast, t, url]);
