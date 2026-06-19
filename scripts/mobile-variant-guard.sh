@@ -56,4 +56,53 @@ if [ -n "$matches" ]; then
   exit 1
 fi
 
-echo "✓ No raw theme-variant compares in mobile components/screens."
+# ── Floating glass chrome must carry a Material branch ──────────────────────────
+# The second leak class (fixed in the Home/Discover M3 chrome PR): a screen or top
+# chrome that MOUNTS the floating iOS-island primitives — GlassActionToolbar or
+# CollapsingLargeTitleHeader — with no Material counterpart. GlassSurface only swaps
+# the island FILL by variant (frosted vs opaque), never the LAYOUT, so an unbranched
+# mount renders floating glass FABs/islands on Android (Material) where an M3 top app
+# bar belongs. Flag any file that uses those primitives in JSX but contains no
+# selectByVariant / createVariantComponent branch.
+#
+# Heuristic, not a proof: this is file-level (mounts a primitive AND mentions a
+# branch helper somewhere) — a file that branches on an unrelated value could
+# false-pass. That's acceptable for a backstop; the real guarantee is the per-screen
+# Material Appbar branch + the screenshot diff.
+#
+# GLASS_CHROME_ALLOWLIST — glass-only sub-components whose CALLER owns the branch:
+#  - PlaylistOwnerToolbar: the playlist-detail `renderActions(collapsed)` only mounts
+#    it on the expanded-hero (collapsed=false) path; PlaylistDetailView asks for the
+#    collapsed form on Material, which returns a variant-branched GlassIconButton
+#    overflow instead. So it never renders on Android Material.
+GLASS_CHROME_ALLOWLIST='playlist/PlaylistOwnerToolbar\.tsx'
+
+glass_chrome_unbranched=''
+while IFS= read -r file; do
+  [ -z "$file" ] && continue
+  if ! grep -qE 'selectByVariant|createVariantComponent' "$file"; then
+    glass_chrome_unbranched="${glass_chrome_unbranched}${file}"$'\n'
+  fi
+done < <(
+  grep -rlE "<(GlassActionToolbar|CollapsingLargeTitleHeader)\b" \
+    packages/mobile/src/components packages/mobile/app \
+    --include='*.tsx' \
+    | grep -v '__tests__' \
+    | grep -vE "$GLASS_CHROME_ALLOWLIST" \
+    || true
+)
+
+if [ -n "$glass_chrome_unbranched" ]; then
+  echo "✖ Floating glass chrome mounted without a Material branch:"
+  echo "$glass_chrome_unbranched"
+  echo "  These primitives render the iOS floating-island LAYOUT on every variant"
+  echo "  (GlassSurface swaps only the fill). On Android (Material) that reads as glass"
+  echo "  FABs/islands instead of an M3 top app bar. Route the chrome through"
+  echo "  selectByVariant / createVariantComponent with a Material Appbar branch (see"
+  echo "  CollapsingTopChrome / HomeTopChrome / ProfileTopChrome), or — for a glass-only"
+  echo "  sub-component whose caller owns the branch — add it to GLASS_CHROME_ALLOWLIST"
+  echo "  with a documented reason."
+  exit 1
+fi
+
+echo "✓ No raw theme-variant compares, and no unbranched floating glass chrome, in mobile components/screens."

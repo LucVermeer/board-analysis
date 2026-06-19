@@ -19,6 +19,7 @@ const ctrl = vi.hoisted(() => ({
   board: null as BoardFields | null,
   bluetooth: null as BluetoothCtx,
   setActiveBoard: vi.fn(),
+  variant: 'liquidGlass' as 'liquidGlass' | 'material',
 }));
 const haptics = vi.hoisted(() => ({ light: vi.fn() }));
 
@@ -49,14 +50,40 @@ vi.mock('react-native-safe-area-context', () => ({
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock('@boardsesh/board-config', () => ({ formatBoardDisplayName: (boardType: string) => `Display:${boardType}` }));
 
+// The Material branch (CollapsingTopChrome) renders an M3 Appbar via react-native-paper.
+// Stub it so the jsdom suite doesn't pull in Paper's native runtime.
+vi.mock('react-native-paper', () => ({
+  Appbar: {
+    Header: ({ children }: { children?: ReactNode }) =>
+      createElement('div', { 'data-appbar-header': 'true' }, children),
+    Content: ({ title }: { title?: ReactNode }) => createElement('span', { 'data-appbar-title': 'true' }, title),
+    Action: ({
+      icon,
+      onPress,
+      accessibilityLabel,
+    }: {
+      icon?: ReactNode | ((props: { color: string; size: number }) => ReactNode);
+      onPress?: () => void;
+      accessibilityLabel?: string;
+    }) =>
+      createElement(
+        'button',
+        { onClick: onPress, 'data-appbar-action': accessibilityLabel ?? '' },
+        typeof icon === 'function' ? icon({ color: '#000', size: 24 }) : icon,
+      ),
+  },
+}));
+
 vi.mock('../../../providers/theme-provider', () => ({
   useTheme: () => ({
+    variant: ctrl.variant,
     systemColors: {
       label: '#000',
       secondaryLabel: '#888',
       separator: '#ccc',
       elevatedSurface: '#fff',
       background: '#fff',
+      secondaryBackground: '#fff',
     },
     brandColors: { warning: '#FF9500' },
   }),
@@ -149,6 +176,7 @@ describe('DiscoverTopChrome', () => {
   beforeEach(() => {
     ctrl.board = null;
     ctrl.bluetooth = null;
+    ctrl.variant = 'liquidGlass';
     haptics.light.mockClear();
   });
 
@@ -197,5 +225,23 @@ describe('DiscoverTopChrome', () => {
     const { container } = render(<DiscoverTopChrome {...makeProps({ onHeightChange })} />);
     fireEvent.click(container.querySelector('[data-has-layout="true"]') as HTMLElement);
     expect(onHeightChange).toHaveBeenCalledWith(72);
+  });
+
+  describe('Material variant', () => {
+    beforeEach(() => {
+      ctrl.variant = 'material';
+    });
+
+    it('renders the M3 app bar (no floating glass island, no in-chrome create) on Android', () => {
+      ctrl.board = board;
+      const { container } = render(<DiscoverTopChrome {...makeProps({ canCreate: true })} />);
+      expect(container.querySelector('[data-appbar-header]')).not.toBeNull();
+      expect(container.querySelector('[data-avatar-variant="material"]')).not.toBeNull();
+      expect(boardAction(container)).not.toBeNull();
+      // No glass surface, and the create "+" is the screen-level FAB (DiscoverLibrary),
+      // not an in-chrome island.
+      expect(container.querySelector('[data-glass]')).toBeNull();
+      expect(createAction(container)).toBeNull();
+    });
   });
 });

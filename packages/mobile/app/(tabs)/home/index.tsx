@@ -15,7 +15,7 @@ import { Card } from '../../../src/components/Card';
 import { Button } from '../../../src/components/Button';
 import { SessionFeedCard } from '../../../src/components/you/SessionFeedCard';
 import { CommentSheet } from '../../../src/components/you/CommentSheet';
-import { FeedScopeTitle } from '../../../src/components/feed/FeedScopeTitle';
+import { HomeTopChrome, TOP_ISLAND_BAND } from '../../../src/components/feed/HomeTopChrome';
 import { type AppMenuAction } from '../../../src/components/AppMenu';
 import {
   useBulkVoteSummaries,
@@ -29,9 +29,6 @@ import { useTheme } from '../../../src/providers/theme-provider';
 import { useToast } from '../../../src/providers/toast-provider';
 import { useDrawerHost } from '../../../src/providers/drawer-host-provider';
 import { useBottomChromeMetrics } from '../../../src/hooks/use-bottom-chrome-metrics';
-import { ProgressiveBlur } from '../../../src/components/ProgressiveBlur';
-import { GlassActionToolbar, GlassToolbarAction, TOP_ACTION_SIZE } from '../../../src/components/chrome';
-import { UserAvatarToolbarAction } from '../../../src/components/user-drawer/UserAvatarToolbarAction';
 import { dedupeSessionsById } from '../../../src/lib/feed-time-buckets';
 import { deriveFeedScopeInput, type FeedMode } from '../../../src/lib/feed/feed-scope';
 import { openClimbInPlayDrawer } from '../../../src/lib/open-climb-in-play-drawer';
@@ -43,10 +40,6 @@ import { BETA_CARD_HEIGHT, BETA_CARD_WIDTH } from '../../../src/components/play-
 
 const RECENT_BETA_LIMIT = 20;
 const SHELF_GAP = spacing[3];
-// The floating avatar island's vertical band (matches the other tabs' chrome
-// row): used to inset the feed below it and size the top blur.
-const TOP_ISLAND_BAND = spacing[1] + TOP_ACTION_SIZE + spacing[2];
-const ROW_GUTTER = spacing[4];
 const BETA_SKELETON_KEYS = ['beta-skeleton-1', 'beta-skeleton-2', 'beta-skeleton-3'];
 const INITIAL_FEED_SKELETON_KEYS = ['home-feed-skeleton-1', 'home-feed-skeleton-2', 'home-feed-skeleton-3'];
 const NEXT_PAGE_FEED_SKELETON_KEYS = ['home-feed-footer-skeleton-1', 'home-feed-footer-skeleton-2'];
@@ -87,6 +80,10 @@ export default function HomeTab() {
   const listRef = useRef<FlashListRef<SessionFeedItem>>(null);
   const commentSheetRef = useRef<BottomSheet | null>(null);
   const [commentTarget, setCommentTarget] = useState<CommentTarget | null>(null);
+  // Measured top-chrome height so the feed clears the chrome (seeded to the floating
+  // band's height — exact for Liquid Glass, corrected by the Material app bar's
+  // onLayout on the next frame).
+  const [chromeHeight, setChromeHeight] = useState(() => insets.top + TOP_ISLAND_BAND);
 
   // Feed scope. `mode` chooses the view — `crew` (people you follow) is the
   // default; `gym` is everyone on the selected board. `selectedBoard` is the
@@ -368,10 +365,10 @@ export default function HomeTab() {
         // iOS-only `automatic` behaviour left an Android gap), so pad manually.
         contentInsetAdjustmentBehavior="never"
         contentContainerStyle={{
-          paddingTop: insets.top + TOP_ISLAND_BAND,
+          paddingTop: chromeHeight,
           paddingBottom: bottomChrome.scrollBottomPadding + spacing[5],
         }}
-        scrollIndicatorInsets={{ top: insets.top + TOP_ISLAND_BAND }}
+        scrollIndicatorInsets={{ top: chromeHeight }}
         onEndReached={handleEndReached}
         onEndReachedThreshold={0.5}
         ListHeaderComponent={header}
@@ -431,34 +428,15 @@ export default function HomeTab() {
           feed.isFetchingNextPage ? <ActivitySkeletonList skeletonKeys={NEXT_PAGE_FEED_SKELETON_KEYS} /> : null
         }
       />
-      {/* Frost content scrolling under the chrome band, matching the other tabs. */}
-      <ProgressiveBlur style={[styles.topBlur, { height: insets.top + TOP_ISLAND_BAND }]} />
-      {/* Floating header: the user-avatar island (left) and the scope menu (a glass
-          title-menu pill, centred) over the blur — matching the other tabs. */}
-      <View pointerEvents="box-none" style={[styles.headerChrome, { paddingTop: insets.top + spacing[1] }]}>
-        <View pointerEvents="box-none" style={styles.headerRow}>
-          <GlassActionToolbar actionCount={1}>
-            <UserAvatarToolbarAction variant="glass" />
-          </GlassActionToolbar>
-          <View pointerEvents="box-none" style={styles.headerCenter}>
-            <FeedScopeTitle
-              title={scopeMenu.title}
-              actions={scopeMenu.actions}
-              onSelectIndex={scopeMenu.onSelectIndex}
-              accessibilityHint={t('mobile.home.scope.hint')}
-            />
-          </View>
-          {/* Find-climbers action: balances the avatar so the scope menu reads
-              centred, and opens the full-screen climber search. Uses a
-              person-add glyph (not a magnifier) so it doesn't read as a second
-              "search" next to the Climbs tab's bottom-bar magnifier. */}
-          <GlassActionToolbar actionCount={1}>
-            <GlassToolbarAction onPress={handleOpenSearch} accessibilityLabel={t('mobile.home.searchAction')}>
-              <Icon name="person.badge.plus" size={22} color={systemColors.label} />
-            </GlassToolbarAction>
-          </GlassActionToolbar>
-        </View>
-      </View>
+      <HomeTopChrome
+        scopeTitle={scopeMenu.title}
+        scopeActions={scopeMenu.actions}
+        onSelectScopeIndex={scopeMenu.onSelectIndex}
+        onOpenSearch={handleOpenSearch}
+        searchAccessibilityLabel={t('mobile.home.searchAction')}
+        scopeAccessibilityHint={t('mobile.home.scope.hint')}
+        onHeightChange={setChromeHeight}
+      />
       <CommentSheet
         sheetRef={commentSheetRef}
         entityId={commentTarget?.entityId ?? null}
@@ -691,31 +669,6 @@ function RecentBetaCard({
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  topBlur: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-  },
-  headerChrome: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-  },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginHorizontal: ROW_GUTTER,
-    height: TOP_ACTION_SIZE,
-  },
-  headerCenter: {
-    flex: 1,
-    minWidth: 0,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: spacing[2],
-  },
   centered: {
     flex: 1,
     alignItems: 'center',
