@@ -674,6 +674,7 @@ export {
   useUserProfileStats,
   useUserClimbPercentile,
   useUserAscentsFeed,
+  useAscentCaptionMatches,
   useActivityFeed,
   useSessionGroupedFeed,
 } from './use-you-data';

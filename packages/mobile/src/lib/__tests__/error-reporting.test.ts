@@ -49,6 +49,41 @@ describe('reportHandledError', () => {
     expect(mockedCaptureError).not.toHaveBeenCalled();
   });
 
+  it('drops expected beta-attach validation rejections (user resolves them on the share sheet)', () => {
+    const alreadyLinked = Object.assign(new Error('This tick already has a beta video linked'), {
+      response: {
+        status: 200,
+        errors: [
+          {
+            message: 'This tick already has a beta video linked',
+            extensions: { code: 'BETA_LINK_TICK_ALREADY_LINKED' },
+          },
+        ],
+      },
+    });
+    reportHandledError(alreadyLinked, { tags: { source: 'react-query', kind: 'mutation' } });
+    expect(mockedCaptureError).not.toHaveBeenCalled();
+  });
+
+  it('still reports a genuine beta-attach write fault (BETA_LINK_INSERT_FAILED)', () => {
+    const insertFailed = Object.assign(new Error("Couldn't save the beta link. Please try again."), {
+      response: {
+        status: 200,
+        errors: [
+          {
+            message: "Couldn't save the beta link. Please try again.",
+            extensions: { code: 'BETA_LINK_INSERT_FAILED' },
+          },
+        ],
+      },
+    });
+    reportHandledError(insertFailed, { tags: { source: 'react-query', kind: 'mutation' } });
+    expect(mockedCaptureError).toHaveBeenCalledWith(insertFailed, {
+      level: 'error',
+      tags: { source: 'react-query', kind: 'mutation' },
+    });
+  });
+
   it('downgrades offline fetch failures to a warning and tags them network', () => {
     const offline = new TypeError('Network request failed');
     reportHandledError(offline, { tags: { source: 'react-query' } });

@@ -1,7 +1,7 @@
 // Board-aware Instagram/TikTok caption builder for the "share your beta" flow.
 // Pure TS (no DOM, no React, no React Native) so both web and mobile build the
 // exact same caption — the climb name is embedded so the share-back auto-match
-// (matchAscentsToCaption) can recover the climb from the reel caption.
+// (matchClimbsToCaption) can recover the climb from the reel caption.
 
 import { getLayoutById } from '@boardsesh/board-config';
 

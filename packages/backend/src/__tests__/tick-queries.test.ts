@@ -62,6 +62,11 @@ const callUserAscentsFeed = (userId: string, input: Record<string, unknown>) =>
 const callUserGroupedAscentsFeed = (userId: string, input: Record<string, unknown>) =>
   tickQueries.userGroupedAscentsFeed(undefined, { userId, input }) as Promise<GroupedResult>;
 
+const callUserAscentCaptionMatches = (userId: string, caption: string) =>
+  tickQueries.userAscentCaptionMatches(undefined, { userId, caption }) as Promise<
+    Array<{ uuid: string; climbUuid: string; climbName: string; status: string; frames: string | null }>
+  >;
+
 const callUserClimbPercentile = (userId: string) =>
   tickQueries.userClimbPercentile(
     undefined,
@@ -813,6 +818,98 @@ describe('tickQueries — behavior fixes', () => {
 
       expect(result.items).toHaveLength(1);
       expect(result.items[0].climbName).toBe('Direct Canonical Climb');
+    });
+  });
+
+  describe('userAscentsFeed — climbUuids filter (internal, share-beta caption match)', () => {
+    it('restricts the feed to the given climb uuids', async () => {
+      const climbA = CLIMB_PREFIX + 'filter-a';
+      const climbB = CLIMB_PREFIX + 'filter-b';
+      await insertClimb(climbA, 'Filter Climb A');
+      await insertClimb(climbB, 'Filter Climb B');
+      await insertTick({ uuid: 'tick-filter-a', climbUuid: climbA, climbedAt: '2024-01-01 10:00:00', status: 'send' });
+      await insertTick({ uuid: 'tick-filter-b', climbUuid: climbB, climbedAt: '2024-01-02 10:00:00', status: 'send' });
+
+      const result = await callUserAscentsFeed(TEST_USER_ID, { climbUuids: [climbA], limit: 50 });
+
+      expect(result.items.map((item) => item.climbName)).toEqual(['Filter Climb A']);
+    });
+  });
+
+  describe('userAscentCaptionMatches — whole-logbook caption suggestions', () => {
+    it('matches a sent climb by name anywhere in the logbook and returns board art', async () => {
+      const climbUuid = CLIMB_PREFIX + 'caption-purple';
+      await insertClimb(climbUuid, 'Purple Nurple');
+      // An old send (not "recent") — must still surface from a caption match.
+      await insertTick({ uuid: 'tick-caption-1', climbUuid, climbedAt: '2024-01-01 10:00:00', status: 'send' });
+
+      const result = await callUserAscentCaptionMatches(TEST_USER_ID, 'Finally sent Purple Nurple today 🔥');
+
+      expect(result).toHaveLength(1);
+      expect(result[0].climbName).toBe('Purple Nurple');
+      expect(result[0].uuid).toBe('tick-caption-1');
+      // Full ascent row, so the board art (frames) is present for the picker.
+      expect(result[0].frames).toBe('p1r1');
+    });
+
+    it('does not suggest attempt-only climbs (beta attaches to sends/flashes)', async () => {
+      const climbUuid = CLIMB_PREFIX + 'caption-attempt';
+      await insertClimb(climbUuid, 'Crimp Master');
+      await insertTick({ uuid: 'tick-caption-att', climbUuid, climbedAt: '2024-01-01 10:00:00', status: 'attempt' });
+
+      const result = await callUserAscentCaptionMatches(TEST_USER_ID, 'still projecting Crimp Master');
+
+      expect(result).toEqual([]);
+    });
+
+    it('returns one suggestion per matched climb even with multiple sends', async () => {
+      const climbUuid = CLIMB_PREFIX + 'caption-dup';
+      await insertClimb(climbUuid, 'Slab Master');
+      await insertTick({ uuid: 'tick-dup-1', climbUuid, climbedAt: '2024-01-01 10:00:00', status: 'send' });
+      await insertTick({ uuid: 'tick-dup-2', climbUuid, climbedAt: '2024-02-01 10:00:00', status: 'flash' });
+
+      const result = await callUserAscentCaptionMatches(TEST_USER_ID, 'Slab Master again');
+
+      expect(result).toHaveLength(1);
+      expect(result[0].climbUuid).toBe(climbUuid);
+    });
+
+    it('returns nothing for a blank caption', async () => {
+      expect(await callUserAscentCaptionMatches(TEST_USER_ID, '   ')).toEqual([]);
+    });
+
+    it("only matches the requested user's logbook", async () => {
+      const climbUuid = CLIMB_PREFIX + 'caption-user';
+      await insertClimb(climbUuid, 'Shared Caption Climb');
+      await insertTick({
+        uuid: 'tick-caption-other',
+        userId: OTHER_USER_ID,
+        climbUuid,
+        climbedAt: '2024-01-01 10:00:00',
+        status: 'send',
+      });
+
+      const result = await callUserAscentCaptionMatches(TEST_USER_ID, 'sent Shared Caption Climb');
+
+      expect(result).toEqual([]);
+    });
+
+    it('surfaces the canonical name for an aliased (deduped-away) send', async () => {
+      const canonicalUuid = CLIMB_PREFIX + 'caption-canonical';
+      const aliasUuid = CLIMB_PREFIX + 'caption-alias';
+      await insertClimb(canonicalUuid, 'Mega Classic');
+      await insertAlias({ aliasUuid, canonicalUuid });
+      await insertTick({
+        uuid: 'tick-caption-alias',
+        climbUuid: aliasUuid,
+        climbedAt: '2024-01-01 10:00:00',
+        status: 'send',
+      });
+
+      const result = await callUserAscentCaptionMatches(TEST_USER_ID, 'sent Mega Classic finally');
+
+      expect(result).toHaveLength(1);
+      expect(result[0].climbName).toBe('Mega Classic');
     });
   });
 });

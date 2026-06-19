@@ -83,6 +83,10 @@ export const AscentFeedInputSchema = z.object({
   statusMode: z.enum(['both', 'send', 'attempt']).optional(),
   flashOnly: z.boolean().optional(),
   climbName: z.string().max(200).optional(),
+  // Internal filter (not exposed in the SDL AscentFeedInput): restrict the feed
+  // to a specific set of climbs. Used by the userAscentCaptionMatches resolver to
+  // re-fetch full ascent rows (with board art) for caption-matched climbs.
+  climbUuids: z.array(z.string().min(1)).max(50).optional(),
   sortBy: z
     .enum([
       'recent',
