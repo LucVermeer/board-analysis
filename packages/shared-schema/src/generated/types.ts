@@ -4817,6 +4817,24 @@ export type SessionFeedTickHighlight = {
   uuid: Scalars['ID']['output'];
 };
 
+/** Per-grade ascent breakdown for the session summary. */
+export type SessionGradeCount = {
+  __typename?: 'SessionGradeCount';
+  /** Failed attempts at this grade (implicit from multi-try sends) */
+  attempt: Scalars['Int']['output'];
+  /**
+   * Total ascents at this grade (flash + send).
+   * @deprecated Use flash + send. Kept additive so older mobile clients selecting { grade count } keep validating against the schema while they catch up.
+   */
+  count: Scalars['Int']['output'];
+  /** Flashes at this grade */
+  flash: Scalars['Int']['output'];
+  /** Grade name (e.g., 'V5') */
+  grade: Scalars['String']['output'];
+  /** Sends (non-flash) at this grade */
+  send: Scalars['Int']['output'];
+};
+
 /** Grade distribution item with flash/send/attempt breakdown. */
 export type SessionGradeDistributionItem = {
   __typename?: 'SessionGradeDistributionItem';
@@ -4964,8 +4982,8 @@ export type SessionSummary = {
   endedAt?: Maybe<Scalars['String']['output']>;
   /** Session goal text */
   goal?: Maybe<Scalars['String']['output']>;
-  /** Grade distribution with flash/send/attempt breakdown */
-  gradeDistribution: Array<SessionGradeDistributionItem>;
+  /** Grade distribution with flash/send/attempt breakdown (count kept for back-compat) */
+  gradeDistribution: Array<SessionGradeCount>;
   /** Hardest climb sent during the session */
   hardestClimb?: Maybe<SessionHardestClimb>;
   /** Participants with their stats */
@@ -6209,6 +6227,7 @@ export type ResolversTypes = ResolversObject<{
   SessionFeedParticipant: ResolverTypeWrapper<SessionFeedParticipant>;
   SessionFeedResult: ResolverTypeWrapper<SessionFeedResult>;
   SessionFeedTickHighlight: ResolverTypeWrapper<SessionFeedTickHighlight>;
+  SessionGradeCount: ResolverTypeWrapper<SessionGradeCount>;
   SessionGradeDistributionItem: ResolverTypeWrapper<SessionGradeDistributionItem>;
   SessionHardestClimb: ResolverTypeWrapper<SessionHardestClimb>;
   SessionHealthExport: ResolverTypeWrapper<SessionHealthExport>;
@@ -6481,6 +6500,7 @@ export type ResolversParentTypes = ResolversObject<{
   SessionFeedParticipant: SessionFeedParticipant;
   SessionFeedResult: SessionFeedResult;
   SessionFeedTickHighlight: SessionFeedTickHighlight;
+  SessionGradeCount: SessionGradeCount;
   SessionGradeDistributionItem: SessionGradeDistributionItem;
   SessionHardestClimb: SessionHardestClimb;
   SessionHealthExport: SessionHealthExport;
@@ -9310,6 +9330,18 @@ export type SessionFeedTickHighlightResolvers<
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
+export type SessionGradeCountResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['SessionGradeCount'] = ResolversParentTypes['SessionGradeCount'],
+> = ResolversObject<{
+  attempt?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  count?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  flash?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  grade?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  send?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
+}>;
+
 export type SessionGradeDistributionItemResolvers<
   ContextType = ConnectionContext,
   ParentType extends ResolversParentTypes['SessionGradeDistributionItem'] =
@@ -9408,7 +9440,7 @@ export type SessionSummaryResolvers<
   durationMinutes?: Resolver<Maybe<ResolversTypes['Int']>, ParentType, ContextType>;
   endedAt?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   goal?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
-  gradeDistribution?: Resolver<Array<ResolversTypes['SessionGradeDistributionItem']>, ParentType, ContextType>;
+  gradeDistribution?: Resolver<Array<ResolversTypes['SessionGradeCount']>, ParentType, ContextType>;
   hardestClimb?: Resolver<Maybe<ResolversTypes['SessionHardestClimb']>, ParentType, ContextType>;
   participants?: Resolver<Array<ResolversTypes['SessionParticipant']>, ParentType, ContextType>;
   sessionId?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
@@ -9948,6 +9980,7 @@ export type Resolvers<ContextType = ConnectionContext> = ResolversObject<{
   SessionFeedParticipant?: SessionFeedParticipantResolvers<ContextType>;
   SessionFeedResult?: SessionFeedResultResolvers<ContextType>;
   SessionFeedTickHighlight?: SessionFeedTickHighlightResolvers<ContextType>;
+  SessionGradeCount?: SessionGradeCountResolvers<ContextType>;
   SessionGradeDistributionItem?: SessionGradeDistributionItemResolvers<ContextType>;
   SessionHardestClimb?: SessionHardestClimbResolvers<ContextType>;
   SessionHealthExport?: SessionHealthExportResolvers<ContextType>;

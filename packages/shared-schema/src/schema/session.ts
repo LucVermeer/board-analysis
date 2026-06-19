@@ -142,6 +142,25 @@ export const sessionTypeDefs = /* GraphQL */ `
   # ============================================
 
   """
+  Per-grade ascent breakdown for the session summary.
+  """
+  type SessionGradeCount {
+    "Grade name (e.g., 'V5')"
+    grade: String!
+    "Total ascents at this grade (flash + send)."
+    count: Int!
+      @deprecated(
+        reason: "Use flash + send. Kept additive so older mobile clients selecting { grade count } keep validating against the schema while they catch up."
+      )
+    "Flashes at this grade"
+    flash: Int!
+    "Sends (non-flash) at this grade"
+    send: Int!
+    "Failed attempts at this grade (implicit from multi-try sends)"
+    attempt: Int!
+  }
+
+  """
   Hardest climb sent during a session.
   """
   type SessionHardestClimb {
@@ -191,8 +210,8 @@ export const sessionTypeDefs = /* GraphQL */ `
     totalFlashes: Int!
     "Total attempts (including sends)"
     totalAttempts: Int!
-    "Grade distribution with flash/send/attempt breakdown"
-    gradeDistribution: [SessionGradeDistributionItem!]!
+    "Grade distribution with flash/send/attempt breakdown (count kept for back-compat)"
+    gradeDistribution: [SessionGradeCount!]!
     "Hardest climb sent during the session"
     hardestClimb: SessionHardestClimb
     "Participants with their stats"

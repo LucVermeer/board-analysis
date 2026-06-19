@@ -141,7 +141,8 @@ export async function generateSessionSummary(sessionId: string): Promise<Session
   // the {grade, flash, send, attempt} shape used across session views.
   const gradeDistribution = gradeDistRows
     .filter((r): r is typeof r & { grade: string } => r.grade != null)
-    .map((r) => ({ grade: r.grade, flash: r.flash, send: r.send, attempt: r.attempt }));
+    // `count` (flash + send) is the deprecated back-compat field; new clients read flash/send.
+    .map((r) => ({ grade: r.grade, count: r.flash + r.send, flash: r.flash, send: r.send, attempt: r.attempt }));
 
   // Build hardest climb (climb name already JOINed — no separate query needed).
   // frames/layoutId/boardType/isMirror let the client draw a board thumbnail.

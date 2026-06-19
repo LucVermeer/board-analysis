@@ -36,9 +36,9 @@ function boardLabel(boardPath: string | null | undefined): string {
   return `${capitalized} Board session`;
 }
 
-/** "V5 ×3, V4 ×2" from the summary grade distribution (flash + send ascents). */
+/** "V5 ×3, V4 ×2" from the summary grade distribution (count = flash + send). */
 function formatGradeDistribution(summary: SessionSummary): string {
-  return summary.gradeDistribution.map((entry) => `${entry.grade} ×${entry.flash + entry.send}`).join(', ');
+  return summary.gradeDistribution.map((entry) => `${entry.grade} ×${entry.count}`).join(', ');
 }
 
 /**

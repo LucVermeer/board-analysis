@@ -1,7 +1,5 @@
 // Session types
 
-import type { SessionGradeDistributionItem } from './activity-feed';
-
 export type SessionConnectionState = 'CONNECTED' | 'RECONNECTING';
 
 export type SessionUser = {
@@ -12,6 +10,15 @@ export type SessionUser = {
   /** Stable database user UUID (null for unauthenticated connections) */
   userId?: string | null;
   connectionState: SessionConnectionState;
+};
+
+export type SessionGradeCount = {
+  grade: string;
+  /** Total ascents (flash + send). Deprecated — kept additive for old clients. */
+  count: number;
+  flash: number;
+  send: number;
+  attempt: number;
 };
 
 export type SessionHardestClimb = {
@@ -42,7 +49,7 @@ export type SessionSummary = {
   totalSends: number;
   totalFlashes: number;
   totalAttempts: number;
-  gradeDistribution: SessionGradeDistributionItem[];
+  gradeDistribution: SessionGradeCount[];
   hardestClimb?: SessionHardestClimb | null;
   participants: SessionParticipant[];
   startedAt?: string | null;

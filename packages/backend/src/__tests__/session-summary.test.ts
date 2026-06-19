@@ -133,8 +133,8 @@ describe('generateSessionSummary', () => {
     expect(result!.endedAt).toBe('2024-01-15T11:30:00.000Z');
 
     expect(result!.gradeDistribution).toEqual([
-      { grade: 'V5', flash: 1, send: 2, attempt: 0 },
-      { grade: 'V4', flash: 0, send: 5, attempt: 2 },
+      { grade: 'V5', count: 3, flash: 1, send: 2, attempt: 0 },
+      { grade: 'V4', count: 5, flash: 0, send: 5, attempt: 2 },
     ]);
 
     expect(result!.hardestClimb).toEqual({
@@ -179,8 +179,8 @@ describe('generateSessionSummary', () => {
     const result = await generateSessionSummary('session-1');
 
     expect(result!.gradeDistribution).toEqual([
-      { grade: 'V3', flash: 0, send: 2, attempt: 0 },
-      { grade: 'V5', flash: 1, send: 2, attempt: 0 },
+      { grade: 'V3', count: 2, flash: 0, send: 2, attempt: 0 },
+      { grade: 'V5', count: 3, flash: 1, send: 2, attempt: 0 },
     ]);
   });
 

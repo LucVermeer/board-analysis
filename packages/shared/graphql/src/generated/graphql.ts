@@ -4814,6 +4814,24 @@ export type SessionFeedTickHighlight = {
   uuid: Scalars['ID']['output'];
 };
 
+/** Per-grade ascent breakdown for the session summary. */
+export type SessionGradeCount = {
+  __typename?: 'SessionGradeCount';
+  /** Failed attempts at this grade (implicit from multi-try sends) */
+  attempt: Scalars['Int']['output'];
+  /**
+   * Total ascents at this grade (flash + send).
+   * @deprecated Use flash + send. Kept additive so older mobile clients selecting { grade count } keep validating against the schema while they catch up.
+   */
+  count: Scalars['Int']['output'];
+  /** Flashes at this grade */
+  flash: Scalars['Int']['output'];
+  /** Grade name (e.g., 'V5') */
+  grade: Scalars['String']['output'];
+  /** Sends (non-flash) at this grade */
+  send: Scalars['Int']['output'];
+};
+
 /** Grade distribution item with flash/send/attempt breakdown. */
 export type SessionGradeDistributionItem = {
   __typename?: 'SessionGradeDistributionItem';
@@ -4961,8 +4979,8 @@ export type SessionSummary = {
   endedAt?: Maybe<Scalars['String']['output']>;
   /** Session goal text */
   goal?: Maybe<Scalars['String']['output']>;
-  /** Grade distribution with flash/send/attempt breakdown */
-  gradeDistribution: Array<SessionGradeDistributionItem>;
+  /** Grade distribution with flash/send/attempt breakdown (count kept for back-compat) */
+  gradeDistribution: Array<SessionGradeCount>;
   /** Hardest climb sent during the session */
   hardestClimb?: Maybe<SessionHardestClimb>;
   /** Participants with their stats */
@@ -7377,7 +7395,7 @@ export type SessionSummaryFieldsFragment = {
   durationMinutes?: number | null;
   goal?: string | null;
   gradeDistribution: Array<{
-    __typename?: 'SessionGradeDistributionItem';
+    __typename?: 'SessionGradeCount';
     grade: string;
     flash: number;
     send: number;
@@ -7422,7 +7440,7 @@ export type EndSessionMutation = {
     durationMinutes?: number | null;
     goal?: string | null;
     gradeDistribution: Array<{
-      __typename?: 'SessionGradeDistributionItem';
+      __typename?: 'SessionGradeCount';
       grade: string;
       flash: number;
       send: number;
@@ -7467,7 +7485,7 @@ export type GetSessionSummaryQuery = {
     durationMinutes?: number | null;
     goal?: string | null;
     gradeDistribution: Array<{
-      __typename?: 'SessionGradeDistributionItem';
+      __typename?: 'SessionGradeCount';
       grade: string;
       flash: number;
       send: number;
