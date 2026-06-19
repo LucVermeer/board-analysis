@@ -1,6 +1,6 @@
 ---
 name: android-screenshots
-description: Capture screenshots of the Boardsesh React Native app (packages/mobile/) running on an Android emulator, driven against Metro with a cached dev-client APK. Use when asked to screenshot / see / visually verify the mobile app on Android, or to share mobile screenshots in chat. Linux/KVM-friendly; the iOS counterpart is `vp run mobile:screenshots`. Full reference: docs/android-emulator-screenshots.md.
+description: Capture screenshots of the Boardsesh React Native app (packages/mobile/) running on an Android emulator, driven against Metro with a cached dev-client APK. Use when asked to screenshot / see / visually verify the mobile app on Android, or to share mobile screenshots in chat. Linux/KVM-friendly; the iOS counterpart is `vp run mobile:ios-shots` (full App Store matrix: `vp run mobile:screenshots`). Full reference: docs/android-emulator-screenshots.md.
 ---
 
 # Android emulator screenshots

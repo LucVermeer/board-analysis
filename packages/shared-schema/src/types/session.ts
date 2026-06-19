@@ -14,13 +14,25 @@ export type SessionUser = {
 
 export type SessionGradeCount = {
   grade: string;
+  /** Total ascents (flash + send). Deprecated — kept additive for old clients. */
   count: number;
+  flash: number;
+  send: number;
+  attempt: number;
 };
 
 export type SessionHardestClimb = {
   climbUuid: string;
   climbName: string;
   grade: string;
+  /** Lit-hold frames string for rendering a thumbnail; null for legacy climbs. */
+  frames?: string | null;
+  /** Board layout id, needed to render the thumbnail. */
+  layoutId?: number | null;
+  /** Board type the send was logged on (e.g. 'kilter', 'tension'). */
+  boardType?: string | null;
+  /** Whether the send was on the mirrored climb. */
+  isMirror?: boolean | null;
 };
 
 export type SessionParticipant = {
@@ -28,12 +40,14 @@ export type SessionParticipant = {
   displayName?: string | null;
   avatarUrl?: string | null;
   sends: number;
+  flashes: number;
   attempts: number;
 };
 
 export type SessionSummary = {
   sessionId: string;
   totalSends: number;
+  totalFlashes: number;
   totalAttempts: number;
   gradeDistribution: SessionGradeCount[];
   hardestClimb?: SessionHardestClimb | null;

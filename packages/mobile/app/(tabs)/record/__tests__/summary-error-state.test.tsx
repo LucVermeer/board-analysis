@@ -88,6 +88,38 @@ vi.mock('../../../../src/components/Icon', () => ({ Icon: () => createElement('i
 vi.mock('../../../../src/components/Avatar', () => ({ Avatar: () => createElement('div', null) }));
 vi.mock('../../../../src/components/SectionHeader', () => ({ SectionHeader: () => createElement('div', null) }));
 vi.mock('../../../../src/components/Separator', () => ({ Separator: () => createElement('div', null) }));
+vi.mock('../../../../src/components/Card', () => ({
+  Card: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
+}));
+
+// The loaded recap pulls in reanimated, the native climb renderer, and the
+// gifted-charts bar chart — none of which load in this node/jsdom env. Stub them
+// so the screen's loading/error/store-review logic stays testable in isolation.
+vi.mock('react-native-reanimated', () => ({
+  default: { View: ({ children }: { children?: ReactNode }) => createElement('div', null, children) },
+  useSharedValue: (value: unknown) => ({ value }),
+  useAnimatedStyle: () => ({}),
+  withSpring: (value: unknown) => value,
+  withTiming: (value: unknown) => value,
+  withDelay: (_delay: unknown, value: unknown) => value,
+}));
+vi.mock('../../../../src/components/ClimbListThumbnail', () => ({
+  ClimbListThumbnail: () => createElement('div', null),
+}));
+vi.mock('../../../../src/components/you/AvatarGroup', () => ({ AvatarGroup: () => createElement('div', null) }));
+vi.mock('../../../../src/components/you/YouCharts', () => ({ StackedBarChart: () => createElement('div', null) }));
+vi.mock('../../../../src/components/you/profile-chart-colors', () => ({
+  buildSessionGradeBars: () => null,
+  gradeBadgeColor: () => '#000000',
+}));
+vi.mock('../../../../src/components/session/session-stat-tiles', () => ({
+  StatTile: () => createElement('div', null),
+  GradeTile: () => createElement('div', null),
+}));
+vi.mock('../../../../src/lib/playlists/board-details-for-playlist', () => ({ getBoardConfigForPlaylist: () => null }));
+vi.mock('../../../../src/lib/format-session-when', () => ({ formatSessionWhen: () => 'Sunday morning' }));
+vi.mock('../../../../src/theme/animations', () => ({ springs: {}, timing: { fast: 150, normal: 250 } }));
+vi.mock('../../../../src/lib/haptics', () => ({ hapticSuccess: () => {} }));
 
 // Imported after mocks so it binds to the stubbed dependencies.
 const { default: SessionSummaryScreen } = await import('../summary');

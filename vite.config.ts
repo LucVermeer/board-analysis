@@ -287,6 +287,22 @@ export default defineConfig({
         command: 'node --import tsx scripts/generate-oss-licenses.ts',
         cache: false,
       },
+      'generate:changelog': {
+        command: 'node --import tsx scripts/generate-changelog.ts',
+        cache: false,
+      },
+      'check:changelog': {
+        command: 'node --import tsx scripts/generate-changelog.ts --check',
+        cache: false,
+      },
+      'check:commit-message': {
+        command: 'tsx scripts/check-commit-message.ts',
+        cache: false,
+      },
+      'check:release-notes': {
+        command: 'tsx scripts/check-release-notes.ts',
+        cache: false,
+      },
       'generate:ios-board-placement-data': {
         command: 'node --import tsx packages/board-constants/scripts/generate-ios-board-placement-data.ts',
         dependsOn: ['build:constants'],
@@ -529,6 +545,10 @@ export default defineConfig({
       },
       'mobile:android-shots': {
         command: 'tsx scripts/mobile-android-shots.ts',
+        cache: false,
+      },
+      'mobile:ios-shots': {
+        command: 'tsx scripts/mobile-ios-shots.ts',
         cache: false,
       },
       'mobile:android-doctor': {

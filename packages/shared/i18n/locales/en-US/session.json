@@ -203,7 +203,21 @@
     "shareToStrava": "Share to Strava",
     "sharingToStrava": "Sharing to Strava…",
     "sharedToStrava": "Shared to Strava",
-    "shareToStravaFailed": "Couldn't share to Strava"
+    "shareToStravaFailed": "Couldn't share to Strava",
+    "flashes": "Flashes",
+    "heroNiceSession": "Nice session.",
+    "heroCrushedIt": "Crushed it.",
+    "heroCrewSession": "Solid crew session.",
+    "heroLoggedWork": "Logged the work.",
+    "featuredSendsLabel_one": "send",
+    "featuredSendsLabel_other": "sends",
+    "featuredAttemptsLabel_one": "attempt",
+    "featuredAttemptsLabel_other": "attempts",
+    "hardestSendTitle": "Hardest send",
+    "effortTitle": "Worth coming back to",
+    "effortBody": "That project's not going anywhere. You'll get it.",
+    "crew": "The crew",
+    "crewStatLine": "{{sends}} sends · {{flashes}} flashes · {{attempts}} attempts"
   },
   "overview": {
     "goal": "Goal: {{goal}}"

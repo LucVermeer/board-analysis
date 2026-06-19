@@ -28,6 +28,7 @@ import { getSupportedIntegrations, runSessionEndExports, INTEGRATIONS } from '..
 const summary: SessionSummary = {
   sessionId: 'session-1',
   totalSends: 1,
+  totalFlashes: 0,
   totalAttempts: 2,
   gradeDistribution: [],
   participants: [],
