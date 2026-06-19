@@ -22,6 +22,8 @@ export default function ProfileLayout() {
       {/* i18n-ignore-next-line — preview-only screen */}
       <Stack.Screen name="branch-switcher" options={{ title: 'Branch Switcher' }} />
       <Stack.Screen name="dev-servers" options={{ title: t('mobile.more.metroServersTitle') }} />
+      {/* i18n-ignore-next-line — tester-only screen */}
+      <Stack.Screen name="channel-switcher" options={{ title: 'OTA Channel Switcher' }} />
       <Stack.Screen name="delete-account" options={{ title: tSettings('deleteAccount.title') }} />
     </Stack>
   );

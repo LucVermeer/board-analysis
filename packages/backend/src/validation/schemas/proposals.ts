@@ -14,7 +14,7 @@ export const ProposalStatusSchema = z.enum(['open', 'approved', 'rejected', 'sup
 /**
  * Community role type validation schema
  */
-export const CommunityRoleTypeSchema = z.enum(['admin', 'community_leader']);
+export const CommunityRoleTypeSchema = z.enum(['admin', 'community_leader', 'tester']);
 
 export const CreateProposalInputSchema = z.object({
   climbUuid: ExternalUUIDSchema,

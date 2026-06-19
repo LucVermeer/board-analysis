@@ -1,4 +1,5 @@
 import { router } from 'expo-router';
+import * as Updates from 'expo-updates';
 import { Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import type { GradeDisplayFormat } from '@boardsesh/play-view';
@@ -46,6 +47,11 @@ export default function MoreScreen() {
   const { localePreference, setLocalePreference } = useLocalePreference();
   const { showToast } = useToast();
   const stravaEnabled = useFeatureFlag('strava-integration') === true;
+
+  // The OTA channel switcher relies on expo-updates runtime overrides, which only
+  // work on real (non-dev) builds where updates are enabled. Gated on the tester
+  // flag so only admin-marked testers see it.
+  const showChannelSwitcher = Boolean(profile?.isTester) && !__DEV__ && Updates.isEnabled;
 
   // 'System' follows the device language; the rest are the supported locales,
   // labelled in their own script (English / Español / Français) from
@@ -245,7 +251,7 @@ export default function MoreScreen() {
         </View>
       </View>
 
-      {__DEV__ ? (
+      {__DEV__ || profile?.isTester ? (
         <View style={styles.section}>
           <SectionHeader title={t('mobile.more.development')} />
           <View style={[styles.card, { backgroundColor: systemColors.secondaryBackground }]}>
@@ -254,9 +260,21 @@ export default function MoreScreen() {
               subtitle={t('mobile.more.metroServersSubtitle')}
               leading={<Icon name="server" size={22} color={systemColors.secondaryLabel} />}
               showChevron
-              showSeparator={false}
+              showSeparator={showChannelSwitcher}
               onPress={() => router.push('/(tabs)/profile/dev-servers')}
             />
+            {showChannelSwitcher ? (
+              <ListRow
+                // i18n-ignore-next-line — tester-only dev tooling
+                title="OTA Channel Switcher"
+                // i18n-ignore-next-line
+                subtitle="Switch Expo update channel"
+                leading={<Icon name="transfer" size={22} color={systemColors.secondaryLabel} />}
+                showChevron
+                showSeparator={false}
+                onPress={() => router.push('/(tabs)/profile/channel-switcher')}
+              />
+            ) : null}
           </View>
         </View>
       ) : null}

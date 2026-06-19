@@ -36,7 +36,7 @@ export function resolveUpdatesConfig(easProjectId: string, projectRoot: string):
   const easUrl = `https://u.expo.dev/${easProjectId}`;
 
   if (process.env.EAS_BUILD) {
-    return { url: easUrl };
+    return { url: easUrl, disableAntiBrickingMeasures: true };
   }
 
   // Fail closed: only point a production binary at the self-hosted server when
@@ -48,12 +48,12 @@ export function resolveUpdatesConfig(easProjectId: string, projectRoot: string):
   // for production, so OTA is simply inert), keeping every build safe to ship.
   const selfHostUrl = process.env.EXPO_UPDATES_URL;
   if (!selfHostUrl) {
-    return { url: easUrl };
+    return { url: easUrl, disableAntiBrickingMeasures: true };
   }
   // Check the cert only once the server URL is set (skips the filesystem stat in
   // the common no-infra case, and avoids touching projectRoot when unused).
   if (!existsSync(resolve(projectRoot, CODE_SIGNING_CERT_PATH))) {
-    return { url: easUrl };
+    return { url: easUrl, disableAntiBrickingMeasures: true };
   }
 
   const channel = process.env.EXPO_UPDATES_CHANNEL;
@@ -61,6 +61,14 @@ export function resolveUpdatesConfig(easProjectId: string, projectRoot: string):
   return {
     url: selfHostUrl,
     enabled: true,
+    // Lets tester-only tooling repoint the channel at runtime via
+    // Updates.setUpdateURLAndRequestHeadersOverride (see ChannelSwitcherScreen).
+    // The override API hard-requires this flag. It disables the anti-brick
+    // rollback measure build-wide, but on-device manifest signature verification
+    // (codeSigningCertificate below) is unaffected, so a compromised host still
+    // can't push unsigned JS. This is a fingerprint input, so it ships in a fresh
+    // native build like any other native config change.
+    disableAntiBrickingMeasures: true,
     // Written into Expo.plist (EXUpdatesRequestHeaders) and AndroidManifest by
     // `expo prebuild`; the self-hosted server maps this channel to a branch.
     ...(channel ? { requestHeaders: { 'expo-channel-name': channel } } : {}),

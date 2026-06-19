@@ -132,6 +132,7 @@ export const GET_PROFILE = gql`
       email
       displayName
       avatarUrl
+      isTester
     }
   }
 `;
@@ -147,6 +148,7 @@ export const UPDATE_PROFILE = gql`
       email
       displayName
       avatarUrl
+      isTester
     }
   }
 `;

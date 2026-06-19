@@ -58,18 +58,27 @@ describe('resolveUpdatesConfig', () => {
     process.env.EAS_BUILD = '1';
     process.env.EXPO_UPDATES_URL = SELF_HOST_URL;
     process.env.EXPO_UPDATES_CHANNEL = 'production';
-    expect(resolveUpdatesConfig(PROJECT_ID, projectRoot(true))).toEqual({ url: EAS_URL });
+    expect(resolveUpdatesConfig(PROJECT_ID, projectRoot(true))).toEqual({
+      url: EAS_URL,
+      disableAntiBrickingMeasures: true,
+    });
   });
 
   it('falls back to the EAS URL when EXPO_UPDATES_URL is unset', () => {
-    expect(resolveUpdatesConfig(PROJECT_ID, projectRoot(true))).toEqual({ url: EAS_URL });
+    expect(resolveUpdatesConfig(PROJECT_ID, projectRoot(true))).toEqual({
+      url: EAS_URL,
+      disableAntiBrickingMeasures: true,
+    });
   });
 
   it('FAILS CLOSED to the EAS URL when the server URL is set but the cert is missing', () => {
     process.env.EXPO_UPDATES_URL = SELF_HOST_URL;
     process.env.EXPO_UPDATES_CHANNEL = 'production';
     // No cert in this project root → must not bake the self-hosted (unsigned) URL.
-    expect(resolveUpdatesConfig(PROJECT_ID, projectRoot(false))).toEqual({ url: EAS_URL });
+    expect(resolveUpdatesConfig(PROJECT_ID, projectRoot(false))).toEqual({
+      url: EAS_URL,
+      disableAntiBrickingMeasures: true,
+    });
   });
 
   it('uses the self-hosted server with channel header + code signing when URL + cert are present', () => {
@@ -78,6 +87,8 @@ describe('resolveUpdatesConfig', () => {
     expect(resolveUpdatesConfig(PROJECT_ID, projectRoot(true))).toEqual({
       url: SELF_HOST_URL,
       enabled: true,
+      // Required by the runtime channel-override API used by the tester channel switcher.
+      disableAntiBrickingMeasures: true,
       requestHeaders: { 'expo-channel-name': 'production' },
       codeSigningCertificate: './certs/certificate.pem',
       codeSigningMetadata: { keyid: 'main', alg: 'rsa-v1_5-sha256' },
