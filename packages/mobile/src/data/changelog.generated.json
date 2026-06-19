@@ -1,4 +1,34 @@
 {
-  "generatedAt": "",
-  "entries": []
+  "generatedAt": "2026-06-19T23:20:38.188Z",
+  "entries": [
+    {
+      "prNumber": 3072,
+      "category": "fixed",
+      "title": "none (CI / release-plumbing only)",
+      "mergedAt": "2026-06-19T23:19:28Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3072",
+      "body": "🤖 Generated with [Claude Code](https://claude.com/claude-code)\nhttps://claude.ai/code/session_0142LzvfoFMQ3sQMtkFFugTJ"
+    },
+    {
+      "prNumber": 3070,
+      "category": "fixed",
+      "title": "none (CI / release-plumbing only)",
+      "mergedAt": "2026-06-19T23:08:27Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3070"
+    },
+    {
+      "prNumber": 3069,
+      "category": "fixed",
+      "title": "The board view now renders natively on the newest Android phones that use 16 KB memory pages (Android 15 and later, 64-bit devices).",
+      "mergedAt": "2026-06-19T22:43:27Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3069"
+    },
+    {
+      "prNumber": 3066,
+      "category": "new",
+      "title": "See what's new right in the app — a What's New page now lives under Settings, with a \"New\" dot when there's an update you haven't read yet.",
+      "mergedAt": "2026-06-19T22:04:35Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3066"
+    }
+  ]
 }
