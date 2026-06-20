@@ -25,6 +25,12 @@ vi.mock('../../lib/error-reporting', () => ({ reportError: (...args: unknown[]) 
 
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 
+// The hook reads Platform.OS to gate the Google web fallback to iOS. A mutable
+// hoisted ref lets each test flip the platform (default iOS, where the fallback
+// lives); the real react-native module is too heavy to load under jsdom.
+const { platform } = vi.hoisted(() => ({ platform: { OS: 'ios' } as { OS: string } }));
+vi.mock('react-native', () => ({ Platform: platform }));
+
 const { useNativeOAuthSignIn } = await import('../use-native-oauth-sign-in');
 
 type TrackedEvent = { event: unknown; flow: unknown; reason: unknown };
@@ -44,8 +50,9 @@ async function runSignIn(provider: 'google' | 'apple', setError = vi.fn()) {
   return setError;
 }
 
-describe('useNativeOAuthSignIn — Google web fallback', () => {
+describe('useNativeOAuthSignIn — Google web fallback (iOS)', () => {
   beforeEach(() => {
+    platform.OS = 'ios';
     trackMock.mockReset();
     reportErrorMock.mockReset();
     signInWithAppleMock.mockReset();
@@ -112,5 +119,52 @@ describe('useNativeOAuthSignIn — Google web fallback', () => {
 
     expect(signInWithGoogleWebMock).not.toHaveBeenCalled();
     expect(reportErrorMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('useNativeOAuthSignIn — Android has no web fallback', () => {
+  beforeEach(() => {
+    platform.OS = 'android';
+    trackMock.mockReset();
+    reportErrorMock.mockReset();
+    signInWithAppleMock.mockReset();
+    signInWithGoogleMock.mockReset();
+    signInWithGoogleWebMock.mockReset();
+  });
+
+  it('surfaces the native error (no fallback) when Google throws — the SHA-1/DEVELOPER_ERROR case', async () => {
+    signInWithGoogleMock.mockRejectedValue(Object.assign(new Error('developer error'), { code: 'DEVELOPER_ERROR' }));
+
+    const setError = await runSignIn('google');
+
+    expect(signInWithGoogleWebMock).not.toHaveBeenCalled();
+    // Reported once, tagged with the native code so PostHog records DEVELOPER_ERROR.
+    expect(reportErrorMock).toHaveBeenCalledTimes(1);
+    expect(reportErrorMock).toHaveBeenCalledWith(
+      expect.any(Error),
+      expect.objectContaining({
+        tags: expect.objectContaining({ provider: 'google', flow: 'native', native_error_code: 'DEVELOPER_ERROR' }),
+      }),
+    );
+    expect(setError).toHaveBeenLastCalledWith('nativeStart.oauthError');
+  });
+
+  it('surfaces the native error (no fallback) when Google returns a non-cancel failure', async () => {
+    signInWithGoogleMock.mockResolvedValue({ success: false, status: 401, error: 'invalid' });
+
+    const setError = await runSignIn('google');
+
+    expect(signInWithGoogleWebMock).not.toHaveBeenCalled();
+    expect(reportErrorMock).toHaveBeenCalledTimes(1);
+    expect(setError).toHaveBeenLastCalledWith('nativeStart.oauthError');
+  });
+
+  it('does NOT fall back or error when the user cancels native Google', async () => {
+    signInWithGoogleMock.mockResolvedValue({ success: false, cancelled: true });
+
+    await runSignIn('google');
+
+    expect(signInWithGoogleWebMock).not.toHaveBeenCalled();
+    expect(reportErrorMock).not.toHaveBeenCalled();
   });
 });
