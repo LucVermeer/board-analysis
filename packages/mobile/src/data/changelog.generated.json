@@ -1,6 +1,20 @@
 {
-  "generatedAt": "2026-06-20T07:52:29.827Z",
+  "generatedAt": "2026-06-20T11:21:40.780Z",
   "entries": [
+    {
+      "prNumber": 3076,
+      "category": "new",
+      "title": "See a climber's recent beta videos right on their profile — swipe through the shelf or tap See all for the full grid.",
+      "mergedAt": "2026-06-20T11:20:47Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3076"
+    },
+    {
+      "prNumber": 3099,
+      "category": "improved",
+      "title": "Boards open without a hitch on Android — selecting a board no longer briefly freezes the app.",
+      "mergedAt": "2026-06-20T11:20:34Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3099"
+    },
     {
       "prNumber": 3092,
       "category": "fixed",

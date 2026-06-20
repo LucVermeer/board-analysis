@@ -8,6 +8,7 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ### New
 
+- See a climber's recent beta videos right on their profile — swipe through the shelf or tap See all for the full grid. ([#3076](https://github.com/boardsesh/boardsesh/pull/3076))
 - Drive your board from the Android session notification ([#3073](https://github.com/boardsesh/boardsesh/pull/3073))
   The session notification now shows your current climb with its grade, angle, and your spot in the queue, and draws the board art right on your phone. Previous and Next move the board through your queue without opening the app, and the lightbulb shows when you're connected. When a crewmate takes the board, the card steps back to show what's on the wall.
 - The lock-screen Live Activity got a cleaner look and now knows who's on the board. ([#3077](https://github.com/boardsesh/boardsesh/pull/3077))
@@ -15,6 +16,10 @@ manual changes). See docs/mobile-ota-updates.md.
   queue; when a crewmate takes over, it shows what they're climbing instead. The
   grade shows in its real grade colour up in the corner, and the board thumbnail is
   easier to read at a glance.
+
+### Improved
+
+- Boards open without a hitch on Android — selecting a board no longer briefly freezes the app. ([#3099](https://github.com/boardsesh/boardsesh/pull/3099))
 
 ### Fixed
 
