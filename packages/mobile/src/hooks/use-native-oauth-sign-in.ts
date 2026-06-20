@@ -26,7 +26,7 @@ type Options = {
  * shares one error region with credentials sign-in while register has its own.
  */
 export function useNativeOAuthSignIn({ isRegistration = false, setError }: Options) {
-  const { signInWithApple, signInWithGoogle, signInWithGoogleWeb } = useAuth();
+  const { signInWithApple, signInWithGoogle, signInWithGoogleWeb, signInWithAppleWeb } = useAuth();
   const { t } = useTranslation('auth');
   const [inProgress, setInProgress] = useState(false);
 
@@ -42,23 +42,26 @@ export function useNativeOAuthSignIn({ isRegistration = false, setError }: Optio
       // the flow dying programmatically (sub-second).
       const attemptStartedAt = Date.now();
 
-      // Browser-OAuth fallback for Google, iOS-only. The native SDK can't present
-      // its OAuth browser on iOS 26.5.1 (GIDSignIn "Unable to open Safari"), so a
-      // native failure there isn't fatal — the web NextAuth handoff completes
+      // Browser-OAuth fallback, iOS-only, for both Google and Apple. The native
+      // SDK can fail before any network call — Google on iOS 26.5.1 (GIDSignIn
+      // "Unable to open Safari"), Apple on ASAuthorizationError.unknown (code
+      // 1000: device not signed into iCloud, 2FA disabled, transient Apple ID
+      // issues) — and that failure isn't fatal: the web NextAuth handoff completes
       // sign-in without the native SDK. Reports its own telemetry under
       // flow: 'web_fallback' so we can measure how often it rescues a native
       // failure, and fully owns the outcome (success returns, a browser cancel
       // stays silent, a real failure reaches error tracking + the error region).
       // Not used on Android: the redirect to com.boardsesh.app://auth/callback
-      // doesn't reliably return through openAuthSessionAsync there, and an Android
-      // native failure is almost always an unregistered signing-cert SHA-1 — a
-      // Google Cloud fix, so we surface the real error instead (see auth.ts).
-      const runGoogleWebFallback = async (): Promise<void> => {
+      // doesn't reliably return through openAuthSessionAsync there, an Android
+      // native Google failure is almost always an unregistered signing-cert SHA-1
+      // (a Google Cloud fix), and Apple sign-in isn't offered on Android at all —
+      // so we surface the real error instead (see auth.ts).
+      const runWebFallback = async (): Promise<void> => {
         const fallbackStartedAt = Date.now();
         track(SHARED_EVENTS.LoginAttempted, { auth_method: provider, flow: 'web_fallback', ...registrationProps });
         let fallback: OAuthSignInResult;
         try {
-          fallback = await signInWithGoogleWeb();
+          fallback = provider === 'apple' ? await signInWithAppleWeb() : await signInWithGoogleWeb();
         } catch (fallbackError) {
           track(SHARED_EVENTS.LoginFailed, {
             auth_method: provider,
@@ -136,12 +139,12 @@ export function useNativeOAuthSignIn({ isRegistration = false, setError }: Optio
           duration_ms: Date.now() - attemptStartedAt,
           ...registrationProps,
         });
-        // On iOS, Google native failures are recoverable in the browser — the
-        // fallback owns the user-facing outcome and error tracking from here.
-        // Android has no working browser fallback and falls through to the
+        // On iOS, Google and Apple native failures are recoverable in the browser
+        // — the fallback owns the user-facing outcome and error tracking from
+        // here. Android has no working browser fallback and falls through to the
         // real-error path below.
-        if (provider === 'google' && Platform.OS === 'ios') {
-          await runGoogleWebFallback();
+        if (Platform.OS === 'ios') {
+          await runWebFallback();
           return;
         }
         // Surface to error tracking too: an OAuth 401 / no_id_token is a config
@@ -166,14 +169,16 @@ export function useNativeOAuthSignIn({ isRegistration = false, setError }: Optio
           duration_ms: Date.now() - attemptStartedAt,
           ...registrationProps,
         });
-        // The iOS 26.5.1 "Unable to open Safari" GIDSignIn throw lands here — on iOS,
-        // recover via the browser flow instead of reporting it and dead-ending the
-        // user. On Android the same throw is almost always an unregistered
-        // signing-cert SHA-1 (DEVELOPER_ERROR); fall through so reportError tags it
-        // with native_error_code for PostHog instead of hiding it behind a fallback
-        // that can't complete.
-        if (provider === 'google' && Platform.OS === 'ios') {
-          await runGoogleWebFallback();
+        // Native throws land here — on iOS, recover via the browser flow instead
+        // of reporting and dead-ending the user. Google's is the iOS 26.5.1
+        // "Unable to open Safari" GIDSignIn throw; Apple's is
+        // ASAuthorizationError.unknown (code 1000). On Android a Google throw is
+        // almost always an unregistered signing-cert SHA-1 (DEVELOPER_ERROR) and
+        // Apple isn't offered, so fall through and let reportError tag it with
+        // native_error_code for PostHog rather than hide it behind a fallback that
+        // can't complete.
+        if (Platform.OS === 'ios') {
+          await runWebFallback();
           return;
         }
         reportError(oauthError, {
@@ -190,7 +195,16 @@ export function useNativeOAuthSignIn({ isRegistration = false, setError }: Optio
         setInProgress(false);
       }
     },
-    [inProgress, isRegistration, setError, signInWithApple, signInWithGoogle, signInWithGoogleWeb, t],
+    [
+      inProgress,
+      isRegistration,
+      setError,
+      signInWithApple,
+      signInWithGoogle,
+      signInWithGoogleWeb,
+      signInWithAppleWeb,
+      t,
+    ],
   );
 
   return { signIn, inProgress };
