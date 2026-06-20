@@ -16,6 +16,7 @@ on:
       - 'packages/shared/**'
       - 'packages/board-constants/**'
       - 'packages/shared-schema/**'
+      - 'patches/**' # bun patches to mobile deps live in root patches/, not under packages/mobile/**
       - '.github/workflows/android-apk-rn.yml'
   workflow_dispatch:
     inputs:
