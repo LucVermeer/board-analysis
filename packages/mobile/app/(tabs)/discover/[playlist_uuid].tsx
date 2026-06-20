@@ -3,7 +3,12 @@ import { View, StyleSheet, Alert, Pressable } from 'react-native';
 import { useLocalSearchParams, useNavigation } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { usePlaylistClimbs, usePlaylistMutations, usePlaylistItemMutations } from '@boardsesh/playlists-react';
+import {
+  usePlaylistClimbs,
+  usePlaylistMutations,
+  usePlaylistItemMutations,
+  type PlaylistClimbsBoardInput,
+} from '@boardsesh/playlists-react';
 import type { Climb } from '@boardsesh/queue';
 import {
   GET_PLAYLIST,
@@ -30,6 +35,7 @@ import {
 } from '../../../src/components/playlist';
 import { GlassIconButton } from '../../../src/components/GlassIconButton';
 import { getHttpClient } from '../../../src/lib/graphql/client';
+import { useActiveBoard } from '../../../src/lib/graphql/use-active-board';
 import { usePlaylistActivation } from '../../../src/lib/playlists/use-playlist-activation';
 import { usePlaylistRenderBoard } from '../../../src/lib/playlists/use-playlist-render-board';
 import { resolvePlaylistClimbRenderBoard } from '../../../src/lib/playlists/playlist-climb-render-board';
@@ -79,7 +85,23 @@ export default function PlaylistDetail() {
     enabled: !!playlistUuid,
   });
 
-  const { query, allClimbs } = usePlaylistClimbs({ playlistUuid });
+  // Render the list at the user's selected wall angle: in all-boards mode the
+  // resolver renders on-active-board climbs' grades at `activeAngle` instead of
+  // the added-at / most-ascents fallback. `boardName` is deliberately omitted so
+  // the resolver stays in all-boards mode and still lists off-board climbs
+  // (dimmed) rather than filtering them out.
+  const activeBoard = useActiveBoard().data ?? null;
+  const playlistClimbsBoardInput = useMemo<PlaylistClimbsBoardInput | undefined>(
+    () => (activeBoard ? { activeBoardName: activeBoard.boardType, activeAngle: activeBoard.angle } : undefined),
+    [activeBoard],
+  );
+  const { query, allClimbs } = usePlaylistClimbs({
+    playlistUuid,
+    // Key the cache by the active board so switching board/angle refetches at
+    // the new angle instead of serving stale grades.
+    boardUuid: activeBoard?.uuid ?? null,
+    boardInput: playlistClimbsBoardInput,
+  });
 
   // Suggestion-refresh fetcher: pages the same playlist scoped to the active
   // board so the play-drawer swipe walks the whole playlist on that board.
